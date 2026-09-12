@@ -7,16 +7,25 @@ Remote save paths are opaque receipt metadata, never server filesystem inputs.
 import copy
 
 from server.gen1_native_execution import NativeExecutionPolicy
-from server.gen1_native_trade_receipts import _bytes, verify_native_release, verify_native_trade_receipt
+from server.gen1_native_trade_receipts import (
+    _bytes,
+    verify_native_release,
+    verify_native_trade_receipt,
+)
 from server.gen1_trade_preparation import SYMBOLS, preparation_payload, verify_preparation
 from server.gen1_trade_rules import Gen1TradeRules
 from server.gen1_trade_ui_receipts import verify_partner_prompt, verify_receptionist_offer
-from server.identity_registry import IdentityContext, IdentityRegistry, IdentityWitness, MigrationWitness
+from server.identity_registry import (
+    IdentityContext,
+    IdentityRegistry,
+    IdentityWitness,
+    MigrationWitness,
+)
 from server.protocol import digest
 from server.protocol_journal import JournalError
+from server.save_file_receipt import verify_file_image
 from server.save_identity import SaveIdentity
 from server.trade_coordinator import TradeVerification
-from server.save_file_receipt import verify_file_image
 
 
 def contexts(document):
@@ -87,18 +96,36 @@ class NativeTradePolicy:
         verify_receipt(self,trade,player,command,receipt['stages']['save'],ready['checkpoint'])
         from server.gen1_prompt_execution import verify_preparation_prompt
         verify_preparation_prompt(self,trade,player,command,receipt['stages']['prompt'],receipt['stages']['save']['point'])
-        # Cache is not authority: every use rechecks its digest against the
-        # committed PreparedTrade. Reopen has no cache and requires recovery.
+        # Cache is not authority: every use rechecks its digest against the committed
+        # PreparedTrade. The trade composition hook retains the same verified stages in the
+        # trade_ready commit (gen1_native_preparation), so a reopened runtime reads them back.
         if self.prepared.get("transaction_id")!=trade["id"]:
             self.prepared={"transaction_id":trade["id"],"players":{}}
-        self.prepared["players"][player]=copy.deepcopy(ready["checkpoint"])
+        self.prepared["players"][player]={"checkpoint":copy.deepcopy(ready["checkpoint"]),
+            "save":copy.deepcopy(receipt["stages"]["save"]),"prompt":copy.deepcopy(receipt["stages"]["prompt"])}
         return prepared
 
+    def _cached_checkpoint(self,trade,player):
+        stage=self.prepared.get("players",{}).get(player)
+        if self.prepared.get("transaction_id")!=trade["id"] or stage is None:return None
+        return stage["checkpoint"] if isinstance(stage,dict) and "checkpoint" in stage else stage
+
     def checkpoint(self,trade,player):
-        point=self.prepared.get("players",{}).get(player)
-        if (self.prepared.get("transaction_id")!=trade["id"] or point is None
-                or digest(point)!=trade["ready"][player]["details"]["checkpoint_digest"]):
-            raise JournalError("native preparation cache differs from its committed proof; recovery required")
+        expected=trade["ready"][player]["details"]["checkpoint_digest"]
+        point=self._cached_checkpoint(trade,player)
+        if point is None and self.runtime is not None:
+            from server.gen1_native_preparation import stored
+            entry=stored(self.runtime.state().document(),trade["id"],player)
+            if entry is not None:
+                point=entry["checkpoint"]
+                if digest(point)==expected:
+                    self.prepared.setdefault("players",{})
+                    if self.prepared.get("transaction_id")!=trade["id"]:
+                        self.prepared={"transaction_id":trade["id"],"players":{}}
+                    self.prepared["players"][player]={"checkpoint":copy.deepcopy(point),
+                        "save":entry["save"],"prompt":entry["prompt"]}
+        if point is None or digest(point)!=expected:
+            raise JournalError("native preparation evidence differs from its committed proof; recovery required")
         return point
 
     def commit(self,trade,state,authority):

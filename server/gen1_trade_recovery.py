@@ -85,12 +85,19 @@ def pending_commands(journal, identifier, commands=None, acknowledgements=()):
     return pending
 
 
-def compose(journal, state, trade, commands, acknowledgements, *, data_dir,state_type=None):
+def compose(journal, state, trade, commands, acknowledgements, *, data_dir,state_type=None, native=None):
     # No writes here. Journal CAS makes these reads and the detached projection
     # conditional on the coordinator's original revision at the single commit.
     from server.gen1_runtime_state import COMPONENT as RUNTIME, Gen1RuntimeState, recovery_history
 
     components = state["components"]
+    if native is not None:
+        # The native policy's verified ready evidence rides this same commit (durable both-peer
+        # preparation); it is dropped once the transaction is terminal with nothing pending.
+        from server.gen1_native_preparation import retain
+
+        retain(components, trade, acknowledgements, native,
+               pending=pending_commands(journal, trade["id"], commands, acknowledgements))
     previous = copy.deepcopy(components.get(COMPONENT, {"schema": SCHEMA, "transactions": {}}))
     entries = previous["transactions"]
     pending = pending_commands(journal, trade["id"], commands, acknowledgements)

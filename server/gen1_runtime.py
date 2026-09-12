@@ -170,6 +170,7 @@ class Gen1Runtime(DurableRuntime):
                         commands,
                         acknowledgements,
                         data_dir=self.data_dir,
+                        native=trade_policy,
                         state_type=self._stage_type,
                     ),
                 )
@@ -303,6 +304,8 @@ class Gen1Runtime(DurableRuntime):
         verify_native_observations(self.journal, stage)
         from server.gen1_native_windows import verify_journal as verify_native_windows
         verify_native_windows(self.journal, stage)
+        from server.gen1_native_preparation import verify_journal as verify_native_preparation
+        verify_native_preparation(self.journal, stage)
         from server.gen1_static_lifecycle import verify_journal as verify_statics
         verify_statics(self.journal, stage, rom_provider=(
             self.prepared_cartridges.rom if self.prepared_cartridges is not None else None))
