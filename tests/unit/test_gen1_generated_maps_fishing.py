@@ -63,14 +63,13 @@ def test_area_map_qualifies_against_both_decomps():
         area_map = json.load(f)
     failures, notes = amap.check(area_map, amap.find_repos())
     assert failures == [], "\n".join(failures)
-    # The only wild-data maps without an area are Super-Rod-only towns/indoor maps, and
-    # the set is pinned so a change in either direction is a visible decision.
-    red_note = next(n for n in notes if n.startswith("pokered:"))
-    yellow_note = next(n for n in notes if n.startswith("pokeyellow:"))
-    assert red_note.endswith("VIRIDIAN_CITY(1), CERULEAN_CITY(3), VERMILION_CITY(5), "
-                             "FUCHSIA_CITY(7), CERULEAN_GYM(65), VERMILION_DOCK(94)"), red_note
-    assert yellow_note.endswith("VIRIDIAN_CITY(1), CERULEAN_CITY(3), VERMILION_CITY(5), "
-                                "FUCHSIA_CITY(7), VERMILION_DOCK(94)"), yellow_note
+    # Every map that carries wild data of any method has an area: the Super-Rod-only towns
+    # and the two indoor fishing maps fold into their cities (Cerulean Gym -> cerulean_city,
+    # Vermilion Dock -> vermilion_city), the same policy that folds the Fighting Dojo into
+    # saffron_city. Pinned so an unmapped fishable map is a visible failure, not a note.
+    for prefix in ("pokered:", "pokeyellow:"):
+        note = next(n for n in notes if n.startswith(prefix))
+        assert note.endswith("(fishing there is not shown): none"), note
     assert any("yellow-only map ids: SUMMER_BEACH_HOUSE(248)" in n for n in notes), notes
 
 
@@ -87,7 +86,7 @@ def test_every_rod_method_is_present_and_sums_to_100(title):
     tables = _shipped()[title]
     for rod in RODS:
         areas = [a for a, b in tables.items() if rod in b]
-        assert len(areas) == 24, f"{title}/{rod}: {len(areas)} areas"
+        assert len(areas) == 28, f"{title}/{rod}: {len(areas)} areas"
         for a in areas:
             total = sum(e["rate"] for e in tables[a][rod])
             assert total == 100, f"{title}/{a}/{rod} sums to {total}"
@@ -133,6 +132,11 @@ def test_yellow_super_rod_rows_match_the_asm():
     # The lowest map id wins within an area and B1F (0xE3) is below 1F (0xE4), exactly as
     # gen1_rom_scan.build_encounter_tables resolves it; pinned so the choice is visible.
     assert _rows(t["cerulean_cave"]["Super Rod"]) == {"Seaking": (75, 40, 60), "Goldeen": (25, 30, 30)}
+    # Vermilion Dock folds into vermilion_city (one rule area, like the Fighting Dojo into
+    # Saffron) and Yellow gives the dock its own row (Tentacool, Staryu, Shellder); the city
+    # map (5) wins over the dock (94), so the widget shows the city's row. Same display
+    # limitation as Cerulean Cave above, pinned so it stays a decision.
+    assert _rows(t["vermilion_city"]["Super Rod"]) == {"Tentacool": (75, 10, 20), "Horsea": (25, 5, 5)}
 
 
 # ── (e) the widget shows the rod icon ────────────────────────────────────────────────────

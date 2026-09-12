@@ -3331,6 +3331,142 @@
         }
       ]
     },
+    "viridian_city": {
+      "Super Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 72,
+          "name": "Tentacool",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "cerulean_city": {
+      "Super Rod": [
+        {
+          "species_id": 54,
+          "name": "Psyduck",
+          "rate": 34,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "vermilion_city": {
+      "Super Rod": [
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
     "celadon_city": {
       "Super Rod": [
         {
@@ -3344,6 +3480,63 @@
           "species_id": 79,
           "name": "Slowpoke",
           "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "fuchsia_city": {
+      "Super Rod": [
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 25,
           "min_level": 15,
           "max_level": 15
         }
@@ -6778,6 +6971,142 @@
         }
       ]
     },
+    "viridian_city": {
+      "Super Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 72,
+          "name": "Tentacool",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "cerulean_city": {
+      "Super Rod": [
+        {
+          "species_id": 54,
+          "name": "Psyduck",
+          "rate": 34,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "vermilion_city": {
+      "Super Rod": [
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
     "celadon_city": {
       "Super Rod": [
         {
@@ -6791,6 +7120,63 @@
           "species_id": 79,
           "name": "Slowpoke",
           "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "fuchsia_city": {
+      "Super Rod": [
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 25,
           "min_level": 15,
           "max_level": 15
         }
@@ -10095,6 +10481,128 @@
         }
       ]
     },
+    "viridian_city": {
+      "Super Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 15
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "cerulean_city": {
+      "Super Rod": [
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 25,
+          "max_level": 30
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 50,
+          "min_level": 30,
+          "max_level": 40
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "vermilion_city": {
+      "Super Rod": [
+        {
+          "species_id": 72,
+          "name": "Tentacool",
+          "rate": 75,
+          "min_level": 10,
+          "max_level": 20
+        },
+        {
+          "species_id": 116,
+          "name": "Horsea",
+          "rate": 25,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
     "celadon_city": {
       "Super Rod": [
         {
@@ -10103,6 +10611,49 @@
           "rate": 100,
           "min_level": 5,
           "max_level": 20
+        }
+      ],
+      "Old Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 100,
+          "min_level": 5,
+          "max_level": 5
+        }
+      ],
+      "Good Rod": [
+        {
+          "species_id": 60,
+          "name": "Poliwag",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 50,
+          "min_level": 10,
+          "max_level": 10
+        }
+      ]
+    },
+    "fuchsia_city": {
+      "Super Rod": [
+        {
+          "species_id": 129,
+          "name": "Magikarp",
+          "rate": 75,
+          "min_level": 5,
+          "max_level": 15
+        },
+        {
+          "species_id": 130,
+          "name": "Gyarados",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
         }
       ],
       "Old Rod": [
