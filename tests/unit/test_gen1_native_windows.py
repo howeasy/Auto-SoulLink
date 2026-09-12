@@ -66,7 +66,8 @@ def test_free_player_windows_are_journaled_with_the_grant_and_survive_reopen(nat
     value.runtime.state()  # the state audit (verify_state) runs on every read
 
 
-@pytest.mark.parametrize("fault", ["unverified", "foreign_response", "backwards", "not_native_policy"])
+@pytest.mark.parametrize("fault", ["unverified", "foreign_response", "backwards", "disarmed", "other_intent",
+                                   "fewer_steps", "unowned_frames", "not_native_policy"])
 def test_windows_refuse_unverified_or_regressing_progress_and_commit_nothing(native_case, fault):
     value, policy, command, evidence, request, response, proof = issued(native_case)
     before = value.runtime.journal.snapshot()
@@ -85,6 +86,47 @@ def test_windows_refuse_unverified_or_regressing_progress_and_commit_nothing(nat
         request, response = request_for(proof), None
         response = issue(request, proof)
         evidence = earlier
+    elif fault in {"disarmed", "other_intent", "fewer_steps", "unowned_frames"}:
+        # The armed prefix-2 window is durable. A later report for the same command (the live cache
+        # rewritten as a reconnect whose cache forgot the prior would present it) must not overwrite
+        # it when it is a fresh `before` window, names another intent, claims fewer steps, or claims
+        # more frames than steps (frames the process ran outside any window). The control (frame and
+        # steps both +10, nothing else changed) persists.
+        from server.execution_window import VerifiedExecutionWindow
+        renewal = armed(evidence)
+        _, _, _, _, request2, response2, _ = issued(native_case, renewal)
+        persist_grant(value.runtime, "a", request2, response2, renewal)
+        key_a = ("a", command["command_id"], value.runtime.gate.sessions["a"].metadata["control_binding"]["binding_digest"])
+        live = policy.observed[key_a]
+
+        def report(later_frame, later_steps, **changes):
+            live.update({"frame": later_frame, "steps": later_steps, **changes})
+            published = policy.published[key_a]
+            fresh = VerifiedExecutionWindow(dict(published.scope), published.proof_digest, published.frames, published.ttl_ms,
+                                            digest(value.runtime.state().document()))
+            policy.published[key_a] = fresh
+            later = copy.deepcopy(renewal)
+            later["host"]["frame"], later["host"]["steps"] = later_frame, later_steps
+            request = request_for(fresh)
+            return request, issue(request, fresh), later
+
+        frame, steps, intent = renewal["host"]["frame"], renewal["host"]["steps"], live["intent_digest"]
+        if fault == "disarmed":
+            request, response, evidence = report(frame + 10, steps + 10, armed=False)
+        elif fault == "other_intent":
+            request, response, evidence = report(frame + 10, steps + 10, intent_digest="1" * 64)
+        elif fault == "fewer_steps":
+            request, response, evidence = report(frame + 10, steps - 1)
+        else:
+            request, response, evidence = report(frame + 10, steps + 4)
+        before = value.runtime.journal.snapshot()
+        with pytest.raises(JournalError, match="moved backwards"):
+            persist(value.runtime, "a", request, response, evidence)
+        assert value.runtime.journal.snapshot() == before
+        request, response, evidence = report(frame + 10, steps + 10, armed=True, intent_digest=intent)
+        persist(value.runtime, "a", request, response, evidence)
+        assert windows_for(value.runtime.state().document(), "a")[command["command_id"]]["host"]["frame"] == frame + 10
+        return
     elif fault == "not_native_policy":
         from server.gen1_held_faint import verify as held
         value.runtime.verify_operation_execution = held

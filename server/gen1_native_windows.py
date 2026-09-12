@@ -90,10 +90,20 @@ def persist(runtime, player, request, response, evidence):
         raise JournalError("native window lost its independently verified state binding")
     windows = document["components"].setdefault(COMPONENT, {}).setdefault(player, {})
     previous = windows.get(command_id)
+    # Monotonic per command, whatever binding reports it: the live cache is keyed by the current
+    # control binding, so a reconnect could otherwise republish an earlier stage (a fresh `before`
+    # window at a later frame) over an armed prefix and erase the arming evidence. Frames and steps
+    # advance by the same amount, as the live policy requires within one binding
+    # (gen1_native_execution): every frame the process ran since the last window was a stepped one.
     if previous is not None and (previous["host"]["process_id"] != entry["host"]["process_id"]
                                  or previous["host"]["frame"] > entry["host"]["frame"]
+                                 or previous["host"]["steps"] > entry["host"]["steps"]
+                                 or (entry["host"]["frame"] - previous["host"]["frame"]
+                                     != entry["host"]["steps"] - previous["host"]["steps"])
                                  or previous["sequence_length"] > entry["sequence_length"]
-                                 or previous["start"] != entry["start"]):
+                                 or previous["start"] != entry["start"]
+                                 or (previous["armed"] and not entry["armed"])
+                                 or previous["intent_digest"] != entry["intent_digest"]):
         raise JournalError("native window progress moved backwards")
     windows[command_id] = entry
     result = {"ack": "ACK", "native_window_grant": operation, "ordinary_execution": False}

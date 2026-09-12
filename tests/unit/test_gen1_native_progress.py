@@ -19,10 +19,17 @@ from tests.unit.test_gen1_native_policy import evidence  # noqa: F401
 from tests.unit.test_gen1_native_windows import request_for
 
 
+# The native trade fixtures never enroll (their event policy admits no observation), so the immutable
+# initial-observation record is stood in for by this value: the host RuntimeCase admits player a with
+# (process 123 in the window evidence, physical instance "1"*32, context generation "a"*32). Every
+# comparison against the CURRENT admission below is real.
+ENROLLED = {"process_id": 123, "physical_instance": "1" * 32, "context_generation": "a" * 32}
+
+
 @pytest.fixture
 def durable(request, monkeypatch):
     from server import gen1_native_progress as progress_module
-    monkeypatch.setattr(progress_module, "enrolled_process", lambda document, player: 123)
+    monkeypatch.setattr(progress_module, "enrolled_host", lambda document, player: ENROLLED)
     """The verified-file fixture with its COMMIT window journaled durably and the live cache emptied,
     i.e. the state a reopened runtime is in when the verified receipt arrives."""
     policy, trade, command, receipt = request.getfixturevalue("evidence")
@@ -54,7 +61,8 @@ def test_a_reopened_runtime_verifies_from_the_durable_window(durable):
     assert policy.execution.observed == {} and COMPONENT in run.state().document()["components"]
 
 
-@pytest.mark.parametrize("fault", ["missing", "other_command", "incomplete", "not_selected", "frame_outside"])
+@pytest.mark.parametrize("fault", ["missing", "other_command", "incomplete", "not_selected", "frame_outside",
+                                   "stale_binding", "other_context"])
 def test_wrong_or_missing_durable_windows_refuse(durable, fault):
     policy, trade, command, receipt, run = durable
     document = run.state().document()
@@ -78,7 +86,7 @@ def test_wrong_or_missing_durable_windows_refuse(durable, fault):
             policy.verified(trade, "a", command, receipt)
     elif fault == "not_selected":
         run.native_trade = False
-        assert durable_progress(run, "a", command["command_id"]) is None
+        assert durable_progress(run, "a", command["command_id"], run.gate.sessions["a"].metadata["control_binding"]) is None
         with pytest.raises(JournalError, match="outside the owned native frame window"):
             policy.verified(trade, "a", command, receipt)
     elif fault == "frame_outside":
@@ -86,6 +94,19 @@ def test_wrong_or_missing_durable_windows_refuse(durable, fault):
         bad["file"]["frame"] = 100 + 121  # past the 120-frame flush window of the durable progress
         with pytest.raises(JournalError):
             policy.verified(trade, "a", command, bad)
+    elif fault == "stale_binding":
+        # A binding that is not the current admission of the player (an earlier session) gets no window.
+        binding = {**run.gate.sessions["a"].metadata["control_binding"], "binding_digest": "0" * 64}
+        assert durable_progress(run, "a", command["command_id"], binding) is None
+    elif fault == "other_context":
+        # The window was issued under context generation G; a record read under another admitted
+        # context (the admission binding rewritten as a new client would produce) gets no window.
+        binding = run.gate.sessions["a"].metadata["control_binding"]
+        document["components"]["gen1-runtime"]["admissions"]["a"]["binding"]["context_generation"] = "f" * 32
+        run.state = lambda document=document: type("S", (), {"document": staticmethod(lambda: document)})()
+        assert durable_progress(run, "a", command["command_id"], {**binding, "context_generation": "f" * 32}) is None
+        with pytest.raises(JournalError, match="outside the owned native frame window"):
+            policy.verified(trade, "a", command, receipt)
 
 
 # ── a real reopen: new runtime object, fresh admission and control binding ─────────────────
@@ -106,7 +127,7 @@ def test_the_previously_issued_receipt_verifies_after_a_real_reopen_with_a_fresh
     base = request.getfixturevalue("case")
     value = base[0]
     old_binding = run.gate.sessions["a"].metadata["control_binding"]
-    monkeypatch.setattr(progress_module, "enrolled_process", lambda document, player: 123)
+    monkeypatch.setattr(progress_module, "enrolled_host", lambda document, player: ENROLLED)
     value.close()
     value.open()
     reopened = value.runtime
@@ -139,7 +160,58 @@ def test_the_previously_issued_receipt_verifies_after_a_real_reopen_with_a_fresh
     with pytest.raises(JournalError, match="complete native and file-image evidence"):
         fresh.verified(trade, "a", command, foreign)
     # A different emulator process (enrollment host) gets no window from the durable record.
-    monkeypatch.setattr(progress_module, "enrolled_process", lambda document, player: 999)
+    monkeypatch.setattr(progress_module, "enrolled_host", lambda document, player: {**ENROLLED, "process_id": 999})
+    with pytest.raises(JournalError, match="outside the owned native frame window"):
+        fresh.verified(trade, "a", command, receipt)
+    value.close()
+
+
+@pytest.mark.parametrize("replacement", ["new_context_and_instance", "same_context_new_instance"])
+def test_a_replaced_emulator_admitted_under_a_new_context_gets_no_durable_window(request, monkeypatch, replacement):
+    """Reopen, then admit player a as a REPLACED emulator would: a new physical instance, with a new
+    context generation or (the nonce being client-supplied) the old one replayed. The enrollment
+    host and the window host are both the old process id (historical values), so a check on those
+    alone would still hand the stale window to the new session; the current admission refuses it."""
+    from server import gen1_native_progress as progress_module
+    from server.gen1_native_execution import NativeExecutionPolicy
+    from server.gen1_native_policy import NativeTradePolicy
+    from server.trade_coordinator import NAMESPACE
+
+    policy, trade, command, receipt, run = request.getfixturevalue("durable")
+    execution = policy.execution
+    rules, manifests = execution.rules, execution.manifests
+    native = receipt["native"]
+    value = request.getfixturevalue("case")[0]
+    monkeypatch.setattr(progress_module, "enrolled_host", lambda document, player: ENROLLED)  # old host, unchanged
+    value.close()
+    value.open()
+    reopened = value.runtime
+    owner = object()
+    value.owners["a"] = owner
+    context = "f" * 32 if replacement == "new_context_and_instance" else "a" * 32
+    hello = value.hello("a", context_generation=context)
+    hello["gen1_metadata"] = {**hello["gen1_metadata"], "physical_instance": "9" * 32}
+    value.admissions["a"] = reopened.process(hello, owner)
+    value.admit("b"); value.control("a"); value.control("b")
+    new_binding = reopened.gate.sessions["a"].metadata["control_binding"]
+    assert new_binding["context_generation"] == context
+    admission = reopened.state().document()["components"]["gen1-runtime"]["admissions"]["a"]
+    assert admission["binding"] == {"binding_digest": new_binding["binding_digest"], "context_generation": context}
+    assert admission["metadata"]["gen1_metadata"]["physical_instance"] == "9" * 32
+    windows = reopened.state().document()["components"][COMPONENT]["a"]
+    assert windows[command["command_id"]]["host"]["process_id"] == ENROLLED["process_id"]  # the historical values still agree
+    reopened.free_service = True
+    reopened.native_trade = True
+    fresh_execution = NativeExecutionPolicy(rules=rules, manifests=manifests)
+    fresh_execution.bind(reopened)
+    fresh = NativeTradePolicy()
+    fresh.runtime = reopened
+    fresh.execution = fresh_execution
+    fresh.rules, fresh.manifests = rules, manifests
+    fresh.prepared = policy.prepared
+    trade = reopened.journal.record(NAMESPACE, trade["id"]).value
+    trade["applied"] = {"a": copy.deepcopy(native)}
+    assert durable_progress(reopened, "a", command["command_id"], new_binding) is None
     with pytest.raises(JournalError, match="outside the owned native frame window"):
         fresh.verified(trade, "a", command, receipt)
     value.close()
