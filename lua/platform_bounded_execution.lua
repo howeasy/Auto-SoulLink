@@ -153,6 +153,15 @@ function M.new(options)
         if failed or not valid()or emu.framecount()~=expected_frame then return stop("bounded context changed during held yield")end
         return true
     end
+    -- A layered owner (injected host) is short-lived: the composed client arms one per native
+    -- command and closes it afterwards, because expected_frame cannot survive free frames.
+    -- Closing unregisters this owner's lifecycle hooks and marks it failed; it releases nothing.
+    function self.close(reason)
+        if load_hook then event.unregisterbyid(load_hook);load_hook=nil end
+        if exit_hook then event.unregisterbyid(exit_hook);exit_hook=nil end
+        failed=failed or tostring(reason or "bounded owner closed")
+        return true
+    end
     function self.status()
         return {schema="slink-bounded-execution-status-v1",failed=failed,steps=steps,host=host.status(),
             expected_frame=expected_frame,load_state_invalidation=load_hook~=nil,owner_exit_invalidation=exit_hook~=nil,
