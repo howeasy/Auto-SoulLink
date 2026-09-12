@@ -618,10 +618,14 @@ def _persist(
 def persist_grant(runtime, player, request, response, evidence):
     """Called after issue_for_control succeeds, before delivering its response."""
     if player not in runtime.journal.snapshot().state["components"].get(FRAMES, {}):
-        # No frame ledger (free_service): the window is retained by gen1_native_windows instead.
-        from server.gen1_native_windows import persist
+        # No frame ledger. Only a runtime that explicitly selected both free_service and
+        # native_trade retains the window through gen1_native_windows; a standalone or held
+        # native runtime keeps its existing behavior (nothing persisted).
+        if getattr(runtime, "free_service", False) is True and getattr(runtime, "native_trade", False) is True:
+            from server.gen1_native_windows import persist
 
-        return persist(runtime, player, request, response, evidence)
+            return persist(runtime, player, request, response, evidence)
+        return None
     operation = request["challenge"]
     message = {
         "event": "native_frame_grant",
