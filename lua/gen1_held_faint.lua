@@ -3,12 +3,13 @@ local JSON=require("json_codec")
 local Canonical=require("journal_document")
 local Receipts=require("gen1_command_receipts")
 local Permit=require("held_write_permit")
+local Rival=require("gen1_held_rival_team")
 local M={}
 function M.handles(body)
     return type(body)=="table"and(body.cmd=="initial_save"or type(body.job_id)=="string"
         and(body.cmd=="storage_observe"or body.cmd=="storage_apply")or type(body.acquisition_id)=="string"
         and(body.cmd=="retirement_observe"or body.cmd=="acquisition_retire")or type(body.death_id)=="string"
-        and(body.cmd=="force_faint"or body.cmd=="memorialize"or body.cmd=="memorial_observe"))
+        and(body.cmd=="force_faint"or body.cmd=="memorialize"or body.cmd=="memorial_observe")or Rival.handles(body))
 end
 local function is_read(body)return body.cmd=="memorial_observe"or body.cmd=="retirement_observe"or body.cmd=="storage_observe"end
 local function copy(v)return assert(JSON.decode(assert(JSON.encode(v))))end
@@ -35,8 +36,11 @@ function M.new(options)
     end
     local permit=Permit.new({clock=options.clock,current_scope=scope,
         verify_grant=function(packet)return self.pending_proof~=nil and packet.proof_digest==self.pending_proof end})
+    local rival=Rival.new({memory=mem,variant=options.variant})
     local function safe()
-        owned();return mem.isPartyWriteSafe() and host.status().physical_stop_verified
+        owned();local held=host.status().physical_stop_verified
+        if self.current and Rival.handles(self.current.body)then return rival.safe(self.current.body) and held end
+        return mem.isPartyWriteSafe() and held
     end
     local function readable(body)
         if body.cmd=="storage_observe"then owned();return host.status().physical_stop_verified end
@@ -63,6 +67,7 @@ function M.new(options)
         return {apply="memorialize",save="memorial_save",repair="memorial_repair"}
     end
     local function selected(body)
+        if Rival.handles(body)then return rival end
         if body.cmd=="force_faint"then return adapter end
         if body.cmd=="acquisition_retire"or body.cmd=="retirement_observe"then return retirement end
         if body.cmd=="storage_apply"or body.cmd=="storage_observe"then return storage end
@@ -134,12 +139,12 @@ function M.new(options)
             local selected=scope()
             if not selected or not control.admitted or not control.held or not safe()then return nil end
             local entry=self.current;local status=host.status()
-            local evidence={schema=entry.body.cmd=="force_faint" and "rby-held-faint-evidence-v1" or (entry.body.cmd=="initial_save" and "rby-held-initial-save-evidence-v1" or entry.body.cmd=="acquisition_retire"and"rby-held-retirement-evidence-v1"or entry.body.cmd=="storage_apply"and"rby-held-storage-evidence-v1"or "rby-held-memorial-evidence-v1"),command_id=entry.command_id,command_sequence=entry.command_sequence,
+            local evidence={schema=Rival.handles(entry.body) and Rival.EVIDENCE or entry.body.cmd=="force_faint" and "rby-held-faint-evidence-v1" or (entry.body.cmd=="initial_save" and "rby-held-initial-save-evidence-v1" or entry.body.cmd=="acquisition_retire"and"rby-held-retirement-evidence-v1"or entry.body.cmd=="storage_apply"and"rby-held-storage-evidence-v1"or "rby-held-memorial-evidence-v1"),command_id=entry.command_id,command_sequence=entry.command_sequence,
                 context_generation=owned().context_generation,final_sha1=gameinfo.getromhash():lower(),
                 host={owner_id=status.owner_id,capability_id=status.capability_id,process_id=status.process_id,
                     frame=emu.framecount(),held=status.physical_stop_verified==true},
-                checkpoint=require("gen1_write_checkpoint").capture(mem.profile),intent=copy(entry.intent),
-                current=entry.body.cmd=="force_faint" and assert(Receipts.party_snapshot(mem,options.variant)) or current_point}
+                checkpoint=Rival.handles(entry.body) and rival.checkpoint(entry.body) or require("gen1_write_checkpoint").capture(mem.profile),intent=copy(entry.intent),
+                current=Rival.handles(entry.body) and rival.image(entry.body) or entry.body.cmd=="force_faint" and assert(Receipts.party_snapshot(mem,options.variant)) or current_point}
             if is_image(entry.body)then evidence.phase=self.memorial_phase or phases(entry.body).apply end
             self.pending_proof=sha(evidence);self.pending_request=assert(permit:challenge())
             self.pending_sequence=entry.command_sequence

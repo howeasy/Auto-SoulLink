@@ -9,6 +9,7 @@ from server.gen1_observation_provenance import semantic_receipt
 from server.gen1_party_codec import PartyCodec
 from server.gen1_semantic_events import faint_event
 from server.gen1_starter_settlement import context
+from server.gen1_whiteout import settle_whiteout
 from server.linked_death_rules import update_run_over
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
@@ -193,6 +194,9 @@ def settle(runtime, stage, document, player, entry):
         blockers = stage.barrier.document()["blockers"]
         blockers[death_id] = REASON
         stage.barrier.set_blockers(blockers)
+        # P5-whiteout: AnyPartyAlive over the same signal, only after the faint settled, so the
+        # whited-out pair is already DEAD and the engine cannot queue a second peer death for it.
+        settle_whiteout(stage, document, player, entry, index, signal)
     synchronize(stage, document)
     return commands
 
