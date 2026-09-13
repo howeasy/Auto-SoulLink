@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+R0 isolated claim reviewer ACTIVE after exact ACK; only its report may be written. Own unnecessary ignored-status command stopped, no locks/files removed; narrow status only henceforth. D0-A Sol owns its two untracked test files, disjoint; no live lane.
+
 R0 claim-readiness source check READY for fresh isolated agent, sole reviews/R0-claim-check-successor.md, no source/test/runtime ownership. Parallel to D0-A Sol's disjoint two-file build; exact excluded paths and policy limits in guide.
 
 D0-A Sol ACK verified at clean c7f1e1e and ACTIVE on exact two new tests/live files plus named report/model receipts. No existing production/shared file writer, no live lane. All N0 evidence frozen.
