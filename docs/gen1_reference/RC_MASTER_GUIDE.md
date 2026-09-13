@@ -26,6 +26,8 @@ Production remains `19edbb2`; verified review HEAD `fd06f58`, clean, with docume
 
 C1 execution clarification: a uniquely owned OS `TemporaryDirectory` is permitted for the real runtime's test journal/config fixture; record the resolved path, keep it under the OS temp root, clean only that owned fixture after use. Set `PYTHONDONTWRITEBYTECODE=1` for the probe. Durable/exclusive outputs remain the three assigned files; no arbitrary repo/runtime writes are granted.
 
+F1-host result: 46 passed, 2 skipped (WinError 1314, symlink privilege absent), pytest exit 0, 0.95s. **HOLD for final F** under the no-skip gate; [frozen receipt](reviews/F1-host-successor.md). Coordinator releases report writer ownership. `/root/p0_review` reserved for independent read-only receipt review (no outputs/tests/rerun); acknowledge current Git/report hashes, then confirm XML/text counts and evaluator interpretation. Owner input is needed for a symlink-capable final test environment; source work continues.
+
 Next owner/action: C1 runner returns its first falsifier; N0 runner returns the actual-CLI oracle gap; Claude returns the concrete P2a decision report; coordinator resolves the concrete F1 host-capability question. Coordinator reviews these and records the nine-part claim before any implementation READY. No production implementation is currently granted.
 
 Source cut **`19edbb2`** on `gen1/rc`: owner-authorized native lifecycle and coherent checkpoint refactors are integrated. Prior product fixes remain `df38453`; earlier physical receipts are still tied to their original cuts. The root `E:/Google Drive/SLink` checkout stays clean `master` at `adf3362`. Subsequent documentation commits do not change source evidence.
