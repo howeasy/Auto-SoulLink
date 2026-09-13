@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+R1 resource cleanup error discovered in retained summary: runtime.close attempted before TCP handlers drained, despite all child processes exiting. Same R2 Sol controller scope includes bounded owned-handler cleanup before journal close, plus modeled ordering check. No live lane or production source change.
+
 Sol R2 ACK verified, ACTIVE build-only on new exact paths. OMP first-run cleanup receipt check read-only ACTIVE conditional on ACK. Root writes first physical report; no live lane, original artifacts frozen.
 
 N0 first lane RELEASED after identity-checked stop: no EmuHawk, all captured CLI/children exited, summary0a73bc91 retained HOLD. Sol R2 controller READY on new .cache/report paths in guide, old files frozen. No live/source writer; new build requires ACK/activation.
