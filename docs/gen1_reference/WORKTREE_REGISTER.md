@@ -101,3 +101,5 @@ Combined Standards PASS; Spec accepts four HUD/small-contract files and holds re
 Sole N0-CLI Y/Y live lane ACTIVE for coordinator; fresh hashes/process/auto-load preflight passed. Exact .cache subtree/summary plus console log reserved, no existing user saves. All other measured jobs held; Sol retirement remains READY. Read-only source reviews allowed. Builder released executable/report; coordinator owns execution receipt.
 
 15:15 UTC actual CLI startup/refusals passed; all owned processes stopped and no EmuHawk remains. Lane released, exact artifacts retained. Sol retirement R2 acknowledged/ACTIVE on one unit test. Coordinator complete integration run ACTIVE on frozen production/integration helpers, cache provider disabled; no emulator or production writer.
+
+Integration run complete157/4/0; blocker is missing Playwright resolution, no browser assertions ran. OMP existing-runtime resolution READY, no installs or browser launch. Retirement R2 author released; independent Spec re-review READY with frozen hash. No code or live writer currently active.
