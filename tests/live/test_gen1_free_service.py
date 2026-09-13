@@ -52,6 +52,8 @@ def phase_fps_floor(planned):
     if planned["speed"] == 300 and planned["active"]:
         return ACTIVE_THREE_X_MIN_FPS
     return TARGET_FPS * planned["speed"] / 100 * MIN_FRACTION
+
+
 # The credit-loop run behind ORDINARY_FRAME_TURNOVER_PROFILE.md (refresh 2026-09-10).
 CREDIT_RUN = Path(os.environ.get("SLINK_CREDIT_RUN", ROOT / ".cache/gen1-bootstrap-launcher-ehtld3qv"))
 CREDIT_LOOP = {"source": "docs/gen1_reference/ORDINARY_FRAME_TURNOVER_PROFILE.md, refresh 2026-09-10",
@@ -100,6 +102,17 @@ def credit_reference(player):
             "name": last["source"]["fields"]["name"], "save_status": last["source"]["save_status"],
             "acquisition_kinds": [item["kind"] for bundle in bundles for item in bundle["acquisitions"]],
             "transition": strip_digests(snapshot["components"][INVENTORY][player]["transition"])}
+
+
+def current_name_binding(last, initial, status):
+    """A separate New Game may choose another default name at different input timing.
+
+    The current cartridge's raw name must instead remain byte-identical to its
+    own checked enrollment and admitted save identity throughout this route.
+    """
+    assert last["fields"]["name"] == initial["observation"]["source"]["fields"]["name"]
+    assert status["context"]["save_identity"] == initial["metadata"]["save_identity"]
+    return {"current": last["fields"]["name"], "enrollment_bound": True}
 
 
 def fps_between(commits):
@@ -421,15 +434,17 @@ def run_free_pair(variants):
                                            "acquisition_kinds": kinds, "save_status": last["save_status"],
                                            "transition": strip_digests(transition)},
                               "credit_run": credit_reference(p)}
+                initial = document["components"]["gen1-initial-observations"][p]
+                comparison["name"] = current_name_binding(last, initial, status)
                 reference = comparison["credit_run"]
                 if reference is not None:
                     assert last["fields"]["party"] == reference["party"]
                     assert last["fields"]["box"] == reference["box"]
-                    assert last["fields"]["name"] == reference["name"]
                     assert last["save_status"] == reference["save_status"]
                     assert kinds == reference["acquisition_kinds"] == []
                     assert comparison["free_run"]["transition"] == reference["transition"]
-                    comparison["result"] = "party, box and name bytes, save status, receipt kinds and transition identical"
+                    comparison["name"]["credit"] = reference["name"]
+                    comparison["result"] = "party, box, save status, receipt kinds and transition identical; name bound within this run"
                 else:
                     comparison["result"] = "credit run unavailable; set SLINK_CREDIT_RUN to compare"
                 summary["players"][p]["receipt_comparison"] = comparison
