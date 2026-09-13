@@ -43,8 +43,9 @@ def lua():
             frameadvance=function()assert(not physical,'frame advanced under a hold');advances=advances+1;frame=frame+1 end,
             getregister=function(k)return k=='PC' and 0x40 or k=='SP' and sp or 0 end}
         -- A saved overlay word on the stack exactly as save_overlay_on_stack leaves it (pairs pushed: 31 54 4C 53 ascending).
-        -- Pushed at 0xDFE0 by the service; the CPU has since nested ~1 KB deeper (SP 0xDBF0): any depth is found.
-        function stack_word()sp=0xDBF0;local saved={0x53,0x4C,0x54,0x31,1,5,7,6,0,0,0,0,0xA1,0xB2,0xC3,0xD4}
+        -- Pushed near the top of the fixed Stack section by the service; the CPU has since nested deeper (SP 0xDF10)
+        -- and, at this frame boundary, vcopy has even borrowed SP as a pointer: the section scan finds it regardless.
+        function stack_word()sp=0x8800;local saved={0x53,0x4C,0x54,0x31,1,5,7,6,0,0,0,0,0xA1,0xB2,0xC3,0xD4}
             local a=0xDFE0;for pair=8,1,-1 do bus[a]=saved[2*pair];bus[a+1]=saved[2*pair-1];a=a+2 end end
         -- BizHawk's global memory API (gen1_native_reattach reads the bus through it).
         memory={read_u8=function(a,d)if bus[a]~=nil then return bus[a]end;return (a>=0xC000 and a<0xE000) and 0 or 1 end}
@@ -263,15 +264,28 @@ def test_native_manifest_is_refused_outside_the_free_service_client_or_for_anoth
 
 def test_a_failing_physical_read_before_begin_leaves_the_core_held(lua):
     """The host is claimed and held before the first frame; if the pre-frame read itself fails
-    (here: an unreadable stack pointer), the entry fails with the hold in place and no frame runs."""
+    (here: the bus read raises), the entry fails with the hold in place and no frame runs."""
     lua.execute("frame=7;write_safe=false;overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
         start(launch_json);assert(physical==true)
-        sp=0x1234                                                    -- outside WRAM: the read refuses
-        local ok,why=service:step();assert(ok==false and tostring(why):find('stack pointer'))
+        package.loaded['memory_gb'].read_u8=function()error('bus unavailable',0)end
+        local ok,why=service:step();assert(ok==false and tostring(why):find('bus unavailable'))
         assert(physical==true and advances==0 and service.phase=='failed')
         assert(service:step()==false and physical==true)
+    ''')
+
+
+def test_a_cold_core_before_init_sets_the_stack_pointer_still_boots_one_clean_frame_at_a_time(lua):
+    """Before home/init.asm `ld sp, wStack` the core reports SP=$FFFE; the section scan does not
+    depend on SP, so a cold boot is clean and progresses under re-taken holds, never failing held."""
+    lua.execute("frame=0;write_safe=false;sp=0xFFFE;overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
+    lua.globals().launch_json = json.dumps(launch())
+    lua.execute(r'''
+        start(launch_json);assert(physical==true and service.native_physical()=='clean')
+        for _=1,4 do assert(service:step());assert(not physical and service.booting);emu.frameadvance()end
+        assert(advances==4 and service.runtime==nil and service.phase~='failed')
+        sp=0xDFF7;write_safe=true;assert(service:step());assert(physical and service.reattach_verdict=='clean')
     ''')
 
 

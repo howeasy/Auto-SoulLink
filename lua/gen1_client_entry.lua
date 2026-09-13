@@ -80,9 +80,11 @@ function M.start(launch,options)
     --    routine is halted at DONE waiting for release (byte5 == 7);
     --  * mid_routine: the service saved the word on the STACK (save_overlay_on_stack: pairs pushed
     --    so the magic reads 31 54 4C 53 ascending, preceded by byte5, byte4) and swapped the overlay
-    --    to tiles; the CPU is inside the original trade routine. Anything pushed lives at or above
-    --    SP and below the top of WRAM (pret wStack ends at $E000), so the whole range [SP, $E000)
-    --    is scanned: no assumption about nesting depth across apply/animation/evolution/save.
+    --    to tiles; the CPU is inside the original trade routine. The stack is the fixed pret
+    --    SECTION "Stack" ($DF00..$DFFF, wStack = $DFFF, ram/wram.asm) and everything pushed lives
+    --    inside it, so that whole section is scanned regardless of SP: no nesting-depth assumption,
+    --    and no dependence on SP, which a cold core reports outside WRAM before home/init.asm sets
+    --    `ld sp, wStack` and home/vcopy.asm borrows transiently.
     -- A cold boot shows neither (WRAM re-derived from SaveRAM, probe a4e3f1b), however late this
     -- script starts; a script attached mid-play shows one of them exactly when a free frame would be
     -- unowned. No frame-count heuristic is involved. The read runs under the startup hold that a
@@ -92,9 +94,7 @@ function M.start(launch,options)
         local base=native.foreground.overlay
         if memory.read_u8(base)==0x53 and memory.read_u8(base+1)==0x4c and memory.read_u8(base+2)==0x54
             and memory.read_u8(base+3)==0x31 and memory.read_u8(base+4)==1 then return "armed" end
-        local sp=emu.getregister("SP")
-        assert(type(sp)=="number" and sp>=0xC000 and sp<0xE000,"stack pointer outside WRAM")
-        for address=sp,0xE000-4 do
+        for address=0xDF00,0xE000-4 do
             if memory.read_u8(address)==0x31 and memory.read_u8(address+1)==0x54 and memory.read_u8(address+2)==0x4c
                 and memory.read_u8(address+3)==0x53 then return "mid_routine" end
         end
