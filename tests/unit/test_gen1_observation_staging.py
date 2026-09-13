@@ -6,6 +6,7 @@ import secrets
 import pytest
 
 from server import gen1_engine_signal_runtime as engine, gen1_inventory_observation as inventory
+from server.gen1_hud_feedback import PRESENTATION_COMMANDS, validate_body as validate_hud_body
 from server.gen1_run_config import create_runtime
 from server.protocol_journal import JournalError
 from server.state import LinkStatus
@@ -36,6 +37,23 @@ def forbid_publication(monkeypatch, runtime):
     monkeypatch.setattr(runtime.journal, 'register_session', forbidden)
 
 
+def physical_commands(commands):
+    """Allow checked presentation feedback after, never in place of, a write."""
+    assert set(commands) == {'a', 'b'}
+    physical = {}
+    for player, bodies in commands.items():
+        seen_presentation = False
+        physical[player] = []
+        for body in bodies:
+            if body['cmd'] in PRESENTATION_COMMANDS:
+                validate_hud_body(body)
+                seen_presentation = True
+            else:
+                assert not seen_presentation, 'physical command followed presentation feedback'
+                physical[player].append(body)
+    return physical
+
+
 @pytest.mark.parametrize('variant', ['red', 'blue', 'yellow'])
 def test_sources_and_checkpoints_compose_on_one_detached_stage(tmp_path, monkeypatch, variant):
     runtime = create_runtime(tmp_path, contract(variant, variant))
@@ -61,7 +79,7 @@ def test_sources_and_checkpoints_compose_on_one_detached_stage(tmp_path, monkeyp
                 )
                 assert set(staged) == {'entry', 'result', 'commands', 'records'}
                 assert document['components'][module.COMPONENT][player] == staged['entry']
-                assert staged['commands'] == {'a': [], 'b': []}
+                assert physical_commands(staged['commands']) == {'a': [], 'b': []}
                 assert staged['result']['ack'] == 'ACK'
                 records.extend(staged['records'])
         assert len(stage.rules.links) == len(document['identities']['links']) == 1
@@ -113,8 +131,9 @@ def test_linked_death_stages_command_without_publishing_it(tmp_path, monkeypatch
             {'event': 'engine_signals', 'payload': value},
         )
         assert stage.rules.links[0].status == LinkStatus.DEAD
-        assert [row['cmd'] for row in staged['commands']['b']] == ['force_faint']
-        assert staged['commands']['a'] == []
+        physical = physical_commands(staged['commands'])
+        assert [row['cmd'] for row in physical['b']] == ['force_faint']
+        assert physical['a'] == []
         assert not runtime.journal.pending_ids('a') and not runtime.journal.pending_ids('b')
         assert durable_evidence(runtime) == before
     finally:
