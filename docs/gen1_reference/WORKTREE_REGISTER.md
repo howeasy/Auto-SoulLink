@@ -27,3 +27,5 @@ Update rule for an agent: read the master guide, run `git worktree list --porcel
 P0 acknowledged clean b06d796 on HOUNDOOM and is ACTIVE with sole report ownership; subsequent f0c393f changes only coordinator docs. No runtime lane granted.
 
 P0b isolated OMP onboarding reserves no files and no runtime lane; canonical source reads only, guide controls any later review grant.
+
+D0b acknowledged 13:11 UTC on HOUNDOOM at clean 18446b1; ACTIVE research/report-only ownership. P0 initial verify-inputs exited 1 for unset SLINK_EMUHAWK/SLINK_UPR_JAR; static census continues, no dependencies changed.
