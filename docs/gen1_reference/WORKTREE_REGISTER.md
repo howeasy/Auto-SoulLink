@@ -45,3 +45,5 @@ Claude next-route support completed/released; source-derived parcel/Oak/Mart rou
 OMP late R/B receipt returned and matches independent verification; now has one reply-only fresh live preflight under the guide, no file/test/emulator writer. Provider error history retained.
 
 D1 review: Standards accepted, Spec found Pallet dialogue blocker. Sol owns only route Lua, bootstrap Lua and new route model test for the source-qualified correction plus existing report/receipts; all other candidate code frozen. OMP preflight resent cx-7c56e110. No live lane.
+
+Pallet correction frozen/released:44/44 models/Ruff; same two reviewers confirm revised three-file hashes in guide. No active source writer or live runner.
