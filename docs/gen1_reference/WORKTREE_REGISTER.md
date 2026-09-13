@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0 input-attribution correction READY reserves the same two tracked test files and named report/model outputs to Sol. Needed because fixed human_inputs_only metadata must not mislabel autonomous normal-button input. No live run yet; Claude report correction and isolated OMP source check are disjoint.
+
 Owner now authorizes autonomous normal-button emulator checks without human input, superseding availability hold. No live run started yet; root will use initialized sky Computer Use against actual CLI windows after preflight. Claude R0 report correction and fresh isolated OMP encoding check are source-only, disjoint. D0 source frozen; no production writer.
 
 R0 supplied contractf126d3c9 frozen; independent source Spec review and short isolated OMP encoding check ACTIVE conditional on ACK, both reply-only/no writes/execution. No classifier implementation grant. D0 code integrated, emulator work held by owner.
