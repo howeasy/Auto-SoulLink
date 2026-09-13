@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-A integrated7b8e203, no active code writer, physical repeat awaiting operator availability. R0 technical classification choices recorded; Claude supplied-evidence contract report READY on sole named path, pending ACK. No runtime/replay authority or source edit.
+
 D0-A final two-file candidate accepted for integration at MODEL level after both reviews, nine complete model passes and Ruff pass. Final hashes and receipt pins in guide. No production/manifest edits or physical invocation; all file grants released. R0 source report remains contract HOLD.
 
 D0-A behavior/ownership reviews passed; focused Ruff found five import-order findings. Same two files/report assigned for import-only cleanup and fresh complete modeled/lint receipts. No live lane or production edit; R0 claim remains HOLD.
