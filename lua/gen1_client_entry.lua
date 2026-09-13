@@ -262,6 +262,9 @@ function M.start(launch,options)
         local function hard_revoke(reason)
             assert(self.holds:set("lifecycle",true,reason))
             if self.instruction then assert(self.instruction:revoke(reason))end
+            -- A re-admission rotates the control binding: the server accepts no earlier read as this
+            -- session's evidence, so the held read is republished once the runtime is bound again.
+            if native then self.reattach_republish=true end
             return true
         end
         if free then
@@ -327,6 +330,12 @@ function M.start(launch,options)
                 if baseline.pending_inventory_retry then
                     proof.pending_inventory_retry=baseline.pending_inventory_retry
                 end
+                if native then
+                    -- Terminal-only native continuity: stated under this lifecycle hold from the live
+                    -- lease and host, never from a remembered verdict.
+                    proof.native={lease_phase=assert(self.native.native_store:read()).phase,
+                        host_armed=self.native_host.armed(),host_failure=self.native_host.failure() or JSON.null}
+                end
                 return proof
             end)
             if not ok then return deferred(proof)end
@@ -365,6 +374,16 @@ function M.start(launch,options)
             service_continuity=free and service_continuity or nil,
             on_service_authority=free and accept_service or nil,
             read_context=free and source_owned or owned,
+            semantic_settlement=native and function(oldest,packet)
+                -- Only the typed native read settles here; every other semantic event (sync,
+                -- command_ack, trade events) settles as before, and a verdict riding one of those
+                -- replies is unsolicited and refused.
+                if type(oldest)~="table" or type(oldest.payload)~="table" or oldest.payload.event~="native_reattach" then
+                    assert(type(packet)~="table" or packet.native_reattach_result==nil,"unsolicited native reattach settlement")
+                    return nil
+                end
+                return require("gen1_native_reattach").settlement(oldest,packet,self.store.backend.sha256)
+            end or nil,
             operation_execution=operations,
             operation_ready=ready,
             executor_adapter=executor}))
@@ -396,11 +415,23 @@ function M.start(launch,options)
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
+                -- Native trade: the party snapshot the native checkpoint rides on is read INSIDE the same
+                -- writer hold as the full inventory point it accompanies, and handed to the loop's
+                -- native_checkpoint(frame) for that exact frame only (never re-read unheld).
+                local function native_party_under_hold(frame)
+                    if not native then return end
+                    local party=require("gen1_command_receipts").party_snapshot(memory,launch.cartridge.variant)
+                    self.native_point=party and {frame=frame,party=party} or nil
+                end
                 local function capture_inventory()
                     if not memory.isPartyWriteSafe()then return nil end
                     assert(self.holds:set("writer",true,"full inventory checkpoint"))
-                    local ok,point=pcall(Observation.capture,{owned=owned,host=self.host,memory=memory,
-                        variant=launch.cartridge.variant})
+                    local ok,point=pcall(function()
+                        local frame=emu.framecount()
+                        local value=Observation.capture({owned=owned,host=self.host,memory=memory,variant=launch.cartridge.variant})
+                        native_party_under_hold(frame);assert(emu.framecount()==frame,"inventory checkpoint frame changed")
+                        return value
+                    end)
                     assert(self.holds:set("writer",false,"full inventory checkpoint complete"))
                     if not ok then error(point,0)end
                     return point
@@ -414,6 +445,7 @@ function M.start(launch,options)
                         local dirty=previous~=false and(force or not previous or not Fingerprint.same(previous,current))
                         local full=dirty and Observation.capture({owned=owned,host=self.host,memory=memory,
                             variant=launch.cartridge.variant})or nil
+                        if full then native_party_under_hold(frame)end
                         source_owned();assert(emu.framecount()==frame,"inventory fingerprint frame changed")
                         return full,current,dirty
                     end)
@@ -437,6 +469,13 @@ function M.start(launch,options)
                         append_many=function(_,events,baseline)return self.runtime:observe(events,baseline)end},
                     session={pump=function()assert(self.runtime:step())end}, -- never blocks: connector settimeout(0)
                     inventory=capture_inventory,checkpoint=checkpoint,
+                    native_checkpoint=native and function(frame)
+                        -- Hand over the party read under the writer hold of THIS frame's full point (see
+                        -- native_party_under_hold); a frame number alone never grants a fresh unheld read.
+                        local point=self.native_point;self.native_point=nil
+                        if not point or point.frame~=frame or emu.framecount()~=frame then return JSON.null end
+                        return {schema="rby-native-observation-v1",party=point.party}
+                    end or nil,
                     writer={pending=writer_pending,service=function()
                         if native_pending() and not (faint~=nil and faint.pending()) then
                             -- Arm at this loop boundary (between frames). The native vote keeps the core held
@@ -520,6 +559,10 @@ function M.start(launch,options)
                 if not visible then return end
                 begin()
             end
+            if native and self.reattach_republish and self.runtime:is_bound() and self.holds:is_held() then
+                self.reattach_republish=false
+                self:republish_reattach()
+            end
             if self.loop then
                 -- One tick per emulated frame (run() advances it). Under a hold taken outside the loop
                 -- only the runtime pumps, so a tick never re-observes the same frame; a native command
@@ -569,6 +612,15 @@ function M.start(launch,options)
         local ids,why=self.runtime:observe(JSON.array({event}),baseline)
         assert(ids,why)
         return physical
+    end
+    -- After a revoke/re-admission: a fresh held read under the current binding (the old verdict is
+    -- discarded; the loop, if any, stays under the lifecycle hold until the server answers again).
+    function self:republish_reattach()
+        assert(self.host.status().physical_stop_verified,"native reattach republication requires the hold")
+        self.reattach_read=require("gen1_native_reattach").read({host=self.host,memory=memory,manifest=native,
+            lease=function()return self.native.native_store:read()end})
+        self.reattach_server=nil
+        return self:classify_reattach(native_physical())
     end
     -- One bounded native slice per entry step while the native vote holds: pump the native
     -- service, one runtime turn, at most one authorized original-routine frame; release the

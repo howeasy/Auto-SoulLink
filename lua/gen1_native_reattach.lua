@@ -45,6 +45,7 @@ end
 M.RESULT_SCHEMA="rby-native-reattach-result-v1"
 function M.settlement(oldest,packet,sha256)
     assert(type(oldest)=="table" and type(oldest.payload)=="table" and oldest.payload.event=="native_reattach","native reattach event required")
+    assert(type(packet)~="table" or packet.observation_result==nil,"unsolicited observation settlement on a native reattach reply")
     local result=type(packet)=="table" and packet.native_reattach_result or nil
     assert(type(result)=="table" and result.schema==M.RESULT_SCHEMA and result.operation_id==oldest.operation_id
         and (result.verdict=="released" or result.verdict=="held") and type(result.class)=="string"

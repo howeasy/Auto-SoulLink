@@ -59,6 +59,7 @@ function M.new(options)
     end
     local fixed={protocol=PROTOCOL,hold_event=HOLD_EVENT,variant=variant,executor_adapter=adapter,
         pending_delivery_hint=true,
+        semantic_settlement=options.semantic_settlement,
         metadata_matches=M.metadata_matches,
         read_hello=function()
             local context,why=options.read_context()
