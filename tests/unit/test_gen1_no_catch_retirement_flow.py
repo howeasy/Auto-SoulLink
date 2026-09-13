@@ -21,6 +21,7 @@ from tests.unit.observation_fixture import checkpoint, commit, observe, party_bl
 from tests.unit.test_gen1_engine_signal_runtime import payload as engine_payload
 from tests.unit.test_gen1_faint_runtime import bag
 from tests.unit.test_gen1_held_faint import checkpoint as held_checkpoint
+from tests.unit.test_gen1_hud_feedback import hud_receipt
 from tests.unit.test_gen1_inventory_observation import party_point
 from tests.unit.test_gen1_sessions import contract
 from tests.unit.test_gen1_storage_runtime import complete_storage
@@ -45,6 +46,28 @@ def ack(runtime, receipt):
     }
     operation = secrets.token_hex(16)
     return operation, message, retirement.acknowledge(runtime, "a", operation, message)
+
+
+def ack_hud_head(runtime, player):
+    command = runtime.journal.command(player, runtime.journal.pending_ids(player)[0])
+    assert command["body"]["cmd"] == "hud_notice"
+    session = runtime.gate.sessions[player]
+    return runtime.process(
+        {
+            "protocol": runtime.protocol,
+            "player": player,
+            "admission_epoch": runtime.gate.epoch,
+            "session_id": session.session_id,
+            "seq": session.last_seq + 1,
+            "operation_id": secrets.token_hex(16),
+            "event": "command_ack",
+            "command_id": command["command_id"],
+            "command_sequence": command["command_sequence"],
+            "outcome": "ACK",
+            "receipt": hud_receipt(command),
+        },
+        session.owner,
+    )
 
 
 @pytest.mark.parametrize("variants", [("yellow", "yellow"), ("red", "blue"), ("blue", "yellow")])
@@ -82,8 +105,10 @@ def test_quarantined_capture_is_archived_after_peer_no_catch_and_reopens(tmp_pat
         key = obligation["key"]
         assert key not in state.rules.party_keys["a"]
         assert next(m for m in inventory(point["source"], state.rules.player_identity["a"])["members"] if m["key"] == key)["location"] == "box"
+        assert [runtime.journal.command("a", identifier)["body"]["cmd"] for identifier in runtime.journal.pending_ids("a")] == ["retirement_observe", "hud_notice"]
         command = runtime.journal.command("a", runtime.journal.pending_ids("a")[0])
         assert command["body"]["cmd"] == "retirement_observe"
+        assert command["body"]["key"] == key
         ack(
             runtime,
             {
@@ -97,8 +122,13 @@ def test_quarantined_capture_is_archived_after_peer_no_catch_and_reopens(tmp_pat
                 "point": copy.deepcopy(point["source"]),
             },
         )
+        assert [runtime.journal.command("a", identifier)["body"]["cmd"] for identifier in runtime.journal.pending_ids("a")] == ["hud_notice", "acquisition_retire"]
+        ack_hud_head(runtime, "a")
+        assert [runtime.journal.command("a", identifier)["body"]["cmd"] for identifier in runtime.journal.pending_ids("a")] == ["acquisition_retire"]
         command = runtime.journal.command("a", runtime.journal.pending_ids("a")[0])
         entry = runtime.state().document()["components"][retirement.COMPONENT]["a"][0]
+        assert command["body"]["acquisition_id"] == entry["acquisition_id"]
+        assert command["body"]["key"] == key
         prepared = entry["payload"]
         receipt = {
             "schema": SCHEMA,
@@ -148,6 +178,8 @@ def test_quarantined_capture_is_archived_after_peer_no_catch_and_reopens(tmp_pat
         transition = runtime.state().document()["components"]["gen1-inventory-observations"]["a"]["transition"]
         assert [r["kind"] for r in transition["authorized_writes"]] == ["acquisition_retire"]
         assert all(not transition[k] for k in ("added", "removed", "movements", "party_hp_zero", "changed"))
+        assert [runtime.journal.command("b", identifier)["body"]["cmd"] for identifier in runtime.journal.pending_ids("b")] == ["hud_notice"]
+        ack_hud_head(runtime, "b")
     finally:
         runtime.close()
     runtime = open_runtime(tmp_path)
