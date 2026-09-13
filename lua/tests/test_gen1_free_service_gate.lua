@@ -69,12 +69,19 @@ local function status_now()return SLINK_RUNTIME_STATUS and SLINK_RUNTIME_STATUS(
 local function begin_phase(status)
     phase_index=phase_index+1;phase=PHASES[phase_index]
     if not phase then return false end
+    assert(type(phase.active)=="boolean" and phase.frames%WINDOW==0,"bounded active/quiet windows required")
     client.speedmode(phase.speed)
     client.frameskip(0)
     emu.minimizeframeskip(false)
     phase.began={frame=emu.framecount(),clock=clock(),pending_events=status.runtime.pending_events}
     phase.windows=JSON.array();phase.window={frame=emu.framecount(),clock=clock()}
     phase.diagnostics_before=status.observation_diagnostics
+    phase.probes=JSON.array()
+    if phase.active then
+        for _=1,phase.frames/WINDOW do
+            phase.probes[#phase.probes+1]={injected=false,restored=false,address=assert(symbols.wPartyDataStart)+403}
+        end
+    end
     return true
 end
 local function end_phase(status)
@@ -82,7 +89,8 @@ local function end_phase(status)
     local frames,seconds=ended.frame-phase.began.frame,ended.clock-phase.began.clock
     phases[#phases+1]={name=phase.name,speed=phase.speed,planned_frames=phase.frames,frames=frames,seconds=seconds,
         fps=frames/seconds,began=phase.began,ended=ended,windows=phase.windows,
-        diagnostics={before=phase.diagnostics_before,after=status.observation_diagnostics}}
+        diagnostics={before=phase.diagnostics_before,after=status.observation_diagnostics},
+        active=phase.active,probes=phase.probes}
 end
 emu.yield=function()
     -- Held phases yield here, as the credit-loop gate does: normal inputs before the hold,
@@ -118,11 +126,29 @@ emu.frameadvance=function()
     else
         local buttons={};for key,value in pairs(idle)do buttons[key]=value end
         buttons.Right=emu.framecount()-loop_started.frame<16;joypad.set(buttons)
+        if phase and phase.active then
+            local offset=emu.framecount()-phase.began.frame
+            local probe=phase.probes[math.floor(offset/WINDOW)+1]
+            if probe then
+                local inside=offset%WINDOW
+                if not probe.injected and inside>=90 then
+                    probe.original=memory.read_u8(probe.address,"System Bus")
+                    probe.replacement=(probe.original+1)%256
+                    probe.injected_frame=emu.framecount()
+                    memory.write_u8(probe.address,probe.replacement,"System Bus")
+                    probe.injected=true
+                elseif probe.injected and not probe.restored and inside>=180 then
+                    memory.write_u8(probe.address,probe.original,"System Bus")
+                    probe.restored_frame=emu.framecount();probe.restored=true
+                end
+            end
+        end
         if status then
             if phase and emu.framecount()-phase.window.frame>=WINDOW then
                 local now=clock();local frames=emu.framecount()-phase.window.frame
                 phase.windows[#phase.windows+1]={first_frame=phase.window.frame,last_frame=emu.framecount(),frames=frames,
-                    seconds=now-phase.window.clock,fps=frames/(now-phase.window.clock)}
+                    seconds=now-phase.window.clock,fps=frames/(now-phase.window.clock),
+                    pending_events=status.runtime.pending_events}
                 phase.window={frame=emu.framecount(),clock=now}
             end
             assert(not read(input.directory.."/abort.json"),"paired free-service launcher test aborted")

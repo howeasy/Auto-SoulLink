@@ -58,6 +58,7 @@ function M.new(options)
         adapter[name]=function(body,...)return options.executor_adapter[name](M.unwrap(body,player),...)end
     end
     local fixed={protocol=PROTOCOL,hold_event=HOLD_EVENT,variant=variant,executor_adapter=adapter,
+        pending_delivery_hint=true,
         metadata_matches=M.metadata_matches,
         read_hello=function()
             local context,why=options.read_context()
