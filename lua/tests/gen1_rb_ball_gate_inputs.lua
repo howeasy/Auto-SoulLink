@@ -108,19 +108,34 @@ function M.new(expected)
             assert(point.menu_y~=12 and point.menu_y~=14,"unknown battle menu; refuse blind A")
             return press("A",frame),"rival-dialogue"
         end
-        if point.lab_rival_done then
-            assert(self.battle_seen and point.battle_result==1 and point.party_hp>0,
-                "lab loss/heal checkpoint differs")
+        if point.lab_script==8 then return idle(),"rival-walks-to-ball" end
+        if point.lab_script==9 then
+            if point.npc_moving or point.joy_ignore==0xFF then return idle(),"rival-ball-movement" end
+            assert(point.joy_ignore==0xFC,"rival starter dialogue lacks A/B permission")
+            return press("A",frame),"rival-chooses-starter"
+        end
+        if point.lab_script==10 then
+            if point.y==6 then return press("B",frame),"rival-challenge-dialogue" end
+            if point.y<5 then return walk(point,point.x,5),"lab-clear-ball-row" end
+            if point.x~=5 then return walk(point,5,5),"lab-center-row" end
+            local buttons=idle();buttons.Down=true;return buttons,"start-lab-rival"
+        end
+        if point.lab_script==11 or point.lab_script==12 then
+            return idle(),"rival-battle-transition"
+        end
+        if point.lab_script==13 then
+            if point.npc_moving or point.joy_ignore==0xFF then return idle(),"rival-exit-movement" end
+            assert(point.joy_ignore==0xF0,"rival exit dialogue lacks A/B permission")
+            return press("B",frame),"rival-exit-dialogue"
+        end
+        if point.lab_script==14 then return idle(),"watch-rival-exit" end
+        if point.lab_script==18 then
+            assert(self.battle_seen and point.lab_rival_done and point.battle_result==1 and point.party_hp>0,
+                "lab loss/heal/free checkpoint differs")
             self.loss_seen=true
             return idle(),"lab-loss-complete"
         end
-        if point.x~=5 or point.y<5 then
-            if point.y<5 then return walk(point,point.x,5),"lab-clear-ball-row" end
-            return walk(point,5,5),"lab-center-row"
-        end
-        local buttons=idle();buttons.Down=true
-        if frame%16<2 then buttons.A=true end
-        return buttons,"start-lab-rival"
+        error("unexpected post-starter lab script before first rival exit")
     end
     return self
 end

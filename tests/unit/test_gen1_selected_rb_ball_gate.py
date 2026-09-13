@@ -108,8 +108,50 @@ def test_rb_route_requires_lab_loss_and_heal_before_complete():
     point.menu_y, point.menu_x, point.menu_max, point.menu_index = 14, 9, 1, 0
     driver.step(handshake, status, point, 16)
     point.battle, point.lab_rival_done, point.battle_result, point.party_hp = 0, True, 1, 20
-    point.lab_script = 12
+    point.lab_script = 18
     buttons, phase = driver.step(handshake, status, point, 17)
+    assert phase == "lab-loss-complete" and not buttons["A"] and not buttons["Down"]
+
+
+def test_post_starter_lab_script_flow_waits_through_rival_exit():
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle = 0x28, 1, 0
+    point.x, point.y, point.lab_script, point.joy_ignore = 8, 4, 8, 0
+    steps = [
+        (16, 8, 0, False, "rival-walks-to-ball", None),
+        (17, 9, 0xFF, True, "rival-ball-movement", None),
+        (32, 9, 0xFC, False, "rival-chooses-starter", "A"),
+        (33, 10, 0, False, "lab-clear-ball-row", "Down"),
+    ]
+    for frame, script, mask, npc, phase, button in steps:
+        point.lab_script, point.joy_ignore, point.npc_moving = script, mask, npc
+        buttons, actual = driver.step(handshake, status, point, frame)
+        assert actual == phase
+        if button:
+            assert buttons[button]
+    point.x, point.y = 5, 6
+    buttons, phase = driver.step(handshake, status, point, 48)
+    assert phase == "rival-challenge-dialogue" and buttons["B"]
+    point.lab_script = 11
+    buttons, phase = driver.step(handshake, status, point, 49)
+    assert phase == "rival-battle-transition" and not buttons["A"]
+    point.lab_script, point.battle, point.opponent = 12, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 2
+    point.move2, point.move2_pp = 0x2D, 20
+    buttons, phase = driver.step(handshake, status, point, 64)
+    assert phase == "use-growl" and buttons["A"]
+    point.battle, point.lab_script = 0, 12
+    buttons, phase = driver.step(handshake, status, point, 65)
+    assert phase == "rival-battle-transition" and not buttons["A"]
+    point.lab_script, point.joy_ignore = 13, 0xF0
+    buttons, phase = driver.step(handshake, status, point, 80)
+    assert phase == "rival-exit-dialogue" and buttons["B"]
+    point.lab_script, point.npc_moving = 14, True
+    buttons, phase = driver.step(handshake, status, point, 81)
+    assert phase == "watch-rival-exit" and not buttons["A"] and not buttons["Down"]
+    point.lab_script, point.npc_moving = 18, False
+    point.lab_rival_done, point.battle_result, point.party_hp = True, 1, 20
+    buttons, phase = driver.step(handshake, status, point, 82)
     assert phase == "lab-loss-complete" and not buttons["A"] and not buttons["Down"]
 
 

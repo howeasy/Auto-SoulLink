@@ -91,3 +91,7 @@ Both speed/dialog writers frozen/released with hashes in guide. Root speedreview
 Dialogue+speed candidates reviewed; finalcombined46pass. Root owns fresh3×attempt4 afterintegration, allsourcewritersreleased. Parcel candidatefrozenawaitingfirstcheckpoint; muteDONE.
 
 Attempt4closed aftertimeout/fullcleanup; physical starters/source entries present but settlement/link absent in checked snapshot, no lablossproof. Sol1 owns finite remaininglabdialogue/input correction in existingLua/unit/report. No emulator; parcel candidatefrozen.
+
+Finite lab correction frozen47/47/Ruff; no sourcewriter. Codex independent source review active; root verifies/integrates. Nextlive3× only afteracceptance.
+
+Final finite-labreviewaccepted,47/47/Ruff. Rootsole3×attempt5afterintegration; no sourcewriters. ParcelcandidatefrozenawaitingfirstPASS.
