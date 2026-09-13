@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+OMP host preflight complete/released; one short read-only controls/config follow-up is assigned in the guide. Sol cleanup correction remains the only .cache/report writer; no live lane or production writer.
+
 N0 enrollment review transition: independent Standards found two process-cleanup exception gaps, verified by coordinator. Same Sol owner receives build-only correction grant on the existing script/report, plus `.cache/n0-enrollment-cleanup-check.py/.txt` for a bounded modeled exception check. No real subprocess/server/emulator execution or production writer. Other reviewers remain read-only against frozen2c97758b; no worktree changes.
 
 Current successor transition: canonical gen1/rc verified at `c9f8ab7`, production15727ec/source-testsa1714c5. Repaired unit7815 and configured integration161 pass without skips; independent OMP receipt review complete. N0 enrollment script/report frozen and writer released; isolated Standards and context-sensitive Claude advisory plus short OMP host check are read-only ACTIVE conditional on matching ACK, exact scopes in RC_MASTER_GUIDE. No production writer or live lane. Enrollment report is the sole untracked file. No worktree changes; parked speed-gate remains preserved and locked. The guide's current dispatch supersedes older status entries below.
