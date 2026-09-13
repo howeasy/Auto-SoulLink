@@ -11,8 +11,14 @@ import time
 import pytest
 from lupa.lua54 import LuaError
 
-from server.gen1_hud_feedback import (RECEIPT_SCHEMA, STATE_RECEIPT_SCHEMA, build_notice,
-                                      build_state, verify_receipt, verify_state_receipt)
+from server.gen1_hud_feedback import (
+    RECEIPT_SCHEMA,
+    STATE_RECEIPT_SCHEMA,
+    build_notice,
+    build_state,
+    verify_receipt,
+    verify_state_receipt,
+)
 from server.protocol import canonical_json, decode_frame, digest
 from tests.unit.test_client_journal import start
 from tests.unit.test_client_state_store import (
@@ -35,14 +41,15 @@ HARNESS = r"""
     package.path=root..'/data/games/gen1_rby/?.lua;'..package.path
     package.loaded.platform_identity={new_nonce=new_id}
     Runtime=require('gen1_runtime')
-    frame=100;now=1000;draws={};boxes=0;box_log={};fail_draw=false;fail_receipt=false;touched={}
+    frame=100;now=1000;draws={};boxes=0;clears=0;box_log={};fail_draw=false;fail_receipt=false;touched={}
     emu={framecount=function()return frame end}
     gui={drawText=function(x,y,text,color)
             if fail_draw then fail_draw=false;error('display lost',0)end
             draws[#draws+1]={frame=frame,text=text,color=color,y=y}
         end,
         drawBox=function(x,y,right,bottom,outline,fill)
-            boxes=boxes+1;box_log[#box_log+1]={x=x,y=y,right=right,bottom=bottom,outline=outline,fill=fill}end}
+            boxes=boxes+1;box_log[#box_log+1]={x=x,y=y,right=right,bottom=bottom,outline=outline,fill=fill}end,
+        clearGraphics=function()clears=clears+1 end}
     local function trap(name)
         return setmetatable({},{__index=function(_,key)
             touched[#touched+1]=name..'.'..tostring(key);error(name..' touched: '..tostring(key),0)end})
@@ -351,23 +358,35 @@ def test_overlay_retains_fifo_but_immediate_draw_briefly_preempts_visual_order(r
     runtime.execute(r"""
         assert(Overlay.present({surface='hud',text='A',frames=2,r=1,g=2,b=3})==true)
         assert(Overlay.present({surface='hud',text='B',frames=1,r=1,g=2,b=3})==true)
-        assert(Overlay.retained().hud==1) -- B consumed its one-frame budget in present()
+        assert(Overlay.retained().hud==2)
         Overlay.render()
+        assert(Overlay.retained().hud==2)
+        Overlay.render();Overlay.render()
         assert(Overlay.retained().hud==0)
-        local erase=boxes;Overlay.render();assert(boxes==erase+1) -- one transparent erase box, no text
+        local erased=clears;Overlay.render();assert(clears==erased+1) -- persistent canvas cleared
         assert(Overlay.present({surface='prompt',text='\226\152\133 Linked \195\169',frames=1,r=1,g=2,b=3})==true)
         for i=1,20 do assert(Overlay.present({surface='prompt',text='P'..i,frames=5}))end
-        assert(Overlay.retained().prompt==20)
-        local before_clear=boxes
+        assert(Overlay.retained().prompt==21)
+        local before_clear=clears
         assert(Overlay.clear()==true)
-        assert(boxes==before_clear+1) -- the visible prompt surface was actually erased
+        assert(clears==before_clear+1) -- the visible prompt surface was actually erased
         assert(Overlay.retained().hud==0 and Overlay.retained().prompt==0)
     """)
     # Actual same-surface draw order is A,B,A, not strict visual FIFO. B must
     # draw now for a truthful ACK; deferring it would wedge later physical work
     # on a held core. All remaining frames are retained without silent eviction.
-    assert [d["text"] for d in draws(runtime)] == ["A", "B", "A", "* Linked e"] + [f"P{i}" for i in range(1, 21)]
-    assert draws(runtime)[3]["color"] == "#010203" and draws(runtime)[4]["color"] == "#FFFFFF"
+    assert [d["text"] for d in draws(runtime)] == ["A", "B", "A", "A", "B", "* Linked e"] + [f"P{i}" for i in range(1, 21)]
+    assert draws(runtime)[5]["color"] == "#010203" and draws(runtime)[6]["color"] == "#FFFFFF"
+
+
+def test_link_formed_kind_reaches_shared_compact_prompt(runtime):  # noqa: F811
+    g = harness(runtime)
+    body = notice(kind="link_formed", surface="prompt", text="BULBASAUR and CHARMANDER li...")
+    g.deliver(json.dumps([wrapped(body, 1, ID1)]))
+    done, result = g.step(ID1)
+    assert done is True and result["outcome"] == "ACK"
+    assert draws(runtime)[-1]["text"] == "Linked!"
+    assert status_of(runtime)["retained"] == 1
 
 
 def test_terminal_game_over_survives_ack_retirement_and_vm_reload_without_new_commands(runtime):  # noqa: F811
@@ -392,7 +411,7 @@ def test_terminal_game_over_survives_ack_retirement_and_vm_reload_without_new_co
     count = len(draws(runtime))
     g.restart()  # the previous overlay erases, then the new instance restores visibly
     assert len(draws(runtime)) == count + 1 and draws(runtime)[-1]["text"] == "GAME OVER!"
-    assert json.loads(g.boxes_json())[-2]["fill"] == 0  # actual transparent erase before restore
+    assert runtime.eval("clears") >= 1  # canvas cleared before persistent state restore
     assert runtime.eval("Overlay.is_game_over()") is True
     assert json.loads(g.state_json())["outbox"] == []
     assert status_of(runtime)["pending"] == 0
@@ -404,7 +423,7 @@ def test_terminal_game_over_survives_ack_retirement_and_vm_reload_without_new_co
     assert json.loads(g.state_json())["hud_state"] == state["hud_state"]
     runtime.execute("assert(Overlay.clear())")  # explicit close/new-run erases persistent GUI pixels
     assert runtime.eval("Overlay.is_game_over()") is False
-    assert json.loads(g.boxes_json())[-1]["fill"] == 0
+    assert runtime.eval("clears") >= 2
 
 
 def test_terminal_state_replay_after_local_receipt_loss_restores_without_an_effect_flood(runtime):  # noqa: F811
@@ -465,7 +484,8 @@ FAINT_FIXTURE = r"""
     package.loaded.platform_identity={new_nonce=new_id}
     now=1;frame=100;physical_writes=0;held=true;draws={}
     emu={framecount=function()return frame end};gameinfo={getromhash=function()return string.rep('e',40)end}
-    gui={drawText=function(_,_,text)draws[#draws+1]=text end,drawBox=function()end}
+    gui={drawText=function(_,_,text)draws[#draws+1]=text end,drawBox=function()end,
+        clearGraphics=function()end}
     context={context_generation=string.rep('c',32),save_identity={ot_id='0000',trainer_name='SAME'}}
     current={hp=10}
     package.loaded.gen1_force_faint_executor={new=function()return {
@@ -543,7 +563,8 @@ ENTRY_HARNESS = r"""
     physical=false;nonce=0;frame=100;draws={};boxes=0;pending_faint=false;prior_clears=0
     gameinfo={getromhash=function()return string.rep('e',40)end}
     emu={framecount=function()return frame end,yield=function()end,frameadvance=function()error('startup advanced a frame')end}
-    gui={drawText=function(_,_,text)draws[#draws+1]={frame=frame,text=text}end,drawBox=function()boxes=boxes+1 end}
+    gui={drawText=function(_,_,text)draws[#draws+1]={frame=frame,text=text}end,
+        drawBox=function()boxes=boxes+1 end,clearGraphics=function()prior_clears=prior_clears+1 end}
     event={onloadstate=function()return 'load-hook'end,unregisterbyid=function()end}
     console={log=function()end}
     package.loaded['memory_gb']={initProfile=function()end,isPartyWriteSafe=function()return true end,
@@ -632,7 +653,8 @@ def test_client_entry_composes_the_router_over_hud_and_held_faint_and_renders_on
     assert [d["frame"] for d in json.loads(g.draws_json())] == [100, 101]
     lua.execute("assert(service:step())")  # same frame while held: no render
     assert len(json.loads(g.draws_json())) == 2
-    lua.execute("local before=boxes;service:close();assert(boxes==before+1 and SLINK_RUNTIME_OVERLAY_CLEAR==nil)")
+    lua.execute("local before=prior_clears;service:close();"
+                "assert(prior_clears==before+1 and SLINK_RUNTIME_OVERLAY_CLEAR==nil)")
 
 
 # The real durable runtime and gen1_runtime binding over the real Python runtime: the server
@@ -644,7 +666,8 @@ E2E_HARNESS = r"""
     gameinfo={getromhash=function()return data.cartridge.final_rom_sha1 end}
     frame=100;now=1000;draws={};held=true;nonce=0;t=0;connected=false;incoming={};outgoing={}
     emu={framecount=function()return frame end}
-    gui={drawText=function(_,_,text)draws[#draws+1]={frame=frame,text=text}end,drawBox=function()end}
+    gui={drawText=function(_,_,text)draws[#draws+1]={frame=frame,text=text}end,
+        drawBox=function()end,clearGraphics=function()end}
     context=data.context
     initial=Journal.initial();store=assert(open_store())
     ids=0

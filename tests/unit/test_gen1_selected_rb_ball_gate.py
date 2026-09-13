@@ -95,11 +95,44 @@ def test_rb_route_refuses_damage_or_struggle_during_lab_rival():
     with pytest.raises(LuaError, match="Growl unavailable"):
         driver.step(handshake, status, point, 16)
     point.move2_pp = 30
-    buttons, phase = driver.step(handshake, status, point, 17)
-    assert phase == "use-growl" and buttons["A"]
+    buttons, phase = driver.step(handshake, status, point, 18)
+    assert phase == "use-growl" and not buttons["A"]
     point.menu_index = 1
     buttons, phase = driver.step(handshake, status, point, 32)
     assert phase == "select-growl" and buttons["Down"] and not buttons["A"]
+
+
+def test_accepted_growl_pp_drop_with_stale_move_cursor_advances_text_not_down():
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 2
+    point.move2, point.move2_pp = 0x2D, 40
+    buttons, phase = driver.step(handshake, status, point, 16)
+    assert phase == "use-growl" and buttons["A"]
+    point.menu_index, point.move2_pp = 1, 39  # R5 captured both after accepted Growl.
+    buttons, phase = driver.step(handshake, status, point, 17)
+    assert phase == "rival-turn-text" and buttons["B"] and not buttons["Down"]
+    buttons, phase = driver.step(handshake, status, point, 18)
+    assert phase == "rival-turn-text" and not buttons["Down"]
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 14, 9, 1, 0
+    buttons, phase = driver.step(handshake, status, point, 32)
+    assert phase == "open-fight" and buttons["A"]
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 2
+    buttons, phase = driver.step(handshake, status, point, 48)
+    assert phase == "use-growl" and buttons["A"]
+
+
+def test_selected_growl_without_pp_acceptance_refuses_unsafe_next_cursor():
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 2
+    point.move2, point.move2_pp = 0x2D, 40
+    driver.step(handshake, status, point, 16)
+    point.menu_index = 1
+    buttons, phase = driver.step(handshake, status, point, 17)
+    assert phase == "await-growl-acceptance" and not buttons["Down"] and not buttons["A"]
+    with pytest.raises(LuaError, match="no accepted PP/action evidence"):
+        driver.step(handshake, status, point, 616)
 
 
 def test_rb_route_requires_lab_loss_and_heal_before_complete():
@@ -140,8 +173,11 @@ def test_post_starter_lab_script_flow_waits_through_rival_exit():
     point.move2, point.move2_pp = 0x2D, 20
     buttons, phase = driver.step(handshake, status, point, 64)
     assert phase == "use-growl" and buttons["A"]
-    point.battle, point.lab_script = 0, 12
+    point.move2_pp, point.menu_index = 19, 1
     buttons, phase = driver.step(handshake, status, point, 65)
+    assert phase == "rival-turn-text" and not buttons["Down"]
+    point.battle, point.lab_script = 0, 12
+    buttons, phase = driver.step(handshake, status, point, 66)
     assert phase == "rival-battle-transition" and not buttons["A"]
     point.lab_script, point.joy_ignore = 13, 0xF0
     buttons, phase = driver.step(handshake, status, point, 80)

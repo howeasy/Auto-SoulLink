@@ -157,7 +157,8 @@ function M.new(options)
         if expired(body)then return end -- readback settles it as expired; nothing was drawn
         local at=frame()
         assert(integer(at,0,M.MAX_INT),"emulated frame counter required")
-        assert(overlay.present({surface=body.surface,text=body.text,r=body.r,g=body.g,b=body.b,frames=body.frames})==true,
+        assert(overlay.present({kind=body.kind,surface=body.surface,text=body.text,
+            r=body.r,g=body.g,b=body.b,frames=body.frames})==true,
             "HUD overlay did not draw the notice")
         forget_settled()
         self.drawn[identity.command_id]={frame=at}

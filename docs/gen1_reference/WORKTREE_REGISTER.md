@@ -4,15 +4,11 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-**Current work:** R/B gameplay priority; Yellow-specific new work deferred, broad exclusion migration paused to avoid overhead. D0-RB scripted enrollment passed and all resources closed. Sol has frozen/released the seven D1-RB paths; two Codex reviewers own read-only Standards/Spec review under the guide. Claude waypoint support and Codex R/B receipt cross-check completed/released. OMP tasks are closed after repeated provider errors; no scope report was produced.
+Canonical E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2, gen1/rc. Coordinator Codex01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa alone integrates and updates the guide/register. The machine checkpoint in the guide names exact frozen files and next action.
 
-- Canonical: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`; coordinator Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa` on HOUNDOOM owns guide/register, reviews and integration.
-- Product behavior15727ec; integrated scripted test sourcea63d793 (R/B default). Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
-- D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed; fresh R/B session93346 also completed exit0 with all resources closed; no current live lane. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
-- No active source writer. D1-RB candidate frozen39/39/Ruff; /root/d1_rb_standards and /root/rb_gate_safety perform separate read-only reviews. No live lane until acceptance.
-- Yellow and E1 source reviewers completed and released their reports. Yellow is deferred post-RC; E1 implementation is paused for gameplay priority.
-- No peer report writer. Claude D1-RB source report is integrated/released and now has reply-only waypoint support; OMP file grant revoked with closed task. R0 revision4 remains frozen/released and awaiting reconciliation, uncommitted. D0-S receipt check complete.
-- Speed-gate remains parked and administratively locked. Its repaired metadata and original worktree are preserved; see [recovery receipt](reviews/SPEED_GATE_ADMIN_RECOVERY_2026-09-13.md).
+All battle/HUD/hook/parcel authors and reviewers have released files. No emulator or source writer is active. Coordinator has only current-card integration/verification and TEMP handoff remaining, then all work pauses by owner request. Parcel and R0 candidates remain explicitly unintegrated; other parked worktrees remain untouched.
+
+Production core baseline15727ec; current shared HUD changes are a production delta, not merely test/docs. The final freeze is recorded in the guide after integration. Root master is not the RC checkout. Native hook configs were installed user-level with backups; trust/activation remains a separate host action, not a code receipt.
 
 ## Preserved checkout classifications
 
@@ -35,65 +31,3 @@ The table below retains the last full file-status audit; it does not claim that 
 Read the master guide first; verify only the assigned checkout with `git --no-optional-locks status --short`, HEAD and necessary source hashes. No broad ignored-cache scan for a read-only card. Coordinator updates this register on worktree/ownership/integration transitions and before handoff/compaction.
 
 All Git mutations use `-c maintenance.auto=false -c gc.auto=0`. Before any future physical archive/move/delete, verify absolute workspace containment, tracked/untracked/ignored receipt preservation and live bindings. Current authorization does not permit deleting parked worktrees, merging to master or pushing. “Archived” means classification/exclusion unless a separate physical action is explicitly authorized.
-
-Current short support: Claude reply-only D1-RB waypoints; Codex faint oracle completed, now R/B receipt check. No extra file writer or emulator lane.
-
-20:52 UTC: OMP scope/receipt tasks closed, provider Together HTTP/2 errors repeated; no report/file claim. Codex receives bounded reply-only R/B receipt cross-check. Sol alone continues D1-RB code; no live runner.
-
-Claude next-route support completed/released; source-derived parcel/Oak/Mart route retained in cx-42c18447 for the next checkpoint. Sol alone continues first starter/rival code; independent reviewers wait for frozen code.
-
-OMP late R/B receipt returned and matches independent verification; now has one reply-only fresh live preflight under the guide, no file/test/emulator writer. Provider error history retained.
-
-D1 review: Standards accepted, Spec found Pallet dialogue blocker. Sol owns only route Lua, bootstrap Lua and new route model test for the source-qualified correction plus existing report/receipts; all other candidate code frozen. OMP preflight resent cx-7c56e110. No live lane.
-
-Pallet correction frozen/released:44/44 models/Ruff; same two reviewers confirm revised three-file hashes in guide. No active source writer or live runner.
-
-Both revised D1 reviews accepted; final44/44/Ruff verified. All source writers released. Coordinator owns sole first starter/rival physical lane under guide using integrated seven-file candidate; root/OMP preflight clear. R0 report remains unrelated/uncommitted.
-
-First D1 live run a369bef stopped/HOLD at source-proven lab speech input gap; both reached lab, no starter proof. All owned processes/resources closed. Sol now owns route Lua + route unit model only for script5 dialogue correction; Claude has reply-only starter interaction check. No live lane.
-
-Parallel code lanes: Sol1 owns current lab speech correction in starter Lua/unit; Sol2 /root/d1_rb_parcel_sol owns NEW parcel Lua/unit and its report only (exact dispatch). No shared file overlap. Parcel integration/live waits successful starter checkpoint and separate grant. Claude checks starter interaction; no live runner.
-
-Sol1 lab correction frozen/released45/45/Ruff, two reviewers confirm revised two-file source. Sol2 parcel module remains active in separate NEW Lua/unit. No live runner/shared writer.
-
-Revised lab Standards reviewer is /root/d1_yellow_claim, R/B-only read-only assignment under current guide; old Yellow report work stays deferred. Sol2 parcel code remains isolated.
-
-OMP has one bounded read-only first-run lab-stall/cleanup receipt cross-check; no file or live lane.
-
-21:23 UTC live Claude disconnected; isolated source-only fallback for starterUp+A question. Sol2 continues missing wildRUN in parcelmodule; first partial candidate not accepted. Labfix bothreviewsaccepted and readyintegration.
-
-Attempt2 rootsolelive atf4553be; Sol2 separatecode continues, models deferred. Claude live same session returned, contextual starter-input source question acknowledged. No shared source writer.
-
-Parcel/RUN source frozen with hashes in guide; independent Codex Spec/Standards read-only reviews run beside physicalattempt2. Final modelcheck deferred. No active source writer; live rootonly.
-
-Parcel Spec found3 source-proven script/journey bugs; Sol2 resumes same isolated Lua/unit/report corrections during rootlive, models deferred. No shared source edits or additional emulator.
-
-Attempt2 still owns live lane; diagnostic paired suspension/re-admission observed, trigger unknown/owner clarification pending. No user-input blame or product-defect claim. Parcel source corrections continue without model execution.
-
-Current parallel assignments after53467cleanup: Sol2 parcel finalmodels/re-review inNEWLua/unit; Sol /root/rb_mute_sol owns tests/live/gen1_selected_scenario.py only for private volume0; Claude source-only sameprocess interruption question; OMP frozen attempt2receipt. No emulator or overlapping writer.
-
-Parcel final11/11/Ruff frozen/released, independent revisedSpec review; Sol mute sourcefile remains sole active codewriter. Claude/OMP shortjobs active as guide.
-
-Sol2 continues one remaining Martscript0 dialogue correction, same exclusive parcel Lua/unit/report.
-
-Private mute candidate root-reviewed45/45/Ruff and released; integrate volume0/receiptassertion only. Attempt2 closed/interrupted, exactsuspensiontriggerunknown and operator soundsettingsreported. All resourcesclosed.
-
-Muted attempt3 rootsolelive on949462e; all source writers frozen. Parcel final12case candidate under revisedSpec read-only review; no offline model execution overlaps live.
-
-Owner requested faster route tests. Sol mute worker prepares isolated speed300 patch while live70685 keeps sourcefrozen; source application waits cleanup. OMP verifies silent private configs read-only. Parcel source12/12 correctionaccepted, integration still gated starterPASS/rawmenu producer.
-
-MuteDONE by ownerconfirmation, no furthermute tasks. Live70685closed and cleanupverified. Shared scenariofile released for preparedspeedpatch only; exact dialogue correction to starterroute separately assigned next.
-
-Two disjoint active writers: Sol1 exact starter script6 dialogue Lua/unit; speedSol shared SelectedRun.py preparedpatch application. Parcel files frozen. No emulator. Muteclosed/done.
-
-Both speed/dialog writers frozen/released with hashes in guide. Root speedreviewcomplete, Codex narrowdialogSpecreviewactive. No emulator. Muteclosed.
-
-Dialogue+speed candidates reviewed; finalcombined46pass. Root owns fresh3×attempt4 afterintegration, allsourcewritersreleased. Parcel candidatefrozenawaitingfirstcheckpoint; muteDONE.
-
-Attempt4closed aftertimeout/fullcleanup; physical starters/source entries present but settlement/link absent in checked snapshot, no lablossproof. Sol1 owns finite remaininglabdialogue/input correction in existingLua/unit/report. No emulator; parcel candidatefrozen.
-
-Finite lab correction frozen47/47/Ruff; no sourcewriter. Codex independent source review active; root verifies/integrates. Nextlive3× only afteracceptance.
-
-Final finite-labreviewaccepted,47/47/Ruff. Rootsole3×attempt5afterintegration; no sourcewriters. ParcelcandidatefrozenawaitingfirstPASS.
-
-Current lanes: battle input Sol1 (starterLua/unit); shared HUD Sol (hud.lua, thin gen1 service adapter, HUDtests); hook Sol (generic guard/installer/tests). Exact files in guide machine checkpoint. Parcel frozen; no emulator. Coordinator alone edits guide/register/AGENTS/CLAUDE/policy.

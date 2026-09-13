@@ -142,6 +142,7 @@ end
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────
 local hud_queue = {}
 local hud_visible = false
+local surface_dirty = false
 
 function H.show(text, r, g, b, duration_frames)
     text = fit_hud(sanitize(text))
@@ -157,21 +158,14 @@ local function draw_hud(msg)
     gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
                 cfg.hud_right, cfg.hud_y + cfg.font_size,
                 0xFF000000, 0xBB000000)
+    surface_dirty = true
     gui.drawText(cfg.hud_x, cfg.hud_y - 1, msg.text, msg.color,
                  nil, cfg.font_size, "Courier New", "Bold")
     hud_visible = true
 end
 
 local function render_hud()
-    if #hud_queue == 0 then
-        if hud_visible then
-            gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
-                        cfg.hud_right, cfg.hud_y + cfg.font_size,
-                        0x00000000, 0x00000000)
-            hud_visible = false
-        end
-        return
-    end
+    if #hud_queue == 0 then return end
     local msg = hud_queue[1]
     draw_hud(msg)
     msg.frames = msg.frames - 1
@@ -195,20 +189,13 @@ end
 local function draw_prompt(p)
     local py = cfg.prompt_y
     gui.drawBox(1, py, cfg.screen_w - 1, py + cfg.prompt_h, 0xFF000000, 0xCC000000)
+    surface_dirty = true
     gui.drawText(4, py + 1, p.text, p.color, nil, cfg.font_size, "Courier New", "Bold")
     prompt_visible = true
 end
 
 local function render_prompt()
-    local py = cfg.prompt_y
-    local py2 = py + cfg.prompt_h
-    if #prompt_queue == 0 then
-        if prompt_visible then
-            gui.drawBox(1, py, cfg.screen_w - 1, py2, 0x00000000, 0x00000000)
-            prompt_visible = false
-        end
-        return
-    end
+    if #prompt_queue == 0 then return end
     local p = prompt_queue[1]
     draw_prompt(p)
     p.frames = p.frames - 1
@@ -223,7 +210,8 @@ end
 -- then render() resumes A before retaining B's remaining frames. Waiting to draw
 -- B until A drains could wedge a physical command behind B while the core is held.
 -- Returns true only after the draw call completed, which is what a durable
--- "drawn" receipt asserts. H.render keeps drawing it for `frames` frames.
+-- "drawn" receipt asserts. H.render draws the requested frame budget after
+-- clearing the retained canvas, including a present/render pair on one frame.
 function H.present(notice)
     assert(type(notice) == "table" and (notice.surface == "hud" or notice.surface == "prompt")
         and type(notice.text) == "string" and type(notice.frames) == "number" and notice.frames >= 1,
@@ -231,16 +219,19 @@ function H.present(notice)
     local prompt = notice.surface == "prompt"
     local queue = prompt and prompt_queue or hud_queue
     local fit = prompt and fit_prompt or fit_hud
+    -- A semantic notice can choose a compact cross-viewport label before the
+    -- generic pixel budget cuts a meaningful message mid-word on GB screens.
+    local text = notice.kind == "link_formed" and "Linked!" or notice.text
     local entry = {
-        text   = fit(sanitize(notice.text)),
+        text   = fit(sanitize(text)),
         color  = fmt("#%02X%02X%02X", notice.r or 255, notice.g or 255, notice.b or 255),
-        -- present() draws the first requested frame immediately.  Retention owns only
-        -- the remaining frames, so the wire duration is not rendered once too many.
-        frames = notice.frames - 1,
+        -- Keep the requested render budget: render() clears the canvas first,
+        -- so a one-frame notice must be repainted after its immediate ACK draw.
+        frames = notice.frames,
     }
     if prompt then draw_prompt(entry) else draw_hud(entry) end
     -- Retained only once the draw call completed: a failed draw retains nothing.
-    if entry.frames > 0 then queue[#queue + 1] = entry end
+    queue[#queue + 1] = entry
     return true
 end
 
@@ -264,6 +255,7 @@ local function render_game_over()
     if not game_over then return end
     local gy = cfg.gameover_y
     gui.drawBox(0, gy, cfg.screen_w, gy + 24, 0xFFBB0000, 0xDD990000)
+    surface_dirty = true
     gui.drawText(8, gy + 4, "GAME OVER!", "#FFFFFF",
                  nil, cfg.font_size + 2, "Courier New", "Bold")
 end
@@ -290,6 +282,7 @@ local function render_rebuilding()
     if not rebuild_text or game_over then return end
     local ry = cfg.gameover_y
     gui.drawBox(0, ry, cfg.screen_w, ry + 14, 0xFF0066AA, 0xDD003388)
+    surface_dirty = true
     gui.drawText(4, ry + 2, rebuild_text, "#FFFFFF",
                  nil, cfg.font_size, "Courier New", "Bold")
 end
@@ -311,21 +304,10 @@ function H.is_nuzlocke_start()
 end
 
 local function render_nuzlocke_start()
-    -- When inactive (text cleared or game_over overdrawing): if we painted
-    -- the banner last frame, paint a transparent box over the same region
-    -- once to erase it. BizHawk's gui surface persists last-painted pixels
-    -- until something overdraws them, so without this the banner stays
-    -- on-screen until the next map transition repaints the area.
-    if not nuzlocke_start_text or game_over then
-        if nuzlocke_start_visible then
-            local ny = cfg.gameover_y
-            gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0x00000000, 0x00000000)
-            nuzlocke_start_visible = false
-        end
-        return
-    end
+    if not nuzlocke_start_text or game_over then return end
     local ny = cfg.gameover_y
     gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0xFF0066AA, 0xDD003388)
+    surface_dirty = true
     gui.drawText(8, ny + 4, nuzlocke_start_text, "#FFFFFF",
                  nil, cfg.font_size + 2, "Courier New", "Bold")
     nuzlocke_start_visible = true
@@ -335,6 +317,15 @@ end
 
 -- ── Master render (call once per frame, after all game logic) ───────────────
 function H.render()
+    -- BizHawk keeps prior Lua pixels. Transparent drawBox uses normal blending
+    -- and does not erase them; rebuild our production HUD surface each frame.
+    local active = #prompt_queue > 0 or #hud_queue > 0 or game_over or rebuild_text
+        or nuzlocke_start_text
+    if not active and not surface_dirty then return end
+    if surface_dirty then gui.clearGraphics();surface_dirty = false end
+    hud_visible = false
+    prompt_visible = false
+    nuzlocke_start_visible = false
     render_prompt()
     render_hud()
     render_nuzlocke_start()
@@ -344,21 +335,7 @@ end
 
 -- ── Utility ─────────────────────────────────────────────────────────────────
 function H.clear()
-    -- BizHawk's GUI surface retains the last painted pixels.  Erase every surface
-    -- that this module may have painted before forgetting its visibility state.
-    if hud_visible then
-        gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
-                    cfg.hud_right, cfg.hud_y + cfg.font_size,
-                    0x00000000, 0x00000000)
-    end
-    if prompt_visible then
-        gui.drawBox(1, cfg.prompt_y, cfg.screen_w - 1, cfg.prompt_y + cfg.prompt_h,
-                    0x00000000, 0x00000000)
-    end
-    if game_over or rebuild_text or nuzlocke_start_visible then
-        gui.drawBox(0, cfg.gameover_y, cfg.screen_w, cfg.gameover_y + 24,
-                    0x00000000, 0x00000000)
-    end
+    if surface_dirty then gui.clearGraphics();surface_dirty = false end
     hud_queue = {}
     prompt_queue = {}
     hud_visible = false

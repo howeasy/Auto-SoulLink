@@ -17,7 +17,8 @@ function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
         "complete owned R/B route identity required")
-    local self={last_frame=-1,starter_seen=false,battle_seen=false,loss_seen=false,nickname_declined=false}
+    local self={last_frame=-1,starter_seen=false,battle_seen=false,loss_seen=false,nickname_declined=false,
+        pending_growl_pp=nil,awaiting_main_menu=false}
     function self.step(handshake,status,point,frame)
         if not handshake then return idle(),"await-pair-handshake" end
         assert(handshake.ready==true and handshake.run_id==expected.run_id
@@ -95,10 +96,32 @@ function M.new(expected)
         if point.battle~=0 then
             assert(point.opponent==225,"first battle was not lab Rival1")
             self.battle_seen=true
+            if self.pending_growl_pp and point.move2_pp<self.pending_growl_pp then
+                self.pending_growl_pp=nil
+                self.awaiting_main_menu=true
+            end
+            if self.awaiting_main_menu then
+                if point.menu_y==14 and point.menu_max==1 then
+                    self.awaiting_main_menu=false
+                else
+                    return press("B",frame),"rival-turn-text"
+                end
+            end
+            if self.pending_growl_pp then
+                assert(frame-self.pending_growl_frame<600,"selected Growl has no accepted PP/action evidence")
+                return idle(),"await-growl-acceptance"
+            end
             if point.menu_y==12 and point.menu_x==5 and point.menu_max>=2 then
                 assert(point.move2==0x2d and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage")
                 if point.menu_index<2 then return press("Down",frame),"select-growl" end
-                if point.menu_index==2 then return press("A",frame),"use-growl" end
+                if point.menu_index==2 then
+                    local buttons=press("A",frame)
+                    if buttons.A then
+                        self.pending_growl_pp=point.move2_pp
+                        self.pending_growl_frame=frame
+                    end
+                    return buttons,"use-growl"
+                end
                 return press("Up",frame),"correct-growl-cursor"
             end
             if point.menu_y==14 and point.menu_max==1 then

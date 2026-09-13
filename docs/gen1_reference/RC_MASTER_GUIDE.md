@@ -13,28 +13,32 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-13T22:53:37.124101+00:00",
+  "updated_at_utc": "2026-09-13T23:34:39.174383+00:00",
   "coordinator_session_id": "01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa",
   "source_head": "f60be69",
   "live_lane": null,
-  "next_action": "Fix battle input, shared HUD and install verified orchestration hooks in parallel; no live until reviewed changes.",
+  "next_action": "Integrate reviewed current cards, perform one bounded current-card verification, write TEMP handoff and pause all workers.",
   "workers": [
     {
       "id": "battle-input",
       "owner": "/root/n0_enrollment_sol",
-      "state": "active",
+      "state": "frozen",
       "files": [
         "lua/tests/gen1_rb_ball_gate_inputs.lua",
         "tests/unit/test_gen1_selected_rb_ball_gate.py",
         "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
       ],
-      "next_action": "Fast captured PP40-to39/stale-menu replay; correct complete battle input sequence.",
-      "reuse_decision": "game-specific adapter: pinned R/B menu/story state; reuse existing input helpers where applicable"
+      "next_action": "Coordinator current-card integration/verification then owner-requested pause",
+      "reuse_decision": "game-specific adapter: pinned R/B menu/story state; reuse existing input helpers where applicable",
+      "receipt": "docs/gen1_reference/reviews/D1-RB-implementation-successor.md",
+      "independent_review_refs": [
+        "coordinator-verified current-card peer review recorded in transition archive"
+      ]
     },
     {
       "id": "shared-hud",
       "owner": "/root/rb_mute_sol",
-      "state": "active",
+      "state": "frozen",
       "files": [
         "lua/hud.lua",
         "lua/gen1_hud_service.lua",
@@ -42,21 +46,29 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_hud_client.py",
         "docs/gen1_reference/reviews/SHARED-HUD-successor.md"
       ],
-      "next_action": "Reproduce actual compact link text/expiry; shared renderer fix with thin metadata adapter.",
-      "reuse_decision": "shared: existing HUD serves GB/GBA clients; viewport parameters stay adapters"
+      "next_action": "Coordinator current-card integration/verification then owner-requested pause",
+      "reuse_decision": "shared: existing HUD serves GB/GBA clients; viewport parameters stay adapters",
+      "receipt": "docs/gen1_reference/reviews/SHARED-HUD-successor.md",
+      "independent_review_refs": [
+        "coordinator-verified current-card peer review recorded in transition archive"
+      ]
     },
     {
       "id": "orchestration-hooks",
       "owner": "/root/rc_hooks_sol",
-      "state": "active",
+      "state": "frozen",
       "files": [
         "tools/agent_work_guard.py",
         "tools/install_agent_work_hooks.py",
         "tests/unit/test_agent_work_guard.py",
         "docs/agents/HOOKS_SETUP.md"
       ],
-      "next_action": "Implement and test native hook handler/installer; root installs after review; trust remains native UI.",
-      "reuse_decision": "shared: generic ledger/policy paths and Codex/Claude hook adapters"
+      "next_action": "Coordinator current-card integration/verification then owner-requested pause",
+      "reuse_decision": "shared: generic ledger/policy paths and Codex/Claude hook adapters",
+      "receipt": "docs/agents/HOOKS_SETUP.md",
+      "independent_review_refs": [
+        "coordinator-verified current-card peer review recorded in transition archive"
+      ]
     },
     {
       "id": "parcel",
@@ -67,8 +79,12 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_rb_parcel_inputs.py",
         "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
       ],
-      "next_action": "Await starter checkpoint and raw menu producer integration.",
-      "reuse_decision": "game-specific adapter for pinned R/B routes; shared host and HUD reused"
+      "next_action": "Remain frozen until owner resumes and prerequisite integration is granted",
+      "reuse_decision": "game-specific adapter for pinned R/B routes; shared host and HUD reused",
+      "receipt": "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md",
+      "independent_review_refs": [
+        "coordinator-verified current-card peer review recorded in transition archive"
+      ]
     }
   ]
 }
@@ -76,54 +92,29 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 <!-- AGENT_CHECKPOINT_END -->
 
 
-Updated for the 2026-09-13 owner-directed Red/Blue RC scope at verified HEAD b1439a2. This section is current; [past transition receipts](RC_SUCCESSOR_TRANSITIONS_2026-09-13.md) are history, not active grants.
+Updated for the current-card freeze and owner-requested handoff/pause. This section is current; [past transition receipts](RC_SUCCESSOR_TRANSITIONS_2026-09-13.md) are history, not active grants.
 
 - **Coordinator/integrator:** Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa`, HOUNDOOM. Coordinator alone grants file/live ownership and integrates. Implemented code goes to Sol; context-sensitive discussion uses Claude Gen1-Collab2. OMP handles short bounded checks; independent work uses isolated workers when available.
-- **Canonical checkout:** `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`. Product behavior cut `15727ec7853ba5ef1d5506d2b5edcc95e2fbdb67`; integrated scripted test cut `a63d7934e6feda3435b0cfe8c8e66f751be8b058` (R/B default atop6283d58). Later commits here are documentation. Query Git for current HEAD; do not reset differences. Root master is not the RC checkout (registered at `adf3362` in the latest metadata check).
+- **Canonical checkout:** `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`. Product behavior cut `15727ec7853ba5ef1d5506d2b5edcc95e2fbdb67`; last integrated gameplay test cut f60be69; current reviewed battle/HUD/hook files are being integrated now. Query Git and the checkpoint for the final freeze. Query Git for current HEAD; do not reset differences. Root master is not the RC checkout (registered at `adf3362` in the latest metadata check).
 - **Current input authority:** emulator tests use scripts and normal game buttons. **No Computer Use or OS UI input.** No human availability gate for scripted tests. Read-only game-state inspection is allowed; no test RAM/register/SaveRAM/savestate/CPU staging or copied performance-memory probes. Each live run still needs the coordinator's sole-lane grant. This supersedes earlier human-only and emulator-hold transitions.
-- **Live state:** muted fresh attempt3 assigned to coordinator on949462e. Earlier58395/53467 closed/HOLD with cleanup. All code writers frozen/released; parcel12-case source review continues read-only. Sol owns only the seven D1-RB test/driver files; no product/server/manifest writer.
+- **Live state:** no emulator or active source writer. Attempts1–5 closed/HOLD; attempt5 proved both starters settled and an ALIVE link but stalled after one Growl. Final current-card verification is the only remaining live action before handoff.
 - **Dispatch:** fully specified cards for onboarded workers may be ACTIVE conditional on the first matching Git/hash/scope acknowledgment; work then continues in that turn. A mismatch means HOLD. This removes an idle roundtrip, never the complete claim, prerequisites or one-writer rule.
 
 ### Active assignments and next action
 
-**Current priority: R/B release gates, not a separate demo.** Yellow source work is stopped/deferred. The R/B baseline passed; no emulator is running. The shared scripted driver is available; its first live R/B verification and R/B ball-gate route are next. Existing Y/Y evidence stays historical and distinct.
+**Owner boundary:** finish the current battle-input, shared-HUD and hook cards, write the successor handoff, then pause all work. No next gameplay slice. Mute is DONE; do not reopen it. Route tests request300%;100% remains available for explicit qualification. All authors/reviewers are released; coordinator owns remaining integration and one bounded verification.
 
-| Card | Owner / exact scope | State / exit |
-| --- | --- | --- |
-| Yellow work | No active owner | Deferred to POST_RC_YELLOW_TODO.md. Source claim and all prior receipts preserved; no new Yellow implementation/live qualification. |
-| R/B first-ball route claim | Claude cx-e488a096 released; reviews/D1-RB-claim-successor.md | SOURCE claim accepted with root checks of R/B hook bytes, lab HealParty and preactivation settlement. Report d538b856…; its old no-R/B-run statements are superseded by D0-RB PASS. Gameplay implementation granted below; no row closure from first ball alone. |
-| R/B release scope inventory | OMP cx-305c8775 CLOSED, no file claim | No report produced. Further exclusion stopped by owner; OMP provider repeatedly failed Together HTTP/2 stream20:39–20:51. Shared coverage retained; no manifest edits. |
-| R/B scripted idle entry | Sol /root/n0_enrollment_sol released; tests/live/test_gen1_selected_idle.py | PROVED MODEL: two-line default/forwarding correction, independently reviewed by root for scope and standards. 19/19 models, Ruff clean; test SHA256 5323452ea49d4c5a8d4add6f8dcf715318ee28cedb4e9adbb80b17e9167082fa. Report reviews/D0-RB-entry-successor.md. No physical proof yet. |
-| E1-red wild-species claim | No active writer; reviews/E1-red-claim-successor.md frozen | SOURCE report complete and preserved; implementation paused for R/B gameplay priority. |
-| D1 text-setting meaning | Claude reply cx-19255346 returned; no active writer | SOURCE report returned: UPR fastest-text patch OFF/ON, not the in-game text-speed menu. Verification is part of the R/B gameplay claim. |
-| D0-S physical receipt cross-check | OMP cx-99eb4050 returned; no active writer | Complete: frozen hashes, markers, mode attribution, separate files, service/queues and cleanup cross-checked. Root separately verified prepared-image equality. Preserved Y/Y evidence only. |
-| R0 contract correction, revision4 | Claude report frozen/released; reviews/R0-supplied-contract-successor.md | Revision4 SHA256 88aec118c2fd09c02012755ad06bc6b21fb15907a6bbe211c2878bfabf8f00cf awaits source reconciliation, uncommitted. No active writer or implementation grant; paused for gameplay priority. |
-| D0-RB scripted baseline | Coordinator released session93346 | PROVED controlled-scripted R/B enrollment; report reviews/D0-RB-physical-successor.md, summary7807ab0e…/console40258653…. Both ACKed initial files independently compared to prepared(), service current/queues empty, complete cleanup. No gameplay/FPS/CLI claim. |
-| R/B gate safety review | Codex /root/rb_gate_safety released | SOURCE review complete: preserve explicit deferred status, complete active proofs/checks and scope-bound human promotion. No implementation; broad scope migration paused by latest owner steering. |
-| D1-RB gameplay implementation | Sol /root/n0_enrollment_sol frozen/released | Candidate first starter/rival checkpoint:39/39 models, zero skip/error/fail; Ruff clean. Report reviews/D1-RB-implementation-successor.md. No physical attempt yet. Two independent review axes below; no source writer until findings assigned. |
-| D1-RB waypoint support | Claude cx-f245d9e6 released | Source-derived collision-safe waypoints/menu/event symbols returned and sent to Sol; physical route remains unverified. Root additionally corrected one-based move cursor (Growl index2), avoiding accidental Tackle/Scratch. |
-| D1-RB faint-oracle check | Codex /root/rb_gate_safety released | SOURCE verified and root reconciled: RemoveFaintedPlayerMon precedes last-party blackout and lab HealParty; require captured battle_hp0, not stale partyHP or ACK-before-heal timing. Sent to Sol. |
-| D0-RB receipt cross-check | Codex /root/rb_gate_safety released | Complete, no discrepancies: full frozen hashes, both RB modes/stop markers, each32768-byte file/hash, current-service/empty-queue audit and six closed identities verified. Root separately verified prepared-image equality. |
-| D1-RB next-route support | Claude cx-42c18447 released | Source-derived parcel/Oak/Mart segments returned for next checkpoint; no code/runtime claim. Route1 has unavoidable grass/random encounters; use read-only coordinate waypoints and bounded encounter handling, never blind step-count proof. Current Sol freeze remains starter/rival only. |
-| D1-RB frozen review | Codex Standards and Spec released | Both axes accept revised candidate at02a186d and exact final hashes. Prior Pallet blocker fixed and modeled red→green; source44/44/Ruff. Root independently verified source/receipts. |
-| D1-RB live preflight | OMP cx-7c56e110 and coordinator complete | No EmuHawk/SLink test process; only OMP kernels42320/36976. Config92ca34c6… and Emuf8cdb935… exact, root rechecked after reviews. No live overlap. |
-| D1-RB Pallet correction | Sol released | Integrated with starter/rival candidate after both revised reviews; source-qualified Oak dialogue pulses and movement idle,44/44/Ruff. No remaining source review blocker; physical proof pending. |
-| D1-RB physical first checkpoint | Coordinator released session58395 | HOLD scripted-input defect, report reviews/D1-RB-physical-successor.md. Both reached lab script5/(5,3)/maskFC; route Down-only cannot advance Oak speech. Intentional early helper stop, full cleanup verified. No product failure or starter/rival PASS. |
-| D1-RB lab speech correction | Sol1 frozen/released; revised Spec/Standards confirmation ACTIVE | Captured-point red23pass/1fail then45/45/Ruff. Route bd28e62f01d56eefb76d8c3f5994d0aaa8d76d6f9abab2c473a7253c854fdcf6; model d5a7271be08aebc5b7e50d9de8c4a3c8cba056349e1ac7abc5f714e1fc2d7644. Only script5/maskFC normalA; wrapper/other candidate code unchanged. No live grant yet. |
-| D1-RB starter interaction check | Isolated Claude fallback, reply-only | Live Gen1-Collab2 disconnected (peers0 at21:23); cx-0ed2ac77 closed unanswered. Same bounded Up+A/YesNo source question moves to headless independent transport; no source writer. It is a suspected input issue, not an established blocker. |
-| D1-RB independent parcel module | Sol2 same NEW Lua/unit/report ACTIVE correction; no shared files | Spec HOLD3 concrete gaps: Mart script1 movement then dialogue must distinguish; parcel removal precedes Oak delivery event/dialogues, retain in-progress phase; reset journey segment cursors on second outbound trip while preserving wild detours. Standards accepted boundaries, remove unreachable duplicate cancel block. Final models deferred during rootlive. Correct and refreeze, not accepted for integration. |
-| D1-RB stopped-run receipt | OMP; reply-only | ACTIVE conditional ACK. Frozen first-run summary977d95ae…/console29d2d77e…/coordinator-stopbb91b8da… and owned files only. Verify both labscript5/map40/(5,3)/maskFC/party0, intentional helper stop attribution, four cleanup identities false, arrays empty/config unchanged. No source survey, tests or journal/emulator access. |
-| D1-RB physical attempt2 | Coordinator released53467 | Interrupted/HOLD after paired suspension/reHELLO, later hostexit; both reachedlabscript6/mask0. Owner attempted soundsettings, trigger not proven. Fourclosed identities/noerrors; summary70f1fe1e…/consoledb3b10f2… independentlychecked. No starterPASS/productdefectclaim. |
-| D1-RB private audio setting | Sol /root/rb_mute_sol released | PROVED MODEL/root-reviewed tiny diff: copied config SoundVolume/SoundVolumeRWFF0 plus private receipt assertion; original/engine/sound-enable/throttle unchanged. File5661d434…;45/45/Ruff. Report reviews/D1-RB-mute-successor.md. |
-| D1-RB interruption source check | Claude Gen1-Collab2; reply-only | ACTIVE conditional ACK. Concrete post-loop suspension/reHELLO with zero ordinary observations and operator sound-setting attempt: locate current same-process continuity refusal path and one cheapest modeled falsifier, <=300words. No broad R0/restart research, code writes/tests/journal/emulator. |
-| D1-RB attempt2 receipt | OMP; reply-only | ACTIVE conditional ACK. Frozen summary70f1fe1e…/consoledb3b10f2… verify HOLD/lastmarkers/cleanup/config; original suspension trigger remains unknown despite owner sound-setting interaction. No source survey/test/emulator/journal. |
-| D1-RB physical attempt3 | Coordinator sole live; .cache/d1-rb-starter-rival-r3/ and sibling summary/console | ACTIVE on muted949462e, limit600, same reviewed gameplay oracle. Private volume0 avoids owner menu interaction; original config retained. No shared writer; parcel final tests complete and source review may proceed offline. No CUA/staging. |
-| D1-RB fast route configuration | Sol /root/rb_mute_sol; .cache/d1-rb-speed.patch and reviews/D1-RB-speed-successor.md ONLY during live | ACTIVE conditional ACK. Owner requests faster AI routing. Prepare minimal patch for tests/live/gen1_selected_scenario.py: route default SpeedPercent300, explicit100 override for qualification, record requested speed/verify private config; retain FrameSkip0/throttle/volume0 and source config. Existing100 default is falsifier; same focused model/Ruff after application. No live source edits now. Root releases shared file after70685cleanup then Sol applies/checks/freezes. Actual near3× performance not claimed from setting. |
-| D1-RB silent-config receipt | OMP, reply-only | ACTIVE conditional ACK. Read two owned attempt3 emulator config.ini files plus original; verify private volumes0/0,FrameSkip0 and original unchanged. No process/UI/journal/source survey. |
-| D1-RB exact script6 dialogue fix | Sol /root/n0_enrollment_sol; lua/tests/gen1_rb_ball_gate_inputs.lua + tests/unit/test_gen1_selected_rb_ball_gate.py and existing report/.cache/d1-rb-model.* | ACTIVE conditional ACK. Attempt3 frames continue at map40/(5,3)/party0/script6/mask0; owner sees Oak dialogue, route gives only Down. Verify bounded text/input ordering (lateA may reopen Oak; hypothesis), make normal B/text-exit handling local to this clear-entry state without reopening interaction or changing holds. Captured-point regression + same focused pair/Ruff, freeze/review before3×retry. No broad survey, staging or shared edits. |
-| Coordinator documentation/integration | This guide, register, history archives and physical report | Record accepted receipts, maintain current owner/state, then freeze the next bounded implementation claim. No push/master merge/release declaration. |
+| Card | Current state / owner / next action |
+| --- | --- |
+| Battle input | Sol candidate frozen and independently accepted: PP acceptance distinguishes retained move-menu fields from turn text;49 focused/shared models passed. Exact Lua/unit/report paths are in the machine checkpoint. Current-card physical verification remains. |
+| Shared HUD | Shared lua/hud.lua owns compact link notice and painted-surface expiry; gen1_hud_service only forwards kind. Lazy-clear correction leaves empty/no-GUI clients untouched. Source review accepted; exact combined caller tests passed. Physical display semantics remain bounded to current production GUI composition. |
+| Orchestration hooks | Six focused tests and independent review accepted. Installed additive scoped Codex/Claude handlers with existing settings preserved and idempotency verified. Native Codex trust via /hooks is still required; actual host firing is not claimed. See docs/agents/HOOKS_SETUP.md. |
+| Combined verification |188 passed, zero failures/errors/skips, .cache/current-cards-final.xml. These are current-card checks, not full release qualification. |
+| Parcel module | Frozen untracked candidate,12/12 models and source review accepted; not integrated. Raw menu producer and successful first checkpoint remain prerequisites. No new work before owner resumes. |
+| Recovery / remaining RC | R0 revision4 report is frozen/uncommitted and unreconciled. P2a policy approved but mechanisms absent; P2b still unapproved. Full campaign/trade/artifact/performance/frozen evaluator and human evidence remain open. |
+| Coordinator | Update this checkpoint/register, integrate only reviewed current-card files, record one bounded result, write TEMP handoff and mark all work paused. |
 
-**D1-RB implementation claim (READY by coordinator).** (1) gameplay.red.ball-gate and gameplay.blue.ball-gate: genuine starter/lab faint before activation, then parcel/cancel/first-ball player-local activation; actual catches and both fastest-text settings remain later full-row requirements. (2) Product15727ec, shared testa63d793; pinned pokered405b6246; accepted D1-RB source report d538b856abffe2fd37c97fc5d8d57ebe25aa53204fbe61f959d923138156b8ee; root verified both clean ROM hook bytes E1D1C1C178EA96CFC9 at52843, lab HealParty and inactive-faint guard. (3) Current script stops at first idle; no normal starter/rival/ball gameplay receipt. (4) Hypothesis: a scenario module supplies normal inputs on existing owned frames after coordinator audited paired enrollment, with context/hold refusal; no new production authority. (5) First falsifier is modeled refusal before handshake/while held/after changed context plus real route start; first live checkpoint both starter receipts and pre-ball lab loss with link ALIVE/no death or force_faint. (6) Sol alone: tests/live/test_gen1_selected_rb_ball_gate.py, lua/tests/gen1_rb_ball_gate_inputs.lua, tests/unit/test_gen1_selected_rb_ball_gate.py NEW; shared tests/live/gen1_scripted_host.py, lua/tests/gen1_scripted_new_game.lua, tests/live/gen1_selected_scenario.py, tests/live/test_gen1_selected_idle.py. Report reviews/D1-RB-implementation-successor.md and .cache/d1-rb-model.*. D0-RB PASS is prerequisite satisfied; no parallel writer on these files. (7) Positive and refusal modeled checks, focused Ruff; freeze first working starter/rival checkpoint promptly, then source review and separate sole live grant. Subsequent parcel readback/no activation, cancel unchanged bag/money, first ball retained exact ACK/source and partner independence are later same-admission checkpoints; do not call rows closed. (8) On source contradiction stop exact checkpoint, preserve evidence and request bounded coordinator correction; never stage game data or bypass holds. (9) READY and conditional ACTIVE now. No manifest/server/product changes. Default canonical R/B first; fastest-text artifact adapter and D2 catches are separate real gameplay follow-ups, not a demo detour.
+**Initial D1-RB implementation claim (historical scope; current checkpoint governs).** (1) gameplay.red.ball-gate and gameplay.blue.ball-gate: genuine starter/lab faint before activation, then parcel/cancel/first-ball player-local activation; actual catches and both fastest-text settings remain later full-row requirements. (2) Product15727ec, shared testa63d793; pinned pokered405b6246; accepted D1-RB source report d538b856abffe2fd37c97fc5d8d57ebe25aa53204fbe61f959d923138156b8ee; root verified both clean ROM hook bytes E1D1C1C178EA96CFC9 at52843, lab HealParty and inactive-faint guard. (3) Current script stops at first idle; no normal starter/rival/ball gameplay receipt. (4) Hypothesis: a scenario module supplies normal inputs on existing owned frames after coordinator audited paired enrollment, with context/hold refusal; no new production authority. (5) First falsifier is modeled refusal before handshake/while held/after changed context plus real route start; first live checkpoint both starter receipts and pre-ball lab loss with link ALIVE/no death or force_faint. (6) Sol alone: tests/live/test_gen1_selected_rb_ball_gate.py, lua/tests/gen1_rb_ball_gate_inputs.lua, tests/unit/test_gen1_selected_rb_ball_gate.py NEW; shared tests/live/gen1_scripted_host.py, lua/tests/gen1_scripted_new_game.lua, tests/live/gen1_selected_scenario.py, tests/live/test_gen1_selected_idle.py. Report reviews/D1-RB-implementation-successor.md and .cache/d1-rb-model.*. D0-RB PASS is prerequisite satisfied; no parallel writer on these files. (7) Positive and refusal modeled checks, focused Ruff; freeze first working starter/rival checkpoint promptly, then source review and separate sole live grant. Subsequent parcel readback/no activation, cancel unchanged bag/money, first ball retained exact ACK/source and partner independence are later same-admission checkpoints; do not call rows closed. (8) On source contradiction stop exact checkpoint, preserve evidence and request bounded coordinator correction; never stage game data or bypass holds. (9) READY and conditional ACTIVE now. No manifest/server/product changes. Default canonical R/B first; fastest-text artifact adapter and D2 catches are separate real gameplay follow-ups, not a demo detour.
 
 R0 revision3 input is frozen at SHA256 `4dadeb79dd944abe23d069f0eb768a11f7a0c70316f08a441dbb03e40408477e`. Required corrections: equal-byte replacement must still match actual S/R to B; successful DONE must require result0 and permit S==B when B==A; supply a complete typed re-enrollment-witness representation or explicit unavailable refusal; scope image comparisons to actual protected regions, allowing only the precise bank0 sprite-workspace range already permitted by gen1_native_policy.py163–171 (not all bank0). Ordered native-save writes remain source-correct. Clarify F byte/hash/projection comparisons without claiming file presence from supplied hashes. P2b stays refused and no producer is implemented by this report. Root reviews the frozen correction before any pure-classifier grant.
 
@@ -143,7 +134,7 @@ R0 revision3 input is frozen at SHA256 `4dadeb79dd944abe23d069f0eb768a11f7a0c703
 | C1 | First model reproduced atomic collateral refusal; [source reachability](reviews/C1-reachability-successor.md) names preactivation Magikarp history. History-complete model execution was stopped by automatic safety review for possible cybersecurity risk; no workaround reassignment or implementation. |
 | N1/N2, D/E/T, F/H | Same-admission receptionist/party and native trade, ordinary campaign axes, full title/artifact matrix, frozen evaluator and two-human session remain unproved. No release readiness. |
 
-Current D0-S summary: `.cache/d0-s-scripted-summary.json`, SHA256 `ffa5cf5118affa9e598d726e26c42b042f4e80eae9c94ae63e08572ac22eaaab`; console `e0f2a9cd97c8b659143e6a78d8ad8f1041ec497f8f2fce53dd1fbb7cde6b2bf1`. Run `run_20260913_195515_9e4d11`, runtime `609393fa512a849ea3b5f2ae318baafb`. Both separate SaveRAM files hash `abdc79629f72608bc0936a334a9e4af0880dbedd05d19eaf1a3a4c93bca53ea6`; both were independently reread against prepared() from a checked snapshot. Normal observation counts0 are expected at unchanged idle; no ordinary-traffic/FPS proof follows.
+Preserved D0-S summary: `.cache/d0-s-scripted-summary.json`, SHA256 `ffa5cf5118affa9e598d726e26c42b042f4e80eae9c94ae63e08572ac22eaaab`; console `e0f2a9cd97c8b659143e6a78d8ad8f1041ec497f8f2fce53dd1fbb7cde6b2bf1`. Run `run_20260913_195515_9e4d11`, runtime `609393fa512a849ea3b5f2ae318baafb`. Both separate SaveRAM files hash `abdc79629f72608bc0936a334a9e4af0880dbedd05d19eaf1a3a4c93bca53ea6`; both were independently reread against prepared() from a checked snapshot. Normal observation counts0 are expected at unchanged idle; no ordinary-traffic/FPS proof follows.
 
 D1-R/B gameplay is current priority. Broad R/B scope exclusion is paused after owner objected to its cost; retain shared coverage and existing Yellow evidence, defer new Yellow-specific work. Yellow's claim is deferred; E1 remains paused for gameplay priority. No manifest row was added/closed by D0. Preserve the legacy388-row inventory and evidence while explicitly aligning active R/B qualification; the old224/164 census is not a current R/B coverage count.
 
@@ -234,52 +225,3 @@ Before physically moving or removing a worktree, verify absolute paths, tracked/
 - Project contract and runner: [Gen 1 release requirements](../../tests/gen1_release_requirements.json), [release evaluator](../../tools/verify_gen1_release.py), [pret source pins](../../data/pret_sources.lock.json), [canonical companion profiles](../../server/gen1_cartridge_profiles.py). Counts/IDs above were read from the manifest at the documented cut, not inferred from registration status.
 - Native/ordinary source: [client entry](../../lua/gen1_client_entry.lua), [observation loop](../../lua/gen1_observation_loop.lua), [receptionist authorization](../../server/gen1_receptionist_runtime.py), [native execution](../../server/gen1_native_execution.py), [storage](../../server/gen1_storage_runtime.py), [whiteout](../../server/gen1_whiteout.py), [recovery classifier design](NATIVE_RECOVERY_CLASSIFIER_2026-09-12.md). The local pinned pret trees under `.cache/pret` contain the original R/B/Y assembly; [trade receptionist patch](../../patch/gen1/src/trade_receptionist.asm) and [Yellow Bill's PC source](../../.cache/pret/pokeyellow/engine/pokemon/bills_pc.asm) settle corresponding game behavior. Source is not a live emulator receipt.
 - Workflow sources (method only, accessed 2026-09-13): Git project, [`git-worktree` manual v2.42.1](https://git-scm.com/docs/git-worktree/2.42.1); Anthropic, [“Run parallel sessions with worktrees”](https://code.claude.com/docs/en/worktrees); GitHub Docs, [“About pull requests”](https://docs.github.com/en/pull-requests/get-started/about-pull-requests). These support isolated edits and reviewable dependent cuts, not release claims.
-
-Latest D1-RB guidance: A Bulbasaur / B Charmander, preserving RB starter clauses (bridge/settlement); lab faint receipt must cite captured battle_hp0 and ACK, then separately verify healed completed battle. OMP tasks closed after repeated provider errors; no repeated headless fallback or new exclusion job. Sol code and Claude waypoint support continue.
-
-D1-RB frozen source SHA256 (Sol released, root reread):
-- tests/live/test_gen1_selected_rb_ball_gate.py: `b1e26d1887e01c4f396832e4318d1b7a27093a173986596a11925d7ca6e242bc`
-- lua/tests/gen1_rb_ball_gate_inputs.lua: `3d285400774c450ce37389d8a06c983a8f7c3b6de9dce003cd2461398b726f75`
-- tests/unit/test_gen1_selected_rb_ball_gate.py: `ffbb78913fb3578dfa26492c8d137e4f7635473a392f4156670808b4cf86f9ff`
-- tests/live/gen1_scripted_host.py: `0b7900991eaa47310966271112ffb7c4d087046c620d10767f55dc0b8b571c6b`
-- lua/tests/gen1_scripted_new_game.lua: `c801a4412c5e31b4c16246600a374dc73c7ed9c075b710e9ff088473b134eda0`
-- tests/live/gen1_selected_scenario.py: `93f8e4e398af462f4f2653daea53bd3341f80f335f0460c74fee7c57bf1370f5`
-- tests/live/test_gen1_selected_idle.py: `dd650c75e8c5a4a6586899c0c5d89d0f0d6d9bbf0f223bced23e3ac83db55b29`
-
-OMP preflight resent on owner request as cx-7c56e110, superseding cx-65b53d02; cancelled Yellow census is not resent.
-
-Pallet correction frozen full hashes: lua/tests/gen1_rb_ball_gate_inputs.lua 9269fbe54be94606bab120205e8934d813d150edd4e6aa814e7d1bbf106a9e08; lua/tests/gen1_scripted_new_game.lua c5a48aca28a6c0f483affaa18b62c0b62eee15f4476a36d8ef1565aa441e5952; tests/unit/test_gen1_selected_rb_ball_gate.py 3235b9f4d52cf279d8dc8d927e670ed8b347e2bd1fc96e8342f1e10629b239b0. Reviews now check this source correction only against prior accepted boundaries.
-
-Lab correction Spec accepted at72f09ce; revised Standards task resumes /root/d1_yellow_claim for R/B-only review (historical task name, no Yellow work), because the former Standards task hit the collaboration thread limit. Same two frozen source paths; no writes/execution.
-
-Labscript5 correction accepted by independent Spec and Standards, exact hashes/45models/Ruff verified. Integrate this source; first run HOLD remains preserved. No known product defect or new policy grant.
-
-Claude live returned as slink-93, same session4ec907e2, ACKed pending starter-input question atf4553be. Headless bounded source fallback already launched; no additional duplicate dispatch. Root physical attempt2 uses reviewed Labfix regardless of unproved speculative input concern, and preserves any concrete failure.
-
-Live Claude Up+A source check returned: no source-proven menu blocker; root reconciled and optional facing tidy deferred. Isolated fallback timed out120s/stopped, no result accepted or repeat. Attempt2 is active at sourcef4553be/docsd902bb2, session53467.
-
-Attempt2 diagnostic: before any coordinator stop, checked snapshot revision21; raw diagnostic event census shows runtime_suspended at17, fresh HELLO/native_reattach B18/19 and A20/21, no ordinary observation component. Both client journals report native clean/released and empty outboxes; current recovery reason overwritten by binding change. Last route markers both labscript6/mask0/(5,3), then stop updating. Trigger unknown; owner says may have caused it and clarification pending. Do not call this an established product defect or assume heartbeat cause. Preserve original run.
-
-Attempt2 session53467 CLOSED with four cleanupidentities false, all survivor/unknown/resourceerror arrays empty, originalconfigunchanged. Owner says attempted to turn off sound; menu pause is possible trigger, not proved. No product-defect classification or gameplayPASS. Sol2 final tests released; sourcecorrection candidate Lua19270b43…/unitde59cb2e… awaiting finalreceipt and revisedreview.
-
-Parcel Spec3 correction final frozen: Lua19270b437f245c79b6be817b361ae71850c4a94d897db93ee970cf537cea3e1a, unit122289502cc5847c497efb67da398769225c0f0111d73ffc8c054b0528c39792;11/11/Ruff after test-lane release. Sol2 released; /root/rb_gate_safety revised Spec confirmation ACTIVE, same two-file scope. No integration/live before starterPASS.
-
-Parcel re-review resolves prior3 findings but finds initial Martscript0 DisplayTextID omitted. Sol2 same isolated source/unit/report correction ACTIVE: source-qualified script0 dialogue, then script1 movement/dialogue regression sequence, preserve movement refusal. No shared integration.
-
-Parcel final Mart correction frozen: Luaf2a3c0f6e8809b5f9d92f0de511f03d50d0983544a856cde815777153b213d77/unit ae2ed205f29e7a73ae59add785e973a50ae6f5cab1a349f48fac5cd1f8ca9518,12/12/Ruff. Revised Spec /root/rb_gate_safety ACTIVE, no writes/tests. Claude source result: sequence0 initial cursor supported; silent continuity deferrals/refusals not journaled; actual pause cause remainsunknown. No extra diagnostic framework or policy change before this muted fresh run.
-
-Owner confirms MUTE WORKED and stops all further mute investigation; OMP silent-config taskcx-30cfc864closed. Attempt3 intentionally stopped at repeated labscript6/(5,3) dialogue, allcleanup arrays empty. Current work ONLY exact dialogue handling and prepared3×route configuration; parcel module remains separate frozen/reviewed candidate. No unchanged rerun.
-
-Prepared speed patch application NOW authorized to /root/rb_mute_sol in tests/live/gen1_selected_scenario.py only (70685closed/cleanupverified). Preserve completed mute unchanged. Same focused models/Ruff and freeze. This is speed work, not renewed audio work.
-
-Exact dialogue correction frozen: route63a47e470259118775e50c604b0b9776585b0a23b2b444e2a72e493fbe5a056b/unit0ec6ea7bebe462f6966b681697107f0009b324c466d33e3a9456b3eeb155bf0d;46/46/Ruff, bounded600-frame localB/Down exit atcapturedscript6 point. Speed candidateSelectedRunb0e39a89be30ca615276837265748da9e1d0166def77db027a4d5ff39ed954bd;45/45/Ruff. Root speed/Standards review accepts small preserved-guard diff; independent /root/rb_gate_safety Spec confirmation ACTIVE for exact dialog two-file correction. No live until acceptance.
-
-Current integration: exact script6 B/Down correction accepted independentSpec/rootStandards, speed300default acceptedrootreview, all46 combined focused tests pass onfinalthree-filecut (.cache/d1-rb-fast-final.xml), no skips. Writers released. Attempt4 uses fresh .cache/d1-rb-starter-rival-r4 at requested300%, limit180; coordinator solelane ACTIVE afterintegration, no unchangedrerun. Private soundremainscompleted0; no more audio tasks. Parcel module12/12 acceptedSOURCE/model, frozenawaitingfirststarterPASS andrawmenuproducerintegration.
-
-Attempt4 session42299 timedout/closed with allcleanup arrays empty. Both physical parties have starters and server source entries exist for a+b; settled is empty, link_id null, and rules links empty (no linked-starter claim) but stuckscript9/maskFC rival dialogue while movementbranch supplied no A/B. Full starter/rival checkpoint notpassed. Sol1 ACTIVE same starterLua/unit/report scope: audit and correct COMPLETE remaining finite initial-lab dialogue/input sequence8–14 before movement, preservingnickname/B and battle handling; source-qualified masks/states, ordered model throughallmandatorydialogues, no prompt-by-promptblindreruns. Include firstbattle menu selection in source pass. Same focusedmodels/Ruff, freeze/review beforefasterretry. No audio/speed work.
-
-Complete finite lab correction frozen: Lua0f80c01c075856422b79ca6a2605547b9e174ddd781d376f572cd8c1c2df5bb9/unite4b9aa55ce3164a881a4d0f1b3d9676833a9e95dad82c36ef813670217df5928;47/47/Ruff. Ordered model8→9text→10/11→battle→12heal→13text→14exit→18free, markeronlyterminal18. Independent /root/rb_gate_safety full remaining-sequence source review ACTIVE, same2files/sourcepinned only. Root Standards/source/receipt verification concurrent; no emulator untilacceptance.
-
-Final remaining-lab source review ACCEPTED across8–14/18; rootStandards/modelreceiptsverified47/47/Ruff. Integrate onlystarterLua/unit/report; parcel remainsunintegratedfrozen. Attempt5 .cache/d1-rb-starter-rival-r5 requested300%,limit180 coordinatorsolelane ACTIVEafterintegration. Allsourcewritersreleased; no audio work or newscope.
-
-Current explicit grants: battle-input Sol first fast red replay of observed PP39/stale move-menu stall (R5 timed out, fullcleanup; both starters settled and ALIVE link now verified); shared-HUD Sol first faithful red reproducer for exact ACKed message `BULBASAUR and CHARMANDER li...`/300frames then shared fix. HUD code limited to lua/hud.lua and thin kind forwarding in gen1_hud_service.lua plus assigned tests/report, no server schema change. Root hook request authorizes generic tools/agent_work_guard.py, installer and tests/setup note; no global settings writes until reviewed. Machine checkpoint and docs/agents/orchestration.md govern current grants; no mute work.
