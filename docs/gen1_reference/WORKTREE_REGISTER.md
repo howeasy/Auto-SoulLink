@@ -77,3 +77,5 @@ Both N0-root reviewers acknowledged c95b360 and frozen hashes; ACTIVE separate S
 14:15 UTC: N0-root independent Standards/Spec both PASS, source/test/report accepted for integration with current guide/register. All production/test writers frozen during complete F1 unit run; coordinator owns only .cache/f1-unit-successor.{xml,txt} and review report. OMP small checks acknowledged and ACTIVE reply-only; no live/emulator grant.
 
 Integrated source15727ec; full unit session66713 active, one failure marker at23% (details pending). C1/D0b research writers released frozen reports. C1 history-complete .cache-only probe READY on exact three new outputs; no source/test-file writes during full-unit freeze. OMP checks ACTIVE, no runtime claim.
+
+Owner approved conservative P2a clean resume policy; mechanisms still absent and N0/D0 gates remain. Acknowledged C1-history probe ACTIVE on three .cache/report outputs only; no production/test-file edits or live grant.

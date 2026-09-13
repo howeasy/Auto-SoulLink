@@ -71,6 +71,10 @@ Integrated production cut is now **`15727ec7853ba5ef1d5506d2b5edcc95e2fbdb67`** 
 
 Corrected D0b source report frozen/released, SHA256 `b4da6f10cbb8a51728655467deae1466b6340ecf2788105c6b4aa8c69d16e0cb`; coordinator verified it retracts the seven premises. H1/Slice A remains HOLD; source-pinned save witnessing and command-permitted file evidence are missing interfaces, not capabilities. Original report remains frozen as superseded research. No new replay/held-save/savestate exception is authorized.
 
+**P2a APPROVED by owner:** conservative clean same-run resume after Lua/emulator restart, only if both players saved before either exits, both files match newly verified server-acknowledged save checkpoints, source/bundle unchanged, and no command/trade is pending. Unknown/rolled-back evidence and savestate invalidation remain HOLD. This is policy approval only: no save-witness/file-permit mechanism is implemented; N0/D0, corrected interface claims and one-writer handoffs still gate code. P-1 held-survivor save-only release remains unapproved; P2b partial-trade visible replay/replacement remains unapproved. Do not revive rejected H1/Slice A.
+
+**C1-history-successor ACTIVE** after `/root/c1_repro` acknowledged HOUNDOOM, clean canonical `0e2ec6f`, unchanged C1 source and three absent exclusive output paths. Proceed .cache-only complete-history model; full unit source/test freeze remains in force.
+
 Next owner/action: C1 runner returns its first falsifier; N0 runner returns the actual-CLI oracle gap; Claude returns the concrete P2a decision report; coordinator resolves the concrete F1 host-capability question. Coordinator reviews these and records the nine-part claim before any implementation READY. No production implementation is currently granted.
 
 Source cut **`19edbb2`** on `gen1/rc`: owner-authorized native lifecycle and coherent checkpoint refactors are integrated. Prior product fixes remain `df38453`; earlier physical receipts are still tied to their original cuts. The root `E:/Google Drive/SLink` checkout stays clean `master` at `adf3362`. Subsequent documentation commits do not change source evidence.
