@@ -39,3 +39,5 @@ All Git mutations use `-c maintenance.auto=false -c gc.auto=0`. Before any futur
 Current short support: Claude reply-only D1-RB waypoints; Codex faint oracle completed, now R/B receipt check. No extra file writer or emulator lane.
 
 20:52 UTC: OMP scope/receipt tasks closed, provider Together HTTP/2 errors repeated; no report/file claim. Codex receives bounded reply-only R/B receipt cross-check. Sol alone continues D1-RB code; no live runner.
+
+Claude has reply-only next-route support (lab→parcel→Oak→Mart), no file or emulator writer; Sol continues the first starter/rival checkpoint.
