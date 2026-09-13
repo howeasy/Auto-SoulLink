@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+R0 supplied contractf126d3c9 frozen; independent source Spec review and short isolated OMP encoding check ACTIVE conditional on ACK, both reply-only/no writes/execution. No classifier implementation grant. D0 code integrated, emulator work held by owner.
+
 Claude R0 supplied-evidence contract ACK verified and ACTIVE on sole named report. Owner emulator HOLD remains; no other code writer/live lane. D0-A tracked code integrated MODEL.
 
 OWNER HOLD on all emulator work; no live lane until owner resumes. D0-A integrated MODEL awaiting physical recheck. Source/implementation/modeled work may continue; R0 contract report pending ACK. No running emulator, unchanged worktrees.
