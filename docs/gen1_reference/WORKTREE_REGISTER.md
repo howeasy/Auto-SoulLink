@@ -63,3 +63,5 @@ OMP has one bounded read-only first-run lab-stall/cleanup receipt cross-check; n
 21:23 UTC live Claude disconnected; isolated source-only fallback for starterUp+A question. Sol2 continues missing wildRUN in parcelmodule; first partial candidate not accepted. Labfix bothreviewsaccepted and readyintegration.
 
 Attempt2 rootsolelive atf4553be; Sol2 separatecode continues, models deferred. Claude live same session returned, contextual starter-input source question acknowledged. No shared source writer.
+
+Parcel/RUN source frozen with hashes in guide; independent Codex Spec/Standards read-only reviews run beside physicalattempt2. Final modelcheck deferred. No active source writer; live rootonly.
