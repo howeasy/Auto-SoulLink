@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Claude R0 supplied-evidence contract ACK verified and ACTIVE on sole named report. Owner emulator HOLD remains; no other code writer/live lane. D0-A tracked code integrated MODEL.
+
 OWNER HOLD on all emulator work; no live lane until owner resumes. D0-A integrated MODEL awaiting physical recheck. Source/implementation/modeled work may continue; R0 contract report pending ACK. No running emulator, unchanged worktrees.
 
 D0-A integrated7b8e203, no active code writer, physical repeat awaiting operator availability. R0 technical classification choices recorded; Claude supplied-evidence contract report READY on sole named path, pending ACK. No runtime/replay authority or source edit.
