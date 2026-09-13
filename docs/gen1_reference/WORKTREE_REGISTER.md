@@ -47,3 +47,5 @@ OMP late R/B receipt returned and matches independent verification; now has one 
 D1 review: Standards accepted, Spec found Pallet dialogue blocker. Sol owns only route Lua, bootstrap Lua and new route model test for the source-qualified correction plus existing report/receipts; all other candidate code frozen. OMP preflight resent cx-7c56e110. No live lane.
 
 Pallet correction frozen/released:44/44 models/Ruff; same two reviewers confirm revised three-file hashes in guide. No active source writer or live runner.
+
+Both revised D1 reviews accepted; final44/44/Ruff verified. All source writers released. Coordinator owns sole first starter/rival physical lane under guide using integrated seven-file candidate; root/OMP preflight clear. R0 report remains unrelated/uncommitted.

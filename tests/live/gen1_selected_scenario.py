@@ -279,7 +279,7 @@ class SelectedRun:
     observation_sequence = staticmethod(observation_sequence)
 
     def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="15727ec",
-                 input_mode="human", launch_mode="product-cli"):
+                 input_mode="human", launch_mode="product-cli", route_mode=None):
         self.owned = Path(owned).resolve()
         self.variants = tuple(variants)
         assert len(self.variants) == 2 and all(v in {"red", "blue", "yellow"} for v in self.variants)
@@ -294,8 +294,12 @@ class SelectedRun:
             raise ValueError("explicit supported selected launch mode required")
         if (launch_mode == "scripted-selected-launcher") != (input_mode == "scripted-normal-buttons"):
             raise ValueError("scripted input requires the scripted selected launcher")
+        if route_mode not in (None, "rb-starter-rival") or route_mode is not None and (
+                launch_mode != "scripted-selected-launcher" or self.variants != ("red", "blue")):
+            raise ValueError("R/B starter-rival route requires the scripted Red/Blue pair")
         self.input_mode = input_mode
         self.launch_mode = launch_mode
+        self.route_mode = route_mode
         self.source_cut = source_cut
         self.patch = MonkeyPatch()
         self.client = self.runtime = self.listener = None
@@ -307,6 +311,7 @@ class SelectedRun:
         self.outcome = {"status": "HOLD", "variants": self.variants,
                         "owned": str(self.owned), "source_cut": source_cut,
                         "limit_seconds": limit, "input_mode": input_mode, "launch_mode": launch_mode,
+                        "route_mode": route_mode,
                         "human_inputs_only": input_mode == "human"}
 
     async def __aenter__(self):
@@ -343,6 +348,9 @@ class SelectedRun:
                             emulator=str(self.emulator), base_config=str(self.base_config))
         if self.launch_mode == "scripted-selected-launcher":
             for name in ("tests/live/gen1_scripted_host.py", "lua/tests/gen1_scripted_new_game.lua"):
+                self.outcome["source_files"][name] = sha(ROOT / name)
+        if self.route_mode == "rb-starter-rival":
+            for name in ("lua/tests/gen1_rb_ball_gate_inputs.lua", "tests/live/test_gen1_selected_rb_ball_gate.py"):
                 self.outcome["source_files"][name] = sha(ROOT / name)
         self.owned.mkdir(parents=True, exist_ok=False)
         self._owns_output = True
@@ -426,6 +434,8 @@ class SelectedRun:
                     "--manifest", str(entry["manifest"]), "--rom", str(entry["rom"]),
                     "--emuhawk", str(self.emulator), "--base-config", str(private_config),
                     "--root", str(self.owned / "clients")]
+            if self.route_mode is not None:
+                argv.extend(("--route", self.route_mode))
             log = self.owned / f"{player}.log"
             with log.open("wb") as output:
                 process = subprocess.Popen(argv, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT,
@@ -524,6 +534,10 @@ class SelectedRun:
                 assert state["stage"] == "input-stopped", "scripted normal input did not stop at free service"
                 players[player]["scripted_progress"] = state
                 players[player]["scripted_plan"] = plan
+                if self.route_mode == "rb-starter-rival":
+                    assert plan["route_mode"] == self.route_mode
+                    assert plan["rb_route_sha256"] == sha(directory / "gen1_rb_ball_gate_inputs.lua")
+                    assert plan["rb_route_sha256"] == sha(ROOT / "lua/tests/gen1_rb_ball_gate_inputs.lua")
         evidence = audit_enrollment(self.runtime, document, {
             player: Path(players[player]["save_directory"]) for player in ("a", "b")},
             {job["player"]: job for job in self.jobs}, rows, self.emulator)

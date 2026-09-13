@@ -222,6 +222,36 @@ def test_scripted_host_prepares_checked_launcher_without_spawning(tmp_path):
         launch(result, fake_emulator)
 
 
+def test_rb_route_stages_only_test_module_beside_checked_launcher(tmp_path):
+    from server.bizhawk_launch import manifest
+
+    launcher = tmp_path / "launcher.lua"
+    launcher.write_text("return true\n")
+    rom = tmp_path / "slink_red.gb"
+    rom.write_bytes(b"MODELED RED ROM")
+    config = tmp_path / "base.ini"
+    config.write_text('{"PathEntries":{"Paths":[{"Type":"Save RAM","System":"GB_GBC_SGB","Path":"old"}]}}')
+    spec = manifest(run_id="a" * 32, player="a", profile="gambatte",
+                    rom_sha1=hashlib.sha1(rom.read_bytes()).hexdigest(), launcher=launcher.read_text())
+    plan = prepare_scripted_plan(tmp_path / "owned", spec, rom=rom, launcher=launcher,
+                                 base_config=config, route_mode="rb-starter-rival")
+    staged = Path(plan["cwd"])
+    assert plan["arguments"][1] == "--lua=scripted_new_game.lua"
+    assert hashlib.sha256((staged / "launcher.lua").read_bytes()).hexdigest() == spec["launcher_sha256"]
+    assert (staged / "gen1_rb_ball_gate_inputs.lua").is_file()
+    assert plan["rb_route_sha256"] == hashlib.sha256((staged / "gen1_rb_ball_gate_inputs.lua").read_bytes()).hexdigest()
+    route = json.loads((staged / "scripted_input.json").read_text())["route"]
+    assert route["mode"] == "rb-starter-rival"
+    assert Path(route["handshake"]).parent == staged
+    settings = {"emulator": tmp_path / "EmuHawk.exe", "base_config": config, "limit": 1800,
+                "input_mode": "scripted-normal-buttons", "launch_mode": "scripted-selected-launcher",
+                "route_mode": "rb-starter-rival"}
+    run = SelectedRun(tmp_path / "selected", ("red", "blue"), **settings)
+    assert run.outcome["route_mode"] == "rb-starter-rival"
+    with pytest.raises(ValueError):
+        SelectedRun(tmp_path / "wrong-pair", ("red", "yellow"), **settings)
+
+
 def test_scripted_driver_failure_marker_is_read_from_owned_path(tmp_path):
     assert scripted_failure(tmp_path) is None
     marker = tmp_path / "scripted_failure.json"
