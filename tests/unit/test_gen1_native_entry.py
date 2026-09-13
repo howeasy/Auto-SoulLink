@@ -43,8 +43,9 @@ def lua():
             frameadvance=function()assert(not physical,'frame advanced under a hold');advances=advances+1;frame=frame+1 end,
             getregister=function(k)return k=='PC' and 0x40 or k=='SP' and sp or 0 end}
         -- A saved overlay word on the stack exactly as save_overlay_on_stack leaves it (pairs pushed: 31 54 4C 53 ascending).
-        function stack_word()sp=0xDFE0;local saved={0x53,0x4C,0x54,0x31,1,5,7,6,0,0,0,0,0xA1,0xB2,0xC3,0xD4}
-            local a=sp;for pair=8,1,-1 do bus[a]=saved[2*pair];bus[a+1]=saved[2*pair-1];a=a+2 end end
+        -- Pushed at 0xDFE0 by the service; the CPU has since nested ~1 KB deeper (SP 0xDBF0): any depth is found.
+        function stack_word()sp=0xDBF0;local saved={0x53,0x4C,0x54,0x31,1,5,7,6,0,0,0,0,0xA1,0xB2,0xC3,0xD4}
+            local a=0xDFE0;for pair=8,1,-1 do bus[a]=saved[2*pair];bus[a+1]=saved[2*pair-1];a=a+2 end end
         -- BizHawk's global memory API (gen1_native_reattach reads the bus through it).
         memory={read_u8=function(a,d)if bus[a]~=nil then return bus[a]end;return (a>=0xC000 and a<0xE000) and 0 or 1 end}
         event={onloadstate=function(fn)return 'load-hook'end,onexit=function()return 'exit-hook'end,unregisterbyid=function()end}
@@ -191,12 +192,13 @@ def test_a_slow_cold_launch_free_runs_the_boot_however_late_the_script_starts(lu
     lua.execute("frame=9000;write_safe=false;overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
-        start(launch_json);assert(service.native_physical()=='clean')
-        for _=1,3 do assert(service:step());emu.frameadvance()end          -- boot frames run free (run loop)
-        assert(service.runtime==nil and not physical and advances==3)
-        write_safe=true;assert(service:step())                              -- begin under the hold, read clean, startup command, loop
-        assert(service.reattach_required==false and service.reattach_read.armed==false and service.reattach_verdict=='clean')
-        assert(loop_built and not physical)                                 -- lease + nothing pending: free again
+        start(launch_json);assert(physical==true)                           -- claimed and held before the first frame
+        assert(service.native_physical()=='clean')
+        for _=1,3 do assert(service:step());assert(not physical and service.booting);emu.frameadvance()end  -- one clean boot frame at a time
+        assert(service.runtime==nil and advances==3)
+        write_safe=true;assert(service:step())                              -- begin under the hold, read clean
+        assert(physical==true and service.reattach_required==false and service.reattach_read.armed==false and service.reattach_verdict=='clean')
+        assert(service:step());assert(loop_built and not physical)          -- startup command, lease + nothing pending: free again
         assert(service:step());assert(not physical)
     ''')
 
@@ -209,7 +211,7 @@ def test_a_fresh_boot_with_an_open_lease_or_pending_native_command_stays_held(lu
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
         start(launch_json);assert(service.native_physical()=='clean')
-        write_safe=false;assert(service:step());assert(service.runtime==nil and not physical)   -- boot frames free-run
+        write_safe=false;assert(service:step());assert(service.runtime==nil and not physical)   -- boot frame released
         write_safe=true;assert(service:step())
         assert(physical==true and service.phase=='native_reattach_held' or service.reattach_verdict=='clean')
         for _=1,4 do assert(service:step())end;assert(not loop_built and physical)
@@ -257,3 +259,17 @@ def test_native_manifest_is_refused_outside_the_free_service_client_or_for_anoth
     lua.globals().launch_json = json.dumps(launch(**changes))
     with pytest.raises(LuaError, match="initial observation" if fault == "no_initial_observations" else "native launch requires"):
         lua.execute("start(launch_json)")
+
+
+def test_a_failing_physical_read_before_begin_leaves_the_core_held(lua):
+    """The host is claimed and held before the first frame; if the pre-frame read itself fails
+    (here: an unreadable stack pointer), the entry fails with the hold in place and no frame runs."""
+    lua.execute("frame=7;write_safe=false;overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
+    lua.globals().launch_json = json.dumps(launch())
+    lua.execute(r'''
+        start(launch_json);assert(physical==true)
+        sp=0x1234                                                    -- outside WRAM: the read refuses
+        local ok,why=service:step();assert(ok==false and tostring(why):find('stack pointer'))
+        assert(physical==true and advances==0 and service.phase=='failed')
+        assert(service:step()==false and physical==true)
+    ''')

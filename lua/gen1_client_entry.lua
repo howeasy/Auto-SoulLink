@@ -6,10 +6,7 @@
 -- command_service_router: physical commands take the held faint service (permit + hold),
 -- hud_notice takes gen1_hud_service, which draws on the lua/hud.lua overlay with no write,
 -- permit or hold and therefore settles even while lifecycle-held.
-local M={WRITE_SERVICE_SECONDS=2,CONTINUITY_RETRY_SECONDS=2,
-    -- Stack bytes scanned for a saved overlay word before every pre-begin free frame (the RBY
-    -- stack lives at the top of WRAM; the trade service pushes the 16-byte word onto it).
-    NATIVE_STACK_SCAN=512}
+local M={WRITE_SERVICE_SECONDS=2,CONTINUITY_RETRY_SECONDS=2}
 -- GB overlay geometry, as lua/clients/gen1_rby_client.lua:185.
 local OVERLAY={screen_w=160,screen_h=144,hud_x=2,hud_y=134,hud_right=158,prompt_y=36,prompt_h=10,gameover_y=50,
     font_size=8,char_width=5}
@@ -69,18 +66,21 @@ function M.start(launch,options)
     --    routine is halted at DONE waiting for release (byte5 == 7);
     --  * mid_routine: the service saved the word on the STACK (save_overlay_on_stack: pairs pushed
     --    so the magic reads 31 54 4C 53 ascending, preceded by byte5, byte4) and swapped the overlay
-    --    to tiles; the CPU is inside the original trade routine.
+    --    to tiles; the CPU is inside the original trade routine. Anything pushed lives at or above
+    --    SP and below the top of WRAM (pret wStack ends at $E000), so the whole range [SP, $E000)
+    --    is scanned: no assumption about nesting depth across apply/animation/evolution/save.
     -- A cold boot shows neither (WRAM re-derived from SaveRAM, probe a4e3f1b), however late this
     -- script starts; a script attached mid-play shows one of them exactly when a free frame would be
-    -- unowned. No frame-count heuristic is involved.
+    -- unowned. No frame-count heuristic is involved. The read runs under the startup hold that a
+    -- native launch claims in start(), before its first frame: a failing read leaves the core held.
     local function native_physical()
         if not native then return "clean" end
         local base=native.foreground.overlay
         if memory.read_u8(base)==0x53 and memory.read_u8(base+1)==0x4c and memory.read_u8(base+2)==0x54
             and memory.read_u8(base+3)==0x31 and memory.read_u8(base+4)==1 then return "armed" end
         local sp=emu.getregister("SP")
-        local top=math.min(0xE000,sp+M.NATIVE_STACK_SCAN)
-        for address=sp,top-4 do
+        assert(type(sp)=="number" and sp>=0xC000 and sp<0xE000,"stack pointer outside WRAM")
+        for address=sp,0xE000-4 do
             if memory.read_u8(address)==0x31 and memory.read_u8(address+1)==0x54 and memory.read_u8(address+2)==0x4c
                 and memory.read_u8(address+3)==0x53 then return "mid_routine" end
         end
@@ -118,11 +118,20 @@ function M.start(launch,options)
         assert(type(base)=="string" and #base>0,"local client storage directory required")
         return tostring(Path.GetFullPath(base.."/"..launch.run_id.."/"..launch.player.."/journal.json"))
     end
-    local function begin()
-        local Execution=require("platform_execution")
+    local Execution=require("platform_execution")
+    -- Claim the one exclusive actuator and take the startup hold. A native launch claims it in
+    -- start(), before this script's first frame, so every pre-begin read runs held and a failure
+    -- anywhere leaves the core stopped (platform_execution never releases on its own).
+    local function claim_host(reason)
+        if self.host then return end
         self.host=assert(Execution.new({profile="gambatte",owner_id=instance,exclusive_ownership="emulator_process",
             control_context="between_frames",expected_host=assert(Execution.supported_profile("gambatte"))}))
         self.holds=require("hold_mux").new({host=self.host,owners={"startup","control","writer","lifecycle","native"}})
+        assert(self.holds:set("startup",true,reason or "waiting for qualified paired runtime bindings"))
+    end
+    if native then claim_host("native launch: held before the first frame") end
+    local function begin()
+        claim_host()
         assert(self.holds:set("startup",true,"waiting for qualified paired runtime bindings"))
         first_frame=emu.framecount()
         context={context_generation=generation,physical_instance=instance,
@@ -450,18 +459,30 @@ function M.start(launch,options)
             end
             self.last_physical_frame=physical_frame
             if not self.runtime then
-                -- Native reattach: build and hold the host before this frame may run (see start()).
-                -- Otherwise hold at the first safe overworld frame that is also visible. A fresh
+                -- Hold at the first safe overworld frame that is also visible. A fresh
                 -- New Game reaches write-safety inside the white fade into the
                 -- bedroom (rBGP==0x00); holding there freezes a blank screen and
                 -- proves nothing. Battery-save boots are already faded in.
-                local physical=native_physical()
-                if physical=="clean" then
-                    if not memory.isPartyWriteSafe() or memory.readPlayerName()=="" or memory.read_u8(0xFF47)==0 then return end
+                local visible=memory.isPartyWriteSafe() and memory.readPlayerName()~="" and memory.read_u8(0xFF47)~=0
+                if native then
+                    -- Held (claimed in start()): read the physical arming state, then either begin under
+                    -- this hold (in play, or a reattach that must not see a free frame) or release the
+                    -- hold for exactly one boot frame and read again before the next.
+                    assert(self.holds:set("startup",true,"native pre-frame check"))
+                    local physical=native_physical()
+                    if physical=="clean" and not visible then
+                        assert(self.holds:set("startup",false,"clean boot frame may run"))
+                        self.booting=true
+                        return
+                    end
+                    self.booting=false
+                    self.reattach_required=physical~="clean"
+                    begin()
+                    self:classify_reattach(physical)
+                    return
                 end
-                self.reattach_required=physical~="clean"   -- held before this frame; the game is in play
+                if not visible then return end
                 begin()
-                if native then self:classify_reattach(physical)end
             end
             if self.loop then
                 -- One tick per emulated frame (run() advances it). Under a hold taken outside the loop
@@ -572,7 +593,7 @@ function M.run(launch)
             if captured then _G.SLINK_RUNTIME_STATUS=function()return status end end
             service:close();error(why,0)
         end
-        if service.loop and not service.host.status().held then emu.frameadvance()
+        if (service.loop or service.booting) and not service.host.status().held then emu.frameadvance()
         elseif service.host then assert(service.host.yield_held())else emu.yield()end
     end
 end
