@@ -43,3 +43,5 @@ P0-review reserves no files; independent canonical reads only after runner repor
 13:35 UTC transition: P0 accepted after independent zero-finding review; no P0 writer remains. Acknowledged C1-repro and N0-gap ACTIVE at frozen source 19edbb2/docs fd06f58, with exact disjoint probe/report outputs in guide. Claude same-conversation transport lineage confirmed, D0b unchanged sole report owner. No production writer or emulator lane. Guide transient intake entries consolidated; history remains in Git and frozen P0 report.
 
 F1-host coordinator reserves only `.cache/f1-host-successor.xml`, `.cache/f1-host-successor.txt`, `reviews/F1-host-successor.md` for one security-file runtime diagnosis; no emulator or production ownership.
+
+C1 owned OS-temp fixture journal/config allowed for its real-runtime probe, with bytecode writes disabled; no persistent output expansion.
