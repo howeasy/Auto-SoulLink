@@ -53,3 +53,5 @@ Both revised D1 reviews accepted; final44/44/Ruff verified. All source writers r
 First D1 live run a369bef stopped/HOLD at source-proven lab speech input gap; both reached lab, no starter proof. All owned processes/resources closed. Sol now owns route Lua + route unit model only for script5 dialogue correction; Claude has reply-only starter interaction check. No live lane.
 
 Parallel code lanes: Sol1 owns current lab speech correction in starter Lua/unit; Sol2 /root/d1_rb_parcel_sol owns NEW parcel Lua/unit and its report only (exact dispatch). No shared file overlap. Parcel integration/live waits successful starter checkpoint and separate grant. Claude checks starter interaction; no live runner.
+
+Sol1 lab correction frozen/released45/45/Ruff, two reviewers confirm revised two-file source. Sol2 parcel module remains active in separate NEW Lua/unit. No live runner/shared writer.
