@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+CURRENT: autonomous normal-button checks supersede ALL prior emulator holds/human-availability gates; earlier paragraphs are history. Root D0-A autonomous lane ACTIVE on exact new output paths in guide, Computer Use sky keys only. Claude R0 report correction active, no classifier code grant. No other live/test workload.
+
 Sol input-attribution metadata accepted; exact two-file diff/model/Ruff verified by root. R0 contract2a1a7c1b frozen, independent Spec reviewer and Claude short row5 source check read-only; no classifier writer. Autonomous normal-button D0 live grant is next after final preflight.
 
 Sol metadata correction ACTIVE after ACK. Isolated OMP encoding attempt timed out/stopped with no receipt or file claim; live OMP gets short context-aware ledger check. Claude R0 report correction active. No live lane started.
