@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-S final four-file correction frozen (module03742f5d/testbe90e015/hostb5a6d797/Luacd8c8e3d), focused parallel re-review only. Author released; 19 model cases and Ruff pass. Scripts-only; no live lane until acceptance.
+
 D0-S reviews passed; root completion-timing correction assigned to same Sol files with fresh r2 model receipts. Wait for child input-stopped before final audit and tolerate only missing-file publication transient. No live lane; no product edits.
 
 D0-S author released four-file frozen candidate; Standards/Spec, Claude wrapper advisory and OMP receipt check dispatched in parallel under guide's ACK-and-work rule, all read-only. No live lane or active code writer. R0 report remains frozen, not implementation-authorized.
