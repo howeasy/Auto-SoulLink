@@ -334,3 +334,25 @@ def test_a_held_server_verdict_keeps_the_hold_and_the_published_read_digest_matc
     from server.protocol import digest
     assert digest(json.loads(lua.globals().published)) == lua.globals().read_digest   # the server can match the client's digest exactly
     assert lua.globals().read_digest == lua.eval("service:status().native_reattach.read_digest")
+
+
+def test_a_native_revoke_drops_the_remembered_verdict_at_once_and_holds_until_a_fresh_read_is_released(lua):
+    """Invariant, not step order: hard_revoke (the runtime's on_revoke) clears reattach_server in the same
+    call it takes the lifecycle hold, so loop_ready can never consult a pre-revoke release across a new
+    admission; the loop frees again only after the republished read gets its own released verdict."""
+    lua.execute("overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
+    lua.globals().launch_json = json.dumps(launch())
+    lua.execute(r'''
+        start(launch_json);assert(service:step())
+        acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
+        -- Revoke before any rebind: no releasable verdict survives the call itself, the lifecycle hold is on.
+        assert(runtime_options.on_revoke('re-admission'))
+        assert(service.reattach_server==nil and service.reattach_republish==true and service.holds:held('lifecycle'))
+        -- The next step republishes under the hold (a new read, still pending) and stays held ...
+        assert(service:step());assert(#observed==2 and observed[2].event=='native_reattach' and physical)
+        assert(service.reattach_server==nil and service.reattach_republish==false)
+        for _=1,3 do assert(service:step());assert(physical)end
+        -- ... until the fresh read's own verdict arrives.
+        local b=acknowledge('released','clean');assert(b.native_reattach.verdict=='released')
+        assert(service.reattach_server.read_digest==service.reattach_read_digest)
+    ''')

@@ -264,7 +264,9 @@ function M.start(launch,options)
             if self.instruction then assert(self.instruction:revoke(reason))end
             -- A re-admission rotates the control binding: the server accepts no earlier read as this
             -- session's evidence, so the held read is republished once the runtime is bound again.
-            if native then self.reattach_republish=true end
+            -- The remembered verdict is dropped HERE, not on the later republish: loop_ready can
+            -- never consult a pre-revoke release across a new admission whatever the step order.
+            if native then self.reattach_server=nil;self.reattach_republish=true end
             return true
         end
         if free then
