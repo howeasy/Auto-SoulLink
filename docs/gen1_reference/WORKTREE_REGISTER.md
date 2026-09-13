@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Claude D0b-save-witness-boundary research READY reserves only reviews/D0b-save-witness-boundary-successor.md, pending ACK/activation. Existing corrected design reused, only the concrete Yellow save-completion/hook boundary gap is in scope. No production/test/journal/live ownership; Sol enrollment .cache corrections remain disjoint.
+
 Claude N0 source-oracle advisory complete; same Sol script/report gets one bounded readiness polling correction, preserving final full audit. Cleanup candidate5425d666 and modeled checks are frozen. No live execution or worktree change; final correction review follows freeze.
 
 OMP host preflight complete/released; one short read-only controls/config follow-up is assigned in the guide. Sol cleanup correction remains the only .cache/report writer; no live lane or production writer.
