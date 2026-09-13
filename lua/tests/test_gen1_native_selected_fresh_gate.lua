@@ -158,6 +158,9 @@ emu.frameadvance=function()
             end
         end
         if status and (frame-loop_started.frame)%120==0 then
+            -- A parent-side assertion happens only after both ready receipts.
+            -- Exit on its abort without adding filesystem polling to FPS windows.
+            if reported and read(input.directory.."/abort.json")then error("paired native selected gate aborted")end
             assert(status.phase=="free_service" and status.runtime.connected
                 and status.runtime.session_state=="admitted" and not status.runtime.failed,
                 "native-selected free client lost its admitted service")
