@@ -1,6 +1,8 @@
 """Checked Manager-selected native free service, fresh New Game only.
 
-This is a bounded bedroom smoke, not a trade or CONTINUE qualification. It uses
+This is a bounded bedroom smoke, not a trade or CONTINUE qualification. Its
+early hold is before the first frame *after launcher load*, not emulator power-on:
+the gate's observed/go handshake and intro frames precede that load. It uses
 the Manager's actual POST and launcher/bundle HTTP handlers, the exact run-local
 canonical companion files, two isolated BizHawk SaveRAM directories, and the
 production LocalAppData client-journal location. The Lua gate only supplies
@@ -368,6 +370,7 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
             assert snapshot["components"]["gen1-native-reattach"] == document["components"]["gen1-native-reattach"]
             assert not document["identities"]["members"] and not document["rules"]["core"]["links"]
             publish(directory / "summary.json", {"schema": "rby-native-selected-fresh-smoke-v1",
+                "launch_boundary": "hold before first post-launcher frame; observed/go and intro preceded launcher load",
                 "manager_id": run["run_id"], "session_id": session_id, "variants": variants,
                 "players": {player: {"phases": ready[player]["phases"], "held_frame": ready[player]["held_frame"],
                                       "loop_started": ready[player]["loop_started"]} for player in ("a", "b")}})

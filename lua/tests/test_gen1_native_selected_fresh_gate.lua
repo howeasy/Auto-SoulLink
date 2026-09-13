@@ -1,6 +1,7 @@
 -- Manager-selected canonical companion, blank SaveRAM, normal New Game inputs.
--- The native entry claims its owner BEFORE the first boot frame, so unlike the
--- non-native free-service gate menu inputs must be supplied on clean boot frames.
+-- The native entry claims its owner BEFORE the first frame after launcher load;
+-- the observed/go handshake and intro frames precede that load. Unlike the
+-- non-native free-service gate, menu inputs must be supplied on clean boot frames.
 -- No CPU/register/cartridge writes; the only WRAM edit is a restored byte probe.
 local ROOT=SLINK_ROOT or os.getenv("SLINK_ROOT")
 local JSON=dofile(ROOT.."/lua/json_codec.lua")
