@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Sol metadata correction ACTIVE after ACK. Isolated OMP encoding attempt timed out/stopped with no receipt or file claim; live OMP gets short context-aware ledger check. Claude R0 report correction active. No live lane started.
+
 D0 input-attribution correction READY reserves the same two tracked test files and named report/model outputs to Sol. Needed because fixed human_inputs_only metadata must not mislabel autonomous normal-button input. No live run yet; Claude report correction and isolated OMP source check are disjoint.
 
 Owner now authorizes autonomous normal-button emulator checks without human input, superseding availability hold. No live run started yet; root will use initialized sky Computer Use against actual CLI windows after preflight. Claude R0 report correction and fresh isolated OMP encoding check are source-only, disjoint. D0 source frozen; no production writer.
