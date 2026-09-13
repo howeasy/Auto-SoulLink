@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-S author released four-file frozen candidate; Standards/Spec, Claude wrapper advisory and OMP receipt check dispatched in parallel under guide's ACK-and-work rule, all read-only. No live lane or active code writer. R0 report remains frozen, not implementation-authorized.
+
 Scripted-only owner direction current; interrupted UI attempt cleaned with HOLD and no survivors, lane released. D0-S Sol ACTIVE on first matching ACK across four exact test-only files/report/receipts in guide. Claude launch-path advisory and OMP command/input-scope check read-only ACTIVE on matching ACK, parallel; no production writer or live lane. Fully specified onboarded cards now acknowledge-and-work in one turn.
 
 Owner forbids Computer Use and directs scripted emulator tests. D0 UI attempt interrupted; root stopping only recorded owned CLI to trigger cleanup, original receipts preserved HOLD. No further sky/CUA/OS UI actions. Scripted normal-input work will use existing test patterns after scoped review.
