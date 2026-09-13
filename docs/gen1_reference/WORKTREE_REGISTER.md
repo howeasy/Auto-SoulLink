@@ -63,3 +63,5 @@ Owner approved MAT draft/default labels; coordinator installed canonical CLAUDE.
 MAT setup complete, F1 symlink 48/48 independently accepted. N0-root implementation READY reserves only server/runtime_launcher.py and new tests/unit/test_runtime_launcher_root.py plus named receipts/report; awaiting isolated owner ACK, no emulator. C1/N0-gap/Claude report writers released. D0b review remains read-only ACTIVE. Root master untouched.
 
 13:58 UTC: N0-root acknowledged clean207b8da and exact files/outputs, ACTIVE sole production renderer writer. D0b review complete; seven source/design corrections verified, implementation HOLD. Claude corrective source report READY on sole new reviews/D0b-correction-successor.md; no code/native client ownership. C1 natural-reachability gap remains HOLD. No emulator or other measured job.
+
+C1 independent reachability review READY reserves only reviews/C1-reachability-successor.md; no runtime/code ownership. N0-root remains sole production writer; other active work is read-only source/report work.
