@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+CURRENT18:21UTC: Claude D0-boundary ACK verified at clean d9dcf45/script31254a40; ACTIVE sole source-only report writer. R2 physical lane completed/released, OMP final frozen receipt cross-check read-only in flight. All Sol builders/reviewers released; no emulator/production writer.
+
 D0-boundary source-only research READY for Claude on sole reviews/D0-boundary-successor.md, reusing proven N0 R2 and W0 rather than resurveying. No implementation/live grant. OMP R2 receipt verification in flight; all Sol source/build writers released. Guide policy section refreshed to reflect already-approved P2a and owner execution authorization.
 
 CURRENT R2 session83976 physical PASS, lane RELEASED after all process/resource cleanup, exact receipt/report in guide. Source/testsa1714c5 unchanged. OMP final R2 receipt check read-only ACTIVE conditional on ACK; no emulator/source writer. Original first-run HOLD retained.
