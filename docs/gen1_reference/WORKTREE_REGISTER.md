@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-A final two-file candidate accepted for integration at MODEL level after both reviews, nine complete model passes and Ruff pass. Final hashes and receipt pins in guide. No production/manifest edits or physical invocation; all file grants released. R0 source report remains contract HOLD.
+
 D0-A behavior/ownership reviews passed; focused Ruff found five import-order findings. Same two files/report assigned for import-only cleanup and fresh complete modeled/lint receipts. No live lane or production edit; R0 claim remains HOLD.
 
 D0-A corrected moduled1f00911/test0034356c/report5de3948d frozen; author released. Standards P1 re-review ACTIVE conditional on ACK, read-only. R0 report frozen with explicit contract HOLD; no active code writer or live lane.
