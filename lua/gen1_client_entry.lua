@@ -40,12 +40,25 @@ local function validate(launch)
 end
 
 function M.start(launch,options)
-    validate(launch)
     options=options or {}
-    local free=launch.mode=="free_service"
-    local native=launch.native_manifest
     local root=assert(options.root or rawget(_G,"SLINK_ROOT"),"SLink client root required")
     package.path=root.."/lua/?.lua;"..root.."/data/games/gen1_rby/?.lua;"..package.path
+    -- A native launch script may be loaded onto an APPLY-armed core. Claim the exclusive actuator
+    -- and hold it BEFORE anything that can fail (launch validation, profile, ROM checks): a startup
+    -- error then leaves the core stopped (platform_execution never releases on its own) instead of
+    -- free-running one unowned frame. Nothing here reads the manifest.
+    local early_host,early_holds,early_instance
+    if type(launch)=="table" and launch.native_manifest~=nil then
+        local Execution=require("platform_execution")
+        early_instance=assert(require("platform_identity").new_nonce())
+        early_host=assert(Execution.new({profile="gambatte",owner_id=early_instance,exclusive_ownership="emulator_process",
+            control_context="between_frames",expected_host=assert(Execution.supported_profile("gambatte"))}))
+        early_holds=require("hold_mux").new({host=early_host,owners={"startup","control","writer","lifecycle","native"}})
+        assert(early_holds:set("startup",true,"native launch: held before the first frame"))
+    end
+    validate(launch)
+    local free=launch.mode=="free_service"
+    local native=launch.native_manifest
     local JSON=require("json_codec")
     launch=assert(JSON.decode(assert(JSON.encode(launch))))
     local memory=require("memory_gb")
@@ -58,7 +71,8 @@ function M.start(launch,options)
         continuity_retry=nil,continuity_epoch=nil,
         continuity_status={state="unavailable",reason="free service is not initialized"}}
     local nonce=require("platform_identity").new_nonce
-    local generation,instance=assert(nonce()),assert(nonce())
+    local generation,instance=assert(nonce()),early_instance or assert(nonce())
+    self.host,self.holds=early_host,early_holds
     -- Native physical read, source-grounded (patch/gen1/src/trade_service.asm), taken before EVERY
     -- pre-begin free frame and once more under the hold:
     --  * armed/done: the overlay word is published in WRAM ("SLT1", byte4 == 1): the next free frame
@@ -123,13 +137,12 @@ function M.start(launch,options)
     -- start(), before this script's first frame, so every pre-begin read runs held and a failure
     -- anywhere leaves the core stopped (platform_execution never releases on its own).
     local function claim_host(reason)
-        if self.host then return end
+        if self.host then return end   -- a native launch already claimed and holds it (above)
         self.host=assert(Execution.new({profile="gambatte",owner_id=instance,exclusive_ownership="emulator_process",
             control_context="between_frames",expected_host=assert(Execution.supported_profile("gambatte"))}))
         self.holds=require("hold_mux").new({host=self.host,owners={"startup","control","writer","lifecycle","native"}})
         assert(self.holds:set("startup",true,reason or "waiting for qualified paired runtime bindings"))
     end
-    if native then claim_host("native launch: held before the first frame") end
     local function begin()
         claim_host()
         assert(self.holds:set("startup",true,"waiting for qualified paired runtime bindings"))

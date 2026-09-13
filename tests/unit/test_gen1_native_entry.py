@@ -273,3 +273,17 @@ def test_a_failing_physical_read_before_begin_leaves_the_core_held(lua):
         assert(physical==true and advances==0 and service.phase=='failed')
         assert(service:step()==false and physical==true)
     ''')
+
+
+@pytest.mark.parametrize("fault", ["other_variant", "other_rom", "held_service"])
+def test_a_native_launch_that_fails_validation_on_an_armed_core_leaves_it_held(lua, fault):
+    """The actuator is claimed and held before launch validation can fail: a stale manifest, a
+    changed ROM or the wrong mode on an APPLY-armed core exits with the hold in place."""
+    lua.execute("frame=4242;write_safe=false;overlay(ARMED)".replace("ARMED", "{" + ",".join(map(str, ARMED)) + "}"))
+    changes = {"other_variant": {"native_manifest": {**MANIFEST, "variant": "red"}},
+               "other_rom": {"cartridge": {"variant": "yellow", "final_rom_sha1": "f" * 40}},
+               "held_service": {"mode": "held_service"}}[fault]
+    lua.globals().launch_json = json.dumps(launch(**changes))
+    with pytest.raises(LuaError):
+        lua.execute("start(launch_json)")
+    lua.execute("assert(physical==true and advances==0);for _=1,3 do if not physical then emu.frameadvance()end end;assert(advances==0)")
