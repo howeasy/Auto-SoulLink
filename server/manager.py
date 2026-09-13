@@ -731,6 +731,7 @@ class RunManager:
                 connect_host = urlsplit("http://"+host_header).hostname or "127.0.0.1"
                 configuration=build_configuration(prepared["run_id"],prepared["contract"],player,prepared_cartridges=cartridges,
                     initial_observations=prepared.get('initial_observations',False),
+                    native_trade=prepared.get('native_trade',False),
                     free_service=prepared.get('free_service',False))
                 content = render_launcher(configuration,
                     host=connect_host, port=run["tcp_port"], name=run.get("name") or run_id)
@@ -762,25 +763,41 @@ class RunManager:
         try:
             body=await request.json()
             if (not isinstance(body,dict) or not {'name','rom_a','rom_b'}<=set(body)
-                    or set(body)-{'name','rom_a','rom_b','rules','start'}
+                    or set(body)-{'name','rom_a','rom_b','rules','start','native'}
                     or not isinstance(body['name'],str) or not 1<=len(body['name'].strip())<=120
                     or any(ord(c)<32 for c in body['name'])
-                    or type(body.get('start',True)) is not bool):
-                raise ValueError('name, two cartridge paths and optional explicit rules/start are required')
-            contract=await asyncio.to_thread(clean_contract,{'a':body['rom_a'],'b':body['rom_b']})
+                    or type(body.get('start',True)) is not bool or type(body.get('native',False)) is not bool):
+                raise ValueError('name, two cartridge paths and optional explicit rules/start/native are required')
+            # The user's cartridges are admitted as exact canonical CLEAN ROMs either way.
+            admitted=await asyncio.to_thread(clean_contract,{'a':body['rom_a'],'b':body['rom_b']})
+            contract=admitted
             runs=_load_registry();tcp_port,http_port=_next_ports(runs)
             run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
             directory=Path(MANAGER_DIR)/run_id
-            runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}),free_service=True)
+            cartridges=None
+            if body.get('native',False):
+                # Native trade: derive the canonical companion pair from those clean inputs inside the
+                # run (hash-pinned to the installed catalog), and select it; the launcher then ships the
+                # native manifest and the client boots the companion, not the clean ROM.
+                from server.gen1_prepared_cartridges import PreparedCartridges,stage_canonical_pair
+                directory.mkdir(parents=True,exist_ok=False)
+                try:
+                    await asyncio.to_thread(stage_canonical_pair,directory/'prepared',{'a':body['rom_a'],'b':body['rom_b']})
+                    cartridges=PreparedCartridges(directory/'prepared')
+                except Exception:
+                    shutil.rmtree(directory,ignore_errors=True);raise   # no half-staged run directory survives
+                contract=cartridges.contract()
+            runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}),free_service=True,
+                prepared_cartridges=cartridges,native_trade=cartridges is not None)
             try:
                 rules=runtime.state().rules
                 settings={key:bool(getattr(rules,key)) for key in ('species_lock','gender_lock','type_lock','explode_mode',
                     'rival_team_swap','overworld_presence','native_messages','native_sounds','battle_calc','pc_trade_npc')}
             finally:runtime.close()
-            write_contract(directory/'rom_contract.json',contract)
+            write_contract(directory/'rom_contract.json',admitted)   # the user's admitted clean cartridges; the runtime binds the pair
             run={'run_id':run_id,'name':body['name'].strip(),'created_at':datetime.now(UTC).isoformat(),
                 'tcp_port':tcp_port,'http_port':http_port,'status':'stopped','pid':None,'cartridges':contract['players'],
-                **settings}
+                'native_trade':cartridges is not None,**settings}
             _write_run_meta(run);runs.append(run);_save_registry(runs)
             if body.get('start',True):
                 run['pid']=await _spawn_run(run,self.bind_host,manager_port=self.manager_port)
@@ -789,7 +806,8 @@ class RunManager:
             return web.json_response({'ok':False,'error':str(error)},status=400)
         except (RuntimeError,OSError,sqlite3.Error) as error:
             return web.json_response({'ok':False,'error':str(error)},status=500)
-        return web.json_response({'ok':True,'run':run,'runtime_mode':'free_service'})
+        return web.json_response({'ok':True,'run':run,'runtime_mode':'free_service',
+            'native_trade':cartridges is not None})
 
     async def handle_cartridges(self, request: web.Request) -> web.Response:
         """Bind each RBY player to an inspected local cartridge before admission."""
