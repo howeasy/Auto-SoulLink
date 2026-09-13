@@ -111,3 +111,5 @@ Recovery complete:18 entries, speed-gate clean35b7894 and administratively locke
 Retirement R2 independently passed both axes and is accepted for sole-test integration. Configured integration161/161 passes. Sol full repaired-unit evidence run READY, no code edits; freeze production/tests for that run. No live lane or source writer; all18 worktrees retained.
 
 Full repaired-unit Sol ACK cleana1714c5 and exact env/command, now ACTIVE; metadata uses -meta.json. No source/test writers or emulator. Claude N0 existing-oracle advisory READY reply-only; new Sol N0 enrollment controller READY in exact .cache/report scope, build-only and human-input/live grants required later.
+
+Sol enrollment controller ACK clean63d637e and exact outputs, ACTIVE build-only. Full unit session57677 running, no reported failures at25%; source/tests frozen. Existing read-only/same-scope review jobs may use explicit conditional-ACTIVE matching ACK in one turn, never bypassing product gates or file ownership.
