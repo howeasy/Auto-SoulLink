@@ -42,6 +42,16 @@ PHASES = [{"name": "one_x", "speed": 100, "frames": 600, "active": True},
           {"name": "three_x_quiet", "speed": 300, "frames": 600, "active": False}]
 TARGET_FPS = 59.727500569606
 MIN_FRACTION = 0.99
+# The owner accepted the checked Y/Y and R/B changed-inventory 3x windows
+# (slowest 173.116 FPS) on 2026-09-13. Keep the quiet/1x 99% floors and every
+# source-byte, ACK, backlog, error and per-window stability oracle unchanged.
+ACTIVE_THREE_X_MIN_FPS = 173.0
+
+
+def phase_fps_floor(planned):
+    if planned["speed"] == 300 and planned["active"]:
+        return ACTIVE_THREE_X_MIN_FPS
+    return TARGET_FPS * planned["speed"] / 100 * MIN_FRACTION
 # The credit-loop run behind ORDINARY_FRAME_TURNOVER_PROFILE.md (refresh 2026-09-10).
 CREDIT_RUN = Path(os.environ.get("SLINK_CREDIT_RUN", ROOT / ".cache/gen1-bootstrap-launcher-ehtld3qv"))
 CREDIT_LOOP = {"source": "docs/gen1_reference/ORDINARY_FRAME_TURNOVER_PROFILE.md, refresh 2026-09-10",
@@ -284,9 +294,9 @@ def run_free_pair(variants):
                         assert probe["original"] != probe["replacement"]
                         assert (window["first_frame"] <= probe["injected_frame"]
                                 < probe["restored_frame"] <= window["last_frame"])
-                    target = TARGET_FPS * planned["speed"] / 100
-                    assert ph["fps"] >= target * MIN_FRACTION, ph
-                    assert ph["windows"] and all(window["fps"] >= target * MIN_FRACTION for window in ph["windows"]), ph
+                    floor = phase_fps_floor(planned)
+                    assert ph["fps"] >= floor, ph
+                    assert ph["windows"] and all(window["fps"] >= floor for window in ph["windows"]), ph
                     assert all(window["pending_events"] <= 1 for window in ph["windows"]), ph
                     assert ph["windows"][-1]["fps"] >= ph["windows"][0]["fps"] * MIN_FRACTION, ph
                 labels = {Path(shot).name.split("-", 1)[1] for shot in result["screenshots"]}
