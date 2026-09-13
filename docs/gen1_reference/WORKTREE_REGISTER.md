@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Scripted-only owner direction current; interrupted UI attempt cleaned with HOLD and no survivors, lane released. D0-S Sol ACTIVE on first matching ACK across four exact test-only files/report/receipts in guide. Claude launch-path advisory and OMP command/input-scope check read-only ACTIVE on matching ACK, parallel; no production writer or live lane. Fully specified onboarded cards now acknowledge-and-work in one turn.
+
 Owner forbids Computer Use and directs scripted emulator tests. D0 UI attempt interrupted; root stopping only recorded owned CLI to trigger cleanup, original receipts preserved HOLD. No further sky/CUA/OS UI actions. Scripted normal-input work will use existing test patterns after scoped review.
 
 CURRENT: autonomous normal-button checks supersede ALL prior emulator holds/human-availability gates; earlier paragraphs are history. Root D0-A autonomous lane ACTIVE on exact new output paths in guide, Computer Use sky keys only. Claude R0 report correction active, no classifier code grant. No other live/test workload.
