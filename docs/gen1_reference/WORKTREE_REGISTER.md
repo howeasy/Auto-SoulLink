@@ -47,3 +47,5 @@ F1-host coordinator reserves only `.cache/f1-host-successor.xml`, `.cache/f1-hos
 C1 owned OS-temp fixture journal/config allowed for its real-runtime probe, with bytecode writes disabled; no persistent output expansion.
 
 F1-host execution complete: 46 pass/2 symlink-privilege skips, no running test job. Report writer released, independent read-only reviewer reserved; no runtime lane. Final qualification HOLD, other active source/evidence outputs unchanged.
+
+13:40 UTC: original F1-host receipt independently accepted. Owner explicitly authorized enabling symlinks on this PC. Coordinator owns only new F1-symlinks receipt/report outputs and the one documented Windows Developer Mode registry change; no emulator, reboot or production edits.
