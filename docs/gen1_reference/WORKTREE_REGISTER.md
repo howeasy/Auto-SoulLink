@@ -91,3 +91,5 @@ All three F1 repair workers ACK clean2d652cf and exact disjoint paths, now ACTIV
 F1-retirement writer released frozen one-test candidate (115 target/helper pass). N0-CLI probe review rejects first build pending same-owner corrections; no live execution, same .cache/report scope reserved. Claude HUD remains sole active tracked-test writer; Sol fixture paths frozen for review.
 
 Sol N0-CLI correction scope acknowledged/ACTIVE, build/static only. OMP full-unit receipt check complete with matching counts/hashes/groups; coordinator resolved exit metadata from actual tool completion. No OMP file or runtime ownership remains.
+
+Two fresh combined F1 fixture reviewers READY, no outputs; they wait for all five candidate test hashes and author release before source inspection. No additional writer or emulator grant.
