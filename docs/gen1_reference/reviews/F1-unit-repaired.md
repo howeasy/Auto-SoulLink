@@ -1,0 +1,9 @@
+# F1 complete repaired unit receipt
+
+Evidence owner: Sol `/root/f1_small_sol`, HOUNDOOM. Coordinator: Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa`. Frozen integrated source/test cut `a1714c57c7a267c89c99e0fc8e38c7b10c9d65d9`; the run began on documentation-only descendant `63d637eef4a6baba1c5ec1b7612e552e37c86f05`. A later documentation-only commit advanced HEAD while the run was active. `git diff a1714c5 HEAD -- tests/unit server lua tests/gen1_release_requirements.json` is empty.
+
+One complete `tests/unit` invocation began `2026-09-13T16:13:59.5671291Z` and ended `2026-09-13T16:27:10.1048660Z`. Exact argv: `C:/Users/howar/AppData/Local/Programs/Python/Python312/python.exe -m pytest tests/unit -q -ra -p no:randomly -p no:cacheprovider -o addopts= --junitxml=.cache/f1-unit-repaired.xml`. The process-local environment values are recorded in `.cache/f1-unit-repaired-meta.json`. Python PID 38440; shell PID 36480. Process exit **0**; pytest reports **7,815 passed, 0 failed, 0 errors, 0 skipped** in 788.86 seconds. XML independently records 7,815 tests, zero errors/failures/skips, with hostname HOUNDOOM. No deselection marker was reported. The receipt proves this unit invocation on the frozen source/test cut; it does not establish selected emulator gameplay or the full release verdict.
+
+Evidence SHA256: `.cache/f1-unit-repaired.xml` `fd108416479ac2e8176ef1c04373d6f69d254f4162811e9704e9375b7bd99e6b`; `.cache/f1-unit-repaired.txt` `1d1cb323d8d8b90fb31be112985175b673d511fc17edaec0de0f5c3ed06e44d9`; `.cache/f1-unit-repaired-meta.json` `e3c438895e7e25f8d899515b14cbd5ef6c3824ecb4843a8c27faae8b548e89d2`.
+
+No code, test, manifest, dependency, or emulator changes were made for this evidence card. Next owner: coordinator to freeze and assign independent receipt review, then update the Gen 1 RC guide/register. A separate untracked N0 enrollment report belongs to another owner.

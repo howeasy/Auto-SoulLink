@@ -113,3 +113,5 @@ Retirement R2 independently passed both axes and is accepted for sole-test integ
 Full repaired-unit Sol ACK cleana1714c5 and exact env/command, now ACTIVE; metadata uses -meta.json. No source/test writers or emulator. Claude N0 existing-oracle advisory READY reply-only; new Sol N0 enrollment controller READY in exact .cache/report scope, build-only and human-input/live grants required later.
 
 Sol enrollment controller ACK clean63d637e and exact outputs, ACTIVE build-only. Full unit session57677 running, no reported failures at25%; source/tests frozen. Existing read-only/same-scope review jobs may use explicit conditional-ACTIVE matching ACK in one turn, never bypassing product gates or file ownership.
+
+Full unit7815/7815 complete, no failures/skips, writer released; integration161/161 already passed. N0 enrollment .cache build needs bounded coordinator review corrections, same Sol scope, no live grant. All production/test files unchanged,18 worktrees preserved.
