@@ -50,7 +50,13 @@ assert(blank==string.rep(string.char(255),0x8000),"native fresh gate requires bl
 assert(gameinfo.getromhash():lower()==input.rom_sha1,"gate did not boot the exact Manager artifact")
 publish("observed",{variant=t.variant,rom_sha1=gameinfo.getromhash():lower(),saveram_path=saveram})
 local deadline=os.time()+45
-while not read(input.directory.."/go.json")do assert(os.time()<deadline,"Manager launch timed out");t.step({})end
+while not read(input.directory.."/go.json")do
+    if read(input.directory.."/abort.json")then
+        t.check("Manager-selected native launch reached the paired go signal",false,"aborted before go")
+        t.finish();return
+    end
+    assert(os.time()<deadline,"Manager launch timed out");t.step({})
+end
 for _=1,120 do t.step({})end;shot("intro")
 
 local original_yield,original_advance=emu.yield,emu.frameadvance

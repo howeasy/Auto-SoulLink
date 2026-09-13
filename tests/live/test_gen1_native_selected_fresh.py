@@ -374,6 +374,9 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                 "manager_id": run["run_id"], "session_id": session_id, "variants": variants,
                 "players": {player: {"phases": ready[player]["phases"], "held_frame": ready[player]["held_frame"],
                                       "loop_started": ready[player]["loop_started"]} for player in ("a", "b")}})
+        except BaseException as error:
+            publish(directory / "harness-error.json", {"type": type(error).__name__, "reason": str(error)[:1000]})
+            raise
         finally:
             if any(not job.done() for job in jobs):
                 publish(directory / "abort.json", {"reason": "paired selected-native fresh gate finished or failed"})
