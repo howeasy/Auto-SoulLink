@@ -113,6 +113,8 @@ N0-CLI source review found blocking probe defects before execution: missing expl
 
 F1-retirement Sol released test-only candidate: original 3 failures, repaired assigned/helper selection 115 passed, zero skips. Frozen test `84b611cb7c639024b78cb981dfc90d66b25569444d747d57845c3824d57bee7f`, report `fb29811ced1154ab28cf5ff3e3a0e7821c4187ed1000bc63bb971c46ede58d26`. Coordinator reviewed both small Sol diffs; independent Standards/Spec review will use their frozen paths before integration.
 
+N0-CLI same-owner corrections **ACTIVE** after Sol acknowledged the exact unchanged script/report scope; require fresh Git/source and input hashes in its replacement handoff. Build/static only, no live execution. OMP F1 receipt check complete: hashes/counts/file groups independently verified; the peer could not infer process exit from XML/text alone. Coordinator verified exit 1 from unified session66713 completion (tool chunk97b65c, exit_code1); no rerun required and original receipts remain unchanged.
+
 Next owner/action: C1 runner returns its first falsifier; N0 runner returns the actual-CLI oracle gap; Claude returns the concrete P2a decision report; coordinator resolves the concrete F1 host-capability question. Coordinator reviews these and records the nine-part claim before any implementation READY. No production implementation is currently granted.
 
 Source cut **`19edbb2`** on `gen1/rc`: owner-authorized native lifecycle and coherent checkpoint refactors are integrated. Prior product fixes remain `df38453`; earlier physical receipts are still tied to their original cuts. The root `E:/Google Drive/SLink` checkout stays clean `master` at `adf3362`. Subsequent documentation commits do not change source evidence.
