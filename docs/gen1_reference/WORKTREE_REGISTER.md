@@ -89,3 +89,5 @@ Two disjoint active writers: Sol1 exact starter script6 dialogue Lua/unit; speed
 Both speed/dialog writers frozen/released with hashes in guide. Root speedreviewcomplete, Codex narrowdialogSpecreviewactive. No emulator. Muteclosed.
 
 Dialogue+speed candidates reviewed; finalcombined46pass. Root owns fresh3×attempt4 afterintegration, allsourcewritersreleased. Parcel candidatefrozenawaitingfirstcheckpoint; muteDONE.
+
+Attempt4closed aftertimeout/fullcleanup; physical starters/source entries present but settlement/link absent in checked snapshot, no lablossproof. Sol1 owns finite remaininglabdialogue/input correction in existingLua/unit/report. No emulator; parcel candidatefrozen.
