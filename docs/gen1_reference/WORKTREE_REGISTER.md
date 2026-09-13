@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0 boundary reporte37f9560 accepted with exact wording limits in guide; Claude released. D0-A implementation READY reserves two new tests/live files plus named report/model receipts to Sol, pending ACK/activation. No production/manifest edits or live lane; N0 originals preserved.
+
 D0 first report287ffbab frozen; coordinator found source-pinning rationale and proposed-boundary corrections. Same Claude report-only correction ACTIVE conditional on ACK, no implementation/live grant. N0 bounded physical baseline accepted; no other active writer.
 
 CURRENT: N0 R2 Y/Y physical baseline accepted after OMP receipt verification and coordinator independent prepared-image byte comparison, tool807127 exit0. OMP released, no emulator/test/source writer. Claude alone owns active D0-boundary-successor.md report (currently untracked, excluded from coordinator commit). Guide current snapshot/row updated; original physical report hash0e9522dc retained.
