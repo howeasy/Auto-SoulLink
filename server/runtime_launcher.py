@@ -83,6 +83,11 @@ end
 if root then root=root:gsub("\\","/"):gsub("/*$", "/")end
 if not valid(root)then root=nil end
 if not root then
+    local environment=os.getenv("SLINK_ROOT")
+    if environment and environment~="" then environment=environment:gsub("\\","/"):gsub("/*$", "/")end
+    if valid(environment)then root=environment end
+end
+if not root then
     local file=io.open(cache_path,"r")
     if file then local cached=file:read("*l");file:close();if valid(cached)then root=cached end end
 end
