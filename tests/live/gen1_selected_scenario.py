@@ -264,6 +264,7 @@ def private_receipt(job, spec, rom, emulator):
              and entry.get("System") in {"GB_GBC_SGB", "GBL", "GB", "GBC", "SGB"}]
     assert paths and all(Path(path).resolve() == saves.resolve() for path in paths)
     assert config["FrameSkip"] == 0 and config["AutoMinimizeSkipping"] is False
+    assert config["SoundVolume"] == 0 and config["SoundVolumeRWFF"] == 0
     assert any(matching(child) is not None and Path(matching(child).exe()).resolve() == emulator
                for child in job["children"].values()), "identity-checked emulator child missing"
     return {"private": str(private), "save_directory": str(saves),
@@ -421,6 +422,8 @@ class SelectedRun:
                           "AutosaveSaveRAM": False}, before
         base["FrameSkip"] = 0
         base["AutoMinimizeSkipping"] = False
+        base["SoundVolume"] = 0
+        base["SoundVolumeRWFF"] = 0
         private_config = self.owned / "base-config.ini"
         private_config.write_text(json.dumps(base, indent=2) + "\n")
         self.outcome["input_hashes"] = {"emulator": sha(self.emulator), "source_config": sha(self.base_config),
