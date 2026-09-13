@@ -67,3 +67,5 @@ MAT setup complete, F1 symlink 48/48 independently accepted. N0-root implementat
 C1 independent reachability review READY reserves only reviews/C1-reachability-successor.md; no runtime/code ownership. N0-root remains sole production writer; other active work is read-only source/report work.
 
 14:01 UTC: current guide snapshot consolidated before the next phase. N0-root is the sole uncommitted production/test writer; all previous report writers released. Acknowledged C1 reachability and Claude D0b correction are ACTIVE report-only, no overlapping paths. No emulator grant. MAT setup/F1 symlink repair complete and independently reconciled.
+
+N0-root source/test writer released frozen candidate (67 focused pass); no production writer while review is pending. OMP two small context-sensitive setup/ledger checks READY, reply-only and no file/runtime ownership. C1 reachability and Claude correction remain separate report writers.
