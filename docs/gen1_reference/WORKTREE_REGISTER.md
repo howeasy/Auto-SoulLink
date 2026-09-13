@@ -1,10 +1,10 @@
 # Gen 1 RC worktree register
 
-Checked 2026-09-13 against `git worktree list --porcelain` and `git status --porcelain=v1 --untracked-files=all` in every checkout. This is a *use/ownership* cleanup, not a deletion: worktree paths can back Codex/Claude tasks and contain ignored emulator receipts. Keep branches and checkouts until an owner separately validates those bindings and ignored data for physical relocation. Recheck before every handoff; the HEADs below are a snapshot, not a source pin.
+Checked 2026-09-13 against `git worktree list --porcelain` and `git status --porcelain=v1 --untracked-files=all` in every checkout; `git worktree prune --dry-run --verbose` found no stale entries. This is a *use/ownership* cleanup, not a deletion: worktree paths can back Codex/Claude tasks and contain ignored emulator receipts. Keep branches and checkouts until an owner separately validates those bindings and ignored data for physical relocation. Recheck before every handoff; the HEADs below are a snapshot, not a source pin. RC code cut is `df38453`, documentation archive started at `32c9870`, and this guide/register commit advances HEAD again.
 
 | Checkout under `E:/Google Drive/SLink/.claude/worktrees/` | HEAD at audit | Classification and action |
 | --- | --- | --- |
-| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | `df38453` | **ACTIVE, canonical integration.** Root owns code merges and [master guide](RC_MASTER_GUIDE.md). Documentation archive edits follow this HEAD. |
+| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | code `df38453`; docs ≥`32c9870` | **ACTIVE, canonical integration.** Integrator owns code merges and [master guide](RC_MASTER_GUIDE.md). Always query the current HEAD; a documentation commit advances it without changing the code cut. |
 | `gen1-native-free-service` | `3404bc9` | **PARKED DIRTY.** Claude stopped the normal-walk experiment: two modified selected-smoke files and untracked `tests/live/test_gen1_native_selected_progression.py`. Do not merge, clean, or delete; product B code through `10a500a` was already integrated at `e9f11f9`. |
 | `gen1-storage-sync-runtime` | `f8325dc` | **PARKED FUTURE C**, clean modeled storage work. No implementation authorization in the current A+B3 slice. Rebase/review before any future code. |
 | `gen1-collab-bad73b` | `adf3362` | **LIVE CLAUDE SESSION**, clean conversation checkout, not the B code source. Do not move under an active peer session. |

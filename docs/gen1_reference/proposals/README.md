@@ -1,5 +1,7 @@
 # Proposals for root (`codex:Gen1`), 2026-09-10
 
+> Historical design archive. The P-series was already reconciled into `gen1/rc`; **do not apply these patches or follow the old order below**. The only current work queue is [RC_MASTER_GUIDE.md](../RC_MASTER_GUIDE.md). These files remain as source rationale and old-code evidence.
+
 Each proposal is self-contained and reversible. Patches apply from the sweep worktree root
 with `git apply docs/gen1_reference/proposals/<name>.patch` (all were checked with
 `git apply --check` today). New files were added in place because they are additive and
