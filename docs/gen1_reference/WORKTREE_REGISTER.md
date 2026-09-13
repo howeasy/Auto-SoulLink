@@ -83,3 +83,5 @@ Owner approved conservative P2a clean resume policy; mechanisms still absent and
 OMP completed both small checks at15727ec: approved setup/config pointers verified, two stale N0 snapshot statements identified. Coordinator accepted and refreshed N0 row to integrated15727ec, 67 focused pass, no source writer. OMP holds no files/live lane.
 
 14:36 UTC full unit complete, 7800 pass/15 fail/0 skip; no test process remains. Freeze released only for three READY test-only repairs: Claude HUD fixture pair, Sol small-contract pair, Sol retirement fixture. Exact paths in guide; no overlapping writer, no production/Lua/manifest or emulator grant. C1 history turn blocked by automatic safety check, no outputs, HOLD; not transferred.
+
+All three F1 repair workers ACK clean2d652cf and exact disjoint paths, now ACTIVE. OMP receipt-only F1 check READY. New Sol N0 actual-CLI probe build READY on .cache script/evidence/summary and one report only; no emulator execution grant, no production or tracked-test edits. Root master untouched.
