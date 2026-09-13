@@ -33,3 +33,5 @@ P0b isolated OMP onboarding reserves no files and no runtime lane; canonical sou
 D0b acknowledged 13:11 UTC on HOUNDOOM at clean 18446b1; ACTIVE research/report-only ownership. P0 initial verify-inputs exited 1 for unset SLINK_EMUHAWK/SLINK_UPR_JAR; static census continues, no dependencies changed.
 
 P0-config extension acknowledged; ACTIVE for one process-local configured --verify-inputs rerun, same report owner.
+
+Prepared C1-repro and N0-gap remain WAIT for accepted P0; exact canonical report/probe outputs are reserved in guide, no production writer or emulator grant. No new checkout is required for these disjoint source/evidence outputs.
