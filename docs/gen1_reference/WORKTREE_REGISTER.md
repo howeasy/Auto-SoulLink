@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Claude D0b-save-witness-boundary ACK verified and ACTIVE on its sole report, source-only. No overlap with frozen enrollment controller/review; no live lane.
+
 Sol enrollment writer released final861ff075/report0e213b6d; same independent Standards correction review ACTIVE conditional on matching ACK, no writes. Claude save-boundary report reserved READY; no emulator/live/source writer. Current guide governs all exact grants.
 
 Claude D0b-save-witness-boundary research READY reserves only reviews/D0b-save-witness-boundary-successor.md, pending ACK/activation. Existing corrected design reused, only the concrete Yellow save-completion/hook boundary gap is in scope. No production/test/journal/live ownership; Sol enrollment .cache corrections remain disjoint.
