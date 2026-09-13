@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-A Spec PASS, Standards P1 existing-evidence overwrite confirmed; same Sol two-file/report correction ACTIVE conditional on ACK with new r2 modeled receipts. R0 report2cdae342 frozen/released, coordinator reconciliation pending. No live lane/production writer.
+
 D0-A author released frozen module0d7e50de/test83746333/report1d712f94; separate Standards/Spec reviews ACTIVE conditional on ACK, no writes/execution. R0 source reporter remains sole active report writer. No live lane or production writer; N0 artifacts unchanged.
 
 Coordinator cleared only the stopped scan's verified zero-byte canonical index.lock after confirming no git.exe remained. Activation commit succeeded; no worktree/index/source reset. Narrow no-optional-locks Git reads required.
