@@ -79,3 +79,5 @@ Both N0-root reviewers acknowledged c95b360 and frozen hashes; ACTIVE separate S
 Integrated source15727ec; full unit session66713 active, one failure marker at23% (details pending). C1/D0b research writers released frozen reports. C1 history-complete .cache-only probe READY on exact three new outputs; no source/test-file writes during full-unit freeze. OMP checks ACTIVE, no runtime claim.
 
 Owner approved conservative P2a clean resume policy; mechanisms still absent and N0/D0 gates remain. Acknowledged C1-history probe ACTIVE on three .cache/report outputs only; no production/test-file edits or live grant.
+
+OMP completed both small checks at15727ec: approved setup/config pointers verified, two stale N0 snapshot statements identified. Coordinator accepted and refreshed N0 row to integrated15727ec, 67 focused pass, no source writer. OMP holds no files/live lane.
