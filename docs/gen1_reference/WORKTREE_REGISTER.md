@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-S reviews passed; root completion-timing correction assigned to same Sol files with fresh r2 model receipts. Wait for child input-stopped before final audit and tolerate only missing-file publication transient. No live lane; no product edits.
+
 D0-S author released four-file frozen candidate; Standards/Spec, Claude wrapper advisory and OMP receipt check dispatched in parallel under guide's ACK-and-work rule, all read-only. No live lane or active code writer. R0 report remains frozen, not implementation-authorized.
 
 Scripted-only owner direction current; interrupted UI attempt cleaned with HOLD and no survivors, lane released. D0-S Sol ACTIVE on first matching ACK across four exact test-only files/report/receipts in guide. Claude launch-path advisory and OMP command/input-scope check read-only ACTIVE on matching ACK, parallel; no production writer or live lane. Fully specified onboarded cards now acknowledge-and-work in one turn.
