@@ -43,3 +43,5 @@ Current short support: Claude reply-only D1-RB waypoints; Codex faint oracle com
 Claude next-route support completed/released; source-derived parcel/Oak/Mart route retained in cx-42c18447 for the next checkpoint. Sol alone continues first starter/rival code; independent reviewers wait for frozen code.
 
 OMP late R/B receipt returned and matches independent verification; now has one reply-only fresh live preflight under the guide, no file/test/emulator writer. Provider error history retained.
+
+D1 review: Standards accepted, Spec found Pallet dialogue blocker. Sol owns only route Lua, bootstrap Lua and new route model test for the source-qualified correction plus existing report/receipts; all other candidate code frozen. OMP preflight resent cx-7c56e110. No live lane.
