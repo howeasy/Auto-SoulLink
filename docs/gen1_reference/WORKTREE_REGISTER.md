@@ -37,3 +37,5 @@ Read the master guide first; verify only the assigned checkout with `git --no-op
 All Git mutations use `-c maintenance.auto=false -c gc.auto=0`. Before any future physical archive/move/delete, verify absolute workspace containment, tracked/untracked/ignored receipt preservation and live bindings. Current authorization does not permit deleting parked worktrees, merging to master or pushing. “Archived” means classification/exclusion unless a separate physical action is explicitly authorized.
 
 Current short support grants: Claude reply-only D1-RB waypoints; Codex reply-only lab-faint hook oracle; OMP frozen R/B receipt check after scope-stop ACK. No extra file writers or emulator lane.
+
+20:52 UTC: OMP scope/receipt tasks closed, provider Together HTTP/2 errors repeated; no report/file claim. Codex receives bounded reply-only R/B receipt cross-check. Sol alone continues D1-RB code; no live runner.
