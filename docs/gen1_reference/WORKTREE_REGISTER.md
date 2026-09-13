@@ -40,4 +40,4 @@ Current short support: Claude reply-only D1-RB waypoints; Codex faint oracle com
 
 20:52 UTC: OMP scope/receipt tasks closed, provider Together HTTP/2 errors repeated; no report/file claim. Codex receives bounded reply-only R/B receipt cross-check. Sol alone continues D1-RB code; no live runner.
 
-Claude has reply-only next-route support (lab→parcel→Oak→Mart), no file or emulator writer; Sol continues the first starter/rival checkpoint.
+Claude next-route support completed/released; source-derived parcel/Oak/Mart route retained in cx-42c18447 for the next checkpoint. Sol alone continues first starter/rival code; independent reviewers wait for frozen code.
