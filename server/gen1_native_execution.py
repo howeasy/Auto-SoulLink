@@ -73,6 +73,14 @@ class NativeExecutionPolicy:
             if runtime.receptionist is None:raise JournalError('native receptionist policy is not selected')
             return runtime.receptionist.window(player,command,evidence,document,binding)
         trade = runtime.journal.record(NAMESPACE, body["transaction_id"]).value
+        # The record is read after the snapshot check above; a same-revision record swap between the
+        # two reads must not be consumed. The snapshot's gen1-trade component pins the record's
+        # digest and phase (gen1_trade_recovery), so the record consumed here is the one the
+        # verified document links, or nothing is issued.
+        linked = document["components"].get("gen1-trade", {}).get("transactions", {}).get(body["transaction_id"])
+        if (not isinstance(linked, dict) or linked.get("record_digest") != digest(trade)
+                or linked.get("phase") != trade.get("phase")):
+            raise JournalError("native window trade record is not the one the verified state links")
         if trade["recovery_required"]:return None
         native = evidence["native"]
         if not isinstance(native, dict):raise JournalError("native phase evidence required")
