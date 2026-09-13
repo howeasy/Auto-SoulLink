@@ -1,0 +1,9 @@
+# Parked speed-gate administrative recovery
+
+During commit6a47f8c Git reported failure deleting the parked gen1-speed-gate administrative directory. Read-only inspection found the checkout directory and its .git pointer intact, branch codex/gen1-speed-gate still35b7894, but administrative HEAD/index/commondir/gitdir missing. Worktree enumeration had17 entries. The initiating cause is unproved; no explicit worktree remove/prune was issued in this task, and no active Git hook or matching test/tool cleanup command was found.
+
+Coordinator preserved remaining metadata and the .git pointer under canonical .cache/speedgate-admin-recovery. Standard git worktree repair restored gitdir, but the missing HEAD/commondir/index prevented recognition. A separate temporary index was populated from retained branch35b7894 using explicit GIT_INDEX_FILE and common Git/worktree paths. After update-index --refresh, tracked diff and untracked-nonignored listings were both empty. These commands changed only the temporary index, not working files.
+
+Only the missing administrative commondir, symbolic HEAD and index were reconstructed; branch refs and checkout files were not reset, checked out, moved or deleted. Existing ORIG_HEAD/residue remained. Git then reported the parked checkout clean at35b7894 and enumerated18 worktrees again. The restored worktree was locked with reason "Preserve parked Gen1 RC evidence; coordinator-managed after administrative recovery".
+
+The reconstructed index represents the retained branch after byte/content comparison with its working tree; the deleted original index itself was unavailable. Ignored receipts remain in their original checkout, which no recovery command modified. Future coordinator Git mutations use per-command maintenance.auto=false and gc.auto=0; status reads use --no-optional-locks. The lock is an administrative preservation measure, not a new source-work grant.
