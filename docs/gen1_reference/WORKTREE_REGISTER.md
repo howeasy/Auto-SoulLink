@@ -95,3 +95,5 @@ Sol N0-CLI correction scope acknowledged/ACTIVE, build/static only. OMP full-uni
 Two fresh combined F1 fixture reviewers READY, no outputs; they wait for all five candidate test hashes and author release before source inspection. No additional writer or emulator grant.
 
 Claude HUD reply retrieved,112 target/332 helper pass, author released. All five fixture candidates frozen with matching hashes; acknowledged Standards/Spec reviews ACTIVE. No tracked-test writer. N0 Sol final cleanup correction remains same .cache-only scope; no emulator.
+
+Combined Standards PASS; Spec accepts four HUD/small-contract files and holds retirement for premature HUD ACK bypass. Sol retirement same-file correction READY with new r2 receipt paths; other four frozen files ready for integration. Final N0-CLI build source-reviewed/accepted (no execution yet); no active emulator.

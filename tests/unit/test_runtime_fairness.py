@@ -28,6 +28,9 @@ def test_control_and_large_receipt_queue_alternate_without_granting_frames(runti
                         context_generation=binding.context_generation,binding_digest=binding.binding_digest,
                         challenge=packet.control.challenge,authority="hold",reason="owned test hold"}
                 elseif packet.event=="observation" and not issued then
+                    assert(packet.sequence==7 and packet.frame==120 and packet.inventory==JSON.null)
+                    response.observation_result={schema='rby-observation-result-v1',
+                        operation_id=packet.operation_id,sequence=7,frame=120,inventory_status='absent'}
                     local cmd={cmd="fixture",command_id=string.rep('5',32),command_sequence=1,command_index=1}
                     for _,key in ipairs({'protocol','player','seq','operation_id','session_id','admission_epoch'})do cmd[key]=response[key]end
                     response.commands=JSON.array({cmd});issued=true
@@ -42,7 +45,8 @@ def test_control_and_large_receipt_queue_alternate_without_granting_frames(runti
             executor_adapter={prepare=function()return {schema='fixture'}end,
                 classify=function()return 'after',{verified=true}end,apply=function()error('must never write')end,
                 receipt=function()return {schema='fixture-proof-v1',payload=string.rep('AB',32768)}end}}))
-        assert(service:observe(JSON.array({{event='observation'}}),{fixture=true}))
+        assert(service:observe(JSON.array({{event='observation',schema='rby-observation-v1',
+            sequence=7,frame=120,inventory=JSON.null}}),{fixture=true}))
         for i=1,12 do now=i*.30;assert(service:step())end
         local counts={};for _,event in ipairs(sent)do counts[event]=(counts[event]or 0)+1 end
         assert(counts.observation==1 and counts.command_ack==1 and counts.control>=2,'control starved durable receipts: '..assert(JSON.encode(sent))..assert(JSON.encode(service:status({summary=true}))))

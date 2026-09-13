@@ -25,6 +25,7 @@ from server.protocol_journal import JournalError
 from server.state import LinkStatus
 from tests.unit.test_gen1_engine_signal_runtime import deliver, payload
 from tests.unit.test_gen1_faint_runtime import ack, acknowledgement, bag, paired, signal_batch
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_memorial import fixture
 from tests.unit.test_gen1_memorial_runtime import observe, start
 from tests.unit.test_gen1_party_codec import make_blob
@@ -342,7 +343,17 @@ def terminal_start(runtime):
     deliver(runtime, "b", owners["b"], peer_activation)
     deliver(runtime, "a", owners["a"], signal_batch(runtime, "a"))
     command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
+    assert command["body"]["cmd"] == "force_faint"
     ack(runtime, "b", owners["b"], acknowledgement(runtime, "b", command))
+    # The whiteout's death notice, terminal HUD state and peer notice precede each memorial
+    # read on the independent HUD lane; the typed memorial read is the only physical command.
+    for player in ("a", "b"):
+        assert [runtime.journal.command(player, i)["body"]["cmd"] for i in runtime.journal.pending_ids(player)] == [
+            "hud_notice", "hud_state", "hud_notice", "memorial_observe"]
+    acknowledge_hud(runtime)
+    for player in ("a", "b"):
+        assert [runtime.journal.command(player, i)["body"]["cmd"] for i in runtime.journal.pending_ids(player)] == [
+            "memorial_observe"]
     return owners
 
 

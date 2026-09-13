@@ -52,7 +52,7 @@ def test_control_view_is_detached_invalidates_on_commit_and_does_not_escape_turn
             return {"fixture": True}
 
         monkeypatch.setattr(runtime, "_control_checked", turn)
-        assert runtime._control("a", {}) == {"fixture": True}
+        assert runtime._control("a", {}) == {"fixture": True, "pending_delivery": False}
         assert runtime._control_state_cache is None and not runtime._control_cache_active
         runtime.journal._db.execute(
             "UPDATE records SET digest=? WHERE namespace=?", ("0" * 64, saves.COMPONENT)

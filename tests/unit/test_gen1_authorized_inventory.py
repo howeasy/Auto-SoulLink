@@ -18,6 +18,7 @@ from server.gen1_observation_runtime import record as record_batch
 from tests.unit.observation_fixture import observe, setup, starters
 from tests.unit.test_gen1_faint_runtime import ack, signal_batch
 from tests.unit.test_gen1_held_faint import checkpoint
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver
 from tests.unit.test_gen1_memorial import fixture
@@ -79,6 +80,23 @@ def test_first_baseline_uses_verified_save_but_preserves_raw_enrollment_and_late
         runtime.close()
 
 
+def queue(runtime, player):
+    return [runtime.journal.command(player, i)["body"]["cmd"] for i in runtime.journal.pending_ids(player)]
+
+
+def physical_head(runtime, player, expected):
+    """Settle the no-write HUD entries ahead of the next typed physical command.
+
+    The exact FIFO shape is asserted before and after: HUD notices/state ride the
+    independent HUD lane and never hide, reorder or replace a physical obligation.
+    """
+    assert queue(runtime, player) == expected
+    acknowledge_hud(runtime, player)
+    physical = [cmd for cmd in expected if cmd not in ("hud_notice", "hud_state")]
+    assert queue(runtime, player) == physical
+    return runtime.journal.command(player, runtime.journal.pending_ids(player)[0])
+
+
 def receiver_memorial(runtime):
     """A source faint at122; B's two-member roster stays held at120 for its writes."""
     starters(runtime)
@@ -116,6 +134,8 @@ def receiver_memorial(runtime):
     a["source"]["cart_hex"], a["source"]["save_status"] = prepared(document, "a")["after"]["cart_hex"], 2
     observe(runtime, "a", inventory=a, signals=signal)
     owner = runtime.gate.sessions["b"].owner
+    # The physical faint leads B's FIFO; its death notice is appended behind it.
+    assert queue(runtime, "b") == ["force_faint", "hud_notice"]
     command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
     members = inventory(b["source"], {"ot_id": "0000", "trainer_name": "SAME"})["members"]
     pre = {
@@ -144,7 +164,7 @@ def receiver_memorial(runtime):
             "receipt": {"schema": "gen1-force-faint-receipt-v1", "before": pre, "after": post},
         },
     )
-    command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
+    command = physical_head(runtime, "b", ["hud_notice", "memorial_observe"])
     physical = copy.deepcopy(b["source"])
     raw = bytearray.fromhex(physical["fields"]["party"])
     raw[9:11] = b"\0\0"
@@ -186,7 +206,7 @@ def complete_memorial(runtime, player, point, frame):
     """Acknowledge the memorial observe and memorialize commands for ``player`` at its held frame."""
     owner = runtime.gate.sessions[player].owner
     initial = runtime.state().document()["components"]["gen1-initial-observations"][player]
-    command = runtime.journal.command(player, runtime.journal.pending_ids(player)[0])
+    command = physical_head(runtime, player, ["hud_notice", "memorial_observe"])
     ack(
         runtime,
         player,
@@ -296,7 +316,8 @@ def test_unapplied_command_arriving_mid_batch_defers_only_the_heartbeat_checkpoi
         a["source"]["fields"]["party"] = signal["signals"][-1]["point"]["party_hex"]
         observe(runtime, "a", inventory=a, signals=signal)
         pending = runtime.journal.pending_ids("b")
-        assert len(pending) == 1
+        # One unapplied physical command; the death notices behind it are no-write UI.
+        assert queue(runtime, "b") == ["force_faint", "hud_notice", "hud_notice"]
         b = copy.deepcopy(runtime.state().document()["components"][COMPONENT]["b"]["observation"])
         b["frame"] = 115
         _, _, result = observe(runtime, "b", inventory=b, allow_deferred=True)
