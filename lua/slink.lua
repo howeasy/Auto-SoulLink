@@ -12,9 +12,10 @@ package.path = _dir .. "?.lua;" .. _dir .. "?/init.lua;" .. package.path
 -- Explicit durable selection never falls through to a legacy client or its
 -- shared log file. The checked launcher supplies the run-bound configuration.
 if rawget(_G,"SLINK_RUNTIME_LAUNCH_JSON")~=nil then
+    local launch_json=SLINK_RUNTIME_LAUNCH_JSON
     package.loaded.json_codec=nil
     local JSON=require("json_codec")
-    local configuration=assert(JSON.decode(SLINK_RUNTIME_LAUNCH_JSON))
+    local configuration=assert(JSON.decode(launch_json))
     SLINK_RUNTIME_LAUNCH_JSON=nil
     assert(configuration.protocol=="slink-gen1-durable-v1","unsupported durable launcher protocol")
     -- The checked launcher, not a second hand-maintained list, defines every
@@ -33,6 +34,9 @@ if rawget(_G,"SLINK_RUNTIME_LAUNCH_JSON")~=nil then
             package.loaded[base]=nil
         end
     end
+    -- The checked file list may evict json_codec itself. Its null sentinel is
+    -- module-local, so no decoded manifest value may cross that reload boundary.
+    configuration=assert(require("json_codec").decode(launch_json))
     return require("gen1_client_entry").run(configuration)
 end
 

@@ -149,6 +149,31 @@ def test_durable_entry_evicts_every_checked_lua_module_before_start():
         lua.execute('SLINK_RUNTIME_LAUNCH_JSON=launch;return dofile(root.."/lua/slink.lua")')
 
 
+def test_durable_entry_decodes_native_null_with_the_final_checked_codec():
+    """The native manifest's null probe must survive the checked module reload."""
+    from lupa.lua54 import LuaRuntime
+
+    root = Path(__file__).resolve().parents[2]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().root = root.as_posix()
+    lua.globals().launch = json.dumps({
+        "protocol": "slink-gen1-durable-v1",
+        "native_manifest": {"test_probe": None, "nested": [None]},
+        "files": [{"path": path, "sha256": "a" * 64, "encoding": "utf8_lf"}
+                  for path in ("lua/json_codec.lua", "lua/gen1_client_entry.lua")],
+    })
+    assert lua.execute(r'''
+        package.path=root.."/lua/?.lua;"..package.path
+        package.preload.gen1_client_entry=function()return {run=function(configuration)
+            local JSON=require("json_codec")
+            return configuration.native_manifest.test_probe==JSON.null
+                and configuration.native_manifest.nested[1]==JSON.null
+        end}end
+        SLINK_RUNTIME_LAUNCH_JSON=launch
+        return dofile(root.."/lua/slink.lua")
+    ''')
+
+
 def test_wrong_run_launcher_cannot_admit_even_with_identical_cartridge_and_save(prepared):
     before = prepared.runtime.journal.snapshot()
     with pytest.raises(ProtocolError, match="different run"):
