@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+FINAL CURRENT SNAPSHOT: Claude report revision2 frozen22491a6a and source facts reviewed with explicit status-value/provenance exclusion in guide; all workers released. N0 controller861ff075 reviewed WAIT human availability, no live lane or source writer. Canonical source/testsa1714c5 unchanged; only coordinator/review documents integrated. All worktrees preserved. Earlier ACTIVE entries are historical, not current grants.
+
 Claude save-boundary first report348c5b03 frozen for Git retention; coordinator found concrete equality/provenance/validator/trampoline corrections. Same-report source-only correction ACTIVE conditional on ACK, no scope expansion or live grant. Enrollment remains reviewed WAIT human availability.
 
 OMP controls lookup complete/released, exact bindings verified by coordinator. No active OMP or Sol file claim; Claude sole report writer. Enrollment reviewed861ff075 awaits human availability, no emulator lane. Guide records configured controls and next receipt-review use for OMP.
