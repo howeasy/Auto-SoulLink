@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0 first report287ffbab frozen; coordinator found source-pinning rationale and proposed-boundary corrections. Same Claude report-only correction ACTIVE conditional on ACK, no implementation/live grant. N0 bounded physical baseline accepted; no other active writer.
+
 CURRENT: N0 R2 Y/Y physical baseline accepted after OMP receipt verification and coordinator independent prepared-image byte comparison, tool807127 exit0. OMP released, no emulator/test/source writer. Claude alone owns active D0-boundary-successor.md report (currently untracked, excluded from coordinator commit). Guide current snapshot/row updated; original physical report hash0e9522dc retained.
 
 CURRENT18:21UTC: Claude D0-boundary ACK verified at clean d9dcf45/script31254a40; ACTIVE sole source-only report writer. R2 physical lane completed/released, OMP final frozen receipt cross-check read-only in flight. All Sol builders/reviewers released; no emulator/production writer.
