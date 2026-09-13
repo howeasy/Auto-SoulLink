@@ -6,7 +6,7 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 Canonical E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2, gen1/rc. Coordinator Codex01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa alone integrates and updates the guide/register. The machine checkpoint in the guide names exact frozen files and next action.
 
-All battle/HUD/hook/parcel authors and reviewers have released files. No emulator or source writer is active. Coordinator has only current-card integration/verification and TEMP handoff remaining, then all work pauses by owner request. Parcel and R0 candidates remain explicitly unintegrated; other parked worktrees remain untouched.
+All battle/HUD/hook/parcel authors and reviewers have released files. Coordinator has the final current-card attempt6 live grant at c647f91; no source writer is active. Coordinator has only current-card integration/verification and TEMP handoff remaining, then all work pauses by owner request. Parcel and R0 candidates remain explicitly unintegrated; other parked worktrees remain untouched.
 
 Production core baseline15727ec; current shared HUD changes are a production delta, not merely test/docs. The final freeze is recorded in the guide after integration. Root master is not the RC checkout. Native hook configs were installed user-level with backups; trust/activation remains a separate host action, not a code receipt.
 

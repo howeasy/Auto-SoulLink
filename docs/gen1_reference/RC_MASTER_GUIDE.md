@@ -13,11 +13,16 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-13T23:34:39.174383+00:00",
+  "updated_at_utc": "2026-09-13T23:38:41.726543+00:00",
   "coordinator_session_id": "01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa",
-  "source_head": "f60be69",
-  "live_lane": null,
-  "next_action": "Integrate reviewed current cards, perform one bounded current-card verification, write TEMP handoff and pause all workers.",
+  "source_head": "c647f9126e79909f2b5976beec65d7b3beedd737",
+  "live_lane": {
+    "owner": "coordinator",
+    "run": "D1-RB attempt6",
+    "source_head": "c647f9126e79909f2b5976beec65d7b3beedd737",
+    "artifact_root": ".cache/d1-rb-starter-rival-r6"
+  },
+  "next_action": "One final current-card 300%/180s verification, then TEMP handoff and pause all work; preserve any unresolved result without another workstream.",
   "workers": [
     {
       "id": "battle-input",
@@ -97,7 +102,7 @@ Updated for the current-card freeze and owner-requested handoff/pause. This sect
 - **Coordinator/integrator:** Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa`, HOUNDOOM. Coordinator alone grants file/live ownership and integrates. Implemented code goes to Sol; context-sensitive discussion uses Claude Gen1-Collab2. OMP handles short bounded checks; independent work uses isolated workers when available.
 - **Canonical checkout:** `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`. Product behavior cut `15727ec7853ba5ef1d5506d2b5edcc95e2fbdb67`; last integrated gameplay test cut f60be69; current reviewed battle/HUD/hook files are being integrated now. Query Git and the checkpoint for the final freeze. Query Git for current HEAD; do not reset differences. Root master is not the RC checkout (registered at `adf3362` in the latest metadata check).
 - **Current input authority:** emulator tests use scripts and normal game buttons. **No Computer Use or OS UI input.** No human availability gate for scripted tests. Read-only game-state inspection is allowed; no test RAM/register/SaveRAM/savestate/CPU staging or copied performance-memory probes. Each live run still needs the coordinator's sole-lane grant. This supersedes earlier human-only and emulator-hold transitions.
-- **Live state:** no emulator or active source writer. Attempts1–5 closed/HOLD; attempt5 proved both starters settled and an ALIVE link but stalled after one Growl. Final current-card verification is the only remaining live action before handoff.
+- **Live state:** coordinator owns final current-card attempt6 at c647f91, requested300%, limit180. All source writers/reviewers released. Earlier attempts1–5 closed/HOLD; source/module evidence remains separate from this pending live result.
 - **Dispatch:** fully specified cards for onboarded workers may be ACTIVE conditional on the first matching Git/hash/scope acknowledgment; work then continues in that turn. A mismatch means HOLD. This removes an idle roundtrip, never the complete claim, prerequisites or one-writer rule.
 
 ### Active assignments and next action
