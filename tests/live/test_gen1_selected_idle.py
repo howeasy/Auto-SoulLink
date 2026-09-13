@@ -20,9 +20,9 @@ from tests.live.gen1_selected_scenario import (
 
 
 async def idle_enrollment(owned, *, emulator, base_config, limit=1800,
-                          input_mode="human", launch_mode="product-cli"):
+                          input_mode="human", launch_mode="product-cli", variants=("red", "blue")):
     """Explicit physical entry, invoked by a human outside pytest collection."""
-    run = SelectedRun(owned, ("yellow", "yellow"), emulator=emulator,
+    run = SelectedRun(owned, variants, emulator=emulator,
                       base_config=base_config, limit=limit, input_mode=input_mode,
                       launch_mode=launch_mode)
     async with run:
