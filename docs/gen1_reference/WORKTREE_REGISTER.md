@@ -1,10 +1,12 @@
 # Gen 1 RC worktree register
 
+Latest canonical-only closeout, **2026-09-13 12:40 UTC**: architecture candidates 1/2 integrated in source `19edbb2`, with documentation-only closeout following. Both implementers and scan worker are complete; no Gen1 ACTIVE card or emulator/Python/Java job remains. Canonical source/tests passed 640 affected checks without failures/errors/skips; [exact handoff](reviews/ARCHITECTURE_CLOSEOUT_2026-09-13.md). Root `master` is still clean at `adf3362`. No worktree or branch was created, moved, removed or cleaned. Parked/quarantined classifications below retain the earlier full audit; they were not requalified by this refactor.
+
 Rechecked 2026-09-13 12:10 UTC in all 18 worktrees: canonical RC was clean at `67054c4` before this handoff note; parked B, old performance and unrelated UI dirt were unchanged. All delegated Gen 1 agents are complete, no SLink Claude peer was reachable, and no emulator/Python test/Java job was running. Reachable Claude sessions were in the separate ClaudEx repository. Earlier prune dry-run found no stale entries. Worktree archival remains classification only; preserve task bindings and ignored receipts before any physical move. Product code cut is `df38453`; current Git HEAD advances with this documentation update.
 
 | Checkout under `E:/Google Drive/SLink/.claude/worktrees/` | HEAD at audit | Classification and action |
 | --- | --- | --- |
-| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | code `df38453`; docs `67054c4` before this edit | **CANONICAL, ready for coordinator handoff; no ACTIVE card.** A user-assigned successor records its identity in the [master guide](RC_MASTER_GUIDE.md). Query Git for the current HEAD. |
+| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | source `19edbb2`; documentation-only closeout follows | **CANONICAL, clean coordinator handoff after docs commit; no ACTIVE card.** A user-assigned successor records its identity in the [master guide](RC_MASTER_GUIDE.md). Query Git for current HEAD; do not use the older code cut below as current source. |
 | `gen1-native-free-service` | `3404bc9` | **PARKED DIRTY.** Claude stopped the normal-walk experiment: two modified selected-smoke files and untracked `tests/live/test_gen1_native_selected_progression.py`. Do not merge, clean, or delete; product B code through `10a500a` was already integrated at `e9f11f9`. |
 | `gen1-storage-sync-runtime` | `f8325dc` | **PARKED FUTURE C**, clean modeled storage work. No implementation authorization in the current A+B3 slice. Rebase/review before any future code. |
 | `gen1-collab-bad73b` | `adf3362` | **HISTORICAL PEER CHECKOUT**, clean; no SLink Claude session was reachable at handoff check. Verify task binding before any physical move. |
