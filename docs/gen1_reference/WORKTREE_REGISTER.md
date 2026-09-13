@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Owner forbids Computer Use and directs scripted emulator tests. D0 UI attempt interrupted; root stopping only recorded owned CLI to trigger cleanup, original receipts preserved HOLD. No further sky/CUA/OS UI actions. Scripted normal-input work will use existing test patterns after scoped review.
+
 CURRENT: autonomous normal-button checks supersede ALL prior emulator holds/human-availability gates; earlier paragraphs are history. Root D0-A autonomous lane ACTIVE on exact new output paths in guide, Computer Use sky keys only. Claude R0 report correction active, no classifier code grant. No other live/test workload.
 
 Sol input-attribution metadata accepted; exact two-file diff/model/Ruff verified by root. R0 contract2a1a7c1b frozen, independent Spec reviewer and Claude short row5 source check read-only; no classifier writer. Autonomous normal-button D0 live grant is next after final preflight.
