@@ -203,14 +203,17 @@ def test_free_loop_carries_the_same_frame_native_checkpoint_beside_its_heartbeat
 
     import tests.unit.test_gen1_observation_loop as loop_test
     from tests.unit.test_gen1_observation_loop import HARNESS
-    def harness(producer):
+    def harness(native):
         value = LuaRuntime(unpack_returned_tuples=True)
         value.globals().root = loop_test.REPO.replace(os.sep, "/")
-        value.execute("checkpoints={};native_checkpoint=" + producer)
-        value.execute(HARNESS.replace("checkpoint=checkpoint}", "checkpoint=checkpoint,native_checkpoint=native_checkpoint}"))
+        value.execute("checkpoints={}")
+        value.execute(HARNESS.replace(
+            'inventory=function()inventories=inventories+1;return {schema="fixture-inventory",frame=frame}end,',
+            'inventory=function(f)inventories=inventories+1;checkpoints[#checkpoints+1]=f;'
+            'return {schema="fixture-inventory",frame=f},' + native + ' end,'))
         value.execute("build()")
         return value
-    lua = harness("function(f)checkpoints[#checkpoints+1]=f;return {schema='rby-native-observation-v1',party={frame=f}}end")
+    lua = harness("{schema='rby-native-observation-v1',party={frame=f}}")
     lua.globals().advance(21)                       # frame 120: heartbeat with inventory
     assert lua.eval("#appended") == 1
     assert lua.eval("appended[1].event.native_checkpoint.schema") == "rby-native-observation-v1"
@@ -218,10 +221,13 @@ def test_free_loop_carries_the_same_frame_native_checkpoint_beside_its_heartbeat
     assert lua.eval("#checkpoints") == 1 and lua.eval("checkpoints[1]") == 120
     lua.globals().advance()                         # frame 121: quiet, no inventory, no checkpoint read
     assert lua.eval("#appended") == 1 and lua.eval("#checkpoints") == 1
-    # Without the producer (no native manifest) the event has no native_checkpoint field at all.
+    # Native unselected omits the field; selected without party explicitly publishes JSON null.
     lua = harness("nil")
     lua.globals().advance(21)                       # frame 120: heartbeat without the producer
     assert lua.eval("#appended") == 1 and lua.eval("appended[1].event.native_checkpoint == nil") is True
+    lua = harness("JSON.null")
+    lua.globals().advance(21)
+    assert lua.eval("appended[1].event.native_checkpoint == JSON.null") is True
 
 
 

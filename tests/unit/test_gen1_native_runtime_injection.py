@@ -29,7 +29,7 @@ def lua():
             save_identity={ot_id='1234',trainer_name='RED'}}
         memory={read_u8=function()return 0 end,write_u8=function()error('no cartridge writes in composition test')end}
         gameinfo={getromhash=function()return string.rep('f',40)end}
-        emu={framecount=function()return 100+steps end}
+        emu={framecount=function()return 100+steps end,getregister=function()return 0 end}
         hooks=0;unregistered=0
         local function hook()hooks=hooks+1;return 'hook-'..hooks end
         event={on_bus_exec=hook,onloadstate=hook,onexit=hook,unregisterbyid=function()unregistered=unregistered+1 end}
@@ -39,8 +39,16 @@ def lua():
             capability_id='fixture',process_id=1,held=true,host_blocked=true,lease_owned=true,user_paused=false},
             frame_rate={numerator=60,denominator=1},single_frame_only=true,frame_callbacks_suppressed=true,
             load_state_invalidation=true,owner_exit_invalidation=true,steps=0,expected_frame=100}
+        arms=0;yields=0;disarms=0;is_armed=false
         shared_host={status=function()return host_state end,
-            step_one=function(scope)assert(native.authorize_step(scope));steps=steps+1;host_state.steps=steps;host_state.expected_frame=100+steps;return true end}
+            armed=function()return is_armed end,failure=function()return host_failure end,
+            arm=function()arms=arms+1;is_armed=true;return true end,
+            yield_held=function()yields=yields+1;return true end,
+            disarm=function()assert(not host_failure);disarms=disarms+1;is_armed=false;return true end,
+            step_one=function(scope)
+                if step_failure then host_failure='modeled step failure';return false,host_failure end
+                assert(native.authorize_step(scope));steps=steps+1;host_state.steps=steps;host_state.expected_frame=100+steps;return true
+            end}
         package.loaded.platform_execution={supported_profile=function()return {}end}
         package.loaded.platform_bounded_execution={new=function(options)
             host_created=host_created+1;host_authorize=options.authorize
@@ -90,6 +98,11 @@ def lua():
                 scope=request.window.scope,frames=3,ttl_ms=1000,proof_digest=sha(assert(Canonical.encode(request.evidence)))}
             assert(native.operations.accept(JSON.object(packet)));return request.window.scope
         end
+        function set_phase(kind,phase)
+            local store=assert(native[kind..'_store']);local state=assert(store:read())
+            state.phase=phase;assert(store:commit(state))
+        end
+        function shared_pump()pumps=pumps+1;return true end
     """)
     return value
 
@@ -239,3 +252,137 @@ def test_ambiguous_observation_projection_refuses_without_committing(lua):
     assert lua.globals().completed is False
     assert "multiple journal projections" in lua.globals().reason
     assert lua.globals().disks["owner/journal.json"] == lua.globals().before
+
+
+def test_embedded_lifecycle_releases_idle_owner_after_exactly_one_shared_pump(lua):
+    lua.execute("construct();assert(not native:pending());native:hold();native:hold();native:service_slice(shared_pump)")
+    g = lua.globals()
+    assert g.arms == g.pumps == g.disarms == 1
+    assert g.steps == g.yields == 0 and not g.is_armed
+    assert g.native.metrics.services == 1 and g.native.last_service == g.now
+    assert g.host_created == g.runtime_created == g.clock_created == 0
+
+
+@pytest.mark.parametrize("method", ["pending", "hold", "service_slice"])
+def test_embedded_lifecycle_methods_refuse_standalone_use(lua, method):
+    lua.execute("options.embedded=false;options.host=nil;options.journal=nil;construct()")
+    with pytest.raises(LuaError, match="embedded"):
+        lua.execute(f"native:{method}(shared_pump)")
+    assert lua.globals().pumps == lua.globals().arms == lua.globals().disarms == 0
+
+
+@pytest.mark.parametrize("kind,phase,terminal", [
+    ("native", "armed", "released"), ("native", "complete", "released"), ("native", "releasing", "released"),
+    ("prompt", "complete", "closed"), ("prompt", "closing", "closed"),
+    ("receptionist", "active", "complete"), ("receptionist", "unknown", "complete"),
+])
+def test_embedded_lifecycle_holds_after_command_ack_and_prune_until_local_lease_terminal(lua, kind, phase, terminal):
+    lua.globals().lease_kind = kind
+    lua.globals().lease_phase = phase
+    lua.globals().terminal_phase = terminal
+    lua.execute("""
+        options.receptionist=true;construct();command('native_trade_abort');set_phase(lease_kind,lease_phase)
+        assert(journal:complete_command(id,'ACK',{schema='explicit-native-abort-receipt'}))
+        assert(native:pending());native:hold()
+        native:service_slice(function()
+            pumps=pumps+1
+            assert(journal:accept_response(journal:pending_events()[1].operation_id,JSON.array()))
+            assert(#shared_store:read().inbox==0 and #journal:pending_commands()==0)
+            return true
+        end)
+    """)
+    g = lua.globals()
+    assert g.is_armed and g.disarms == g.steps == 0 and g.yields == g.pumps == 1
+    lua.execute("set_phase(lease_kind,terminal_phase);assert(not native:pending());native:service_slice(shared_pump)")
+    assert not g.is_armed and g.disarms == 1 and g.pumps == 2
+
+
+@pytest.mark.parametrize("kind", ["native", "prompt", "receptionist"])
+def test_embedded_lifecycle_unreadable_lease_holds_without_frames(lua, kind):
+    lua.globals().lease_kind = kind
+    lua.execute("options.receptionist=true;construct();native[lease_kind..'_store']:close();assert(native:pending());native:hold()")
+    if kind == "receptionist":
+        # The existing native pump itself reads this store before the shared pump.
+        with pytest.raises(LuaError):
+            lua.execute("native:service_slice(shared_pump)")
+    else:
+        lua.execute("native:service_slice(shared_pump)")
+    g = lua.globals()
+    assert g.is_armed and g.disarms == g.steps == 0
+    assert g.yields == g.pumps == (0 if kind == "receptionist" else 1)
+
+
+def test_embedded_lifecycle_failed_host_short_circuits_and_never_rearms(lua):
+    lua.execute("construct();host_failure='latched';shared_store:close();assert(native:pending());native:hold()")
+    g = lua.globals()
+    assert g.arms == g.disarms == g.pumps == g.steps == 0
+
+
+def test_embedded_lifecycle_selects_only_oldest_journal_command(lua):
+    lua.execute("""
+        construct();command('force_faint')
+        local origin=assert(journal:append({event='fixture'}))
+        assert(journal:accept_response(origin,JSON.array({{command_id=string.rep('f',32),command_sequence=2,
+            body={cmd='native_trade_abort',body={cmd='native_trade_abort',player='a'}}}})))
+        assert(not native:pending())
+        assert(journal:complete_command(id,'ACK',{schema='ordinary-fixture'}))
+        assert(native:pending())
+        native:hold();native:service_slice(shared_pump)
+    """)
+    g = lua.globals()
+    assert g.is_armed and g.yields == 1 and g.disarms == g.steps == 0
+
+
+def test_embedded_lifecycle_detects_receptionist_query_from_modeled_memory(lua):
+    lua.execute("""
+        construct();assert(not native:pending())
+        local ram=manifest.ram;local ui=manifest.receptionist;local overlay=manifest.foreground.overlay
+        local bytes={0x53,0x4c,0x54,0x31,1,1,2,0,0,0,0,0,0,0,0,0}
+        emu.getregister=function(name)return name=='PC' and 0x40 or 0xc100 end
+        memory.read_u8=function(address)
+            if address==ram.hLoadedROMBank then return ui.entry.bank end
+            if address==0xc102 then return ui.query_return%256 end
+            if address==0xc103 then return math.floor(ui.query_return/256) end
+            return bytes[address-overlay+1] or 0
+        end
+        mem.bytesToHex=function(values)local out={};for _,v in ipairs(values)do out[#out+1]=string.format('%02X',v)end;return table.concat(out)end
+        assert(native:pending());native:hold();native:service_slice(shared_pump)
+        bytes[8]=bytes[7];assert(not native:pending());native:service_slice(shared_pump)
+    """)
+    g = lua.globals()
+    assert g.yields == g.disarms == 1 and g.pumps == 2 and g.steps == 0
+
+
+@pytest.mark.parametrize("fault", ["failed_host", "pump", "step"])
+def test_embedded_lifecycle_failure_never_releases_the_owner(lua, fault):
+    lua.execute("construct();scope=arm();native:hold()")
+    if fault == "failed_host":
+        lua.execute("host_failure='latched';native:hold();native:service_slice(shared_pump)")
+    else:
+        if fault == "step":
+            lua.execute("step_failure=true")
+        pump = "function()pumps=pumps+1;return false,'pump failed'end" if fault == "pump" else "shared_pump"
+        with pytest.raises(LuaError):
+            lua.execute(f"native:service_slice({pump})")
+    g = lua.globals()
+    assert g.is_armed and g.disarms == g.steps == 0 and g.arms == g.pumps == 1
+    if fault != "pump":
+        lua.execute("assert(native:pending());native:service_slice(shared_pump)")
+        assert g.disarms == 0 and g.yields >= 1
+
+
+def test_embedded_lifecycle_orders_native_pump_clock_shared_pump_and_one_authorized_frame(lua):
+    lua.execute("""
+        construct();scope=arm();native:hold()
+        -- The frame-accounting adapter observes the native pump; the host observes
+        -- the resulting authorized frame. Keep the real lifecycle methods intact.
+        native.frame_accounting={pump=function()native_pumped=true;now=1.1 end}
+        native:service_slice(function()
+            assert(native_pumped);pumps=pumps+1;now=1.15
+            return true
+        end)
+    """)
+    g = lua.globals()
+    assert g.pumps == g.steps == 1 and g.yields == g.disarms == 0
+    assert g.native.last_service == 1.15
+    assert g.native.metrics.service_seconds == pytest.approx(0.05)

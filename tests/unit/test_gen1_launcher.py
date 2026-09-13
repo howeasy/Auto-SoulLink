@@ -101,6 +101,11 @@ def test_free_service_checked_bundle_covers_every_literal_lua_dependency(extra):
     assert missing == []
 
 
+def test_coherent_inventory_capture_is_in_the_checked_free_service_closure():
+    assert "lua/gen1_inventory_checkpoint.lua" in FREE_FILES
+    assert "lua/gen1_inventory_checkpoint.lua" not in FILES + NATIVE_FILES
+
+
 def test_command_router_and_hud_service_are_in_every_checked_launcher_closure():
     # gen1_client_entry composes the router with the no-write HUD service on every launch, so the
     # held closure carries them (and the canonical encoder the HUD receipt digest needs) and the

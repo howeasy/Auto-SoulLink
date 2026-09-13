@@ -336,6 +336,28 @@ function M.new(options)
         end
     function self.handles(body)return type(body)=="table" and adapters[body.cmd]~=nil end
     function self.frame_scope()local value=scope();return value and copy(value)or nil end
+    -- Local leases outlive journal ACK/prune: the original routine can still be
+    -- awaiting its peer or physical return. Unknown/unreadable phases hold too.
+    local TERMINAL={native={idle=true,released=true},prompt={idle=true,closed=true},receptionist={idle=true,complete=true}}
+    function self:pending()
+        assert(embedded,"native lifecycle requires embedded mode")
+        if self.host.failure()then return true end
+        local ok,open=pcall(function()
+            local function open_in(store,kind)return store~=nil and not TERMINAL[kind][assert(store:read()).phase]end
+            return open_in(self.native_store,"native") or open_in(self.prompt_store,"prompt")
+                or open_in(self.receptionist_store,"receptionist")
+        end)
+        if not ok or open==true then return true end
+        local entry=assert(self.journal:pending_commands())[1]
+        if entry and self.handles(Runtime.unwrap(entry.body,player))then return true end
+        return require("gen1_receptionist_client").query(mem,manifest)~=nil
+    end
+    function self:hold()
+        assert(embedded,"native lifecycle requires embedded mode")
+        if not self.host.armed() and not self.host.failure()then
+            assert(self.host.arm("servicing a native command"))
+        end
+    end
     if not embedded then
         self.transport=require("connector")
         -- Preserve the standalone service's response/control/empty-poll budgets.
@@ -347,9 +369,8 @@ function M.new(options)
     end
     local rate=self.host.status().frame_rate
     self.pacer=require("frame_pacer").new({clock=clock,numerator=rate.numerator,denominator=rate.denominator})
-    -- Embedded owner calls pump_native before its single shared runtime pump,
-    -- then after_service only when that pump succeeds. This timestamp is not a
-    -- substitute for the independently scoped and expiring native window.
+    -- Service timestamps do not substitute for the independently scoped and
+    -- expiring native window. Standalone also uses these lower-level phases.
     function self:pump_native()
         read_context()
         if self.frame_accounting then self.frame_accounting:pump()end
@@ -389,6 +410,21 @@ function M.new(options)
                 self.timings[id]=timing
             end
         return allowed
+    end
+    -- The outer owner supplies its sole shared runtime pump. One slice services
+    -- the native vote and advances at most one authorized original-routine frame.
+    function self:service_slice(pump)
+        assert(embedded,"native lifecycle requires embedded mode")
+        self:pump_native()
+        local began=clock();assert(pump());self:after_service(began)
+        if self:pending() and not self.host.failure()then
+            local stepped=self:step_native()
+            if not stepped then assert(self.host.yield_held())end
+        elseif not self.host.failure()then
+            assert(self.host.disarm("native command service complete"))
+        else
+            assert(self.host.yield_held())
+        end
     end
     function self:step()
         if embedded then return false,"embedded native service must be driven by its single outer owner"end

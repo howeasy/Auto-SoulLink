@@ -391,7 +391,7 @@ function M.start(launch,options)
             executor_adapter=executor}))
         if free then
             local Loop=require("gen1_observation_loop")
-            local Fingerprint=require("gen1_inventory_fingerprint")
+            local Checkpoint=require("gen1_inventory_checkpoint")
             local function loop_ready()
                 local baseline=assert(self.store:read()).observation
                 -- Held-phase writes finish, and every held-phase event is acknowledged, before the
@@ -404,77 +404,13 @@ function M.start(launch,options)
                     and (not native or (self.reattach_verdict=="clean" and self.reattach_server~=nil
                         and self.reattach_server.verdict=="released" and self.reattach_server.read_digest==self.reattach_read_digest))
             end
-            -- Terminal phases per native store (gen1_native_trade_executor / gen1_partner_prompt_executor /
-            -- gen1_receptionist_executor); anything else, or an unreadable store, keeps the vote.
-            local TERMINAL={native={idle=true,released=true},prompt={idle=true,closed=true},receptionist={idle=true,complete=true}}
-            local function lease_open()
-                local n=self.native
-                local ok,open=pcall(function()
-                    local function open_in(store,kind)return store~=nil and not TERMINAL[kind][assert(store:read()).phase]end
-                    return open_in(n.native_store,"native") or open_in(n.prompt_store,"prompt") or open_in(n.receptionist_store,"receptionist")
-                end)
-                return (not ok) or open==true
-            end
-            self.lease_open=lease_open
-            local function native_pending()
-                if not self.native then return false end
-                if self.native_host.failure() then return true end -- latched: stays held (no forward recovery in this build)
-                -- A non-terminal local lease holds on its own: after this side's commit receipt is ACKed
-                -- and pruned, the original routine still sits at .waitForReceipt (trade_service.asm:135-145)
-                -- until the peer verifies and the release command arrives; likewise the partner prompt
-                -- (complete while the original routine awaits the partner's decision, closing until the
-                -- physical return) and an active receptionist sequence. No pending command, query or
-                -- failure says so, and a free frame there would run the routine unowned. A store that
-                -- cannot be read holds too.
-                if lease_open() then return true end
-                local entry=assert(journal:pending_commands())[1]
-                if entry and self.native.handles(require("gen1_runtime").unwrap(entry.body,launch.player))then return true end
-                return require("gen1_receptionist_client").query(memory,native)~=nil
-            end
-            self.native_pending=native_pending
             local function writer_pending()
-                return (faint~=nil and faint.pending()) or native_pending()
+                return (faint~=nil and faint.pending()) or (self.native~=nil and self.native:pending())
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
-                -- Native trade: the party snapshot the native checkpoint rides on is read INSIDE the same
-                -- writer hold as the full inventory point it accompanies, and handed to the loop's
-                -- native_checkpoint(frame) for that exact frame only (never re-read unheld).
-                local function native_party_under_hold(frame)
-                    if not native then return end
-                    local party=require("gen1_command_receipts").party_snapshot(memory,launch.cartridge.variant)
-                    self.native_point=party and {frame=frame,party=party} or nil
-                end
-                local function capture_inventory()
-                    if not memory.isPartyWriteSafe()then return nil end
-                    assert(self.holds:set("writer",true,"full inventory checkpoint"))
-                    local ok,point=pcall(function()
-                        local frame=emu.framecount()
-                        local value=Observation.capture({owned=owned,host=self.host,memory=memory,variant=launch.cartridge.variant})
-                        native_party_under_hold(frame);assert(emu.framecount()==frame,"inventory checkpoint frame changed")
-                        return value
-                    end)
-                    assert(self.holds:set("writer",false,"full inventory checkpoint complete"))
-                    if not ok then error(point,0)end
-                    return point
-                end
-                local function checkpoint(previous,force)
-                    if not memory.isPartyWriteSafe()then return nil,previous,false end
-                    assert(self.holds:set("writer",true,"inventory fingerprint checkpoint"))
-                    local ok,point,fingerprint,changed=pcall(function()
-                        local frame=emu.framecount();source_owned()
-                        local current=Fingerprint.capture(memory,launch.cartridge.variant)
-                        local dirty=previous~=false and(force or not previous or not Fingerprint.same(previous,current))
-                        local full=dirty and Observation.capture({owned=owned,host=self.host,memory=memory,
-                            variant=launch.cartridge.variant})or nil
-                        if full then native_party_under_hold(frame)end
-                        source_owned();assert(emu.framecount()==frame,"inventory fingerprint frame changed")
-                        return full,current,dirty
-                    end)
-                    assert(self.holds:set("writer",false,"inventory fingerprint checkpoint complete"))
-                    if not ok then error(point,0)end
-                    return point,fingerprint,changed
-                end
+                local checkpoint=Checkpoint.new({memory=memory,variant=launch.cartridge.variant,host=self.host,holds=self.holds,
+                    owned=owned,source_owned=source_owned,native=native~=nil})
                 self.loop_ctx={engine=self.observer.signals,observers=self.acquisitions,owned=source_owned,instruction=self.instruction,
                     rom_hash=function()return gameinfo.getromhash():lower()end,
                     baseline=function()return assert(self.store:read()).observation end,
@@ -490,21 +426,13 @@ function M.start(launch,options)
                             local ids,why=self.runtime:observe(JSON.array({event}),baseline);return ids and ids[1],why end,
                         append_many=function(_,events,baseline)return self.runtime:observe(events,baseline)end},
                     session={pump=function()assert(self.runtime:step())end}, -- never blocks: connector settimeout(0)
-                    inventory=capture_inventory,checkpoint=checkpoint,
-                    native_checkpoint=native and function(frame)
-                        -- Hand over the party read under the writer hold of THIS frame's full point (see
-                        -- native_party_under_hold); a frame number alone never grants a fresh unheld read.
-                        local point=self.native_point;self.native_point=nil
-                        if not point or point.frame~=frame or emu.framecount()~=frame then return JSON.null end
-                        return {schema="rby-native-observation-v1",party=point.party}
-                    end or nil,
+                    inventory=function(frame)return checkpoint:inventory(frame)end,
+                    checkpoint=function(previous,force,frame)return checkpoint:checkpoint(previous,force,frame)end,
                     writer={pending=writer_pending,service=function()
-                        if native_pending() and not (faint~=nil and faint.pending()) then
+                        if self.native and self.native:pending() and not (faint~=nil and faint.pending()) then
                             -- Arm at this loop boundary (between frames). The native vote keeps the core held
                             -- until the command completes; the entry services it in step() slices.
-                            if not self.native_host.armed() and not self.native_host.failure() then
-                                assert(self.native_host.arm("servicing a native command"))
-                            end
+                            self.native:hold()
                             return
                         end
                         -- ponytail: whole-command hold, bounded per tick and retried while pending; item 4
@@ -590,7 +518,9 @@ function M.start(launch,options)
                 -- only the runtime pumps, so a tick never re-observes the same frame; a native command
                 -- holds through its own vote and is serviced in bounded slices instead.
                 if self.holds:is_held() then
-                    if self.native_host and self.native_host.armed() then self:native_slice()else assert(self.runtime:step())end
+                    if self.native_host and self.native_host.armed() then
+                        self.native:service_slice(function()return self.runtime:step()end)
+                    else assert(self.runtime:step())end
                 else self.loop:tick()end
                 return
             end
@@ -643,21 +573,6 @@ function M.start(launch,options)
             lease=function()return self.native.native_store:read()end})
         self.reattach_server=nil
         return self:classify_reattach(native_physical())
-    end
-    -- One bounded native slice per entry step while the native vote holds: pump the native
-    -- service, one runtime turn, at most one authorized original-routine frame; release the
-    -- vote only when the command is complete and the stepper never failed.
-    function self:native_slice()
-        self.native:pump_native()
-        local began=self.clock();assert(self.runtime:step());self.native:after_service(began)
-        if self.native_pending() and not self.native_host.failure() then
-            local stepped=self.native:step_native()
-            if not stepped then assert(self.native_host.yield_held())end
-        elseif not self.native_host.failure() then
-            assert(self.native_host.disarm("native command service complete"))
-        else
-            assert(self.native_host.yield_held())
-        end
     end
     function self:status()
         local observation=self.store and self.store:read().observation or {}

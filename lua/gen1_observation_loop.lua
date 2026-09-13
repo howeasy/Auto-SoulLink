@@ -55,7 +55,7 @@ function M.new(ctx)
         observer_active=0,publications=0,inventory_checks=0,inventory_publications=0,
         signal_publications=0,acquisition_publications=0}}
     if ctx.checkpoint then
-        local _,fingerprint=ctx.checkpoint(false)
+        local _,fingerprint=ctx.checkpoint(false,nil,frame_of())
         assert(fingerprint,"initial inventory fingerprint required")
         self.fingerprint=fingerprint
     end
@@ -92,17 +92,13 @@ function M.new(ctx)
         if heartbeat and ctx.checkpoint then
             self.diagnostics.inventory_checks=self.diagnostics.inventory_checks+1
             local retry=ctx.pending_inventory_retry and ctx.pending_inventory_retry() or nil
-            local point,fingerprint=ctx.checkpoint(self.fingerprint,retry~=nil)
+            local point,fingerprint,_,native=ctx.checkpoint(self.fingerprint,retry~=nil,frame)
             if fingerprint then self.fingerprint=fingerprint end
-            if point then inventory=point end
+            if point then inventory=point;native_checkpoint=native end
         elseif heartbeat and ctx.inventory then
-            inventory=ctx.inventory()or JSON.null
-        end
-        if inventory~=JSON.null and ctx.native_checkpoint then
-            -- Same held frame as the heartbeat inventory it rides beside (gen1_native_observation.stage_free
-            -- anchors it to that inventory's sequence); absent when the native manifest is not selected.
-            native_checkpoint=ctx.native_checkpoint(frame)
-            if native_checkpoint==nil then native_checkpoint=JSON.null end
+            local point,native=ctx.inventory(frame)
+            inventory=point or JSON.null
+            if inventory~=JSON.null then native_checkpoint=native end
         end
         local publish=#signals>0 or inventory~=JSON.null or (heartbeat and (not ctx.checkpoint or probe.battle~=0))
             or engaged~=JSON.null or rows~=nil and #rows.receipts>0

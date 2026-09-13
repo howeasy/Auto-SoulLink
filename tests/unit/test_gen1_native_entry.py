@@ -4,8 +4,9 @@ grounded bytes (published overlay word, or the word saved on the stack mid-routi
 builds and holds the host BEFORE that frame; a cold boot free-runs however late the script starts;
 the loop is constructed only when the read is clean and the server granted the lease with nothing
 pending; a pending native command is serviced in bounded slices under the native vote with the core
-held throughout; a failed step latches. Modeled runtime/native service, real hold_mux,
-gen1_native_host and gen1_native_reattach."""
+held throughout; a failed step latches. Modeled runtime/native lifecycle routing, real hold_mux,
+gen1_native_host and gen1_native_reattach. Lease policy is tested at the real native runtime
+interface in test_gen1_native_runtime_injection.py."""
 import hashlib
 import json
 from pathlib import Path
@@ -37,7 +38,7 @@ def lua():
         package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
         JSON=require('json_codec');physical=false;pending=1;loop_built=false;startup_write=false;clock=0;nonce=0
         frame=0;advances=0;write_safe=true;bus={};lease={schema='gen1-native-trade-lease-v1',phase='idle'};prompt_lease={phase='idle'}
-        native_commands={};runtime_steps=0;native_pumps=0;native_steps=0;stepper_authorize=true;observed={}
+        native_commands={};runtime_steps=0;native_slices=0;native_holds=0;native_steps=0;stepper_authorize=true;observed={}
         -- The server's acknowledgement of a published event, as client_journal delivers it to the entry's callback.
         function acknowledge(verdict,class,read_digest)
             local event=observed[1]
@@ -125,7 +126,7 @@ def lua():
         package.loaded['gen1_runtime']={unwrap=function(value)return value end,new=function(options)
             runtime_options=options
             return {step=function()
-                    runtime_steps=runtime_steps+1
+                    runtime_steps=runtime_steps+1;clock=clock+1
                     if pending==1 then assert(physical and options.operation_held(),'startup command lacks the startup hold');startup_write=true;pending=0 end
                     return true end,
                 has_service_lease=function()return true end,is_bound=function()return true end,
@@ -142,12 +143,15 @@ def lua():
                     handles=function(body)return body.cmd=='native_trade_commit'end,
                     executor_adapter={},ready=function()return false end,operations=operations,update_control=function()end,
                     authorize_step=function()return stepper_authorize end,
-                    pump_native=function()native_pumps=native_pumps+1 end,after_service=function()end,
-                    step_native=function()
-                        if #native_commands==0 then return false end
+                    -- Scripted entry routing fixture, with no lease/query policy.
+                    pending=function()return #native_commands>0 end,
+                    hold=function()native_holds=native_holds+1;assert(options.host.arm('fixture native hold'))end,
+                    service_slice=function(_,pump)
+                        native_slices=native_slices+1;assert(physical,'native slice requires hold');assert(pump())
+                        if #native_commands==0 then assert(options.host.disarm('fixture complete'));return end
                         assert(options.host.step_one({phase='native_trade_commit'}));native_steps=native_steps+1
-                        if native_steps>=3 then table.remove(native_commands,1)end    -- the routine completes after three frames
-                        return true end,
+                        if native_steps>=3 then table.remove(native_commands,1)end
+                    end,
                     status=function()return {embedded=true}end,close=function()end}
             end}
         package.loaded['gen1_observation_loop']={new=function(ctx)
@@ -244,10 +248,10 @@ def test_a_native_command_is_serviced_in_bounded_slices_under_the_native_vote_an
         assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
         native_commands={{command_id='c',body={cmd='native_trade_commit'}}}
         assert(service:step())                                   -- loop tick: writer pending -> arm at the boundary
-        assert(physical==true and service.native_host.armed() and service.holds:held('native'))
-        local before=frame
+        assert(physical==true and service.native_host.armed() and service.holds:held('native') and native_holds==1)
+        local before=frame;local pumped=runtime_steps
         for _=1,3 do assert(service:step())end                   -- held: bounded slices, one authorized frame each
-        assert(native_steps==3 and frame==before+3 and #native_commands==0 and native_pumps>=3)
+        assert(native_steps==3 and frame==before+3 and #native_commands==0 and native_slices==3 and runtime_steps==pumped+3)
         assert(service:step())                                   -- complete: disarm, vote released
         assert(not physical and not service.native_host.armed() and service.native_host.failure()==nil)
         assert(service:step());assert(not physical)              -- free again
@@ -358,54 +362,28 @@ def test_a_native_revoke_drops_the_remembered_verdict_at_once_and_holds_until_a_
     ''')
 
 
-def test_the_native_hold_outlives_the_commit_receipt_until_the_peer_verifies_and_the_lease_is_released(lua):
-    """Two-peer delayed verification: A's commit routine completes and its receipt is ACKed and pruned
-    (no pending command, no receptionist query, no host failure) while the local lease is still
-    `complete` because B has not verified and no release command exists yet. A's original routine sits
-    at .waitForReceipt; the native vote must stay armed with zero frames advanced and no repeated
-    physical step until the lease reaches `released`, then the loop frees. Fails on old code (the
-    vote disarmed on the first slice after the prune)."""
+def test_faint_service_takes_priority_over_pending_native_work_at_the_loop_boundary(lua):
+    """Entry owns service priority; native lease semantics live behind the native interface."""
     lua.execute("overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
         start(launch_json)
         assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
-        native_commands={{command_id='c',body={cmd='native_trade_commit'}}}
-        assert(service:step());assert(physical and service.native_host.armed())
-        lease.phase='armed'
-        for _=1,3 do assert(service:step())end                   -- the routine reaches DONE: receipt taken
-        lease.phase='complete';assert(#native_commands==0 and native_steps==3)
-        local at=frame
-        for _=1,6 do                                             -- ACKed and pruned, B still verifying
-            assert(service:step())
-            assert(physical==true and service.native_host.armed() and service.holds:held('native'),'vote dropped while the lease is open')
-            assert(frame==at and native_steps==3,'frames advanced or the routine was stepped again while waiting for release')
-        end
-        assert(service.native_pending()==true)
-        lease.phase='releasing';assert(service:step());assert(physical and service.native_host.armed())
-        lease.phase='released';assert(service:step())            -- release applied: terminal lease, vote dropped
-        assert(not physical and not service.native_host.armed() and service.native_host.failure()==nil)
-        assert(service:step());assert(not physical and frame==at)
+        native_commands={{command_id='c',body={cmd='native_trade_commit'}}};pending=1
+        assert(service:step()) -- faint takes the writer hold and settles through the outer runtime
+        assert(pending==0 and native_holds==0 and native_slices==0 and native_steps==0 and not physical)
+        assert(service:step()) -- following boundary routes native work to its hold interface
+        assert(native_holds==1 and physical and service.holds:held('native'))
     ''')
 
 
-def test_the_native_hold_outlives_a_completed_partner_prompt_until_it_is_closed(lua):
-    """The prompt lease: `complete` while the original routine awaits the partner's decision (or the
-    peer is delayed/disconnected), `closing` until the physical return. With no durable command pending
-    the vote stays armed, zero frames, until `closed`. An unreadable store holds as well."""
+def test_an_external_hold_pumps_the_shared_runtime_without_entering_a_native_slice(lua):
     lua.execute("overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
         start(launch_json)
         assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
-        prompt_lease.phase='complete'                            -- prompt DONE, partner undecided, nothing pending
-        assert(service.native_pending()==true)
-        assert(service:step());assert(physical and service.native_host.armed())
-        local at=frame
-        for _=1,4 do assert(service:step());assert(physical and service.native_host.armed() and frame==at and native_steps==0)end
-        prompt_lease.phase='closing';assert(service:step());assert(physical and service.native_host.armed() and frame==at)
-        prompt_lease=nil                                          -- store unreadable: still held
-        assert(service.lease_open()==true);assert(service:step());assert(physical and frame==at)
-        prompt_lease={phase='closed'};assert(service:step())    -- closed: terminal, vote dropped
-        assert(not physical and not service.native_host.armed() and service.native_host.failure()==nil and frame==at)
+        assert(service.holds:set('lifecycle',true,'fixture external hold'))
+        local before=runtime_steps;assert(service:step())
+        assert(runtime_steps==before+1 and physical and native_slices==0 and native_holds==0)
     ''')
