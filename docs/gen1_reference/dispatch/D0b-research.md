@@ -10,7 +10,7 @@ Research can begin before the owner decides P2a. Implementation remains blocked 
 
 ## Start, facts and read scope
 
-Canonical checkout: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2` on `gen1/rc`; source reference `df38453`. Confirm actual HEAD and docs-only divergence. Coordinator is owning task `01a06d9c-4200-7023-a822-7663ed2ea1dd` through your assignment channel.
+Canonical checkout: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2` on `gen1/rc`; source reference `df38453`. Confirm actual HEAD and docs-only divergence. Use the current user-assigned coordinator and assignment channel recorded in the master guide; the former coordinator's session is not a prerequisite for this research.
 
 Current facts: `server/gen1_service_continuity.py::verify` requires original admitted metadata/context; `lua/gen1_client_entry.lua::start` creates new physical/context nonces on restart. Existing owned SaveRAM preparation does not grant server re-enrollment. Current reattach is a held physical/lease summary, not a full new-run adoption record. Read those files plus `server/gen1_runtime.py`, `server/gen1_native_progress.py`, `server/bizhawk_launch.py`, `tests/unit/test_gen1_service_continuity.py` and `test_gen1_native_reattach_integration.py`. Follow only required imports/data and pinned save/CONTINUE assembly under `.cache/pret` and `data/pret_sources.lock.json`.
 

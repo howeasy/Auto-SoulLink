@@ -9,7 +9,7 @@ Produce a precise list of available/missing/mismatched RC inputs and unresolved 
 ## Start and scope
 
 - Canonical checkout: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`. Product code reference: `df38453`; later docs-only commits are expected. Record actual HEAD/UTC and refuse an unexplained source difference.
-- Coordinator: owning task `01a06d9c-4200-7023-a822-7663ed2ea1dd` via the assigning task/verified ClaudEx route. Report your runtime/session identity and capabilities first.
+- Coordinator: the current user-assigned coordinator recorded in the master guide. The former task ID is historical, not a required live dependency. Report your runtime/session identity and capabilities through your assignment route first; a user-appointed successor coordinator may record itself and execute this read-only card directly.
 - Host: inspect the local machine you are executing on; call it the final RC machine only if the coordinator's assignment says so. Use the already available Python interpreter and record its resolved path/version. A missing interpreter or different host is a reported gap.
 - Reads: [manifest](../../../tests/gen1_release_requirements.json), [input pins](../../../tests/gen1_release_inputs.json), [evaluator](../../../tools/verify_gen1_release.py), exact dependency paths it resolves, and only the skip sites reached by its unit/integration argv.
 - Sole permitted output: `docs/gen1_reference/reviews/P0-<assignment-id>.md`. Choose a filesystem-safe unique assignment ID supplied by the coordinator or return the report to the coordinator if your runtime is read-only. No source, manifest, inventory, privilege or dependency changes.

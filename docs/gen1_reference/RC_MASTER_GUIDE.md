@@ -12,7 +12,9 @@ The pre-human RC verdict is a frozen-source, non-quick `tools/verify_gen1_releas
 
 Code cut `df38453` on `gen1/rc`, followed by documentation archive `32c9870`; verify current HEAD/dirty paths when resuming. The root `E:/Google Drive/SLink` checkout stays `master`. No EmuHawk lane is active at this handoff. This document will advance HEAD without changing that code evidence.
 
-Current coordinator: the owning user task `01a06d9c-4200-7023-a822-7663ed2ea1dd`, local host, canonical checkout `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`. A successor gets a named role and complete dispatch brief from the owner/coordinator; return through the assigning task or its verified ClaudEx address. An unknown coordinator is a missing assignment, not permission to self-assign. Prior `.cache/...` evidence paths below are relative to this canonical checkout and are ignored by Git; a new worktree does not inherit them. Obtain a verified copy from the coordinator before relying on an unavailable receipt.
+Handoff state, checked 2026-09-13 12:10 UTC: **no ACTIVE Gen 1 card, running delegated worker, emulator, Python test or Java job**. The previous coordinator was task `01a06d9c-4200-7023-a822-7663ed2ea1dd`; a new agent explicitly assigned by the user to continue or coordinate this project becomes the successor coordinator after verifying this guide and Git. It does not need a reply or approval from the retired session. Record the new coordinator identity here before delegating file ownership. Unassigned helpers still need a complete card assignment.
+
+Canonical checkout: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2` on `gen1/rc`. Commits are local and ahead of `origin/gen1/rc`; a remote/default-branch checkout is not this handoff. Prior `.cache/...` evidence paths below are relative to this checkout and are ignored by Git. A new worktree does not inherit them; verify or transfer any required receipt before relying on it. Stopped dirty experiments and the parked C branch are listed in the register, with no active owner to wait on.
 
 | Evidence | Exact bounded result |
 | --- | --- |
