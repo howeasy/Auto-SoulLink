@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+CURRENT R2 session83976 physical PASS, lane RELEASED after all process/resource cleanup, exact receipt/report in guide. Source/testsa1714c5 unchanged. OMP final R2 receipt check read-only ACTIVE conditional on ACK; no emulator/source writer. Original first-run HOLD retained.
+
 R2 live session83976 at6ceda01, owned CLI44036/42424 and Emu27456/49436, exact create times and run identities in guide. Waiting normal human New Game inputs; no other runtime/test/source owner.
 
 N0 R2 sole live lane ACTIVE under coordinator, final31254a40 independently reviewed, fresh preflight clean9d5de0f/source-testsa1714c5. Exact new R2 subtree/summary/console/report in guide; first-run originals preserved. Human New Game inputs requested again. No other writer/test/emulator lane.
