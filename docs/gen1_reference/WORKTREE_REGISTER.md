@@ -4,12 +4,12 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-**Current work:** R/B gameplay priority; Yellow-specific new work deferred, broad exclusion migration paused to avoid overhead. D0-RB scripted enrollment passed and all resources closed. Sol owns the seven D1-RB test/driver paths named in the guide. Claude waypoint support and Codex R/B receipt cross-check completed/released. OMP tasks are closed after repeated provider errors; no scope report was produced.
+**Current work:** R/B gameplay priority; Yellow-specific new work deferred, broad exclusion migration paused to avoid overhead. D0-RB scripted enrollment passed and all resources closed. Sol has frozen/released the seven D1-RB paths; two Codex reviewers own read-only Standards/Spec review under the guide. Claude waypoint support and Codex R/B receipt cross-check completed/released. OMP tasks are closed after repeated provider errors; no scope report was produced.
 
 - Canonical: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`; coordinator Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa` on HOUNDOOM owns guide/register, reviews and integration.
 - Product behavior15727ec; integrated scripted test sourcea63d793 (R/B default). Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
 - D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed; fresh R/B session93346 also completed exit0 with all resources closed; no current live lane. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
-- Sol /root/n0_enrollment_sol owns the D1-RB exact seven test/driver files plus report/receipts in the guide; no production/server/manifest writer. Codex gate reviewer released.
+- No active source writer. D1-RB candidate frozen39/39/Ruff; /root/d1_rb_standards and /root/rb_gate_safety perform separate read-only reviews. No live lane until acceptance.
 - Yellow and E1 source reviewers completed and released their reports. Yellow is deferred post-RC; E1 implementation is paused for gameplay priority.
 - No peer report writer. Claude D1-RB source report is integrated/released and now has reply-only waypoint support; OMP file grant revoked with closed task. R0 revision4 remains frozen/released and awaiting reconciliation, uncommitted. D0-S receipt check complete.
 - Speed-gate remains parked and administratively locked. Its repaired metadata and original worktree are preserved; see [recovery receipt](reviews/SPEED_GATE_ADMIN_RECOVERY_2026-09-13.md).
