@@ -87,3 +87,5 @@ OMP completed both small checks at15727ec: approved setup/config pointers verifi
 All three F1 repair workers ACK clean2d652cf and exact disjoint paths, now ACTIVE. OMP receipt-only F1 check READY. New Sol N0 actual-CLI probe build READY on .cache script/evidence/summary and one report only; no emulator execution grant, no production or tracked-test edits. Root master untouched.
 
 14:46 UTC: N0-CLI Sol build and OMP F1 read-only receipt check acknowledged/ACTIVE. F1-small writer released frozen two-test candidate (90 helper/target pass); Claude HUD and Sol retirement retain their disjoint files. No emulator or production writer.
+
+F1-retirement writer released frozen one-test candidate (115 target/helper pass). N0-CLI probe review rejects first build pending same-owner corrections; no live execution, same .cache/report scope reserved. Claude HUD remains sole active tracked-test writer; Sol fixture paths frozen for review.
