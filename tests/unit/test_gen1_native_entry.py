@@ -36,7 +36,7 @@ def lua():
     value.execute(r'''
         package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
         JSON=require('json_codec');physical=false;pending=1;loop_built=false;startup_write=false;clock=0;nonce=0
-        frame=0;advances=0;write_safe=true;bus={};lease={schema='gen1-native-trade-lease-v1',phase='idle'}
+        frame=0;advances=0;write_safe=true;bus={};lease={schema='gen1-native-trade-lease-v1',phase='idle'};prompt_lease={phase='idle'}
         native_commands={};runtime_steps=0;native_pumps=0;native_steps=0;stepper_authorize=true;observed={}
         -- The server's acknowledgement of a published event, as client_journal delivers it to the entry's callback.
         function acknowledge(verdict,class,read_digest)
@@ -138,7 +138,7 @@ def lua():
                 native_options=options
                 local s=options.host.status()
                 assert(options.embedded==true and s.host.physical_stop_verified and s.single_frame_only,'native service needs a held bounded owner at construction')
-                return {journal=options.journal,native_store={read=function()return lease end},
+                return {journal=options.journal,native_store={read=function()return lease end},prompt_store={read=function()return prompt_lease end},
                     handles=function(body)return body.cmd=='native_trade_commit'end,
                     executor_adapter={},ready=function()return false end,operations=operations,update_control=function()end,
                     authorize_step=function()return stepper_authorize end,
@@ -386,4 +386,26 @@ def test_the_native_hold_outlives_the_commit_receipt_until_the_peer_verifies_and
         lease.phase='released';assert(service:step())            -- release applied: terminal lease, vote dropped
         assert(not physical and not service.native_host.armed() and service.native_host.failure()==nil)
         assert(service:step());assert(not physical and frame==at)
+    ''')
+
+
+def test_the_native_hold_outlives_a_completed_partner_prompt_until_it_is_closed(lua):
+    """The prompt lease: `complete` while the original routine awaits the partner's decision (or the
+    peer is delayed/disconnected), `closing` until the physical return. With no durable command pending
+    the vote stays armed, zero frames, until `closed`. An unreadable store holds as well."""
+    lua.execute("overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
+    lua.globals().launch_json = json.dumps(launch())
+    lua.execute(r'''
+        start(launch_json)
+        assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
+        prompt_lease.phase='complete'                            -- prompt DONE, partner undecided, nothing pending
+        assert(service.native_pending()==true)
+        assert(service:step());assert(physical and service.native_host.armed())
+        local at=frame
+        for _=1,4 do assert(service:step());assert(physical and service.native_host.armed() and frame==at and native_steps==0)end
+        prompt_lease.phase='closing';assert(service:step());assert(physical and service.native_host.armed() and frame==at)
+        prompt_lease=nil                                          -- store unreadable: still held
+        assert(service.lease_open()==true);assert(service:step());assert(physical and frame==at)
+        prompt_lease={phase='closed'};assert(service:step())    -- closed: terminal, vote dropped
+        assert(not physical and not service.native_host.armed() and service.native_host.failure()==nil and frame==at)
     ''')

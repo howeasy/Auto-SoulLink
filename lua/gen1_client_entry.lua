@@ -404,15 +404,29 @@ function M.start(launch,options)
                     and (not native or (self.reattach_verdict=="clean" and self.reattach_server~=nil
                         and self.reattach_server.verdict=="released" and self.reattach_server.read_digest==self.reattach_read_digest))
             end
+            -- Terminal phases per native store (gen1_native_trade_executor / gen1_partner_prompt_executor /
+            -- gen1_receptionist_executor); anything else, or an unreadable store, keeps the vote.
+            local TERMINAL={native={idle=true,released=true},prompt={idle=true,closed=true},receptionist={idle=true,complete=true}}
+            local function lease_open()
+                local n=self.native
+                local ok,open=pcall(function()
+                    local function open_in(store,kind)return store~=nil and not TERMINAL[kind][assert(store:read()).phase]end
+                    return open_in(n.native_store,"native") or open_in(n.prompt_store,"prompt") or open_in(n.receptionist_store,"receptionist")
+                end)
+                return (not ok) or open==true
+            end
+            self.lease_open=lease_open
             local function native_pending()
                 if not self.native then return false end
                 if self.native_host.failure() then return true end -- latched: stays held (no forward recovery in this build)
                 -- A non-terminal local lease holds on its own: after this side's commit receipt is ACKed
                 -- and pruned, the original routine still sits at .waitForReceipt (trade_service.asm:135-145)
-                -- until the peer verifies and the release command arrives; no pending command, query or
-                -- failure says so, and a free frame there would run it unowned.
-                local lease=assert(self.native.native_store:read()).phase
-                if lease~="idle" and lease~="released" then return true end
+                -- until the peer verifies and the release command arrives; likewise the partner prompt
+                -- (complete while the original routine awaits the partner's decision, closing until the
+                -- physical return) and an active receptionist sequence. No pending command, query or
+                -- failure says so, and a free frame there would run the routine unowned. A store that
+                -- cannot be read holds too.
+                if lease_open() then return true end
                 local entry=assert(journal:pending_commands())[1]
                 if entry and self.native.handles(require("gen1_runtime").unwrap(entry.body,launch.player))then return true end
                 return require("gen1_receptionist_client").query(memory,native)~=nil
