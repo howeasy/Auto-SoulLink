@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | needs-triage | needs-triage | Coordinator evaluates an incoming report or request. |
 | needs-info | needs-info | Missing evidence or a human decision must be supplied. |
-| ready-for-agent | ready-for-agent | Bounded specification is prepared for coordinator review. |
+| ready-for-agent | ready-for-agent | Fully specified for an agent; execution still requires the RC coordinator's grant. |
 | ready-for-human | ready-for-human | Requires a human-only action or owner decision. |
 | wontfix | wontfix | Owner/coordinator records why the request is outside accepted scope. |
 

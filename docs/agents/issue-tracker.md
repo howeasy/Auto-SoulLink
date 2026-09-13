@@ -10,4 +10,4 @@ Use to-spec/to-tickets for a newly accepted bounded design, implement/tdd at its
 
 The GitHub remote does not authorize another RC queue, issue creation, publication, push or merge. Other games/UI retain their own owners; discover their tracker within their authorized scope.
 
-For this RC, Gen1-Collab2 handles context-sensitive Claude work. OMP DeepSeek Flash v4.1 handles short bounded turns; live OMP uses relevant coordination context, while independent work uses isolated workers after a verified transport handshake. Every transport follows the same guide claim, acknowledgment, exclusive-file and receipt-review rules. Current agent/session IDs and assignments belong only in the guide.
+For this RC, Gen1-Collab2 handles context-sensitive Claude work. OMP handles short bounded turns; verify its current configured model in the guide. Live OMP uses relevant coordination context, while independent work uses isolated workers after a verified transport handshake. Every transport follows the same guide claim, acknowledgment, exclusive-file and receipt-review rules. Current model/session IDs and assignments belong only in the guide.
