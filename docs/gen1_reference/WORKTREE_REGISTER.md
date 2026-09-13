@@ -37,3 +37,5 @@ P0-config extension acknowledged; ACTIVE for one process-local configured --veri
 Prepared C1-repro and N0-gap remain WAIT for accepted P0; exact canonical report/probe outputs are reserved in guide, no production writer or emulator grant. No new checkout is required for these disjoint source/evidence outputs.
 
 P0-review reserves no files; independent canonical reads only after runner report freeze, no emulator grant.
+
+13:32 UTC: P0 report frozen SHA256 ff6326c497c95fbd0145440312f67a6360d5f78ea0d82042a5ba07033e6da674, runner released sole output. Acknowledged independent P0-review now ACTIVE read-only. Gen1-Collab2 resumed PID49496 with transport identity 4ec907e2-58e4-4495-8aba-87fc96ff233c (command line resumes old b4c6c3b4 session); continuity acknowledgment requested, D0b output remains reserved and no new writer granted.
