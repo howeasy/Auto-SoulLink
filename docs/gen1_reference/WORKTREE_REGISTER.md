@@ -39,3 +39,5 @@ Prepared C1-repro and N0-gap remain WAIT for accepted P0; exact canonical report
 P0-review reserves no files; independent canonical reads only after runner report freeze, no emulator grant.
 
 13:32 UTC: P0 report frozen SHA256 ff6326c497c95fbd0145440312f67a6360d5f78ea0d82042a5ba07033e6da674, runner released sole output. Acknowledged independent P0-review now ACTIVE read-only. Gen1-Collab2 resumed PID49496 with transport identity 4ec907e2-58e4-4495-8aba-87fc96ff233c (command line resumes old b4c6c3b4 session); continuity acknowledgment requested, D0b output remains reserved and no new writer granted.
+
+13:35 UTC transition: P0 accepted after independent zero-finding review; no P0 writer remains. Acknowledged C1-repro and N0-gap ACTIVE at frozen source 19edbb2/docs fd06f58, with exact disjoint probe/report outputs in guide. Claude same-conversation transport lineage confirmed, D0b unchanged sole report owner. No production writer or emulator lane. Guide transient intake entries consolidated; history remains in Git and frozen P0 report.
