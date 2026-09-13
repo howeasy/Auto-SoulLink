@@ -49,3 +49,5 @@ C1 owned OS-temp fixture journal/config allowed for its real-runtime probe, with
 F1-host execution complete: 46 pass/2 symlink-privilege skips, no running test job. Report writer released, independent read-only reviewer reserved; no runtime lane. Final qualification HOLD, other active source/evidence outputs unchanged.
 
 13:40 UTC: original F1-host receipt independently accepted. Owner explicitly authorized enabling symlinks on this PC. Coordinator owns only new F1-symlinks receipt/report outputs and the one documented Windows Developer Mode registry change; no emulator, reboot or production edits.
+
+13:42 UTC: registry change verified, F1 security file 48/48 no skips; no test/helper process remains. New receipt writer released for independent review. N0/D0b report writers released (frozen hashes returned); coordinator source review active, no production file owner or live lane.
