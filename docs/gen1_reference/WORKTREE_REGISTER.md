@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Sol enrollment writer released final861ff075/report0e213b6d; same independent Standards correction review ACTIVE conditional on matching ACK, no writes. Claude save-boundary report reserved READY; no emulator/live/source writer. Current guide governs all exact grants.
+
 Claude D0b-save-witness-boundary research READY reserves only reviews/D0b-save-witness-boundary-successor.md, pending ACK/activation. Existing corrected design reused, only the concrete Yellow save-completion/hook boundary gap is in scope. No production/test/journal/live ownership; Sol enrollment .cache corrections remain disjoint.
 
 Claude N0 source-oracle advisory complete; same Sol script/report gets one bounded readiness polling correction, preserving final full audit. Cleanup candidate5425d666 and modeled checks are frozen. No live execution or worktree change; final correction review follows freeze.
