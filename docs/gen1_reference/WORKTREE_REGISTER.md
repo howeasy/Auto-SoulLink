@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Claude save-boundary first report348c5b03 frozen for Git retention; coordinator found concrete equality/provenance/validator/trampoline corrections. Same-report source-only correction ACTIVE conditional on ACK, no scope expansion or live grant. Enrollment remains reviewed WAIT human availability.
+
 OMP controls lookup complete/released, exact bindings verified by coordinator. No active OMP or Sol file claim; Claude sole report writer. Enrollment reviewed861ff075 awaits human availability, no emulator lane. Guide records configured controls and next receipt-review use for OMP.
 
 LATEST: N0 final861ff075 independently reviewed PASS, writer/reviewer released, WAIT human availability (asked). No emulator/live/source writer. Claude D0b-save-witness-boundary is the sole ACTIVE report writer; OMP controls lookup read-only. Canonical source/test cuta1714c5 unchanged; docs HEAD advances with this transition. Earlier status paragraphs are historical where superseded; all parked worktrees preserved.
