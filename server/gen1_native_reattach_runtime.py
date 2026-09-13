@@ -16,12 +16,20 @@ the same operation returns the committed verdict; a different payload under the 
 id is a journal conflict; a read whose binding, cartridge or owner differs from the current
 admission is refused before anything is written.
 
-Integration hook for Root (A-frozen file, not edited here): one line in ``Gen1Runtime._semantic``
-dispatch, ``if event == "native_reattach": return record(self, player, message["operation_id"],
-self._semantic(message))`` beside the ``observation`` branch, plus registering ``verify_state`` /
-``verify_journal`` with the other component audits.
+Integration hooks for Root (A-frozen files, not edited here):
+* ``Gen1Runtime`` semantic dispatch: ``if event == "native_reattach": return record(self, player,
+  message["operation_id"], self._semantic(message))`` beside the ``observation`` branch;
+* ``Gen1Runtime._process``: after ``super()._process``, ``response = attach_result(self, player,
+  message, response)`` (the observation_result branch does the same for observations: DurableRuntime
+  ignores the dispatch result, so the verdict must be attached to the ACK response explicitly);
+* register ``verify_state`` / ``verify_journal`` with the other component audits;
+* client ``lua/durable_runtime.lua`` semantic response: for an oldest event other than
+  ``observation``, ``semantic_result = options.semantic_settlement(oldest, packet)`` when that
+  option is set (gen1_runtime.lua passes ``gen1_native_reattach.settlement``); today the branch
+  asserts ``semantic_result == nil`` for every non-observation event.
 """
 
+import copy
 import re
 
 from server import event_reference
@@ -67,10 +75,20 @@ def typed(request):
             raise JournalError("native reattach CPU/frame fields required")
     if not _hex(read["overlay_hex"], 32) or not all(isinstance(read[n], bool) for n in ("published", "armed", "done")):
         raise JournalError("native reattach overlay fields required")
-    if read["published"] is False and (read["armed"] or read["done"] or read["phase"] is not None or read["token_hex"] is not None):
-        raise JournalError("unpublished overlay cannot be armed, done or carry a token")
-    if read["published"] and (type(read["phase"]) is not int or not _hex(read["token_hex"], 8)):
-        raise JournalError("published overlay requires its phase and token")
+    # The booleans are derived from the 16 raw bytes exactly as lua/gen1_native_reattach.read derives
+    # them (magic "SLT1", byte4 published, byte5 phase, byte6/7 generations, bytes 12-15 token); a
+    # read whose flags contradict its own bytes is refused, never classified from the flags.
+    word = bytes.fromhex(read["overlay_hex"])
+    published = word[:4] == b"SLT1" and word[4] == 1
+    derived = {"published": published, "phase": word[5] if published else None,
+               "armed": published and word[5] == 5 and word[6] != word[7],
+               "done": published and word[5] == 7 and word[6] == word[7],
+               "token_hex": word[12:16].hex().upper() if published else None}
+    actual = {n: read[n] for n in derived}
+    if isinstance(actual["token_hex"], str):
+        actual["token_hex"] = actual["token_hex"].upper()
+    if actual != derived:
+        raise JournalError("native reattach overlay flags contradict the raw overlay word")
     lease = read["lease"]
     if (not isinstance(lease, dict) or set(lease) != LEASE or lease["phase"] not in LEASES
             or not isinstance(lease["receipt"], bool)
@@ -87,7 +105,18 @@ def typed(request):
 
 
 def classify(document, journal, player, payload):
-    """The server's verdict: (verdict, class). Physical facts from the read, obligations from the journal."""
+    """The server's verdict: (verdict, class). Physical facts from the read, obligations from the journal.
+
+    Every trade record consulted is first linked to the verified document (digest AND phase), as the
+    native window verifier does: a same-revision substitution between the snapshot and this read is
+    refused before any verdict, never decided.
+    """
+    trades = {}
+    for identifier, entry in document["components"].get("gen1-trade", {}).get("transactions", {}).items():
+        record_ = journal.record(NAMESPACE, identifier)
+        if record_ is None or digest(record_.value) != entry.get("record_digest") or record_.value.get("phase") != entry.get("phase"):
+            raise JournalError("native reattach trade record is not the one the verified state links")
+        trades[identifier] = record_.value
     read = payload["read"]
     if read["published"] and read["done"]:
         return "held", "done_unreleased"
@@ -102,9 +131,8 @@ def classify(document, journal, player, payload):
             return "held", "pending_native_command"
     if document["active_trade"] is not None:
         return "held", "active_trade"
-    for identifier, entry in document["components"].get("gen1-trade", {}).get("transactions", {}).items():
-        record = journal.record(NAMESPACE, identifier)
-        if record is None or record.value["phase"] not in TERMINAL or record.value.get("recovery_required"):
+    for trade in trades.values():
+        if trade["phase"] not in TERMINAL or trade.get("recovery_required"):
             return "held", "trade_open"
     return "released", "clean"
 
@@ -137,6 +165,29 @@ def record(runtime, player, operation, request):
     return runtime.journal.commit(player, operation, request, expected_revision=stage.journal_revision, state=document,
                                   commands={"a": [], "b": []}, result=result,
                                   records=[{"namespace": COMPONENT, "key": key(player), "value": entry}]).result
+
+
+RESULT_SCHEMA = "rby-native-reattach-result-v1"
+
+
+def attach_result(runtime, player, message, response):
+    """Expose the committed verdict on the ACK response (Root's second hook in Gen1Runtime._process).
+
+    DurableRuntime builds the transport response itself and ignores the dispatch result, so the
+    client would otherwise see a bare ACK. Mirrors the observation_result branch: resolve the
+    immutable committed result under the same operation id (also on a session-local retry),
+    attach it, and re-cache the enriched response so exact retries stay byte-identical.
+    """
+    if message.get("event") != EVENT or response.get("ack") != "ACK":
+        return response
+    operation = message["operation_id"]
+    semantic = {k: v for k, v in message.items() if k in {"event", "payload"}}
+    recorded = runtime.journal.event(player, operation, semantic)
+    if recorded is None or "native_reattach" not in recorded.result:
+        raise JournalError("acknowledged native reattach lacks its committed verdict")
+    response["native_reattach_result"] = {"schema": RESULT_SCHEMA, "operation_id": operation, **recorded.result["native_reattach"]}
+    runtime.gate.sessions[player].last_response = copy.deepcopy(response)
+    return response
 
 
 def verify_state(stage):

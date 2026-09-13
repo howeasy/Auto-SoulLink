@@ -23,7 +23,7 @@ def probe(runtime):  # noqa: F811
         gameinfo={getromhash=function()return hash end}
         emu={framecount=function()return frame end,frameadvance=function()advanced=advanced+1;frame=frame+1 end,
             getregister=function(k)return k=='PC' and 0x0040 or k=='SP' and 0xDFF7 or 0 end}
-        host={status=function()return {held=held,physical_stop_verified=stop}end}
+        host={status=function()return {held=held,physical_stop_verified=stop,owner_id=string.rep('1',32),process_id=7,capability_id='bizhawk-2.11.1-gambatte-exclusive-hold-v1'}end}
         lease={schema='gen1-native-trade-lease-v1',phase='idle'}
         bus[manifest.ram.hLoadedROMBank]=1
         function overlay(bytes)for i,v in ipairs(bytes)do bus[fg.overlay+i-1]=v end end
@@ -41,6 +41,7 @@ def test_an_apply_armed_overlay_is_reported_armed_with_no_frame_run(probe):
         assert(r.schema=='rby-native-reattach-read-v1' and r.frame==4242 and advanced==0)
         assert(r.published==true and r.armed==true and r.done==false and r.phase==5 and r.token_hex=='A1B2C3D4')
         assert(r.lease.phase=='armed' and r.lease.token_hex=='A1B2C3D4' and r.lease.receipt==false and r.pc==0x40 and r.sp==0xDFF7 and r.bank==1)
+        assert(r.host.owner_id==string.rep('1',32) and r.host.process_id==7 and r.host.held==true and r.host.capability_id:find('gambatte'))
         assert(r.overlay_hex=='534C54310105070600000000A1B2C3D4')
     """)
 

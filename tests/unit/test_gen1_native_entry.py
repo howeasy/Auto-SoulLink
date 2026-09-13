@@ -6,6 +6,7 @@ the loop is constructed only when the read is clean and the server granted the l
 pending; a pending native command is serviced in bounded slices under the native vote with the core
 held throughout; a failed step latches. Modeled runtime/native service, real hold_mux,
 gen1_native_host and gen1_native_reattach."""
+import hashlib
 import json
 from pathlib import Path
 
@@ -31,11 +32,18 @@ def launch(**changes):
 def lua():
     value = LuaRuntime(unpack_returned_tuples=True)
     value.globals().root = ROOT.as_posix()
+    value.globals().sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
     value.execute(r'''
         package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
         JSON=require('json_codec');physical=false;pending=1;loop_built=false;startup_write=false;clock=0;nonce=0
         frame=0;advances=0;write_safe=true;bus={};lease={schema='gen1-native-trade-lease-v1',phase='idle'}
-        native_commands={};runtime_steps=0;native_pumps=0;native_steps=0;stepper_authorize=true
+        native_commands={};runtime_steps=0;native_pumps=0;native_steps=0;stepper_authorize=true;observed={}
+        -- The server's acknowledgement of a published event, as client_journal delivers it to the entry's callback.
+        function acknowledge(verdict,class,read_digest)
+            local event=observed[1]
+            return journal_callbacks.acknowledge_event(event,string.rep('e',32),{observation_sequence=0},
+                {schema='rby-native-reattach-result-v1',operation_id=string.rep('e',32),verdict=verdict,class=class,read_digest=read_digest or service.reattach_read_digest})
+        end
         function overlay(bytes)for i,v in ipairs(bytes)do bus[MANIFEST.foreground.overlay+i-1]=v end end
         gameinfo={getromhash=function()return SHA1 end}
         sp=0xDFF7
@@ -93,7 +101,7 @@ def lua():
         end}
         local baseline={initial_inventory={phase='acknowledged',operation_id=string.rep('9',32)},bootstrap={phase='acknowledged'},
             observation_sequence=1,observation_cursor={sequence=1,operation_id=string.rep('8',32),frame=100}}
-        local store={read=function()return {observation=baseline}end,close=function()end}
+        local store={read=function()return {observation=baseline}end,close=function()end,backend={sha256=function(text)return sha(text)end}}
         package.loaded['platform_storage']={new=function()return {}end}
         package.loaded['state_store']={open=function()return store end}
         package.loaded['connector']={}
@@ -102,7 +110,7 @@ def lua():
                 local rows={};if pending==1 then rows[#rows+1]={command_id='initial',body={cmd='initial_save'}}end
                 for _,c in ipairs(native_commands)do rows[#rows+1]=c end;return rows end,
             pending_events=function()return {}end}
-        package.loaded['client_journal']={initial=function()return {}end,open=function()return journal end}
+        package.loaded['client_journal']={initial=function()return {}end,open=function(_,_,callbacks)journal_callbacks=callbacks;return journal end}
         package.loaded['gen1_bootstrap_observer']={new=function()return {close=function()end,status=function()return{}end}end}
         local observer={signals={status=function()return{}end},step=function()end,close=function()end}
         package.loaded['gen1_initial_observation']={new=function()return observer end,capture=function()return{frame=100}end}
@@ -121,7 +129,8 @@ def lua():
                     if pending==1 then assert(physical and options.operation_held(),'startup command lacks the startup hold');startup_write=true;pending=0 end
                     return true end,
                 has_service_lease=function()return true end,is_bound=function()return true end,
-                observe=function()return {1}end,status=function()return{}end,revoke=function()end}
+                observe=function(_,events,baseline)for _,e in ipairs(events)do observed[#observed+1]=e end;observed_baseline=baseline;return {#observed}end,
+                status=function()return{}end,revoke=function()end}
         end}
         -- Modeled native service: the embedded interface gen1_native_runtime exposes.
         package.loaded['gen1_native_runtime']={journal_options=function(observation)return observation end,
@@ -197,9 +206,17 @@ def test_a_slow_cold_launch_free_runs_the_boot_however_late_the_script_starts(lu
         assert(service.native_physical()=='clean')
         for _=1,3 do assert(service:step());assert(not physical and service.booting);emu.frameadvance()end  -- one clean boot frame at a time
         assert(service.runtime==nil and advances==3)
-        write_safe=true;assert(service:step())                              -- begin under the hold, read clean
+        write_safe=true;assert(service:step())                              -- begin under the hold, read clean, read published
         assert(physical==true and service.reattach_required==false and service.reattach_read.armed==false and service.reattach_verdict=='clean')
-        assert(service:step());assert(loop_built and not physical)          -- startup command, lease + nothing pending: free again
+        assert(#observed==1 and observed[1].event=='native_reattach' and observed[1].payload.physical=='clean')
+        assert(observed_baseline.native_reattach.verdict=='pending' and observed_baseline.native_reattach.read_digest==service.reattach_read_digest)
+        assert(service:step());assert(not loop_built and physical)          -- no server verdict yet: still held
+        local b=acknowledge('released','clean',string.rep('0',64))            -- a verdict for another read never releases
+        assert(b.native_reattach.class=='verdict_mismatch' and service.reattach_server.verdict=='held')
+        assert(service:step());assert(not loop_built and physical)
+        b=acknowledge('released','clean')                                    -- the exact verdict on this digest
+        assert(b.native_reattach.verdict=='released' and service.reattach_server.read_digest==service.reattach_read_digest)
+        assert(service:step());assert(loop_built and not physical)          -- lease + nothing pending: free again
         assert(service:step());assert(not physical)
     ''')
 
@@ -224,7 +241,7 @@ def test_a_native_command_is_serviced_in_bounded_slices_under_the_native_vote_an
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
         start(launch_json)
-        assert(service:step());assert(service:step());assert(loop_built and not physical)
+        assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
         native_commands={{command_id='c',body={cmd='native_trade_commit'}}}
         assert(service:step())                                   -- loop tick: writer pending -> arm at the boundary
         assert(physical==true and service.native_host.armed() and service.holds:held('native'))
@@ -242,7 +259,7 @@ def test_a_failed_native_step_latches_the_hold_and_the_loop_never_frees(lua):
     lua.globals().launch_json = json.dumps(launch())
     lua.execute(r'''
         start(launch_json)
-        assert(service:step());assert(service:step());assert(loop_built)
+        assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built)
         native_commands={{command_id='c',body={cmd='native_trade_commit'}}};stepper_authorize=false
         assert(service:step());assert(physical and service.native_host.armed())
         local ok=service:step()                                   -- the modeled service asserts its step; the host latched first
@@ -301,3 +318,19 @@ def test_a_native_launch_that_fails_validation_on_an_armed_core_leaves_it_held(l
     with pytest.raises(LuaError):
         lua.execute("start(launch_json)")
     lua.execute("assert(physical==true and advances==0);for _=1,3 do if not physical then emu.frameadvance()end end;assert(advances==0)")
+
+
+def test_a_held_server_verdict_keeps_the_hold_and_the_published_read_digest_matches_the_server_digest(lua):
+    lua.execute("overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
+    lua.globals().launch_json = json.dumps(launch())
+    lua.execute(r'''
+        start(launch_json);assert(service:step())
+        assert(service.reattach_verdict=='clean' and #observed==1)
+        acknowledge('held','pending_native_command')
+        for _=1,3 do assert(service:step())end
+        assert(not loop_built and physical and service.reattach_server.class=='pending_native_command' and service.phase~='failed')
+        published=JSON.encode(observed[1].payload.read);read_digest=service.reattach_read_digest
+    ''')
+    from server.protocol import digest
+    assert digest(json.loads(lua.globals().published)) == lua.globals().read_digest   # the server can match the client's digest exactly
+    assert lua.globals().read_digest == lua.eval("service:status().native_reattach.read_digest")

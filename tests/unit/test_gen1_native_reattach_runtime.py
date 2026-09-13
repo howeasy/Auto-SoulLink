@@ -95,7 +95,8 @@ def test_every_obligation_or_physical_arming_holds_with_its_class(case, state):
 
 
 @pytest.mark.parametrize("fault", ["context", "cartridge", "owner", "unheld", "unpublished_but_armed", "published_without_token",
-                                   "lease_phase", "extra_field", "physical_word", "no_session"])
+                                   "lease_phase", "extra_field", "physical_word", "no_session",
+                                   "raw_armed_flagged_clean", "raw_tiles_flagged_armed", "raw_done_flagged_armed", "wrong_token", "wrong_phase"])
 def test_a_read_that_is_not_the_current_admission_or_not_well_typed_is_refused_before_any_commit(case, fault):
     run = case.runtime
     message = request(case)
@@ -119,6 +120,16 @@ def test_a_read_that_is_not_the_current_admission_or_not_well_typed_is_refused_b
         payload["read"]["extra"] = 1
     elif fault == "physical_word":
         payload["physical"] = "released"
+    elif fault == "raw_armed_flagged_clean":
+        payload["read"]["overlay_hex"] = ARMED                      # SLT1, byte4=1, byte5=5, gen 7!=6: APPLY-armed bytes, flagged clean
+    elif fault == "raw_tiles_flagged_armed":
+        payload["read"].update(published=True, phase=5, armed=True, token_hex="A1B2C3D4")   # tile bytes, flagged armed
+    elif fault == "raw_done_flagged_armed":
+        payload["read"].update(overlay_hex="534C54310107060600000000A1B2C3D4", published=True, phase=7, armed=True, token_hex="A1B2C3D4")
+    elif fault == "wrong_token":
+        payload["read"].update(overlay_hex=ARMED, published=True, phase=5, armed=True, token_hex="00000000")
+    elif fault == "wrong_phase":
+        payload["read"].update(overlay_hex=ARMED, published=True, phase=3, armed=True, token_hex="A1B2C3D4")
     else:
         player = "b"
         run.gate.sessions.pop("b")
@@ -151,6 +162,84 @@ def test_classify_is_a_pure_view_of_read_and_obligations(case):
     run = case.runtime
     document = run.state().document()
     assert classify(document, run.journal, "a", request(case)["payload"]) == ("released", "clean")
-    trade_open = copy.deepcopy(document)
-    trade_open["components"]["gen1-trade"] = {"schema": "slink-gen1-trade-recovery-v1", "transactions": {"e" * 32: {"phase": "commit_persisted", "record_digest": "0" * 64, "pending": {"a": [], "b": []}}}}
-    assert classify(trade_open, run.journal, "a", request(case)["payload"]) == ("held", "trade_open")
+    case.offer(); case.accept()
+    with_trade = run.state().document()
+    assert classify(with_trade, run.journal, "a", request(case)["payload"]) == ("held", "active_trade")   # accepted, no native command yet
+    # An entry whose record is not linkable (digest/phase differ from the verified document) is refused, not decided.
+    unlinked = copy.deepcopy(with_trade)
+    unlinked["components"]["gen1-trade"]["transactions"][case.tx]["record_digest"] = "0" * 64
+    with pytest.raises(JournalError, match="not the one the verified state links"):
+        classify(unlinked, run.journal, "a", request(case)["payload"])
+
+
+def test_a_same_revision_trade_record_swap_between_snapshot_and_classify_is_refused_not_decided(case, monkeypatch):
+    run = case.runtime
+    case.offer(); case.accept()                                   # a non-terminal trade with a linked gen1-trade entry
+    document = run.state().document()                             # verified snapshot read BEFORE the swap
+    assert document["components"]["gen1-trade"]["transactions"]
+    real = run.journal.record
+    from server.trade_coordinator import NAMESPACE as TRADES
+    def swapped(namespace, identifier):
+        record_ = real(namespace, identifier)
+        if namespace == TRADES and identifier == case.tx:
+            import dataclasses
+            body = copy.deepcopy(record_.value)
+            body["phase"] = "link_committed"; body["recovery_required"] = False   # a terminal-looking substitute
+            return dataclasses.replace(record_, value=body)
+        return record_
+    monkeypatch.setattr(run.journal, "record", swapped)
+    with pytest.raises(JournalError, match="not the one the verified state links"):
+        classify(document, run.journal, "a", request(case)["payload"])
+
+
+def test_attach_result_exposes_the_committed_verdict_on_the_ack_and_caches_it_for_retry(case):
+    """Root's second server hook: DurableRuntime ignores the dispatch result, so the verdict must ride the
+    ACK response explicitly (as observation_result does), identical on a session-local retry."""
+    from server.gen1_native_reattach_runtime import RESULT_SCHEMA, attach_result
+    run = case.runtime
+    operation = secrets.token_hex(16)
+    message = {**request(case), "operation_id": operation, "player": "a", "seq": 9}
+    semantic = {"event": message["event"], "payload": message["payload"]}
+    committed = record(run, "a", operation, semantic)
+    response = attach_result(run, "a", message, {"ack": "ACK"})
+    assert response["native_reattach_result"] == {"schema": RESULT_SCHEMA, "operation_id": operation, **committed["native_reattach"]}
+    assert run.gate.sessions["a"].last_response == response
+    assert attach_result(run, "a", message, {"ack": "ACK"}) == response                    # retry: byte-identical
+    assert attach_result(run, "a", message, {"ack": "NACK"}) == {"ack": "NACK"}             # only an ACK carries a verdict
+    assert attach_result(run, "a", {**message, "event": "observation"}, {"ack": "ACK"}) == {"ack": "ACK"}
+    with pytest.raises(JournalError, match="lacks its committed verdict"):
+        attach_result(run, "a", {**message, "operation_id": secrets.token_hex(16)}, {"ack": "ACK"})  # never recorded
+
+
+def test_client_settlement_accepts_only_the_exact_verdict_for_its_event():
+    """Root's client hook: durable_runtime's non-observation semantic branch hands the oldest event and the
+    packet to this validator; anything but the exact committed verdict for this operation and read is refused."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    from lupa.lua54 import LuaError, LuaRuntime
+    root = Path(__file__).resolve().parents[2]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().package.path = (root / "lua/?.lua").as_posix() + ";" + lua.globals().package.path
+    lua.globals().sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
+    lua.execute("""
+        R=require('gen1_native_reattach');Canonical=require('journal_document')
+        read_value={schema='rby-native-reattach-read-v1',frame=1,overlay_hex=string.rep('23',16)}
+        oldest={operation_id=string.rep('e',32),payload={event='native_reattach',payload={schema='rby-native-reattach-v1',read=read_value}}}
+        digest=sha(Canonical.encode(read_value))
+        good={native_reattach_result={schema='rby-native-reattach-result-v1',operation_id=string.rep('e',32),verdict='released',class='clean',read_digest=digest}}
+        local r=R.settlement(oldest,good,sha);assert(r.verdict=='released' and r.read_digest==digest)
+        r.verdict='held';assert(good.native_reattach_result.verdict=='released')   -- detached copy
+    """)
+    from server.protocol import digest as server_digest
+    assert lua.globals().digest == server_digest(json.loads(lua.eval("require('json_codec').encode(read_value)")))
+    for fault in ("good.native_reattach_result.operation_id=string.rep('f',32)",
+                  "good.native_reattach_result.read_digest=string.rep('0',64)",
+                  "good.native_reattach_result.verdict='maybe'",
+                  "good.native_reattach_result.extra=1",
+                  "good.native_reattach_result=nil",
+                  "oldest.payload.event='observation'"):
+        with pytest.raises(LuaError):
+            lua.execute(fault + ";R.settlement(oldest,good,sha)")
+        lua.execute("good={native_reattach_result={schema='rby-native-reattach-result-v1',operation_id=string.rep('e',32),verdict='released',class='clean',read_digest=digest}};oldest.payload.event='native_reattach'")

@@ -161,6 +161,28 @@ function M.start(launch,options)
         local Observation=launch.initial_observations and require("gen1_initial_observation")or nil
         local Native=native and require("gen1_native_runtime") or nil
         local callbacks=Native and Native.journal_options(Observation,function()return self.native end) or Observation
+        if native then
+            -- The server's verdict on the published held read arrives as the event's acknowledged
+            -- result. Only a `released` verdict whose read_digest equals the read this client
+            -- published can ever release the startup hold; anything else keeps it (fail closed).
+            local inner={};for k,v in pairs(callbacks)do inner[k]=v end
+            callbacks=inner
+            local acknowledge=inner.acknowledge_event
+            callbacks.acknowledge_event=function(event,operation_id,baseline,result)
+                if type(event)=="table" and event.event=="native_reattach" then
+                    local verdict=type(result)=="table" and result.schema=="rby-native-reattach-result-v1" and result or nil
+                    if verdict and verdict.read_digest==self.reattach_read_digest and (verdict.verdict=="released" or verdict.verdict=="held") then
+                        self.reattach_server={verdict=verdict.verdict,class=verdict.class,read_digest=verdict.read_digest,operation_id=operation_id}
+                    else
+                        self.reattach_server={verdict="held",class="verdict_mismatch",read_digest=self.reattach_read_digest,operation_id=operation_id}
+                    end
+                    baseline.native_reattach={read_digest=self.reattach_read_digest,verdict=self.reattach_server.verdict,class=self.reattach_server.class}
+                    return baseline
+                end
+                if acknowledge then return acknowledge(event,operation_id,baseline,result)end
+                return nil
+            end
+        end
         local journal=assert(Journal.open(self.store,nil,callbacks))
         -- Source hooks may run inside a free-running frame. They validate the stable
         -- ROM/save identity; publication and writes also require a hold.
@@ -358,7 +380,8 @@ function M.start(launch,options)
                 return self.runtime:has_service_lease() and self.observer.signals~=nil and self.acquisitions~=nil
                     and baseline.initial_inventory~=nil and baseline.initial_inventory.phase=="acknowledged"
                     and baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"
-                    and (not native or self.reattach_verdict=="clean")
+                    and (not native or (self.reattach_verdict=="clean" and self.reattach_server~=nil
+                        and self.reattach_server.verdict=="released" and self.reattach_server.read_digest==self.reattach_read_digest))
             end
             local function native_pending()
                 if not self.native then return false end
@@ -534,6 +557,17 @@ function M.start(launch,options)
         if physical~="clean" then
             self.phase="native_reattach_held";self.reason="native reattach requires classification ("..physical.."); execution stays held"
         end
+        -- Publish the read as this client's first NEW semantic evidence after HELLO/control, still
+        -- held (older durable outbox items, if any, precede it; they carry no authority). The hold
+        -- is released only by the server's exact verdict on this digest (see the journal callback).
+        local Canonical=require("journal_document")
+        self.reattach_read_digest=self.store.backend.sha256(assert(Canonical.encode(read)))
+        local event={event="native_reattach",payload={schema="rby-native-reattach-v1",
+            context_generation=context.context_generation,final_sha1=launch.cartridge.final_rom_sha1,physical=physical,read=read}}
+        local baseline=assert(self.store:read()).observation
+        baseline.native_reattach={read_digest=self.reattach_read_digest,verdict="pending",class=physical}
+        local ids,why=self.runtime:observe(JSON.array({event}),baseline)
+        assert(ids,why)
         return physical
     end
     -- One bounded native slice per entry step while the native vote holds: pump the native
@@ -569,6 +603,7 @@ function M.start(launch,options)
             native=self.native and self.native:status() or nil,
             native_host=self.native_host and self.native_host.status() or nil,
             native_reattach=self.reattach_read and {read=self.reattach_read,verdict=self.reattach_verdict,
+                read_digest=self.reattach_read_digest,server=self.reattach_server,
                 required_before_first_frame=self.reattach_required} or nil,
             ordinary_execution=false,
             free_service=free,observation_loop=self.loop~=nil}))))
