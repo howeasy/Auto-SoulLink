@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+OMP controls lookup complete/released, exact bindings verified by coordinator. No active OMP or Sol file claim; Claude sole report writer. Enrollment reviewed861ff075 awaits human availability, no emulator lane. Guide records configured controls and next receipt-review use for OMP.
+
 LATEST: N0 final861ff075 independently reviewed PASS, writer/reviewer released, WAIT human availability (asked). No emulator/live/source writer. Claude D0b-save-witness-boundary is the sole ACTIVE report writer; OMP controls lookup read-only. Canonical source/test cuta1714c5 unchanged; docs HEAD advances with this transition. Earlier status paragraphs are historical where superseded; all parked worktrees preserved.
 
 Claude D0b-save-witness-boundary ACK verified and ACTIVE on its sole report, source-only. No overlap with frozen enrollment controller/review; no live lane.
