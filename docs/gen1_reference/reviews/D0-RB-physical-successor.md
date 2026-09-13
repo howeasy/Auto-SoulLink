@@ -1,0 +1,9 @@
+# D0-RB scripted selected enrollment
+
+PASS, controlled-scripted selected-launcher evidence only. Run run_20260913_204346_85c5ea, runtime54b7a98799f0c3c84628666c76ebbfc3, source HEAD914c1f1, test cut a63d793, product15727ec. Session93346 exited0. Red A and Blue B used normal buttons from New Game; no Computer Use, RAM/register/SaveRAM/savestate staging or human input.
+
+Both native reads were clean/released, initial/bootstrap/save receipts acknowledged, service current, pending queues empty. A driver stopped at frame3489 after3488 boot frames; B at3502 after3501. Normal observation counts0 at unchanged idle. Root separately reread each32768-byte owned file and compared it to prepared() from the checked read-only journal snapshot: A fe32c0e4586c8166cb990ec249efe7a2467d1d50ebe925b951002d06b2b3edc3; B 42f94258193a4278dd00ce141f5eb9f2b6c55ea08af907c7e895718d413b2756. Source config92ca34c6… unchanged. All six recorded process identities ended; survivors, unknown audits and resource errors empty; no EmuHawk remained in independent census.
+
+Summary .cache/d0-rb-scripted-summary.json SHA256 7807ab0efe8f2321c551e6afa6839c0663f9ff13c3856289f3154dd86697b090. Console .cache/d0-rb-scripted-console.txt SHA256 402586539ccae72f15c9afd530f7ef964240f9481c388b64121a1783ca85f9d8. Invocation: idle_enrollment(.cache/d0-rb-scripted, variants=(red,blue), limit480, input_mode=scripted-normal-buttons, launch_mode=scripted-selected-launcher), using pinned emulator and config. Existing full model file19/19 and Ruff passed before this run.
+
+This proves fresh R/B selected enrollment and initial file ownership. It does not prove actual product CLI, starter/ball/catch/death gameplay, trade, FPS or release readiness. Next slice continues an independently fresh admitted run from this shared boundary through the first starter/rival/ball checkpoints. No stopped-process resume is implied.

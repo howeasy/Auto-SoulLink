@@ -4,12 +4,12 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-**Owner scope change:** current RC is Red/Blue; Yellow-specific work is post-RC TODO. Preserve all Yellow code/evidence/worktrees. Coordinator holds the sole R/B scripted baseline emulator grant at a63d793; no other live runner. Claude owns only the new R/B gameplay claim, OMP the R/B scope inventory report, and isolated Codex the reply-only gate-safety review. Sol's one-file R/B idle correction is frozen, root-reviewed and released.
+**Current work:** R/B gameplay priority; Yellow-specific new work deferred, broad exclusion migration paused to avoid overhead. D0-RB scripted enrollment passed and all resources closed. Sol owns the seven D1-RB test/driver paths named in the guide. Claude source claim and Codex gate review are complete/released; OMP was told to freeze existing scope findings and stop further census.
 
 - Canonical: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`; coordinator Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa` on HOUNDOOM owns guide/register, reviews and integration.
 - Product behavior15727ec; scripted test source6283d58. Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
 - D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed; the fresh R/B lane is separately assigned to the coordinator. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
-- No active source/test writer. Sol R/B entry correction is frozen and root-reviewed (19/19 models, Ruff clean). Codex /root/rb_gate_safety has only the reply-only source review in the guide.
+- Sol /root/n0_enrollment_sol owns the D1-RB exact seven test/driver files plus report/receipts in the guide; no production/server/manifest writer. Codex gate reviewer released.
 - Yellow and E1 source reviewers completed and released their reports. Yellow is deferred post-RC; E1 implementation is paused for gameplay priority.
 - Claude Gen1-Collab2 owns reviews/D1-RB-claim-successor.md (ACK at b1439a2); OMP owns reviews/RC-RB-scope-map-successor.md. Both source-only reports, no execution. R0 revision4 is frozen/released and awaiting reconciliation; D0-S receipt check is complete.
 - Speed-gate remains parked and administratively locked. Its repaired metadata and original worktree are preserved; see [recovery receipt](reviews/SPEED_GATE_ADMIN_RECOVERY_2026-09-13.md).
