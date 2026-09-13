@@ -48,7 +48,8 @@ assert(saveram:sub(1,#save_directory)==save_directory and saveram:match("candida
 local save=assert(io.open(saveram,"rb"));local blank=save:read("*a");save:close()
 assert(blank==string.rep(string.char(255),0x8000),"native fresh gate requires blank SaveRAM")
 assert(gameinfo.getromhash():lower()==input.rom_sha1,"gate did not boot the exact Manager artifact")
-publish("observed",{variant=t.variant,rom_sha1=gameinfo.getromhash():lower(),saveram_path=saveram})
+publish("observed",{variant=t.variant,rom_sha1=gameinfo.getromhash():lower(),
+    saveram_path=saveram,saveram_directory=save_directory})
 local deadline=os.time()+45
 while not read(input.directory.."/go.json")do
     if read(input.directory.."/abort.json")then
