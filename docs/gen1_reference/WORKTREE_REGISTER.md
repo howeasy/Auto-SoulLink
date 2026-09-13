@@ -49,3 +49,5 @@ D1 review: Standards accepted, Spec found Pallet dialogue blocker. Sol owns only
 Pallet correction frozen/released:44/44 models/Ruff; same two reviewers confirm revised three-file hashes in guide. No active source writer or live runner.
 
 Both revised D1 reviews accepted; final44/44/Ruff verified. All source writers released. Coordinator owns sole first starter/rival physical lane under guide using integrated seven-file candidate; root/OMP preflight clear. R0 report remains unrelated/uncommitted.
+
+First D1 live run a369bef stopped/HOLD at source-proven lab speech input gap; both reached lab, no starter proof. All owned processes/resources closed. Sol now owns route Lua + route unit model only for script5 dialogue correction; Claude has reply-only starter interaction check. No live lane.
