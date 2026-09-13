@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Coordinator cleared only the stopped scan's verified zero-byte canonical index.lock after confirming no git.exe remained. Activation commit succeeded; no worktree/index/source reset. Narrow no-optional-locks Git reads required.
+
 R0 isolated claim reviewer ACTIVE after exact ACK; only its report may be written. Own unnecessary ignored-status command stopped, no locks/files removed; narrow status only henceforth. D0-A Sol owns its two untracked test files, disjoint; no live lane.
 
 R0 claim-readiness source check READY for fresh isolated agent, sole reviews/R0-claim-check-successor.md, no source/test/runtime ownership. Parallel to D0-A Sol's disjoint two-file build; exact excluded paths and policy limits in guide.
