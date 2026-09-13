@@ -104,6 +104,15 @@ class Gen1RuntimeState:
             validate_pair(*(component["admissions"][p]["metadata"] for p in ("a", "b")))
         if self.barrier.document()["history_digest"] != self.history_digest():
             raise JournalError("RBY recovery history differs from committed rules/identities")
+        self._begin_validation_document()
+        try:
+            self._verify_components()
+        except BaseException:
+            self._cancel_validation_document()
+            raise
+        self._end_validation_document()
+
+    def _verify_components(self):
         from server.gen1_initial_observation import verify_state
         verify_state(self)
         from server.gen1_inventory_observation import verify_state as verify_inventory
@@ -221,11 +230,35 @@ class Gen1RuntimeState:
         return commands
 
     def document(self):
+        # Validators within one state read may share a detached copy.  The copy
+        # is discarded before staging begins, and _end_validation_document
+        # rejects any validator that changed it or the underlying state.
+        shared = getattr(self, "_validation_document", None)
+        if shared is not None:
+            return shared
         document = copy_json(self._document)
         document["rules"] = self.rules.document()
         document["identities"] = self.identities.document()
         document["components"][COMPONENT]["recovery"] = self.barrier.document()
         return document
+
+    def _begin_validation_document(self):
+        if getattr(self, "_validation_document", None) is not None:
+            raise JournalError("nested RBY validation document")
+        self._validation_document = self.document()
+
+    def _end_validation_document(self):
+        shared = getattr(self, "_validation_document", None)
+        if shared is None:
+            raise JournalError("RBY validation document is absent")
+        self._validation_document = None
+        if shared != self.document():
+            raise JournalError("RBY validator mutated its detached state view")
+
+    def _cancel_validation_document(self):
+        # A failed validator already prevents authority; do not retain its
+        # partially read view through the exception traceback or a retry.
+        self._validation_document = None
 
 
 def state_type_for(cartridges=None):

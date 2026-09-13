@@ -7,11 +7,13 @@ acknowledge is called. This primitive does not make the existing dispatcher dura
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
 import secrets
 import sqlite3
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -122,6 +124,63 @@ def _record_key(namespace, key):
     _identifier(key)
 
 
+class _VerifiedRowCache:
+    """Bounded proof of canonical JSON bytes, never a cached SQL/authority read."""
+
+    def __init__(self):
+        self.rows = OrderedDict()
+        self.snapshot_witness = None
+        self.serialized_bytes = self.hits = self.misses = 0
+
+    def _witness(self, source, key, revision, body, digest):
+        if type(revision) is not int or revision < 0:
+            raise JournalError('cached row has an invalid committed revision')
+        # The singleton snapshot is the monotonic authority anchor.  Dynamic
+        # event/record/command identities may grow without bound in a complete
+        # playthrough; their fresh SQL and component provenance checks remain
+        # mandatory, and no high-water witness is silently evicted for them.
+        if (source, key) != ('snapshot', 'singleton'):
+            return
+        prior = self.snapshot_witness
+        if prior is not None and (revision < prior[0] or revision == prior[0] and digest != prior[1]):
+            raise JournalError('committed row was rolled back or changed at the same revision')
+        if prior is None or revision > prior[0]:
+            # The exact body lives only in the bounded LRU.  A changed body
+            # with the same claimed digest still fails the fresh SHA check.
+            self.snapshot_witness = (revision, digest)
+
+    def seed(self, source, key, revision, body, digest, value):
+        self._witness(source, key, revision, body, digest)
+        identity = (source, key, revision, body, digest)
+        if identity in self.rows:
+            self.rows.move_to_end(identity)
+            return
+        size = len(body)
+        if size > 8 * 1024 * 1024:
+            return
+        detached = copy.deepcopy(value)
+        while self.rows and (len(self.rows) >= 64 or self.serialized_bytes + size > 8 * 1024 * 1024):
+            old, _ = self.rows.popitem(last=False)
+            self.serialized_bytes -= len(old[3])
+        self.rows[identity] = detached
+        self.serialized_bytes += size
+
+    def read(self, source, key, revision, body, digest):
+        self._witness(source, key, revision, body, digest)
+        identity = (source, key, revision, body, digest)
+        value = self.rows.get(identity)
+        if value is not None:
+            if hashlib.sha256(body.encode('ascii')).hexdigest() != digest:
+                raise JournalError('cached row checksum changed')
+            self.rows.move_to_end(identity)
+            self.hits += 1
+            return copy.deepcopy(value)
+        self.misses += 1
+        value = _decode(body, digest)
+        self.seed(source, key, revision, body, digest, value)
+        return value
+
+
 class ProtocolJournal:
     def __init__(self, path, *, contract_hash, run_id=None, max_pending=4096):
         if run_id is not None:
@@ -132,6 +191,7 @@ class ProtocolJournal:
             raise JournalError("invalid pending-command bound")
         self.path = Path(path)
         self.max_pending = max_pending
+        self._verified_rows = None  # opt-in Gen1 pure JSON proof, disabled for other consumers
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(self.path, isolation_level=None, timeout=2.5)
         self._db.row_factory = sqlite3.Row
@@ -191,7 +251,23 @@ class ProtocolJournal:
             raise
 
     def close(self):
+        self._verified_rows = None
         self._db.close()
+
+    def enable_verified_row_cache(self):
+        if self._verified_rows is not None:
+            raise JournalError('verified row cache already enabled')
+        self._verified_rows = _VerifiedRowCache()
+
+    def verified_row_cache_info(self):
+        cache = self._verified_rows
+        return None if cache is None else {'entries': len(cache.rows), 'serialized_bytes': cache.serialized_bytes,
+                                          'hits': cache.hits, 'misses': cache.misses}
+
+    def _decoded_row(self, source, key, revision, body, digest):
+        cache = self._verified_rows
+        return (_decode(body, digest) if cache is None
+                else cache.read(source, key, revision, body, digest))
 
     def register_session(self, player, client_nonce, admission_epoch):
         """Consume a validated HELLO nonce durably, including across server restarts."""
@@ -228,7 +304,8 @@ class ProtocolJournal:
         row = self._db.execute("SELECT * FROM snapshot WHERE singleton=1").fetchone()
         if row is None:
             raise JournalError("journal has not been bootstrapped")
-        return Snapshot(row["revision"], _decode(row["body"], row["digest"]))
+        return Snapshot(row["revision"], self._decoded_row(
+            'snapshot', 'singleton', row['revision'], row['body'], row['digest']))
 
     def event(self, player, operation_id, request):
         _player(player)
@@ -237,12 +314,14 @@ class ProtocolJournal:
         row = self._db.execute("SELECT * FROM events WHERE player=? AND operation_id=?", (player, operation_id)).fetchone()
         if row is None:
             return None
-        _decode(row["request"], row["request_digest"])
+        self._decoded_row('events.request', (player, operation_id), row['revision'],
+                          row['request'], row['request_digest'])
         if fingerprint != row["request_digest"]:
             raise JournalError("operation ID was reused with different semantic content")
         ids = tuple(r[0] for r in self._db.execute(
             "SELECT command_id FROM commands WHERE origin_player=? AND origin_operation=? ORDER BY position", (player, operation_id)))
-        return EventReceipt(row["revision"], _decode(row["result"], row["result_digest"]), ids)
+        return EventReceipt(row["revision"], self._decoded_row(
+            'events.result', (player, operation_id), row['revision'], row['result'], row['result_digest']), ids)
 
     def event_snapshot(self, player, operation_id):
         """Read checked, detached event evidence without supplying its request.
@@ -268,8 +347,10 @@ class ProtocolJournal:
                     or not re.fullmatch(r"[0-9a-f]{64}", row[name + "_digest"])):
                 raise JournalError("invalid stored event document or digest")
         try:
-            request = _decode(row["request"], row["request_digest"])
-            result = _decode(row["result"], row["result_digest"])
+            request = self._decoded_row('events.request', (player, operation_id), row['revision'],
+                                        row['request'], row['request_digest'])
+            result = self._decoded_row('events.result', (player, operation_id), row['revision'],
+                                       row['result'], row['result_digest'])
         except (UnicodeError, RecursionError) as exc:
             raise JournalError("invalid stored event document encoding or structure") from exc
         ids = tuple(_identifier(r[0]) for r in self._db.execute(
@@ -353,6 +434,18 @@ class ProtocolJournal:
         except Exception:
             self._db.rollback()
             raise
+        cache = self._verified_rows
+        if cache is not None:
+            # SQLite I/O may release the GIL: never seed from caller-owned
+            # dictionaries after it.  These exact texts passed _encode before
+            # publication and are the bytes the successful COMMIT stored.
+            cache.seed('snapshot', 'singleton', revision, state_text, state_hash, json.loads(state_text))
+            cache.seed('events.request', (player, operation_id), revision, request_text, request_hash,
+                       json.loads(request_text))
+            cache.seed('events.result', (player, operation_id), revision, result_text, result_hash,
+                       json.loads(result_text))
+            for row in record_rows:
+                cache.seed('records.latest', (row[0], row[1]), row[2], row[3], row[4], json.loads(row[3]))
         return EventReceipt(revision, json.loads(result_text), tuple(row[0] for row in staged))
 
     def record(self, namespace, key):
@@ -364,13 +457,13 @@ class ProtocolJournal:
         if row is None:
             return None
         current = self._record_revision_limit(namespace, key)
-        return self._checked_record(row, current)
+        return self._checked_record(row, current, 'records.latest', (namespace, key))
 
-    @staticmethod
-    def _checked_record(row, current):
+    def _checked_record(self, row, current, source, key):
         if type(row["revision"]) is not int or not 1 <= row["revision"] <= current:
             raise JournalError("component record has an invalid committed revision")
-        return RecordSnapshot(row["revision"], _decode(row["body"], row["digest"]))
+        return RecordSnapshot(row["revision"], self._decoded_row(
+            source, key, row['revision'], row['body'], row['digest']))
 
     def _record_revision_limit(self, namespace, key):
         # Validate the entire scoped history before pagination can hide a bad
@@ -399,8 +492,10 @@ class ProtocolJournal:
         if row is None:
             raise JournalError('journal has not been bootstrapped')
         current = tuple(row)
+        if self._verified_rows is not None:
+            self._verified_rows._witness('snapshot', 'singleton', row['revision'], row['body'], row['digest'])
         if getattr(self, '_validated_snapshot_row', None) != current:
-            _decode(row['body'], row['digest'])
+            self._decoded_row('snapshot', 'singleton', row['revision'], row['body'], row['digest'])
             if type(row['revision']) is not int or row['revision'] < 0:
                 raise JournalError('invalid committed state revision')
             self._validated_snapshot_row = current
@@ -416,7 +511,7 @@ class ProtocolJournal:
             "SELECT * FROM records WHERE namespace=? AND record_key=? AND revision>? ORDER BY revision LIMIT ?",
             (namespace, key, after_revision, limit)).fetchall()
         current = self._record_revision_limit(namespace, key)
-        return [self._checked_record(row, current) for row in rows]
+        return [self._checked_record(row, current, 'records.history', (namespace, key, row['revision'])) for row in rows]
 
     def pending_ids(self, player):
         """Complete bounded obligation index, independent of delivery pagination.
@@ -443,7 +538,8 @@ class ProtocolJournal:
                 if not batch:
                     raise JournalError("first pending command cannot fit the requested frame bound")
                 break
-            payload = _decode(row["body"], row["digest"])
+            payload = self._decoded_row('commands.body', row['command_id'], row['position'],
+                                        row['body'], row['digest'])
             batch.append({**payload, "command_id": row["command_id"], "command_sequence": row["position"]})
             size += cost
         return batch
@@ -456,7 +552,8 @@ class ProtocolJournal:
             raise JournalError("unknown command or wrong player")
         receipt = None if row["outcome"] is None else _decode(row["receipt"], row["receipt_digest"])
         return {"command_id": command_id, "command_sequence": row["position"],
-                "body": _decode(row["body"], row["digest"]), "outcome": row["outcome"], "receipt": receipt}
+                "body": self._decoded_row('commands.body', command_id, row['position'], row['body'], row['digest']),
+                "outcome": row["outcome"], "receipt": receipt}
 
     def _acknowledge(self, player, command_id, outcome, receipt):
         _player(player)

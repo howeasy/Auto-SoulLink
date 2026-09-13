@@ -10,6 +10,20 @@ local function token(value)return type(value)=="string" and #value==32 and value
 local function integer(value)return type(value)=="number" and value%1==0 and value>=0 and value<=9007199254740991 end
 local function encoded(value)return assert(JSON.encode(value))end
 local function copy(value)return assert(JSON.decode(encoded(value)))end
+local function clone_json_validated(value)
+    if value==JSON.null or type(value)~="table"then return value end
+    local kind=JSON.kind(value)
+    local clone=(kind=="array" or kind~="object" and #value>0) and JSON.array() or JSON.object()
+    for key,child in pairs(value)do clone[key]=clone_json_validated(child)end
+    return clone
+end
+local function copy_after_json_check(value)
+    -- encode() strict-decodes its own wire before returning.  Keep that full
+    -- validation but detach the already-proven batch without decoding a
+    -- 70-KiB source string for a second time.
+    encoded(value)
+    return clone_json_validated(value)
+end
 local function hex(value,size)return type(value)=="string" and #value==size and value:match("^[0-9a-f]+$")~=nil end
 local function display_state(value)
     if JSON.kind(value)~="object" or value.schema~=M.HUD_STATE
@@ -99,15 +113,18 @@ function M.open(store,new_id,options)
     local ok,validation_error=pcall(validate,initial)
     if not ok then return nil,tostring(validation_error) end
     local self={store=store,new_id=new_id or Identity.new_nonce}
-    local function mutate(fn)
+    local function mutate(fn,definitely_changed)
         local state,reason=store:read()
         if not state then return false,reason end
         local ok,result=pcall(function()
             validate(state)
-            local before=encoded(state)
+            local before=not definitely_changed and encoded(state) or nil
             local result=fn(state)
             validate(state)
-            if encoded(state)==before then return result end
+            -- A nonempty append necessarily adds an outbox entry.  The store
+            -- still performs full JSON validation, detached copying and exact
+            -- flushed readback; only its redundant no-op comparison is skipped.
+            if not definitely_changed and encoded(state)==before then return result end
             local saved,why=store:commit(state)
             if not saved then error(why,0) end
             return result
@@ -185,7 +202,7 @@ function M.open(store,new_id,options)
         -- the next detector baseline together, so a crash cannot leave a new
         -- baseline hiding an observation that never reached the durable outbox.
         local prepared,proposal=pcall(function()
-            local batch=copy(payloads)
+            local batch=copy_after_json_check(payloads)
             if JSON.kind(batch)~="array" or #batch>M.MAX_EVENTS then
                 error("bounded observation array required",0)
             end
@@ -211,7 +228,7 @@ function M.open(store,new_id,options)
             for _,entry in ipairs(proposal.entries) do state.outbox[#state.outbox+1]=entry end
             if observation~=nil then state.observation=proposal.baseline end
             return proposal.ids
-        end)
+        end,#proposal.entries>0)
         if not ok then return nil,result end
         return result
     end

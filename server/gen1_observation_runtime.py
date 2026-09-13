@@ -92,9 +92,14 @@ def record(runtime, player, operation, request):
     if previous is not None:
         return previous.result
     typed(request)
-    stage = runtime.state()
-    document = stage.document()
-    staged = stage_observation(runtime, stage, document, player, operation, request)
+    from server.gen1_initial_observation import inventory_dependency_scope
+
+    with inventory_dependency_scope():
+        stage = runtime.state()
+        document = stage.document()
+        staged = stage_observation(runtime, stage, document, player, operation, request)
+    # The scope's fresh dependency read above must succeed before this can
+    # publish the state, either outbox, or the operation result.
     return runtime.journal.commit(player, operation, request, expected_revision=stage.journal_revision, state=document,
         commands=staged['commands'], result=staged['result'], records=staged['records']).result
 

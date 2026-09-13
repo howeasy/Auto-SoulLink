@@ -32,6 +32,7 @@ HARNESS = r"""
     }
     options={player=data.player,variant=data.variant,run_id=data.run_id,server_host='127.0.0.1',server_port=9000,
         journal=journal,transport=transport,clock=function()return t end,
+        control_interval=data.control_interval,sync_interval=data.sync_interval,
         host={set_held=function(value)held=value;return true end},
         read_context=function()return context end,
         operation_ready=function()return false,'physical operations are outside this held interoperability case'end,
@@ -49,7 +50,7 @@ HARNESS = r"""
 """
 
 
-def client(case, player):
+def client(case, player, *, control_interval=None, sync_interval=None):
     lua = lua_store.__wrapped__()
     report = case.hello(player)
     lua.globals().client_input = json.dumps(
@@ -64,6 +65,8 @@ def client(case, player):
             },
             "id_prefix": "aa" if player == "a" else "bb",
             "nonce_prefix": "cc" if player == "a" else "dd",
+            **({"control_interval": control_interval} if control_interval is not None else {}),
+            **({"sync_interval": sync_interval} if sync_interval is not None else {}),
         }
     )
     lua.execute(HARNESS)
@@ -110,7 +113,9 @@ def test_paired_lua_durable_delivery_matches_python_journal_without_any_frames(t
         exchange(8)
         faint_index = next(index for index, (p, message, _response) in enumerate(sent)
                            if index >= semantic_start and p == "a" and message["event"] == "faint")
-        assert not any(p == "a" and message["event"] == "sync" for p, message, _ in sent[faint_index + 1:])
+        # A local faint must outrank polling; after its ACK, a fresh CONTROL
+        # may legitimately request a durable sync for newly pending commands.
+        assert not any(p == "a" and message["event"] == "sync" for p, message, _ in sent[semantic_start:faint_index])
         exchange(6)
         assert case.runtime.rule_state().links[0].status == LinkStatus.DEAD
         received = json.loads(clients["b"].globals().state_json())
@@ -209,6 +214,42 @@ def test_gen1_wrapper_cannot_be_retargeted_and_preserves_journal_on_hold(tmp_pat
         result = lua.eval("runtime:observe(assert(JSON.decode(events_json)),{})")
         assert result[0] is None
         assert json.loads(lua.globals().state_json())["outbox"] == []
+    finally:
+        case.close()
+
+
+@pytest.mark.parametrize("source", [
+    "JSON.array({JSON.object({event='trade_request'})})",
+    "JSON.array({JSON.object({event='observation',source=string.char(255)})})",
+    "(function()local p=JSON.object({event='observation'});p.self=p;return JSON.array({p})end)()",
+    "JSON.object({event='observation'})",
+])
+def test_observe_rejects_transient_or_malformed_batch_before_journal_mutation(tmp_path, source):
+    case = RuntimeCase(tmp_path)
+    try:
+        lua = client(case, "a")
+        before = lua.globals().disk
+        payloads = lua.eval(source)
+        result = lua.globals().runtime.observe(lua.globals().runtime, payloads, lua.eval("JSON.object({})"))
+        assert result[0] is None and result[1]
+        assert lua.globals().disk == before
+        assert json.loads(lua.globals().state_json())["outbox"] == []
+        assert json.loads(lua.globals().status_json())["failed"] is True
+    finally:
+        case.close()
+
+
+def test_observe_detaches_full_point_and_reopen_checks_durable_bytes(tmp_path):
+    case = RuntimeCase(tmp_path)
+    try:
+        lua = client(case, "a")
+        payloads = lua.eval("JSON.array({JSON.object({event='observation',source=string.rep('A',74000)})})")
+        result = lua.globals().runtime.observe(lua.globals().runtime, payloads, lua.eval("JSON.object({frame=1})"))
+        assert len(result) == 1
+        payloads[1].source = "changed by caller"
+        assert json.loads(lua.globals().state_json())["outbox"][0]["payload"]["source"] == "A" * 74000
+        lua.execute("store:close();reopened=assert(open_store())")
+        assert lua.eval("(assert(reopened:read())).outbox[1].payload.source") == "A" * 74000
     finally:
         case.close()
 

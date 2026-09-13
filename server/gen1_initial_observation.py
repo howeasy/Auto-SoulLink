@@ -2,6 +2,8 @@
 import copy
 import hashlib
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict
 
 from server.gen1_full_save import SYMBOLS, image, layout
@@ -45,7 +47,35 @@ def inventory_dependencies():
     }
 
 
-@verified_content_cache(dependencies=inventory_dependencies)
+_dependency_scope = ContextVar('gen1-inventory-dependency-scope', default=None)
+
+
+def scoped_inventory_dependencies():
+    proof = _dependency_scope.get()
+    return copy.deepcopy(proof) if proof is not None else inventory_dependencies()
+
+
+@contextmanager
+def inventory_dependency_scope():
+    """One observation's pure decoder inputs; recheck before any commit.
+
+    The exact source point remains in every validator/cache key.  This scope
+    memoizes only the installed codec/layout dependencies while a detached
+    state is audited and staged, never the result or an authority decision.
+    """
+    if _dependency_scope.get() is not None:
+        raise JournalError('nested inventory dependency scope')
+    proof = inventory_dependencies()
+    token = _dependency_scope.set(proof)
+    try:
+        yield
+        if inventory_dependencies() != proof:
+            raise JournalError('inventory decoder dependencies changed before commit')
+    finally:
+        _dependency_scope.reset(token)
+
+
+@verified_content_cache(dependencies=scoped_inventory_dependencies)
 def inventory(source, save):
     """Decode every authoritative slot, excluding the active box's stale SRAM copy."""
     image(source)  # Complete bounded source fields/CartRAM, using pinned save geometry.

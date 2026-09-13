@@ -158,6 +158,7 @@ class Gen1Runtime(DurableRuntime):
                 verify_reconciliation=verify_reconciliation,
                 **options,
             )
+            self.journal.enable_verified_row_cache()
             if trade_policy is not None:
                 self.trade = TradeCoordinator(
                     self.journal,
@@ -276,6 +277,18 @@ class Gen1Runtime(DurableRuntime):
             if cached is not None and cached[0] == stamp:
                 return copy.deepcopy(cached[1])
         stage = super().state()
+        stage._begin_validation_document()
+        try:
+            self._verify_state_journal(stage)
+        except BaseException:
+            stage._cancel_validation_document()
+            raise
+        stage._end_validation_document()
+        if getattr(self, '_control_cache_active', False):
+            self._control_state_cache = (stamp, copy.deepcopy(stage))
+        return stage
+
+    def _verify_state_journal(self, stage):
         verify_journal(self.journal, stage.document())
         from server.gen1_receptionist_runtime import verify_state
         verify_state(self.journal,stage)
@@ -318,9 +331,6 @@ class Gen1Runtime(DurableRuntime):
         from server.gen1_evolution_runtime import verify_journal as verify_evolutions
         verify_evolutions(self.journal, stage, rom_provider=(
             self.prepared_cartridges.rom if self.prepared_cartridges is not None else None))
-        if getattr(self, '_control_cache_active', False):
-            self._control_state_cache = (stamp, copy.deepcopy(stage))
-        return stage
 
     def _interrupt_trades(self, reason):
         if self.trade is None:
@@ -443,7 +453,12 @@ class Gen1Runtime(DurableRuntime):
         self._control_cache_active = True
         self._control_state_cache = None
         try:
-            return self._control_checked(player, message)
+            response = self._control_checked(player, message)
+            # A scheduling hint only: CONTROL still delivers no commands. Query
+            # after all Gen1 control/native side effects in this serialized turn,
+            # so a newly committed obligation cannot be hidden by an older view.
+            response["pending_delivery"] = bool(self.journal.pending_ids(player))
+            return response
         finally:
             self._control_cache_active = False
             self._control_state_cache = None

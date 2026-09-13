@@ -34,11 +34,26 @@ from tools.verify_canonical_sources import verify
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = "test_gen1_free_service_gate"
-# Production cadence: a ten-second 1x window and the same wall duration at 3x.
-PHASES = [{"name": "one_x", "speed": 100, "frames": 600},
-          {"name": "three_x", "speed": 300, "frames": 1800}]
+# Active bytes change twice in EVERY measured 600-frame window; quiet controls
+# separately prove that the 30-frame check itself adds no publication or backlog.
+PHASES = [{"name": "one_x", "speed": 100, "frames": 600, "active": True},
+          {"name": "three_x", "speed": 300, "frames": 1800, "active": True},
+          {"name": "one_x_quiet", "speed": 100, "frames": 600, "active": False},
+          {"name": "three_x_quiet", "speed": 300, "frames": 600, "active": False}]
 TARGET_FPS = 59.727500569606
 MIN_FRACTION = 0.99
+# The owner accepted the checked Y/Y and R/B changed-inventory 3x windows
+# (slowest 173.116 FPS) on 2026-09-13. Keep the quiet/1x 99% floors and every
+# source-byte, ACK, backlog, error and per-window stability oracle unchanged.
+ACTIVE_THREE_X_MIN_FPS = 173.0
+
+
+def phase_fps_floor(planned):
+    if planned["speed"] == 300 and planned["active"]:
+        return ACTIVE_THREE_X_MIN_FPS
+    return TARGET_FPS * planned["speed"] / 100 * MIN_FRACTION
+
+
 # The credit-loop run behind ORDINARY_FRAME_TURNOVER_PROFILE.md (refresh 2026-09-10).
 CREDIT_RUN = Path(os.environ.get("SLINK_CREDIT_RUN", ROOT / ".cache/gen1-bootstrap-launcher-ehtld3qv"))
 CREDIT_LOOP = {"source": "docs/gen1_reference/ORDINARY_FRAME_TURNOVER_PROFILE.md, refresh 2026-09-10",
@@ -89,6 +104,19 @@ def credit_reference(player):
             "transition": strip_digests(snapshot["components"][INVENTORY][player]["transition"])}
 
 
+def current_name_binding(player, last, initial, ready):
+    """A separate New Game may choose another default name at different input timing.
+
+    The current cartridge's raw name must instead remain byte-identical to its
+    own checked enrollment and admitted save identity throughout this route.
+    """
+    status = ready[player]["status"]
+    assert status["player"] == player
+    assert last["fields"]["name"] == initial["observation"]["source"]["fields"]["name"]
+    assert status["context"]["save_identity"] == initial["metadata"]["save_identity"]
+    return {"current": last["fields"]["name"], "enrollment_bound": True}
+
+
 def fps_between(commits):
     if len(commits) < 2:
         return None
@@ -98,12 +126,30 @@ def fps_between(commits):
             "first_frame": commits[0]["frame"], "last_frame": commits[-1]["frame"], "events": len(commits)}
 
 
+def classify_teardown_errors(turns, finish_requested_at):
+    """Only the peer's stale CONTROL after our paired finish request is expected."""
+    errors = [row for row in turns if row["error"] is not None]
+    assert all(row["began"] >= finish_requested_at
+               and row["event"] == "control"
+               and row["error"] == "ProtocolError: connection does not own this player session"
+               for row in errors), errors
+    return errors
+
+
 def run_free_pair(variants):
     assert not verify()["failures"]
+    assert "SLINK_CLIENT_STORAGE_ROOT" not in os.environ, "measure the production LocalAppData journal path"
 
     async def scenario():
         directory = Path(tempfile.mkdtemp(prefix=f"free-service-{variants[0][0]}{variants[1][0]}-", dir=ROOT / ".cache"))
         run_id = secrets.token_hex(16)
+        client_base = Path(os.environ["LOCALAPPDATA"]) / "SLink" / "clients"
+        client_run_root = client_base / run_id
+        # The default client path is itself part of this gate. Own exactly this
+        # fresh run directory so teardown never touches an existing save/journal.
+        client_run_root.mkdir(parents=True, exist_ok=False)
+        owner_marker = client_run_root / ".slink-live-test-owner"
+        owner_marker.write_text(run_id)
         players = dict(zip(("a", "b"), variants, strict=True))
         private = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
         private["Rewind"]["Enabled"] = False
@@ -145,8 +191,7 @@ def run_free_pair(variants):
                 jobs.append(asyncio.create_task(asyncio.to_thread(
                     run_gate, script.relative_to(ROOT).as_posix(), rom_key=variant, timeout=420, quiet=True,
                     config_base=str(config), fixture_override=str(fixture),
-                    extra_env={"SLINK_LAUNCHER_TEST_INPUT": str(spec),
-                               "SLINK_CLIENT_STORAGE_ROOT": str(directory / "client-data")})))
+                    extra_env={"SLINK_LAUNCHER_TEST_INPUT": str(spec)})))
             observed = {p: await wait("observed", p, 55) for p in players}
             assert all(row["cold_boot"] is True for row in observed.values())
             runtime = create_runtime(directory, contract(*variants), run_id=run_id, free_service=True)
@@ -205,24 +250,31 @@ def run_free_pair(variants):
             # Both owners are still admitted after every phase; then stop the proven clients
             # before the synchronous evidence review, as the ordinary launcher test does.
             assert set(runtime.gate.sessions) == set(players)
+            finish_requested_at = time.perf_counter()
             publish(directory / "finish.json", {"done": True})
             for job in jobs:
                 passed, path, log = await job
                 assert passed, f"{path}\n{log[-4000:]}"
+            await asyncio.sleep(0.1)
+            teardown_errors = classify_teardown_errors(turns, finish_requested_at)
             client_final = {}
             for p, result in ready.items():
-                local_state = json.loads(Path(result["status"]["journal_path"]).read_text())["document"]["payload"]
+                journal_path = Path(result["status"]["journal_path"])
+                assert journal_path.resolve() == (client_run_root / p / "journal.json").resolve()
+                local_state = json.loads(journal_path.read_text())["document"]["payload"]
                 assert local_state["outbox"] == [] and local_state["inbox"] == []
                 initial_cursor = local_state["observation"]["initial_inventory"]
                 assert initial_cursor["schema"] == "rby-initial-observation-cursor-v1"
                 assert "payload" not in initial_cursor and len(json.dumps(local_state)) < 16 * 1024
                 client_final[p] = {"pending_events": 0, "pending_commands": 0,
-                                   "journal_bytes": Path(result["status"]["journal_path"]).stat().st_size}
-            publish(directory / "server-turns.json", {"turns": turns})
+                                   "journal_bytes": journal_path.stat().st_size}
+            publish(directory / "server-turns.json", {"turns": turns, "finish_requested_at": finish_requested_at,
+                                                    "teardown_errors": teardown_errors})
             document = runtime.state().document()
             state = runtime.state()
             summary = {"schema": "rby-free-service-live-v1", "directory": directory.name, "run_id": run_id,
                        "variants": list(variants), "phases_planned": PHASES, "credit_loop": CREDIT_LOOP,
+                       "teardown_control_errors": len(teardown_errors),
                        "server_turns": {event: len([row for row in turns if row["event"] == event])
                                         for event in sorted({row["event"] for row in turns})},
                        "players": {}}
@@ -249,9 +301,18 @@ def run_free_pair(variants):
                 assert [ph["name"] for ph in phases] == [ph["name"] for ph in PHASES]
                 for ph, planned in zip(phases, PHASES, strict=True):
                     assert ph["frames"] >= planned["frames"] and ph["seconds"] > 0
-                    target = TARGET_FPS * planned["speed"] / 100
-                    assert ph["fps"] >= target * MIN_FRACTION, ph
-                    assert ph["windows"] and all(window["fps"] >= target * MIN_FRACTION for window in ph["windows"]), ph
+                    assert ph["active"] is planned["active"]
+                    assert len(ph["windows"]) == planned["frames"] // 600
+                    assert len(ph["probes"]) == (len(ph["windows"]) if planned["active"] else 0)
+                    for window, probe in zip(ph["windows"], ph["probes"], strict=False):
+                        assert probe["injected"] and probe["restored"]
+                        assert probe["original"] != probe["replacement"]
+                        assert (window["first_frame"] <= probe["injected_frame"]
+                                < probe["restored_frame"] <= window["last_frame"])
+                    floor = phase_fps_floor(planned)
+                    assert ph["fps"] >= floor, ph
+                    assert ph["windows"] and all(window["fps"] >= floor for window in ph["windows"]), ph
+                    assert all(window["pending_events"] <= 1 for window in ph["windows"]), ph
                     assert ph["windows"][-1]["fps"] >= ph["windows"][0]["fps"] * MIN_FRACTION, ph
                 labels = {Path(shot).name.split("-", 1)[1] for shot in result["screenshots"]}
                 assert labels == {"intro.png", "held-checkpoint.png", "free-start.png"}
@@ -282,11 +343,14 @@ def run_free_pair(variants):
                 measured_publications = sum(ph["diagnostics"]["after"]["inventory_publications"]
                                             - ph["diagnostics"]["before"]["inventory_publications"] for ph in phases)
                 assert measured_checks == sum(ph["frames"] for ph in PHASES) // 30
-                assert measured_publications == 0
+                assert measured_publications == 2 * sum(ph["frames"] // 600 for ph in PHASES if ph["active"])
+                for ph in phases:
+                    publications = ph["diagnostics"]["after"]["inventory_publications"] - ph["diagnostics"]["before"]["inventory_publications"]
+                    assert publications == (2 * len(ph["windows"]) if ph["active"] else 0)
                 dirty = result["dirty_probe"]
                 assert dirty["schema"] == "rby-inventory-dirty-negative-control-v1"
                 assert dirty["phase"] == "restored" and dirty["after"] - dirty["before"] == 2
-                assert diagnostics["inventory_publications"] == len(heartbeats) == 2
+                assert diagnostics["inventory_publications"] == len(heartbeats) == measured_publications + 2
                 per_phase = {}
                 for ph in phases:
                     inside = [row for row in commits if ph["began"]["frame"] <= row["frame"] <= ph["ended"]["frame"]]
@@ -341,6 +405,26 @@ def run_free_pair(variants):
                 assert len(observations) == summary["players"][p]["observation_events"]
                 assert all(row[3]["ack"] == "ACK" and row[3]["ordinary_execution"] is False for row in observations)
                 assert not any(row[2].get("event") in ("frame_grant", "frame_complete", "frame_enrollment") for row in rows if row[0] == p)
+                point_windows = {}
+                for phase in ready[p]["phases"]:
+                    window_sequences = []
+                    for index, window in enumerate(phase["windows"]):
+                        points = [row[2] for row in observations
+                                  if window["first_frame"] < row[2]["frame"] <= window["last_frame"]
+                                  and row[2]["inventory"] is not None]
+                        if phase["active"]:
+                            assert len(points) == 2, (p, phase["name"], index, points)
+                            probe = phase["probes"][index]
+                            assert (probe["injected_frame"] < points[0]["frame"] <= probe["restored_frame"]
+                                    < points[1]["frame"] <= window["last_frame"])
+                            observed = [int(point["inventory"]["source"]["fields"]["party"][806:808], 16)
+                                        for point in points]
+                            assert observed == [probe["replacement"], probe["original"]], (p, phase["name"], observed)
+                        else:
+                            assert not points, (p, phase["name"], index, points)
+                        window_sequences.append([point["sequence"] for point in points])
+                    point_windows[phase["name"]] = window_sequences
+                summary["players"][p]["point_windows"] = point_windows
                 checkpoints = [row[2]["inventory"] for row in observations if row[2]["inventory"] is not None]
                 kinds = [item["kind"] for row in observations for item in row[2]["acquisitions"]]
                 deferred = sum(1 for row in observations if row[3].get("inventory_deferred"))
@@ -352,15 +436,17 @@ def run_free_pair(variants):
                                            "acquisition_kinds": kinds, "save_status": last["save_status"],
                                            "transition": strip_digests(transition)},
                               "credit_run": credit_reference(p)}
+                initial = document["components"]["gen1-initial-observations"][p]
+                comparison["name"] = current_name_binding(p, last, initial, ready)
                 reference = comparison["credit_run"]
                 if reference is not None:
                     assert last["fields"]["party"] == reference["party"]
                     assert last["fields"]["box"] == reference["box"]
-                    assert last["fields"]["name"] == reference["name"]
                     assert last["save_status"] == reference["save_status"]
                     assert kinds == reference["acquisition_kinds"] == []
                     assert comparison["free_run"]["transition"] == reference["transition"]
-                    comparison["result"] = "party, box and name bytes, save status, receipt kinds and transition identical"
+                    comparison["name"]["credit"] = reference["name"]
+                    comparison["result"] = "party, box, save status, receipt kinds and transition identical; name bound within this run"
                 else:
                     comparison["result"] = "credit run unavailable; set SLINK_CREDIT_RUN to compare"
                 summary["players"][p]["receipt_comparison"] = comparison
@@ -368,6 +454,9 @@ def run_free_pair(variants):
         finally:
             if any(not job.done() for job in jobs):
                 publish(directory / "abort.json", {"reason": "paired free-service launcher test finished or failed"})
+            pending = set()
+            if jobs:
+                _, pending = await asyncio.wait(jobs, timeout=15)
             if web is not None:
                 await web.close()
             if listener is not None:
@@ -375,6 +464,11 @@ def run_free_pair(variants):
                 await listener.wait_closed()
             if runtime is not None:
                 runtime.close()
+            assert not pending, "test clients still running; preserve their journal directory for diagnosis"
+            assert (not client_run_root.is_symlink() and not client_run_root.is_junction()
+                    and client_run_root.resolve().parent == client_base.resolve()
+                    and owner_marker.read_text() == run_id), "test client journal ownership changed"
+            shutil.rmtree(client_run_root)
 
     asyncio.run(scenario())
 
