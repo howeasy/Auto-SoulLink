@@ -1,4 +1,4 @@
-"""Source proof of the native-route continuity seam (B3 blocker, A-frozen file, not fixed here).
+"""Source proof of the native-route continuity seam (closed by the B3 hooks; kept as the regression).
 
 server/gen1_runtime.py `_service_continuity_enabled` returns `free_service and not native_trade`,
 so a native-selected runtime omits `service_recovery` from HELLO and control responses
@@ -43,10 +43,12 @@ def test_native_selected_runtime_omits_service_recovery_that_the_free_service_cl
     pair = PreparedCartridges(stage_canonical_pair(run / "prepared", {"a": CLEAN, "b": CLEAN}))
     runtime = create_runtime(run, pair.contract(), prepared_cartridges=pair, native_trade=True, free_service=True)
     try:
-        assert runtime.free_service and runtime.native_trade and runtime._service_continuity_enabled() is False
+        # The seam is closed on this branch (hook 5): the native-selected free service offers continuity
+        # and gen1_service_continuity refuses it unless the current admission's held read was released.
+        assert runtime.free_service and runtime.native_trade and runtime._service_continuity_enabled() is True
         response = hello(runtime)
         assert response["ack"] == "ACK" and "recovery" in response
-        assert "service_recovery" not in response   # lua/durable_runtime.lua:310-316 asserts it is an object -> client fails
+        assert response["service_recovery"]["schema"] == "slink-service-recovery-v1"
     finally:
         runtime.close()
     # The same client against a free-service-only runtime gets the document it requires.

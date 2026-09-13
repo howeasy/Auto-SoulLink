@@ -201,6 +201,11 @@ class Gen1Runtime(DurableRuntime):
 
     def _process(self, message, owner):
         response = super()._process(message, owner)
+        if message.get("event") == "native_reattach" and response.get("ack") == "ACK":
+            # DurableRuntime ignores the dispatch result; the committed verdict rides the ACK and the
+            # enriched response is re-cached for byte-identical retries (as observation_result below).
+            from server.gen1_native_reattach_runtime import attach_result
+            return attach_result(self, message["player"], message, response)
         if message.get("event") != "observation" or response.get("ack") != "ACK":
             return response
         # A transport ACK alone cannot tell the free client whether its exact
@@ -251,7 +256,10 @@ class Gen1Runtime(DurableRuntime):
         return verify(self, player, evidence, stage, binding)
 
     def _service_continuity_enabled(self):
-        return self.free_service and not self.native_trade
+        # The native-selected free service is still the free service: continuity is offered, and
+        # gen1_service_continuity refuses it unless the player's held reattach read was released
+        # and nothing native is owed (terminal-only).
+        return self.free_service
 
     def _presentation_state(self):
         # The journal checks the committed snapshot hash. Displaying that state
@@ -319,6 +327,8 @@ class Gen1Runtime(DurableRuntime):
         verify_native_windows(self.journal, stage)
         from server.gen1_native_preparation import verify_journal as verify_native_preparation
         verify_native_preparation(self.journal, stage)
+        from server.gen1_native_reattach_runtime import verify_journal as verify_native_reattach
+        verify_native_reattach(self.journal, stage)
         from server.gen1_static_lifecycle import verify_journal as verify_statics
         verify_statics(self.journal, stage, rom_provider=(
             self.prepared_cartridges.rom if self.prepared_cartridges is not None else None))
@@ -353,6 +363,13 @@ class Gen1Runtime(DurableRuntime):
             if not self.free_service:
                 raise ProtocolError('free-run observation is not selected')
             from server.gen1_observation_runtime import record
+            return record(self, player, message['operation_id'], self._semantic(message))
+        if event == 'native_reattach':
+            # The native client's start-of-script held read (B3): recorded with the server's own verdict;
+            # it never mutates a trade, window or command (gen1_native_reattach_runtime).
+            if not (self.free_service and self.native_trade):
+                raise ProtocolError('native reattach evidence requires the native-selected free service')
+            from server.gen1_native_reattach_runtime import record
             return record(self, player, message['operation_id'], self._semantic(message))
         if event == 'native_frame_return':
             if not self.native_trade:

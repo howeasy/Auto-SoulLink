@@ -46,7 +46,8 @@ READ = frozenset({"schema", "frame", "pc", "sp", "bank", "overlay_hex", "publish
                   "token_hex", "lease", "host"})
 LEASE = frozenset({"phase", "command_id", "intent_digest", "token_hex", "receipt"})
 HOST = frozenset({"owner_id", "process_id", "capability_id", "held"})
-ENTRY = frozenset({"origin", "read_digest", "verdict", "class", "physical", "frame", "lease_phase"})
+ENTRY = frozenset({"origin", "read_digest", "verdict", "class", "physical", "frame", "lease_phase", "context_generation",
+                   "binding_digest"})
 MAX_INT = 2**53 - 1
 
 
@@ -158,7 +159,8 @@ def record(runtime, player, operation, request):
     verdict, kind = classify(document, runtime.journal, player, payload)
     entry = {"origin": event_reference.make(player, operation, request), "read_digest": digest(payload["read"]),
              "verdict": verdict, "class": kind, "physical": payload["physical"], "frame": payload["read"]["frame"],
-             "lease_phase": payload["read"]["lease"]["phase"]}
+             "lease_phase": payload["read"]["lease"]["phase"], "context_generation": payload["context_generation"],
+             "binding_digest": binding["binding_digest"]}
     players = document["components"].setdefault(COMPONENT, {})
     players[player] = entry
     result = {"ack": "ACK", "native_reattach": {"verdict": verdict, "class": kind, "read_digest": entry["read_digest"]}}
@@ -197,7 +199,8 @@ def verify_state(stage):
     for player, entry in players.items():
         if (not isinstance(entry, dict) or set(entry) != ENTRY or not _hex(entry["read_digest"], 64)
                 or entry["verdict"] not in {"released", "held"} or (entry["verdict"] == "released") != (entry["class"] == "clean")
-                or entry["lease_phase"] not in LEASES or type(entry["frame"]) is not int):
+                or entry["lease_phase"] not in LEASES or type(entry["frame"]) is not int
+                or not _hex(entry["context_generation"], 32) or not _hex(entry["binding_digest"], 64)):
             raise JournalError("complete native reattach entry required")
         if event_reference.validate(entry["origin"])["player"] != player:
             raise JournalError("native reattach reference changed player")
@@ -215,5 +218,6 @@ def verify_journal(journal, stage):
             continue
         event = event_reference.resolve(journal, entry["origin"])
         if (event.request.get("event") != EVENT or digest(event.request["payload"]["read"]) != entry["read_digest"]
+                or event.request["payload"].get("context_generation") != entry["context_generation"]
                 or event.result.get("native_reattach", {}).get("verdict") != entry["verdict"]):
             raise JournalError("native reattach entry differs from its committed event")

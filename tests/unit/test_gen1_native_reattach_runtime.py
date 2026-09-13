@@ -49,6 +49,8 @@ def test_a_clean_read_with_nothing_owed_is_released_durably_and_replays_without_
     document = run.state().document()
     entry = document["components"][COMPONENT]["a"]
     assert entry["verdict"] == "released" and entry["class"] == "clean" and entry["frame"] == 4242 and entry["lease_phase"] == "idle"
+    assert entry["context_generation"] == run.gate.sessions["a"].metadata["control_binding"]["context_generation"]
+    assert entry["binding_digest"] == run.gate.sessions["a"].metadata["control_binding"]["binding_digest"]
     assert run.journal.record(COMPONENT, key("a")).value == entry
     assert run.journal.snapshot().revision == before.revision + 1
     verify_journal(run.journal, run.state())

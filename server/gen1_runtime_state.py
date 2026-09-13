@@ -115,6 +115,8 @@ class Gen1RuntimeState:
     def _verify_components(self):
         from server.gen1_initial_observation import verify_state
         verify_state(self)
+        from server.gen1_native_reattach_runtime import verify_state as verify_native_reattach
+        verify_native_reattach(self)
         from server.gen1_inventory_observation import verify_state as verify_inventory
         verify_inventory(self)
         from server.gen1_bootstrap_runtime import verify_state as verify_bootstrap
