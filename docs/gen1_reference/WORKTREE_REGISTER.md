@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+R2 Standards found unbounded listener.wait_closed before handler timeout; root independently confirms installedPython3.12 semantics. Same R2 Sol files receive bounded cleanup ordering correction. Spec retains frozen idle-oracle review, final hashes reviewed again before any live grant.
+
 R2 builder released script9b568bce/report1e553d2d; separate Standards/Spec read-only reviews ACTIVE conditional on ACK, exact paths/axes in guide. No .cache/report writer or emulator lane. Root owns integration documents only.
 
 R1 resource cleanup error discovered in retained summary: runtime.close attempted before TCP handlers drained, despite all child processes exiting. Same R2 Sol controller scope includes bounded owned-handler cleanup before journal close, plus modeled ordering check. No live lane or production source change.
