@@ -14,6 +14,8 @@ Successor transition **2026-09-13 13:08 UTC**: coordinator/integrator is Codex t
 
 ### Current assignments — 2026-09-13, after repaired F1 receipt review
 
+**D0-A implementation ACTIVE** after Sol /root/n0_enrollment_sol ACK clean c7f1e1e, product15727ec/testsa1714c5, exact two new tracked files/report/model outputs and agreed seams; TDD references and CONTEXT read. Build and modeled tests only, no server/CLI/emulator launch or source outside grant. Claude/OMP and other reviewers hold no current files; coordinator owns guide/register/integration. No live lane.
+
 **D0-A tracked idle runner implementation READY.** Corrected Claude reporte37f9560 accepted with two wording limits: .cache helpers can already be dynamically imported (the R2 model does so), and their bytes can be hashed/reviewed; the actual missing capability is independently usable lifecycle/reporting without patching a fused script's globals, plus tracked maintenance. No proof registration question or new owner policy.
 
 1. **Requirement/behavior:** D0 catalog interface infrastructure supporting literal runtime.initial-inventory-enrollment and future selected scenarios; preserves the proven Y/Y idle behavior. Registers/closes no manifest row, including manager.yellow.yellow.same-hash.

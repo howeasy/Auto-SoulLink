@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-A Sol ACK verified at clean c7f1e1e and ACTIVE on exact two new tests/live files plus named report/model receipts. No existing production/shared file writer, no live lane. All N0 evidence frozen.
+
 D0 boundary reporte37f9560 accepted with exact wording limits in guide; Claude released. D0-A implementation READY reserves two new tests/live files plus named report/model receipts to Sol, pending ACK/activation. No production/manifest edits or live lane; N0 originals preserved.
 
 D0 first report287ffbab frozen; coordinator found source-pinning rationale and proposed-boundary corrections. Same Claude report-only correction ACTIVE conditional on ACK, no implementation/live grant. N0 bounded physical baseline accepted; no other active writer.
