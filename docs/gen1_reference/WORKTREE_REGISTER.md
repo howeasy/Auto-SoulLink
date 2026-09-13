@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Owner now authorizes autonomous normal-button emulator checks without human input, superseding availability hold. No live run started yet; root will use initialized sky Computer Use against actual CLI windows after preflight. Claude R0 report correction and fresh isolated OMP encoding check are source-only, disjoint. D0 source frozen; no production writer.
+
 R0 supplied contractf126d3c9 frozen; independent source Spec review and short isolated OMP encoding check ACTIVE conditional on ACK, both reply-only/no writes/execution. No classifier implementation grant. D0 code integrated, emulator work held by owner.
 
 Claude R0 supplied-evidence contract ACK verified and ACTIVE on sole named report. Owner emulator HOLD remains; no other code writer/live lane. D0-A tracked code integrated MODEL.
