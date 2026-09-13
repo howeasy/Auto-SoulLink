@@ -79,3 +79,5 @@ Sol2 continues one remaining Martscript0 dialogue correction, same exclusive par
 Private mute candidate root-reviewed45/45/Ruff and released; integrate volume0/receiptassertion only. Attempt2 closed/interrupted, exactsuspensiontriggerunknown and operator soundsettingsreported. All resourcesclosed.
 
 Muted attempt3 rootsolelive on949462e; all source writers frozen. Parcel final12case candidate under revisedSpec read-only review; no offline model execution overlaps live.
+
+Owner requested faster route tests. Sol mute worker prepares isolated speed300 patch while live70685 keeps sourcefrozen; source application waits cleanup. OMP verifies silent private configs read-only. Parcel source12/12 correctionaccepted, integration still gated starterPASS/rawmenu producer.
