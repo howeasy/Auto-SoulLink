@@ -4,6 +4,8 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
+**Owner scope change:** current RC is Red/Blue; Yellow-specific work is post-RC TODO. Preserve all Yellow code/evidence/worktrees. No emulator is running. Claude owns only the new R/B gameplay claim, OMP the R/B scope inventory report, and Sol the one-file R/B idle-entry parameter correction under the guide's conditional-ACK grants.
+
 - Canonical: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`; coordinator Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa` on HOUNDOOM owns guide/register, reviews and integration.
 - Product behavior15727ec; scripted test source6283d58. Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
 - D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed, no live lane. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
