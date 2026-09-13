@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-boundary source-only research READY for Claude on sole reviews/D0-boundary-successor.md, reusing proven N0 R2 and W0 rather than resurveying. No implementation/live grant. OMP R2 receipt verification in flight; all Sol source/build writers released. Guide policy section refreshed to reflect already-approved P2a and owner execution authorization.
+
 CURRENT R2 session83976 physical PASS, lane RELEASED after all process/resource cleanup, exact receipt/report in guide. Source/testsa1714c5 unchanged. OMP final R2 receipt check read-only ACTIVE conditional on ACK; no emulator/source writer. Original first-run HOLD retained.
 
 R2 live session83976 at6ceda01, owned CLI44036/42424 and Emu27456/49436, exact create times and run identities in guide. Waiting normal human New Game inputs; no other runtime/test/source owner.
