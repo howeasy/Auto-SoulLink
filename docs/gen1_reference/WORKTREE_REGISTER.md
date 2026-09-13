@@ -55,3 +55,5 @@ First D1 live run a369bef stopped/HOLD at source-proven lab speech input gap; bo
 Parallel code lanes: Sol1 owns current lab speech correction in starter Lua/unit; Sol2 /root/d1_rb_parcel_sol owns NEW parcel Lua/unit and its report only (exact dispatch). No shared file overlap. Parcel integration/live waits successful starter checkpoint and separate grant. Claude checks starter interaction; no live runner.
 
 Sol1 lab correction frozen/released45/45/Ruff, two reviewers confirm revised two-file source. Sol2 parcel module remains active in separate NEW Lua/unit. No live runner/shared writer.
+
+Revised lab Standards reviewer is /root/d1_yellow_claim, R/B-only read-only assignment under current guide; old Yellow report work stays deferred. Sol2 parcel code remains isolated.

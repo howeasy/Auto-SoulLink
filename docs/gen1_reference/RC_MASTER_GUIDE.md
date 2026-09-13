@@ -174,3 +174,5 @@ D1-RB frozen source SHA256 (Sol released, root reread):
 OMP preflight resent on owner request as cx-7c56e110, superseding cx-65b53d02; cancelled Yellow census is not resent.
 
 Pallet correction frozen full hashes: lua/tests/gen1_rb_ball_gate_inputs.lua 9269fbe54be94606bab120205e8934d813d150edd4e6aa814e7d1bbf106a9e08; lua/tests/gen1_scripted_new_game.lua c5a48aca28a6c0f483affaa18b62c0b62eee15f4476a36d8ef1565aa441e5952; tests/unit/test_gen1_selected_rb_ball_gate.py 3235b9f4d52cf279d8dc8d927e670ed8b347e2bd1fc96e8342f1e10629b239b0. Reviews now check this source correction only against prior accepted boundaries.
+
+Lab correction Spec accepted at72f09ce; revised Standards task resumes /root/d1_yellow_claim for R/B-only review (historical task name, no Yellow work), because the former Standards task hit the collaboration thread limit. Same two frozen source paths; no writes/execution.
