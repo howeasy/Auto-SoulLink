@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+N0 live partial evidence: both initial saves ACKed at checked revision16, normal observations absent. Sole lane remains coordinator/session57983. Context-sensitive Claude service-start source triage read-only ACTIVE conditional on ACK, no file/test/live ownership. No source edits while this run is active.
+
 N0 sole live lane running session57983, run_20260913_175541_a34844; owned CLI42016/43812 and identity-checked EmuHawk21120/39444, exact create times in guide/controller records. Human New Game inputs requested; no enrollment verdict yet. No other live/test/source writer.
 
 CURRENT: owner available; coordinator holds sole N0 enrollment live lane after clean6a8049e/fresh input preflight and reviewed861ff075/config92ca34c6 checks. Exact .cache subtree/summary/console and physical report in guide. No other worker/test/emulator lane or production writer. Worktrees unchanged; parked trees preserved.
