@@ -104,12 +104,14 @@ def credit_reference(player):
             "transition": strip_digests(snapshot["components"][INVENTORY][player]["transition"])}
 
 
-def current_name_binding(last, initial, status):
+def current_name_binding(player, last, initial, ready):
     """A separate New Game may choose another default name at different input timing.
 
     The current cartridge's raw name must instead remain byte-identical to its
     own checked enrollment and admitted save identity throughout this route.
     """
+    status = ready[player]["status"]
+    assert status["player"] == player
     assert last["fields"]["name"] == initial["observation"]["source"]["fields"]["name"]
     assert status["context"]["save_identity"] == initial["metadata"]["save_identity"]
     return {"current": last["fields"]["name"], "enrollment_bound": True}
@@ -435,7 +437,7 @@ def run_free_pair(variants):
                                            "transition": strip_digests(transition)},
                               "credit_run": credit_reference(p)}
                 initial = document["components"]["gen1-initial-observations"][p]
-                comparison["name"] = current_name_binding(last, initial, status)
+                comparison["name"] = current_name_binding(p, last, initial, ready)
                 reference = comparison["credit_run"]
                 if reference is not None:
                     assert last["fields"]["party"] == reference["party"]
