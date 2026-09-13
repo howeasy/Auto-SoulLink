@@ -65,3 +65,9 @@ OMP has one bounded read-only first-run lab-stall/cleanup receipt cross-check; n
 Attempt2 rootsolelive atf4553be; Sol2 separatecode continues, models deferred. Claude live same session returned, contextual starter-input source question acknowledged. No shared source writer.
 
 Parcel/RUN source frozen with hashes in guide; independent Codex Spec/Standards read-only reviews run beside physicalattempt2. Final modelcheck deferred. No active source writer; live rootonly.
+
+Parcel Spec found3 source-proven script/journey bugs; Sol2 resumes same isolated Lua/unit/report corrections during rootlive, models deferred. No shared source edits or additional emulator.
+
+Attempt2 still owns live lane; diagnostic paired suspension/re-admission observed, trigger unknown/owner clarification pending. No user-input blame or product-defect claim. Parcel source corrections continue without model execution.
+
+Current parallel assignments after53467cleanup: Sol2 parcel finalmodels/re-review inNEWLua/unit; Sol /root/rb_mute_sol owns tests/live/gen1_selected_scenario.py only for private volume0; Claude source-only sameprocess interruption question; OMP frozen attempt2receipt. No emulator or overlapping writer.
