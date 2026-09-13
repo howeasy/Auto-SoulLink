@@ -199,6 +199,7 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
         marker = None
         turns = []
         completed = False
+        performance_failures = []
 
         async def wait(name, player, seconds):
             file = directory / f"{name}-{player}.json"
@@ -313,10 +314,13 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                     floor = (ACTIVE_THREE_X_MIN_FPS if planned["speed"] == 300 and planned["active"]
                              else TARGET_FPS * planned["speed"] / 100 * MIN_FRACTION)
                     assert phase["active"] is planned["active"] and phase["frames"] >= planned["frames"]
-                    assert phase["fps"] >= floor, phase
                     assert len(phase["windows"]) == planned["frames"] // 600
-                    assert all(window["fps"] >= floor and window["pending_events"] == 0
-                               for window in phase["windows"]), phase
+                    assert all(window["pending_events"] == 0 for window in phase["windows"]), phase
+                    if phase["fps"] < floor:
+                        performance_failures.append((player, phase["name"], "average", phase["fps"], floor))
+                    for index, window in enumerate(phase["windows"]):
+                        if window["fps"] < floor:
+                            performance_failures.append((player, phase["name"], index, window["fps"], floor))
                     assert all(probe["injected"] and probe["restored"] for probe in phase["probes"])
                 assert status["runtime"]["pending_events"] == 0
             assert all(turn["error"] is None for turn in turns), "server error before client finish"
@@ -379,8 +383,10 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
             publish(directory / "summary.json", {"schema": "rby-native-selected-fresh-smoke-v1",
                 "launch_boundary": "hold before first post-launcher frame; observed/go and intro preceded launcher load",
                 "manager_id": run["run_id"], "session_id": session_id, "variants": variants,
+                "performance_failures": performance_failures,
                 "players": {player: {"phases": ready[player]["phases"], "held_frame": ready[player]["held_frame"],
                                       "loop_started": ready[player]["loop_started"]} for player in ("a", "b")}})
+            assert not performance_failures, performance_failures
             completed = True
         except BaseException as error:
             publish(directory / "harness-error.json", {"type": type(error).__name__, "reason": str(error)[:1000]})
