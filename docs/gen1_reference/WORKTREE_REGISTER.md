@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+CURRENT: N0 R2 Y/Y physical baseline accepted after OMP receipt verification and coordinator independent prepared-image byte comparison, tool807127 exit0. OMP released, no emulator/test/source writer. Claude alone owns active D0-boundary-successor.md report (currently untracked, excluded from coordinator commit). Guide current snapshot/row updated; original physical report hash0e9522dc retained.
+
 CURRENT18:21UTC: Claude D0-boundary ACK verified at clean d9dcf45/script31254a40; ACTIVE sole source-only report writer. R2 physical lane completed/released, OMP final frozen receipt cross-check read-only in flight. All Sol builders/reviewers released; no emulator/production writer.
 
 D0-boundary source-only research READY for Claude on sole reviews/D0-boundary-successor.md, reusing proven N0 R2 and W0 rather than resurveying. No implementation/live grant. OMP R2 receipt verification in flight; all Sol source/build writers released. Guide policy section refreshed to reflect already-approved P2a and owner execution authorization.
