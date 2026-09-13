@@ -51,3 +51,5 @@ Pallet correction frozen/released:44/44 models/Ruff; same two reviewers confirm 
 Both revised D1 reviews accepted; final44/44/Ruff verified. All source writers released. Coordinator owns sole first starter/rival physical lane under guide using integrated seven-file candidate; root/OMP preflight clear. R0 report remains unrelated/uncommitted.
 
 First D1 live run a369bef stopped/HOLD at source-proven lab speech input gap; both reached lab, no starter proof. All owned processes/resources closed. Sol now owns route Lua + route unit model only for script5 dialogue correction; Claude has reply-only starter interaction check. No live lane.
+
+Parallel code lanes: Sol1 owns current lab speech correction in starter Lua/unit; Sol2 /root/d1_rb_parcel_sol owns NEW parcel Lua/unit and its report only (exact dispatch). No shared file overlap. Parcel integration/live waits successful starter checkpoint and separate grant. Claude checks starter interaction; no live runner.
