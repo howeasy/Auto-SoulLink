@@ -9,9 +9,9 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 - Canonical: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`; coordinator Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa` on HOUNDOOM owns guide/register, reviews and integration.
 - Product behavior15727ec; scripted test source6283d58. Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
 - D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed, no live lane. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
-- No active source/test-file writer. Sol builders and independent source reviewers are released.
-- Two new isolated source reviewers own only D1-yellow-claim-successor.md and E1-red-claim-successor.md under reviews, conditional on matching onboarding/Git/scope ACK. No code/test/emulator/JAR execution grants. Exact bounded questions are in the master guide.
-- Claude Gen1-Collab2 owns only the next R0 contract report correction under the guide's exact source/design scope, conditional on matching ACK; no code/runtime authority. OMP has only the frozen D0-S receipt check, read-only/reply-only, conditional on matching ACK.
+- Sol /root/n0_enrollment_sol owns only tests/live/test_gen1_selected_idle.py and its named D0-RB entry report/receipts under the guide grant; other source/test writers are released.
+- Yellow and E1 source reviewers completed and released their reports. Yellow is deferred post-RC; E1 implementation is paused for gameplay priority.
+- Claude Gen1-Collab2 owns reviews/D1-RB-claim-successor.md (ACK at b1439a2); OMP owns reviews/RC-RB-scope-map-successor.md. Both source-only reports, no execution. R0 revision4 is frozen/released and awaiting reconciliation; D0-S receipt check is complete.
 - Speed-gate remains parked and administratively locked. Its repaired metadata and original worktree are preserved; see [recovery receipt](reviews/SPEED_GATE_ADMIN_RECOVERY_2026-09-13.md).
 
 ## Preserved checkout classifications
