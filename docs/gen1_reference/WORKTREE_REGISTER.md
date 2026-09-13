@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Sol R2 ACK verified, ACTIVE build-only on new exact paths. OMP first-run cleanup receipt check read-only ACTIVE conditional on ACK. Root writes first physical report; no live lane, original artifacts frozen.
+
 N0 first lane RELEASED after identity-checked stop: no EmuHawk, all captured CLI/children exited, summary0a73bc91 retained HOLD. Sol R2 controller READY on new .cache/report paths in guide, old files frozen. No live/source writer; new build requires ACK/activation.
 
 N0 first run has a confirmed controller false-HOLD: idle client owes no observation. Bounded identity-checked CLI shutdown authorized in guide to trigger reviewed cleanup and retain first-run failure. Live lane remains reserved until survivor audit; no production fix or green verdict.
