@@ -407,6 +407,12 @@ function M.start(launch,options)
             local function native_pending()
                 if not self.native then return false end
                 if self.native_host.failure() then return true end -- latched: stays held (no forward recovery in this build)
+                -- A non-terminal local lease holds on its own: after this side's commit receipt is ACKed
+                -- and pruned, the original routine still sits at .waitForReceipt (trade_service.asm:135-145)
+                -- until the peer verifies and the release command arrives; no pending command, query or
+                -- failure says so, and a free frame there would run it unowned.
+                local lease=assert(self.native.native_store:read()).phase
+                if lease~="idle" and lease~="released" then return true end
                 local entry=assert(journal:pending_commands())[1]
                 if entry and self.native.handles(require("gen1_runtime").unwrap(entry.body,launch.player))then return true end
                 return require("gen1_receptionist_client").query(memory,native)~=nil

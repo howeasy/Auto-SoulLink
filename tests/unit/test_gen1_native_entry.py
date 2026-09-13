@@ -356,3 +356,34 @@ def test_a_native_revoke_drops_the_remembered_verdict_at_once_and_holds_until_a_
         local b=acknowledge('released','clean');assert(b.native_reattach.verdict=='released')
         assert(service.reattach_server.read_digest==service.reattach_read_digest)
     ''')
+
+
+def test_the_native_hold_outlives_the_commit_receipt_until_the_peer_verifies_and_the_lease_is_released(lua):
+    """Two-peer delayed verification: A's commit routine completes and its receipt is ACKed and pruned
+    (no pending command, no receptionist query, no host failure) while the local lease is still
+    `complete` because B has not verified and no release command exists yet. A's original routine sits
+    at .waitForReceipt; the native vote must stay armed with zero frames advanced and no repeated
+    physical step until the lease reaches `released`, then the loop frees. Fails on old code (the
+    vote disarmed on the first slice after the prune)."""
+    lua.execute("overlay(TILES)".replace("TILES", "{" + ",".join(map(str, TILES)) + "}"))
+    lua.globals().launch_json = json.dumps(launch())
+    lua.execute(r'''
+        start(launch_json)
+        assert(service:step());acknowledge('released','clean');assert(service:step());assert(loop_built and not physical)
+        native_commands={{command_id='c',body={cmd='native_trade_commit'}}}
+        assert(service:step());assert(physical and service.native_host.armed())
+        lease.phase='armed'
+        for _=1,3 do assert(service:step())end                   -- the routine reaches DONE: receipt taken
+        lease.phase='complete';assert(#native_commands==0 and native_steps==3)
+        local at=frame
+        for _=1,6 do                                             -- ACKed and pruned, B still verifying
+            assert(service:step())
+            assert(physical==true and service.native_host.armed() and service.holds:held('native'),'vote dropped while the lease is open')
+            assert(frame==at and native_steps==3,'frames advanced or the routine was stepped again while waiting for release')
+        end
+        assert(service.native_pending()==true)
+        lease.phase='releasing';assert(service:step());assert(physical and service.native_host.armed())
+        lease.phase='released';assert(service:step())            -- release applied: terminal lease, vote dropped
+        assert(not physical and not service.native_host.armed() and service.native_host.failure()==nil)
+        assert(service:step());assert(not physical and frame==at)
+    ''')
