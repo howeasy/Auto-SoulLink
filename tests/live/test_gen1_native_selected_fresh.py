@@ -144,6 +144,12 @@ async def checked_downloads(client, run, run_directory, session_id, variants, ba
         assert manifest["launcher_sha256"] == hashlib.sha256(launcher.encode()).hexdigest()
         script = run_directory / f"download-{player}.lua"
         script.write_text(launcher)
+        # A downloaded launcher normally learns the project root from a prior
+        # selection. Supply that same cache input so a headless gate never
+        # waits in its first-run FolderBrowserDialog.
+        root_cache = script.with_name("slink_path.cfg")
+        root_cache.write_text(ROOT.as_posix() + "/\n")
+        assert root_cache.read_text().strip() == ROOT.as_posix() + "/"
         plan = prepare(run_directory / "host-preflight", manifest, rom=rom, launcher=script,
                        base_config=base_config)
         private_saves = Path(plan["save_directory"])
@@ -192,6 +198,7 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
         client_run_root = None
         marker = None
         turns = []
+        completed = False
 
         async def wait(name, player, seconds):
             file = directory / f"{name}-{player}.json"
@@ -374,6 +381,7 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                 "manager_id": run["run_id"], "session_id": session_id, "variants": variants,
                 "players": {player: {"phases": ready[player]["phases"], "held_frame": ready[player]["held_frame"],
                                       "loop_started": ready[player]["loop_started"]} for player in ("a", "b")}})
+            completed = True
         except BaseException as error:
             publish(directory / "harness-error.json", {"type": type(error).__name__, "reason": str(error)[:1000]})
             raise
@@ -398,6 +406,8 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                 assert (not client_run_root.is_symlink() and not client_run_root.is_junction()
                         and client_run_root.resolve().parent == client_base.resolve()
                         and marker.read_text() == client_run_root.name == session_id), "client journal ownership changed"
+                if not completed:
+                    shutil.copytree(client_run_root, directory / "client-journal-failure")
                 shutil.rmtree(client_run_root)
 
     asyncio.run(scenario())
