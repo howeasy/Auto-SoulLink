@@ -26,7 +26,8 @@ FIELDS = {
     "inventory",
     "idle",
 }
-OPTIONAL = {"pending_inventory_retry"}
+OPTIONAL = {"pending_inventory_retry", "native"}
+NATIVE = {"lease_phase", "host_armed", "host_failure"}
 CURSOR = {"sequence", "operation_id", "frame"}
 IDLE = {
     "pending_events",
@@ -65,8 +66,8 @@ def _inventory_semantics(value):
 
 
 def verify(runtime, player, evidence, stage, binding):
-    if not runtime.free_service or runtime.native_trade:
-        raise JournalError("service continuity is limited to non-trade RBY free service")
+    if not runtime.free_service:
+        raise JournalError("service continuity is limited to RBY free service")
     if not isinstance(evidence, dict) or set(evidence) - OPTIONAL != FIELDS or evidence.get("schema") != SCHEMA:
         raise JournalError("typed RBY free-service continuity proof required")
     if evidence["service_epoch"] != runtime._service_epoch:
@@ -120,6 +121,31 @@ def verify(runtime, player, evidence, stage, binding):
         for entry in transactions(document).values()
     ):
         raise JournalError("native trade state prohibits service continuity")
+    if runtime.native_trade:
+        # Terminal-only native continuity: the player's held start-of-script read must have been
+        # accepted and released by the server (nothing published/armed/done, lease idle or released,
+        # no pending native command, no open trade at that read); a missing or held read refuses.
+        from server.gen1_native_reattach_runtime import COMPONENT as REATTACH
+        entry = document["components"].get(REATTACH, {}).get(player)
+        if entry is None:
+            raise JournalError("native service continuity requires the accepted held reattach read")
+        # The read must be THIS admission's held read: the control binding digest rotates on every
+        # HELLO (the client's context generation does not, durable_runtime re-HELLOs the same entry), so
+        # a released entry from an earlier session is not evidence about the current process until the
+        # client republishes its read under the new binding.
+        if (entry["binding_digest"] != binding["binding_digest"]
+                or entry["context_generation"] != binding["context_generation"]):
+            raise JournalError("native service continuity requires the current admission's held reattach read")
+        if entry["verdict"] != "released" or entry["lease_phase"] not in {"idle", "released"} or entry["physical"] != "clean":
+            raise JournalError("native service continuity requires a released idle reattach read")
+        # And the client's own held statement of its native state now, not only the recorded read.
+        native = evidence.get("native")
+        if (not isinstance(native, dict) or set(native) != NATIVE
+                or native["lease_phase"] not in {"idle", "released"} or native["host_armed"] is not False
+                or native["host_failure"] is not None):
+            raise JournalError("native service continuity requires an idle native lease and an unarmed, unfailed native host")
+    elif "native" in evidence:
+        raise JournalError("native continuity fields belong to the native-selected service")
 
     point = evidence["inventory"]
     current = validate(point, metadata, initial["binding"])

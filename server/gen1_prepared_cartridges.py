@@ -1,4 +1,14 @@
-"""Revalidate a local prepared pair before using its exact cartridge metadata."""
+"""Revalidate a local prepared pair before using its exact cartridge metadata.
+
+Two shapes share one class so every `isinstance(..., PreparedCartridges)` gate and the
+persisted `prepared_artifacts` relative-path readback (gen1_run_config) keep working:
+
+* ``slink-gen1-prepared-artifacts-v1``: a UPR-randomized pair, re-reproduced on every open.
+* ``slink-gen1-canonical-companion-pair-v1``: the canonical companion pair, derived inside the
+  run from the players' admitted CLEAN cartridges by the installed catalog spans and pinned to
+  the catalog's final hashes (`stage_canonical_pair`). No UPR, no seeds, no randomized
+  provenance; `unpatched_rom`/`patch` are unavailable and `prepared_targets` presents nothing.
+"""
 from __future__ import annotations
 import copy
 import hashlib
@@ -8,11 +18,65 @@ from pathlib import Path
 
 from patch.tools.make_ups import ups_apply,ups_create
 from server.gen1_admission import CONTRACT_SCHEMA,cartridge_metadata,clean_profiles
+from server.gen1_cartridge_profiles import companion_profiles
 from server.gen1_companion_patch import apply_to_candidate
+from server.patch_plan import PatchSpan,apply_spans
 from server.gen1_upr_policy import validate_file,verify_effective
 from server.gen1_upr_scan import LAYOUT
 from server.protocol import canonical_json,decode_frame,digest
 from server.upr_runner import BRIDGE_PIN,JAR_SHA256,SOURCE_COMMIT,canonical_seed,run_pinned,strict_log
+
+
+CANONICAL_SCHEMA="slink-gen1-canonical-companion-pair-v1"
+SPAN_OPTIONS={"protected":((0x100,0x150),),"bank_size":0x4000}
+
+
+def _companion_from_clean(rom):
+    """The canonical companion for one admitted clean cartridge, or a ValueError."""
+    clean=clean_profiles()
+    sha1=hashlib.sha1(rom).hexdigest()
+    variant=next((v for v,p in clean.items() if p["final_rom_sha1"]==sha1),None)
+    if variant is None or hashlib.sha256(rom).hexdigest()!=clean[variant]["rom_sha256"]:
+        raise ValueError("canonical companion pair requires the admitted clean cartridge")
+    installed=companion_profiles()[variant];manifest=installed["manifest"]
+    spans=[PatchSpan(row["offset"],bytes.fromhex(row["before_hex"]),bytes.fromhex(row["after_hex"]),row["label"])
+           for row in manifest["companion"]["spans"]]
+    final=apply_spans(rom,spans,**SPAN_OPTIONS)
+    if (hashlib.sha256(final).hexdigest()!=installed["rom_sha256"] or hashlib.sha1(final).hexdigest()!=installed["final_rom_sha1"]
+            or installed["final_rom_sha1"]!=manifest["final_sha1"]):
+        raise ValueError("installed companion spans do not reproduce the canonical artifact")
+    return variant,installed,final
+
+
+def stage_canonical_pair(directory,clean_paths):
+    """Derive and pin the canonical companion pair inside a run from two clean cartridges.
+
+    Writes ``final/<player>/slink_<variant>.gb`` + ``manifest.json`` and ``prepared-artifacts.json``
+    under ``directory`` (which must be inside the run: gen1_run_config.configure_runtime). Returns the
+    directory. Never accepts a patched or unknown input; never reads the build tree.
+    """
+    if not isinstance(clean_paths,dict) or set(clean_paths)!={"a","b"}:raise ValueError("both players' clean cartridges required")
+    directory=Path(directory).resolve()
+    if directory.exists() and any(directory.iterdir()):raise ValueError("canonical pair directory must be empty")
+    players={}
+    for player,source in clean_paths.items():
+        rom=Path(source).read_bytes()
+        variant,installed,final=_companion_from_clean(rom)
+        target=directory/"final"/player;target.mkdir(parents=True,exist_ok=True)
+        rom_name=f"slink_{variant}.gb";(target/rom_name).write_bytes(final)
+        manifest=copy.deepcopy(installed["manifest"]);manifest["output"]=f"final/{player}/{rom_name}"
+        encoded=json.dumps(manifest,sort_keys=True,separators=(",",":")).encode()
+        (target/"manifest.json").write_bytes(encoded)
+        players[player]={"variant":variant,"rom":manifest["output"],"rom_sha1":installed["final_rom_sha1"],
+            "rom_sha256":installed["rom_sha256"],"manifest":f"final/{player}/manifest.json",
+            "manifest_sha256":hashlib.sha256(encoded).hexdigest(),"content_profile_hash":installed["content_profile_hash"]}
+    published={"schema":CANONICAL_SCHEMA,"status":"canonical_requires_runtime_admission","runtime_ready":False,"players":players}
+    # The descriptor is published last and atomically: a partial stage has no descriptor and
+    # PreparedCartridges refuses the directory, so a run is never created over half a pair.
+    index=directory/"prepared-artifacts.json";temporary=index.with_suffix(".tmp")
+    temporary.write_text(json.dumps(published,sort_keys=True,indent=1),encoding="utf-8");temporary.replace(index)
+    PreparedCartridges(directory)  # readback proof before the caller publishes the run
+    return directory
 
 
 class PreparedCartridges:
@@ -31,6 +95,9 @@ class PreparedCartridges:
             return result
         def read_json(relative):return decode_frame(path(relative).read_bytes())
         published=read_json("prepared-artifacts.json")
+        if isinstance(published,dict) and published.get("schema")==CANONICAL_SCHEMA:
+            self.provenance="canonical_companion";self._init_canonical(published,path);return
+        self.provenance="reproduced_upr"
         if (set(published)!={"schema","status","settings_sha256","custom_names_sha256","players","runtime_ready"}
                 or published["schema"]!="slink-gen1-prepared-artifacts-v1" or published["status"]!="prepared_requires_runtime_admission"
                 or published["runtime_ready"] is not False or not isinstance(published["players"],dict)
@@ -109,6 +176,34 @@ class PreparedCartridges:
             self._unpatched[player]=candidate;self._patches[player]=encoded
         if seeds[0]==seeds[1]:raise ValueError("prepared paired seeds must differ")
 
+    def _init_canonical(self,published,path):
+        """Re-verify the staged canonical pair against its descriptor AND the installed catalog."""
+        if (set(published)!={"schema","status","runtime_ready","players"} or published["status"]!="canonical_requires_runtime_admission"
+                or published["runtime_ready"] is not False or not isinstance(published["players"],dict)
+                or set(published["players"])!={"a","b"}):
+            raise ValueError("complete canonical companion pair required")
+        self._profiles={};self._roms={};self._manifests={};self._unpatched={};self._patches={}
+        companions=companion_profiles()
+        for player,entry in published["players"].items():
+            if (not isinstance(entry,dict) or set(entry)!={"variant","rom","rom_sha1","rom_sha256","manifest","manifest_sha256","content_profile_hash"}
+                    or entry["variant"] not in companions):
+                raise ValueError("canonical player descriptor differs")
+            installed=companions[entry["variant"]]
+            # Exact player-scoped paths: an aliased descriptor pointing both players at one file
+            # would pass every hash check while erasing the per-player artifact distinction.
+            if (entry["rom"]!=f"final/{player}/slink_{entry['variant']}.gb" or entry["manifest"]!=f"final/{player}/manifest.json"):
+                raise ValueError("canonical companion artifact path differs from its player")
+            final=path(entry["rom"]).read_bytes();encoded=path(entry["manifest"]).read_bytes()
+            manifest=decode_frame(encoded)
+            expected=copy.deepcopy(installed["manifest"]);expected["output"]=entry["rom"]
+            if (hashlib.sha1(final).hexdigest()!=installed["final_rom_sha1"] or hashlib.sha256(final).hexdigest()!=installed["rom_sha256"]
+                    or entry["rom_sha1"]!=installed["final_rom_sha1"] or entry["rom_sha256"]!=installed["rom_sha256"]
+                    or entry["content_profile_hash"]!=installed["content_profile_hash"]
+                    or hashlib.sha256(encoded).hexdigest()!=entry["manifest_sha256"]
+                    or canonical_json(manifest)!=canonical_json(expected)):
+                raise ValueError("canonical companion artifact/manifest differs from the installed catalog")
+            self._profiles[player]=copy.deepcopy(installed);self._roms[player]=final;self._manifests[player]=manifest
+
     def contract(self):
         return {"schema":CONTRACT_SCHEMA,"players":{p:cartridge_metadata(value) for p,value in self._profiles.items()}}
 
@@ -118,5 +213,9 @@ class PreparedCartridges:
 
     def manifest(self,player):return copy.deepcopy(self._manifests[player])
     def rom(self,player):return self._roms[player]
-    def unpatched_rom(self,player):return self._unpatched[player]
-    def patch(self,player):return self._patches[player]
+    def unpatched_rom(self,player):
+        if player not in self._unpatched:raise ValueError("canonical companion pair has no unpatched randomized artifact")
+        return self._unpatched[player]
+    def patch(self,player):
+        if player not in self._patches:raise ValueError("canonical companion pair has no distributable patch")
+        return self._patches[player]

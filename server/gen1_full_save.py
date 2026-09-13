@@ -7,9 +7,9 @@ import json
 from pathlib import Path
 
 from server.gen1_native_trade_receipts import _bytes
-from server.protocol_journal import JournalError
-from server.protocol import digest
 from server.gen1_trade_preparation import validate_checkpoint
+from server.protocol import digest
+from server.protocol_journal import JournalError
 from server.save_file_receipt import verify_file_image
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -115,7 +115,8 @@ def verify_receipt(policy, trade, player, command, receipt, checkpoint):
             or receipt['final_sha1']!=policy.manifests[player]['final_sha1']):
         raise JournalError('full-save receipt belongs to another command/context')
     binding=policy.runtime.gate.sessions[player].metadata['control_binding']
-    previous=policy.execution.observed.get((player,command['command_id'],binding['binding_digest']))
+    from server.gen1_native_progress import progress_for
+    previous=progress_for(policy.execution,player,command['command_id'],binding)
     if (previous is None or receipt['point']!=previous.get('full_save_point')
             or receipt['image_hex']!=previous.get('save_image_hex')):
         raise JournalError('full save lacks its owned initial window')

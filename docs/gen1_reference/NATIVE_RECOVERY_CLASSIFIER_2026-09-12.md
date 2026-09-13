@@ -1,0 +1,213 @@
+# Native trade post-COMMIT recovery: classifier matrix (B2), 2026-09-12
+
+Branch `claude/gen1-native-free-service`. Status: **revision 4 after Codex review, no forward action
+enabled**. Derived from current source; section 7 probe 2 (emulator killed mid-COMMIT, read-only reboot) has
+been exercised live on Y/Y (evidence `.cache/native-reboot-probe-bqb4hlh6/`, commit a4e3f1b); probe 1 has not.
+
+## 1. Evidence layers (each independent; none may stand in for another)
+
+| Layer | Source of truth | What it can and cannot say |
+| --- | --- | --- |
+| S1 server phase | `paired-trade` record (`trade_coordinator.py`): `commit_persisted` .. `link_committed`, `applied[p]`, `verified[p]`, `recovery_required` | Authoritative COMMIT ordering. Says nothing about the cartridge. |
+| S2 server high-water | `gen1-native-windows[p][commit command]` (d28bd4a): `armed`, `sequence_length` = confirmed original-routine prefix of `SEQUENCE` = service, InternalClockTradeAnim, TryEvolvingMon, SavePartyAndDexData (`gen1_native_trade_receipts.py:15`); `host.frame`, `intent_digest` (binds the lease token) | A **lower bound** on progress: a window is issued only after the client proved the previous prefix, so prefix n means at least hook n fired. It lags reality by up to one 60-frame window; mutation can occur after the last renewal. `armed:false` (the `before` window) means credits were granted before any write. No window at all means no credits were ever granted for this command. |
+| S3 server preparation | `gen1-native-preparation[tx][p]` (08faa13): full B checkpoint (`cart_hex`, party, storage, map, name), full-save point, prompt closure | The exact prepared image B; the predicted A comes from `TradeResultRules` (`gen1_trade_result.py`) applied to the proposal. |
+| C lease | `native.json` (`gen1-native-trade-lease-v1`, `state_store.lua`): `idle` / `armed` (intent + token, persisted BEFORE the RAM write, `gen1_native_trade_executor.lua:191-209`) / execution receipts per hook / `releasing` | Client-durable only. Missing or checksum-valid-but-older revision is indistinguishable from never-armed (`state_store.lua:53-63` idle-inits a missing file; no `context_generation`/`physical_instance` binding, `gen1_native_runtime.lua:129-143`). |
+| O overlay | 16 WRAM bytes at `foreground.overlay` (`0xC508` on Red, outside the observed main-data range `wMainDataStart..End` = `0xD2F7..0xDA80`), byte4 `1`=published, byte5 `5`=APPLY armed / `7`=DONE waiting for release / `8`=RELEASE, byte6/7 generation published/completed, byte8 result (`0` ok, `2` uncertain append), bytes 12-15 token (`trade_service.asm:69-160`, `gen1_native_trade_executor.lua:107-111,156-168,207-208,234`) | The cartridge's own progress word, WRAM only. NOT in today's inventory/native checkpoint: the classifier needs an explicit `union_hex` readback (the executor already reads it, `:142`). While the routine runs the overlay is swapped with the tile backup (`trade_service.asm:88-95`), so mid-routine it reads as tiles. |
+| R readback | party readback + storage + save region at the next write-safe checkpoint, or at reattach if the CPU is inside the routine | Physical shape now. Compared to B (S3) and A_pred (S3 + rules). Equal bytes only prove shape, never operation. |
+| S SaveRAM | `readback.save` region of CartRAM / the save file | The ONLY state that survives an emulator restart. `SavePartyAndDexData` writes it as the last routine step (`native_trade.asm:203`). |
+| F file | `save_file_receipt` (`slink-saveram-file-v1`, owned frame, flushed, readback) | Durability of the file on the host, only for a frame inside an owned window (`gen1_native_policy.verified`, now durable-window aware, 170a69c). |
+
+Rules the matrix applies (Codex decisions of 2026-09-12): post-COMMIT never rolls back, never re-runs the
+mutating routine from before-looking bytes alone, never synthesizes `trade_applied`/`trade_verified` from
+bytes; `unknown -> hold` is a terminal outcome for this build, reported as such, not as recovery.
+
+**Acceptance criterion (proposed, needs the owner's word), stated as the exact invariant:** *at most one
+surviving logical committed effect per side*. The logical effect of the routine is "own mon removed, incoming
+mon appended, dex updated, then saved" applied to the prepared image B; the durable store (SaveRAM plus the run
+journal: `applied`, `verified`, identity migration, link commit) may hold that effect at most once. What the
+invariant permits and forbids, precisely:
+
+- A second execution of `SavePartyAndDexData` that writes bytes identical to what SaveRAM already holds is
+  **permitted**: it is a second save invocation, not a second effect. Counting save invocations would forbid
+  the only safe completion of an equal-byte trade (see rule 3) for no durable gain.
+- A second `RemovePokemon`/`AddEnemyMonToPlayerParty` acting on a WRAM party that already holds A is
+  **forbidden**: that is the duplicate effect (a second mon removed, the incoming appended twice). After a
+  witnessed reboot WRAM is re-derived from S, so a re-run acts on S: safe iff S==B (row 6), never when
+  S==A_pred with a real difference (rows 7/8), because the routine would then act on A.
+- A repeated *visible* routine (fade, animation, evolution screen, trade music) after a reboot that erased
+  WRAM is accepted as a replay and disclosed on the HUD: it acts on the same B and yields the same A.
+
+If the owner instead requires *no duplicate animation*, rows 6-8 collapse to hold whenever any window past
+`before` exists, and only row 1 forwards after a reboot. Nothing below enables either.
+
+## 2. Physical facts that shape the classes (source)
+
+1. The routine is monolithic and cannot be resumed midway: metadata copies, Yellow happiness, `RemovePokemon`,
+   `AddEnemyMonToPlayerParty` (party mutated), 100 delay frames + `InternalClockTradeAnim`, `TryEvolvingMon`,
+   screen restore, `SavePartyAndDexData` (`native_trade.asm:120-203`). Only WRAM changes until the final save.
+2. After completion the cartridge spins in `.waitForReceipt` inside DelayFrame until byte5 becomes `8`
+   (`trade_service.asm:118-160`, "a disconnected client stays in this foreground lease for recovery"): a
+   completed-but-unreleased side is physically halted at DONE, not playing.
+3. The routine enters only when byte4==1, byte5==5 and byte6!=byte7 at the DelayFrame bridge (`:69-83`); under
+   bounded stepping no frame runs without a server window. **Hazard:** if a client restarts into ordinary
+   free_service with an APPLY-armed overlay still in WRAM, the next free frame runs the trade routine with no
+   ownership. The reattach must read O before the loop may free-run (see §4, rule 0).
+4. A full emulator restart loses WRAM: the game reboots from SaveRAM, so R == S at the first checkpoint.
+   Anything the routine did before `SavePartyAndDexData` is physically gone. O is NOT zeros after a boot: the
+   16 bytes are the borrowed `wSurroundingTiles`/`wTileMapBackup` union and read as ordinary tile data (the
+   probe read `2A2B2C2C2323...`, byte4 = 0x23 != 1, equal to the lease's pre-write `union_hex`), so "not
+   armed" is decided by the published/phase bytes (byte4 != 1 or byte5 != 5 or byte6 == byte7), never by
+   emptiness (`gen1_native_reattach.lua`).
+5. Equal-byte trade (both halves identical bytes): B == A_pred for party and save region; R/S can never
+   distinguish applied from not applied.
+
+## 3. Classes per player (post-COMMIT, `recovery_required` set on reopen)
+
+Inputs: HW (S2 prefix: `none` no window, `0` before-only, `1..4`), O (overlay word when the emulator process
+survived, else `n/a`), R, S, C, F. "A" means equals A_pred, "B" equals the prepared image, "X" anything else.
+
+| # | Situation | HW | O | S | R | Class | Permitted action |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Commit dispatched, no window ever issued | none | not armed / n/a | B | B | `never_issued` | Forward: re-deliver the same pending `native_trade_commit` (same command id, same intent digest); the client re-prepares from the durable intent. Safe because `authorize_apply` needs a window and none existed. Requires C not `applied/releasing`; if C claims progress, class 10. |
+| 2 | No window, but O armed (`5`) | none | `5`, token == intent | B | B | `armed_without_authority` | Hold. A client wrote the overlay without a window (bug/tamper). Disarm only under an explicit held write after review. |
+| 3 | Before-window only, same emulator process, overlay not armed | 0 | `4`!=1 or `5`!=5, read under the reattach hold | B | B | `credits_unused` | Forward as 1 only with operation-bound proof that the routine never ran: overlay never consumed (byte6==byte7 or byte4!=1) AND the client lease has no execution receipt AND the CPU is at the DelayFrame bridge / overworld loop (PC, SP and stack words per `gen1_write_safety.lua:53-66`). HW=0 is a lower bound only (one window may have run up to 60 frames), so B-looking bytes alone never decide. Non-equal-byte only. After an emulator reboot this row does not apply (row 6). |
+| 4 | Before-window only, overlay armed, same emulator process | 0 | `5`, byte6!=byte7, token == intent | B | B | `armed_pending` | Hold the free loop (rule 0). Forward only when the CPU provably has not entered the service: PC/SP inside the overworld DelayFrame path (`gen1_write_safety.lua:53-66` invariant) or at the bridge before `save_overlay_on_stack` (`trade_service.asm:88`); then re-issue windows for the same command and let the routine start under ownership. If the CPU is anywhere else, row 5 or row 10. Requires C lease armed with the same token. |
+| 5 | Routine entered, emulator alive, CPU inside the routine or at DONE | >=1 | tiles (mid) or `7` (DONE) | B or A | partial/A | `in_progress` / `done_unreleased` | Forward: re-issue armed windows for the same command with the same intent; continue stepping to DONE, collect the execution receipt (hooks already fired are in C; the server accepts only prefix >= HW), then release. Requires emulator framecount >= HW `host.frame`, same ROM/save identity, C present and consistent. Any mismatch: class 10. |
+| 6 | Emulator process replaced (ordinary crash), save region == B at the witnessed reboot | any <4 | tiles (WRAM re-derived) | B | B (boot) | `process_replaced` | Hold in this build (physical owner bound at enrollment: `gen1_held_faint.verify_owned_host`, `gen1_native_progress.durable_progress` now also bound to the current admission, a35d367). Through section 6: S==B at a witnessed CONTINUE boot proves **no surviving logical effect**, not that the routine never ran (it may have removed/appended/animated before the save; the reboot erased that). Under the invariant the forward action is a single re-run of the same commit on the same B, disclosed as a replay; under a *no duplicate animation* criterion this row holds unless HW==none. Equal-byte trades: same action (S==B==A_pred; the re-run acts on B and leaves one effect, with a real once-only receipt). **Premise confirmed live (Y/Y, a4e3f1b):** CartRAM sha256 == killed file == the retained full-save receipt of B over all 32 KB, party == B, overlay in tile shape, boot witnessed load -> loaded(status 2) -> chose -> pressed -> enter. |
+| 7 | Emulator process replaced, save region == A_pred, server witnessed the save hook | 4 | n/a | A | A (boot) | `process_replaced_saved` | Hold in this build; through section 6: operation proof = the durable prefix-4 window + S==A_pred + the file the new process booted from. Caveat examined: the prefix is the client's hook report accepted at renewal (`gen1_native_execution.py` armed phase checks `sequence == SEQUENCE[:n]` and frame/step continuity, it cannot re-verify a bus hook from bytes), so prefix 4 proves the enrolled owner reported reaching the save hook inside an owned window, not that the write finished; S==A_pred supplies the finish. Forward = file readback receipt under a new window on the new process (a read, never a flush), then verified/finalize. Equal-byte: S==A_pred is vacuous (S==B too), so the pair (prefix 4, no receipt) is not a completion proof; action = re-run as row 6, which is safe under the invariant because the re-run acts on bytes equal to B. |
+| 8 | Emulator process replaced, save region == A_pred, server never witnessed the save hook | <4 | tiles | A | A | `saved_unwitnessed` | Hold, owner decision. Bytes alone; no once-only provenance for the save step (the window lagged the routine); a re-run is forbidden by the invariant (it would act on A). Equal-byte: S==B, so re-run as row 6. |
+| 9 | Peer already `verified`/`link_committed` on the other side; this side any of 1-7 | | | | | as above | The peer's completion never changes this side's class; forward completion is per side. Releases (`native_trade_release`) stay pending until both are done; preparation evidence is retained until then (08faa13). |
+| 10 | Lease missing or rolled back (revision below the server high-water), armed lease after process replacement with no re-enrollment record (section 6), O in an unexpected published state (byte4 == 1 with a phase or token that matches no lease), R/S == X, result byte8 == 2, or any row whose only proof would be a byte shape (after rule 3 no decidable row is decided by shape; whatever falls outside the rows lands here) | | | | | `unknown` | Hold both sides. Record the class and the evidence digests durably; report; no mutation, no release, no rollback. |
+| 11 | Savestate load / file rollback detected (framecount < durable window frame with the same process, or S older than the prepared image) | | | | | `rolled_back` | Hold both sides permanently for this build; owner decision. |
+
+Pre-COMMIT (`preparing`, `both_prepared`): interruption cancels and aborts as today (`_interrupt_trades`);
+the retained preparation stays until the aborts close (08faa13) so a client can restore its overlay.
+
+## 4. Rules before any forward action (must be true of the implementation)
+
+0. **Hold before the first frame.** `gen1_client_entry.lua` free-runs (`emu.yield()`, `:451`) until the first
+   write-safe visible overworld frame before `begin()` builds the host (`:376-378`) and refuses a native
+   manifest (`:26`); with an APPLY-armed overlay in WRAM that first free frame would run the routine unowned
+   (fact 3). `gen1_native_runtime.new` constructs the bounded owner held (`platform_bounded_execution`, no frame
+   without `authorize_step`), so the hazard is only the frames before `new()`. The composed native entry (B3)
+   must therefore call `new()` first, then `gen1_native_reattach.read` (2629b27: overlay word, lease summary,
+   PC/SP/bank, under the held owner, asserts no frame moved) and publish it, and keep the hold until the
+   server has classified; admission and control already run under a hold, so classification needs no free
+   frame. The read exists and is tested; the composed entry that calls it first is B3.
+1. Server-durable prewrite witness: the `before` window (`armed:false`) is issued before the overlay write and
+   is journaled (d28bd4a); the lease token is bound through `intent_digest`. Every forward re-issue uses the
+   same command id and the same intent digest; a different token is refused.
+2. High-water monotonicity: windows for a command never regress (`gen1_native_windows.persist` refuses a
+   changed process, an earlier frame or step count, a shorter prefix, a changed start, armed -> not armed, a
+   changed intent digest, or frame/step deltas that differ; a35d367), and a client-reported prefix below HW is
+   refused. A durable window is readable only by the CURRENT admission of the enrolled host (same context
+   generation as the enrollment and the window, same physical instance, same process); a replaced emulator or
+   client reads none (`durable_progress`, a35d367).
+3. Equal-byte trades: never decided by B/A shape, and never `unknown` merely for being equal-byte. Same
+   process: row 1 (no window ever issued), row 5 (live CPU inside the routine or overlay DONE with the token),
+   rows 3/4 only through the CPU/overlay invariants. Replaced process: S==B==A_pred, so a re-run acts on bytes
+   equal to B and leaves exactly one logical effect (the invariant's permitted case: a second save of identical
+   bytes), producing a real once-only receipt; rows 6-8 all map to the row-6 action; prefix 4 alone is not a
+   completion proof (row 7). Row 10 no longer names equal-byte at all; section 6 step 3 agrees.
+4. Both-peer gate: forward actions on one side may run while the other side holds, but finalize requires both
+   sides `verified`; a held side keeps the trade in `recovery_required` and the release commands pending.
+5. Nothing is released (`byte5=8`) until the server has the verified receipt; `.waitForReceipt` keeps the
+   cartridge halted otherwise (fact 2), which is the intended fail-closed state.
+
+## 5. What remains unknown until the controlled probe (exclusive lane) (exclusive EmuHawk lane, Codex-granted)
+
+- Whether a client can be killed and reattached with the CPU inside `SlinkTradeApply` and the bounded stepper
+  resumed (class 5). Probe: arm, step to a known hook, kill the Lua client (not the emulator), relaunch the
+  checked launcher, verify framecount and overlay, resume windows, reach DONE, release.
+- ~~Whether a full emulator restart before `SavePartyAndDexData` really lands on R==S==B with a clean overlay
+  (class 6)~~ Settled on Y/Y (a4e3f1b): S==B byte-for-byte, party==B, overlay in tile shape (not clean:
+  fact 4), CONTINUE path witnessed. Still open on R/B (same sites pinned and companion-verified, 906f28a) and
+  for a NON-equal-byte pair (the Y/Y pair traded identical bytes, so S==A_pred held vacuously too).
+- Whether the file receipt after class 5 (DONE, unreleased, same process) can be produced inside a fresh
+  window without a new mutation; 838af24 proves only that the receipt produced INSIDE the original window
+  verifies after a reopen.
+- The owner decision in classes 6/7 (a replaced emulator process: permanent hold for this build, or a
+  controlled re-enrollment design).
+
+Nothing in §3 is implemented; the classifier code will encode exactly this table, with a test per row and a
+recorded durable decision (class, evidence digests, action) so every hold is auditable and every forward step
+is traceable to a row.
+
+## 6. Controlled re-enrollment of a replaced emulator process (design, not implemented)
+
+Full process replacement is an ordinary crash and cannot stay a permanent hold if the blocker is to close.
+What makes it tractable: after a reboot the cartridge's only durable state is SaveRAM, and the game re-derives
+WRAM from it, so a witnessed boot turns "bytes look like B" into "the durable store IS B and nothing else
+survived". The design:
+
+1. **Reboot witness (client).** With a native manifest the entry installs `gen1_bootstrap_observer` (already
+   present for New Game, `gen1_client_entry.lua:64-70`) on the CONTINUE path too, proving the normal source
+   entry/return of the boot into the overworld, then takes the first write-safe checkpoint under the writer
+   hold with the full SaveRAM image, the party readback, the overlay (expected cleared) and the lease. It
+   publishes this as a `reenrollment` event, not an `observation`: no rule settlement rides on it.
+2. **Server acceptance (new component `gen1-reenrollment`).** Accepted only when: same run, player, cartridge
+   sha1 and save identity as the enrollment; a non-terminal or `recovery_required` trade exists or every
+   obligation is closed; the boot witness verifies; the SaveRAM image equals either the retained prepared
+   full-save point B (08faa13) or the A_pred image derived from it by `TradeResultRules` (save region) with
+   every other byte equal to B (the same equality `verified()` applies today). Anything else: `unknown -> hold`.
+   The record binds old process -> new process with the witness digests; `verify_owned_host`
+   (`gen1_held_faint.py:88-116`) and `durable_progress` consult it and accept the new process from then on.
+   Neither of the two files frozen for lane A is touched (`gen1_runtime.py`, `gen1_runtime_state.py` only
+   register the audit later, as with the other components).
+3. **Classification after re-enrollment** is rows 6-8 with the witness in hand: S==B -> re-run the same
+   commit (same command id, same intent; the client re-prepares from the retained preparation; the ROM
+   routine runs once under fresh windows); S==A_pred with prefix 4 -> file readback receipt under a new window
+   (a read of the file the process booted from, never a flush), then verified/finalize; S==A_pred with prefix
+   <4 -> hold, owner decision; equal-byte -> S==B, re-run as row 6 (rule 3).
+4. **Both peers** re-enroll independently; the trade stays `recovery_required` until both sides reach
+   `verified` or one is held; releases stay pending meanwhile (08faa13 keeps the preparation).
+5. **Window lineage, never a reset.** `gen1_native_windows.persist` refuses a changed `host.process_id` for an
+   existing command (d28bd4a, "progress moved backwards"). Re-enrollment does not relax that: the old entry is
+   frozen as-is, and a window issued to the new process is recorded as a new lineage member of the same
+   command (`lineage: [old entry digest]`, `sequence_length` floor = old prefix, `start` = new frame), accepted
+   only when the `gen1-reenrollment` record maps the old process to the new one for that player. A file-read
+   window on the new process therefore never overwrites the old grant, and the old prefix is never reset.
+6. **Lease supersession.** `native.json` lives in the client storage root and survives an emulator restart. The
+   re-enrollment event carries the lease summary (revision, state, token, execution receipts present or
+   `missing`); the server records it in `gen1-reenrollment` and the reissued command carries
+   `supersedes_lease: <digest>`; the client archives the old file under the re-enrollment id and opens a fresh
+   idle lease bound to the new `context_generation`/`physical_instance` (which the store binding lacks today,
+   `gen1_native_runtime.lua:129-143`; adding those two fields to the binding is part of this step). An old
+   `armed` lease is evidence for classification only; it never re-arms anything.
+7. **CONTINUE witness (exists, 906f28a).** `data/games/gen1_rby/continue_sites.json` (own file and hash, so
+   journaled New Game receipts keep verifying against `bootstrap_sites.json`) pins, from pret and the clean
+   ROMs for all three titles: `TryLoadSaveFile` entry and `.done` return (register A = `wSaveFileStatus`, 2 =
+   good checksum; note `predef TryLoadSaveFile` runs in `MainMenu` BEFORE any choice, for the save preview),
+   `MainMenu.choseContinue`, `MainMenu.pressedA`, `SpecialEnterMap`. `lua/gen1_continue_observer.lua` requires
+   that order, same SP for the return and the jump, status 2, once, publication under a held frame, and fails
+   closed otherwise; every site's bytes are verified against the built companion artifacts. Server acceptance
+   of the receipt (`rby-continue-receipt-v1`) is part of the `gen1-reenrollment` component (step 2).
+
+Impasse to bring to the owner if (2) is not accepted: without it a replaced emulator has no authority by
+design, so a permanent hold is the only honest outcome for any crash that takes the emulator with it.
+
+## 7. Smallest controlled probe (exclusive EmuHawk lane, Codex-granted; not started)
+
+One title pair (Y/Y, the format that differs most), the existing standalone native composition
+(`tests/live/test_gen1_native_runtime.py`, no production launcher), two runs:
+
+1. **Client killed, emulator alive (rows 4/5).** Drive to the armed COMMIT window; step until the
+   `InternalClockTradeAnim` hook (prefix 2); kill only the Lua client. Expect: the emulator makes no frame
+   (bounded stepping stopped); overlay reads as tiles (mid-routine swap); CPU PC inside the routine. Reattach
+   a client with the start-of-script hold, read overlay + registers + lease, resume windows for the same
+   command from prefix 2, reach DONE, collect receipts, release. Records: durable windows show one lineage,
+   prefix never regressed; party and save equal A_pred; exactly one execution receipt per lease token.
+2. **Emulator killed after the animation, before the save (row 6). DONE (a4e3f1b).** Y/Y, client a killed
+   (SIGTERM on the test-owned EmuHawk, recorded PID) once it reported prefix 2 inside the armed COMMIT window;
+   read-only reboot from the killed SaveRAM copy: CONTINUE witnessed (load f631 -> loaded f667 status 2 ->
+   chose f753 -> pressed f821 -> enter f837, walk proof f1049), first write-safe frame 1050 PC 0x0040 SP
+   0xDFFB, CartRAM sha256 == killed file == retained full-save receipt of B (`2afbab3c...`), save region ==
+   lease `before.save_region_hex`, party[0] == B, overlay `2A2B2C2C2323...` (tile shape, == pre-write
+   `union_hex`), lease `armed` rev 1 with no execution receipt, peer held on "player a disconnected".
+   Limits: the standalone harness constructs `Gen1Runtime` without `free_service`/`native_trade`, so no
+   `gen1-native-windows` record was written (the server-durable prewrite/high-water needs the native-selected
+   composition, B3); and the pair was equal-byte. No forward action was taken; the run stays held.
+
+What each probe settles: (1) whether a paused routine can be resumed under fresh windows (row 5 forward);
+(2) whether a witnessed reboot lands exactly on B with a clean overlay (row 6 premise) and what the CONTINUE
+witness must pin. Neither probe performs a forward action; both leave the run held.

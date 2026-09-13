@@ -66,8 +66,22 @@ function M.new(options)
     end
     function self:adapter(owner)
         assert(allowed[owner],"unknown execution hold owner")
+        -- status/yield_held read the underlying actuator when it offers them, so an owner adapter
+        -- can stand in for the host of a layered owner (platform_bounded_execution). `held`
+        -- reports THIS owner's vote; the physical stop is the actuator's verified readback.
         return {set_held=function(value,why)return self:set(owner,value,why)end,
-            verify=function()return self:verify()end}
+            verify=function()return self:verify()end,
+            status=function()
+                local actual=type(options.host.status)=="function" and options.host.status() or {}
+                local result={};for key,value in pairs(actual)do result[key]=value end
+                result.held=held[owner]==true;result.owner=owner;result.aggregate_held=aggregate()
+                return result
+            end,
+            yield_held=function()
+                if not held[owner] then return false,"owner must hold execution before a held yield" end
+                assert(type(options.host.yield_held)=="function","held yield unavailable on this actuator")
+                return options.host.yield_held()
+            end}
     end
     function self:construct_and_release(owner,why,current,build)
         assert(allowed[owner] and held[owner],"construction owner must hold execution")

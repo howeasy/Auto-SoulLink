@@ -91,3 +91,55 @@ async def test_manager_refuses_a_pre_free_service_gen1_launcher(tmp_path,monkeyp
     response=await manager.RunManager('127.0.0.1').handle_launcher(request)
     assert response.status==409
     assert json.loads(response.text)['error']=='Manager cannot launch a held-service Gen1 run; create a new Gen1 run'
+
+
+@pytest.mark.asyncio
+async def test_manager_native_run_stages_the_canonical_pair_from_clean_inputs_and_selects_native_trade(tmp_path,monkeypatch):
+    """`native: true` keeps clean_contract's admission of the user's CLEAN cartridges, derives the
+    hash-pinned canonical companion pair inside the run, selects native_trade with it, persists the
+    selection, and the run's launcher then carries the native manifest."""
+    import json as _json
+    from pathlib import Path
+    from server.gen1_cartridge_profiles import companion_profiles
+    from server.gen1_launcher import configuration
+    lock=_json.loads((Path(manager.__file__).resolve().parents[1]/'data/pret_sources.lock.json').read_text())
+    clean=Path(manager.__file__).resolve().parents[1]/lock['clean_roms']['pokeyellow']['filename']
+    if not clean.is_file():pytest.skip('legal clean Yellow cartridge required')
+    runs=[]
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(manager,'_save_registry',lambda value:runs.__setitem__(slice(None),value))
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
+        'name':'Native Yellow pair','rom_a':str(clean),'rom_b':str(clean),'rules':{},'start':False,'native':True}))
+    result=_json.loads(response.text)
+    assert response.status==200 and result['ok'] and result['native_trade'] is True and runs[0]['native_trade'] is True
+    expected=companion_profiles()['yellow']['final_rom_sha1']
+    assert all(c['final_rom_sha1']==expected for c in runs[0]['cartridges'].values())   # the companion pair, not the clean inputs
+    directory=tmp_path/runs[0]['run_id']
+    assert (directory/'prepared/prepared-artifacts.json').is_file() and (directory/'prepared/final/a/slink_yellow.gb').is_file()
+    runtime=open_runtime(directory)
+    try:
+        assert runtime.native_trade and runtime.free_service and runtime.prepared_cartridges.provenance=='canonical_companion'
+        launch=configuration(runtime,'b')
+        assert launch['mode']=='free_service' and launch['native_manifest']['final_sha1']==expected
+        assert launch['native_manifest']['output']=='final/b/slink_yellow.gb'
+    finally:runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_manager_native_run_refuses_a_patched_input_and_leaves_no_run_directory(tmp_path,monkeypatch):
+    runs=[]
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('invalid run registered'))
+    monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('yellow','yellow'))   # admission stubbed...
+    bogus=tmp_path/'not-clean.gbc';bogus.write_bytes(b'\0'*1024)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
+        'name':'bad','rom_a':str(bogus),'rom_b':str(bogus),'rules':{},'start':False,'native':True}))
+    assert response.status==400 and 'admitted clean cartridge' in _json_text(response)        # ...the staging is not
+    assert [p.name for p in tmp_path.iterdir() if p.is_dir() and p.name.startswith('run_')]==[]
+
+
+def _json_text(response):
+    import json as _json
+    return _json.loads(response.text)['error']

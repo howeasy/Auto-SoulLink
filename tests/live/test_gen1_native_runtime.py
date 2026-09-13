@@ -71,9 +71,52 @@ def test_reproduced_yellow_pair_uses_native_runtime_and_recipient_rom_evolution(
     asyncio.run(run_native_runtime(("yellow","yellow"),cartridges=cartridges,receptionist=True))
 
 
-async def run_native_runtime(variants,*,disconnect=False,delayed=False,cartridges=None,decision="accept",receptionist=False,receptionist_choice='trade'):
+def _emuhawk_pid_for(script_path):
+    """The test-owned EmuHawk whose --lua argument is this exact client script, or None."""
+    import psutil
+    # run_gate passes the script relative to the repo root; match on that tail.
+    wanted=Path(script_path).relative_to(ROOT).as_posix().lower() if Path(script_path).is_absolute() else str(script_path).replace("\\","/").lower()
+    for proc in psutil.process_iter(["pid","name","cmdline"]):
+        if (proc.info.get("name") or "").lower()!="emuhawk.exe":continue
+        line=" ".join(proc.info.get("cmdline") or []).replace("\\","/").lower()
+        if wanted in line:return proc.info["pid"]
+    return None
+
+
+def reboot_probe(directory,variant,save_path):
+    """Read-only: boot the companion cartridge from the killed run's SaveRAM (run_gate copies it into a fresh
+    gate directory), witness LoadSAV, record PC/SP, overlay, party, save region, WRAM/CartRAM/file hashes.
+    No forward action. Inputs come from the run directory so the record can be completed after the harness
+    itself has exited."""
+    directory=Path(directory).resolve();spec=directory/"reboot-input-a.json"  # EmuHawk resolves relative paths against its own directory
+    # The probe hooks these pret symbols before booting; a missing one must fail here, not hang the gate.
+    source="pokeyellow" if variant=="yellow" else "pokered";target="pokeblue" if variant=="blue" else source
+    names={line.split(" ",1)[1].strip() for line in (ROOT/".cache/pret"/source/f"{target}.sym").read_text().splitlines() if " " in line}
+    missing=[s for s in ("TryLoadSaveFile","MainMenu.choseContinue","MainMenu.pressedA","SpecialEnterMap","wSaveFileStatus") if s not in names]
+    assert not missing,f"{target}.sym lacks {missing}"
+    inputs=json.loads((directory/"input-a.json").read_text());observed=json.loads((directory/"observed-a.json").read_text())
+    publish(spec,{"directory":directory.as_posix(),"player":"a","manifest":inputs["manifest"],
+        "expected_party_blob_hex":observed["snapshot"]["party"][0]})
+    passed,result,log=run_gate("lua/tests/probe_gen1_native_reboot.lua",rom_key=variant+"_companion",timeout=230,quiet=True,
+        config_base=str(directory/"host.ini"),fixture_override=str(save_path),extra_env={"SLINK_NATIVE_REBOOT_INPUT":str(spec)})
+    reboot=json.loads((directory/"reboot-a.json").read_text()) if (directory/"reboot-a.json").exists() else None
+    if reboot is not None:
+        import hashlib
+        for name in ("cart","wram","save_file"):
+            reboot[f"{name}_sha256"]=hashlib.sha256(bytes.fromhex(reboot.pop(f"{name}_hex"))).hexdigest()
+        publish(directory/"reboot-a.json",reboot)
+    return reboot,{"passed":passed,"result":str(result),"log_tail":log[-3000:]}
+
+
+async def run_native_runtime(variants,*,disconnect=False,delayed=False,cartridges=None,decision="accept",receptionist=False,receptionist_choice='trade',kill_emulator=False):
+    """``kill_emulator``: observational probe of the post-COMMIT reboot premise (classifier matrix row 6).
+    After player a's client reports the InternalClockTradeAnim hook (routine prefix 2) inside the armed
+    COMMIT window, the exact test-owned EmuHawk process running client-a is terminated abruptly (recorded
+    PID), then a read-only probe boots the companion cartridge from that run's isolated SaveRAM and records
+    the LoadSAV boot witness, PC/SP, overlay, party, save region and file hashes. No forward action, no
+    re-run, no claim of recovery; both journals and the client store are copied into the evidence dir."""
     ui_only=receptionist and receptionist_choice!='trade'
-    directory=Path(tempfile.mkdtemp(prefix="native-runtime-",dir=ROOT/".cache"))
+    directory=Path(tempfile.mkdtemp(prefix="native-reboot-probe-" if kill_emulator else "native-runtime-",dir=ROOT/".cache"))
     run_id=secrets.token_hex(16);players=dict(zip(("a","b"),variants,strict=True))
     if cartridges is None:
         built={v:build(v) for v in set(variants)};artifacts={p:built[v] for p,v in players.items()}
@@ -185,10 +228,14 @@ async def run_native_runtime(variants,*,disconnect=False,delayed=False,cartridge
         holder.update(server=SLinkServer(data_dir=str(directory),gen1_runtime=runtime),execution=execution)
         publish(directory/"go.json",{"start":True})
         deadline=asyncio.get_running_loop().time()+185;transaction=None;dropped=False
+        killed=None;before_kill=None
         while asyncio.get_running_loop().time()<deadline:
             for p in players:
                 error=directory/f"error-{p}.json"
-                if error.exists():raise AssertionError(error_summary(error))
+                if error.exists():
+                    # After the exact client-a kill the peer's hold is the expected outcome, nothing else is.
+                    if killed is not None and p=="b" and "player a disconnected" in error.read_text():continue
+                    raise AssertionError(error_summary(error))
             async with runtime._lock:
                 if transaction is None and set(runtime.gate.sessions)=={"a","b"}:
                     if receptionist:
@@ -209,6 +256,19 @@ async def run_native_runtime(variants,*,disconnect=False,delayed=False,cartridge
                     if disconnect and not dropped and any(row["frame"]-row["start"]>=200 for row in execution.observed.values()):
                         runtime._writers["a"][1].close();dropped=True
                     if dropped and runtime.trade.status(transaction)["recovery_required"]:break
+                    if kill_emulator and killed is None and any(key[0]=="a" and row.get("sequence_length",0)>=2 and row["armed"]
+                                                                  for key,row in execution.observed.items()):
+                        import hashlib,os,signal
+                        save_path=Path(observed["a"]["save_path"])
+                        before_kill={"observed":{f"{k[0]}:{k[1]}":dict(v) for k,v in execution.observed.items()},
+                            "save_file_sha256":hashlib.sha256(save_path.read_bytes()).hexdigest(),
+                            "trade":runtime.journal.record(NAMESPACE,transaction).value,
+                            "pending":{p:runtime.journal.pending_ids(p) for p in players}}
+                        pid=_emuhawk_pid_for(directory/"client-a.lua")
+                        assert pid is not None,"test-owned EmuHawk for client-a not found"
+                        os.kill(pid,signal.SIGTERM)  # abrupt: no SaveRAM flush, no Lua shutdown
+                        killed={"pid":pid,"at_row":{f"{k[0]}:{k[1]}":dict(v) for k,v in execution.observed.items() if k[0]=="a"}}
+                    if killed is not None and runtime.trade.status(transaction)["recovery_required"]:break
                     if phase=="link_committed" and all(not runtime.journal.pending_ids(p) for p in players):break
                     if phase in {"declined","expired"} and all(not runtime.journal.pending_ids(p) for p in players):break
                 if ui_only and runtime.state().document()['components'].get('gen1-receptionist',{}).get('a',{}).get('phase')=='closed':
@@ -228,6 +288,37 @@ async def run_native_runtime(variants,*,disconnect=False,delayed=False,cartridge
             for job in jobs:
                 passed,path,log=await job;assert passed,f'{path}\n{log[-4000:]}'
             return
+        if kill_emulator:
+            import hashlib,shutil
+            assert killed is not None and runtime.trade.status(transaction)["recovery_required"]
+            for job in jobs:
+                if job.done():pass
+            # Wait for the killed client's gate thread to return (it reports the exit, not a verdict).
+            passed_a,result_a,log_a=await jobs[0]
+            trade=runtime.journal.record(NAMESPACE,transaction).value
+            save_path=Path(observed["a"]["save_path"])
+            after_kill={"save_file_sha256":hashlib.sha256(save_path.read_bytes()).hexdigest(),
+                "trade_phase":trade["phase"],"applied":sorted(trade["applied"]),"verified":sorted(trade["verified"]),
+                "recovery_required":trade["recovery_required"],"pending":{p:runtime.journal.pending_ids(p) for p in players},
+                "observed":{f"{k[0]}:{k[1]}":dict(v) for k,v in execution.observed.items()}}
+            evidence=directory/"evidence";evidence.mkdir()
+            shutil.copytree(directory/"client-a",evidence/"client-a-store",dirs_exist_ok=True)
+            shutil.copyfile(directory/"runtime.sqlite3",evidence/"runtime.sqlite3")
+            shutil.copyfile(save_path,evidence/"killed.SaveRAM")
+            reboot,probe_report=await asyncio.to_thread(reboot_probe,directory,players["a"],evidence/"killed.SaveRAM")
+            publish(directory/"verified-reboot-probe.json",{"killed":killed,"before_kill":before_kill,"after_kill":after_kill,
+                "killed_client_gate":{"passed":passed_a,"result":str(result_a),"log_tail":log_a[-3000:]},
+                "probe":probe_report,"reboot":reboot})
+            publish(directory/"finish.json",{"finish":True})
+            pid_b=_emuhawk_pid_for(directory/"client-b.lua")
+            try:
+                await asyncio.wait_for(jobs[1],timeout=60)
+            except asyncio.TimeoutError:
+                if pid_b is not None:
+                    import os as _os,signal as _signal
+                    _os.kill(pid_b,_signal.SIGTERM)
+            assert reboot is not None,f"reboot probe produced no observation\n{probe_report['log_tail']}"
+            return directory
         if disconnect:
             assert dropped and runtime.trade.status(transaction)["recovery_required"]
             stopped={p:await progress("stopped",p) for p in players}

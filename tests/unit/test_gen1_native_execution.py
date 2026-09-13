@@ -1,12 +1,13 @@
 """Owned native window policy against actual journals; cartridge observations are modeled."""
 import copy
+import dataclasses
 from types import SimpleNamespace
 
 import pytest
 
 from server.execution_window import command_scope
 from server.gen1_cartridge_profiles import companion_profiles
-from server.gen1_native_execution import NativeExecutionPolicy, SCHEMA
+from server.gen1_native_execution import SCHEMA, NativeExecutionPolicy
 from server.gen1_trade_preparation import preparation_payload, verify_preparation
 from server.protocol import digest
 from server.protocol_journal import JournalError
@@ -17,7 +18,7 @@ from tests.unit.test_gen1_trade_preparation import checkpoint
 
 @pytest.fixture
 def case(tmp_path):
-    value=TradeCase(tmp_path);value.admit("a");value.admit("b")
+    value=TradeCase(tmp_path);value.admit("a");value.admit("b");value.control("a");value.control("b")
     manifests={p:companion_profiles()[v]["manifest"] for p,v in value.variants.items()}
     for p in manifests:value.policy.rules[p].rom_sha1=manifests[p]["final_sha1"]
     fixture=SimpleNamespace(policy=value.policy,contexts=value.policy.contexts,
@@ -126,3 +127,28 @@ def test_reopen_interruption_and_operation_ceiling_never_grant_recovery_frames(c
     assert verify(case,armed(case[3],frames=60000)) is None
     value=case[0];value.runtime.disconnect("a",value.owners["a"])
     assert value.runtime.journal.record(NAMESPACE,value.tx).value["recovery_required"]
+
+
+@pytest.mark.parametrize("swap",["body","phase"])
+def test_a_same_revision_trade_record_swap_between_snapshot_and_record_read_is_refused(case,swap,monkeypatch):
+    """The verifier checks the snapshot, then reads the paired-trade record directly. A record
+    that no longer matches the digest/phase the verified snapshot links (a valid-looking body
+    swapped in between the two reads) is refused before any window is issued."""
+    value,policy,command,evidence=case
+    document=value.runtime.state().document()          # the verified snapshot, read BEFORE the swap
+    binding=value.runtime.gate.sessions["a"].metadata["control_binding"]
+    real=value.runtime.journal.record
+    from server.trade_coordinator import NAMESPACE as TRADES
+    def swapped(namespace,key):
+        record=real(namespace,key)
+        if namespace==TRADES and key==command["body"]["transaction_id"]:
+            body=copy.deepcopy(record.value)
+            if swap=="body":body["expires_ms"]+=1            # same phase, different bytes, valid shape
+            else:body["phase"]="link_committed"             # different phase, same revision
+            return dataclasses.replace(record,value=body)
+        return record
+    monkeypatch.setattr(value.runtime.journal,"record",swapped)
+    before=value.runtime.journal.snapshot()
+    with pytest.raises(JournalError,match="not the one the verified state links"):
+        policy("a",command,evidence,document,binding)
+    assert value.runtime.journal.snapshot()==before

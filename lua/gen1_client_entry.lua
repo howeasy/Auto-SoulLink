@@ -23,7 +23,16 @@ local function validate(launch)
     assert(type(launch.cartridge)=="table" and hex(launch.cartridge.final_rom_sha1,40),"expected RBY cartridge required")
     assert(launch.initial_observations==nil or launch.initial_observations==true,"invalid initial observation selection")
     assert(launch.ordinary_frames==nil,"the frame-credit client is retired; relaunch in free_service mode")
-    assert(launch.native_manifest==nil,"native launch requires the composed bounded owner, which this entry no longer composes")
+    if launch.native_manifest~=nil then
+        -- Native trade rides the free-service client: ordinary gameplay stays free; only the original
+        -- ROM trade routine steps under an owned bounded window (gen1_native_host).
+        local native=launch.native_manifest
+        assert(launch.mode=="free_service" and launch.initial_observations==true,
+            "native launch requires the free-service client with initial observations")
+        assert(type(native)=="table" and native.schema=="gen1-native-trade-build-v1" and native.variant==launch.cartridge.variant
+            and native.final_sha1==launch.cartridge.final_rom_sha1 and type(native.foreground)=="table"
+            and type(native.foreground.overlay)=="number","native launch requires the admitted companion manifest")
+    end
     assert(launch.mode~="free_service" or launch.initial_observations==true,
         "free-run observation requires initial observation enrollment")
     local variant=launch.cartridge.variant
@@ -31,11 +40,25 @@ local function validate(launch)
 end
 
 function M.start(launch,options)
-    validate(launch)
     options=options or {}
-    local free=launch.mode=="free_service"
     local root=assert(options.root or rawget(_G,"SLINK_ROOT"),"SLink client root required")
     package.path=root.."/lua/?.lua;"..root.."/data/games/gen1_rby/?.lua;"..package.path
+    -- A native launch script may be loaded onto an APPLY-armed core. Claim the exclusive actuator
+    -- and hold it BEFORE anything that can fail (launch validation, profile, ROM checks): a startup
+    -- error then leaves the core stopped (platform_execution never releases on its own) instead of
+    -- free-running one unowned frame. Nothing here reads the manifest.
+    local early_host,early_holds,early_instance
+    if type(launch)=="table" and launch.native_manifest~=nil then
+        local Execution=require("platform_execution")
+        early_instance=assert(require("platform_identity").new_nonce())
+        early_host=assert(Execution.new({profile="gambatte",owner_id=early_instance,exclusive_ownership="emulator_process",
+            control_context="between_frames",expected_host=assert(Execution.supported_profile("gambatte"))}))
+        early_holds=require("hold_mux").new({host=early_host,owners={"startup","control","writer","lifecycle","native"}})
+        assert(early_holds:set("startup",true,"native launch: held before the first frame"))
+    end
+    validate(launch)
+    local free=launch.mode=="free_service"
+    local native=launch.native_manifest
     local JSON=require("json_codec")
     launch=assert(JSON.decode(assert(JSON.encode(launch))))
     local memory=require("memory_gb")
@@ -48,7 +71,36 @@ function M.start(launch,options)
         continuity_retry=nil,continuity_epoch=nil,
         continuity_status={state="unavailable",reason="free service is not initialized"}}
     local nonce=require("platform_identity").new_nonce
-    local generation,instance=assert(nonce()),assert(nonce())
+    local generation,instance=assert(nonce()),early_instance or assert(nonce())
+    self.host,self.holds=early_host,early_holds
+    -- Native physical read, source-grounded (patch/gen1/src/trade_service.asm), taken before EVERY
+    -- pre-begin free frame and once more under the hold:
+    --  * armed/done: the overlay word is published in WRAM ("SLT1", byte4 == 1): the next free frame
+    --    could enter the service at the DelayFrame bridge (byte5 == 5, byte6 ~= byte7), or the
+    --    routine is halted at DONE waiting for release (byte5 == 7);
+    --  * mid_routine: the service saved the word on the STACK (save_overlay_on_stack: pairs pushed
+    --    so the magic reads 31 54 4C 53 ascending, preceded by byte5, byte4) and swapped the overlay
+    --    to tiles; the CPU is inside the original trade routine. The stack is the fixed pret
+    --    SECTION "Stack" ($DF00..$DFFF, wStack = $DFFF, ram/wram.asm) and everything pushed lives
+    --    inside it, so that whole section is scanned regardless of SP: no nesting-depth assumption,
+    --    and no dependence on SP, which a cold core reports outside WRAM before home/init.asm sets
+    --    `ld sp, wStack` and home/vcopy.asm borrows transiently.
+    -- A cold boot shows neither (WRAM re-derived from SaveRAM, probe a4e3f1b), however late this
+    -- script starts; a script attached mid-play shows one of them exactly when a free frame would be
+    -- unowned. No frame-count heuristic is involved. The read runs under the startup hold that a
+    -- native launch claims in start(), before its first frame: a failing read leaves the core held.
+    local function native_physical()
+        if not native then return "clean" end
+        local base=native.foreground.overlay
+        if memory.read_u8(base)==0x53 and memory.read_u8(base+1)==0x4c and memory.read_u8(base+2)==0x54
+            and memory.read_u8(base+3)==0x31 and memory.read_u8(base+4)==1 then return "armed" end
+        for address=0xDF00,0xE000-4 do
+            if memory.read_u8(address)==0x31 and memory.read_u8(address+1)==0x54 and memory.read_u8(address+2)==0x4c
+                and memory.read_u8(address+3)==0x53 then return "mid_routine" end
+        end
+        return "clean"
+    end
+    self.native_physical=native_physical
     -- An in-process script reload evicts the module cache but retains globals.  The
     -- previous overlay closure can still erase BizHawk's persistent GUI pixels before
     -- the fresh module loses that visibility state.
@@ -80,11 +132,19 @@ function M.start(launch,options)
         assert(type(base)=="string" and #base>0,"local client storage directory required")
         return tostring(Path.GetFullPath(base.."/"..launch.run_id.."/"..launch.player.."/journal.json"))
     end
-    local function begin()
-        local Execution=require("platform_execution")
+    local Execution=require("platform_execution")
+    -- Claim the one exclusive actuator and take the startup hold. A native launch claims it in
+    -- start(), before this script's first frame, so every pre-begin read runs held and a failure
+    -- anywhere leaves the core stopped (platform_execution never releases on its own).
+    local function claim_host(reason)
+        if self.host then return end   -- a native launch already claimed and holds it (above)
         self.host=assert(Execution.new({profile="gambatte",owner_id=instance,exclusive_ownership="emulator_process",
             control_context="between_frames",expected_host=assert(Execution.supported_profile("gambatte"))}))
-        self.holds=require("hold_mux").new({host=self.host,owners={"startup","control","writer","lifecycle"}})
+        self.holds=require("hold_mux").new({host=self.host,owners={"startup","control","writer","lifecycle","native"}})
+        assert(self.holds:set("startup",true,reason or "waiting for qualified paired runtime bindings"))
+    end
+    local function begin()
+        claim_host()
         assert(self.holds:set("startup",true,"waiting for qualified paired runtime bindings"))
         first_frame=emu.framecount()
         context={context_generation=generation,physical_instance=instance,
@@ -99,7 +159,31 @@ function M.start(launch,options)
             {schema="slink-gen1-client-binding-v1",run_id=launch.run_id,player=launch.player,
              cartridge=launch.cartridge,save_identity=context.save_identity},Journal.initial()))
         local Observation=launch.initial_observations and require("gen1_initial_observation")or nil
-        local journal=assert(Journal.open(self.store,nil,Observation))
+        local Native=native and require("gen1_native_runtime") or nil
+        local callbacks=Native and Native.journal_options(Observation,function()return self.native end) or Observation
+        if native then
+            -- The server's verdict on the published held read arrives as the event's acknowledged
+            -- result. Only a `released` verdict whose read_digest equals the read this client
+            -- published can ever release the startup hold; anything else keeps it (fail closed).
+            local inner={};for k,v in pairs(callbacks)do inner[k]=v end
+            callbacks=inner
+            local acknowledge=inner.acknowledge_event
+            callbacks.acknowledge_event=function(event,operation_id,baseline,result)
+                if type(event)=="table" and event.event=="native_reattach" then
+                    local verdict=type(result)=="table" and result.schema=="rby-native-reattach-result-v1" and result or nil
+                    if verdict and verdict.read_digest==self.reattach_read_digest and (verdict.verdict=="released" or verdict.verdict=="held") then
+                        self.reattach_server={verdict=verdict.verdict,class=verdict.class,read_digest=verdict.read_digest,operation_id=operation_id}
+                    else
+                        self.reattach_server={verdict="held",class="verdict_mismatch",read_digest=self.reattach_read_digest,operation_id=operation_id}
+                    end
+                    baseline.native_reattach={read_digest=self.reattach_read_digest,verdict=self.reattach_server.verdict,class=self.reattach_server.class}
+                    return baseline
+                end
+                if acknowledge then return acknowledge(event,operation_id,baseline,result)end
+                return nil
+            end
+        end
+        local journal=assert(Journal.open(self.store,nil,callbacks))
         -- Source hooks may run inside a free-running frame. They validate the stable
         -- ROM/save identity; publication and writes also require a hold.
         local function source_owned()
@@ -137,6 +221,29 @@ function M.start(launch,options)
         self.hud=require("gen1_hud_service").new({journal=journal,overlay=self.overlay,player=launch.player})
         local services={self.hud}
         if faint then services[#services+1]=faint end
+        if Native then
+            -- Construct the native service under the startup hold with its host ARMED so it can
+            -- verify a held, bounded owner; then disarm so ordinary gameplay stays free. A later
+            -- native command re-arms a fresh bounded owner at that command's boundary.
+            assert(self.holds:set("native",true,"native service construction"))
+            self.native_host=require("gen1_native_host").new({adapter=self.holds:adapter("native"),owner_id=instance,
+                expected_host=assert(Execution.supported_profile("gambatte")),
+                authorize=function(scope,checkpoint)return self.native~=nil and self.native.authorize_step(scope,checkpoint)end})
+            assert(self.native_host.arm("native service construction"))
+            self.native=Native.new({embedded=true,memory=memory,manifest=native,variant=launch.cartridge.variant,
+                player=launch.player,run_id=launch.run_id,context=context,read_context=source_owned,clock=clock,
+                host=self.native_host,journal=journal,receptionist=true,
+                storage_directory=tostring(luanet.import_type("System.IO.Path").GetDirectoryName(self.path)).."/native",
+                saveram_directory=self.saveram_directory,
+                observe=function(events,baseline)return self.runtime:observe(events,baseline)end,
+                read_runtime_status=function()return self.runtime and self.runtime:status({summary=true})or {}end})
+            -- The start-of-script read: overlay word, lease, CPU, under the held owner, no frame.
+            self.reattach_read=require("gen1_native_reattach").read({host=self.host,memory=memory,manifest=native,
+                lease=function()return self.native.native_store:read()end})
+            assert(self.native_host.disarm("native service constructed"))
+            services[#services+1]={handles=self.native.handles,adapter=self.native.executor_adapter,ready=self.native.ready,
+                operations=self.native.operations,update_control=self.native.update_control}
+        end
         local router=require("command_service_router").new(services)
         local operations,ready,executor=router.operations,router.ready,router.adapter
         local function new_instruction()
@@ -155,6 +262,11 @@ function M.start(launch,options)
         local function hard_revoke(reason)
             assert(self.holds:set("lifecycle",true,reason))
             if self.instruction then assert(self.instruction:revoke(reason))end
+            -- A re-admission rotates the control binding: the server accepts no earlier read as this
+            -- session's evidence, so the held read is republished once the runtime is bound again.
+            -- The remembered verdict is dropped HERE, not on the later republish: loop_ready can
+            -- never consult a pre-revoke release across a new admission whatever the step order.
+            if native then self.reattach_server=nil;self.reattach_republish=true end
             return true
         end
         if free then
@@ -220,6 +332,12 @@ function M.start(launch,options)
                 if baseline.pending_inventory_retry then
                     proof.pending_inventory_retry=baseline.pending_inventory_retry
                 end
+                if native then
+                    -- Terminal-only native continuity: stated under this lifecycle hold from the live
+                    -- lease and host, never from a remembered verdict.
+                    proof.native={lease_phase=assert(self.native.native_store:read()).phase,
+                        host_armed=self.native_host.armed(),host_failure=self.native_host.failure() or JSON.null}
+                end
                 return proof
             end)
             if not ok then return deferred(proof)end
@@ -258,6 +376,16 @@ function M.start(launch,options)
             service_continuity=free and service_continuity or nil,
             on_service_authority=free and accept_service or nil,
             read_context=free and source_owned or owned,
+            semantic_settlement=native and function(oldest,packet)
+                -- Only the typed native read settles here; every other semantic event (sync,
+                -- command_ack, trade events) settles as before, and a verdict riding one of those
+                -- replies is unsolicited and refused.
+                if type(oldest)~="table" or type(oldest.payload)~="table" or oldest.payload.event~="native_reattach" then
+                    assert(type(packet)~="table" or packet.native_reattach_result==nil,"unsolicited native reattach settlement")
+                    return nil
+                end
+                return require("gen1_native_reattach").settlement(oldest,packet,self.store.backend.sha256)
+            end or nil,
             operation_execution=operations,
             operation_ready=ready,
             executor_adapter=executor}))
@@ -273,17 +401,59 @@ function M.start(launch,options)
                 return self.runtime:has_service_lease() and self.observer.signals~=nil and self.acquisitions~=nil
                     and baseline.initial_inventory~=nil and baseline.initial_inventory.phase=="acknowledged"
                     and baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"
+                    and (not native or (self.reattach_verdict=="clean" and self.reattach_server~=nil
+                        and self.reattach_server.verdict=="released" and self.reattach_server.read_digest==self.reattach_read_digest))
             end
+            -- Terminal phases per native store (gen1_native_trade_executor / gen1_partner_prompt_executor /
+            -- gen1_receptionist_executor); anything else, or an unreadable store, keeps the vote.
+            local TERMINAL={native={idle=true,released=true},prompt={idle=true,closed=true},receptionist={idle=true,complete=true}}
+            local function lease_open()
+                local n=self.native
+                local ok,open=pcall(function()
+                    local function open_in(store,kind)return store~=nil and not TERMINAL[kind][assert(store:read()).phase]end
+                    return open_in(n.native_store,"native") or open_in(n.prompt_store,"prompt") or open_in(n.receptionist_store,"receptionist")
+                end)
+                return (not ok) or open==true
+            end
+            self.lease_open=lease_open
+            local function native_pending()
+                if not self.native then return false end
+                if self.native_host.failure() then return true end -- latched: stays held (no forward recovery in this build)
+                -- A non-terminal local lease holds on its own: after this side's commit receipt is ACKed
+                -- and pruned, the original routine still sits at .waitForReceipt (trade_service.asm:135-145)
+                -- until the peer verifies and the release command arrives; likewise the partner prompt
+                -- (complete while the original routine awaits the partner's decision, closing until the
+                -- physical return) and an active receptionist sequence. No pending command, query or
+                -- failure says so, and a free frame there would run the routine unowned. A store that
+                -- cannot be read holds too.
+                if lease_open() then return true end
+                local entry=assert(journal:pending_commands())[1]
+                if entry and self.native.handles(require("gen1_runtime").unwrap(entry.body,launch.player))then return true end
+                return require("gen1_receptionist_client").query(memory,native)~=nil
+            end
+            self.native_pending=native_pending
             local function writer_pending()
-                return faint~=nil and faint.pending()
+                return (faint~=nil and faint.pending()) or native_pending()
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
+                -- Native trade: the party snapshot the native checkpoint rides on is read INSIDE the same
+                -- writer hold as the full inventory point it accompanies, and handed to the loop's
+                -- native_checkpoint(frame) for that exact frame only (never re-read unheld).
+                local function native_party_under_hold(frame)
+                    if not native then return end
+                    local party=require("gen1_command_receipts").party_snapshot(memory,launch.cartridge.variant)
+                    self.native_point=party and {frame=frame,party=party} or nil
+                end
                 local function capture_inventory()
                     if not memory.isPartyWriteSafe()then return nil end
                     assert(self.holds:set("writer",true,"full inventory checkpoint"))
-                    local ok,point=pcall(Observation.capture,{owned=owned,host=self.host,memory=memory,
-                        variant=launch.cartridge.variant})
+                    local ok,point=pcall(function()
+                        local frame=emu.framecount()
+                        local value=Observation.capture({owned=owned,host=self.host,memory=memory,variant=launch.cartridge.variant})
+                        native_party_under_hold(frame);assert(emu.framecount()==frame,"inventory checkpoint frame changed")
+                        return value
+                    end)
                     assert(self.holds:set("writer",false,"full inventory checkpoint complete"))
                     if not ok then error(point,0)end
                     return point
@@ -297,6 +467,7 @@ function M.start(launch,options)
                         local dirty=previous~=false and(force or not previous or not Fingerprint.same(previous,current))
                         local full=dirty and Observation.capture({owned=owned,host=self.host,memory=memory,
                             variant=launch.cartridge.variant})or nil
+                        if full then native_party_under_hold(frame)end
                         source_owned();assert(emu.framecount()==frame,"inventory fingerprint frame changed")
                         return full,current,dirty
                     end)
@@ -320,7 +491,22 @@ function M.start(launch,options)
                         append_many=function(_,events,baseline)return self.runtime:observe(events,baseline)end},
                     session={pump=function()assert(self.runtime:step())end}, -- never blocks: connector settimeout(0)
                     inventory=capture_inventory,checkpoint=checkpoint,
+                    native_checkpoint=native and function(frame)
+                        -- Hand over the party read under the writer hold of THIS frame's full point (see
+                        -- native_party_under_hold); a frame number alone never grants a fresh unheld read.
+                        local point=self.native_point;self.native_point=nil
+                        if not point or point.frame~=frame or emu.framecount()~=frame then return JSON.null end
+                        return {schema="rby-native-observation-v1",party=point.party}
+                    end or nil,
                     writer={pending=writer_pending,service=function()
+                        if native_pending() and not (faint~=nil and faint.pending()) then
+                            -- Arm at this loop boundary (between frames). The native vote keeps the core held
+                            -- until the command completes; the entry services it in step() slices.
+                            if not self.native_host.armed() and not self.native_host.failure() then
+                                assert(self.native_host.arm("servicing a native command"))
+                            end
+                            return
+                        end
                         -- ponytail: whole-command hold, bounded per tick and retried while pending; item 4
                         -- maps every engine command to its executor and item 5 adds the in-battle window.
                         assert(self.holds:set("writer",true,"servicing a held write command"))
@@ -374,13 +560,38 @@ function M.start(launch,options)
                 -- New Game reaches write-safety inside the white fade into the
                 -- bedroom (rBGP==0x00); holding there freezes a blank screen and
                 -- proves nothing. Battery-save boots are already faded in.
-                if not memory.isPartyWriteSafe() or memory.readPlayerName()=="" or memory.read_u8(0xFF47)==0 then return end
+                local visible=memory.isPartyWriteSafe() and memory.readPlayerName()~="" and memory.read_u8(0xFF47)~=0
+                if native then
+                    -- Held (claimed in start()): read the physical arming state, then either begin under
+                    -- this hold (in play, or a reattach that must not see a free frame) or release the
+                    -- hold for exactly one boot frame and read again before the next.
+                    assert(self.holds:set("startup",true,"native pre-frame check"))
+                    local physical=native_physical()
+                    if physical=="clean" and not visible then
+                        assert(self.holds:set("startup",false,"clean boot frame may run"))
+                        self.booting=true
+                        return
+                    end
+                    self.booting=false
+                    self.reattach_required=physical~="clean"
+                    begin()
+                    self:classify_reattach(physical)
+                    return
+                end
+                if not visible then return end
                 begin()
+            end
+            if native and self.reattach_republish and self.runtime:is_bound() and self.holds:is_held() then
+                self.reattach_republish=false
+                self:republish_reattach()
             end
             if self.loop then
                 -- One tick per emulated frame (run() advances it). Under a hold taken outside the loop
-                -- only the runtime pumps, so a tick never re-observes the same frame.
-                if self.holds:is_held() then assert(self.runtime:step())else self.loop:tick()end
+                -- only the runtime pumps, so a tick never re-observes the same frame; a native command
+                -- holds through its own vote and is serviced in bounded slices instead.
+                if self.holds:is_held() then
+                    if self.native_host and self.native_host.armed() then self:native_slice()else assert(self.runtime:step())end
+                else self.loop:tick()end
                 return
             end
             local serviced,reason=self.runtime:step()
@@ -397,6 +608,57 @@ function M.start(launch,options)
         end
         return true
     end
+    -- The physical verdict under the hold. It never releases anything by itself: the free loop is
+    -- constructed only when this is "clean" AND the server has granted the service lease and
+    -- delivered no pending command (loop_ready), i.e. the server, not these bytes, says nothing is
+    -- owed. Anything else stays held (no forward recovery in this build). Publication of the read
+    -- as the first post-HELLO semantic evidence is a pending shared-file seam (gen1_runtime.py).
+    function self:classify_reattach(physical)
+        local read=assert(self.reattach_read,"native reattach read required")
+        local lease=read.lease
+        if physical=="clean" and (read.published or read.armed or read.done) then physical="armed" end
+        if physical=="clean" and lease.phase~="idle" and lease.phase~="released" then physical="lease_open" end
+        self.reattach_verdict=physical
+        if physical~="clean" then
+            self.phase="native_reattach_held";self.reason="native reattach requires classification ("..physical.."); execution stays held"
+        end
+        -- Publish the read as this client's first NEW semantic evidence after HELLO/control, still
+        -- held (older durable outbox items, if any, precede it; they carry no authority). The hold
+        -- is released only by the server's exact verdict on this digest (see the journal callback).
+        local Canonical=require("journal_document")
+        self.reattach_read_digest=self.store.backend.sha256(assert(Canonical.encode(read)))
+        local event={event="native_reattach",payload={schema="rby-native-reattach-v1",
+            context_generation=context.context_generation,final_sha1=launch.cartridge.final_rom_sha1,physical=physical,read=read}}
+        local baseline=assert(self.store:read()).observation
+        baseline.native_reattach={read_digest=self.reattach_read_digest,verdict="pending",class=physical}
+        local ids,why=self.runtime:observe(JSON.array({event}),baseline)
+        assert(ids,why)
+        return physical
+    end
+    -- After a revoke/re-admission: a fresh held read under the current binding (the old verdict is
+    -- discarded; the loop, if any, stays under the lifecycle hold until the server answers again).
+    function self:republish_reattach()
+        assert(self.host.status().physical_stop_verified,"native reattach republication requires the hold")
+        self.reattach_read=require("gen1_native_reattach").read({host=self.host,memory=memory,manifest=native,
+            lease=function()return self.native.native_store:read()end})
+        self.reattach_server=nil
+        return self:classify_reattach(native_physical())
+    end
+    -- One bounded native slice per entry step while the native vote holds: pump the native
+    -- service, one runtime turn, at most one authorized original-routine frame; release the
+    -- vote only when the command is complete and the stepper never failed.
+    function self:native_slice()
+        self.native:pump_native()
+        local began=self.clock();assert(self.runtime:step());self.native:after_service(began)
+        if self.native_pending() and not self.native_host.failure() then
+            local stepped=self.native:step_native()
+            if not stepped then assert(self.native_host.yield_held())end
+        elseif not self.native_host.failure() then
+            assert(self.native_host.disarm("native command service complete"))
+        else
+            assert(self.native_host.yield_held())
+        end
+    end
     function self:status()
         local observation=self.store and self.store:read().observation or {}
         local initial=observation.initial_inventory and observation.initial_inventory.phase
@@ -412,6 +674,11 @@ function M.start(launch,options)
             hud=self.hud and self.hud.status() or nil,
             continuity=self.continuity_status,
             hold_mux=self.holds and self.holds:status() or nil,
+            native=self.native and self.native:status() or nil,
+            native_host=self.native_host and self.native_host.status() or nil,
+            native_reattach=self.reattach_read and {read=self.reattach_read,verdict=self.reattach_verdict,
+                read_digest=self.reattach_read_digest,server=self.reattach_server,
+                required_before_first_frame=self.reattach_required} or nil,
             ordinary_execution=false,
             free_service=free,observation_loop=self.loop~=nil}))))
     end
@@ -423,6 +690,7 @@ function M.start(launch,options)
         if self.observer then self.observer:close()end
         if self.load_state_hook then event.unregisterbyid(self.load_state_hook);self.load_state_hook=nil end
         if self.runtime then self.runtime:revoke("client service is closing")end
+        if self.native then self.native:close()end
         if self.store then self.store:close()end
         if self.overlay_clear then
             assert(self.overlay_clear()==true)
@@ -447,7 +715,7 @@ function M.run(launch)
             if captured then _G.SLINK_RUNTIME_STATUS=function()return status end end
             service:close();error(why,0)
         end
-        if service.loop and not service.host.status().held then emu.frameadvance()
+        if (service.loop or service.booting) and not service.host.status().held then emu.frameadvance()
         elseif service.host then assert(service.host.yield_held())else emu.yield()end
     end
 end

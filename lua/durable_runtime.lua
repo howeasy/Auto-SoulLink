@@ -96,6 +96,8 @@ function M.new(options)
         local sync_interval=interval(options.sync_interval,0.5,2)
         assert(options.pending_delivery_hint==nil or type(options.pending_delivery_hint)=="boolean",
             "pending delivery hint selection must be boolean")
+        assert(options.semantic_settlement==nil or type(options.semantic_settlement)=="function",
+            "invalid semantic settlement callback")
         local metadata_interval=interval(options.metadata_interval,0.05,0.5)
         local state={phase="connection_pending",connected=false,failed=false,reason="waiting for admission",
             last_clock=nil,last_control=nil,last_sync=nil,last_semantic=nil,last_metadata=nil,pending_delivery=nil,
@@ -388,6 +390,12 @@ function M.new(options)
                     assert((inventory==JSON.null and status=="absent")
                         or (inventory~=JSON.null and (status=="recorded"or status=="deferred")),
                         "observation settlement differs from its durable inventory")
+                elseif options.semantic_settlement then
+                    -- A generation-owned semantic event (the native reattach read) settles through its
+                    -- own validator, which must bind the response to this exact event or raise; the
+                    -- result is persisted with the acknowledgement before any command executes.
+                    assert(semantic_result==nil,"unsolicited observation settlement")
+                    semantic_result=options.semantic_settlement(copy(oldest),copy(packet))
                 else
                     assert(semantic_result==nil,"unsolicited observation settlement")
                 end

@@ -88,6 +88,7 @@ function M.new(ctx)
         local engaged=trainer(probe,frame)
         local heartbeat=frame%period==0
         local inventory=JSON.null
+        local native_checkpoint=nil
         if heartbeat and ctx.checkpoint then
             self.diagnostics.inventory_checks=self.diagnostics.inventory_checks+1
             local retry=ctx.pending_inventory_retry and ctx.pending_inventory_retry() or nil
@@ -96,6 +97,12 @@ function M.new(ctx)
             if point then inventory=point end
         elseif heartbeat and ctx.inventory then
             inventory=ctx.inventory()or JSON.null
+        end
+        if inventory~=JSON.null and ctx.native_checkpoint then
+            -- Same held frame as the heartbeat inventory it rides beside (gen1_native_observation.stage_free
+            -- anchors it to that inventory's sequence); absent when the native manifest is not selected.
+            native_checkpoint=ctx.native_checkpoint(frame)
+            if native_checkpoint==nil then native_checkpoint=JSON.null end
         end
         local publish=#signals>0 or inventory~=JSON.null or (heartbeat and (not ctx.checkpoint or probe.battle~=0))
             or engaged~=JSON.null or rows~=nil and #rows.receipts>0
@@ -118,6 +125,7 @@ function M.new(ctx)
                     rom=ctx.rom_hash(),signals=batch,acquisitions=rows and copy(rows.receipts) or JSON.array(),
                     inventory=inventory,
                     battle=probe.battle,trainer=engaged}
+                if native_checkpoint~=nil then event.native_checkpoint=native_checkpoint end
                 self.diagnostics.publications=self.diagnostics.publications+1
                 if inventory~=JSON.null then self.diagnostics.inventory_publications=self.diagnostics.inventory_publications+1 end
                 if #signals>0 then self.diagnostics.signal_publications=self.diagnostics.signal_publications+1 end

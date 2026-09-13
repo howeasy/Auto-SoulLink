@@ -94,6 +94,8 @@ def test_free_service_checked_bundle_covers_every_literal_lua_dependency(extra):
             relative = module.replace(".", "/") + ".lua"
             candidates = [f"lua/{relative}", f"data/games/gen1_rby/{relative}"]
             existing = [path for path in candidates if (root / path).is_file()]
+            if name == "lua/gen1_client_entry.lua" and any(path in NATIVE_FILES for path in existing) and not (set(NATIVE_FILES) <= selected):
+                continue  # required only under a native manifest, which the launcher ships with NATIVE_FILES
             if existing and not any(path in selected for path in existing):
                 missing.append((name, module, existing))
     assert missing == []

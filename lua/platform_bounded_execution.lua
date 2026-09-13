@@ -1,5 +1,9 @@
 -- Source-pinned one-frame owner layered on the unchanged exclusive hold actuator.
 -- Generation policy must authorize each step. No ordinary or recovery ticket is inferred.
+-- options.host: an already claimed, currently HELD actuator adapter (set_held/verify/status/
+-- yield_held) to layer on instead of claiming a second exclusive owner, which the per-process
+-- lease refuses (platform_execution). The composed free-service client passes its hold_mux
+-- owner adapter so ordinary gameplay stays free between bounded native steps.
 local Execution=require("platform_execution")
 local M={SCHEMA="slink-bounded-frame-v1"}
 function M.new(options)
@@ -73,8 +77,18 @@ function M.new(options)
     end
     local valid_initial,conflict=valid()
     assert(valid_initial,"bounded host conflict: "..tostring(conflict))
-    local host=assert(Execution.new({profile=options.profile,owner_id=options.owner_id,
-        exclusive_ownership="emulator_process",control_context="between_frames",expected_host=options.expected_host}))
+    local host=options.host
+    if host~=nil then
+        assert(type(host)=="table" and type(host.set_held)=="function" and type(host.verify)=="function"
+            and type(host.status)=="function" and type(host.yield_held)=="function","complete held actuator adapter required")
+        local shared=host.status()
+        assert(type(shared)=="table" and shared.owner_id==options.owner_id and shared.held==true
+            and shared.physical_stop_verified==true and shared.failed~=true and shared.closed~=true,
+            "injected actuator must be the owner's verified held exclusive hold")
+    else
+        host=assert(Execution.new({profile=options.profile,owner_id=options.owner_id,
+            exclusive_ownership="emulator_process",control_context="between_frames",expected_host=options.expected_host}))
+    end
     assert(host.set_held(true,"bounded execution owner waiting for authority"))
     local self={}
     local failed,busy,steps=nil,false,0
@@ -137,6 +151,15 @@ function M.new(options)
         local ok,why=host.yield_held()
         if not ok then return stop(why)end
         if failed or not valid()or emu.framecount()~=expected_frame then return stop("bounded context changed during held yield")end
+        return true
+    end
+    -- A layered owner (injected host) is short-lived: the composed client arms one per native
+    -- command and closes it afterwards, because expected_frame cannot survive free frames.
+    -- Closing unregisters this owner's lifecycle hooks and marks it failed; it releases nothing.
+    function self.close(reason)
+        if load_hook then event.unregisterbyid(load_hook);load_hook=nil end
+        if exit_hook then event.unregisterbyid(exit_hook);exit_hook=nil end
+        failed=failed or tostring(reason or "bounded owner closed")
         return true
     end
     function self.status()

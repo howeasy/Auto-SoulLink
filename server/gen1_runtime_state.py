@@ -115,6 +115,8 @@ class Gen1RuntimeState:
     def _verify_components(self):
         from server.gen1_initial_observation import verify_state
         verify_state(self)
+        from server.gen1_native_reattach_runtime import verify_state as verify_native_reattach
+        verify_native_reattach(self)
         from server.gen1_inventory_observation import verify_state as verify_inventory
         verify_inventory(self)
         from server.gen1_bootstrap_runtime import verify_state as verify_bootstrap
@@ -141,6 +143,10 @@ class Gen1RuntimeState:
         verify_acquisitions(self)
         from server.gen1_native_observation import verify_state as verify_native_observations
         verify_native_observations(self)
+        from server.gen1_native_windows import verify_state as verify_native_windows
+        verify_native_windows(self)
+        from server.gen1_native_preparation import verify_state as verify_native_preparation
+        verify_native_preparation(self)
         from server.gen1_static_lifecycle import (
             COMPONENT as STATICS,
             verify_state as verify_statics,

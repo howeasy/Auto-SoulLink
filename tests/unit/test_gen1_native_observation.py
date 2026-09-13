@@ -21,7 +21,14 @@ from server.gen1_native_observation import (
 from server.gen1_run_config import create_runtime, open_runtime
 from server.protocol_journal import JournalError
 from tests.unit.observation_fixture import ledger, starters
-from tests.unit.test_gen1_native_frame_accounting import compose, grant, handoff, queue, returned, terminal
+from tests.unit.test_gen1_native_frame_accounting import (
+    compose,
+    grant,
+    handoff,
+    queue,
+    returned,
+    terminal,
+)
 from tests.unit.test_gen1_sessions import contract
 
 
@@ -119,3 +126,195 @@ def test_paired_checkpoints_follow_both_handed_back_loans_and_reopen(tmp_path):
         assert set(checkpoints(reopened)) == {"a", "b"}
     finally:
         reopened.close()
+
+
+# ── the free-run bridge: the checkpoint rides the heartbeat inventory, no ledger ─────────
+
+def key_of_inventory(player):
+    from server.gen1_inventory_observation import record_key
+    return record_key(player)
+
+
+def free_readback(runtime, player, point):
+    """The party readback a native client reads in the same held frame as its heartbeat inventory."""
+    state = runtime.state().document()
+    initial = state["components"]["gen1-initial-observations"][player]
+    source = point["source"]
+    raw = bytes.fromhex(source["fields"]["party"])
+    members = inventory(source, initial["metadata"]["save_identity"])["members"]
+    party = [member["blob_hex"] for member in members if member["location"] == "party"]
+    save = initial["metadata"]["save_identity"]
+    return {"schema": "rby-native-observation-v1", "party": {
+        "schema": "gen1-party-readback-v1", "variant": source["variant"], "save_id": save["ot_id"],
+        "save_name": save["trainer_name"], "party_count": len(party), "party": party,
+        "species_list": list(raw[1 : 2 + len(party)]), "battle_flag": 0, "active_slot": None, "battle_hp": None}}
+
+
+def test_free_batches_anchor_the_checkpoint_to_their_heartbeat_inventory_and_reopen(tmp_path):
+    from server.gen1_observation_runtime import verify_journal as verify_batches
+    from tests.unit.test_gen1_observation_runtime import (
+        batch,
+        checkpoint,
+        deliver,
+        enrolled,
+        publish,
+    )
+
+    value = create_runtime(tmp_path, contract("yellow", "red"), free_service=True)
+    try:
+        owners, points = {}, {}
+        for player in ("a", "b"):
+            owner, initial, _first = enrolled(value, player, occupied=True)
+            owners[player], points[player] = owner, checkpoint(initial, 130)
+        with pytest.raises(JournalError, match="both native"):
+            checkpoints(value)
+        for player in ("a", "b"):
+            point = points[player]
+            request = {**batch(value, player, 1, frame=130, inventory=point), "native_checkpoint": free_readback(value, player, point)}
+            _operation, result = publish(value, player, owners[player], request)
+            entry = value.state().document()["components"][COMPONENT][player]
+            assert entry["frame"] == 130 and entry["anchor"] == {"inventory_sequence": 1}
+            assert result["native_checkpoint_digest"] == digest_of(entry)
+            assert value.journal.record(COMPONENT, key(player)).value == entry
+        checked = checkpoints(value)
+        assert set(checked) == {"a", "b"} and checked["a"]["party"] == free_readback(value, "a", points["a"])["party"]
+        assert set(candidate_checkpoints(value, "b")) == {"a", "b"}
+        state = value.state()
+        verify_journal(value.journal, state)
+        verify_batches(value.journal, state)
+        # A later heartbeat without a checkpoint supersedes the old one: stale, refused.
+        deliver(value, "a", owners["a"], batch(value, "a", 2, frame=160, inventory=checkpoint(points["a"], 160)))
+        with pytest.raises(JournalError, match="stale"):
+            checkpoints(value)
+        with pytest.raises(JournalError, match="stale"):
+            candidate_checkpoints(value, "a")
+        assert set(candidate_checkpoints(value, "b")) == {"a", "b"}  # the peer's is still current
+        # The next heartbeat that carries the checkpoint makes it current again.
+        point = checkpoint(points["a"], 190)
+        publish(value, "a", owners["a"], {**batch(value, "a", 3, frame=190, inventory=point), "native_checkpoint": free_readback(value, "a", point)})
+        assert value.state().document()["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 3}
+        assert set(checkpoints(value)) == {"a", "b"}
+        verify_journal(value.journal, value.state())
+        saved = value.state().document()["components"][COMPONENT]
+    finally:
+        value.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        assert reopened.state().document()["components"][COMPONENT] == saved
+        assert set(checkpoints(reopened)) == {"a", "b"}
+        verify_journal(reopened.journal, reopened.state())
+    finally:
+        reopened.close()
+
+
+def test_an_old_free_anchor_survives_more_heartbeats_than_the_history_read_bound(tmp_path):
+    """Player b publishes 131 heartbeats with checkpoints: its current anchor is inventory record
+    131, past the 128-record bound of a history prefix scan (the old lookup lost it and failed the
+    audit). Player a keeps its anchor at heartbeat 1 and then publishes 130 inventory-only
+    heartbeats: the old anchor still verifies (found by the revision its batch committed at) and is
+    reported stale, as before; a fresh checkpoint then makes a current again."""
+    from tests.unit.test_gen1_observation_runtime import (
+        batch,
+        checkpoint,
+        deliver,
+        enrolled,
+        publish,
+    )
+
+    value = create_runtime(tmp_path, contract("yellow", "red"), free_service=True)
+    try:
+        owners, points = {}, {}
+        for player in ("a", "b"):
+            owner, initial, _first = enrolled(value, player, occupied=True)
+            owners[player], points[player] = owner, checkpoint(initial, 130)
+        for player in ("a", "b"):
+            point = points[player]
+            publish(value, player, owners[player], {**batch(value, player, 1, frame=130, inventory=point),
+                                                    "native_checkpoint": free_readback(value, player, point)})
+        for sequence in range(2, 132):
+            frame = 130 + 30 * (sequence - 1)
+            point = checkpoint(points["b"], frame)
+            publish(value, "b", owners["b"], {**batch(value, "b", sequence, frame=frame, inventory=point),
+                                              "native_checkpoint": free_readback(value, "b", point)})
+        document = value.state().document()
+        assert document["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 1}
+        assert document["components"][COMPONENT]["b"]["anchor"] == {"inventory_sequence": 131}
+        assert len(value.journal.record_history("gen1-inventory-observations", key_of_inventory("b"))) == 128  # the bound
+        verify_journal(value.journal, value.state())
+        assert set(checkpoints(value)) == {"a", "b"}
+        for sequence in range(2, 132):
+            frame = 130 + 30 * (sequence - 1)
+            deliver(value, "a", owners["a"], batch(value, "a", sequence, frame=frame, inventory=checkpoint(points["a"], frame)))
+        assert value.state().document()["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 1}
+        verify_journal(value.journal, value.state())
+        with pytest.raises(JournalError, match="stale"):
+            checkpoints(value)
+        point = checkpoint(points["a"], 130 + 30 * 131)
+        publish(value, "a", owners["a"], {**batch(value, "a", 132, frame=130 + 30 * 131, inventory=point),
+                                          "native_checkpoint": free_readback(value, "a", point)})
+        assert value.state().document()["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 132}
+        verify_journal(value.journal, value.state())
+        assert set(checkpoints(value)) == {"a", "b"}
+    finally:
+        value.close()
+
+
+@pytest.mark.parametrize("fault", ["no_inventory", "bad_schema", "identity", "battle"])
+def test_free_checkpoint_faults_commit_nothing(tmp_path, fault):
+    from tests.unit.test_gen1_observation_runtime import batch, checkpoint, deliver, enrolled
+
+    value = create_runtime(tmp_path, contract("blue", "blue"), free_service=True)
+    try:
+        owner, initial, _first = enrolled(value, "a", occupied=True)
+        point = checkpoint(initial, 130)
+        native = free_readback(value, "a", point)
+        request = {**batch(value, "a", 1, frame=130, inventory=point), "native_checkpoint": native}
+        if fault == "no_inventory":
+            request["inventory"] = None
+        elif fault == "bad_schema":
+            native["schema"] = "rby-native-observation-v0"
+        elif fault == "identity":
+            native["party"]["save_id"] = "FFFF"
+        elif fault == "battle":
+            native["party"].update(battle_flag=1, active_slot=0, battle_hp=10)
+        before = value.journal.snapshot()
+        with pytest.raises(JournalError):
+            deliver(value, "a", owner, request)
+        assert value.journal.snapshot() == before
+        assert COMPONENT not in value.state().document()["components"]
+    finally:
+        value.close()
+
+
+def test_free_checkpoint_is_deferred_with_its_heartbeat_behind_an_open_obligation(tmp_path):
+    from tests.unit.test_gen1_engine_signal_runtime import deliver as deliver_signals
+    from tests.unit.test_gen1_faint_runtime import enroll, signal_batch, source_and_checkpoint
+    from tests.unit.test_gen1_inventory_observation import deliver as deliver_inventory
+    from tests.unit.test_gen1_observation_runtime import batch, checkpoint, deliver, publish
+
+    value = create_runtime(tmp_path, contract("yellow", "yellow"), free_service=True)
+    try:
+        instant = value.clock()
+        value.clock = lambda: instant
+        owners, initials, operations = enroll(value)
+        points = {}
+        for player in ("a", "b"):
+            source, stable = source_and_checkpoint(value, player, initials[player], operations[player])
+            deliver_signals(value, player, owners[player], source)
+            deliver_inventory(value, player, owners[player], stable)
+            points[player] = stable["observation"]
+        deliver(value, "a", owners["a"], batch(value, "a", 1, frame=121, signals=signal_batch(value, "a")))
+        assert value.journal.pending_ids("b")  # the partner owes a physical faint
+        point = checkpoint(points["a"], 160)
+        _operation, result = publish(value, "a", owners["a"], {**batch(value, "a", 2, frame=160, inventory=point),
+                                                              "native_checkpoint": free_readback(value, "a", point)})
+        assert result["inventory_deferred"] is True and result["native_checkpoint_deferred"] is True
+        assert COMPONENT not in value.state().document()["components"]
+    finally:
+        value.close()
+
+
+def digest_of(entry):
+    from server.protocol import digest
+
+    return digest(entry)
