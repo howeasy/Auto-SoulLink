@@ -115,3 +115,5 @@ Full repaired-unit Sol ACK cleana1714c5 and exact env/command, now ACTIVE; metad
 Sol enrollment controller ACK clean63d637e and exact outputs, ACTIVE build-only. Full unit session57677 running, no reported failures at25%; source/tests frozen. Existing read-only/same-scope review jobs may use explicit conditional-ACTIVE matching ACK in one turn, never bypassing product gates or file ownership.
 
 Full unit7815/7815 complete, no failures/skips, writer released; integration161/161 already passed. N0 enrollment .cache build needs bounded coordinator review corrections, same Sol scope, no live grant. All production/test files unchanged,18 worktrees preserved.
+
+OMP green F1 receipt verification ACTIVE on matching read-only ACK, no writes/runtime; four browser JSON receipts retained under canonical .cache/f1-integration-browser-receipts. Sol remains sole enrollment .cache script/report writer, no live lane.
