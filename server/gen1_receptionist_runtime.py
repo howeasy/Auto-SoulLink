@@ -5,7 +5,7 @@ import re
 from server.execution_window import command_scope
 from server.gen1_command_receipts import validate_party_snapshot
 from server.gen1_native_trade_receipts import _bytes, validate_party_storage
-from server.gen1_trade_preparation import boxed_keys
+from server.gen1_trade_preparation import FIELDS as CHECKPOINT_FIELDS, boxed_keys
 from server.identity_registry import IdentityRegistry
 from server.protocol import digest
 from server.protocol_journal import JournalError
@@ -16,6 +16,22 @@ REASON='RBY native receptionist awaiting verified return'
 PATHS=[['after_query','party','offer','offer_result','menus_restored'],
        ['after_query','party','menus_restored'],['after_query','menus_restored'],
        ['after_query','menus_restored','cable']]
+
+
+def owned_receptionist_checkpoint(committed,live):
+    """Keep roster/box authority; allow only ordinary map and bank-1 save drift.
+
+    The free inventory fingerprint does not include the current map or SRAM's
+    in-game save mirror. Both are read again under the original held query;
+    later preparation validates that complete live save and its checksum.
+    Bank 0 and the two inactive-box banks remain byte-bound to the inventory.
+    """
+    if not isinstance(live,dict) or set(live)!=CHECKPOINT_FIELDS or not isinstance(committed,dict):return False
+    if any(live[field]!=committed[field] for field in CHECKPOINT_FIELDS-{'map','cart_hex'}):return False
+    if type(live['map']) is not int or not 0<=live['map']<=255:return False
+    try:before,now=_bytes(committed['cart_hex'],0x8000),_bytes(live['cart_hex'],0x8000)
+    except JournalError:return False
+    return before[:0x2000]==now[:0x2000] and before[0x4000:]==now[0x4000:]
 
 
 def query(value,manifest):
@@ -83,7 +99,7 @@ class ReceptionistRuntime:
         contexts_now=contexts(document);own=contexts_now[player];manifest=self.policy.manifests[player]
         points=self.policy.candidate_checkpoints(player)
         if (payload['context_generation']!=own.context_generation or payload['final_sha1']!=manifest['final_sha1']
-                or payload['checkpoint']!=points[player]):
+                or not owned_receptionist_checkpoint(points[player],payload['checkpoint'])):
             raise JournalError('receptionist entry differs from owned observation')
         query(payload['query'],manifest)
         point=payload['checkpoint'];party=validate_party_snapshot(point['party'],variant=self.policy.rules[player].variant)

@@ -64,13 +64,35 @@ def test_query_is_durable_replay_deduplicated_and_generates_only_one_ui_command(
     assert run.runtime.state().barrier.ticket() is None
 
 
-@pytest.mark.parametrize('fault',['caller','bank','generation','point','context'])
+@pytest.mark.parametrize('fault',['caller','bank','generation','party_storage','context'])
 def test_unverified_query_cannot_create_a_native_obligation(ui,fault):
     run,controller,_,event=ui;event=copy.deepcopy(event)
     if fault in {'caller','bank'}:event['payload']['query'][fault]+=1
     elif fault=='generation':event['payload']['query']['overlay_hex']='534C543101010707'+'00'*8
-    elif fault=='point':event['payload']['checkpoint']['map']+=1
+    elif fault=='party_storage':event['payload']['checkpoint']['party_storage_hex']='00'+event['payload']['checkpoint']['party_storage_hex'][2:]
     else:event['payload']['context_generation']='f'*32
+    with pytest.raises(JournalError):controller.start('a',secrets.token_hex(16),event)
+    assert not run.runtime.journal.pending_ids('a')
+
+
+def test_receptionist_accepts_current_map_and_ordinary_bank_one_save_drift(ui):
+    run,controller,_,event=ui;event=copy.deepcopy(event)
+    point=event['payload']['checkpoint']
+    point['map']=0x29  # a fresh Pokémon Center read after the last roster heartbeat
+    cart=bytearray.fromhex(point['cart_hex']);cart[0x2000]^=1
+    point['cart_hex']=cart.hex().upper()
+    result=controller.start('a',secrets.token_hex(16),event)
+    assert result['ack']=='ACK'
+    command=run.runtime.journal.command('a',run.runtime.journal.pending_ids('a')[0])
+    assert command['body']['payload']['checkpoint']==point
+
+
+@pytest.mark.parametrize('offset',[0x0000,0x4000,0x6000])
+def test_receptionist_cannot_replace_hall_of_fame_or_inactive_box_banks(ui,offset):
+    run,controller,_,event=ui;event=copy.deepcopy(event)
+    point=event['payload']['checkpoint']
+    cart=bytearray.fromhex(point['cart_hex']);cart[offset]^=1
+    point['cart_hex']=cart.hex().upper()
     with pytest.raises(JournalError):controller.start('a',secrets.token_hex(16),event)
     assert not run.runtime.journal.pending_ids('a')
 
