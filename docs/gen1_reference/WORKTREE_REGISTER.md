@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-A author released frozen module0d7e50de/test83746333/report1d712f94; separate Standards/Spec reviews ACTIVE conditional on ACK, no writes/execution. R0 source reporter remains sole active report writer. No live lane or production writer; N0 artifacts unchanged.
+
 Coordinator cleared only the stopped scan's verified zero-byte canonical index.lock after confirming no git.exe remained. Activation commit succeeded; no worktree/index/source reset. Narrow no-optional-locks Git reads required.
 
 R0 isolated claim reviewer ACTIVE after exact ACK; only its report may be written. Own unnecessary ignored-status command stopped, no locks/files removed; narrow status only henceforth. D0-A Sol owns its two untracked test files, disjoint; no live lane.
