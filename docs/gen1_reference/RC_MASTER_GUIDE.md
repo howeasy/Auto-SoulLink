@@ -9,6 +9,72 @@ The current RC product is a playable two-person **Red/Blue Soul Link** through t
 The finish line remains a frozen-source, non-quick release evaluator pass for the **approved R/B scope**, no skips/xfails/deselection or input drift in active checks, followed by the required two-person human attestation and owner shipping authority. **Gate scope alignment is pending:** the current machine-readable manifest/runner still encode the older full-RBY388-row/all-nine-pair contract. Do not claim a passing R/B release by ignoring its failures or relabeling Yellow rows passed. Preserve deferred Yellow obligations explicitly and review exact active/deferred IDs, shared-row descriptions, check inventory and hardcoded pair validation before changing the gate. Existing15-check/eight-prerequisite results remain historical until aligned; seven prerequisite hash pins plus Java presence is the existing P0 policy.
 
 ## Verified cut and current work ledger
+<!-- AGENT_CHECKPOINT_START -->
+```json
+{
+  "schema": 1,
+  "updated_at_utc": "2026-09-13T22:53:37.124101+00:00",
+  "coordinator_session_id": "01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa",
+  "source_head": "f60be69",
+  "live_lane": null,
+  "next_action": "Fix battle input, shared HUD and install verified orchestration hooks in parallel; no live until reviewed changes.",
+  "workers": [
+    {
+      "id": "battle-input",
+      "owner": "/root/n0_enrollment_sol",
+      "state": "active",
+      "files": [
+        "lua/tests/gen1_rb_ball_gate_inputs.lua",
+        "tests/unit/test_gen1_selected_rb_ball_gate.py",
+        "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
+      ],
+      "next_action": "Fast captured PP40-to39/stale-menu replay; correct complete battle input sequence.",
+      "reuse_decision": "game-specific adapter: pinned R/B menu/story state; reuse existing input helpers where applicable"
+    },
+    {
+      "id": "shared-hud",
+      "owner": "/root/rb_mute_sol",
+      "state": "active",
+      "files": [
+        "lua/hud.lua",
+        "lua/gen1_hud_service.lua",
+        "tests/unit/test_shared_hud_transients.py",
+        "tests/unit/test_gen1_hud_client.py",
+        "docs/gen1_reference/reviews/SHARED-HUD-successor.md"
+      ],
+      "next_action": "Reproduce actual compact link text/expiry; shared renderer fix with thin metadata adapter.",
+      "reuse_decision": "shared: existing HUD serves GB/GBA clients; viewport parameters stay adapters"
+    },
+    {
+      "id": "orchestration-hooks",
+      "owner": "/root/rc_hooks_sol",
+      "state": "active",
+      "files": [
+        "tools/agent_work_guard.py",
+        "tools/install_agent_work_hooks.py",
+        "tests/unit/test_agent_work_guard.py",
+        "docs/agents/HOOKS_SETUP.md"
+      ],
+      "next_action": "Implement and test native hook handler/installer; root installs after review; trust remains native UI.",
+      "reuse_decision": "shared: generic ledger/policy paths and Codex/Claude hook adapters"
+    },
+    {
+      "id": "parcel",
+      "owner": "/root/d1_rb_parcel_sol",
+      "state": "frozen",
+      "files": [
+        "lua/tests/gen1_rb_parcel_inputs.lua",
+        "tests/unit/test_gen1_rb_parcel_inputs.py",
+        "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
+      ],
+      "next_action": "Await starter checkpoint and raw menu producer integration.",
+      "reuse_decision": "game-specific adapter for pinned R/B routes; shared host and HUD reused"
+    }
+  ]
+}
+```
+<!-- AGENT_CHECKPOINT_END -->
+
 
 Updated for the 2026-09-13 owner-directed Red/Blue RC scope at verified HEAD b1439a2. This section is current; [past transition receipts](RC_SUCCESSOR_TRANSITIONS_2026-09-13.md) are history, not active grants.
 
@@ -215,3 +281,5 @@ Attempt4 session42299 timedout/closed with allcleanup arrays empty. Both physica
 Complete finite lab correction frozen: Lua0f80c01c075856422b79ca6a2605547b9e174ddd781d376f572cd8c1c2df5bb9/unite4b9aa55ce3164a881a4d0f1b3d9676833a9e95dad82c36ef813670217df5928;47/47/Ruff. Ordered model8→9text→10/11→battle→12heal→13text→14exit→18free, markeronlyterminal18. Independent /root/rb_gate_safety full remaining-sequence source review ACTIVE, same2files/sourcepinned only. Root Standards/source/receipt verification concurrent; no emulator untilacceptance.
 
 Final remaining-lab source review ACCEPTED across8–14/18; rootStandards/modelreceiptsverified47/47/Ruff. Integrate onlystarterLua/unit/report; parcel remainsunintegratedfrozen. Attempt5 .cache/d1-rb-starter-rival-r5 requested300%,limit180 coordinatorsolelane ACTIVEafterintegration. Allsourcewritersreleased; no audio work or newscope.
+
+Current explicit grants: battle-input Sol first fast red replay of observed PP39/stale move-menu stall (R5 timed out, fullcleanup; both starters settled and ALIVE link now verified); shared-HUD Sol first faithful red reproducer for exact ACKed message `BULBASAUR and CHARMANDER li...`/300frames then shared fix. HUD code limited to lua/hud.lua and thin kind forwarding in gen1_hud_service.lua plus assigned tests/report, no server schema change. Root hook request authorizes generic tools/agent_work_guard.py, installer and tests/setup note; no global settings writes until reviewed. Machine checkpoint and docs/agents/orchestration.md govern current grants; no mute work.

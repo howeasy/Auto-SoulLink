@@ -95,3 +95,5 @@ Attempt4closed aftertimeout/fullcleanup; physical starters/source entries presen
 Finite lab correction frozen47/47/Ruff; no sourcewriter. Codex independent source review active; root verifies/integrates. Nextlive3× only afteracceptance.
 
 Final finite-labreviewaccepted,47/47/Ruff. Rootsole3×attempt5afterintegration; no sourcewriters. ParcelcandidatefrozenawaitingfirstPASS.
+
+Current lanes: battle input Sol1 (starterLua/unit); shared HUD Sol (hud.lua, thin gen1 service adapter, HUDtests); hook Sol (generic guard/installer/tests). Exact files in guide machine checkpoint. Parcel frozen; no emulator. Coordinator alone edits guide/register/AGENTS/CLAUDE/policy.
