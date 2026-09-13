@@ -31,3 +31,5 @@ P0b isolated OMP onboarding reserves no files and no runtime lane; canonical sou
 13:26 UTC: P0b headless OMP timed out without acknowledgment and holds no files; live OMP confirms no worktree/runtime claims. No EmuHawk/Python/Java process observed now (only live OMP PID 47172). P0 runner resumed after tool interruption; its config extension reserves the same sole report and process-local env only. Canonical remains production 19edbb2 plus coordinator docs; no worktrees changed.
 
 D0b acknowledged 13:11 UTC on HOUNDOOM at clean 18446b1; ACTIVE research/report-only ownership. P0 initial verify-inputs exited 1 for unset SLINK_EMUHAWK/SLINK_UPR_JAR; static census continues, no dependencies changed.
+
+P0-config extension acknowledged; ACTIVE for one process-local configured --verify-inputs rerun, same report owner.
