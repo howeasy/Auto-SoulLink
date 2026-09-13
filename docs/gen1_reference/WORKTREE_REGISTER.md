@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+R2 final31254a40 frozen/released, Spec PASS with unsupported race finding withdrawn, Standards bounded-listener correction review ACTIVE conditional on matching ACK. No file writer/live lane. Original861ff075 and first HOLD0a73bc91 preserved.
+
 R2 Standards found unbounded listener.wait_closed before handler timeout; root independently confirms installedPython3.12 semantics. Same R2 Sol files receive bounded cleanup ordering correction. Spec retains frozen idle-oracle review, final hashes reviewed again before any live grant.
 
 R2 builder released script9b568bce/report1e553d2d; separate Standards/Spec read-only reviews ACTIVE conditional on ACK, exact paths/axes in guide. No .cache/report writer or emulator lane. Root owns integration documents only.
