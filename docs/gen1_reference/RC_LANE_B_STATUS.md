@@ -1,5 +1,15 @@
 # RC lane B — native trade recovery and selected production route
 
+> Historical detailed evidence. The [master guide](RC_MASTER_GUIDE.md) is now the only live status/queue; do not append another current plan here. Last B3 product source checkpoint is below.
+
+## Final B3 product checkpoint — 2026-09-13 03:50 UTC
+
+Claude's cx-466c7655 source review found a control timing race: a newly delivered native command could be noticed by CONTROL before the free-loop boundary arms the native host; an unbounded window request would NACK and disconnect. Root's `df38453` waits until the embedded host's actual bounded hold is armed before requesting the window. The old-code-failing case, 41 focused native entry/runtime/continuity tests, 309 Lua syntax parses and Claude's cx-40944b23 adversarial diff review pass. The existing grant path is wired source-to-source; **the actual receptionist/window/paired animation/file path is still unrun**. Failed/latching hosts remain held. No further code or emulator work is in this checkpoint.
+
+The stopped B-branch walk edits remain uncommitted/unmerged (see [worktree register](WORKTREE_REGISTER.md)). No independent B status owner is active. Future agents send exact evidence to the integrator, who updates only the master guide and register. User-created states are later rehearsal material unless they carry same-run enrollment and continuity provenance; no import feature is implied.
+
+---
+
 ## Product liveness closeout — 2026-09-13 03:42 UTC
 
 Root committed `800a0be` on `gen1/rc` after old-code-failing reproduction and independent Claude adversarial review (cx-9e39e4db). At an original receptionist query, the client captures the current map and CartRAM; the prior server equality required those to equal the last full roster heartbeat even though the free fingerprint does not track map or SRAM bank 1. A normal entrance to Viridian Center or in-game SAVE could refuse before issuing a native command. The new narrow comparator keeps committed ROM, trainer, party snapshot, 404-byte party storage, active box/current box, and CartRAM banks 0/2/3 exactly equal; only the held query's map (typed byte) and bank-1 save mirror may differ. Downstream preparation/full-save checksum and file receipt still bind the complete live checkpoint. A targeted map+bank1 case failed old code, now passes; bank0/box-bank/party mismatches refuse. **43/43** focused receptionist/native observation/frame-accounting tests pass, critical Ruff and diff check pass. This is product code progress, not original-ROM trade, 3× or recovery qualification. No additional route harness or emulator run was authorized after the owner stopped test-state construction.

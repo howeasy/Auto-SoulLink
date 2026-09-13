@@ -1,0 +1,19 @@
+# Gen 1 RC worktree register
+
+Checked 2026-09-13 against `git worktree list --porcelain` and `git status --porcelain=v1 --untracked-files=all` in every checkout. This is a *use/ownership* cleanup, not a deletion: worktree paths can back Codex/Claude tasks and contain ignored emulator receipts. Keep branches and checkouts until an owner separately validates those bindings and ignored data for physical relocation. Recheck before every handoff; the HEADs below are a snapshot, not a source pin.
+
+| Checkout under `E:/Google Drive/SLink/.claude/worktrees/` | HEAD at audit | Classification and action |
+| --- | --- | --- |
+| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | `df38453` | **ACTIVE, canonical integration.** Root owns code merges and [master guide](RC_MASTER_GUIDE.md). Documentation archive edits follow this HEAD. |
+| `gen1-native-free-service` | `3404bc9` | **PARKED DIRTY.** Claude stopped the normal-walk experiment: two modified selected-smoke files and untracked `tests/live/test_gen1_native_selected_progression.py`. Do not merge, clean, or delete; product B code through `10a500a` was already integrated at `e9f11f9`. |
+| `gen1-storage-sync-runtime` | `f8325dc` | **PARKED FUTURE C**, clean modeled storage work. No implementation authorization in the current A+B3 slice. Rebase/review before any future code. |
+| `gen1-collab-bad73b` | `adf3362` | **LIVE CLAUDE SESSION**, clean conversation checkout, not the B code source. Do not move under an active peer session. |
+| `gen1-active-3x-rc`, `gen1-active-3x-rc-measure` | `b858743` each | **HISTORICAL CLEAN**, A integrated at `3945f24`; ignored `.cache` evidence and task paths stay in place. Do not cherry-pick or use as current code. |
+| `gen1-continuity`, `gen1-hud-client`, `gen1-hud-server`, `gen1-memory-boundaries`, `gen1-nonlive-closure`, `gen1-registration`, `gen1-service-lease`, `gen1-speed-gate` | `fe7f1e1`, `da88b5f`, `9ea513e`, `e63f525`, `60362b8`, `547c5b3`, `1db7788`, `35b7894` | **HISTORICAL CLEAN, archived in place.** Their branch tips are not necessarily ancestors of RC because integration/reconciliation used different commits. Do not re-cherry-pick or assume their old README/status is current. |
+| `gen1-runtime-performance` | `fbaa506` | **DIRTY QUARANTINE**, three modified performance/inventory files. Old unqualified experiment; do not use as A source or discard user data. |
+| `agent-a7f68e4f2daf34d8d` (`claude/ui-mockup-track-b`) | `05c419b` | **OUT OF GEN1 RC**, six untracked UI files. Untouched. |
+| `shared-framework` | `9433c80` | **OUT OF GEN1 RC**, clean. Untouched. |
+
+The root checkout `E:/Google Drive/SLink` (`master`, `adf3362` at audit) is clean and **not** the RC checkout. The 18 registered worktrees include it. No worktree directory or branch was removed, reset, or moved in this cleanup. This matters: moving a registered checkout may break an app task's saved directory, and `git status` does not inventory ignored emulator caches. The word “archived” here means excluded from active ownership and code selection, not physically erased.
+
+Update rule for an agent: read the master guide, run `git worktree list --porcelain`, check `git -C <exact-path> status --short --branch` and HEAD for the tree you own, then edit only the assigned files. Report commit, changed paths, evidence level, pass/fail/skips, and next owner/action to the RC integrator. The integrator changes this register on any worktree creation, handoff, merge, dirty-state change, or physical archive. Before a later physical move/delete: verify each absolute source and destination inside this workspace; inspect tracked, untracked **and ignored** receipts plus live task/process bindings; preserve the branch and an evidence path; never discard dirty trees just to tidy the list.
