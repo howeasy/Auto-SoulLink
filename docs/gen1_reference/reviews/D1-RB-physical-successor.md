@@ -27,3 +27,13 @@ Summary48f2bd9f26309e361dd00e15987c78362e59137c86c92052719a230773d0f92f; console
 Sourceefb327d, requested300%, session42299; timed out and cleaned allresources. Both physicalparties held one starter, but script9/maskFC rival text remained while the route emitted movement. Checked snapshot contained starter sourcesa+b, settled empty, link_idnull and ruleslinks empty. No linked-starter or lab-loss PASS.
 
 Summary .cache/d1-rb-starter-rival-r4-summary.json eb39d6fa97ddecfc1677754b15420253b3cdda7e9bbd61d47c6d7ea9ed72e5b8; consoleb97b525a44df3073f7ded9ef43859966a661af67db2fec678007bc6d5a6ba570. Complete finite post-starter scripts8–14/18 were then corrected and independently source-reviewed;47/47/Ruff. Completion now waits for rival exit and terminalscript18, not only the earlier healed/event flag. Existing server settlement/source/faint/ALIVE oracle remains mandatory.
+
+## Attempt5 and final attempt6 — battle input HOLD, owner pause
+
+Attempt5 atf60be69 established both settled starters and ALIVE OaksLab link, then stalled after one Growl: retained move-menu fields Y12/X5/index1 with PP39 were mistaken for a fresh selection. Its captured replay was minimized and the current correction passed models and independent source review.
+
+Final attempt6 atcode c647f9126e79909f2b5976beec65d7b3beedd737, invocationdocsd894616, run run_20260913_233857_13c467/runtimeff963b85ea7946f72b6372948227f483, requested300%, limit180, session88801. Both starters settled and formed ALIVE link5b85b1827879a4fae77c1c9206e9d97f. It failed boundedly at `selected Growl has no accepted PP/action evidence`: last markers Y12/X5/index2, Growl PP40, stage await-growl-acceptance. No lab-loss completion. A sent A pulse did not establish acceptance; exact missed-input cause remains unproved. First resumed investigation should replay this unchanged-PP/selected-cursor case and distinguish a lost selection pulse from retained metadata, preserving existing PP40→39 regression and all source/hold oracles. Do not simply rerun unchanged.
+
+Summary .cache/d1-rb-starter-rival-r6-summary.json SHA256481821b77f2d6380a5d80641463900eb09e60ccfb7d4dcd4aefdf4e02cfde191; consolea395b5c1c4aad735cb9d759a45ec3356649fd65cc8d4640954e631077a8c07e3. Survivors, unknown audits and resource cleanup errors empty; independent process census found no EmuHawk/test runner. Shared-HUD code was exercised by the run, but no dedicated physical pixel-expiry capture was made. Source/model evidence is not a physical-display or release verdict.
+
+Current-card combined verification188passed/0fail/error/skip, .cache/current-cards-final.xml SHA256bc078899f88808b5ea2275608824a3ed3a7f3395f950412591074c216133ffa6. Owner requested handoff and pause; no further fix, rerun or new gameplay slice is dispatched.

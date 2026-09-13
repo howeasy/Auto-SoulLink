@@ -13,32 +13,28 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-13T23:38:41.726543+00:00",
+  "updated_at_utc": "2026-09-13T23:48:03.823355+00:00",
   "coordinator_session_id": "01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa",
   "source_head": "c647f9126e79909f2b5976beec65d7b3beedd737",
-  "live_lane": {
-    "owner": "coordinator",
-    "run": "D1-RB attempt6",
-    "source_head": "c647f9126e79909f2b5976beec65d7b3beedd737",
-    "artifact_root": ".cache/d1-rb-starter-rival-r6"
-  },
-  "next_action": "One final current-card 300%/180s verification, then TEMP handoff and pause all work; preserve any unresolved result without another workstream.",
+  "live_lane": null,
+  "next_action": "Remain paused. On explicit owner resume, read TEMP handoff and this guide, verify Git, appoint new coordinator, then diagnose R6 Growl acceptance before another live run.",
   "workers": [
     {
       "id": "battle-input",
       "owner": "/root/n0_enrollment_sol",
-      "state": "frozen",
+      "state": "blocked",
       "files": [
         "lua/tests/gen1_rb_ball_gate_inputs.lua",
         "tests/unit/test_gen1_selected_rb_ball_gate.py",
         "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
       ],
-      "next_action": "Coordinator current-card integration/verification then owner-requested pause",
+      "next_action": "Paused by owner; no execution without explicit resume.",
       "reuse_decision": "game-specific adapter: pinned R/B menu/story state; reuse existing input helpers where applicable",
       "receipt": "docs/gen1_reference/reviews/D1-RB-implementation-successor.md",
       "independent_review_refs": [
         "coordinator-verified current-card peer review recorded in transition archive"
-      ]
+      ],
+      "blocked_reason": "R6 physical Growl acceptance guard failed despite models; owner paused further diagnosis."
     },
     {
       "id": "shared-hud",
@@ -51,7 +47,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_hud_client.py",
         "docs/gen1_reference/reviews/SHARED-HUD-successor.md"
       ],
-      "next_action": "Coordinator current-card integration/verification then owner-requested pause",
+      "next_action": "Paused by owner; no execution without explicit resume.",
       "reuse_decision": "shared: existing HUD serves GB/GBA clients; viewport parameters stay adapters",
       "receipt": "docs/gen1_reference/reviews/SHARED-HUD-successor.md",
       "independent_review_refs": [
@@ -61,19 +57,20 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     {
       "id": "orchestration-hooks",
       "owner": "/root/rc_hooks_sol",
-      "state": "frozen",
+      "state": "blocked",
       "files": [
         "tools/agent_work_guard.py",
         "tools/install_agent_work_hooks.py",
         "tests/unit/test_agent_work_guard.py",
         "docs/agents/HOOKS_SETUP.md"
       ],
-      "next_action": "Coordinator current-card integration/verification then owner-requested pause",
+      "next_action": "Paused by owner; no execution without explicit resume.",
       "reuse_decision": "shared: generic ledger/policy paths and Codex/Claude hook adapters",
       "receipt": "docs/agents/HOOKS_SETUP.md",
       "independent_review_refs": [
         "coordinator-verified current-card peer review recorded in transition archive"
-      ]
+      ],
+      "blocked_reason": "Code and installation verified; native Codex /hooks trust and actual host firing remain unverified; paused by owner."
     },
     {
       "id": "parcel",
@@ -84,40 +81,43 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_rb_parcel_inputs.py",
         "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
       ],
-      "next_action": "Remain frozen until owner resumes and prerequisite integration is granted",
+      "next_action": "Paused by owner; no execution without explicit resume.",
       "reuse_decision": "game-specific adapter for pinned R/B routes; shared host and HUD reused",
       "receipt": "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md",
       "independent_review_refs": [
         "coordinator-verified current-card peer review recorded in transition archive"
       ]
     }
-  ]
+  ],
+  "paused_by_owner": true,
+  "pause_reason": "Owner requested handoff to next orchestrator and pause all work after current cards."
 }
 ```
 <!-- AGENT_CHECKPOINT_END -->
 
 
-Updated for the current-card freeze and owner-requested handoff/pause. This section is current; [past transition receipts](RC_SUCCESSOR_TRANSITIONS_2026-09-13.md) are history, not active grants.
+Updated at final owner-requested pause after R6; see machine checkpoint timestamp. This section is current; [past transition receipts](RC_SUCCESSOR_TRANSITIONS_2026-09-13.md) are history, not active grants.
 
 - **Coordinator/integrator:** Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa`, HOUNDOOM. Coordinator alone grants file/live ownership and integrates. Implemented code goes to Sol; context-sensitive discussion uses Claude Gen1-Collab2. OMP handles short bounded checks; independent work uses isolated workers when available.
 - **Canonical checkout:** `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`. Product behavior cut `15727ec7853ba5ef1d5506d2b5edcc95e2fbdb67`; last integrated gameplay test cut f60be69; current reviewed battle/HUD/hook files are being integrated now. Query Git and the checkpoint for the final freeze. Query Git for current HEAD; do not reset differences. Root master is not the RC checkout (registered at `adf3362` in the latest metadata check).
 - **Current input authority:** emulator tests use scripts and normal game buttons. **No Computer Use or OS UI input.** No human availability gate for scripted tests. Read-only game-state inspection is allowed; no test RAM/register/SaveRAM/savestate/CPU staging or copied performance-memory probes. Each live run still needs the coordinator's sole-lane grant. This supersedes earlier human-only and emulator-hold transitions.
-- **Live state:** coordinator owns final current-card attempt6 at c647f91, requested300%, limit180. All source writers/reviewers released. Earlier attempts1–5 closed/HOLD; source/module evidence remains separate from this pending live result.
+- **Live state:** PAUSED BY OWNER. No emulator, test runner, active code writer or assigned peer job. Final R6 closed/HOLD with full cleanup. All source/model/review receipts preserved.
 - **Dispatch:** fully specified cards for onboarded workers may be ACTIVE conditional on the first matching Git/hash/scope acknowledgment; work then continues in that turn. A mismatch means HOLD. This removes an idle roundtrip, never the complete claim, prerequisites or one-writer rule.
 
-### Active assignments and next action
+### Paused checkpoint and next action
 
-**Owner boundary:** finish the current battle-input, shared-HUD and hook cards, write the successor handoff, then pause all work. No next gameplay slice. Mute is DONE; do not reopen it. Route tests request300%;100% remains available for explicit qualification. All authors/reviewers are released; coordinator owns remaining integration and one bounded verification.
+**All work is paused by owner request.** No new task, retry, live run or integration is authorized by this handoff. On explicit resume, the next coordinator verifies Git/ownership and records their identity before dispatch. Mute is DONE; do not reopen it. R/B focus and shared-module policy remain; route testing requests300%, explicit100% only for qualification.
 
-| Card | Current state / owner / next action |
+| Item | Verified state / next owner action after resume |
 | --- | --- |
-| Battle input | Sol candidate frozen and independently accepted: PP acceptance distinguishes retained move-menu fields from turn text;49 focused/shared models passed. Exact Lua/unit/report paths are in the machine checkpoint. Current-card physical verification remains. |
-| Shared HUD | Shared lua/hud.lua owns compact link notice and painted-surface expiry; gen1_hud_service only forwards kind. Lazy-clear correction leaves empty/no-GUI clients untouched. Source review accepted; exact combined caller tests passed. Physical display semantics remain bounded to current production GUI composition. |
-| Orchestration hooks | Six focused tests and independent review accepted. Installed additive scoped Codex/Claude handlers with existing settings preserved and idempotency verified. Native Codex trust via /hooks is still required; actual host firing is not claimed. See docs/agents/HOOKS_SETUP.md. |
-| Combined verification |188 passed, zero failures/errors/skips, .cache/current-cards-final.xml. These are current-card checks, not full release qualification. |
-| Parcel module | Frozen untracked candidate,12/12 models and source review accepted; not integrated. Raw menu producer and successful first checkpoint remain prerequisites. No new work before owner resumes. |
-| Recovery / remaining RC | R0 revision4 report is frozen/uncommitted and unreconciled. P2a policy approved but mechanisms absent; P2b still unapproved. Full campaign/trade/artifact/performance/frozen evaluator and human evidence remain open. |
-| Coordinator | Update this checkpoint/register, integrate only reviewed current-card files, record one bounded result, write TEMP handoff and mark all work paused. |
+| Current source |c647f9126e79909f2b5976beec65d7b3beedd737 integrates reviewed battle input, shared-HUD correction and hook package. Later commits are checkpoint documentation. Production core baseline15727ec; HUD is a new production delta. |
+| Battle path |R6 HOLD at Growl acceptance: PP40/cursor2, await-growl-acceptance after emitted A; both starters settled and ALIVE link verified. Replay this concrete failure before another live run. Full lab/campaign/ball gate is not proved. |
+| Shared HUD |Shared core compact Linked! and painted-surface expiry, thin Gen1 kind forwarding; source review and combined models passed. Runtime exercised; physical pixel-expiry verification remains unproved. |
+| Checks |188 current-card tests passed, no failure/error/skip; .cache/current-cards-final.xml. No fresh full release evaluator or readiness verdict. |
+| Hooks |Scoped Codex/Claude config installed, existing settings preserved, repeat apply idempotent; exact handlers tested through PowerShell/cmd/Git Bash. Codex native /hooks trust and host event firing remain pending/unverified. No native OMP extension installed; dispatch policy shared. |
+| Preserved dirty candidates |R0-supplied-contract-successor.md modified/frozen/unreconciled; parcel Lua/unit/report untracked,12/12/source-reviewed, not integrated. Preserve these exact files; no cleanup/reset. |
+| Remaining RC |Source/model/physical/human levels stay separate. Full campaign/trade/artifact/performance/frozen evaluator and two-person attestation remain open. P2a approved but mechanisms absent; P2b unapproved. |
+| Handoff |TEMP document (handoff skill): C:\Users\howar\AppData\Local\Temp\SLink-RB-RC-successor-handoff-20260913.md. This guide remains sole current authority; transition archive is history. |
 
 **Initial D1-RB implementation claim (historical scope; current checkpoint governs).** (1) gameplay.red.ball-gate and gameplay.blue.ball-gate: genuine starter/lab faint before activation, then parcel/cancel/first-ball player-local activation; actual catches and both fastest-text settings remain later full-row requirements. (2) Product15727ec, shared testa63d793; pinned pokered405b6246; accepted D1-RB source report d538b856abffe2fd37c97fc5d8d57ebe25aa53204fbe61f959d923138156b8ee; root verified both clean ROM hook bytes E1D1C1C178EA96CFC9 at52843, lab HealParty and inactive-faint guard. (3) Current script stops at first idle; no normal starter/rival/ball gameplay receipt. (4) Hypothesis: a scenario module supplies normal inputs on existing owned frames after coordinator audited paired enrollment, with context/hold refusal; no new production authority. (5) First falsifier is modeled refusal before handshake/while held/after changed context plus real route start; first live checkpoint both starter receipts and pre-ball lab loss with link ALIVE/no death or force_faint. (6) Sol alone: tests/live/test_gen1_selected_rb_ball_gate.py, lua/tests/gen1_rb_ball_gate_inputs.lua, tests/unit/test_gen1_selected_rb_ball_gate.py NEW; shared tests/live/gen1_scripted_host.py, lua/tests/gen1_scripted_new_game.lua, tests/live/gen1_selected_scenario.py, tests/live/test_gen1_selected_idle.py. Report reviews/D1-RB-implementation-successor.md and .cache/d1-rb-model.*. D0-RB PASS is prerequisite satisfied; no parallel writer on these files. (7) Positive and refusal modeled checks, focused Ruff; freeze first working starter/rival checkpoint promptly, then source review and separate sole live grant. Subsequent parcel readback/no activation, cancel unchanged bag/money, first ball retained exact ACK/source and partner independence are later same-admission checkpoints; do not call rows closed. (8) On source contradiction stop exact checkpoint, preserve evidence and request bounded coordinator correction; never stage game data or bypass holds. (9) READY and conditional ACTIVE now. No manifest/server/product changes. Default canonical R/B first; fastest-text artifact adapter and D2 catches are separate real gameplay follow-ups, not a demo detour.
 

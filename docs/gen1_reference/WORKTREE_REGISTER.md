@@ -4,11 +4,11 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-Canonical E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2, gen1/rc. Coordinator Codex01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa alone integrates and updates the guide/register. The machine checkpoint in the guide names exact frozen files and next action.
+**PAUSED BY OWNER.** Canonical E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2, gen1/rc. Code freeze c647f9126e79909f2b5976beec65d7b3beedd737; later docs record the pause. All workers/reviewers released, live88801 closed/HOLD and no EmuHawk/test runner remains. No active file or emulator claim.
 
-All battle/HUD/hook/parcel authors and reviewers have released files. Coordinator has the final current-card attempt6 live grant at c647f91; no source writer is active. Coordinator has only current-card integration/verification and TEMP handoff remaining, then all work pauses by owner request. Parcel and R0 candidates remain explicitly unintegrated; other parked worktrees remain untouched.
+Coordinator Codex01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa has only completed the handoff; next coordinator requires explicit owner resume and must update the sole guide identity/claims. TEMP handoff location is in the guide. Native hook trust/activation is not claimed.
 
-Production core baseline15727ec; current shared HUD changes are a production delta, not merely test/docs. The final freeze is recorded in the guide after integration. Root master is not the RC checkout. Native hook configs were installed user-level with backups; trust/activation remains a separate host action, not a code receipt.
+Preserve dirty R0 report and untracked parcel Lua/unit/report. All18 parked registrations remain as classified; no parked worktree was moved/deleted/reset. Root master is not the RC checkout. Existing user settings were preserved during scoped hook installation.
 
 ## Preserved checkout classifications
 
