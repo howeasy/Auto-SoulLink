@@ -138,6 +138,16 @@ def test_captured_lab_choose_mon_speech_advances_only_allowed_text_button():
     assert phase == "lab-oak-speech-wait" and not buttons["A"] and not buttons["Down"]
 
 
+def test_captured_lab_script6_exits_possible_leftover_text_locally():
+    _, driver, handshake, status, point = model()
+    point.map, point.x, point.y = 0x28, 5, 3
+    point.party_count, point.lab_script, point.joy_ignore = 0, 6, 0
+    buttons, phase = driver.step(handshake, status, point, 16)
+    assert phase == "lab-text-exit" and buttons["B"] and not buttons["A"] and not buttons["Down"]
+    buttons, phase = driver.step(handshake, status, point, 18)
+    assert phase == "lab-text-exit" and buttons["Down"] and not buttons["B"]
+
+
 def test_checkpoint_requires_acked_source_faint_and_alive_preball_link():
     from tests.live.test_gen1_selected_rb_ball_gate import verify_starter_rival_checkpoint
 

@@ -85,3 +85,7 @@ Owner requested faster route tests. Sol mute worker prepares isolated speed300 p
 MuteDONE by ownerconfirmation, no furthermute tasks. Live70685closed and cleanupverified. Shared scenariofile released for preparedspeedpatch only; exact dialogue correction to starterroute separately assigned next.
 
 Two disjoint active writers: Sol1 exact starter script6 dialogue Lua/unit; speedSol shared SelectedRun.py preparedpatch application. Parcel files frozen. No emulator. Muteclosed/done.
+
+Both speed/dialog writers frozen/released with hashes in guide. Root speedreviewcomplete, Codex narrowdialogSpecreviewactive. No emulator. Muteclosed.
+
+Dialogue+speed candidates reviewed; finalcombined46pass. Root owns fresh3×attempt4 afterintegration, allsourcewritersreleased. Parcel candidatefrozenawaitingfirstcheckpoint; muteDONE.

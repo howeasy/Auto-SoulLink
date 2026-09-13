@@ -69,6 +69,13 @@ function M.new(expected)
                 end
                 return idle(),"lab-oak-speech-wait"
             end
+            if point.lab_script==6 and point.x==5 and point.y==3 and point.joy_ignore==0 then
+                self.lab_text_exit_started=self.lab_text_exit_started or frame
+                assert(frame-self.lab_text_exit_started<600,"lab script6 text exit made no bounded progress")
+                if frame%16<2 then return press("B",frame),"lab-text-exit" end
+                return walk(point,5,4),"lab-text-exit"
+            end
+            self.lab_text_exit_started=nil
             local target=expected.player=="a"and 8 or 6 -- Bulbasaur A, Charmander B; distinct species.
             if point.y<4 then return walk(point,5,4),"lab-clear-entry" end
             if point.x==target and point.y==4 then

@@ -245,7 +245,7 @@ def verify_initial_save_file(proof, expected, save_directory):
     return {"path": str(path), "sha256": sha(path), "byte_length": len(actual), "receipt": proof}
 
 
-def private_receipt(job, spec, rom, emulator):
+def private_receipt(job, spec, rom, emulator, requested_speed_percent):
     owned = job["owned"]
     private = owned / "clients" / spec["run_id"] / spec["player"]
     assert private.resolve().is_relative_to((owned / "clients").resolve())
@@ -265,12 +265,14 @@ def private_receipt(job, spec, rom, emulator):
     assert paths and all(Path(path).resolve() == saves.resolve() for path in paths)
     assert config["FrameSkip"] == 0 and config["AutoMinimizeSkipping"] is False
     assert config["SoundVolume"] == 0 and config["SoundVolumeRWFF"] == 0
+    assert config["SpeedPercent"] == requested_speed_percent
     assert any(matching(child) is not None and Path(matching(child).exe()).resolve() == emulator
                for child in job["children"].values()), "identity-checked emulator child missing"
     return {"private": str(private), "save_directory": str(saves),
             "staged_sha256": {name: sha(path) for name, path in files.items()},
             "save_files": {str(path): sha(path) for path in saves.glob("*.SaveRAM")},
-            "save_paths": paths, "root_cache": files["slink_path.cfg"].read_text()}
+            "save_paths": paths, "root_cache": files["slink_path.cfg"].read_text(),
+            "speed_percent": config["SpeedPercent"]}
 
 
 class SelectedRun:
@@ -280,7 +282,8 @@ class SelectedRun:
     observation_sequence = staticmethod(observation_sequence)
 
     def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="15727ec",
-                 input_mode="human", launch_mode="product-cli", route_mode=None):
+                 input_mode="human", launch_mode="product-cli", route_mode=None,
+                 requested_speed_percent=300):
         self.owned = Path(owned).resolve()
         self.variants = tuple(variants)
         assert len(self.variants) == 2 and all(v in {"red", "blue", "yellow"} for v in self.variants)
@@ -288,6 +291,9 @@ class SelectedRun:
         self.base_config = Path(base_config).resolve()
         self.limit = limit
         assert type(limit) in (int, float) and 0 < limit <= 1800
+        if type(requested_speed_percent) is not int or requested_speed_percent not in (100, 300):
+            raise ValueError("requested speed must be 100 or 300 percent")
+        self.requested_speed_percent = requested_speed_percent
         if type(input_mode) is not str or input_mode not in {
                 "human", "computer-use-normal-buttons", "scripted-normal-buttons"}:
             raise ValueError("explicit supported input mode required")
@@ -312,7 +318,7 @@ class SelectedRun:
         self.outcome = {"status": "HOLD", "variants": self.variants,
                         "owned": str(self.owned), "source_cut": source_cut,
                         "limit_seconds": limit, "input_mode": input_mode, "launch_mode": launch_mode,
-                        "route_mode": route_mode,
+                        "route_mode": route_mode, "requested_speed_percent": requested_speed_percent,
                         "human_inputs_only": input_mode == "human"}
 
     async def __aenter__(self):
@@ -424,6 +430,7 @@ class SelectedRun:
         base["AutoMinimizeSkipping"] = False
         base["SoundVolume"] = 0
         base["SoundVolumeRWFF"] = 0
+        base["SpeedPercent"] = self.requested_speed_percent
         private_config = self.owned / "base-config.ini"
         private_config.write_text(json.dumps(base, indent=2) + "\n")
         self.outcome["input_hashes"] = {"emulator": sha(self.emulator), "source_config": sha(self.base_config),
@@ -519,7 +526,8 @@ class SelectedRun:
         document = self.runtime.state().document()
         players = {job["player"]: private_receipt(
             job, json.loads(self.downloads[job["player"]]["manifest"].read_text()),
-            self.downloads[job["player"]]["rom"], self.emulator) for job in self.jobs}
+            self.downloads[job["player"]]["rom"], self.emulator,
+            self.requested_speed_percent) for job in self.jobs}
         if self.launch_mode == "scripted-selected-launcher":
             for player in ("a", "b"):
                 directory = Path(players[player]["private"]) / "emulator"
