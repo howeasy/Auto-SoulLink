@@ -130,7 +130,8 @@ emu.frameadvance=function()
             -- gate supplies ordinary menu buttons on those frames, never while held.
             assert(status and status.phase=="waiting_for_overworld" and not status.native_reattach,
                 "unexpected pre-loop free frame")
-            assert(status.host and status.host.owner_id==status.context.physical_instance
+            assert(status.host and status.host.lease_owned and status.host.owner_id
+                and (not status.context or status.host.owner_id==status.context.physical_instance)
                 and not status.host.held,"clean New Game frame lost its exclusive native owner")
             early_claim_frame=early_claim_frame or frame
             first_client_frame=first_client_frame or frame
