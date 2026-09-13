@@ -241,6 +241,14 @@ function M.new(options)
             local selected=scope();if not selected then return nil end
             local current=self.current
             local state=self.host.status();local host=state.host
+            -- In the embedded free loop a command may arrive during the same
+            -- ordinary tick that sends CONTROL, before the next boundary arms
+            -- the native vote. Do not send unbounded evidence (which the server
+            -- NACKs/disconnects); the armed next CONTROL requests the window.
+            if embedded and not (state.single_frame_only and state.frame_callbacks_suppressed
+                and state.load_state_invalidation and state.owner_exit_invalidation
+                and host.held and host.host_blocked and host.lease_owned and host.physical_stop_verified
+                and not state.failed and not host.failed and not host.closed)then return nil end
             local stage,child_intent
             if current.body.cmd=="native_trade_prepare"then stage,child_intent=self.preparation.current(current.command_id)end
             local intent=child_intent or current.intent

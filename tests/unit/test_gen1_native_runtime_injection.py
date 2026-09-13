@@ -169,6 +169,30 @@ def test_shared_owner_consumes_only_live_native_scope_and_preserves_rate_pause_a
     assert g.native.step_native(g.native) is False and g.steps == 3
 
 
+def test_embedded_window_waits_for_the_native_vote_before_requesting_control(lua):
+    """A command delivered during an ordinary tick cannot send unbounded evidence."""
+    lua.execute("""
+        construct();body=command('native_trade_commit')
+        native.native.frames_pending=function()return true end
+        native.native.window_evidence=function()return {schema='explicit-native-window-fixture'}end
+        native:after_service()
+        host_state.host.held=false;host_state.host.host_blocked=false
+        host_state.single_frame_only=false;host_state.frame_callbacks_suppressed=false
+        host_state.load_state_invalidation=false;host_state.owner_exit_invalidation=false
+        early=native.operations.request({binding_digest=string.rep('b',64)},{admitted=true,held=false})
+    """)
+    assert lua.globals().early is None
+    assert lua.globals().native.pending_request is None
+    lua.execute("""
+        host_state.host.held=true;host_state.host.host_blocked=true
+        host_state.single_frame_only=true;host_state.frame_callbacks_suppressed=true
+        host_state.load_state_invalidation=true;host_state.owner_exit_invalidation=true
+        ready=native.operations.request({binding_digest=string.rep('b',64)},{admitted=true,held=true})
+    """)
+    assert lua.globals().ready["evidence"]["host"]["held"] is True
+    assert lua.globals().ready["evidence"]["host"]["bounded"] is True
+
+
 @pytest.mark.parametrize("fault", ["scope", "stale_service", "expired", "context", "revoked"])
 def test_external_owner_cannot_spend_a_changed_stale_or_revoked_native_authority(lua, fault):
     lua.execute("construct();scope=arm()")
