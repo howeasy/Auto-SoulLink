@@ -143,6 +143,14 @@ Integration completed: **157 pass/4 fail/0 skip**,161 cases,96.80s, exit1. All f
 
 **F1-retirement R2 Spec re-review READY** for existing independent `/root/f1_fixture_spec`, same one-file no-write scope. Author released corrected candidate after115 target/helper passes. New test SHA256 `04c83e1642626420fc98fcdb7d5991dd1fb30d1125a1f42eb3b7ec79240688b9`; report `2ca09fe8c9d7654d72bc0a73fe96d1934cff60dd596f42d89230d5e79eb7d732`; R2 XML `59b1863aa24c9e2cd2ae323b82b7d7f24face01800338fc01f0e13d2d389e13a`. Confirm previous FIFO finding fixed through Gen1Runtime.process, exact A/B queue transitions, preserved oracles/R1 rejection. No tests/writes; acknowledge hashes then ACTIVE.
 
+OMP browser resolution **ACTIVE** after inline ACK at6a47f8c for exact bundled package/Node read scope. No installs/browser launch; return viable process-local configuration only.
+
+### Git administrative recovery
+
+Commit6a47f8c reported failure deleting `.git/worktrees/gen1-speed-gate`. Subsequent read-only inventory lists17 worktrees instead of18. Physical parked checkout and its .git pointer remain; its shared branch still resolves35b7894. Administrative HEAD/index/commondir/gitdir are missing; residue is ORIG_HEAD plus empty logs/refs. Cause not yet proved. No worktree remove/prune command was issued in this task, and no non-sample Git hook/core.hooksPath was found.
+
+Coordinator owns recovery of that registration only: preserve residue and checkout .git pointer under canonical `.cache/speedgate-admin-recovery/`, try standard `git worktree repair`, and if metadata is insufficient first verify working files against retained35b7894 using an isolated temporary index before any administrative reconstruction. No working-file checkout/reset/move/delete or branch change; preserve ignored receipts. All Git mutations now use per-command `-c maintenance.auto=false -c gc.auto=0`; read status uses `--no-optional-locks`. Recovery does not grant parked source work. Other read-only reviews continue.
+
 Next owner/action: C1 runner returns its first falsifier; N0 runner returns the actual-CLI oracle gap; Claude returns the concrete P2a decision report; coordinator resolves the concrete F1 host-capability question. Coordinator reviews these and records the nine-part claim before any implementation READY. No production implementation is currently granted.
 
 Source cut **`19edbb2`** on `gen1/rc`: owner-authorized native lifecycle and coherent checkpoint refactors are integrated. Prior product fixes remain `df38453`; earlier physical receipts are still tied to their original cuts. The root `E:/Google Drive/SLink` checkout stays clean `master` at `adf3362`. Subsequent documentation commits do not change source evidence.
