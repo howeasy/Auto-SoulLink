@@ -1,6 +1,6 @@
 # Gen 1 RBY RC: start here
 
-Root [AGENTS.md](../../AGENTS.md) and [CLAUDE.md](../../CLAUDE.md) are tracked short entry pointers for future Codex and Claude sessions. They contain no separate backlog.
+This is the universal entry for **any** implementation, review, research, or evidence agent, regardless of model or ClaudEx transport. Tracked root [AGENTS.md](../../AGENTS.md) and [CLAUDE.md](../../CLAUDE.md) are compatibility pointers, not separate rules. A new agent runtime that does not auto-load either file must receive this README path in its assignment.
 
 Read [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md) for the **only current status, ordered work queue, proof boundaries, and agent update rules**. Check [WORKTREE_REGISTER.md](WORKTREE_REGISTER.md) before touching another checkout. The manifest at [tests/gen1_release_requirements.json](../../tests/gen1_release_requirements.json) is the exact requirement catalogue, not a claim that its rows have passed.
 
