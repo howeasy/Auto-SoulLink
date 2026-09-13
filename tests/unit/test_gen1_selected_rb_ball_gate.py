@@ -126,6 +126,18 @@ def test_nickname_refusal_waits_for_observed_lab_script_transition():
     assert phase != "decline-nickname"
 
 
+def test_captured_lab_choose_mon_speech_advances_only_allowed_text_button():
+    _, driver, handshake, status, point = model()
+    point.map, point.x, point.y = 0x28, 5, 3
+    point.party_count, point.lab_script, point.joy_ignore = 0, 5, 0xFC
+    buttons, phase = driver.step(handshake, status, point, 16)
+    assert phase == "lab-oak-choose-mon-speech"
+    assert buttons["A"] and not buttons["Down"]
+    point.joy_ignore = 0xFF
+    buttons, phase = driver.step(handshake, status, point, 17)
+    assert phase == "lab-oak-speech-wait" and not buttons["A"] and not buttons["Down"]
+
+
 def test_checkpoint_requires_acked_source_faint_and_alive_preball_link():
     from tests.live.test_gen1_selected_rb_ball_gate import verify_starter_rival_checkpoint
 

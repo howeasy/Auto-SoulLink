@@ -63,6 +63,12 @@ function M.new(expected)
         end
         assert(point.map==0x28,"R/B first checkpoint left Oak's Lab unexpectedly")
         if point.party_count==0 then
+            if point.lab_script==5 then
+                if point.joy_ignore==0xFC then
+                    return press("A",frame),"lab-oak-choose-mon-speech"
+                end
+                return idle(),"lab-oak-speech-wait"
+            end
             local target=expected.player=="a"and 8 or 6 -- Bulbasaur A, Charmander B; distinct species.
             if point.y<4 then return walk(point,5,4),"lab-clear-entry" end
             if point.x==target and point.y==4 then

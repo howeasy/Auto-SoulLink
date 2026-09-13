@@ -57,3 +57,7 @@ Parallel code lanes: Sol1 owns current lab speech correction in starter Lua/unit
 Sol1 lab correction frozen/released45/45/Ruff, two reviewers confirm revised two-file source. Sol2 parcel module remains active in separate NEW Lua/unit. No live runner/shared writer.
 
 Revised lab Standards reviewer is /root/d1_yellow_claim, R/B-only read-only assignment under current guide; old Yellow report work stays deferred. Sol2 parcel code remains isolated.
+
+OMP has one bounded read-only first-run lab-stall/cleanup receipt cross-check; no file or live lane.
+
+21:23 UTC live Claude disconnected; isolated source-only fallback for starterUp+A question. Sol2 continues missing wildRUN in parcelmodule; first partial candidate not accepted. Labfix bothreviewsaccepted and readyintegration.
