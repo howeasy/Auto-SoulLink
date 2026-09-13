@@ -278,7 +278,8 @@ class SelectedRun:
     enrollment_ready = staticmethod(enrollment_ready)
     observation_sequence = staticmethod(observation_sequence)
 
-    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="15727ec"):
+    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="15727ec",
+                 input_mode="human"):
         self.owned = Path(owned).resolve()
         self.variants = tuple(variants)
         assert len(self.variants) == 2 and all(v in {"red", "blue", "yellow"} for v in self.variants)
@@ -286,6 +287,9 @@ class SelectedRun:
         self.base_config = Path(base_config).resolve()
         self.limit = limit
         assert type(limit) in (int, float) and 0 < limit <= 1800
+        if type(input_mode) is not str or input_mode not in {"human", "computer-use-normal-buttons"}:
+            raise ValueError("explicit supported input mode required")
+        self.input_mode = input_mode
         self.source_cut = source_cut
         self.patch = MonkeyPatch()
         self.client = self.runtime = self.listener = None
@@ -296,7 +300,8 @@ class SelectedRun:
         self._owns_output = False
         self.outcome = {"status": "HOLD", "variants": self.variants,
                         "owned": str(self.owned), "source_cut": source_cut,
-                        "limit_seconds": limit, "human_inputs_only": True}
+                        "limit_seconds": limit, "input_mode": input_mode,
+                        "human_inputs_only": input_mode == "human"}
 
     async def __aenter__(self):
         try:

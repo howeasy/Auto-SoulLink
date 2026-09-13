@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+Sol input-attribution metadata accepted; exact two-file diff/model/Ruff verified by root. R0 contract2a1a7c1b frozen, independent Spec reviewer and Claude short row5 source check read-only; no classifier writer. Autonomous normal-button D0 live grant is next after final preflight.
+
 Sol metadata correction ACTIVE after ACK. Isolated OMP encoding attempt timed out/stopped with no receipt or file claim; live OMP gets short context-aware ledger check. Claude R0 report correction active. No live lane started.
 
 D0 input-attribution correction READY reserves the same two tracked test files and named report/model outputs to Sol. Needed because fixed human_inputs_only metadata must not mislabel autonomous normal-button input. No live run yet; Claude report correction and isolated OMP source check are disjoint.

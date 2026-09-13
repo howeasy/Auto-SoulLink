@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import inspect
 import tempfile
 from pathlib import Path
 
@@ -14,10 +15,10 @@ from tests.live.gen1_selected_scenario import (
 )
 
 
-async def idle_enrollment(owned, *, emulator, base_config, limit=1800):
+async def idle_enrollment(owned, *, emulator, base_config, limit=1800, input_mode="human"):
     """Explicit physical entry, invoked by a human outside pytest collection."""
     run = SelectedRun(owned, ("yellow", "yellow"), emulator=emulator,
-                      base_config=base_config, limit=limit)
+                      base_config=base_config, limit=limit, input_mode=input_mode)
     async with run:
         rows = await run.wait(run.enrollment_ready)
         enrollment = run.audit_enrollment(rows)
@@ -168,3 +169,18 @@ async def test_outside_cache_output_is_preserved_on_context_refusal(tmp_path):
             pytest.fail("outside output should be refused before entry")
     assert progress_file.read_bytes() == b"outside progress sentinel\n"
     assert summary.read_bytes() == b"outside summary sentinel\n"
+
+
+def test_selected_idle_input_attribution_is_explicit_and_validated(tmp_path):
+    assert inspect.signature(idle_enrollment).parameters["input_mode"].default == "human"
+    settings = {"emulator": tmp_path / "EmuHawk.exe", "base_config": tmp_path / "config.ini", "limit": 1800}
+    human = SelectedRun(tmp_path / "human", ("yellow", "yellow"), **settings)
+    assert human.outcome["input_mode"] == "human"
+    assert human.outcome["human_inputs_only"] is True
+    computer = SelectedRun(tmp_path / "computer", ("yellow", "yellow"),
+                           input_mode="computer-use-normal-buttons", **settings)
+    assert computer.outcome["input_mode"] == "computer-use-normal-buttons"
+    assert computer.outcome["human_inputs_only"] is False
+    with pytest.raises(ValueError):
+        SelectedRun(tmp_path / "invalid", ("yellow", "yellow"), input_mode="automation", **settings)
+    assert not any((tmp_path / name).exists() for name in ("human", "computer", "invalid"))

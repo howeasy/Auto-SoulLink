@@ -1,0 +1,5 @@
+# D0 selected idle input attribution — model receipt
+
+`SelectedRun` now accepts an explicit validated `input_mode`: `human` (compatible default) or `computer-use-normal-buttons`. The output records both `input_mode` and the matching `human_inputs_only` boolean. `idle_enrollment` forwards the selected mode without changing the Manager, launcher, input mechanism, enrollment oracles, cleanup, or authority. This metadata lets a future normal-button computer-driven run state who supplied the inputs truthfully; it does not perform any input itself.
+
+The new modeled test checks both accepted modes, invalid-mode refusal, import/construction without outputs, and the idle entry's default parameter. It was red against the previous signature (`KeyError: input_mode`, with the prior nine tests passing), then the complete file passed: `.cache/d0-input-attribution.xml` and `.cache/d0-input-attribution.txt` record 10 passed with zero skips or deselection. Focused Ruff passed. No live run was invoked. The prior D0-A and N0 evidence remains unchanged.
