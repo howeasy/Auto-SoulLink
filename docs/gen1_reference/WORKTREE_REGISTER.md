@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+CURRENT: owner available; coordinator holds sole N0 enrollment live lane after clean6a8049e/fresh input preflight and reviewed861ff075/config92ca34c6 checks. Exact .cache subtree/summary/console and physical report in guide. No other worker/test/emulator lane or production writer. Worktrees unchanged; parked trees preserved.
+
 FINAL CURRENT SNAPSHOT: Claude report revision2 frozen22491a6a and source facts reviewed with explicit status-value/provenance exclusion in guide; all workers released. N0 controller861ff075 reviewed WAIT human availability, no live lane or source writer. Canonical source/testsa1714c5 unchanged; only coordinator/review documents integrated. All worktrees preserved. Earlier ACTIVE entries are historical, not current grants.
 
 Claude save-boundary first report348c5b03 frozen for Git retention; coordinator found concrete equality/provenance/validator/trampoline corrections. Same-report source-only correction ACTIVE conditional on ACK, no scope expansion or live grant. Enrollment remains reviewed WAIT human availability.
