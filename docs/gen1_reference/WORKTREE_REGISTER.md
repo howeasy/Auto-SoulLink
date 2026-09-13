@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+D0-S scripted-only480s live lane ACTIVE under root on exact new outputs; no UI input or staging. R0 final contract review, Claude existing-model fixture mapping and OMP receipt-field checklist are read-only parallel work. No code writer or second live lane.
+
 D0-S four-file candidate accepted MODEL after both reviews,19 complete model cases and Ruff; author/reviewers released. Integrating exact files/report, then one scripted-only live lane after preflight. No product/manifest edit or Computer Use.
 
 D0-S final four-file correction frozen (module03742f5d/testbe90e015/hostb5a6d797/Luacd8c8e3d), focused parallel re-review only. Author released; 19 model cases and Ruff pass. Scripts-only; no live lane until acceptance.
