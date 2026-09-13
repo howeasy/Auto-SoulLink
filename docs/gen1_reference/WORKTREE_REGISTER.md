@@ -4,14 +4,14 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-**Current work:** R/B gameplay priority; Yellow-specific new work deferred, broad exclusion migration paused to avoid overhead. D0-RB scripted enrollment passed and all resources closed. Sol owns the seven D1-RB test/driver paths named in the guide. Claude source claim and Codex gate review are complete/released; OMP was told to freeze existing scope findings and stop further census.
+**Current work:** R/B gameplay priority; Yellow-specific new work deferred, broad exclusion migration paused to avoid overhead. D0-RB scripted enrollment passed and all resources closed. Sol owns the seven D1-RB test/driver paths named in the guide. Claude waypoint support and Codex R/B receipt cross-check completed/released. OMP tasks are closed after repeated provider errors; no scope report was produced.
 
 - Canonical: `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`; coordinator Codex `01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa` on HOUNDOOM owns guide/register, reviews and integration.
-- Product behavior15727ec; scripted test source6283d58. Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
-- D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed; the fresh R/B lane is separately assigned to the coordinator. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
+- Product behavior15727ec; integrated scripted test sourcea63d793 (R/B default). Metadata census before this documentation update found canonical HEAD e7161be and all18 registered worktrees; root master remains adf3362. No checkout was created, removed, moved, reset or cleaned in this work packet.
+- D0-S scripted Y/Y run completed exit0; all helpers/emulators/resources closed; fresh R/B session93346 also completed exit0 with all resources closed; no current live lane. No Computer Use or OS UI input is permitted. Normal-button scripted tests do not require human availability.
 - Sol /root/n0_enrollment_sol owns the D1-RB exact seven test/driver files plus report/receipts in the guide; no production/server/manifest writer. Codex gate reviewer released.
 - Yellow and E1 source reviewers completed and released their reports. Yellow is deferred post-RC; E1 implementation is paused for gameplay priority.
-- Claude Gen1-Collab2 owns reviews/D1-RB-claim-successor.md (ACK at b1439a2); OMP owns reviews/RC-RB-scope-map-successor.md. Both source-only reports, no execution. R0 revision4 is frozen/released and awaiting reconciliation; D0-S receipt check is complete.
+- No peer report writer. Claude D1-RB source report is integrated/released and now has reply-only waypoint support; OMP file grant revoked with closed task. R0 revision4 remains frozen/released and awaiting reconciliation, uncommitted. D0-S receipt check complete.
 - Speed-gate remains parked and administratively locked. Its repaired metadata and original worktree are preserved; see [recovery receipt](reviews/SPEED_GATE_ADMIN_RECOVERY_2026-09-13.md).
 
 ## Preserved checkout classifications
@@ -19,7 +19,7 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 The table below retains the last full file-status audit; it does not claim that every parked tree's files were rescanned today. Today's metadata census confirmed all18 registrations and the speed-gate lock. Parked dirty evidence must not be discarded or cherry-picked without a separate reviewed claim.
 | Checkout under `E:/Google Drive/SLink/.claude/worktrees/` | HEAD at audit | Classification and action |
 | --- | --- | --- |
-| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | product15727ec; test6283d58; query Git for current docs HEAD | **CANONICAL.** Current ownership and grants are only in RC_MASTER_GUIDE.md. |
+| `gen1-rby-code-sweep-8d06e2` (`gen1/rc`) | product15727ec; testa63d793; query Git for current docs HEAD | **CANONICAL.** Current ownership and grants are only in RC_MASTER_GUIDE.md. |
 | `gen1-native-free-service` | `3404bc9` | **PARKED DIRTY.** Claude stopped the normal-walk experiment: two modified selected-smoke files and untracked `tests/live/test_gen1_native_selected_progression.py`. Do not merge, clean, or delete; product B code through `10a500a` was already integrated at `e9f11f9`. |
 | `gen1-storage-sync-runtime` | `f8325dc` | **PARKED FUTURE C**, clean modeled storage work. No implementation authorization in the current A+B3 slice. Rebase/review before any future code. |
 | `gen1-collab-bad73b` | `adf3362` | **HISTORICAL PEER CHECKOUT**, clean; no SLink Claude session was reachable at handoff check. Verify task binding before any physical move. |
@@ -36,6 +36,6 @@ Read the master guide first; verify only the assigned checkout with `git --no-op
 
 All Git mutations use `-c maintenance.auto=false -c gc.auto=0`. Before any future physical archive/move/delete, verify absolute workspace containment, tracked/untracked/ignored receipt preservation and live bindings. Current authorization does not permit deleting parked worktrees, merging to master or pushing. “Archived” means classification/exclusion unless a separate physical action is explicitly authorized.
 
-Current short support grants: Claude reply-only D1-RB waypoints; Codex reply-only lab-faint hook oracle; OMP frozen R/B receipt check after scope-stop ACK. No extra file writers or emulator lane.
+Current short support: Claude reply-only D1-RB waypoints; Codex faint oracle completed, now R/B receipt check. No extra file writer or emulator lane.
 
 20:52 UTC: OMP scope/receipt tasks closed, provider Together HTTP/2 errors repeated; no report/file claim. Codex receives bounded reply-only R/B receipt cross-check. Sol alone continues D1-RB code; no live runner.
