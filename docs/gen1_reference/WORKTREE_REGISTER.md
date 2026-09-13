@@ -25,3 +25,5 @@ The root checkout `E:/Google Drive/SLink` (`master`, `adf3362` at audit) is clea
 Update rule for an agent: read the master guide, run `git worktree list --porcelain`, check `git -C <exact-path> status --short --branch` and HEAD for the tree you own, then edit only the assigned files. Report commit, changed paths, evidence level, pass/fail/skips, and next owner/action to the RC integrator. The integrator changes this register on any worktree creation, handoff, merge, dirty-state change, or physical archive. Before a later physical move/delete: verify each absolute source and destination inside this workspace; inspect tracked, untracked **and ignored** receipts plus live task/process bindings; preserve the branch and an evidence path; never discard dirty trees just to tidy the list.
 
 P0 acknowledged clean b06d796 on HOUNDOOM and is ACTIVE with sole report ownership; subsequent f0c393f changes only coordinator docs. No runtime lane granted.
+
+P0b isolated OMP onboarding reserves no files and no runtime lane; canonical source reads only, guide controls any later review grant.

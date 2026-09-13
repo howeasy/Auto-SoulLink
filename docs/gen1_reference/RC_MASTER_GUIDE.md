@@ -19,7 +19,9 @@ Successor transition **2026-09-13 13:08 UTC**: coordinator/integrator is Codex t
 
 - **D0b-design-20260913-successor — READY, research only, awaiting acknowledgment.** Gen1-Collab2 Claude `b4c6c3b4-4af4-4dfd-af84-54f3ba8ca8ed` is assigned the prepared `dispatch/D0b-research.md` against production `19edbb2` and verified docs descendant `b06d796`; newer coordinator docs are permitted. Exact sole output `docs/gen1_reference/reviews/D0b-design-20260913-successor.md`. Read-only source/pret inspection; no test/code/schema/emulator execution or writes. Context ownership check acknowledged: no workers, files or emulator held. Research may precede P2a/P0 completion; implementation remains blocked by P2a, N0, D0 and a nine-part accepted claim. Exit is the brief's six-part decision-ready report, source/refusal citations, field ownership/high-water/rollback analysis, proposed smallest slice and explicit policy questions. The coordinator reviews source and obtains independent review before acceptance. No capability is established by this report.
 
-Next action: P0 acknowledgment/execution and independent D0b policy-gap research. No new implementation is READY.
+- **P0b-omp-successor — READY, read-only onboarding only.** Isolated headless OMP, persistent name `gen1-rc-short-review`, coordinator as above, canonical branch production `19edbb2` plus docs through `18446b1`. No exclusive files and no writes/runtime lane. Return identity/host/model if exposed, actual Git, entry/guide authority and capability limits; acknowledgment establishes eligibility for a later bounded independent review, not acceptance of any product behavior.
+
+Next action: P0 input execution and independent D0b policy-gap research; onboard OMP for short reviews. No new implementation is READY.
 
 Source cut **`19edbb2`** on `gen1/rc`: owner-authorized native lifecycle and coherent checkpoint refactors are integrated. Prior product fixes remain `df38453`; earlier physical receipts are still tied to their original cuts. The root `E:/Google Drive/SLink` checkout stays clean `master` at `adf3362`. Subsequent documentation commits do not change source evidence.
 
