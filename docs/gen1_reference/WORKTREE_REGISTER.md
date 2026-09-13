@@ -81,3 +81,5 @@ Integrated source15727ec; full unit session66713 active, one failure marker at23
 Owner approved conservative P2a clean resume policy; mechanisms still absent and N0/D0 gates remain. Acknowledged C1-history probe ACTIVE on three .cache/report outputs only; no production/test-file edits or live grant.
 
 OMP completed both small checks at15727ec: approved setup/config pointers verified, two stale N0 snapshot statements identified. Coordinator accepted and refreshed N0 row to integrated15727ec, 67 focused pass, no source writer. OMP holds no files/live lane.
+
+14:36 UTC full unit complete, 7800 pass/15 fail/0 skip; no test process remains. Freeze released only for three READY test-only repairs: Claude HUD fixture pair, Sol small-contract pair, Sol retirement fixture. Exact paths in guide; no overlapping writer, no production/Lua/manifest or emulator grant. C1 history turn blocked by automatic safety check, no outputs, HOLD; not transferred.
