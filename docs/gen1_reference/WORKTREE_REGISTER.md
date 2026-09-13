@@ -1,5 +1,7 @@
 # Gen 1 RC worktree register
 
+LATEST: N0 final861ff075 independently reviewed PASS, writer/reviewer released, WAIT human availability (asked). No emulator/live/source writer. Claude D0b-save-witness-boundary is the sole ACTIVE report writer; OMP controls lookup read-only. Canonical source/test cuta1714c5 unchanged; docs HEAD advances with this transition. Earlier status paragraphs are historical where superseded; all parked worktrees preserved.
+
 Claude D0b-save-witness-boundary ACK verified and ACTIVE on its sole report, source-only. No overlap with frozen enrollment controller/review; no live lane.
 
 Sol enrollment writer released final861ff075/report0e213b6d; same independent Standards correction review ACTIVE conditional on matching ACK, no writes. Claude save-boundary report reserved READY; no emulator/live/source writer. Current guide governs all exact grants.
