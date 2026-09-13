@@ -279,7 +279,7 @@ class SelectedRun:
     observation_sequence = staticmethod(observation_sequence)
 
     def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="15727ec",
-                 input_mode="human"):
+                 input_mode="human", launch_mode="product-cli"):
         self.owned = Path(owned).resolve()
         self.variants = tuple(variants)
         assert len(self.variants) == 2 and all(v in {"red", "blue", "yellow"} for v in self.variants)
@@ -287,9 +287,15 @@ class SelectedRun:
         self.base_config = Path(base_config).resolve()
         self.limit = limit
         assert type(limit) in (int, float) and 0 < limit <= 1800
-        if type(input_mode) is not str or input_mode not in {"human", "computer-use-normal-buttons"}:
+        if type(input_mode) is not str or input_mode not in {
+                "human", "computer-use-normal-buttons", "scripted-normal-buttons"}:
             raise ValueError("explicit supported input mode required")
+        if type(launch_mode) is not str or launch_mode not in {"product-cli", "scripted-selected-launcher"}:
+            raise ValueError("explicit supported selected launch mode required")
+        if (launch_mode == "scripted-selected-launcher") != (input_mode == "scripted-normal-buttons"):
+            raise ValueError("scripted input requires the scripted selected launcher")
         self.input_mode = input_mode
+        self.launch_mode = launch_mode
         self.source_cut = source_cut
         self.patch = MonkeyPatch()
         self.client = self.runtime = self.listener = None
@@ -300,7 +306,7 @@ class SelectedRun:
         self._owns_output = False
         self.outcome = {"status": "HOLD", "variants": self.variants,
                         "owned": str(self.owned), "source_cut": source_cut,
-                        "limit_seconds": limit, "input_mode": input_mode,
+                        "limit_seconds": limit, "input_mode": input_mode, "launch_mode": launch_mode,
                         "human_inputs_only": input_mode == "human"}
 
     async def __aenter__(self):
@@ -335,6 +341,9 @@ class SelectedRun:
                               cwd=ROOT, check=False).returncode == 0
         self.outcome.update(source_head=head, source_files={name: sha(ROOT / name) for name in source_files},
                             emulator=str(self.emulator), base_config=str(self.base_config))
+        if self.launch_mode == "scripted-selected-launcher":
+            for name in ("tests/live/gen1_scripted_host.py", "lua/tests/gen1_scripted_new_game.lua"):
+                self.outcome["source_files"][name] = sha(ROOT / name)
         self.owned.mkdir(parents=True, exist_ok=False)
         self._owns_output = True
 
@@ -410,7 +419,10 @@ class SelectedRun:
                                         "private_config": sha(private_config)}
         for player in ("a", "b"):
             entry = self.downloads[player]
-            argv = [sys.executable, str(ROOT / "tools/launch_bizhawk.py"),
+            command = ([sys.executable, str(ROOT / "tools/launch_bizhawk.py")]
+                       if self.launch_mode == "product-cli" else
+                       [sys.executable, "-m", "tests.live.gen1_scripted_host"])
+            argv = [*command,
                     "--manifest", str(entry["manifest"]), "--rom", str(entry["rom"]),
                     "--emuhawk", str(self.emulator), "--base-config", str(private_config),
                     "--root", str(self.owned / "clients")]
@@ -435,23 +447,42 @@ class SelectedRun:
             for job in self.jobs:
                 if observe(job) is not None:
                     raise RuntimeError(f"{job['player']} CLI exited before readiness; see {job['log']}")
+                if self.launch_mode == "scripted-selected-launcher":
+                    from tests.live.gen1_scripted_host import scripted_failure, scripted_progress
+
+                    spec = json.loads(self.downloads[job["player"]]["manifest"].read_text())
+                    directory = self.owned / "clients" / spec["run_id"] / job["player"] / "emulator"
+                    detail = scripted_failure(directory)
+                    if detail is not None:
+                        self.outcome.setdefault("scripted_driver_failures", {})[job["player"]] = detail
+                        raise RuntimeError(f"scripted {job['player']} input failed: {detail.get('error')}")
+                    state = scripted_progress(directory)
+                    if state is not None:
+                        self.outcome.setdefault("scripted_driver_progress", {})[job["player"]] = state
             if not announced:
                 try:
                     child_ids = {job["player"]: emulator_child(job, self.emulator) for job in self.jobs}
                 except AssertionError:
                     child_ids = None
                 if child_ids is not None:
-                    (self.owned / "ready-for-human.json").write_text(json.dumps({
-                        "stage": "ready-for-human-new-game", "at": time.time(),
+                    scripted = self.launch_mode == "scripted-selected-launcher"
+                    (self.owned / ("ready-for-scripted.json" if scripted else "ready-for-human.json")).write_text(
+                        json.dumps({
+                        "stage": "ready-for-scripted-new-game" if scripted else "ready-for-human-new-game",
+                        "at": time.time(),
                         "manager": self.outcome["manager"], "emulator_children": child_ids,
-                        "instruction": "Use normal New Game inputs in both emulator windows"}, indent=2) + "\n")
+                        "instruction": ("Scripted normal New Game buttons active" if scripted else
+                                        "Use normal New Game inputs in both emulator windows")}, indent=2) + "\n")
                     announced = True
             components = self.runtime.journal.snapshot().state.get("components", {})
             pending = {player: self.runtime.journal.pending_ids(player) for player in ("a", "b")}
             now = time.monotonic()
             if now - last_progress >= 5:
                 progress(self.owned, "awaiting-scenario", manager=self.outcome["manager"],
-                         ready_for_human=announced, pending_ids=pending,
+                         ready_for_human=announced and self.launch_mode == "product-cli",
+                         ready_for_scripted=announced and self.launch_mode == "scripted-selected-launcher",
+                         pending_ids=pending,
+                         scripted_driver_progress=self.outcome.get("scripted_driver_progress", {}),
                          components={name: sorted(components.get(name, {})) for name in (
                              "gen1-native-reattach", "gen1-initial-observations",
                              "gen1-new-game-bootstrap", "gen1-initial-save")},
@@ -461,7 +492,10 @@ class SelectedRun:
                 rows = checked_events(self.runtime)
                 for player in ("a", "b"):
                     observation_sequence(rows, player)
-                if self.runtime.service_current():
+                if self.runtime.service_current() and (
+                        self.launch_mode != "scripted-selected-launcher" or all(
+                            self.outcome.get("scripted_driver_progress", {}).get(player, {}).get("stage") ==
+                            "input-stopped" for player in ("a", "b"))):
                     return rows
             await asyncio.sleep(poll)
         raise TimeoutError("selected scenario readiness timed out")
@@ -473,6 +507,23 @@ class SelectedRun:
         players = {job["player"]: private_receipt(
             job, json.loads(self.downloads[job["player"]]["manifest"].read_text()),
             self.downloads[job["player"]]["rom"], self.emulator) for job in self.jobs}
+        if self.launch_mode == "scripted-selected-launcher":
+            for player in ("a", "b"):
+                directory = Path(players[player]["private"]) / "emulator"
+                plan = json.loads((directory / "scripted_plan.json").read_text())
+                assert plan["launch_mode"] == "scripted-selected-launcher"
+                assert plan["arguments"][1] == "--lua=scripted_new_game.lua"
+                assert plan["checked_launcher_sha256"] == sha(directory / "launcher.lua")
+                assert plan["scripted_bootstrap_sha256"] == sha(directory / "scripted_new_game.lua")
+                assert plan["scripted_bootstrap_sha256"] == sha(ROOT / "lua/tests/gen1_scripted_new_game.lua")
+                assert plan["environment"] == {
+                    "SLINK_ROOT": str(ROOT), "SLINK_CLIENT_STORAGE_ROOT": str(self.owned / "clients"),
+                    "SLINK_SAVERAM_DIRECTORY": players[player]["save_directory"],
+                    "SLINK_SCRIPTED_INPUT": str(directory / "scripted_input.json")}
+                state = json.loads((directory / "scripted_progress.json").read_text())
+                assert state["stage"] == "input-stopped", "scripted normal input did not stop at free service"
+                players[player]["scripted_progress"] = state
+                players[player]["scripted_plan"] = plan
         evidence = audit_enrollment(self.runtime, document, {
             player: Path(players[player]["save_directory"]) for player in ("a", "b")},
             {job["player"]: job for job in self.jobs}, rows, self.emulator)
