@@ -444,7 +444,12 @@ class Gen1Runtime(DurableRuntime):
         self._control_cache_active = True
         self._control_state_cache = None
         try:
-            return self._control_checked(player, message)
+            response = self._control_checked(player, message)
+            # A scheduling hint only: CONTROL still delivers no commands. Query
+            # after all Gen1 control/native side effects in this serialized turn,
+            # so a newly committed obligation cannot be hidden by an older view.
+            response["pending_delivery"] = bool(self.journal.pending_ids(player))
+            return response
         finally:
             self._control_cache_active = False
             self._control_state_cache = None

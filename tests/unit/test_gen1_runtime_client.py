@@ -32,6 +32,7 @@ HARNESS = r"""
     }
     options={player=data.player,variant=data.variant,run_id=data.run_id,server_host='127.0.0.1',server_port=9000,
         journal=journal,transport=transport,clock=function()return t end,
+        control_interval=data.control_interval,sync_interval=data.sync_interval,
         host={set_held=function(value)held=value;return true end},
         read_context=function()return context end,
         operation_ready=function()return false,'physical operations are outside this held interoperability case'end,
@@ -49,7 +50,7 @@ HARNESS = r"""
 """
 
 
-def client(case, player):
+def client(case, player, *, control_interval=None, sync_interval=None):
     lua = lua_store.__wrapped__()
     report = case.hello(player)
     lua.globals().client_input = json.dumps(
@@ -64,6 +65,8 @@ def client(case, player):
             },
             "id_prefix": "aa" if player == "a" else "bb",
             "nonce_prefix": "cc" if player == "a" else "dd",
+            **({"control_interval": control_interval} if control_interval is not None else {}),
+            **({"sync_interval": sync_interval} if sync_interval is not None else {}),
         }
     )
     lua.execute(HARNESS)
@@ -110,7 +113,9 @@ def test_paired_lua_durable_delivery_matches_python_journal_without_any_frames(t
         exchange(8)
         faint_index = next(index for index, (p, message, _response) in enumerate(sent)
                            if index >= semantic_start and p == "a" and message["event"] == "faint")
-        assert not any(p == "a" and message["event"] == "sync" for p, message, _ in sent[faint_index + 1:])
+        # A local faint must outrank polling; after its ACK, a fresh CONTROL
+        # may legitimately request a durable sync for newly pending commands.
+        assert not any(p == "a" and message["event"] == "sync" for p, message, _ in sent[semantic_start:faint_index])
         exchange(6)
         assert case.runtime.rule_state().links[0].status == LinkStatus.DEAD
         received = json.loads(clients["b"].globals().state_json())

@@ -94,9 +94,11 @@ function M.new(options)
         local heartbeat=interval(options.control_interval,0.25,0.5)
         local response_timeout=interval(options.response_timeout,0.75,1)
         local sync_interval=interval(options.sync_interval,0.5,2)
+        assert(options.pending_delivery_hint==nil or type(options.pending_delivery_hint)=="boolean",
+            "pending delivery hint selection must be boolean")
         local metadata_interval=interval(options.metadata_interval,0.05,0.5)
         local state={phase="connection_pending",connected=false,failed=false,reason="waiting for admission",
-            last_clock=nil,last_control=nil,last_sync=nil,last_semantic=nil,last_metadata=nil,
+            last_clock=nil,last_control=nil,last_sync=nil,last_semantic=nil,last_metadata=nil,pending_delivery=nil,
             request=nil,binding=nil,admission=nil,recovery=nil,
             service_recovery=nil,
             event_count=0,command_count=0,hold_verified=false,host_request_verified=false}
@@ -143,7 +145,7 @@ function M.new(options)
             state.failed=state.failed or fatal
             state.reason=why;state.phase=state.failed and "failed" or "connection_pending"
             state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.service_recovery=nil;state.last_control=nil
-            state.last_verified_control=nil;state.last_metadata=nil
+            state.last_verified_control=nil;state.last_metadata=nil;state.pending_delivery=nil
             if options.on_revoke then
                 local stopped,problem=pcall(options.on_revoke,why)
                 if not stopped or problem~=true then
@@ -344,12 +346,18 @@ function M.new(options)
                 if operation_execution then operation_execution.revoke("new admission binding")end
                 state.binding=copy(binding);state.admission=copy(packet.admission)
                 state.recovery=packet.recovery~=JSON.null and packet.recovery and copy(packet.recovery) or nil
+                state.pending_delivery=nil
                 state.phase="admitted";state.reason="waiting for paired control authority"
             elseif request.kind=="control" then
                 assert(JSON.kind(packet.control)=="object","control response packet required")
                 assert(JSON.kind(packet.recovery)=="object","control response recovery document required")
                 assert(control:accept(packet.control),"stale or invalid control authority")
                 state.last_verified_control=request.started
+                -- The response envelope and exact CONTROL challenge were just
+                -- accepted. An absent/malformed hint keeps the old sync cadence.
+                if options.pending_delivery_hint and type(packet.pending_delivery)=="boolean" then
+                    state.pending_delivery=packet.pending_delivery
+                else state.pending_delivery=nil end
                 if (packet.control.authority=="service"or packet.control.authority=="run")
                     and options.on_service_authority then
                     assert(options.on_service_authority(copy(packet.control),copy(state.service_recovery))==true,
@@ -397,6 +405,7 @@ function M.new(options)
                 if not safe or not saved then
                     revoke(not safe and saved or problem or "response publication is uncertain",true);return
                 end
+                state.pending_delivery=nil -- this semantic reply already fetched current delivery
                 state.last_semantic=now()
             end
             state.request=nil
@@ -469,9 +478,10 @@ function M.new(options)
                     local pending=events()
                     local recent=state.last_sync
                     if state.last_semantic and (not recent or state.last_semantic>recent)then recent=state.last_semantic end
-                    if #pending==0 and (not recent or time-recent>=sync_interval) then
+                    if #pending==0 and (state.pending_delivery==true
+                        or state.pending_delivery~=false and (not recent or time-recent>=sync_interval)) then
                         local id,why=journal:append(JSON.object({event="sync"}))
-                        assert(id,why);state.last_sync=time;pending=events()
+                        assert(id,why);state.last_sync=time;state.pending_delivery=nil;pending=events()
                     end
                     if pending[1] then
                         local packet=copy(pending[1].payload);packet.operation_id=pending[1].operation_id
