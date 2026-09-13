@@ -22,3 +22,7 @@ Summary `.cache/n0-enrollment-successor-summary.json` SHA256 `0a73bc911f7c5a0def
 All bundles, client journals, save files, server journal, process/ready/progress records remain under `.cache/n0-enrollment-successor/`. The controller never reached its final file-byte/current-service audit, so the two save ACKs alone are not accepted as that full oracle. No frame-rate, native trade, recovery/resume or gameplay campaign proof follows.
 
 Next: a separately reviewed R2 controller must allow zero normal observations only alongside a current service lease, full audited enrollment, matching save receipts/files and empty queues. Any existing stream must still have contiguous acknowledged observations. Preserve this first invocation unchanged; do not relabel it green.
+
+## Post-stop file verification
+
+Coordinator read the retained snapshot through read_journal and calculated gen1_initial_save_runtime.prepared(snapshot.state, player)['after']['cart_hex']. Both private game.SaveRAM files are exactly32768 bytes and byte-identical to their expected image after process exit: A SHA256 `4bc9cdbfd20b093bf866ec0f9e344b0c39d6c39d3492edc39c202b7095427513`; B `c4c6d5e8df18dddbcdcf9b0ed213796c1dcde47c6fc80dc1333b073e1824bc7a`. Read-only command completed exit0 (tool receipt e11ca1). This adds post-stop physical file equality; it does not recover the omitted live service-current audit or change the first controller result.
