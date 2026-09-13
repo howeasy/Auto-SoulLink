@@ -109,3 +109,5 @@ Integration run complete157/4/0; blocker is missing Playwright resolution, no br
 Recovery complete:18 entries, speed-gate clean35b7894 and administratively locked; only missing metadata reconstructed after separate index/content verification, no working-file reset/change. Configured integration rerun owns new XML/text and fresh named OS-temp basetemp; no install/emulator. Retirement R2 re-review is read-only, no writer.
 
 Retirement R2 independently passed both axes and is accepted for sole-test integration. Configured integration161/161 passes. Sol full repaired-unit evidence run READY, no code edits; freeze production/tests for that run. No live lane or source writer; all18 worktrees retained.
+
+Full repaired-unit Sol ACK cleana1714c5 and exact env/command, now ACTIVE; metadata uses -meta.json. No source/test writers or emulator. Claude N0 existing-oracle advisory READY reply-only; new Sol N0 enrollment controller READY in exact .cache/report scope, build-only and human-input/live grants required later.
