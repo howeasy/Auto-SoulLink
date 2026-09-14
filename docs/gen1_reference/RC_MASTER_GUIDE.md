@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:05:34+00:00",
+  "updated_at_utc": "2026-09-14T09:08:37+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "c868282",
+  "source_head": "fd870b7",
   "live_lane": null,
-  "next_action": "Feature build-out. Integrated candidates: UI-2 3050f0a (accepted), FT-2b 8467394 (accepted). Rejected candidates awaiting round 2 on the branch: FT-3 1b38696 (custom_names path), R5a ad6583a. Active: C1 (Sonnet), R5a-2 (Sonnet), HX-1 (OMP, hold visibility census); Codex: FT-3-2 review. N3 claim done (READY WAIT R5a-2/R5b). Queued: C3 after C1; R5b after R5a-2.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. Candidates under Codex review: C1 8ea6f25 (adversarial, cx-221a8234), R5a-2 fd870b7 (cx-d1cafa3d). FT-3 round 3 (Sonnet: allowlist projection, log_sha256 excluded). HX-2-SPEC (OMP) in flight. Next: C3 implementation on the C1 worker once C1 is accepted; R5b seam once R5a-2 is accepted; N3 after R5b.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -865,11 +865,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "c1",
-      "owner": "isolated Claude Sonnet worker (implementation; claim accepted, READY by coordinator)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate 8ea6f25 (isolated Sonnet worker authored)",
+      "state": "done",
       "files": ["server/gen1_whiteout.py", "server/gen1_faint_runtime.py", "tests/unit/test_gen1_whiteout.py", "docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md"],
       "next_action": "Extract the per-command death-obligation block of gen1_faint_runtime.py:176-229 into a helper; settle_whiteout records collateral force_faint/force_explode as real obligations (own death_id/blocker/pending phase, warning for the missed faint signal) and keeps the JournalError only for a duplicate of the triggering key; three unit tests + report.",
-      "reuse_decision": "Gen 1 specific (gen1_whiteout/gen1_faint_runtime); shared state.py _handle_whiteout already correct, untouched"
+      "reuse_decision": "Gen 1 specific (gen1_whiteout/gen1_faint_runtime); shared state.py _handle_whiteout already correct, untouched",
+      "receipt": "commit 8ea6f25; tests/unit/test_gen1_whiteout.py + test_gen1_faint_runtime.py + test_gen1_memorial_runtime.py 90 passed; diff sha256 3d160149…2b5e; docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md (MODEL-only; identifier() gained an optional discriminant; verify_state accepts collateral_of records)",
+      "independent_review_refs": [
+        "Codex ADVERSARIAL_REVIEW cx-221a8234 (f97247c..8ea6f25) in flight"
+      ]
     },
     {
       "id": "c3-claim",
@@ -957,23 +961,35 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "hx-1",
-      "owner": "OMP live pid 47172 (read-only research; task cx-2e4c8723)",
-      "state": "active",
+      "owner": "OMP live pid 47172 (done; task cx-2e4c8723)",
+      "state": "done",
       "files": ["server/templates/manager.html (read-only)", "server/gen1_hud_feedback.py (read-only)"],
-      "next_action": "Table of every hold/refusal reason a human can hit vs. where (if anywhere) it is shown; Manager actions that clear holds.",
-      "reuse_decision": "research only; feeds R5b/N3 human-facing recovery UI"
+      "next_action": "None; census recorded (HX-1 row); HX-2 spec dispatched.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (HX-1 row)",
+      "independent_review_refs": [
+        "coordinator spot-check: manager.py route table and gen1_native_reattach_runtime.py:127-137 verdicts match earlier FG-1/N3 findings"
+      ]
+    },
+    {
+      "id": "hx-2-spec",
+      "owner": "OMP live pid 47172 (read-only; task cx-01f9df05)",
+      "state": "active",
+      "files": ["server/status_payload.py (read-only)", "server/durable_runtime.py (read-only)"],
+      "next_action": "Spec: holds list in the live payload built in one shared place from Gen 1 runtime facts; human wording table; Manager live-panel markup; tests.",
+      "reuse_decision": "research only; implementation follows on acceptance"
     },
     {
       "id": "ft-3",
-      "owner": "integrated by coordinator as candidates 1b38696 + c868282 (isolated Sonnet worker authored two rounds)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 3; candidates 1b38696 + c868282 on the branch)",
+      "state": "active",
       "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
       "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
       "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged",
       "receipt": "commits 1b38696 + c868282; tests/unit/test_gen1_prepared_cartridges.py 7 passed; prepared/admission/manager subset 64 passed; cumulative diff sha256 5fd4a06d…3b62",
       "independent_review_refs": [
         "Codex REVIEW cx-a085e592: REJECT — generation.custom_names.selection.path is a second run-local absolute path (upr_runner.py:56-60,138,158-170); fixture used a fake shape; old persisted UPR identities need an explicit cutover note.",
-        "Round 2 c868282: custom_names projected to its byte hash, real-shaped fixture, cutover documented; Codex REVIEW cx-6b02452f in flight"
+        "Round 2 c868282: Codex REVIEW cx-6b02452f REJECT — log_sha256 hashes the raw UPR log containing 'Time elapsed: <ms>' (Randomizer.java:690; bridge passes it through); round 3 = explicit allowlist projection"
       ]
     },
     {
@@ -990,14 +1006,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5a",
-      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate ad6583a stays on the branch)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidates ad6583a + fd870b7 (isolated Sonnet worker authored two rounds)",
+      "state": "done",
       "files": ["server/paired_save_checkpoints.py", "tests/unit/test_paired_save_checkpoints.py", "docs/gen1_reference/reviews/R5a-paired-checkpoints.md"],
       "next_action": "PairedCheckpointStore: capture (both saves + rules + identity, manifest last, CURRENT pointer atomic), load with hash re-validation, history; refusals per the R5 claim.",
       "reuse_decision": "shared lifecycle module (game-neutral; save_size parameter); Gen 1 witness/Manager seam deferred to R5b",
-      "receipt": "commit ad6583a; tests/unit/test_paired_save_checkpoints.py 15 passed; module sha256 fb56b072…fb9c; docs/gen1_reference/reviews/R5a-paired-checkpoints.md",
+      "receipt": "commits ad6583a + fd870b7; tests/unit/test_paired_save_checkpoints.py 28 passed; module sha256 b2101960…8bff; docs/gen1_reference/reviews/R5a-paired-checkpoints.md (disposition table)",
       "independent_review_refs": [
-        "Codex REVIEW cx-fbbd022a (commit B): REJECT — concurrent captures share CURRENT.tmp (dangling pointer), historical manifests unanchored, load fails open on ID/schema/size, JSON/OS errors leak, post-promotion failure cases untested; round 2 dispatched with those reds"
+        "Codex REVIEW cx-fbbd022a (commit B): REJECT — concurrent captures share CURRENT.tmp (dangling pointer), historical manifests unanchored, load fails open on ID/schema/size, JSON/OS errors leak, post-promotion failure cases untested",
+        "Round 2 fd870b7: Codex REVIEW cx-d1cafa3d in flight"
       ]
     },
     {
@@ -1062,6 +1079,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | **Parcel attempt 6 — D2 PASS (CONTROLLED-SCRIPTED)** | `rb-parcel-checkpoint-observed` at `c701e15`: one chained process per player from New Game to the first bought POKé BALL with the server's ball-gate activation recorded for BOTH players (committed engine records), starter link alive, no deaths, clean cleanup. Receipts summary `3bd2aff9…dd55`, console `a4164c08…cbcf`; full record in the [D1 physical report](reviews/D1-RB-physical-successor.md). Closes D2 for the `false` text axis; catches (D3), the tweaked text axis (FT-2) and later rows remain open. |
 | Parcel attempt 5 | Oak's cutscene completed and the second trip to the Viridian Mart PROVED; BUY → POKé BALL accepted → quantity prompt reached, then `mart-unknown-wait` because `wTextBoxID` read 1 (not 0x0D) — the list/quantity routines never rewrite it. Item/quantity/confirm signatures now ignore `text_box` (geometry + oob + exit method); red test from the live point. Receipts summary `11e4371c…8afe`, console `ddf4892d…3ec8`. Attempt 6 is the changed run. |
 | FG-1 (human-play product gap census) | Gen1-CodexPeer (cx-8d25617e, SOURCE, cut `8c409da`). BUILT (code path exists): prepared native R/B creation via API + bundles; New Game enrollment; starters + lab pair; first-ball activation; Route 1 catches/link; dead zone; linked faint with partner overworld AND in-battle paths; memorial into BOX12; last-mon terminal retention (intentional, not a gap); PC deposit/withdraw + partner sync; evolution key migration; NPC in-game trades; native SLINK TRADE + Cable Club fallback; single-pair whiteout/run over; save + clean quit + resume; same-client TCP reconnect; dashboard/HUD/START panel. **MISSING/BROKEN, ranked by first-10-hour exposure:** (1) **UI-2** Manager Create posts to `/api/runs/new` (`manager.html:1041-1047`); only the Resume form reaches `/api/runs/gen1` (`:960-1009`) — a human using Create never gets a selected Gen 1 runtime (coordinator-verified). (2) Emulator crash / replacement with unsaved or unfinished work: only refusals exist (`gen1_run_resume.py:150-196`, `gen1_service_continuity.py:85-89`). (3) **C3** whiteout automatic rebuild MISSING: `gen1_whiteout.py:66-75` returns HUD "REBUILD PENDING" only; shared plan at `state.py:2030-2062`. (4) **C1** whiteout collateral BROKEN: `gen1_whiteout.py:62-65` raises on any extra force_faint. (5) Crash mid native trade: reattach stays held (`gen1_native_reattach_runtime.py:121-137`). Decisions: UI-2, C1, C3 are implementation cards now; (2) and (5) are recovery-policy design (refusal is truthful today) and wait until the first three land. |
+| HX-1 (hold visibility census) | OMP (cx-2e4c8723, SOURCE at `60694d5`). INVISIBLE to humans: the seven barrier blocker reasons (`gen1_faint_runtime.py:20`, `gen1_storage_runtime.py:27`, `gen1_wild_encounter_runtime.py:25`, `gen1_acquisition_runtime.py:38`, `gen1_trade_recovery.py:13`, `gen1_receptionist_runtime.py:15`, `gen1_initial_observation.py:20`) — pure journal state; the native-reattach verdicts (`done_unreleased/armed/<physical>/lease_open/pending_native_command/active_trade/trade_open`, `gen1_native_reattach_runtime.py:127-137`) and service holds (`durable_runtime.py:236-254,446,456-470`) reach only the Lua client status document (`lua/gen1_client_entry.lua:586,611-620`); `admission_reason` exists in `/api/status` (`server.py:3722`, `status_payload.py:42`) with no dashboard consumer. SHOWN: resume refusals (Manager 409 reasons, `manager.html:1018`), Game Over (`manager.html:521-522`), REBUILD PENDING (in-game notice, `gen1_hud_feedback.py:273,286`). No Manager action clears a hold or restarts a client (`manager.py:1315-1347`). **Consequence:** a blocked faint, storage job or retirement looks like a hung game to both players. **Decision: HX-2** (holds surfaced in the Manager live panel with actionable wording) is an implementation card; spec in flight on OMP. |
 | N3 claim (crash during native trade) | Gen1-CodexPeer (cx-0afc641a, SOURCE, cut `8467394`). State table: before PREPARE / both_prepared → no exchange issued, pretrade full-save images already verified and retained (`gen1_native_policy.py:89-105`, `gen1_native_preparation.py`, `gen1_full_save.py:107-128`); COMMIT armed → "published not applied" is NOT established (local armed marker precedes RAM staging; server progress is a lower bound, `native_trade_executor.lua:187-208`, `gen1_native_execution.py:106-124`, `gen1_native_progress.py:15-71`); one side applied → historical receipt ≠ durable file, other side unknown; both applied unverified → needs fresh file-backed verification; animation/save → reattach carries frame/PC/SP/bank/overlay/lease summary but NO party/box/save bytes (`gen1_native_reattach_runtime.py:45-48,62-104`); both verified → finalize is logical only. Today every unresolved class returns held (`:121-137`), the executor refuses after replacement (`lua/gen1_native_trade_executor.lua:160-163`), clean resume refuses `active_trade` (`gen1_run_resume.py:151,170-175`) and the Manager has no recovery action — a mid-trade crash bricks the run. **Coordinator decision (vetoable): N3 first slice** = automatic paired PRETRADE checkpoint at `both_prepared` (archive the already-verified 0x8000-byte pretrade images + rules/identity snapshot via R5a; COMMIT depends on the committed checkpoint id; narrow variant that permits this settled preparation boundary without relaxing the generic R5 audit) + explicit Manager "Recover both players to before this trade" (stop/revoke old runtime, archive the failed transaction unchanged, successor from the checkpoint via Continue, BOTH reload, transaction marked abandoned-by-paired-rollback, never cleared in place). Before COMMIT: existing cancel + verified prompt closure. Forward one-sided recovery = separate later claim (needs execution/progress/executor re-anchoring; party equality alone is never proof). Files: shared `trade_coordinator.py` (checkpoint prerequisite/disposition), new `server/trade_recovery.py`, `manager.py`, `manager.html`; Gen 1 `gen1_native_preparation.py`, `gen1_native_policy.py`, `gen1_native_reattach_runtime.py`, `gen1_run_resume.py`, new `gen1_trade_recovery.py`, tests, `reviews/N3-interrupted-trade-claim.md`. Refusals: no/unpaired/partial archive, mismatched contract/identity, unclosed old owner, pending unrelated native work → HOLD without writes; rollback recorded as rollback, never as a completed trade. **READY WAIT(R5a-2, R5b).** |
 | R5 claim (crash with unsaved progress) | Gen1-CodexPeer (cx-5a94fec0, SOURCE). Rows `gameplay.{red,blue}.reconnect` (trade recovery rows are NOT closed by this). Today: the save witness stores only `frame/digest/projection/index/operation_id` (`gen1_engine_signal_runtime.py:15-21`), the journal keeps one current snapshot row (`protocol_journal.py:361-428`), `resume_record` exports CURRENT state (`gen1_run_resume.py:59-83,127-207`), rolling backups are periodic and unbound to witnesses (`backup.py:24-44`, `server.py:2378-2383`) — no historical paired checkpoint exists, so a replaced client is refused (`gen1_service_continuity.py:85-89`; "committed gameplay after the save witness; hold" `gen1_run_resume.py:188-196`). **Coordinator policy decision (vetoable):** recovery = both players roll back to the last COMPLETE PAIRED checkpoint, captured prospectively (both save in-game → Manager action archives both 0x8000-byte files + one immutable rules/memorial snapshot + identity export + contract/source fingerprints, manifest published LAST, previous checkpoint retained until complete); recovery stops both clients, verifies the checkpoint, allocates a successor with that state and expected digests via the existing resume/Continue path (`gen1_run_resume.py:365-391`, `bizhawk_launch.py:73-104`, `tools/launch_bizhawk.py --resume-save`), shows the discarded interval, refuses when a native trade is pending. Asymmetric rollback is unsound (linked catches/deaths touch both). **Slices:** R5a shared envelope `server/paired_save_checkpoints.py` (ACTIVE, new files only); R5b Gen 1 seam + Manager "Checkpoint"/"Recover" actions (`gen1_engine_signal_runtime.py`, `gen1_run_resume.py`, `gen1_run_config.py`, `manager.py`, `manager.html`, `lua/gen1_engine_signals.lua`, `lua/gen1_client_entry.lua`, `tools/launch_bizhawk.py`, `bizhawk_launch.py`, new `gen1_checkpoint_runtime.py`) READY WAIT(R5a, UI-2). Falsifiers: partial capture leaves the previous checkpoint current; matching digest without archived bytes fails. Sessions without a prior checkpoint get "no recoverable paired checkpoint". |
 | UI-2 spec (Manager Create → Gen 1) | Gen1-CodexPeer (cx-7b9a0d6c). Body for a fresh two-human run: `{name, rom_a, rom_b, rules:{species_lock,gender_lock,type_lock,explode_mode,rival_team_swap,pc_trade_npc (from newOpts), native_sounds:false}, start:true, native:true, fastest_text}` — `overworld_presence`, `native_messages`, `battle_calc` are rejected by `gen1_run_config.py:117-123` and must be omitted + disabled in the UI ("Unavailable for Gen 1"); `native_sounds:true` refuses. `native:true` is the default (companion features). UI: a labelled optional "Gen 1 Red/Blue cartridge paths" disclosure after the name input (ids `gen1-create-rom-a/b`, `gen1-create-fastest-text`, state `gen1Create{rom_a,rom_b,fastest_text,busy,error}`), both empty → today's `/api/runs/new`, both filled → `/api/runs/gen1`, one filled → inline error; reuse the Resume form's input/error/busy pattern (`manager.html:352-356`, `resumeRun()`), keep OMP's Resume `fastest_text` controls untouched. Tests: new `tests/unit/test_manager_gen1_create_ui.py` (structural regex checks in the `test_manager_resume_ui.py` style; runtime dispatch proof only if the function is executed with a stubbed fetch) + one handler test in `test_manager_prepared_gen1.py` sending the exact UI body (no mocking of `create_runtime`). Files: `server/templates/manager.html`, the two test files; no `manager.py` change. Falsifier: today's `createRun()` never mentions `/api/runs/gen1`. **Coordinator decision: READY WAIT(FT-2 diff frozen); implementation → OMP.** |
