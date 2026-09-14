@@ -99,16 +99,51 @@ LIFECYCLE_EVENTS = frozenset({"runtime_opened", "runtime_reconciliation_refused"
 DISPLAY_COMMANDS = frozenset({"hud_notice", "hud_state"})
 
 
-def _no_gameplay(request, db):
+def _no_gameplay(request, db, *, extra_events=frozenset()):
     if not isinstance(request, dict):
         return False
     event = request.get("event")
-    if event in LIFECYCLE_EVENTS:
+    if event in LIFECYCLE_EVENTS or event in extra_events:
         return True
     if event == "command_ack":
         row = db.execute("SELECT body FROM commands WHERE command_id=?", (str(request.get("command_id")),)).fetchone()
         return row is not None and json.loads(row[0]).get("cmd") in DISPLAY_COMMANDS
     return _pure_heartbeat(request)
+
+
+def no_gameplay_since(journal, player, anchor_operation_id, *, extra_events=frozenset(), window=EVENT_WINDOW):
+    """True iff PLAYER has committed nothing but no-gameplay events (per `_no_gameplay`, plus
+    any of EXTRA_EVENTS a caller classifies as its own non-gameplay bookkeeping — e.g. a
+    checkpoint request/upload's own typed events) since ANCHOR_OPERATION_ID's own committed
+    revision. False when the anchor itself is not committed, or the window is exceeded.
+
+    Mirrors audit_predecessor's per-player scan (:191-196) but reads the OWNING runtime's own
+    live journal connection directly (server.protocol_journal.ProtocolJournal), in place of a
+    read-only connection to a closed run's directory — a live runtime never needs that second
+    connection, since every write it makes already serializes through this same one."""
+    db = journal._db
+    row = db.execute("SELECT revision FROM events WHERE player=? AND operation_id=?",
+                     (player, anchor_operation_id)).fetchone()
+    if row is None:
+        return False
+    later = db.execute("SELECT request FROM events WHERE player=? AND revision>? ORDER BY revision LIMIT ?",
+                       (player, row[0], window + 1)).fetchall()
+    if len(later) > window:
+        return False
+    return all(_no_gameplay(json.loads(r[0]), db, extra_events=extra_events) for r in later)
+
+
+def checkpoint_anchor_operation(witness):
+    """Which committed operation a checkpoint witness's "no gameplay since" check anchors on:
+    the START-menu save witness's own operation for the legacy kind, or the native-pretrade
+    kind's ready-ACK operation (R5b/N3) — one helper for both, per witness_kind, so a new kind
+    only ever adds a branch here rather than duplicating the policy at each call site."""
+    kind = witness.get("witness_kind", "save_witness") if isinstance(witness, dict) else None
+    if kind == "save_witness":
+        return witness["operation_id"]
+    if kind == "native_pretrade":
+        return witness["ready_operation_id"]
+    raise JournalError("unknown checkpoint witness_kind")
 
 
 def _pure_heartbeat(request):

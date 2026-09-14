@@ -212,6 +212,12 @@ class Gen1Runtime(DurableRuntime):
                 **options,
             )
             self.journal.enable_verified_row_cache()
+            from server.gen1_checkpoint_runtime import reconcile_on_open, server_source_manifest
+            # A live-process fact, not committed history (R5b-1): recomputed at every
+            # construction/reopen, never journaled. finalize_checkpoint refuses whenever this
+            # drifts from a fresh recompute, or was never set.
+            self._source_manifest = server_source_manifest()
+            reconcile_on_open(self)
             if trade_policy is not None:
                 self.trade = TradeCoordinator(
                     self.journal,
@@ -500,6 +506,11 @@ class Gen1Runtime(DurableRuntime):
             if not self.initial_observations:raise ProtocolError('engine signal observation is not selected')
             from server.gen1_engine_signal_runtime import record
             return record(self,player,message['operation_id'],self._semantic(message))
+        if event=='save_upload':
+            if not self.initial_observations:
+                raise ProtocolError('checkpoint capture requires initial observations')
+            from server.gen1_checkpoint_runtime import record as checkpoint_record
+            return checkpoint_record(self,player,message['operation_id'],self._semantic(message))
         if event=='inventory_observation':
             if not self.initial_observations:raise ProtocolError('inventory observation enrollment is not selected')
             from server.gen1_inventory_observation import record

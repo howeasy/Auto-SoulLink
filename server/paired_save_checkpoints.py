@@ -47,7 +47,15 @@ from pathlib import Path
 
 SCHEMA = "slink-paired-checkpoint-v1"
 PLAYERS = ("a", "b")
+# Tagged union: a witness is either the legacy START-menu save witness (witness_kind absent,
+# or present and equal to "save_witness") or a native-pretrade witness (R5b/N3: the pretrade
+# image already retained by the native trade path, witnessed by its ready-ACK operation
+# instead of a save_witness engine signal). New kinds are added here, never by widening either
+# fixed key set in place.
 WITNESS_KEYS = frozenset({"frame", "digest", "projection", "index", "operation_id"})
+NATIVE_PRETRADE_WITNESS_KEYS = frozenset({"witness_kind", "digest", "projection", "transaction_id",
+    "command_id", "command_sequence", "context_generation", "ready_operation_id",
+    "checkpoint_digest", "save_receipt_digest"})
 TOP_LEVEL_KEYS = frozenset({"schema", "checkpoint_id", "created_at", "players", "rules_sha256",
                             "identity_sha256", "contract_fingerprint", "source_fingerprint",
                             "predecessor", "provenance"})
@@ -57,6 +65,8 @@ LOCK_TIMEOUT = 5.0
 LOCK_POLL = 0.01
 PROVENANCE_MAX_KEYS = 32
 PROVENANCE_MAX_STR = 512
+PROVENANCE_MAX_KEY_LEN = 64
+PROVENANCE_MAX_INT = 2**53
 
 
 class CheckpointError(Exception):
@@ -119,6 +129,46 @@ def _validate_witness_values(component, witness):
             raise CheckpointError(f"{component} witness {key} must be a non-empty string")
 
 
+def _validate_native_pretrade_witness_values(component, witness):
+    for key in ("digest", "projection", "transaction_id", "command_id", "context_generation",
+                "ready_operation_id", "checkpoint_digest", "save_receipt_digest"):
+        if not _nonempty_str(witness[key]):
+            raise CheckpointError(f"{component} witness {key} must be a non-empty string")
+    if not _nonneg_int(witness["command_sequence"]):
+        raise CheckpointError(f"{component} witness command_sequence must be a nonnegative int")
+
+
+def _witness_kind(witness):
+    return witness.get("witness_kind", "save_witness") if isinstance(witness, dict) else None
+
+
+def _witness_key_set(kind, witness):
+    """The complete key set for KIND, given the witness dict actually presented — the legacy
+    kind's set gains "witness_kind" only when the caller explicitly included it."""
+    if kind == "save_witness":
+        return WITNESS_KEYS | ({"witness_kind"} if isinstance(witness, dict) and "witness_kind" in witness else set())
+    if kind == "native_pretrade":
+        return NATIVE_PRETRADE_WITNESS_KEYS
+    return None
+
+
+def _validate_witness(component, witness, *, exact):
+    """Validate WITNESS against its tagged union's shape+values. EXACT=True (manifest shape,
+    load time) requires the key set to match precisely; EXACT=False (caller input, capture
+    time) only requires it as a subset — capture() then stores exactly the kind's own keys."""
+    kind = _witness_kind(witness)
+    expected = _witness_key_set(kind, witness)
+    if expected is None or not isinstance(witness, dict):
+        raise CheckpointError(f"{component} witness has an unrecognized witness_kind")
+    if (set(witness) != expected) if exact else not (set(witness) >= expected):
+        raise CheckpointError(f"{component} witness is missing required keys")
+    if kind == "save_witness":
+        _validate_witness_values(component, witness)
+    else:
+        _validate_native_pretrade_witness_values(component, witness)
+    return expected
+
+
 def _validate_provenance(component, provenance):
     """R5b/N3 bind a transaction id, predecessor run id, or journal revision here. Kept to
     plain JSON scalars and a bounded size — it is stored and hash-verified like everything
@@ -126,14 +176,16 @@ def _validate_provenance(component, provenance):
     if not isinstance(provenance, dict) or len(provenance) > PROVENANCE_MAX_KEYS:
         raise CheckpointError(f"{component} provenance must be a JSON object with at most {PROVENANCE_MAX_KEYS} keys")
     for key, value in provenance.items():
-        if not _nonempty_str(key):
-            raise CheckpointError(f"{component} provenance keys must be non-empty strings")
+        if not _nonempty_str(key) or len(key) > PROVENANCE_MAX_KEY_LEN:
+            raise CheckpointError(f"{component} provenance keys must be non-empty strings of at most {PROVENANCE_MAX_KEY_LEN} characters")
         if value is None:
             continue
         if isinstance(value, bool) or not isinstance(value, (str, int)):
             raise CheckpointError(f"{component} provenance value for {key!r} must be str, int, or null")
         if isinstance(value, str) and len(value) > PROVENANCE_MAX_STR:
             raise CheckpointError(f"{component} provenance value for {key!r} exceeds {PROVENANCE_MAX_STR} characters")
+        if isinstance(value, int) and abs(value) > PROVENANCE_MAX_INT:
+            raise CheckpointError(f"{component} provenance value for {key!r} exceeds the {PROVENANCE_MAX_INT} magnitude bound")
 
 
 class PairedCheckpointStore:
@@ -175,7 +227,8 @@ class PairedCheckpointStore:
                     "created_at": datetime.now(UTC).isoformat(),
                     "players": {
                         player: {
-                            "witness": {key: witnesses[player][key] for key in WITNESS_KEYS},
+                            "witness": {key: witnesses[player][key]
+                                        for key in _witness_key_set(_witness_kind(witnesses[player]), witnesses[player])},
                             "save_sha256": self._write_verified(temp_dir / f"{player}.sav", players[player]["save"]),
                             "save_size": len(players[player]["save"]),
                         } for player in PLAYERS
@@ -275,13 +328,12 @@ class PairedCheckpointStore:
             save = entry["save"]
             if not isinstance(save, (bytes, bytearray)) or len(save) != self.save_size:
                 raise CheckpointError(f"player {player} save must be exactly {self.save_size} bytes")
-            witness = entry["witness"]
-            if not isinstance(witness, dict) or not set(witness) >= WITNESS_KEYS:
-                raise CheckpointError(f"player {player} witness is missing required keys")
-            _validate_witness_values(f"player {player}", witness)
-            witnesses[player] = witness
-        if not allow_same_batch and witnesses["a"]["operation_id"] == witnesses["b"]["operation_id"] \
-                and witnesses["a"]["index"] == witnesses["b"]["index"]:
+            _validate_witness(f"player {player}", entry["witness"], exact=False)
+            witnesses[player] = entry["witness"]
+        if (not allow_same_batch and _witness_kind(witnesses["a"]) == "save_witness"
+                and _witness_kind(witnesses["b"]) == "save_witness"
+                and witnesses["a"]["operation_id"] == witnesses["b"]["operation_id"]
+                and witnesses["a"]["index"] == witnesses["b"]["index"]):
             # ponytail: a duplicate-reference heuristic, NOT proof the two saves are actually
             # paired — it only refuses the degenerate "one batch witnessed both players" shape.
             # R5b (the real witness seam) owns pairing.
@@ -330,10 +382,7 @@ class PairedCheckpointStore:
                 raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} save_size does not match the configured size")
             if not isinstance(entry["save_sha256"], str) or not HEX64.fullmatch(entry["save_sha256"]):
                 raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} save_sha256 is invalid")
-            witness = entry["witness"]
-            if not isinstance(witness, dict) or set(witness) != WITNESS_KEYS:
-                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} witness is invalid")
-            _validate_witness_values(f"checkpoint {checkpoint_id} player {player}", witness)
+            _validate_witness(f"checkpoint {checkpoint_id} player {player}", entry["witness"], exact=True)
         for field in ("rules_sha256", "identity_sha256"):
             value = manifest.get(field)
             if not isinstance(value, str) or not HEX64.fullmatch(value):

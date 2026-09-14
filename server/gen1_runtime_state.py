@@ -165,6 +165,8 @@ class Gen1RuntimeState:
         verify_evolutions(self)
         from server.gen1_run_resume import verify_state as verify_resume
         verify_resume(self)
+        from server.gen1_checkpoint_runtime import verify_state as verify_checkpoint
+        verify_checkpoint(self)
 
     @classmethod
     def initial(cls, rules, identities, contract, *, data_dir, resume=None):

@@ -27,6 +27,15 @@ def _players(seq):
             "b": {"save": _save(f"b{seq}"), "witness": _witness("b", seq)}}
 
 
+def _native_pretrade_witness(player, seq):
+    return {"witness_kind": "native_pretrade", "digest": f"native-digest-{player}-{seq}",
+            "projection": "cartram-hex-sha256", "transaction_id": f"txn-{seq}",
+            "command_id": f"cmd-{player}-{seq}", "command_sequence": seq,
+            "context_generation": f"ctx-{player}", "ready_operation_id": f"ready-{player}-{seq}",
+            "checkpoint_digest": f"checkpoint-digest-{player}-{seq}",
+            "save_receipt_digest": f"save-receipt-{player}-{seq}"}
+
+
 def _capture(store, seq, **kwargs):
     return store.capture(_players(seq), f"rules-{seq}".encode(), f"identity-{seq}".encode(),
                           "contract-x", f"source-{seq}", **kwargs)
@@ -459,8 +468,62 @@ def test_tampering_provenance_makes_load_raise(tmp_path):
     ({"k": True}, "must be str, int, or null"),
     ({"k": ["nested"]}, "must be str, int, or null"),
     ({"k": "x" * 513}, "exceeds 512 characters"),
+    ({"k" * 65: "x"}, "at most 64 characters"),
+    ({"k": 2**53 + 1}, "magnitude bound"),
+    ({"k": -(2**53 + 1)}, "magnitude bound"),
 ])
 def test_capture_refuses_malformed_provenance(tmp_path, provenance, message):
     store = PairedCheckpointStore(tmp_path)
     with pytest.raises(CheckpointError, match=message):
         store.capture(_players(1), b"rules", b"identity", "contract", "source", provenance=provenance)
+
+
+# -- R5b design input: tagged-union witness kinds ----------------------------
+
+def test_capture_with_legacy_save_witness_kind_round_trips(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    checkpoint = store.load(manifest["checkpoint_id"])
+    assert manifest["players"]["a"]["witness"] == _witness("a", 1)
+    assert checkpoint.manifest["players"]["b"]["witness"] == _witness("b", 1)
+
+
+def test_capture_with_native_pretrade_witness_kind_round_trips(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    players = {"a": {"save": _save("a1"), "witness": _native_pretrade_witness("a", 1)},
+               "b": {"save": _save("b1"), "witness": _native_pretrade_witness("b", 1)}}
+    manifest = store.capture(players, b"rules", b"identity", "contract", "source")
+
+    assert manifest["players"]["a"]["witness"] == _native_pretrade_witness("a", 1)
+    checkpoint = store.load(manifest["checkpoint_id"])
+    assert checkpoint.manifest["players"]["b"]["witness"] == _native_pretrade_witness("b", 1)
+
+
+def test_capture_with_mixed_witness_kinds_round_trips(tmp_path):
+    # A legacy save witness for one player, a native-pretrade witness for the other — no
+    # same-batch heuristic applies since it's save_witness-kind-specific (no operation_id/
+    # index on the native side to even compare).
+    store = PairedCheckpointStore(tmp_path)
+    players = {"a": {"save": _save("a1"), "witness": _witness("a", 1)},
+               "b": {"save": _save("b1"), "witness": _native_pretrade_witness("b", 1)}}
+    manifest = store.capture(players, b"rules", b"identity", "contract", "source")
+    assert manifest["players"]["a"]["witness"] == _witness("a", 1)
+    assert manifest["players"]["b"]["witness"] == _native_pretrade_witness("b", 1)
+
+
+def test_capture_refuses_unknown_witness_kind(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    players = _players(1)
+    players["a"]["witness"] = {**players["a"]["witness"], "witness_kind": "bogus"}
+    with pytest.raises(CheckpointError, match="unrecognized witness_kind"):
+        store.capture(players, b"rules", b"identity", "contract", "source")
+
+
+def test_load_refuses_unknown_witness_kind_in_stored_manifest(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "manifest.json"
+    _rewrite_manifest(path, lambda doc: doc["players"]["a"]["witness"].__setitem__("witness_kind", "bogus"))
+
+    with pytest.raises(CheckpointError, match="unrecognized witness_kind"):
+        store.load(manifest["checkpoint_id"])

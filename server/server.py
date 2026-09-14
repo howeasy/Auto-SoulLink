@@ -5383,6 +5383,44 @@ class SLinkServer:
     async def handle_status_json(self, request):
         return aiohttp_web.json_response(self._build_status_dict())
 
+    # ── Paired checkpoint capture (R5b-1: server/gen1_checkpoint_runtime.py) ────
+
+    async def handle_checkpoint_start_api(self, request):
+        """POST /api/checkpoint — admit a new paired-checkpoint request on this Gen1 durable
+        run. Body: {"request_id": <str>, "registry_run_id": <str, optional>}. 202 with the
+        request's status; never claims the checkpoint is saved (that needs both uploads plus
+        a journal-confirmed archive)."""
+        if self.gen1_runtime is None:
+            return aiohttp_web.json_response({"ok": False, "error": "this run is not a Gen1 durable runtime"}, status=400)
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+        request_id = body.get("request_id") if isinstance(body, dict) else None
+        if not isinstance(request_id, str) or not request_id:
+            return aiohttp_web.json_response({"ok": False, "error": "request_id is required"}, status=400)
+        registry_run_id = body.get("registry_run_id") if isinstance(body, dict) else None
+        from server.gen1_checkpoint_runtime import start
+        from server.protocol_journal import JournalError
+        try:
+            result = start(self.gen1_runtime, request_id, registry_run_id)
+        except JournalError as error:
+            return aiohttp_web.json_response({"ok": False, "error": str(error)}, status=409)
+        return aiohttp_web.json_response({"ok": True, **result}, status=202)
+
+    async def handle_checkpoint_status_api(self, request):
+        """GET /api/checkpoint/{request_id} — the current status of one paired-checkpoint
+        request on this Gen1 durable run."""
+        if self.gen1_runtime is None:
+            return aiohttp_web.json_response({"ok": False, "error": "this run is not a Gen1 durable runtime"}, status=400)
+        from server.gen1_checkpoint_runtime import COMPONENT as CHECKPOINT_COMPONENT
+        component = self.gen1_runtime.state().document()["components"].get(CHECKPOINT_COMPONENT)
+        request_id = request.match_info["request_id"]
+        if component is None or component["request_id"] != request_id:
+            return aiohttp_web.json_response({"ok": False, "error": "unknown checkpoint request_id"}, status=404)
+        return aiohttp_web.json_response({"ok": True, "request_id": request_id,
+            "status": component["status"], "confirmed": component["confirmed"]})
+
     # ── RR Damage Calculator handlers ───────────────────────────────────────
 
     async def handle_calc_redirect(self, request):
@@ -8626,7 +8664,12 @@ def build_app(srv):
     """
     @aiohttp_web.middleware
     async def gen1_runtime_controls(request, handler):
-        if getattr(srv, "gen1_runtime", None) is not None and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        # /api/checkpoint is the one deliberate exception: unlike every other POST route here
+        # (reset/debug/inject_link), it never bypasses the durable journal — it goes through
+        # server/gen1_checkpoint_runtime.py's own runtime.journal.commit(...), exactly as safe
+        # as the socket protocol it rides alongside.
+        if (getattr(srv, "gen1_runtime", None) is not None and request.method not in {"GET", "HEAD", "OPTIONS"}
+                and request.path != "/api/checkpoint"):
             raise aiohttp_web.HTTPConflict(text="Gen1 durable UI command binding is still pending")
         return await handler(request)
 
@@ -8636,6 +8679,8 @@ def build_app(srv):
     app.router.add_get("/memorial",    srv.handle_memorial_html)
     app.router.add_get("/api/status",  srv.handle_status_json)
     app.router.add_get("/api/events",  srv.handle_sse)
+    app.router.add_post("/api/checkpoint",              srv.handle_checkpoint_start_api)
+    app.router.add_get("/api/checkpoint/{request_id}",  srv.handle_checkpoint_status_api)
     app.router.add_post("/api/reset",              srv.handle_reset_api)
     app.router.add_post("/api/inject_link",        srv.handle_inject_link_api)
     app.router.add_post("/api/inject_link_by_slot", srv.handle_inject_link_by_slot_api)

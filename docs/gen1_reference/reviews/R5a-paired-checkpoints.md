@@ -115,8 +115,12 @@ scalars, `{}` by default).
   as a trailing `{"checkpoint_id", "error"}` entry instead of raising; `load()`/`current()`
   raise for the same conditions since they promise one specific checkpoint back, not a
   best-effort list.
+- **Fresh-store cutover.** Manifests without a top-level `provenance` key are rejected outright
+  (see the complete-key-set check above) — a acceptable break only because no store existed
+  before this session (an acceptable break); there is no migration path for a pre-provenance manifest.
 - **`provenance` rides through hash-verified, never interpreted.** A JSON object of
-  `str -> (str | int | None)`, at most 32 keys, string values at most 512 characters. It is
+  `str -> (str | int | None)`, at most 32 keys, keys at most 64 characters, string values at
+  most 512 characters, integer magnitude at most 2**53. It is
   part of the manifest bytes like every other field, so tampering it is caught the same way
   tampering `source_fingerprint` is. `WITNESS_KEYS` was not widened for this — provenance is
   its own top-level field, unrelated to a player's witness record.
