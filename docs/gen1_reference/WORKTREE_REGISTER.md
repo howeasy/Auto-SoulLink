@@ -4,11 +4,11 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-**PAUSED BY OWNER.** Canonical E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2, gen1/rc. Code freeze c647f9126e79909f2b5976beec65d7b3beedd737; later docs record the pause. All workers/reviewers released, live88801 closed/HOLD and no EmuHawk/test runner remains. No active file or emulator claim.
+**RESUMED under explicit owner authorization (2026-09-14 UTC).** Canonical `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`; HEAD `59b6b0b` at takeover, code freeze `c647f91`. Coordinator: Claude Opus 5 session `9a7ac120-04eb-489f-8fd1-c9ecb67b31a6` (`slink-63`); roles, not providers, carry authority (see the guide). No EmuHawk/test runner; no emulator lane granted.
 
-Coordinator Codex01a09ae0-ad6f-7b01-8753-5e6b71eb1cfa has only completed the handoff; next coordinator requires explicit owner resume and must update the sole guide identity/claims. TEMP handoff location is in the guide. Native hook trust/activation is not claimed.
+Current file claims (one writer each): BI-1 implementation worker — `lua/tests/gen1_rb_ball_gate_inputs.lua`, `tests/unit/test_gen1_selected_rb_ball_gate.py`, `docs/gen1_reference/reviews/D1-RB-implementation-successor.md` (READY, ACTIVE on acknowledgment). Read-only cards: R6-SRC (contextual peer, pokered sources), TK-1 (OMP, receipts). Coordinator alone edits the guide, this register and `docs/agents/orchestration.md`.
 
-Preserve dirty R0 report and untracked parcel Lua/unit/report. All18 parked registrations remain as classified; no parked worktree was moved/deleted/reset. Root master is not the RC checkout. Existing user settings were preserved during scoped hook installation.
+Preserve dirty R0 report and untracked parcel Lua/unit/report (hashes verified at takeover). All 18 parked registrations remain as classified; no parked worktree was moved/deleted/reset. Root master is not the RC checkout. Native hook trust/activation is not claimed.
 
 ## Preserved checkout classifications
 
