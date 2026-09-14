@@ -186,6 +186,10 @@ function Client.new(p)
             end
         else
             self.invalid_streak = self.invalid_streak + 1
+            -- WRAM cleared (home/init.asm after a reset): whatever the player picks next is a
+            -- new session for the server — CONTINUE re-hellos the same save (a reconnect),
+            -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
+            if reads.read_player_id() == 0 then self.hello_sent = false end
             if self.invalid_streak >= Client.MAX_INVALID and self.writes_enabled then
                 -- pause, never drop: the queues survive (an unreadable party is a transient the
                 -- engine creates itself, e.g. AddPartyMon's AskName prompt before the struct
@@ -331,8 +335,14 @@ function Client.new(p)
             writes:arm("overworld")
             if cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
                 local slot = find_party_slot(cmd.key)
-                if slot then writes:faint_party_slot(slot) end
-                self.sync_written[cmd.key] = true
+                if slot then
+                    writes:faint_party_slot(slot)
+                    self.sync_written[cmd.key] = true
+                else
+                    -- the mon left the party before the checkpoint (PC deposit): no byte moves,
+                    -- and no echo-suppression either. The protocol has no force_faint NACK.
+                    log("[SLink-gen1] " .. cmd.cmd .. " dropped at the checkpoint: key not in party " .. tostring(cmd.key))
+                end
             elseif cmd.cmd == "box_mon" then
                 local slot, mon = find_party_slot(cmd.key)
                 if slot then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
@@ -845,11 +855,15 @@ function Client.new(p)
         self.frame = io.framecount()
         net.pump()
         local connected = net.connected()
-        -- hello only from a live game: at power-on/soft reset WRAM is cleared until the main
-        -- menu reloads the save (home/init.asm, MainMenu -> TryLoadSaveFile), so an immediate
-        -- hello would carry ot_id 0/65535 and an empty party
+        -- hello only once the player is IN the game: the main menu already holds the save
+        -- (MainMenu -> TryLoadSaveFile before the CONTINUE/NEW GAME choice) and a cleared WRAM
+        -- holds nothing, so "party readable" is not enough — require the overworld checkpoint
+        -- or a running battle (a reconnect mid-battle must not wait for it to end)
         if not connected then self.hello_sent = false end
-        if connected and not self.hello_sent and game_is_live() then self:send_hello() end
+        if connected and not self.hello_sent and game_is_live()
+           and (reads.read_battle().in_battle ~= 0 or safety.check(ws_profile, io)) then
+            self:send_hello()
+        end
         connected = connected and self.hello_sent
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do

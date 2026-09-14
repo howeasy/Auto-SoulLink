@@ -51,6 +51,7 @@ class World:
         self.hud: list[tuple] = []
         self.writes: list[tuple[int, int, str]] = []
         self.saveram_calls = 0
+        self.logs: list[str] = []
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         L = self.lua
         io = L.table(
@@ -74,7 +75,7 @@ class World:
         )
         Entry = L.eval(f'dofile("{ENTRY}")')
         deps = L.table(root=REPO.as_posix(), io=io, net=net, hud=hud, title=title, player=player,
-                       rom_sha1="deadbeef", log=lambda t: None)
+                       rom_sha1="deadbeef", log=lambda t: self.logs.append(str(t)))
         self.client, self.parts = Entry.build(deps)
         self.client.start(self.client)
         self.overworld_safe()
@@ -551,6 +552,83 @@ def test_active_force_faint_waits_for_the_battle_loop_head(world):
     world.fire("battle_loop_head")
     assert world.bus[world.ram["wBattleMonHP"]] == 0 and world.bus[world.ram["wBattleMonHP"] + 1] == 0
     assert world.bus[world.ram["wPlayerSelectedMove"]] == 0xFF
+    assert world.party()[0]["hp"] == 0
+
+
+def test_hello_waits_for_the_overworld_checkpoint_not_the_main_menu(world):
+    # MainMenu -> TryLoadSaveFile: the save is in WRAM (party readable, wPlayerID set) before
+    # the player chooses CONTINUE or NEW GAME, so a readable party is not "in the game"
+    world.regs["PC"] = 0x1234  # not parked in OverworldLoop
+    world.connect()
+    world.step(90)
+    assert world.events("hello") == []
+    world.overworld_safe()
+    world.step()
+    assert len(world.events("hello")) == 1
+    # a cleared WRAM (reset) makes the next live game a new session: hello again
+    saved = bytes(world.bus)
+    r = world.ram
+    for a in range(r["wPartyCount"], r["wPartyCount"] + 8):
+        world.bus[a] = 0
+    world.bus[r["wPlayerID"]] = world.bus[r["wPlayerID"] + 1] = 0
+    world.regs["PC"] = 0x1234
+    world.step(60)
+    world.bus[:] = saved  # CONTINUE reloaded the same save
+    world.overworld_safe()
+    world.step()
+    hellos = world.events("hello")
+    assert len(hellos) == 2 and hellos[1]["ot_id"] == hellos[0]["ot_id"]
+    world.assert_all_conform()
+
+
+def test_reconnect_inside_a_battle_hellos_without_waiting_for_the_checkpoint(world):
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.regs["PC"] = 0x1234
+    world.connected = False
+    world.step(2)
+    world.connected = True
+    world.step()
+    assert len(world.events("hello")) == 2 and world.events("hello")[-1]["in_battle"] is True
+
+
+def test_deferred_force_faint_whose_mon_left_the_party_writes_nothing_and_says_so(world):
+    world.connect()
+    world.step(60)
+    key = codec.key(world.party()[1])
+    world.reply({"cmd": "force_faint", "key": key})
+    world.regs["PC"] = 0x1234
+    world.step(2)
+    world.seed_party(world.party()[:1])  # the player deposited it before the checkpoint
+    world.overworld_safe()
+    world.step()
+    assert [w for w in world.writes if w[2] == "System Bus"] == []
+    assert not world.client.sync_written[key]
+    assert any("dropped at the checkpoint" in line for line in world.logs)
+
+
+def test_a_battle_write_queued_before_a_pause_still_lands_at_the_loop_head(world):
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[0])
+    world.reply({"cmd": "force_faint", "key": key})
+    world.step()
+    # the party goes unreadable mid-battle for five validations (list/struct disagree)
+    world.bus[world.ram["wPartyCount"]] = 3
+    world.bus[world.ram["wPartySpecies"] + 2] = 0xA5
+    world.bus[world.ram["wPartySpecies"] + 3] = 0xFF
+    world.step(60 * 5)
+    assert world.client.writes_enabled is False
+    world.bus[world.ram["wPartyCount"]] = 2
+    world.bus[world.ram["wPartySpecies"] + 2] = 0xFF
+    world.step(60)
+    assert world.client.writes_enabled is True
+    world.fire("battle_loop_head")
+    assert world.bus[world.ram["wBattleMonHP"]] == 0 and world.bus[world.ram["wBattleMonHP"] + 1] == 0
     assert world.party()[0]["hp"] == 0
 
 
