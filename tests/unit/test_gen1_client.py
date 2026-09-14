@@ -459,6 +459,34 @@ def test_faint_in_battle_names_the_active_slot_and_whiteout_when_none_alive(worl
     world.assert_all_conform()
 
 
+def test_poison_faint_in_the_overworld_names_the_slot_from_wWhichPokemon(world):
+    """S-4: ApplyOutOfBattlePoisonDamage.noBorrow fires once per mon the step's damage killed.
+
+    At that site `wWhichPokemon` is the party slot and its HP bytes are already zero, so the
+    faint carries the right key without any polling; two poison deaths in a row must produce
+    two faints and exactly one whiteout, and neither may need a battle.
+    """
+    world.connect()
+    party = world.party()
+    party[1]["hp"] = 0            # the step's damage zeroed it
+    world.seed_party(party)
+    world.bus[world.ram["wWhichPokemon"]] = 1
+    world.fire("poison_faint")
+    world.step()
+    f = world.events("faint")
+    assert len(f) == 1 and f[0]["key"] == codec.key(party[1]) and f[0]["area_id"] == "route_1"
+    assert world.events("whiteout") == []   # slot 0 alive
+    # slot 0 faints from poison too -> whiteout exactly once
+    party = world.party()
+    party[0]["hp"] = 0
+    world.seed_party(party)
+    world.bus[world.ram["wWhichPokemon"]] = 0
+    world.fire("poison_faint")
+    world.step()
+    assert len(world.events("faint")) == 2 and len(world.events("whiteout")) == 1
+    world.assert_all_conform()
+
+
 def test_pc_moves_come_from_the_movemon_signal_direction(world):
     world.connect()
     party = world.party()
@@ -679,5 +707,34 @@ def test_partner_prompt_and_apply_drive_the_lease_and_report_the_received_mon(wo
     w.step()
     td = w.events("trade_done")[-1]
     assert td["new_key"] == codec.key(w.party()[0]) and td["new_species"] == 0xB1 and td["token"] == "t8"
+    assert _overlay(w)[5] == 8
+    w.assert_all_conform()
+
+
+def test_slink_trade_reports_trade_done_and_never_key_change(world):
+    """S-5: a SLINK trade is neither an evolution nor an NPC trade, so it emits no `key_change`.
+
+    The received mon lands in the last slot under a new key -- exactly the shape the evolution
+    and in-game-trade migrations are built for, which is why the absence is asserted rather
+    than assumed. One `trade_done` reports it; no migration event may appear beside it.
+    """
+    w = _patched_world()
+    rng = random.Random(13)
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    base = w.ram["wSerialPartyMonsPatchList"]
+    old_key = codec.key(w.party()[0])
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(), "old_key": old_key,
+             "token": "t9", "partner_name": "BLUE"})
+    w.step()
+    ov = _overlay(w)
+    assert ov[5] == 5, "apply armed"
+    gen = ov[6]
+    w.seed_party([incoming])          # the native routine replaced our only mon
+    w.bus[base + 5], w.bus[base + 8], w.bus[base + 7] = 7, 0, gen
+    w.step()
+    assert len(w.events("trade_done")) == 1
+    assert w.events("trade_done")[-1]["new_species"] == 0xB1
+    assert w.events("key_change") == []
     assert _overlay(w)[5] == 8
     w.assert_all_conform()

@@ -57,7 +57,13 @@ local function battle_point(io, ram)
              cur_level = io.read_u8(ram.wCurEnemyLevel, "System Bus") }
 end
 S.KINDS.battle_faint = { point = battle_point }
-S.KINDS.poison_faint = { point = battle_point }
+-- ApplyOutOfBattlePoisonDamage.noBorrow (engine/events/poison.asm): fires once per mon that
+-- fainted from the step's damage; wWhichPokemon is that party slot, HP already zeroed
+S.KINDS.poison_faint = { point = function(io, ram)
+    local pt = battle_point(io, ram)
+    pt.which = io.read_u8(ram.wWhichPokemon, "System Bus")
+    return pt
+end }
 S.KINDS.starter_begin = { point = battle_point }
 S.KINDS.starter_end = { point = battle_point }
 S.KINDS.save_witness = {
