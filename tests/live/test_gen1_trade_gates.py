@@ -61,6 +61,9 @@ def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
     assert "[ok] bank-qualified trade service site registered" in text
     assert "[ok] walked from Oak's Lab to the physical Center receptionist" in text
     assert text.count("[ok] native receptionist emitted trade_query within 30 frames") == 2
+    assert "[ok] CABLE CLUB fell through to vanilla and returned to the overworld" in text
+    assert "[ok] CANCEL closed the native menu with no offer" in text
+    assert "VANILLA Welcome to the" in text
     assert text.count("[ok] selected slot zero emitted trade_offer within 180 frames") == 2
     # wait_for logs nothing on success; the gate prints the tilemap row it saw
     assert "NOTICE Trade unavailable." in text
@@ -75,6 +78,6 @@ def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
         assert schema.validate_event(message) == [], (rom, index, message)
     seq = [message["seq"] for message in messages]
     assert seq == list(range(seq[0], seq[0] + len(seq))), f"{rom}: client seq discontinuity"
-    assert sum(message["event"] == "trade_query" for message in messages) == 2
+    assert sum(message["event"] == "trade_query" for message in messages) == 4  # 2 offers + CABLE CLUB + CANCEL
     offers = [message for message in messages if message["event"] == "trade_offer"]
     assert len(offers) == 2 and [offer["slot"] for offer in offers] == [0, 0]

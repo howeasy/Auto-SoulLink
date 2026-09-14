@@ -188,6 +188,48 @@ local ok, err = xpcall(function()
     end
     visit(false)
     visit(true)
+
+    -- T-1's other half: CABLE CLUB and CANCEL fall through to vanilla. Talk again, wait for the
+    -- native menu, move the cursor with re-pulsed Down until the engine shows the row, select.
+    local function open_menu()
+        local first = #t.sent
+        pulse("Up");step({})
+        pulse("A")
+        wait_for(function() return find_sent("trade_query", first) ~= nil end, 30, "trade_query on the revisit")
+        reply({cmd="trade_mask", mask=1})
+        wait_for(function() return has_tiles("SLINK TRADE", 42) and has_tiles("CANCEL", 122) end,
+                 120, "native menu on the revisit")
+        return first
+    end
+    local function choose_row(index)
+        wait_for(function() return at("wCurrentMenuItem") == index end, 120,
+                 fmt("cursor on native menu row %d", index), "Down")
+    end
+    -- CABLE CLUB: engine/link/cable_club_npc.asm CableClubNPC prints CableClubNPCWelcomeText, then
+    -- (Pokedex obtained) tries the serial link for 90 frames and fails without a cable.
+    open_menu()
+    choose_row(1)
+    wait_for(function() return has_tiles("Welcome to the") end, 180, "vanilla CABLE CLUB welcome text", "A")
+    t.log("VANILLA " .. row(281, 18) .. " | " .. row(321, 18))
+    local returned = false
+    for i = 1, 900 do
+        if t.overworld_ok() then returned = true;break end
+        step(i % 16 < 2 and {A=true} or {})
+    end
+    require_check("CABLE CLUB fell through to vanilla and returned to the overworld", returned,
+                  fmt("map=%d x=%d y=%d frame=%d", at("wCurMap"), at("wXCoord"), at("wYCoord"), t.frame))
+    -- CANCEL: the menu closes with no offer and no notice
+    local before = #t.sent
+    open_menu()
+    choose_row(2)
+    local closed = false
+    for i = 1, 300 do
+        if t.overworld_ok() and not has_tiles("SLINK TRADE", 42) then closed = true;break end
+        step(i % 16 < 2 and {A=true} or {})
+    end
+    require_check("CANCEL closed the native menu with no offer", closed and
+                  find_sent("trade_offer", before) == nil,
+                  fmt("closed=%s map=%d frame=%d", tostring(closed), at("wCurMap"), t.frame))
 end, debug.traceback)
 
 if not ok then t.check("receptionist gate sequence", false, tostring(err)) end
