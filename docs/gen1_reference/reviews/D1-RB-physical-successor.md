@@ -1,4 +1,4 @@
-# D1-RB first physical route — HOLD
+# D1-RB first physical route — R7 PASS (controlled-scripted), attempts 1–6 HOLD history below
 
 Integrated source a369bef743eaa8d18944801ef8705a36574495e1, product15727ec. Scripted normal-button R/B run run_20260913_211155_8db8cb, runtimeee55a30c1a055530d6ac8574ad8dd58b, session58395. Both fresh enrollments completed and both physically walked through Pallet/Oak into the lab. No starter/rival checkpoint passed.
 
@@ -37,3 +37,11 @@ Final attempt6 atcode c647f9126e79909f2b5976beec65d7b3beedd737, invocationdocsd8
 Summary .cache/d1-rb-starter-rival-r6-summary.json SHA256481821b77f2d6380a5d80641463900eb09e60ccfb7d4dcd4aefdf4e02cfde191; consolea395b5c1c4aad735cb9d759a45ec3356649fd65cc8d4640954e631077a8c07e3. Survivors, unknown audits and resource cleanup errors empty; independent process census found no EmuHawk/test runner. Shared-HUD code was exercised by the run, but no dedicated physical pixel-expiry capture was made. Source/model evidence is not a physical-display or release verdict.
 
 Current-card combined verification188passed/0fail/error/skip, .cache/current-cards-final.xml SHA256bc078899f88808b5ea2275608824a3ed3a7f3395f950412591074c216133ffa6. Owner requested handoff and pause; no further fix, rerun or new gameplay slice is dispatched.
+
+## Attempt 7 (R7) — lab-rival checkpoint OBSERVED, controlled-scripted PASS
+
+Source `57eabf78d989ab50188868e0d5278d5236447af9` (driver `lua/tests/gen1_rb_ball_gate_inputs.lua` SHA256 `7c000361e32a8de41f7fdd2f5a6ba907d5cc2ace3c1d4d5012fcad9930637e41`, product cut `15727ec` unchanged), run `run_20260914_004257_e6c059`, runtime session `2a34e6da7bc1889ec4ca40d6303e0a72`, requested 300%, limit 180 s, coordinator-owned sole lane, launched via `rb_starter_rival(".cache/d1-rb-starter-rival-r7", emulator=E:/Howard/Bizhawk/EmuHawk.exe, base_config=E:/Howard/Bizhawk/config.ini, limit=180)`.
+
+Result `status: rb-starter-rival-checkpoint-observed` — set only after `verify_starter_rival_checkpoint` (ALIVE `oaks_lab` link 57FC:5885:99 ↔ 3025:89E4:B0, species 1/4, `pokeballs_obtained` false for both, no faint activations/deaths, exactly one source-ACKed `starter_begin`/`starter_end`/`battle_faint` per player with `battle_hp 0`), the commands-table check (no `force_faint`/`force_explode`/`memorialize` queued), service current, queues empty, `audit_scenario`. Markers: A `lab-loss-complete` frame 21569 (route frames 18051), lab script 18, `battle_result 1`, HP 20, rival event set, Growl PP 15; B frame 17952 (route frames 14400), script 18, result 1, HP 19, PP 24. Cleanup: survivors, unknown audits and resource errors all empty; every tracked identity `alive_after: false`; original config `92ca34c6…` unchanged; independent census found no EmuHawk.
+
+Receipts: `.cache/d1-rb-starter-rival-r7-summary.json` SHA256 `12bd67afa1c4960c10f6bc48371eb73f0ac404281d04fb68191a77b6ce30f408`; console `.cache/d1-rb-starter-rival-r7-console.txt` `a0a1016ea976ffa7e2310cfc4c56c9d4b0cd18c75c74779534b7f1f91627754d`; owned root `.cache/d1-rb-starter-rival-r7/`. Evidence level: CONTROLLED-SCRIPTED (scripted normal buttons, read-only WRAM, no staging). This closes the D1 first checkpoint only — starter linkage, pre-ball lab loss with no death propagation, heal/free. Parcel, first ball, catches, fastest-text settings and every later row remain open; no manifest row is closed by this run.
