@@ -1074,13 +1074,15 @@ class RunManager:
     async def handle_stream_index(self, request: web.Request) -> web.Response:
         """GET /broadcast (and /stream for the URL that is pasted into OBS): the overlay
         gallery, wearing the Manager's rail. The gallery lays itself out as the second
-        column of whatever grid it sits in; body.mgr-stream is that grid here."""
+        column of whatever grid it sits in; here that is the Manager's .mk shell."""
         ctx = _build_stream_index_context(request)
         rail_ctx = self._rail_ctx(request, self._get(), page="broadcast")
         env = aiohttp_jinja2.get_env(request.app)
         ctx["sidebar_html"] = env.get_template("_rail.html").render(rail_ctx)
         ctx["sidebar_css"] = "board"
-        ctx["body_class"] = "board mgr mgr-stream"
+        ctx["body_class"] = "board mgr"
+        ctx["mgr"] = True
+        ctx["active_run_name"] = (self._active_stream_run() or {}).get("name", "")
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
     async def handle_randomizer_page(self, request: web.Request) -> web.Response:

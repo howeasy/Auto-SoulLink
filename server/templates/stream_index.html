@@ -3,7 +3,7 @@
 {% block title %}Soul Link Overlays{% endblock %}
 
 {% block head_extra %}
-  <link rel="stylesheet" href="/static/dashboard.css">
+  {% if not mgr %}<link rel="stylesheet" href="/static/dashboard.css">{% endif %}
   <script src="/static/dashboard.js" defer></script>
   <style>
     /* Master-detail overlay launcher — entirely token-driven so
@@ -40,8 +40,8 @@
       border-bottom: 1px solid var(--c-edge);
     }
     .rail h1 {
-      font-family: var(--font-pixel);
-      font-size: 11px;
+      font-family: var(--font-ui);
+      font-size: var(--fs-xs);
       color: var(--c-brand);
       letter-spacing: .12em;
       margin: 0;
@@ -86,7 +86,8 @@
       margin-top: 1em;
     }
     .rail-family-label {
-      font-size: 10px;
+      font-size: var(--fs-sm);
+      font-family: var(--font-ui);
       letter-spacing: .15em;
       text-transform: uppercase;
       color: var(--c-dim);
@@ -103,7 +104,7 @@
       background: transparent;
       color: var(--c-txt);
       font-family: inherit;
-      font-size: 13px;
+      font-size: var(--fs-md);
       cursor: pointer;
       text-align: left;
       border-left: 3px solid transparent;
@@ -127,7 +128,7 @@
       padding: 1.4em 2em 3em;
     }
     .pane h2 {
-      font-size: 1.4em;
+      font-size: var(--fs-lg);
       font-weight: 600;
       color: var(--c-txt);
       margin: 0 0 .25em;
@@ -135,7 +136,7 @@
     }
     .pane .desc {
       color: var(--c-dim);
-      font-size: .95em;
+      font-size: var(--fs-md);
       max-width: 1000px;
       margin-bottom: 1.2em;
     }
@@ -145,7 +146,7 @@
       border-radius: 6px;
       padding: 10px 14px;
       margin-bottom: 1.5em;
-      font-size: .85em;
+      font-size: var(--fs-sm);
       color: var(--c-txt);
       max-width: 1000px;
     }
@@ -199,7 +200,7 @@
       padding: 5px 8px;
       background: color-mix(in srgb, var(--c-brand) 14%, var(--c-card));
       border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
-      font-size: 0.78em;
+      font-size: var(--fs-sm);
       font-weight: 600;
       color: var(--c-txt);
     }
@@ -214,7 +215,7 @@
       text-decoration: none;
       padding: 1px 6px;
       border-radius: 3px;
-      font-size: 0.9em;
+      font-size: var(--fs-md);
     }
     .overview-tile-pop:hover { background: color-mix(in srgb, var(--c-link) 18%, transparent); }
     .overview-tile-frame {
@@ -238,7 +239,7 @@
     }
     .cfg-row:first-of-type { border-top: 0; }
     .cfg-lbl {
-      font-size: .82em;
+      font-size: var(--fs-sm);
       color: var(--c-dim);
       padding-top: 5px;
       letter-spacing: .04em;
@@ -251,7 +252,7 @@
       border: 1px solid var(--c-edge);
       border-radius: 4px;
       padding: 4px 10px;
-      font-size: .82em;
+      font-size: var(--fs-sm);
       cursor: pointer;
       font-family: inherit;
       white-space: nowrap;
@@ -279,7 +280,7 @@
     /* Size hint + URL row */
     .size-hint {
       font-family: var(--font-pixel);
-      font-size: 9px;
+      font-size: var(--fs-xs);
       color: var(--c-brand);
       opacity: .75;
       margin: 1.2em 0 .6em;
@@ -302,7 +303,7 @@
       border-radius: 4px;
       padding: 6px 10px;
       font-family: monospace;
-      font-size: .88em;
+      font-size: var(--fs-md);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -312,7 +313,7 @@
     .copy-btn, .open-btn {
       padding: 6px 14px;
       border-radius: 4px;
-      font-size: .85em;
+      font-size: var(--fs-sm);
       font-family: inherit;
       cursor: pointer;
       text-decoration: none;
@@ -344,7 +345,7 @@
       border-radius: 4px;
       padding: 5px 8px;
       font-family: var(--font-pixel);
-      font-size: .75em;
+      font-size: var(--fs-xs);
       text-align: center;
     }
 
@@ -369,7 +370,19 @@
   window.SLINK_ALL_FILTERS = {{ all_filters_json | safe }};
 </script>
 
+{% if mgr %}<div class="mk">{% endif %}
 {{ sidebar_html | safe }}
+{% if mgr %}<main class="mk-main mk-body-root">
+  <header class="mk-runhdr">
+    <h1 class="mk-runname">Broadcast</h1>
+    <span class="mk-meta">· Overlays{% if active_run_name %} · {{ active_run_name }}{% endif %}</span>
+    <span class="mk-hdr-spacer"></span>
+    <nav class="mk-tabs" aria-label="Broadcast">
+      <a class="mk-tab active" href="/broadcast">Overlays</a>
+      <a class="mk-tab" href="/broadcast/twitch">Twitch</a>
+      <a class="mk-tab" href="/broadcast/obs">OBS</a>
+    </nav>
+  </header>{% endif %}
 <div class="launcher"
      x-data="overlayLauncher()"
      x-init="setup(window.SLINK_OVERLAY_CATALOG)">
@@ -538,6 +551,7 @@
     </div>
   </main>
 </div>
+{% if mgr %}</main></div>{% endif %}
 
 <script>
 function overlayLauncher() {

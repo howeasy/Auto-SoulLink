@@ -23,42 +23,42 @@
   .debug-panel * { box-sizing:border-box; }
   /* The sidebar grid is set by dashboard.css. The debug-page body styles
    * below apply to .dash-main where the page content lives. */
-  .debug-panel h1{ color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
-  .debug-panel .nav{ color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
+  .debug-panel h1{ color:var(--orange); margin-bottom:0.2em; font-size:var(--fs-h1); }
+  .debug-panel .nav{ color:var(--muted); font-size:var(--fs-sm); margin-bottom:0.8em; }
   .debug-panel .nav a{ color:var(--blue); text-decoration:none; }
   .debug-panel .nav a:hover{ text-decoration:underline; }
 
   /* ── Live status banner ── */
   .debug-panel .live-bar{ display:flex; gap:1.2em; flex-wrap:wrap; align-items:center;
               background:var(--c-bg); border:1px solid var(--border); border-radius:6px;
-              padding:0.6em 1em; margin-bottom:1em; font-size:0.85em; }
+              padding:0.6em 1em; margin-bottom:1em; font-size:var(--fs-sm); }
   .debug-panel .live-bar .sse-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
   .debug-panel .live-bar .sse-ok{ background:var(--green); box-shadow:0 0 4px var(--green); }
   .debug-panel .live-bar .sse-off{ background:var(--red); box-shadow:0 0 4px var(--red); }
   .debug-panel .live-bar .player-pill{ display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
-                           border-radius:12px; font-weight:600; font-size:0.9em; }
+                           border-radius:12px; font-weight:600; font-size:var(--fs-md); }
   .debug-panel .live-bar .player-pill.on{ background:color-mix(in srgb, var(--c-alive) 22%, transparent); color:var(--green); }
   .debug-panel .live-bar .player-pill.off{ background:var(--c-card); color:var(--c-dim); }
   .debug-panel .live-bar .stat{ color:var(--muted); }
   .debug-panel .live-bar .stat b{ color:var(--text); font-variant-numeric:tabular-nums; }
-  .debug-panel .live-bar .event-log{ flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
+  .debug-panel .live-bar .event-log{ flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:var(--fs-md);
                          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
 
   .debug-panel .grid{ display:grid; grid-template-columns:1fr 1fr; gap:1em; }
   @media(max-width:900px){ .debug-panel .grid { grid-template-columns:1fr; } }
   .debug-panel .panel{ background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:1em; }
-  .debug-panel .panel h2{ color:var(--orange); font-size:1em; margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
+  .debug-panel .panel h2{ color:var(--orange); font-size:var(--fs-base); margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
               display:flex; align-items:center; justify-content:space-between; }
   .debug-panel .panel h2 .h2-left{ display:flex; align-items:center; gap:0.3em; }
   .debug-panel .panel.full{ grid-column:1/-1; }
-  .debug-panel label{ display:block; color:var(--muted); font-size:0.85em; margin-bottom:2px; }
+  .debug-panel label{ display:block; color:var(--muted); font-size:var(--fs-sm); margin-bottom:2px; }
   .debug-panel input, .debug-panel select, .debug-panel textarea{ background:var(--c-bg); border:1px solid var(--border); color:var(--text);
-    padding:5px 8px; border-radius:4px; font-size:0.88em; font-family:inherit; width:100%; }
+    padding:5px 8px; border-radius:4px; font-size:var(--fs-md); font-family:inherit; width:100%; }
   .debug-panel select{ cursor:pointer; }
   .debug-panel textarea{ min-height:100px; resize:vertical; }
   .debug-panel .row{ display:flex; gap:0.6em; margin-bottom:0.6em; }
   .debug-panel .row > *{ flex:1; }
-  .debug-panel .btn{ padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:0.85em; font-weight:600;
+  .debug-panel .btn{ padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:var(--fs-sm); font-weight:600;
          transition:filter 0.15s; }
   .debug-panel .btn-orange{ background:color-mix(in srgb, var(--c-pend) 22%, transparent); color:var(--orange); }
   .debug-panel .btn-red{ background:color-mix(in srgb, var(--c-dead) 22%, transparent); color:var(--red); }
@@ -66,31 +66,31 @@
   .debug-panel .btn-blue{ background:color-mix(in srgb, var(--c-link) 22%, transparent); color:var(--blue); }
   .debug-panel .btn:hover{ filter:brightness(1.3); }
   .debug-panel .btn:active{ filter:brightness(0.9); }
-  .debug-panel .btn-sm{ padding:3px 10px; font-size:0.8em; }
+  .debug-panel .btn-sm{ padding:3px 10px; font-size:var(--fs-sm); }
   .debug-panel .result{ margin-top:0.6em; padding:0.5em; background:var(--c-bg); border-radius:4px;
-    font-family:monospace; font-size:0.82em; white-space:pre-wrap; word-break:break-all;
+    font-family:monospace; font-size:var(--fs-sm); white-space:pre-wrap; word-break:break-all;
     max-height:300px; overflow-y:auto; color:var(--muted); display:none; }
   .debug-panel .result.ok{ border-left:3px solid var(--green); }
   .debug-panel .result.err{ border-left:3px solid var(--red); }
   .debug-panel .flash{ animation: flash-border 0.5s ease-out; }
   @keyframes flash-border{ 0% { border-color:var(--c-link); } 100% { border-color:var(--border); } }
   .debug-panel #raw-state{ max-height:500px; overflow:auto; }
-  .debug-panel #raw-state pre{ white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:0.82em; }
-  .debug-panel .backup-table{ width:100%; font-size:0.9em; border-collapse:collapse; }
+  .debug-panel #raw-state pre{ white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:var(--fs-sm); }
+  .debug-panel .backup-table{ width:100%; font-size:var(--fs-md); border-collapse:collapse; }
   .debug-panel .backup-table th{ text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
   .debug-panel .backup-table td{ padding:3px 6px; }
   .debug-panel .backup-table tr:hover{ background:var(--c-card); }
   .debug-panel .backup-table .slot-link{ color:var(--c-link); cursor:pointer; text-decoration:underline; }
   .debug-panel .backup-table .slot-link:hover{ color:var(--c-info); }
-  .debug-panel .ml-table{ width:100%; font-size:0.85em; border-collapse:collapse; }
+  .debug-panel .ml-table{ width:100%; font-size:var(--fs-sm); border-collapse:collapse; }
   .debug-panel .ml-table th{ text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
   .debug-panel .ml-table td{ padding:3px 6px; font-family:monospace; }
   .debug-panel .ml-table tr:hover{ background:var(--c-card); }
   .debug-panel .ml-table .st-alive{ color:var(--green); }
   .debug-panel .ml-table .st-dead{ color:var(--red); }
   .debug-panel .ml-table .st-memorial{ color:var(--c-dim); }
-  .debug-panel .ml-table .btn-unlink{ padding:2px 8px; font-size:0.8em; }
-  .debug-panel .ml-table .btn-revive{ padding:2px 8px; font-size:0.8em; background:color-mix(in srgb, var(--c-alive) 40%, transparent); color:#fff; border:none; border-radius:3px; cursor:pointer; }
+  .debug-panel .ml-table .btn-unlink{ padding:2px 8px; font-size:var(--fs-sm); }
+  .debug-panel .ml-table .btn-revive{ padding:2px 8px; font-size:var(--fs-sm); background:color-mix(in srgb, var(--c-alive) 40%, transparent); color:#fff; border:none; border-radius:3px; cursor:pointer; }
   .debug-panel .ml-table .btn-revive:hover{ background:color-mix(in srgb, var(--c-alive) 55%, transparent); }
 </style>
 <div class="debug-panel">
@@ -199,7 +199,7 @@
   <div class="panel">
     <h2><span class="h2-left">&#128270; Live State</span>
       <button class="btn btn-blue btn-sm" onclick="loadLiveState()">&#8635; Refresh</button></h2>
-    <div id="live-state-content" style="font-size:0.85em;color:var(--muted)">Loading…</div>
+    <div id="live-state-content" style="font-size:var(--fs-sm);color:var(--muted)">Loading…</div>
   </div>
 
   <!-- Danger Zone -->
@@ -228,25 +228,25 @@
     <div id="ml-links-table" style="margin-bottom:1em;max-height:250px;overflow-y:auto"></div>
 
     <!-- Create new link -->
-    <h3 style="color:var(--green);font-size:0.9em;margin-bottom:0.5em">Create Link</h3>
+    <h3 style="color:var(--green);font-size:var(--fs-md);margin-bottom:0.5em">Create Link</h3>
     <div class="row">
       <div><label id="ml-label-a">Player A</label>
-        <select id="ml-a" onchange="mlMonChanged('a')" style="font-family:monospace;font-size:0.88em"></select></div>
+        <select id="ml-a" onchange="mlMonChanged('a')" style="font-family:monospace;font-size:var(--fs-md)"></select></div>
       <div><label id="ml-label-b">Player B</label>
-        <select id="ml-b" onchange="mlMonChanged('b')" style="font-family:monospace;font-size:0.88em"></select></div>
+        <select id="ml-b" onchange="mlMonChanged('b')" style="font-family:monospace;font-size:var(--fs-md)"></select></div>
     </div>
     <div class="row">
       <div><label>Area</label>
-        <select id="ml-area" style="font-family:monospace;font-size:0.88em"></select></div>
+        <select id="ml-area" style="font-family:monospace;font-size:var(--fs-md)"></select></div>
       <div><label>Filter areas</label>
-        <input id="ml-area-filter" type="text" placeholder="type to filter…" oninput="mlFilterAreas()" style="font-family:monospace;font-size:0.85em"></div>
+        <input id="ml-area-filter" type="text" placeholder="type to filter…" oninput="mlFilterAreas()" style="font-family:monospace;font-size:var(--fs-sm)"></div>
     </div>
     <div style="display:flex;gap:0.6em;align-items:center;margin-top:0.4em">
       <button class="btn btn-green" onclick="doManualLink()">&#128279; Link</button>
-      <label style="display:inline;font-size:0.8em;cursor:pointer;color:var(--muted)">
+      <label style="display:inline;font-size:var(--fs-sm);cursor:pointer;color:var(--muted)">
         <input type="checkbox" id="ml-override" style="width:auto"> Override existing links
       </label>
-      <span id="ml-warn" style="font-size:0.85em;color:var(--yellow)"></span>
+      <span id="ml-warn" style="font-size:var(--fs-sm);color:var(--yellow)"></span>
     </div>
     <div class="result" id="ml-result"></div>
   </div>
@@ -255,14 +255,14 @@
   <div class="panel full">
     <h2><span class="h2-left">&#129702; Memorial Box Monitor</span>
       <button class="btn btn-blue btn-sm" onclick="loadMemorial()">&#8635; Refresh</button></h2>
-    <div id="memorial-content" style="font-size:0.85em;color:var(--muted)">Loading…</div>
+    <div id="memorial-content" style="font-size:var(--fs-sm);color:var(--muted)">Loading…</div>
   </div>
 
   <!-- Raw State -->
   <div class="panel full" id="raw-state">
     <h2><span class="h2-left">&#128196; Raw State</span>
       <span>
-        <label style="display:inline;font-size:0.75em;cursor:pointer;color:var(--muted);margin-right:0.5em">
+        <label style="display:inline;font-size:var(--fs-xs);cursor:pointer;color:var(--muted);margin-right:0.5em">
           <input type="checkbox" id="raw-auto" checked style="width:auto"> auto
         </label>
         <button class="btn btn-blue btn-sm" onclick="loadRaw()">&#8635; Refresh</button>
@@ -541,7 +541,7 @@ async function loadBackups() {
   var j = await r.json();
   var el = document.getElementById('backup-list');
   if (!j.backups || j.backups.length === 0) {
-    el.innerHTML = '<span style="color:var(--c-dim);font-size:0.9em">No backups yet — created every 5 min when both players connected.</span>';
+    el.innerHTML = '<span style="color:var(--c-dim);font-size:var(--fs-md)">No backups yet — created every 5 min when both players connected.</span>';
     return;
   }
   window._backupData = {};
@@ -706,7 +706,7 @@ async function loadMemorial() {
       if (pkeys.length > 0) hasPending = true;
     });
     if (hasPending) {
-      h += '<div style="margin-bottom:0.8em"><b style="color:var(--yellow)">\\u23f3 Pending Memorials</b> <span style="color:var(--muted);font-size:0.85em">(awaiting Lua confirmation)</span><br>';
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--yellow)">\\u23f3 Pending Memorials</b> <span style="color:var(--muted);font-size:var(--fs-sm)">(awaiting Lua confirmation)</span><br>';
       ['a','b'].forEach(function(pid) {
         var pkeys = pendingMem[pid] || [];
         if (!pkeys.length) return;
@@ -728,7 +728,7 @@ async function loadMemorial() {
         totalSlots += entries.length;
       });
       if (totalSlots === 0) {
-        h += ' <span style="color:var(--c-dim);font-size:0.9em">— empty or not scanned by emulator</span></div>';
+        h += ' <span style="color:var(--c-dim);font-size:var(--fs-md)">— empty or not scanned by emulator</span></div>';
       } else {
         h += '</div>';
         ['a','b'].forEach(function(pid) {
@@ -750,7 +750,7 @@ async function loadMemorial() {
             h += '<td>' + (e.slot + 1) + '</td>';
             h += '<td>' + (e.species_name || '#' + e.species_id) + '</td>';
             h += '<td>' + (e.nickname || '<span style="color:var(--c-dim)">—</span>') + '</td>';
-            h += '<td style="font-family:monospace;font-size:0.9em">' + e.key.substring(0,8) + '</td>';
+            h += '<td style="font-family:monospace;font-size:var(--fs-md)">' + e.key.substring(0,8) + '</td>';
             h += '<td style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</td>';
             h += '</tr>';
           });
@@ -903,7 +903,7 @@ function renderLinksTable() {
   var d = _lastStatus;
   var el = document.getElementById('ml-links-table');
   if (!d || !d.links || d.links.length === 0) {
-    el.innerHTML = '<span style="color:var(--c-dim);font-size:0.85em">No links yet.</span>';
+    el.innerHTML = '<span style="color:var(--c-dim);font-size:var(--fs-sm)">No links yet.</span>';
     return;
   }
   var h = '<table class="ml-table"><thead><tr><th>Area</th><th>A</th><th>B</th><th>Status</th><th></th></tr></thead><tbody>';

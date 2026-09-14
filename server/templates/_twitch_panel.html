@@ -5,39 +5,39 @@
    to .twitch-panel so bare element rules do not leak into the host page. #}
 <style>
     .twitch-panel *{box-sizing:border-box}
-    .twitch-panel h1{font-family:var(--font-heading);color:var(--c-gold);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
-    .twitch-panel .sub{color:var(--c-dim);font-size:.85em;margin-bottom:1.5em}
+    .twitch-panel h1{font-family:var(--font-heading);color:var(--c-gold);font-size:1.5rem;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
+    .twitch-panel .sub{color:var(--c-dim);font-size:var(--fs-sm);margin-bottom:1.5em}
     .twitch-panel .sub a{color:var(--c-link);text-decoration:none}
     .twitch-panel .panel{background:var(--c-card);border:1px solid var(--c-edge);border-radius:8px;padding:1.2em;margin-bottom:1.2em}
-    .twitch-panel .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:var(--c-brand);margin-bottom:.8em;letter-spacing:.05em}
-    .twitch-panel .status-badge{display:inline-block;padding:3px 12px;border-radius:3px;font-size:.82em;font-weight:700;letter-spacing:.05em}
+    .twitch-panel .panel h2{font-size:var(--fs-xs);color:var(--c-brand);margin-bottom:.8em;letter-spacing:.05em}
+    .twitch-panel .status-badge{display:inline-block;padding:3px 12px;border-radius:3px;font-size:var(--fs-sm);font-weight:700;letter-spacing:.05em}
     .twitch-panel .sb-on{background:color-mix(in srgb, var(--c-alive) 22%, transparent);color:var(--c-alive);border:1px solid var(--c-alive)}
     .twitch-panel .sb-off{background:color-mix(in srgb, var(--c-dead) 18%, transparent);color:var(--c-dead);border:1px solid var(--c-dead)}
     .twitch-panel .sb-dis{background:var(--c-card);color:var(--c-dim);border:1px solid var(--c-dim)}
-    .twitch-panel label{display:block;color:var(--c-dim);font-size:.8em;margin-bottom:.2em;margin-top:.7em}
-    .twitch-panel input[type=text], .twitch-panel input[type=number]{width:100%;background:var(--c-bg);color:var(--c-txt);border:1px solid var(--c-edge);border-radius:4px;padding:6px 10px;font-size:.85em}
+    .twitch-panel label{display:block;color:var(--c-dim);font-size:var(--fs-sm);margin-bottom:.2em;margin-top:.7em}
+    .twitch-panel input[type=text], .twitch-panel input[type=number]{width:100%;background:var(--c-bg);color:var(--c-txt);border:1px solid var(--c-edge);border-radius:4px;padding:6px 10px;font-size:var(--fs-sm)}
     .twitch-panel input[type=text]:focus, .twitch-panel input[type=number]:focus{outline:none;border-color:var(--c-brand)}
-    .twitch-panel .btn{background:color-mix(in srgb, var(--c-link) 12%, transparent);color:var(--c-link);border:1px solid var(--c-link);border-radius:4px;padding:6px 14px;cursor:pointer;font-size:.82em;white-space:nowrap}
+    .twitch-panel .btn{background:color-mix(in srgb, var(--c-link) 12%, transparent);color:var(--c-link);border:1px solid var(--c-link);border-radius:4px;padding:6px 14px;cursor:pointer;font-size:var(--fs-sm);white-space:nowrap}
     .twitch-panel .btn:hover{background:color-mix(in srgb, var(--c-link) 22%, transparent)}
     .twitch-panel .btn-red{color:var(--c-dead);border-color:var(--c-dead)}.twitch-panel .btn-red:hover{background:color-mix(in srgb, var(--c-dead) 18%, transparent)}
     .twitch-panel .btn-grn{color:var(--c-alive);border-color:var(--c-alive)}.twitch-panel .btn-grn:hover{background:color-mix(in srgb, var(--c-alive) 16%, transparent)}
     .twitch-panel .btn-row{display:flex;gap:.6em;flex-wrap:wrap;margin-top:.8em}
-    .twitch-panel .hint{color:var(--c-dim);font-size:.75em;margin-top:.3em}
-    .twitch-panel table{width:100%;border-collapse:collapse;font-size:.83em}
+    .twitch-panel .hint{color:var(--c-dim);font-size:var(--fs-xs);margin-top:.3em}
+    .twitch-panel table{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
     .twitch-panel th{text-align:left;color:var(--c-dim);padding:4px 8px;border-bottom:1px solid var(--c-edge);font-weight:400}
     .twitch-panel td{padding:4px 8px;border-bottom:1px solid var(--c-sep);vertical-align:top}
     .twitch-panel td.cmd{font-family:monospace;color:var(--c-brand);white-space:nowrap}
     .twitch-panel td.arg{font-family:monospace;color:var(--c-dim);white-space:nowrap}
-    .twitch-panel .log-entry{font-size:.78em;padding:4px 0;border-bottom:1px solid var(--c-sep);display:flex;gap:.7em}
+    .twitch-panel .log-entry{font-size:var(--fs-sm);padding:4px 0;border-bottom:1px solid var(--c-sep);display:flex;gap:.7em}
     .twitch-panel .log-ts{color:var(--c-dim);flex-shrink:0;white-space:nowrap}
     .twitch-panel .log-txt{color:var(--c-txt);word-break:break-all}
     .twitch-panel #log-list .log-entry:last-child{border-bottom:none}
-    .twitch-panel .empty{color:var(--c-dim);font-size:.82em;font-style:italic}
-    .twitch-panel .preview-box{background:var(--c-bg);border:1px solid var(--c-edge);border-radius:4px;padding:8px 12px;font-size:.82em;min-height:2em;color:var(--c-link);font-family:monospace;white-space:pre-wrap;word-break:break-all}
-    .twitch-panel select{background:var(--c-bg);color:var(--c-txt);border:1px solid var(--c-edge);border-radius:4px;padding:6px 10px;font-size:.85em;width:100%}
+    .twitch-panel .empty{color:var(--c-dim);font-size:var(--fs-sm);font-style:italic}
+    .twitch-panel .preview-box{background:var(--c-bg);border:1px solid var(--c-edge);border-radius:4px;padding:8px 12px;font-size:var(--fs-sm);min-height:2em;color:var(--c-link);font-family:monospace;white-space:pre-wrap;word-break:break-all}
+    .twitch-panel select{background:var(--c-bg);color:var(--c-txt);border:1px solid var(--c-edge);border-radius:4px;padding:6px 10px;font-size:var(--fs-sm);width:100%}
     .twitch-panel .row2{display:grid;grid-template-columns:1fr 1fr;gap:1em}
     @media(max-width:600px){.twitch-panel .row2{grid-template-columns:1fr}}
-    .twitch-panel .sec-note{color:var(--c-brand);background:rgba(248,208,48,.07);border:1px solid rgba(248,208,48,.2);border-radius:4px;padding:8px 12px;font-size:.78em;margin-bottom:.8em}
+    .twitch-panel .sec-note{color:var(--c-brand);background:rgba(248,208,48,.07);border:1px solid rgba(248,208,48,.2);border-radius:4px;padding:8px 12px;font-size:var(--fs-sm);margin-bottom:.8em}
   
 </style>
 <div class="twitch-panel">
@@ -46,10 +46,10 @@
   <div class="panel">
     <h2>STATUS</h2>
     <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
-    <span id="status-channel" style="margin-left:.8em;color:var(--c-dim);font-size:.85em"></span>
-    <span id="token-badge" style="margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
-    <span id="clientid-badge" style="margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
-    <div id="status-error" style="display:none;margin-top:.7em;background:rgba(240,56,56,.1);border:1px solid var(--c-dead);border-radius:4px;padding:7px 12px;color:var(--c-dead);font-size:.82em;font-family:monospace;word-break:break-all"></div>
+    <span id="status-channel" style="margin-left:.8em;color:var(--c-dim);font-size:var(--fs-sm)"></span>
+    <span id="token-badge" style="margin-left:1em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <span id="clientid-badge" style="margin-left:.5em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <div id="status-error" style="display:none;margin-top:.7em;background:rgba(240,56,56,.1);border:1px solid var(--c-dead);border-radius:4px;padding:7px 12px;color:var(--c-dead);font-size:var(--fs-sm);font-family:monospace;word-break:break-all"></div>
   </div>
 
   <div class="panel">
@@ -92,7 +92,7 @@
 
   <div class="panel">
     <h2>COMMAND PREVIEW</h2>
-    <p style="color:var(--c-dim);font-size:.82em;margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
+    <p style="color:var(--c-dim);font-size:var(--fs-sm);margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
     <div style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:160px">
         <label>Command</label>
@@ -145,7 +145,7 @@
     function showToast(msg, ok) {
       var t = document.createElement('div');
       t.textContent = msg;
-      t.style.cssText = 'position:fixed;bottom:1.5em;right:1.5em;background:'+(ok?'color-mix(in srgb, var(--c-alive) 16%, transparent)':'color-mix(in srgb, var(--c-dead) 18%, transparent)')+';color:'+(ok?'var(--c-alive)':'var(--c-dead)')+';border-radius:5px;padding:8px 16px;font-size:.85em;z-index:999';
+      t.style.cssText = 'position:fixed;bottom:1.5em;right:1.5em;background:'+(ok?'color-mix(in srgb, var(--c-alive) 16%, transparent)':'color-mix(in srgb, var(--c-dead) 18%, transparent)')+';color:'+(ok?'var(--c-alive)':'var(--c-dead)')+';border-radius:5px;padding:8px 16px;font-size:var(--fs-sm);z-index:999';
       document.body.appendChild(t);
       setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},2500);
     }
@@ -176,19 +176,19 @@
         const _icoX     = '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>';
         if (tBadge) {
           if (j.access_token_set) {
-            tBadge.style.cssText = 'background:color-mix(in srgb, var(--c-alive) 10%, transparent);color:var(--c-alive);border:1px solid var(--c-alive);margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            tBadge.style.cssText = 'background:color-mix(in srgb, var(--c-alive) 10%, transparent);color:var(--c-alive);border:1px solid var(--c-alive);margin-left:1em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block';
             tBadge.innerHTML = _icoCheck + ' Access Token set';
           } else {
-            tBadge.style.cssText = 'background:color-mix(in srgb, var(--c-dead) 18%, transparent);color:var(--c-dead);border:1px solid var(--c-dead);margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            tBadge.style.cssText = 'background:color-mix(in srgb, var(--c-dead) 18%, transparent);color:var(--c-dead);border:1px solid var(--c-dead);margin-left:1em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block';
             tBadge.innerHTML = _icoX + ' TWITCH_ACCESS_TOKEN not set';
           }
         }
         if (cidBadge) {
           if (j.client_id_set) {
-            cidBadge.style.cssText = 'background:color-mix(in srgb, var(--c-alive) 10%, transparent);color:var(--c-alive);border:1px solid var(--c-alive);margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            cidBadge.style.cssText = 'background:color-mix(in srgb, var(--c-alive) 10%, transparent);color:var(--c-alive);border:1px solid var(--c-alive);margin-left:.5em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block';
             cidBadge.innerHTML = _icoCheck + ' Client ID set';
           } else {
-            cidBadge.style.cssText = 'background:color-mix(in srgb, var(--c-dead) 18%, transparent);color:var(--c-dead);border:1px solid var(--c-dead);margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            cidBadge.style.cssText = 'background:color-mix(in srgb, var(--c-dead) 18%, transparent);color:var(--c-dead);border:1px solid var(--c-dead);margin-left:.5em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block';
             cidBadge.innerHTML = _icoX + ' Client ID not set';
           }
         }
