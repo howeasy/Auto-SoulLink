@@ -90,6 +90,7 @@ gclient.handle_command = function(self, cmd)
     if c ~= "noop" then
         log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
     end
+    if c == "game_over" then log("GAME_OVER RX game_over") end
     return _handle(self, cmd)
 end
 local okc, errc = pcall(function() gclient:start() end)
@@ -227,7 +228,8 @@ local function hunt(mode, options)
     })
     local route = Hunt.new({ player = D.player }, { driver = driver, step = yield_buttons, rd = rd, symbols = symbols,
                                                    mode = mode, log = log, switch_slot = options.switch_slot,
-                                                   move_slot = options.move_slot, fainted = options.fainted })
+                                                   move_slot = options.move_slot, fainted = options.fainted,
+                                                   start_active = options.start_active })
     local last_phase, n = nil, 0
     local terminal = { caught = true, escaped = true, ["out-of-balls"] = true, ["hunt-exhausted"] = true,
                        ["linked-fainted"] = true, ["linked-active-menu"] = true,
@@ -515,9 +517,10 @@ local function bench_at_route_one_side(linked_slot)
     return false, "B could not leave Route 1 grass"
 end
 
-local function escape_after_faint(tag)
+local function escape_after_faint(tag, replacement_slot)
     -- The game may demand a replacement starter before RUN becomes selectable. Handle
     -- both the forced party list and the standard RUN column with ordinary joypad edges.
+    replacement_slot = replacement_slot or 0
     for _ = 1, 12000 do
         if rd(ram.wIsInBattle) == 0 then
             if not wait_until(overworld_ok, 30, "post-faint overworld checkpoint") then
@@ -530,7 +533,8 @@ local function escape_after_faint(tag)
         local cur = rd(ram.wCurrentMenuItem)
         local buttons
         if x == 0 and y == 1 then
-            buttons = pulse_at_frame(cur == 0 and "A" or "Up") -- select living starter slot 0
+            buttons = pulse_at_frame(cur == replacement_slot and "A" or
+                (cur < replacement_slot and "Down" or "Up")) -- select living starter
         elseif x == 0x0C and y == 0x0C and rd(ram.wMaxMenuItem) == 2 then
             buttons = pulse_at_frame(cur == 0 and "A" or "Up") -- SWITCH
         elseif rd(ram.wTextBoxID) == 0x0B and tile_text("FIGHT") and y == 14 then
@@ -543,7 +547,7 @@ local function escape_after_faint(tag)
     return false, "post-faint battle did not end or RUN within 12000 frames"
 end
 
-local function show_bench_fnt(linked_slot)
+local function show_bench_fnt(linked_slot, key, faint_frame)
     -- An A-edge on the first frame after force_faint opens START before the next
     -- overworld checkpoint can consume the queued memorialize. PartyMenuInit and
     -- PrintStatusCondition draw slot i's FNT at tilemap + 40*i + 17 (pret
@@ -553,25 +557,58 @@ local function show_bench_fnt(linked_slot)
     local status = rd(base + 4)
     log(fmt("BENCH_HP_STATUS %04X %02X", hp, status))
     if hp ~= 0 or status ~= 0 then return false, "B bench force_faint did not clear HP/status" end
+    local function removed()
+        local party = reads.read_party()
+        if not party then return false end -- a torn read is not proof of memorialization
+        for _, mon in ipairs(party) do if reads.key(mon) == key then return false end end
+        return true
+    end
+    local function unavailable()
+        log(fmt("TILEMAP_FNT unavailable: memorialised within %d frames of the faint", frame - faint_frame))
+        for _ = 1, 600 do
+            if overworld_ok() then return true end
+            yield_frame(pulse_at_frame("B"))
+        end
+        return false, "party/START menu did not close after fast memorialization"
+    end
+    if removed() then return unavailable() end
     for _ = 1, 240 do
+        if removed() then return unavailable() end
         local point = play.point()
         if point.start_menu_save_index >= 0 and point.font_loaded then break end
         yield_frame(pulse_at_frame("Start"))
     end
     local point = play.point()
+    if removed() then return unavailable() end
     if point.start_menu_save_index < 0 then return false, "START menu did not open before memorialize" end
     local pokemon_row = point.start_menu_save_index - 3 -- POKEMON precedes ITEM/name/SAVE
     for _ = 1, 180 do
+        if removed() then return unavailable() end
         if rd(ram.wCurrentMenuItem) == pokemon_row then break end
         yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < pokemon_row and "Down" or "Up"))
     end
     if rd(ram.wCurrentMenuItem) ~= pokemon_row then return false, "START cursor missed POKEMON" end
     for _ = 1, 180 do
+        if removed() then return unavailable() end
         if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 then break end
         yield_frame(pulse_at_frame("A"))
     end
+    if rd(symbols.wTopMenuItemY) ~= 1 or rd(symbols.wTopMenuItemX) ~= 0 then
+        if removed() then return unavailable() end
+        return false, "party menu did not open for linked FNT readback"
+    end
     local offset = 40 * linked_slot + 17
-    if not tile_text("FNT", offset) then return false, "party menu lacked linked slot FNT glyphs" end
+    if not tile_text("FNT", offset) then
+        if removed() then return unavailable() end
+        local party = reads.read_party()
+        if not party or not party[linked_slot + 1] then
+            return false, "party unreadable while checking linked FNT slot"
+        end
+        if not tile_text(party[linked_slot + 1].nickname, 40 * linked_slot + 3) then
+            return false, "linked party slot was not drawn for FNT readback"
+        end
+        return false, "party menu lacked linked slot FNT glyphs"
+    end
     log(fmt("TILEMAP_FNT row=%d offset=%d %s", 2 * linked_slot, offset,
             Center.row(rd, ram.wTileMap, 40 * linked_slot, 20)))
     for _ = 1, 600 do
@@ -579,6 +616,94 @@ local function show_bench_fnt(linked_slot)
         yield_frame(pulse_at_frame("B"))
     end
     return false, "party menu did not close after FNT readback"
+end
+
+local function reorder_linked_to_lead(key)
+    -- Overworld START -> POKEMON -> slot 1 -> field menu SWITCH -> slot 0.
+    -- start_sub_menus.asm:8-25,67-94 selects SWITCH at max-1; home/pokemon.asm:201-290
+    -- uses party Y1/X0 and wMenuItemToSwap (1-based) for the second selection;
+    -- start_sub_menus.asm:694-743 swaps species, structs and names together.
+    local before = reads.read_party()
+    if not before or #before ~= 2 or reads.key(before[2]) ~= key then
+        return false, "linked mon was not physical slot 1 before overworld reorder"
+    end
+    local starter_key = reads.key(before[1])
+    if not wait_until(overworld_ok, 30, "overworld before party reorder") then
+        return false, "not safe to open START before reorder"
+    end
+    for _ = 1, 300 do
+        local point = play.point()
+        if point.start_menu_save_index >= 0 and point.font_loaded then break end
+        yield_frame(pulse_at_frame("Start"))
+    end
+    local point = play.point()
+    if point.start_menu_save_index < 0 then return false, "START menu did not open for reorder" end
+    local pokemon_row = point.start_menu_save_index - 3
+    for _ = 1, 240 do
+        if rd(ram.wCurrentMenuItem) == pokemon_row then break end
+        yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < pokemon_row and "Down" or "Up"))
+    end
+    if rd(ram.wCurrentMenuItem) ~= pokemon_row then return false, "START cursor missed POKEMON row" end
+    for _ = 1, 240 do
+        if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 then break end
+        yield_frame(pulse_at_frame("A"))
+    end
+    if rd(symbols.wTopMenuItemY) ~= 1 or rd(symbols.wTopMenuItemX) ~= 0 or
+       not tile_text(before[2].nickname, 40 + 3) then
+        return false, "party menu did not draw linked slot 1 nickname"
+    end
+    for _ = 1, 240 do
+        if rd(ram.wCurrentMenuItem) == 1 then break end
+        yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < 1 and "Down" or "Up"))
+    end
+    if rd(ram.wCurrentMenuItem) ~= 1 then return false, "party cursor missed linked slot 1" end
+    for _ = 1, 240 do
+        if rd(ram.wTextBoxID) == 4 and rd(symbols.wTopMenuItemY) ~= 1 and rd(ram.wMaxMenuItem) >= 2 then break end
+        yield_frame(pulse_at_frame("A"))
+    end
+    -- FIELD_MOVE_MON_MENU=$04 (pret constants/menu_constants.asm:9); the dynamic
+    -- field-move list places SWITCH one row before CANCEL (start_sub_menus.asm:67-94).
+    if rd(ram.wTextBoxID) ~= 4 then return false, "field move menu did not open for SWITCH" end
+    local switch_row = rd(ram.wMaxMenuItem) - 1
+    for _ = 1, 240 do
+        local cur = rd(ram.wCurrentMenuItem)
+        if cur == switch_row then break end
+        yield_frame(pulse_at_frame(cur < switch_row and "Down" or "Up"))
+    end
+    if rd(ram.wCurrentMenuItem) ~= switch_row then return false, "field menu cursor missed SWITCH" end
+    for _ = 1, 240 do
+        if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 and
+           rd(symbols.wMenuItemToSwap) == 2 then break end
+        yield_frame(pulse_at_frame("A"))
+    end
+    if rd(symbols.wMenuItemToSwap) ~= 2 then return false, "first SWITCH choice did not latch slot 1" end
+    for _ = 1, 240 do
+        if rd(ram.wCurrentMenuItem) == 0 then break end
+        yield_frame(pulse_at_frame("Up"))
+    end
+    if rd(ram.wCurrentMenuItem) ~= 0 then return false, "second SWITCH cursor missed slot 0" end
+    for _ = 1, 240 do
+        local now = reads.read_party()
+        if now and reads.key(now[1]) == key and reads.key(now[2]) == starter_key and
+           rd(symbols.wMenuItemToSwap) == 0 then break end
+        yield_frame(pulse_at_frame("A"))
+    end
+    local after = reads.read_party()
+    if not after or reads.key(after[1]) ~= key or reads.key(after[2]) ~= starter_key then
+        return false, "overworld SWITCH did not put linked mon in lead slot 0"
+    end
+    for _ = 1, 120 do
+        if tile_text(after[1].nickname, 3) then break end
+        yield_frame({})
+    end
+    if not tile_text(after[1].nickname, 3) then return false, "reordered party tilemap lacks lead nickname" end
+    log("REORDER_LEAD " .. key .. " slot=0 from=1 tilemap=" ..
+        Center.row(rd, ram.wTileMap, 0, 20))
+    for _ = 1, 600 do
+        if overworld_ok() then return true end
+        yield_frame(pulse_at_frame("B"))
+    end
+    return false, "party/START menu did not close after reorder"
 end
 
 local function linked_faint_scenario(active)
@@ -604,10 +729,13 @@ local function linked_faint_scenario(active)
         local escaped, error_text = escape_after_faint("a")
         if not escaped then return false, error_text end
     elseif active then
-        local phase, driver = hunt("switch-hold", {switch_slot=1, keep_driver=true})
+        local reordered, reorder_why = reorder_linked_to_lead(key)
+        if not reordered then return false, reorder_why end
+        local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true})
         if phase ~= "linked-active-menu" then return false, "B could not hold its linked mon active: " .. tostring(phase) end
-        if rd(ram.wPlayerMonNumber) ~= 1 then return false, "B linked mon not active at hold menu" end
-        log("READY_ACTIVE linked_slot=1")
+        if rd(ram.wPlayerMonNumber) ~= 0 or not reads.read_party() or
+           reads.key(reads.read_party()[1]) ~= key then return false, "B linked lead not active at hold menu" end
+        log("READY_ACTIVE linked_slot=0")
         local old = gclient.on_battle_loop_head
         gclient.on_battle_loop_head = function(self, sig)
             local pending = self.pending_battle_writes[1]
@@ -633,14 +761,15 @@ local function linked_faint_scenario(active)
         for _ = 1, 1800 do
             faint_text = fainted_bang_on_tilemap()
             if faint_text and (seen.faint or 0) > first_faint then break end
+            if (seen.faint or 0) > first_faint and rd(ram.wIsInBattle) == 0 then break end
             yield_frame(pulse_at_frame("A"))
         end
-        if not faint_text or not battle_site_keys[key] or
-           not sent_events.faint or sent_events.faint.key ~= key then
-            return false, "B engine fainted! text or battle_faint site was not observed"
+        if not battle_site_keys[key] or not sent_events.faint or sent_events.faint.key ~= key then
+            return false, "B engine battle_faint site was not observed for the linked key"
         end
-        log(fmt("TILEMAP_FAINTED offset=%d", faint_text))
-        local escaped, error_text = escape_after_faint("b")
+        if faint_text then log(fmt("TILEMAP_FAINTED offset=%d", faint_text))
+        else log("TILEMAP_FAINTED unavailable: native faint text advanced before probe") end
+        local escaped, error_text = escape_after_faint("b", 1)
         if not escaped then return false, error_text end
     else
         local parked, error_text = bench_at_route_one_side(mon.slot)
@@ -658,7 +787,7 @@ local function linked_faint_scenario(active)
             yield_frame()
         end
         if not fainted then return false, "B bench force_faint never zeroed party HP" end
-        local shown, why_fnt = show_bench_fnt(mon.slot)
+        local shown, why_fnt = show_bench_fnt(mon.slot, key, frame)
         if not shown then return false, why_fnt end
     end
     if not wait_until(function() return (seen.memorialize_done or 0) >= 1 end, 180,

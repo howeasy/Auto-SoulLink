@@ -230,6 +230,7 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
     ("RESULT: FAIL (linked capture was not returned)", "CONSEQUENCE"),
     ("RESULT: FAIL (linked capture was not returned to party)", "CONSEQUENCE"),
     ("RESULT: FAIL (force_faint never arrived)", "FINAL"),
+    ("RESULT: FAIL (B could not hold its linked mon active: out-of-balls)", "FINAL"),
     ("RESULT: FAIL (link_new prerequisite failed: hunt ended stuck)", "FINAL"),
 ])
 def test_gen1_result_reason_table_is_exact(line, classification):
@@ -443,6 +444,7 @@ def _linked_faint_fixture(tmp_path, scenario):
               'TX {"event":"memorialize_done"}\n')
     b_text = (f'RX force_faint key={run._link_keys["b"]}\n'
               f'RX memorialize key={run._link_keys["b"]}\n'
+              'GAME_OVER RX game_over\n'
               'TX {"event":"memorialize_done"}\n')
     return run, paths, a_text, b_text
 
@@ -453,6 +455,10 @@ def test_synthetic_bench_faint_oracle_passes_then_rejects_status_corruption(tmp_
                "b": b_text + "READY_BENCH map=12 x=8 y=31\nBENCH_HP_STATUS 0000 00\nTILEMAP_FNT row=2\n"}
     run.assert_linked_faint_saved(results, active=False)
     assert "Box 12" in capsys.readouterr().out
+    fast_memorial = {"a": a_text, "b": b_text + "READY_BENCH map=12 x=8 y=31\n"
+                     "BENCH_HP_STATUS 0000 00\n"
+                     "TILEMAP_FNT unavailable: memorialised within 1 frames of the faint\n"}
+    run.assert_linked_faint_saved(fast_memorial, active=False)
     path, sram, _rom = paths["b"]
     box = codec.verify_boxes(sram)["boxes"][12]["offset"]
     sram[box + codec.BOX_LAYOUT["mons"] + 4] = 1  # status, not HP; preserve structure
@@ -473,24 +479,28 @@ def test_synthetic_active_faint_oracle_requires_loop_write_before_engine_site(tm
     proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
               + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
               + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
-              + "TILEMAP_FAINTED\nBATTLE_RESULT b 2\n")
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
     run.assert_linked_faint_saved({"a": a_text, "b": proper}, active=True)
     assert "Box 12" in capsys.readouterr().out
+    run.assert_linked_faint_saved({"a": a_text, "b": proper.replace(
+        "TILEMAP_FAINTED offset=123\n", "TILEMAP_FAINTED unavailable: native faint text advanced before probe\n")},
+        active=True)
     reversed_order = (b_text + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
                       + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
                       + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
-                      + "TILEMAP_FAINTED\nBATTLE_RESULT b 2\n")
+                      + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
     with pytest.raises(RuntimeError, match="not followed by engine battle_faint"):
         run.assert_linked_faint_saved({"a": a_text, "b": reversed_order}, active=True)
     print("synthetic active faint: PASS; reversed loop/engine order: FAIL")
 
 
-@pytest.mark.parametrize(("mode", "faint_after", "expected", "encounters"), [
-    ("sacrifice", 2, "linked-fainted", 1),
-    ("sacrifice", 999, "linked-survived-3-battles", 3),
-    ("switch-hold", 999, "linked-active-menu", 1),
+@pytest.mark.parametrize(("mode", "faint_after", "expected", "encounters", "start_active"), [
+    ("sacrifice", 2, "linked-fainted", 1, False),
+    ("sacrifice", 999, "linked-survived-3-battles", 3, False),
+    ("switch-hold", 999, "linked-active-menu", 1, False),
+    ("switch-hold", 999, "linked-active-menu", 1, True),
 ])
-def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expected, encounters):
+def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expected, encounters, start_active):
     lua = LuaRuntime(unpack_returned_tuples=True)
     module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
     moves = {"count": 0}
@@ -501,13 +511,19 @@ def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expe
         moves["count"] += 1
         return lua.table(why="player_move" if faint_after < 999 else "battle_over")
 
+    switches = []
+
+    def switch_to(slot, _budget):
+        switches.append(slot)
+        return lua.table(ok=True, why="switched")
+
     driver = lua.table(wait_menu=lambda _budget: lua.table(ok=True, frames=1),
-                       switch_to=lambda _slot, _budget: lua.table(ok=True, why="switched"),
+                       switch_to=switch_to,
                        choose=lambda _name: lua.table(ok=True), commit_move=commit)
     route = module.new(lua.table(player="a"), lua.table(
         driver=driver, step=lambda _buttons: None, rd=lambda _addr: 0,
         symbols=lua.table(wNumBagItems=1, wBagItems=2),
-        mode=mode, move_slot=1, switch_slot=1, fainted=fainted))
+        mode=mode, move_slot=1, switch_slot=1, fainted=fainted, start_active=start_active))
     battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=10,
                        party_count=2, font_loaded=False, joy_ignore=0)
     overworld = lua.table(map=12, x=10, y=35, battle=0, battle_type=0, party_hp=10,
@@ -522,3 +538,4 @@ def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expe
             break
     assert phase == expected
     assert route.encounters == encounters
+    assert switches == ([] if start_active else [1] * encounters)

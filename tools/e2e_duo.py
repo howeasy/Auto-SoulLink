@@ -175,6 +175,7 @@ GEN1_RNG_REASON_CLASS = {
     "link_new prerequisite failed: hunt ended out-of-balls": "CAUSE_RNG",  # nested trade/faint
     "linked capture was not returned": "CONSEQUENCE",  # linked_faint_* without pair
     "linked capture was not returned to party": "CONSEQUENCE",  # trade_new without pair
+    "B could not hold its linked mon active: out-of-balls": "FINAL",  # switch-turn death, not catch RNG
 }
 
 
@@ -956,15 +957,20 @@ class DuoRun:
             raise RuntimeError("A's engine battle_faint did not emit its linked key")
         if f"RX force_faint key={self._link_keys['b']}" not in b_text:
             raise RuntimeError("B never received the server force_faint for its linked key")
+        if "GAME_OVER RX game_over" not in b_text:
+            raise RuntimeError("B never received the last-link game_over command")
         if active:
             first = b_text.find("LOOP_HEAD_WRITE key=" + self._link_keys["b"])
             second = b_text.find("BATTLE_FAINT_SITE " + self._link_keys["b"])
-            if (first < 0 or second <= first or "TILEMAP_FAINTED" not in b_text
+            tile_witness = ("TILEMAP_FAINTED offset=" in b_text or
+                            "TILEMAP_FAINTED unavailable: native faint text advanced before probe" in b_text)
+            if (first < 0 or second <= first or not tile_witness
                     or f'"event":"faint","key":"{self._link_keys["b"]}"' not in b_text
                     or "BATTLE_RESULT b " not in b_text):
                 raise RuntimeError("B active write was not followed by engine battle_faint/text")
         elif ("READY_BENCH map=12 x=8 y=31" not in b_text or "BENCH_HP_STATUS 0000 00" not in b_text
-              or "TILEMAP_FNT row=2" not in b_text):
+              or ("TILEMAP_FNT row=2" not in b_text and
+                  "TILEMAP_FNT unavailable: memorialised within " not in b_text)):
             raise RuntimeError("B bench write lacked HP/status and party-menu FNT tile evidence")
         self._pydec_note(f"D-6/W-{2 if active else 1} server battle cause and ordered engine receipts valid")
 

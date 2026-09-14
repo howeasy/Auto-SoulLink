@@ -58,6 +58,8 @@ end
 -- opts.rd       read_u8 on the System Bus;  opts.symbols  the title's pret .sym table
 -- opts.mode     "catch" | "run" | "sacrifice" | "switch-hold"; opts.log optional line sink
 -- opts.switch_slot 0-based linked party slot; opts.move_slot 1-based move to play
+-- opts.start_active: switch-hold lead was selected in the overworld, so the first
+-- battle menu is already the hold point; do NOT spend a switch turn.
 -- opts.fainted() read-only engine-faint receipt predicate for sacrifice mode.
 function M.new(expected, opts)
     assert(expected and (expected.player == "a" or expected.player == "b"), "R/B route identity required")
@@ -127,6 +129,11 @@ function M.new(expected, opts)
         local m = wait_menu(1800)
         if m ~= "menu" then return m end
         if mode == "run" then self.stage = "run"; return run_until_escaped() end
+        if mode == "switch-hold" and opts.start_active then
+            self.stage = "hold"
+            log("[hunt] linked lead active without a switch turn")
+            return "linked-active-menu"
+        end
         if mode == "sacrifice" or mode == "switch-hold" then
             -- pret engine/battle/core.asm:2329-2419: PKMN -> PartyMenuInit (row = physical
             -- slot) -> SWITCH/STATS/CANCEL. Driver.switch_to verifies Y/X and cursor.
