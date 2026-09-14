@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import signal
 import sys
@@ -157,6 +158,18 @@ def _refusal_body(predecessor: dict | None, reasons: list[str], details: dict | 
     if predecessor and predecessor.get("resumed_by"):
         details["resumed_by"] = predecessor["resumed_by"]
     return {"ok": False, "error": "predecessor cannot be resumed", "reasons": reasons, "details": details}
+
+
+def _release(entry: dict, token: str, **fields) -> None:
+    """Drop this start's reservation from an entry and apply the outcome fields."""
+    if entry.get("starting_token") == token:
+        entry.pop("starting_token", None)
+        entry.pop("starting_at", None)
+    entry.update(fields)
+
+
+def _starting_refusal() -> web.Response:
+    return web.json_response({"ok": False, "error": "Run is starting; wait for the start to finish"}, status=409)
 
 
 def _find_run(runs: list[dict], run_id: str) -> dict | None:
@@ -479,13 +492,34 @@ def _adopt_orphans(runs: list[dict]) -> bool:
     return changed
 
 
+# ponytail: a start reservation (status "starting", no pid yet) is trusted for this long; past it a
+# manager that died mid-spawn is assumed and the entry is normalised to stopped. Raise it if a spawn
+# ever legitimately takes longer than two minutes.
+STARTING_TIMEOUT = 120.0
+
+
+def _reservation_live(run: dict) -> bool:
+    """A starting entry still owned by an in-flight handle_start: token present and younger than the timeout."""
+    if run.get("status") != "starting" or not run.get("starting_token"):
+        return False
+    try:
+        started = datetime.fromisoformat(run["starting_at"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (datetime.now(UTC) - started).total_seconds() < STARTING_TIMEOUT
+
+
 def _reconcile(runs: list[dict]) -> bool:
     """Check live processes; update status for dead ones. Adopt orphan dirs. Returns True if any changed."""
     changed = False
     for run in runs:
+        if run["status"] == "starting" and _reservation_live(run):
+            continue
         if run["status"] in ("running", "starting") and not _is_alive(run.get("pid")):
             run["status"] = "stopped"
             run["pid"] = None
+            run.pop("starting_token", None)
+            run.pop("starting_at", None)
             changed = True
     if _adopt_orphans(runs):
         changed = True
@@ -693,23 +727,34 @@ class RunManager:
             if run.get("resumed_by"):
                 return web.json_response({"ok": False, "error": "This run was resumed; start its successor instead",
                                           "details": {"resumed_by": run["resumed_by"]}}, status=409)
-            if run["status"] in ("running", "starting") and _is_alive(run.get("pid")):
+            if run["status"] == "running" and _is_alive(run.get("pid")):
                 return web.json_response({"ok": True, "message": "Already running"})
-            if run["status"] == "starting":
+            if _reservation_live(run):
                 return web.json_response({"ok": False, "error": "Run is already starting"}, status=409)
-            run["status"] = "starting"
-            run["pid"] = None
+            token = secrets.token_hex(16)
+            run.update(status="starting", pid=None, starting_token=token, starting_at=datetime.now(UTC).isoformat())
             _save_registry(runs)
         try:
             pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
                                    manager_port=self.manager_port)
         except Exception as e:
-            await self._update_run(run_id, lambda entry: entry.update(status="stopped", pid=None))
+            await self._update_run(run_id, lambda entry: _release(entry, token, status="stopped"))
             return web.json_response({"ok": False, "error": str(e)}, status=500)
-        # Commit on a fresh load under the lock, never the list read before the await.
-        if await self._update_run(run_id, lambda entry: entry.update(status="running", pid=pid)) is None:
+        # Commit on a fresh load under the lock, and only if this reservation still stands: the run may
+        # have been resumed (resumed_by) or re-reserved meanwhile; then the spawn is ours to kill.
+        outcome = {}
+
+        def commit(entry):
+            if entry.get("starting_token") == token and not entry.get("resumed_by"):
+                _release(entry, token, status="running", pid=pid)
+                outcome["ok"] = True
+        if await self._update_run(run_id, commit) is None:
             _kill_run(pid)
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if not outcome:
+            _kill_run(pid)
+            return web.json_response({"ok": False, "error": "start superseded; the run was resumed or re-reserved meanwhile"},
+                                     status=409)
         return web.json_response({"ok": True, "pid": pid})
 
     async def handle_stop(self, request: web.Request) -> web.Response:
@@ -718,6 +763,8 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if _reservation_live(run):
+            return _starting_refusal()
         pid = run.get("pid")
         if pid:
             _kill_run(pid)
@@ -730,6 +777,8 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if _reservation_live(run):
+            return _starting_refusal()
         pid = run.get("pid")
         if pid and _is_alive(pid):
             _kill_run(pid)
@@ -742,6 +791,8 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if _reservation_live(run):
+            return _starting_refusal()
         # Stop the process if running
         pid = run.get("pid")
         if pid and _is_alive(pid):
@@ -808,7 +859,6 @@ class RunManager:
 
     async def handle_create_gen1(self, request: web.Request) -> web.Response:
         """Prepare a fresh RBY runtime before starting its server process."""
-        import secrets
         import sqlite3
         from pathlib import Path
 

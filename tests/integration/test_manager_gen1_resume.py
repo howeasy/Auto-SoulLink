@@ -320,3 +320,91 @@ async def test_resume_refusal_cleanup_works_with_a_python311_rmtree(registry, tm
     response = await manager.RunManager("127.0.0.1").handle_create_gen1(Request(body(resume_from="run_pred")))
     assert response.status == 409 and json.loads(response.text)["reasons"] == ["predecessor already resumed"]
     assert [p.name for p in tmp_path.iterdir() if p.name.startswith("run_")] == ["run_pred"] and len(registry) == 1
+
+
+@pytest.fixture
+def paused_start(registry, tmp_path, monkeypatch):
+    """handle_start(run_pred) parked inside its spawn; yields (handler, task, gate)."""
+    import asyncio
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    gate = asyncio.Event()
+
+    async def paused_spawn(run, *args, **kwargs):
+        await gate.wait()
+        return 777
+    monkeypatch.setattr(manager, "_spawn_run", paused_spawn)
+    handler = manager.RunManager("127.0.0.1")
+    return handler, gate
+
+
+async def _park(handler):
+    import asyncio
+    task = asyncio.create_task(handler.handle_start(Request({}, run_id="run_pred")))
+    await asyncio.sleep(0)
+    return task
+
+
+@pytest.mark.asyncio
+async def test_a_reservation_survives_listing_and_reconcile(paused_start, registry):
+    handler, gate = paused_start
+    task = await _park(handler)
+    assert registry[0]["status"] == "starting" and registry[0]["starting_token"] and registry[0]["starting_at"]
+    listed = json.loads((await handler.handle_list(Request({}))).text)["runs"]
+    assert listed[0]["status"] == "starting"
+    shown = json.loads((await handler.handle_run(Request({}, run_id="run_pred"))).text)["run"]
+    assert shown["status"] == "starting"
+    gate.set()
+    assert json.loads((await task).text)["ok"] and registry[0]["status"] == "running"
+    assert "starting_token" not in registry[0] and "starting_at" not in registry[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["handle_stop", "handle_archive", "handle_delete"])
+async def test_a_starting_run_cannot_be_stopped_archived_or_deleted(paused_start, registry, tmp_path, action):
+    handler, gate = paused_start
+    task = await _park(handler)
+    response = await getattr(handler, action)(Request({}, run_id="run_pred"))
+    assert response.status == 409 and registry[0]["status"] == "starting" and (tmp_path / "run_pred").exists()
+    gate.set()
+    assert json.loads((await task).text)["ok"]
+
+
+@pytest.mark.asyncio
+async def test_a_start_superseded_by_a_resume_kills_what_it_spawned(paused_start, registry, monkeypatch):
+    handler, gate = paused_start
+    killed = []
+    monkeypatch.setattr(manager, "_kill_run", lambda pid: killed.append(pid))
+    task = await _park(handler)
+    registry[0]["resumed_by"] = "run_successor"  # a resume committed while the spawn was in flight
+    gate.set()
+    response = await task
+    assert response.status == 409 and "superseded" in json.loads(response.text)["error"]
+    assert killed == [777] and registry[0]["status"] != "running" and registry[0]["pid"] != 777
+    assert registry[0]["resumed_by"] == "run_successor"
+
+
+@pytest.mark.asyncio
+async def test_a_start_whose_token_was_replaced_does_not_commit(paused_start, registry, monkeypatch):
+    handler, gate = paused_start
+    killed = []
+    monkeypatch.setattr(manager, "_kill_run", lambda pid: killed.append(pid))
+    task = await _park(handler)
+    registry[0]["starting_token"] = "another-reservation"
+    gate.set()
+    response = await task
+    assert response.status == 409 and killed == [777] and registry[0]["status"] == "starting"
+
+
+def test_reconcile_keeps_a_fresh_reservation_and_expires_a_stale_one():
+    from datetime import UTC, datetime, timedelta
+    fresh = {"run_id": "run_fresh", "status": "starting", "pid": None, "starting_token": "t1",
+             "starting_at": datetime.now(UTC).isoformat()}
+    stale = {"run_id": "run_stale", "status": "starting", "pid": None, "starting_token": "t2",
+             "starting_at": (datetime.now(UTC) - timedelta(seconds=manager.STARTING_TIMEOUT + 1)).isoformat()}
+    orphan = {"run_id": "run_orphan", "status": "starting", "pid": None}  # no token: a pre-token or damaged entry
+    runs = [fresh, stale, orphan]
+    assert manager._reconcile(runs) is True
+    assert fresh["status"] == "starting" and fresh["starting_token"] == "t1"
+    assert stale["status"] == "stopped" and "starting_token" not in stale and "starting_at" not in stale
+    assert orphan["status"] == "stopped"
