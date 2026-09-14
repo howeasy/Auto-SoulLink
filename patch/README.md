@@ -134,3 +134,20 @@ Removed (opcode numbers 10–12 reserved): `APPLY_DAMAGE`, `CURE_STATUS` (linked
 
 Opcode/address reference: `patch/src/ADDRESSES.md`. Build pipeline: `patch/tools/build.py`
 (gcc → ld → objcopy → inject → UPS/IPS, all round-trip self-checked).
+
+## Gen 1 Red/Blue companion patches
+
+The trade-carrying Red/Blue patches are separate UPS files for their exact clean dumps:
+
+| Patch | Clean ROM md5 | Patched ROM md5 |
+|---|---|---|
+| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `eb8c79d45007b9e22f72ada3560a001d` |
+| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `068b59eebc5d8fc573a23e9dfe1376bf` |
+
+Rebuild them from the clean dumps and the current Gen 1 build:
+
+```bash
+python patch/gen1/tools/build.py
+python patch/tools/make_ups.py create patch/build/gen1_red.gb patch/gen1/build/slink_red.gb patch/dist/SLink-RB-Red
+python patch/tools/make_ups.py create patch/build/gen1_blue.gb patch/gen1/build/slink_blue.gb patch/dist/SLink-RB-Blue
+```

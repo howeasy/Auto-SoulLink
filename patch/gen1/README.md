@@ -77,9 +77,8 @@ python patch/tools/make_ups.py create patch/build/gen1_red.gb  patch/gen1/build/
 python patch/tools/make_ups.py create patch/build/gen1_blue.gb patch/gen1/build/slink_blue.gb patch/dist/SLink-RB-Blue
 ```
 
-**The committed `.ups` files predate the trade spans** — their embedded destination CRC no
-longer matches the build — so regenerate them with the commands above before distributing.
-Both are served by the in-browser patcher (`/patcher?game=rb-red`), applied client-side —
+The committed `.ups` files are regenerated from the trade-carrying build (destination md5s
+above; `tests/unit/test_patcher_routes.py` applies the shipped bytes). Both are served by the in-browser patcher (`/patcher?game=rb-red`), applied client-side —
 no ROM is ever uploaded. **No Yellow patch is built or shipped**, and
 `tests/unit/test_patcher_routes.py` asserts its absence rather than leaving it to be
 noticed.
