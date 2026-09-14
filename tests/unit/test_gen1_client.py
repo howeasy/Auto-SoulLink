@@ -342,6 +342,42 @@ def test_tower_ghost_battle_without_silph_scope_is_not_a_failed_encounter(world)
     world.assert_all_conform()
 
 
+def test_static_encounter_gets_its_own_area_id_not_the_map(world):
+    """Route 12's Snorlax is a scripted encounter: it must not consume the route's wild slot.
+
+    The species list comes from data/games/gen1_rby/static_encounters.json ("23": SNORLAX),
+    which tools/gen_gen1_statics.py reads out of the decomps; the client is handed it as
+    `statics` (entry.lua will wire that in, the test sets it directly).
+    """
+    r = world.ram
+    world.connect()
+    world.client.statics = world.lua.table_from({"23": world.lua.table_from([0x84])})  # SNORLAX
+    world.set_map(0x17)                 # ROUTE_12 (map_constants.asm:53)
+    world.step(30)
+    assert world.events("tick")[-1]["area_id"] == "route_12", "the route is unmapped"
+
+    world.in_battle(opponent=0x84, species=0x84, level=30)   # the static Snorlax
+    world.fire("wild_begin")
+    world.step()
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    nc = world.events("no_catch")
+    assert len(nc) == 1 and nc[0]["area_id"] == "static_23_143", nc
+
+    # The same map with an ordinary wild mon still resolves the route's own area id, so the
+    # static id is not swallowing the route.
+    world.in_battle(opponent=0x24, species=0x24, level=3)    # wild Pidgey
+    world.fire("wild_begin")
+    world.step()
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    nc = world.events("no_catch")
+    assert len(nc) == 2 and nc[-1]["area_id"] == "route_12", nc
+    world.assert_all_conform()
+
+
 def test_trainer_battle_start_is_sent_once_with_the_200_form_id(world):
     world.connect()
     world.in_battle(opponent=0xE1, species=0xB0, level=5)  # RIVAL1 = class 225

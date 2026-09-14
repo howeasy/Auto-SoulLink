@@ -39,6 +39,8 @@ function Entry.build(deps)
     local sites = assert(load_json(json, root .. "/data/games/gen1_rby/engine_signals.json").titles[title]).sites
     local write_checkpoint = assert(load_json(json, root .. "/data/games/gen1_rby/write_checkpoint.json")[title])
     local area_map = load_json(json, root .. "/data/games/gen1_rby/area_map.json")
+    -- static (scripted, fixed-species) encounters get their own area id; generated from pret
+    local statics = load_json(json, root .. "/data/games/gen1_rby/static_encounters.json").statics
 
     local bio = deps.io
     -- reads: System Bus, no domain argument
@@ -65,6 +67,7 @@ function Entry.build(deps)
         reads = reads, signals = S, writes = writes, boxes = boxes, rom = rom, safety = safety,
         net = deps.net, json = json, hud = deps.hud, io = bio,
         profile = profile, sites = sites, write_checkpoint = write_checkpoint, area_map = area_map,
+        statics = statics,
         player = assert(deps.player, "deps.player required"), rom_type = Entry.ROM_TYPE[title],
         rom_sha1 = deps.rom_sha1, log = deps.log or function() end,
     })

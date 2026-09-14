@@ -1,0 +1,60 @@
+{
+  "schema": "gen1-statics-v1",
+  "source": "pret 405b624",
+  "statics": {
+    "23": [
+      132
+    ],
+    "27": [
+      132
+    ],
+    "83": [
+      6,
+      75,
+      141
+    ],
+    "147": [
+      145
+    ],
+    "162": [
+      74
+    ],
+    "194": [
+      73
+    ],
+    "227": [
+      131
+    ]
+  },
+  "cites": {
+    "23": [
+      "scripts/Route12.asm:33"
+    ],
+    "27": [
+      "scripts/Route16.asm:33"
+    ],
+    "83": [
+      "data/maps/objects/PowerPlant.asm:28",
+      "data/maps/objects/PowerPlant.asm:29",
+      "data/maps/objects/PowerPlant.asm:30",
+      "data/maps/objects/PowerPlant.asm:31",
+      "data/maps/objects/PowerPlant.asm:32",
+      "data/maps/objects/PowerPlant.asm:33",
+      "data/maps/objects/PowerPlant.asm:34",
+      "data/maps/objects/PowerPlant.asm:35",
+      "data/maps/objects/PowerPlant.asm:36"
+    ],
+    "147": [
+      "scripts/PokemonTower6F.asm:36"
+    ],
+    "162": [
+      "data/maps/objects/SeafoamIslandsB4F.asm:22"
+    ],
+    "194": [
+      "data/maps/objects/VictoryRoad2F.asm:36"
+    ],
+    "227": [
+      "data/maps/objects/CeruleanCaveB1F.asm:15"
+    ]
+  }
+}

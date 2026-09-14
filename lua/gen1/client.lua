@@ -57,7 +57,7 @@ function Client.new(p)
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
         deferred = {}, pending_battle_writes = {}, sync_written = {},
         pending_change = nil, battle = nil, has_pokeballs = false,
-        signals = nil, boxes = p.boxes, rom = p.rom,
+        signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics,
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
@@ -402,6 +402,22 @@ function Client.new(p)
                                 cur_opponent = pt.cur_opponent, captured = false }
                 self.whiteout_sent = false
                 if not self.battle.wild then send("trainer_battle_start", { trainer_id = pt.cur_opponent }) end
+                if self.battle.wild then
+                    -- A scripted, fixed-species encounter owns its own slot and must not consume
+                    -- the map's wild area: data/games/gen1_rby/static_encounters.json lists the
+                    -- species per map, and the server recognises static_<map>_<dex>.
+                    local ids = self.statics and self.statics[tostring(map_id)]
+                    for _, s in ipairs(ids or {}) do
+                        if s == pt.species then
+                            local dex = self.rom.natdex(pt.species)
+                            if dex then
+                                self.battle.static = true
+                                self.battle.area_id = "static_" .. tostring(map_id) .. "_" .. tostring(dex)
+                            end
+                            break
+                        end
+                    end
+                end
             end
         elseif k == "battle_end" then
             local b = self.battle
@@ -501,7 +517,8 @@ function Client.new(p)
             self.known_keys[key] = true
             local gift = not pc.in_battle
             local area_id = pc.area_id
-            if gift then area_id = "gift_map_" .. tostring(pc.map) end
+            if gift then area_id = "gift_map_" .. tostring(pc.map)
+            elseif self.battle and self.battle.static then area_id = self.battle.area_id end
             send("capture", { key = key, area_id = area_id, species_id = found.species, level = found.level,
                               hp = found.hp, maxHP = found.max_hp ~= reads.NULL and found.max_hp or nil,
                               nickname = found.nickname, gift = gift, in_box = pc.to_box,
