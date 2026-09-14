@@ -80,3 +80,28 @@ def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
     assert ps.validate_event(hello) == []
     assert hello["party"][0]["key"] == codec.key(py_party[0])
     assert "write-safe overworld checkpoint reached" in text and "[ok] write-safe" in text
+
+
+SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"
+
+
+@pytest.mark.parametrize("rom", ("red", "blue"))
+def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch):
+    """S-1 PHYSICAL: a cold cartridge, NEW GAME -> starter -> rival battle by buttons only, with
+    the signals layer armed. The engine-site sequence must be the one pret's scripts imply."""
+    from run_gb_gate import run_gate
+    monkeypatch.setenv("SLINK_SCRIPT_CHAIN", "lab")
+    monkeypatch.setenv("SLINK_SCRIPT_PLAYER", "a" if rom == "red" else "b")
+    monkeypatch.delenv("SLINK_SCRIPT_FLUSH", raising=False)
+    passed, path, text = run_gate(SCRIPTED_GATE, rom_key=f"{rom}_cold", target="town", timeout=600, quiet=True)
+    assert passed, f"scripted lab route FAILED on {rom}: {text[-1500:]}"
+    kinds = [tok.split("@")[0] for tok in re.search(r"^SIGNALS (.*)$", text, re.M).group(1).split()]
+    # gift starter, then the rival battle: its enemy party is built through AddPartyMon too
+    assert kinds[:3] == ["starter_begin", "add_party_mon", "starter_end"], kinds[:6]
+    assert kinds[3:5] == ["battle_begin", "add_party_mon"], kinds[3:6]
+    assert kinds.count("battle_faint") >= 1 and kinds[-1] == "battle_end", kinds[-4:]
+    assert kinds.count("battle_loop_head") >= 3
+    assert "blackout" not in kinds and "wild_begin" not in kinds and "capture_box" not in kinds
+    raw = bytes.fromhex(re.search(r"^PARTY_RAW ([0-9A-F]+)$", text, re.M).group(1))
+    (mon,) = codec.decode_party(raw)
+    assert mon["level"] == 5 and mon["exp"] == 135  # a real L5 starter (add_mon.asm stores exp_for_level)

@@ -304,6 +304,44 @@ def test_wild_battle_without_capture_emits_no_catch_with_species(world):
     assert len(world.events("no_catch")) == 1
 
 
+def test_tower_ghost_battle_without_silph_scope_is_not_a_failed_encounter(world):
+    """A Tower ghost cannot be fought or caught, so a battle there is no failed encounter.
+
+    Without the Silph Scope in the bag the engine refuses the throw, so a wild battle ending
+    on a Tower floor says nothing about the player failing to catch: the area must stay
+    unresolved, or the run dead-zones the whole Tower (the old adapter did).
+    """
+    r = world.ram
+    world.connect()
+    world.set_map(0x8F)          # Pokemon Tower 2F; $8E-$94 all map to "pokemon_tower"
+    world.step(30)
+    assert world.events("tick")[-1]["area_id"] == "pokemon_tower", "the Tower map is unmapped"
+
+    world.in_battle(opponent=0x5B, species=0x5B, level=20)   # wild Gastly
+    world.fire("wild_begin")
+    world.step()
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert world.events("no_catch") == [], "a Tower ghost was reported as a failed encounter"
+
+    # With the Scope (item_constants.asm:84) the same battle IS a failed encounter -- which
+    # also proves the ghost above left the area unresolved: a resolved area would swallow it.
+    world.bus[r["wNumBagItems"]] = 1
+    world.bus[r["wBagItems"]], world.bus[r["wBagItems"] + 1] = 0x48, 1
+    world.bus[r["wBagItems"] + 2] = 0xFF
+    world.in_battle(opponent=0x5B, species=0x5B, level=21)
+    world.fire("wild_begin")
+    world.step()
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    nc = world.events("no_catch")
+    assert len(nc) == 1, f"the scoped battle produced {len(nc)} no_catch events"
+    assert nc[0]["area_id"] == "pokemon_tower" and nc[0]["species_id"] == 0x5B
+    world.assert_all_conform()
+
+
 def test_trainer_battle_start_is_sent_once_with_the_200_form_id(world):
     world.connect()
     world.in_battle(opponent=0xE1, species=0xB0, level=5)  # RIVAL1 = class 225

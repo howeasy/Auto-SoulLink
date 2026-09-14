@@ -18,6 +18,14 @@
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600 }
 
 local BALL_ITEMS = { [1] = true, [2] = true, [3] = true, [4] = true } -- MASTER..POKE (item_constants.asm:10-13)
+-- Pokemon Tower 1F-7F ($8E-$94, map_constants.asm:228-234). A wild battle on these maps
+-- without the Silph Scope (item_constants.asm:84) in the bag is a "ghost": the engine
+-- refuses both the fight and the throw, so the battle ending says nothing about whether the
+-- player failed to catch anything -- it is NOT a failed encounter and must not dead-zone
+-- the area (docs/gen1_requirements.md F-4/S-2).
+local TOWER_MAPS = { [0x8E] = true, [0x8F] = true, [0x90] = true, [0x91] = true,
+                     [0x92] = true, [0x93] = true, [0x94] = true }
+local SILPH_SCOPE = 0x48
 local MOVE_BOX_TO_PARTY, MOVE_PARTY_TO_BOX, MOVE_DAYCARE_TO_PARTY, MOVE_PARTY_TO_DAYCARE = 0, 1, 2, 3
 local TRANSFORMED_BIT = 8 -- bit 3 of wPlayerBattleStatus3 (battle_constants.asm:106)
 
@@ -385,19 +393,29 @@ function Client.new(p)
 
     function self:on_signal(sig)
         local k, pt = sig.kind, sig.point or {}
-        local area_id = select(1, area_of(pt.map or reads.read_map().map))
+        local map_id = pt.map or reads.read_map().map
+        local area_id = select(1, area_of(map_id))
         if k == "battle_begin" or k == "wild_begin" then
             if not self.battle or self.battle.frame ~= sig.frame then
                 self.battle = { frame = sig.frame, wild = pt.cur_opponent < 200, species = pt.species,
-                                level = pt.level, area_id = area_id, cur_opponent = pt.cur_opponent, captured = false }
+                                level = pt.level, area_id = area_id, map = map_id,
+                                cur_opponent = pt.cur_opponent, captured = false }
                 self.whiteout_sent = false
                 if not self.battle.wild then send("trainer_battle_start", { trainer_id = pt.cur_opponent }) end
             end
         elseif k == "battle_end" then
             local b = self.battle
             if b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
-                send("no_catch", { area_id = b.area_id, species_id = b.species, level = b.level })
-                self.resolved_areas[b.area_id] = true
+                -- A Tower ghost without the Scope: the battle cannot be won or caught, so it
+                -- is not evidence of a failed encounter. `has_item` returns nil when the bag
+                -- cannot be read (reads.lua:200-207), and the safe reading of "cannot tell" is
+                -- to leave the area unresolved rather than to dead-zone it on a guess.
+                if TOWER_MAPS[b.map] and reads.has_item(SILPH_SCOPE) ~= true then
+                    log("[SLink-gen1] tower ghost battle without the Silph Scope: no_catch suppressed")
+                else
+                    send("no_catch", { area_id = b.area_id, species_id = b.species, level = b.level })
+                    self.resolved_areas[b.area_id] = true
+                end
             end
             self.battle = nil
             self.pending_safe = true

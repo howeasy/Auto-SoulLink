@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _build_tools_bootstrap import ensure_rgbds  # noqa: E402
 
 SRC = os.path.join(REPO, "patch", "gen1", "src", "slink.asm")
+TRADE_SRC = os.path.join(REPO, "patch", "gen1", "src", "trade.asm")
 BUILD = os.path.join(REPO, "patch", "gen1", "build")
 DIST = os.path.join(REPO, "patch", "gen1", "dist")
 PAYLOAD_FILE = os.path.join(DIST, "slink_bank3f.bin")
@@ -47,24 +48,36 @@ from manifest import (  # noqa: E402
     MENU_PATCHES,
     PROTECTED_RANGE,
     ROMS,
+    TRADE_BRIDGE_AFTER,
 )
 
 
 def assemble() -> bytes:
-    """rgbasm + rgblink the module; return the raw bytes of bank $3F."""
+    """Link the panel and fixed-section trade objects into one bank $3F image."""
     rgbds = ensure_rgbds()
     os.makedirs(BUILD, exist_ok=True)
     exe = ".exe" if os.name == "nt" else ""
     obj = os.path.join(BUILD, "slink.o")
+    trade_obj = os.path.join(BUILD, "trade.o")
     out = os.path.join(BUILD, "slink_stub.gb")
 
     subprocess.run([os.path.join(rgbds, "rgbasm" + exe), "-o", obj, SRC], check=True)
+    subprocess.run([os.path.join(rgbds, "rgbasm" + exe),
+                    "-I", os.path.join(REPO, "patch", "gen1", "src") + os.sep,
+                    "-o", trade_obj, TRADE_SRC], check=True)
     # -p 0x00 matches pokered's own RGBLINKFLAGS, so the padding we emit is the padding the
     # target bank already contains.
     subprocess.run([os.path.join(rgbds, "rgblink" + exe), "-p", "0x00",
-                    "-o", out, "-n", os.path.join(BUILD, "slink.sym"), obj], check=True)
+                    "-o", out, "-n", os.path.join(BUILD, "slink.sym"),
+                    obj, trade_obj], check=True)
     with open(out, "rb") as f:
         image = f.read()
+    # trade_service.asm:33-65 pins the 42-byte bridge in ROM0's reserved RST
+    # padding. inject.py has no assembler, so its manifest embeds the bytes;
+    # the build checks that this linked image still produces exactly those bytes.
+    bridge = image[0x0001:0x002B]
+    if bridge != TRADE_BRIDGE_AFTER:
+        raise SystemExit("linked trade bridge drifted from manifest: " + bridge.hex())
     start = INJECT_OFFSET
     if len(image) < start + BANK_SIZE:
         # rgblink emits only as many banks as it needs; the section is pinned to $3F, so a

@@ -138,6 +138,32 @@ MENU_PATCHES = [
      "the last dispatch comparison -> jump to the trampoline"),
 ]
 
+# Trade spans, independently read from both pinned clean ROMs and the linked
+# trade-only image (trade_service.asm:33-65; trade_receptionist.asm:1-15).
+# The bridge occupies reserved RST padding declared in pret/home/header.asm:3-38.
+# Its exact 42-byte replacement is image[0x0001:0x002b] from rgblink; build.py
+# rejects a future source change that would drift from this toolchain-free manifest.
+TRADE_BRIDGE_BEFORE = bytes.fromhex(
+    "00000000000000ff00000000000000ff00000000000000ff"
+    "00000000000000ff00000000000000ff0000"
+)
+TRADE_BRIDGE_AFTER = bytes.fromhex(
+    "c2b320f5c5d5e5f8082afe022804fe0520137efe04200e"
+    "fa12c53d2008063f210045cdd635e1d1c1f1c9"
+)
+TRADE_DELAY_BEFORE = bytes.fromhex("20fac9")
+TRADE_DELAY_AFTER = bytes.fromhex("c30100")  # jp SlinkDelayFrameBridge, linked 00:0001
+TRADE_DISPATCH_BEFORE = bytes.fromhex("21c5710601cdd6351809")
+TRADE_DISPATCH_AFTER = bytes.fromhex("21004c063fcdd6351812")
+MENU_PATCHES.extend([
+    (0x0001, TRADE_BRIDGE_BEFORE, TRADE_BRIDGE_AFTER,
+     "DelayFrame foreground service bridge in reserved RST padding"),
+    (0x20B7, TRADE_DELAY_BEFORE, TRADE_DELAY_AFTER,
+     "DelayFrame tail -> SlinkDelayFrameBridge"),
+    (0x29C3, TRADE_DISPATCH_BEFORE, TRADE_DISPATCH_AFTER,
+     "Cable Club receptionist -> SlinkReceptionist in bank $3F"),
+])
+
 # Never written, at any offset, for any reason: the cartridge header carries the Nintendo
 # logo the boot ROM checks and the entrypoint at $0100. The free run found by scanning
 # runs 0x00BE-0x0100 INCLUSIVE, and that last byte is the entrypoint's `nop` -- so the

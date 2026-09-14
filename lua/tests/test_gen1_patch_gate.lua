@@ -81,9 +81,16 @@ t.check("the displaced TrackPlayTime still runs (play clock advances)", moved,
 -- 6. The game still plays.
 local x_addr, y_addr = M.MAP_ID_ADDR + 4, M.MAP_ID_ADDR + 3
 local x0, y0 = M.read_u8(x_addr), M.read_u8(y_addr)
+-- Right, then Left: the regenerated town fixtures stand in Oak's Lab, where the tile to the
+-- right of the parking spot is furniture; the claim is only that the game still moves.
 t.hold("Right", 30, function()
     return M.read_u8(x_addr) ~= x0 or M.read_u8(y_addr) ~= y0
 end)
+if M.read_u8(x_addr) == x0 and M.read_u8(y_addr) == y0 then
+    t.hold("Left", 30, function()
+        return M.read_u8(x_addr) ~= x0 or M.read_u8(y_addr) ~= y0
+    end)
+end
 t.check("the player can still walk on the patched ROM",
         M.read_u8(x_addr) ~= x0 or M.read_u8(y_addr) ~= y0,
         fmt("(%d,%d) -> (%d,%d)", x0, y0, M.read_u8(x_addr), M.read_u8(y_addr)))
@@ -140,9 +147,20 @@ t.check("the SFX request byte is still consumed by the hook", consumed,
 -- ...and it must NOT reach the audio engine. This is the assertion that would have failed
 -- against the ABI-2 build, and it is the one that matters: no reachable PlaySound means no
 -- re-entrancy window to land in.
+-- "Never starts" = no SFX channel that was silent becomes busy. A channel that was already
+-- playing (the CONTINUE menu's own press sound, id 180, was still fading in the lab fixture)
+-- is allowed to finish; string equality read that finishing as the hook playing something.
 local before = sfx_channels()
-for _ = 1, 30 do t.step(nil) end
-t.check("a drained SFX request never starts a sound", sfx_channels() == before,
+local before_ids = { M.read_u8(CHANNEL_SOUND_IDS + 4), M.read_u8(CHANNEL_SOUND_IDS + 5),
+                     M.read_u8(CHANNEL_SOUND_IDS + 6), M.read_u8(CHANNEL_SOUND_IDS + 7) }
+local started = false
+for _ = 1, 30 do
+    t.step(nil)
+    for i = 0, 3 do
+        if before_ids[i + 1] == 0 and M.read_u8(CHANNEL_SOUND_IDS + 4 + i) ~= 0 then started = true end
+    end
+end
+t.check("a drained SFX request never starts a sound", not started,
         fmt("CHAN5-8 %s -> %s — the hook still reaches PlaySound", before, sfx_channels()))
 
 -- 8. And the game still runs normally afterwards — a botched `call` from inside an interrupt
@@ -151,6 +169,11 @@ local x2, y2 = M.read_u8(x_addr), M.read_u8(y_addr)
 t.hold("Left", 30, function()
     return M.read_u8(x_addr) ~= x2 or M.read_u8(y_addr) ~= y2
 end)
+if M.read_u8(x_addr) == x2 and M.read_u8(y_addr) == y2 then  -- a wall on the left: go back right
+    t.hold("Right", 30, function()
+        return M.read_u8(x_addr) ~= x2 or M.read_u8(y_addr) ~= y2
+    end)
+end
 t.check("the player can still walk after the SFX hook fired",
         M.read_u8(x_addr) ~= x2 or M.read_u8(y_addr) ~= y2,
         fmt("(%d,%d) -> (%d,%d)", x2, y2, M.read_u8(x_addr), M.read_u8(y_addr)))
