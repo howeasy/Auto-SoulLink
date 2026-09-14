@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:09:55+00:00",
+  "updated_at_utc": "2026-09-14T10:11:17+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "645fa94",
+  "source_head": "1c2701b",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-1 round 2 (Sonnet: F1-F6 + joint protocol), R5b-2 round 2 (Sonnet: refusal receipt + hold until release), R5b-3 Manager (OMP). HS-1 done -> HS-3 active (Sonnet), HS-2 queued on OMP, HS-4 queued after R5b-2-2 (spec in flight on Codex). C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-1 round 2 (Sonnet: F1-F6 + joint protocol), R5b-2 round 2 (Sonnet: refusal receipt + hold until release), R5b-3 candidate 1c2701b under adversarial review. HS-2 active (OMP), HS-3 active (Sonnet), HS-4 queued after R5b-2-2 (spec in flight on Codex). C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -1018,10 +1018,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "hs-2",
-      "owner": "queued for OMP after R5b-3 (same files)",
-      "state": "blocked",
-      "blocked_reason": "server/manager.py and manager.html are owned by R5b-3 (OMP) until it reports",
-      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_gen1_create_ui.py"],
+      "owner": "OMP live pid 47172 (coding; task cx-46ef6171)",
+      "state": "active",
+      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_gen1_create_ui.py", "tests/unit/test_manager_prepared_gen1.py"],
       "next_action": "Launcher buttons link to the ZIP bundle (?bundle=1) with instructions; per-player prepared FINAL cartridge download for the remote player (GET /api/runs/{id}/cartridge/{player}, bounded, from the run's prepared/final files, with SHA1 shown); Manager prints the LAN URL/instructions at startup.",
       "reuse_decision": "Manager shared presentation/lifecycle"
     },
@@ -1145,11 +1144,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-3",
-      "owner": "OMP live pid 47172 (coding; task cx-4e6db174)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate 1c2701b (OMP authored, task cx-4e6db174)",
+      "state": "done",
       "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_checkpoint_recovery.py", "tests/unit/test_manager_checkpoint_ui.py"],
       "next_action": "Manager checkpoint request/status proxy, checkpoints list (running: proxy; stopped: confirmed_checkpoints + store validation), recover -> exact resume record from the checkpoint -> successor via the resume tail without audit_predecessor, recovered_from/recovered_by, per-player save download with hash header, UI buttons/confirm texts/poll; tests. Contracts pinned with R5b-1 (run-server /api/checkpoint routes, components['gen1-checkpoint'] shape, confirmed_checkpoints helper).",
-      "reuse_decision": "Manager shared lifecycle; checkpoint semantics from R5a/R5b-1; native_pretrade witness mapping flagged for the R5b-1 tagged resume extension"
+      "reuse_decision": "Manager shared lifecycle; checkpoint semantics from R5a/R5b-1; native_pretrade witness mapping flagged for the R5b-1 tagged resume extension",
+      "receipt": "commit 1c2701b; 74 passed (6 recovery tests drive a real PairedCheckpointStore capture; 5 UI structural); proxy handlers untested; native_pretrade mapping unverified against validate_required",
+      "independent_review_refs": [
+        "Codex ADVERSARIAL_REVIEW cx-142b9779 (0c2e3fc..1c2701b) in flight"
+      ]
     },
     {
       "id": "hx-2",
