@@ -168,6 +168,7 @@ def test_identical_seeds_are_refused(tmp_path, monkeypatch):
                         lambda _s: {"flags": {}, "misc_tweaks": 0})
     monkeypatch.setattr(upr_pipeline, "forbidden_enabled", lambda _p: [])
     monkeypatch.setattr(upr_pipeline, "categories_enabled", lambda _p: {"wild"})
+    monkeypatch.setattr(upr_pipeline, "spec_from_parsed", lambda _p: {"wild": "random"})
     monkeypatch.setattr(upr_pipeline, "_check_content", lambda _s, _o: {"wild": {}})
     with pytest.raises(UprPipelineError, match="both players got seed 42"):
         prepare_pair("jar", s, _roms(), str(tmp_path / "out"))

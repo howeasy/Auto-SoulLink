@@ -48,6 +48,8 @@ from server.upr_settings import (
     forbidden_enabled,
     load,
     parse_settings_string,
+    spec_from_parsed,
+    summarize,
     unexpected_settings,
 )
 
@@ -195,6 +197,11 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
     return info
 
 
+def _rule_bearing(base_stats: dict[int, dict]) -> dict[int, dict]:
+    return {dex: {k: v for k, v in rec.items() if k != "catch_rate"}
+            for dex, rec in base_stats.items()}
+
+
 def _check_content(source_rom: str, output_rom: str) -> dict:
     """Scan the output and refuse anything that moved data the rules depend on.
 
@@ -218,7 +225,9 @@ def _check_content(source_rom: str, output_rom: str) -> dict:
                 f"source ROM is not a clean dump ({src_ident['sha1']}); randomize from a "
                 f"clean cartridge so the result is reproducible")
         profile = scan(out)
-        if scan_base_stats(out) != scan_base_stats(src):
+        # Gen 1 keeps the catch rate inside the base-stats record, and the minimum-catch-
+        # rate option legitimately raises it; no rule reads it, so it is not compared.
+        if _rule_bearing(scan_base_stats(out)) != _rule_bearing(scan_base_stats(src)):
             raise UprPipelineError(
                 "base stats or types differ from the source — a setting that changes data "
                 "the Soul Link rules read was enabled")
@@ -290,6 +299,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             raise UprPipelineError(
                 f"player {player}: after tweakForRom the run would randomize {', '.join(bad)}")
         info["categories"] = sorted(categories_enabled(effective))
+        info["spec"] = spec_from_parsed(effective)
         info["content_profile"] = _check_content(sources[player], info["output"])
         results[player] = info
 
@@ -297,10 +307,10 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         raise UprPipelineError(
             f"both players got seed {results['a']['seed']} — the point of the pairing is "
             f"that their tables differ")
-    if results["a"]["categories"] != results["b"]["categories"]:
+    if results["a"]["spec"] != results["b"]["spec"]:
         raise UprPipelineError(
-            f"the two ROMs ended up with different categories randomized: "
-            f"{results['a']['categories']} vs {results['b']['categories']}")
+            f"the two ROMs ended up with different settings applied: "
+            f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}")
 
     from server.adapters.gen1_rom_scan import fingerprint_rom, profile_hash
     for player in ("a", "b"):
@@ -321,5 +331,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         "settings_sha256": hashlib.sha256(
             open(settings_path, "rb").read()).hexdigest(),
         "categories": results["a"]["categories"],
+        "spec": results["a"]["spec"],
+        "summary": summarize(results["a"]["spec"]),
         "players": results,
     }

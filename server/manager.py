@@ -702,11 +702,9 @@ class RunManager:
         if run is not None and run.get("game") not in new_run_form()["gen1_games"]:
             return None
         from server.upr_pipeline import find_upr_jar
-        from server.upr_settings import _CATEGORY_MODES
+        from server.upr_settings import option_form
         return {
-            "categories": sorted(_CATEGORY_MODES),
-            "labels": {"wild": "Wild encounters", "starters": "Starters", "statics": "Static encounters",
-                       "trainers": "Trainer teams", "tms": "TMs", "field_items": "Field items"},
+            "options": option_form(),
             "jar": find_upr_jar() or "",
             "current": run.get("randomizer") if run else None,
         }
@@ -886,20 +884,26 @@ class RunManager:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
         from server.upr_pipeline import UprPipelineError, find_upr_jar, prepare_pair
-        from server.upr_settings import UprSettingsError, build_categories
+        from server.upr_settings import UprSettingsError, build_categories, build_spec
 
         jar = str(body.get("jar", "")).strip() or find_upr_jar() or ""
         settings = str(body.get("settings", "")).strip()
         rom_a = str(body.get("rom_a", "")).strip()
         rom_b = str(body.get("rom_b", "")).strip()
-        # Either a settings file the user built in UPR's GUI, or the six categories the
-        # form offers -- from which the SAME builder the allowlist is computed from writes
-        # the file, so a file made here is by construction one the pipeline admits.
-        categories = body.get("categories")
-        if categories is not None and not settings:
+        # Either a settings file the user built in UPR's GUI, the form's spec (every option
+        # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
+        # two go through the SAME builder the allowlist is computed from, so a file made here
+        # is by construction one the pipeline admits.
+        spec, categories = body.get("spec"), body.get("categories")
+        if (spec is not None or categories is not None) and not settings:
             try:
-                blob = build_categories(set(map(str, categories)),
-                                        fastest_text=bool(body.get("fastest_text", True)))
+                if spec is not None:
+                    if not isinstance(spec, dict):
+                        raise UprSettingsError("spec must be an object")
+                    blob = build_spec(spec)
+                else:
+                    blob = build_categories(set(map(str, categories)),
+                                            fastest_text=bool(body.get("fastest_text", True)))
             except UprSettingsError as exc:
                 return web.json_response({"ok": False, "error": str(exc)}, status=400)
             settings = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")
@@ -929,6 +933,8 @@ class RunManager:
             "upr_version": result["upr_version"],
             "settings_sha256": result["settings_sha256"],
             "categories": result["categories"],
+            "spec": result["spec"],
+            "summary": result["summary"],
             "created_at": datetime.now(UTC).isoformat(),
             "players": {
                 p: {"seed": str(v["seed"]),      # 48-bit; a string so no JS float rounds it

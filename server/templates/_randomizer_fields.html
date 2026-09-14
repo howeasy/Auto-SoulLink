@@ -1,22 +1,51 @@
 {#
-  _randomizer_fields.html — the randomizer's inputs: categories, jar, the two clean ROMs
-  with a picker, and the preflight tags. Included inside an Alpine scope that carries the
-  `randomizerFields()` mixin (static/randomizer.js): `rform`, `rdraft`, `picker`, `pre`,
-  `browse()`, `list()`, `pick()`. Used by the run creator (the normal path) and by
+  _randomizer_fields.html — the randomizer's inputs: every option in upr_settings.OPTIONS
+  (rendered by group from rform.options — the table is the definition of what SLink
+  allows, so nothing is hand-listed here), the jar, the two clean ROMs with a picker, and
+  the preflight tags. Included inside an Alpine scope that carries the `randomizerFields()`
+  mixin (static/randomizer.js): `rform`, `rdraft`, `picker`, `pre`, `groups()`, `browse()`,
+  `list()`, `pick()`. Used by the run creator (the normal path) and by
   /runs/{id}/randomizer (rebuilding a pair on an existing run).
 #}
-<div class="mk-optgrid">
-  <template x-for="key in rform.categories" :key="key">
-    <label class="mk-opt" :class="rdraft.categories[key] ? 'on' : ''">
-      <input type="checkbox" x-model="rdraft.categories[key]">
-      <span x-text="rform.labels[key] || key"></span>
-    </label>
+<div class="mk-rgroups">
+  <template x-for="g in groups()" :key="g.name">
+    <fieldset class="mk-rgroup">
+      <legend x-text="g.name"></legend>
+      <template x-for="o in g.options" :key="o.key">
+        <div class="mk-ropt" :class="'kind-' + o.kind">
+          <template x-if="o.kind === 'choice'">
+            <div class="mk-rchoice">
+              <span class="mk-rlabel" x-text="o.label"></span>
+              <div class="mk-rchips" role="radiogroup" :aria-label="o.label">
+                <template x-for="c in o.choices" :key="c.value">
+                  <button type="button" class="mk-gchip" role="radio" :aria-checked="rdraft.spec[o.key] === c.value"
+                          :class="rdraft.spec[o.key] === c.value ? 'active' : ''"
+                          @click="rdraft.spec[o.key] = c.value" x-text="c.label"></button>
+                </template>
+              </div>
+            </div>
+          </template>
+          <template x-if="o.kind === 'bool'">
+            <label class="mk-opt" :class="rdraft.spec[o.key] ? 'on' : ''">
+              <input type="checkbox" x-model="rdraft.spec[o.key]">
+              <span x-text="o.label"></span>
+            </label>
+          </template>
+          <template x-if="o.kind === 'int'">
+            <label class="mk-range">
+              <span class="mk-rlabel"><span x-text="o.label"></span><em class="mk-sub" x-show="o.help" x-text="o.help"></em></span>
+              <input type="range" :min="o.min" :max="o.max" step="1" x-model.number="rdraft.spec[o.key]"
+                     @dblclick="rdraft.spec[o.key] = o.default">
+              <output class="num" :class="rdraft.spec[o.key] ? 'set' : ''"
+                      x-text="(o.unit && rdraft.spec[o.key] > 0 ? '+' : '') + rdraft.spec[o.key] + (o.unit || '')"></output>
+            </label>
+          </template>
+        </div>
+      </template>
+    </fieldset>
   </template>
-  <label class="mk-opt" :class="rdraft.fastest_text ? 'on' : ''">
-    <input type="checkbox" x-model="rdraft.fastest_text"><span>Fastest text</span>
-  </label>
 </div>
-<p class="mk-cap">Types, evolutions, movesets and base stats are never randomized: the species and type clauses have to mean the same thing on both cartridges.</p>
+<p class="mk-cap">Types, evolutions, movesets and base stats are never randomized: the species and type clauses have to mean the same thing on both cartridges. <button type="button" class="mk-linkbtn" @click="resetSpec()">Reset to defaults</button></p>
 
 <div class="mk-optgrid">
   <label class="mk-field"><span>Randomizer jar</span>

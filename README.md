@@ -261,7 +261,7 @@ python -m server.manager --host 0.0.0.0
 # http://localhost:8090/tools     the patcher and the Gen 1 randomized-pair builder
 ```
 
-**Randomized pairs (Gen 1).** On a Red · Blue · Yellow run, *Randomizer* in the run header builds one randomized ROM per player — same settings, different seeds — from your own copy of Universal Pokémon Randomizer ZX (put `PokeRandoZX.jar` in `.cache/upr/` or set `SLINK_UPR_JAR`; Java must be on `PATH`). Pick the six categories, browse to two clean dumps, build, download `slink_<run>_a.gb` and `_b.gb`. The run then admits only those two cartridges. Types, evolutions, movesets and base stats are never randomized, so the species and type clauses mean the same thing on both.
+**Randomized pairs (Gen 1).** On a Red · Blue · Yellow run, *Randomizer* in the run header builds one randomized ROM per player — same settings, different seeds — from your own copy of Universal Pokémon Randomizer ZX (put `PokeRandoZX.jar` in `.cache/upr/` or set `SLINK_UPR_JAR`; Java must be on `PATH`). Choose what to randomize and how hard — wild/static/trainer modes, level curves (−50…+50 %), fully-evolved-from-level, similar strength, rival keeps starter, minimum catch rate, TM compatibility, field items and the misc tweaks — browse to two clean dumps, build, download `slink_<run>_a.gb` and `_b.gb`. The run then admits only those two cartridges. Types, evolutions, movesets, base stats, EXP curves and in-game trades are never randomized, so the species and type clauses mean the same thing on both; the full list is `server/upr_settings.py::OPTIONS`.
 
 ## Tests
 

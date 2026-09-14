@@ -417,7 +417,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
 | `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
 | `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |
-| `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, categories? | settings?, fastest_text?}` — builds the pair, records seeds/hashes, writes `rom_contract.json` |
+| `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json` |
 | `/api/runs/{id}/rom/{player}` | GET | Download that player's randomized ROM as `slink_<run>_<player>.gb` |
 | `/api/randomizer/status` | GET | `?jar=&rom_a=&rom_b=` — jar found, Java on PATH, each ROM present and a clean dump |
 | `/api/browse` | GET | `?dir=&ext=` — directory listing rooted at the user's home and the repo, for the pickers; lists, never reads |

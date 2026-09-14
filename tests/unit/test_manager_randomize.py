@@ -107,6 +107,40 @@ async def test_a_pipeline_refusal_is_a_400_with_its_reason(manager_dir, tmp_path
 
 
 @pytest.mark.asyncio
+async def test_a_spec_body_writes_the_settings_file_the_form_asked_for(manager_dir, monkeypatch):
+    """The form posts its options, not a file; the manager writes settings.rnqs from them
+    through the same builder the allowlist is computed from, then runs the pipeline on it."""
+    from server import upr_pipeline
+    from server.upr_settings import load, spec_from_parsed
+
+    seen = {}
+
+    def fake_prepare_pair(jar, settings, sources, out_dir, **kw):
+        seen["spec"] = spec_from_parsed(load(settings))
+        raise upr_pipeline.UprPipelineError("stop here")
+
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", fake_prepare_pair)
+    status, body = await _post({"jar": "x", "rom_a": _RED, "rom_b": _BLUE,
+                                "spec": {"trainers_levels": 30, "trainers_force_evolved": 36,
+                                         "wild": "area", "starters": "unchanged"}})
+    assert status == 400 and body["error"] == "stop here"
+    assert seen["spec"]["trainers_levels"] == 30
+    assert seen["spec"]["trainers_force_evolved"] == 36
+    assert seen["spec"]["wild"] == "area" and seen["spec"]["starters"] == "unchanged"
+    assert seen["spec"]["fastest_text"] is True         # a default the body did not mention
+    assert os.path.exists(os.path.join(mgr.MANAGER_DIR, "run_test", "settings.rnqs"))
+
+
+@pytest.mark.asyncio
+async def test_a_bad_spec_is_a_400_naming_the_option(manager_dir):
+    status, body = await _post({"jar": "x", "rom_a": _RED, "rom_b": _BLUE,
+                                "spec": {"trainers_levels": 999}})
+    assert status == 400 and "trainers_levels" in body["error"]
+    status, body = await _post({"jar": "x", "rom_a": _RED, "rom_b": _BLUE, "spec": [1]})
+    assert status == 400 and "spec" in body["error"]
+
+
+@pytest.mark.asyncio
 async def test_nothing_is_recorded_on_the_run_when_it_refuses(tmp_path, manager_dir):
     bad = tmp_path / "bad.rnqs"
     bad.write_bytes(build({"evolutions_UNCHANGED": False}))
@@ -129,6 +163,7 @@ class TestAgainstTheRealJar:
         rnd = body["randomizer"]
         assert rnd["upr_version"] == "4.6.1"
         assert set(rnd["categories"]) == ALL_CATEGORIES
+        assert rnd["spec"]["trainers"] == "random" and rnd["summary"].startswith("wild encounters random")
         a, b = rnd["players"]["a"], rnd["players"]["b"]
         assert a["seed"] != b["seed"]
         assert a["content_hash"] != b["content_hash"]

@@ -3,12 +3,12 @@
 *Handoff document. Rewritten 2026-09-14 by the session that built the mockups. Assume the
 reader has none of that conversation.*
 
-**Status (2026-09-14, end of session):** Phases 0–8 and most of 9 are committed on
+**Status (2026-09-14, later):** Phases 0–8, **8b** and most of 9 are committed on
 `claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`,
-HEAD `6a66b57`, suite 2 553 green). **Next up: Phase 8b below — expose the rest of UPR's
-SLink-compatible settings (level curve, difficulty).** Its research is finished and recorded
-there; no code for it exists yet. After that, what is left of 9: `sidebar.css` (calc page
-only), `--font-ui` flip after checking every overlay at catalogue size,
+suite 2 621 green). Phase 8b shipped: every SLink-compatible UPR option is exposed from one
+table (`upr_settings.OPTIONS`), proven against the real jar (trainers +50 % → Youngster #1
+Lv11→17, all fully evolved; wild −20 %; catch rate 3). What is left of 9: `sidebar.css`
+(calc page only), `--font-ui` flip after checking every overlay at catalogue size,
 `calc/src/js/slink_bridge.js` palette, `html_render.py` helpers only tests call. Deliberately
 not done: Debug as a drawer (the rail links to the run's `/debug`), the Manager owning
 `obs_config.json`. Owner to force-delete the three `claude/ui-mockup-track-b*` branches (a
@@ -438,7 +438,7 @@ them import it.
 
 ---
 
-# Phase 8b — Expose the rest of the randomizer *(researched, not built)*
+# Phase 8b — Expose the rest of the randomizer *(done)*
 
 Owner (2026-09-14): *"we need to expose more of the randomizer settings, such as level curve
 and other difficulty adjustments. If it's compatible with SLink, we should allow it."*
@@ -514,7 +514,34 @@ the form should not.
 | Misc | fastest text (on) · randomize PC potion · lower-case names · nerf X Accuracy · fix crit rate · update type effectiveness | 32–35 | ✓ (none touch species/types/evos; Gen 1 has no calc to mislead) | bools |
 | — | in-game trades, held items, EXP curves, `ALLOW_PIKACHU_EVOLUTION`, movesets/types/evos/base stats/move data | | ✗ | not offered |
 
-## How to build it (the shape, so it is one change)
+## What was built (2026-09-14)
+
+- `server/upr_settings.py`: **`OPTIONS`** — 29 options in 7 groups, each `kind`
+  bool/choice/int with how it lands (`flag`/`misc`/`choices`→flags/`byte`+`encode`+`decode`).
+  `build_spec(spec)` validates (unknown key, bad choice, out-of-range int, non-bool →
+  `UprSettingsError` naming the option) and writes; `spec_from_parsed` is the exact inverse;
+  `summarize(spec)` is the one-line record ("wild encounters 1-to-1 per area, trainer level
+  curve +30%, fully evolved from level 36"); `option_form()` is the JSON the page renders;
+  `build_categories` is a wrapper (old callers untouched). `permitted_byte_values()` now
+  enumerates per-byte products over the options that touch each byte — exact, ~1 000
+  builds, still cached. `trainersMatchTypingDistribution` (27,2) added to `FLAGS`.
+- `server/upr_pipeline.py`: the base-stats comparison ignores `catch_rate` (Gen 1 keeps it
+  in the base-stats record and the minimum-catch-rate option legitimately raises it; no rule
+  reads it). Players are compared on the full effective `spec`, not just categories; the
+  result carries `spec` and `summary`.
+- `server/manager.py`: `POST …/randomize` takes `spec`; the run record and the page's
+  "randomized: …" line carry `summary`; `_randomizer_form` ships `options`.
+- `_randomizer_fields.html` renders `rform.options` by group (`fieldset.mk-rgroup`, chips
+  for choices, `.mk-opt` for bools, `<input type=range>` + `.num` readout for the curves;
+  double-click a slider to reset it; "Reset to defaults"); `randomizer.js` keeps
+  `rdraft.spec`, seeded from the run's last pair on the rebuild page. `board.css`: the
+  `.mk-r*` block (CSS columns pack the uneven groups).
+- Tests: every option value round-trips and is admitted; the full spec round-trips; the
+  level-curve/force-evolved/catch-rate bytes are pinned to the `Settings.toString()` layout;
+  a two-mode-bits file is refused; bad specs are 400s naming the option; the manager writes
+  `settings.rnqs` from a `spec` body.
+
+## How it was built (the shape)
 
 1. **`upr_settings.py`:** an `OPTIONS` table — name → `{kind: bool|choice|int, default, choices|range, group, label, help, writes}` where `writes` is how a value lands (flag names, or `(byte, mask, fn)` for the numeric bytes). Extend `build(flags, misc, rom_name, *, bytes_override)` to take raw byte values for 14/36/38/47/50. `build_spec(spec) -> bytes` validates against `OPTIONS` and writes; `build_categories(enabled, fastest_text)` becomes a thin wrapper (its callers — `manager.handle_randomize`, four test files — keep working). `spec_from_parsed(parsed) -> dict` is the inverse, so the run's `randomizer` record and the "randomized: …" line can say *trainers +30 %, force evolved from 36* instead of a category list.
 2. **The envelope stays exact:** `permitted_byte_values()` currently enumerates 2⁶×2 whole files. Replace with per-byte products: for each byte, the options that touch it (discover by building each single-option variant against the default and diffing), then enumerate the product of their value sets for that byte only. The level-modifier bytes each have 1 option × 102 values; byte 15 has 3 × 4; byte 16 has 2 × 2 × 6; nothing explodes. `unexpected_settings()` needs no change — it reads the envelope.

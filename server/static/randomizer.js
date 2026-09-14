@@ -1,24 +1,38 @@
 /* randomizer.js — the Alpine mixin behind _randomizer_fields.html.
  *
  * `randomizerFields(form)` returns the state and methods the fields need; a component
- * spreads it into its own object. `form` is window.SLINK_RANDOMIZER: the categories the
- * pipeline supports (from the same table its allowlist is computed from), their labels,
- * the jar found on this machine, and the run's current pair when there is one.
+ * spreads it into its own object. `form` is window.SLINK_RANDOMIZER: the options the
+ * pipeline supports (upr_settings.OPTIONS — the same table its allowlist is computed
+ * from, in display order with kind/choices/range), the jar found on this machine, and the
+ * run's current pair when there is one. `rdraft.spec` is posted back as-is.
  *
  * `randomizePair(runId)` posts the draft to a run and resolves with the server's answer.
  * Every refusal names the setting or the file to fix, so the reason is surfaced verbatim.
  */
+function defaultSpec(form) {
+  return Object.fromEntries(form.options.map(function (o) { return [o.key, o.default]; }));
+}
+
 function randomizerFields(form) {
   return {
     rform: form,
     pre: null,
     rdraft: {
-      jar: form.jar || '', rom_a: '', rom_b: '', fastest_text: true,
-      categories: Object.fromEntries(form.categories.map(function (k) {
-        return [k, k === 'wild' || k === 'starters' || k === 'trainers'];
-      })),
+      jar: form.jar || '', rom_a: '', rom_b: '',
+      // Start from the run's last pair when there is one, so "build again" means the
+      // same settings unless changed.
+      spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
     picker: { field: '', ext: '', dir: '', parent: null, entries: [] },
+    groups() {
+      var out = [], by = {};
+      form.options.forEach(function (o) {
+        if (!by[o.group]) { by[o.group] = { name: o.group, options: [] }; out.push(by[o.group]); }
+        by[o.group].options.push(o);
+      });
+      return out;
+    },
+    resetSpec() { this.rdraft.spec = defaultSpec(form); },
     watchRandomizer() {
       var self = this;
       this.preflight();
@@ -44,12 +58,7 @@ function randomizerFields(form) {
     },
     pick(path) { this.rdraft[this.picker.field] = path; this.picker.field = ''; },
     randomizeBody() {
-      var self = this;
-      return {
-        jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b,
-        fastest_text: this.rdraft.fastest_text,
-        categories: Object.keys(this.rdraft.categories).filter(function (k) { return self.rdraft.categories[k]; }),
-      };
+      return { jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b, spec: this.rdraft.spec };
     },
     async randomizePair(runId) {
       var res = await fetch('/api/runs/' + runId + '/randomize', {

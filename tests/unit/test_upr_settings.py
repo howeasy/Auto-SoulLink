@@ -201,27 +201,29 @@ def test_the_default_file_is_accepted():
 
 
 @pytest.mark.parametrize("flag", [
-    # Every one of these passed forbidden_enabled. That is the point.
-    "randomizeTrainerNames",
-    "randomizeTrainerClassNames",
-    "trainersUsePokemonOfSimilarStrength",
-    "rivalCarriesStarterThroughout",
-    "useMinimumCatchRate",
-    "wildRestriction_CATCH_EM_ALL",
-    "wildRestriction_TYPE_THEME_AREAS",
+    # Every one of these passes forbidden_enabled, and none is in OPTIONS. That is the point.
     "useTimeBasedEncounters",
     "limitPokemon",
     "standardizeEXPCurves",
-    "tmLevelUpMoveSanity",
-    "keepFieldMoveTMs",
-    "banBadRandomFieldItems",
     "blockBrokenTMMoves",
+    "randomizeWildPokemonHeldItems",
+    "trades_RANDOMIZE_GIVEN",
+    "trainersBlockEarlyWonderGuard",
 ])
 def test_a_setting_outside_the_supported_set_is_named(flag):
     from server.upr_settings import unexpected_settings
-    out = unexpected_settings(load(build({flag: True})))
+    on = flag != "trainersBlockEarlyWonderGuard"      # a default-on flag: turning it OFF is foreign
+    out = unexpected_settings(load(build({flag: on})))
     assert out, f"{flag} was accepted"
     assert any(flag in line for line in out), out
+
+
+def test_two_mode_bits_in_one_group_are_refused():
+    """A hand-made file with CATCH_EM_ALL set but NONE still set is not a file we produce,
+    even though each bit alone is an option we offer."""
+    from server.upr_settings import unexpected_settings
+    out = unexpected_settings(load(build({"wildRestriction_CATCH_EM_ALL": True})))
+    assert out and "byte 15" in out[0], out
 
 
 def test_the_allowlist_also_catches_the_dangerous_domains():
@@ -241,13 +243,13 @@ def test_an_unmodelled_byte_is_reported_by_index_rather_than_guessed_at():
     raw = bytearray(build_categories({"wild"}))
     length = struct.unpack(">i", raw[4:8])[0]
     blob = bytearray(base64.b64decode(raw[8:8 + length]))
-    blob[38] = 0x80 | 60            # wildLevelsModified, +10 levels
+    blob[43] = 0x80 | 60            # totemLevelsModified, +10 levels (Gen 7 only)
     body = bytes(blob[:-8])
     blob[-8:-4] = struct.pack(">I", binascii.crc32(body) & 0xFFFFFFFF)
     fixed = base64.b64encode(bytes(blob))
     parsed = load(bytes(raw[:4]) + struct.pack(">i", len(fixed)) + fixed)
     out = unexpected_settings(parsed)
-    assert any("byte 38" in line for line in out), out
+    assert any("byte 43" in line for line in out), out
 
 
 def test_the_envelope_covers_all_fifty_one_bytes():
@@ -256,3 +258,115 @@ def test_the_envelope_covers_all_fifty_one_bytes():
     env = permitted_byte_values()
     assert len(env) == 51
     assert all(v for v in env), "some byte has no permitted value at all"
+
+
+# ── the option table ─────────────────────────────────────────────────────────────────────
+# OPTIONS is the definition of "compatible with SLink": the form renders it, build_spec
+# writes from it, spec_from_parsed reads back through it and the envelope is enumerated from
+# it. These pin that the four agree with each other.
+
+def _every_value():
+    from server.upr_settings import OPTIONS
+    for key, opt in OPTIONS.items():
+        if opt["kind"] == "choice":
+            vals = list(opt["choices"])
+        elif opt["kind"] == "bool":
+            vals = [False, True]
+        else:
+            vals = [opt["min"], opt["default"], opt["max"], (opt["min"] + opt["max"]) // 2 + 1]
+        for v in vals:
+            yield key, v
+
+
+@pytest.mark.parametrize("key,value", list(_every_value()))
+def test_every_option_value_round_trips_and_is_admitted(key, value):
+    from server.upr_settings import build_spec, spec_from_parsed, unexpected_settings
+    parsed = load(build_spec({key: value}))
+    assert spec_from_parsed(parsed)[key] == value
+    assert unexpected_settings(parsed) == []
+    assert forbidden_enabled(parsed) == []
+
+
+def test_a_full_spec_round_trips():
+    from server.upr_settings import OPTIONS, build_spec, spec_from_parsed, unexpected_settings
+    spec = {}
+    for key, opt in OPTIONS.items():           # the LAST value of every option, all at once
+        if opt["kind"] == "choice":
+            spec[key] = list(opt["choices"])[-1]
+        elif opt["kind"] == "bool":
+            spec[key] = not opt["default"]
+        else:
+            spec[key] = opt["max"]
+    parsed = load(build_spec(spec))
+    assert spec_from_parsed(parsed) == spec
+    assert unexpected_settings(parsed) == []
+
+
+def test_the_level_curve_bytes_carry_their_own_enable_bit():
+    """+50 % trainers is byte 36 = 0x80 | 100; 0 % is the unmodified 50, not 0x80 | 50.
+    (Settings.toString: (trainersLevelModified ? 0x80 : 0) | (trainersLevelModifier + 50).)"""
+    from server.upr_settings import build_spec
+    assert load(build_spec({"trainers_levels": 50}))["data"][36] == 0x80 | 100
+    assert load(build_spec({"trainers_levels": -50}))["data"][36] == 0x80 | 0
+    assert load(build_spec({"trainers_levels": 0}))["data"][36] == 50
+    assert load(build_spec({"wild_levels": 10}))["data"][38] == 0x80 | 60
+    assert load(build_spec({"static_levels": -10}))["data"][47] == 0x80 | 40
+    d = load(build_spec({"trainers_force_evolved": 36}))["data"]
+    assert d[14] == 0x80 | 36
+    assert load(build_spec({"trainers_force_evolved": 0}))["data"][14] == 30
+    d = load(build_spec({"wild_min_catch_rate": 3}))["data"]
+    assert d[16] & 1 and d[50] == 2 << 3
+    d = load(build_spec({"wild_min_catch_rate": 0}))["data"]
+    assert not d[16] & 1 and d[50] == 0
+
+
+def test_build_categories_is_the_random_choice_of_each_category():
+    from server.upr_settings import build_spec
+    assert build_categories({"wild", "tms"}) == build_spec(
+        {"wild": "random", "tms": "random", "starters": "unchanged", "statics": "unchanged",
+         "trainers": "unchanged", "field_items": "unchanged"})
+    assert build_categories(set(), fastest_text=False) == build_spec(
+        dict.fromkeys(("wild", "starters", "statics", "trainers", "tms", "field_items"), "unchanged")
+        | {"fastest_text": False})
+
+
+def test_categories_enabled_counts_any_mode_not_just_random():
+    from server.upr_settings import build_spec, categories_enabled
+    parsed = load(build_spec({"wild": "area", "trainers": "type_themed", "starters": "unchanged"}))
+    assert categories_enabled(parsed) == {"wild", "trainers"}
+
+
+@pytest.mark.parametrize("spec,needle", [
+    ({"nope": 1}, "unknown"),
+    ({"wild": "chaos"}, "wild"),
+    ({"trainers_levels": 51}, "-50..50"),
+    ({"trainers_levels": "10"}, "-50..50"),
+    ({"trainers_levels": True}, "-50..50"),
+    ({"wild_min_catch_rate": 6}, "0..5"),
+    ({"fastest_text": 1}, "true/false"),
+])
+def test_a_bad_spec_is_refused_by_name(spec, needle):
+    from server.upr_settings import build_spec
+    with pytest.raises(UprSettingsError, match=needle):
+        build_spec(spec)
+
+
+def test_summarize_names_what_differs_from_nothing():
+    from server.upr_settings import summarize
+    assert summarize(dict.fromkeys(("wild", "starters", "trainers"), "unchanged")) == "nothing"
+    line = summarize({"trainers_levels": 30, "trainers_force_evolved": 36, "wild": "area",
+                      "wild_block_legendaries": False, "starters": "unchanged", "trainers": "unchanged"})
+    assert line == ("wild encounters 1-to-1 per area, no wild legendaries off, "
+                    "trainer level curve +30%, fully evolved from level 36")
+
+
+def test_option_form_is_json_safe_and_ordered_like_the_table():
+    import json
+
+    from server.upr_settings import OPTIONS, option_form
+    rows = option_form()
+    assert [r["key"] for r in rows] == list(OPTIONS)
+    json.dumps(rows)
+    by_key = {r["key"]: r for r in rows}
+    assert by_key["trainers_levels"]["min"] == -50 and by_key["trainers_levels"]["unit"] == "%"
+    assert [c["value"] for c in by_key["wild"]["choices"]] == ["unchanged", "random", "area", "global"]

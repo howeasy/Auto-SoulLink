@@ -112,8 +112,9 @@ async def test_the_randomizer_page_is_a_gen1_run_page(manager_client, manager_di
     assert resp.status == 200
     body = await resp.text()
     start = body.index("window.SLINK_RANDOMIZER = ") + len("window.SLINK_RANDOMIZER = ")
-    form = json.loads(body[start:body.index(";", start)])
-    assert set(form["categories"]) == {"wild", "starters", "statics", "trainers", "tms", "field_items"}
+    form = json.loads(body[start:body.index(";</script>", start)])   # labels carry ';'
+    keys = [o["key"] for o in form["options"]]
+    assert {"wild", "starters", "statics", "trainers", "tms", "field_items", "trainers_levels"} <= set(keys)
     assert form["current"] is None
     assert "/static/randomizer.js" in body and "randomizerPage(" in body
 

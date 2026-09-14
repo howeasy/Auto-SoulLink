@@ -159,6 +159,7 @@ FLAGS: dict[str, tuple[int, int]] = {
     # 27: trainer misc
     "trainersUsePokemonOfSimilarStrength": (27, 0),
     "rivalCarriesStarterThroughout": (27, 1),
+    "trainersMatchTypingDistribution": (27, 2),
     "trainersBlockLegendaries": (27, 3),
     "trainersBlockEarlyWonderGuard": (27, 4),
     # 37: shop items
@@ -224,13 +225,15 @@ def _default_bytes() -> bytearray:
 
 def build(flags: dict[str, bool] | None = None,
           misc_tweaks: int = 0,
-          rom_name: str = "Pokemon Red (U) [!]") -> bytes:
+          rom_name: str = "Pokemon Red (U) [!]",
+          *, bytes_override: dict[int, int] | None = None) -> bytes:
     """A complete .rnqs file. ``flags`` is applied on top of UPR's own defaults.
 
     Setting a mode means clearing its siblings yourself -- e.g. enabling ``wild_RANDOM``
     without clearing ``wild_UNCHANGED`` leaves two mode bits set, and UPR's ``fromString``
     reads them in a fixed order so the result would be whichever it happens to test first.
-    ``build_categories`` does that bookkeeping; prefer it.
+    ``build_spec`` does that bookkeeping; prefer it. ``bytes_override`` writes whole bytes
+    last -- the level modifiers and the like, which are numbers rather than bits.
     """
     data = _default_bytes()
     for name, on in (flags or {}).items():
@@ -242,7 +245,12 @@ def build(flags: dict[str, bool] | None = None,
         else:
             data[idx] &= ~(1 << bit) & 0xFF
     data[32:36] = struct.pack(">i", misc_tweaks)
+    for idx, val in (bytes_override or {}).items():
+        data[idx] = val & 0xFF
+    return _encode(data, rom_name)
 
+
+def _encode(data: bytearray, rom_name: str) -> bytes:
     blob = bytearray(data)
     name_bytes = rom_name.encode("ascii")
     blob.append(len(name_bytes))
@@ -254,30 +262,233 @@ def build(flags: dict[str, bool] | None = None,
     return struct.pack(">i", VERSION) + struct.pack(">i", len(settings_string)) + settings_string
 
 
-# The categories this project allows a run to enable, and the mode bits each one owns.
-# "Same settings, different seeds" is only meaningful if both players enabled the same set.
-_CATEGORY_MODES = {
-    "wild": ("wild_UNCHANGED", "wild_RANDOM"),
-    "starters": ("starters_UNCHANGED", "starters_COMPLETELY_RANDOM"),
-    "statics": ("static_UNCHANGED", "static_COMPLETELY_RANDOM"),
-    "trainers": ("trainers_UNCHANGED", "trainers_RANDOM"),
-    "tms": ("tms_UNCHANGED", "tms_RANDOM"),
-    "field_items": ("fieldItems_UNCHANGED", "fieldItems_RANDOM"),
+# ── the options this project exposes ─────────────────────────────────────────────────────
+# Everything a run may set, and how each value lands in the blob. This table is the whole
+# definition of "compatible with SLink": the form renders it, build_spec writes from it,
+# spec_from_parsed reads back through it, and the allowlist envelope is enumerated from it,
+# so nothing can be offered that the pipeline would then refuse, or refused that it offers.
+#
+# What is NOT here, and why: types, evolutions, level-up movesets, base stats and move data
+# (the species and type clauses must mean the same on both cartridges; _check_content
+# verifies base stats and the evolution graph survived); EXP curves (Gen 1 stores the growth
+# rate inside the base-stats table, so the same check would refuse the ROM);
+# ALLOW_PIKACHU_EVOLUTION (an evolution); in-game trades (the client reasons about the
+# specific species an NPC trade gives, untested on randomized ones); and everything
+# tweakForRom clears for Gen 1 anyway (held items, abilities, time-based encounters, tutors).
+#
+# kind "choice": ``choices`` maps value -> (label, flags to set); every flag any choice of
+# that option owns is cleared first, so exactly one mode bit ends up set.
+# kind "bool": ``flag`` (a FLAGS name) or ``misc`` (a MISC_TWEAKS name).
+# kind "int": ``byte`` plus ``encode``/``decode`` between the value and that whole byte.
+def _level_mod(byte: int) -> dict:
+    # (modified ? 0x80 : 0) | (modifier + 50); 0 % is written as "not modified"
+    return {"kind": "int", "min": -50, "max": 50, "unit": "%", "byte": byte,
+            "encode": lambda v: (0x80 | (v + _LEVEL_MOD_BIAS)) if v else _LEVEL_MOD_BIAS,
+            "decode": lambda b: (b & 0x7F) - _LEVEL_MOD_BIAS if b & 0x80 else 0}
+
+
+OPTIONS: dict[str, dict] = {
+    # wild
+    "wild": {"kind": "choice", "group": "Wild encounters", "label": "Wild encounters", "default": "random",
+             "choices": {"unchanged": ("Unchanged", ["wild_UNCHANGED"]),
+                         "random": ("Random", ["wild_RANDOM"]),
+                         "area": ("1-to-1 per area", ["wild_AREA_MAPPING"]),
+                         "global": ("Global 1-to-1", ["wild_GLOBAL_MAPPING"])}},
+    "wild_restriction": {"kind": "choice", "group": "Wild encounters", "label": "Restriction", "default": "none",
+                         "choices": {"none": ("None", ["wildRestriction_NONE"]),
+                                     "similar": ("Similar strength", ["wildRestriction_SIMILAR_STRENGTH"]),
+                                     "catch_em_all": ("Catch 'em all", ["wildRestriction_CATCH_EM_ALL"]),
+                                     "type_themed": ("Type-themed areas", ["wildRestriction_TYPE_THEME_AREAS"])}},
+    "wild_block_legendaries": {"kind": "bool", "group": "Wild encounters", "label": "No wild legendaries",
+                               "default": True, "flag": "blockWildLegendaries"},
+    "wild_min_catch_rate": {"kind": "int", "group": "Wild encounters", "label": "Minimum catch rate",
+                            "help": "0 is off; 1 to 5 raises every species to at least that tier",
+                            "default": 0, "min": 0, "max": 5, "byte": 50,
+                            "flag": "useMinimumCatchRate",                    # bit 0 of byte 16, on when > 0
+                            "encode": lambda v: ((v - 1) << 3) if v else 0,
+                            "decode": lambda b: (b >> 3 & 7) + 1},
+    "wild_levels": dict(_level_mod(38), group="Wild encounters", label="Wild level curve", default=0),
+    # starters
+    "starters": {"kind": "choice", "group": "Starters", "label": "Starters", "default": "random",
+                 "choices": {"unchanged": ("Unchanged", ["starters_UNCHANGED"]),
+                             "random": ("Random", ["starters_COMPLETELY_RANDOM"]),
+                             "two_evos": ("Random with two evolutions", ["starters_RANDOM_WITH_TWO_EVOLUTIONS"])}},
+    # statics
+    "statics": {"kind": "choice", "group": "Static encounters", "label": "Static encounters", "default": "unchanged",
+                "choices": {"unchanged": ("Unchanged", ["static_UNCHANGED"]),
+                            "random": ("Random", ["static_COMPLETELY_RANDOM"]),
+                            "matching": ("Random, legendary for legendary", ["static_RANDOM_MATCHING"]),
+                            "similar": ("Similar strength", ["static_SIMILAR_STRENGTH"])}},
+    "static_levels": dict(_level_mod(47), group="Static encounters", label="Static level curve", default=0),
+    # trainers
+    "trainers": {"kind": "choice", "group": "Trainers", "label": "Trainer teams", "default": "random",
+                 "choices": {"unchanged": ("Unchanged", ["trainers_UNCHANGED"]),
+                             "random": ("Random", ["trainers_RANDOM"]),
+                             "distributed": ("Random, evenly distributed", ["trainers_DISTRIBUTED"]),
+                             "type_themed": ("Type-themed", ["trainers_TYPE_THEMED"]),
+                             "type_themed_gyms": ("Type-themed gyms and Elite Four", ["trainers_TYPE_THEMED_ELITE4_GYMS"])}},
+    "trainers_similar_strength": {"kind": "bool", "group": "Trainers", "label": "Similar strength",
+                                  "default": False, "flag": "trainersUsePokemonOfSimilarStrength"},
+    "trainers_rival_starter": {"kind": "bool", "group": "Trainers", "label": "Rival keeps their starter",
+                               "default": False, "flag": "rivalCarriesStarterThroughout"},
+    "trainers_block_legendaries": {"kind": "bool", "group": "Trainers", "label": "No trainer legendaries",
+                                   "default": True, "flag": "trainersBlockLegendaries"},
+    "trainers_match_typing": {"kind": "bool", "group": "Trainers", "label": "Match the original type spread",
+                              "default": False, "flag": "trainersMatchTypingDistribution"},
+    "trainers_levels": dict(_level_mod(36), group="Trainers", label="Trainer level curve", default=0),
+    "trainers_force_evolved": {"kind": "int", "group": "Trainers", "label": "Fully evolved from level",
+                               "help": "0 is off", "default": 0, "min": 0, "max": 100, "byte": 14,
+                               "encode": lambda v: (0x80 | v) if v else 30,   # 30: UPR's default, not forced
+                               "decode": lambda b: b & 0x7F if b & 0x80 else 0},
+    "trainer_names": {"kind": "bool", "group": "Trainers", "label": "Random trainer names",
+                      "default": False, "flag": "randomizeTrainerNames"},
+    "trainer_class_names": {"kind": "bool", "group": "Trainers", "label": "Random trainer classes",
+                            "default": False, "flag": "randomizeTrainerClassNames"},
+    # TMs
+    "tms": {"kind": "choice", "group": "TMs", "label": "TM moves", "default": "unchanged",
+            "choices": {"unchanged": ("Unchanged", ["tms_UNCHANGED"]),
+                        "random": ("Random", ["tms_RANDOM"])}},
+    "tm_compat": {"kind": "choice", "group": "TMs", "label": "TM compatibility", "default": "unchanged",
+                  "choices": {"unchanged": ("Unchanged", ["tmCompat_UNCHANGED"]),
+                              "random": ("Random", ["tmCompat_COMPLETELY_RANDOM"]),
+                              "prefer_type": ("Random, prefer same type", ["tmCompat_RANDOM_PREFER_TYPE"]),
+                              "full": ("Everything learns everything", ["tmCompat_FULL"])}},
+    "tm_sanity": {"kind": "bool", "group": "TMs", "label": "Level-up moves stay TM-compatible",
+                  "default": False, "flag": "tmLevelUpMoveSanity"},
+    "tm_keep_field": {"kind": "bool", "group": "TMs", "label": "Keep field-move TMs",
+                      "default": False, "flag": "keepFieldMoveTMs"},
+    # field items
+    "field_items": {"kind": "choice", "group": "Field items", "label": "Field items", "default": "unchanged",
+                    "choices": {"unchanged": ("Unchanged", ["fieldItems_UNCHANGED"]),
+                                "random": ("Random", ["fieldItems_RANDOM"]),
+                                "shuffle": ("Shuffled", ["fieldItems_SHUFFLE"]),
+                                "random_even": ("Random, evenly spread", ["fieldItems_RANDOM_EVEN"])}},
+    "field_items_ban_bad": {"kind": "bool", "group": "Field items", "label": "No junk items",
+                            "default": False, "flag": "banBadRandomFieldItems"},
+    # misc tweaks -- none of these touch species, types or evolutions
+    "fastest_text": {"kind": "bool", "group": "Tweaks", "label": "Fastest text", "default": True, "misc": "FASTEST_TEXT"},
+    "pc_potion": {"kind": "bool", "group": "Tweaks", "label": "Random PC potion", "default": False, "misc": "RANDOMIZE_PC_POTION"},
+    "lowercase_names": {"kind": "bool", "group": "Tweaks", "label": "Lower-case names", "default": False, "misc": "LOWER_CASE_POKEMON_NAMES"},
+    "nerf_x_accuracy": {"kind": "bool", "group": "Tweaks", "label": "Nerf X Accuracy", "default": False, "misc": "NERF_X_ACCURACY"},
+    "fix_crit_rate": {"kind": "bool", "group": "Tweaks", "label": "Fix the crit rate", "default": False, "misc": "FIX_CRIT_RATE"},
+    "update_type_effectiveness": {"kind": "bool", "group": "Tweaks", "label": "Later-gen type chart", "default": False, "misc": "UPDATE_TYPE_EFFECTIVENESS"},
 }
+
+# The six categories older callers speak in. Each is the choice option of the same name;
+# "enabled" means anything but unchanged.
+_CATEGORY_MODES = ("wild", "starters", "statics", "trainers", "tms", "field_items")
+
+
+def default_spec() -> dict:
+    return {key: opt["default"] for key, opt in OPTIONS.items()}
+
+
+def option_form() -> list[dict]:
+    """The table as the form renders it: JSON-safe, in display order, no encoders."""
+    out = []
+    for key, opt in OPTIONS.items():
+        row = {"key": key, "kind": opt["kind"], "group": opt["group"], "label": opt["label"],
+               "default": opt["default"], "help": opt.get("help", "")}
+        if opt["kind"] == "choice":
+            row["choices"] = [{"value": v, "label": lbl} for v, (lbl, _f) in opt["choices"].items()]
+        elif opt["kind"] == "int":
+            row.update(min=opt["min"], max=opt["max"], unit=opt.get("unit", ""))
+        out.append(row)
+    return out
+
+
+def _spec_data(spec: dict) -> bytearray:
+    """Validate ``spec`` against OPTIONS and lay it over UPR's defaults. Every key must be
+    known; missing keys take their default. This is the trust boundary for the HTTP body."""
+    unknown = set(spec) - set(OPTIONS)
+    if unknown:
+        raise UprSettingsError(f"unknown randomizer option: {sorted(unknown)}")
+    flags: dict[str, bool] = {}
+    misc = 0
+    override: dict[int, int] = {}
+    for key, opt in OPTIONS.items():
+        val = spec.get(key, opt["default"])
+        kind = opt["kind"]
+        if kind == "choice":
+            if val not in opt["choices"]:
+                raise UprSettingsError(f"{key}: {val!r} is not one of {sorted(opt['choices'])}")
+            for _v, (_lbl, names) in opt["choices"].items():
+                for n in names:
+                    flags[n] = False
+            for n in opt["choices"][val][1]:
+                flags[n] = True
+        elif kind == "bool":
+            if not isinstance(val, bool):
+                raise UprSettingsError(f"{key}: expected true/false, got {val!r}")
+            if "flag" in opt:
+                flags[opt["flag"]] = val
+            else:
+                misc |= MISC_TWEAKS[opt["misc"]] if val else 0
+        else:
+            if isinstance(val, bool) or not isinstance(val, int) or not opt["min"] <= val <= opt["max"]:
+                raise UprSettingsError(f"{key}: expected {opt['min']}..{opt['max']}, got {val!r}")
+            override[opt["byte"]] = opt["encode"](val)
+            if "flag" in opt:
+                flags[opt["flag"]] = val > 0
+    data = _default_bytes()
+    for name, on in flags.items():
+        idx, bit = FLAGS[name]
+        data[idx] = (data[idx] | 1 << bit) if on else (data[idx] & ~(1 << bit) & 0xFF)
+    data[32:36] = struct.pack(">i", misc)
+    for idx, val in override.items():
+        data[idx] = val
+    return data
+
+
+def build_spec(spec: dict, rom_name: str = "Pokemon Red (U) [!]") -> bytes:
+    """A file for exactly ``spec`` (see OPTIONS); anything not mentioned is at its default."""
+    return _encode(_spec_data(spec), rom_name)
+
+
+def spec_from_parsed(parsed: dict) -> dict:
+    """The inverse of build_spec, read off a parsed file or log string. A choice with no
+    recognised mode bit set reads as its default, so a foreign file still yields a spec --
+    unexpected_settings is what refuses it, not this."""
+    data, flags, tweaks = parsed["data"], parsed["flags"], parsed["misc_tweaks"]
+    spec = {}
+    for key, opt in OPTIONS.items():
+        kind = opt["kind"]
+        if kind == "choice":
+            spec[key] = next((v for v, (_lbl, names) in opt["choices"].items()
+                              if all(flags.get(n) for n in names)), opt["default"])
+        elif kind == "bool":
+            spec[key] = bool(flags.get(opt["flag"])) if "flag" in opt else bool(tweaks & MISC_TWEAKS[opt["misc"]])
+        else:
+            spec[key] = opt["decode"](data[opt["byte"]]) if ("flag" not in opt or flags.get(opt["flag"])) else 0
+    return spec
+
+
+def summarize(spec: dict) -> str:
+    """One line for the run record: what differs from a run that randomizes nothing."""
+    parts = []
+    for key, opt in OPTIONS.items():
+        val = spec.get(key, opt["default"])
+        if opt["kind"] == "choice":
+            if val != next(iter(opt["choices"])):        # the first choice is the quiet one
+                parts.append(f"{opt['label'].lower()} {opt['choices'][val][0].lower()}")
+        elif opt["kind"] == "bool":
+            if val != opt["default"]:
+                parts.append(opt["label"].lower() + ("" if val else " off"))
+        elif val:
+            parts.append(f"{opt['label'].lower()} {val:+d}{opt.get('unit', '')}"
+                         if opt.get("unit") else f"{opt['label'].lower()} {val}")
+    return ", ".join(parts) or "nothing"
 
 
 def build_categories(enabled: set[str], fastest_text: bool = True,
                      rom_name: str = "Pokemon Red (U) [!]") -> bytes:
     """Build a file with exactly ``enabled`` randomized and everything else untouched."""
-    unknown = enabled - set(_CATEGORY_MODES)
+    unknown = set(enabled) - set(_CATEGORY_MODES)
     if unknown:
         raise UprSettingsError(f"not an allowed category: {sorted(unknown)}")
-    flags: dict[str, bool] = {}
-    for cat, (unchanged, randomized) in _CATEGORY_MODES.items():
-        on = cat in enabled
-        flags[unchanged] = not on
-        flags[randomized] = on
-    return build(flags, MISC_TWEAKS["FASTEST_TEXT"] if fastest_text else 0, rom_name)
+    spec = {cat: "random" if cat in enabled else "unchanged" for cat in _CATEGORY_MODES}
+    spec["fastest_text"] = fastest_text
+    return build_spec(spec, rom_name)
 
 
 # ── reading ──────────────────────────────────────────────────────────────────────────────
@@ -341,9 +552,9 @@ def load(path_or_bytes) -> dict:
 
 
 def categories_enabled(parsed: dict) -> set[str]:
-    """Which allowed categories this settings file actually randomizes."""
-    return {cat for cat, (_unchanged, randomized) in _CATEGORY_MODES.items()
-            if parsed["flags"].get(randomized)}
+    """Which of the six categories this settings file actually randomizes (any mode)."""
+    spec = spec_from_parsed(parsed)
+    return {cat for cat in _CATEGORY_MODES if spec[cat] != "unchanged"}
 
 
 def forbidden_enabled(parsed: dict) -> list[str]:
@@ -382,9 +593,11 @@ def forbidden_enabled(parsed: dict) -> list[str]:
 #
 # So the file is checked the other way round: a settings file is admissible only if it is
 # byte-for-byte one of the files THIS PROJECT would produce. The envelope is computed from
-# build_categories over every combination of the allowed categories and both Fastest Text
-# states, so it cannot drift from what the pipeline actually supports -- adding a category
-# to _CATEGORY_MODES widens the envelope automatically, and nothing else does.
+# OPTIONS itself: for each byte, the options that write to it (found by building each
+# single-option variant and diffing against the default) and the product of their value
+# sets -- so adding an option to the table widens the envelope automatically, and nothing
+# else does. Options write independent bits or whole bytes, so a per-byte product is exact
+# and no byte has more than a few hundred values.
 #
 # This applies to the FILE a player hands us, where their intent lives. It deliberately does
 # NOT apply to the effective settings echoed in UPR's log: tweakForRom legitimately rewrites
@@ -397,14 +610,24 @@ def permitted_byte_values() -> list[set[int]]:
     """For each of the 51 settings bytes, every value an allowed configuration can hold."""
     global _ENVELOPE_CACHE
     if _ENVELOPE_CACHE is None:
-        cats = sorted(_CATEGORY_MODES)
-        envelope: list[set[int]] = [set() for _ in range(LENGTH_OF_SETTINGS_DATA)]
-        for mask in range(1 << len(cats)):
-            chosen = {c for i, c in enumerate(cats) if mask >> i & 1}
-            for fastest in (True, False):
-                data = load(build_categories(chosen, fastest_text=fastest))["data"]
-                for i, byte in enumerate(data):
-                    envelope[i].add(byte)
+        import itertools
+
+        base = _spec_data({})
+        values = {key: (list(opt["choices"]) if opt["kind"] == "choice"
+                        else [False, True] if opt["kind"] == "bool"
+                        else list(range(opt["min"], opt["max"] + 1)))
+                  for key, opt in OPTIONS.items()}
+        touches: dict[int, list[str]] = {}
+        for key, vals in values.items():
+            for v in vals:
+                data = _spec_data({key: v})
+                for i in range(LENGTH_OF_SETTINGS_DATA):
+                    if data[i] != base[i] and key not in touches.setdefault(i, []):
+                        touches[i].append(key)
+        envelope: list[set[int]] = [{base[i]} for i in range(LENGTH_OF_SETTINGS_DATA)]
+        for i, keys in touches.items():
+            for combo in itertools.product(*(values[k] for k in keys)):
+                envelope[i].add(_spec_data(dict(zip(keys, combo, strict=True)))[i])
         _ENVELOPE_CACHE = envelope
     return _ENVELOPE_CACHE
 
