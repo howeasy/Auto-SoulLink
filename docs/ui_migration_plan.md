@@ -505,6 +505,17 @@ and `/stream/{slug}/fragment` must survive.
 allocation is untouched. Two forked copies of that template exist (`server.py:~5845`,
 `manager.py:~124`) and have **diverged** (different folder pickers); take the manager's.
 
+**Gen 1 wire facts the board honours** (from the Gen 1 release session, 2026-09-14): every
+`species_id` on the Gen 1 wire is the game-INTERNAL index (internal 1 = Rhydon, 153 =
+Bulbasaur), so names, sprites and types come only from the adapter — the board reads
+`species_name` / `sprite_html` the server already resolved and never treats `species_id` as a
+dex number (`grep species_id server/board.py server/templates/_board.html` is empty by
+design); `stat_stages` is a 7-slot list whose 5th label is blank on Gen 1 (`capabilities.
+stat_stage_labels`); `pp_ups` is a list; `status_cond` uses the Gen 3 bit layout. The Gen 1
+hello adds `ot_id`, `rom_sha1`, `pc_boxes`, `writes_enabled`, which the server may ignore. The
+trade port touches only `state.py`; no trade UI is needed for the release. A "randomized
+pair" badge, if ever built, keys off the run's ROM contract, never the client hello.
+
 **Lua clients reference no HTTP at all.** The emulator half — and therefore the whole Gen 1
 release — is insulated from this work.
 
