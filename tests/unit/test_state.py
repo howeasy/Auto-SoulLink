@@ -3702,18 +3702,24 @@ def test_identity_lock_wrong_ot_rejected(tmp_path, monkeypatch):
         "trainer_name": "Ash",
         "party": [{"key": "AAAA:1111", "hp": 50, "maxHP": 50, "level": 10}],
     })
-    # Connect with wrong OT ID
+    # Connect with wrong OT ID: a bigger party carrying blobs, so adoption would be visible
+    blob = "AB" * state.adapter.party_blob_size()
     msg = {
         "event": "hello",
         "trainer_name": "Gary",
-        "party": [{"key": "CCCC:9999", "hp": 30, "maxHP": 30, "level": 8}],
+        "party": [{"key": f"CCC{i}:9999", "hp": 30, "maxHP": 30, "level": 8, "slot": i, "blob_hex": blob}
+                  for i in range(3)],
     }
+    size_before, blobs_before = state.party_size.get("a"), list(state.partner_blobs.get("a") or [])
     cmds = state.handle_event("a", msg)
     assert msg.get("_rejected") is True
     assert "a" in state.identity_error
     assert "9999" in state.identity_error["a"] or "mismatch" in state.identity_error["a"].lower()
     # Should have a hud_show command in the returned commands
     assert any(c["cmd"] == "hud_show" for c in cmds)
+    # C-1: nothing about the wrong save is adopted, not even in memory
+    assert state.party_size.get("a") == size_before == 1
+    assert state.partner_blobs.get("a") == blobs_before
 
 
 def test_identity_lock_wrong_ot_blocks_events(tmp_path, monkeypatch):

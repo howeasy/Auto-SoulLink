@@ -931,15 +931,9 @@ class SoulLinkState:
         missing-from-party mons may simply be boxed (do not treat as dead).
         """
         party = msg.get("party", [])
-        old_size = self.party_size.get(player_id, 0)
-        self.party_size[player_id] = len(party)
-        log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
-        # Rival Team Swap: refresh the per-player blob cache from the same
-        # snapshot.  Each party entry carries blob_hex (200 chars) from
-        # build_party_snapshot — see lua/clients/gen3_frlge_client.lua.
-        self._ingest_party_blobs(player_id, party)
 
-        # ── Identity lock ──
+        # ── Identity lock ── (before anything about this hello is adopted: a wrong save must
+        # leave party_size / the blob cache exactly as they were)
         # PREFER THE CARTRIDGE'S OWN TRAINER ID over one inferred from a mon.
         # Deriving it from party[0]'s key makes the lock depend on which mon happens to be
         # in the lead slot: an in-game-trade mon is a DIFFERENT OT by definition, so leading
@@ -991,6 +985,14 @@ class SoulLinkState:
                 self.identity_error.pop(player_id, None)
                 log.info(f"[{player_id}] Identity locked: {incoming_name or player_id.upper()} (OT {incoming_ot[:8]})")
                 self._save()
+
+        old_size = self.party_size.get(player_id, 0)
+        self.party_size[player_id] = len(party)
+        log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
+        # Rival Team Swap: refresh the per-player blob cache from the same
+        # snapshot.  Each party entry carries blob_hex (200 chars) from
+        # build_party_snapshot — see lua/clients/gen3_frlge_client.lua.
+        self._ingest_party_blobs(player_id, party)
 
         # Accept pokéballs status from Lua (M.hasPokeballs() reads actual bag).
         # If the field is absent (old client), fall back to non-empty party heuristic.
