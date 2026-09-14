@@ -330,3 +330,16 @@ def test_complete_dex_bijection_and_holes():
     for invalid in (0, 152, -1, True):
         with pytest.raises(ValueError):
             codec.natdex_to_internal(invalid)
+
+
+def test_species_zero_inside_the_count_is_refused():
+    """A 0 species byte within the count is a torn list, never a Pokemon (same rule as Lua)."""
+    mon = codec.decode_party_mon(bytes(44))
+    mon["species"] = 0
+    body = bytearray(codec.PARTY_LAYOUT["size"])
+    body[codec.PARTY_LAYOUT["count"]] = 1
+    body[codec.PARTY_LAYOUT["species"]] = 0
+    body[codec.PARTY_LAYOUT["species"] + 1] = codec.SPECIES_END
+    body[codec.PARTY_LAYOUT["mons"]:codec.PARTY_LAYOUT["mons"] + 44] = codec.encode_party_mon(mon)
+    with pytest.raises(ValueError, match="species 0 inside the count"):
+        codec.decode_party(bytes(body))

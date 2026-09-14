@@ -66,7 +66,12 @@ RAM_SYMBOLS = [
     "wEnemyMon", "wEnemyMonSpecies", "wEnemyMonHP", "wEnemyMonLevel",
     "wEnemyPartyCount", "wEnemyPartySpecies", "wEnemyMons", "wEnemyMon1", "wEnemyMon2", "wEnemyMonOT",
     "wEnemyMonNicks",
-    "wBattleMon", "wBattleMonSpecies", "wBattleMonHP", "wBattleMonLevel",
+    "wBattleMon", "wBattleMonSpecies", "wBattleMonHP", "wBattleMonStatus", "wBattleMonMoves",
+    "wBattleMonLevel", "wBattleMonMaxHP", "wBattleMonPP",
+    # named sub-fields of slot 1 (offsets of every other slot follow by struct size)
+    "wPartyMon1HP", "wPartyMon1Status", "wPartyMon1Moves", "wPartyMon1PP", "wPartyMon1Level",
+    "wPartyMon1MaxHP", "wEnemyMon1Species", "wEnemyMon1HP", "wEnemyMon1Moves", "wEnemyMon1PP",
+    "wEnemyMonMoves", "wEnemyMonPP", "wEnemyMonStatus",
     "wPlayerMonNumber", "wPlayerSelectedMove", "wPlayerBattleStatus3",
     "wPlayerMonAttackMod", "wPlayerMonDefenseMod", "wPlayerMonSpeedMod", "wPlayerMonSpecialMod",
     "wPlayerMonAccuracyMod", "wPlayerMonEvasionMod",

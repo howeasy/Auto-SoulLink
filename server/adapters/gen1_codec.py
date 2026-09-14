@@ -571,6 +571,10 @@ def _decode_collection(b: bytes, *, box: bool) -> list[dict]:
         listed = b[layout["species"] + slot]
         if listed == SPECIES_END or listed != mon["species"]:
             raise ValueError(f"species-list mismatch in slot {slot + 1}")
+        if listed == 0:
+            # species 0 is not a Pokemon (constants/pokemon_constants.asm starts at 1); a zero
+            # inside the count is a torn or uninitialised list, refused like the Lua reader does
+            raise ValueError(f"species 0 inside the count in slot {slot + 1}")
         mon["species_list_entry"] = listed
         for key, block in (("ot_name", "ot_names"), ("nickname", "nicknames")):
             start = layout[block] + slot * NAME_SIZE
