@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{#
+  A run's secondary pages on the Manager — the calc and the debug panel — in the board
+  chrome: the rail, the run's header line with a way back to the board, and one panel
+  partial. The panel's own JS reaches the run through the Manager's per-run API proxy
+  (/runs/{id}/api/*), which is what SLINK_API_BASE names.
+#}
+{% block title %}{{ panel_label }} — {{ run.name }} — Soul Link{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/board.css">
+  <script src="/static/dashboard.js" defer></script>
+  <script>window.SLINK_API_BASE = {{ api_base | tojson }};</script>
+  {% block panel_head %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="mk">
+  {% include "_rail.html" %}
+  <main class="mk-main mk-body-root">
+    <header class="mk-runhdr">
+      <h1 class="mk-runname">{{ run.name }}</h1>
+      <span class="mk-meta">· {{ panel_label }}</span>
+      <span class="mk-hdr-spacer"></span>
+      <nav class="mk-tabs" aria-label="Run">
+        <a class="mk-tab" href="/runs/{{ run.run_id }}">Board</a>
+        <a class="mk-tab{% if panel == 'calc' %} active{% endif %}" href="/runs/{{ run.run_id }}/calc/normal.html">Calc</a>
+        <a class="mk-tab{% if panel == 'debug' %} active{% endif %}" href="/runs/{{ run.run_id }}/debug">Debug</a>
+      </nav>
+    </header>
+    <div class="mk-page">
+      {% if run.status != 'running' %}
+        <div class="mk-empty">This run is not running; {{ panel_label | lower }} needs its server. <a href="/runs/{{ run.run_id }}">Start it from the board</a>.</div>
+      {% else %}
+        {% include "_" ~ panel ~ "_panel.html" %}
+      {% endif %}
+    </div>
+  </main>
+</div>
+{% endblock %}

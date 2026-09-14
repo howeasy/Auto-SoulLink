@@ -13,7 +13,6 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
-import server.server as server_module
 from server.adapters.gen3_frlge import Gen3Adapter
 from server.server import SLinkServer, build_app
 from server.state import AreaStatus
@@ -31,8 +30,9 @@ def calc_dirs(tmp_path, monkeypatch):
     src, dist = tmp_path / "src", tmp_path / "dist"
     src.mkdir()
     dist.mkdir()
-    monkeypatch.setattr(server_module, "_CALC_SRC_DIR", str(src))
-    monkeypatch.setattr(server_module, "_CALC_DIST_DIR", str(dist))
+    from server import calc_files
+    monkeypatch.setattr(calc_files, "SRC_DIR", str(src))
+    monkeypatch.setattr(calc_files, "DIST_DIR", str(dist))
     (tmp_path / "outside.txt").write_text("PRIVATE FILE", encoding="utf-8")
     return src, dist
 

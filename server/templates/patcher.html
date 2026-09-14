@@ -8,117 +8,24 @@
 
 {% block head_extra %}
   <link rel="stylesheet" href="/static/patcher.css">
+  {% if mgr %}<link rel="stylesheet" href="/static/board.css"><script src="/static/dashboard.js" defer></script>{% endif %}
 {% endblock %}
 
 {% block content %}
-  {{ sidebar_html | safe }}
-  <main class="dash-main">
-    <div class="patcher-wrap"
-         data-base-md5="{{ base_rom_md5 }}"
-         data-patched-md5="{{ patched_rom_md5 }}"
-         data-out-name="{{ target.out_name }}"
-         data-patch-url="/companion/{{ target.patch }}">
-
-      <header class="patcher-head">
-        <h1>Companion ROM Patcher</h1>
-        <p class="patcher-lead">
-          Apply the SLink companion patch to your <strong>{{ target.base_hint }}</strong>
-          right here — the patch runs entirely in your browser, nothing is uploaded.
-          The patch is <strong>optional</strong>: without it the SLink Lua client falls
-          back to its existing behaviour, and unpatched players are unaffected.
-        </p>
-        {# One page, several games. A UPS carries the CRC32 of the exact dump it was
-           diffed against, so the target has to be chosen before the file is applied
-           rather than guessed from what the user drops in. #}
-        <nav class="patcher-games">
-          {% for t in targets %}
-            {% if t.slug == target.slug %}
-              <strong class="patcher-game is-active">{{ t.label }}</strong>
-            {% else %}
-              <a class="patcher-game" href="/patcher?game={{ t.slug }}">{{ t.label }}</a>
-            {% endif %}
-          {% endfor %}
-        </nav>
-        {% if target.slug != "rr" %}
-        <p class="patcher-muted">
-          Pokemon Yellow is not listed because there is no companion build for it: its
-          WRAM has no free bytes for the mailbox the patch needs. Yellow plays fine —
-          the core Soul Link rules need no patch on any Game Boy title — it simply has
-          no in-game panel.
-        </p>
-        {% endif %}
-      </header>
-
-      {# ── Patch-and-download ─────────────────────────────────────────── #}
-      <section class="patcher-card">
-        <h2>1 · Patch your ROM</h2>
-        <label id="drop" class="patcher-drop" for="rom-input">
-          <input id="rom-input" type="file" accept="{{ target.accept }}" hidden>
-          <span class="patcher-drop-ico" aria-hidden="true">⬇</span>
-          <span class="patcher-drop-text">
-            Drop your <code>{{ target.label }}</code> ROM here, or click to choose
-          </span>
-          <span id="rom-name" class="patcher-drop-name"></span>
-        </label>
-
-        <div class="patcher-actions">
-          <button id="apply" type="button" class="patcher-btn" disabled>Apply patch</button>
-          <a id="download" class="patcher-btn patcher-btn-ok" hidden download>Download patched ROM</a>
-        </div>
-
-        <div id="status" class="patcher-status" role="status" aria-live="polite"></div>
-
-        <dl class="patcher-fp" id="fp" hidden>
-          <div><dt>Input md5</dt><dd id="fp-in">—</dd></div>
-          <div><dt>Output md5</dt><dd id="fp-out">—</dd></div>
-        </dl>
-      </section>
-
-      {# ── What this unlocks ──────────────────────────────────────────── #}
-      <section class="patcher-card">
-        <h2>What the patch unlocks</h2>
-        <p class="patcher-muted">
-          These native in-game features <strong>require</strong> the patch (both linked
-          players must be patched for the peer/trade features). Everything else in SLink
-          works without it.
-        </p>
-        <ul class="patcher-features">
-          <li><strong>Native message box</strong> — momentous overworld events (a link
-            forms, a shiny is found, an area becomes a dead zone) show in the real in-game
-            text box instead of the HUD.</li>
-          <li><strong>Peer ghost</strong> — your partner walks your overworld as a real
-            NPC, rendered as their own trainer avatar &amp; colours, moving in real time.</li>
-          <li><strong>Talk to your partner</strong> — face the ghost + press A for a native
-            <em>Trade / Say hey</em> menu. Trade plays the real in-game trade scene on both
-            sides (including trade-evolution); Say hey pings your partner.</li>
-          <li><strong>Native sound</strong> — link / KO / shiny cues play through the game's
-            own sound engine instead of a Lua RAM-poke.</li>
-          <li><strong>Bundled Battle Calc</strong> — an in-battle damage / type-effectiveness
-            readout for the highlighted move, folded into the same patch.</li>
-        </ul>
-        <p class="patcher-muted">
-          Patch-dependent augmentations (<strong>Explode Mode</strong>, <strong>Rival Swap</strong>,
-          <strong>Overworld Presence</strong>) are toggled per-run when you create a run in the
-          <strong>Manager</strong> — under the “Requires ROM patch” section.
-        </p>
-      </section>
-
-      {# ── Manual download ────────────────────────────────────────────── #}
-      <section class="patcher-card">
-        <h2>Prefer your own patcher?</h2>
-        <p class="patcher-muted">
-          Download the raw UPS and apply it with Flips, NUPS, RomPatcher.js, … Your clean
-          ROM's md5 should be <code>{{ base_rom_md5 }}</code>; the patched result should be
-          <code>{{ patched_rom_md5 }}</code>.
-        </p>
-        <p>
-          <a class="patcher-btn patcher-btn-ghost" href="/companion/{{ target.patch }}" download>
-            Download {{ target.patch }}
-          </a>
-        </p>
-      </section>
+  {% if mgr %}
+    <div class="mk">
+      {{ sidebar_html | safe }}
+      <main class="mk-main mk-body-root">
+        <header class="mk-runhdr"><h1 class="mk-runname">Companion ROM patcher</h1></header>
+        <div class="mk-page">{% include "_patcher_panel.html" %}</div>
+      </main>
     </div>
-  </main>
+  {% else %}
+    {{ sidebar_html | safe }}
+    <main class="dash-main">
+      {% include "_patcher_panel.html" %}
+    </main>
+  {% endif %}
 {% endblock %}
 
 {% block scripts %}

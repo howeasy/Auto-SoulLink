@@ -42,6 +42,7 @@ except ImportError:
 
 import aiohttp_jinja2
 
+from server import calc_files
 from server.http_safety import csrf_protection, theme_cache
 from server.json_files import atomic_write_json
 from server.lua_literals import lua_comment, lua_string
@@ -1102,6 +1103,95 @@ class RunManager:
         })
         return aiohttp_jinja2.render_template("randomizer.html", request, ctx)
 
+    def _run_or_404(self, request: web.Request) -> tuple[list[dict], dict]:
+        runs = self._get()
+        run = _find_run(runs, request.match_info["run_id"])
+        if run is None:
+            raise web.HTTPNotFound(text="Run not found")
+        return runs, run
+
+    def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
+        ctx = self._rail_ctx(request, runs, page="run")
+        ctx.update({
+            "page_title": f"{label} — {run.get('name', '')}",
+            "theme": resolve_theme(request),
+            "is_stream": False, "hide_chrome": False,
+            "body_class": "board mgr" + (" dark-theme calc-host" if panel == "calc" else ""),
+            "run": self._augment_for_template(run),
+            "panel": panel, "panel_label": label,
+            "api_base": f"/runs/{run['run_id']}",
+        })
+        return ctx
+
+    async def handle_run_debug(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/debug — the run's debug tools in the Manager's chrome. The
+        panel is the run server's own (templates/_debug_panel.html); its calls go through
+        handle_run_api, SSE included."""
+        runs, run = self._run_or_404(request)
+        ctx = self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
+        return aiohttp_jinja2.render_template("run_panel.html", request, ctx)
+
+    async def handle_run_calc(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/calc/{path} — the damage calculator for one run, in the
+        Manager's chrome. Entry points are wrapped (run_panel.html + _calc_panel.html);
+        the calc's own files are served verbatim. The bridge inside the page reads
+        SLINK_API_BASE (= /runs/{id}) and so talks to that run through handle_run_api."""
+        path = request.match_info.get("path", "") or "normal.html"
+        abs_path = calc_files.resolve(path)
+        if not path.endswith(".html"):
+            return calc_files.file_response(abs_path)
+        runs, run = self._run_or_404(request)
+        ctx = self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
+        ctx.update({
+            "calc_body_html": calc_files.page_body(abs_path),
+            "calc_mode_label": calc_files.mode_label(path),
+            "status_href": f"/runs/{run['run_id']}",
+        })
+        resp = aiohttp_jinja2.render_template("run_panel.html", request, ctx)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+    async def handle_calc_asset(self, request: web.Request) -> web.Response:
+        """GET /calc/{path} — the calc's absolute-path assets (its stylesheets link to
+        /calc/css/…), for the page served under /runs/{id}/calc/."""
+        return calc_files.file_response(calc_files.resolve(request.match_info.get("path", "")))
+
+    async def handle_run_api(self, request: web.Request) -> web.StreamResponse:
+        """/runs/{run_id}/api/{tail} (GET or POST) — relayed verbatim to THAT run, so a
+        run's own panels (debug, calc bridge) work from the Manager's origin. The SSE
+        stream (/api/events) is piped through chunk by chunk."""
+        run = _find_run(_load_registry(), request.match_info["run_id"])
+        if run is None or run.get("status") != "running" or not run.get("http_port"):
+            return web.json_response({"ok": False, "error": "run not running"}, status=404)
+        qs = request.url.query_string
+        url = (f"http://127.0.0.1:{run['http_port']}/api/{request.match_info['tail']}"
+               + (f"?{qs}" if qs else ""))
+        session = request.app["proxy_session"]
+        try:
+            up = await session.request(
+                request.method, url, data=await request.read(),
+                headers={"Content-Type": request.headers.get("Content-Type", "application/json"),
+                         "Accept": request.headers.get("Accept", "*/*")},
+                timeout=aiohttp.ClientTimeout(total=None, sock_read=None))
+        except Exception as e:
+            log.debug(f"Proxy {request.path} failed: {e}")
+            return web.json_response({"ok": False, "error": "proxy_failed"}, status=503)
+        ct = up.headers.get("Content-Type", "application/json")
+        try:
+            if ct.startswith("text/event-stream"):
+                resp = web.StreamResponse(status=up.status, headers={
+                    "Content-Type": ct, "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+                await resp.prepare(request)
+                async for chunk in up.content.iter_any():
+                    await resp.write(chunk)
+                return resp
+            body = await up.read()
+            return web.Response(body=body, status=up.status, content_type=ct.split(";")[0])
+        except (ConnectionResetError, asyncio.CancelledError):
+            raise
+        finally:
+            up.close()
+
     async def handle_broadcast_panel(self, request: web.Request) -> web.Response:
         """GET /broadcast/twitch and /broadcast/obs — the active run's Twitch bot and OBS
         scene triggers in the Manager's chrome. The panel partials are the run server's own
@@ -1298,6 +1388,13 @@ async def main(host: str, port: int):
     # API proxy — relays to the active (pinned or latest) run
     app.router.add_get("/api/status",         manager.handle_proxy_status)
     app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
+    # A run's secondary pages in the Manager's chrome, and the per-run relay their JS uses.
+    app.router.add_get("/runs/{run_id}/debug",            manager.handle_run_debug)
+    app.router.add_get("/runs/{run_id}/calc",             manager.handle_run_calc)
+    app.router.add_get("/runs/{run_id}/calc/{path:.*}",   manager.handle_run_calc)
+    app.router.add_get("/calc/{path:.*}",                 manager.handle_calc_asset)
+    app.router.add_get("/runs/{run_id}/api/{tail:.*}",    manager.handle_run_api)
+    app.router.add_post("/runs/{run_id}/api/{tail:.*}",   manager.handle_run_api)
     # The Twitch and OBS panels under /broadcast/* keep their own JS; their calls land here.
     app.router.add_get("/broadcast/{tab:twitch|obs}", manager.handle_broadcast_panel)
     for prefix in ("/api/bot/{tail:.*}", "/api/obs/{tail:.*}"):
@@ -1307,12 +1404,15 @@ async def main(host: str, port: int):
     # Companion ROM patcher — global setup tool, reachable from the manager too.
     # The manager hosts the page itself, so manager_port=None (Manager nav item
     # would dead-link to self) and tcp_port=None (not tied to a run).
-    from server.chrome import build_sidebar_html
     from server.patcher import setup_patcher_routes
-    setup_patcher_routes(
-        app,
-        lambda active: build_sidebar_html(active, tcp_port=None, manager_port=None),
-    )
+
+    def _patcher_chrome(request: web.Request) -> dict:
+        env = aiohttp_jinja2.get_env(request.app)
+        rail = env.get_template("_rail.html").render(
+            manager._rail_ctx(request, manager._get(), page="tools"))
+        return {"sidebar_html": rail, "sidebar_css": "board", "body_class": "board mgr",
+                "mgr": True, "is_stream": False, "hide_chrome": False}
+    setup_patcher_routes(app, _patcher_chrome)
 
     # Lifecycle: shared aiohttp ClientSession for proxy requests
     async def _startup(app: web.Application) -> None:

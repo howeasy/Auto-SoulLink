@@ -112,7 +112,7 @@ Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; a
 
 ## Web Pages
 
-Everything below lives on the **Manager** (`python -m server.manager`, port 8090): the rail lists your runs, each run's board is `/runs/{id}`, **Broadcast** is the overlay gallery with the pinned run's Twitch bot (`/broadcast/twitch`) and OBS scene triggers (`/broadcast/obs`), **Tools** is the patcher and the randomizer. Calc and Debug open on the run's own server in a new tab. The per-run server's older pages remain reachable on its port:
+Everything lives on the **Manager** (`python -m server.manager`, port 8090): the rail lists your runs; each run has its board (`/runs/{id}`), its damage calculator (`/runs/{id}/calc/normal.html`) and its debug tools (`/runs/{id}/debug`); **Broadcast** is the overlay gallery with the pinned run's Twitch bot (`/broadcast/twitch`) and OBS scene triggers (`/broadcast/obs`); **Tools** is the patcher and the randomizer. A run started by the Manager redirects its own pages there, so you never land in the run server's chrome. The pages below are what the per-run server renders on its own port when run standalone (`python -m server.server`):
 
 | Path | Description |
 |------|-------------|

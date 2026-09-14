@@ -1,0 +1,32 @@
+{# _calc_panel.html — the bundled damage calculator, one copy: its stylesheets, the
+   dark-theme sync, the SLink strip and the calc body sliced from calc/dist. Included by
+   the run server's /calc/*.html page and by the Manager's /runs/{id}/calc/*.html
+   (run_panel.html). The <link>s sit in the body on purpose: the partial has no head.
+   `calc_body_html`, `calc_mode_label`, `status_href` come from the handler. #}
+  {# Calc's vendored CSS, served from `calc/dist/` via handle_calc_files at
+     relative paths. ORDER MATTERS: calc dark-theme.css must come AFTER the
+     calc's main.css + bootstrap so it can override their defaults when
+     calc-internal dark mode is enabled. #}
+  <link rel="stylesheet" href="/calc/js/vendor/select2/select2.css">
+  <link rel="stylesheet" href="/calc/css/main.css">
+  <link rel="stylesheet" href="/calc/css/vendor/bootstrap.css">
+  <link rel="stylesheet" href="/calc/css/dark-theme.css" id="dark-theme-styles">
+  {# Resolve calc-internal dark-theme.css disabled-state synchronously so the
+     initial paint already matches what dark-theme-toggle.js (loaded near the
+     end of the calc body) would resolve. Without this, a user with no
+     `darkTheme` localStorage entry but a system dark-mode preference gets
+     dark-theme.css disabled here, the calc paints with main.css's vanilla
+     white/Verdana Bootstrap look, then dark-theme-toggle.js fires after first
+     paint and re-enables — the user reads that re-enable as
+     "vanilla Smogon flash → themed calc". The two heuristics MUST stay in
+     sync; if you change this, update `calc/src/js/dark-theme-toggle.js` too. #}
+  <script>
+    var prefersDarkTheme = localStorage.getItem('darkTheme')
+      ? localStorage.getItem('darkTheme') === 'true'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (!prefersDarkTheme) {
+      document.getElementById('dark-theme-styles').disabled = true;
+    }
+  </script>
+{% include "_calc_slink_header.html" %}
+{{ calc_body_html | safe }}

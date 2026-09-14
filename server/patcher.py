@@ -93,15 +93,14 @@ PATCHED_ROM_MD5 = TARGETS[DEFAULT_TARGET]["patched_md5"]
 
 def setup_patcher_routes(
     app: web.Application,
-    sidebar_builder: Callable[[str], str],
+    chrome: Callable[[web.Request], dict],
 ) -> None:
     """Register the patcher routes on ``app``.
 
-    ``sidebar_builder`` is a callable ``(active_slug) -> html`` — each app
-    passes its own so the rail renders with that app's port context (the
-    manager passes ``build_sidebar_html`` with no ports; the per-run server
-    passes its ``_build_sidebar_html`` so the brand subtitle + Manager link
-    are populated).
+    ``chrome`` is a callable ``(request) -> dict`` giving the page its shell: at least
+    ``sidebar_html``; the Manager also passes ``mgr=True``, ``sidebar_css="board"`` and
+    ``body_class`` so the page wears the board chrome, the per-run server passes its own
+    rail so the brand subtitle + Manager link are populated.
     """
 
     async def handle_patcher_page(request: web.Request) -> web.Response:
@@ -112,7 +111,7 @@ def setup_patcher_routes(
         ctx = {
             "page_title":      "SLink Companion ROM Patcher",
             "theme":           resolve_theme(request),
-            "sidebar_html":    sidebar_builder("patcher"),
+            **chrome(request),
             "target":          target,
             "targets":         list(TARGETS.values()),
             "base_rom_md5":    target["base_md5"],

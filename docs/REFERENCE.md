@@ -408,6 +408,10 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers / archive / delete) and its board — live from the run's server, or what it persisted once stopped |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
 | `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs. Randomizing is normally part of `/new` |
+| `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
+| `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
+| `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
+| `/runs/{run_id}/api/{tail:.*}` | GET / POST | Relayed verbatim to **that** run's `/api/{tail}`, the SSE stream `/api/events` included — what the debug panel and the calc bridge use from this origin |
 | `/broadcast` | GET | The overlay gallery wearing the Manager's rail (`/stream` serves the same page for OBS) |
 | `/broadcast/{tab:twitch|obs}` | GET | The pinned run's Twitch bot and OBS scene triggers, in the Manager's chrome (same panels as the run's `/twitch` and `/obs`) |
 | `/tools` | GET | The patcher and the randomized-pair builders |
@@ -424,7 +428,9 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/stream/pin` | GET / POST | Which run the overlays show |
 | `/api/status`, `/api/attempts` | GET / POST | Proxied to the pinned run |
 | `/api/bot/{tail:.*}`, `/api/obs/{tail:.*}` | GET / POST | Relayed verbatim to the pinned run, so the Broadcast panels' own JS works from this origin |
-| `/patcher`, `/companion/{name}` | GET | The companion-ROM patcher, same as on a run |
+| `/patcher`, `/companion/{name}` | GET | The companion-ROM patcher, in the Manager's chrome |
+
+A run the Manager started (`--manager-port` + `--run-id`) redirects its own HTML pages (`/`, `/memorial`, `/debug`, `/twitch`, `/obs`, `/calc/*.html`, `/patcher`, `/stream`) to the Manager's equivalents; its overlays (`/stream/{slug}`), API and calc files are unchanged, and `/memorial?_smoke=1` still renders the macro harness.
 
 ### JSON API
 

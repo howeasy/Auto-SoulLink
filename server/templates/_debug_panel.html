@@ -1,14 +1,14 @@
-<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8">
-<title>Debug — {page_title}</title>
-<link rel="stylesheet" href="/static/slink.css">
-<link rel="stylesheet" href="/static/dashboard.css">
+{# _debug_panel.html — the debug tools, one copy: manual linking, event injection,
+   state toggles, backup rollback. Included by the run server's /debug page (old rail)
+   and by the Manager's /runs/{id}/debug (run_panel.html). Every request goes through
+   `API` (window.SLINK_API_BASE, '' on the run server, /runs/{id} on the Manager, whose
+   per-run proxy carries it — including the /api/events SSE stream). Styles are scoped
+   to .debug-panel. #}
 <style>
   /* Map the debug page's private design tokens to slink.css so themes flow
    * through automatically (same pattern as the calc body theming). Anything
    * inside this page's panels keeps its existing rules. */
-  :root {
+  .debug-panel {
     --bg:     var(--c-bg);
     --panel:  var(--c-card);
     --border: var(--c-edge);
@@ -20,84 +20,80 @@
     --blue:   var(--c-link);
     --orange: var(--c-pend);
   }
-  * { box-sizing:border-box; }
+  .debug-panel * { box-sizing:border-box; }
   /* The sidebar grid is set by dashboard.css. The debug-page body styles
    * below apply to .dash-main where the page content lives. */
-  .dash-main { padding:1.2em 1.4em 2em; font-family:var(--font-heading); font-size:0.95em; }
-  h1 { color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
-  .nav { color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
-  .nav a { color:var(--blue); text-decoration:none; }
-  .nav a:hover { text-decoration:underline; }
+  .debug-panel h1{ color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
+  .debug-panel .nav{ color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
+  .debug-panel .nav a{ color:var(--blue); text-decoration:none; }
+  .debug-panel .nav a:hover{ text-decoration:underline; }
 
   /* ── Live status banner ── */
-  .live-bar { display:flex; gap:1.2em; flex-wrap:wrap; align-items:center;
-              background:#0d1117; border:1px solid var(--border); border-radius:6px;
+  .debug-panel .live-bar{ display:flex; gap:1.2em; flex-wrap:wrap; align-items:center;
+              background:var(--c-bg); border:1px solid var(--border); border-radius:6px;
               padding:0.6em 1em; margin-bottom:1em; font-size:0.85em; }
-  .live-bar .sse-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
-  .live-bar .sse-ok { background:var(--green); box-shadow:0 0 4px var(--green); }
-  .live-bar .sse-off { background:var(--red); box-shadow:0 0 4px var(--red); }
-  .live-bar .player-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
+  .debug-panel .live-bar .sse-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  .debug-panel .live-bar .sse-ok{ background:var(--green); box-shadow:0 0 4px var(--green); }
+  .debug-panel .live-bar .sse-off{ background:var(--red); box-shadow:0 0 4px var(--red); }
+  .debug-panel .live-bar .player-pill{ display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
                            border-radius:12px; font-weight:600; font-size:0.9em; }
-  .live-bar .player-pill.on { background:#14532d; color:var(--green); }
-  .live-bar .player-pill.off { background:#1c1c1c; color:var(--c-dim); }
-  .live-bar .stat { color:var(--muted); }
-  .live-bar .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
-  .live-bar .event-log { flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
+  .debug-panel .live-bar .player-pill.on{ background:color-mix(in srgb, var(--c-alive) 22%, transparent); color:var(--green); }
+  .debug-panel .live-bar .player-pill.off{ background:var(--c-card); color:var(--c-dim); }
+  .debug-panel .live-bar .stat{ color:var(--muted); }
+  .debug-panel .live-bar .stat b{ color:var(--text); font-variant-numeric:tabular-nums; }
+  .debug-panel .live-bar .event-log{ flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
                          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
 
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:1em; }
-  @media(max-width:900px) { .grid { grid-template-columns:1fr; } }
-  .panel { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:1em; }
-  .panel h2 { color:var(--orange); font-size:1em; margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
+  .debug-panel .grid{ display:grid; grid-template-columns:1fr 1fr; gap:1em; }
+  @media(max-width:900px){ .debug-panel .grid { grid-template-columns:1fr; } }
+  .debug-panel .panel{ background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:1em; }
+  .debug-panel .panel h2{ color:var(--orange); font-size:1em; margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
               display:flex; align-items:center; justify-content:space-between; }
-  .panel h2 .h2-left { display:flex; align-items:center; gap:0.3em; }
-  .panel.full { grid-column:1/-1; }
-  label { display:block; color:var(--muted); font-size:0.85em; margin-bottom:2px; }
-  input, select, textarea { background:#0d1b2a; border:1px solid var(--border); color:var(--text);
+  .debug-panel .panel h2 .h2-left{ display:flex; align-items:center; gap:0.3em; }
+  .debug-panel .panel.full{ grid-column:1/-1; }
+  .debug-panel label{ display:block; color:var(--muted); font-size:0.85em; margin-bottom:2px; }
+  .debug-panel input, .debug-panel select, .debug-panel textarea{ background:var(--c-bg); border:1px solid var(--border); color:var(--text);
     padding:5px 8px; border-radius:4px; font-size:0.88em; font-family:inherit; width:100%; }
-  select { cursor:pointer; }
-  textarea { min-height:100px; resize:vertical; }
-  .row { display:flex; gap:0.6em; margin-bottom:0.6em; }
-  .row > * { flex:1; }
-  .btn { padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:0.85em; font-weight:600;
+  .debug-panel select{ cursor:pointer; }
+  .debug-panel textarea{ min-height:100px; resize:vertical; }
+  .debug-panel .row{ display:flex; gap:0.6em; margin-bottom:0.6em; }
+  .debug-panel .row > *{ flex:1; }
+  .debug-panel .btn{ padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:0.85em; font-weight:600;
          transition:filter 0.15s; }
-  .btn-orange { background:#7c2d12; color:var(--orange); }
-  .btn-red { background:#7f1d1d; color:var(--red); }
-  .btn-green { background:#14532d; color:var(--green); }
-  .btn-blue { background:#1e3a5f; color:var(--blue); }
-  .btn:hover { filter:brightness(1.3); }
-  .btn:active { filter:brightness(0.9); }
-  .btn-sm { padding:3px 10px; font-size:0.8em; }
-  .result { margin-top:0.6em; padding:0.5em; background:#0d1b2a; border-radius:4px;
+  .debug-panel .btn-orange{ background:color-mix(in srgb, var(--c-pend) 22%, transparent); color:var(--orange); }
+  .debug-panel .btn-red{ background:color-mix(in srgb, var(--c-dead) 22%, transparent); color:var(--red); }
+  .debug-panel .btn-green{ background:color-mix(in srgb, var(--c-alive) 22%, transparent); color:var(--green); }
+  .debug-panel .btn-blue{ background:color-mix(in srgb, var(--c-link) 22%, transparent); color:var(--blue); }
+  .debug-panel .btn:hover{ filter:brightness(1.3); }
+  .debug-panel .btn:active{ filter:brightness(0.9); }
+  .debug-panel .btn-sm{ padding:3px 10px; font-size:0.8em; }
+  .debug-panel .result{ margin-top:0.6em; padding:0.5em; background:var(--c-bg); border-radius:4px;
     font-family:monospace; font-size:0.82em; white-space:pre-wrap; word-break:break-all;
     max-height:300px; overflow-y:auto; color:var(--muted); display:none; }
-  .result.ok { border-left:3px solid var(--green); }
-  .result.err { border-left:3px solid var(--red); }
-  .flash { animation: flash-border 0.5s ease-out; }
-  @keyframes flash-border { 0% { border-color:#4af; } 100% { border-color:var(--border); } }
-  #raw-state { max-height:500px; overflow:auto; }
-  #raw-state pre { white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:0.82em; }
-  .backup-table { width:100%; font-size:0.9em; border-collapse:collapse; }
-  .backup-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
-  .backup-table td { padding:3px 6px; }
-  .backup-table tr:hover { background:#1a1a2a; }
-  .backup-table .slot-link { color:var(--c-link); cursor:pointer; text-decoration:underline; }
-  .backup-table .slot-link:hover { color:#4cf; }
-  .ml-table { width:100%; font-size:0.85em; border-collapse:collapse; }
-  .ml-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
-  .ml-table td { padding:3px 6px; font-family:monospace; }
-  .ml-table tr:hover { background:#1a1a2a; }
-  .ml-table .st-alive { color:var(--green); }
-  .ml-table .st-dead { color:var(--red); }
-  .ml-table .st-memorial { color:var(--c-dim); }
-  .ml-table .btn-unlink { padding:2px 8px; font-size:0.8em; }
-  .ml-table .btn-revive { padding:2px 8px; font-size:0.8em; background:#2a6; color:#fff; border:none; border-radius:3px; cursor:pointer; }
-  .ml-table .btn-revive:hover { background:#3b7; }
+  .debug-panel .result.ok{ border-left:3px solid var(--green); }
+  .debug-panel .result.err{ border-left:3px solid var(--red); }
+  .debug-panel .flash{ animation: flash-border 0.5s ease-out; }
+  @keyframes flash-border{ 0% { border-color:var(--c-link); } 100% { border-color:var(--border); } }
+  .debug-panel #raw-state{ max-height:500px; overflow:auto; }
+  .debug-panel #raw-state pre{ white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:0.82em; }
+  .debug-panel .backup-table{ width:100%; font-size:0.9em; border-collapse:collapse; }
+  .debug-panel .backup-table th{ text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
+  .debug-panel .backup-table td{ padding:3px 6px; }
+  .debug-panel .backup-table tr:hover{ background:var(--c-card); }
+  .debug-panel .backup-table .slot-link{ color:var(--c-link); cursor:pointer; text-decoration:underline; }
+  .debug-panel .backup-table .slot-link:hover{ color:var(--c-info); }
+  .debug-panel .ml-table{ width:100%; font-size:0.85em; border-collapse:collapse; }
+  .debug-panel .ml-table th{ text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
+  .debug-panel .ml-table td{ padding:3px 6px; font-family:monospace; }
+  .debug-panel .ml-table tr:hover{ background:var(--c-card); }
+  .debug-panel .ml-table .st-alive{ color:var(--green); }
+  .debug-panel .ml-table .st-dead{ color:var(--red); }
+  .debug-panel .ml-table .st-memorial{ color:var(--c-dim); }
+  .debug-panel .ml-table .btn-unlink{ padding:2px 8px; font-size:0.8em; }
+  .debug-panel .ml-table .btn-revive{ padding:2px 8px; font-size:0.8em; background:color-mix(in srgb, var(--c-alive) 40%, transparent); color:#fff; border:none; border-radius:3px; cursor:pointer; }
+  .debug-panel .ml-table .btn-revive:hover{ background:color-mix(in srgb, var(--c-alive) 55%, transparent); }
 </style>
-</head><body>
-<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
-{sidebar}
-<main class="dash-main">
+<div class="debug-panel">
 <h1>&#128295; Debug Console</h1>
 
 <!-- Live status banner -->
@@ -282,6 +278,7 @@
 <datalist id="dl-areas"></datalist>
 
 <script>
+var API = window.SLINK_API_BASE || '';
 // ── Helpers ──────────────────────────────────────────────────────────────
 function showResult(el, ok, data) {
   el.style.display = 'block';
@@ -305,7 +302,7 @@ var _lastStatus = null;
 var _refreshQueued = false;
 
 function initSSE() {
-  var src = new EventSource('/api/events');
+  var src = new EventSource(API + '/api/events');
   src.addEventListener('status', function(e) {
     _sseOk = true;
     updateSSEBadge(true);
@@ -375,7 +372,7 @@ function updateLiveBar() {
   var qa = d.players.a.queued || 0, qb = d.players.b.queued || 0;
   var qEl = document.getElementById('lb-queued');
   qEl.textContent = qa + ' / ' + qb;
-  qEl.style.color = (qa + qb > 0) ? '#fbbf24' : '';
+  qEl.style.color = (qa + qb > 0) ? 'var(--c-gold)' : '';
   // Last event
   var events = [];
   ['a','b'].forEach(function(pid) {
@@ -467,7 +464,7 @@ function updateDataLists() {
 
 async function loadAllAreas() {
   try {
-    var r = await fetch('/api/debug/manual_link_data');
+    var r = await fetch(API + '/api/debug/manual_link_data');
     var ml = await r.json();
     _allAreas = {};
     var areas = ml.areas || {};
@@ -488,7 +485,7 @@ async function injectEvent() {
   if (area) ev.area_id = area;
   var extra = document.getElementById('ev-extra').value.trim();
   if (extra) { try { Object.assign(ev, JSON.parse(extra)); } catch(e) { showResult(document.getElementById('ev-result'), false, 'Invalid JSON: '+e); return; } }
-  var j = await api('POST', '/api/debug/inject_event', ev);
+  var j = await api('POST', API + '/api/debug/inject_event', ev);
   showResult(document.getElementById('ev-result'), j.ok, j);
   flashPanel(document.getElementById('ev-result'));
 }
@@ -501,7 +498,7 @@ async function queueCmd() {
   if (key) cmd.key = key;
   var extra = document.getElementById('cmd-extra').value.trim();
   if (extra) { try { Object.assign(cmd, JSON.parse(extra)); } catch(e) { showResult(document.getElementById('cmd-result'), false, 'Invalid JSON: '+e); return; } }
-  var j = await api('POST', '/api/debug/queue_command', cmd);
+  var j = await api('POST', API + '/api/debug/queue_command', cmd);
   showResult(document.getElementById('cmd-result'), j.ok, j);
   flashPanel(document.getElementById('cmd-result'));
 }
@@ -509,11 +506,11 @@ async function queueCmd() {
 // ── Toggles ─────────────────────────────────────────────────────────────
 async function toggleBalls(val) {
   var p = document.getElementById('tog-player').value;
-  var j = await api('POST', '/api/debug/set_pokeballs', {player: p, value: val});
+  var j = await api('POST', API + '/api/debug/set_pokeballs', {player: p, value: val});
   showResult(document.getElementById('tog-result'), j.ok, j);
 }
 async function setAreaState() {
-  var j = await api('POST', '/api/debug/set_area_state', {
+  var j = await api('POST', API + '/api/debug/set_area_state', {
     area_id: document.getElementById('area-id').value.trim(),
     state: document.getElementById('area-state').value
   });
@@ -523,24 +520,24 @@ async function setAreaState() {
 // ── Danger Zone ─────────────────────────────────────────────────────────
 async function resetRun() {
   if (!confirm('Reset ALL run state? This cannot be undone.')) return;
-  var j = await api('POST', '/api/reset');
+  var j = await api('POST', API + '/api/reset');
   showResult(document.getElementById('danger-result'), j.ok, j);
 }
 async function clearPending() {
   if (!confirm('Clear ALL pending captures?')) return;
-  var j = await api('POST', '/api/debug/clear_pending', {});
+  var j = await api('POST', API + '/api/debug/clear_pending', {});
   showResult(document.getElementById('danger-result'), j.ok, j);
 }
 async function clearPendingArea() {
   var area = document.getElementById('clear-area').value.trim();
   if (!area) { alert('Enter an area ID'); return; }
-  var j = await api('POST', '/api/debug/clear_pending', {area_id: area});
+  var j = await api('POST', API + '/api/debug/clear_pending', {area_id: area});
   showResult(document.getElementById('danger-result'), j.ok, j);
 }
 
 // ── Backups ─────────────────────────────────────────────────────────────
 async function loadBackups() {
-  var r = await fetch('/api/debug/backups');
+  var r = await fetch(API + '/api/debug/backups');
   var j = await r.json();
   var el = document.getElementById('backup-list');
   if (!j.backups || j.backups.length === 0) {
@@ -551,7 +548,7 @@ async function loadBackups() {
   var rows = j.backups.map(function(b) {
     window._backupData[b.slot] = b;
     var sum = b.summary;
-    var detail = sum ? '<span style="color:#4f8">'+sum.links_alive+'&#x2764;</span> <span style="color:#f55">'+sum.links_dead+'&#x2620;</span> '+sum.areas_pending+' pending '+sum.areas_dead_zone+' dz' : '<span style="color:var(--c-dim)">?</span>';
+    var detail = sum ? '<span style="color:var(--c-alive)">'+sum.links_alive+'&#x2764;</span> <span style="color:var(--c-dead)">'+sum.links_dead+'&#x2620;</span> '+sum.areas_pending+' pending '+sum.areas_dead_zone+' dz' : '<span style="color:var(--c-dim)">?</span>';
     return '<tr><td class="slot-link" onclick="doRollback('+b.slot+')">#' + b.slot + '</td><td>' + b.modified + '</td><td>' + detail + '</td><td>' + (b.size/1024).toFixed(1) + 'K</td></tr>';
   });
   el.innerHTML = '<table class="backup-table"><tr><th>Slot</th><th>Time</th><th>State</th><th>Size</th></tr>' + rows.join('') + '</table>';
@@ -570,7 +567,7 @@ async function doRollback(slot) {
   }
   msg += '\\n\\nCurrent state will be saved as pre_rollback.';
   if (!confirm(msg)) return;
-  var j = await api('POST', '/api/debug/rollback', {slot: slot});
+  var j = await api('POST', API + '/api/debug/rollback', {slot: slot});
   showResult(document.getElementById('rollback-result'), j.ok, j.message || j.error);
   if (j.ok) loadBackups();
 }
@@ -578,7 +575,7 @@ async function doRollback(slot) {
 // ── Raw State ───────────────────────────────────────────────────────────
 async function loadRaw() {
   try {
-    var r = await fetch('/api/debug/raw_state');
+    var r = await fetch(API + '/api/debug/raw_state');
     var j = await r.json();
     document.getElementById('raw-json').textContent = JSON.stringify(j, null, 2);
   } catch(e) {}
@@ -587,7 +584,7 @@ async function loadRaw() {
 // ── Live State Info ─────────────────────────────────────────────────────
 async function loadLiveState() {
   try {
-    var r = await fetch('/api/debug/raw_state');
+    var r = await fetch(API + '/api/debug/raw_state');
     var j = await r.json();
     var live = j._live || {};
     var h = '';
@@ -595,9 +592,9 @@ async function loadLiveState() {
     // Lock rules
     var rules = j.rules || {};
     var ruleItems = [];
-    if (rules.species_lock) ruleItems.push('<span style="color:#f97316">Species</span>');
-    if (rules.gender_lock) ruleItems.push('<span style="color:#a78bfa">Gender</span>');
-    if (rules.type_lock) ruleItems.push('<span style="color:#38bdf8">Type</span>');
+    if (rules.species_lock) ruleItems.push('<span style="color:var(--c-pend)">Species</span>');
+    if (rules.gender_lock) ruleItems.push('<span style="color:var(--c-link)">Gender</span>');
+    if (rules.type_lock) ruleItems.push('<span style="color:var(--c-info)">Type</span>');
     h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Lock Rules:</b> ' + (ruleItems.length ? ruleItems.join(' \\u00b7 ') : '<span style="color:var(--c-dim)">none</span>') + '</div>';
 
     // Player identity
@@ -628,7 +625,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var keys = pk[pid] || [];
       h += '&nbsp;&nbsp;' + pid.toUpperCase() + ' (' + keys.length + '): ';
-      h += keys.length ? keys.map(function(k){return '<code style="color:#60a5fa">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">empty</span>';
+      h += keys.length ? keys.map(function(k){return '<code style="color:var(--c-link)">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">empty</span>';
       h += '<br>';
     });
     h += '</div>';
@@ -640,7 +637,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var keys = bk[pid] || [];
       h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
-      h += keys.length ? keys.map(function(k){return '<code style="color:#fbbf24">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">none</span>';
+      h += keys.length ? keys.map(function(k){return '<code style="color:var(--c-gold)">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">none</span>';
       h += '<br>';
     });
     h += '</div>';
@@ -686,7 +683,7 @@ async function loadLiveState() {
 // ── Memorial Box Monitor ────────────────────────────────────────────────
 async function loadMemorial() {
   try {
-    var r = await fetch('/api/debug/raw_state');
+    var r = await fetch(API + '/api/debug/raw_state');
     var j = await r.json();
     var mem = j._memorial || {};
     var boxIdx = mem.memorial_box_index;
@@ -743,13 +740,13 @@ async function loadMemorial() {
           h += '<th>Slot</th><th>Species</th><th>Nickname</th><th>Key</th><th>Status</th>';
           h += '</tr></thead><tbody>';
           entries.forEach(function(e) {
-            var statusColor = '#888';
+            var statusColor = 'var(--c-dim)';
             var statusLabel = e.status;
             if (e.status === 'dead') { statusColor = 'var(--red)'; statusLabel = '\\u2620 dead'; }
             else if (e.status === 'pending_memorial') { statusColor = 'var(--yellow)'; statusLabel = '\\u23f3 pending'; }
             else if (e.status === 'quarantined') { statusColor = 'var(--orange)'; statusLabel = '\\u26a0 QUARANTINED'; }
             else if (e.status === 'unknown') { statusColor = 'var(--yellow)'; statusLabel = '? unknown'; }
-            h += '<tr' + (e.status === 'quarantined' ? ' style="background:#3a1a0a"' : '') + '>';
+            h += '<tr' + (e.status === 'quarantined' ? ' style="background:color-mix(in srgb, var(--c-pend) 14%, transparent)"' : '') + '>';
             h += '<td>' + (e.slot + 1) + '</td>';
             h += '<td>' + (e.species_name || '#' + e.species_id) + '</td>';
             h += '<td>' + (e.nickname || '<span style="color:var(--c-dim)">—</span>') + '</td>';
@@ -795,7 +792,7 @@ var _mlForceLink = false;
 
 async function mlRefresh() {
   try {
-    var r = await fetch('/api/debug/manual_link_data');
+    var r = await fetch(API + '/api/debug/manual_link_data');
     _mlData = await r.json();
   } catch(e) { _mlData = {a_options:[], b_options:[], areas:{}, area_ids:[], name_a:"Player A", name_b:"Player B"}; }
   document.getElementById('ml-label-a').textContent = _mlData.name_a;
@@ -849,9 +846,9 @@ function mlFilterAreas() {
       h += '<option value="' + aid + '">' + info.d + suffix + '</option>';
     }
   }
-  addGroup('Pending Captures', groups.pending, '#fa0');
-  addGroup('Available', groups.unseen, '#4f4');
-  addGroup('Resolved', groups.other, '#888');
+  addGroup('Pending Captures', groups.pending, 'var(--c-pend)');
+  addGroup('Available', groups.unseen, 'var(--c-alive)');
+  addGroup('Resolved', groups.other, 'var(--c-dim)');
   sel.innerHTML = h;
   if (cur) { sel.value = cur; }
 }
@@ -886,7 +883,7 @@ async function doManualLink() {
   var override = document.getElementById('ml-override').checked;
   if (!aKey || !bKey) { showResult(res, false, 'Select a mon from each player.'); return; }
   if (!area) { showResult(res, false, 'Select an area.'); return; }
-  var j = await api('POST', '/api/inject_link', {a_key: aKey, b_key: bKey, area_id: area, force: _mlForceLink, override: override});
+  var j = await api('POST', API + '/api/inject_link', {a_key: aKey, b_key: bKey, area_id: area, force: _mlForceLink, override: override});
   if (j.ok) {
     showResult(res, true, j.message || 'Linked!');
     _mlForceLink = false;
@@ -942,7 +939,7 @@ async function doUnlink(areaId, idx) {
   var lnk = d && d.links && d.links[idx];
   var desc = lnk ? (lnk.a_nickname||'?') + ' <-> ' + (lnk.b_nickname||'?') + ' on ' + (lnk.area_display || areaId) : 'link #' + idx;
   if (!confirm('Unlink ' + desc + '?\\n\\nThis removes the link entry. Both mons become available for relinking.')) return;
-  var j = await api('POST', '/api/debug/unlink', {area_id: areaId, index: idx});
+  var j = await api('POST', API + '/api/debug/unlink', {area_id: areaId, index: idx});
   showResult(document.getElementById('ml-result'), j.ok, j.message || j.error || JSON.stringify(j));
 }
 
@@ -951,7 +948,7 @@ async function doRevive(areaId, idx) {
   var lnk = d && d.links && d.links[idx];
   var desc = lnk ? (lnk.a_nickname||'?') + ' <-> ' + (lnk.b_nickname||'?') + ' on ' + (lnk.area_display || areaId) : 'link #' + idx;
   if (!confirm('Revive ' + desc + '?\\n\\nThis sets the link back to alive. You will need to manually restore the mons from the memorial box in-game.')) return;
-  var j = await api('POST', '/api/debug/revive', {area_id: areaId, index: idx});
+  var j = await api('POST', API + '/api/debug/revive', {area_id: areaId, index: idx});
   showResult(document.getElementById('ml-result'), j.ok, j.message || j.error || JSON.stringify(j));
 }
 
@@ -975,10 +972,11 @@ initSSE();
 // Fetch initial status to populate datalists immediately
 (async function() {
   try {
-    var r = await fetch('/api/status');
+    var r = await fetch(API + '/api/status');
     _lastStatus = await r.json();
     updateLiveBar();
     updateDataLists();
+    renderLinksTable();          // SSE only sends `status` on a change; draw what is there now
   } catch(e) {}
 })();
 loadAllAreas();
@@ -990,6 +988,4 @@ loadBackups();
 // Fallback poll in case SSE disconnects
 setInterval(function() { if (!_sseOk) refreshAll(); }, 10000);
 </script>
-<script src="/static/dashboard.js" defer></script>
-</main>
-</body></html>
+</div>

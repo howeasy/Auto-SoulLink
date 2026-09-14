@@ -31,7 +31,7 @@ def _make_app() -> web.Application:
     import jinja2
     aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader(
         os.path.join(os.path.dirname(patcher.__file__), "templates")))
-    patcher.setup_patcher_routes(app, sidebar_builder=lambda active: "")
+    patcher.setup_patcher_routes(app, chrome=lambda _req: {"sidebar_html": ""})
     return app
 
 

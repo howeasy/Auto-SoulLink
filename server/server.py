@@ -23,16 +23,14 @@ import html
 import json
 import logging
 import logging.handlers
-import mimetypes
-import ntpath
 import os
 import re
 import shutil
 import time
 from collections import deque
 from datetime import datetime
-from pathlib import Path
 
+from server import calc_files
 from server.http_safety import csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
@@ -69,9 +67,10 @@ except ImportError:
 try:
     from .templating import resolve_layout, resolve_theme, setup_templating
 except ImportError:
-    from server.templating import resolve_layout, resolve_theme, setup_templating
-
+    from server import calc_files
 import aiohttp_jinja2
+
+from server.templating import resolve_layout, resolve_theme, setup_templating
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -114,18 +113,7 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 # ── Damage Calculator integration ────────────────────────────────────────────
 
-_CALC_DIST_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "calc", "dist")
-# Dev-loop convenience: edits under calc/src/ go live on the next page reload
-# without running the `npm run build` step. `handle_calc_files` prefers
-# src/ when a path exists there and falls through to dist/ otherwise. The
-# HTML entry points (`/calc/normal.html`, `/calc/hardcore.html`) only exist
-# in dist/ (the src files are `*.template.html` with build placeholders), so
-# the fallback resolves them from dist automatically.
-_CALC_SRC_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "calc", "src")
+# The calc's files (dist / src resolution) live in server/calc_files.py, shared with the Manager.
 
 _NATURE_NAMES = (
     "Hardy","Lonely","Brave","Adamant","Naughty",
@@ -222,17 +210,6 @@ def _build_mon_entry(key, detail, adapter):
 
 
 # ── Raw pages ──────────────────────────────────────────────────────────────────
-# The debug page is static HTML with a {sidebar} (and {page_title}) placeholder substituted
-# by str.replace -- not Jinja, because its JS is full of braces. It lived in this file as a
-# string constant, 995 lines of it. (Twitch and OBS are Jinja partials now.)
-_PAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "pages")
-
-
-@functools.cache
-def _page(name: str) -> str:
-    with open(os.path.join(_PAGES_DIR, name), encoding="utf-8") as f:
-        return f.read()
-
 
 
 
@@ -2331,7 +2308,22 @@ class SLinkServer:
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
 
+    def _manager_url(self, request, path: str) -> str | None:
+        """Where the Manager shows this page, when a Manager spawned this run. The Manager
+        is THE UI; a run's own pages exist for the standalone `python -m server.server`
+        case and are otherwise redirected there so nobody lands in the old chrome."""
+        if not (self._manager_port and self._run_id):
+            return None
+        host = (request.host or "127.0.0.1").split(":")[0] or "127.0.0.1"
+        return f"{request.scheme}://{host}:{self._manager_port}{path.replace('{id}', self._run_id)}"
+
+    def _to_manager(self, request, path: str) -> None:
+        url = self._manager_url(request, path)
+        if url:
+            raise aiohttp_web.HTTPFound(url)
+
     async def handle_status_html(self, request):
+        self._to_manager(request, "/runs/{id}")
         return await self._handle_dashboard_template(request)
 
     async def _handle_dashboard_template(self, request):
@@ -2359,79 +2351,30 @@ class SLinkServer:
         raise aiohttp_web.HTTPFound('/calc/normal.html')
 
     async def handle_calc_files(self, request):
-        """Serve calc assets — `calc/src/` wins over `calc/dist/` when both have the path.
-
-        HTML entry points (`normal.html`, `hardcore.html`) are wrapped in the
-        Jinja `calc.html` template so they pick up the same theme / font /
-        sidebar chrome as the rest of the SLink UI. Everything else (CSS, JS,
-        fonts, sprites, data files) is served verbatim from disk.
-
-        Resolution: prefer `calc/src/` when the path exists there, fall back
-        to `calc/dist/` otherwise. Lets calc/src/ edits go live without
-        running the build script. The HTML entry points only exist in dist/
-        (src has `*.template.html` with build placeholders), so they resolve
-        from dist automatically.
-        """
+        """Serve the calc: entry points wrapped in ``calc.html`` for the chrome, everything
+        else verbatim (resolution in ``server.calc_files``, shared with the Manager)."""
         path = request.match_info.get('path', '')
-        # URL paths must stay relative on Windows as well as POSIX. Normalizing
-        # first can hide traversal, and a drive-qualified join discards its base.
-        if (ntpath.splitdrive(path)[0] or path.startswith('/') or '\\' in path
-                or '\x00' in path or '..' in path.split('/')):
-            raise aiohttp_web.HTTPForbidden()
-        abs_path = None
-        for directory in (_CALC_SRC_DIR, _CALC_DIST_DIR):
-            try:
-                root = Path(directory).resolve()
-                candidate = (root / path).resolve()
-                # resolve() follows symlinks and Windows junctions before the
-                # containment check; a textual prefix check is insufficient.
-                if not candidate.is_relative_to(root):
-                    raise aiohttp_web.HTTPForbidden()
-                if candidate.is_file():
-                    abs_path = candidate
-                    break
-            except (OSError, RuntimeError, ValueError):
-                raise aiohttp_web.HTTPForbidden() from None
-        if abs_path is None:
-            raise aiohttp_web.HTTPNotFound()
-        if path.endswith('.html'):
-            with open(abs_path, encoding='utf-8') as fh:
-                full = fh.read()
-            # Slice the calc body inner. Regex-matched rather than
-            # `text.find('<body')` so HEAD comments that mention `<body>`
-            # textually don't trip the parser (the dist HTML's HEAD comment
-            # block currently does this). Same end-of-body match for symmetry.
-            # If markers can't be found, falls back to serving the full text
-            # so a malformed dist file degrades gracefully rather than 500ing.
-            body_open_match  = re.search(r'<body\b[^>]*>', full)
-            body_close_match = list(re.finditer(r'</body\s*>', full))
-            if body_open_match and body_close_match:
-                calc_body = full[body_open_match.end():body_close_match[-1].start()]
-            else:
-                calc_body = full
-            is_hardcore = 'hardcore' in path.lower()
-            ctx = {
-                "page_title":      "Pokémon Radical Red Damage Calculator",
-                "theme":           resolve_theme(request),
-                "body_class":      "dark-theme",
-                "sidebar_html":    self._build_sidebar_html("calc"),
-                "sidebar_css":     "sidebar",
-                "calc_body_html":  calc_body,
-                "calc_mode_label": "Hardcore Mode" if is_hardcore else "Normal Mode",
-                "is_stream":       False,
-                "hide_chrome":     False,
-            }
-            resp = aiohttp_jinja2.render_template("calc.html", request, ctx)
-            # The rendered theme depends on the `slink-theme` cookie. Without
-            # this header the browser may serve a stale heuristic-cached copy
-            # after the user changes themes on another page; revalidating
-            # forces a fresh render. Same pattern as the static middleware in
-            # templating.py for `/static/*`.
-            resp.headers["Cache-Control"] = "no-cache"
-            return resp
-        mime, _ = mimetypes.guess_type(abs_path)
-        ct = mime or 'application/octet-stream'
-        return aiohttp_web.FileResponse(abs_path, headers={"Content-Type": ct})
+        abs_path = calc_files.resolve(path)
+        if not path.endswith('.html'):
+            return calc_files.file_response(abs_path)
+        self._to_manager(request, "/runs/{id}/calc/" + path)
+        ctx = {
+            "page_title":      "Pokémon Radical Red Damage Calculator",
+            "theme":           resolve_theme(request),
+            "body_class":      "dark-theme",
+            "sidebar_html":    self._build_sidebar_html("calc"),
+            "sidebar_css":     "sidebar",
+            "calc_body_html":  calc_files.page_body(abs_path),
+            "calc_mode_label": calc_files.mode_label(path),
+            "status_href":     "/",
+            "is_stream":       False,
+            "hide_chrome":     False,
+        }
+        resp = aiohttp_jinja2.render_template("calc.html", request, ctx)
+        # The rendered theme depends on the `slink-theme` cookie; revalidate so a theme
+        # change on another page is not masked by a heuristic-cached copy.
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
     async def handle_calc_mons(self, request):
         """Return live party + linked mons for both players as Showdown pastes."""
@@ -2516,6 +2459,8 @@ class SLinkServer:
         return aiohttp_web.json_response(result)
 
     async def handle_memorial_html(self, request):
+        if request.query.get("_smoke") != "1":      # the macro harness stays reachable
+            self._to_manager(request, "/runs/{id}")
         return await self._handle_memorial_template(request)
 
     async def _handle_memorial_template(self, request):
@@ -2551,6 +2496,7 @@ class SLinkServer:
     # ── Stream overlay handlers ──────────────────────────────────────────────
 
     async def handle_stream_index(self, request):
+        self._to_manager(request, "/broadcast")
         ctx = _build_stream_index_context(request)
         ctx["sidebar_html"] = self._build_sidebar_html("stream")
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
@@ -3293,8 +3239,11 @@ class SLinkServer:
         return self._panel_page(request, "twitch")
 
     def _panel_page(self, request, name: str):
-        """/twitch and /obs: the shared panel (templates/_{name}_panel.html) in this run's
-        own rail. The Manager renders the same panel at /broadcast/{name}."""
+        """/twitch, /obs and /debug: the shared panel (templates/_{name}_panel.html) in this
+        run's own rail. The Manager renders the same panels at /broadcast/{name} and
+        /runs/{id}/debug, and a Manager-spawned run sends the browser there."""
+        self._to_manager(request, {"twitch": "/broadcast/twitch", "obs": "/broadcast/obs",
+                                   "debug": "/runs/{id}/debug"}[name])
         return aiohttp_jinja2.render_template(
             f"{name}.html", request,
             {"page_title": self._page_title(), "theme": resolve_theme(request),
@@ -3664,13 +3613,7 @@ class SLinkServer:
     # ── Debug page & API ─────────────────────────────────────────────────────
 
     async def handle_debug_html(self, request):
-        # str.replace (not .format) — the debug page contains literal `{` / `}`
-        # inside its JS that would break str.format. The sidebar HTML is
-        # injected the same way to avoid escaping those braces.
-        text = (_page("debug.html")
-                .replace("{page_title}", html.escape(self._page_title()))
-                .replace("{sidebar}",    self._build_sidebar_html("debug")))
-        return aiohttp_web.Response(text=text, content_type="text/html")
+        return self._panel_page(request, "debug")
 
     async def handle_debug_manual_link_data(self, request):
         """GET /api/debug/manual_link_data — return mon options + area data for manual linking."""
@@ -4687,7 +4630,10 @@ def build_app(srv):
     app.router.add_get("/api/calc/mons",  srv.handle_calc_mons)
 
     from server.patcher import setup_patcher_routes
-    setup_patcher_routes(app, srv._build_sidebar_html)
+    def _patcher_chrome(request):
+        srv._to_manager(request, "/patcher")
+        return {"sidebar_html": srv._build_sidebar_html("patcher")}
+    setup_patcher_routes(app, _patcher_chrome)
     return app
 
 

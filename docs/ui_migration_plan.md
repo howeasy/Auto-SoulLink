@@ -20,10 +20,19 @@ scoped to the pinned run: the panels are Jinja partials (`_twitch_panel.html`,
 `_obs_panel.html`, tokenised, style-scoped) shared with the run server's own `/twitch` and
 `/obs`, and the Manager relays `/api/bot/*` + `/api/obs/*` verbatim to that run
 (`handle_proxy_api`). Earlier sessions had marked Phase 7 done with those two panels still
-only on the run server and unlinked from the Manager — that was under-reported. Still on the
-run server by design: `/memorial` (the board's fallen zone is the memorial; the page also
-hosts the `_smoke=1` macro harness), `/debug` and `/calc` (new-tab links from the rail).
-Deliberately not done: Debug as a drawer, the Manager owning `obs_config.json`.
+only on the run server and unlinked from the Manager — that was under-reported. **Session 4 sweep — one chrome everywhere:** the run's debug tools and damage
+calculator are Manager pages (`/runs/{id}/debug`, `/runs/{id}/calc/*.html`, template
+`run_panel.html`, partials `_debug_panel.html` / `_calc_panel.html`, both style-scoped and
+tokenised), reached through a **per-run relay** `/runs/{id}/api/{tail}` that pipes SSE
+too (`handle_run_api`); `server/calc_files.py` is the calc resolver both apps share; the
+patcher wears the rail (`setup_patcher_routes(app, chrome)`); and **a run the Manager
+spawned redirects every page it used to render to the Manager** (`SLinkServer._to_manager`:
+`/`, `/memorial`, `/debug`, `/twitch`, `/obs`, `/calc/*.html`, `/patcher`, `/stream` →
+`/broadcast`), keeping overlays, the API, the calc's files and the `_smoke=1` harness. The
+run server's own pages remain only for standalone `python -m server.server`. Not a drawer
+in the end: the debug JS is 700 lines of page-scoped script that expects a load, so it is
+a page with Board · Calc · Debug tabs, which the owner accepted. Deliberately not done: the
+Manager owning `obs_config.json`.
 **Gen 1 session (2026-09-14) acknowledged the randomizer requirements** and found one real
 gap from them: their rewritten client (`lua/gen1/client.lua`) was not sending `rom_content`
 in the hello — card ROM-CONTENT-1 is adding it with a test that

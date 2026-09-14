@@ -166,3 +166,36 @@ def test_run_flags_follow_one_table():
     everything_on = run_options({k: True for k, _, _ in RUN_FLAGS})
     assert "--verbose" in run_flags(everything_on) and "--no-battle-calc" not in run_flags(everything_on)
     assert run_flags(run_options({"battle_calc": False})) == ["--no-battle-calc"]
+
+
+# ── a run's secondary pages, in the Manager's chrome ────────────────────────────────────
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path,panel", [("/runs/run_1/debug", "debug"), ("/runs/run_1/calc/normal.html", "calc")])
+async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, path, panel):
+    """Both wear the rail and the run header; a stopped run gets the empty state instead of
+    a panel whose JS would fail against a dead server."""
+    _stopped_run(manager_dir)
+    resp = await manager_client.get(path)
+    assert resp.status == 200
+    body = await resp.text()
+    assert "mk-rail" in body and "Kanto Duo" in body
+    assert f"/runs/run_1/{'calc/normal.html' if panel == 'calc' else 'debug'}" in body
+    assert "window.SLINK_API_BASE = \"/runs/run_1\"" in body
+    assert "not running" in body
+
+
+@pytest.mark.asyncio
+async def test_the_calc_files_are_served_from_both_paths(manager_client, manager_dir):
+    _stopped_run(manager_dir)
+    for path in ("/calc/css/main.css", "/runs/run_1/calc/css/main.css"):
+        resp = await manager_client.get(path)
+        assert resp.status == 200 and "text/css" in resp.headers["Content-Type"], path
+    assert (await manager_client.get("/calc/../server/manager.py")).status in (403, 404)
+
+
+@pytest.mark.asyncio
+async def test_the_per_run_relay_refuses_a_run_that_is_not_running(manager_client, manager_dir):
+    _stopped_run(manager_dir)
+    resp = await manager_client.get("/runs/run_1/api/status")
+    assert resp.status == 404
+    assert (await manager_client.get("/runs/nope/api/status")).status == 404

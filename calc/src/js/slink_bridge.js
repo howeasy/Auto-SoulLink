@@ -27,6 +27,9 @@
    *                                       (calc is served by the SLink server)
    */
   var SLINK_BASE = (function () {
+    // The Manager serves the calc at /runs/{id}/calc/ and names that run's API
+    // base here; its per-run proxy carries /runs/{id}/api/* to the run.
+    if (window.SLINK_API_BASE) return String(window.SLINK_API_BASE).replace(/\/$/, '');
     try {
       var p = new URLSearchParams(window.location.search);
       var v = p.get('slink');
@@ -991,7 +994,7 @@
       color       : '#fff',
       padding     : '8px 14px',
       borderRadius: '4px',
-      fontFamily  : 'monospace',
+      fontFamily  : 'inherit',
       fontSize    : '12px',
       maxWidth    : '340px',
       lineHeight  : '1.5',
@@ -1025,7 +1028,7 @@
       border      : '1px solid ' + C.border,
       borderRadius: '6px',
       zIndex      : '9999',
-      fontFamily  : 'monospace',
+      fontFamily  : 'inherit',
       fontSize    : '12px',
       color       : C.text,
       boxShadow   : '0 4px 24px rgba(0,0,0,0.7)',

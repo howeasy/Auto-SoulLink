@@ -87,6 +87,21 @@ body.mgr-stream { display: grid; grid-template-columns: var(--mk-rail) minmax(0,
 .mk-dot.running  { background: var(--c-alive); box-shadow: 0 0 6px var(--c-alive); }
 .mk-dot.archived { background: none; border: 1px solid var(--c-dim); }
 
+/* The calc page loads Bootstrap and the calc's own theme, which style bare elements
+ * (body font, links) for the whole document; the shell restates what it needs. */
+body.calc-host .mk-rail, body.calc-host .mk-runhdr { font-family: var(--font-ui) !important; font-size: var(--scale-step) !important; line-height: 1.4; color: var(--c-txt); }
+body.calc-host .mk-rail a, body.calc-host .mk-runhdr a { color: inherit !important; }
+body.calc-host .mk-rail-item.new { color: var(--c-brand) !important; }
+body.calc-host .mk-tab.active { color: var(--c-brand) !important; }
+body.calc-host .mk-rail-brandtext b { color: var(--c-brand); }
+/* Inside the Manager the calc is one page of the run: the run header names it, so the
+ * strip and the calc's own title go, and the calc's `monospace !important` gives way to
+ * the UI face (Jersey has tabular figures, which is what a calc wants). */
+body.calc-host .slink-header, body.calc-host .mk-page .title-text { display: none; }
+body.calc-host .mk-page, body.calc-host .mk-page :is(input, select, button, textarea, table, label, .btn, code),
+body.calc-host #slink-bridge-panel, body.calc-host #slink-bridge-panel * { font-family: var(--font-ui) !important; }
+body.calc-host .mk-page { padding-top: var(--space-3); }
+
 /* ── Run header: sticky, one line, tabs in the middle ──────────────────── */
 
 .mk-main { min-width: 0; }

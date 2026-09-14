@@ -220,3 +220,34 @@ async def test_sprites_carry_the_class_the_stylesheet_selects_on(client, srv):
         pytest.skip("this generation renders no sprites")
     assert 'class="mon-sprite"' in body or 'class="enc-sprite"' in body, (
         "no sprite on the dashboard carries a class the stylesheet can select")
+
+
+# ── a run the Manager spawned sends its pages to the Manager ─────────────────────────────
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path,target", [
+    ("/", "/runs/r1"), ("/memorial", "/runs/r1"), ("/debug", "/runs/r1/debug"),
+    ("/twitch", "/broadcast/twitch"), ("/obs", "/broadcast/obs"),
+    ("/calc/normal.html", "/runs/r1/calc/normal.html"), ("/patcher", "/patcher"),
+    ("/stream", "/broadcast"),
+])
+async def test_a_managed_run_redirects_its_pages_to_the_manager(tmp_path, path, target):
+    """The Manager is the UI. A run started by it (manager_port + run_id set) never shows
+    its own chrome: every page it used to render redirects to the Manager's equivalent.
+    Overlays, the API and the calc's files stay, because OBS and the clients use them."""
+    srv = SLinkServer(data_dir=str(tmp_path / "run"), run_id="r1", manager_port=8090)
+    async with TestClient(TestServer(build_app(srv))) as client:
+        resp = await client.get(path, allow_redirects=False)
+        assert resp.status == 302, path
+        assert resp.headers["Location"].endswith(f":8090{target}"), resp.headers["Location"]
+        for kept in ("/memorial?_smoke=1", "/api/status", "/calc/css/main.css"):
+            r = await client.get(kept, allow_redirects=False)
+            assert r.status in (200, 404), kept          # never a redirect
+        assert (await client.get("/stream/linked-party", allow_redirects=False)).status == 200
+
+
+@pytest.mark.asyncio
+async def test_a_standalone_run_still_renders_its_own_pages(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path / "run"))
+    async with TestClient(TestServer(build_app(srv))) as client:
+        for path in ("/", "/debug", "/twitch", "/obs"):
+            assert (await client.get(path, allow_redirects=False)).status == 200, path
