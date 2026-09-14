@@ -739,9 +739,9 @@ def recompute_stats(mon: dict, base_stats: dict) -> dict:
     """Rebuild stored stat names from a gen1_rom_scan.scan_base_stats() entry.
 
     Call scan_base_stats(rom)[internal_to_natdex(mon['species'])] once outside
-    this pure oracle. The scanner currently exposes hp/attack/defense/speed/
-    special but not growth_rate; supply a verified growth-rate index separately
-    to level_from_exp. No ROM tables or scanner implementation are duplicated.
+    this pure oracle; that entry also carries growth_rate (record byte 19), so
+    level_from_exp(entry["growth_rate"], mon["exp"]) is the level control. No ROM
+    tables or scanner implementation are duplicated.
     """
     names = {"hp": ("hp", "max_hp"), "atk": ("attack", "atk"),
              "def": ("defense", "def"), "spd": ("speed", "spd"), "spc": ("special", "spc")}

@@ -367,6 +367,27 @@ def test_golden_mew_is_stored_apart_on_red_and_blue():
     assert stats[1]["hp"] == 45 and stats[1]["attack"] == 49            # Bulbasaur
 
 
+def test_growth_rate_matches_pret():
+    """The growth byte drives level_from_exp, so a misread curve levels a whole run.
+
+    Values transcribed from pret (pokered 405b624), `db GROWTH_...` on
+    data/pokemon/base_stats/{bulbasaur,pidgey,rattata,mew}.asm:14, numbered by the
+    const_def at constants/pokemon_data_constants.asm:87-93: MEDIUM_FAST=0,
+    SLIGHTLY_FAST=1, SLIGHTLY_SLOW=2, MEDIUM_SLOW=3, FAST=4, SLOW=5. The byte sits at
+    record offset 19, after BASE_MOVES rb NUM_MOVES (pokemon_data_constants.asm:20-21).
+    Mew is included because it is read through its own symbol on R/B, so it is the one
+    record a stride or symbol bug would spare.
+    """
+    stats = scan_base_stats(_rom("red"))
+    for dex, rec in stats.items():
+        assert 0 <= rec["growth_rate"] <= 5, (
+            f"dex {dex} reports growth rate {rec['growth_rate']}, outside the six constants")
+    assert stats[1]["growth_rate"] == 3      # Bulbasaur: GROWTH_MEDIUM_SLOW
+    assert stats[16]["growth_rate"] == 3     # Pidgey:    GROWTH_MEDIUM_SLOW
+    assert stats[19]["growth_rate"] == 0     # Rattata:   GROWTH_MEDIUM_FAST
+    assert stats[151]["growth_rate"] == 3    # Mew:       GROWTH_MEDIUM_SLOW
+
+
 # ── the index -> dex mapping everything else rests on ────────────────────────────────────
 @pytest.mark.parametrize("title", TITLES)
 def test_pokedex_order_matches_the_table_slink_ships(title):

@@ -43,7 +43,8 @@ VERIFIED LAYOUTS (all read from the real dumps, not inferred):
 
   Base stats        28-byte records ordered by POKEDEX number, 150 of them. Mew is not in
                     the table on R/B; it sits alone at MewBaseStats. Yellow has no separate
-                    Mew symbol.
+                    Mew symbol. Record offset 19 is BASE_GROWTH_RATE, the curve byte
+                    level_from_exp needs -- read from the record rather than inferred.
 """
 from __future__ import annotations
 
@@ -276,9 +277,11 @@ def scan_fishing(rom: bytes) -> dict:
 def scan_base_stats(rom: bytes) -> dict[int, dict]:
     """dex number -> base stats. Keyed by DEX, because that is how the ROM orders them.
 
-    Carries types, which the type clause enforces on, and the five stats plus catch rate,
-    which is what a from-ROM stat rebuild needs (CalcStat is deterministic from base stat,
-    stat exp, DV and level).
+    Carries types, which the type clause enforces on, and the five stats plus catch rate
+    and the growth rate, which is what a from-ROM stat rebuild needs: CalcStat is
+    deterministic from base stat, stat exp, DV and level, and the level is recovered from
+    the stored exp through the GROWTH curve this record names -- a per-species fact no
+    exported table carries.
     """
     ident, syms = _syms_for(rom)
     base = sym_to_offset(syms["BaseStats"])
@@ -292,6 +295,14 @@ def scan_base_stats(rom: bytes) -> dict[int, dict]:
             "dex": r[0], "hp": r[1], "attack": r[2], "defense": r[3],
             "speed": r[4], "special": r[5],
             "type1": r[6], "type2": r[7], "catch_rate": r[8], "base_exp": r[9],
+            # Offset 19, counted in the record, not assumed: BASE_GROWTH_RATE follows
+            # BASE_MOVES rb NUM_MOVES (4 bytes) in the rsreset block at pret
+            # constants/pokemon_data_constants.asm:20-21, and the `db GROWTH_MEDIUM_SLOW`
+            # that lands there is data/pokemon/base_stats/bulbasaur.asm:14. The value is
+            # one of the six constants at constants/pokemon_data_constants.asm:87-93
+            # (MEDIUM_FAST=0, SLIGHTLY_FAST=1, SLIGHTLY_SLOW=2, MEDIUM_SLOW=3, FAST=4,
+            # SLOW=5); Gen 1 only ever uses 0, 3, 4 and 5.
+            "growth_rate": r[19],
         }
 
     # HOW MANY RECORDS THE MAIN TABLE HOLDS DEPENDS ON THE TITLE.
