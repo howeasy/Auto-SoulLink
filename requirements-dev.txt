@@ -4,6 +4,14 @@
 # ruff — Python linter/formatter. Config lives in ruff.toml.
 ruff==0.15.15
 
+# The test suite, and the optional runtime extras it exercises (Twitch bot, OBS switcher,
+# process adoption in the Manager) so nothing importorskips on a dev machine.
+pytest
+pytest-asyncio
+psutil
+twitchio>=3.0
+simpleobsws>=1.4
+
 # capstone — ARM/Thumb disassembler used by the companion-patch toolchain
 # (patch/tools/disasm.py and build.py's hook/inject verification step).
 capstone==5.0.7

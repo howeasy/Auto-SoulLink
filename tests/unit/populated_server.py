@@ -3,8 +3,8 @@
 The route smoke test renders one linked pair and one memorial, which is enough to prove a
 template compiles and not enough to prove it says anything. The mock injector is the
 complete cast (six pairs, a pending capture, a dead zone, a boxed pair, a battle, PC boxes,
-held items, badges), and it is what the mockup fixtures under `server/static/mockups/
-fixtures/` were captured from. Driving it through the REAL TCP handler — not `_dispatch`
+held items, badges), and it is what the payload fixtures under `tests/fixtures/ui/`
+were captured from. Driving it through the REAL TCP handler — not `_dispatch`
 directly — is what makes the adapter switch on hello, `connected_players` and the seq guard
 all run, so the page under test is the page a live run shows.
 

@@ -8,6 +8,13 @@ Read this before writing any markup.
 
 ---
 
+> **Historical.** The mockups this brief describes were ported into the product (the pair
+> board is `server/templates/_board.html` + `server/board.py`; the Manager is
+> `server/templates/manager.html`) and the mockup files were deleted in the migration's
+> Phase 9. They are in git history at `aa246f6^` if a rationale here needs its source. §3
+> (layout), §4 (capability rules) and §7 (fixtures, now under `tests/fixtures/ui/`) remain
+> the reference; §8 (output layout) describes files that no longer exist.
+
 ## 1. Why
 
 The browser UI is two disjoint apps on two ports, built two different ways:
@@ -275,7 +282,7 @@ CDN, no SSE, no fonts loaded at runtime. Anything added to `slink.css` ships to 
 
 ## 7. Fixtures
 
-In `server/static/mockups/fixtures/`. **Generated, never hand-written** — a hand-written
+In `tests/fixtures/ui/`. **Generated, never hand-written** — a hand-written
 fixture drifts into fiction and then the mockup is designing for a payload that does not
 exist.
 
@@ -291,8 +298,8 @@ To regenerate:
 ```bash
 python -m server.server --port 54321 --http-port 8080 --data-dir <scratch> --reset &
 python tools/inject_full_mocks.py                 # or: --game gen1
-curl -s localhost:8080/api/status > server/static/mockups/fixtures/gen3.json
-python tools/gen_ui_capabilities.py > server/static/mockups/fixtures/capabilities.json
+curl -s localhost:8080/api/status > tests/fixtures/ui/gen3.json
+python tools/gen_ui_capabilities.py > tests/fixtures/ui/capabilities.json
 ```
 
 The status payload is built by `server/server.py:3044` `_build_status_dict`. That function

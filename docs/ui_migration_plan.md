@@ -3,10 +3,18 @@
 *Handoff document. Rewritten 2026-09-14 by the session that built the mockups. Assume the
 reader has none of that conversation.*
 
-**Status (2026-09-14):** Phases 0–6 are committed on `claude/soul-link-ui-mockups-40f67b`
-(worktree `dreamy-pike-09f3e3`, based on `79d5172`). Next: Phase 7 (Broadcast + Tools pages,
-Debug drawer, move `_DEBUG_HTML`/`_OBS_PAGE_HTML`/`_TWITCH_PAGE_HTML` to templates), then 8
-(randomizer), then 9. Gate per phase: `pytest tests/unit tests/integration -q` and
+**Status (2026-09-14, later):** Phases 0–8 and the first half of 9 are committed on
+`claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`).
+Done in 7: the three raw pages moved to `templates/pages/`, `/broadcast` and `/tools` on the
+Manager. Done in 8: `/runs/{id}/randomizer` (categories → `build_categories`, preflight,
+browse, download; verified against the real jar in ~4 s, so no job queue). Done in 9: mockups,
+Track B and 22 fonts deleted, fixtures moved to `tests/fixtures/ui/`, requirements split,
+README rewritten for the one-origin Manager. **Still open in 9:** `dashboard.css`/`sidebar.css`
+cleanup, table-driving the overlay handlers, the flag table in `manager.py`, `--font-ui` flip
+after checking overlays, the route-docs test, `calc/src/js/slink_bridge.js` palette. Not done
+from 7: Debug as a drawer (rail links to the run's `/debug` instead) and the Manager owning
+`obs_config.json` (OBS/Twitch stay on the run's port, linked from Broadcast). Three
+`claude/ui-mockup-track-b*` branches remain for the owner to force-delete (a hook blocks it here). Gate per phase: `pytest tests/unit tests/integration -q` and
 `ruff check . --select E9,F6,F7,F81,F82`. Dev: `.claude/launch.json` has `run-server` (8098/54331)
 and `manager` (8090); populate a run with
 `SLINK_MOCK_TCP_PORT=… SLINK_MOCK_HTTP=… SLINK_MOCK_HOLD=100000 python tools/inject_full_mocks.py --game gen1`.

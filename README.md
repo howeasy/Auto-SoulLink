@@ -30,12 +30,14 @@ The LuaSocket DLL is **already committed** at `lua/x64/socket-windows-5-4.dll`. 
 
 There are two ways to run SLink, and they listen on different ports. Picking the wrong URL is the most common first-run confusion.
 
-| | Command | Dashboard | Use when |
+| | Command | Open | Use when |
 |---|---|---|---|
-| **Single server** | `python -m server.server` | `http://localhost:8080/` | One run, started by hand. Simplest. |
-| **Run Manager** | `python -m server.manager --host 0.0.0.0` | `http://localhost:8090/` | Several runs, start/stop from the browser. Each run it spawns gets **its own** dashboard starting at **8081** — the Manager links to it. |
+| **Manager** | `python -m server.manager --host 0.0.0.0` | `http://localhost:8090/` | The UI. Create runs, start and stop them, watch the board, build a randomized pair, pin a run for the stream overlays. Each run it spawns gets its own server starting at **8081**, but you never need to open it: the Manager shows every run's board on its own port. |
+| **Single server** | `python -m server.server` | `http://localhost:8080/` | One run, started by hand, no Manager. The same board. |
 
-Both listen for the game clients on TCP **54321** (the Manager gives each spawned run its own TCP port). If a port is taken, the server now says so and suggests a free one instead of printing a traceback.
+Both listen for the game clients on TCP **54321** (the Manager gives each spawned run its own TCP port). If a port is taken, the server says so and suggests a free one instead of printing a traceback.
+
+The board is one page: both players' current position and fight at the top, then every linked pair as a row — A's half, the bond, B's half — sorted into *in party*, *pending*, *split*, *boxed* and *fallen*, with the event log beside it. Boxes and the memorial are zones of that page, not other pages.
 
 ## Quick Start
 
@@ -248,12 +250,18 @@ Both options use the **exact same code and token setup** — the only difference
 
 ## Run Manager
 
-Orchestrate multiple runs from a single dashboard:
+Orchestrate multiple runs from a single page:
 
 ```bash
 python -m server.manager --host 0.0.0.0
-# Dashboard at http://localhost:8090/
+# http://localhost:8090/          the first running run's board
+# http://localhost:8090/new       create a run: game family first, options greyed with reasons
+# http://localhost:8090/runs/<id> a run's board (live, or what it persisted once stopped)
+# http://localhost:8090/broadcast the overlay gallery
+# http://localhost:8090/tools     the patcher and the Gen 1 randomized-pair builder
 ```
+
+**Randomized pairs (Gen 1).** On a Red · Blue · Yellow run, *Randomizer* in the run header builds one randomized ROM per player — same settings, different seeds — from your own copy of Universal Pokémon Randomizer ZX (put `PokeRandoZX.jar` in `.cache/upr/` or set `SLINK_UPR_JAR`; Java must be on `PATH`). Pick the six categories, browse to two clean dumps, build, download `slink_<run>_a.gb` and `_b.gb`. The run then admits only those two cartridges. Types, evolutions, movesets and base stats are never randomized, so the species and type clauses mean the same thing on both.
 
 ## Tests
 

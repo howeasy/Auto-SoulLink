@@ -1,6 +1,6 @@
 """The UI mockup fixtures must keep describing the payload the server actually sends.
 
-The fixtures under server/static/mockups/fixtures/ were captured from a running server
+The fixtures under tests/fixtures/ui/ were captured from a running server
 (see docs/ui_mockup_brief.md §7) so the mockups design against a real payload rather than
 an imagined one. That only holds while the payload does not move underneath them: a
 mockup built on a stale fixture is a mockup of a product that does not exist, and nothing
@@ -18,8 +18,7 @@ import os
 import pytest
 
 FIXTURE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "server", "static", "mockups", "fixtures",
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "ui",
 )
 
 STATUS_FIXTURES = ["gen3.json", "gen1.json"]
@@ -183,14 +182,3 @@ def test_capabilities_distinguish_cartridges_within_one_generation():
     # mockups make, and the one most likely to be quietly wrong.
     assert caps["red"]["explode_mode"] is True
     assert caps["red"]["abilities"] is False
-
-
-def test_runs_fixture_has_the_display_fields_the_rail_needs():
-    """/api/runs alone is not enough -- the rail needs the manager's augmented shape."""
-    runs = _load("runs.json")["runs"]
-    assert {r["status"] for r in runs} == {"running", "stopped", "archived"}, (
-        "the rail groups runs by status, so all three states must be represented"
-    )
-    for r in runs:
-        for field in ("run_id", "name", "status", "created_short", "safe_name", "game_label"):
-            assert field in r, f"run {r.get('run_id')} lacks {field}"

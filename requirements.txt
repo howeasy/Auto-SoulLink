@@ -1,8 +1,6 @@
-pytest
-pytest-asyncio
+# What a player installs. Test tooling is in requirements-dev.txt; the Twitch bot and the
+# OBS scene switcher are lazily imported and only needed if you turn those on:
+#   pip install "twitchio>=3.0" "simpleobsws>=1.4" psutil
 aiohttp
-psutil
-twitchio>=3.0
-simpleobsws>=1.4
 Jinja2>=3.1
 aiohttp-jinja2>=1.5
