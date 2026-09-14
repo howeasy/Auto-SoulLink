@@ -13,9 +13,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:53:20+00:00",
+  "updated_at_utc": "2026-09-14T08:55:30+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "ad6583a",
+  "source_head": "1b38696",
   "live_lane": null,
   "next_action": "Feature build-out. Candidates on gen1/rc: FT-2 661b8ff (REJECTED by review cx-415ec52b; fix-ups FT-2b on OMP + FT-3 on Sonnet), UI-2 3050f0a and R5a ad6583a (review cx-fbbd022a in flight). Active: C1 (Sonnet), FT-3 (Sonnet), FT-2b (OMP). Queued: C3 after C1; R5b after R5a review + FT-2b; N3 mid-trade crash claim (Codex) when idle.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
@@ -929,11 +929,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-3",
-      "owner": "isolated Claude Sonnet worker (tdd bug fix)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate 1b38696 (isolated Sonnet worker authored)",
+      "state": "done",
       "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
       "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
-      "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged"
+      "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged",
+      "receipt": "commit 1b38696; tests/unit/test_gen1_prepared_cartridges.py 5 passed; prepared/admission/upr subset 350 passed; diff sha256 fb445836…1d83",
+      "independent_review_refs": [
+        "Codex review to be requested together with FT-2b (same finding set cx-415ec52b P1)"
+      ]
     },
     {
       "id": "ui-2",
