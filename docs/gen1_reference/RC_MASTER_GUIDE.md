@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:15:52+00:00",
+  "updated_at_utc": "2026-09-14T08:24:49+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "6f1f2a1",
+  "source_head": "6931fdf",
   "live_lane": null,
-  "next_action": "After P2A-11 commits: F0 live run (tests/live/test_gen1_native_selected_fresh.py::test_manager_selected_native_pair_free_runs_fresh_bedroom, R/B, once, criteria unchanged). N1-1 harness in flight; TK-4 suite in flight.",
+  "next_action": "PAUSED BY OWNER 2026-09-14 (wrap-up). F0 speed gate PASS recorded; D4-CLAIM recorded; N1-1 frozen mid-TDD (owner stopped the worker; WIP left dirty, patches under .cache/n1-1-wip-*.patch). Next on resume: coordinator finishes N1-1 (red chain test -> bootstrap go-file feed), Codex review, integrate, re-pin source_cut, one live rb-native-trade-r1; then D4a per the claim.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -717,14 +717,18 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "p2a-11",
-      "owner": "isolated Claude worker (server; resumed context; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
       "files": [
         "server/manager.py",
         "tests/integration/test_manager_gen1_resume.py"
       ],
-      "next_action": "Reservation token cleared on normalise/stop/archive/delete; token-gated failure cleanup.",
-      "reuse_decision": "shared"
+      "next_action": "None; integrated at 79f04a3 (8056/0). Round-5 finding A closed; a final MODEL gate review of 597f5ba..79f04a3 can be requested if desired.",
+      "reuse_decision": "shared",
+      "receipt": "tests/integration/test_manager_gen1_resume.py (+4; 251 manager/resume tests)",
+      "independent_review_refs": [
+        "Codex REVIEW cx-aa100faf round 5 finding A \u2014 addressed"
+      ]
     },
     {
       "id": "ui-1-resume-button",
@@ -773,8 +777,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "n1-1",
-      "owner": "isolated Claude worker (harness; resumed RS context; ACK on report)",
-      "state": "active",
+      "owner": "coordinator (worker a0b11382536ae868f stopped by the owner mid-TDD)",
+      "state": "frozen",
+      "blocked_reason": "owner wrap-up 2026-09-14; WIP uncommitted",
       "files": [
         "lua/tests/gen1_rb_native_trade_inputs.lua",
         "tests/unit/test_gen1_rb_native_trade_inputs.py",
@@ -785,7 +790,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_scripted_route_modes.py",
         "tests/unit/test_gen1_scripted_chain.py"
       ],
-      "next_action": "rb-native-trade chained route: mart-exit, walk to the Viridian Center counter, A initiates SLINK TRADE with the linked starter, B consents at (5,5); verifier per the paired-native test; live callable.",
+      "next_action": "Resume: make tests/unit/test_gen1_scripted_chain.py::test_native_trade_chain_hands_off_twice_and_feeds_the_go_file_to_the_point[a,b] green (2 failed / 44 passed at freeze; lupa clean; new files sha256 9eafdd49 lua, 7bfa134d live, b8853d4b unit; patches .cache/n1-1-wip-{tracked,new1,new2,new3}.patch be8ea531/21551ded/79740670/2610f4e2), then Codex review, integrate, re-pin, one live rb-native-trade-r1.",
       "reuse_decision": "shared scripted-host chain (N entries); Gen 1 route facts and trade-UI geometry in the module"
     },
     {
@@ -817,6 +822,45 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (F0 claim row)",
       "independent_review_refs": [
         "coordinator spot-check: ACTIVE_THREE_X_MIN_FPS in tests/live/test_gen1_free_service.py:43-54; RC_LANE_B_STATUS.md:25,29"
+      ]
+    },
+    {
+      "id": "d4-claim",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-03b34366)",
+      "state": "done",
+      "files": [
+        "server/gen1_faint_runtime.py",
+        "lua/gen1_held_faint.lua"
+      ],
+      "next_action": "None; recorded in the guide D4 claim row (D4a terminal-propagation lane chosen as the first slice).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (D4 claim row)",
+      "independent_review_refs": [
+        "coordinator spot-check: gen1_memorial.py last-member refusal and gen1_faint_runtime.py pokeballs_obtained gate cited by the claim match the R7/parcel-r6 physical reports"
+      ]
+    },
+    {
+      "id": "f0-run",
+      "owner": "coordinator slink-63 (execution-only)",
+      "state": "done",
+      "files": ["tests/live/test_gen1_native_selected_fresh.py (read-only; run once)"],
+      "next_action": "None; PASS recorded in the F0 result row. No retune.",
+      "reuse_decision": "execution only (criteria unchanged)",
+      "receipt": ".cache/native-selected-fresh-q55jdxn0/summary.json sha256 ebc35bf7...c113; console .cache/f0-rb-6931fdf-r1-console.txt sha256 18dbaa14...7047 (1 passed in 47.49s)",
+      "independent_review_refs": [
+        "gate thresholds fixed before the run by F0 claim cx-d782d831; performance_failures=[] is the harness verdict"
+      ]
+    },
+    {
+      "id": "tk-5",
+      "owner": "OMP live pid 47172 (done; task cx-259ea75b)",
+      "state": "done",
+      "files": ["ruff.toml (read-only; ruff check . reported)"],
+      "next_action": "None; lint drift fact recorded (TK-5 row).",
+      "reuse_decision": "fact check only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (TK-5 row)",
+      "independent_review_refs": [
+        "coordinator: three-line literal card, outputs copied verbatim; not re-run"
       ]
     }
   ]
@@ -868,6 +912,9 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | P2A-2 seams (resume at the run boundary) | Gen1-CodexPeer record. **Why it is the top feature:** today a run can only be played in one sitting — every relaunch is refused, so a full playthrough is impossible without it. Seams: Manager `resume_from` joins the strict key check before staging (`manager.py:763-776`); predecessor inspected read-only via `journal_reader.read_journal` (`:26-62`, never `open_runtime`); rules import via typed `SoulLinkState.from_document` / staged restore (`state.py:783-847`, `staged_state.py:74-145`), carrying links/area states/pending captures/mon stats/`pokeballs_obtained`/player identity/memorial (`rules.memorial.retired_pairs`) and NOT admissions, bindings, engine counters, cursors, commands, trades, observations, leases. **Blockers to design around:** `initial_observation.record` refuses any established history (`:155-161`) → needs a resume-specific transition; the earliest byte-level gate is right after `validate()` at `:163` (`sha256(bytes.fromhex(cart_hex)[0x498:0x8000])` vs the required witness digest); a matched digest must be paired with a witnessed **CONTINUE** (compose `gen1_continue_observer.lua`; the client currently builds the New Game bootstrap observer, `gen1_client_entry.lua:118`); inherited ball activation must be a typed lineage fact consumed by `gen1_wild_encounter_runtime.py:100-117` / `gen1_faint_runtime.py:132-155` (never a forged signal or frame 0); SaveRAM lives under `root/<journal-run-id>/<player>/SaveRAM` with an ownership manifest (`bizhawk_launch.py:73-104`) → an ownership chain or a verified copy; witness/rules alignment: refuse when a player's last committed observation revision exceeds its witness revision (owner policy: saved-but-unwitnessed → HOLD); "unchanged bundle" = reviewed source/dependency + cartridge identity, not ZIP equality. Proposed files: new `server/gen1_run_resume.py`, `manager.py`, `gen1_run_config.py`, `gen1_initial_observation.py`, `gen1_runtime_state.py`, `gen1_runtime.py`, `gen1_faint_runtime.py`, `gen1_wild_encounter_runtime.py`, `bizhawk_launch.py`, `tools/launch_bizhawk.py`, `lua/gen1_client_entry.lua`, new resume observer; unit/integration/live tests; dashboard affordance deferred (API + CLI first). Falsifiers: `resume_from` rejected today; imported core rejected by initial enrollment; prepare refuses a nonempty unowned SaveRAM. |
 | **Parcel attempt 6 — D2 PASS (CONTROLLED-SCRIPTED)** | `rb-parcel-checkpoint-observed` at `c701e15`: one chained process per player from New Game to the first bought POKé BALL with the server's ball-gate activation recorded for BOTH players (committed engine records), starter link alive, no deaths, clean cleanup. Receipts summary `3bd2aff9…dd55`, console `a4164c08…cbcf`; full record in the [D1 physical report](reviews/D1-RB-physical-successor.md). Closes D2 for the `false` text axis; catches (D3), the tweaked text axis (FT-2) and later rows remain open. |
 | Parcel attempt 5 | Oak's cutscene completed and the second trip to the Viridian Mart PROVED; BUY → POKé BALL accepted → quantity prompt reached, then `mart-unknown-wait` because `wTextBoxID` read 1 (not 0x0D) — the list/quantity routines never rewrite it. Item/quantity/confirm signatures now ignore `text_box` (geometry + oob + exit method); red test from the live point. Receipts summary `11e4371c…8afe`, console `ddf4892d…3ec8`. Attempt 6 is the changed run. |
+| F0 result (speed gate, r1) | **PASS (PHYSICAL, controlled-scripted, bedroom workload only).** Pin `6931fdf`, `test_manager_selected_native_pair_free_runs_fresh_bedroom[variants1]` (R/B), 1 passed in 47.49 s, `performance_failures=[]`. Per player (phase average / windows): a 1x-active 59.96, 3x-active 176.88 [176.8, 176.8, 177.0], 1x-quiet 59.72, 3x-quiet 178.97; b 1x-active 59.96, 3x-active 176.96 [177.1, 176.7, 177.1], 1x-quiet 59.70, 3x-quiet 179.43. Floors: 59.130 / 173.0 / 177.391; min active-3x window 176.7 (+3.7 over the floor vs the +0.2-0.9 margin at `90853f5`); post-WB-1/P2A hook registration cost is not measurable at this resolution. Receipts `.cache/native-selected-fresh-q55jdxn0/` (summary `ebc35bf7...c113`), console `.cache/f0-rb-6931fdf-r1-console.txt` (`18dbaa14...7047`). Not timed: save/resume/trade paths. |
+| D4 claim (linked death, first slice) | Gen1-CodexPeer record (cx-03b34366, SOURCE, read-only). Rows: `gameplay.{red,blue}.faint-whiteout-rebuild/.memorial-overflow/.explode` (each with both text variants); one A->B propagated faint closes none of them fully. Corrections: Gen 1 grave is physical BOX12 (index 11), not "Box 13"; `battle_faint` site `RemoveFaintedPlayerMon` bank 0F `$4741`; faint settlement ignores rows while `pokeballs_obtained` is false (`gen1_faint_runtime.py:152-155`), which is why R7 propagated nothing; "same round-trip" = atomic rule decision + command publication, physical HP0 needs admission+hold+permit (`:59-85,215-229`); partner safe() needs `isPartyWriteSafe` AND `physical_stop_verified` (`lua/gen1_held_faint.lua:33-51`) so B must be parked idle indoors; `memorial.expected` refuses `party_count<=1` (`gen1_memorial.py:35-58`). **Coordinator decision: D4a** - terminal propagation-only lane on the one-starter pair after a both-activated paired save + clean resume: A walks to Route 1 grass and loses naturally (Growl-only, bounded turns/PP, refuse on wrong move/escape/capture), B idle; PASS = pair DEAD, exactly one B `force_faint` with receipt-verified HP0, `run_over`/whiteout as source-derived, memorial recorded as expected HOLD (last-member refusal). D4b (complete memorial) needs a second usable party member per side (D3). Files: new `lua/tests/gen1_rb_linked_death_inputs.lua`, unit + live tests, host/scenario/bootstrap + route/chain tests, `reviews/D4-RB-linked-death-claim.md`; no production edits. Receipts `.cache/d4-rb-resume-faint-r1*` (+ role-swapped run). READY WAIT(N1-1 releases host/scenario/bootstrap; predecessor save pair with both activations). |
+| TK-5 (lint drift) | OMP fact (cx-259ea75b): at `6931fdf` `ruff check .` reports **1744 findings, 129 auto-fixable** (tail of `--statistics`: E401x3, SIM102x3, C408x2, C420x2, F841x2, B017, C417, F811, SIM117, UP041). The `c5d70da` clean sweep was on master; `gen1/rc` has never been swept. Release-freeze item (F-wave), not RC gameplay; do not fix piecemeal inside feature cards. |
 | Parcel attempt 4 | Parcel **delivered** to Oak on both cartridges (script 15); driver idled on a `wJoyIgnore == $FC` gate while the cutscene text runs with mask 0/$F0. Fix: tap A whenever unmasked and no scripted NPC walk; red model test. Receipts summary `de3e46fc…ae04`, console `b2411c4e…147f`. Attempt 5 is the changed run. |
 | Parcel attempt 3 | **HOLD at Oak's handoff, but the WB-1 fix is PROVED live**: both cartridges crossed Route 1 grass with wild encounters (RUN sub-path) and no observer crash, received the parcel, returned to Oak, then idled — the driver waited for lab script 0 while the post-rival state is `SCRIPT_OAKSLAB_NOOP` (18); one-line fix, red model test. Receipts summary `7e401a9a…ed11`, console `3f4ef3cf…8659`. Attempt 4 is the changed run. |
 | P2A-1 integrated (A+B) | `save_witness` engine signal at `SaveMenu.save` + 3 (anchor `0x772D`, `CD487821A5C4`, capture_offset 3; regenerated by `tools/gen_gen1_engine_signals.py` with source-text and ROM-byte asserts; Yellow site came for free from the same symbol, no branch) carrying `digest = sha256(hex(CartRAM[0x0498:0x8000]))`, `projection cartram-0498-8000-v1`, `save_file_status`. Server validates (`gen1_engine_signals.py` SAVE_PROJECTION; refuses bad digest/status/projection/extra keys) and records `components["gen1-save-witness"][player]` (latest wins) in `gen1_engine_signal_runtime.py`, audited by `verify_state`. 98 model tests. **Finding that re-scopes C:** `save_identity` at HELLO is only `{ot_id, trainer_name}`; the comparable presented bytes are `initial_observation.source.cart_hex` (server-side same projection). Admitting a relaunched emulator into the SAME runtime would require re-anchoring ~110 frame/identity comparisons across 33 modules (`emu.framecount()` restarts) plus the client's replaced-context refusal (`gen1_initial_observation.lua:70-75`) — 250–400 lines, ≥12 files. **Coordinator decision (vetoable):** implement resume at the RUN boundary instead (P2A-2): Manager `resume_from` creates a NEW run that imports the previous run's rules state and requires each player's presented `cart_hex` projection to equal that run's last acked `save_witness` digest; refuses otherwise. This honours the owner's P2a policy (both saved, files match acked checkpoints, no pending/trade, unchanged source) with a fresh frame line and no re-anchoring; it is the user-visible flow after a crash anyway. |
@@ -889,7 +936,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | E-2 | Claim record for `browser.red.clean-ups` received (Gen1-CodexPeer). Source: `/patcher?game=rb-red` + `/companion/SLink-Red.ups` (`server/patcher.py:61-77,120-175`), in-browser UPS apply with base/final SHA checks (`server/static/patcher.js:275-325`), final SHA256 `26c1e987…94e7`. Case map: only `valid`/`wrong-rom` have real-browser assertions (`tests/browser/gen1_patcher.cjs:37-54`); five cases have component-only unit coverage; `header-protection`/`raw-download` have none in-browser. **Coordinator decision 2026-09-14 (vetoable):** `reapply-noop` is satisfied by the current behaviour — a *named* refusal that leaves the output byte-identical (the injector already names reapply a no-op, `tests/unit/test_gen1_injector.py:158-160`; the browser refuses at `cjs:46`/`patcher.js:286`). The E gate asserts unchanged bytes plus the named reason; no UX change. Hypothesis: bounded browser matrix + one new Red live boot gate feeding the exact downloaded file into `server/bizhawk_launch.py` prepare/launch (not `SelectedRun`, which hardcodes its prepared ROM path, `gen1_selected_scenario.py:404-444`); proposed exclusive files `tests/browser/gen1_patcher.cjs`, `tests/integration/test_gen1_browser_patcher.py`, new `tests/live/test_gen1_browser_red_boot.py`, `lua/tests/test_gen1_browser_red_boot.lua`, `tests/unit/test_gen1_browser_red_boot.py`, `reviews/E2-BROWSER-RED-successor.md`; coordinator-only: manifest proofs/live-gates argv, inventory. No Yellow edits; Blue needs its own cases/hash/boot. READY once the D2/D3 lane work is integrated; no owner input required. |
 | E-1 | `browser.red.clean-ups` (stage patch-browser) has an empty `proofs` array → automatic evaluator failure (`tools/verify_gen1_release.py:264`); the stage is 40/42 missing (P0 report). The only registered browser proof (`patch.actual-browser-canonical-upr`, `tests/integration/test_gen1_browser_patcher.py:28,34`) is a Chrome download/hash/refusal matrix with no emulator boot; the R6 `downloads` block is evidence for the clean-bundle boot only. Gap: real EmuHawk boot of the browser-patched Red ROM; cheapest closer reuses `server/bizhawk_launch.py` prepare/launch or `SelectedRun`. Needs the emulator lane; independent of BI-1 and N2. Not dispatched until a nine-part claim exists. |
 | Shared HUD | Integrated at c647f91; source/model passed. Physical pixel-expiry proof remains an open limit. |
-| Checks | 188 current-card tests, no failure/error/skip; `.cache/current-cards-final.xml` `bc078899…ffa6`. No fresh release-evaluator verdict. |
+| Checks | Independent full unit suite (OMP, TK-4) on HEAD `b87c349` + the P2A-11 edits (= `79f04a3`): **8056 passed, 0 failed** (782 s). Earlier: 188 current-card tests at the takeover. No fresh release-evaluator verdict. |
 | Hooks | Installed and tested; Codex native `/hooks` trust and actual host firing remain human-only/unverified. BLOCKED, not worked. |
 | Preserved dirty candidates | `R0-supplied-contract-successor.md` modified (+12/−9, unreconciled, no classifier grant); parcel Lua/unit/report untracked, 12/12 modeled, hashes match report, not integrated. No cleanup/reset. |
 | Remaining RC | Source/model/physical/human levels stay separate. Full campaign/trade/artifact/performance/frozen evaluator and two-person attestation remain open. P2a approved, mechanisms absent; P2b unapproved. Gate scope alignment is a later bounded card, not a census. |
