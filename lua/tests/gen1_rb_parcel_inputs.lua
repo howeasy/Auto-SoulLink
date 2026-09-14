@@ -88,7 +88,8 @@ function M.new(expected)
                 "wild battle ended without observed escape")
             self.wild_active=false
         end
-        if self.cancel_baseline and not self.cancelled and point.menu_kind~="mart-confirm" then
+        if self.cancel_baseline and not self.cancelled and point.menu_kind~="mart-confirm"
+            and point.menu_kind~="unknown" then
             assert(point.ball_count==self.cancel_baseline.balls
                 and point.money==self.cancel_baseline.money,
                 "cancel changed ball count or money")
@@ -102,6 +103,7 @@ function M.new(expected)
             if point.map~=0x2A or not point.oak_got_parcel then
                 return idle(),"unexpected-menu"
             end
+            if point.menu_kind=="unknown" then return idle(),"mart-unknown-wait" end
             if point.menu_kind=="mart-choice" and point.menu_index==0 then
                 return tap("A",frame),"mart-buy"
             end

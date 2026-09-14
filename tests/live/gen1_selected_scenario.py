@@ -359,6 +359,11 @@ class SelectedRun:
             for name in ("tests/live/gen1_scripted_host.py", "lua/tests/gen1_scripted_new_game.lua"):
                 self.outcome["source_files"][name] = sha(ROOT / name)
         if self.route_mode is not None:
+            decoders = ["lua/tests/gen1_rb_point_fields.lua"]
+            if self.route_mode == "rb-parcel":
+                decoders.append("lua/tests/gen1_rb_mart_signature.lua")
+            for name in decoders:  # dofile()d by the bootstrap; not staged by the host.
+                self.outcome["source_files"][name] = sha(ROOT / name)
             for module in ROUTE_MODULES[self.route_mode]:
                 self.outcome["source_files"][module.relative_to(ROOT).as_posix()] = sha(module)
             self.outcome["source_files"]["tests/live/test_gen1_selected_rb_ball_gate.py"] = sha(

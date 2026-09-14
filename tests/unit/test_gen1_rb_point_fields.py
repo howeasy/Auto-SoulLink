@@ -51,3 +51,29 @@ def test_facing_names():
     assert fields.facing_name(0x08) == "left" and fields.facing_name(0x0C) == "right"
     assert fields.facing_name(0x00) == "down" and fields.facing_name(0x04) == "up"
     assert fields.facing_name(0x77) == "unknown"
+
+
+def test_parcel_event_bits_are_isolated():
+    lua, fields = load()
+    read = reader(lua, {0xD747 + 7: 0b01})
+    assert fields.event_bit(read, 0xD747, fields.EVENT_OAK_GOT_PARCEL) is True
+    assert fields.event_bit(read, 0xD747, fields.EVENT_GOT_OAKS_PARCEL) is False
+    read = reader(lua, {0xD747 + 7: 0b10})
+    assert fields.event_bit(read, 0xD747, fields.EVENT_OAK_GOT_PARCEL) is False
+    assert fields.event_bit(read, 0xD747, fields.EVENT_GOT_OAKS_PARCEL) is True
+
+
+def test_bag_scan_stops_at_terminator_before_count():
+    lua, fields = load()
+    memory = {0xD31D: 3, 0xD31E: 0x46, 0xD31F: 1, 0xD320: 0xFF, 0xD321: 0x00,
+              0xD322: 0x04, 0xD323: 9}
+    read = reader(lua, memory)
+    assert fields.bag_quantity(read, 0xD31D, 0xD31E, fields.OAKS_PARCEL) == 1
+    assert fields.bag_quantity(read, 0xD31D, 0xD31E, fields.POKE_BALL) == 0
+
+
+def test_bag_scan_respects_count_before_later_match():
+    lua, fields = load()
+    memory = {0xD31D: 1, 0xD31E: 0x46, 0xD31F: 1, 0xD320: 0x04, 0xD321: 7, 0xD322: 0xFF}
+    read = reader(lua, memory)
+    assert fields.bag_quantity(read, 0xD31D, 0xD31E, fields.POKE_BALL) == 0

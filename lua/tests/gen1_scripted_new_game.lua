@@ -26,6 +26,7 @@ local original_advance,original_yield=emu.frameadvance,emu.yield
 local deadline=os.time()+input.deadline_seconds
 local frames,beat,stopped=0,0,false
 local route_driver,route_expected,route_phase,route_frames=nil,nil,nil,0
+local chain_next,handoffs=1,JSON.array()
 local function status_now()return SLINK_RUNTIME_STATUS and SLINK_RUNTIME_STATUS()end
 local symbols={}
 do
@@ -40,6 +41,7 @@ do
 end
 local function sym(name)return memory.read_u8(assert(symbols[name]),"System Bus")end
 local FIELDS=dofile(ROOT.."/lua/tests/gen1_rb_point_fields.lua")
+local SIG=dofile(ROOT.."/lua/tests/gen1_rb_mart_signature.lua")
 local function rd(addr)return memory.read_u8(addr,"System Bus")end
 local function menu_inputs()
     beat=beat+1;local moment=beat%16
@@ -54,7 +56,7 @@ local function route_point()
     local event_byte=memory.read_u8(assert(symbols.wEventFlags)+4,"System Bus")
     local hp=memory.read_u8(assert(symbols.wPartyMon1HP),"System Bus")*256
         +memory.read_u8(assert(symbols.wPartyMon1HP)+1,"System Bus")
-    return {map=sym("wCurMap"),x=sym("wXCoord"),y=sym("wYCoord"),
+    local raw={map=sym("wCurMap"),x=sym("wXCoord"),y=sym("wYCoord"),
         party_count=sym("wPartyCount"),battle=sym("wIsInBattle"),opponent=sym("wCurOpponent"),
         menu_y=sym("wTopMenuItemY"),menu_x=sym("wTopMenuItemX"),menu_max=sym("wMaxMenuItem"),
         menu_index=sym("wCurrentMenuItem"),move2=memory.read_u8(assert(symbols.wBattleMonMoves)+1,"System Bus"),
@@ -73,8 +75,12 @@ local function route_point()
         simulated_joypad_index=sym("wSimulatedJoypadStatesIndex"),
         facing=FIELDS.facing_name(sym("wSpritePlayerStateData1FacingDirection")),
         battle_type=sym("wBattleType"),run_attempts=sym("wNumRunAttempts"),
-        list_menu_id=sym("wListMenuID"),item_id=sym("wCurItem"),quantity=sym("wItemQuantity"),
-        chosen_menu_item=sym("wChosenMenuItem"),menu_exit_method=sym("wMenuExitMethod")}
+        list_menu_id=sym("wListMenuID"),cur_item=sym("wCurItem"),quantity=sym("wItemQuantity"),
+        chosen_menu_item=sym("wChosenMenuItem"),menu_exit_method=sym("wMenuExitMethod"),
+        list_scroll_offset=sym("wListScrollOffset"),menu_watch_oob=sym("wMenuWatchMovingOutOfBounds"),
+        font_loaded=sym("wFontLoaded")%2==1}
+    raw.menu_kind,raw.item_id,raw.confirm_index=SIG.mart_menu(raw)
+    return raw
 end
 
 publish(input.progress,{stage="wrapper-ready",player=input.player,frame=emu.framecount(),boot_frames=0})
@@ -96,7 +102,14 @@ local function wrapped_advance()
             publish(input.progress,{stage="input-stopped",player=input.player,frame=emu.framecount(),boot_frames=frames})
         end
         if input.route then
-            assert(input.route.mode=="rb-starter-rival" and input.variant~="yellow")
+            assert((input.route.mode=="rb-starter-rival" or input.route.mode=="rb-parcel")
+                and (input.variant=="red" or input.variant=="blue"))
+            local chain=input.route.chain or {}
+            assert(type(chain)=="table")
+            assert((input.route.mode=="rb-starter-rival" and next(chain)==nil)
+                or (input.route.mode=="rb-parcel" and #chain==1
+                and type(chain[1])=="table" and type(chain[1].module)=="string"
+                and chain[1].after=="lab-loss-complete" and chain[1].terminal=="first-ball-readback"))
             local handshake=read_optional(input.route.handshake)
             if handshake and not route_driver then
                 assert(status.context and status.host and status.host.owner_id==status.context.physical_instance,
@@ -106,19 +119,31 @@ local function wrapped_advance()
                     physical_instance=status.context.physical_instance}
                 route_driver=assert(dofile(input.route.module)).new(route_expected)
             end
-            local buttons,phase
+            local point,frame=route_driver and route_point() or JSON.null,emu.framecount()
+            local buttons,phase=idle,"await-pair-handshake"
             if route_driver then
                 route_frames=route_frames+1
-                assert(route_frames<120000,"R/B starter/rival route made no bounded progress")
-                buttons,phase=route_driver.step(handshake,status,route_point(),emu.framecount())
-            else buttons,phase=idle,"await-pair-handshake"end
-            joypad.set(buttons)
-            if phase~=route_phase or route_frames%600==0 then
-                route_phase=phase
-                publish(input.route.progress,{stage=phase,player=input.player,frame=emu.framecount(),
-                    route_frames=route_frames,point=route_driver and route_point() or JSON.null})
+                assert(route_frames<120000,"R/B route made no bounded progress")
             end
-            if phase=="lab-loss-complete" then
+            while true do
+                if route_driver then buttons,phase=route_driver.step(handshake,status,point,frame) end
+                local entry=chain[chain_next]
+                local handoff=route_driver and entry and phase==entry.after
+                if handoff then
+                    handoffs[#handoffs+1]={stage=phase,frame=frame,route_frames=route_frames}
+                end
+                if phase~=route_phase or route_frames%600==0 or handoff then
+                    route_phase=phase
+                    publish(input.route.progress,{stage=phase,player=input.player,frame=frame,
+                        route_frames=route_frames,point=point,chain_handoffs=#chain>0 and handoffs or nil})
+                end
+                if not handoff then break end
+                chain_next=chain_next+1
+                route_driver=assert(dofile(entry.module)).new(route_expected)
+            end
+            joypad.set(buttons)
+            local terminal=#chain==0 and "lab-loss-complete" or chain[#chain].terminal
+            if chain_next>#chain and phase==terminal then
                 joypad.set(idle)
                 if emu.frameadvance==wrapped_advance then emu.frameadvance=original_advance end
                 if emu.yield==wrapped_yield then emu.yield=original_yield end

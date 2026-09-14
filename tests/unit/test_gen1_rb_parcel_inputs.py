@@ -282,3 +282,28 @@ def test_completed_first_outbound_does_not_skip_second_outbound():
     assert phase == "route_north" and buttons["Up"]
     buttons, phase = visit(1, [(21, 35)])
     assert phase == "viridian_mart" and buttons["Left"]
+
+
+def test_unknown_menu_kind_idles():
+    driver, handshake, status, point = model()
+    point.map, point.x, point.y = 0x2A, 2, 5
+    point.got_parcel, point.parcel_count = True, 1
+    step(driver, handshake, status, point)
+    point.map, point.x, point.y = 0x28, 5, 3
+    step(driver, handshake, status, point, 24)
+    point.parcel_count, point.oak_got_parcel, point.lab_script = 0, True, 18
+    step(driver, handshake, status, point, 32)
+    point.map, point.x, point.y, point.facing = 0x2A, 2, 5, "left"
+    point.menu_kind = "unknown"
+    buttons, phase = step(driver, handshake, status, point, 48)
+    assert phase == "mart-unknown-wait" and not any(buttons.values())
+    # A pending cancel is not completed on an ambiguous display either.
+    point.menu_kind, point.confirm_index = "mart-confirm", 0
+    buttons, phase = step(driver, handshake, status, point, 64)
+    assert phase == "cancel-first-purchase" and buttons["B"]
+    point.menu_kind = "unknown"
+    buttons, phase = step(driver, handshake, status, point, 80)
+    assert phase == "mart-unknown-wait" and not any(buttons.values())
+    point.menu_kind, point.ball_count = "mart-item", 1
+    with pytest.raises(LuaError, match="cancel changed"):
+        step(driver, handshake, status, point, 96)
