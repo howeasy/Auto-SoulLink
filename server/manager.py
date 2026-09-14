@@ -878,12 +878,17 @@ class RunManager:
         try:
             body=await request.json()
             if (not isinstance(body,dict) or not {'name','rom_a','rom_b'}<=set(body)
-                    or set(body)-{'name','rom_a','rom_b','rules','start','native','resume_from'}
+                    or set(body)-{'name','rom_a','rom_b','rules','start','native','fastest_text','resume_from'}
                     or not isinstance(body['name'],str) or not 1<=len(body['name'].strip())<=120
                     or any(ord(c)<32 for c in body['name'])
                     or type(body.get('start',True)) is not bool or type(body.get('native',False)) is not bool
+                    or type(body.get('fastest_text',False)) is not bool
                     or not isinstance(body.get('resume_from',''),str)):
-                raise ValueError('name, two cartridge paths and optional explicit rules/start/native/resume_from are required')
+                raise ValueError('name, two cartridge paths and optional explicit rules/start/native/fastest_text/resume_from are required')
+            if body.get('fastest_text',False) and not body.get('native',False):
+                # Fastest text is a preset of the native path: it replaces the canonical companion
+                # pair, so without native there is no prepared directory to hold it.
+                raise ValueError('fastest_text requires native')
             # The user's cartridges are admitted as exact canonical CLEAN ROMs either way.
             admitted=await asyncio.to_thread(clean_contract,{'a':body['rom_a'],'b':body['rom_b']})
             contract=admitted
@@ -929,7 +934,21 @@ class RunManager:
                 from server.gen1_prepared_cartridges import PreparedCartridges, stage_canonical_pair
                 directory.mkdir(parents=True,exist_ok=False)
                 try:
-                    await asyncio.to_thread(stage_canonical_pair,directory/'prepared',{'a':body['rom_a'],'b':body['rom_b']})
+                    if body.get('fastest_text',False):
+                        # Fastest text: the same SLink policy pair, produced by UPR with its single
+                        # fastest-text misc tweak and nothing else randomized. The settings the pair
+                        # was built from stay in the run as evidence; the producer takes them as bytes.
+                        from server.gen1_upr_pipeline import prepare_pair
+                        from server.gen1_upr_policy import build_preset
+                        jar=os.environ.get('SLINK_UPR_JAR','')
+                        if not jar:
+                            raise ValueError('SLINK_UPR_JAR is not set')
+                        settings=build_preset({'currentMiscTweaks':8})
+                        (directory/'fastest-text.rnqs').write_bytes(settings)
+                        await asyncio.to_thread(prepare_pair,jar,settings,{'a':body['rom_a'],'b':body['rom_b']},
+                            directory/'prepared',seeds={'a':'123456789','b':'987654321'})
+                    else:
+                        await asyncio.to_thread(stage_canonical_pair,directory/'prepared',{'a':body['rom_a'],'b':body['rom_b']})
                     cartridges=PreparedCartridges(directory/'prepared')
                 except Exception:
                     shutil.rmtree(directory,ignore_errors=True);raise   # no half-staged run directory survives
@@ -944,7 +963,7 @@ class RunManager:
             write_contract(directory/'rom_contract.json',admitted)   # the user's admitted clean cartridges; the runtime binds the pair
             run={'run_id':run_id,'name':body['name'].strip(),'created_at':datetime.now(UTC).isoformat(),
                 'tcp_port':tcp_port,'http_port':http_port,'status':'stopped','pid':None,'cartridges':contract['players'],
-                'native_trade':cartridges is not None,**settings}
+                'native_trade':cartridges is not None,'fastest_text':bool(body.get('fastest_text',False)),**settings}
             if resume is not None:
                 # The launch contract each client must meet (runtime_launcher/bizhawk_launch emit it per player);
                 # the imported rules state lives in the runtime journal, not the registry.
