@@ -4327,6 +4327,11 @@ class SLinkServer:
             trainer_str = f'<span style="color:var(--c-gold)">{trainer}</span> &mdash; ' if trainer else ""
 
             parts.append(f'<div class="player-card {card_cls}">')
+            _holds = [h for h in (d.get('holds') or []) if h.get('player') in (None, pid)]
+            if _holds:
+                parts.append(f'<div id="hold-{pid}" class="hold-line" '
+                    f'title="{html.escape(chr(10).join(str(h.get("reason", "")) for h in _holds), quote=True)}">'
+                    f'waiting on: {html.escape(" - ".join(str(h.get("text", "")) for h in _holds))}</div>')
             _safe_run = re.sub(r'[^\w-]', '_', self._run_name or self._run_id or "SLink").strip('_') or "SLink"
             dl_icon = (
                 f'<a class="launcher-dl" href="/launcher/{pid}" download="slink_{_safe_run}_{pid}.lua" '
@@ -5350,6 +5355,11 @@ class SLinkServer:
         if self._run_name:
             concise_parts.append(html.escape(self._run_name))
         concise_title = " — ".join(concise_parts) if concise_parts else "Soul Link"
+        _holds = runtime_boundary.read_runtime_holds(self)
+        hold_banner = (
+            f'<div id="hold-banner" class="phase-banner phase-game_over">'
+            f'Run held &mdash; {html.escape(str(_holds[0].get("text", "")))}</div>'
+        ) if _holds else ''
         header_html = (
             f'<header class="dash-page-hdr">'
             f'<h1 class="dash-page-title">{concise_title}</h1>'
@@ -5358,6 +5368,7 @@ class SLinkServer:
             f'<span class="phase-label">{phase_label}</span>'
             f'{stats_html}'
             f'</div>'
+            f'{hold_banner}'
             f'</header>'
         )
         content_html = content_html.replace(
@@ -5424,8 +5435,13 @@ class SLinkServer:
             return aiohttp_web.json_response({"ok": False, "error": "this run is not a Gen1 durable runtime"}, status=400)
         from server.gen1_checkpoint_runtime import (
             COMPONENT as CHECKPOINT_COMPONENT,
+            check_collect_timeout,
             player_upload_status,
         )
+        # F6/joint doc: a status poll is itself a chance to notice an expired collection
+        # deadline even with no other traffic at all -- "no activity -> expiry on the next
+        # status poll".
+        check_collect_timeout(self.gen1_runtime)
         component = self.gen1_runtime.state().document()["components"].get(CHECKPOINT_COMPONENT)
         request_id = request.match_info["request_id"]
         if component is None or component["request_id"] != request_id:
