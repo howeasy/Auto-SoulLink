@@ -1,0 +1,10 @@
+attempt 1 of 2
+server DEAD propagation precedes final MEMORIAL, cause=battle
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved living starter; linked key D6D7:4190:A5 absent from party/current box
+a Box 12 D6D7:4190:A5 HP0000/status00; initialized checksums/terminators valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved living starter; linked key A361:AFB9:24 absent from party/current box
+b Box 12 A361:AFB9:24 HP0000/status00; initialized checksums/terminators valid
+D-6/W-1 server battle cause and ordered engine receipts valid
+PYDEC: PASS asserted scenario facts
