@@ -74,13 +74,13 @@ def test_status_token(a, value, expected):
 
 
 def test_status_token_agrees_with_the_shared_icon_renderer(a):
-    """The dashboard renders the player's own party through html_render.status_icon_html
-    and the PARTNER column through adapter.status_token. If the two disagree, one mon
-    shows PSN and its linked half shows nothing."""
-    from server.html_render import status_icon_html
+    """The board renders a mon's own status through the status_pill macro and the
+    PARTNER column through adapter.status_token. If the two disagree, one mon shows PSN
+    and its linked half shows nothing."""
+    from tests.unit.test_stat_stages import _status_icon_html
     for value in (0x01, 0x07, 0x08, 0x10, 0x20, 0x40):
         tok = a.status_token(value)
-        icon = status_icon_html(value)
+        icon = _status_icon_html(value)
         assert tok and tok in icon, f"0x{value:02X}: token={tok!r} icon={icon!r}"
 
 

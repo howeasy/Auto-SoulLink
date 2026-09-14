@@ -36,23 +36,32 @@
   })();
 
   // ---------------------------------------------------------------------------
-  // Colour palette (dark theme matching the calc)
+  // Colour palette: the slink.css tokens when the calc is served inside SLink
+  // (base.html loads slink.css + the theme), the old literals when it is not.
   // ---------------------------------------------------------------------------
 
-  var C = {
-    panelBg  : '#1a1a2e',
-    headerBg : '#16213e',
-    border   : '#0f3460',
-    btn      : '#e94560',
-    activeTab: '#0f3460',
-    text     : '#eee',
-    dim      : '#888',
-    item     : '#adf',
-    nature   : '#cba',   // also used for ability
-    hpGreen  : '#4caf50',
-    hpYellow : '#ffeb3b',
-    hpRed    : '#f44336',
-  };
+  var C = (function () {
+    var css = {};
+    try { css = getComputedStyle(document.documentElement); } catch (e) { /* no DOM */ }
+    function tok(name, fallback) {
+      var v = css.getPropertyValue ? css.getPropertyValue(name).trim() : '';
+      return v || fallback;
+    }
+    return {
+      panelBg  : tok('--c-sticky', '#1a1a2e'),
+      headerBg : tok('--c-calc-th-bg', '#16213e'),
+      border   : tok('--c-calc-btn-edge', '#0f3460'),
+      btn      : tok('--c-brand', '#e94560'),
+      activeTab: tok('--c-calc-btn-bg-hover', '#0f3460'),
+      text     : tok('--c-txt', '#eee'),
+      dim      : tok('--c-dim', '#888'),
+      item     : tok('--c-link', '#adf'),
+      nature   : tok('--c-info', '#cba'),   // also used for ability
+      hpGreen  : tok('--c-hp-high', '#4caf50'),
+      hpYellow : tok('--c-hp-mid', '#ffeb3b'),
+      hpRed    : tok('--c-hp-low', '#f44336'),
+    };
+  })();
 
   // ---------------------------------------------------------------------------
   // Runtime state

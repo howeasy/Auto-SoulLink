@@ -13,31 +13,6 @@ import re
 
 import pytest
 
-from server.html_render import TYPE_COLOR, _relative_luminance, readable_on
-
-
-def _contrast(fg: str, bg: str) -> float:
-    a, b = _relative_luminance(fg), _relative_luminance(bg)
-    hi, lo = max(a, b), min(a, b)
-    return (hi + 0.05) / (lo + 0.05)
-
-
-@pytest.mark.parametrize("type_name,bg", sorted(TYPE_COLOR.items()))
-def test_every_type_badge_meets_wcag_aa(type_name, bg):
-    """Type is the primary matchup signal in the party, box, encounter list and every overlay.
-
-    A hand-maintained whitelist of five "light" types left nine badges below AA — Steel at
-    1.94:1, Grass 2.06, Bug 2.20. Deriving the text colour fixes all of them and cannot drift
-    when a new type colour is added.
-    """
-    assert _contrast(bg, readable_on(bg)) >= 4.5
-
-
-def test_readable_on_picks_the_higher_contrast_option():
-    assert readable_on("#ffffff") == "#000"
-    assert readable_on("#000000") == "#fff"
-
-
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 

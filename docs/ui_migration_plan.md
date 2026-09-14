@@ -3,19 +3,26 @@
 *Handoff document. Rewritten 2026-09-14 by the session that built the mockups. Assume the
 reader has none of that conversation.*
 
-**Status (2026-09-14, later):** Phases 0–8, **8b** and most of 9 are committed on
+**Status (2026-09-14, end of session 3):** Phases 0–8, 8b and 9 are committed on
 `claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`,
-suite 2 621 green). Phase 8b shipped: every SLink-compatible UPR option is exposed from one
+suite 2 603 green). Phase 8b shipped: every SLink-compatible UPR option is exposed from one
 table (`upr_settings.OPTIONS`), proven against the real jar (trainers +50 % → Youngster #1
-Lv11→17, all fully evolved; wild −20 %; catch rate 3). What is left of 9: `sidebar.css`
-(calc page only), `--font-ui` flip after checking every overlay at catalogue size,
-`calc/src/js/slink_bridge.js` palette, `html_render.py` helpers only tests call. Deliberately
-not done: Debug as a drawer (the rail links to the run's `/debug`), the Manager owning
-`obs_config.json`. Owner to force-delete the three `claude/ui-mockup-track-b*` branches (a
-hook blocks it here). **Merge:** master is still `adf3362`; the Gen 1 session will
-fast-forward it to `79d5172` and message this session — then rebase, take their delete of
-`tests/unit/test_gen1_adapter.py`, resolve one hunk each in `server/manager.py` (imports) and
-`tests/unit/test_upr_pipeline.py` (SIM115), run the suite, FF master to this branch.
+Lv11→17, all fully evolved; wild −20 %; catch rate 3). Phase 9 closed: `sidebar.css` is the
+one rail stylesheet (`dashboard.css` @imports it, −566 lines of duplicate rules),
+`calc/src/js/slink_bridge.js` reads the slink.css tokens, `server/html_render.py` deleted
+(nothing but tests called it; the status tests now render the `status_pill` macro).
+**Not flipped, on purpose:** `--font-ui` stays Pixelify for the run pages and the 25 OBS
+overlays — the board already sets Jersey 20 for itself (`body.board`), every page has the
+font picker, and re-fonting overlays users have sized in OBS is the owner's call, not a
+cleanup. Deliberately not done: Debug as a drawer (the rail links to the run's `/debug`),
+the Manager owning `obs_config.json`. Owner to force-delete the three
+`claude/ui-mockup-track-b*` branches (a hook blocks it here). **Merge:** master is still
+`adf3362`; the Gen 1 session will fast-forward it to `79d5172` and message this session —
+then rebase, take their delete of `tests/unit/test_gen1_adapter.py`, resolve one hunk each
+in `server/manager.py` (imports) and `tests/unit/test_upr_pipeline.py` (SIM115), run the
+suite, FF master to this branch. Two Gen 1-owned docstrings still name `html_render.
+status_icon_html` (`adapters/gen1_rby.py:476`, `adapters/gen3_frlge.py:326`) — tell that
+session; the decoder is now `templates/_macros.html::status_pill`.
 
 ## Read this first
 
@@ -549,7 +556,7 @@ the form should not.
 4. **`_randomizer_fields.html` + `static/randomizer.js`:** render `OPTIONS` by group (chips for choices, `.mk-opt` for bools, a range or number input for the curves with the value shown in `.num`); `rdraft` becomes the spec; the preflight and browse parts are unchanged. Ship `OPTIONS` to the page inside `SLINK_RANDOMIZER` (from `_randomizer_form`).
 5. **Tests:** `tests/unit/test_upr_settings.py` — round-trip every option through `build_spec` → `load` → `spec_from_parsed`; the envelope accepts every `build_spec` output and still refuses the hand-built forbidden files; `test_manager_randomize.py` — a `spec` body. **Then one real run against the jar with trainers +50 % and force-evolved-from-1, reading the log's `#1 (YOUNGSTER)` line** (baseline Lv11 → expect Lv16, all evolved) — the log lists every trainer's team and every wild slot, which is how each option's effect is provable in seconds (`scratchpad/upr_probe.py` from this session did exactly that; 0.5 s per randomize).
 
-# Phase 9 — Cleanup
+# Phase 9 — Cleanup *(done; see Status for what was left alone and why)*
 
 - **Table-drive the overlays** from `overlay_catalog.OVERLAYS`. 47 of 54 handler methods are
   ≤ 4 lines differing by one string; titles exist in **three** places and have drifted

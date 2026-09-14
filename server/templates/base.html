@@ -8,10 +8,11 @@
   <link rel="stylesheet" href="/static/themes/{{ theme }}.css" id="slink-theme">
   {# Pages that include the dashboard sidebar pull in their sidebar CSS + .js
      so the rail / collapse toggle / theme picker all wire up. Defaults to
-     `dashboard.css` for the templated pages (status, manager, memorial,
-     stream). The calc page passes `sidebar_css: "sidebar"` to get the
-     lighter sidebar.css instead — dashboard.css's Pixelify body font + the
-     high-res font-size scaling clobber calc's em-based Bootstrap layout. #}
+     `dashboard.css` (which @imports sidebar.css, the rail itself) for the
+     templated pages (status, memorial, stream). The calc page passes
+     `sidebar_css: "sidebar"` to get the rail alone — dashboard.css's
+     Pixelify body font + the high-res font-size scaling clobber calc's
+     em-based Bootstrap layout. The Manager passes "board". #}
   {% if sidebar_html %}
     <link rel="stylesheet" href="/static/{{ sidebar_css|default('dashboard') }}.css">
     <script src="/static/dashboard.js" defer></script>

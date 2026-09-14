@@ -1,124 +1,14 @@
 """
-Unit tests for stat stage icon rendering and passthrough.
+Unit tests for stat stage passthrough.
 
 Tests:
-- stat_stages_html() helper in server/html_render.py
-- status_icon_html() helper in server/html_render.py
 - stat_stages field flows through tick handler → party_details
 - stat_stages flows through _enrich_battle_state() for enemy party
 - Offset constant M.BATTLE_MON_STAT_STAGES_OFF = 0x19 (cannot read CFRU type3)
+
+The chips themselves are rendered by the `stat_stages_row` macro in templates/_macros.html,
+covered by the page tests.
 """
-from server.html_render import (
-    STAT_STAGE_LABELS as _STAT_STAGE_LABELS,
-    stat_stages_html as _stat_stages_html,
-    status_icon_html as _status_icon_html,
-)
-
-# ── _stat_stages_html: None / empty / all-neutral ────────────────────────────
-
-class TestStatStagesHtmlNullCases:
-    def test_none_returns_empty(self):
-        assert _stat_stages_html(None) == ""
-
-    def test_empty_list_returns_empty(self):
-        assert _stat_stages_html([]) == ""
-
-    def test_all_neutral_returns_empty(self):
-        assert _stat_stages_html([6, 6, 6, 6, 6, 6, 6]) == ""
-
-    def test_string_returns_empty(self):
-        assert _stat_stages_html("garbage") == ""
-
-    def test_dict_returns_empty(self):
-        assert _stat_stages_html({"atk": 8}) == ""
-
-    def test_int_returns_empty(self):
-        assert _stat_stages_html(8) == ""
-
-
-# ── _stat_stages_html: content correctness ───────────────────────────────────
-
-class TestStatStagesHtmlContent:
-    def test_atk_boost_2(self):
-        # ATK = 8, all others neutral
-        result = _stat_stages_html([8, 6, 6, 6, 6, 6, 6])
-        assert "+2" in result
-        assert "ATK" in result
-        assert "ss-up" in result
-        assert "ss-dn" not in result
-
-    def test_spd_drop_1(self):
-        # SPD = 5 (index 2)
-        result = _stat_stages_html([6, 6, 5, 6, 6, 6, 6])
-        assert "\u22121" in result
-        assert "SPD" in result
-        assert "ss-dn" in result
-        assert "ss-up" not in result
-
-    def test_multiple_stages(self):
-        # ATK +2, DEF -1, ACC +1
-        result = _stat_stages_html([8, 5, 6, 6, 6, 7, 6])
-        assert "+2 ATK" in result
-        assert "\u22121 DEF" in result
-        assert "+1 ACC" in result
-
-    def test_max_stage_12(self):
-        result = _stat_stages_html([12, 6, 6, 6, 6, 6, 6])
-        assert "+6 ATK" in result
-
-    def test_min_stage_0(self):
-        result = _stat_stages_html([0, 6, 6, 6, 6, 6, 6])
-        assert "\u22126 ATK" in result
-
-    def test_label_order(self):
-        # Each stat should map to correct label
-        for i, label in enumerate(_STAT_STAGE_LABELS):
-            stages = [6] * 7
-            stages[i] = 8  # +2 boost
-            result = _stat_stages_html(stages)
-            assert label in result, f"Expected label '{label}' at index {i}"
-
-    def test_exactly_7_labels(self):
-        assert _STAT_STAGE_LABELS == ["ATK", "DEF", "SPD", "SATK", "SDEF", "ACC", "EVA"]
-        assert len(_STAT_STAGE_LABELS) == 7
-
-
-# ── _stat_stages_html: malformed input hardening ─────────────────────────────
-
-class TestStatStagesHtmlMalformed:
-    def test_out_of_range_high_ignored(self):
-        # Raw value 25 would be stage +19 — clamp/skip
-        result = _stat_stages_html([25, 6, 6, 6, 6, 6, 6])
-        assert result == ""
-
-    def test_out_of_range_low_negative_ignored(self):
-        # Negative raw values (unsigned read shouldn't produce these, but defensive)
-        result = _stat_stages_html([-5, 6, 6, 6, 6, 6, 6])
-        assert result == ""
-
-    def test_none_entry_in_list_skipped(self):
-        # Mixed list: one None value should not raise
-        result = _stat_stages_html([None, 8, 6, 6, 6, 6, 6])
-        assert "ATK" not in result  # first slot skipped
-        assert "+2 DEF" in result   # second slot rendered
-
-    def test_string_entry_in_list_skipped(self):
-        result = _stat_stages_html(["bad", 6, 6, 6, 6, 6, 6])
-        assert result == ""
-
-    def test_longer_list_truncated_to_7_labels(self):
-        # Extra elements beyond 7 should be ignored
-        result = _stat_stages_html([8, 6, 6, 6, 6, 6, 6, 8, 8])
-        # Only ATK badge — no extra badges for indices 7,8
-        assert result.count("stat-stage") == 1
-
-    def test_shorter_list_renders_available(self):
-        # Only first 3 elements provided
-        result = _stat_stages_html([8, 6, 4])
-        assert "+2 ATK" in result
-        assert "\u22122 SPD" in result
-        assert "DEF" not in result  # neutral, no badge
-
 
 # ── party_details stat_stages passthrough ─────────────────────────────────────
 
@@ -224,19 +114,6 @@ class TestPartyDetailsPassthrough:
         assert detail["active"] is False
         assert detail["stat_stages"] is None
 
-    def test_stat_stages_html_not_rendered_for_inactive(self):
-        stages = [8, 6, 6, 6, 6, 6, 6]
-        # Mirrors server.py's `(active and _stat_stages_html(...) or "")` render idiom:
-        # an inactive mon must render nothing even when it has non-neutral stages.
-        is_active = False
-        result = is_active and _stat_stages_html(stages) or ""
-        assert result == ""
-        # ...and the same idiom does render once the mon is active (guards the
-        # inactive case above from passing for the wrong reason).
-        is_active = True
-        assert "+2 ATK" in (is_active and _stat_stages_html(stages) or "")
-
-
 # ── _enrich_battle_state passthrough ─────────────────────────────────────────
 
 class TestEnrichBattleStatePassthrough:
@@ -270,13 +147,6 @@ class TestEnrichBattleStatePassthrough:
         assert enriched[0]["species_name"] == "Charizard"
         assert enriched[0]["sprite_html"]
 
-    def test_stat_stages_html_renders_enemy_active(self):
-        stages = [6, 9, 6, 6, 6, 6, 6]  # DEF +3
-        result = _stat_stages_html(stages)
-        assert "+3 DEF" in result
-        assert "ss-up" in result
-
-
 # ── Offset correctness: 0x19 skips both vanilla HP-stage and CFRU type3 ──────
 
 class TestOffsetConstant:
@@ -308,10 +178,21 @@ class TestOffsetConstant:
         )
 
 
-# ── _status_icon_html ─────────────────────────────────────────────────────────
+# ── the status_pill macro ─────────────────────────────────────────────────────
+
+def _status_icon_html(cond) -> str:
+    """Render templates/_macros.html's status_pill the way every page does."""
+    import jinja2
+
+    from server.templating import TEMPLATES_DIR
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True)
+    env.filters["bitand"] = lambda v, m: (int(v) & int(m)) if isinstance(v, int) else 0
+    return env.from_string(
+        '{% from "_macros.html" import status_pill %}{{ status_pill(cond) }}').render(cond=cond).strip()
+
 
 class TestStatusIconHtml:
-    """Tests for _status_icon_html().
+    """Tests for the status_pill macro, the one status-condition decoder every page uses.
 
     Gen 3 status1 bitmask (from pret/pokefirered include/constants/pokemon.h):
       bits 0–2  STATUS1_SLEEP         (counter 1–7)
@@ -335,7 +216,7 @@ class TestStatusIconHtml:
     def test_sleep_counter_1(self):
         result = _status_icon_html(0x01)
         assert "SLP" in result
-        assert "s-slp" in result
+        assert "sc-slp" in result
 
     def test_sleep_counter_7(self):
         result = _status_icon_html(0x07)
@@ -344,28 +225,28 @@ class TestStatusIconHtml:
     def test_poison(self):
         result = _status_icon_html(0x08)
         assert "PSN" in result
-        assert "s-psn" in result
+        assert "sc-psn" in result
 
     def test_burn(self):
         result = _status_icon_html(0x10)
         assert "BRN" in result
-        assert "s-brn" in result
+        assert "sc-brn" in result
 
     def test_freeze(self):
         result = _status_icon_html(0x20)
         assert "FRZ" in result
-        assert "s-frz" in result
+        assert "sc-frz" in result
 
     def test_paralysis(self):
         result = _status_icon_html(0x40)
         assert "PAR" in result
-        assert "s-par" in result
+        assert "sc-par" in result
 
     def test_toxic(self):
         # Toxic sets both bit 7 (0x80) and bit 3 (0x08) in-game
         result = _status_icon_html(0x88)
         assert "TOX" in result
-        assert "s-tox" in result
+        assert "sc-tox" in result
 
     # ── priority: Toxic must win over PSN ──────────────────────────────────
 
@@ -399,12 +280,12 @@ class TestStatusIconHtml:
     def test_css_class_names(self):
         """Verify exact class names — stream overlays depend on these."""
         cases = [
-            (0x01, "s-slp"),
-            (0x08, "s-psn"),
-            (0x10, "s-brn"),
-            (0x20, "s-frz"),
-            (0x40, "s-par"),
-            (0x80, "s-tox"),
+            (0x01, "sc-slp"),
+            (0x08, "sc-psn"),
+            (0x10, "sc-brn"),
+            (0x20, "sc-frz"),
+            (0x40, "sc-par"),
+            (0x80, "sc-tox"),
         ]
         for cond, cls in cases:
             result = _status_icon_html(cond)

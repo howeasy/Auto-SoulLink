@@ -1,40 +1,56 @@
-/* sidebar.css — minimal SLink sidebar chrome for pages that DON'T want the
- * full dashboard.css typography (calc body, etc.).
- *
- * What's in here:
- *   - body grid layout (230px sidebar | 1fr main)
- *   - .dash-sidebar* rules + brand + nav items + foot
- *   - collapsed-mode rules
- *   - .theme-switcher--in-sidebar styling
- *
- * What's NOT in here:
- *   - body { font-family / font-size / line-height } — calc keeps its own
- *   - @media font-size scaling at high resolutions — calc has fixed sizing
- *   - table / heading / card styling — calc's Bootstrap owns those
- *
- * Pages that DO want the full dashboard chrome (status, debug, twitch, OBS,
- * memorial, stream gallery) load dashboard.css instead of (or in addition
- * to) this file. */
+/* sidebar.css — the SLink sidebar: the two-column body grid, the rail (.dash-sidebar*),
+ * the nav items, the collapse toggle, the theme + font pickers moved into the rail, and
+ * the narrow-width collapse. Loaded on its own by the calc page (which keeps Bootstrap's
+ * body typography) and @imported by dashboard.css for every other rail page. One copy of
+ * these rules; the calc-specific font rule is at the end. */
 
 body {
   margin: 0;
   padding: 0;
+  /* Two-column shell: nav rail + scrollable content pane. The rail
+   * lives outside #content so SSE-triggered morph swaps never touch it.
+   * Both rail width and content cap derive from --scale-step so they
+   * scale smoothly with the viewport. */
   display: grid;
-  /* Rail width sourced from slink.css --size-rail so calc / status /
-   * manager all share the same rail size at any viewport. */
   grid-template-columns: var(--size-rail) minmax(0, 1fr);
   min-height: 100vh;
 }
+/* Collapsed sidebar mode — user toggle persists in localStorage; see
+ * dashboard.js. The brand title, page port, and item labels hide, leaving
+ * a slim icon-only rail that recovers content width. The hamburger toggle
+ * also hides (logo doubles as the click target) so the logo can sit
+ * perfectly centered in the collapsed column. */
 body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0, 1fr); }
+body.dash-collapsed .dash-sidebar-title,
+body.dash-collapsed .dash-side-label,
+body.dash-collapsed .dash-sidebar-toggle,
+body.dash-collapsed .dash-sidebar-brand {
+  padding: 14px 0 12px;
+  justify-content: center;
+  gap: 0;
+}
+body.dash-collapsed .dash-sidebar-brand .slink-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+body.dash-collapsed .dash-side-item { justify-content: center; padding: 10px 6px; }
+body.dash-collapsed .dash-sidebar-nav { padding: 8px 4px; }
+h2 {
+  color: var(--c-info);
+  font-family: var(--font-heading);
+  margin-top: 1.1em;
+  margin-bottom: 0.5em;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c-brand) 40%, transparent);
+}
+h3 { color: var(--c-txt); margin: 0 0 0.55em 0; font-size: 1.05em; }
 
-/* Calc opts out of the viewport-driven --scale-step ramp by pinning the
- * token to Bootstrap's native 14px (declared in slink.css under the
- * `body.dark-theme` selector). Calc's sidebar still scales smoothly
- * because slink.css re-asserts --scale-step inside .dash-sidebar on the
- * calc page. The prior `zoom: 1.1` hack lived here — removed now that
- * the token system gives us a cleaner opt-out. */
-
-/* ── Sidebar shell ────────────────────────────────────────────────────── */
+/* ── Sidebar nav (HTMX rail) ──────────────────────────────────────────
+ * Always-visible left rail with inline SVG icons whose currentColor
+ * tracks each item's semantic accent (memorial = dead, stream = link,
+ * twitch = gold, etc.) so the theme paints them automatically. Lives
+ * outside #content so dashboard SSE morph swaps never re-render it. */
 .dash-sidebar {
   position: sticky;
   top: 0;
@@ -52,16 +68,6 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
     inset -1px 0 0 rgba(255, 255, 255, .03),
     2px 0 10px rgba(0, 0, 0, .35);
   z-index: 30;
-  /* `--font-ui` flips between Pixelify and system-ui via the sidebar
-   * font picker (see slink.css). Font size sourced from --scale-step so
-   * the sidebar matches the dashboard at every viewport. On the calc
-   * page (body.dark-theme) slink.css re-asserts --scale-step inside the
-   * sidebar specifically so calc's body keeps its native Bootstrap size
-   * while the rail still grows to match the rest of the product. */
-  font-family: var(--font-ui);
-  font-size: var(--scale-step);
-  line-height: 1.4;
-  color: var(--c-txt);
 }
 .dash-sidebar-brand {
   display: flex;
@@ -74,7 +80,9 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
   flex-shrink: 0;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-brand) 55%, transparent));
 }
-.dash-sidebar-brand .slink-logo svg { width: 30px; height: 30px; display: block; }
+.dash-sidebar-brand .slink-logo svg {
+  width: 30px; height: 30px; display: block;
+}
 .dash-sidebar-title {
   display: flex;
   flex-direction: column;
@@ -84,9 +92,6 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
 }
 .dash-sidebar-name {
   font-family: var(--font-heading);
-  /* Em-relative so the brand grows with the sidebar's scaling font-size
-   * (matches dashboard.css's value). Pre-fix this was a fixed 15px which
-   * stayed small on 4K screens while the dashboard sidebar grew. */
   font-size: 0.92em;
   font-weight: 700;
   color: var(--c-gold);
@@ -94,7 +99,7 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
   text-shadow: 0 0 8px color-mix(in srgb, var(--c-brand) 55%, transparent);
 }
 .dash-sidebar-port {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);   /* a port is a number; see --font-num in slink.css */
   font-size: 0.6em;
   color: var(--c-dim);
   letter-spacing: 0.08em;
@@ -102,6 +107,9 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
   margin-top: 2px;
 }
 
+/* Collapse toggle — appears in the brand area, persists state to
+ * localStorage via dashboard.js. Small hamburger icon that becomes the only
+ * sidebar control when collapsed. */
 .dash-sidebar-toggle {
   flex-shrink: 0;
   background: transparent;
@@ -122,8 +130,6 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
   color: var(--c-brand);
 }
 .dash-sidebar-toggle-ico { width: 16px; height: 16px; display: block; }
-
-/* ── Nav items ────────────────────────────────────────────────────────── */
 .dash-sidebar-nav {
   flex: 1;
   display: flex;
@@ -143,10 +149,6 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
   text-decoration: none;
   color: var(--c-txt);
   font-family: var(--font-heading);
-  /* Em-relative so nav items scale with the sidebar's font-size media
-   * queries. Pre-fix this was 13px which kept items at the same size
-   * even when the sidebar grew to 36px on 4K — dashboard.css uses 0.62em
-   * for the same surface and we now match. */
   font-size: 0.62em;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -171,9 +173,22 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
   color: var(--item-accent);
 }
 .dash-side-label { line-height: 1; }
-/* Eight items, eight distinct accent tokens (see dashboard.css for the
- * rationale). Sidebar.css duplicates the mapping so calc renders the
- * same rail palette as the dashboard pages. */
+/* Sidebar nav accent palette — eight items, eight distinct token sources
+ * so no two icons share a colour AND each theme shifts the lineup
+ * differently. Previously Status+Twitch were both --c-gold and
+ * Debug+Calc were both --c-pend, which collapsed the rail into six
+ * visible hues; the swap below restores one unique colour per item.
+ *
+ * Token choices:
+ *   manager  → c-alive (green, "run is active")
+ *   status   → c-gold  (yellow, primary state)
+ *   memorial → c-dead  (red, gravestone)
+ *   stream   → c-link  (blue, video link feel)
+ *   twitch   → c-brand (theme accent — purple-ish on grape, orange on
+ *              fire, etc.; gives the most variety between themes)
+ *   obs      → c-info  (cyan, broadcaster)
+ *   calc     → c-pend  (warm, "experimental calculator")
+ *   debug    → c-txt   (light, contrasts with every theme's bg) */
 .dash-side-item.nav-manager  { --item-accent: var(--c-alive); }
 .dash-side-item.nav-status   { --item-accent: var(--c-gold); }
 .dash-side-item.nav-memorial { --item-accent: var(--c-dead); }
@@ -183,25 +198,74 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
 .dash-side-item.nav-calc     { --item-accent: var(--c-pend); }
 .dash-side-item.nav-debug    { --item-accent: var(--c-txt); }
 
-/* ── Font + theme picker slots ───────────────────────────────────────── */
-/* Both slots sit at the bottom of the rail, font picker above theme.
- * dashboard.js builds + drops the widgets in here at parse time. Empty
- * state collapses each slot so a page that never builds the widgets
- * (e.g. before dashboard.js runs) shows no decorative border line. */
-.dash-sidebar-font,
+/* Theme-switcher base styling — duplicated here from _theme_switcher.html's
+ * inline <style> so the VANILLA picker (built by dashboard.js on
+ * non-Jinja pages: status / debug / twitch / OBS / calc) renders at the
+ * same 12px scale + 6px/9px summary padding as the Alpine version that
+ * ships with the Jinja partial. Without this, the vanilla picker
+ * inherited the sidebar's 28px font-size on 4K monitors and rendered
+ * comically larger than the matched theme picker on dashboard/manager.
+ *
+ * The Alpine partial's own inline <style> rules cascade on top with
+ * equal specificity on Jinja pages — same values, no conflict. */
+.theme-switcher {
+  font-family: 'Pixelify Sans', 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+}
+.theme-switcher details {
+  background: var(--c-card, #1a1a22);
+  border: 1px solid var(--c-edge, #2a2a35);
+  border-radius: 6px;
+  min-width: 130px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .4);
+}
+.theme-switcher summary {
+  display: flex; align-items: center; gap: 6px; padding: 6px 9px;
+  cursor: pointer; user-select: none; color: var(--c-txt, #ccc); list-style: none;
+}
+.theme-switcher summary::-webkit-details-marker { display: none; }
+.theme-switcher .theme-caret { margin-left: auto; opacity: .6; font-size: .8em; }
+.theme-switcher details[open] .theme-caret { transform: rotate(180deg); }
+.theme-switcher .theme-swatch {
+  width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+  border: 1px solid var(--c-edge, #2a2a35);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+}
+.theme-switcher .theme-pills {
+  display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  border-top: 1px solid var(--c-edge, #2a2a35);
+}
+.theme-switcher .theme-pill {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  color: var(--c-txt, #ccc); font: inherit; cursor: pointer; text-align: left;
+}
+.theme-switcher .theme-pill:hover {
+  background: color-mix(in srgb, var(--c-edge, #2a2a35) 35%, transparent);
+}
+.theme-switcher .theme-pill.active {
+  background: color-mix(in srgb, var(--c-brand, #f8d030) 18%, transparent);
+  border-color: var(--c-brand, #f8d030);
+}
+.theme-switcher .theme-pill .theme-label { flex: 1; }
+/* Floating top-right placement is the default; suppressed on pages that
+ * have a sidebar slot to receive the widget (see :has() rule below). */
+.theme-switcher:not(.theme-switcher--in-sidebar) {
+  position: fixed; top: 12px; right: 12px; z-index: 100;
+}
+
+/* Theme switcher slot — dashboard.js moves the floating widget here. The
+ * `.theme-switcher--in-sidebar` class overrides the fixed positioning the
+ * floating mode applies. */
 .dash-sidebar-theme {
   padding: 8px 10px;
   border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
 }
-.dash-sidebar-font:empty,
 .dash-sidebar-theme:empty { display: none; }
-/* Font switcher uses the same chrome treatment as the theme switcher;
- * dashboard.css holds the full ruleset. sidebar.css only needs to
- * acknowledge the slot exists. */
-.font-switcher--in-sidebar { width: 100%; }
-.font-switcher--in-sidebar details { width: 100%; min-width: 0 !important; max-width: 100%; }
-/* Hide floating widget on pages with a sidebar slot until dashboard.js moves
- * it into place (FOUC prevention). */
+/* Hide the floating widget on pages that have a sidebar slot to receive it
+ * (FOUC prevention). dashboard.js relocates the switcher into the slot on
+ * load, but during the brief moment between body parse and JS execution the
+ * widget would otherwise flash in its default fixed top-right position. */
 body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
   visibility: hidden;
 }
@@ -216,9 +280,11 @@ body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
   border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
   border-radius: 6px;
   width: 100%;
-  /* Override `_theme_switcher.html`'s inline `min-width: 130px` (loaded
-   * after this stylesheet) so the picker fits inside the collapsed rail
-   * instead of overflowing into the calc content area. */
+  /* `_theme_switcher.html`'s inline <style> sets `min-width: 130px` for the
+   * floating top-right widget and loads after dashboard.css, so this needs
+   * !important to win the tie. Without it, the in-sidebar details overflows
+   * the collapsed 60px rail (the user saw a wide rectangle spilling into
+   * the content pane). */
   min-width: 0 !important;
   max-width: 100%;
   position: relative;
@@ -229,7 +295,9 @@ body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
   gap: 10px;
   padding: 10px 12px;
   font-family: var(--font-heading);
-  font-size: 14px;
+  /* Match the sidebar nav item label size (0.62em on a 22-32px body) so the
+   * picker reads at the same weight as the nav links it lives below. */
+  font-size: 1em;
   letter-spacing: 0.04em;
   font-weight: 600;
   color: var(--c-txt);
@@ -250,9 +318,11 @@ body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.theme-switcher--in-sidebar .theme-caret { opacity: .6; font-size: 12px; }
+.theme-switcher--in-sidebar .theme-caret { opacity: .6; font-size: .85em; }
 .theme-switcher--in-sidebar details[open] .theme-caret { transform: rotate(180deg); }
 .theme-switcher--in-sidebar .theme-pills {
+  /* Expand panel upward so it doesn't collide with the footer / hover the
+   * page content. */
   position: absolute;
   bottom: calc(100% + 4px);
   left: 0;
@@ -276,8 +346,9 @@ body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
   border: 1px solid transparent;
   border-radius: 4px;
   color: var(--c-txt);
+  font: inherit;
+  font-size: 0.95em;
   font-family: var(--font-heading);
-  font-size: 13px;
   cursor: pointer;
   text-align: left;
 }
@@ -290,23 +361,8 @@ body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
 }
 .theme-switcher--in-sidebar .theme-pill .theme-label { flex: 1; }
 
-/* ── Collapsed sidebar ────────────────────────────────────────────────── */
-body.dash-collapsed .dash-sidebar-title,
-body.dash-collapsed .dash-side-label,
-body.dash-collapsed .dash-sidebar-toggle,
-body.dash-collapsed .dash-sidebar-brand {
-  padding: 14px 0 12px;
-  justify-content: center;
-  gap: 0;
-}
-body.dash-collapsed .dash-sidebar-brand .slink-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-body.dash-collapsed .dash-side-item { justify-content: center; padding: 10px 6px; }
-body.dash-collapsed .dash-sidebar-nav { padding: 8px 4px; }
+/* Collapsed sidebar: shrink the picker to a single swatch button, keep the
+ * dropdown panel accessible (escapes the 60px rail to the right). */
 body.dash-collapsed .dash-sidebar-theme { padding: 6px 4px; }
 body.dash-collapsed .theme-switcher--in-sidebar summary {
   justify-content: center;
@@ -324,4 +380,192 @@ body.dash-collapsed .theme-switcher--in-sidebar .theme-pills {
   right: auto;
   bottom: 0;
   min-width: 180px;
+}
+
+/* ── Font picker — visually identical to the theme picker. The two pickers
+ *    stack in the sidebar (font on top, theme below) and must read at the
+ *    same scale so neither one dominates the rail. Achieved by reusing the
+ *    theme picker's exact rules; only the inner .font-sample glyph differs
+ *    from the .theme-swatch (an "Aa" preview vs. a color block).
+ *
+ *    The summary's label always renders in `--font-heading` (Pixelify) even
+ *    when the active font is classic, so the picker chrome looks stable
+ *    across choices — only the .font-sample previews the target font. */
+.dash-sidebar-font {
+  padding: 8px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
+}
+.dash-sidebar-font:empty { display: none; }
+/* The font picker mirrors the theme picker EXACTLY — same wrapper font-
+ * size (12px from _theme_switcher.html's inline <style>), same summary
+ * padding (6px 9px), same swatch geometry. Keeping the two pickers
+ * visually identical means they read as a single control surface in the
+ * rail rather than competing for attention. The font-switcher has no
+ * inline-template counterpart (it's built entirely from dashboard.js),
+ * so its sizing tokens live here as the source of truth. */
+.font-switcher {
+  font-size: 12px;
+  font-family: 'Pixelify Sans', 'Segoe UI', system-ui, sans-serif;
+}
+.font-switcher--in-sidebar {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+}
+.font-switcher--in-sidebar details {
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+  position: relative;
+}
+.font-switcher--in-sidebar summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--c-txt);
+  list-style: none;
+}
+.font-switcher--in-sidebar summary::-webkit-details-marker { display: none; }
+.font-switcher--in-sidebar .font-sample {
+  /* Match the theme picker's swatch dimensions exactly: 20×20 content +
+   * 1px border = 22×22 bounding box (same as .theme-switcher--in-sidebar
+   * .theme-swatch in dashboard.css). */
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--c-bg) 60%, var(--c-card));
+  /* "Aa" preview shrunk to fit the swatch-sized box. font-family is set
+   * per-element inline (by dashboard.js refreshFontWidget) so each pill
+   * previews its target font and the summary previews the active one. */
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.font-switcher--in-sidebar .font-caret { margin-left: auto; opacity: .6; font-size: .8em; }
+.font-switcher--in-sidebar .font-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-switcher--in-sidebar details[open] .font-caret { transform: rotate(180deg); }
+.font-switcher--in-sidebar .font-pills {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.font-switcher--in-sidebar .font-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--c-txt);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.font-switcher--in-sidebar .font-pill:hover {
+  background: color-mix(in srgb, var(--c-edge) 35%, transparent);
+}
+.font-switcher--in-sidebar .font-pill.active {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: var(--c-brand);
+}
+.font-switcher--in-sidebar .font-pill .font-label { flex: 1; }
+
+/* Collapsed sidebar: shrink to a single sample swatch — mirrors the
+ * theme picker's collapsed treatment exactly. */
+body.dash-collapsed .dash-sidebar-font { padding: 6px 4px; }
+body.dash-collapsed .font-switcher--in-sidebar summary {
+  justify-content: center;
+  padding: 8px 6px;
+  gap: 0;
+}
+body.dash-collapsed .font-switcher--in-sidebar .font-name,
+body.dash-collapsed .font-switcher--in-sidebar .font-caret { display: none !important; }
+body.dash-collapsed .font-switcher--in-sidebar .font-sample {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+body.dash-collapsed .font-switcher--in-sidebar .font-pills {
+  left: calc(100% + 6px);
+  right: auto;
+  bottom: 0;
+  min-width: 180px;
+}
+
+.dash-main {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  min-width: 0;
+  width: 100%;
+  max-width: var(--size-content-cap);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.dash-main > .phase-banner {
+  margin-bottom: 0.8em;
+}
+#dash-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  /* No `outline: 0` — this is a real text input and removing its focus ring made it
+     keyboard-invisible. It is the only such suppression the dashboard had. */
+  color: var(--c-txt);
+  font-family: var(--font-heading);
+  font-size: 0.95em;
+  padding: 6px 0;
+}
+#dash-search-input::placeholder { color: var(--c-dim); opacity: 0.75; }
+#dash-search-input::-webkit-search-cancel-button { display: none; }
+/* On narrow desktop widths, collapse the sidebar to an icon-only strip so
+ * the dashboard content still gets the full window. Below 700px the rail
+ * stacks above content (tablet / portrait monitor). */
+@media (max-width: 700px) {
+  body { grid-template-columns: 1fr; }
+  .dash-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  }
+  .dash-sidebar-brand { flex: 0 0 auto; border-bottom: 0; }
+  .dash-sidebar-nav { flex: 1; flex-direction: row; flex-wrap: wrap; padding: 8px; }
+  .dash-side-item { border-left: 0; border-bottom: 3px solid transparent; }
+  .dash-side-item:hover { border-left-color: transparent; border-bottom-color: var(--item-accent); }
+  .dash-side-item[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--item-accent); }
+}
+
+/* Pages without dashboard.css (the calc) set no body font; the rail still reads in the
+ * UI face at the shared step. On dashboard pages body already says the same. */
+.dash-sidebar {
+  font-family: var(--font-ui);
+  font-size: var(--scale-step);
+  line-height: 1.4;
+  color: var(--c-txt);
 }
