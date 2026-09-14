@@ -15,6 +15,8 @@ from pathlib import Path
 import psutil
 from pytest import MonkeyPatch
 
+from tests.live.gen1_scripted_host import ROUTE_MODULES
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -301,9 +303,9 @@ class SelectedRun:
             raise ValueError("explicit supported selected launch mode required")
         if (launch_mode == "scripted-selected-launcher") != (input_mode == "scripted-normal-buttons"):
             raise ValueError("scripted input requires the scripted selected launcher")
-        if route_mode not in (None, "rb-starter-rival") or route_mode is not None and (
+        if route_mode not in (None, *ROUTE_MODULES) or route_mode is not None and (
                 launch_mode != "scripted-selected-launcher" or self.variants != ("red", "blue")):
-            raise ValueError("R/B starter-rival route requires the scripted Red/Blue pair")
+            raise ValueError("R/B route requires the scripted Red/Blue pair")
         self.input_mode = input_mode
         self.launch_mode = launch_mode
         self.route_mode = route_mode
@@ -356,9 +358,11 @@ class SelectedRun:
         if self.launch_mode == "scripted-selected-launcher":
             for name in ("tests/live/gen1_scripted_host.py", "lua/tests/gen1_scripted_new_game.lua"):
                 self.outcome["source_files"][name] = sha(ROOT / name)
-        if self.route_mode == "rb-starter-rival":
-            for name in ("lua/tests/gen1_rb_ball_gate_inputs.lua", "tests/live/test_gen1_selected_rb_ball_gate.py"):
-                self.outcome["source_files"][name] = sha(ROOT / name)
+        if self.route_mode is not None:
+            for module in ROUTE_MODULES[self.route_mode]:
+                self.outcome["source_files"][module.relative_to(ROOT).as_posix()] = sha(module)
+            self.outcome["source_files"]["tests/live/test_gen1_selected_rb_ball_gate.py"] = sha(
+                ROOT / "tests/live/test_gen1_selected_rb_ball_gate.py")
         self.owned.mkdir(parents=True, exist_ok=False)
         self._owns_output = True
 
@@ -545,8 +549,11 @@ class SelectedRun:
                 assert state["stage"] == "input-stopped", "scripted normal input did not stop at free service"
                 players[player]["scripted_progress"] = state
                 players[player]["scripted_plan"] = plan
-                if self.route_mode == "rb-starter-rival":
+                if self.route_mode is not None:
                     assert plan["route_mode"] == self.route_mode
+                    for module in ROUTE_MODULES[self.route_mode]:
+                        assert plan["route_module_sha256"][module.name] == sha(directory / module.name)
+                        assert plan["route_module_sha256"][module.name] == sha(module)
                     assert plan["rb_route_sha256"] == sha(directory / "gen1_rb_ball_gate_inputs.lua")
                     assert plan["rb_route_sha256"] == sha(ROOT / "lua/tests/gen1_rb_ball_gate_inputs.lua")
         evidence = audit_enrollment(self.runtime, document, {

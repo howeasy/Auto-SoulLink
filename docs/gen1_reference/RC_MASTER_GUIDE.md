@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T00:48:08+00:00",
+  "updated_at_utc": "2026-09-14T01:10:25+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "57eabf78d989ab50188868e0d5278d5236447af9",
   "live_lane": null,
-  "next_action": "R7 PASS recorded. Next: owner decision on browser reapply-noop contract (E-2); dispatch P-2a route_point() field producer (OMP, literal card) and P-2b menu_kind derivation research (Codex peer) toward parcel integration; D2 first-ball/catch claim record.",
+  "next_action": "Integrate D2-HOST + P-2a + parcel candidate (reviewed cx-4754b1c0 ACCEPT-WITH-NOTES). Then dispatch D2-LUA (chaining + mart signature with an explicit 'unknown' idle kind + parcel-module amendment + decoder hash in source_files) to an isolated implementation worker using the Gen1-CodexPeer spec. Owner decisions pending: E-2 reapply-noop; FT-2 Manager UPR recipe scope.",
   "workers": [
     {
       "id": "battle-input",
@@ -107,18 +107,20 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "parcel",
-      "owner": "released (/root/d1_rb_parcel_sol); files preserved untracked",
-      "state": "frozen",
+      "owner": "integrated into git by coordinator as part of D2 (candidate files now tracked; menu_kind contract under revision in D2-LUA)",
+      "state": "done",
       "files": [
         "lua/tests/gen1_rb_parcel_inputs.lua",
         "tests/unit/test_gen1_rb_parcel_inputs.py",
         "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
       ],
-      "next_action": "Wait for the R7 lab checkpoint PASS and a raw menu producer; then rebase/review for integration.",
+      "next_action": "D2-LUA amends the menu_kind branch: 'unknown' idles; 12 existing model tests stay green plus red tests from the spec.",
       "reuse_decision": "game-specific adapter for pinned R/B routes; shared host and HUD reused",
-      "receipt": "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md",
+      "receipt": "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md (12/12 modeled, hashes f2a3c0f6.../ae2ed205... at integration)",
       "independent_review_refs": [
-        "coordinator-verified current-card peer review recorded in transition archive"
+        "prior coordinator source review recorded in the parcel report",
+        "P-2b audit cx-a4e7afad (wCurItem trap, predicates)",
+        "D2-LUA-SPEC cx-2b893131 (none-acts finding)"
       ]
     },
     {
@@ -198,6 +200,117 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator cross-check against gen1_scripted_new_game.lua:51-65,86 and the parcel report L9/L18"
       ]
+    },
+    {
+      "id": "p2a-point-fields",
+      "owner": "integrated by coordinator (OMP authored)",
+      "state": "done",
+      "files": [
+        "lua/tests/gen1_rb_point_fields.lua",
+        "tests/unit/test_gen1_rb_point_fields.py",
+        "lua/tests/gen1_scripted_new_game.lua"
+      ],
+      "next_action": "None; integrated MODEL ONLY. item_id stays raw wCurItem until D2-LUA derivation; list_scroll_offset/menu_watch_oob/font_loaded to be added in D2-LUA.",
+      "reuse_decision": "game-specific R/B WRAM decoders in a small pure module; the shared scripted host only gains additive point fields",
+      "receipt": "tests/unit/test_gen1_rb_point_fields.py (4 passed)",
+      "independent_review_refs": [
+        "Codex headless REVIEW cx-4754b1c0: ACCEPT-WITH-NOTES (CUT B) \u2014 event bits 35/56/57, BCD, bag layout, facing, symbols verified against pokered 405b624"
+      ]
+    },
+    {
+      "id": "p2b-menu-kind-audit",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-a4e7afad)",
+      "state": "done",
+      "files": [
+        ".cache/pret/pokered/scripts/ViridianMart.asm",
+        "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
+      ],
+      "next_action": "None; findings recorded in the guide P-2b line and folded into the P-2a-2/D2-LUA specs.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (P-2b line)",
+      "independent_review_refs": [
+        "coordinator verified home/list_menu.asm:417 wCurItem overwrite and data/items/marts.asm:4-5 inventory order"
+      ]
+    },
+    {
+      "id": "d2-claim-draft",
+      "owner": "Sonnet 5 worker (done)",
+      "state": "done",
+      "files": [
+        "tests/gen1_release_requirements.json",
+        "tests/live/gen1_scripted_host.py",
+        "tests/live/gen1_selected_scenario.py"
+      ],
+      "next_action": "None. Record accepted by coordinator: parcel module resumes in the same process after lab-loss-complete (map 0x28, oak_got_parcel false; gen1_rb_parcel_inputs.lua:125-128), terminal phase first-ball-readback (:99); chained rb-parcel route mode is the smallest plumbing; ball-gate rows gameplay.red/blue.ball-gate (manifest :2905/:3165, proofs=[]); server flips pokeballs_obtained per player from has_pokeballs (server/state.py:388-389).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (D2 line)",
+      "independent_review_refs": [
+        "coordinator cross-check of gen1_scripted_host.py:18,47-49,115 and gen1_selected_scenario.py:304-306,359,447-448,548-549"
+      ]
+    },
+    {
+      "id": "d2-host",
+      "owner": "integrated by coordinator (Sonnet worker authored rounds 1-2)",
+      "state": "done",
+      "files": [
+        "tests/live/gen1_scripted_host.py",
+        "tests/live/gen1_selected_scenario.py",
+        "tests/live/test_gen1_selected_rb_ball_gate.py",
+        "tests/unit/test_gen1_scripted_route_modes.py"
+      ],
+      "next_action": "None; integrated MODEL ONLY. Note P3: add lua/tests/gen1_rb_point_fields.lua to SelectedRun source_files (gen1_selected_scenario.py:358-367) in D2-LUA.",
+      "reuse_decision": "shared scripted-host infrastructure (route-mode plumbing, chaining contract); the parcel module and point fields stay R/B-specific",
+      "independent_review_refs": [
+        "Codex headless REVIEW cx-9297dfc8 round 1: REJECT (activation oracle, settlement wait)",
+        "Codex headless REVIEW cx-4754b1c0 round 2: ACCEPT-WITH-NOTES (CUT A)"
+      ],
+      "receipt": "tests/unit/test_gen1_scripted_route_modes.py (9 passed) + docs/gen1_reference/RC_MASTER_GUIDE.md D2 rows"
+    },
+    {
+      "id": "ft1-fastest-text",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-348939ba)",
+      "state": "done",
+      "files": [
+        ".cache/pret/pokered/engine/menus/options.asm",
+        "tools/verify_gen1_release.py"
+      ],
+      "next_action": "None; facts recorded in the guide FT-1 line.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (FT-1 line)",
+      "independent_review_refs": [
+        "coordinator cross-check against D1-RB-claim-successor.md:48 and server/upr_settings.py:269-280"
+      ]
+    },
+    {
+      "id": "ft2-claim-record",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-5cf6888a)",
+      "state": "done",
+      "files": [
+        "server/gen1_upr_pipeline.py",
+        "server/upr_settings.py",
+        "tests/live/test_gen1_native_selected_fresh.py"
+      ],
+      "next_action": "None. READY withheld: needs owner scope decision (new Manager API branch) and D2's release of gen1_selected_scenario.py.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (FT-2 line)",
+      "independent_review_refs": [
+        "coordinator spot-check: server/manager.py allowed keys and clean_contract at :755-791; gen1_run_config.py:64-111 prepared_cartridges path"
+      ]
+    },
+    {
+      "id": "d2-lua-spec",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-2b893131)",
+      "state": "done",
+      "files": [
+        "lua/tests/gen1_rb_parcel_inputs.lua",
+        "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
+      ],
+      "next_action": "None; spec handed to D2-LUA. Its blocker (none != wait in the frozen parcel module) is resolved by an explicit 'unknown' idle kind + module amendment in D2-LUA.",
+      "reuse_decision": "research/spec only; implementation follows as D2-LUA once P-2a releases the bootstrap",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (D2-LUA-SPEC line)",
+      "independent_review_refs": [
+        "coordinator read of gen1_rb_parcel_inputs.lua:91-95,101-123,196-198 confirming the none-acts behaviour"
+      ]
     }
   ]
 }
@@ -223,6 +336,11 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | --- | --- |
 | Battle path | **R7 PASS (CONTROLLED-SCRIPTED)** at `57eabf7`: both cartridges reached `lab-loss-complete` (lab script 18, `battle_result 1`, healed HP 20/19, rival event set, Growl PP 15/24); ALIVE `oaks_lab` link, no death command queued, clean cleanup. Receipts `.cache/d1-rb-starter-rival-r7-summary.json` `12bd67af…f408`, console `a0a1016e…754d`; full record in [D1 physical report](reviews/D1-RB-physical-successor.md). Closes the D1 first checkpoint only; parcel/first ball/catches/fastest-text remain open; no manifest row closed. Lane released. Round-1 shape: Driver diff is four lines at `gen1_rb_ball_gate_inputs.lua:110-116`: while pending and the point is still the move menu with the cursor on Growl, re-pulse `A` on the 16-frame cadence; otherwise bounded idle as before. Coordinator re-ran 30 passed / 0 failed / 0 skipped, ruff clean, lupa ok; SHA256 Lua `b98f0dbed09f85ee713c53d7ec075e4d6900678f84b3c3465a37062b4695f52f`, test `13a76486d8526feb900bc7e23f7fc06f3e18fb0df2eac372bd1d2577e45e8b92`; receipt `.cache/bi1-model.xml`. Known ceiling (worker-noted): a button-gated prompt before the player's PP drop on an enemy-first turn would still hit the 600-frame bound; only R7 can show it. **R7 launch note (R7-PREP):** `asyncio.run(rb_starter_rival(r".cache\d1-rb-starter-rival-r7", emulator=r"E:\Howard\Bizhawk\EmuHawk.exe", base_config=r"E:\Howard\Bizhawk\config.ini", limit=180))` from the checkout with `PYTHONDONTWRITEBYTECODE=1`; 300% is the `SelectedRun` default (`gen1_selected_scenario.py:286`); the summary is self-written to `<owned>-summary.json` (`:606-607`), console must be tee'd to `.cache/d1-rb-starter-rival-r7-console.txt`; preflight (`:340-363`) refuses a pre-existing owned root and self-checks emulator/config/source hashes; PASS = final status `rb-starter-rival-checkpoint-observed` after clean cleanup (`:595-604`). Historical: RED established 2026-09-14 00:2x UTC: `test_r6_dropped_growl_pulse_is_repeated_until_observed_acceptance` fails at `tests/unit/test_gen1_selected_rb_ball_gate.py:141` (`assert buttons["A"]`) on the unchanged driver, 1 failed / 29 passed — the dropped-pulse mechanism is confirmed on the driver side. Green step: then re-pulse `A` on the 16-frame cadence while the cursor still sits on Growl with unchanged PP; index 2→1 with unchanged PP = accepted-not-executed (idle, no Down); PP drop → existing `awaiting_main_menu`; 600-frame bound from first emit. Independent review of the frozen diff precedes R7. |
 | BI-1 integrated | Round 2 (isolated Claude worker): pending + not(Growl cursor) → `press("B")` on the cadence; `test_enemy_first_prompt_before_pp_drop_is_advanced_with_b` red on round 1, green now; 31 passed / 0 / 0, ruff, lupa; SHA256 Lua `7c000361e32a8de41f7fdd2f5a6ba907d5cc2ace3c1d4d5012fcad9930637e41`, test `ab5f163ba04992644552bc69da01ad028110cad32ba499b7be7b6cbd77e29966`. Codex re-review `cx-f22e3dde`: **ACCEPT-WITH-NOTES** — `ManualTextScroll` accepts A|B (`home/text.asm:209-217`, `home/joypad2.asm:55-92`); battle menu ignores B (`core.asm:2091,2124-2125`); no reachable harmful-B state at level 5; faint sets `wBattleResult=1` and cleanup clears `wIsInBattle` (`core.asm:1030-1044`, `end_of_battle.asm:27-50`); healing + rival event happen in lab script **12** (`scripts/OaksLab.asm:418-436`), 13/14 → 18 is exit dialogue. Open: the 600-frame total through the final KO dialogue is only establishable by R7. MODEL ONLY. |
+| D2 claim (parcel route) | (1) `gameplay.red.ball-gate` / `gameplay.blue.ball-gate` (manifest `:2905`, `:3165`, `proofs=[]`, axes title + fastest_text). (2) Route mode pinned in three places: `gen1_scripted_new_game.lua:86,94,108`, `gen1_scripted_host.py:18,47-49,115`, `gen1_selected_scenario.py:304-306`. (3) Missing: no mode launches the parcel module; its terminal `first-ball-readback` (`gen1_rb_parcel_inputs.lua:99`) is unknown to the host; it expects to resume in the same process at map 0x28 with the parcel undelivered (`:125-128`) — exactly the starter-rival exit state. (4) HYPOTHESIS: chained `rb-parcel` mode (starter-rival driver → `lab-loss-complete` → parcel driver → `first-ball-readback`), no new fixture or launch. (5) Falsifier: unit model shows the host refuses `rb-parcel` today; lupa test that the wrapper hands over at `lab-loss-complete`. (6) Files: D2-HOST (Python: host, scenario, live callable, new unit test) now; D2-LUA (`gen1_scripted_new_game.lua` chaining + lupa test) after P-2a releases the file; depends on P-2a fields and P-2b `menu_kind` derivation. (7) Positive: `oak_got_parcel` true, `parcel_count` 0, `ball_count>0` with money debit, server `pokeballs_obtained[p]` true only for the buyer (`server/state.py:388-389`), link alive, no death commands; refusal: cancel leaves bag/money unchanged, no activation before the first ball readback, partner independent. Receipts `.cache/d1-rb-parcel-r1*`. (8) If the module cannot resume from the exit state: standalone mode with its own entry fixture (larger; not authorized yet). (9) **READY — coordinator decision 2026-09-14**, D2-HOST ACTIVE; D2-LUA WAIT(P-2a). |
+| P-2b | `menu_kind` audit (Gen1-CodexPeer, pokered 405b624), SOURCE FACT: with M=(map 0x2A && `wViridianMartCurScript`==2) — **mart-choice** `wListMenuID`==2 && `wTextBoxID`==0x0E && Y1/X1/max2 (`home/text_script.asm:148-150`, `engine/menus/text_box.asm:151-175`; index 0=BUY,1=SELL,2=QUIT); **mart-item** L==2 && T==0x0D && Y4/X5/max2 (`engine/events/pokemart.asm:134-150`, `home/list_menu.asm:29-56`); **mart-quantity** same geometry, 1≤`wItemQuantity`≤99, `wMenuWatchMovingOutOfBounds`==0 vs 1 while listing (`list_menu.asm:41-48,98-99,197-245`); **mart-confirm** T==0x14 && Y8/X15/max1, `confirm_index` = live `wCurrentMenuItem` (0=YES) with `wMenuExitMethod`==0 excluding a completed answer (`text_box.asm:213-235,307-335`); **none** has no exact WRAM predicate — the complement is not proof of free movement. **Critical, coordinator-verified:** `wCurItem` is overwritten for every printed price (`home/list_menu.asm:417`, ends at BURN_HEAL for the Viridian list), so the frozen module's `item_id==4` check needs `item_id` derived from the Viridian inventory `POKE_BALL, ANTIDOTE, PARLYZ_HEAL, BURN_HEAL` (`data/items/marts.asm:4-5`) at `menu_index + wListScrollOffset` (`cc36`); expose `wMenuWatchMovingOutOfBounds` (`cc37`). Retention: T/L/Y/X/N/I persist after menus close; `wMenuExitMethod`/`wChosenMenuItem` are retained outcomes; `mart_script`==2 persists before and after delivery. Parcel delivery/Oak handoff use plain dialogue, no yes/no. |
+| FT-2 claim (fastest-text axis) | Gen1-CodexPeer record. (2) Manager run creation accepts only `name,rom_a,rom_b,rules,start,native`, calls `clean_contract` unconditionally and stages the canonical pair (`server/manager.py:755-791`); there is **no HTTP seam for prepared UPR artifacts**; the lower `create_runtime(prepared_cartridges=…)` path exists (`gen1_run_config.py:64-111`) and `PreparedCartridges` replays seeds/settings/JAR and revalidates in place (`gen1_prepared_cartridges.py:111-177`, relocation-sensitive). `selected_manager` requires provenance `canonical_companion` (`test_gen1_native_selected_fresh.py:82-110`); the scripted host requires filenames `slink_(red|blue).gb` (`gen1_scripted_host.py:30-41`). (4) HYPOTHESIS: a bounded optional **UPR generation recipe on Manager run creation** (run-local `prepare_pair` → `PreparedCartridges` → existing `create_runtime`), SelectedRun accepting that recipe and publishing settings/provenance/final hashes plus the `$38D3` byte from the exact staged file; a byte-identical run-owned launch copy named `slink_<variant>.gb` avoids editing the host/drivers. This is a **product API change → owner scope decision**. (6) Proposed files: `server/manager.py`, `tests/live/test_gen1_native_selected_fresh.py`, `tests/live/gen1_selected_scenario.py` (after D2 releases it), new unit/integration/live tests, `reviews/FT2-UPR-SELECTED-claim.md`; pins JAR `380dc1e6…`, seeds a=123456789/b=987654321 fixed across FT0/FT8. Randomization rule: **all** `build_categories` categories disabled, only `currentMiscTweaks` 0/8 differs (`upr_settings.py:259-280`, `gen1_upr_policy.py:43-71`) — starters/trainers/wild randomization would break the drivers' species 1/4, trainer 225, Growl and Mart-order facts. (9) READY withheld pending the owner decision and D2. |
+| FT-1 | `fastest_text` on the ball-gate rows is **declarative axis metadata** (no evaluator handling, `verify_gen1_release.py:259-294`) that the existing R/B claim ties to the **UPR Fastest Text tweak** — `build_categories(..., fastest_text=)` → `currentMiscTweaks` 0/8 (`server/upr_settings.py:269-280`, `gen1_upr_policy.py:53-54`), a `RET` at `PrintLetterDelay` $38D3 verified by the scanner (`gen1_upr_scan.py:307-313,353-355`; `upr_layout.json:501`). It is NOT the in-game FAST option (`wOptions` $D355, low bits FAST=1/MEDIUM=3/SLOW=5, default $03, `main_menu.asm:127-132,623-645`). R7 covers only `false`; no FAST/tweaked R/B gameplay receipt exists. Native FAST would be selectable by normal buttons (Down, A, Left, B from the fresh main menu, `main_menu.asm:44-90,468-505`) but closes a different claim. Letter pacing changes the elapsed frames inside the two 600-frame driver bounds and all wall-clock limits; `Delay3` and prompt gates are unaffected. Closer (FT-2, claim record in progress): feed reproduced `prepare_pair` artifacts (tweaks 0 and 8) through the selected scripted path with settings/final-hash/$38D3-byte receipts; do not edit the route drivers. |
+| D2-LUA-SPEC | Gen1-CodexPeer: chaining hunks for `wrapped_advance` (publish the handoff phase once, retain `chain_handoffs`, one `original_advance` per frame, unhook only at the last chain terminal), a diagnostic `mart_menu(raw)` signature function (choice/item/quantity/confirm from `text_box`/`list_menu_id`/geometry/`menu_watch_oob`/`list_scroll_offset`/`menu_exit_method`), two raw fields to add (`wListScrollOffset` $CC36, `wMenuWatchMovingOutOfBounds` $CC37), and a red-test list. **Finding:** the frozen parcel module treats `menu_kind=="none"` as *act* (`gen1_rb_parcel_inputs.lua:91-95,196-198`), so ambiguity must map to a distinct `"unknown"` kind that idles (bounded by the wrapper's 120000-frame and wall-clock limits), and `confirm_index`/`item_id` sentinels must not satisfy `==0`/`==4`. D2-LUA implements: chaining, `lua/tests/gen1_rb_mart_signature.lua` with `unknown`, `font_loaded` raw field, the parcel-module amendment, decoder hash in `source_files`. |
 | P-1 | "Raw menu producer" = `route_point()` (`gen1_scripted_new_game.lua:51-65`) does not yet emit the parcel module's 14 extra fields (`wNumBagItems d31d`, `wBagItems d31e`, `wPlayerMoney d347`, two `wEventFlags d747` bits, `wViridianMartCurScript d60d`, `wSimulatedJoypadStatesIndex cd38`, menu cluster `wListMenuID cf94`/`wCurItem cf91`/`wItemQuantity cf96`/`wChosenMenuItem d12d`/`wMenuExitMethod d12e`), `menu_kind` has no raw-symbol derivation yet, and three literals pin the only route mode (`gen1_scripted_new_game.lua:86`, `tests/live/gen1_scripted_host.py:18,47-48`, `gen1_selected_scenario.py:304-306`). Shared: host loop/plan staging/enums; game-specific: `route_point()` fields and the parcel module. Not dispatched until the lab checkpoint passes. |
 | BI-1 review round 1 | Codex headless REVIEW `cx-d02ec69d`: **REJECT** for R7. Source-derived and coordinator-verified: when the enemy outspeeds, `ExecuteEnemyMove` runs first and a KO is handled before the player's move (`engine/battle/core.asm:418-424`); enemy stat-fall `_FellText` (`data/text/text_3.asm:122-124`) and `_PlayerMonFaintedText` (`data/text/text_2.asm:882-885`) end in `prompt`, so an idle driver hits the 600-frame bound before any PP drop. Attempt 5 passed one Growl only because the enemy used a plain attack (`done`-terminated text). Minor: index decrement precedes validation (`:2620-2656`), so it is not an acceptance signal. Round 2 in progress: press B on the cadence while pending outside the Growl-cursor state. |
 | TK-1 | OMP (deepseek-v4.1-flash): `.cache/current-cards-final.xml` tests=188 failures=0 errors=0 skipped=0; parcel Lua/unit hashes EQUAL to the report; R0 working copy `88aec118c2fd09c02012755ad06bc6b21fb15907a6bbe211c2878bfabf8f00cf` ≠ frozen supplied input `4dadeb79…` — expected, the dirty file is the correction candidate, not drift. |

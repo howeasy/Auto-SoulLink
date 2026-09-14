@@ -16,6 +16,11 @@ from server.runtime_lease import RuntimeLease
 ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = ROOT / "lua/tests/gen1_scripted_new_game.lua"
 RB_ROUTE = ROOT / "lua/tests/gen1_rb_ball_gate_inputs.lua"
+PARCEL_ROUTE = ROOT / "lua/tests/gen1_rb_parcel_inputs.lua"
+# Each mode's chain of Lua route modules, staged and hashed in order. The
+# scripted bootstrap (a separate card's file) hands off from one module to
+# the next; this host only stages them and records the handoff contract.
+ROUTE_MODULES = {"rb-starter-rival": (RB_ROUTE,), "rb-parcel": (RB_ROUTE, PARCEL_ROUTE)}
 
 
 def sha(path):
@@ -44,16 +49,19 @@ def prepare_scripted_plan(root, spec, *, rom, launcher, base_config, bootstrap=B
     if destination.exists() and destination.read_bytes() != source:
         raise ValueError("existing scripted bootstrap differs")
     destination.write_bytes(source)
-    if route_mode not in (None, "rb-starter-rival"):
+    if route_mode not in (None, *ROUTE_MODULES):
         raise ValueError("unsupported scripted route")
-    if route_mode == "rb-starter-rival":
+    route_destinations = []
+    if route_mode is not None:
         if match.group(1) not in ("red", "blue"):
             raise ValueError("R/B lab route requires Red or Blue")
-        route_bytes = RB_ROUTE.read_bytes()
-        route_destination = staged / "gen1_rb_ball_gate_inputs.lua"
-        if route_destination.exists() and route_destination.read_bytes() != route_bytes:
-            raise ValueError("existing R/B route module differs")
-        route_destination.write_bytes(route_bytes)
+        for module in ROUTE_MODULES[route_mode]:
+            route_bytes = module.read_bytes()
+            route_destination = staged / module.name
+            if route_destination.exists() and route_destination.read_bytes() != route_bytes:
+                raise ValueError("existing R/B route module differs")
+            route_destination.write_bytes(route_bytes)
+            route_destinations.append(route_destination)
     input_path = staged / "scripted_input.json"
     input_data = {"schema": "gen1-scripted-normal-buttons-v1", "player": spec["player"],
                   "variant": match.group(1),
@@ -62,10 +70,15 @@ def prepare_scripted_plan(root, spec, *, rom, launcher, base_config, bootstrap=B
                   "progress": str(staged / "scripted_progress.json"),
                   "failure": str(staged / "scripted_failure.json"),
                   "max_boot_frames": 20000, "deadline_seconds": 1800}
-    if route_mode == "rb-starter-rival":
-        input_data["route"] = {"mode": route_mode, "module": str(route_destination),
+    if route_mode is not None:
+        chain = []
+        if route_mode == "rb-parcel":
+            chain = [{"module": str(route_destinations[1]), "after": "lab-loss-complete",
+                     "terminal": "first-ball-readback"}]
+        input_data["route"] = {"mode": route_mode, "module": str(route_destinations[0]),
                                "handshake": str(staged / "rb_route_go.json"),
-                               "progress": str(staged / "rb_route_progress.json")}
+                               "progress": str(staged / "rb_route_progress.json"),
+                               "chain": chain}
     if input_path.exists() and json.loads(input_path.read_text()) != input_data:
         raise ValueError("existing scripted input differs")
     input_path.write_text(json.dumps(input_data, indent=2) + "\n")
@@ -74,8 +87,10 @@ def prepare_scripted_plan(root, spec, *, rom, launcher, base_config, bootstrap=B
     plan["arguments"][1] = "--lua=scripted_new_game.lua"
     plan["environment"]["SLINK_SCRIPTED_INPUT"] = str(input_path)
     plan["scripted_bootstrap_sha256"] = sha(destination)
-    if route_mode == "rb-starter-rival":
-        plan["rb_route_sha256"] = sha(route_destination)
+    if route_mode is not None:
+        plan["route_module_sha256"] = {path.name: sha(path) for path in route_destinations}
+        # Existing key: the first module's hash, unchanged shape for R7-style consumers.
+        plan["rb_route_sha256"] = plan["route_module_sha256"][route_destinations[0].name]
     plan["checked_launcher_sha256"] = sha(staged / "launcher.lua")
     if plan["checked_launcher_sha256"] != spec["launcher_sha256"]:
         raise ValueError("scripted host changed checked launcher")
@@ -112,7 +127,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("manifest", "rom", "emuhawk", "base-config", "root"):
         parser.add_argument("--" + name, required=True, type=Path)
-    parser.add_argument("--route", choices=("rb-starter-rival",))
+    parser.add_argument("--route", choices=tuple(ROUTE_MODULES))
     args = parser.parse_args(argv)
     spec = json.loads(args.manifest.read_text())
     validate_manifest(spec)
@@ -134,6 +149,7 @@ def main(argv=None):
         if args.route:
             receipt["route_mode"] = args.route
             receipt["rb_route_sha256"] = plan["rb_route_sha256"]
+            receipt["route_module_sha256"] = plan["route_module_sha256"]
         (Path(plan["cwd"]) / "scripted_plan.json").write_text(json.dumps(receipt, indent=2) + "\n")
         return launch(plan, args.emuhawk).wait()
 

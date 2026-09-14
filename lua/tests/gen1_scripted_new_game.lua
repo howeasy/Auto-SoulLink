@@ -39,6 +39,8 @@ do
     end
 end
 local function sym(name)return memory.read_u8(assert(symbols[name]),"System Bus")end
+local FIELDS=dofile(ROOT.."/lua/tests/gen1_rb_point_fields.lua")
+local function rd(addr)return memory.read_u8(addr,"System Bus")end
 local function menu_inputs()
     beat=beat+1;local moment=beat%16
     local buttons={A=moment<2,Start=moment==8}
@@ -61,7 +63,18 @@ local function route_point()
         pallet_script=sym("wPalletTownCurScript"),joy_ignore=sym("wJoyIgnore"),
         npc_moving=sym("wStatusFlags5")%2==1,
         battle_result=sym("wBattleResult"),party_hp=hp,
-        lab_rival_done=math.floor(event_byte/8)%2==1}
+        lab_rival_done=math.floor(event_byte/8)%2==1,
+        ball_count=FIELDS.bag_quantity(rd,assert(symbols.wNumBagItems),assert(symbols.wBagItems),FIELDS.POKE_BALL),
+        parcel_count=FIELDS.bag_quantity(rd,assert(symbols.wNumBagItems),assert(symbols.wBagItems),FIELDS.OAKS_PARCEL),
+        money=FIELDS.bcd_money(rd,assert(symbols.wPlayerMoney)),
+        got_parcel=FIELDS.event_bit(rd,assert(symbols.wEventFlags),FIELDS.EVENT_GOT_OAKS_PARCEL),
+        oak_got_parcel=FIELDS.event_bit(rd,assert(symbols.wEventFlags),FIELDS.EVENT_OAK_GOT_PARCEL),
+        mart_script=sym("wViridianMartCurScript"),
+        simulated_joypad_index=sym("wSimulatedJoypadStatesIndex"),
+        facing=FIELDS.facing_name(sym("wSpritePlayerStateData1FacingDirection")),
+        battle_type=sym("wBattleType"),run_attempts=sym("wNumRunAttempts"),
+        list_menu_id=sym("wListMenuID"),item_id=sym("wCurItem"),quantity=sym("wItemQuantity"),
+        chosen_menu_item=sym("wChosenMenuItem"),menu_exit_method=sym("wMenuExitMethod")}
 end
 
 publish(input.progress,{stage="wrapper-ready",player=input.player,frame=emu.framecount(),boot_frames=0})
