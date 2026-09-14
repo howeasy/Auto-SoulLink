@@ -138,7 +138,7 @@ function M.new(expected)
                     return idle(),"oak-delivery-script-wait"
                 end
                 if point.x==5 and point.y==3 then
-                    if point.lab_script==0 and point.joy_ignore==0 then
+                    if (point.lab_script==0 or point.lab_script==18) and point.joy_ignore==0 then -- 18 = SCRIPT_OAKSLAB_NOOP after the rival leaves
                         local b=tap("A",frame);b.Up=true;return b,"give-parcel-to-oak"
                     end
                     if point.joy_ignore==0xFC then return tap("A",frame),"oak-parcel-dialogue" end

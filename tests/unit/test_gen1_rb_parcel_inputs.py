@@ -343,3 +343,16 @@ def test_map_edges_keep_driving_until_the_engine_changes_map():
     buttons, phase = walk(0x0C, [(10, 4), (14, 4), (14, 14), (9, 14), (9, 22), (12, 22), (12, 24),
                                  (8, 24), (8, 31), (10, 31), (10, 35)])
     assert phase == "route_south" and buttons["Down"]
+
+
+def test_parcel_is_handed_to_oak_from_the_post_rival_noop_script():
+    # Live parcel attempt 3: after the rival leaves, wOaksLabCurScript stays at
+    # SCRIPT_OAKSLAB_NOOP (18, scripts/OaksLab.asm OaksLabPlayerWatchRivalExitScript);
+    # the delivery starts from Oak's text script (:1015 -> script 15), so the driver
+    # must talk to Oak in state 18, not wait for 0.
+    driver, handshake, status, point = model()
+    point.map, point.x, point.y = 0x28, 5, 3
+    point.parcel_count, point.got_parcel, point.oak_got_parcel = 1, True, False
+    point.lab_script, point.joy_ignore, point.menu_kind = 18, 0, "none"
+    buttons, phase = step(driver, handshake, status, point, 16)
+    assert phase == "give-parcel-to-oak" and buttons["A"] and buttons["Up"]
