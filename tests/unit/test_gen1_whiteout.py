@@ -4,13 +4,14 @@ import secrets
 
 import pytest
 
-from server import gen1_whiteout as wo
+from server import gen1_semantic_events as ev, gen1_whiteout as wo
 from server.gen1_engine_signals import DATA
-from server.gen1_faint_runtime import COMPONENT as FAINT
+from server.gen1_faint_runtime import COMPONENT as FAINT, record_death_obligation
+from server.gen1_hud_feedback import classify_death
+from server.gen1_initial_observation import COMPONENT as INITIAL
 from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_state import Gen1RuntimeState
-from server.gen1_hud_feedback import classify_death
 from server.gen1_staged_state import StagedGen1State
 from server.protocol_journal import JournalError
 from server.state import LinkEntry, LinkStatus, MonInfo
@@ -199,3 +200,142 @@ def test_tampered_whiteout_records_are_refused_by_the_state_aggregate(tmp_path, 
             Gen1RuntimeState.restore(document, data_dir=tmp_path)
     finally:
         runtime.close()
+
+
+class _FakeBlockers:
+    """Stand-in for stage.barrier: the recovery-hold document settle_whiteout reads and writes."""
+
+    def __init__(self):
+        self._blockers = {}
+
+    def document(self):
+        return {"blockers": dict(self._blockers)}
+
+    def set_blockers(self, blockers):
+        self._blockers = dict(blockers)
+
+
+class _FakeIdentities:
+    """Stand-in for stage.identities: resolve() is identity (member id == physical key), so
+    _link_identity's cross-player match only needs document()["links"] to carry the pairing.
+    The real IdentityRegistry is exercised elsewhere (gen1_run_resume, starter settlement);
+    this double isolates settle_whiteout/record_death_obligation from that machinery.
+    """
+
+    def __init__(self, links):
+        self._links = links  # {link_id: {"members": [key_a, key_b]}}
+
+    def resolve(self, context, key):
+        return key
+
+    def document(self):
+        return {"links": self._links}
+
+
+def _real_initials(runtime):
+    """A real, fully-enrolled initials component (from a paired runtime) -- context() needs its
+    exact shape (save_identity, gen1_metadata, binding), which no small hand-built dict reproduces
+    faithfully; reuse it rather than fake it.
+    """
+    return runtime.state().document()["components"][INITIAL]
+
+
+def test_two_alive_links_whiteout_produces_collateral_force_faint(tmp_path):
+    """CLAUDE.md 'Whiteout': every partner of a remaining linked party mon gets force-fainted --
+    even for a second linked pair that reads 0 HP in the SAME party capture without ever firing
+    its own battle_faint/poison_faint signal (a missed/debounced faint, or simply never sampled
+    mid-battle). Falsifies C1-CLAIM: settle_whiteout must no longer discard this as an error.
+    """
+    runtime = create_runtime(tmp_path, contract("red", "red"))
+    try:
+        paired(runtime)  # L1: real identity + real initials, enrolled by the runtime itself
+        stage = runtime.state()
+        initials = _real_initials(runtime)
+        rules = stage.rules
+        link1 = rules.links[0]
+        trigger_key = link1.a.key
+
+        key_a2, key_b2 = "AAAA:0001:07", "BBBB:0002:6A"
+        l2 = LinkEntry(area_id="route_2", a=MonInfo(key=key_a2, level=5, species=0x07),
+                        b=MonInfo(key=key_b2, level=7, species=0x6A), status=LinkStatus.ALIVE)
+        rules.links.append(l2)
+        rules._index_entry(l2)
+        rules.party_keys["a"].add(key_a2)
+        rules.party_keys["b"].add(key_b2)
+        rules.pokeballs_obtained["a"] = rules.pokeballs_obtained["b"] = True  # nuzlocke gate active
+
+        # L1's own faint settles first, exactly like gen1_faint_runtime.settle()'s per-signal loop
+        # (handle_event, then take_commands to drain the peer force_faint it queued).
+        immediate = rules.handle_event("a", ev.faint_event(key=trigger_key, level=link1.a.level))
+        assert link1.status == LinkStatus.DEAD
+        assert l2.status == LinkStatus.ALIVE  # still alive and still in a's party: the collateral case
+        drained = rules.take_commands("a", immediate)
+        trigger_command = next(c for c in drained["b"] if c.get("cmd") == "force_faint")
+
+        identities = _FakeIdentities({
+            "1" * 32: {"members": [link1.a.key, link1.b.key]},
+            "2" * 32: {"members": [key_a2, key_b2]},
+        })
+        document = {"components": {INITIAL: initials, FAINT: {"activations": {}, "deaths": {}}}}
+        component = document["components"][FAINT]
+
+        class _Stage:
+            pass
+
+        fake = _Stage()
+        fake.rules = rules
+        fake.identities = identities
+        fake.barrier = _FakeBlockers()
+
+        entry = {"operation_id": "op-collateral"}
+        trigger_death_id = record_death_obligation(
+            fake, document, component, {"a": [], "b": []}, player="a", partner="b", entry=entry,
+            index=0, key=trigger_key, link=link1, command=trigger_command, at=link1.killed_at,
+        )
+        assert len(component["deaths"]) == 1
+
+        value = faint("red", [0, 0], fainted=0)
+        feedback = wo.settle_whiteout(fake, document, "a", entry, 0, value,
+                                      trigger_death_id=trigger_death_id, trigger_key=trigger_key)
+
+        assert l2.status == LinkStatus.DEAD  # the shared engine's own collateral force-faint still ran
+        assert len(component["deaths"]) == 2  # trigger + collateral, distinct death_ids
+        collateral_id = next(d for d in component["deaths"] if d != trigger_death_id)
+        collateral = component["deaths"][collateral_id]
+        assert collateral["collateral_of"] == trigger_death_id
+        assert collateral["key"] == key_a2 and collateral["peer_key"] == key_b2 and collateral["peer"] == "b"
+        assert collateral["command"] == "force_faint"
+        # B actually receives the collateral force_faint command, with its own death_id.
+        b_force_faints = [c for c in feedback["b"] if c.get("cmd") == "force_faint"]
+        assert len(b_force_faints) == 1
+        assert b_force_faints[0]["key"] == key_b2 and b_force_faints[0]["death_id"] == collateral_id
+        from server.gen1_faint_runtime import REASON
+
+        blockers = fake.barrier.document()["blockers"]
+        assert blockers.get(trigger_death_id) == REASON
+        assert blockers.get(collateral_id) == REASON
+    finally:
+        runtime.close()
+
+
+def test_whiteout_still_refuses_a_genuine_duplicate_of_the_triggering_mon(tmp_path):
+    """If _handle_whiteout ever re-found the SAME mon its own faint should already have killed
+    (a call-ordering regression), settle_whiteout must still refuse -- collateral handling must
+    never paper over a genuine duplicate death for the trigger's own link."""
+    state = linked_state(tmp_path)
+    staged = StagedGen1State.from_live(state, {"retired_pairs": []})
+
+    class _Stage:
+        pass
+
+    fake = _Stage()
+    fake.rules = staged
+    fake.identities = _FakeIdentities({})  # never reached: the duplicate check raises first
+    fake.barrier = _FakeBlockers()
+    document = {"components": {FAINT: {"activations": {}, "deaths": {}}}}
+
+    # link never settled its own faint -- still ALIVE when the whiteout signal arrives.
+    value = faint("red", [0, 0], fainted=1, stale=17)
+    with pytest.raises(JournalError, match="its faint settlement left alive"):
+        wo.settle_whiteout(fake, document, "a", {"operation_id": "op-dup"}, 0, value,
+                            trigger_death_id="dummy-trigger", trigger_key=KEY_A)

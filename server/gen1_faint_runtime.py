@@ -20,8 +20,13 @@ COMPONENT = "gen1-faint-settlement"
 REASON = "Linked death requires verified physical faint and memorial closure"
 
 
-def identifier(player, operation, index):
-    return digest({"player": player, "engine_operation": operation, "signal": index})[:32]
+def identifier(player, operation, index, discriminant=None):
+    """discriminant disambiguates a whiteout's collateral deaths, which share the triggering
+    death's (player, operation, index): omitted, this hashes exactly as it always has."""
+    payload = {"player": player, "engine_operation": operation, "signal": index}
+    if discriminant is not None:
+        payload["collateral_key"] = discriminant
+    return digest(payload)[:32]
 
 
 def source_result(entry):
@@ -114,6 +119,67 @@ def _recipient_commands(journal, issued, recipient):
     return rows
 
 
+def _link_identity(stage, initials, link):
+    """Resolve a link's cross-player logical identity id; exactly one match is required."""
+    members = [
+        stage.identities.resolve(context(initials[p], p), getattr(link, p).key)
+        for p in ("a", "b")
+    ]
+    matches = [
+        key
+        for key, value in stage.identities.document()["links"].items()
+        if set(value["members"]) == set(members)
+    ]
+    if None in members or len(matches) != 1:
+        raise JournalError("faint rule pair differs from logical identity linkage")
+    return matches[0], members
+
+
+def record_death_obligation(stage, document, component, commands, *, player, partner, entry,
+                             index, key, link, command, at, collateral_of=None):
+    """Record one durable, ack-able peer death obligation: death_id, blocker, deferred-storage
+    handling and the outbound force_faint/force_explode (or its deferred stand-in).
+
+    Used both for the triggering faint's own peer command and -- when collateral_of names that
+    death's id -- for a whiteout's collateral partner deaths, where no faint signal of their own
+    was ever observed.
+    """
+    initials = document["components"][INITIAL]
+    link_id, members = _link_identity(stage, initials, link)
+    death_id = identifier(player, entry["operation_id"], index, discriminant=key if collateral_of else None)
+    effect = {"player": partner, "command": dict(command)}
+    effect["command"]["death_id"] = death_id
+    record = {
+        "player": player,
+        "engine_record": copy.deepcopy(entry),
+        "index": index,
+        "link_id": link_id,
+        "members": members,
+        "key": key,
+        "peer": partner,
+        "peer_key": getattr(link, partner).key,
+        "at": at,
+        "command": command["cmd"],
+        "phase": "pending_faint",
+        "receipt_event": None,
+    }
+    if collateral_of is not None:
+        record["collateral_of"] = collateral_of
+    component["deaths"][death_id] = record
+    jobs = _storage_jobs(document, (player, partner))
+    if jobs:
+        component["deaths"][death_id].update(
+            phase="pending_issue",
+            deferred={"jobs": jobs, "command": copy.deepcopy(effect["command"]), "origin": None},
+        )
+    else:
+        commands[partner].append(effect["command"])
+    blockers = stage.barrier.document()["blockers"]
+    blockers[death_id] = REASON
+    stage.barrier.set_blockers(blockers)
+    return death_id
+
+
 def settle(runtime, stage, document, player, entry):
     commands = {"a": [], "b": []}
     relevant = [
@@ -165,18 +231,6 @@ def settle(runtime, stage, document, player, entry):
         partner = "b" if player == "a" else "a"
         if partner not in initials:  # reachable only after a resume seeded inherited links
             raise JournalError("paired enrollment required before linked faint settlement")
-        members = [
-            stage.identities.resolve(context(initials[p], p), getattr(link, p).key)
-            for p in ("a", "b")
-        ]
-        matches = [
-            key
-            for key, value in stage.identities.document()["links"].items()
-            if set(value["members"]) == set(members)
-        ]
-        if None in members or len(matches) != 1:
-            raise JournalError("faint rule pair differs from logical identity linkage")
-        death_id = identifier(player, entry["operation_id"], index)
         mon = PartyCodec(entry["payload"]["variant"]).validate_blob(bytes.fromhex(row["blob_hex"]))
         # The shared rule engine decides the death exactly as it does for Gen 3 (_handle_faint ->
         # _propagate_faint): pair DEAD, both party keys released, both memorial obligations, the
@@ -196,40 +250,16 @@ def settle(runtime, stage, document, player, entry):
         labels = {p: getattr(link, p).nickname or stage.rules.adapter.species_name(getattr(link, p).species)
                   or getattr(link, p).key[:8] for p in ("a", "b")}
         feedback = classify_death(captured, member_labels=labels)
-        effect = {"player": partner, "command": dict(physical[0])}
-        effect["command"]["death_id"] = death_id
-        component["deaths"][death_id] = {
-            "player": player,
-            "engine_record": copy.deepcopy(entry),
-            "index": index,
-            "link_id": matches[0],
-            "members": members,
-            "key": row["key"],
-            "peer": partner,
-            "peer_key": getattr(link, partner).key,
-            "at": at,
-            "command": physical[0]["cmd"],
-            "phase": "pending_faint",
-            "receipt_event": None,
-        }
-        jobs = _storage_jobs(document, (player, partner))
-        if jobs:
-            component["deaths"][death_id].update(
-                phase="pending_issue",
-                deferred={
-                    "jobs": jobs,
-                    "command": copy.deepcopy(effect["command"]),
-                    "origin": None,
-                },
-            )
-        else:
-            commands[partner].append(effect["command"])
-        blockers = stage.barrier.document()["blockers"]
-        blockers[death_id] = REASON
-        stage.barrier.set_blockers(blockers)
-        # P5-whiteout: AnyPartyAlive over the same signal, only after the faint settled, so the
-        # whited-out pair is already DEAD and the engine cannot queue a second peer death for it.
-        whiteout_feedback = settle_whiteout(stage, document, player, entry, index, signal)
+        death_id = record_death_obligation(
+            stage, document, component, commands, player=player, partner=partner, entry=entry,
+            index=index, key=row["key"], link=link, command=physical[0], at=at,
+        )
+        # P5-whiteout: AnyPartyAlive over the same signal, right after the faint settled. The
+        # triggering pair is already DEAD; any *other* still-alive linked pair the whiteout also
+        # retires (no faint signal of its own ever fired for it) is recorded as a collateral
+        # death obligation, not silently dropped -- see settle_whiteout.
+        whiteout_feedback = settle_whiteout(stage, document, player, entry, index, signal,
+                                            trigger_death_id=death_id, trigger_key=row["key"])
         for recipient in ("a", "b"):
             commands[recipient].extend(feedback[recipient])
             commands[recipient].extend(whiteout_feedback[recipient])
@@ -445,7 +475,7 @@ def verify_state(stage):
             raise JournalError("ball activation lost its permanent rule credit")
     for death_id, death in component["deaths"].items():
         _identifier(death_id)
-        if set(death) - {"deferred", "enforcement"} != {
+        if set(death) - {"deferred", "enforcement", "collateral_of"} != {
             "player",
             "engine_record",
             "index",
@@ -471,7 +501,25 @@ def verify_state(stage):
             death["index"],
         ):
             raise JournalError("faint precedes its activation evidence")
-        if (
+        if "collateral_of" in death:
+            # A whiteout collateral death: no faint signal of its own ever fired, so its
+            # evidence IS the whiteout-causing signal, not a "faint" decode at this index.
+            trigger = component["deaths"].get(death["collateral_of"])
+            if (
+                trigger is None
+                or "collateral_of" in trigger
+                or trigger["player"] != player
+                or trigger["engine_record"] != death["engine_record"]
+                or trigger["index"] != death["index"]
+            ):
+                raise JournalError("collateral death is not anchored to its triggering whiteout")
+            if (
+                row["kind"] not in ("battle_faint", "poison_faint")
+                or death_id
+                != identifier(player, death["engine_record"]["operation_id"], death["index"], discriminant=death["key"])
+            ):
+                raise JournalError("collateral death differs from source evidence")
+        elif (
             row["kind"] != "faint"
             or row["key"] != death["key"]
             or death_id
