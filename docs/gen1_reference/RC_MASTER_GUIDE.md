@@ -13,52 +13,68 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T00:13:39+00:00",
+  "updated_at_utc": "2026-09-14T00:42:34+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "c647f9126e79909f2b5976beec65d7b3beedd737",
-  "live_lane": null,
-  "next_action": "Dispatch BI-1 (R6 Growl acceptance fix, red model test first) to an isolated implementation worker; R6-SRC source fact-check to the contextual peer; TK-1 drift check to OMP. Integrate reviewed BI-1, then one R7 live run.",
+  "live_lane": {
+    "card": "R7",
+    "owner": "coordinator slink-63 (sole emulator lane)",
+    "owned_root": ".cache/d1-rb-starter-rival-r7",
+    "titles": "red/blue",
+    "requested_speed_percent": 300,
+    "limit_seconds": 180
+  },
+  "next_action": "Run R7 (coordinator, sole lane). Classify PASS/HOLD from the self-written summary; update D1 physical report, guide, register; release lane; then E-2/parcel cards per results.",
   "workers": [
     {
       "id": "battle-input",
-      "owner": "isolated implementation worker (BI-1; Codex headless delegate, pending acknowledgment)",
-      "state": "ready",
+      "owner": "integrated by coordinator (isolated Claude worker authored rounds 1-2)",
+      "state": "done",
       "files": [
         "lua/tests/gen1_rb_ball_gate_inputs.lua",
         "tests/unit/test_gen1_selected_rb_ball_gate.py",
         "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
       ],
-      "next_action": "Red model test replaying R6 (Down accepted, A emitted next frame and dropped in HandleMenuInput_ Delay3, driver must re-pulse until wCurrentMenuItem 2->1 / PP drop), then the driver fix; report diff hash.",
+      "next_action": "None; integrated MODEL ONLY. R7 live run is the physical check.",
       "reuse_decision": "game-specific test driver (R/B lab route facts); 're-pulse until observed acceptance' stays local until the parcel module becomes a second consumer",
       "receipt": "docs/gen1_reference/reviews/D1-RB-implementation-successor.md",
       "independent_review_refs": [
-        "coordinator-verified current-card peer review recorded in transition archive"
+        "Codex headless REVIEW cx-d02ec69d round 1: REJECT (enemy-first prompt stall) \u2014 resolved",
+        "Codex headless REVIEW cx-f22e3dde round 2: ACCEPT-WITH-NOTES for one R7 attempt"
       ]
     },
     {
       "id": "r6-source-check",
-      "owner": "contextual Codex peer Gen1-p2 (read-only)",
-      "state": "active",
+      "owner": "contextual Codex peer Gen1-CodexPeer (task cx-ccffd08c, closed)",
+      "state": "done",
       "files": [
         ".cache/pret/pokered/home/window.asm",
         ".cache/pret/pokered/engine/battle/core.asm",
         ".cache/pret/pokered/home/vblank.asm",
         ".cache/pret/pokered/engine/joypad.asm"
       ],
-      "next_action": "Confirm/refute the Delay3 dead-window and wCurrentMenuItem acceptance facts against pokered 405b624 and BizHawk joypad.set per-frame semantics; no edits.",
-      "reuse_decision": "research only"
+      "next_action": "None; reconciled 4 accepted / 2 nuances (b: last-VBlank pulse survives; d: index 2->1 also on B-cancel, wPlayerSelectedMove is the strict accept write).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (reconciliation paragraph)",
+      "independent_review_refs": [
+        "coordinator reconciliation against pokered 405b624 home/window.asm, engine/battle/core.asm:2620-2670, engine/joypad.asm"
+      ]
     },
     {
       "id": "takeover-drift-check",
-      "owner": "OMP live session pid 47172 (read-only)",
-      "state": "active",
+      "owner": "OMP live pid 47172 (deepseek-v4.1-flash; task cx-3c0b00ba, closed)",
+      "state": "done",
       "files": [
         "docs/gen1_reference/reviews/R0-supplied-contract-successor.md",
         ".cache/current-cards-final.xml",
         "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
       ],
-      "next_action": "Report R0 working-copy hash vs frozen 4dadeb79..., current-cards-final.xml counts, parcel hashes vs report; three lines, then exit.",
-      "reuse_decision": "research only"
+      "next_action": "None. XML 188/0/0/0; parcel hashes EQUAL; R0 working copy 88aec118... differs from the frozen supplied-input hash 4dadeb79... as expected (the dirty file is the correction candidate).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (TK-1 line)",
+      "independent_review_refs": [
+        "coordinator sha256sum cross-check at takeover (parcel Lua f2a3c0f6..., unit ae2ed205...)"
+      ]
     },
     {
       "id": "shared-hud",
@@ -111,6 +127,80 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator-verified current-card peer review recorded in transition archive"
       ]
+    },
+    {
+      "id": "r7-prep",
+      "owner": "Sonnet 5 worker (done)",
+      "state": "done",
+      "files": [
+        ".cache/d1-rb-starter-rival-r6-summary.json",
+        "tests/live/test_gen1_selected_rb_ball_gate.py",
+        "tests/live/gen1_selected_scenario.py"
+      ],
+      "next_action": "None; invocation reconstructed (rb_starter_rival(owned, emulator, base_config, limit=180); 300% is SelectedRun default; summary self-written; console tee'd; preflight refuses existing owned root and self-checks hashes).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (R7 launch note)",
+      "independent_review_refs": [
+        "coordinator cross-checked against tests/live/gen1_selected_scenario.py:286,340-363,595-607 and test_gen1_selected_rb_ball_gate.py:56,132"
+      ]
+    },
+    {
+      "id": "e1-title-card",
+      "owner": "Sonnet 5 worker (done)",
+      "state": "done",
+      "files": [
+        "tests/gen1_release_requirements.json",
+        "tools/verify_gen1_release.py"
+      ],
+      "next_action": "None; finding recorded. Next E card needs a nine-part claim: boot the browser-patched Red ROM through existing prepare/launch/SelectedRun (emulator lane), independent of BI-1/N2.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (E-1 line)",
+      "independent_review_refs": [
+        "coordinator spot-check: tools/verify_gen1_release.py:264 empty-proofs failure; RC_CHECKLIST.md:370,402"
+      ]
+    },
+    {
+      "id": "tk2-r7-launch-facts",
+      "owner": "OMP live pid 47172 (done)",
+      "state": "done",
+      "files": [
+        "tests/live/gen1_selected_scenario.py",
+        "tests/live/test_gen1_selected_rb_ball_gate.py"
+      ],
+      "next_action": "None; six literal grep lines confirmed R7-PREP.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (R7 launch note)",
+      "independent_review_refs": [
+        "Sonnet R7-PREP and coordinator reading of gen1_selected_scenario.py:286,294,342,606"
+      ]
+    },
+    {
+      "id": "e2-claim-record",
+      "owner": "contextual Codex peer Gen1-CodexPeer (task cx-038bf6e4, read-only)",
+      "state": "active",
+      "files": [
+        "tests/gen1_release_requirements.json",
+        "tests/integration/test_gen1_browser_patcher.py",
+        "server/bizhawk_launch.py"
+      ],
+      "next_action": "Nine-part claim record for browser.red.clean-ups; coordinator decides READY.",
+      "reuse_decision": "research only"
+    },
+    {
+      "id": "p1-parcel-prereq",
+      "owner": "Sonnet 5 worker (done)",
+      "state": "done",
+      "files": [
+        "lua/tests/gen1_scripted_new_game.lua",
+        "tests/live/gen1_scripted_host.py",
+        "docs/gen1_reference/reviews/D1-RB-parcel-module-successor.md"
+      ],
+      "next_action": "None; 'raw menu producer' = route_point() lacking 14 fields (bag/money/event bits/mart script/menu cluster) + three hardcoded rb-starter-rival literals (gen1_scripted_new_game.lua:86, gen1_scripted_host.py:18,47-48, gen1_selected_scenario.py:304-306) + menu_kind derivation audit.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (P-1 line)",
+      "independent_review_refs": [
+        "coordinator cross-check against gen1_scripted_new_game.lua:51-65,86 and the parcel report L9/L18"
+      ]
     }
   ]
 }
@@ -130,9 +220,16 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 **R6 root cause (SOURCE FACT for the game path; hypothesis for the driver until the red model test confirms it).** Both cartridges failed at the identical point (`Y12/X5/max3/index2`, Growl PP 40). The driver's `press()` fires on `frame%16<2`: `Down` is accepted inside frame `16k` (`HandleMenuInput_ .loop2` polls without `DelayFrame`), the next step already reads `wCurrentMenuItem==2`, and `press("A", 16k+1)` emits a one-frame `A` immediately after the cursor move. pokered is then in `SelectMenuItem_CursorDown → SelectMenuItem → HandleMenuInput_ .loop1 → PlaceMenuCursor → Delay3` (`home/window.asm:14-19`, `engine/battle/core.asm:2702-2709`); `_Joypad` is not called for ≥3 frames and `hJoyInput` is overwritten every VBlank (`home/vblank.asm:77-79`), so the pulse is dropped. The driver then idles 600 frames because it treated *emitted* as *accepted* (`gen1_rb_ball_gate_inputs.lua:110-123`). Attempt 5's repeated pulses used Growl (PP 39), which corroborates the mechanism. The game's own acceptance write is `wCurrentMenuItem` 2→1 (`core.asm:2624-2626`) followed by the PP drop.
 
+**R6-SRC reconciliation (Gen1-CodexPeer, task cx-ccffd08c, 2026-09-14):** (a)(c)(e)(f) confirmed with citations. Nuance (b): a pulse sampled on the final delayed VBlank survives into the next poll (`home/vblank.asm:77-79`, `engine/joypad.asm:5-20`); R6's pulse was on the first post-Down frame, so it was still dropped. Nuance (d): `wCurrentMenuItem` is decremented before validation and on B-cancel too (`engine/battle/core.asm:2620-2626`); the strict accept write is `wPlayerSelectedMove` (`:2662-2670`) and PP decrements later (`:3117-3122`, `decrement_pp.asm:36-42`). The driver never presses B inside the move menu and asserts Growl PP>0 first, so the index-1 window is only reachable by real acceptance; PP drop plus the 600-frame bound remain the acceptance oracle. `wPlayerSelectedMove` is recorded as the stronger signal to adopt if R7 ever stalls at index 1.
+
 | Item | Verified state / next owner action |
 | --- | --- |
-| Battle path | BI-1 READY→ACTIVE on acknowledgment: red model test replaying the dropped pulse, then re-pulse `A` on the 16-frame cadence while the cursor still sits on Growl with unchanged PP; index 2→1 with unchanged PP = accepted-not-executed (idle, no Down); PP drop → existing `awaiting_main_menu`; 600-frame bound from first emit. Independent review of the frozen diff precedes R7. |
+| Battle path | BI-1 INTEGRATED (see row below); R7 lane granted to the coordinator. Round-1 shape: Driver diff is four lines at `gen1_rb_ball_gate_inputs.lua:110-116`: while pending and the point is still the move menu with the cursor on Growl, re-pulse `A` on the 16-frame cadence; otherwise bounded idle as before. Coordinator re-ran 30 passed / 0 failed / 0 skipped, ruff clean, lupa ok; SHA256 Lua `b98f0dbed09f85ee713c53d7ec075e4d6900678f84b3c3465a37062b4695f52f`, test `13a76486d8526feb900bc7e23f7fc06f3e18fb0df2eac372bd1d2577e45e8b92`; receipt `.cache/bi1-model.xml`. Known ceiling (worker-noted): a button-gated prompt before the player's PP drop on an enemy-first turn would still hit the 600-frame bound; only R7 can show it. **R7 launch note (R7-PREP):** `asyncio.run(rb_starter_rival(r".cache\d1-rb-starter-rival-r7", emulator=r"E:\Howard\Bizhawk\EmuHawk.exe", base_config=r"E:\Howard\Bizhawk\config.ini", limit=180))` from the checkout with `PYTHONDONTWRITEBYTECODE=1`; 300% is the `SelectedRun` default (`gen1_selected_scenario.py:286`); the summary is self-written to `<owned>-summary.json` (`:606-607`), console must be tee'd to `.cache/d1-rb-starter-rival-r7-console.txt`; preflight (`:340-363`) refuses a pre-existing owned root and self-checks emulator/config/source hashes; PASS = final status `rb-starter-rival-checkpoint-observed` after clean cleanup (`:595-604`). Historical: RED established 2026-09-14 00:2x UTC: `test_r6_dropped_growl_pulse_is_repeated_until_observed_acceptance` fails at `tests/unit/test_gen1_selected_rb_ball_gate.py:141` (`assert buttons["A"]`) on the unchanged driver, 1 failed / 29 passed — the dropped-pulse mechanism is confirmed on the driver side. Green step: then re-pulse `A` on the 16-frame cadence while the cursor still sits on Growl with unchanged PP; index 2→1 with unchanged PP = accepted-not-executed (idle, no Down); PP drop → existing `awaiting_main_menu`; 600-frame bound from first emit. Independent review of the frozen diff precedes R7. |
+| BI-1 integrated | Round 2 (isolated Claude worker): pending + not(Growl cursor) → `press("B")` on the cadence; `test_enemy_first_prompt_before_pp_drop_is_advanced_with_b` red on round 1, green now; 31 passed / 0 / 0, ruff, lupa; SHA256 Lua `7c000361e32a8de41f7fdd2f5a6ba907d5cc2ace3c1d4d5012fcad9930637e41`, test `ab5f163ba04992644552bc69da01ad028110cad32ba499b7be7b6cbd77e29966`. Codex re-review `cx-f22e3dde`: **ACCEPT-WITH-NOTES** — `ManualTextScroll` accepts A|B (`home/text.asm:209-217`, `home/joypad2.asm:55-92`); battle menu ignores B (`core.asm:2091,2124-2125`); no reachable harmful-B state at level 5; faint sets `wBattleResult=1` and cleanup clears `wIsInBattle` (`core.asm:1030-1044`, `end_of_battle.asm:27-50`); healing + rival event happen in lab script **12** (`scripts/OaksLab.asm:418-436`), 13/14 → 18 is exit dialogue. Open: the 600-frame total through the final KO dialogue is only establishable by R7. MODEL ONLY. |
+| P-1 | "Raw menu producer" = `route_point()` (`gen1_scripted_new_game.lua:51-65`) does not yet emit the parcel module's 14 extra fields (`wNumBagItems d31d`, `wBagItems d31e`, `wPlayerMoney d347`, two `wEventFlags d747` bits, `wViridianMartCurScript d60d`, `wSimulatedJoypadStatesIndex cd38`, menu cluster `wListMenuID cf94`/`wCurItem cf91`/`wItemQuantity cf96`/`wChosenMenuItem d12d`/`wMenuExitMethod d12e`), `menu_kind` has no raw-symbol derivation yet, and three literals pin the only route mode (`gen1_scripted_new_game.lua:86`, `tests/live/gen1_scripted_host.py:18,47-48`, `gen1_selected_scenario.py:304-306`). Shared: host loop/plan staging/enums; game-specific: `route_point()` fields and the parcel module. Not dispatched until the lab checkpoint passes. |
+| BI-1 review round 1 | Codex headless REVIEW `cx-d02ec69d`: **REJECT** for R7. Source-derived and coordinator-verified: when the enemy outspeeds, `ExecuteEnemyMove` runs first and a KO is handled before the player's move (`engine/battle/core.asm:418-424`); enemy stat-fall `_FellText` (`data/text/text_3.asm:122-124`) and `_PlayerMonFaintedText` (`data/text/text_2.asm:882-885`) end in `prompt`, so an idle driver hits the 600-frame bound before any PP drop. Attempt 5 passed one Growl only because the enemy used a plain attack (`done`-terminated text). Minor: index decrement precedes validation (`:2620-2656`), so it is not an acceptance signal. Round 2 in progress: press B on the cadence while pending outside the Growl-cursor state. |
+| TK-1 | OMP (deepseek-v4.1-flash): `.cache/current-cards-final.xml` tests=188 failures=0 errors=0 skipped=0; parcel Lua/unit hashes EQUAL to the report; R0 working copy `88aec118c2fd09c02012755ad06bc6b21fb15907a6bbe211c2878bfabf8f00cf` ≠ frozen supplied input `4dadeb79…` — expected, the dirty file is the correction candidate, not drift. |
+| E-1 | `browser.red.clean-ups` (stage patch-browser) has an empty `proofs` array → automatic evaluator failure (`tools/verify_gen1_release.py:264`); the stage is 40/42 missing (P0 report). The only registered browser proof (`patch.actual-browser-canonical-upr`, `tests/integration/test_gen1_browser_patcher.py:28,34`) is a Chrome download/hash/refusal matrix with no emulator boot; the R6 `downloads` block is evidence for the clean-bundle boot only. Gap: real EmuHawk boot of the browser-patched Red ROM; cheapest closer reuses `server/bizhawk_launch.py` prepare/launch or `SelectedRun`. Needs the emulator lane; independent of BI-1 and N2. Not dispatched until a nine-part claim exists. |
 | Shared HUD | Integrated at c647f91; source/model passed. Physical pixel-expiry proof remains an open limit. |
 | Checks | 188 current-card tests, no failure/error/skip; `.cache/current-cards-final.xml` `bc078899…ffa6`. No fresh release-evaluator verdict. |
 | Hooks | Installed and tested; Codex native `/hooks` trust and actual host firing remain human-only/unverified. BLOCKED, not worked. |

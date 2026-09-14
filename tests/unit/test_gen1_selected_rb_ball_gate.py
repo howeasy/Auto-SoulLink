@@ -122,6 +122,31 @@ def test_accepted_growl_pp_drop_with_stale_move_cursor_advances_text_not_down():
     assert phase == "use-growl" and buttons["A"]
 
 
+def test_r6_dropped_growl_pulse_is_repeated_until_observed_acceptance():
+    # R6: Down accepted at frame 16; cursor visible next frame; A emitted at 17 lands in
+    # HandleMenuInput_ Delay3 (pokered home/window.asm:18) and is dropped; PP stays 40.
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 1
+    point.move2, point.move2_pp = 0x2D, 40
+    buttons, phase = driver.step(handshake, status, point, 16)
+    assert phase == "select-growl" and buttons["Down"]
+    point.menu_index = 2
+    buttons, _ = driver.step(handshake, status, point, 17)
+    assert buttons["A"]  # Emitted, but dropped by the game.
+    for frame in range(18, 32):
+        buttons, _ = driver.step(handshake, status, point, frame)
+        assert not buttons["Down"]
+    buttons, _ = driver.step(handshake, status, point, 32)
+    assert buttons["A"]  # A sent pulse is not acceptance.
+    point.menu_index = 1  # SelectMenuItem decremented: accepted, not yet executed.
+    buttons, phase = driver.step(handshake, status, point, 33)
+    assert phase == "await-growl-acceptance" and not buttons["Down"] and not buttons["A"]
+    point.move2_pp = 39
+    buttons, phase = driver.step(handshake, status, point, 48)
+    assert phase == "rival-turn-text" and buttons["B"]
+
+
 def test_selected_growl_without_pp_acceptance_refuses_unsafe_next_cursor():
     _, driver, handshake, status, point = model()
     point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
@@ -133,6 +158,27 @@ def test_selected_growl_without_pp_acceptance_refuses_unsafe_next_cursor():
     assert phase == "await-growl-acceptance" and not buttons["Down"] and not buttons["A"]
     with pytest.raises(LuaError, match="no accepted PP/action evidence"):
         driver.step(handshake, status, point, 616)
+
+
+def test_enemy_first_prompt_before_pp_drop_is_advanced_with_b():
+    # Enemy outspeeds: its "fell!" / "fainted!" text ends in `prompt` before the player's PP drops
+    # (pokered core.asm:418-424, text_3.asm:122-124, text_2.asm:882-885); idle would hit the 600-frame bound.
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 2
+    point.move2, point.move2_pp = 0x2D, 40
+    buttons, _ = driver.step(handshake, status, point, 16)
+    assert buttons["A"]
+    point.menu_index = 1  # accepted; enemy acting first; prompt showing
+    buttons, phase = driver.step(handshake, status, point, 32)
+    assert phase == "await-growl-acceptance" and buttons["B"] and not buttons["A"] and not buttons["Down"]
+    buttons, _ = driver.step(handshake, status, point, 33)
+    assert buttons["B"]
+    buttons, _ = driver.step(handshake, status, point, 34)
+    assert not buttons["B"]  # normal press cadence, not a held button
+    point.battle, point.lab_script, point.joy_ignore, point.npc_moving = 0, 13, 0xF0, False  # KO'd before PP drop
+    buttons, phase = driver.step(handshake, status, point, 48)
+    assert phase == "rival-exit-dialogue" and buttons["B"]  # pending must not block the post-battle flow
 
 
 def test_rb_route_requires_lab_loss_and_heal_before_complete():

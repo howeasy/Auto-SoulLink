@@ -109,7 +109,15 @@ function M.new(expected)
             end
             if self.pending_growl_pp then
                 assert(frame-self.pending_growl_frame<600,"selected Growl has no accepted PP/action evidence")
-                return idle(),"await-growl-acceptance"
+                -- ponytail: HandleMenuInput_ runs Delay3 after each cursor placement and drops presses; keep pulsing A
+                -- while the move menu still shows index 2. The index decrement (core.asm:2620-2626) precedes validation;
+                -- the PP drop is the acceptance oracle. Until then pulse B: the driver never presses B inside the open
+                -- move menu (index 2 -> A), and B only advances prompt-gated text (WaitForTextScrollButtonPress takes A|B,
+                -- e.g. enemy-first "fell!"/"fainted!" before ExecutePlayerMove, core.asm:418-424) or backs out of nothing.
+                if point.menu_y==12 and point.menu_x==5 and point.menu_max>=2 and point.menu_index==2 then
+                    return press("A",frame),"use-growl"
+                end
+                return press("B",frame),"await-growl-acceptance"
             end
             if point.menu_y==12 and point.menu_x==5 and point.menu_max>=2 then
                 assert(point.move2==0x2d and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage")

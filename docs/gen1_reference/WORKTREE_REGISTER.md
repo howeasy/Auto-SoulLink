@@ -4,9 +4,9 @@ Current owner/status is in [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md), the sole di
 
 ## Current ownership
 
-**RESUMED under explicit owner authorization (2026-09-14 UTC).** Canonical `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`; HEAD `59b6b0b` at takeover, code freeze `c647f91`. Coordinator: Claude Opus 5 session `9a7ac120-04eb-489f-8fd1-c9ecb67b31a6` (`slink-63`); roles, not providers, carry authority (see the guide). No EmuHawk/test runner; no emulator lane granted.
+**RESUMED under explicit owner authorization (2026-09-14 UTC).** Canonical `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`; HEAD `59b6b0b` at takeover, code freeze `c647f91`. Coordinator: Claude Opus 5 session `9a7ac120-04eb-489f-8fd1-c9ecb67b31a6` (`slink-63`); roles, not providers, carry authority (see the guide). R7 live lane granted to the coordinator (see guide checkpoint live_lane).
 
-Current file claims (one writer each): BI-1 implementation worker — `lua/tests/gen1_rb_ball_gate_inputs.lua`, `tests/unit/test_gen1_selected_rb_ball_gate.py`, `docs/gen1_reference/reviews/D1-RB-implementation-successor.md` (READY, ACTIVE on acknowledgment). Read-only cards: R6-SRC (contextual peer, pokered sources), TK-1 (OMP, receipts). Coordinator alone edits the guide, this register and `docs/agents/orchestration.md`.
+Current file claims: BI-1 integrated and released (`lua/tests/gen1_rb_ball_gate_inputs.lua`, `tests/unit/test_gen1_selected_rb_ball_gate.py`, `docs/gen1_reference/reviews/D1-RB-implementation-successor.md`; two Codex reviews recorded in the guide). **Emulator lane: R7 granted to the coordinator**, owned root `.cache/d1-rb-starter-rival-r7` ( the Codex headless delegate HOLDed on sandbox Python access after adding the red test). Read-only cards: R6-SRC (Gen1-CodexPeer, DONE/reconciled), TK-1, R7-PREP and E-1 DONE; TK-2 and P-1 DONE; E-2 (Gen1-CodexPeer) active, read-only. Coordinator alone edits the guide, this register and `docs/agents/orchestration.md`.
 
 Preserve dirty R0 report and untracked parcel Lua/unit/report (hashes verified at takeover). All 18 parked registrations remain as classified; no parked worktree was moved/deleted/reset. Root master is not the RC checkout. Native hook trust/activation is not claimed.
 

@@ -1,5 +1,25 @@
 # D1 Red/Blue starter and lab-rival checkpoint — model handoff
 
+## Current status: BI-1 round 2 complete (GREEN), model only
+
+Base HEAD `6c96032566d0339a7a03626171cd91a457c78be3`, branch `gen1/rc`. Exclusive files only: the driver, the model test file and this report. R0 and the three parcel files untouched; the coordinator ledger docs are dirty by design.
+
+Round 1 (dropped-pulse fix) was REJECTED by independent review: with `pending_growl_pp` set and the point no longer at move-menu index 2, the driver idled until PP dropped. When the enemy outspeeds (rival Charmander vs Bulbasaur), `engine/battle/core.asm:418` runs `ExecuteEnemyMove` before the player's move and `:424` jumps to `HandlePlayerMonFainted` before `ExecutePlayerMove`. `_FellText` (`data/text/text_3.asm:122-124`) and `_PlayerMonFaintedText` (`data/text/text_2.asm:882-885`) end in `prompt` (button-gated), so an enemy Growl/Tail Whip, a crit or the final KO would stall at the 600-frame bound before PP ever dropped. Attempt 5 only saw PP 39 because the enemy used a plain attack (`done`-terminated text).
+
+Round-1 root cause still stands and its fix is kept: `press()` fires on `frame%16<2`; Down is accepted inside frame 16k, the one-frame A at 16k+1 lands in `HandleMenuInput_`'s Delay3 (`home/window.asm:14-19`, `core.asm:2702-2709`) and is dropped (`hJoyInput` rewritten every VBlank, `home/vblank.asm:77-79`). The driver re-pulses A on the normal cadence while the move menu still shows index 2.
+
+Round-2 change (driver, +10/-1 total vs HEAD): in the pending branch the non-index-2 case now returns `press("B",frame),"await-growl-acceptance"` instead of idle. The 600-frame bound from the first emitted A and the A re-pulse are unchanged. The comment no longer calls the index decrement "acceptance": the decrement (`core.asm:2620-2626`) precedes validation, the PP drop is the acceptance oracle, and B is safe because the driver never presses B inside the open move menu (index 2 -> A) and B only advances prompt-gated text (`WaitForTextScrollButtonPress` accepts A|B) or backs out of nothing. Once the battle ends (`point.battle==0`) the battle branch is skipped entirely, so a stale pending never blocks the post-battle script flow.
+
+Red evidence: new `test_enemy_first_prompt_before_pp_drop_is_advanced_with_b` (index 2 -> A at 16; index 1 at 32 -> B pulse on the 16-frame cadence at 32/33, not 34; battle 0 + script 13 at 48 -> `rival-exit-dialogue` B). Before the driver change it was the only failure (1 failed, 30 passed) at `assert phase == "await-growl-acceptance" and buttons["B"] and not buttons["A"] and not buttons["Down"]` with `buttons["B"] == False`. Existing-expectation check: the only `not buttons["B"]` assertion in the file is the `lab-text-exit` walk frame (line 251), not the await state; no existing test was rewritten.
+
+Checks: `pytest tests/unit/test_gen1_selected_rb_ball_gate.py -q -o addopts= --junitxml=.cache/bi1-model.xml` -> `31 passed in 0.36s` (0 failed, 0 skipped). Ruff on the test file: `All checks passed!`. lupa (Lua 5.4) load of the driver: `lua ok`. Read-only sanity `tests/unit/test_gen1_rb_parcel_inputs.py`: `12 passed`. `git diff --stat`: driver `10 +++++-`, test `46 ++++`.
+
+SHA256: Lua `7c000361e32a8de41f7fdd2f5a6ba907d5cc2ace3c1d4d5012fcad9930637e41`; Python `ab5f163ba04992644552bc69da01ad028110cad32ba499b7be7b6cbd77e29966`.
+
+Evidence level: MODEL ONLY. No emulator, live or e2e run; no commit. Next owner: coordinator (independent review, then R7 live run).
+
+## Prior history (unchanged)
+
 The first ordinary gameplay slice is built on the previously verified Red/Blue scripted enrollment. `tests/live/test_gen1_selected_rb_ball_gate.py::rb_starter_rival` is an explicit callable, never invoked by pytest collection. It creates a fresh `SelectedRun` in `scripted-selected-launcher` mode for `(red, blue)`, waits for and audits both initial enrollments, then publishes a one-time, atomic, run/player/ROM/context-bound route handshake inside each private emulator directory. The shared test host stages the separate `gen1_rb_ball_gate_inputs.lua` beside the unchanged checked launcher; its plan records the route-module hash. The default idle/product CLI modes remain unchanged. No live run occurred in this build grant.
 
 The Lua route uses only read-only symbol-backed WRAM points and `joypad.set` on the already owned frame calls. Source-derived 2F, 1F, Pallet and Oak's Lab waypoints lead A to Bulbasaur and B to Charmander, avoiding the same-species starter-clause path. After an observed post-nickname lab-script transition, it approaches the rival from row 5. In Rival1 battle it selects Fight and the one-based second move only after checking Growl (`0x2D`) and positive PP; it refuses unknown battle menus, a held frame, changed context, foreign handshake, or exhausted Growl. No RAM, register, SaveRAM, savestate or CPU staging is present. The route stops when the game's own lab-rival event, loss result and healed party HP are read back. These waypoints and button timing are SOURCE/MODEL until a physical run proves them.
