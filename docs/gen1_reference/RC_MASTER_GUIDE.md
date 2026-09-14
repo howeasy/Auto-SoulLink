@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:53:59+00:00",
+  "updated_at_utc": "2026-09-14T10:00:38+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "de312cf",
+  "source_head": "1fbdb00",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. FT-2d integrated. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-2 Lua client (Sonnet), R5b-3 Manager (OMP). R5b-1 candidate 1fbdb00 under adversarial review. C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -950,11 +950,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-1",
-      "owner": "isolated Claude Sonnet worker (implementation; the R5a author)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate 1fbdb00 (isolated Sonnet worker authored; the R5a author)",
+      "state": "done",
       "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
       "next_action": "Server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
-      "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules"
+      "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules",
+      "receipt": "commit 1fbdb00; tests/unit/test_gen1_checkpoint_runtime.py 23 passed; checkpoint/envelope/resume-enrollment/sessions 170 passed; module sha256 ffda64bc…6248; docs/gen1_reference/reviews/R5b-1-server-capture.md (kept its own HTTP/journal shapes; deltas from the pin documented; contract re-pinned to R5b-3)",
+      "independent_review_refs": [
+        "Codex ADVERSARIAL_REVIEW cx-823ee12a (de312cf..1fbdb00) in flight"
+      ]
     },
     {
       "id": "n3-spec",
@@ -1072,7 +1076,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hx-2b",
       "owner": "OMP (correct refusal on cx-f1eb6743: the dashboard player cards are rendered by server.py _build_status_html:4329 and the banner is injected by _handle_dashboard_template:5330-5355; dashboard.html is a 41-line shell)",
       "state": "blocked",
-      "blocked_reason": "server/server.py is owned by R5b-1 until it reports; HX-2b (+HX-2c, same rule for gen1_runtime.py) dispatch after release",
+      "blocked_reason": "waits for OMP to finish R5b-3 (same worker); server.py/gen1_runtime.py released by R5b-1 at 1fbdb00",
       "files": ["server/server.py (_build_status_html player-card loop + header injection)", "tests/unit/test_dashboard_holds_ui.py"],
       "next_action": "~10 lines in server.py: banner into the injected header_html, per-player waiting-on line in the player-card loop filtered by player, title=reason; render test through test_routes_smoke.py's client.",
       "reuse_decision": "presentation only; reads the shared status dict"
