@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:24:24+00:00",
+  "updated_at_utc": "2026-09-14T09:25:30+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "4dec149",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b; OMP: HX-2b dashboard holds (active), then FT-2d missing-file 400.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b; OMP: HX-2b dashboard holds (active), then HX-2c (HX-2 review fix-ups), then FT-2d missing-file 400. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -1013,14 +1013,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "hx-2",
-      "owner": "integrated by coordinator as candidate f4f74da (OMP authored, task cx-767c1aa6)",
-      "state": "done",
+      "owner": "candidate f4f74da on the branch (OMP authored); REJECTED on wording/attribution, fix-up HX-2c queued on OMP",
+      "state": "frozen",
+      "blocked_reason": "HX-2c fix-up (A1 phase-aware attribution, A2 truthful reattach wording, no 'outdoors') waits for OMP to finish HX-2b",
       "files": ["server/gen1_runtime.py", "server/runtime_boundary.py", "server/server.py (_build_status_dict only)", "server/status_payload.py", "server/templates/manager.html", "tests/unit/test_manager_http_hardening.py", "tests/unit/test_gen1_sessions.py", "tests/unit/test_manager_live_holds_ui.py"],
       "next_action": "Gen1Runtime.holds() (reason + human wording + cheap player attribution) read through runtime_boundary.read_runtime_holds into status['holds']; Manager live banner + per-player 'Waiting on' row; payload/sessions/structural tests.",
       "reuse_decision": "shared status/presentation carries an opaque holds list; the Gen 1 runtime owns reasons and wording (no game_id branch in shared code)",
       "receipt": "commit f4f74da; 121 passed across http_hardening/sessions/live_holds_ui/create_ui; worker proved a committed blocker and a held reattach read reach holds()",
       "independent_review_refs": [
-        "Codex REVIEW cx-5a3222f5 (commit A) in flight"
+        "Codex REVIEW cx-5a3222f5 (commit A): REJECT — A1 every death obligation is attributed to the peer for its whole lifecycle although memorial work can remain on either side (gen1_faint_runtime.py:601-624); A2 reattach texts name unavailable remedies ('reopen the same run' / 'use Recover' — those classes stay held until real recovery, gen1_service_continuity.py:118-140, native_trade_executor.lua:160-163) and 'outdoors' is wrong (safe indoor overworld is allowed, gen1_write_safety.lua:44-67). Reason literals, acquisition recomputation, reattach component, dedup and runtime_boundary wiring ACCEPTED."
       ]
     },
     {
@@ -1060,7 +1061,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "Codex REVIEW cx-fbbd022a (commit B): REJECT — concurrent captures share CURRENT.tmp (dangling pointer), historical manifests unanchored, load fails open on ID/schema/size, JSON/OS errors leak, post-promotion failure cases untested",
         "Round 2 fd870b7: Codex REVIEW cx-d1cafa3d REJECT — lock + hash chain ACCEPTED; remaining: missing predecessor key leaks KeyError from the chain walk, current() skips payload validation, pointer temps not cleaned; OPEN: stale lock is not auto-stolen (operator procedure), ID policy is containment not 32-hex, R5b needs a provenance field.",
-        "Round 3 4dec149: complete key set, current() validates payload, temp cleanup, provenance dict, operational limits; Codex REVIEW cx-5a3222f5 (commit B) in flight"
+        "Round 3 4dec149: Codex REVIEW cx-5a3222f5 (commit B) ACCEPT-WITH-NOTES — key-length/int-magnitude bounds (folded into R5b-1), fresh-store cutover note. R5a INTEGRATED."
       ]
     },
     {
