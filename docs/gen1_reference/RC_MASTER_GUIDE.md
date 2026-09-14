@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T06:32:18+00:00",
+  "updated_at_utc": "2026-09-14T06:41:23+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "c57de64",
   "live_lane": null,
-  "next_action": "Round-4 Codex review of 6075af1..HEAD; on ACCEPT grant the lane for rb_resume_roundtrip.",
+  "next_action": "Resume round-trip r1 HOLD in the save driver (wSaveFileStatus is battle-clobbered; RS-2 fixing). P2A-9 (start reservation) in flight. Then re-run the round-trip (changed run).",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -635,6 +635,29 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "Codex REVIEW cx-03a237b0 round 3 \u2014 addressed; round 4 pending"
       ]
+    },
+    {
+      "id": "p2a-9",
+      "owner": "isolated Claude worker (server; resumed context; ACK on report)",
+      "state": "active",
+      "files": [
+        "server/manager.py",
+        "tests/integration/test_manager_gen1_resume.py",
+        "tests/unit/test_manager_http_hardening.py"
+      ],
+      "next_action": "Starting reservation token respected by reconcile/stop/archive/delete; final start commit conditional on token + resumed_by; bounded timeout normalisation.",
+      "reuse_decision": "shared"
+    },
+    {
+      "id": "rs-2",
+      "owner": "isolated Claude worker (harness; resumed RS-1 context; ACK on report)",
+      "state": "active",
+      "files": [
+        "lua/tests/gen1_rb_save_inputs.lua",
+        "tests/unit/test_gen1_rb_save_inputs.py"
+      ],
+      "next_action": "Save driver terminal without wSaveFileStatus (confirmed YES + menus closed); red model from the live point.",
+      "reuse_decision": "Gen 1 route facts"
     }
   ]
 }
@@ -658,6 +681,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| Resume round-trip attempt 1 | HOLD before any save: the `rb-save` driver treated `wSaveFileStatus` as a fresh-cartridge/save oracle, but the byte is battle-animation scratch (`ram/wram.asm:1371-1385`) and read 2 during the rival battle. Driver terminal changes to confirmed-YES + menus closed (RS-2); the acked `gen1-save-witness` remains the proof. No product code implicated; resume phase not reached. Summary `aed95181…`. |
+| P2A review round 4 | Codex `cx-69ce8923`: B/C/D resolved; **A not resolved (MAJOR, MODEL only):** `_reconcile` erases an active `starting` reservation on any read (`manager.py:486-488,523-527`), stop/archive overwrite it, and the final start commit is unconditional (`:893-903`), so a start paused at spawn can still overlap a resume. Not on the live path (harness posts `start=False`, `gen1_selected_scenario.py:191-194`): **LIVE go**. P2A-9 dispatched; live `rb_resume_roundtrip` running. |
 | P2A-8 integrated | `handle_start` reserves `status="starting"` under the lock (409 if `resumed_by` set or already starting), spawns outside, commits `running`/reverts on failure; resume refuses `starting`/`running`; `_reconcile` normalises a stale `starting`; `shutil.rmtree(onerror=)` (3.11); `_pure_heartbeat` requires explicit `battle==0` and `trainer` null keys (native checkpoint may be absent); `_get`/`_active_stream_run` under the lock. 8032/0. |
 | P2A review round 3 | Codex `cx-03a237b0`: (3) heartbeat rule works; minor — absent `trainer` treated as pure; (5) all handlers commit on fresh loads; minor — `_get()` saves unlocked; (7) resolved. **New majors:** `handle_start` reserves no state before spawning and ignores `resumed_by`, so a start paused at spawn can overlap a resume of the same predecessor (`manager.py:681-698`); `shutil.rmtree(onexc=)` is Python 3.12-only while the repo supports 3.11 (`manager.py:740,887`). Inventory-observation concern withdrawn (idle publications suppressed, `gen1_observation_loop.lua:89-104`). REJECT (MODEL), LIVE hold. P2A-8 dispatched. |
 | P2A-7 integrated | Post-witness rule inverted: every committed event holds except a pure heartbeat (`observation` with no signals/inventory/acquisitions, battle 0, no trainer, no native checkpoint; absent optional fields count as not pure). Registry mutations serialised under `RunManager._registry_lock` via `_update_run` (spawn/slow work outside the lock, fresh reload before every save; the paused-spawn race is pinned by a test); refusal bodies carry fixed `reasons` + `details`; rmtree failures logged. 8029/0. |
