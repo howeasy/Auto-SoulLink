@@ -12,8 +12,10 @@ from server import (
     gen1_upr_pipeline,
     manager,
 )
-from server.gen1_run_config import open_runtime
+from server.adapters.gen1_rom_scan import GEN1_ROM_SIZE
+from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_admission import METADATA_SCHEMA, PROTOCOL
+from server.protocol_journal import JournalError
 from tests.unit.test_gen1_sessions import contract
 
 
@@ -159,10 +161,23 @@ def _run_directories(tmp_path):
 
 
 class _PreparedPair:
-    """The prepared-pair surface the create handler reads before the runtime is built."""
+    """A synthetic prepared pair: contract-shaped metadata and a placeholder image, no real ROM.
+
+    `manifest`/`rom` exist so the runtime's native binding gets as far as reading the pair; what
+    it then refuses is the image itself (see test_create_runtime_needs_a_real_cartridge_image).
+    """
 
     def __init__(self,directory):self.directory=Path(directory)
-    def contract(self):return contract('red','blue')
+    def contract(self):
+        published=contract('red','blue')
+        for player in published['players'].values():   # a native pair must claim the trade capability
+            player['capabilities']={**player['capabilities'],'pc_trade':True,'panel':True,'sfx':True}
+        return published
+    def validate_contract(self,value):
+        assert value==self.contract()
+        return value['players']
+    def manifest(self,player):return {'final_sha1':self.contract()['players'][player]['final_rom_sha1']}
+    def rom(self,player):return bytes(GEN1_ROM_SIZE)   # blank: not a cartridge, only the right size
 
 
 _RULE_KEYS=('species_lock','gender_lock','type_lock','explode_mode','rival_team_swap','overworld_presence',
@@ -198,9 +213,12 @@ def _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls,create_runtime
 
 
 @pytest.mark.asyncio
-async def test_manager_fastest_text_stages_the_policy_preset_pair_and_records_it(tmp_path,monkeypatch):
-    """`fastest_text: true` keeps the native path but stages the UPR pair built from the SLink
-    policy preset carrying UPR's fastest-text tweak, and records the choice on the run."""
+async def test_manager_fastest_text_plumbs_the_policy_preset_pair_into_the_runtime(tmp_path,monkeypatch):
+    """Handler plumbing for `fastest_text: true`: which producer runs, with which settings and
+    seeds, and what the handler then hands the runtime. The runtime itself is stubbed here on
+    purpose — it cannot be satisfied by a synthetic pair (see
+    test_create_runtime_needs_a_real_cartridge_image_for_a_native_pair), so this test pins the
+    handler's half of the contract and nothing more."""
     from server.gen1_upr_policy import build_preset
     preset=build_preset({'currentMiscTweaks':8})
     calls=[]
@@ -262,9 +280,10 @@ async def test_manager_without_fastest_text_still_stages_the_canonical_pair(tmp_
 
 
 @pytest.mark.asyncio
-async def test_manager_accepts_the_exact_body_the_gen1_create_ui_posts(tmp_path,monkeypatch):
-    """manager.html createRun() posts this body verbatim for a filled Gen 1 pair: the six rule
-    keys create_runtime allows (native_sounds forced off), native, start and fastest_text."""
+async def test_manager_plumbs_the_exact_body_the_gen1_create_ui_posts(tmp_path,monkeypatch):
+    """Handler plumbing for the body manager.html createRun() posts verbatim for a filled Gen 1
+    pair: the six rule keys create_runtime allows (native_sounds forced off), native, start and
+    fastest_text. The runtime is stubbed here for the same reason as the fastest_text test."""
     rules={'species_lock':True,'gender_lock':False,'type_lock':True,'explode_mode':False,
         'rival_team_swap':True,'pc_trade_npc':False,'native_sounds':False}
     staged=[]
@@ -338,3 +357,45 @@ async def test_manager_removes_the_staged_directory_when_runtime_creation_fails(
     assert response.status==400 and 'after staging' in _json_text(response)
     assert len(runtime_calls)==1 and runs==[]
     assert _run_directories(tmp_path)==[]   # the half-built run directory is gone
+
+
+def test_create_runtime_needs_a_real_cartridge_image_for_a_native_pair(tmp_path,monkeypatch):
+    """Why the plumbing tests stub the runtime: `native_trade=True` makes Gen1Runtime install the
+    native binding (server/gen1_runtime.py:184 -> gen1_native_binding.py:41-46), which reads the
+    pair's ACTUAL cartridge bytes through TradeResultRules.from_rom. Measured refusals as the fake
+    image gets less blank: a blank 1 MiB image -> "not a supported Gen 1 title"; a titled one ->
+    "HM move table terminator differs"; that byte patched too -> "EvosMovesPointerTable entry 0
+    points outside the bank window". Passing it means counterfeiting a whole pret cartridge, so
+    the boundary is documented here instead of assumed by the tests above."""
+    run=tmp_path/'run_boundary'
+    (run/'prepared').mkdir(parents=True)
+    pair=_PreparedPair(run/'prepared')
+    monkeypatch.setattr(gen1_prepared_cartridges,'PreparedCartridges',_PreparedPair)
+    with pytest.raises(JournalError,match="native ROM differs from the admitted contract") as refusal:
+        create_runtime(run,pair.contract(),prepared_cartridges=pair,native_trade=True,free_service=True)
+    assert 'not a supported Gen 1 title' in str(refusal.value)   # the fake image is not a cartridge
+
+
+@pytest.mark.asyncio
+async def test_manager_refuses_a_rule_key_the_gen1_runtime_does_not_accept(tmp_path,monkeypatch):
+    """The allowed rule set belongs to the runtime (gen1_run_config.py:117-123), so an extra key
+    is refused by the REAL create_runtime as a 400 - the handler forwards rules untouched, and
+    the F4 window removes the half-staged directory on the way out."""
+    runs=[]
+    staged=[]
+    def stage_canonical_pair(directory,clean_paths):
+        staged.append((Path(directory),clean_paths))
+        Path(directory).mkdir(parents=True)
+        return Path(directory)
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('nothing may be registered'))
+    monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
+    monkeypatch.setattr(gen1_prepared_cartridges,'PreparedCartridges',_PreparedPair)
+    monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',stage_canonical_pair)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
+        'name':'Extra rule key','rom_a':'a.gb','rom_b':'b.gb','rules':{'species_lock':True,'overworld_presence':True},
+        'start':False,'native':True}))
+    assert response.status==400 and 'explicit supported Gen1 rule options required' in _json_text(response)
+    assert len(staged)==1 and runs==[]
+    assert _run_directories(tmp_path)==[]   # the refusal happens before anything is kept
