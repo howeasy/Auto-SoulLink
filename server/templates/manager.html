@@ -40,6 +40,19 @@
       <input type="text" placeholder="New run name…"
              x-model="newRunName"
              @keyup.enter="createRun()">
+      <details class="mgr-new-disclosure">
+        <summary>Gen 1 Red/Blue — optional clean cartridge paths (both empty = generic run; both filled = Gen 1 run)</summary>
+        <div class="mgr-new-opts mgr-rand-form">
+          <label>Player A ROM<input type="text" id="gen1-create-rom-a" x-model="gen1Create.rom_a" placeholder="Local .gb or .gbc path"></label>
+          <label>Player B ROM<input type="text" id="gen1-create-rom-b" x-model="gen1Create.rom_b" placeholder="Local .gb or .gbc path"></label>
+          <label data-tip="Build the pair with UPR's fastest-text misc tweak and nothing else randomized, instead of the canonical companion pair. Requires SLINK_UPR_JAR on the Manager host.">
+            <input type="checkbox" id="gen1-create-fastest-text" x-model="gen1Create.fastest_text">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-script"/></svg>
+            Fastest text (UPR, no other randomization)
+          </label>
+          <p class="mgr-rand-error" x-show="gen1Create.error" x-text="gen1Create.error"></p>
+        </div>
+      </details>
       <div class="mgr-new-opts-section">
         <div class="mgr-new-opts-head">
           <span class="mgr-new-opts-label">Link Clauses</span>
@@ -89,8 +102,8 @@
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
             Rival Swap
           </label>
-          <label data-tip="See your partner walking in your overworld as a live peer ghost. Gen 3 only (Radical Red).">
-            <input type="checkbox" x-model="newOpts.overworld_presence">
+          <label data-tip="See your partner walking in your overworld as a live peer ghost. Gen 3 only (Radical Red). Unavailable for Gen 1.">
+            <input type="checkbox" x-model="newOpts.overworld_presence" :disabled="gen1CreateSelected()">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-presence"/></svg>
             Overworld Presence
           </label>
@@ -104,18 +117,18 @@
             </span>
           </summary>
           <div class="mgr-new-opts">
-            <label data-tip="Draw field + battle notifications as native in-game text boxes instead of the Lua HUD overlay. Gen 3 only.">
-              <input type="checkbox" x-model="newOpts.native_messages">
+            <label data-tip="Draw field + battle notifications as native in-game text boxes instead of the Lua HUD overlay. Gen 3 only. Unavailable for Gen 1.">
+              <input type="checkbox" x-model="newOpts.native_messages" :disabled="gen1CreateSelected()">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-msgbox"/></svg>
               Native Messages
             </label>
-            <label data-tip="Play notification sounds through the game's own audio engine instead of the Lua m4a poke. Gen 3 only — the Gen 1 companion patch ships without audio, because its only available hook re-enters a non-reentrant sound routine.">
-              <input type="checkbox" x-model="newOpts.native_sounds">
+            <label data-tip="Play notification sounds through the game's own audio engine instead of the Lua m4a poke. Gen 3 only — the Gen 1 companion patch ships without audio, because its only available hook re-enters a non-reentrant sound routine. Unavailable for Gen 1.">
+              <input type="checkbox" x-model="newOpts.native_sounds" :disabled="gen1CreateSelected()">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-sound"/></svg>
               Native Sounds
             </label>
-            <label data-tip="Show the bundled in-battle damage / type-effectiveness calculator. Off hides it (on by default). Gen 3 only — the calculator is pinned to modern mechanics and would misreport Gen 1 damage.">
-              <input type="checkbox" x-model="newOpts.battle_calc">
+            <label data-tip="Show the bundled in-battle damage / type-effectiveness calculator. Off hides it (on by default). Gen 3 only — the calculator is pinned to modern mechanics and would misreport Gen 1 damage. Unavailable for Gen 1.">
+              <input type="checkbox" x-model="newOpts.battle_calc" :disabled="gen1CreateSelected()">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-calc"/></svg>
               Battle Calc
             </label>
@@ -127,7 +140,7 @@
           </div>
         </details>
       </div>
-      <button class="mgr-create-btn" @click="createRun()">
+      <button class="mgr-create-btn" :disabled="gen1Create.busy" @click="createRun()">
         <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-plus"/></svg>
         Create
       </button>
@@ -967,6 +980,10 @@ function runManager() {
     // re-entered by hand — everything else the server needs is read straight off the
     // predecessor's own registry entry, same as it was recorded at its own creation.
     resume: { rom_a: '', rom_b: '', fastest_text: false, busy: false, error: '' },
+    gen1Create: { rom_a: '', rom_b: '', fastest_text: false, busy: false, error: '' },
+
+    // Both paths or neither: one path cannot name a pair, and neither means the generic run.
+    gen1CreateSelected() { return !!(this.gen1Create.rom_a.trim() || this.gen1Create.rom_b.trim()); },
 
     resumeRuleOptions(run) {
       // Must match server/gen1_run_config.py create_runtime's `allowed` rule_options
@@ -1046,20 +1063,26 @@ function runManager() {
     },
 
     async createRun() {
-      var name = this.newRunName.trim();
-      if (!name) { alert('Enter a run name'); return; }
-      var res = await fetch('/api/runs/new', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.assign({ name }, this.newOpts))
-      });
-      var j = await res.json();
-      if (!j.ok) { alert(j.error || 'Create failed'); return; }
-      this.newRunName = '';
-      await this.refreshRuns();
-      // Auto-select the newly created run if present.
-      var created = this.runs.find(r => r.name === name);
-      if (created) this.active = created.run_id;
+      const g=this.gen1Create; if(g.busy) return; g.error='';
+      const name=this.newRunName.trim(), a=g.rom_a.trim(), b=g.rom_b.trim();
+      if(!name){ g.error='Enter a run name'; return; }
+      if(Boolean(a)!==Boolean(b)){ g.error='Both cartridge paths are required'; return; }
+      let url='/api/runs/new', body=Object.assign({ name }, this.newOpts);
+      if(a&&b){
+        const rules={};
+        ['species_lock','gender_lock','type_lock','explode_mode','rival_team_swap','pc_trade_npc'].forEach(k=>{ rules[k]=!!this.newOpts[k]; });
+        rules.native_sounds=false; url='/api/runs/gen1';
+        body={ name, rom_a:a, rom_b:b, rules, start:true, native:true, fastest_text:!!g.fastest_text };
+      }
+      g.busy=true;
+      try {
+        const res=await fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        const j=await res.json();
+        if(!res.ok||!j.ok){ g.error=Array.isArray(j.reasons)&&j.reasons.length ? j.reasons.join('; ') : (j.error||'Create failed'); return; }
+        this.newRunName=''; g.rom_a=''; g.rom_b=''; g.fastest_text=false;
+        await this.refreshRuns();
+        if(j.run&&j.run.run_id) this.active=j.run.run_id; else { const created=this.runs.find(r=>r.name===name); if(created) this.active=created.run_id; }
+      } catch(error){ g.error=String(error); } finally { g.busy=false; }
     },
   };
 }

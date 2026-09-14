@@ -253,3 +253,31 @@ async def test_manager_without_fastest_text_still_stages_the_canonical_pair(tmp_
     assert len(staged)==1 and staged[0][1]=={'a':'a.gb','b':'b.gb'}
     assert runs[0]['native_trade'] is True and runs[0]['fastest_text'] is False
     assert len(runtime_calls)==1 and runtime_calls[0][2]['native_trade'] is True
+
+
+@pytest.mark.asyncio
+async def test_manager_accepts_the_exact_body_the_gen1_create_ui_posts(tmp_path,monkeypatch):
+    """manager.html createRun() posts this body verbatim for a filled Gen 1 pair: the six rule
+    keys create_runtime allows (native_sounds forced off), native, start and fastest_text."""
+    rules={'species_lock':True,'gender_lock':False,'type_lock':True,'explode_mode':False,
+        'rival_team_swap':True,'pc_trade_npc':False,'native_sounds':False}
+    staged=[]
+    runtime_calls=[]
+    runs=[]
+    def stage_canonical_pair(directory,clean_paths):
+        staged.append((Path(directory),clean_paths))
+        Path(directory).mkdir(parents=True)
+        return Path(directory)
+    monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',stage_canonical_pair)
+    _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls)
+    async def spawn(*args,**kwargs):return 12345   # the UI body starts the run
+    monkeypatch.setattr(manager,'_spawn_run',spawn)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
+        'name':'Gen 1 pair','rom_a':'a.gb','rom_b':'b.gb','rules':rules,'start':True,'native':True,
+        'fastest_text':False}))
+    result=json.loads(response.text)
+    assert response.status==200 and result['ok'] is True and result['native_trade'] is True
+    assert len(staged)==1 and len(runtime_calls)==1
+    options=runtime_calls[0][2]
+    assert options['rule_options']==rules and options['native_trade'] is True
+    assert runs[0]['status']=='running' and runs[0]['native_trade'] is True
