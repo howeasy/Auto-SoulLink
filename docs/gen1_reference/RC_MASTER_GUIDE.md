@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:02:55+00:00",
+  "updated_at_utc": "2026-09-14T08:06:45+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "6f1f2a1",
   "live_lane": null,
-  "next_action": "Resume PROVED live (r5). P2A-11 closes the last MODEL major (reservation token lifecycle); UI-1 adds the dashboard Resume action; N1-CLAIM scopes native trade. Lane free.",
+  "next_action": "N1-1 (first native trade harness) and P2A-11 (last resume MODEL edge) in flight; OMP running the independent full suite on HEAD. Lane free.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -758,14 +758,35 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "n1-path",
-      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-2a1b5ed2)",
-      "state": "active",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-2a1b5ed2)",
+      "state": "done",
       "files": [
         ".cache/pret/pokered/maps/ViridianPokecenter.blk",
         ".cache/pret/pokered/data/maps/objects/ViridianPokecenter.asm"
       ],
-      "next_action": "Collision-verified waypoints Mart \u2192 Center \u2192 counter (11,3); B's wait cell; hazards.",
-      "reuse_decision": "research only"
+      "next_action": "None; tables recorded in the guide N1 row and handed to N1-1.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (N1-PATH row)",
+      "independent_review_refs": [
+        "coordinator accepted as SOURCE-derived static terrain; NPC occupancy dynamic"
+      ]
+    },
+    {
+      "id": "n1-1",
+      "owner": "isolated Claude worker (harness; resumed RS context; ACK on report)",
+      "state": "active",
+      "files": [
+        "lua/tests/gen1_rb_native_trade_inputs.lua",
+        "tests/unit/test_gen1_rb_native_trade_inputs.py",
+        "tests/live/test_gen1_selected_rb_native_trade.py",
+        "tests/live/gen1_scripted_host.py",
+        "tests/live/gen1_selected_scenario.py",
+        "lua/tests/gen1_scripted_new_game.lua",
+        "tests/unit/test_gen1_scripted_route_modes.py",
+        "tests/unit/test_gen1_scripted_chain.py"
+      ],
+      "next_action": "rb-native-trade chained route: mart-exit, walk to the Viridian Center counter, A initiates SLINK TRADE with the linked starter, B consents at (5,5); verifier per the paired-native test; live callable.",
+      "reuse_decision": "shared scripted-host chain (N entries); Gen 1 route facts and trade-UI geometry in the module"
     }
   ]
 }
@@ -790,9 +811,10 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | Item | Verified state / next owner action |
 | --- | --- |
 | UI-1 integrated | Dashboard: "Resume as a new run" disclosure on stopped, un-resumed runs (posts `/api/runs/gen1` with `resume_from`; 409 reasons shown verbatim), `resumed from`/`resumed by` badges, Start disabled on a resumed predecessor, `--resume-save` hint on the launcher panel. Template only; 7 string-presence tests. |
+| N1-PATH | Verified x-first tables (pokered 405b624, decoded cell-by-cell): Mart exit `(3,7)` → city `(29,19)`; city `{29,20},{19,20},{19,26},{23,26},{23,25}` (door → Center `(3,7)`; never column 23 above row 26, wall at `(22,25)`); Center `{3,4},{11,4},{11,3}` then face Up (row 6 blocked at `(6,6)`/`(7,6)`); B waits at `(5,5)` via `{3,5},{5,5}`. Hazards: city walkers `(13,20)`/`(30,25)`; the Center gentleman walks column x10 and can occupy `(10,4)` — bounded wait, never blind A. Receptionist = object 4 at `(11,2)`, typed dispatch `script_cable_club_receptionist` intercepted by the companion; Center map script only tries the serial link and enables auto text boxes. Precondition: the Mart purchase UI must be closed first (parcel terminal fires inside it). |
 | N1 claim (native trade, first slice) | Gen1-CodexPeer record. Rows served: `trade.{red,blue}.canonical-physical/.durability/.foreground-overlay/.blob-fidelity` (first selected-path transaction evidence; not full closure). **Starters are tradeable** — eligibility needs one ALIVE linked pair with both halves in party, `pc_trade_npc` enabled, no pending work (`server/gen1_trade_rules.py:29-72`; one-mon pair modelled at `tests/unit/test_gen1_trade_rules.py:24-47`); D3 catch NOT required. Nearest counter: Viridian Pokémon Center (city entrance (23,25), interior map $29, receptionist object 4 at (11,2), interact from (11,3) facing Up). Companion patch offers SLINK TRADE / CABLE CLUB / CANCEL after an availability query (`patch/gen1/src/trade_receptionist.asm:1-15,44-60,119-176,270-298`); only ONE player initiates (server refuses concurrent visits, `gen1_receptionist_runtime.py:95`), the partner consents through the native prompt (`trade_prompt.asm:77-99`). Native execution stays the production executor's owned transaction (`lua/gen1_native_trade_executor.lua:187-208`, `gen1_native_execution.py:87-111`); the verifier waits for both applied + file-verified results and logical migration (`gen1_native_policy.py:141-171`, `gen1_trade_rules.py:74-85`). HYPOTHESIS: `rb-native-trade` chain starter → parcel → receptionist module (A initiates, B waits at a safe cell), optional START→SAVE on both afterwards. Files: new `lua/tests/gen1_rb_native_trade_inputs.lua`, unit + live tests, host/scenario/bootstrap, report. Recovery rows: only 'before PREPARE' is now addressable by clean resume; before/after COMMIT and during animation/save remain open. (9) READY WAIT(N1-PATH audit; P2A-11 release of shared files). |
 | P2A review round 5 | Codex `cx-aa100faf` on `c57de64..597f5ba`: B (lifecycle allowlist) and C (harness commits) resolved; A still MAJOR on the 120 s edge — timeout normalisation, stop and archive keep the old `starting_token`, so a slow spawn's final commit can write `running` over stopped/archived (`manager.py:346-352,501-522,771,785,748-750`), and an expired start's late failure overwrites a newer reservation (`:163-168,732-741`). REJECT (MODEL). P2A-11 dispatched: token cleared on every non-owner transition; token-gated failure cleanup. |
-| **Resume round-trip attempt 5 — RESUME PASS (CONTROLLED-SCRIPTED)** | `rb-resume-checkpoint-observed` at `597f5ba`: save → clean stop → `resume_from` accepted → save files imported after digest verification → both clients CONTINUE-booted and enrolled (`gen1-resume.enrolled` digests = predecessor witnesses) → `oaks_lab` link ALIVE with species 1/4 carried across, identities re-minted, no activations/deaths, clean cleanup. First physical proof that a run survives a session boundary. Open (MODEL only): post-resume gameplay (inherited-pair faint, catch with inherited activation) and the refusal cases. Receipts summary `b70b0c78…`, resumed `c50bb01d…`, console `fa7ccf25…`; [D1 physical report](reviews/D1-RB-physical-successor.md). |
+| **Resume round-trip attempt 5 — RESUME PASS (CONTROLLED-SCRIPTED)** | `rb-resume-checkpoint-observed` at `597f5ba`: save → clean stop → `resume_from` accepted → save files imported after digest verification → both clients CONTINUE-booted and enrolled (`gen1-resume.enrolled` digests = predecessor witnesses) → `oaks_lab` link ALIVE with species 1/4 carried across, identities re-minted, no activations/deaths, clean cleanup. First physical proof that a run survives a session boundary. Independently validated (TK-3, OMP): receipt hashes, status, lineage and links; coordinator matched the predecessor journal's `save_witness` digests (rev 341/531) to the resumed enrollment digests — both MATCH. Open (MODEL only): post-resume gameplay (inherited-pair faint, catch with inherited activation) and the refusal cases. Receipts summary `b70b0c78…`, resumed `c50bb01d…`, console `fa7ccf25…`; [D1 physical report](reviews/D1-RB-physical-successor.md). |
 | **Resume round-trip attempt 4 — save phase PASS (CONTROLLED-SCRIPTED)** | Both players saved in-game via START→SAVE→YES; server-acked `save_witness` for both (A rev 558, B rev 588); SaveRAM flushed; clean stop — first physical proof of the P2A-1 witness. Resume creation was refused: the only post-witness event for A is `runtime_suspended` (the clean stop's lifecycle record), which the inverted P2A-7 rule counts as gameplay → false hold. P2A-10: allowlist lifecycle events from source. Summary `7b02af23…`, resumed `f571f0fc…`. |
 | START menu fact | The companion patch (`patch/gen1/tools/manifest.py:114-130`) adds a **SLINK** row after EXIT: `wMaxMenuItem` is 7 without the Pokédex and 8 with (vanilla 6/7); SAVE remains index 3/4. Confirmed in the r3 cartridge bytes at DrawStartMenu (`$710B`). Any driver counting rows from `wMaxMenuItem` must use index+4 on companion cartridges; the save driver now walks to the tilemap-located SAVE row. |
 | Resume round-trip attempt 3 | Battle passed (BI-2 hardening held); START menu opened on both cartridges but reported `wMaxMenuItem 7` where the driver expected 6 (no Pokédex yet per `draw_start_menu.asm:30-38`) → idle. RS-3: navigate to the SAVE row found by the tile scan, accept 6/7, publish `got_pokedex`. Not a product defect. Summary `99c8e01d…`. |
