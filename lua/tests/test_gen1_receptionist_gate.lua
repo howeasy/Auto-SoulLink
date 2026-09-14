@@ -30,6 +30,11 @@ end
 local function require_check(label, ok, detail)
     if not t.check(label, ok, detail) then error(label .. ": " .. tostring(detail), 0) end
 end
+-- per-frame invariants: silent while they hold (console.log per frame starves the emulator
+-- and floods the receipt — run 2 wrote 3000 [ok] lines for one walk), fatal when they break
+local function invariant(label, ok, detail)
+    if not ok then require_check(label, ok, detail) end
+end
 local function tile_bytes()
     local bytes = {}
     for i = 0, TILE_COUNT - 1 do bytes[#bytes + 1] = read(ram.wTileMap + i) end
@@ -84,10 +89,14 @@ end
 local function reply(command)
     t.replies[#t.replies + 1] = assert(json.encode({commands = {command}}))
 end
-local function wait_for(predicate, frames, label)
+local function wait_for(predicate, frames, label, repulse)
+    -- emitted != accepted: a native menu (HandleMenuInput) polls on its own cadence, so a
+    -- single 2-frame pulse can land before it listens (receipt: SLINK TRADE row drawn,
+    -- cursor at 0, one A pulse, picker never appeared in 180 frames). With `repulse`, the
+    -- button is re-pulsed every 16 frames until the predicate holds.
     for _ = 1, frames do
         if predicate() then return true end
-        step({})
+        step(repulse and t.frame % 16 < 2 and {[repulse] = true} or {})
     end
     require_check(label, false, fmt("not seen in %d frames; map=%d x=%d y=%d tile=%s",
                                    frames, at("wCurMap"), at("wXCoord"), at("wYCoord"), row(281, 18)))
@@ -130,23 +139,26 @@ local function route_buttons()
     local map, x, y = at("wCurMap"), at("wXCoord"), at("wYCoord")
     local battle = at("wIsInBattle")
     if battle ~= 0 then
-        require_check("only an ordinary Route 1 wild battle interrupted the walk",
+        invariant("only an ordinary Route 1 wild battle interrupted the walk",
             map == MAP.route1 and battle == 1 and at("wBattleType") == 0,
             fmt("map=%d battle=%d type=%d", map, battle, at("wBattleType")))
         wild_active = true
-        require_check("wild RUN attempts stay bounded", wild_attempts < 8,
+        invariant("wild RUN attempts stay bounded", wild_attempts < 8,
                       fmt("attempts=%d tile=%s", wild_attempts, row(281, 18)))
         -- gen1_rb_route1_inputs.lua:41-60: BATTLE_MENU_TEMPLATE, right column,
         -- second item RUN. All actions are normal joypad pulses.
-        if at("wTextBoxID") == 0x0B then
+        -- wTextBoxID stays 0x0B through "Can't escape!" and the enemy's turn while the
+        -- cursor bytes hold stale values (receipt: index=3 max=1 with a blank row); only
+        -- a drawn menu (FIGHT on the tilemap row) is the menu
+        if at("wTextBoxID") == 0x0B and row(281, 18):find("FIGHT", 1, true) then
             local mx, my = read(menu_addr.wTopMenuItemX), read(menu_addr.wTopMenuItemY)
             local index = at("wCurrentMenuItem")
-            require_check("observed standard wild battle menu", my == 14 and at("wMaxMenuItem") == 1,
+            invariant("observed standard wild battle menu", my == 14 and at("wMaxMenuItem") == 1,
                           fmt("x=%d y=%d index=%d max=%d", mx, my, index, at("wMaxMenuItem")))
             if mx == 9 then return t.frame % 16 < 2 and {Right=true} or {} end
-            require_check("wild RUN column observed", mx == 15, fmt("x=%d", mx))
+            invariant("wild RUN column observed", mx == 15, fmt("x=%d", mx))
             if index == 0 then return t.frame % 16 < 2 and {Down=true} or {} end
-            require_check("wild RUN row observed", index == 1, fmt("index=%d", index))
+            invariant("wild RUN row observed", index == 1, fmt("index=%d", index))
             if t.frame % 16 < 2 then wild_attempts = wild_attempts + 1;return {A=true} end
             return {}
         end
@@ -165,7 +177,7 @@ local function route_buttons()
         stage_index, waypoint_index, still, last_point = stage_index + 1, 1, 0, ""
         stage = stages[stage_index]
     end
-    require_check("walk stayed on the planned map chain", map == stage.map,
+    invariant("walk stayed on the planned map chain", map == stage.map,
                   fmt("expected %s map=%d, got map=%d (%d,%d)", stage.name, stage.map, map, x, y))
     if stage_index == #stages and waypoint_index > #stage.waypoints then return nil, true end
     local target = stage.waypoints[waypoint_index]
@@ -184,7 +196,9 @@ local function route_buttons()
     local point = fmt("%d:%d:%d:%d", map, x, y, waypoint_index)
     still = point == last_point and still + 1 or 0
     last_point = point
-    require_check("waypoint not blocked", still < 300,
+    -- Route 1's two wandering NPCs can stand in the lane for many seconds (Blue run: 300
+    -- frames at (14,14) heading north); the parcel driver simply holds the direction
+    invariant("waypoint not blocked", still < 1800,
                   fmt("%s waypoint=%d at (%d,%d) target=(%d,%d)",
                       stage.name, waypoint_index, x, y, target[1], target[2]))
     if at("wJoyIgnore") ~= 0 then
@@ -242,18 +256,18 @@ local ok, err = xpcall(function()
         t.log("MENU CANCEL " .. row(122, 16))
         require_check("native menu defaulted to SLINK TRADE row", at("wCurrentMenuItem") == 0,
                       fmt("index=%d", at("wCurrentMenuItem")))
-        pulse("A")
         -- trade_receptionist.asm:345-390 prints the picker at +22.
         wait_for(function() return has_tiles("TRADE WHICH?", 22) end, 180,
-                 "TRADE WHICH? linked-party list")
+                 "TRADE WHICH? linked-party list", "A")
         t.log("MENU PARTY " .. row(22, 16))
         local chosen = t.frame
-        pulse("A") -- mask=1 makes the first visible row physical slot 0
+        -- mask=1 makes the first visible row physical slot 0; re-pulse A on the 16-frame
+        -- cadence until the offer is on the wire (run 3: one pulse, picker stayed up 180 frames)
         local offered
-        for _ = 1, 176 do
+        for _ = 1, 180 do
             offered = find_sent("trade_offer", first)
             if offered then break end
-            step({})
+            step(t.frame % 16 < 2 and {A=true} or {})
         end
         require_check("selected slot zero emitted trade_offer within 180 frames",
                       offered and offered.slot == 0 and t.frame - chosen <= 180,

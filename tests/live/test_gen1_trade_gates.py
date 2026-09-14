@@ -59,8 +59,9 @@ def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
     assert "[ok] walked from Oak's Lab to the physical Center receptionist" in text
     assert text.count("[ok] native receptionist emitted trade_query within 30 frames") == 2
     assert text.count("[ok] selected slot zero emitted trade_offer within 180 frames") == 2
-    assert "[ok] Trade unavailable. native notice" in text
-    assert "[ok] Trade offer sent. native notice" in text
+    # wait_for logs nothing on success; the gate prints the tilemap row it saw
+    assert "NOTICE Trade unavailable." in text
+    assert "NOTICE Trade offer sent." in text
     assert text.count("[ok] native offer returned cleanly to the overworld") == 2
     assert "MENU SLINK" in text and "MENU CABLE" in text and "MENU CANCEL" in text
 
