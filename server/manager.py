@@ -979,13 +979,42 @@ class RunManager:
 
     # ── Stream overlay pages (served at fixed manager port 8090) ───────────────
 
+    def _rail_ctx(self, request: web.Request, runs: list[dict], *, page: str) -> dict:
+        """What _rail.html needs, for the pages that are not the run shell."""
+        return {
+            "runs": [self._augment_for_template(r) for r in runs],
+            "run": None,
+            "page": page,
+            "pinned_run_id": self._stream_pin_id,
+            "manager_port": self.manager_port,
+            "host": (request.host or "127.0.0.1").split(":")[0] or "127.0.0.1",
+        }
+
     async def handle_stream_index(self, request: web.Request) -> web.Response:
-        from server.chrome import build_sidebar_html
+        """GET /broadcast (and /stream for the URL that is pasted into OBS): the overlay
+        gallery, wearing the Manager's rail. The gallery lays itself out as the second
+        column of whatever grid it sits in; body.mgr-stream is that grid here."""
         ctx = _build_stream_index_context(request)
-        # Manager itself is the host of this page — pass manager_port=None so
-        # the Manager nav item doesn't link back to itself.
-        ctx["sidebar_html"] = build_sidebar_html("stream", tcp_port=None, manager_port=None)
+        rail_ctx = self._rail_ctx(request, self._get(), page="broadcast")
+        env = aiohttp_jinja2.get_env(request.app)
+        ctx["sidebar_html"] = env.get_template("_rail.html").render(rail_ctx)
+        ctx["sidebar_css"] = "board"
+        ctx["body_class"] = "board mgr mgr-stream"
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
+
+    async def handle_tools_page(self, request: web.Request) -> web.Response:
+        """GET /tools — the patcher and the randomized-pair builder."""
+        runs = self._get()
+        ctx = self._rail_ctx(request, runs, page="tools")
+        ctx.update({
+            "page_title": "Tools — Soul Link",
+            "theme": resolve_theme(request),
+            "is_stream": False, "hide_chrome": False,
+            "body_class": "board mgr",
+            "gen1_runs": [self._augment_for_template(r) for r in runs
+                          if r.get("game") in new_run_form()["gen1_games"] and r.get("status") != "archived"],
+        })
+        return aiohttp_jinja2.render_template("tools.html", request, ctx)
 
     async def handle_stream_overlay_proxy(self, request: web.Request) -> web.Response:
         """GET /stream/{name} (and /stream/{name}/fragment) on the manager —
@@ -1112,6 +1141,8 @@ async def main(host: str, port: int):
     # Stream overlay gallery — fixed at manager port 8090. The /stream/{name}
     # proxy relays to the active run's HTTP port so OBS browser sources can
     # bookmark a stable URL even if the pinned run changes.
+    app.router.add_get("/broadcast",                       manager.handle_stream_index)
+    app.router.add_get("/tools",                           manager.handle_tools_page)
     app.router.add_get("/stream",                          manager.handle_stream_index)
     app.router.add_get("/stream/",                         manager.handle_stream_index)
     app.router.add_get("/stream/{name}",                   manager.handle_stream_overlay_proxy)

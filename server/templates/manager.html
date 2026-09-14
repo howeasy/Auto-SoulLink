@@ -32,56 +32,7 @@
 
 <div class="mk" x-data="manager()">
 
-  {# ══ Rail ═══════════════════════════════════════════════════════════════ #}
-  <aside class="mk-rail">
-    <a class="mk-rail-brand" href="/">
-      <svg viewBox="0 0 595.3 594.1" aria-hidden="true">
-        <path fill="currentColor" opacity=".85" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/>
-        <path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/>
-        <path fill="currentColor" d="M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z M297.6,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C503.3,424.8,410.6,511.6,297.6,511.6z"/>
-      </svg>
-      <span class="mk-rail-brandtext"><b>SOUL LINK</b><span class="num">manager · {{ manager_port }}</span></span>
-    </a>
-
-    <a class="mk-rail-item new{% if page == 'new' %} active{% endif %}" href="/new">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 2h2v5h5v2H9v5H7V9H2V7h5z"/></svg>
-      <span class="mk-rail-label">New run</span>
-    </a>
-
-    {% for group in ('running', 'stopped', 'archived') %}
-      {% for r in runs if r.status == group %}
-        <a class="mk-rail-item{% if run and r.run_id == run.run_id %} active{% endif %}" href="/runs/{{ r.run_id }}" title="{{ r.game_label or 'game detected on connect' }}">
-          <span class="mk-dot {{ r.status }}"></span>
-          <span class="mk-rail-label">{{ r.name }}</span>
-          {% if r.run_id == pinned_run_id %}<span class="mk-rail-pin" title="pinned for stream">◉</span>{% endif %}
-        </a>
-      {% endfor %}
-    {% endfor %}
-
-    <hr class="mk-rail-sep">
-
-    <a class="mk-rail-item" href="/stream">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5 1h2v2H5zM9 1h2v2H9zM1 4h14v10H1zM6 6v6l5-3z"/></svg>
-      <span class="mk-rail-label">Broadcast</span>
-    </a>
-    <a class="mk-rail-item" href="{% if run and run.status == 'running' %}//{{ host }}:{{ run.http_port }}/patcher{% else %}/stream{% endif %}">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M11 1a4 4 0 00-3.8 5.2L1 12.4 3.6 15l6.2-6.2A4 4 0 1011 1zm0 2a2 2 0 110 4 2 2 0 010-4z"/></svg>
-      <span class="mk-rail-label">Tools</span>
-    </a>
-    {% if run and run.status == 'running' %}
-      <a class="mk-rail-item" href="//{{ host }}:{{ run.http_port }}/calc/normal.html" target="_blank" rel="noopener">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 1h12v14H2zM4 3v3h8V3zM4 7v2h2V7zm3 0v2h2V7zm3 0v2h2V7zM4 10v2h2v-2zm3 0v2h2v-2zm3 0v5h2v-5z"/></svg>
-        <span class="mk-rail-label">Calc ↗</span>
-      </a>
-      <a class="mk-rail-item" href="//{{ host }}:{{ run.http_port }}/debug" target="_blank" rel="noopener">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1l1 2h2l1-2 1 1-1 2h1v1h2v2h-2v2h2v2h-2v1l-3 2-3-2v-1H3v-2h2V9H3V7h2V5h1L5 3z"/></svg>
-        <span class="mk-rail-label">Debug ↗</span>
-      </a>
-    {% endif %}
-
-    <div class="mgr-rail-font"></div>
-    <div class="mgr-rail-theme"></div>
-  </aside>
+  {% include "_rail.html" %}
 
   {# ══ Main ═══════════════════════════════════════════════════════════════ #}
   <main class="mk-main mk-body-root">

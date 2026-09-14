@@ -53,6 +53,8 @@ body.density-compact { --density: .7; }
 
 .mk { display: grid; grid-template-columns: var(--mk-rail) minmax(0, 1fr); min-height: 100vh; align-items: start; }
 body.mgr { margin: 0; }
+/* The overlay gallery (stream_index.html) is the second column of whatever grid holds it. */
+body.mgr-stream { display: grid; grid-template-columns: var(--mk-rail) minmax(0, 1fr); }
 
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{#
+  Tools: the things that are not a run. The companion ROM patcher (its own page, already
+  on this origin) and the randomized-pair builder for Gen 1 runs.
+#}
+{% block title %}Tools — Soul Link{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/board.css">
+  <script src="/static/dashboard.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="mk">
+  {% include "_rail.html" %}
+  <main class="mk-main mk-body-root">
+    <header class="mk-runhdr"><h1 class="mk-runname">Tools</h1></header>
+    <div class="mk-page mk-cards3">
+      <section class="mk-zone">
+        <h2 class="mk-h2"><span>Companion ROM patch</span><i></i></h2>
+        <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
+          <p class="mk-sub">The Radical Red companion patch (rival swap, native messages, the peer ghost) and the Gen 1 panel patch. Applied in your browser; the ROM never leaves this machine.</p>
+          <div><a class="mk-btn primary" href="/patcher">Open the patcher</a></div>
+        </div>
+      </section>
+      <section class="mk-zone">
+        <h2 class="mk-h2"><span>Randomized ROM pair</span><i></i><em>Gen 1</em></h2>
+        <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
+          <p class="mk-sub">One randomized ROM per player with the same settings and different seeds, using your own copy of Universal Pokémon Randomizer ZX. The run then admits only those cartridges.</p>
+          {% if gen1_runs %}
+            <div class="mk-opts">
+              {% for r in gen1_runs %}<a class="mk-btn" href="/runs/{{ r.run_id }}#randomizer">{{ r.name }}</a>{% endfor %}
+            </div>
+            <span class="mk-cap">Built from a run's page, so the pair is bound to that run.</span>
+          {% else %}
+            <span class="mk-cap">Create a Red · Blue · Yellow run first; the builder lives on the run's page.</span>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+{% endblock %}
