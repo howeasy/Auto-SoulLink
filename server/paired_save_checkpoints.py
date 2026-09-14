@@ -12,14 +12,32 @@ integrity verification on read. It has no opinion on which game produced the byt
 save was witnessed, or how rules are serialized — the caller supplies raw bytes and an
 opaque `witness` record per player (the shape used elsewhere: frame, digest, projection,
 index, operation_id — see server/gen1_engine_signal_runtime.py's SAVE_WITNESS component).
+
+Trust chain: each manifest records its predecessor as {checkpoint_id, manifest_sha256} —
+not a bare id — so an older, superseded manifest can't be edited undetected. `load()`,
+`current()` and `history()` all verify a checkpoint's manifest hash against the digest its
+*successor* recorded (CURRENT plays that role for the newest checkpoint), walking the chain
+from CURRENT rather than trusting a bare file on disk.
+
+Durability: `capture()` guarantees atomic visibility (a reader never sees a half-written
+checkpoint) and cleanup of partial writes on any exception raised before CURRENT is
+published. It is NOT a host-crash-durability guarantee — the CURRENT pointer's temp file is
+flushed and fsynced before its rename, but this module never fsyncs a directory, so a power
+loss at exactly the wrong instant could still lose a rename the OS had not yet committed.
+Concurrent `capture()` calls (same process or not, provided they share `directory`) are
+serialized by an exclusive-create lock file, held from the predecessor read through the
+CURRENT publish; a crash while holding it leaves a stale lock file needing manual removal.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +45,10 @@ from pathlib import Path
 SCHEMA = "slink-paired-checkpoint-v1"
 PLAYERS = ("a", "b")
 WITNESS_KEYS = frozenset({"frame", "digest", "projection", "index", "operation_id"})
+HEX64 = re.compile(r"[0-9a-f]{64}")
+LOCK_NAME = ".capture.lock"
+LOCK_TIMEOUT = 5.0
+LOCK_POLL = 0.01
 
 
 class CheckpointError(Exception):
@@ -48,6 +70,44 @@ class Checkpoint:
         return self._files["identity"]
 
 
+@contextlib.contextmanager
+def _capture_lock(path, timeout, poll):
+    """Exclusive-create lock file: O_EXCL is honored identically on POSIX and Windows,
+    the boring cross-platform choice over fcntl/msvcrt. ponytail: a crash while held
+    leaves a stale lock (see module docstring on durability) — not solved here."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise CheckpointError("timed out waiting for the capture lock") from None
+            time.sleep(poll)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(path)
+
+
+def _nonneg_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _nonempty_str(value):
+    return isinstance(value, str) and bool(value)
+
+
+def _validate_witness_values(component, witness):
+    for key in ("frame", "index"):
+        if not _nonneg_int(witness[key]):
+            raise CheckpointError(f"{component} witness {key} must be a nonnegative int")
+    for key in ("digest", "projection", "operation_id"):
+        if not _nonempty_str(witness[key]):
+            raise CheckpointError(f"{component} witness {key} must be a non-empty string")
+
+
 class PairedCheckpointStore:
     """Immutable checkpoints under `<directory>/checkpoints/<checkpoint_id>/`."""
 
@@ -64,90 +124,108 @@ class PairedCheckpointStore:
             raise CheckpointError("rules snapshot must be non-empty bytes")
         if not isinstance(identity, bytes) or not identity:
             raise CheckpointError("identity export must be non-empty bytes")
+        if not _nonempty_str(contract_fingerprint):
+            raise CheckpointError("contract_fingerprint must be a non-empty string")
+        if not _nonempty_str(source_fingerprint):
+            raise CheckpointError("source_fingerprint must be a non-empty string")
         self._checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        predecessor = self._read_current_pointer()
-        checkpoint_id = secrets.token_hex(16)
-        temp_dir = self._checkpoints_dir / f".tmp-{checkpoint_id}"
-        final_dir = self._checkpoints_dir / checkpoint_id
-        temp_dir.mkdir()
-        renamed = False
-        try:
-            manifest = {
-                "schema": SCHEMA, "checkpoint_id": checkpoint_id,
-                "created_at": datetime.now(UTC).isoformat(),
-                "players": {
-                    player: {
-                        "witness": {key: witnesses[player][key] for key in WITNESS_KEYS},
-                        "save_sha256": self._write_verified(temp_dir / f"{player}.sav", players[player]["save"]),
-                        "save_size": len(players[player]["save"]),
-                    } for player in PLAYERS
-                },
-                "rules_sha256": self._write_verified(temp_dir / "rules.json", rules),
-                "identity_sha256": self._write_verified(temp_dir / "identity.json", identity),
-                "contract_fingerprint": contract_fingerprint,
-                "source_fingerprint": source_fingerprint,
-                "predecessor": predecessor["checkpoint_id"] if predecessor else None,
-            }
-            manifest_bytes = json.dumps(manifest, sort_keys=True, indent=2).encode("utf-8")
-            manifest_sha256 = self._write_verified(temp_dir / "manifest.json", manifest_bytes)
-            os.replace(temp_dir, final_dir)
-            renamed = True
-            self._write_current(checkpoint_id, manifest_sha256)
-        except Exception:
-            shutil.rmtree(final_dir if renamed else temp_dir, ignore_errors=True)
-            raise
-        return manifest
+        with _capture_lock(str(self._checkpoints_dir / LOCK_NAME), timeout=LOCK_TIMEOUT, poll=LOCK_POLL):
+            # Held from here through the CURRENT publish below: the predecessor read and
+            # the publish must never straddle another capture's, or CURRENT can end up
+            # naming a checkpoint a losing writer's cleanup then deletes (the R5a-round-1 bug).
+            predecessor = self._read_current_pointer()
+            checkpoint_id = secrets.token_hex(16)
+            temp_dir = self._checkpoints_dir / f".tmp-{checkpoint_id}"
+            final_dir = self._checkpoints_dir / checkpoint_id
+            temp_dir.mkdir()
+            renamed = False
+            try:
+                manifest = {
+                    "schema": SCHEMA, "checkpoint_id": checkpoint_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "players": {
+                        player: {
+                            "witness": {key: witnesses[player][key] for key in WITNESS_KEYS},
+                            "save_sha256": self._write_verified(temp_dir / f"{player}.sav", players[player]["save"]),
+                            "save_size": len(players[player]["save"]),
+                        } for player in PLAYERS
+                    },
+                    "rules_sha256": self._write_verified(temp_dir / "rules.json", rules),
+                    "identity_sha256": self._write_verified(temp_dir / "identity.json", identity),
+                    "contract_fingerprint": contract_fingerprint,
+                    "source_fingerprint": source_fingerprint,
+                    "predecessor": predecessor,
+                }
+                manifest_bytes = json.dumps(manifest, sort_keys=True, indent=2).encode("utf-8")
+                manifest_sha256 = self._write_verified(temp_dir / "manifest.json", manifest_bytes)
+                os.replace(temp_dir, final_dir)
+                renamed = True
+                self._write_current(checkpoint_id, manifest_sha256)
+            except Exception:
+                # Whichever half-finished thing exists (temp dir, or a promoted-but-
+                # unpublished final dir) is discarded; CURRENT still names the old one.
+                shutil.rmtree(final_dir if renamed else temp_dir, ignore_errors=True)
+                raise
+            return manifest
 
     def current(self):
-        pointer = self._read_current_pointer()
-        if pointer is None:
-            return None
-        return self.load(pointer["checkpoint_id"]).manifest
+        for checkpoint_id, manifest, _bytes, error in self._walk_chain():
+            if error:
+                raise CheckpointError(f"CURRENT checkpoint {checkpoint_id} failed verification: {error}")
+            return manifest
+        return None
 
     def load(self, checkpoint_id):
-        """Re-validate every file's hash against the manifest before returning it."""
-        checkpoint_dir = self._checkpoints_dir / checkpoint_id
-        manifest_path = checkpoint_dir / "manifest.json"
-        if not manifest_path.is_file():
-            raise CheckpointError(f"checkpoint {checkpoint_id} has no manifest.json")
-        manifest_bytes = manifest_path.read_bytes()
-        manifest = json.loads(manifest_bytes)
-        files = {}
-        for player in PLAYERS:
-            data = self._read_bytes(checkpoint_dir / f"{player}.sav")
-            if hashlib.sha256(data).hexdigest() != manifest["players"][player]["save_sha256"]:
-                raise CheckpointError(f"{player}.sav failed hash verification")
-            files[player] = data
-        for name, key in (("rules.json", "rules_sha256"), ("identity.json", "identity_sha256")):
-            data = self._read_bytes(checkpoint_dir / name)
-            if hashlib.sha256(data).hexdigest() != manifest[key]:
-                raise CheckpointError(f"{name} failed hash verification")
-            files[name.split(".")[0]] = data
-        pointer = self._read_current_pointer()
-        if pointer is not None and pointer["checkpoint_id"] == checkpoint_id \
-                and hashlib.sha256(manifest_bytes).hexdigest() != pointer["manifest_sha256"]:
-            raise CheckpointError("manifest.json does not match CURRENT")
-        return Checkpoint(manifest=manifest, _files=files)
+        """Verify checkpoint_id's manifest against the digest its successor (or CURRENT,
+        for the newest) recorded, then verify every archived file against that manifest."""
+        self._safe_checkpoint_dir(checkpoint_id)
+        for candidate, manifest, _bytes, error in self._walk_chain():
+            if error:
+                raise CheckpointError(f"checkpoint {candidate} failed verification: {error}")
+            if candidate == checkpoint_id:
+                return self._checkpoint_from_manifest(manifest)
+        raise CheckpointError(f"checkpoint {checkpoint_id} is not reachable from CURRENT")
 
     def history(self):
-        """Newest first, following `predecessor` pointers. A broken link stops the walk
-        and records the error instead of raising — a torn history is data, not a crash."""
-        pointer = self._read_current_pointer()
-        if pointer is None:
-            return []
-        results, checkpoint_id, seen = [], pointer["checkpoint_id"], set()
-        while checkpoint_id is not None and checkpoint_id not in seen:
-            seen.add(checkpoint_id)
-            try:
-                manifest = self.load(checkpoint_id).manifest
-            except CheckpointError as error:
-                results.append({"checkpoint_id": checkpoint_id, "error": str(error)})
+        """Newest first, following the CURRENT-anchored, hash-verified predecessor chain.
+        A broken link (missing/tampered/malformed manifest, or a cycle) stops the walk and
+        is recorded as an error entry instead of raised — a torn history is data, not a crash."""
+        results = []
+        for checkpoint_id, manifest, _bytes, error in self._walk_chain():
+            if error:
+                results.append({"checkpoint_id": checkpoint_id, "error": error})
                 break
             results.append(manifest)
-            checkpoint_id = manifest["predecessor"]
         return results
 
     # -- internals --------------------------------------------------------------
+
+    def _walk_chain(self):
+        """Yield (checkpoint_id, manifest, manifest_bytes, error) from CURRENT backward.
+        Reads the CURRENT pointer exactly once; every subsequent hop is verified against
+        the digest carried by the hop before it, never by re-reading a moving pointer."""
+        pointer = self._read_current_pointer()
+        if pointer is None:
+            return
+        trusted_id, trusted_hash, seen = pointer["checkpoint_id"], pointer["manifest_sha256"], set()
+        while True:
+            if trusted_id in seen:
+                yield trusted_id, None, None, "predecessor cycle detected"
+                return
+            seen.add(trusted_id)
+            try:
+                manifest_bytes, manifest = self._read_manifest_raw(trusted_id)
+            except CheckpointError as error:
+                yield trusted_id, None, None, str(error)
+                return
+            if hashlib.sha256(manifest_bytes).hexdigest() != trusted_hash:
+                yield trusted_id, None, None, "manifest.json failed hash verification"
+                return
+            yield trusted_id, manifest, manifest_bytes, None
+            predecessor = manifest["predecessor"]
+            if predecessor is None:
+                return
+            trusted_id, trusted_hash = predecessor["checkpoint_id"], predecessor["manifest_sha256"]
 
     def _validate_players(self, players, allow_same_batch):
         if not isinstance(players, dict) or set(players) != {"a", "b"}:
@@ -163,11 +241,88 @@ class PairedCheckpointStore:
             witness = entry["witness"]
             if not isinstance(witness, dict) or not set(witness) >= WITNESS_KEYS:
                 raise CheckpointError(f"player {player} witness is missing required keys")
+            _validate_witness_values(f"player {player}", witness)
             witnesses[player] = witness
         if not allow_same_batch and witnesses["a"]["operation_id"] == witnesses["b"]["operation_id"] \
                 and witnesses["a"]["index"] == witnesses["b"]["index"]:
+            # ponytail: a duplicate-reference heuristic, NOT proof the two saves are actually
+            # paired — it only refuses the degenerate "one batch witnessed both players" shape.
+            # R5b (the real witness seam) owns pairing.
             raise CheckpointError("both players witnessed the same batch; pass allow_same_batch=True to override")
         return witnesses
+
+    def _safe_checkpoint_dir(self, checkpoint_id):
+        if not isinstance(checkpoint_id, str) or not checkpoint_id or checkpoint_id in (".", "..") \
+                or "/" in checkpoint_id or "\\" in checkpoint_id:
+            raise CheckpointError(f"invalid checkpoint id: {checkpoint_id!r}")
+        base = self._checkpoints_dir.resolve()
+        directory = (base / checkpoint_id).resolve()
+        if directory.parent != base:
+            raise CheckpointError(f"invalid checkpoint id: {checkpoint_id!r}")
+        return base / checkpoint_id
+
+    def _read_manifest_raw(self, checkpoint_id):
+        checkpoint_dir = self._safe_checkpoint_dir(checkpoint_id)
+        manifest_path = checkpoint_dir / "manifest.json"
+        try:
+            manifest_bytes = manifest_path.read_bytes()
+            manifest = json.loads(manifest_bytes)
+        except (OSError, ValueError) as error:
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json could not be read: {error}") from error
+        try:
+            self._validate_manifest_shape(checkpoint_id, manifest)
+        except (KeyError, TypeError, AttributeError) as error:
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json has an invalid shape: {error}") from error
+        return manifest_bytes, manifest
+
+    def _validate_manifest_shape(self, checkpoint_id, manifest):
+        if not isinstance(manifest, dict) or manifest.get("schema") != SCHEMA or manifest.get("checkpoint_id") != checkpoint_id:
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json has an invalid schema or self-id")
+        if not _nonempty_str(manifest.get("created_at")):
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json is missing created_at")
+        players = manifest.get("players")
+        if not isinstance(players, dict) or set(players) != {"a", "b"}:
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json has invalid players")
+        for player in PLAYERS:
+            entry = players[player]
+            if not isinstance(entry, dict) or set(entry) != {"witness", "save_sha256", "save_size"}:
+                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} entry is invalid")
+            if entry["save_size"] != self.save_size:
+                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} save_size does not match the configured size")
+            if not isinstance(entry["save_sha256"], str) or not HEX64.fullmatch(entry["save_sha256"]):
+                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} save_sha256 is invalid")
+            witness = entry["witness"]
+            if not isinstance(witness, dict) or set(witness) != WITNESS_KEYS:
+                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json player {player} witness is invalid")
+            _validate_witness_values(f"checkpoint {checkpoint_id} player {player}", witness)
+        for field in ("rules_sha256", "identity_sha256"):
+            value = manifest.get(field)
+            if not isinstance(value, str) or not HEX64.fullmatch(value):
+                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json {field} is invalid")
+        for field in ("contract_fingerprint", "source_fingerprint"):
+            if not _nonempty_str(manifest.get(field)):
+                raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json {field} must be a non-empty string")
+        predecessor = manifest.get("predecessor")
+        if predecessor is not None and (not isinstance(predecessor, dict) or set(predecessor) != {"checkpoint_id", "manifest_sha256"}
+                or not _nonempty_str(predecessor["checkpoint_id"])
+                or not isinstance(predecessor["manifest_sha256"], str) or not HEX64.fullmatch(predecessor["manifest_sha256"])):
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json predecessor is invalid")
+
+    def _checkpoint_from_manifest(self, manifest):
+        checkpoint_dir = self._safe_checkpoint_dir(manifest["checkpoint_id"])
+        files = {}
+        for player in PLAYERS:
+            entry = manifest["players"][player]
+            data = self._read_bytes(checkpoint_dir / f"{player}.sav")
+            if len(data) != entry["save_size"] or hashlib.sha256(data).hexdigest() != entry["save_sha256"]:
+                raise CheckpointError(f"{player}.sav failed hash verification")
+            files[player] = data
+        for name, key in (("rules.json", "rules_sha256"), ("identity.json", "identity_sha256")):
+            data = self._read_bytes(checkpoint_dir / name)
+            if not data or hashlib.sha256(data).hexdigest() != manifest[key]:
+                raise CheckpointError(f"{name} failed hash verification")
+            files[name.split(".")[0]] = data
+        return Checkpoint(manifest=manifest, _files=files)
 
     def _write_verified(self, path, data):
         with open(path, "wb") as fh:
@@ -187,10 +342,23 @@ class PairedCheckpointStore:
     def _read_current_pointer(self):
         if not self._current_path.exists():
             return None
-        return json.loads(self._current_path.read_text(encoding="utf-8"))
+        try:
+            pointer = json.loads(self._current_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise CheckpointError(f"CURRENT could not be read: {error}") from error
+        if not isinstance(pointer, dict) or set(pointer) != {"checkpoint_id", "manifest_sha256"} \
+                or not _nonempty_str(pointer["checkpoint_id"]) \
+                or not isinstance(pointer["manifest_sha256"], str) or not HEX64.fullmatch(pointer["manifest_sha256"]):
+            raise CheckpointError("CURRENT has an invalid pointer")
+        return pointer
 
     def _write_current(self, checkpoint_id, manifest_sha256):
-        temp_path = self._checkpoints_dir / "CURRENT.tmp"
-        temp_path.write_text(json.dumps({"checkpoint_id": checkpoint_id, "manifest_sha256": manifest_sha256}),
-                              encoding="utf-8")
+        # A unique name per attempt: belt-and-suspenders alongside the capture lock, so a
+        # stale temp file left by an aborted capture can never collide with this one's.
+        temp_path = self._checkpoints_dir / f".CURRENT.tmp-{secrets.token_hex(8)}"
+        payload = json.dumps({"checkpoint_id": checkpoint_id, "manifest_sha256": manifest_sha256}).encode("utf-8")
+        with open(temp_path, "wb") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())  # best-effort: see module docstring on durability
         os.replace(temp_path, self._current_path)

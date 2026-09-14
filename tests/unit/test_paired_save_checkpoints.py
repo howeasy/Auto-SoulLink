@@ -1,4 +1,8 @@
+import hashlib
 import json
+import os
+import threading
+import time
 
 import pytest
 
@@ -18,18 +22,29 @@ def _witness(player, seq, *, operation_id=None, index=0):
             "index": index, "operation_id": operation_id or f"op-{player}-{seq}"}
 
 
-def _players(seq, **overrides):
-    players = {"a": {"save": _save(f"a{seq}"), "witness": _witness("a", seq)},
-               "b": {"save": _save(f"b{seq}"), "witness": _witness("b", seq)}}
-    for player, patch in overrides.items():
-        players[player] = {**players[player], **patch}
-    return players
+def _players(seq):
+    return {"a": {"save": _save(f"a{seq}"), "witness": _witness("a", seq)},
+            "b": {"save": _save(f"b{seq}"), "witness": _witness("b", seq)}}
 
 
 def _capture(store, seq, **kwargs):
     return store.capture(_players(seq), f"rules-{seq}".encode(), f"identity-{seq}".encode(),
                           "contract-x", f"source-{seq}", **kwargs)
 
+
+def _rewrite_manifest(path, mutator):
+    document = json.loads(path.read_text())
+    mutator(document)
+    encoded = json.dumps(document, sort_keys=True, indent=2).encode("utf-8")
+    path.write_bytes(encoded)
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_current(checkpoints_dir, checkpoint_id, manifest_sha256):
+    (checkpoints_dir / "CURRENT").write_text(json.dumps({"checkpoint_id": checkpoint_id, "manifest_sha256": manifest_sha256}))
+
+
+# -- happy path / basic chain -------------------------------------------------
 
 def test_happy_capture_current_load(tmp_path):
     store = PairedCheckpointStore(tmp_path)
@@ -51,43 +66,167 @@ def test_second_capture_supersedes_and_records_predecessor(tmp_path):
     first = _capture(store, 1)
     second = _capture(store, 2)
 
-    assert second["predecessor"] == first["checkpoint_id"]
+    assert second["predecessor"] == {"checkpoint_id": first["checkpoint_id"], "manifest_sha256": _manifest_hash(tmp_path, first)}
     assert store.current() == second
 
 
-def test_tampered_save_file_makes_load_raise_naming_it(tmp_path):
+def _manifest_hash(tmp_path, manifest):
+    path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "manifest.json"
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_history_order_and_broken_pointer(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    first = _capture(store, 1)
+    second = _capture(store, 2)
+    third = _capture(store, 3)
+
+    order = store.history()
+    assert [m["checkpoint_id"] for m in order] == [third["checkpoint_id"], second["checkpoint_id"], first["checkpoint_id"]]
+
+    import shutil
+    shutil.rmtree(tmp_path / "checkpoints" / first["checkpoint_id"])
+
+    walked = store.history()
+    assert [m["checkpoint_id"] for m in walked[:2]] == [third["checkpoint_id"], second["checkpoint_id"]]
+    assert walked[2]["checkpoint_id"] == first["checkpoint_id"]
+    assert "error" in walked[2]
+
+
+def test_history_empty_when_no_checkpoints(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    assert store.history() == []
+    assert store.current() is None
+
+
+def test_manifest_serialization_round_trips_through_json(tmp_path):
     store = PairedCheckpointStore(tmp_path)
     manifest = _capture(store, 1)
-    save_path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "a.sav"
-    save_path.write_bytes(b"\xff" * SAVE_SIZE)
+    manifest_path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "manifest.json"
+    assert json.loads(manifest_path.read_text()) == manifest
+
+
+# -- finding 1: concurrent captures must not corrupt CURRENT / the chain -----
+
+def test_concurrent_captures_never_leave_current_dangling(tmp_path, monkeypatch):
+    store = PairedCheckpointStore(tmp_path)
+    real_replace = os.replace
+
+    def slow_replace(src, dst):
+        time.sleep(0.02)
+        return real_replace(src, dst)
+    monkeypatch.setattr(paired_save_checkpoints.os, "replace", slow_replace)
+
+    errors = []
+
+    def worker(seq):
+        try:
+            _capture(store, seq)
+        except Exception as exc:  # noqa: BLE001 - surfaced via errors, not swallowed
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(seq,)) for seq in (1, 2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert not errors
+    history = store.history()
+    assert len(history) == 2
+    assert all("error" not in entry for entry in history)
+    newer, older = history
+    assert newer["predecessor"]["checkpoint_id"] == older["checkpoint_id"]
+    dir_names = {p.name for p in (tmp_path / "checkpoints").iterdir() if p.is_dir()}
+    assert dir_names == {newer["checkpoint_id"], older["checkpoint_id"]}
+
+
+def test_capture_times_out_when_lock_is_held(tmp_path, monkeypatch):
+    store = PairedCheckpointStore(tmp_path)
+    (tmp_path / "checkpoints").mkdir(parents=True)
+    lock_path = tmp_path / "checkpoints" / paired_save_checkpoints.LOCK_NAME
+    os.close(os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    monkeypatch.setattr(paired_save_checkpoints, "LOCK_TIMEOUT", 0.05)
+    monkeypatch.setattr(paired_save_checkpoints, "LOCK_POLL", 0.01)
+
+    with pytest.raises(CheckpointError, match="lock"):
+        _capture(store, 1)
+
+
+# -- finding 2: historical manifests are hash-anchored to their successor ----
+
+def test_tampered_older_manifest_makes_load_raise_naming_manifest(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    first = _capture(store, 1)
+    _capture(store, 2)
+
+    first_path = tmp_path / "checkpoints" / first["checkpoint_id"] / "manifest.json"
+    _rewrite_manifest(first_path, lambda doc: doc.__setitem__("source_fingerprint", "tampered"))
+
+    with pytest.raises(CheckpointError, match="manifest.json"):
+        store.load(first["checkpoint_id"])
+
+
+def test_load_of_current_checkpoint_detects_tamper_too(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "manifest.json"
+    _rewrite_manifest(path, lambda doc: doc.__setitem__("source_fingerprint", "tampered"))
+
+    with pytest.raises(CheckpointError, match="manifest.json"):
+        store.load(manifest["checkpoint_id"])
+
+
+def test_history_detects_predecessor_cycle(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    first = _capture(store, 1)
+    second = _capture(store, 2)
+    checkpoints_dir = tmp_path / "checkpoints"
+    first_path = checkpoints_dir / first["checkpoint_id"] / "manifest.json"
+    second_path = checkpoints_dir / second["checkpoint_id"] / "manifest.json"
+
+    first_hash = _rewrite_manifest(first_path, lambda doc: doc.__setitem__(
+        "predecessor", {"checkpoint_id": second["checkpoint_id"], "manifest_sha256": "0" * 64}))
+    second_hash = _rewrite_manifest(second_path, lambda doc: doc["predecessor"].__setitem__("manifest_sha256", first_hash))
+    _write_current(checkpoints_dir, second["checkpoint_id"], second_hash)
+
+    history = store.history()
+    assert history[0]["checkpoint_id"] == second["checkpoint_id"]
+    assert history[1]["checkpoint_id"] == first["checkpoint_id"]
+    assert history[2]["checkpoint_id"] == second["checkpoint_id"]
+    assert "cycle" in history[2]["error"]
+
+
+# -- finding 3: load()/capture() fail open on shape --------------------------
+
+def test_load_rejects_archived_file_shorter_than_declared_size_even_with_matching_hash(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    checkpoint_dir = tmp_path / "checkpoints" / manifest["checkpoint_id"]
+    one_byte = b"\x7f"
+    (checkpoint_dir / "a.sav").write_bytes(one_byte)
+    _rewrite_manifest(checkpoint_dir / "manifest.json", lambda doc: doc["players"]["a"].__setitem__(
+        "save_sha256", hashlib.sha256(one_byte).hexdigest()))
+    # The successor-recorded hash anchor is gone (there is no successor); re-point CURRENT
+    # at the edited manifest's new hash so the edit under test is what load() actually checks.
+    new_hash = hashlib.sha256((checkpoint_dir / "manifest.json").read_bytes()).hexdigest()
+    _write_current(tmp_path / "checkpoints", manifest["checkpoint_id"], new_hash)
 
     with pytest.raises(CheckpointError, match="a.sav"):
         store.load(manifest["checkpoint_id"])
 
 
-def test_failure_before_current_update_leaves_current_untouched(tmp_path, monkeypatch):
+def test_capture_refuses_none_contract_fingerprint(tmp_path):
     store = PairedCheckpointStore(tmp_path)
-    first = _capture(store, 1)
+    with pytest.raises(CheckpointError, match="contract_fingerprint"):
+        store.capture(_players(1), b"rules", b"identity", None, "source")
 
-    real_replace = paired_save_checkpoints.os.replace
-    calls = {"n": 0}
 
-    def flaky_replace(src, dst):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise OSError("simulated failure renaming into place")
-        return real_replace(src, dst)
-
-    monkeypatch.setattr(paired_save_checkpoints.os, "replace", flaky_replace)
-
-    with pytest.raises(OSError):
-        _capture(store, 2)
-
-    assert store.current() == first
-    checkpoints_dir = tmp_path / "checkpoints"
-    dirs = [p for p in checkpoints_dir.iterdir() if p.is_dir()]
-    assert len(dirs) == 1
-    assert dirs[0].name == first["checkpoint_id"]
+def test_load_refuses_path_traversal_checkpoint_id(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    _capture(store, 1)
+    with pytest.raises(CheckpointError, match="invalid checkpoint id"):
+        store.load("../x")
 
 
 @pytest.mark.parametrize("mutate,message", [
@@ -96,6 +235,8 @@ def test_failure_before_current_update_leaves_current_untouched(tmp_path, monkey
     (lambda p: p["a"].__setitem__("save", b""), "exactly"),
     (lambda p: p["a"].__setitem__("save", b"x" * (SAVE_SIZE - 1)), "exactly"),
     (lambda p: p["a"]["witness"].pop("digest"), "witness is missing required keys"),
+    (lambda p: p["a"]["witness"].__setitem__("frame", -1), "nonnegative int"),
+    (lambda p: p["a"]["witness"].__setitem__("digest", ""), "non-empty string"),
 ])
 def test_capture_refuses_malformed_players(tmp_path, mutate, message):
     store = PairedCheckpointStore(tmp_path)
@@ -128,33 +269,85 @@ def test_capture_refuses_same_batch_witness_by_default(tmp_path):
     assert manifest["checkpoint_id"]
 
 
-def test_history_order_and_broken_pointer(tmp_path):
+# -- finding 4: error contract ------------------------------------------------
+
+def test_malformed_current_pointer_raises_checkpoint_error(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    _capture(store, 1)
+    (tmp_path / "checkpoints" / "CURRENT").write_bytes(b"{")
+
+    with pytest.raises(CheckpointError):
+        store.current()
+
+
+def test_history_reports_truncated_manifest_as_broken_entry_not_raise(tmp_path):
     store = PairedCheckpointStore(tmp_path)
     first = _capture(store, 1)
     second = _capture(store, 2)
-    third = _capture(store, 3)
+    (tmp_path / "checkpoints" / first["checkpoint_id"] / "manifest.json").write_bytes(b"{")
 
-    order = store.history()
-    assert [m["checkpoint_id"] for m in order] == [third["checkpoint_id"], second["checkpoint_id"], first["checkpoint_id"]]
-
-    # Break the chain: delete the oldest checkpoint's directory.
-    import shutil
-    shutil.rmtree(tmp_path / "checkpoints" / first["checkpoint_id"])
-
-    walked = store.history()
-    assert [m["checkpoint_id"] for m in walked[:2]] == [third["checkpoint_id"], second["checkpoint_id"]]
-    assert walked[2]["checkpoint_id"] == first["checkpoint_id"]
-    assert "error" in walked[2]
+    history = store.history()
+    assert history[0]["checkpoint_id"] == second["checkpoint_id"]
+    assert history[1]["checkpoint_id"] == first["checkpoint_id"]
+    assert "error" in history[1]
 
 
-def test_history_empty_when_no_checkpoints(tmp_path):
+# -- finding 5: failure windows during capture --------------------------------
+
+def test_capture_failure_after_b_sav_before_manifest_leaves_no_partial_dir(tmp_path, monkeypatch):
     store = PairedCheckpointStore(tmp_path)
-    assert store.history() == []
-    assert store.current() is None
+    first = _capture(store, 1)
+
+    real_write_verified = PairedCheckpointStore._write_verified
+
+    def flaky(self, path, data):
+        if path.name == "rules.json":
+            raise OSError("simulated failure writing rules.json")
+        return real_write_verified(self, path, data)
+    monkeypatch.setattr(PairedCheckpointStore, "_write_verified", flaky)
+
+    with pytest.raises(OSError):
+        _capture(store, 2)
+
+    assert store.current() == first
+    dirs = [p.name for p in (tmp_path / "checkpoints").iterdir() if p.is_dir()]
+    assert dirs == [first["checkpoint_id"]]
 
 
-def test_manifest_serialization_round_trips_through_json(tmp_path):
+def test_capture_failure_promoting_directory_leaves_current_and_dirs_clean(tmp_path, monkeypatch):
     store = PairedCheckpointStore(tmp_path)
-    manifest = _capture(store, 1)
-    manifest_path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "manifest.json"
-    assert json.loads(manifest_path.read_text()) == manifest
+    first = _capture(store, 1)
+
+    def fail_replace(src, dst):
+        raise OSError("simulated directory promotion failure")
+    monkeypatch.setattr(paired_save_checkpoints.os, "replace", fail_replace)
+
+    with pytest.raises(OSError):
+        _capture(store, 2)
+    monkeypatch.undo()
+
+    assert store.current() == first
+    dirs = [p.name for p in (tmp_path / "checkpoints").iterdir() if p.is_dir()]
+    assert dirs == [first["checkpoint_id"]]
+
+
+def test_capture_failure_publishing_current_removes_promoted_directory(tmp_path, monkeypatch):
+    store = PairedCheckpointStore(tmp_path)
+    first = _capture(store, 1)
+    real_replace = os.replace
+    calls = {"n": 0}
+
+    def fail_second_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_replace(src, dst)  # directory promotion succeeds
+        raise OSError("simulated CURRENT publish failure")
+    monkeypatch.setattr(paired_save_checkpoints.os, "replace", fail_second_replace)
+
+    with pytest.raises(OSError):
+        _capture(store, 2)
+    monkeypatch.undo()
+
+    assert store.current() == first
+    dirs = [p.name for p in (tmp_path / "checkpoints").iterdir() if p.is_dir()]
+    assert dirs == [first["checkpoint_id"]]  # the promoted-but-unpublished dir was removed
