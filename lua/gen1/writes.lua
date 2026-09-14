@@ -1,0 +1,123 @@
+-- lua/gen1/writes.lua — every byte the Gen 1 client writes into the game, in one place.
+--
+-- Two rules, enforced here rather than trusted to callers:
+--   1. Nothing is written unless the caller has ARMED a write window: either the overworld
+--      write-safe checkpoint (lua/gen1_write_safety.lua) or a battle hook site. `W.arm(reason)`
+--      opens the window for the current frame; `write_bytes` refuses outside it (W-7).
+--   2. Every multi-byte write is validated completely before the first byte lands (W-4).
+--
+-- Facts (pret pokered 405b624 / pokeyellow 0a08515; all addresses come from profile.ram):
+--   party_struct (macros/ram.asm:20-38): HP @+1 (BE u16), Status @+4, Moves @+8..11, PP @+29..32
+--   battle_struct (macros/ram.asm:39-57): HP @+1, Status @+4, Moves @+8..11, PP @+25..28
+--   The engine judges "fainted" at MainInBattleLoop from wBattleMonHP == 0; a zero written
+--   only to the party struct is copied over from the battle struct each turn (RC
+--   BATTLE_FORCE_FAINT_WINDOW.md), so an active battler needs BOTH plus
+--   wPlayerSelectedMove = $FF (CANNOT_MOVE) so the corpse does not act first.
+--   EXPLOSION = $99 (constants/move_constants.asm:161).
+--   TRANSFORMED = bit 3 of wPlayerBattleStatus3 (constants/battle_constants.asm:106).
+local W = { EXPLOSION = 0x99, CANNOT_MOVE = 0xFF }
+
+local function be16(v) return math.floor(v / 256) % 256, v % 256 end
+
+function W.new(profile, io)
+    local ram, d = assert(profile.ram), assert(profile.derived)
+    local self = { armed = nil, log = {} }
+
+    -- Open the write window for this frame. `reason` names the checkpoint that authorised it
+    -- ("overworld", "battle_loop_head"); it is recorded with every write for the receipts.
+    function self:arm(reason) self.armed = assert(reason, "arm needs a reason") end
+    function self:disarm() self.armed = nil end
+
+    function self:write_bytes(addr, bytes)
+        assert(self.armed, "write refused: no armed write window (W-7)")
+        for i = 1, #bytes do
+            local b = bytes[i]
+            assert(type(b) == "number" and b >= 0 and b <= 255 and b % 1 == 0, "byte out of range")
+        end
+        for i = 1, #bytes do io.write_u8(addr + i - 1, bytes[i], "System Bus") end
+        self.log[#self.log + 1] = { addr = addr, n = #bytes, why = self.armed }
+    end
+
+    local function party_slot_base(slot) return ram.wPartyMons + slot * d.party_struct_size end
+
+    -- W-1: benched (or out-of-battle) mon: HP 0, status clear. `slot` is 0-based.
+    function self:faint_party_slot(slot)
+        assert(slot >= 0 and slot < d.party_capacity, "party slot out of range")
+        local base = party_slot_base(slot)
+        self:write_bytes(base + (ram.wPartyMon1HP - ram.wPartyMon1), { 0, 0 })
+        self:write_bytes(base + (ram.wPartyMon1Status - ram.wPartyMon1), { 0 })
+    end
+
+    -- W-2: the active battler, from the MainInBattleLoop hook only. Zero the battle struct HP,
+    -- mirror it into the party slot, and make the corpse unable to move this turn.
+    function self:faint_active_battler(slot)
+        assert(self.armed == "battle_loop_head", "active-battler faint only at the battle loop head")
+        self:write_bytes(ram.wBattleMonHP, { 0, 0 })
+        self:write_bytes(ram.wPlayerSelectedMove, { W.CANNOT_MOVE })
+        self:faint_party_slot(slot)
+    end
+
+    -- Guard for W-2 (pure; caller passes the reads). Returns ok, reason.
+    --   battle: {in_battle, type, link_state, player_mon_number, battle_species, transformed}
+    --   party_mon: the decoded party entry the server named (species = internal index)
+    function W.active_faint_guard(battle, slot, party_mon)
+        if battle.in_battle ~= 1 and battle.in_battle ~= 2 then return false, "not in a battle" end
+        if battle.type ~= 0 then return false, "special battle type (old man / safari)" end
+        if battle.link_state == 4 then return false, "link battle" end
+        if battle.player_mon_number ~= slot then return false, "target is not the active battler" end
+        -- Transform rewrites wBattleMonSpecies to the foe's species; the party slot is still ours.
+        if not battle.transformed and battle.battle_species ~= party_mon.species then
+            return false, "battle struct species differs from the party slot"
+        end
+        return true
+    end
+
+    -- W-3: Explode Mode — all four move slots become EXPLOSION with PP 1 (battle struct AND
+    -- party mirror), so the engine offers nothing else. Slot-0-only was escapable (RC).
+    function self:explode_active_battler(slot)
+        assert(self.armed == "battle_loop_head", "explode only at the battle loop head")
+        self:write_bytes(ram.wBattleMonMoves, { W.EXPLOSION, W.EXPLOSION, W.EXPLOSION, W.EXPLOSION })
+        self:write_bytes(ram.wBattleMonPP, { 1, 1, 1, 1 })
+        local base = party_slot_base(slot)
+        self:write_bytes(base + (ram.wPartyMon1Moves - ram.wPartyMon1), { W.EXPLOSION, W.EXPLOSION, W.EXPLOSION, W.EXPLOSION })
+        self:write_bytes(base + (ram.wPartyMon1PP - ram.wPartyMon1), { 1, 1, 1, 1 })
+    end
+
+    -- W-4: replace the enemy (rival) party. `mons` = list of {blob = 44 bytes, ot = 11, nick = 11,
+    -- species = internal index}. Everything is validated before any write; the write itself is
+    -- count, species list (+ $FF), structs, OT names, nicknames — the same shape the engine
+    -- fills in engine/battle/read_trainer_party.asm.
+    function self:write_enemy_party(mons)
+        assert(type(mons) == "table" and #mons >= 1 and #mons <= d.party_capacity, "enemy party count must be 1..6")
+        for i, m in ipairs(mons) do
+            assert(#m.blob == d.battle_struct_size, "enemy mon " .. i .. ": blob must be " .. d.battle_struct_size .. " bytes")
+            assert(#m.ot == d.name_length and #m.nick == d.name_length, "enemy mon " .. i .. ": names must be " .. d.name_length .. " bytes")
+            assert(m.species >= 1 and m.species <= 190 and m.species == m.blob[1], "enemy mon " .. i .. ": species/blob mismatch")
+        end
+        local species = {}
+        for i, m in ipairs(mons) do species[i] = m.species end
+        species[#mons + 1] = 0xFF
+        self:write_bytes(ram.wEnemyPartyCount, { #mons })
+        self:write_bytes(ram.wEnemyPartySpecies, species)
+        for i, m in ipairs(mons) do
+            local k = i - 1
+            self:write_bytes(ram.wEnemyMons + k * d.battle_struct_size, m.blob)
+            self:write_bytes(ram.wEnemyMonOT + k * d.name_length, m.ot)
+            self:write_bytes(ram.wEnemyMonNicks + k * d.name_length, m.nick)
+        end
+    end
+
+    -- Helper for callers building a 16-bit big-endian pair.
+    function W.u16be(v) return { be16(v) } end
+
+    return self
+end
+
+function W.bizhawk_io()
+    return {
+        read_u8 = function(addr, domain) return memory.read_u8(addr, domain) end,
+        write_u8 = function(addr, v, domain) return memory.write_u8(addr, v, domain) end,
+    }
+end
+
+return W
