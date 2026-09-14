@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:27:07+00:00",
+  "updated_at_utc": "2026-09-14T09:29:34+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "4dec149",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b (spec in flight on Codex); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua spec in flight on Codex; OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -957,10 +957,22 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "n3-spec",
-      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-fc6b3995)",
-      "state": "active",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-fc6b3995)",
+      "state": "done",
       "files": ["server/trade_coordinator.py (read-only)", "server/gen1_native_preparation.py (read-only)", "server/gen1_full_save.py (read-only)"],
-      "next_action": "Literal N3 spec reusing R5b-1 capture: pretrade images retained?, COMMIT prerequisite seam, recover-before-trade selection/abandonment, UI wording, tests, files.",
+      "next_action": "None; recorded as docs/gen1_reference/reviews/N3-implementation-spec.md; READY WAIT(R5b-1). Key fact: both 0x8000-byte pretrade images are already retained in gen1-native-preparation, so N3 capture reuses the R5b-1 finalizer with a native_pretrade witness variant.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/reviews/N3-implementation-spec.md",
+      "independent_review_refs": [
+        "coordinator: retained image_hex at gen1_native_preparation.py:26-71 and the COMMIT seam trade_coordinator.py:465-475 spot-checked; finalizer/witness-union design forwarded to the R5b-1 worker"
+      ]
+    },
+    {
+      "id": "r5b-2-spec",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-68c1908a)",
+      "state": "active",
+      "files": ["lua/gen1_client_entry.lua (read-only)", "lua/gen1_held_faint.lua (read-only)", "server/gen1_launcher.py (read-only)"],
+      "next_action": "Literal Lua-side spec: command routing, safe read point + drained outbox, CartRAM read/hex, durable event append + size limits, retirement, launcher file closure, lupa test harness.",
       "reuse_decision": "research only"
     },
     {
