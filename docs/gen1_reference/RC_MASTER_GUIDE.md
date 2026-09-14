@@ -13,9 +13,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:31:21+00:00",
+  "updated_at_utc": "2026-09-14T10:34:45+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "10ebb74",
+  "source_head": "f565dcb",
   "live_lane": null,
   "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-1 round 2 (Sonnet: F1-F6 + joint protocol), R5b-2 round 2 (Sonnet: refusal receipt + hold until release), R5b-3b server half on Sonnet; UI half done (56ffcab). HS-2 candidate 9d13974 (review with R5b-3b). HS-3 active (Sonnet), HS-4 spec recorded; HS-4 queued after R5b-2-2. C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
@@ -1076,11 +1076,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-proto",
-      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-f42accec)",
-      "state": "active",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-f42accec)",
+      "state": "done",
       "files": ["server/gen1_checkpoint_runtime.py (read-only)", "lua/gen1_checkpoint_client.lua (read-only)"],
-      "next_action": "Joint client<->server state-pair audit of the paired checkpoint protocol; ordering rule that makes the queue-block impossible; wire bounds table; Manager-recover-while-collecting rule; five joint tests.",
-      "reuse_decision": "research only; feeds R5b-1/R5b-2 round 3"
+      "next_action": "None; recorded as docs/gen1_reference/reviews/R5b-joint-protocol.md (e9643cf), binding on R5b-1/R5b-2/R5b-3b round 3 (document wins over earlier instructions).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/reviews/R5b-joint-protocol.md",
+      "independent_review_refs": [
+        "coordinator: ordering invariant §1 and the release-reason/request-id bound disagreements accepted as the root causes of the two REJECT rounds"
+      ]
     },
     {
       "id": "c3",
@@ -1165,9 +1169,8 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "hx-2b",
-      "owner": "queued (OMP refused the combined card cx-4673a9a0; single-concern cards only)",
-      "state": "blocked",
-      "blocked_reason": "dispatch as its own card after HX-2c-A2 (OMP owns gen1_runtime.py/server.py sequentially)",
+      "owner": "OMP live pid 47172 (coding; task cx-d2b7c9a1; server.py dashboard regions only)",
+      "state": "active",
       "files": ["server/server.py (_build_status_html player-card loop + header injection)", "tests/unit/test_dashboard_holds_ui.py"],
       "next_action": "~10 lines in server.py: banner into the injected header_html, per-player waiting-on line in the player-card loop filtered by player, title=reason; render test through test_routes_smoke.py's client.",
       "reuse_decision": "presentation only; reads the shared status dict"
@@ -1199,7 +1202,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "hx-2",
-      "owner": "candidate f4f74da on the branch (OMP authored); HX-2c split: A2 wording on OMP (cx-f53a4a18), A1 phase-aware attribution queued for a Sonnet worker",
+      "owner": "candidate f4f74da (OMP) + A2 wording f565dcb (OMP, cx-f53a4a18); A1 phase-aware attribution queued for a Sonnet worker (gen1_runtime.py _blocker_actor) after R5b-1 round 3 releases the file",
       "state": "active",
       "files": ["server/gen1_runtime.py", "server/runtime_boundary.py", "server/server.py (_build_status_dict only)", "server/status_payload.py", "server/templates/manager.html", "tests/unit/test_manager_http_hardening.py", "tests/unit/test_gen1_sessions.py", "tests/unit/test_manager_live_holds_ui.py"],
       "next_action": "Gen1Runtime.holds() (reason + human wording + cheap player attribution) read through runtime_boundary.read_runtime_holds into status['holds']; Manager live banner + per-player 'Waiting on' row; payload/sessions/structural tests.",
