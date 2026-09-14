@@ -368,6 +368,8 @@ def test_instruction_window_finishes_first_and_arms_last_in_a_tick(lua):
 
 # The real acquisition aggregator (gen1_acquisition_observers.lua) over stubbed producers: every source kind
 # rides the batch through the same persist-before-drain path, under the loop's boundary predicate.
+# Witness frames follow the pinned host convention (HOOK_FRAME_OFFSET = 0): a bus-exec hook inside the
+# returned frame reads the count that frame was armed at, one below the count the tick reads after it.
 SOURCES = """
 package.loaded.gen1_capture_sites=assert(JSON.decode(capture_data_json))
 Sources=require("gen1_acquisition_observers")
@@ -409,13 +411,13 @@ def sourced(lua):
 def test_static_exchange_wild_and_evolution_rows_ride_the_batch_and_drain_after_append(sourced):
     lua = sourced
     lua.execute("""
-        buffers.static[1]={schema="rby-static-origin-receipt-v1",source_id="static:route12_snorlax",arm={frame=100},began={frame=100}}
-        buffers.static[2]={schema="rby-static-origin-receipt-v1",["end"]={frame=100}}
-        buffers.npc_exchange[1]={schema="rby-npc-exchange-receipt-v1",source_id="npc:route_2_trade_house:1",call={frame=99},remove={frame=100},["return"]={frame=100}}
-        buffers.wild[1]={schema="rby-wild-encounter-receipt-v1",kind="begin",witness={frame=100}}
-        buffers.evolution[1]={schema="rby-evolution-receipt-v1",outcome="evolved",before={frame=100},after={frame=100}}
+        buffers.static[1]={schema="rby-static-origin-receipt-v1",source_id="static:route12_snorlax",arm={frame=99},began={frame=99}}
+        buffers.static[2]={schema="rby-static-origin-receipt-v1",["end"]={frame=99}}
+        buffers.npc_exchange[1]={schema="rby-npc-exchange-receipt-v1",source_id="npc:route_2_trade_house:1",call={frame=98},remove={frame=99},["return"]={frame=99}}
+        buffers.wild[1]={schema="rby-wild-encounter-receipt-v1",kind="begin",witness={frame=99}}
+        buffers.evolution[1]={schema="rby-evolution-receipt-v1",outcome="evolved",before={frame=99},after={frame=99}}
     """)
-    lua.globals().advance()  # frame 100 (the first returned frame): one publication carries every kind, in completion order
+    lua.globals().advance()  # frame 100 (the first returned frame; its hooks read 99): one publication carries every kind, in completion order
     seq = calls(lua)
     assert lua.eval("#appended") == 1 and lua.eval("appended[1].event.signals == JSON.null") is True
     assert lua.eval("kinds(appended[1].event)") == "static_origin,static_battle_end,npc_exchange,wild_begin,evolution"
@@ -431,27 +433,27 @@ def test_static_exchange_wild_and_evolution_rows_ride_the_batch_and_drain_after_
 
 def test_capture_assembly_persists_its_open_call_before_drain_and_publishes_once_on_delivery(sourced):
     lua = sourced
-    lua.execute('buffers.capture[1]={kind="party_begin",frame=100,sp=57342}')
-    lua.globals().advance()  # frame 100: the call opened; the cursor is persisted, nothing is published
+    lua.execute('buffers.capture[1]={kind="party_begin",frame=99,sp=57342}')
+    lua.globals().advance()  # frame 100 (hooks read 99): the call opened; the cursor is persisted, nothing is published
     seq = calls(lua)
     assert "append" not in seq and seq.index("persist") < seq.index("drain:capture")
     assert lua.eval("persisted[1].acquisition_source.capture_open.kind") == "party_begin" and lua.eval("#buffers.capture") == 0
-    lua.execute('buffers.capture[1]={kind="party_end",frame=101,sp=57342}')
-    lua.globals().advance()  # frame 101: the return completes ONE capture receipt
+    lua.execute('buffers.capture[1]={kind="party_end",frame=100,sp=57342}')
+    lua.globals().advance()  # frame 101 (hooks read 100): the return completes ONE capture receipt
     seq = calls(lua)
     assert lua.eval("#appended") == 1 and seq.index("append") < seq.index("drain:capture")
     assert lua.eval("kinds(appended[1].event)") == "capture"
     row = json.loads(lua.eval("JSON.encode(appended[1].event.acquisitions[1].receipt)"))
     assert row["schema"] == "rby-capture-receipt-v1" and row["receipt"]["destination"] == "party"
-    assert (row["receipt"]["begin"]["frame"], row["receipt"]["end"]["frame"]) == (100, 101)
+    assert (row["receipt"]["begin"]["frame"], row["receipt"]["end"]["frame"]) == (99, 100)
     assert lua.eval("appended[1].baseline.acquisition_source.capture_open == JSON.null") is True
 
 
 def test_a_refused_publication_keeps_every_source_buffer_and_stops_the_next_frame(sourced):
     lua = sourced
     lua.execute("""
-        buffers.wild[1]={schema="rby-wild-encounter-receipt-v1",kind="end",witness={frame=100}}
-        buffers.evolution[1]={schema="rby-evolution-receipt-v1",outcome="cancelled",before={frame=100},after={frame=100}}
+        buffers.wild[1]={schema="rby-wild-encounter-receipt-v1",kind="end",witness={frame=99}}
+        buffers.evolution[1]={schema="rby-evolution-receipt-v1",outcome="cancelled",before={frame=99},after={frame=99}}
         journal.append=function()error("transport refused the batch",0)end
     """)
     with pytest.raises(LuaError, match="transport refused the batch"):

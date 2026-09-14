@@ -64,6 +64,8 @@ LUA = """
         new_nonce=function()nonce=nonce+1;return string.format('%032x',nonce)end})
     state=collector:initial(frame)
     -- Hook drivers: the site's bytes go on the bus right before its hook fires, as the engine would have them.
+    -- A hook reads the count its frame was armed at (HOOK_FRAME_OFFSET = 0); once that frame returns the
+    -- tick reads one more, so every driver leaves `frame` at w.frame+1.
     local snames={map_id='wCurMap',cur_opponent='wCurOpponent',cur_level='wCurEnemyLevel',enemy_species2='wEnemyMonSpecies2',
         battle_flag='wIsInBattle',battle_type='wBattleType',sprite_index='wSpriteIndex',engaged_class='wEngagedTrainerClass',
         engaged_set='wEngagedTrainerSet',battle_result='wBattleResult'}
@@ -73,7 +75,7 @@ LUA = """
     local function fire(prefix,name,anchor,w)
         frame=w.frame;regs.SP=w.sp;regs.A=w.a or 0;pc=anchor.address
         bus[SA.hLoadedROMBank]=anchor.bank;put(anchor.address,anchor.expected_hex)
-        hooks[prefix..name]()
+        hooks[prefix..name]();frame=w.frame+1
     end
     function static_fire(name,w)
         put(SA.wPlayerName,w.point.trainer_hex);put(SA.wPlayerID,w.point.player_id_hex)
@@ -88,7 +90,7 @@ LUA = """
         for key,addr in pairs(nnames)do bus[NA[addr]]=p[key]end
         fire('slink-exchange-',name,name:sub(1,5)=='call-' and N.sites[name:sub(6)].call or E[name],w)
     end
-    function capture_fire(kind,w)frame=w.frame;local row=detached(w);row.kind=kind;capture_pending[#capture_pending+1]=row end
+    function capture_fire(kind,w)frame=w.frame+1;local row=detached(w);row.kind=kind;capture_pending[#capture_pending+1]=row end
     local wnames={map_id='wCurMap',cur_opponent='wCurOpponent',species_index='wEnemyMonSpecies2',level='wCurEnemyLevel',
         battle_flag='wIsInBattle',battle_type='wBattleType',battle_result='wBattleResult',link_state='wLinkState'}
     function wild_fire(kind,w)
@@ -118,10 +120,11 @@ def probe(request, runtime):  # noqa: F811
 
 
 def at(value, frame):
-    """A receipt fixture with every witness moved to one frame (the returned physical step)."""
+    """A receipt fixture with every witness inside one returned physical step `frame`: a hook there reads the
+    count the step was armed at (HOOK_FRAME_OFFSET = 0), one below the count the tick reads after it."""
     for witness in value.values():
         if isinstance(witness, dict) and "frame" in witness:
-            witness["frame"] = frame
+            witness["frame"] = frame - 1
     return value
 
 
@@ -157,7 +160,7 @@ def capture(lua, variant, frame, kind):
 
 def wild(lua, variant, frame, kind):
     """One wild boundary hook (`begin`/`end`); returns the witness the observer should publish."""
-    value = wild_receipt(variant, kind, frame)
+    value = wild_receipt(variant, kind, frame - 1)  # the hook's count inside returned step `frame`
     fire(lua, [("wild_fire", kind, value["witness"])])
     return value["witness"]
 
@@ -190,7 +193,7 @@ def test_mixed_frame_is_one_list_in_hook_order_and_a_repeated_peek_is_identical(
     merged = rows(lua)
     assert [row["kind"] for row in merged] == ["capture", "static_origin", "static_battle_end", "npc_exchange"]
     assert merged[1]["receipt"] == static and merged[2]["receipt"] == end and merged[3]["receipt"] == trade
-    assert merged[0]["receipt"]["receipt"]["end"]["frame"] == 102
+    assert merged[0]["receipt"]["receipt"]["end"]["frame"] == 101  # hook count inside returned step 102
     assert rows(lua, "again") == merged and pending(lua) == [1, 2, 1]  # peek moves no cursor
     assert lua.eval("Canonical.encode(prepared.state)==Canonical.encode(again.state)")
     assert lua.eval("#prepared.static==2 and #prepared.npc_exchange==1")

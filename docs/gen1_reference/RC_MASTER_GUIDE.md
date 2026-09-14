@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T01:51:54+00:00",
+  "updated_at_utc": "2026-09-14T02:29:34+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "975ab9c",
   "live_lane": null,
-  "next_action": "Parcel attempt 2 surfaced a PRODUCTION client defect at the first wild encounter (gen1_acquisition_observers.lua:167). WB-1 (isolated Claude worker) diagnosing with a red replay then root-cause fix in the shared observer/loop lifecycle. After the fix: one changed parcel re-run. Feature pivot: P2A claim recorded (READY after WB-1 lane; RB save-site offset derivation is the next research). D3, FT-2, E-2 PARKED.",
+  "next_action": "WB-1 integrated. P2A-1 (feature) in progress and owns client/server engine-signal files; the changed rb-parcel re-run waits for P2A-1 to land (no live run on a half-edited client). D3, FT-2, E-2 PARKED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -381,8 +381,8 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "wb1-wild-assembly",
-      "owner": "isolated Claude worker (diagnosis + fix; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
       "files": [
         "lua/gen1_acquisition_observers.lua",
         "lua/gen1_observation_loop.lua",
@@ -391,8 +391,12 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_observation_loop.py",
         "tests/unit/test_gen1_wild_assembly.py"
       ],
-      "next_action": "Red replay of 'wild_begin completion lies outside returned physical step' in the loop model, then a root-cause lifecycle fix; do not loosen the step-window check.",
-      "reuse_decision": "shared observer/loop lifecycle (production); the wild site data stays the Gen 1 adapter"
+      "next_action": "None; integrated MODEL ONLY. The next rb-parcel live run (after P2A-1 releases the client Lua) is the physical check of the fixed capture/wild path.",
+      "reuse_decision": "shared observer/loop lifecycle (production); the wild site data stays the Gen 1 adapter",
+      "receipt": "tests/unit/test_gen1_wild_assembly.py (red replay) + 165 passed across loop/acquisition/native/inventory sets",
+      "independent_review_refs": [
+        "coordinator diff review: strict in_step equality consistent with BATTLE_FORCE_FAINT_WINDOW.md section 10 and instruction_executor.lua:38; live receipts show every engine signal one frame below its observation (8 samples, R7 + parcel r2)"
+      ]
     },
     {
       "id": "p2a-claim",
@@ -408,6 +412,28 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator spot-check of gen1_service_continuity.py:87-89 refusal and gen1_engine_signals.py:29"
       ]
+    },
+    {
+      "id": "p2a-1",
+      "owner": "isolated Claude worker (feature implementation; ACK on report)",
+      "state": "active",
+      "files": [
+        "server/gen1_engine_signals.py",
+        "server/gen1_engine_signal_runtime.py",
+        "server/gen1_faint_runtime.py",
+        "server/gen1_service_continuity.py",
+        "server/gen1_runtime_admission.py",
+        "server/protocol.py",
+        "server/gen1_observation_runtime.py",
+        "server/gen1_held_faint.py",
+        "server/gen1_native_progress.py",
+        "data/games/gen1_rby/engine_signals.json",
+        "lua/gen1_engine_signals.lua",
+        "tests/unit/test_gen1_engine_signals.py",
+        "tests/unit/test_gen1_service_continuity.py"
+      ],
+      "next_action": "TDD: save_witness site (SaveMenu.save+3, 1c:7730) + client signal with CartRAM[0x0498:0x8000] digest; server validation + per-player checkpoint; clean-resume admission per the owner policy with journaled resume record; full unit suite green.",
+      "reuse_decision": "shared lifecycle/state in server modules (no game_id branches); Gen 1 facts only in data/games/gen1_rby and the engine-signal adapter; reuses gen1_full_save reader and the injected sha256"
     }
   ]
 }
@@ -431,8 +457,9 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| WB-1 fixed | **Root cause (SOURCE + live receipts):** inside a bus-exec hook `emu.framecount()` returns the frame the step was armed at (= `state.frame`), one below the assembling tick's count (pinned in [BATTLE_FORCE_FAINT_WINDOW.md](BATTLE_FORCE_FAINT_WINDOW.md) §10; `instruction_executor.lua:38`; every live engine signal sits one frame below its observation — 8 samples over R7 and parcel r2). `gen1_acquisition_observers.lua:132/:167` demanded `witness.frame > state.frame`, which excluded **every** hook-stamped witness that could exist; latent because no acquisition witness had ever reached the non-fast path live (all prior `acquisitions` were `[]`; the starter is an engine signal, not a grant receipt). The first capture would have crashed identically. Fix: strict `witness.frame == state.frame` (`in_step`), no other assert touched; test models that stamped fake witnesses with the tick's count were corrected. Red replay `tests/unit/test_gen1_wild_assembly.py`; 165 passed across the loop/acquisition/native/inventory sets. MODEL ONLY until the next parcel run. |
 | Parcel route attempt 2 | **HOLD at `975ab9c` on a PRODUCTION defect** (`.cache/d1-rb-parcel-r2`, summary `6e47c087…774d`, console `4a659dfe…dcb2`): chain handoff again fine; player B crashed at its **first genuine wild encounter** (Route 1 southern grass) — `lua/gen1_acquisition_observers.lua:167: wild_begin completion lies outside returned physical step` via `gen1_client_entry.lua:631`. Never reachable before: R7 stayed in the lab and the starter is a gift (grant observer). A real player hits this on their first Route 1 encounter. WB-1 (isolated Claude worker): fast red replay in the loop model, then a root-cause lifecycle fix in the shared observer/loop modules; the step-window check is not to be loosened. |
-| P2a claim (clean resume) | Sonnet record: rows `gameplay.{red,blue}.reconnect` ("durable reconnect replay, admission epochs, bounded queues"), `trade.{red,blue}.recovery`; no save-witness or re-enrollment mechanism exists (`gen1_continue_observer.lua` witnesses CONTINUE/load only; engine-signal sites `bag_received, battle_faint, poison_faint, starter_begin, starter_end`; unknown kinds refused `gen1_engine_signals.py:29`). Exact relaunch refusal: `gen1_service_continuity.py:87-89` (`service continuity admission differs from the initial physical identity`) plus three more gates (D0b correction "What stands"). HYPOTHESIS: (a) `save_witness` engine signal at `SavePartyAndDexData`'s trailing `ret` (RB `1c:780f` entry; exact `ret` offset underived — the Yellow analogue is proved in the D0b save-witness doc; must pair with `SaveGameData` entry or read `wSaveFileStatus` to exclude the cable-club partial save) carrying frame + SaveRAM hash; (b) server records/ACKs a per-player checkpoint; (c) re-enrollment admits a new `physical_instance` only when both players' last-acked hashes match the presented files, no pending ids, unchanged contract digest. Shared lifecycle files: `gen1_service_continuity.py`, `gen1_runtime.py`, `gen1_runtime_admission.py`, `protocol.py`, `gen1_engine_signals.py` + `data/games/gen1_rby/engine_signals.json`; adapter: the RB save site data. Falsifiers: unit refusal today; after: admit only on the policy, refuse one-unsaved / hash mismatch / pending / changed digest. Live check: kill one EmuHawk after both saved, relaunch the Manager bundle, observe admission. (9) READY WAIT(WB-1 lane; RB `ret` offset derivation). |
+| P2a claim (clean resume) | Sonnet record: rows `gameplay.{red,blue}.reconnect` ("durable reconnect replay, admission epochs, bounded queues"), `trade.{red,blue}.recovery`; no save-witness or re-enrollment mechanism exists (`gen1_continue_observer.lua` witnesses CONTINUE/load only; engine-signal sites `bag_received, battle_faint, poison_faint, starter_begin, starter_end`; unknown kinds refused `gen1_engine_signals.py:29`). Exact relaunch refusal: `gen1_service_continuity.py:87-89` (`service continuity admission differs from the initial physical identity`) plus three more gates (D0b correction "What stands"). HYPOTHESIS: (a) `save_witness` engine signal at `SavePartyAndDexData`'s trailing `ret` (RB `1c:780f` entry; exact `ret` offset underived — the Yellow analogue is proved in the D0b save-witness doc; must pair with `SaveGameData` entry or read `wSaveFileStatus` to exclude the cable-club partial save) carrying frame + SaveRAM hash; (b) server records/ACKs a per-player checkpoint; (c) re-enrollment admits a new `physical_instance` only when both players' last-acked hashes match the presented files, no pending ids, unchanged contract digest. Shared lifecycle files: `gen1_service_continuity.py`, `gen1_runtime.py`, `gen1_runtime_admission.py`, `protocol.py`, `gen1_engine_signals.py` + `data/games/gen1_rby/engine_signals.json`; adapter: the RB save site data. Falsifiers: unit refusal today; after: admit only on the policy, refuse one-unsaved / hash mismatch / pending / changed digest. Live check: kill one EmuHawk after both saved, relaunch the Manager bundle, observe admission. (9) **READY — coordinator decision 2026-09-14**; P2A-SITE (Gen1-CodexPeer) derived the narrow START-menu completion site `SaveMenu.save+3` = `1c:7730` (`21A5C4` after `CD4878` = `call SaveGameData`, `save.asm:165-170`), excluding Cable Club/Hall of Fame/ChangeBox saves that share `SavePartyAndDexData`'s RET (`1c:7847`); digest projection `CartRAM[0x0498:0x8000]` (sprite buffers excluded, `ram/sram.asm:1-49`). P2A-1 ACTIVE on an isolated Claude worker. |
 | Parcel route | **Attempt 1 HOLD at `4bf3224`** (`.cache/d1-rb-parcel-r1`, summary `8712372c…953d`, console `425228a4…fb59`): **chain handoff PROVED live** on both cartridges (`lab-loss-complete` → parcel driver, frames 16305/16977, `chain_handoffs` recorded), then the parcel driver stalled at Pallet (9,2) pressing Up into a blocked tile — waypoint `{9,1}` in `pallet_north` is off the road column (`gen1_rb_parcel_inputs.lua:17`; the reviewed return path uses `(10,2)`); no stall detection. The Python poller also crashed on `PermissionError` mid-replace of `rb_route_progress.json` (latent in `rb_starter_rival` too) — fixed to tolerate `PermissionError`/`JSONDecodeError`. PT-1 decode (Gen1-CodexPeer): `(9,1)` is a tree (`PalletTown.blk[4]=$4F` → `overworld.bst[1278]=$3A`), columns 10–11 exit north, and the engine changes map only past the edge (`home/overworld.asm:622-635`) — so all four edge-terminated tables (`pallet_north`, `route_north`, `viridian_south`, `route_south`) now end one cell past the edge; model test `test_map_edges_keep_driving_until_the_engine_changes_map` is red on the old tables. Attempt 2 is the changed run. Clean cleanup. |
 | Battle path | **R7 PASS (CONTROLLED-SCRIPTED)** at `57eabf7`: both cartridges reached `lab-loss-complete` (lab script 18, `battle_result 1`, healed HP 20/19, rival event set, Growl PP 15/24); ALIVE `oaks_lab` link, no death command queued, clean cleanup. Receipts `.cache/d1-rb-starter-rival-r7-summary.json` `12bd67af…f408`, console `a0a1016e…754d`; full record in [D1 physical report](reviews/D1-RB-physical-successor.md). Closes the D1 first checkpoint only; parcel/first ball/catches/fastest-text remain open; no manifest row closed. Lane released. Round-1 shape: Driver diff is four lines at `gen1_rb_ball_gate_inputs.lua:110-116`: while pending and the point is still the move menu with the cursor on Growl, re-pulse `A` on the 16-frame cadence; otherwise bounded idle as before. Coordinator re-ran 30 passed / 0 failed / 0 skipped, ruff clean, lupa ok; SHA256 Lua `b98f0dbed09f85ee713c53d7ec075e4d6900678f84b3c3465a37062b4695f52f`, test `13a76486d8526feb900bc7e23f7fc06f3e18fb0df2eac372bd1d2577e45e8b92`; receipt `.cache/bi1-model.xml`. Known ceiling (worker-noted): a button-gated prompt before the player's PP drop on an enemy-first turn would still hit the 600-frame bound; only R7 can show it. **R7 launch note (R7-PREP):** `asyncio.run(rb_starter_rival(r".cache\d1-rb-starter-rival-r7", emulator=r"E:\Howard\Bizhawk\EmuHawk.exe", base_config=r"E:\Howard\Bizhawk\config.ini", limit=180))` from the checkout with `PYTHONDONTWRITEBYTECODE=1`; 300% is the `SelectedRun` default (`gen1_selected_scenario.py:286`); the summary is self-written to `<owned>-summary.json` (`:606-607`), console must be tee'd to `.cache/d1-rb-starter-rival-r7-console.txt`; preflight (`:340-363`) refuses a pre-existing owned root and self-checks emulator/config/source hashes; PASS = final status `rb-starter-rival-checkpoint-observed` after clean cleanup (`:595-604`). Historical: RED established 2026-09-14 00:2x UTC: `test_r6_dropped_growl_pulse_is_repeated_until_observed_acceptance` fails at `tests/unit/test_gen1_selected_rb_ball_gate.py:141` (`assert buttons["A"]`) on the unchanged driver, 1 failed / 29 passed — the dropped-pulse mechanism is confirmed on the driver side. Green step: then re-pulse `A` on the 16-frame cadence while the cursor still sits on Growl with unchanged PP; index 2→1 with unchanged PP = accepted-not-executed (idle, no Down); PP drop → existing `awaiting_main_menu`; 600-frame bound from first emit. Independent review of the frozen diff precedes R7. |
 | BI-1 integrated | Round 2 (isolated Claude worker): pending + not(Growl cursor) → `press("B")` on the cadence; `test_enemy_first_prompt_before_pp_drop_is_advanced_with_b` red on round 1, green now; 31 passed / 0 / 0, ruff, lupa; SHA256 Lua `7c000361e32a8de41f7fdd2f5a6ba907d5cc2ace3c1d4d5012fcad9930637e41`, test `ab5f163ba04992644552bc69da01ad028110cad32ba499b7be7b6cbd77e29966`. Codex re-review `cx-f22e3dde`: **ACCEPT-WITH-NOTES** — `ManualTextScroll` accepts A|B (`home/text.asm:209-217`, `home/joypad2.asm:55-92`); battle menu ignores B (`core.asm:2091,2124-2125`); no reachable harmful-B state at level 5; faint sets `wBattleResult=1` and cleanup clears `wIsInBattle` (`core.asm:1030-1044`, `end_of_battle.asm:27-50`); healing + rival event happen in lab script **12** (`scripts/OaksLab.asm:418-436`), 13/14 → 18 is exit dialogue. Open: the 600-frame total through the final KO dialogue is only establishable by R7. MODEL ONLY. |

@@ -119,6 +119,11 @@ function M.new(options)
         assert(options.held()==true,"acquisition boundary lost held ownership")
         local frame=emu.framecount()
         assert(frame==state.frame+1,"acquisition assembly requires exactly one returned frame")
+        -- A bus-exec hook inside the returned frame reads the count that frame was armed at
+        -- (state.frame), not this tick's count: HOOK_FRAME_OFFSET = 0, pinned live in
+        -- docs/gen1_reference/BATTLE_FORCE_FAINT_WINDOW.md section 10; instruction_executor.lua:38
+        -- relies on the same convention. Every witness of this step therefore carries state.frame.
+        local function in_step(witness)return type(witness)=="table"and integer(witness.frame)and witness.frame==state.frame end
         validate(state)
         local c,g,s,x,w,e=statuses();healthy(c,g,s,x,w,e)
         if options.fast_path and c.pending==0 and g.pending==0 and s.pending==0 and x.pending==0 and w.pending==0 and e.pending==0
@@ -129,8 +134,7 @@ function M.new(options)
         local captured,granted,statics,exchanged,wilds,evolved=capture.peek(),grants.peek(),static.peek(),exchange.peek(),wild.peek(),evolution.peek()
         local next_state=copy(state);local receipts=JSON.array()
         for _,witness in ipairs(captured)do
-            assert(integer(witness.frame)and witness.frame>state.frame and witness.frame<=frame,
-                "capture witness lies outside the returned physical step")
+            assert(in_step(witness),"capture witness lies outside the returned physical step")
             if witness.kind=="party_begin"or witness.kind=="box_begin"then
                 assert(next_state.capture_open==JSON.null,"overlapping capture delivery calls")
                 next_state.capture_open=copy(witness)
@@ -164,8 +168,7 @@ function M.new(options)
         -- from another producer's by text-box frames, so this equals hook order.
         local ordered={};for index,row in ipairs(receipts)do
             local last=completion(row)
-            assert(type(last)=="table"and integer(last.frame)and last.frame>state.frame and last.frame<=frame,
-                row.kind.." completion lies outside returned physical step")
+            assert(in_step(last),row.kind.." completion lies outside returned physical step")
             ordered[#ordered+1]={index=index,frame=last.frame,row=row}
         end
         table.sort(ordered,function(a,b)return a.frame==b.frame and a.index<b.index or a.frame<b.frame end)

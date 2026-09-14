@@ -51,10 +51,12 @@ def setup(lua):
                 new_nonce=function()nonce=nonce+1;return string.format('%032x',nonce)end})
         end
         collector=construct();state=collector:initial(frame)
+        -- A hook inside the returned frame reads the count that frame was armed at (HOOK_FRAME_OFFSET = 0);
+        -- the tick that assembles it reads one more.
         function capture_step(kind)
-            assert(collector:ready(state));frame=frame+1
+            assert(collector:ready(state))
             local row=detached(capture_fixture[kind]);row.kind=kind=='begin'and'party_begin'or'party_end'
-            row.frame=frame;capture_pending[#capture_pending+1]=row
+            row.frame=frame;capture_pending[#capture_pending+1]=row;frame=frame+1
             return collector:prepare(state)
         end
         function persist_and_drain(prepared)
@@ -95,7 +97,7 @@ def test_evolution_requires_retained_live_call_and_durable_completion_before_dra
         lua.execute("replacement:ready(state)")
     lua.execute("""
         assert(collector:ready(state));frame=102;evolution_open=0
-        evolution_pending=JSON.array({{outcome='evolved',before={frame=101},after={frame=102}}})
+        evolution_pending=JSON.array({{outcome='evolved',before={frame=101},after={frame=101}}})
         second=collector:prepare(state)
         assert(#second.receipts==1 and second.receipts[1].kind=='evolution')
         assert(#evolution_pending==1 and second.state.evolution_open==0)
@@ -117,7 +119,7 @@ def test_capture_open_is_persisted_and_reconstruction_completes_the_same_receipt
     wrapped = json.loads(lua.eval("JSON.encode(second.receipts[1])"))
     assert wrapped["kind"] == "capture" and wrapped["receipt"]["source_sha256"] == DATA["sha256"]
     fact = decode_capture(wrapped["receipt"]["receipt"], "yellow", SAVE)
-    assert fact["call_frame"] == 101 and fact["return_frame"] == 102
+    assert fact["call_frame"] == 100 and fact["return_frame"] == 101
     assert lua.globals().drains == 4
 
 
@@ -143,7 +145,7 @@ def test_same_live_grant_observer_survives_transport_reconnect_and_emits_paid_re
         -- Transport has no authority to reconstruct or discard the source owner.
         assert(collector:ready(state));frame=102;grant_open=0
         grant_pending=JSON.array({{schema='rby-grant-receipt-v1',source_id='fixture',
-            call={frame=101},['return']={frame=102},paid={frame=102}}})
+            call={frame=101},['return']={frame=101},paid={frame=101}}})
         prepared=collector:prepare(state)
         assert(#prepared.receipts==1 and prepared.receipts[1].kind=='grant')
         assert(prepared.state.grant_open==0 and #grant_pending==1)
@@ -181,11 +183,11 @@ def test_ambiguous_or_unowned_sources_never_drain(runtime, fault):
     setup(lua)
     before = lua.globals().disk
     code = {
-        "return-only": "frame=101;capture_fixture['end'].frame=101;capture_fixture['end'].kind='party_end';capture_pending=JSON.array({capture_fixture['end']})",
-        "wrong-return": "first=capture_step('begin');persist_and_drain(first);frame=102;capture_fixture['end'].kind='box_end';capture_pending=JSON.array({capture_fixture['end']})",
-        "outside-frame": "frame=101;capture_fixture['begin'].kind='party_begin';capture_fixture['begin'].frame=100;capture_pending=JSON.array({capture_fixture['begin']})",
-        "overlap": "frame=101;capture_fixture['begin'].kind='party_begin';capture_pending=JSON.array({capture_fixture['begin'],capture_fixture['begin']})",
-        "too-many-grants": "frame=101;for i=1,17 do grant_pending[i]={call={frame=101},['return']={frame=101}}end",
+        "return-only": "frame=101;capture_fixture['end'].frame=100;capture_fixture['end'].kind='party_end';capture_pending=JSON.array({capture_fixture['end']})",
+        "wrong-return": "first=capture_step('begin');persist_and_drain(first);frame=102;capture_fixture['end'].frame=101;capture_fixture['end'].kind='box_end';capture_pending=JSON.array({capture_fixture['end']})",
+        "outside-frame": "frame=101;capture_fixture['begin'].kind='party_begin';capture_fixture['begin'].frame=101;capture_pending=JSON.array({capture_fixture['begin']})",
+        "overlap": "frame=101;capture_fixture['begin'].kind='party_begin';capture_fixture['begin'].frame=100;capture_pending=JSON.array({capture_fixture['begin'],capture_fixture['begin']})",
+        "too-many-grants": "frame=101;for i=1,17 do grant_pending[i]={call={frame=100},['return']={frame=100}}end",
         "unheld": "frame=101;held=false",
         "context": "frame=101;context.context_generation=string.rep('c',32)",
     }[fault]
