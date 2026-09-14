@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:26:16+00:00",
+  "updated_at_utc": "2026-09-14T09:27:07+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "4dec149",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b (spec in flight on Codex); OMP: HX-2b dashboard holds (active), then HX-2c (HX-2 review fix-ups), then FT-2d missing-file 400. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b (spec in flight on Codex); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -1013,11 +1013,20 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "hx-2b",
-      "owner": "OMP live pid 47172 (coding; task cx-f1eb6743)",
-      "state": "active",
-      "files": ["server/templates/dashboard.html (or the template rendered at GET /)", "server/static/dashboard.css (only if a class is needed)", "tests/unit/test_dashboard_holds_ui.py"],
-      "next_action": "Run-held banner + per-player waiting-on line on the player-facing dashboard from status['holds']; structural + render tests.",
+      "owner": "OMP (correct refusal on cx-f1eb6743: the dashboard player cards are rendered by server.py _build_status_html:4329 and the banner is injected by _handle_dashboard_template:5330-5355; dashboard.html is a 41-line shell)",
+      "state": "blocked",
+      "blocked_reason": "server/server.py is owned by R5b-1 until it reports; HX-2b (+HX-2c, same rule for gen1_runtime.py) dispatch after release",
+      "files": ["server/server.py (_build_status_html player-card loop + header injection)", "tests/unit/test_dashboard_holds_ui.py"],
+      "next_action": "~10 lines in server.py: banner into the injected header_html, per-player waiting-on line in the player-card loop filtered by player, title=reason; render test through test_routes_smoke.py's client.",
       "reuse_decision": "presentation only; reads the shared status dict"
+    },
+    {
+      "id": "ft-2d",
+      "owner": "OMP live pid 47172 (coding; task cx-c302cb5d)",
+      "state": "active",
+      "files": ["server/manager.py", "tests/unit/test_manager_prepared_gen1.py"],
+      "next_action": "Nonexistent/non-file cartridge path -> 400 'cartridge file not found: <path>' before clean_contract; two tests.",
+      "reuse_decision": "Manager input validation (shared)"
     },
     {
       "id": "hx-2",
