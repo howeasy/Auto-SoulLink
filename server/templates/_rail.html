@@ -31,9 +31,17 @@
 
     <hr class="mk-rail-sep">
 
-    <a class="mk-rail-item{% if page == 'broadcast' %} active{% endif %}" href="/broadcast">
+    <a class="mk-rail-item{% if page == 'broadcast' and not tab %} active{% endif %}" href="/broadcast">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5 1h2v2H5zM9 1h2v2H9zM1 4h14v10H1zM6 6v6l5-3z"/></svg>
       <span class="mk-rail-label">Broadcast</span>
+    </a>
+    <a class="mk-rail-item sub{% if page == 'broadcast' and tab == 'twitch' %} active{% endif %}" href="/broadcast/twitch">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 2v8h3v3l3-3h6V2zm3 3h1v3H5zm4 0h1v3H9z"/></svg>
+      <span class="mk-rail-label">Twitch</span>
+    </a>
+    <a class="mk-rail-item sub{% if page == 'broadcast' and tab == 'obs' %} active{% endif %}" href="/broadcast/obs">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3 4h2l1-1h4l1 1h2v8H3zm5 1a3 3 0 100 6 3 3 0 000-6zm0 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
+      <span class="mk-rail-label">OBS</span>
     </a>
     <a class="mk-rail-item{% if page == 'tools' %} active{% endif %}" href="/tools">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M11 1a4 4 0 00-3.8 5.2L1 12.4 3.6 15l6.2-6.2A4 4 0 1011 1zm0 2a2 2 0 110 4 2 2 0 010-4z"/></svg>

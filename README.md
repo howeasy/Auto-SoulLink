@@ -112,12 +112,14 @@ Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; a
 
 ## Web Pages
 
+Everything below lives on the **Manager** (`python -m server.manager`, port 8090): the rail lists your runs, each run's board is `/runs/{id}`, **Broadcast** is the overlay gallery with the pinned run's Twitch bot (`/broadcast/twitch`) and OBS scene triggers (`/broadcast/obs`), **Tools** is the patcher and the randomizer. Calc and Debug open on the run's own server in a new tab. The per-run server's older pages remain reachable on its port:
+
 | Path | Description |
 |------|-------------|
 | `/` | Live status — parties (split or combined linked-pair view), encounters, linked pairs, area states, enemy battle info, and an **Upcoming Key Trainers** panel (RR: next gym leaders/rivals vs party level, with an "Open in Calc" button). HTMX morph swap every 2 s preserves scroll/`<details open>` state. |
 | `/memorial` | Tombstone cards for dead pairs, polled via HTMX |
-| `/obs` | OBS scene trigger configuration — per-player WebSocket connections, draggable priority rules, area-group filter (`group:routes`, `group:caves`, …) |
-| `/twitch` | Twitch bot configuration and activity log |
+| `/obs` | OBS scene trigger configuration (the same panel as the Manager's `/broadcast/obs`) — per-player WebSocket connections, draggable priority rules, area-group filter (`group:routes`, `group:caves`, …) |
+| `/twitch` | Twitch bot configuration and activity log (the same panel as the Manager's `/broadcast/twitch`) |
 | `/debug` | Manual linking, event injection, state toggles, backup rollback |
 | `/stream/` | Stream overlay index — preview and configure all overlays |
 | `/stream/party-a`, `/stream/party-b` | Party cards with HP bars, moves, held item, status ailments, stat stage icons |
@@ -142,7 +144,7 @@ An optional UPS patch (`patch/`) injects native SLink support into the Radical R
 
 ## OBS Scene Triggers
 
-Automatically switch OBS scenes based on game events. Configure from the `/obs` page.
+Automatically switch OBS scenes based on game events. Configure from the Manager's **Broadcast → OBS** (`/broadcast/obs`) or the run's `/obs` page.
 
 ### Setup
 

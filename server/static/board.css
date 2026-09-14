@@ -103,6 +103,11 @@ body.mgr-stream { display: grid; grid-template-columns: var(--mk-rail) minmax(0,
 .mk-pill.stopped  { color: var(--c-dim); }
 .mk-pill.archived { color: var(--c-dim); opacity: .7; }
 .mk-hdr-spacer { flex: 1 1 auto; }
+/* the Twitch / OBS panels under /broadcast: the Manager's header already names them */
+body.mgr .twitch-panel > h1, body.mgr .obs-panel > h1 { display: none; }
+body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
+.mk-rail-item.sub { padding-left: calc(var(--space-3) + 14px); font-size: .92em; }
+.mk-rail-item.sub svg { width: 14px; height: 14px; }
 .mk-meta { font-size: .8em; color: var(--c-dim); font-variant-numeric: tabular-nums; }
 .mk-meta b { color: var(--c-txt); font-weight: 400; }
 .mk-meta code { color: var(--c-dim); }

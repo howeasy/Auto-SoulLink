@@ -1102,6 +1102,46 @@ class RunManager:
         })
         return aiohttp_jinja2.render_template("randomizer.html", request, ctx)
 
+    async def handle_broadcast_panel(self, request: web.Request) -> web.Response:
+        """GET /broadcast/twitch and /broadcast/obs — the active run's Twitch bot and OBS
+        scene triggers in the Manager's chrome. The panel partials are the run server's own
+        (templates/_{tab}_panel.html); their JS calls /api/bot/* and /api/obs/* on this
+        origin, which handle_proxy_api relays to that run."""
+        tab = request.match_info["tab"]
+        runs = self._get()
+        ctx = self._rail_ctx(request, runs, page="broadcast")
+        active = self._active_stream_run()
+        ctx.update({
+            "page_title": "Broadcast — Soul Link",
+            "theme": resolve_theme(request),
+            "is_stream": False, "hide_chrome": False,
+            "body_class": "board mgr",
+            "tab": tab, "tab_label": {"twitch": "Twitch bot", "obs": "OBS triggers"}[tab],
+            "active": self._augment_for_template(active) if active else None,
+        })
+        return aiohttp_jinja2.render_template("broadcast.html", request, ctx)
+
+    async def handle_proxy_api(self, request: web.Request) -> web.Response:
+        """/api/bot/* and /api/obs/* (GET or POST) — relayed verbatim to the active run,
+        so the Twitch and OBS panels work unchanged from the Manager's origin."""
+        active = self._active_stream_run()
+        if active is None:
+            return web.json_response({"ok": False, "error": "No active run"}, status=503)
+        qs = request.url.query_string
+        url = f"http://127.0.0.1:{active['http_port']}{request.path}" + (f"?{qs}" if qs else "")
+        try:
+            async with request.app["proxy_session"].request(
+                request.method, url, data=await request.read(),
+                headers={"Content-Type": request.headers.get("Content-Type", "application/json")},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                body = await resp.read()
+                ct = resp.headers.get("Content-Type", "application/json")
+                return web.Response(body=body, status=resp.status, content_type=ct.split(";")[0])
+        except Exception as e:
+            log.debug(f"Proxy {request.path} failed: {e}")
+            return web.json_response({"ok": False, "error": "proxy_failed"}, status=503)
+
     async def handle_tools_page(self, request: web.Request) -> web.Response:
         """GET /tools — the patcher and the randomized-pair builder."""
         runs = self._get()
@@ -1258,6 +1298,11 @@ async def main(host: str, port: int):
     # API proxy — relays to the active (pinned or latest) run
     app.router.add_get("/api/status",         manager.handle_proxy_status)
     app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
+    # The Twitch and OBS panels under /broadcast/* keep their own JS; their calls land here.
+    app.router.add_get("/broadcast/{tab:twitch|obs}", manager.handle_broadcast_panel)
+    for prefix in ("/api/bot/{tail:.*}", "/api/obs/{tail:.*}"):
+        app.router.add_get(prefix,  manager.handle_proxy_api)
+        app.router.add_post(prefix, manager.handle_proxy_api)
 
     # Companion ROM patcher — global setup tool, reachable from the manager too.
     # The manager hosts the page itself, so manager_port=None (Manager nav item

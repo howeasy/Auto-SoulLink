@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{# The run server's /twitch page: the shared panel in the run's own rail. The Manager shows
+   the same panel at /broadcast/twitch. #}
+{% block title %}Twitch Bot — {{ page_title }}{% endblock %}
+{% block head_extra %}
+  <style>* { box-sizing: border-box; } body { min-height: 100vh; } .dash-main { padding: 1.2em 1.4em 2em; font-family: var(--font-heading); }</style>
+{% endblock %}
+{% block content %}
+{{ sidebar_html | safe }}
+<main class="dash-main">
+  {% include "_twitch_panel.html" %}
+</main>
+{% endblock %}

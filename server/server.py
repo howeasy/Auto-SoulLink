@@ -222,9 +222,9 @@ def _build_mon_entry(key, detail, adapter):
 
 
 # ── Raw pages ──────────────────────────────────────────────────────────────────
-# The debug, Twitch and OBS pages are static HTML with a {sidebar} (and {page_title})
-# placeholder substituted by str.replace -- not Jinja, because their JS is full of braces.
-# They lived in this file as string constants, 1 736 lines of it. They live on disk now.
+# The debug page is static HTML with a {sidebar} (and {page_title}) placeholder substituted
+# by str.replace -- not Jinja, because its JS is full of braces. It lived in this file as a
+# string constant, 995 lines of it. (Twitch and OBS are Jinja partials now.)
 _PAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "pages")
 
 
@@ -3290,20 +3290,22 @@ class SLinkServer:
 
 
     async def handle_twitch_page(self, request):
-        # str.replace because the page body contains literal { } characters
-        # inside JS — str.format would misparse them. Only the sidebar is
-        # substituted (no other format placeholders).
-        text = _page("twitch.html").replace("{sidebar}", self._build_sidebar_html("twitch"))
-        return aiohttp_web.Response(text=text, content_type="text/html")
+        return self._panel_page(request, "twitch")
+
+    def _panel_page(self, request, name: str):
+        """/twitch and /obs: the shared panel (templates/_{name}_panel.html) in this run's
+        own rail. The Manager renders the same panel at /broadcast/{name}."""
+        return aiohttp_jinja2.render_template(
+            f"{name}.html", request,
+            {"page_title": self._page_title(), "theme": resolve_theme(request),
+             "sidebar_html": self._build_sidebar_html(name),
+             "is_stream": False, "hide_chrome": False})
 
     # ── OBS integration page & API ────────────────────────────────────────────
 
 
     async def handle_obs_page(self, request):
-        # str.replace — page body has literal { } in JS that would break
-        # str.format. Only the sidebar placeholder is substituted.
-        text = _page("obs.html").replace("{sidebar}", self._build_sidebar_html("obs"))
-        return aiohttp_web.Response(text=text, content_type="text/html")
+        return self._panel_page(request, "obs")
 
     async def handle_obs_status(self, request):
         """GET /api/obs/status — connection status + config (passwords omitted)."""

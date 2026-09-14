@@ -410,6 +410,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
 | `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs. Randomizing is normally part of `/new` |
 | `/broadcast` | GET | The overlay gallery wearing the Manager's rail (`/stream` serves the same page for OBS) |
+| `/broadcast/{tab:twitch|obs}` | GET | The pinned run's Twitch bot and OBS scene triggers, in the Manager's chrome (same panels as the run's `/twitch` and `/obs`) |
 | `/tools` | GET | The patcher and the randomized-pair builders |
 | `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned (else most recent running) run — the URLs pasted into OBS |
 | `/api/runs` | GET | The registry |
@@ -423,6 +424,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/browse` | GET | `?dir=&ext=` — directory listing rooted at the user's home and the repo, for the pickers; lists, never reads |
 | `/api/stream/pin` | GET / POST | Which run the overlays show |
 | `/api/status`, `/api/attempts` | GET / POST | Proxied to the pinned run |
+| `/api/bot/{tail:.*}`, `/api/obs/{tail:.*}` | GET / POST | Relayed verbatim to the pinned run, so the Broadcast panels' own JS works from this origin |
 | `/patcher`, `/companion/{name}` | GET | The companion-ROM patcher, same as on a run |
 
 ### JSON API

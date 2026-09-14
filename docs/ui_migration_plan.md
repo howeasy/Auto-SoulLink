@@ -3,7 +3,7 @@
 *Handoff document. Rewritten 2026-09-14 by the session that built the mockups. Assume the
 reader has none of that conversation.*
 
-**Status (2026-09-14, end of session 3):** Phases 0–8, 8b and 9 are committed on
+**Status (2026-09-14, session 3, later):** Phases 0–9 (7 now actually complete) are committed on
 `claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`,
 suite 2 603 green). Phase 8b shipped: every SLink-compatible UPR option is exposed from one
 table (`upr_settings.OPTIONS`), proven against the real jar (trainers +50 % → Youngster #1
@@ -14,8 +14,21 @@ one rail stylesheet (`dashboard.css` @imports it, −566 lines of duplicate rule
 **Not flipped, on purpose:** `--font-ui` stays Pixelify for the run pages and the 25 OBS
 overlays — the board already sets Jersey 20 for itself (`body.board`), every page has the
 font picker, and re-fonting overlays users have sized in OBS is the owner's call, not a
-cleanup. Deliberately not done: Debug as a drawer (the rail links to the run's `/debug`),
-the Manager owning `obs_config.json`. Owner to force-delete the three
+cleanup. **Phase 7 finished properly (session 3):** Twitch and OBS are on the Manager at
+`/broadcast/twitch` and `/broadcast/obs` (rail sub-items under Broadcast), in the board chrome,
+scoped to the pinned run: the panels are Jinja partials (`_twitch_panel.html`,
+`_obs_panel.html`, tokenised, style-scoped) shared with the run server's own `/twitch` and
+`/obs`, and the Manager relays `/api/bot/*` + `/api/obs/*` verbatim to that run
+(`handle_proxy_api`). Earlier sessions had marked Phase 7 done with those two panels still
+only on the run server and unlinked from the Manager — that was under-reported. Still on the
+run server by design: `/memorial` (the board's fallen zone is the memorial; the page also
+hosts the `_smoke=1` macro harness), `/debug` and `/calc` (new-tab links from the rail).
+Deliberately not done: Debug as a drawer, the Manager owning `obs_config.json`.
+**Gen 1 session (2026-09-14) acknowledged the randomizer requirements** and found one real
+gap from them: their rewritten client (`lua/gen1/client.lua`) was not sending `rom_content`
+in the hello — card ROM-CONTENT-1 is adding it with a test that
+`content_fingerprint(payload) == fingerprint_rom(dump)` on all three clean dumps; the live
+"admitted" boot of a randomized ROM is queued on their emulator lane. Owner to force-delete the three
 `claude/ui-mockup-track-b*` branches (a hook blocks it here). **Merge:** master is still
 `adf3362`; the Gen 1 session will fast-forward it to `79d5172` and message this session —
 then rebase, take their delete of `tests/unit/test_gen1_adapter.py`, resolve one hunk each
@@ -348,7 +361,7 @@ of Alpine live-status code are gone with it.
 is the same path on both origins, so no prefix problem exists; Broadcast and Tools rail
 items point at the existing pages until Phase 7.
 
-# Phase 7 — Collapse the pages
+# Phase 7 — Collapse the pages *(done — Twitch and OBS landed in session 3; see Status)*
 
 **Broadcast** = stream gallery + Twitch + OBS. The asymmetry to settle first:
 
