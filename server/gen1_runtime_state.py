@@ -163,10 +163,16 @@ class Gen1RuntimeState:
         verify_storage(self)
         from server.gen1_evolution_runtime import verify_state as verify_evolutions
         verify_evolutions(self)
+        from server.gen1_run_resume import verify_state as verify_resume
+        verify_resume(self)
 
     @classmethod
-    def initial(cls, rules, identities, contract, *, data_dir):
-        """Explicit bootstrap input only; never called from a received HELLO."""
+    def initial(cls, rules, identities, contract, *, data_dir, resume=None):
+        """Explicit bootstrap input only; never called from a received HELLO.
+
+        resume seeds a run created from a closed predecessor (server.gen1_run_resume): the rules
+        document is that predecessor's, and the resume contract plus any inherited ball activation
+        are recorded before the first enrollment."""
         document = TradeCoordinator.initial_state(rules, identities)
         document["components"][COMPONENT] = {
             "schema": COMPONENT_SCHEMA,
@@ -174,6 +180,9 @@ class Gen1RuntimeState:
             "admissions": {"a": None, "b": None},
             "recovery": RecoveryBarrier(recovery_history(rules, identities, None)).document(),
         }
+        if resume is not None:
+            from server.gen1_run_resume import seed
+            seed(document, resume)
         return cls(document, data_dir=data_dir).document()
 
     @classmethod

@@ -49,6 +49,7 @@ function M.new(options)
     assert(type(options.owned)=="function" and options.journal and options.memory and options.host,
         "owned held reader and durable journal required")
     assert(options.source_owned==nil or type(options.source_owned)=="function","source identity reader must be callable")
+    assert(options.continue_observer==nil or options.bootstrap==nil,"a resumed run witnesses CONTINUE, not New Game")
     local self={}
     local stream=not options.free_service and Stream.new({journal=options.journal,key="inventory_stream",event="inventory_observation",owned=options.owned,
         seed=function(baseline)
@@ -98,13 +99,22 @@ function M.new(options)
                 end
             end
             if options.free_service then -- the loop publishes the inventory stream inside its batches
-                self.enrolled=baseline.initial_inventory.phase=="acknowledged"and baseline.bootstrap and baseline.bootstrap.phase=="acknowledged"
+                self.enrolled=baseline.initial_inventory.phase=="acknowledged"and (options.continue_observer~=nil
+                    or (baseline.bootstrap and baseline.bootstrap.phase=="acknowledged"))or false
                 return false
             end
             return assert(stream):step()
         end
+        if options.continue_observer then
+            -- Resume: the CONTINUE witness rides inside the initial observation. A failed witness (wrong
+            -- save, disorder) fails enrollment loudly; an incomplete one simply waits.
+            local witness=options.continue_observer.status()
+            assert(not witness.failed,witness.failed)
+            if not witness.complete then return false end
+        end
         local context=assert(JSON.decode(assert(JSON.encode(options.owned()))));local frame=emu.framecount()
         local payload=M.capture(options)
+        if options.continue_observer then payload.continue_witness=assert(options.continue_observer.peek())end
         local event={event="initial_observation",payload=payload}
         baseline.initial_inventory={phase="queued",payload=event}
         assert(options.journal:append(event,baseline))

@@ -194,3 +194,65 @@ def test_observer_is_optional_for_existing_callers(probe):
         assert lua.globals().step()[0] is True
     assert bootstrap_events(lua) == []
     assert lua.globals().baseline_bootstrap() is None
+
+
+# --- P2A-2C: resumed runs carry the CONTINUE witness inside the initial observation ---
+@pytest.fixture
+def resumed(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    lua.execute("""
+        frame=100;held=true
+        scope={context_generation=string.rep('a',32),physical_instance=string.rep('1',32)}
+        context={context_generation=scope.context_generation}
+        memory={isPartyWriteSafe=function()return true end}
+        gameinfo={getromhash=function()return string.rep('b',40)end}
+        emu={framecount=function()return frame end}
+        package.loaded.gen1_full_save={capture=function()return {fixture=true}end}
+        Observe=require('gen1_initial_observation')
+        journal=assert(Journal.open(store,new_id,Observe))
+        witness={complete=false,failed=nil}
+        receipt={schema='rby-continue-receipt-v1',context_generation=scope.context_generation,load={frame=1},loaded={frame=2,status=2},
+            chose={frame=3},pressed={frame=4},enter={frame=5}}
+        continue_observer={status=function()return witness end,peek=function()assert(held);return witness.complete and receipt or nil end,close=function()end}
+        function owned()assert(held,'held reader called inside frame');return context end
+        function compose(free)
+            composite=Observe.new({journal=journal,variant='yellow',memory=memory,owned=owned,source_owned=function()return context end,
+                continue_observer=continue_observer,free_service=free,
+                host={status=function()return {physical_stop_verified=held,owner_id='fixture',process_id=1,capability_id='fixture'}end}})
+        end
+        function step()return pcall(function()return composite:step(true)end)end
+        function ack_all()for _,entry in ipairs(journal.store:read().outbox)do assert(journal:accept_response(entry.operation_id,JSON.array()))end end
+        compose(false)
+    """)
+    return lua
+
+
+def test_resumed_initial_observation_waits_for_the_continue_witness_then_carries_it(resumed):
+    lua = resumed
+    assert lua.globals().step() == (True, False) and events(lua) == []   # CONTINUE not yet witnessed: nothing published
+    lua.execute("witness.complete=true")
+    assert lua.globals().step() == (True, True)
+    published = events(lua)
+    assert [row["event"] for row in published] == ["initial_observation"]
+    assert published[0]["payload"]["continue_witness"] == json.loads(lua.eval("JSON.encode(receipt)"))
+    assert "bootstrap" not in published[0]["payload"]
+    assert lua.globals().ack_all() is None
+    for _ in range(3):
+        assert lua.globals().step()[0] is True
+    assert bootstrap_events(lua) == []
+    assert saved(lua)["observation"].get("bootstrap") is None  # the New Game receipt is never queued in resume mode
+
+
+def test_resumed_free_service_enrolls_on_the_initial_ack_alone(resumed):
+    lua = resumed
+    lua.execute("compose(true);witness.complete=true;assert(step());ack_all()")
+    assert lua.globals().step() == (True, False)
+    assert lua.globals().composite.enrolled is True and saved(lua)["observation"].get("bootstrap") is None
+
+
+def test_resumed_initial_observation_fails_loudly_on_a_failed_continue_witness(resumed):
+    lua = resumed
+    lua.execute("witness.failed='resumed save differs from the required predecessor witness'")
+    ok, why = lua.globals().step()
+    assert ok is False and "resumed save differs" in str(why) and events(lua) == []

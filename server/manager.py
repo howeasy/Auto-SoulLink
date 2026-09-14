@@ -577,6 +577,12 @@ class RunManager:
     async def handle_list(self, request: web.Request) -> web.Response:
         return web.json_response({"runs": self._get()})
 
+    async def handle_run(self, request: web.Request) -> web.Response:
+        run = _find_run(self._get(), request.match_info["run_id"])
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        return web.json_response({"ok": True, "run": run})
+
     async def handle_new(self, request: web.Request) -> web.Response:
         try:
             body = await request.json()
@@ -763,15 +769,28 @@ class RunManager:
         try:
             body=await request.json()
             if (not isinstance(body,dict) or not {'name','rom_a','rom_b'}<=set(body)
-                    or set(body)-{'name','rom_a','rom_b','rules','start','native'}
+                    or set(body)-{'name','rom_a','rom_b','rules','start','native','resume_from'}
                     or not isinstance(body['name'],str) or not 1<=len(body['name'].strip())<=120
                     or any(ord(c)<32 for c in body['name'])
-                    or type(body.get('start',True)) is not bool or type(body.get('native',False)) is not bool):
-                raise ValueError('name, two cartridge paths and optional explicit rules/start/native are required')
+                    or type(body.get('start',True)) is not bool or type(body.get('native',False)) is not bool
+                    or not isinstance(body.get('resume_from',''),str)):
+                raise ValueError('name, two cartridge paths and optional explicit rules/start/native/resume_from are required')
             # The user's cartridges are admitted as exact canonical CLEAN ROMs either way.
             admitted=await asyncio.to_thread(clean_contract,{'a':body['rom_a'],'b':body['rom_b']})
             contract=admitted
             runs=_load_registry();tcp_port,http_port=_next_ports(runs)
+            resume=None
+            if 'resume_from' in body:
+                # Owner policy P2a: a resume is a NEW run seeded from a closed predecessor's audited journal.
+                from server.gen1_run_resume import audit_predecessor
+                predecessor=_find_run(runs,body['resume_from'])
+                if predecessor is None:
+                    return web.json_response({'ok':False,'error':'Run not found','reasons':['predecessor run is not in the registry']},status=404)
+                audit=await asyncio.to_thread(audit_predecessor,Path(MANAGER_DIR)/predecessor['run_id'],registry_entry=predecessor)
+                if not audit.ok:
+                    return web.json_response({'ok':False,'error':'predecessor cannot be resumed: '+'; '.join(audit.reasons),
+                        'reasons':list(audit.reasons)},status=409)
+                resume=audit.resume_record()
             run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
             directory=Path(MANAGER_DIR)/run_id
             cartridges=None
@@ -788,7 +807,7 @@ class RunManager:
                     shutil.rmtree(directory,ignore_errors=True);raise   # no half-staged run directory survives
                 contract=cartridges.contract()
             runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}),free_service=True,
-                prepared_cartridges=cartridges,native_trade=cartridges is not None)
+                prepared_cartridges=cartridges,native_trade=cartridges is not None,resume=resume)
             try:
                 rules=runtime.state().rules
                 settings={key:bool(getattr(rules,key)) for key in ('species_lock','gender_lock','type_lock','explode_mode',
@@ -798,6 +817,10 @@ class RunManager:
             run={'run_id':run_id,'name':body['name'].strip(),'created_at':datetime.now(UTC).isoformat(),
                 'tcp_port':tcp_port,'http_port':http_port,'status':'stopped','pid':None,'cartridges':contract['players'],
                 'native_trade':cartridges is not None,**settings}
+            if resume is not None:
+                # The launch contract each client must meet (runtime_launcher/bizhawk_launch emit it per player);
+                # the imported rules state lives in the runtime journal, not the registry.
+                run['resume']={'from_run':resume['from_run'],'contract_hash':resume['contract_hash'],'required':resume['required']}
             _write_run_meta(run);runs.append(run);_save_registry(runs)
             if body.get('start',True):
                 run['pid']=await _spawn_run(run,self.bind_host,manager_port=self.manager_port)
@@ -1120,6 +1143,7 @@ async def main(host: str, port: int):
     # Run-management routes
     app.router.add_get("/",                           manager.handle_index)
     app.router.add_get("/api/runs",                   manager.handle_list)
+    app.router.add_get("/api/runs/{run_id}",          manager.handle_run)
     app.router.add_post("/api/runs/new",              manager.handle_new)
     app.router.add_post("/api/runs/{run_id}/start",   manager.handle_start)
     app.router.add_post("/api/runs/{run_id}/stop",    manager.handle_stop)

@@ -103,6 +103,11 @@ def _activation(document, player, frame):
     )
     if not proof:
         return False
+    if "inherited" in proof:
+        from server.gen1_run_resume import inherited_activation_frame
+
+        floor = inherited_activation_frame(document, player)
+        return floor is not None and floor <= frame
     signal = proof["engine_record"]["payload"]["signals"][proof["index"]]
     from server.gen1_engine_signals import validate_signal
 

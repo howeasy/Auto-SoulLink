@@ -153,3 +153,48 @@ def test_new_game_receipts_keep_verifying_against_the_unchanged_bootstrap_source
     with pytest.raises(JournalError, match="bootstrap execution site differs"):  # past the source check
         validate(receipt, variant="yellow", identity={}, context_generation="a" * 32, physical_instance="1" * 32,
                  final_sha1=receipt["final_sha1"], source={}, frame=10)
+
+
+# --- P2A-2C: a resumed run proves the loaded save is the predecessor's acknowledged one ---
+def resume_probe(probe, cart_hex, required):
+    probe.globals().cart_hex = cart_hex
+    probe.globals().required = required
+    probe.execute("""
+        package.loaded.gen1_full_save={capture=function(mem,variant)assert(mem==nil and variant=='yellow');return {cart_hex=cart_hex,save_status=regA}end}
+        hashed=nil
+        probe.close()
+        probe=require('gen1_continue_observer').new({variant='yellow',final_sha1=hash,owned=function()return scope end,
+            held=function()return held end,required_digest=required,projection='cartram-0498-8000-v1',
+            sha256=function(text)hashed=text;return string.rep('d',64)end})
+    """)
+
+
+def test_resume_verifies_the_persistent_projection_at_the_loaded_witness_without_changing_its_shape(probe):
+    resume_probe(probe, "AB" * 0x8000, "d" * 64)
+    probe.execute("""
+        fire('load');fire('loaded')
+        assert(hashed==string.rep('AB',0x8000-0x498),'digest covers CartRAM[0x0498:0x8000] as uppercase hex')
+        assert(probe.status().failed==nil and probe.status().digest_verified==true)
+        fire('chose');fire('pressed');fire('enter')
+        local r=probe.peek()
+        for _,k in ipairs({'frame','pc','bank','sp','status'})do assert(r.loaded[k]~=nil)end
+        local n=0;for _ in pairs(r.loaded)do n=n+1 end;assert(n==5,'loaded witness keeps its five fields')
+    """)
+
+
+def test_resume_refuses_a_save_that_differs_from_the_required_predecessor_witness(probe):
+    resume_probe(probe, "AB" * 0x8000, "e" * 64)
+    probe.execute("""
+        fire('load');fire('loaded')
+        assert(tostring(probe.status().failed):find('resumed save differs from the required predecessor witness'))
+        fire('chose');fire('pressed');fire('enter');assert(not pcall(probe.peek))
+    """)
+
+
+@pytest.mark.parametrize("fault", ["digest", "projection", "sha256"])
+def test_resume_options_are_all_or_nothing_and_strictly_shaped(probe, fault):
+    code = {"digest": "required_digest='short',projection='cartram-0498-8000-v1',sha256=function()end",
+            "projection": "required_digest=string.rep('d',64),projection='whole-file',sha256=function()end",
+            "sha256": "required_digest=string.rep('d',64),projection='cartram-0498-8000-v1'"}[fault]
+    probe.execute("local ok=pcall(function()require('gen1_continue_observer').new({variant='yellow',final_sha1=hash,"
+                  "owned=function()return scope end,held=function()return held end," + code + "})end);assert(not ok)")

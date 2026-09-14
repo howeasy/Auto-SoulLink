@@ -94,12 +94,15 @@ def open_runtime(directory):
         verify_reconciliation=lambda *args: None)
 
 
-def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rule_options=None,native_trade=False,free_service=False):
+def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rule_options=None,native_trade=False,free_service=False,
+                   resume=None):
     """Create an empty owned run; initial game evidence arrives separately over TCP.
 
     free_service=True launches the free-running observation client (P10). free_service=False keeps
     the held-service launch (enrollment and writes under the hold, no gameplay) that the bootstrap
     launcher rows still use. The frame-credit mode that used to sit between them is retired.
+    resume (server.gen1_run_resume.ResumeAudit.resume_record()) seeds the predecessor's typed rules
+    state and the per-player save/CONTINUE contract each enrollment must meet.
     """
     import secrets
 
@@ -123,14 +126,22 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
         raise JournalError('fresh runtime creation cannot replace an existing or legacy run')
     profiles=state_type_for(prepared_cartridges).validate_contract(contract)
     run_id=run_id or secrets.token_hex(16)
-    rules=SoulLinkState(data_dir=str(directory),adapter=get_adapter('gen1_rby',rom_type=profiles['a']['variant'],
-        peer_rom_type=profiles['b']['variant']))   # the pair decides the starter clause policy
-    rules.rom_type=profiles['a']['variant']
-    rules.battle_calc=False;rules.native_messages=False;rules.overworld_presence=False
+    if resume is not None:
+        from server.gen1_run_resume import validate_resume
+        validate_resume(resume)
+        if resume['contract_hash']!=digest(contract):
+            raise JournalError('resumed run must use the predecessor cartridge pair')
+        rules=StagedGen1State.restore(resume['rules'],data_dir=str(directory))   # typed: garbage cannot restore
+    else:
+        rules=SoulLinkState(data_dir=str(directory),adapter=get_adapter('gen1_rby',rom_type=profiles['a']['variant'],
+            peer_rom_type=profiles['b']['variant']))   # the pair decides the starter clause policy
+        rules.rom_type=profiles['a']['variant']
+        rules.battle_calc=False;rules.native_messages=False;rules.overworld_presence=False
     if rule_options is not None:
         for key,value in rule_options.items():setattr(rules,key,value)
-    initial=state_type_for(prepared_cartridges).initial(
-        StagedGen1State.from_live(rules,{'retired_pairs':[]}).document(),IdentityRegistry(run_id).document(),contract,data_dir=directory)
+    staged=rules.document() if resume is not None else StagedGen1State.from_live(rules,{'retired_pairs':[]}).document()
+    initial=state_type_for(prepared_cartridges).initial(staged,IdentityRegistry(run_id).document(),contract,data_dir=directory,
+        resume=resume)
     def unavailable(*args):raise JournalError('ordinary gameplay policy is not selected for initial enrollment')
     journal=directory/'runtime.sqlite3'
     try:

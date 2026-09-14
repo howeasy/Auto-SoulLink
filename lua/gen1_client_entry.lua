@@ -35,6 +35,17 @@ local function validate(launch)
     end
     assert(launch.mode~="free_service" or launch.initial_observations==true,
         "free-run observation requires initial observation enrollment")
+    if launch.resume~=nil then
+        -- Run-boundary resume (P2A-2C): this run continues a closed predecessor; the player must
+        -- CONTINUE the exact save the predecessor last acknowledged, digested under the named projection.
+        local resume=launch.resume
+        assert(type(resume)=="table" and type(resume.from_run)=="string" and #resume.from_run>0
+            and hex(resume.required_digest,64) and resume.projection=="cartram-0498-8000-v1"
+            and launch.initial_observations==true,"invalid resume contract")
+        for key in pairs(resume)do
+            assert(key=="from_run" or key=="required_digest" or key=="projection","invalid resume contract")
+        end
+    end
     local variant=launch.cartridge.variant
     assert(variant=="red" or variant=="blue" or variant=="yellow","RBY variant required")
 end
@@ -115,10 +126,25 @@ function M.start(launch,options)
         -- Installed before New Game so its bus hooks witness the normal
         -- StartNewGame entry/return. Stable pre-admission scope only: it holds
         -- no host, cannot release one, and publishes nothing by itself.
-        self.bootstrap=require("gen1_bootstrap_observer").new({variant=launch.cartridge.variant,
-            final_sha1=launch.cartridge.final_rom_sha1,
+        -- A resumed run witnesses CONTINUE instead, and proves at the load that the save is the
+        -- predecessor's acknowledged one (sha256 through the .NET host: no store exists yet).
+        local witness={variant=launch.cartridge.variant,final_sha1=launch.cartridge.final_rom_sha1,
             owned=function()return {context_generation=generation,physical_instance=instance}end,
-            held=function()return self.host~=nil and self.host.status().physical_stop_verified==true end})
+            held=function()return self.host~=nil and self.host.status().physical_stop_verified==true end}
+        if launch.resume then
+            luanet.load_assembly("System")
+            local Hash,Bits=luanet.import_type("System.Security.Cryptography.SHA256"),luanet.import_type("System.BitConverter")
+            local utf8=luanet.import_type("System.Text.UTF8Encoding")(false,true)
+            witness.required_digest,witness.projection=launch.resume.required_digest,launch.resume.projection
+            witness.sha256=function(text)
+                local hash=Hash.Create()
+                local ok,value=pcall(function()return tostring(Bits.ToString(hash:ComputeHash(utf8:GetBytes(text)))):gsub("-",""):lower()end)
+                hash:Dispose();assert(ok,value);return value
+            end
+            self.continue_observer=require("gen1_continue_observer").new(witness)
+        else
+            self.bootstrap=require("gen1_bootstrap_observer").new(witness)
+        end
     end
     local function storage_path()
         luanet.load_assembly("System")
@@ -214,7 +240,7 @@ function M.start(launch,options)
         -- the loop publishes both inside its observation batches.
         if Observation then self.observer=Observation.new({memory=memory,variant=launch.cartridge.variant,
             journal=journal,host=self.host,owned=owned,source_owned=source_owned,engine_signals=true,
-            bootstrap=self.bootstrap,free_service=free,at_boundary=at_boundary})end
+            bootstrap=self.bootstrap,continue_observer=self.continue_observer,free_service=free,at_boundary=at_boundary})end
         -- HUD notices are no-write commands: no memory, permit, hold or sound. They settle while
         -- lifecycle-held so a pending notice can never block service continuity; every other
         -- command stays with the held faint service, and writer_pending stays physical-only.
@@ -400,7 +426,7 @@ function M.start(launch,options)
                 if #assert(journal:pending_commands())>0 or #assert(journal:pending_events())>0 then return false end
                 return self.runtime:has_service_lease() and self.observer.signals~=nil and self.acquisitions~=nil
                     and baseline.initial_inventory~=nil and baseline.initial_inventory.phase=="acknowledged"
-                    and baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"
+                    and (launch.resume~=nil or (baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"))
                     and (not native or (self.reattach_verdict=="clean" and self.reattach_server~=nil
                         and self.reattach_server.verdict=="released" and self.reattach_server.read_digest==self.reattach_read_digest))
             end
@@ -474,6 +500,7 @@ function M.start(launch,options)
         if self.phase=="failed"then return false,self.reason end
         local ok,why=pcall(function()
             assert(gameinfo.getromhash():lower()==launch.cartridge.final_rom_sha1,"launch cartridge changed")
+            if self.continue_observer then local w=self.continue_observer.status();assert(not w.failed,w.failed)end
             local physical_frame=emu.framecount()
             -- Retained notices count emulated frames: one overlay render per new frame, none while held.
             if physical_frame~=self.rendered_frame then self.rendered_frame=physical_frame;self.overlay.render()end
@@ -583,6 +610,7 @@ function M.start(launch,options)
             initial_observation=initial,
             bootstrap=self.bootstrap and self.bootstrap.status() or nil,
             bootstrap_observation=bootstrap,
+            resume=launch.resume,continue_observer=self.continue_observer and self.continue_observer.status() or nil,
             engine_signals=self.observer and self.observer.signals and self.observer.signals:status()or nil,
             runtime=self.runtime and self.runtime:status({summary=true}) or nil,
             observation_diagnostics=self.loop and self.loop:status()or nil,
@@ -602,6 +630,7 @@ function M.start(launch,options)
         if self.instruction then self.instruction:close()end
         if self.acquisitions then self.acquisitions:close()end
         if self.bootstrap then self.bootstrap.close()end
+        if self.continue_observer then self.continue_observer.close()end
         if self.observer then self.observer:close()end
         if self.load_state_hook then event.unregisterbyid(self.load_state_hook);self.load_state_hook=nil end
         if self.runtime then self.runtime:revoke("client service is closing")end

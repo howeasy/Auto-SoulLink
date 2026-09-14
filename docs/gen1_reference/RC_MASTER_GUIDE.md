@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T03:30:29+00:00",
+  "updated_at_utc": "2026-09-14T04:07:29+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "c701e15",
   "live_lane": null,
-  "next_action": "D2 parcel/first-ball/ball-gate checkpoint PASSED (controlled-scripted, r6). Lane released. Next: P2A-2 resume-at-run-boundary implementation slice (the feature that makes multi-session play possible); D3 catch remains parked unless the owner reopens the scripted campaign.",
+  "next_action": "P2A-2 integrated. Next: P2A-3 identity-registry import (linked death on inherited pairs), then one Codex review of the whole resume diff, then the live resume check.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -454,6 +454,50 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator spot-check of gen1_initial_observation.py:155-163 guard and bizhawk_launch.py:73-104 ownership"
       ]
+    },
+    {
+      "id": "p2a-2s",
+      "owner": "integrated by coordinator (isolated Claude workers authored)",
+      "state": "done",
+      "files": [
+        "server/gen1_run_resume.py",
+        "server/manager.py",
+        "server/gen1_run_config.py",
+        "server/gen1_runtime_state.py",
+        "server/gen1_runtime.py",
+        "server/gen1_initial_observation.py",
+        "server/gen1_faint_runtime.py",
+        "server/gen1_wild_encounter_runtime.py",
+        "tests/unit/test_gen1_run_resume.py",
+        "tests/unit/test_gen1_resume_enrollment.py",
+        "tests/integration/test_manager_gen1_resume.py"
+      ],
+      "next_action": "None; integrated MODEL ONLY. Known gap: identity registry not imported (P2A-3). Independent review after P2A-3, then one live resume check.",
+      "reuse_decision": "shared lifecycle/state in server modules (typed SoulLinkState import, journal_reader); Gen 1 facts stay in adapters",
+      "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, test_gen1_resume_client.py, tests/integration/test_manager_gen1_resume.py (27 + 23 new tests; full unit suite 7979/0 by both workers; coordinator re-ran 367 affected + 7 integration)",
+      "independent_review_refs": [
+        "coordinator checks only so far; Codex headless REVIEW scheduled after P2A-3 on the combined resume diff"
+      ]
+    },
+    {
+      "id": "p2a-2c",
+      "owner": "integrated by coordinator (isolated Claude workers authored)",
+      "state": "done",
+      "files": [
+        "lua/gen1_client_entry.lua",
+        "lua/gen1_continue_observer.lua",
+        "lua/gen1_initial_observation.lua",
+        "server/bizhawk_launch.py",
+        "server/runtime_launcher.py",
+        "tools/launch_bizhawk.py",
+        "server/gen1_launcher.py"
+      ],
+      "next_action": "None; integrated MODEL ONLY. Known gap: identity registry not imported (P2A-3). Independent review after P2A-3, then one live resume check.",
+      "reuse_decision": "shared launcher/bundle/save-import infrastructure; CONTINUE site data stays Gen 1",
+      "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, test_gen1_resume_client.py, tests/integration/test_manager_gen1_resume.py (27 + 23 new tests; full unit suite 7979/0 by both workers; coordinator re-ran 367 affected + 7 integration)",
+      "independent_review_refs": [
+        "coordinator checks only so far; Codex headless REVIEW scheduled after P2A-3 on the combined resume diff"
+      ]
     }
   ]
 }
@@ -477,6 +521,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| **P2A-2 integrated (resume at the run boundary)** | Server: `server/gen1_run_resume.py` audits a closed predecessor read-only (`read_journal`; refusals: missing witness, projection mismatch, pending commands, active trade, newer gameplay after the witness = HOLD, predecessor running, cartridge/contract mismatch, run over) and exports the typed rules via `StagedGen1State.restore(...).document()`; Manager `POST /api/runs/gen1` accepts `resume_from` (404 unknown / 409 with reasons), seeds the new runtime with the imported rules + `components["gen1-resume"]`, records `resume` in the registry, new `GET /api/runs/{id}`; `gen1_initial_observation.record()` requires, under a pending contract, the presented `cart_hex` projection digest (sha256 of the UPPERCASE HEX text of `[0x0498:0x8000]`, identical to the client formula) and a structurally valid `continue_witness`, lifts the established-history guard only for that player, journals the enrollment; inherited ball activation is a typed lineage fact effective from the player's initial observation frame (no forged signal). Client/launcher: `runtime_launcher.player_resume` → `launch.json.resume {from_run, required_digest, projection}`; `bizhawk_launch.prepare(resume_save=)` verifies the projection digest BEFORE copying the player's `.SaveRAM` into the new run's private directory with the ownership manifest (`tools/launch_bizhawk.py --resume-save`); the client builds the CONTINUE observer instead of the New Game bootstrap in resume mode, verifies the loaded save's digest at the `loaded` witness, and publishes `payload.continue_witness`. 50 new tests; full unit suite 7979/0. **Known gap (P2A-3):** the identity registry is not imported, so a linked death on an *inherited* pair would refuse settlement (`faint rule pair differs from logical identity linkage`); wild encounters, dead zones, clauses and the ball gate work from the imported rules. Dashboard affordance deferred. MODEL ONLY until the live resume check. |
 | P2A-2 seams (resume at the run boundary) | Gen1-CodexPeer record. **Why it is the top feature:** today a run can only be played in one sitting — every relaunch is refused, so a full playthrough is impossible without it. Seams: Manager `resume_from` joins the strict key check before staging (`manager.py:763-776`); predecessor inspected read-only via `journal_reader.read_journal` (`:26-62`, never `open_runtime`); rules import via typed `SoulLinkState.from_document` / staged restore (`state.py:783-847`, `staged_state.py:74-145`), carrying links/area states/pending captures/mon stats/`pokeballs_obtained`/player identity/memorial (`rules.memorial.retired_pairs`) and NOT admissions, bindings, engine counters, cursors, commands, trades, observations, leases. **Blockers to design around:** `initial_observation.record` refuses any established history (`:155-161`) → needs a resume-specific transition; the earliest byte-level gate is right after `validate()` at `:163` (`sha256(bytes.fromhex(cart_hex)[0x498:0x8000])` vs the required witness digest); a matched digest must be paired with a witnessed **CONTINUE** (compose `gen1_continue_observer.lua`; the client currently builds the New Game bootstrap observer, `gen1_client_entry.lua:118`); inherited ball activation must be a typed lineage fact consumed by `gen1_wild_encounter_runtime.py:100-117` / `gen1_faint_runtime.py:132-155` (never a forged signal or frame 0); SaveRAM lives under `root/<journal-run-id>/<player>/SaveRAM` with an ownership manifest (`bizhawk_launch.py:73-104`) → an ownership chain or a verified copy; witness/rules alignment: refuse when a player's last committed observation revision exceeds its witness revision (owner policy: saved-but-unwitnessed → HOLD); "unchanged bundle" = reviewed source/dependency + cartridge identity, not ZIP equality. Proposed files: new `server/gen1_run_resume.py`, `manager.py`, `gen1_run_config.py`, `gen1_initial_observation.py`, `gen1_runtime_state.py`, `gen1_runtime.py`, `gen1_faint_runtime.py`, `gen1_wild_encounter_runtime.py`, `bizhawk_launch.py`, `tools/launch_bizhawk.py`, `lua/gen1_client_entry.lua`, new resume observer; unit/integration/live tests; dashboard affordance deferred (API + CLI first). Falsifiers: `resume_from` rejected today; imported core rejected by initial enrollment; prepare refuses a nonempty unowned SaveRAM. |
 | **Parcel attempt 6 — D2 PASS (CONTROLLED-SCRIPTED)** | `rb-parcel-checkpoint-observed` at `c701e15`: one chained process per player from New Game to the first bought POKé BALL with the server's ball-gate activation recorded for BOTH players (committed engine records), starter link alive, no deaths, clean cleanup. Receipts summary `3bd2aff9…dd55`, console `a4164c08…cbcf`; full record in the [D1 physical report](reviews/D1-RB-physical-successor.md). Closes D2 for the `false` text axis; catches (D3), the tweaked text axis (FT-2) and later rows remain open. |
 | Parcel attempt 5 | Oak's cutscene completed and the second trip to the Viridian Mart PROVED; BUY → POKé BALL accepted → quantity prompt reached, then `mart-unknown-wait` because `wTextBoxID` read 1 (not 0x0D) — the list/quantity routines never rewrite it. Item/quantity/confirm signatures now ignore `text_box` (geometry + oob + exit method); red test from the live point. Receipts summary `11e4371c…8afe`, console `ddf4892d…3ec8`. Attempt 6 is the changed run. |

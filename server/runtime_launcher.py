@@ -41,7 +41,21 @@ def file_bundle(root, paths):
     return result
 
 
-def render_launcher(configuration, *, host, port, name="SLink", root_hint=None):
+def player_resume(resume, player):
+    """The run record's resume field, narrowed to what one player's client must prove: the predecessor
+    run and the digest of the save it last acknowledged, under the named projection. None stays None."""
+    if resume is None:
+        return None
+    required = resume.get("required") if isinstance(resume, dict) else None
+    entry = required.get(player) if isinstance(required, dict) else None
+    if (not isinstance(resume.get("from_run"), str) or not resume["from_run"] or not isinstance(entry, dict)
+            or not isinstance(entry.get("digest"), str) or not re.fullmatch(r"[0-9a-f]{64}", entry["digest"])
+            or not isinstance(entry.get("projection"), str) or not entry["projection"]):
+        raise ValueError("complete resume contract for this player required")
+    return {"from_run": resume["from_run"], "required_digest": entry["digest"], "projection": entry["projection"]}
+
+
+def render_launcher(configuration, *, host, port, name="SLink", root_hint=None, resume=None):
     if (not isinstance(configuration, dict) or not re.fullmatch(r"[0-9a-f]{32}", configuration.get("run_id", ""))
             or configuration.get("player") not in ("a", "b") or not configuration.get("files")):
         raise ValueError("complete run/player launch configuration required")
@@ -49,6 +63,8 @@ def render_launcher(configuration, *, host, port, name="SLink", root_hint=None):
             or type(port) is not int or not 1 <= port <= 65535):
         raise ValueError("valid runtime endpoint required")
     configuration = {**configuration, "host": host, "port": port}
+    if resume is not None:
+        configuration["resume"] = player_resume(resume, configuration["player"])
     files = []
     if not isinstance(configuration["files"], list) or not 1 <= len(configuration["files"]) <= MAX_CLIENT_FILES:
         raise ValueError("bounded client-file closure required")

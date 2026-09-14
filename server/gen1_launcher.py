@@ -24,7 +24,8 @@ OBSERVATION_FILES=("lua/gen1_held_initial_save.lua","lua/gen1_held_save_image.lu
     "lua/gen1_command_receipts.lua","lua/observation_stream.lua",
     "lua/gen1_engine_signals.lua","data/games/gen1_rby/gen1_engine_signal_data.lua",
     "data/games/gen1_rby/gen1_full_save_layout.lua","data/games/gen1_rby/gen1_rival_team_checkpoint.lua",
-    "lua/gen1_bootstrap_observer.lua","data/games/gen1_rby/gen1_bootstrap_sites.lua")
+    "lua/gen1_bootstrap_observer.lua","data/games/gen1_rby/gen1_bootstrap_sites.lua",
+    "lua/gen1_continue_observer.lua","data/games/gen1_rby/gen1_continue_sites.lua")
 
 
 # The read-only acquisition sources the free-running loop drains.
@@ -39,7 +40,6 @@ FREE_FILES = ("lua/gen1_observation_loop.lua", "lua/gen1_inventory_fingerprint.l
               "lua/instruction_executor.lua", "lua/battle_force_authority.lua") + SOURCE_FILES
 
 NATIVE_FILES = ("lua/gen1_native_runtime.lua", "lua/gen1_native_host.lua", "lua/gen1_native_reattach.lua",
-    "lua/gen1_continue_observer.lua", "data/games/gen1_rby/gen1_continue_sites.lua",
     "lua/execution_window.lua", "lua/platform_bounded_execution.lua", "lua/gen1_native_frame_client.lua", "lua/frame_pacer.lua",
     "lua/gen1_native_trade_executor.lua", "lua/gen1_partner_prompt_executor.lua", "lua/gen1_prepared_save.lua",
     "lua/gen1_receptionist_executor.lua", "lua/gen1_saved_trade_executor.lua",

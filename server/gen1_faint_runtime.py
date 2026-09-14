@@ -423,7 +423,17 @@ def verify_state(stage):
     if set(component["activations"]) - {"a", "b"}:
         raise JournalError("invalid activation player")
     for player, proof in component["activations"].items():
-        if (
+        if "inherited" in proof:
+            # A resumed run (gen1_run_resume) carries the predecessor's activation; that module
+            # checks the record against the resume contract. It is effective from enrollment.
+            if (
+                set(proof) != {"inherited", "index", "engine_record"}
+                or proof["index"] is not None
+                or proof["engine_record"] is not None
+                or "gen1-resume" not in document["components"]
+            ):
+                raise JournalError("invalid inherited ball activation")
+        elif (
             set(initials) != {"a", "b"}
             or set(proof) != {"engine_record", "index"}
             or verified_source(proof, initials[player])["kind"] != "pokeballs_obtained"
@@ -454,7 +464,7 @@ def verify_state(stage):
             raise JournalError("linked death lacks rule activation or peer")
         row = verified_source(death, initials[player])
         activation = component["activations"][player]
-        if (activation["engine_record"]["payload"]["sequence"], activation["index"]) >= (
+        if "inherited" not in activation and (activation["engine_record"]["payload"]["sequence"], activation["index"]) >= (
             death["engine_record"]["payload"]["sequence"],
             death["index"],
         ):
@@ -590,6 +600,8 @@ def verify_journal(journal, stage):
         (row["player"], row) for row in component["deaths"].values()
     ]:
         entry = proof["engine_record"]
+        if entry is None and "inherited" in proof:
+            continue  # inherited from a closed predecessor; its source event lives in that journal
         receipt = semantic_receipt(journal, player, entry, "engine_signals")
         if receipt is None or receipt.result != source_result(entry):
             raise JournalError("rule transition lacks its committed source event")

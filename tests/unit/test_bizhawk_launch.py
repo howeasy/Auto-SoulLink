@@ -6,7 +6,13 @@ import zipfile
 
 import pytest
 
-from server.bizhawk_launch import bundle, isolated_configuration, manifest, prepare
+from server.bizhawk_launch import (
+    bundle,
+    isolated_configuration,
+    manifest,
+    prepare,
+    validate_manifest,
+)
 from tools.gen_bizhawk_host_profiles import TARGET, generated
 
 
@@ -78,3 +84,91 @@ def test_bundle_contains_only_launch_metadata_script_and_instructions():
         assert set(archive.namelist())=={'launch.json','launcher.lua','README.txt'}
         spec=json.loads(archive.read('launch.json'))
         assert spec['player']=='b' and spec['launcher_sha256']==hashlib.sha256(archive.read('launcher.lua')).hexdigest()
+
+
+# --- P2A-2C: resumed runs import the predecessor's exact save under the run's own manifest ---
+RESUME_PROJECTION='cartram-0498-8000-v1'
+
+
+def save_bytes(seed=b'progress'):
+    return bytes((seed[i%len(seed)]+i)%256 for i in range(0x8000))
+
+
+def projection(data):
+    return hashlib.sha256(data[0x0498:0x8000].hex().upper().encode()).hexdigest()
+
+
+def resume_record(data,player='a'):
+    return {'from_run':'b'*32,'required':{player:{'digest':projection(data),'projection':RESUME_PROJECTION}}}
+
+
+def resumed_inputs(tmp_path,data):
+    spec,paths=inputs(tmp_path)
+    spec=manifest(run_id=spec['run_id'],player='a',profile='gambatte',rom_sha1=spec['rom_sha1'],
+                  launcher=paths['launcher'].read_text(),resume=resume_record(data))
+    source=tmp_path/'Pokemon - Red Version (USA, Europe).SaveRAM';source.write_bytes(data)
+    return spec,paths,source
+
+
+def test_manifest_carries_the_player_resume_contract_and_validates_it():
+    data=save_bytes()
+    spec=manifest(run_id='a'*32,player='a',profile='gambatte',rom_sha1='b'*40,launcher='x',resume=resume_record(data))
+    assert spec['resume']=={'from_run':'b'*32,'required_digest':projection(data),'projection':RESUME_PROJECTION}
+    validate_manifest(spec)
+    for broken in ({**spec['resume'],'required_digest':'zz'},{**spec['resume'],'projection':'whole-file'},
+                   {**spec['resume'],'extra':1},{'from_run':'b'*32}):
+        with pytest.raises(ValueError):validate_manifest({**spec,'resume':broken})
+    with pytest.raises(ValueError):  # the record lacks this player
+        manifest(run_id='a'*32,player='b',profile='gambatte',rom_sha1='b'*40,launcher='x',resume=resume_record(data))
+    raw=bundle(run_id='a'*32,player='a',profile='gambatte',rom_sha1='b'*40,launcher='x',resume=resume_record(data))
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        assert json.loads(archive.read('launch.json'))['resume']==spec['resume']
+
+
+def test_resume_save_import_copies_exact_bytes_under_the_owned_manifest_and_records_the_receipt(tmp_path):
+    data=save_bytes();spec,paths,source=resumed_inputs(tmp_path,data);root=tmp_path/'clients'
+    plan=prepare(root,spec,**paths,resume_save=source)
+    from pathlib import Path
+    copy_path=Path(plan['save_directory'])/source.name
+    assert copy_path.read_bytes()==data and source.read_bytes()==data
+    assert plan['resume_save']=={'source_path':str(source.resolve()),'source_sha256':hashlib.sha256(data).hexdigest(),
+        'copy_sha256':hashlib.sha256(data).hexdigest(),'projection_digest':projection(data)}
+    assert json.loads(Path(plan['manifest']).read_text())['resume']==spec['resume']  # the manifest binds the copy to this run
+    assert prepare(root,spec,**paths,resume_save=source)==plan   # relaunch with the same file is idempotent
+    assert prepare(root,spec,**paths)=={k:v for k,v in plan.items() if k!="resume_save"}  # without it, the import stays
+    copy_path.write_bytes(save_bytes(b'played'))                 # played since: never overwritten by a re-import
+    with pytest.raises(ValueError,match='already'):prepare(root,spec,**paths,resume_save=source)
+    assert copy_path.read_bytes()==save_bytes(b'played')
+
+
+@pytest.mark.parametrize('fault',['digest','size','no_contract','name','unowned_nonempty'])
+def test_resume_save_import_refuses_without_touching_source_or_destination(tmp_path,fault):
+    data=save_bytes();spec,paths,source=resumed_inputs(tmp_path,data);root=tmp_path/'clients'
+    if fault=='digest':source.write_bytes(save_bytes(b'other'))
+    elif fault=='size':source.write_bytes(data[:-1])
+    elif fault=='no_contract':spec={k:v for k,v in spec.items() if k!='resume'}
+    elif fault=='name':source=source.with_name('renamed.sav');source.write_bytes(data)
+    else:
+        saves=root/spec['run_id']/spec['player']/'SaveRAM';saves.mkdir(parents=True)
+        (saves/'stray.SaveRAM').write_bytes(b'unowned')
+    before=source.read_bytes()
+    with pytest.raises(ValueError):prepare(root,spec,**paths,resume_save=source)
+    assert source.read_bytes()==before
+    saves=root/spec['run_id']/spec['player']/'SaveRAM'
+    assert not (saves/source.name).exists() and not (root/spec['run_id']/spec['player']/'emulator'/'launch.json').exists()
+
+
+def test_launch_tool_passes_the_resume_save_through_to_prepare(tmp_path,monkeypatch):
+    import sys
+
+    import tools.launch_bizhawk as tool
+    data=save_bytes();spec,paths,source=resumed_inputs(tmp_path,data)
+    (tmp_path/'launch.json').write_text(json.dumps(spec))
+    seen={}
+    monkeypatch.setattr(tool,'prepare',lambda root,spec,**kw:seen.update(kw) or {'ok':1})
+    class Done:
+        def wait(self):return 0
+    monkeypatch.setattr(tool,'launch',lambda plan,exe:Done())
+    monkeypatch.setattr(sys,'argv',['launch_bizhawk','--manifest',str(tmp_path/'launch.json'),'--rom',str(paths['rom']),
+        '--emuhawk',str(tmp_path/'EmuHawk.exe'),'--root',str(tmp_path/'clients'),'--resume-save',str(source)])
+    assert tool.main()==0 and seen['resume_save']==source

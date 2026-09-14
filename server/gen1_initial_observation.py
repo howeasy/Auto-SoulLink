@@ -9,9 +9,9 @@ from dataclasses import asdict
 from server.gen1_full_save import SYMBOLS, image, layout
 from server.gen1_native_trade_receipts import _bytes
 from server.gen1_party_codec import PartyCodec
+from server.identity_registry import IdentityContext
 from server.protocol import digest
 from server.protocol_journal import JournalError
-from server.identity_registry import IdentityContext
 from server.save_identity import SaveIdentity
 from server.verified_content_cache import verified_content_cache
 
@@ -154,18 +154,45 @@ def record(runtime,player,operation,message):
     if set(message)!={'event','payload'}:raise JournalError('typed initial observation event required')
     stage=runtime.state();document=stage.document();session=runtime.gate.sessions[player]
     core=document['rules']['core']
-    if (document['active_trade'] or document['identities']['members'] or core['links'] or core['area_states']
+    from server.gen1_run_resume import (
+        COMPONENT as RESUME,
+        enrollment_record,
+        save_digest,
+        validate_continue_witness,
+    )
+    resume=document['components'].get(RESUME)
+    resuming=resume is not None and (resume['pending'][player] or player in resume['enrolled'])   # a re-attempt fails as immutable
+    payload=message['payload'] if isinstance(message['payload'],dict) else {}
+    if 'continue_witness' in payload and not resuming:
+        raise JournalError('continue witness is only accepted under a pending resume contract')
+    established=(document['identities']['members'] or core['links'] or core['area_states']
             or any(core['pending_captures'].values()) or any(core['pokeballs_obtained'].values())
-            or any(runtime.journal.pending_ids(p) for p in ('a','b'))
-            or any(document['rules']['runtime']['party_keys'].values())):
+            or any(document['rules']['runtime']['party_keys'].values()))
+    if (document['active_trade'] or any(runtime.journal.pending_ids(p) for p in ('a','b')) or established and not resuming):
         raise JournalError('initial enrollment cannot replace established gameplay history or obligations')
     metadata=session.metadata;binding=metadata['control_binding']
-    result=validate(message['payload'],metadata,binding)
+    observation={k:v for k,v in payload.items() if k!='continue_witness'}
+    result=validate(observation,metadata,binding)
+    if resuming:
+        # Owner policy P2a: the presented save is the predecessor's witnessed checkpoint, booted via CONTINUE.
+        if save_digest(observation['source']['cart_hex'])!=resume['required'][player]['digest']:
+            raise JournalError('resume save projection differs from required predecessor witness')
+        if 'continue_witness' not in payload:
+            raise JournalError('resume enrollment requires a witnessed CONTINUE of the matched save')
+        cartridge=metadata['gen1_metadata']['cartridge']
+        validate_continue_witness(payload['continue_witness'],variant=cartridge['variant'],context_generation=binding['context_generation'],
+            physical_instance=metadata['gen1_metadata']['physical_instance'],final_sha1=cartridge['final_rom_sha1'],frame=observation['frame'])
     entries=document['components'].setdefault(COMPONENT,{})
     if player in entries:raise JournalError('initial observation is immutable; replacement requires reconciliation')
     record={'operation_id':operation,'metadata':copy.deepcopy(metadata),'binding':copy.deepcopy(binding),
-            'observation':copy.deepcopy(message['payload']),'inventory':result}
+            'observation':copy.deepcopy(observation),'inventory':result}
     entries[player]=record
+    records=[]
+    if resuming:
+        resumed=enrollment_record(resume,player,record,copy.deepcopy(payload['continue_witness']))
+        resume['pending'][player]=False
+        resume['enrolled'][player]=resumed
+        records.append({'namespace':RESUME,'key':resumed['record_key'],'value':copy.deepcopy(resumed)})
     stage.identities.bind_context(IdentityContext(player,'gen1_rby',SaveIdentity(**metadata['save_identity']),
         digest(metadata['gen1_metadata']['cartridge']),binding['context_generation'],metadata['gen1_metadata']['physical_instance']))
     stage.rules.player_identity[player]=copy.deepcopy(metadata['save_identity'])
@@ -176,7 +203,8 @@ def record(runtime,player,operation,message):
     stage.barrier.set_history(recovery_history(document['rules'],document['identities'],document['active_trade'],document['components'].get('gen1-trade')))
     document['components']['gen1-runtime']['recovery']=stage.barrier.document()
     from server.gen1_initial_save_runtime import schedule
-    commands, records = schedule(document,player,operation)
+    commands, scheduled = schedule(document,player,operation)
+    records+=scheduled
     receipt=runtime.journal.commit(player,operation,message,expected_revision=stage.journal_revision,
         state=document,commands=commands,result={'ack':'ACK','inventory_digest':digest(result),'ordinary_execution':False},records=records)
     return receipt.result

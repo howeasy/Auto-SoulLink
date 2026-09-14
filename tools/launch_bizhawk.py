@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--emuhawk',type=Path)
     parser.add_argument('--base-config',type=Path)
     parser.add_argument('--root',type=Path,default=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'SLink/clients')
+    parser.add_argument('--resume-save',type=Path,help='the .SaveRAM the predecessor run last acknowledged (resumed runs only)')
     args=parser.parse_args()
     gui=None
     if not all((args.manifest,args.rom,args.emuhawk)):
@@ -37,11 +38,21 @@ def main():
     validate_manifest(spec)
     home=(args.root.resolve()/spec['run_id']/spec['player']).resolve()
     if not home.is_relative_to(args.root.resolve()):raise ValueError('player launch directory leaves its owned root')
+    if spec.get('resume') and args.resume_save is None and not any((home/'SaveRAM').glob('*')):
+        # First launch of a resumed run: the private save directory is empty until the player's own
+        # save is imported; prepare() verifies it against the acknowledged digest before copying.
+        import tkinter as tk
+        from tkinter import filedialog
+        gui=tk.Tk();gui.withdraw()
+        chosen=filedialog.askopenfilename(title='Choose the save you last played in the previous run',filetypes=[('BizHawk SaveRAM','*.SaveRAM')])
+        gui.destroy()
+        if not chosen:return 0
+        args.resume_save=Path(chosen)
     home.mkdir(parents=True,exist_ok=True)
     # Hold the player lease before preparation and until the process exits.
     with RuntimeLease(home/'.process.lock'):
         plan=prepare(args.root,spec,rom=args.rom,launcher=args.manifest.with_name('launcher.lua'),
-                     base_config=args.base_config or args.emuhawk.with_name('config.ini'))
+                     base_config=args.base_config or args.emuhawk.with_name('config.ini'),resume_save=args.resume_save)
         return launch(plan,args.emuhawk).wait()
 
 

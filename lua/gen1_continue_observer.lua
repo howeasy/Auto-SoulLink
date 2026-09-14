@@ -11,9 +11,13 @@
 --   enter   SpecialEnterMap (jumped to from pressedA: same SP)
 -- Anything out of this order, a bad checksum, a stack mismatch, or a hit after completion is a
 -- failure; the witness is then never published.
+-- Resume (P2A-2C): with required_digest/projection/sha256, the `loaded` witness also digests the
+-- persistent save (CartRAM[0x0498:0x8000] as uppercase hex, the same projection the save_witness
+-- engine signal publishes) and fails unless it equals the predecessor run's acknowledged digest.
+-- The witness shape itself is unchanged; the verdict lives in status().digest_verified.
 local JSON=require('json_codec')
 local Data=require('gen1_continue_sites')
-local M={}
+local M={PROJECTION='cartram-0498-8000-v1'}
 local ORDER={'load','loaded','chose','pressed','enter'}
 local function copy(value)return assert(JSON.decode(assert(JSON.encode(value))))end
 local function hex(address,count,domain)
@@ -25,7 +29,10 @@ function M.new(options)
     local profile=assert(Data.titles[options.variant]);local sites=assert(profile.sites,'continue sites')
     local owner=copy(options.owned())
     assert(type(owner.context_generation)=='string' and type(owner.physical_instance)=='string','pre-admission physical identity required')
-    local hooks={};local seen={};local finished,failure;local closed=false
+    local required=options.required_digest
+    assert(required==nil or (type(required)=='string' and #required==64 and required:match('^[0-9a-f]+$')
+        and options.projection==M.PROJECTION and type(options.sha256)=='function'),'resume verification requires digest, projection and sha256')
+    local hooks={};local seen={};local finished,failure;local closed=false;local verified=false
     local function check()
         assert(not closed and not failure,failure or 'continue observer closed')
         assert(gameinfo.getromhash():lower()==options.final_sha1 and JSON.encode(owner)==JSON.encode(options.owned()),'continue physical context changed')
@@ -47,7 +54,13 @@ function M.new(options)
                     elseif kind=='loaded' then
                         assert(seen.load and not seen.loaded and witness.sp==seen.load.sp and witness.frame>=seen.load.frame,'save file load return lacks its entry')
                         witness.status=emu.getregister('A')
-                        assert(witness.status==2,'save file checksum rejected');seen.loaded=witness
+                        assert(witness.status==2,'save file checksum rejected')
+                        if required then
+                            local image=require('gen1_full_save').capture(nil,options.variant)
+                            assert(options.sha256(image.cart_hex:sub(0x498*2+1))==required,'resumed save differs from the required predecessor witness')
+                            verified=true
+                        end
+                        seen.loaded=witness
                     elseif kind=='chose' then
                         assert(seen.loaded,'CONTINUE chosen before the save file loaded');seen.chose=witness;seen.pressed=nil
                     elseif kind=='pressed' then
@@ -66,7 +79,8 @@ function M.new(options)
     end)
     if not ok then close_hooks();error(why,0)end
     return {peek=function()check();assert(options.held(),'continue publication requires held frame');return finished and copy(finished)end,
-        status=function()return {loaded=seen.loaded~=nil,chosen=seen.chose~=nil,complete=finished~=nil,failed=failure,closed=closed}end,
+        status=function()return {loaded=seen.loaded~=nil,chosen=seen.chose~=nil,complete=finished~=nil,failed=failure,closed=closed,
+            digest_verified=required~=nil and verified or nil}end,
         close=function()closed=true;close_hooks()end}
 end
 return M

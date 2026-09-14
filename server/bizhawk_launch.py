@@ -9,10 +9,15 @@ import io
 import zipfile
 from pathlib import Path
 
+from server.runtime_launcher import player_resume
+
 ROOT=Path(__file__).resolve().parents[1]
 PROFILES=json.loads((ROOT/'data/bizhawk_host_profiles.json').read_text())['profiles']
 PATH_SYSTEMS={'gambatte':{'GB_GBC_SGB','GBL','GB','GBC','SGB'},'mgba':{'GBA'}}
 SCHEMA='slink-bizhawk-launch-v1'
+# A save projection names the byte range the digest covers: sha256 over the uppercase hex text of
+# <domain>[start:end] (the same text the client hashes). The file must be exactly the domain's size.
+PROJECTION=re.compile('cartram-([0-9a-f]{4})-([0-9a-f]{4})-v1')
 
 
 def isolated_configuration(source, profile, save_directory):
@@ -37,16 +42,17 @@ def isolated_configuration(source, profile, save_directory):
     return config
 
 
-def manifest(*,run_id,player,profile,rom_sha1,launcher):
+def manifest(*,run_id,player,profile,rom_sha1,launcher,resume=None):
     result={'schema':SCHEMA,'run_id':run_id,'player':player,
             'profile':profile,'rom_sha1':rom_sha1,
             'launcher_sha256':hashlib.sha256(launcher.encode('utf-8')).hexdigest()}
+    if resume is not None:result['resume']=player_resume(resume,player)
     validate_manifest(result)
     return result
 
 
-def bundle(*,run_id,player,profile,rom_sha1,launcher):
-    spec=manifest(run_id=run_id,player=player,profile=profile,rom_sha1=rom_sha1,launcher=launcher)
+def bundle(*,run_id,player,profile,rom_sha1,launcher,resume=None):
+    spec=manifest(run_id=run_id,player=player,profile=profile,rom_sha1=rom_sha1,launcher=launcher,resume=resume)
     output=io.BytesIO()
     instructions=('Extract these files into a folder inside your SLink installation.\n'
         'Run: python tools/launch_bizhawk.py --manifest PATH/TO/launch.json\n'
@@ -61,16 +67,28 @@ def bundle(*,run_id,player,profile,rom_sha1,launcher):
 
 
 def validate_manifest(spec):
-    if (not isinstance(spec,dict) or set(spec)!={'schema','run_id','player','profile','rom_sha1','launcher_sha256'}
+    if (not isinstance(spec,dict) or set(spec)-{'resume'}!={'schema','run_id','player','profile','rom_sha1','launcher_sha256'}
             or spec['schema']!=SCHEMA or spec['profile'] not in PROFILES or spec['player'] not in ('a','b')
             or not isinstance(spec['run_id'],str) or not re.fullmatch('[0-9a-f]{32}',spec['run_id'])):
         raise ValueError('complete run/player emulator launch manifest required')
     for field,length in (('rom_sha1',40),('launcher_sha256',64)):
         if not isinstance(spec[field],str) or not re.fullmatch('[0-9a-f]{'+str(length)+'}',spec[field]):
             raise ValueError('complete admitted file digests required')
+    resume=spec.get('resume')
+    if resume is not None and (not isinstance(resume,dict) or set(resume)!={'from_run','required_digest','projection'}
+            or not isinstance(resume['from_run'],str) or not resume['from_run']
+            or not isinstance(resume['required_digest'],str) or not re.fullmatch('[0-9a-f]{64}',resume['required_digest'])
+            or not isinstance(resume['projection'],str) or not PROJECTION.fullmatch(resume['projection'])):
+        raise ValueError('complete resume contract required')
 
 
-def prepare(root, spec, *, rom, launcher, base_config):
+def projection_digest(data, projection):
+    start,end=(int(value,16) for value in PROJECTION.fullmatch(projection).groups())
+    if len(data)!=end:raise ValueError('resumed save has the wrong size for its projection')
+    return hashlib.sha256(data[start:end].hex().upper().encode()).hexdigest()
+
+
+def prepare(root, spec, *, rom, launcher, base_config, resume_save=None):
     validate_manifest(spec)
     rom_path,launcher_path,config_path=map(lambda value:Path(value).resolve(),(rom,launcher,base_config))
     data=rom_path.read_bytes()
@@ -97,15 +115,34 @@ def prepare(root, spec, *, rom, launcher, base_config):
         raise ValueError('launch inputs cannot alias their outputs')
     if destination.exists() and destination.read_bytes()!=data:
         raise ValueError('staged cartridge changed outside its owner')
+    imported=None
+    if resume_save is not None:
+        # The player's own save from the predecessor run, verified against the digest the server
+        # acknowledged BEFORE anything is written, under the name the host gave it (BizHawk keys
+        # SaveRAM by its gamedb title, which the predecessor's copy already carries).
+        if spec.get('resume') is None:raise ValueError('launch manifest carries no resume contract')
+        source=Path(resume_save).resolve();save=source.read_bytes()
+        if source.suffix.lower()!='.saveram':raise ValueError('resumed save must be the host-named .SaveRAM file')
+        digest=projection_digest(save,spec['resume']['projection'])
+        if digest!=spec['resume']['required_digest']:raise ValueError('resumed save differs from the required predecessor witness')
+        target=saves/source.name
+        if target.exists() and target.read_bytes()!=save:raise ValueError('resumed save already imported and played; refusing to overwrite it')
+        imported={'source_path':str(source),'source_sha256':hashlib.sha256(save).hexdigest(),'projection_digest':digest}
     directory.mkdir(parents=True,exist_ok=True);saves.mkdir(parents=True,exist_ok=True)
     if not destination.exists():destination.write_bytes(data)
+    if imported:
+        if not target.exists():target.write_bytes(save)
+        imported['copy_sha256']=hashlib.sha256(target.read_bytes()).hexdigest()   # read back, not assumed
+        if imported['copy_sha256']!=imported['source_sha256']:raise ValueError('resumed save copy differs from its source')
     (directory/'launcher.lua').write_bytes(script)
     (directory/'config.ini').write_text(json.dumps(generated,indent=2)+'\n',encoding='utf-8')
     marker.write_text(json.dumps(spec,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-    return {'schema':SCHEMA,'cwd':str(directory),'profile':spec['profile'],
+    plan={'schema':SCHEMA,'cwd':str(directory),'profile':spec['profile'],
         'arguments':['--config=config.ini','--lua=launcher.lua',destination.name],
         'environment':{'SLINK_ROOT':str(ROOT),'SLINK_CLIENT_STORAGE_ROOT':str(root),'SLINK_SAVERAM_DIRECTORY':str(saves)},
         'save_directory':str(saves),'manifest':str(marker)}
+    if imported:plan['resume_save']=imported
+    return plan
 
 
 def launch(plan, executable):
