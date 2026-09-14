@@ -1,0 +1,98 @@
+"""C-0 (part 1): the protocol schema tracks the server, which is the contract's authority.
+
+Every event name the server dispatches on is in the schema and vice versa; every command
+literal the server emits is in the schema and vice versa. A client conformance suite built
+on this schema therefore tests the contract, not the Gen 3 client that inspired it.
+"""
+from __future__ import annotations
+
+import pathlib
+import re
+
+import pytest
+
+from tests.unit import protocol_schema as ps
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
+STATE = (REPO / "server" / "state.py").read_text(encoding="utf-8")
+SERVER = (REPO / "server" / "server.py").read_text(encoding="utf-8")
+
+
+def _server_events() -> set[str]:
+    names = set(re.findall(r'event == "([a-z_]+)"', STATE))
+    for group in re.findall(r'event in \(([^)]*)\)', STATE):
+        names |= set(re.findall(r'"([a-z_]+)"', group))
+    for group in re.findall(r'event_type in \(([^)]*)\)|etype in \(([^)]*)\)', SERVER):
+        for g in group:
+            names |= set(re.findall(r'"([a-z_]+)"', g))
+    return names
+
+
+def _server_commands() -> set[str]:
+    names = set(re.findall(r'"cmd": *"([a-z_]+)"', STATE + SERVER))
+    for pair in re.findall(r'cmd_name = "([a-z_]+)" if explode else "([a-z_]+)"', STATE):
+        names |= set(pair)  # the one command name built conditionally (state.py:2621)
+    return names
+
+
+def test_every_dispatched_event_is_in_the_schema_and_vice_versa():
+    server = _server_events()
+    assert "tick" in server and "hello" in server, "extraction regex lost the shared tick/hello path"
+    missing = server - set(ps.EVENTS)
+    stale = set(ps.EVENTS) - server
+    assert not missing, f"server dispatches events the schema lacks: {sorted(missing)}"
+    assert not stale, f"schema lists events the server never dispatches: {sorted(stale)}"
+
+
+def test_every_emitted_command_is_in_the_schema_and_vice_versa():
+    server = _server_commands()
+    missing = server - set(ps.COMMANDS)
+    stale = set(ps.COMMANDS) - server
+    assert not missing, f"server emits commands the schema lacks: {sorted(missing)}"
+    assert not stale, f"schema lists commands the server never emits: {sorted(stale)}"
+
+
+def test_every_ack_and_cancel_event_exists():
+    for cmd, (ack, nack) in ps.ACKS.items():
+        assert cmd in ps.COMMANDS
+        for ev in (ack, nack):
+            assert ev is None or ev in ps.EVENTS, (cmd, ev)
+    for cmd, (ev, field, _code) in ps.PROMPT_CANCEL.items():
+        assert cmd in ps.COMMANDS and ev in ps.EVENTS and field in ps.EVENTS[ev][0]
+
+
+@pytest.mark.parametrize("msg, ok", [
+    ({"event": "faint", "player": "a", "seq": 3, "key": "ABCD:1234:99"}, True),
+    ({"event": "faint", "player": "a", "seq": 3, "key": "ABCD1234:00000099"}, True),  # Gen 3 key
+    ({"event": "faint", "player": "c", "seq": 3, "key": "ABCD:1234:99"}, False),
+    ({"event": "faint", "player": "a", "seq": 3}, False),  # missing key
+    ({"event": "capture", "player": "b", "seq": 1, "key": "0000:0000:01", "area_id": "route_1",
+      "species_id": 0x99, "level": 5, "in_box": False}, True),
+    ({"event": "capture", "player": "b", "seq": 1, "key": "0000:0000:01", "area_id": "route_1",
+      "species_id": "153"}, False),  # species_id must be int
+    ({"event": "no_catch", "player": "a", "seq": 9, "area_id": "route_1", "species_id": 1, "level": 3}, True),
+    ({"event": "trainer_battle_start", "player": "a", "seq": 9, "trainer_id": True}, False),  # bool is not int
+    ({"event": "mystery", "player": "a", "seq": 9}, False),
+])
+def test_validate_event(msg, ok):
+    assert (ps.validate_event(msg) == []) is ok, ps.validate_event(msg)
+
+
+@pytest.mark.parametrize("cmd, ok", [
+    ({"cmd": "noop"}, True),
+    ({"cmd": "force_faint", "key": "ABCD:1234:99", "nickname": "PIKA"}, True),
+    ({"cmd": "force_faint"}, False),
+    ({"cmd": "apply_trade", "slot": 0, "blob_hex": "AB" * 66, "old_key": "ABCD:1234:99", "token": "t1"}, True),
+    ({"cmd": "apply_trade", "slot": 0, "blob_hex": "ABC", "old_key": "ABCD:1234:99", "token": "t1"}, False),
+    ({"cmd": "hud_show", "text": "WRONG SAVE", "color": [255, 0, 0], "duration": 300}, True),
+    ({"cmd": "show_choices", "token": "t2", "options": ["Trade", "Say hey"], "text": "?"}, True),
+    ({"cmd": "bogus"}, False),
+])
+def test_validate_command(cmd, ok):
+    assert (ps.validate_command(cmd) == []) is ok, ps.validate_command(cmd)
+
+
+def test_validate_reply_requires_a_non_empty_command_list():
+    assert ps.validate_reply({"commands": [{"cmd": "noop"}]}) == []
+    assert ps.validate_reply({"commands": []})
+    assert ps.validate_reply({"commands": [{"cmd": "noop"}], "extra": 1})
