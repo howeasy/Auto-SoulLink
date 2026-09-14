@@ -2555,12 +2555,6 @@ class SLinkServer:
         ctx["sidebar_html"] = self._build_sidebar_html("stream")
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
-    async def handle_stream_party_a(self, request):
-        return await self._handle_stream_party_template(request, "a")
-
-    async def handle_stream_party_b(self, request):
-        return await self._handle_stream_party_template(request, "b")
-
     # ── Templated party overlay ────────────────────────────────
 
     def _build_party_overlay_context(self, player_id: str) -> dict:
@@ -2611,71 +2605,7 @@ class SLinkServer:
             "mons":         mons,
         }
 
-    async def _handle_stream_party_template(self, request, player_id: str):
-        """Render the templated party overlay. Two call sites:
-            * /stream/party-{a,b}         — full page (initial paint)
-            * /stream/party-{a,b}/fragment — #root only (HTMX poll target)
-        Both pull from `_build_party_overlay_context(player_id)`. The
-        fragment endpoint is wired in the router below.
-        """
-        is_fragment = request.match_info.get("fragment") == "fragment" \
-                      or request.path.endswith("/fragment")
-        ctx = self._build_party_overlay_context(player_id)
-        ctx["theme"]         = resolve_theme(request)
-        ctx["layout_class"]  = resolve_layout(request)
-        ctx["overlay_title"] = f"Party {player_id.upper()}"
-        # Fragment endpoint URL the body's hx-get points at — must preserve
-        # ?theme= / ?layout= so themed polls keep returning themed bodies.
-        query = request.url.query_string
-        ctx["fragment_url"]  = f"/stream/party-{player_id}/fragment" + (f"?{query}" if query else "")
-
-        template = "stream/_party_root.html" if is_fragment else "stream/party.html"
-        return aiohttp_jinja2.render_template(template, request, ctx)
-
-    async def handle_stream_party_a_fragment(self, request):
-        return await self._handle_stream_party_template(request, "a")
-
-    async def handle_stream_party_b_fragment(self, request):
-        return await self._handle_stream_party_template(request, "b")
-
-    async def handle_stream_enemy_focus_a(self, request):
-        return await self._battle_overlay(request, "enemy-focus-a", "enemy_focus", "a")
-
-    async def handle_stream_enemy_focus_b(self, request):
-        return await self._battle_overlay(request, "enemy-focus-b", "enemy_focus", "b")
-
-    async def handle_stream_enemy_focus_a_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-focus-a", "enemy_focus", "a")
-
-    async def handle_stream_enemy_focus_b_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-focus-b", "enemy_focus", "b")
-
-    async def handle_stream_enemy_trainer_a(self, request):
-        return await self._battle_overlay(request, "enemy-trainer-a", "enemy_trainer", "a")
-
-    async def handle_stream_enemy_trainer_b(self, request):
-        return await self._battle_overlay(request, "enemy-trainer-b", "enemy_trainer", "b")
-
-    async def handle_stream_enemy_trainer_a_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-trainer-a", "enemy_trainer", "a")
-
-    async def handle_stream_enemy_trainer_b_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-trainer-b", "enemy_trainer", "b")
-
     # ── Battle overlay dispatch ──────────────────────────
-
-    async def _battle_overlay(self, request, slug: str, template_base: str,
-                              player_id: str):
-        ctx = self._build_battle_overlay_context(player_id, template_base)
-        self._apply_battle_body_class(ctx, template_base, request)
-        return await self._render_stream_overlay(
-            request, slug, ctx, template_base=template_base)
-
-    async def _battle_fragment(self, request, slug: str, template_base: str, player_id: str):
-        ctx = self._build_battle_overlay_context(player_id, template_base)
-        self._apply_battle_body_class(ctx, template_base, request)
-        return await self._render_stream_overlay(
-            request, slug, ctx, template_base=template_base, fragment=True)
 
     @staticmethod
     def _apply_battle_body_class(ctx: dict, template_base: str, request) -> None:
@@ -2807,30 +2737,6 @@ class SLinkServer:
             "pp_cls":     cls,
         }
 
-    async def handle_stream_links(self, request):
-        return await self._render_stream_overlay(
-            request, "links", self._build_links_overlay_context())
-
-    async def handle_stream_links_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "links", self._build_links_overlay_context(), fragment=True)
-
-    async def handle_stream_linked_party(self, request):
-        return await self._render_stream_overlay(
-            request, "linked-party", self._build_linked_party_overlay_context())
-
-    async def handle_stream_linked_party_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "linked-party", self._build_linked_party_overlay_context(), fragment=True)
-
-    async def handle_stream_boxed_links(self, request):
-        return await self._render_stream_overlay(
-            request, "boxed-links", self._build_boxed_links_overlay_context())
-
-    async def handle_stream_boxed_links_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "boxed-links", self._build_boxed_links_overlay_context(), fragment=True)
-
     # ── Links overlay context builders ───────────────────
 
     @staticmethod
@@ -2948,21 +2854,54 @@ class SLinkServer:
             })
         return {"pairs": pairs}
 
-    async def handle_stream_deaths(self, request):
-        return await self._render_stream_overlay(
-            request, "deaths", self._build_deaths_overlay_context())
+    # ── Stream overlays: one spec per slug, one handler ─────────────
+    # (template base, context factory). The factory gets (self, request) and returns the
+    # template context; the battle overlays also stitch their body class on. Titles come from
+    # overlay_catalog so the launcher and the page agree. Routes are registered per slug
+    # (not as /stream/{slug}) so the router lists every overlay and test_routes_smoke walks
+    # all 48 of them.
+    STREAM_OVERLAYS: dict[str, tuple[str, object]] = {
+        "party-a":         ("party",          lambda self, r: self._build_party_overlay_context("a")),
+        "party-b":         ("party",          lambda self, r: self._build_party_overlay_context("b")),
+        "enemy-focus-a":   ("enemy_focus",    lambda self, r: self._battle_ctx(r, "enemy_focus", "a")),
+        "enemy-focus-b":   ("enemy_focus",    lambda self, r: self._battle_ctx(r, "enemy_focus", "b")),
+        "enemy-trainer-a": ("enemy_trainer",  lambda self, r: self._battle_ctx(r, "enemy_trainer", "a")),
+        "enemy-trainer-b": ("enemy_trainer",  lambda self, r: self._battle_ctx(r, "enemy_trainer", "b")),
+        "focus-a":         ("focus",          lambda self, r: self._battle_ctx(r, "focus", "a")),
+        "focus-b":         ("focus",          lambda self, r: self._battle_ctx(r, "focus", "b")),
+        "links":           ("links",          lambda self, r: self._build_links_overlay_context()),
+        "linked-party":    ("linked_party",   lambda self, r: self._build_linked_party_overlay_context()),
+        "boxed-links":     ("boxed_links",    lambda self, r: self._build_boxed_links_overlay_context()),
+        "deaths":          ("deaths",         lambda self, r: self._build_deaths_overlay_context()),
+        "attempts":        ("attempts",       lambda self, r: self._build_attempts_overlay_context()),
+        "areas":           ("areas",          lambda self, r: self._build_areas_overlay_context()),
+        "events":          ("events",         lambda self, r: self._build_events_overlay_context(r)),
+        "badges-a":        ("badges",         lambda self, r: self._build_badges_overlay_context("a")),
+        "badges-b":        ("badges",         lambda self, r: self._build_badges_overlay_context("b")),
+        "encounters":      ("encounters",     lambda self, r: self._build_encounters_overlay_context()),
+        "stream-memorial": ("stream_memorial", lambda self, r: self._build_memorial_scroll_context()),
+        "ticker":          ("ticker",         lambda self, r: self._build_ticker_overlay_context(r)),
+        "area-encounter":  ("area_encounter", lambda self, r: self._build_area_encounter_overlay_context()),
+        "enc-table-a":     ("enc_table",      lambda self, r: self._build_enc_table_overlay_context("a")),
+        "enc-table-b":     ("enc_table",      lambda self, r: self._build_enc_table_overlay_context("b")),
+    }
 
-    async def handle_stream_deaths_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "deaths", self._build_deaths_overlay_context(), fragment=True)
+    def _battle_ctx(self, request, template_base: str, player_id: str) -> dict:
+        ctx = self._build_battle_overlay_context(player_id, template_base)
+        self._apply_battle_body_class(ctx, template_base, request)
+        return ctx
 
-    async def handle_stream_attempts(self, request):
-        return await self._render_stream_overlay(
-            request, "attempts", self._build_attempts_overlay_context())
-
-    async def handle_stream_attempts_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "attempts", self._build_attempts_overlay_context(), fragment=True)
+    async def handle_stream_overlay(self, request, slug: str, fragment: bool = False):
+        """GET /stream/{slug} (the page) and /stream/{slug}/fragment (the #root subtree the
+        page polls every 2 s and swaps in place by idiomorph)."""
+        from server.overlay_catalog import OVERLAYS
+        template_base, factory = self.STREAM_OVERLAYS[slug]
+        ctx = factory(self, request)
+        title = next((o["title"] for o in OVERLAYS if o.get("slug") == slug), None)
+        if title:
+            ctx.setdefault("overlay_title", title)
+        return await self._render_stream_overlay(request, slug, ctx, template_base=template_base,
+                                                 fragment=fragment)
 
     # ── Shared template plumbing for stream overlays ─────────────
 
@@ -3005,14 +2944,6 @@ class SLinkServer:
     def _build_attempts_overlay_context(self) -> dict:
         return {"attempts_count": self.state.attempts_count}
 
-    async def handle_stream_areas(self, request):
-        return await self._render_stream_overlay(
-            request, "areas", self._build_areas_overlay_context())
-
-    async def handle_stream_areas_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "areas", self._build_areas_overlay_context(), fragment=True)
-
     async def handle_api_attempts(self, request):
         """POST /api/attempts — set the manual attempts counter."""
         try:
@@ -3027,108 +2958,6 @@ class SLinkServer:
         self.state._save()
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True, "attempts_count": count})
-
-    async def handle_stream_events(self, request):
-        return await self._render_stream_overlay(
-            request, "events", self._build_events_overlay_context(request))
-
-    async def handle_stream_events_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "events", self._build_events_overlay_context(request), fragment=True)
-
-    async def handle_stream_badges_a(self, request):
-        return await self._badges_overlay(request, "a")
-
-    async def handle_stream_badges_b(self, request):
-        return await self._badges_overlay(request, "b")
-
-    async def handle_stream_badges_a_fragment(self, request):
-        return await self._badges_fragment(request, "a")
-
-    async def handle_stream_badges_b_fragment(self, request):
-        return await self._badges_fragment(request, "b")
-
-    async def _badges_overlay(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"badges-{player_id}",
-            self._build_badges_overlay_context(player_id),
-            template_base="badges")
-
-    async def _badges_fragment(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"badges-{player_id}",
-            self._build_badges_overlay_context(player_id),
-            template_base="badges", fragment=True)
-
-    async def handle_stream_encounters(self, request):
-        return await self._render_stream_overlay(
-            request, "encounters", self._build_encounters_overlay_context())
-
-    async def handle_stream_encounters_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "encounters", self._build_encounters_overlay_context(), fragment=True)
-
-    async def handle_stream_stream_memorial(self, request):
-        return await self._render_stream_overlay(
-            request, "stream-memorial", self._build_memorial_scroll_context(),
-            template_base="stream_memorial")
-
-    async def handle_stream_stream_memorial_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "stream-memorial", self._build_memorial_scroll_context(),
-            template_base="stream_memorial", fragment=True)
-
-    async def handle_stream_ticker(self, request):
-        return await self._render_stream_overlay(
-            request, "ticker", self._build_ticker_overlay_context(request))
-
-    async def handle_stream_ticker_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "ticker", self._build_ticker_overlay_context(request), fragment=True)
-
-    async def handle_stream_focus_a(self, request):
-        return await self._battle_overlay(request, "focus-a", "focus", "a")
-
-    async def handle_stream_focus_b(self, request):
-        return await self._battle_overlay(request, "focus-b", "focus", "b")
-
-    async def handle_stream_focus_a_fragment(self, request):
-        return await self._battle_fragment(request, "focus-a", "focus", "a")
-
-    async def handle_stream_focus_b_fragment(self, request):
-        return await self._battle_fragment(request, "focus-b", "focus", "b")
-
-    async def handle_stream_area_encounter(self, request):
-        return await self._render_stream_overlay(
-            request, "area-encounter", self._build_area_encounter_overlay_context())
-
-    async def handle_stream_area_encounter_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "area-encounter", self._build_area_encounter_overlay_context(), fragment=True)
-
-    async def handle_stream_enc_table_a(self, request):
-        return await self._enc_table_overlay(request, "a")
-
-    async def handle_stream_enc_table_b(self, request):
-        return await self._enc_table_overlay(request, "b")
-
-    async def handle_stream_enc_table_a_fragment(self, request):
-        return await self._enc_table_fragment(request, "a")
-
-    async def handle_stream_enc_table_b_fragment(self, request):
-        return await self._enc_table_fragment(request, "b")
-
-    async def _enc_table_overlay(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"enc-table-{player_id}",
-            self._build_enc_table_overlay_context(player_id),
-            template_base="enc_table")
-
-    async def _enc_table_fragment(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"enc-table-{player_id}",
-            self._build_enc_table_overlay_context(player_id),
-            template_base="enc_table", fragment=True)
 
     # ── Context builders for the remaining overlays ──
 
@@ -4809,56 +4638,14 @@ def build_app(srv):
     # Stream overlay routes
     app.router.add_get("/stream",          srv.handle_stream_index)
     app.router.add_get("/stream/",         srv.handle_stream_index)
-    app.router.add_get("/stream/party-a",          srv.handle_stream_party_a)
-    app.router.add_get("/stream/party-b",          srv.handle_stream_party_b)
-    # HTMX poll targets for the templated party overlay — return only the
-    # #root subtree so idiomorph swaps in place without re-rendering the
-    # vendored script tags.
-    app.router.add_get("/stream/party-a/fragment", srv.handle_stream_party_a_fragment)
-    app.router.add_get("/stream/party-b/fragment", srv.handle_stream_party_b_fragment)
-    app.router.add_get("/stream/enemy-focus-a/fragment",    srv.handle_stream_enemy_focus_a_fragment)
-    app.router.add_get("/stream/enemy-focus-b/fragment",    srv.handle_stream_enemy_focus_b_fragment)
-    app.router.add_get("/stream/enemy-trainer-a/fragment",  srv.handle_stream_enemy_trainer_a_fragment)
-    app.router.add_get("/stream/enemy-trainer-b/fragment",  srv.handle_stream_enemy_trainer_b_fragment)
-    app.router.add_get("/stream/focus-a/fragment",          srv.handle_stream_focus_a_fragment)
-    app.router.add_get("/stream/focus-b/fragment",          srv.handle_stream_focus_b_fragment)
-    app.router.add_get("/stream/enemy-focus-a",   srv.handle_stream_enemy_focus_a)
-    app.router.add_get("/stream/enemy-focus-b",   srv.handle_stream_enemy_focus_b)
-    app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
-    app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
-    app.router.add_get("/stream/links",                  srv.handle_stream_links)
-    app.router.add_get("/stream/links/fragment",         srv.handle_stream_links_fragment)
-    app.router.add_get("/stream/linked-party",           srv.handle_stream_linked_party)
-    app.router.add_get("/stream/linked-party/fragment",  srv.handle_stream_linked_party_fragment)
-    app.router.add_get("/stream/boxed-links",            srv.handle_stream_boxed_links)
-    app.router.add_get("/stream/boxed-links/fragment",   srv.handle_stream_boxed_links_fragment)
-    app.router.add_get("/stream/deaths",            srv.handle_stream_deaths)
-    app.router.add_get("/stream/deaths/fragment",   srv.handle_stream_deaths_fragment)
-    app.router.add_get("/stream/attempts",          srv.handle_stream_attempts)
-    app.router.add_get("/stream/attempts/fragment", srv.handle_stream_attempts_fragment)
+    # Every overlay page and its fragment, from one table. Registered per slug so the
+    # router (and the route smoke test that walks it) still lists each one.
+    for _slug in SLinkServer.STREAM_OVERLAYS:
+        app.router.add_get(f"/stream/{_slug}",
+                           functools.partial(srv.handle_stream_overlay, slug=_slug))
+        app.router.add_get(f"/stream/{_slug}/fragment",
+                           functools.partial(srv.handle_stream_overlay, slug=_slug, fragment=True))
     app.router.add_post("/api/attempts",   srv.handle_api_attempts)
-    app.router.add_get("/stream/areas",             srv.handle_stream_areas)
-    app.router.add_get("/stream/areas/fragment",    srv.handle_stream_areas_fragment)
-    app.router.add_get("/stream/events",            srv.handle_stream_events)
-    app.router.add_get("/stream/events/fragment",   srv.handle_stream_events_fragment)
-    app.router.add_get("/stream/badges-a",          srv.handle_stream_badges_a)
-    app.router.add_get("/stream/badges-a/fragment", srv.handle_stream_badges_a_fragment)
-    app.router.add_get("/stream/badges-b",          srv.handle_stream_badges_b)
-    app.router.add_get("/stream/badges-b/fragment", srv.handle_stream_badges_b_fragment)
-    app.router.add_get("/stream/encounters",            srv.handle_stream_encounters)
-    app.router.add_get("/stream/encounters/fragment",   srv.handle_stream_encounters_fragment)
-    app.router.add_get("/stream/stream-memorial",           srv.handle_stream_stream_memorial)
-    app.router.add_get("/stream/stream-memorial/fragment",  srv.handle_stream_stream_memorial_fragment)
-    app.router.add_get("/stream/ticker",            srv.handle_stream_ticker)
-    app.router.add_get("/stream/ticker/fragment",   srv.handle_stream_ticker_fragment)
-    app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
-    app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
-    app.router.add_get("/stream/area-encounter",            srv.handle_stream_area_encounter)
-    app.router.add_get("/stream/area-encounter/fragment",   srv.handle_stream_area_encounter_fragment)
-    app.router.add_get("/stream/enc-table-a",               srv.handle_stream_enc_table_a)
-    app.router.add_get("/stream/enc-table-a/fragment",      srv.handle_stream_enc_table_a_fragment)
-    app.router.add_get("/stream/enc-table-b",               srv.handle_stream_enc_table_b)
-    app.router.add_get("/stream/enc-table-b/fragment",      srv.handle_stream_enc_table_b_fragment)
     app.router.add_get("/launcher/{player}", srv.handle_launcher)
     # Twitch bot routes
     app.router.add_get("/twitch",               srv.handle_twitch_page)
