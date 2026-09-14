@@ -13,9 +13,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:16:29+00:00",
+  "updated_at_utc": "2026-09-14T10:25:14+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "56ffcab",
+  "source_head": "2829675",
   "live_lane": null,
   "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-1 round 2 (Sonnet: F1-F6 + joint protocol), R5b-2 round 2 (Sonnet: refusal receipt + hold until release), R5b-3 REJECTED -> R5b-3b server half on Sonnet; UI half done (56ffcab). OMP queue: HX-2b/HX-2c wait for R5b-1 round 2 (server.py/gen1_runtime.py). HS-2 candidate 9d13974 (review with R5b-3b). HS-3 active (Sonnet), HS-4 spec recorded; HS-4 queued after R5b-2-2. C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
@@ -1091,14 +1091,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-2",
-      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate 645fa94 on the branch)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidates 645fa94 + 2829675 (isolated Sonnet worker, two rounds)",
+      "state": "done",
       "files": ["lua/gen1_checkpoint_client.lua", "lua/gen1_client_entry.lua", "server/gen1_launcher.py", "tests/unit/test_gen1_checkpoint_client.py", "docs/gen1_reference/reviews/R5b-2-client.md"],
       "next_action": "checkpoint_upload command service: dedicated hold + drained journal gate, one bulk CartRAM read to 65536 uppercase hex, local projection digest check, intent-persisted completion via complete_command typed envelope, ACK-only retirement; lupa red tests per spec §7.",
       "reuse_decision": "reuses command_service_router/command_executor/client_journal; Gen 1 read/digest semantics in the new module",
-      "receipt": "commit 645fa94; tests/unit/test_gen1_checkpoint_client.py 14 passed (+launcher 33 total); lupa clean; module sha256 01909e08…07f9; docs/gen1_reference/reviews/R5b-2-client.md",
+      "receipt": "commits 645fa94 + 2829675; tests/unit/test_gen1_checkpoint_client.py 21 passed; regression set 226; lupa clean; module sha256 345823fa…36b7; docs/gen1_reference/reviews/R5b-2-client.md. Known limit: writer.service() 2 s reacquisition slice during a long release wait (follow-up card).",
       "independent_review_refs": [
-        "Codex ADVERSARIAL_REVIEW cx-826736db: REJECT — F1 digest/validation failures are executor diagnostic NACKs, not durable refusals (32 KiB reread forever); F2 the writer hold is released after local completion, before the save_upload ACK and the paired capture settle. Envelope, digest convention, real hold acquisition, zero-read guards, intent replay, callback composition and launcher closure ACCEPTED. Joint protocol defined (refusal receipt; checkpoint_release command; collect timeout) and sent to both R5b-1 and R5b-2 workers."
+        "Codex ADVERSARIAL_REVIEW cx-826736db: REJECT — F1 digest/validation failures are executor diagnostic NACKs, not durable refusals (32 KiB reread forever); F2 the writer hold is released after local completion, before the save_upload ACK and the paired capture settle. Envelope, digest convention, real hold acquisition, zero-read guards, intent replay, callback composition and launcher closure ACCEPTED. Joint protocol defined (refusal receipt; checkpoint_release command; collect timeout) and sent to both R5b-1 and R5b-2 workers.",
+        "Round 2 2829675: Codex ADVERSARIAL_REVIEW cx-b1c774ef in flight"
       ]
     },
     {
