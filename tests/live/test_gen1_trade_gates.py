@@ -53,6 +53,9 @@ def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
         pytest.skip(f"{rom}: qualified town SaveRAM or patched trade ROM absent")
     passed, result_path, text = run_gate(GATE, rom_key=f"{rom}_patched", target="town",
                                          timeout=900, quiet=True)
+    # the gate overwrites one result file per run; keep a receipt per cartridge
+    kept = Path(result_path).with_name(f"test_gen1_receptionist_gate_{rom}_result.txt")
+    kept.write_text(text, encoding="utf-8")
     assert passed, f"{rom}: receptionist gate failed ({result_path}):\n{text[-3000:]}"
     assert "[ok] trade_enabled on the patched build" in text
     assert "[ok] bank-qualified trade service site registered" in text
