@@ -408,3 +408,65 @@ def test_reconcile_keeps_a_fresh_reservation_and_expires_a_stale_one():
     assert fresh["status"] == "starting" and fresh["starting_token"] == "t1"
     assert stale["status"] == "stopped" and "starting_token" not in stale and "starting_at" not in stale
     assert orphan["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_an_expired_reservation_archived_meanwhile_is_not_overwritten_by_its_late_spawn(paused_start, registry, monkeypatch):
+    handler, gate = paused_start
+    killed = []
+    monkeypatch.setattr(manager, "_kill_run", lambda pid: killed.append(pid))
+    task = await _park(handler)
+    monkeypatch.setattr(manager, "STARTING_TIMEOUT", -1.0)  # the spawn is now slower than the ceiling
+    listed = json.loads((await handler.handle_list(Request({}))).text)["runs"]
+    assert listed[0]["status"] == "stopped" and "starting_token" not in registry[0]
+    assert (await handler.handle_archive(Request({}, run_id="run_pred"))).status == 200
+    assert "starting_token" not in registry[0] and "starting_at" not in registry[0]
+    gate.set()
+    response = await task
+    assert response.status == 409 and killed == [777]
+    assert registry[0]["status"] == "archived" and registry[0]["pid"] is None and "starting_token" not in registry[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["handle_stop", "handle_archive"])
+async def test_stop_and_archive_of_an_expired_reservation_clear_its_token(paused_start, registry, monkeypatch, action):
+    handler, gate = paused_start
+    monkeypatch.setattr(manager, "_kill_run", lambda pid: None)
+    task = await _park(handler)
+    monkeypatch.setattr(manager, "STARTING_TIMEOUT", -1.0)
+    assert (await getattr(handler, action)(Request({}, run_id="run_pred"))).status == 200
+    assert "starting_token" not in registry[0] and "starting_at" not in registry[0]
+    gate.set()
+    assert (await task).status == 409 and registry[0]["status"] != "running"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_expired_spawn_leaves_the_newer_reservation_intact(registry, tmp_path, monkeypatch):
+    import asyncio
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    gates = [asyncio.Event(), asyncio.Event()]
+    calls = []
+
+    async def spawn(run, *args, **kwargs):
+        index = len(calls)
+        calls.append(run["run_id"])
+        await gates[index].wait()
+        if index == 0:
+            raise RuntimeError("emulator A died")
+        return 888
+    monkeypatch.setattr(manager, "_spawn_run", spawn)
+    handler = manager.RunManager("127.0.0.1")
+    first = await _park(handler)                       # A reserves and parks
+    token_a = registry[0]["starting_token"]
+    monkeypatch.setattr(manager, "STARTING_TIMEOUT", -1.0)   # A's reservation expires
+    second = asyncio.create_task(handler.handle_start(Request({}, run_id="run_pred")))
+    await asyncio.sleep(0)                             # B reserves over the expired A
+    token_b = registry[0]["starting_token"]
+    assert token_b and token_b != token_a and registry[0]["status"] == "starting"
+    monkeypatch.setattr(manager, "STARTING_TIMEOUT", 120.0)
+    gates[0].set()
+    assert (await first).status == 500
+    assert registry[0]["status"] == "starting" and registry[0]["starting_token"] == token_b  # B untouched
+    gates[1].set()
+    assert json.loads((await second).text)["ok"] and registry[0]["status"] == "running" and registry[0]["pid"] == 888

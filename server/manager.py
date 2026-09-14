@@ -160,11 +160,21 @@ def _refusal_body(predecessor: dict | None, reasons: list[str], details: dict | 
     return {"ok": False, "error": "predecessor cannot be resumed", "reasons": reasons, "details": details}
 
 
-def _release(entry: dict, token: str, **fields) -> None:
-    """Drop this start's reservation from an entry and apply the outcome fields."""
-    if entry.get("starting_token") == token:
-        entry.pop("starting_token", None)
-        entry.pop("starting_at", None)
+def _release(entry: dict, token: str, **fields) -> bool:
+    """Apply a start's outcome ONLY while the entry still holds that start's reservation.
+
+    False means another transition (timeout normalisation, stop/archive/delete, a newer start)
+    already took the entry; the caller then owns nothing but its own spawned process."""
+    if entry.get("starting_token") != token:
+        return False
+    _expire(entry, **fields)
+    return True
+
+
+def _expire(entry: dict, **fields) -> None:
+    """A non-owner transition: drop any reservation so a late spawn's commit finds no token."""
+    entry.pop("starting_token", None)
+    entry.pop("starting_at", None)
     entry.update(fields)
 
 
@@ -493,8 +503,10 @@ def _adopt_orphans(runs: list[dict]) -> bool:
 
 
 # ponytail: a start reservation (status "starting", no pid yet) is trusted for this long; past it a
-# manager that died mid-spawn is assumed and the entry is normalised to stopped. Raise it if a spawn
-# ever legitimately takes longer than two minutes.
+# manager that died mid-spawn is assumed and the entry is normalised to stopped. A spawn slower than
+# this ceiling is not a race: it loses its reservation (token cleared by whichever transition comes
+# next) and its own commit then finds no token, kills the process it started and returns 409.
+# Raise the constant if a spawn ever legitimately takes longer than two minutes.
 STARTING_TIMEOUT = 120.0
 
 
@@ -516,10 +528,7 @@ def _reconcile(runs: list[dict]) -> bool:
         if run["status"] == "starting" and _reservation_live(run):
             continue
         if run["status"] in ("running", "starting") and not _is_alive(run.get("pid")):
-            run["status"] = "stopped"
-            run["pid"] = None
-            run.pop("starting_token", None)
-            run.pop("starting_at", None)
+            _expire(run, status="stopped", pid=None)
             changed = True
     if _adopt_orphans(runs):
         changed = True
@@ -738,7 +747,8 @@ class RunManager:
             pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
                                    manager_port=self.manager_port)
         except Exception as e:
-            await self._update_run(run_id, lambda entry: _release(entry, token, status="stopped"))
+            # Revert only our own reservation; an expired-and-replaced start owns nothing here.
+            await self._update_run(run_id, lambda entry: _release(entry, token, status="stopped", pid=None))
             return web.json_response({"ok": False, "error": str(e)}, status=500)
         # Commit on a fresh load under the lock, and only if this reservation still stands: the run may
         # have been resumed (resumed_by) or re-reserved meanwhile; then the spawn is ours to kill.
@@ -768,7 +778,7 @@ class RunManager:
         pid = run.get("pid")
         if pid:
             _kill_run(pid)
-        await self._update_run(run_id, lambda entry: entry.update(status="stopped", pid=None))
+        await self._update_run(run_id, lambda entry: _expire(entry, status="stopped", pid=None))
         return web.json_response({"ok": True})
 
     async def handle_archive(self, request: web.Request) -> web.Response:
@@ -782,7 +792,7 @@ class RunManager:
         pid = run.get("pid")
         if pid and _is_alive(pid):
             _kill_run(pid)
-        await self._update_run(run_id, lambda entry: entry.update(status="archived", pid=None))
+        await self._update_run(run_id, lambda entry: _expire(entry, status="archived", pid=None))
         return web.json_response({"ok": True})
 
     async def handle_delete(self, request: web.Request) -> web.Response:
