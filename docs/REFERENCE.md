@@ -272,7 +272,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 
 | Path | Method | Description |
 |---|---|---|
-| `/` | GET | Main status page |
+| `/` | GET | The pair board (also `/runs/{id}` on the Manager) |
 | `/memorial` | GET | Memorial wall — dead pairs |
 | `/obs` | GET | OBS scene trigger configuration |
 | `/debug` | GET | Debug console |
@@ -301,8 +301,9 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/stream/area-encounter` | GET | Overlay — Soul Link status for the current area |
 | `/stream/enc-table-a` | GET | Overlay — wild encounter rates for Player A's current area |
 | `/stream/enc-table-b` | GET | Overlay — wild encounter rates for Player B's current area |
+| `/stream/{slug}/fragment` | GET | Every overlay above has a fragment twin: the `#root` subtree its page polls every 2 s (idiomorph swap). Same `?theme=&layout=` query. |
 | `/launcher/{player}` | GET | Download pre-configured launcher Lua script |
-| `/calc/` | GET | Damage calculator |
+| `/calc/`, `/calc/{path}` | GET | Damage calculator and its bundle (served from `calc/src/` when present, else `calc/dist/`) |
 | `/patcher` | GET | In-browser companion-ROM patcher (also mounted on the Manager port 8090) |
 | `/companion/SLink-RR.ups` | GET | Download the built companion UPS patch (also mounted on the Manager port 8090) |
 | `/api/status` | GET | Full state JSON dump |
@@ -401,6 +402,31 @@ curl http://localhost:8080/launcher/a -o slink_a.lua
 # Download Player B launcher
 curl http://localhost:8080/launcher/b -o slink_b.lua
 ```
+
+### Run Manager (port 8090)
+
+| Path | Method | Description |
+|---|---|---|
+| `/` | GET | The first running run's board, or the New-run form when there are no runs |
+| `/new` | GET | New-run form: game family, options greyed with reasons, preview |
+| `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers / archive / delete) and its board — live from the run's server, or what it persisted once stopped |
+| `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
+| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: build a randomized ROM pair (categories, jar, clean ROMs, preflight, downloads) |
+| `/broadcast` | GET | The overlay gallery wearing the Manager's rail (`/stream` serves the same page for OBS) |
+| `/tools` | GET | The patcher and the randomized-pair builders |
+| `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned (else most recent running) run — the URLs pasted into OBS |
+| `/api/runs` | GET | The registry |
+| `/api/runs/new` | POST | `{name, game?, ...options}` — creates and auto-starts; `game` is a family key from `manager.GAMES` |
+| `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
+| `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
+| `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |
+| `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, categories? | settings?, fastest_text?}` — builds the pair, records seeds/hashes, writes `rom_contract.json` |
+| `/api/runs/{id}/rom/{player}` | GET | Download that player's randomized ROM as `slink_<run>_<player>.gb` |
+| `/api/randomizer/status` | GET | `?jar=&rom_a=&rom_b=` — jar found, Java on PATH, each ROM present and a clean dump |
+| `/api/browse` | GET | `?dir=&ext=` — directory listing rooted at the user's home and the repo, for the pickers; lists, never reads |
+| `/api/stream/pin` | GET / POST | Which run the overlays show |
+| `/api/status`, `/api/attempts` | GET / POST | Proxied to the pinned run |
+| `/patcher`, `/companion/{name}` | GET | The companion-ROM patcher, same as on a run |
 
 ### JSON API
 
