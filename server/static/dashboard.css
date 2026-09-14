@@ -825,7 +825,9 @@ body.lp-view .players-grid { display: none; }
   color: var(--c-brand);
 }
 .lp-center-cell .bl-chain { width: clamp(16px, 1.2vmin, 22px); }
-.lp-area {
+/* Dashboard-scoped: slink.css owns the bare .lp-area for the linked-party overlay.
+   Unscoped, this silently won over that rule on every page that loads both. */
+.dash-main .lp-area {
   font-size: 0.68em;
   color: var(--c-dim);
   text-align: center;
@@ -1342,7 +1344,7 @@ td .mon-sprite, td img.mon-sprite {
 .area        { color: var(--c-info); }
 .gender-male   { color: var(--c-link); }
 .gender-female { color: #f9a; }   /* Semantic gender pink — palette-independent. */
-.shiny-star    { color: var(--c-gold); }
+.dash-main .shiny-star    { color: var(--c-gold); }  /* base in slink.css */
 
 .killfeed-cause { }
 .kf-inline    { font-size: 0.84em; }
@@ -1597,7 +1599,7 @@ td .mon-sprite, td img.mon-sprite {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .enc-rate { font-weight: bold; white-space: nowrap; min-width: 2.8em; text-align: right; }
-.enc-lv   { color: var(--c-dim); font-size: 0.88em; white-space: nowrap; }
+.dash-main .enc-lv   { color: var(--c-dim); font-size: 0.88em; white-space: nowrap; }  /* base in slink.css */
 .area-enc-details summary { color: var(--c-info); }
 .card-hdr-right { display: flex; align-items: center; gap: 4px; }
 

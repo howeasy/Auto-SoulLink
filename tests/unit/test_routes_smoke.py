@@ -139,6 +139,31 @@ async def test_memorial_page_lists_the_dead_pair(client):
     assert (await resp.text()).strip()
 
 
+@pytest.mark.asyncio
+async def test_macro_smoke_harness_renders_its_mock_cast(client):
+    """`_smoke.html` exercises every macro in `_macros.html` against fixed data. It was routed
+    (`/memorial?_smoke=1`) and rendered by nobody, so a macro could break in the harness
+    alone and no one would know until a designer opened it."""
+    resp = await client.get("/memorial?_smoke=1")
+    assert resp.status == 200
+    body = await resp.text()
+    for mock in ("ZUBAT-A", "PIDGEY-B", "DUNS", "GROWL", "BIG", "FOX", "RIP", "BIRBY-A", "RAT-B"):
+        assert mock in body, f"the smoke harness lost its {mock} mock -- a macro no longer renders"
+
+
+# Every GET route on the run server (69 GET of 106 registered), as of the start of the UI migration. Routes are walked off
+# the live router above, which is the right way to cover new ones -- and exactly the wrong way to
+# notice that collapsing nine pages into three quietly dropped sixty parametrized tests. Change
+# this number on purpose, in the same commit that changes the router.
+EXPECTED_GET_ROUTES = 69
+
+
+def test_route_count_changes_are_deliberate():
+    assert len(_route_ids()) == EXPECTED_GET_ROUTES, (
+        f"{len(_route_ids())} GET routes registered, expected {EXPECTED_GET_ROUTES}. Adding or "
+        "removing a route is fine; update the constant so the coverage change is on record.")
+
+
 # ── Alpine double-init ───────────────────────────────────────────────────────
 # Alpine auto-invokes a component's `init()` with NO arguments during initialisation. Pairing
 # that with x-init="init(...)" runs the method TWICE — once with every parameter undefined.
