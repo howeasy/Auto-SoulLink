@@ -140,7 +140,8 @@ async def test_a_predecessor_can_be_resumed_only_once(registry, tmp_path):
     assert first["ok"] and registry[0]["resumed_by"] == first["run"]["run_id"]
     second = await handler.handle_create_gen1(Request(body(resume_from="run_pred")))
     result = json.loads(second.text)
-    assert second.status == 409 and any("already resumed by " + first["run"]["run_id"] in r for r in result["reasons"])
+    assert second.status == 409 and result["reasons"] == ["predecessor already resumed"]
+    assert result["details"] == {"resumed_by": first["run"]["run_id"]}
     assert len(registry) == 2
 
 
@@ -188,3 +189,46 @@ async def test_audit_failure_returns_a_generic_reason_without_exception_text(reg
     result = json.loads(response.text)
     assert response.status == 409 and result["reasons"] == ["predecessor audit failed"]
     assert "secret" not in response.text and "private" not in response.text and len(registry) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_start_paused_in_its_spawn_does_not_erase_a_concurrent_resume(registry, tmp_path, monkeypatch):
+    import asyncio
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    predecessor(tmp_path / "run_other")
+    registry.append(entry("run_other"))
+    gate = asyncio.Event()
+
+    async def paused_spawn(run, *args, **kwargs):
+        await gate.wait()
+        return 777
+    monkeypatch.setattr(manager, "_spawn_run", paused_spawn)
+    handler = manager.RunManager("127.0.0.1")
+    start = asyncio.create_task(handler.handle_start(Request({}, run_id="run_other")))
+    await asyncio.sleep(0)  # handle_start has loaded the registry and is parked inside _spawn_run
+    created = json.loads((await handler.handle_create_gen1(Request(body(resume_from="run_pred")))).text)
+    assert created["ok"]
+    gate.set()
+    assert json.loads((await start).text)["ok"]
+    by_id = {run["run_id"]: run for run in registry}
+    assert by_id["run_other"]["status"] == "running" and by_id["run_other"]["pid"] == 777
+    assert by_id["run_pred"]["resumed_by"] == created["run"]["run_id"] and created["run"]["run_id"] in by_id
+
+
+@pytest.mark.asyncio
+async def test_registry_mutations_are_serialised_under_one_lock(registry, tmp_path, monkeypatch):
+    handler = manager.RunManager("127.0.0.1")
+    seen = []
+    real_save = manager._save_registry
+
+    def observing_save(value):
+        seen.append(handler._registry_lock.locked())
+        real_save(value)
+    monkeypatch.setattr(manager, "_save_registry", observing_save)
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    await handler.handle_create_gen1(Request(body(resume_from="run_pred")))
+    await handler.handle_stop(Request({}, run_id="run_pred"))
+    await handler.handle_archive(Request({}, run_id="run_pred"))
+    assert seen and all(seen)

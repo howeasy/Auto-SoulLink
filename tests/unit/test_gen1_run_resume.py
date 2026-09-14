@@ -93,7 +93,9 @@ def test_projection_mismatch_refuses(tmp_path, monkeypatch):
     predecessor(tmp_path)
     monkeypatch.setattr(gen1_run_resume, "PROJECTION", "wram-projection-v9")
     audit = audit_predecessor(tmp_path, registry_entry=entry())
-    assert not audit.ok and any("projection" in reason for reason in audit.reasons)
+    assert not audit.ok and "save witness projection is not the persistent CartRAM projection" in audit.reasons
+    # Reasons are fixed strings; the interpolated facts live in details.
+    assert audit.details["projection"] == {"a": SAVE_PROJECTION, "b": SAVE_PROJECTION, "required": "wram-projection-v9"}
 
 
 def test_pending_commands_refuse(tmp_path):
@@ -182,8 +184,9 @@ def append_events(directory, player, requests):
         db.close()
 
 
+# The exact pure heartbeat lua/gen1_observation_loop.lua publishes: nothing observed, out of battle, no trainer.
 HEARTBEAT = {"event": "observation", "schema": "rby-observation-v1", "frame": 500, "sequence": 9, "context": {}, "rom": {},
-             "signals": None, "acquisitions": [], "inventory": None}
+             "signals": None, "acquisitions": [], "inventory": None, "battle": 0, "trainer": None}
 
 
 def test_empty_heartbeats_after_the_witness_do_not_hold(tmp_path):
@@ -215,3 +218,26 @@ def test_unreadable_predecessor_reasons_carry_no_exception_text(tmp_path):
     audit = audit_predecessor(tmp_path, registry_entry=entry())
     assert not audit.ok and "predecessor journal could not be read" in audit.reasons
     assert not any("secret" in reason or "nowhere" in reason for reason in audit.reasons)
+
+
+@pytest.mark.parametrize("shape", [
+    {"trainer": {"trainer_id": 200, "frame": 400}},          # trainer-only engagement (Rival Swap decision)
+    {"battle": 1},                                             # in a battle, nothing else observed
+    {"battle": 2},
+    {"event": "trade_offer", "signals": None, "acquisitions": [], "inventory": None},
+    {"event": "native_release"},
+    {"event": "something_new"},
+    {"native_checkpoint": {"schema": "rby-native-observation-v1", "party": []}},
+])
+def test_any_non_heartbeat_event_after_the_witness_holds(tmp_path, shape):
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [HEARTBEAT, {**HEARTBEAT, **shape}])
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert not audit.ok and "player a has committed gameplay after the save witness; hold" in audit.reasons
+
+
+def test_heartbeat_without_the_battle_or_trainer_fields_is_not_pure(tmp_path):
+    older = {k: v for k, v in HEARTBEAT.items() if k not in ("battle", "trainer")}
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [older])
+    assert not audit_predecessor(tmp_path, registry_entry=entry()).ok

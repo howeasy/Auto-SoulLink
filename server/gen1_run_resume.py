@@ -28,9 +28,6 @@ PROJECTION = SAVE_PROJECTION
 CONTINUE_SCHEMA = "rby-continue-receipt-v1"
 CONTINUE_ORDER = ("load", "loaded", "chose", "pressed", "enter")
 CONTINUE = json.loads((Path(__file__).resolve().parents[1] / "data/games/gen1_rby/continue_sites.json").read_text())
-# Events whose commit means gameplay after the save may have happened. A free-run 'observation'
-# (P10) counts when it carries signals, inventory or acquisitions; empty heartbeats do not.
-GAMEPLAY_EVENTS = {"engine_signals", "inventory_observation"}
 # ponytail: post-witness events are read in one bounded window and refused beyond it; page if a
 # predecessor ever legitimately heartbeats more than this after its last save.
 EVENT_WINDOW = 4096
@@ -53,6 +50,7 @@ class ResumeAudit:
     required: dict | None = None
     rules: dict | None = None
     identities: dict | None = None
+    details: dict | None = None
 
     @property
     def ok(self):
@@ -85,13 +83,15 @@ def known_keys(document, rules):
     return {player: {"known_keys": sorted(values)} for player, values in keys.items()}
 
 
-def _gameplay_bearing(request):
-    event = request.get("event")
-    if event in GAMEPLAY_EVENTS:
-        return True
-    # A free-run heartbeat is {signals: None, inventory: None, acquisitions: []} (gen1_observation_runtime).
-    return event == "observation" and (request.get("signals") is not None or request.get("inventory") is not None
-                                       or bool(request.get("acquisitions")))
+def _pure_heartbeat(request):
+    """The one event that proves nothing happened: lua/gen1_observation_loop.lua's idle publication
+    (no signals, inventory or receipts, wIsInBattle 0, no trainer engagement, no native checkpoint).
+    Every other committed event - trade, native, engine signals, inventory, anything unknown - is
+    gameplay after the save and holds the resume."""
+    return (isinstance(request, dict) and request.get("event") == "observation"
+            and request.get("signals") is None and request.get("inventory") is None
+            and not request.get("acquisitions") and request.get("battle") == 0
+            and request.get("trainer") is None and request.get("native_checkpoint") is None)
 
 
 def audit_predecessor(run_dir, *, registry_entry):
@@ -132,6 +132,7 @@ def audit_predecessor(run_dir, *, registry_entry):
     witnesses = document["components"].get(SAVE_WITNESS, {})
     signals = document["components"].get("gen1-engine-signals", {})
     required = {}
+    details = {}
     db = sqlite3.connect((directory / spec["journal"]).as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=2.5)
     try:
         db.execute("PRAGMA query_only=ON")
@@ -144,7 +145,10 @@ def audit_predecessor(run_dir, *, registry_entry):
                 reasons.append(f"player {player} has no acknowledged save witness")
                 continue
             if witness["projection"] != PROJECTION:
-                reasons.append(f"player {player} save witness projection {witness['projection']!r} is not {PROJECTION!r}")
+                reason = "save witness projection is not the persistent CartRAM projection"
+                if reason not in reasons:
+                    reasons.append(reason)
+                details.setdefault("projection", {"required": PROJECTION})[player] = witness["projection"]
             row = db.execute("SELECT revision FROM events WHERE player=? AND operation_id=?",
                              (player, witness["operation_id"])).fetchone()
             if row is None:
@@ -158,7 +162,7 @@ def audit_predecessor(run_dir, *, registry_entry):
                                (player, row[0], EVENT_WINDOW + 1)).fetchall()
             if len(later) > EVENT_WINDOW:
                 reasons.append("resume audit exceeded the bounded event window")
-            elif any(_gameplay_bearing(json.loads(r[0])) for r in later):
+            elif not all(_pure_heartbeat(json.loads(r[0])) for r in later):
                 reasons.append(f"player {player} has committed gameplay after the save witness; hold")
             required[player] = {"digest": witness["digest"], "projection": witness["projection"],
                                 "witness_index": witness["index"], "operation_id": witness["operation_id"]}
@@ -168,7 +172,7 @@ def audit_predecessor(run_dir, *, registry_entry):
     finally:
         db.close()
     if reasons:
-        return ResumeAudit(from_run, tuple(reasons), journal_run_id=stored.run_id, contract_hash=contract_hash)
+        return ResumeAudit(from_run, tuple(reasons), journal_run_id=stored.run_id, contract_hash=contract_hash, details=details)
     return ResumeAudit(from_run, (), journal_run_id=stored.run_id, contract_hash=contract_hash,
                        cartridges=spec["contract"]["players"], required=required, rules=rules,
                        identities=known_keys(document, rules))

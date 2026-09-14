@@ -147,8 +147,16 @@ def _resume_refusal(predecessor: dict | None) -> list[str] | None:
     if predecessor.get("status") == "running":
         return ["predecessor run is still marked running in the registry; stop it first"]
     if predecessor.get("resumed_by"):
-        return ["predecessor already resumed by " + str(predecessor["resumed_by"])]
+        return ["predecessor already resumed"]
     return None
+
+
+def _refusal_body(predecessor: dict | None, reasons: list[str], details: dict | None = None) -> dict:
+    """409 body: fixed reason strings; every interpolated fact lives in details."""
+    details = dict(details or {})
+    if predecessor and predecessor.get("resumed_by"):
+        details["resumed_by"] = predecessor["resumed_by"]
+    return {"ok": False, "error": "predecessor cannot be resumed", "reasons": reasons, "details": details}
 
 
 def _find_run(runs: list[dict], run_id: str) -> dict | None:
@@ -498,6 +506,19 @@ class RunManager:
         self.bind_host = bind_host
         self.manager_port = manager_port
         self._stream_pin_id: str | None = None  # run_id pinned for stream overlays
+        # Every registry load-modify-save runs under this lock. Slow work (ROM admission, the resume
+        # audit, runtime creation, subprocess spawn) stays outside it; the mutation reloads inside.
+        self._registry_lock = asyncio.Lock()
+
+    async def _update_run(self, run_id: str, mutate) -> dict | None:
+        """Serialised load -> mutate(run) -> save of one entry, on a fresh load. None if unknown."""
+        async with self._registry_lock:
+            runs = _load_registry()
+            run = _find_run(runs, run_id)
+            if run is not None:
+                mutate(run)
+                _save_registry(runs)
+            return run
 
     def _get(self) -> list[dict]:
         runs = _load_registry()
@@ -640,8 +661,10 @@ class RunManager:
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
         _write_run_meta(run)
-        runs.append(run)
-        _save_registry(runs)
+        async with self._registry_lock:
+            runs = _load_registry()
+            runs.append(run)
+            _save_registry(runs)
 
         # Auto-start
         try:
@@ -649,7 +672,7 @@ class RunManager:
                                    manager_port=self.manager_port)
             run["status"] = "running"
             run["pid"] = pid
-            _save_registry(runs)
+            await self._update_run(run_id, lambda entry: entry.update(status="running", pid=pid))
         except Exception as e:
             log.error(f"Failed to auto-start run {run_id}: {e}")
 
@@ -670,9 +693,11 @@ class RunManager:
                                    manager_port=self.manager_port)
         except Exception as e:
             return web.json_response({"ok": False, "error": str(e)}, status=500)
-        run["status"] = "running"
-        run["pid"] = pid
-        _save_registry(runs)
+        # The registry may have changed during the spawn (a resume commits a successor + resumed_by):
+        # mutate a fresh load under the lock, never the list read before the await.
+        if await self._update_run(run_id, lambda entry: entry.update(status="running", pid=pid)) is None:
+            _kill_run(pid)
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
         return web.json_response({"ok": True, "pid": pid})
 
     async def handle_stop(self, request: web.Request) -> web.Response:
@@ -684,9 +709,7 @@ class RunManager:
         pid = run.get("pid")
         if pid:
             _kill_run(pid)
-        run["status"] = "stopped"
-        run["pid"] = None
-        _save_registry(runs)
+        await self._update_run(run_id, lambda entry: entry.update(status="stopped", pid=None))
         return web.json_response({"ok": True})
 
     async def handle_archive(self, request: web.Request) -> web.Response:
@@ -698,9 +721,7 @@ class RunManager:
         pid = run.get("pid")
         if pid and _is_alive(pid):
             _kill_run(pid)
-        run["status"] = "archived"
-        run["pid"] = None
-        _save_registry(runs)
+        await self._update_run(run_id, lambda entry: entry.update(status="archived", pid=None))
         return web.json_response({"ok": True})
 
     async def handle_delete(self, request: web.Request) -> web.Response:
@@ -716,11 +737,12 @@ class RunManager:
         # Remove data directory
         data_dir = os.path.join(MANAGER_DIR, run_id)
         if os.path.isdir(data_dir):
-            shutil.rmtree(data_dir, ignore_errors=True)
+            shutil.rmtree(data_dir, onexc=lambda fn, path, exc: log.warning("delete %s: %s left behind: %s", run_id, path, exc))
             log.info(f"Deleted data directory for run {run_id}")
         # Remove from registry
-        runs = [r for r in runs if r["run_id"] != run_id]
-        _save_registry(runs)
+        async with self._registry_lock:
+            runs = [r for r in _load_registry() if r["run_id"] != run_id]
+            _save_registry(runs)
         log.info(f"Deleted run {run_id}")
         return web.json_response({"ok": True})
 
@@ -804,6 +826,7 @@ class RunManager:
                 if predecessor is None:
                     return web.json_response({'ok':False,'error':'Run not found','reasons':['predecessor run is not in the registry']},status=404)
                 refused=_resume_refusal(predecessor)
+                details=None
                 if refused is None:
                     root=Path(MANAGER_DIR).resolve()
                     predecessor_dir=(root/predecessor['run_id']).resolve()
@@ -816,12 +839,13 @@ class RunManager:
                         refused=['predecessor audit failed']
                     else:
                         refused=None if audit.ok else list(audit.reasons)
+                        details=audit.details
                         # The registry may have changed during the audit (a start, or another resume).
                         runs=_load_registry()
                         predecessor=_find_run(runs,body['resume_from'])
                         refused=refused or _resume_refusal(predecessor)
                 if refused is not None:
-                    return web.json_response({'ok':False,'error':'predecessor cannot be resumed','reasons':refused},status=409)
+                    return web.json_response(_refusal_body(predecessor,refused,details),status=409)
                 resume=audit.resume_record()
             run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
             directory=Path(MANAGER_DIR)/run_id
@@ -853,17 +877,22 @@ class RunManager:
                 # The launch contract each client must meet (runtime_launcher/bizhawk_launch emit it per player);
                 # the imported rules state lives in the runtime journal, not the registry.
                 run['resume']={'from_run':resume['from_run'],'contract_hash':resume['contract_hash'],'required':resume['required']}
+            _write_run_meta(run)
+            async with self._registry_lock:   # the commit: fresh load, final predecessor check, one save
                 runs=_load_registry()
-                predecessor=_find_run(runs,resume['from_run'])
-                refused=_resume_refusal(predecessor)
-                if refused is not None:   # changed under the creation; the new directory must not survive
-                    shutil.rmtree(directory,ignore_errors=True)
-                    return web.json_response({'ok':False,'error':'predecessor cannot be resumed','reasons':refused},status=409)
-                predecessor['resumed_by']=run_id
-            _write_run_meta(run);runs.append(run);_save_registry(runs)
+                if resume is not None:
+                    predecessor=_find_run(runs,resume['from_run'])
+                    refused=_resume_refusal(predecessor)
+                    if refused is not None:   # changed under the creation; the new directory must not survive
+                        shutil.rmtree(directory,onexc=lambda fn,path,exc:log.warning('resume refusal cleanup left %s: %s',path,exc))
+                        return web.json_response(_refusal_body(predecessor,refused),status=409)
+                    predecessor['resumed_by']=run_id
+                runs.append(run)
+                _save_registry(runs)
             if body.get('start',True):
                 run['pid']=await _spawn_run(run,self.bind_host,manager_port=self.manager_port)
-                run['status']='running';_save_registry(runs)
+                run['status']='running'
+                await self._update_run(run_id,lambda entry:entry.update(status='running',pid=run['pid']))
         except (ValueError,TypeError,JournalError) as error:
             return web.json_response({'ok':False,'error':str(error)},status=400)
         except (RuntimeError,OSError,sqlite3.Error) as error:
@@ -889,7 +918,7 @@ class RunManager:
             contract = await asyncio.to_thread(clean_contract, {"a": body["rom_a"], "b": body["rom_b"]})
             write_contract(Path(MANAGER_DIR) / run_id / "rom_contract.json", contract)
             run["cartridges"] = contract["players"]
-            _save_registry(runs)
+            await self._update_run(run_id, lambda entry: entry.update(cartridges=contract["players"]))
         except (AdmissionError, ValueError, TypeError) as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
         except OSError as exc:
@@ -981,7 +1010,7 @@ class RunManager:
                 for p, v in result["players"].items()
             },
         }
-        _save_registry(runs)
+        await self._update_run(run_id, lambda entry: entry.update(randomizer=run["randomizer"]))
         _write_run_meta(run)
         # The server process learns about the contract through the run directory, which is
         # the only thing the two already share (--data-dir). Written as its own file rather
