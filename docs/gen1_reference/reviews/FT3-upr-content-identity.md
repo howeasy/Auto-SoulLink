@@ -211,18 +211,131 @@ at shifted line numbers, still all outside the `content_identity` helper at line
 zero new findings from this round's edit, confirmed by cross-checking every reported line
 number against the `git diff` hunks.
 
+## Round 2 diff hash (candidate c868282, superseded by round 3 below)
+
+`sha256(git diff -- server/gen1_prepared_cartridges.py tests/unit/test_gen1_prepared_cartridges.py)`
+at the time of the round-2 candidate (cumulative round 1 + round 2 against the pre-FT-3
+baseline at HEAD 8467394):
+
+```
+5fd4a06db55dfe0367b14f54d8f2f268375946dfa2160e9b8123cd2a06cb3b62
+```
+
+## Round 3 — REJECT again: exclusion-list whack-a-mole, one more leak
+
+Independent review of candidate c868282 found a third leak of the same shape: `generation`
+still contained `log_sha256` — the hash of the raw UPR log, and that log embeds
+`"Time elapsed: <ms>"` (`Randomizer.java:690`, passed through unmodified by
+`tools/upr/SLinkRandomizer.java:58-65`). Two runs of the identical recipe (same ROM, settings,
+seed, custom names) that merely took a different number of milliseconds inside UPR produced a
+different `log_sha256`, and therefore a different `content_profile_hash` — the same class of
+bug as rounds 1 and 2, just in a field neither round's exclusion list had reached yet.
+
+Rounds 1 and 2 both fixed the specific leak found and missed the next one, because both
+subtracted known-bad keys from the full record (`{k: v for k, v in generation.items() if k !=
+...}`) instead of asserting what belongs. Per the coordinator's round-3 direction, this round
+replaces the exclusion list with an explicit **allowlist** of content-bearing keys
+(`CONTENT_IDENTITY_GENERATION_KEYS`, `server/gen1_prepared_cartridges.py:48-50`):
+
+```python
+CONTENT_IDENTITY_GENERATION_KEYS = frozenset({
+    "schema", "source_commit", "generation", "jar_sha256", "bridge_sha256", "settings_sha256",
+    "gen1_policy_sha256", "source_sha256", "source_sha1", "seed", "effective_settings_string",
+    "output_sha256", "output_sha1", "size", "custom_names"})
+```
+
+`content_identity` now filters `generation` through membership in this set (and still projects
+`custom_names` down to `{"sha256": ...}`, per round 2):
+
+```python
+def content_identity(semantic_profile, manifest_sha256, generation):
+    return digest({"semantic_profile": semantic_profile, "manifest_sha256": manifest_sha256,
+        "generation": {k: ({"sha256": v["sha256"]} if k == "custom_names" else v)
+            for k, v in generation.items() if k in CONTENT_IDENTITY_GENERATION_KEYS}})
+```
+
+Excluded keys, documented in a comment directly above the constant
+(`server/gen1_prepared_cartridges.py:34-47`), and why each is provenance/location rather than
+content:
+
+- **`output`** — absolute path to this run's own `randomized.gbc` (`run_pinned`,
+  `upr_runner.py:140`). (Round 1.)
+- **`custom_names.selection`** — the absolute path (or jar member) `selected_custom_names()`
+  resolved (`upr_runner.py:56-66,138`), present even with no Manager override; `custom_names`
+  keeps its content hash (`sha256`), only `selection` is dropped. (Round 2.)
+- **`log_sha256`** — hash of the raw UPR log, which embeds wall-clock "Time elapsed"; not a
+  property of the produced cartridge. (Round 3, this round.)
+- **`status`** — `upr_runner.py`'s own pipeline-stage marker
+  (`"produced_requires_semantic_scan"`), constant for every run at this point in the pipeline;
+  never varies between two runs of the same recipe, but it is location/provenance-shaped
+  metadata about the record itself rather than cartridge content, so it is excluded on the
+  same principle rather than left in by accident.
+
+Because this is now an allowlist, a key `upr_runner.py` adds to the generation record in the
+future does **not** silently enter `content_identity` (and does not silently get excluded
+either) — it requires a conscious decision to add it to `CONTENT_IDENTITY_GENERATION_KEYS`,
+which `test_content_identity_generation_allowlist_is_exact` pins so that decision cannot be
+skipped unnoticed.
+
+The `canonical_json(expected) != canonical_json(report)` provenance comparison in
+`PreparedCartridges.__init__` (unrelated to `content_identity`) still compares the full,
+unfiltered record and was not touched in any round.
+
+### TDD (round 3)
+
+- `test_content_identity_ignores_log_sha256` — same recipe, only `log_sha256` differs → equal
+  digest. **Red** against the round-2 fix (module still lacked `CONTENT_IDENTITY_GENERATION_KEYS`
+  at all, so this and the allowlist test both started as `ImportError`); after adding the
+  constant and switching the comprehension to the allowlist, both pass and the log-only
+  difference stops changing the digest.
+- `test_content_identity_generation_allowlist_is_exact` — asserts the exact 15-key allowlist
+  set, so a future producer-record change to `upr_runner.py` must touch this test (and the
+  allowlist) on purpose.
+- All prior tests kept and still pass: `test_content_identity_ignores_the_absolute_output_path`,
+  `test_content_identity_ignores_the_custom_names_selection_path_even_with_output_too`,
+  `test_content_identity_changes_with_custom_names_sha256`,
+  `test_content_identity_changes_with_settings_sha256`,
+  `test_content_identity_changes_with_seed`,
+  `test_content_identity_changes_with_output_sha256`,
+  `test_content_identity_changes_with_semantic_profile_or_manifest_hash`.
+
+### Pytest output (round 3)
+
+```
+$ python -m pytest tests/unit/test_gen1_prepared_cartridges.py -q -o addopts= -p no:cacheprovider
+.........
+9 passed in 0.27s
+
+$ python -m pytest tests/unit/test_gen1_prepared_cartridges.py tests/unit/test_gen1_prepared_metadata.py tests/unit/test_gen1_companion_admission.py tests/unit/test_manager_prepared_gen1.py -q -o addopts= -p no:cacheprovider
+..................................................................
+66 passed in 2.68s
+```
+
+### ruff (round 3)
+
+```
+$ ruff check tests/unit/test_gen1_prepared_cartridges.py
+All checks passed!
+$ ruff check server/gen1_prepared_cartridges.py
+```
+`server/gen1_prepared_cartridges.py` reports the same 38 pre-existing findings as rounds 1-2
+(shifted line numbers, all outside the allowlist constant and `content_identity` at lines
+34-64) — zero new findings, confirmed by cross-checking every reported line number against the
+`git diff` hunks.
+
 ## Compatibility cutover
 
 This is a breaking identity change for **existing persisted UPR runtimes**: any prepared run
 created before this fix — its `gen1_runtime.json` contract, its SQLite journal snapshot, its
 Manager registry `cartridges` entry, and any launcher built from the old `contract()` — carries
-a `content_profile_hash` computed from the old (round 1: leaks `custom_names.selection`; before
-round 1: also leaks `output`) formula. Reopening such a run replays `PreparedCartridges(...)`
-fresh (`server/gen1_run_config.py:47`), which now recomputes the new, corrected hash; that no
-longer equals the persisted `value["contract"]`, so `read_bound_configuration` raises at
-`server/gen1_run_config.py:50-51` ("prepared Gen1 contract differs from the committed runtime"),
-and `PreparedCartridges.validate_contract` (`server/gen1_prepared_cartridges.py:227-229`) would
-likewise refuse it wherever else a stored contract is checked against a re-derived one.
+a `content_profile_hash` computed from an older, leakier formula (round 2: leaks `log_sha256`;
+round 1: also leaks `custom_names.selection`; before round 1: also leaks `output`). Reopening
+such a run replays `PreparedCartridges(...)` fresh (`server/gen1_run_config.py:47`), which now
+recomputes the new, corrected hash; that no longer equals the persisted `value["contract"]`, so
+`read_bound_configuration` raises at `server/gen1_run_config.py:50-51` ("prepared Gen1 contract
+differs from the committed runtime"), and `PreparedCartridges.validate_contract`
+(`server/gen1_prepared_cartridges.py:242-244`) would likewise refuse it wherever else a stored
+contract is checked against a re-derived one.
 
 This is accepted, deliberately, for this fresh human session: it affects **only reproduced-UPR
 runs that already exist on disk from before this fix** — start a new run and it is fine. There
@@ -232,11 +345,11 @@ resumable and must be re-created. Canonical companion runs (`stage_canonical_pai
 installed catalog (`companion_profiles()[variant]["content_profile_hash"]`), never from a
 run-local `generation` record, so nothing about this fix changes their identity.
 
-## Round 2 diff hash
+## Round 3 diff hash
 
 `sha256(git diff -- server/gen1_prepared_cartridges.py tests/unit/test_gen1_prepared_cartridges.py)`
-(cumulative diff against the pre-FT-3 baseline at HEAD 8467394, i.e. round 1 + round 2 together):
+(cumulative diff against the pre-FT-3 baseline at HEAD 8467394, i.e. all three rounds together):
 
 ```
-5fd4a06db55dfe0367b14f54d8f2f268375946dfa2160e9b8123cd2a06cb3b62
+de913a5e5a89b8d6959fa70ae5e8fbcad9e996209aa79367c8826dceed87191e
 ```

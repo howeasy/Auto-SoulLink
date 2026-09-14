@@ -15,8 +15,15 @@ str(resolved_path)}` (or "file"/"path", or "jar-resource"/"member") as `selectio
 `custom_names": {"sha256": ..., "selection": selection}`. This is present even when the
 Manager passed no explicit override (the default resolution still records an absolute
 `path`). The fixture below builds `custom_names` in that real nested shape.
+
+Round 3: excluding fields one at a time kept missing leaks — `generation.log_sha256` hashes
+the raw UPR log, which embeds "Time elapsed: <ms>" (Randomizer.java:690, passed through by
+tools/upr/SLinkRandomizer.java:58-65), so byte-identical recipes still produced different
+digests depending on how long UPR happened to take. `content_identity` now projects
+`generation` through an explicit ALLOWLIST of content-bearing keys instead of an exclusion
+list, so a future key added to the producer's record does not silently enter the identity.
 """
-from server.gen1_prepared_cartridges import content_identity
+from server.gen1_prepared_cartridges import CONTENT_IDENTITY_GENERATION_KEYS, content_identity
 
 
 def _generation(output, custom_names_path=r"C:\upr\jar\customnames.rncn"):
@@ -87,3 +94,22 @@ def test_content_identity_changes_with_semantic_profile_or_manifest_hash():
     baseline = content_identity(SEMANTIC_PROFILE, MANIFEST_SHA256, generation)
     assert content_identity({"variant": "red"}, MANIFEST_SHA256, generation) != baseline
     assert content_identity(SEMANTIC_PROFILE, "7" * 64, generation) != baseline
+
+
+def test_content_identity_ignores_log_sha256():
+    """The raw UPR log embeds "Time elapsed: <ms>" (Randomizer.java:690, passed through by
+    tools/upr/SLinkRandomizer.java:58-65) — wall-clock noise, not content. Two otherwise
+    identical recipes that merely ran at different speeds must still compare equal."""
+    base = _generation("out")
+    other = dict(base, log_sha256="8" * 64)
+    assert (content_identity(SEMANTIC_PROFILE, MANIFEST_SHA256, base)
+            == content_identity(SEMANTIC_PROFILE, MANIFEST_SHA256, other))
+
+
+def test_content_identity_generation_allowlist_is_exact():
+    """Pin the exact set of `generation` keys that enter the identity, so a new key added to
+    upr_runner.py's producer record is a conscious decision here, not a silent leak or a
+    silent no-op."""
+    assert {"schema", "source_commit", "generation", "jar_sha256", "bridge_sha256", "settings_sha256",
+        "gen1_policy_sha256", "source_sha256", "source_sha1", "seed", "effective_settings_string",
+        "output_sha256", "output_sha1", "size", "custom_names"} == CONTENT_IDENTITY_GENERATION_KEYS

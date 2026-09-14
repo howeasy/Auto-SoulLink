@@ -31,23 +31,37 @@ CANONICAL_SCHEMA="slink-gen1-canonical-companion-pair-v1"
 SPAN_OPTIONS={"protected":((0x100,0x150),),"bank_size":0x4000}
 
 
+# Explicit ALLOWLIST of the upr_runner.py generation-record keys that are actually content.
+# Excluding fields one at a time as leaks were found (output, then custom_names.selection,
+# then log_sha256) kept missing the next one, so this is an allowlist, not an exclusion list:
+# a key upr_runner.py adds later does NOT enter content_identity unless it is added here on
+# purpose. Keys left out, and why each is provenance/location, not content:
+#   - "output": absolute path to this run's own randomized.gbc (run_pinned, upr_runner.py:140).
+#   - "custom_names.selection": absolute path (or jar member) selected_custom_names() resolved
+#     (upr_runner.py:56-66,138) -- present even with no Manager override. custom_names keeps
+#     its content hash ("sha256"); only "selection" (which branch, from where) is dropped.
+#   - "log_sha256": hash of the raw UPR log, which embeds "Time elapsed: <ms>"
+#     (Randomizer.java:690, passed through by tools/upr/SLinkRandomizer.java:58-65) -- wall
+#     clock noise, not content.
+#   - "status": upr_runner.py's own pipeline-stage marker ("produced_requires_semantic_scan"),
+#     constant for every run at this point; not a property of the cartridge.
+CONTENT_IDENTITY_GENERATION_KEYS=frozenset({"schema","source_commit","generation","jar_sha256",
+    "bridge_sha256","settings_sha256","gen1_policy_sha256","source_sha256","source_sha1","seed",
+    "effective_settings_string","output_sha256","output_sha1","size","custom_names"})
+
+
 def content_identity(semantic_profile,manifest_sha256,generation):
     """Hash a location-free view of a reproduced-UPR pair's content for content_profile_hash.
 
-    `generation` is upr_runner.py's per-player record. Two of its fields are run-local
-    absolute paths, not content: `"output": str(output)` (run_pinned, upr_runner.py:140),
-    and `custom_names.selection` (selected_custom_names, upr_runner.py:56-66 -> run_pinned,
-    upr_runner.py:138) which carries `{"kind": ..., "path": str(resolved_path)}` (or
-    "jar-resource"/"member") even when the Manager passed no explicit override. Byte-identical
-    ROM+settings+seed prepared into two different run directories must still compare equal
-    here, or a resumed run is wrongly refused as a cartridge mismatch (gen1_run_config.py's
-    "resumed run must use the predecessor cartridge pair" check). custom_names keeps its
-    content hash (`sha256`) — only its location-carrying `selection` is dropped. Every other
-    field of `generation` (settings/seed/output hashes etc.) still participates.
+    `generation` is upr_runner.py's per-player record; only CONTENT_IDENTITY_GENERATION_KEYS
+    of it participate (see that constant's comment for the excluded keys and why). Byte-identical
+    ROM+settings+seed prepared into two different run directories, at two different UPR run
+    times, must still compare equal here, or a resumed run is wrongly refused as a cartridge
+    mismatch (gen1_run_config.py's "resumed run must use the predecessor cartridge pair" check).
     """
     return digest({"semantic_profile":semantic_profile,"manifest_sha256":manifest_sha256,
         "generation":{k:({"sha256":v["sha256"]} if k=="custom_names" else v)
-            for k,v in generation.items() if k!="output"}})
+            for k,v in generation.items() if k in CONTENT_IDENTITY_GENERATION_KEYS}})
 
 
 def _companion_from_clean(rom):
