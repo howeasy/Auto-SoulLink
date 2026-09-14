@@ -15,11 +15,14 @@ explains a failure later:
     2. rom-layout         — every flat ROM offset and patch span, against the dumps
     3. lua-parse          — every client and gate file parses
     4. profile-addresses  — WRAM/SRAM symbols, against pret
-    5. patch-build        — the clean dumps still hold what the manifest displaces
-    6. live-gates         — real engine behaviour on real cartridges, incl. the panel
+    5. profile-generated  — profile.json is what the pinned .sym files generate
+    6. statics-generated  — static_encounters.json is what pret's scripts/objects say
+    7. fixtures           — every committed battery save qualifies as a real game state
+    8. patch-build        — the clean dumps still hold what the manifest displaces
+    9. live-gates         — real engine behaviour on real cartridges, incl. the panel
                             on a randomized+injected ROM
-    7. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
-    8. duo-pairs          — every scenario on both pairings, through the real server
+   10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
+   11. duo-pairs          — every scenario on both pairings, through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -95,6 +98,14 @@ LANES = [
          why="every Lua file parses under the runtime the clients actually use"),
     Lane("profile-addresses", [_PY, "tools/verify_profile_addresses.py"],
          why="WRAM/SRAM symbols against pret"),
+    Lane("profile-generated", [_PY, "tools/gen_gen1_profile.py", "--check"],
+         why="data/games/gen1_rby/profile.json is exactly what the pinned pret .sym files "
+             "generate"),
+    Lane("statics-generated", [_PY, "tools/gen_gen1_statics.py", "--check"],
+         why="static_encounters.json is exactly what pret's scripts/objects say"),
+    Lane("fixtures", [_PY, "tools/gen1_fixtures.py", "--qualify"],
+         why="every committed battery save is a real game state the codec qualifies "
+             "(Yellow legacy pinned by name)"),
     Lane("patch-build", [_PY, "patch/gen1/tools/build.py", "--verify-only"],
          why="the clean dumps still hold what the manifest expects to displace"),
     Lane("live-gates",
@@ -127,6 +138,9 @@ REQUIREMENTS = {
     "rom-layout": ["F-2"],
     "lua-parse": ["C-4"],
     "profile-addresses": ["F-1"],
+    "profile-generated": ["F-1"],
+    "statics-generated": ["F-5", "S-8"],
+    "fixtures": ["F-6"],
     "patch-build": ["T-1"],
     "live-gates": ["(pre-rewrite gates; retired in Phase 8)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
