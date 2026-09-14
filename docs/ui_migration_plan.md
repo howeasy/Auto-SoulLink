@@ -9,9 +9,12 @@ Done in 7: the three raw pages moved to `templates/pages/`, `/broadcast` and `/t
 Manager. Done in 8: `/runs/{id}/randomizer` (categories → `build_categories`, preflight,
 browse, download; verified against the real jar in ~4 s, so no job queue). Done in 9: mockups,
 Track B and 22 fonts deleted, fixtures moved to `tests/fixtures/ui/`, requirements split,
-README rewritten for the one-origin Manager. **Still open in 9:** `dashboard.css`/`sidebar.css`
-cleanup, table-driving the overlay handlers, the flag table in `manager.py`, `--font-ui` flip
-after checking overlays, the route-docs test, `calc/src/js/slink_bridge.js` palette. Not done
+README rewritten for the one-origin Manager. Also done in 9: the overlay handlers are one table (`STREAM_OVERLAYS`, −220),
+`RUN_FLAGS` replaces four hand-written option lists, `dashboard.css` lost the 205 rules nothing
+emits (1 769 → 1 090 lines; sidebar/switcher/phase-banner chrome kept). **Still open in 9:**
+`sidebar.css` (calc page only; 230 lines shared with dashboard.css), `--font-ui` flip after
+checking every overlay at catalogue size, the route-docs test, `calc/src/js/slink_bridge.js`
+palette, `html_render.py` helpers now only tests call. Not done
 from 7: Debug as a drawer (rail links to the run's `/debug` instead) and the Manager owning
 `obs_config.json` (OBS/Twitch stay on the run's port, linked from Broadcast). Three
 `claude/ui-mockup-track-b*` branches remain for the owner to force-delete (a hook blocks it here). Gate per phase: `pytest tests/unit tests/integration -q` and
