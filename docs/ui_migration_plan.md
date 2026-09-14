@@ -687,7 +687,13 @@ Gen 3 and Gen 1 fixtures. Confirm by screenshot.
 - **Phase 8:** one real randomize against the actual jar and two clean Red/Blue dumps;
   `tests/unit/test_upr_pipeline.py::TestAgainstTheRealJar` skips without `SLINK_UPR_JAR`, so
   it proves nothing in CI. Then boot one output in BizHawk with the launcher and confirm the
-  hello is admitted (the `rom_contract.json` path).
+  hello is admitted (the `rom_contract.json` path). **Done 2026-09-14 by the Gen 1 session**
+  (scenario `admit_randomized_new`, their commit `c451218`, receipts under
+  `tests/fixtures/gen1/receipts/`): A booted the unpatched randomized Red output on the clean
+  save → `admitted`, "cartridge matches the contract"; B booted clean Blue as the negative
+  control → `rejected`, "this is not the cartridge built for player b (reported …, expected
+  …)", no identity or party adopted. The randomized output loads the clean cartridge's
+  battery save unchanged. Not yet exercised: the companion patch on top of a randomized ROM.
 - **Before the final merge, once:** `SLINK_E2E=1 pytest tests/e2e/test_duo.py`, machine
   idle, because nothing in CI exercises the four API paths it depends on. Coordinate the
   emulator lane with the Gen 1 session — one lane, and they are using it.
