@@ -111,6 +111,12 @@ ROM_SYMBOLS = [
     "TryEvolvingMon", "EvolutionAfterBattle", "Evolution_PartyMonLoop", "Evolution_ChangeMonPic",
     "InGameTrade_DoTrade", "CableClubNPC", "SoftReset", "Init",
     "DisplayPartyMenu", "StartMenu_Pokemon", "CalcStat", "CalcStats",
+    # ROM data tables the client reads (base stats for the withdraw rebuild; dex order)
+    "BaseStats", "PokedexOrder",
+]
+# Symbols a title may legitimately lack (recorded when present, no failure when absent).
+OPTIONAL_ROM_SYMBOLS = [
+    "MewBaseStats",  # R/B keep Mew outside the table; Yellow has it inline as record 150
 ]
 
 
@@ -154,9 +160,10 @@ def build() -> dict:
             ram[name] = syms[name][1]  # RAM: bank is 0 (WRAM0/HRAM) or the SRAM bank; addr is what code reads
         sram_banks = {name: syms[name][0] for name in RAM_SYMBOLS if name.startswith("s") and name in syms}
         rom: dict[str, dict] = {}
-        for name in ROM_SYMBOLS:
+        for name in ROM_SYMBOLS + OPTIONAL_ROM_SYMBOLS:
             if name not in syms:
-                missing.append(f"{title}: {name}")
+                if name in ROM_SYMBOLS:
+                    missing.append(f"{title}: {name}")
                 continue
             bank, addr = syms[name]
             rom[name] = {"bank": bank, "addr": addr, "flat": flat(bank, addr)}

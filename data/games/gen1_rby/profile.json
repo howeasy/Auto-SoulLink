@@ -224,6 +224,11 @@
      "bank": 3,
      "flat": 50844
     },
+    "BaseStats": {
+     "addr": 17374,
+     "bank": 14,
+     "flat": 230366
+    },
     "CableClubNPC": {
      "addr": 29125,
      "bank": 1,
@@ -369,6 +374,11 @@
      "bank": 1,
      "flat": 23505
     },
+    "MewBaseStats": {
+     "addr": 16987,
+     "bank": 1,
+     "flat": 16987
+    },
     "OverworldLoop": {
      "addr": 1023,
      "bank": 0,
@@ -378,6 +388,11 @@
      "addr": 1026,
      "bank": 0,
      "flat": 1026
+    },
+    "PokedexOrder": {
+     "addr": 20516,
+     "bank": 16,
+     "flat": 266276
     },
     "RemoveFaintedPlayerMon": {
      "addr": 18241,
@@ -694,6 +709,11 @@
      "bank": 3,
      "flat": 50844
     },
+    "BaseStats": {
+     "addr": 17374,
+     "bank": 14,
+     "flat": 230366
+    },
     "CableClubNPC": {
      "addr": 29125,
      "bank": 1,
@@ -839,6 +859,11 @@
      "bank": 1,
      "flat": 23505
     },
+    "MewBaseStats": {
+     "addr": 16987,
+     "bank": 1,
+     "flat": 16987
+    },
     "OverworldLoop": {
      "addr": 1023,
      "bank": 0,
@@ -848,6 +873,11 @@
      "addr": 1026,
      "bank": 0,
      "flat": 1026
+    },
+    "PokedexOrder": {
+     "addr": 20516,
+     "bank": 16,
+     "flat": 266276
     },
     "RemoveFaintedPlayerMon": {
      "addr": 18241,
@@ -1164,6 +1194,11 @@
      "bank": 3,
      "flat": 50142
     },
+    "BaseStats": {
+     "addr": 17374,
+     "bank": 14,
+     "flat": 230366
+    },
     "CableClubNPC": {
      "addr": 28725,
      "bank": 1,
@@ -1318,6 +1353,11 @@
      "addr": 581,
      "bank": 0,
      "flat": 581
+    },
+    "PokedexOrder": {
+     "addr": 20657,
+     "bank": 16,
+     "flat": 266417
     },
     "RemoveFaintedPlayerMon": {
      "addr": 18270,

@@ -38,7 +38,7 @@ def test_every_requested_symbol_is_present_in_every_title():
     prof = _committed()
     for title, t in prof["titles"].items():
         assert set(t["ram"]) == set(gen.RAM_SYMBOLS), title
-        assert set(t["rom"]) == set(gen.ROM_SYMBOLS), title
+        assert set(gen.ROM_SYMBOLS) <= set(t["rom"]) <= set(gen.ROM_SYMBOLS) | set(gen.OPTIONAL_ROM_SYMBOLS), title
 
 
 def test_geometry_pret_implies():
