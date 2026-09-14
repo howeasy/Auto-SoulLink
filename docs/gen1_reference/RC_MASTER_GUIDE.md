@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:33:04+00:00",
+  "updated_at_utc": "2026-09-14T08:35:00+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "6931fdf",
   "live_lane": null,
@@ -869,10 +869,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-2",
-      "owner": "OMP live pid 47172 (coding; task cx-3b69de07)",
+      "owner": "OMP live pid 47172 (coding; task cx-6fcdf29d; cx-3b69de07 was sent without allowWrites and correctly refused)",
       "state": "active",
       "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_prepared_gen1.py"],
-      "next_action": "Optional fastest_text key on handle_create_gen1 (requires native): gen1_upr_pipeline.prepare_pair with build_preset({currentMiscTweaks: 8}), pinned seeds, PreparedCartridges as today; checkbox in manager.html; three unit tests.",
+      "next_action": "Optional fastest_text key on handle_create_gen1 (requires native): gen1_upr_pipeline.prepare_pair with build_preset({currentMiscTweaks: 8}), pinned seeds, PreparedCartridges as today; checkbox in manager.html create path (no Gen 1 native checkbox exists to mirror); registry key fastest_text beside native_trade; three unit tests.",
       "reuse_decision": "Manager (shared lifecycle) owns the option; UPR policy stays in gen1_upr_policy"
     },
     {
