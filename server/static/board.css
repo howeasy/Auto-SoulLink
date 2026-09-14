@@ -521,3 +521,28 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
   .mgr-launcher { grid-template-columns: 1fr; max-height: none; min-height: auto; }
   .mgr-rail { border-right: 0; border-bottom: 1px solid var(--c-edge); max-height: 360px; }
 }
+
+/* ── Feel ──────────────────────────────────────────────────────────────
+ * The details that compound: interruptible colour transitions on hover (never
+ * `transition: all`), a 0.96 press on anything that is a button, hit areas that reach
+ * 40px on a desktop, nested corners that stay concentric, and prose that does not orphan. */
+.mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt, .mk-chip {
+  transition-property: background-color, border-color, color, scale;
+  transition-duration: .12s;
+  transition-timing-function: ease-out;
+}
+.mk-btn:active, .mk-gchip:active, .mk-tab:active { scale: .96; }
+.mk-btn:disabled:active { scale: 1; }
+.mk-btn, .mk-gchip, .mk-tab, .mk-rail-item { min-height: 40px; box-sizing: border-box; }
+.mk-btn:focus-visible, .mk-gchip:focus-visible, .mk-tab:focus-visible, .mk-rail-item:focus-visible, .mk-opt:focus-within {
+  outline: 2px solid var(--c-brand); outline-offset: 2px;
+}
+/* Concentric: a button inside a padded 8px/10px surface keeps its corners inside the parent's. */
+.mk-pop .mk-btn, .mk-preview .mk-rail-item, .mk-card-body .mk-btn { border-radius: 4px; }
+.mk-hp-fill { transition-property: width, background-color; transition-duration: .3s; transition-timing-function: ease-out; }
+.mk-opt-desc, .mk-opt-why, .mk-empty, .mk-steps li, .mk-cap, .mk-note, .mk-sub { text-wrap: pretty; }
+.mk-h2, .mk-runname { text-wrap: balance; }
+@media (prefers-reduced-motion: reduce) {
+  .mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt, .mk-chip, .mk-hp-fill { transition-duration: 0s; }
+  .mk-btn:active, .mk-gchip:active, .mk-tab:active { scale: 1; }
+}
