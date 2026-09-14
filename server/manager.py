@@ -152,6 +152,10 @@ def _resume_refusal(predecessor: dict | None) -> list[str] | None:
         return ["predecessor run is starting or running in the registry; stop it first"]
     if predecessor.get("resumed_by"):
         return ["predecessor already resumed"]
+    if predecessor.get("recovered_by"):
+        return ["predecessor already recovered"]
+    if _recovering_live(predecessor):
+        return ["predecessor is being recovered; wait for it to finish or retry"]
     return None
 
 
@@ -172,24 +176,155 @@ CHECKPOINT_RULE_KEYS = ("species_lock", "gender_lock", "type_lock", "explode_mod
 def resume_record_from_checkpoint(run_id: str, manifest: dict, checkpoint) -> dict:
     """The ONE mapping from an R5b checkpoint to the resume contract `validate_resume` accepts.
 
-    A save_witness carries index/operation_id; the tagged native-pretrade variant carries
-    ready_operation_id instead and has no index, so it maps to witness_index 0 and that ready
-    operation — the one place this shape is decided, so R5b-1's validator has a single caller
-    to change if the tagged extension needs different fields.
+    F5 (R5b-3b): only the legacy save_witness kind is recoverable here. A caller MUST refuse a
+    manifest naming any other witness_kind (`_pretrade_checkpoint_error` below) before ever
+    calling this — there is deliberately no native-pretrade mapping to fall back to.
     """
     required = {}
     for player in ("a", "b"):
         witness = manifest["players"][player]["witness"]
-        if witness.get("witness_kind", "save_witness") == "native_pretrade":
-            required[player] = {"digest": witness["digest"], "projection": witness["projection"],
-                "witness_index": 0, "operation_id": witness["ready_operation_id"]}
-        else:
-            required[player] = {"digest": witness["digest"], "projection": witness["projection"],
-                "witness_index": witness["index"], "operation_id": witness["operation_id"]}
+        if witness.get("witness_kind", "save_witness") != "save_witness":
+            raise ValueError("recovery from a pretrade checkpoint is not enabled yet")
+        required[player] = {"digest": witness["digest"], "projection": witness["projection"],
+            "witness_index": witness["index"], "operation_id": witness["operation_id"]}
     return {"from_run": run_id, "required": required,
         "rules": json.loads(checkpoint.rules_bytes().decode("utf-8")),
         "contract_hash": manifest["contract_fingerprint"],
         "identities": json.loads(checkpoint.identity_bytes().decode("utf-8"))}
+
+
+def _pretrade_checkpoint_error(manifest: dict) -> str | None:
+    """F5: refuse before loading anything else if either player's archived witness is not the
+    legacy save_witness kind (native-pretrade recovery is not enabled yet)."""
+    for player in ("a", "b"):
+        witness = manifest["players"][player]["witness"]
+        if witness.get("witness_kind", "save_witness") != "save_witness":
+            return "recovery from a pretrade checkpoint is not enabled yet"
+    return None
+
+
+def _checkpoint_binding_error(manifest: dict, entry: dict, run_spec: dict, run_id: str) -> str | None:
+    """F2: the archive a recovery is about to trust must be the SAME one this run's own journal
+    confirmed (not merely some checkpoint reachable from the store's current CURRENT pointer),
+    minted for THIS run and its cartridge contract, under source files that have not drifted
+    since. Four independent checks, each with its own message so a caller can tell which fired:
+      1. manifest hash == the journal's own confirmed manifest_sha256 (belt-and-suspenders over
+         PairedCheckpointStore.load's own chain verification).
+      2. provenance identity == this run (registry_run_id) and its journal (run_id from the
+         prepared-run spec) — a checkpoint minted for a different run must never bind here.
+      3. contract_fingerprint == digest(this run's own contract) — fails fast; `create_runtime`
+         would refuse the same mismatch later via `resume['contract_hash']`, but a dedicated
+         check here means recovery never even stages a cartridge pair for a doomed resume
+         (R5b-joint-protocol.md §3: "payload/source/contract-verified").
+      4. source_fingerprint == digest(server_source_manifest(...)) computed RIGHT NOW, the exact
+         computation `_build_intent`/`finalize_checkpoint` used to mint it — against a stand-in
+         exposing only the two attributes `_client_source_files` reads (`native_trade`,
+         `free_service`), since a stopped predecessor has no live Gen1Runtime to pass.
+    """
+    from types import SimpleNamespace
+
+    from server import gen1_checkpoint_runtime
+    from server.protocol import digest
+    if gen1_checkpoint_runtime._manifest_sha256(manifest) != entry.get("manifest_sha256"):
+        return "checkpoint manifest does not match the journal-confirmed hash"
+    provenance = manifest.get("provenance") or {}
+    if provenance.get("run_id") != run_spec.get("run_id") or provenance.get("registry_run_id") != run_id:
+        return "checkpoint provenance does not match this run"
+    if manifest.get("contract_fingerprint") != digest(run_spec.get("contract")):
+        return "checkpoint contract fingerprint does not match this run"
+    stand_in = SimpleNamespace(native_trade=bool(run_spec.get("native_trade", False)),
+        free_service=bool(run_spec.get("free_service", False)))
+    if manifest.get("source_fingerprint") != digest(gen1_checkpoint_runtime.server_source_manifest(stand_in)):
+        return "checkpoint source fingerprint does not match the current server/client source"
+    return None
+
+
+def _stopped_journal_facts(run_directory) -> dict:
+    """F1/F8: read-only facts about a STOPPED run's journal, opened exactly the way
+    `gen1_run_resume.audit_predecessor` opens one (same FILENAME/schema/read_journal call) — but
+    only the two checks recovery actually needs, an open trade and any outstanding command,
+    plus the journal's final committed revision (for `discarded_through_revision`). Raises
+    ValueError naming the reason, never re-implementing `audit_predecessor`'s own predicates:
+    the exact same `active_trade`/`outcome IS NULL` expressions it uses, reused verbatim because
+    gen1_run_resume.py has no standalone function for either one to import instead.
+
+    `active_trade` alone is R5b joint-protocol.md §3's "pending-native-trade policy forbids
+    rollback" check too: `trade_coordinator.py` sets it to the transaction identifier exactly
+    while that transaction is non-terminal and clears it exactly when the transaction reaches a
+    TERMINAL phase (:292,351,494) — `gen1_trade_recovery.transactions()`'s own consistency check
+    enforces the converse (a non-terminal phase entry requires `active_trade == identifier`), so
+    there is no reachable state where the phase table is open but `active_trade` is None. A
+    second check against `transactions()`/`TERMINAL` would be unreachable dead code, not
+    defense-in-depth.
+    """
+    import sqlite3
+
+    from server.gen1_run_config import FILENAME, SCHEMA as RUN_SCHEMA
+    from server.journal_reader import read_journal
+    from server.protocol import decode_frame, digest
+    directory = Path(run_directory).resolve()
+    path = directory / FILENAME
+    if not path.is_file() or not (directory / "runtime.sqlite3").is_file():
+        raise ValueError("predecessor run directory has no prepared Gen 1 runtime")
+    spec = decode_frame(path.read_bytes())
+    if spec.get("schema") != RUN_SCHEMA:
+        raise ValueError("predecessor is not a Gen 1 run")
+    stored = read_journal(directory / spec["journal"], run_id=spec["run_id"], contract_hash=digest(spec["contract"]))
+    document = stored.snapshot.state
+    if document.get("active_trade") is not None:
+        raise ValueError("predecessor has an open trade")
+    db = sqlite3.connect((directory / spec["journal"]).as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=2.5)
+    try:
+        db.execute("PRAGMA query_only=ON")
+        db.execute("BEGIN")
+        for player in ("a", "b"):
+            if db.execute("SELECT 1 FROM commands WHERE player=? AND outcome IS NULL LIMIT 1", (player,)).fetchone():
+                raise ValueError("predecessor has pending native commands")
+        final_revision = db.execute("SELECT COALESCE(MAX(revision), 0) FROM events").fetchone()[0]
+    finally:
+        db.close()
+    return {"spec": spec, "final_revision": final_revision}
+
+
+async def _stage_recovered_cartridges(successor_dir: Path, predecessor_dir: Path, predecessor_run: dict, contract: dict, body: dict):
+    """F4: rebuild the successor's OWN prepared pair from scratch — never `copytree` the
+    predecessor's directory, so a recovered run never shares files with the run it discarded.
+
+    A native predecessor's clean ROMs live only at whatever local path the caller supplied at
+    creation time: `rom_contract.json` records the admitted contract (variant/hashes/
+    capabilities), never a file path, and the Manager persists no such path either. So a native
+    recovery's request body must carry fresh `rom_a`/`rom_b` (exactly like `handle_create_gen1`),
+    checked against the predecessor's own admitted contract before they are trusted for anything.
+    """
+    from server.gen1_admission import clean_contract
+    from server.protocol import canonical_json, decode_frame
+    rom_a, rom_b = body.get("rom_a"), body.get("rom_b")
+    if not isinstance(rom_a, str) or not isinstance(rom_b, str):
+        raise ValueError("recovering a native run requires rom_a and rom_b in the request body")
+    for value in (rom_a, rom_b):
+        if not value.strip() or not Path(value).is_file():
+            raise ValueError(f"cartridge file not found: {value}")
+    admitted = await asyncio.to_thread(clean_contract, {"a": rom_a, "b": rom_b})
+    predecessor_admitted = decode_frame((predecessor_dir / "rom_contract.json").read_bytes())
+    if canonical_json(admitted) != canonical_json(predecessor_admitted):
+        raise ValueError("recovery cartridges differ from the predecessor's admitted clean pair")
+    if predecessor_run.get("fastest_text", False):
+        from server.gen1_upr_pipeline import prepare_pair
+        jar = os.environ.get("SLINK_UPR_JAR", "")
+        if not jar:
+            raise ValueError("SLINK_UPR_JAR is not set")
+        settings = (predecessor_dir / "fastest-text.rnqs").read_bytes()
+        (successor_dir / "fastest-text.rnqs").write_bytes(settings)
+        await asyncio.to_thread(prepare_pair, jar, settings, {"a": rom_a, "b": rom_b},
+            successor_dir / "prepared", seeds={"a": "123456789", "b": "987654321"})
+    else:
+        from server.gen1_prepared_cartridges import stage_canonical_pair
+        await asyncio.to_thread(stage_canonical_pair, successor_dir / "prepared", {"a": rom_a, "b": rom_b})
+    from server.gen1_prepared_cartridges import PreparedCartridges
+    cartridges = await asyncio.to_thread(PreparedCartridges, successor_dir / "prepared")
+    if canonical_json(cartridges.contract()) != canonical_json(contract):
+        raise ValueError("recovered cartridge pair does not match the predecessor contract")
+    return cartridges
 
 
 def _confirmed_checkpoint_component(run_directory):
@@ -206,8 +341,16 @@ def _confirmed_checkpoint_component(run_directory):
 
 
 def _confirmed_entry(component):
-    """The recoverable checkpoint entry, or None: status must be confirmed AND name one id."""
-    if not isinstance(component, dict) or component.get("status") != "confirmed":
+    """The recoverable checkpoint entry, or None.
+
+    R5b-joint-protocol.md §3: the `confirmed` field is authority on its own, regardless of the
+    LATEST request's status — a later request may still be collecting/preparing (crashed
+    mid-flight) or have been abandoned, and an earlier confirmed checkpoint must stay usable
+    either way. A partial upload/preparing intent is never recovery authority: `confirmed` is
+    populated only by `_confirm()`, never by `start()`/`_record_upload`'s "preparing" step, so
+    dropping the `status == "confirmed"` filter never promotes an unconfirmed intent.
+    """
+    if not isinstance(component, dict):
         return None
     return component.get("confirmed") or None
 
@@ -579,6 +722,27 @@ def _reservation_live(run: dict) -> bool:
     return (datetime.now(UTC) - started).total_seconds() < STARTING_TIMEOUT
 
 
+def _recovering_live(run: dict) -> bool:
+    """R5b-3b F3: a `recovering` reservation still owned by an in-flight handle_recover, on the
+    same timeout as a start reservation — mirrors `_reservation_live` for the recovery lane."""
+    recovering = run.get("recovering")
+    if not isinstance(recovering, dict) or not recovering.get("token"):
+        return False
+    try:
+        started = datetime.fromisoformat(recovering["at"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (datetime.now(UTC) - started).total_seconds() < STARTING_TIMEOUT
+
+
+def _release_recovering(entry: dict, token: str) -> bool:
+    """Drop a recovery reservation ONLY while it is still ours (mirrors `_release`)."""
+    if (entry.get("recovering") or {}).get("token") != token:
+        return False
+    entry.pop("recovering", None)
+    return True
+
+
 def _reconcile(runs: list[dict]) -> bool:
     """Check live processes; update status for dead ones. Adopt orphan dirs. Returns True if any changed."""
     changed = False
@@ -797,6 +961,8 @@ class RunManager:
             if run.get("recovered_by"):
                 return web.json_response({"ok": False, "error": "This run was recovered; start its successor instead",
                                           "details": {"recovered_by": run["recovered_by"]}}, status=409)
+            if _recovering_live(run):
+                return web.json_response({"ok": False, "error": "This run is being recovered"}, status=409)
             if run["status"] == "running" and _is_alive(run.get("pid")):
                 return web.json_response({"ok": True, "message": "Already running"})
             if _reservation_live(run):
@@ -1455,12 +1621,20 @@ class RunManager:
         entry = _confirmed_entry(component)
         if entry is None:
             return web.json_response({"ok": True, "current": None})
+        from server.gen1_run_config import FILENAME as RUNTIME_FILENAME
         from server.paired_save_checkpoints import PairedCheckpointStore
+        from server.protocol import decode_frame
         try:
             checkpoint = await asyncio.to_thread(PairedCheckpointStore(directory).load, entry["checkpoint_id"])
+            run_spec = decode_frame((directory / RUNTIME_FILENAME).read_bytes())
         except Exception as problem:
             log.warning("confirmed checkpoint %s did not validate: %s", entry["checkpoint_id"], problem)
             return web.json_response({"ok": True, "current": None})
+        # F2: a checkpoint reachable from the store's CURRENT pointer is not necessarily the one
+        # THIS run's own journal confirmed, minted for THIS run, under source files that have not
+        # drifted since — report it dropped rather than offering it for recovery.
+        if _checkpoint_binding_error(checkpoint.manifest, entry, run_spec, run_id) is not None:
+            return web.json_response({"ok": True, "current": None, "dropped": 1})
         return web.json_response({"ok": True, "current": {
             "checkpoint_id": checkpoint.manifest["checkpoint_id"],
             "manifest_sha256": entry["manifest_sha256"],
@@ -1470,64 +1644,93 @@ class RunManager:
     async def handle_recover(self, request: web.Request) -> web.Response:
         """POST /api/runs/{run_id}/recover — a NEW successor seeded from a confirmed checkpoint.
 
-        The checkpoint's state is the authority here: `audit_predecessor` is deliberately NOT
-        run (it audits the predecessor's LATER journal, which is exactly what recovery discards).
+        The checkpoint's state is the authority here: `audit_predecessor` is deliberately NOT run
+        (it audits the predecessor's LATER journal, which is exactly what recovery discards) — but
+        F1/F8 still reads that same stopped journal read-only, for the two checks a rollback must
+        never skip: no open trade, nothing left unacknowledged. A native predecessor's request
+        body must carry fresh `rom_a`/`rom_b` local paths (F4): the Manager never persists the
+        path it admitted a cartridge from, only its hashes.
         """
         run_id = request.match_info.get("run_id", "")
         try:
             body = await request.json()
         except Exception:
             body = {}
-        wanted = body.get("checkpoint_id") if isinstance(body, dict) else None
-        runs = _load_registry()
-        run = _find_run(runs, run_id)
-        if run is None:
-            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        if run.get("status") in ("running", "starting") or _reservation_live(run):
-            return web.json_response({"ok": False, "error": "stop the run before recovering it"}, status=409)
-        if run.get("recovered_by"):
-            return web.json_response({"ok": False, "error": "this run was already recovered"}, status=409)
+        if not isinstance(body, dict):
+            body = {}
+        wanted = body.get("checkpoint_id")
+
+        # F3: reserve the predecessor under the lock BEFORE any of the slow work below (checkpoint
+        # load, cartridge staging, runtime creation) — a concurrent start/resume/second recovery
+        # then sees `recovering` and refuses, exactly like handle_start's own reservation.
+        token = secrets.token_hex(16)
+        async with self._registry_lock:
+            runs = _load_registry()
+            run = _find_run(runs, run_id)
+            if run is None:
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            if run.get("status") in ("running", "starting") or _reservation_live(run):
+                return web.json_response({"ok": False, "error": "stop the run before recovering it"}, status=409)
+            if run.get("recovered_by"):
+                return web.json_response({"ok": False, "error": "this run was already recovered"}, status=409)
+            if run.get("resumed_by"):
+                return web.json_response({"ok": False, "error": "this run was already resumed"}, status=409)
+            if _recovering_live(run):
+                return web.json_response({"ok": False, "error": "a recovery is already in progress for this run"}, status=409)
+            run["recovering"] = {"token": token, "at": datetime.now(UTC).isoformat()}
+            _save_registry(runs)
+
+        async def _release():
+            await self._update_run(run_id, lambda entry: _release_recovering(entry, token))
+
         directory = _run_directory(run_id)
         if directory is None:
+            await _release()
             return web.json_response({"ok": False, "error": "checkpoint unavailable"}, status=400)
         component, error = _confirmed_checkpoint_component(directory)
         if error:
+            await _release()
             return web.json_response({"ok": False, "error": error}, status=503)
         entry = _confirmed_entry(component)
         if entry is None:
+            await _release()
             return web.json_response({"ok": False, "error": "no journal-confirmed checkpoint to recover"}, status=409)
         if wanted is not None and wanted != entry["checkpoint_id"]:
+            await _release()
             return web.json_response({"ok": False, "error": "checkpoint is not the one this journal confirmed"}, status=409)
         checkpoint_id = entry["checkpoint_id"]
-        from server.gen1_prepared_cartridges import PreparedCartridges
-        from server.gen1_run_config import FILENAME as RUNTIME_FILENAME, create_runtime
-        from server.paired_save_checkpoints import PairedCheckpointStore
-        from server.protocol import decode_frame
+        from server.gen1_run_config import create_runtime
+        from server.paired_save_checkpoints import CheckpointError, PairedCheckpointStore
+        from server.protocol_journal import JournalError
         try:
             checkpoint = await asyncio.to_thread(PairedCheckpointStore(directory).load, checkpoint_id)
         except Exception as problem:
+            await _release()
             return web.json_response({"ok": False, "error": f"checkpoint did not validate: {problem}"}, status=409)
         manifest = checkpoint.manifest
-        record = resume_record_from_checkpoint(run_id, manifest, checkpoint)
-        spec = decode_frame((directory / RUNTIME_FILENAME).read_bytes())
-        contract = spec["contract"]
-        native = bool(spec.get("native_trade")) and bool(run.get("native_trade"))
-        successor_id = 'run_' + datetime.now(UTC).strftime('%Y%m%d_%H%M%S') + '_' + secrets.token_hex(3)
-        successor_dir = Path(MANAGER_DIR) / successor_id
-        tcp_port, http_port = _next_ports(runs)
-        successor_dir.mkdir(parents=True, exist_ok=False)
+
+        successor_dir = None
         try:
-            if native and spec.get("prepared_artifacts"):
-                # The successor needs its OWN prepared pair (configure_runtime refuses artifacts
-                # outside the run), and the pair must stay byte-identical: copy the predecessor's
-                # verified directory and let PreparedCartridges re-verify every hash on open.
-                source = (directory / spec["prepared_artifacts"]).resolve()
-                if not source.is_relative_to(directory) or not source.is_dir():
-                    raise ValueError('predecessor prepared cartridge pair is unavailable')
-                await asyncio.to_thread(shutil.copytree, source, successor_dir / "prepared")
+            pretrade_error = _pretrade_checkpoint_error(manifest)  # F5
+            if pretrade_error is not None:
+                raise ValueError(pretrade_error)
+            facts = await asyncio.to_thread(_stopped_journal_facts, directory)  # F1/F8: open trade / pending commands
+            run_spec = facts["spec"]
+            binding_error = _checkpoint_binding_error(manifest, entry, run_spec, run_id)  # F2
+            if binding_error is not None:
+                raise ValueError(binding_error)
+            record = resume_record_from_checkpoint(run_id, manifest, checkpoint)
+            contract = run_spec["contract"]
+            native = bool(run_spec.get("native_trade")) and bool(run.get("native_trade"))
+            successor_id = 'run_' + datetime.now(UTC).strftime('%Y%m%d_%H%M%S') + '_' + secrets.token_hex(3)
+            successor_dir = Path(MANAGER_DIR) / successor_id
+            tcp_port, http_port = _next_ports(runs)
+            successor_dir.mkdir(parents=True, exist_ok=False)
             cartridges = None
-            if (successor_dir / "prepared").is_dir():
-                cartridges = await asyncio.to_thread(PreparedCartridges, successor_dir / "prepared")
+            if native:
+                # F4: the successor's OWN prepared pair, rebuilt from scratch — never copied from
+                # the predecessor's directory.
+                cartridges = await _stage_recovered_cartridges(successor_dir, directory, run, contract, body)
             rule_options = {key: bool(run.get(key, False)) for key in CHECKPOINT_RULE_KEYS}
             runtime = create_runtime(successor_dir, contract, rule_options=rule_options, free_service=True,
                 prepared_cartridges=cartridges, native_trade=cartridges is not None, resume=record)
@@ -1548,19 +1751,35 @@ class RunManager:
                 'required': record['required']}
             successor['recovered_from'] = {'run_id': run_id, 'checkpoint_id': checkpoint_id,
                 'manifest_sha256': entry['manifest_sha256'],
-                'discarded_through_revision': manifest['provenance'].get('journal_revision')}
+                'discarded_after_revision': manifest['provenance'].get('journal_revision'),
+                'discarded_through_revision': facts['final_revision']}
             _write_run_meta(successor)
             async with self._registry_lock:
                 runs = _load_registry()
                 predecessor = _find_run(runs, run_id)
-                if predecessor is None or predecessor.get('recovered_by') or predecessor.get('resumed_by'):
-                    shutil.rmtree(successor_dir, ignore_errors=True)
-                    return web.json_response({"ok": False, "error": "predecessor changed under the recovery"}, status=409)
-                predecessor['recovered_by'] = successor_id
-                runs.append(successor)
-                _save_registry(runs)
+                stale = (predecessor is None or predecessor.get('recovered_by') or predecessor.get('resumed_by')
+                         or (predecessor.get('recovering') or {}).get('token') != token)
+                if not stale:
+                    predecessor.pop('recovering', None)
+                    predecessor['recovered_by'] = successor_id
+                    runs.append(successor)
+                    _save_registry(runs)
+            if stale:
+                # F3: our reservation is already gone (someone else's transition took it), so
+                # there is nothing of ours left to release — only the successor directory.
+                shutil.rmtree(successor_dir, ignore_errors=True)
+                return web.json_response({"ok": False, "error": "predecessor changed under the recovery"}, status=409)
+        except (ValueError, TypeError, JournalError, CheckpointError) as error:
+            # F1/F8: expected refusals (open trade/pending commands, a binding mismatch, a bad
+            # cartridge pair, create_runtime's own contract checks) are 409s, never 500s.
+            if successor_dir is not None:
+                shutil.rmtree(successor_dir, ignore_errors=True)
+            await _release()
+            return web.json_response({"ok": False, "error": str(error)}, status=409)
         except Exception:
-            shutil.rmtree(successor_dir, ignore_errors=True)
+            if successor_dir is not None:
+                shutil.rmtree(successor_dir, ignore_errors=True)
+            await _release()
             raise
         return web.json_response({"ok": True, "run": successor, "checkpoint_id": checkpoint_id,
             "downloads": {"a": f"/api/runs/{successor_id}/recovery-save/a",
@@ -1570,7 +1789,8 @@ class RunManager:
         """GET /api/runs/{run_id}/recovery-save/{player} — that player's archived SaveRAM bytes.
 
         Only a recovered run has them, only from the checkpoint its registry entry names, and the
-        path never leaves the Manager: the bytes are the checkpoint's own, hash-labelled.
+        path never leaves the Manager: the bytes are the checkpoint's own, hash-labelled. F2: an
+        unbound checkpoint (hash/provenance/source drift) is refused exactly like a missing one.
         """
         run_id = request.match_info.get("run_id", "")
         player = request.match_info.get("player", "")
@@ -1583,9 +1803,15 @@ class RunManager:
         source_dir = _run_directory(recovered["run_id"])
         if source_dir is None:
             return web.json_response({"ok": False, "error": "this run has no recovery save"}, status=404)
+        from server.gen1_run_config import FILENAME as RUNTIME_FILENAME
         from server.paired_save_checkpoints import PairedCheckpointStore
+        from server.protocol import decode_frame
         try:
             checkpoint = await asyncio.to_thread(PairedCheckpointStore(source_dir).load, recovered["checkpoint_id"])
+            run_spec = decode_frame((source_dir / RUNTIME_FILENAME).read_bytes())
+            binding_error = _checkpoint_binding_error(checkpoint.manifest, recovered, run_spec, recovered["run_id"])
+            if binding_error is not None:
+                raise ValueError(binding_error)
             data = checkpoint.save_bytes(player)
         except Exception as problem:
             log.warning("recovery save for %s did not validate: %s", run_id, problem)
