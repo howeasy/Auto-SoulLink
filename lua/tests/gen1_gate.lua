@@ -2,8 +2,9 @@
 --
 -- Like gatelib.lua but built on lua/gen1/entry.lua (profile.json, reads, signals, writes,
 -- write_safety) instead of the pre-rewrite memory_gb/gen1_rby modules, which are not evidence.
--- Boot proof is the measured one from gatelib: two walking round trips with an idle between,
--- because party count / flags / map id all read plausibly on the title and loading screens.
+-- Boot proof is the CPU checkpoint gen1_write_safety verifies (main thread parked in OverworldLoop),
+-- because party count / flags / map id all read plausibly on the title and loading screens
+-- and gatelib's walking proof triggers encounters on a grass fixture.
 --
 --   local G = dofile(SLINK_ROOT .. "/lua/tests/gen1_gate.lua")
 --   local t = G.start("test_gen1_inspect_gate")   -- result: patch/build/<name>_result.txt
@@ -78,31 +79,23 @@ function Lib.start(gate_name, opts)
     t.log(fmt("[%s] title=%s rom=%s", gate_name, title, gameinfo.getromhash():lower():sub(1, 8)))
     if opts.no_boot then return t end
 
-    -- Boot proof (see gatelib.prove_booted for why each escalation exists).
-    local function pos() return memory.read_u8(ram.wXCoord, "System Bus"), memory.read_u8(ram.wYCoord, "System Bus") end
-    local function round_trip(out)
-        local back = (out == "Right") and "Left" or "Right"
-        local x0, y0 = pos()
-        t.hold(out, 20, function() local x, y = pos(); return x ~= x0 or y ~= y0 end)
-        local x1, y1 = pos()
-        if x1 == x0 and y1 == y0 then return false end
-        t.hold(back, 20, function() local x, y = pos(); return x == x0 and y == y0 end)
-        local x2, y2 = pos()
-        return x2 == x0 and y2 == y0
-    end
-    local booted = false
-    for attempt = 1, 40 do
-        if attempt % 2 == 0 then t.step({ A = true }) end -- through the title/CONTINUE screens
-        t.idle(30)
+    -- Boot proof. gatelib walked two round trips because party count / flags / map id all read
+    -- plausibly on the title and CONTINUE screens. Walking triggers encounters on a grass
+    -- fixture (blue/battle: stuck in a wild battle at frame 1555), so the proof here is the
+    -- checkpoint gen1_write_safety verifies from the CPU itself: the main thread parked in
+    -- OverworldLoop's DelayFrame, PC at the IRQ vector, no battle/script/text/serial owner.
+    -- That is unreachable from any menu or loading screen, and it moves the player nowhere.
+    local safety = dofile(ROOT .. "/lua/gen1_write_safety.lua")
+    local ws = t.parts.json.decode(assert(io.open(ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[title]
+    t.overworld_ok = function() return safety.check(ws, t.deps) == true end
+    local booted, settled = false, 0
+    for f = 1, 6000 do
         local count = memory.read_u8(ram.wPartyCount, "System Bus")
-        if count >= 1 and count <= 6 and memory.read_u8(ram.wIsInBattle, "System Bus") == 0 then
-            if round_trip("Right") or round_trip("Left") then
-                local x, y = pos()
-                t.idle(90)
-                local x2, y2 = pos()
-                if x == x2 and y == y2 and (round_trip("Right") or round_trip("Left")) then booted = true break end
-            end
-        end
+        local ok = count >= 1 and count <= 6 and t.overworld_ok()
+        settled = ok and settled + 1 or 0
+        if settled >= 30 then booted = true break end
+        -- A on a 16-frame cadence walks the title and CONTINUE prompts; never Down.
+        t.step((not ok and f % 16 < 2) and { A = true } or nil)
     end
     if not booted then
         client.screenshot(ROOT .. "/patch/build/" .. gate_name .. "_bootfail.png")

@@ -52,18 +52,14 @@ if ok then
     t.check("no signal failure after arming", st.failed == nil, tostring(st.failed))
 end
 
--- W-7: the verified overworld checkpoint is reachable while idle
-local safety = dofile(t.ROOT .. "/lua/gen1_write_safety.lua")
-local ws = dofile(t.ROOT .. "/lua/json_codec.lua").decode(
-    assert(io.open(t.ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[t.title]
+-- W-7: the verified overworld checkpoint is reachable while idle (the boot proof already used it
+-- once; this counts how quickly it recurs with nothing pressed)
 local hit, reason, hit_frame = false, nil, nil
 for i = 1, 600 do
-    local safe, r = safety.check(ws, t.deps)
-    reason = r
-    if safe then hit, hit_frame = true, t.frame break end
+    if t.overworld_ok() then hit, hit_frame = true, t.frame break end
     t.step(nil)
 end
-t.check("write-safe overworld checkpoint reached while idle", hit, hit and fmt("frame %d", hit_frame) or reason)
+t.check("write-safe overworld checkpoint reached while idle", hit, hit and fmt("frame %d", hit_frame) or "not within 600 idle frames")
 
 -- Tick shape: what the client would send to the server on this cartridge
 t.online = true
