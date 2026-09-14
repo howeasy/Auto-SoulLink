@@ -204,6 +204,8 @@
         </a>
         <button class="mgr-btn mgr-btn-start"
                 x-show="current?.status === 'stopped'"
+                :disabled="!!current?.resumed_by"
+                :title="current?.resumed_by ? 'This run has been resumed as ' + current.resumed_by + ' — the server refuses to start a resumed predecessor.' : ''"
                 @click="act('start')">
           <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-play"/></svg>
           Start
@@ -310,6 +312,18 @@
               PC NPC Off
             </span>
           </template>
+          <template x-if="current && current.resume">
+            <span class="mgr-badge mgr-badge-lock" :title="'contract ' + current.resume.contract_hash">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-link"/></svg>
+              <span x-text="'resumed from ' + current.resume.from_run"></span>
+            </span>
+          </template>
+          <template x-if="current && current.resumed_by">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-link"/></svg>
+              <span x-text="'resumed by ' + current.resumed_by"></span>
+            </span>
+          </template>
         </div>
 
         <template x-if="current?.last_event">
@@ -318,6 +332,34 @@
             <span class="mgr-ev-ts" x-text="current.last_event.ts"></span>
             <b x-text="current.last_event.player"></b>
             <span x-text="current.last_event.text"></span>
+          </div>
+        </template>
+
+        {# Resume — a stopped, not-yet-resumed run can be continued as a new run
+           (server/manager.py handle_create_gen1, resume_from). The predecessor's
+           name/rules/native are reused; only the two cartridge paths are re-entered,
+           same as the cartridge-binding form below — the manager never stores raw
+           filesystem paths, only the admitted contract's hashes. #}
+        <template x-if="current && current.status === 'stopped' && !current.resumed_by">
+          <div class="mgr-launcher-info">
+            <span class="mgr-section-label">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-link"/></svg>
+              Resume
+            </span>
+            <details class="mgr-new-disclosure">
+              <summary>Resume as a new run</summary>
+              <div class="mgr-new-opts mgr-rand-form">
+                <label>Player A ROM<input type="text" x-model="resume.rom_a" placeholder="Local .gb or .gbc path"></label>
+                <label>Player B ROM<input type="text" x-model="resume.rom_b" placeholder="Local .gb or .gbc path"></label>
+                <button class="mgr-btn" :disabled="resume.busy" @click="resumeRun()"
+                        x-text="resume.busy ? 'Resuming…' : 'Resume'"></button>
+                <p class="mgr-rand-error" x-show="resume.error" x-text="resume.error"></p>
+                <p class="mgr-rand-note">
+                  Creates a new run seeded from this one's audited journal. Same cartridges
+                  required — the manager re-verifies the same ROM files.
+                </p>
+              </div>
+            </details>
           </div>
         </template>
 
@@ -341,6 +383,9 @@
                 Player B
               </a>
             </div>
+            <p class="mgr-rand-note" x-show="current.resume">
+              Start with --resume-save &lt;your previous .SaveRAM&gt;
+            </p>
           </div>
         </template>
 
@@ -911,6 +956,58 @@ function runManager() {
         await this.refreshRuns();
       } catch (error) { this.cartridges.error = String(error); }
       finally { this.cartridges.busy = false; }
+    },
+    // Resumed run creation (POST /api/runs/gen1, resume_from). Only rom_a/rom_b are
+    // re-entered by hand — everything else the server needs is read straight off the
+    // predecessor's own registry entry, same as it was recorded at its own creation.
+    resume: { rom_a: '', rom_b: '', busy: false, error: '' },
+
+    resumeRuleOptions(run) {
+      // Must match server/gen1_run_config.py create_runtime's `allowed` rule_options
+      // set exactly — any other key (e.g. overworld_presence) 400s the request.
+      var keys = ['species_lock', 'gender_lock', 'type_lock', 'explode_mode',
+                  'rival_team_swap', 'native_sounds', 'pc_trade_npc'];
+      var out = {};
+      keys.forEach(k => { out[k] = !!run[k]; });
+      return out;
+    },
+    resumeRequestBody(run, romA, romB) {
+      return {
+        name: (run.name || run.run_id) + ' (resumed)',
+        rom_a: romA,
+        rom_b: romB,
+        rules: this.resumeRuleOptions(run),
+        native: !!run.native_trade,
+        start: false,
+        resume_from: run.run_id,
+      };
+    },
+    async resumeRun() {
+      if (!this.current || this.resume.busy) return;
+      var romA = this.resume.rom_a.trim(), romB = this.resume.rom_b.trim();
+      if (!romA || !romB) { this.resume.error = 'Both cartridge paths are required'; return; }
+      this.resume.busy = true;
+      this.resume.error = '';
+      try {
+        var res = await fetch('/api/runs/gen1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.resumeRequestBody(this.current, romA, romB)),
+        });
+        var j = await res.json();
+        if (!j.ok) {
+          // 409 refusals carry `reasons` — show them verbatim, same as the randomizer form.
+          this.resume.error = (j.reasons && j.reasons.length) ? j.reasons.join('; ') : (j.error || 'Resume failed');
+          return;
+        }
+        this.resume.rom_a = ''; this.resume.rom_b = '';
+        await this.refreshRuns();
+        this.active = j.run.run_id;
+      } catch (e) {
+        this.resume.error = String(e);
+      } finally {
+        this.resume.busy = false;
+      }
     },
     rand: { jar: '', settings: '', rom_a: '', rom_b: '', busy: false, error: '' },
 
