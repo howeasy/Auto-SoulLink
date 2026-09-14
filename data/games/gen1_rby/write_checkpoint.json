@@ -1,0 +1,66 @@
+{
+  "blue": {
+    "BATTLE_FLAG_ADDR": 53335,
+    "FONT_LOADED_ADDR": 53188,
+    "JOY_IGNORE_ADDR": 52587,
+    "write_safe": {
+      "delay_frame": 8367,
+      "disconnected_serial": 255,
+      "entering_cable_club": 52295,
+      "irq_vector": 64,
+      "link_none": 0,
+      "link_state": 53547,
+      "overworld_loop": 1023,
+      "overworld_loop_less_delay": 1026,
+      "serial_status": 65450,
+      "stack_end": 57343,
+      "stack_min": 57088,
+      "vblank_entry": 8228,
+      "vblank_flag": 65494,
+      "version": "gen1-main-loop-v1"
+    }
+  },
+  "red": {
+    "BATTLE_FLAG_ADDR": 53335,
+    "FONT_LOADED_ADDR": 53188,
+    "JOY_IGNORE_ADDR": 52587,
+    "write_safe": {
+      "delay_frame": 8367,
+      "disconnected_serial": 255,
+      "entering_cable_club": 52295,
+      "irq_vector": 64,
+      "link_none": 0,
+      "link_state": 53547,
+      "overworld_loop": 1023,
+      "overworld_loop_less_delay": 1026,
+      "serial_status": 65450,
+      "stack_end": 57343,
+      "stack_min": 57088,
+      "vblank_entry": 8228,
+      "vblank_flag": 65494,
+      "version": "gen1-main-loop-v1"
+    }
+  },
+  "yellow": {
+    "BATTLE_FLAG_ADDR": 53334,
+    "FONT_LOADED_ADDR": 53187,
+    "JOY_IGNORE_ADDR": 52587,
+    "write_safe": {
+      "delay_frame": 7780,
+      "disconnected_serial": 255,
+      "entering_cable_club": 52295,
+      "irq_vector": 64,
+      "link_none": 0,
+      "link_state": 53546,
+      "overworld_loop": 578,
+      "overworld_loop_less_delay": 581,
+      "printer_open": 54425,
+      "serial_status": 65450,
+      "stack_end": 57343,
+      "stack_min": 57109,
+      "vblank_entry": 7653,
+      "vblank_flag": 65494,
+      "version": "gen1-main-loop-v1"
+    }
+  }
+}

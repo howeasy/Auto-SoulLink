@@ -1,0 +1,1367 @@
+{
+ "generator": "tools/gen_gen1_profile.py",
+ "schema": "gen1-profile-v1",
+ "source": {
+  "pokeblue.sym": {
+   "commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+   "repo": "pokered",
+   "sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d"
+  },
+  "pokered.sym": {
+   "commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+   "repo": "pokered",
+   "sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9"
+  },
+  "pokeyellow.sym": {
+   "commit": "0a08515",
+   "repo": "pokeyellow",
+   "sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4"
+  }
+ },
+ "titles": {
+  "blue": {
+   "derived": {
+    "battle_struct_size": 44,
+    "box_capacity": 20,
+    "box_struct_size": 33,
+    "name_length": 11,
+    "party_capacity": 6,
+    "party_struct_size": 44,
+    "sram_box_banks": [
+     2,
+     3
+    ],
+    "sram_box_stride": 1122,
+    "sram_boxes_per_bank": 6
+   },
+   "ram": {
+    "hAutoBGTransferEnabled": 65466,
+    "hDisableJoypadPolling": 65529,
+    "hFrameCounter": 65493,
+    "hJoyHeld": 65460,
+    "hJoyInput": 65528,
+    "hJoyLast": 65457,
+    "hJoyPressed": 65459,
+    "hLoadedROMBank": 65464,
+    "hSerialConnectionStatus": 65450,
+    "hSoftReset": 65418,
+    "hTileAnimations": 65495,
+    "hUILayoutFlags": 65526,
+    "hWY": 65456,
+    "sBank2AllBoxesChecksum": 47692,
+    "sBank2IndividualBoxChecksums": 47693,
+    "sBank3AllBoxesChecksum": 47692,
+    "sBank3IndividualBoxChecksums": 47693,
+    "sBox1": 40960,
+    "sBox12": 46570,
+    "sBox2": 42082,
+    "sBox6": 46570,
+    "sBox7": 40960,
+    "sCurBoxData": 45248,
+    "sGameData": 42392,
+    "sGameDataEnd": 46371,
+    "sHallOfFame": 42392,
+    "sMainData": 42403,
+    "sMainDataCheckSum": 46371,
+    "sPartyData": 44844,
+    "sPlayerName": 42392,
+    "sSpriteData": 44332,
+    "sTileAnimations": 46370,
+    "wBagItems": 54046,
+    "wBattleMon": 53268,
+    "wBattleMonHP": 53269,
+    "wBattleMonLevel": 53282,
+    "wBattleMonSpecies": 53268,
+    "wBattleResult": 53003,
+    "wBattleType": 53338,
+    "wBoxCount": 55936,
+    "wBoxDataEnd": 57058,
+    "wBoxDataStart": 55936,
+    "wBoxMon1": 55958,
+    "wBoxMon2": 55991,
+    "wBoxMonNicks": 56838,
+    "wBoxMonOT": 56618,
+    "wBoxMons": 55958,
+    "wBoxSpecies": 55937,
+    "wCapturedMonSpecies": 53532,
+    "wCurEnemyLevel": 53543,
+    "wCurItem": 53137,
+    "wCurMap": 54110,
+    "wCurMapTileset": 54119,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wCurrentBoxNum": 54688,
+    "wCurrentMenuItem": 52262,
+    "wEnemyMon": 53221,
+    "wEnemyMon1": 55460,
+    "wEnemyMon2": 55504,
+    "wEnemyMonAccuracyMod": 52530,
+    "wEnemyMonAttackMod": 52526,
+    "wEnemyMonDefenseMod": 52527,
+    "wEnemyMonEvasionMod": 52531,
+    "wEnemyMonHP": 53222,
+    "wEnemyMonLevel": 53235,
+    "wEnemyMonNicks": 55790,
+    "wEnemyMonOT": 55724,
+    "wEnemyMonSpecialMod": 52529,
+    "wEnemyMonSpecies": 53221,
+    "wEnemyMonSpecies2": 53208,
+    "wEnemyMonSpeedMod": 52528,
+    "wEnemyMons": 55460,
+    "wEnemyPartyCount": 55452,
+    "wEnemyPartySpecies": 55453,
+    "wEvolutionOccurred": 53537,
+    "wFontLoaded": 53188,
+    "wForceEvolution": 52436,
+    "wGrassMons": 55432,
+    "wGrassRate": 55431,
+    "wInGameTradeGiveMonSpecies": 52495,
+    "wInGameTradeReceiveMonSpecies": 52532,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wJoyIgnore": 52587,
+    "wLastMap": 54117,
+    "wLinkEnemyTrainerName": 55431,
+    "wLinkState": 53547,
+    "wListMenuID": 53140,
+    "wListScrollOffset": 52278,
+    "wMainDataEnd": 55936,
+    "wMainDataStart": 54007,
+    "wMaxMenuItem": 52264,
+    "wMenuExitMethod": 53550,
+    "wMenuWatchMovingOutOfBounds": 52279,
+    "wMonDataLocation": 52297,
+    "wNumBagItems": 54045,
+    "wObtainedBadges": 54102,
+    "wOptions": 54101,
+    "wPartyCount": 53603,
+    "wPartyMon1": 53611,
+    "wPartyMon2": 53655,
+    "wPartyMonNicks": 53941,
+    "wPartyMonOT": 53875,
+    "wPartyMons": 53611,
+    "wPartySpecies": 53604,
+    "wPlayerBattleStatus3": 53348,
+    "wPlayerCoins": 54692,
+    "wPlayerID": 54105,
+    "wPlayerMonAccuracyMod": 52510,
+    "wPlayerMonAttackMod": 52506,
+    "wPlayerMonDefenseMod": 52507,
+    "wPlayerMonEvasionMod": 52511,
+    "wPlayerMonNumber": 52271,
+    "wPlayerMonSpecialMod": 52509,
+    "wPlayerMonSpeedMod": 52508,
+    "wPlayerMoney": 54087,
+    "wPlayerName": 53592,
+    "wPlayerSelectedMove": 52444,
+    "wPokedexOwned": 54007,
+    "wPokedexSeen": 54026,
+    "wRivalName": 54090,
+    "wSaveFileStatus": 53384,
+    "wSerialPartyMonsPatchList": 50440,
+    "wSpriteDataEnd": 49920,
+    "wSpriteDataStart": 49408,
+    "wStatusFlags4": 55086,
+    "wStatusFlags5": 55088,
+    "wStatusFlags6": 55090,
+    "wStatusFlags7": 55091,
+    "wSurroundingTiles": 50440,
+    "wTextBoxID": 53541,
+    "wTileMap": 50080,
+    "wTileMapBackup": 50440,
+    "wTradedEnemyMonSpecies": 52542,
+    "wTradedPlayerMonSpecies": 52541,
+    "wTrainerClass": 53297,
+    "wTrainerName": 53322,
+    "wTrainerNo": 53341,
+    "wWalkCounter": 53189,
+    "wWaterMons": 55461,
+    "wWaterRate": 55460,
+    "wXCoord": 54114,
+    "wYCoord": 54113
+   },
+   "repo": "pokered",
+   "rom": {
+    "AddEnemyMonToPlayerParty": {
+     "addr": 14931,
+     "bank": 0,
+     "flat": 14931
+    },
+    "AddItemToInventory_.done": {
+     "addr": 20075,
+     "bank": 3,
+     "flat": 52843
+    },
+    "AddPartyMon": {
+     "addr": 14631,
+     "bank": 0,
+     "flat": 14631
+    },
+    "ApplyOutOfBattlePoisonDamage": {
+     "addr": 18076,
+     "bank": 3,
+     "flat": 50844
+    },
+    "CableClubNPC": {
+     "addr": 29125,
+     "bank": 1,
+     "flat": 29125
+    },
+    "CalcCheckSum": {
+     "addr": 30806,
+     "bank": 28,
+     "flat": 473174
+    },
+    "CalcIndividualBoxCheckSums": {
+     "addr": 30819,
+     "bank": 28,
+     "flat": 473187
+    },
+    "CalcStat": {
+     "addr": 14666,
+     "bank": 0,
+     "flat": 14666
+    },
+    "CalcStats": {
+     "addr": 14646,
+     "bank": 0,
+     "flat": 14646
+    },
+    "ChangeBox": {
+     "addr": 30881,
+     "bank": 28,
+     "flat": 473249
+    },
+    "DelayFrame": {
+     "addr": 8367,
+     "bank": 0,
+     "flat": 8367
+    },
+    "DelayFrame.halt": {
+     "addr": 8371,
+     "bank": 0,
+     "flat": 8371
+    },
+    "DisplayPartyMenu": {
+     "addr": 5116,
+     "bank": 0,
+     "flat": 5116
+    },
+    "EmptyAllSRAMBoxes": {
+     "addr": 31273,
+     "bank": 28,
+     "flat": 473641
+    },
+    "EndOfBattle": {
+     "addr": 30634,
+     "bank": 4,
+     "flat": 79786
+    },
+    "EnterMap": {
+     "addr": 934,
+     "bank": 0,
+     "flat": 934
+    },
+    "EvolutionAfterBattle": {
+     "addr": 27932,
+     "bank": 14,
+     "flat": 240924
+    },
+    "Evolution_ChangeMonPic": {
+     "addr": 32470,
+     "bank": 30,
+     "flat": 507606
+    },
+    "Evolution_PartyMonLoop": {
+     "addr": 27950,
+     "bank": 14,
+     "flat": 240942
+    },
+    "ExecutePlayerMove": {
+     "addr": 22110,
+     "bank": 15,
+     "flat": 251486
+    },
+    "HandlePlayerBlackOut": {
+     "addr": 18487,
+     "bank": 15,
+     "flat": 247863
+    },
+    "HandlePlayerMonFainted": {
+     "addr": 18176,
+     "bank": 15,
+     "flat": 247552
+    },
+    "HealParty": {
+     "addr": 30373,
+     "bank": 3,
+     "flat": 63141
+    },
+    "InGameTrade_DoTrade": {
+     "addr": 23559,
+     "bank": 28,
+     "flat": 465927
+    },
+    "Init": {
+     "addr": 8020,
+     "bank": 0,
+     "flat": 8020
+    },
+    "InitBattleCommon": {
+     "addr": 28477,
+     "bank": 15,
+     "flat": 257853
+    },
+    "InitWildBattle": {
+     "addr": 28555,
+     "bank": 15,
+     "flat": 257931
+    },
+    "Joypad": {
+     "addr": 410,
+     "bank": 0,
+     "flat": 410
+    },
+    "LoadMapHeader": {
+     "addr": 4220,
+     "bank": 0,
+     "flat": 4220
+    },
+    "MainInBattleLoop": {
+     "addr": 16947,
+     "bank": 15,
+     "flat": 246323
+    },
+    "MainMenu": {
+     "addr": 23282,
+     "bank": 1,
+     "flat": 23282
+    },
+    "MainMenu.choseContinue": {
+     "addr": 23474,
+     "bank": 1,
+     "flat": 23474
+    },
+    "MainMenu.pressedA": {
+     "addr": 23505,
+     "bank": 1,
+     "flat": 23505
+    },
+    "OverworldLoop": {
+     "addr": 1023,
+     "bank": 0,
+     "flat": 1023
+    },
+    "OverworldLoopLessDelay": {
+     "addr": 1026,
+     "bank": 0,
+     "flat": 1026
+    },
+    "RemoveFaintedPlayerMon": {
+     "addr": 18241,
+     "bank": 15,
+     "flat": 247617
+    },
+    "RemoveItemFromInventory": {
+     "addr": 11195,
+     "bank": 0,
+     "flat": 11195
+    },
+    "RemovePokemon": {
+     "addr": 14623,
+     "bank": 0,
+     "flat": 14623
+    },
+    "ResetStatusAndHalveMoneyOnBlackout": {
+     "addr": 16560,
+     "bank": 1,
+     "flat": 16560
+    },
+    "SaveCurrentBoxData": {
+     "addr": 30690,
+     "bank": 28,
+     "flat": 473058
+    },
+    "SaveGameData": {
+     "addr": 30792,
+     "bank": 28,
+     "flat": 473160
+    },
+    "SaveMainData": {
+     "addr": 30604,
+     "bank": 28,
+     "flat": 472972
+    },
+    "SaveMenu.save": {
+     "addr": 30509,
+     "bank": 28,
+     "flat": 472877
+    },
+    "SavePartyAndDexData": {
+     "addr": 30735,
+     "bank": 28,
+     "flat": 473103
+    },
+    "SendNewMonToBox": {
+     "addr": 26532,
+     "bank": 3,
+     "flat": 59300
+    },
+    "SoftReset": {
+     "addr": 8009,
+     "bank": 0,
+     "flat": 8009
+    },
+    "SpecialEnterMap": {
+     "addr": 23903,
+     "bank": 1,
+     "flat": 23903
+    },
+    "StartMenu_Pokemon": {
+     "addr": 28841,
+     "bank": 4,
+     "flat": 77993
+    },
+    "TryEvolvingMon": {
+     "addr": 27918,
+     "bank": 14,
+     "flat": 240910
+    },
+    "TryLoadSaveFile": {
+     "addr": 30184,
+     "bank": 28,
+     "flat": 472552
+    },
+    "TryLoadSaveFile.done": {
+     "addr": 30234,
+     "bank": 28,
+     "flat": 472602
+    },
+    "_Joypad": {
+     "addr": 16384,
+     "bank": 3,
+     "flat": 49152
+    }
+   },
+   "rom_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+   "sram_bank": {
+    "sBank2AllBoxesChecksum": 2,
+    "sBank2IndividualBoxChecksums": 2,
+    "sBank3AllBoxesChecksum": 3,
+    "sBank3IndividualBoxChecksums": 3,
+    "sBox1": 2,
+    "sBox12": 3,
+    "sBox2": 2,
+    "sBox6": 2,
+    "sBox7": 3,
+    "sCurBoxData": 1,
+    "sGameData": 1,
+    "sGameDataEnd": 1,
+    "sHallOfFame": 0,
+    "sMainData": 1,
+    "sMainDataCheckSum": 1,
+    "sPartyData": 1,
+    "sPlayerName": 1,
+    "sSpriteData": 1,
+    "sTileAnimations": 1
+   },
+   "sym": "pokeblue.sym"
+  },
+  "red": {
+   "derived": {
+    "battle_struct_size": 44,
+    "box_capacity": 20,
+    "box_struct_size": 33,
+    "name_length": 11,
+    "party_capacity": 6,
+    "party_struct_size": 44,
+    "sram_box_banks": [
+     2,
+     3
+    ],
+    "sram_box_stride": 1122,
+    "sram_boxes_per_bank": 6
+   },
+   "ram": {
+    "hAutoBGTransferEnabled": 65466,
+    "hDisableJoypadPolling": 65529,
+    "hFrameCounter": 65493,
+    "hJoyHeld": 65460,
+    "hJoyInput": 65528,
+    "hJoyLast": 65457,
+    "hJoyPressed": 65459,
+    "hLoadedROMBank": 65464,
+    "hSerialConnectionStatus": 65450,
+    "hSoftReset": 65418,
+    "hTileAnimations": 65495,
+    "hUILayoutFlags": 65526,
+    "hWY": 65456,
+    "sBank2AllBoxesChecksum": 47692,
+    "sBank2IndividualBoxChecksums": 47693,
+    "sBank3AllBoxesChecksum": 47692,
+    "sBank3IndividualBoxChecksums": 47693,
+    "sBox1": 40960,
+    "sBox12": 46570,
+    "sBox2": 42082,
+    "sBox6": 46570,
+    "sBox7": 40960,
+    "sCurBoxData": 45248,
+    "sGameData": 42392,
+    "sGameDataEnd": 46371,
+    "sHallOfFame": 42392,
+    "sMainData": 42403,
+    "sMainDataCheckSum": 46371,
+    "sPartyData": 44844,
+    "sPlayerName": 42392,
+    "sSpriteData": 44332,
+    "sTileAnimations": 46370,
+    "wBagItems": 54046,
+    "wBattleMon": 53268,
+    "wBattleMonHP": 53269,
+    "wBattleMonLevel": 53282,
+    "wBattleMonSpecies": 53268,
+    "wBattleResult": 53003,
+    "wBattleType": 53338,
+    "wBoxCount": 55936,
+    "wBoxDataEnd": 57058,
+    "wBoxDataStart": 55936,
+    "wBoxMon1": 55958,
+    "wBoxMon2": 55991,
+    "wBoxMonNicks": 56838,
+    "wBoxMonOT": 56618,
+    "wBoxMons": 55958,
+    "wBoxSpecies": 55937,
+    "wCapturedMonSpecies": 53532,
+    "wCurEnemyLevel": 53543,
+    "wCurItem": 53137,
+    "wCurMap": 54110,
+    "wCurMapTileset": 54119,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wCurrentBoxNum": 54688,
+    "wCurrentMenuItem": 52262,
+    "wEnemyMon": 53221,
+    "wEnemyMon1": 55460,
+    "wEnemyMon2": 55504,
+    "wEnemyMonAccuracyMod": 52530,
+    "wEnemyMonAttackMod": 52526,
+    "wEnemyMonDefenseMod": 52527,
+    "wEnemyMonEvasionMod": 52531,
+    "wEnemyMonHP": 53222,
+    "wEnemyMonLevel": 53235,
+    "wEnemyMonNicks": 55790,
+    "wEnemyMonOT": 55724,
+    "wEnemyMonSpecialMod": 52529,
+    "wEnemyMonSpecies": 53221,
+    "wEnemyMonSpecies2": 53208,
+    "wEnemyMonSpeedMod": 52528,
+    "wEnemyMons": 55460,
+    "wEnemyPartyCount": 55452,
+    "wEnemyPartySpecies": 55453,
+    "wEvolutionOccurred": 53537,
+    "wFontLoaded": 53188,
+    "wForceEvolution": 52436,
+    "wGrassMons": 55432,
+    "wGrassRate": 55431,
+    "wInGameTradeGiveMonSpecies": 52495,
+    "wInGameTradeReceiveMonSpecies": 52532,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wJoyIgnore": 52587,
+    "wLastMap": 54117,
+    "wLinkEnemyTrainerName": 55431,
+    "wLinkState": 53547,
+    "wListMenuID": 53140,
+    "wListScrollOffset": 52278,
+    "wMainDataEnd": 55936,
+    "wMainDataStart": 54007,
+    "wMaxMenuItem": 52264,
+    "wMenuExitMethod": 53550,
+    "wMenuWatchMovingOutOfBounds": 52279,
+    "wMonDataLocation": 52297,
+    "wNumBagItems": 54045,
+    "wObtainedBadges": 54102,
+    "wOptions": 54101,
+    "wPartyCount": 53603,
+    "wPartyMon1": 53611,
+    "wPartyMon2": 53655,
+    "wPartyMonNicks": 53941,
+    "wPartyMonOT": 53875,
+    "wPartyMons": 53611,
+    "wPartySpecies": 53604,
+    "wPlayerBattleStatus3": 53348,
+    "wPlayerCoins": 54692,
+    "wPlayerID": 54105,
+    "wPlayerMonAccuracyMod": 52510,
+    "wPlayerMonAttackMod": 52506,
+    "wPlayerMonDefenseMod": 52507,
+    "wPlayerMonEvasionMod": 52511,
+    "wPlayerMonNumber": 52271,
+    "wPlayerMonSpecialMod": 52509,
+    "wPlayerMonSpeedMod": 52508,
+    "wPlayerMoney": 54087,
+    "wPlayerName": 53592,
+    "wPlayerSelectedMove": 52444,
+    "wPokedexOwned": 54007,
+    "wPokedexSeen": 54026,
+    "wRivalName": 54090,
+    "wSaveFileStatus": 53384,
+    "wSerialPartyMonsPatchList": 50440,
+    "wSpriteDataEnd": 49920,
+    "wSpriteDataStart": 49408,
+    "wStatusFlags4": 55086,
+    "wStatusFlags5": 55088,
+    "wStatusFlags6": 55090,
+    "wStatusFlags7": 55091,
+    "wSurroundingTiles": 50440,
+    "wTextBoxID": 53541,
+    "wTileMap": 50080,
+    "wTileMapBackup": 50440,
+    "wTradedEnemyMonSpecies": 52542,
+    "wTradedPlayerMonSpecies": 52541,
+    "wTrainerClass": 53297,
+    "wTrainerName": 53322,
+    "wTrainerNo": 53341,
+    "wWalkCounter": 53189,
+    "wWaterMons": 55461,
+    "wWaterRate": 55460,
+    "wXCoord": 54114,
+    "wYCoord": 54113
+   },
+   "repo": "pokered",
+   "rom": {
+    "AddEnemyMonToPlayerParty": {
+     "addr": 14931,
+     "bank": 0,
+     "flat": 14931
+    },
+    "AddItemToInventory_.done": {
+     "addr": 20075,
+     "bank": 3,
+     "flat": 52843
+    },
+    "AddPartyMon": {
+     "addr": 14631,
+     "bank": 0,
+     "flat": 14631
+    },
+    "ApplyOutOfBattlePoisonDamage": {
+     "addr": 18076,
+     "bank": 3,
+     "flat": 50844
+    },
+    "CableClubNPC": {
+     "addr": 29125,
+     "bank": 1,
+     "flat": 29125
+    },
+    "CalcCheckSum": {
+     "addr": 30806,
+     "bank": 28,
+     "flat": 473174
+    },
+    "CalcIndividualBoxCheckSums": {
+     "addr": 30819,
+     "bank": 28,
+     "flat": 473187
+    },
+    "CalcStat": {
+     "addr": 14666,
+     "bank": 0,
+     "flat": 14666
+    },
+    "CalcStats": {
+     "addr": 14646,
+     "bank": 0,
+     "flat": 14646
+    },
+    "ChangeBox": {
+     "addr": 30881,
+     "bank": 28,
+     "flat": 473249
+    },
+    "DelayFrame": {
+     "addr": 8367,
+     "bank": 0,
+     "flat": 8367
+    },
+    "DelayFrame.halt": {
+     "addr": 8371,
+     "bank": 0,
+     "flat": 8371
+    },
+    "DisplayPartyMenu": {
+     "addr": 5116,
+     "bank": 0,
+     "flat": 5116
+    },
+    "EmptyAllSRAMBoxes": {
+     "addr": 31273,
+     "bank": 28,
+     "flat": 473641
+    },
+    "EndOfBattle": {
+     "addr": 30634,
+     "bank": 4,
+     "flat": 79786
+    },
+    "EnterMap": {
+     "addr": 934,
+     "bank": 0,
+     "flat": 934
+    },
+    "EvolutionAfterBattle": {
+     "addr": 27932,
+     "bank": 14,
+     "flat": 240924
+    },
+    "Evolution_ChangeMonPic": {
+     "addr": 32470,
+     "bank": 30,
+     "flat": 507606
+    },
+    "Evolution_PartyMonLoop": {
+     "addr": 27950,
+     "bank": 14,
+     "flat": 240942
+    },
+    "ExecutePlayerMove": {
+     "addr": 22110,
+     "bank": 15,
+     "flat": 251486
+    },
+    "HandlePlayerBlackOut": {
+     "addr": 18487,
+     "bank": 15,
+     "flat": 247863
+    },
+    "HandlePlayerMonFainted": {
+     "addr": 18176,
+     "bank": 15,
+     "flat": 247552
+    },
+    "HealParty": {
+     "addr": 30373,
+     "bank": 3,
+     "flat": 63141
+    },
+    "InGameTrade_DoTrade": {
+     "addr": 23559,
+     "bank": 28,
+     "flat": 465927
+    },
+    "Init": {
+     "addr": 8020,
+     "bank": 0,
+     "flat": 8020
+    },
+    "InitBattleCommon": {
+     "addr": 28477,
+     "bank": 15,
+     "flat": 257853
+    },
+    "InitWildBattle": {
+     "addr": 28555,
+     "bank": 15,
+     "flat": 257931
+    },
+    "Joypad": {
+     "addr": 410,
+     "bank": 0,
+     "flat": 410
+    },
+    "LoadMapHeader": {
+     "addr": 4220,
+     "bank": 0,
+     "flat": 4220
+    },
+    "MainInBattleLoop": {
+     "addr": 16947,
+     "bank": 15,
+     "flat": 246323
+    },
+    "MainMenu": {
+     "addr": 23282,
+     "bank": 1,
+     "flat": 23282
+    },
+    "MainMenu.choseContinue": {
+     "addr": 23474,
+     "bank": 1,
+     "flat": 23474
+    },
+    "MainMenu.pressedA": {
+     "addr": 23505,
+     "bank": 1,
+     "flat": 23505
+    },
+    "OverworldLoop": {
+     "addr": 1023,
+     "bank": 0,
+     "flat": 1023
+    },
+    "OverworldLoopLessDelay": {
+     "addr": 1026,
+     "bank": 0,
+     "flat": 1026
+    },
+    "RemoveFaintedPlayerMon": {
+     "addr": 18241,
+     "bank": 15,
+     "flat": 247617
+    },
+    "RemoveItemFromInventory": {
+     "addr": 11195,
+     "bank": 0,
+     "flat": 11195
+    },
+    "RemovePokemon": {
+     "addr": 14623,
+     "bank": 0,
+     "flat": 14623
+    },
+    "ResetStatusAndHalveMoneyOnBlackout": {
+     "addr": 16560,
+     "bank": 1,
+     "flat": 16560
+    },
+    "SaveCurrentBoxData": {
+     "addr": 30690,
+     "bank": 28,
+     "flat": 473058
+    },
+    "SaveGameData": {
+     "addr": 30792,
+     "bank": 28,
+     "flat": 473160
+    },
+    "SaveMainData": {
+     "addr": 30604,
+     "bank": 28,
+     "flat": 472972
+    },
+    "SaveMenu.save": {
+     "addr": 30509,
+     "bank": 28,
+     "flat": 472877
+    },
+    "SavePartyAndDexData": {
+     "addr": 30735,
+     "bank": 28,
+     "flat": 473103
+    },
+    "SendNewMonToBox": {
+     "addr": 26532,
+     "bank": 3,
+     "flat": 59300
+    },
+    "SoftReset": {
+     "addr": 8009,
+     "bank": 0,
+     "flat": 8009
+    },
+    "SpecialEnterMap": {
+     "addr": 23903,
+     "bank": 1,
+     "flat": 23903
+    },
+    "StartMenu_Pokemon": {
+     "addr": 28841,
+     "bank": 4,
+     "flat": 77993
+    },
+    "TryEvolvingMon": {
+     "addr": 27918,
+     "bank": 14,
+     "flat": 240910
+    },
+    "TryLoadSaveFile": {
+     "addr": 30184,
+     "bank": 28,
+     "flat": 472552
+    },
+    "TryLoadSaveFile.done": {
+     "addr": 30234,
+     "bank": 28,
+     "flat": 472602
+    },
+    "_Joypad": {
+     "addr": 16384,
+     "bank": 3,
+     "flat": 49152
+    }
+   },
+   "rom_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+   "sram_bank": {
+    "sBank2AllBoxesChecksum": 2,
+    "sBank2IndividualBoxChecksums": 2,
+    "sBank3AllBoxesChecksum": 3,
+    "sBank3IndividualBoxChecksums": 3,
+    "sBox1": 2,
+    "sBox12": 3,
+    "sBox2": 2,
+    "sBox6": 2,
+    "sBox7": 3,
+    "sCurBoxData": 1,
+    "sGameData": 1,
+    "sGameDataEnd": 1,
+    "sHallOfFame": 0,
+    "sMainData": 1,
+    "sMainDataCheckSum": 1,
+    "sPartyData": 1,
+    "sPlayerName": 1,
+    "sSpriteData": 1,
+    "sTileAnimations": 1
+   },
+   "sym": "pokered.sym"
+  },
+  "yellow": {
+   "derived": {
+    "battle_struct_size": 44,
+    "box_capacity": 20,
+    "box_struct_size": 33,
+    "name_length": 11,
+    "party_capacity": 6,
+    "party_struct_size": 44,
+    "sram_box_banks": [
+     2,
+     3
+    ],
+    "sram_box_stride": 1122,
+    "sram_boxes_per_bank": 6
+   },
+   "ram": {
+    "hAutoBGTransferEnabled": 65466,
+    "hDisableJoypadPolling": 65528,
+    "hFrameCounter": 65493,
+    "hJoyHeld": 65460,
+    "hJoyInput": 65525,
+    "hJoyLast": 65457,
+    "hJoyPressed": 65459,
+    "hLoadedROMBank": 65464,
+    "hSerialConnectionStatus": 65450,
+    "hSoftReset": 65418,
+    "hTileAnimations": 65495,
+    "hUILayoutFlags": 65530,
+    "hWY": 65456,
+    "sBank2AllBoxesChecksum": 47692,
+    "sBank2IndividualBoxChecksums": 47693,
+    "sBank3AllBoxesChecksum": 47692,
+    "sBank3IndividualBoxChecksums": 47693,
+    "sBox1": 40960,
+    "sBox12": 46570,
+    "sBox2": 42082,
+    "sBox6": 46570,
+    "sBox7": 40960,
+    "sCurBoxData": 45248,
+    "sGameData": 42392,
+    "sGameDataEnd": 46371,
+    "sHallOfFame": 42392,
+    "sMainData": 42403,
+    "sMainDataCheckSum": 46371,
+    "sPartyData": 44844,
+    "sPlayerName": 42392,
+    "sSpriteData": 44332,
+    "sTileAnimations": 46370,
+    "wBagItems": 54045,
+    "wBattleMon": 53267,
+    "wBattleMonHP": 53268,
+    "wBattleMonLevel": 53281,
+    "wBattleMonSpecies": 53267,
+    "wBattleResult": 53003,
+    "wBattleType": 53337,
+    "wBoxCount": 55935,
+    "wBoxDataEnd": 57057,
+    "wBoxDataStart": 55935,
+    "wBoxMon1": 55957,
+    "wBoxMon2": 55990,
+    "wBoxMonNicks": 56837,
+    "wBoxMonOT": 56617,
+    "wBoxMons": 55957,
+    "wBoxSpecies": 55936,
+    "wCapturedMonSpecies": 53531,
+    "wCurEnemyLevel": 53542,
+    "wCurItem": 53136,
+    "wCurMap": 54109,
+    "wCurMapTileset": 54118,
+    "wCurOpponent": 53336,
+    "wCurPartySpecies": 53136,
+    "wCurrentBoxNum": 54687,
+    "wCurrentMenuItem": 52262,
+    "wEnemyMon": 53220,
+    "wEnemyMon1": 55459,
+    "wEnemyMon2": 55503,
+    "wEnemyMonAccuracyMod": 52530,
+    "wEnemyMonAttackMod": 52526,
+    "wEnemyMonDefenseMod": 52527,
+    "wEnemyMonEvasionMod": 52531,
+    "wEnemyMonHP": 53221,
+    "wEnemyMonLevel": 53234,
+    "wEnemyMonNicks": 55789,
+    "wEnemyMonOT": 55723,
+    "wEnemyMonSpecialMod": 52529,
+    "wEnemyMonSpecies": 53220,
+    "wEnemyMonSpecies2": 53207,
+    "wEnemyMonSpeedMod": 52528,
+    "wEnemyMons": 55459,
+    "wEnemyPartyCount": 55451,
+    "wEnemyPartySpecies": 55452,
+    "wEvolutionOccurred": 53536,
+    "wFontLoaded": 53187,
+    "wForceEvolution": 52436,
+    "wGrassMons": 55431,
+    "wGrassRate": 55430,
+    "wInGameTradeGiveMonSpecies": 52495,
+    "wInGameTradeReceiveMonSpecies": 52532,
+    "wIsInBattle": 53334,
+    "wItemQuantity": 53141,
+    "wJoyIgnore": 52587,
+    "wLastMap": 54116,
+    "wLinkEnemyTrainerName": 55430,
+    "wLinkState": 53546,
+    "wListMenuID": 53139,
+    "wListScrollOffset": 52278,
+    "wMainDataEnd": 55935,
+    "wMainDataStart": 54006,
+    "wMaxMenuItem": 52264,
+    "wMenuExitMethod": 53549,
+    "wMenuWatchMovingOutOfBounds": 52279,
+    "wMonDataLocation": 52297,
+    "wNumBagItems": 54044,
+    "wObtainedBadges": 54101,
+    "wOptions": 54100,
+    "wPartyCount": 53602,
+    "wPartyMon1": 53610,
+    "wPartyMon2": 53654,
+    "wPartyMonNicks": 53940,
+    "wPartyMonOT": 53874,
+    "wPartyMons": 53610,
+    "wPartySpecies": 53603,
+    "wPlayerBattleStatus3": 53347,
+    "wPlayerCoins": 54691,
+    "wPlayerID": 54104,
+    "wPlayerMonAccuracyMod": 52510,
+    "wPlayerMonAttackMod": 52506,
+    "wPlayerMonDefenseMod": 52507,
+    "wPlayerMonEvasionMod": 52511,
+    "wPlayerMonNumber": 52271,
+    "wPlayerMonSpecialMod": 52509,
+    "wPlayerMonSpeedMod": 52508,
+    "wPlayerMoney": 54086,
+    "wPlayerName": 53591,
+    "wPlayerSelectedMove": 52444,
+    "wPokedexOwned": 54006,
+    "wPokedexSeen": 54025,
+    "wRivalName": 54089,
+    "wSaveFileStatus": 53383,
+    "wSerialPartyMonsPatchList": 50440,
+    "wSpriteDataEnd": 49920,
+    "wSpriteDataStart": 49408,
+    "wStatusFlags4": 55085,
+    "wStatusFlags5": 55087,
+    "wStatusFlags6": 55089,
+    "wStatusFlags7": 55090,
+    "wSurroundingTiles": 50440,
+    "wTextBoxID": 53540,
+    "wTileMap": 50080,
+    "wTileMapBackup": 50440,
+    "wTradedEnemyMonSpecies": 52542,
+    "wTradedPlayerMonSpecies": 52541,
+    "wTrainerClass": 53296,
+    "wTrainerName": 53321,
+    "wTrainerNo": 53340,
+    "wWalkCounter": 53188,
+    "wWaterMons": 55460,
+    "wWaterRate": 55459,
+    "wXCoord": 54113,
+    "wYCoord": 54112
+   },
+   "repo": "pokeyellow",
+   "rom": {
+    "AddEnemyMonToPlayerParty": {
+     "addr": 14920,
+     "bank": 0,
+     "flat": 14920
+    },
+    "AddItemToInventory_.done": {
+     "addr": 23512,
+     "bank": 61,
+     "flat": 1006552
+    },
+    "AddPartyMon": {
+     "addr": 14620,
+     "bank": 0,
+     "flat": 14620
+    },
+    "ApplyOutOfBattlePoisonDamage": {
+     "addr": 17374,
+     "bank": 3,
+     "flat": 50142
+    },
+    "CableClubNPC": {
+     "addr": 28725,
+     "bank": 1,
+     "flat": 28725
+    },
+    "CalcCheckSum": {
+     "addr": 31647,
+     "bank": 28,
+     "flat": 474015
+    },
+    "CalcIndividualBoxCheckSums": {
+     "addr": 31660,
+     "bank": 28,
+     "flat": 474028
+    },
+    "CalcStat": {
+     "addr": 14655,
+     "bank": 0,
+     "flat": 14655
+    },
+    "CalcStats": {
+     "addr": 14635,
+     "bank": 0,
+     "flat": 14635
+    },
+    "ChangeBox": {
+     "addr": 31722,
+     "bank": 28,
+     "flat": 474090
+    },
+    "DelayFrame": {
+     "addr": 7780,
+     "bank": 0,
+     "flat": 7780
+    },
+    "DelayFrame.halt": {
+     "addr": 7784,
+     "bank": 0,
+     "flat": 7784
+    },
+    "DisplayPartyMenu": {
+     "addr": 4552,
+     "bank": 0,
+     "flat": 4552
+    },
+    "EmptyAllSRAMBoxes": {
+     "addr": 32101,
+     "bank": 28,
+     "flat": 474469
+    },
+    "EndOfBattle": {
+     "addr": 30565,
+     "bank": 4,
+     "flat": 79717
+    },
+    "EnterMap": {
+     "addr": 471,
+     "bank": 0,
+     "flat": 471
+    },
+    "EvolutionAfterBattle": {
+     "addr": 28102,
+     "bank": 14,
+     "flat": 241094
+    },
+    "Evolution_ChangeMonPic": {
+     "addr": 23380,
+     "bank": 23,
+     "flat": 383828
+    },
+    "Evolution_PartyMonLoop": {
+     "addr": 28120,
+     "bank": 14,
+     "flat": 241112
+    },
+    "ExecutePlayerMove": {
+     "addr": 22480,
+     "bank": 15,
+     "flat": 251856
+    },
+    "HandlePlayerBlackOut": {
+     "addr": 18588,
+     "bank": 15,
+     "flat": 247964
+    },
+    "HandlePlayerMonFainted": {
+     "addr": 18205,
+     "bank": 15,
+     "flat": 247581
+    },
+    "HealParty": {
+     "addr": 29995,
+     "bank": 3,
+     "flat": 62763
+    },
+    "InGameTrade_DoTrade": {
+     "addr": 23721,
+     "bank": 28,
+     "flat": 466089
+    },
+    "Init": {
+     "addr": 7440,
+     "bank": 0,
+     "flat": 7440
+    },
+    "InitBattleCommon": {
+     "addr": 24605,
+     "bank": 61,
+     "flat": 1007645
+    },
+    "InitWildBattle": {
+     "addr": 24700,
+     "bank": 61,
+     "flat": 1007740
+    },
+    "Joypad": {
+     "addr": 441,
+     "bank": 0,
+     "flat": 441
+    },
+    "LoadMapHeader": {
+     "addr": 3499,
+     "bank": 0,
+     "flat": 3499
+    },
+    "MainInBattleLoop": {
+     "addr": 16969,
+     "bank": 15,
+     "flat": 246345
+    },
+    "MainMenu": {
+     "addr": 23462,
+     "bank": 1,
+     "flat": 23462
+    },
+    "MainMenu.choseContinue": {
+     "addr": 23652,
+     "bank": 1,
+     "flat": 23652
+    },
+    "MainMenu.pressedA": {
+     "addr": 23683,
+     "bank": 1,
+     "flat": 23683
+    },
+    "OverworldLoop": {
+     "addr": 578,
+     "bank": 0,
+     "flat": 578
+    },
+    "OverworldLoopLessDelay": {
+     "addr": 581,
+     "bank": 0,
+     "flat": 581
+    },
+    "RemoveFaintedPlayerMon": {
+     "addr": 18270,
+     "bank": 15,
+     "flat": 247646
+    },
+    "RemoveItemFromInventory": {
+     "addr": 10941,
+     "bank": 0,
+     "flat": 10941
+    },
+    "RemovePokemon": {
+     "addr": 14612,
+     "bank": 0,
+     "flat": 14612
+    },
+    "ResetStatusAndHalveMoneyOnBlackout": {
+     "addr": 17012,
+     "bank": 60,
+     "flat": 983668
+    },
+    "SaveCurrentBoxData": {
+     "addr": 31538,
+     "bank": 28,
+     "flat": 473906
+    },
+    "SaveGameData": {
+     "addr": 31633,
+     "bank": 28,
+     "flat": 474001
+    },
+    "SaveMainData": {
+     "addr": 31461,
+     "bank": 28,
+     "flat": 473829
+    },
+    "SaveMenu.save": {
+     "addr": 31381,
+     "bank": 28,
+     "flat": 473749
+    },
+    "SavePartyAndDexData": {
+     "addr": 31574,
+     "bank": 28,
+     "flat": 473942
+    },
+    "SendNewMonToBox": {
+     "addr": 26344,
+     "bank": 3,
+     "flat": 59112
+    },
+    "SoftReset": {
+     "addr": 7429,
+     "bank": 0,
+     "flat": 7429
+    },
+    "SpecialEnterMap": {
+     "addr": 23780,
+     "bank": 1,
+     "flat": 23780
+    },
+    "StartMenu_Pokemon": {
+     "addr": 23606,
+     "bank": 4,
+     "flat": 72758
+    },
+    "TryEvolvingMon": {
+     "addr": 28088,
+     "bank": 14,
+     "flat": 241080
+    },
+    "TryLoadSaveFile": {
+     "addr": 31065,
+     "bank": 28,
+     "flat": 473433
+    },
+    "TryLoadSaveFile.done": {
+     "addr": 31115,
+     "bank": 28,
+     "flat": 473483
+    },
+    "_Joypad": {
+     "addr": 16429,
+     "bank": 3,
+     "flat": 49197
+    }
+   },
+   "rom_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+   "sram_bank": {
+    "sBank2AllBoxesChecksum": 2,
+    "sBank2IndividualBoxChecksums": 2,
+    "sBank3AllBoxesChecksum": 3,
+    "sBank3IndividualBoxChecksums": 3,
+    "sBox1": 2,
+    "sBox12": 3,
+    "sBox2": 2,
+    "sBox6": 2,
+    "sBox7": 3,
+    "sCurBoxData": 1,
+    "sGameData": 1,
+    "sGameDataEnd": 1,
+    "sHallOfFame": 0,
+    "sMainData": 1,
+    "sMainDataCheckSum": 1,
+    "sPartyData": 1,
+    "sPlayerName": 1,
+    "sSpriteData": 1,
+    "sTileAnimations": 1
+   },
+   "sym": "pokeyellow.sym"
+  }
+ }
+}
