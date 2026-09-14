@@ -100,6 +100,10 @@ SCENARIOS = {
                                 "target": "battle", "no_setup": True, "frames": 2500000},
     "reconnect_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
                       "target": "battle", "no_setup": True, "frames": 2000000},
+    # D-2: the starters form a gift pair; the pre-ball rival faints do not kill that pair.
+    # Both cartridges start cold and play lab/parcel/save with sequential rival turns.
+    "ball_gate_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
+                      "cold_boot": True, "no_setup": True, "frames": 400000},
     # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
     "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                   "target": "battle", "no_setup": True, "frames": 2500000,
@@ -259,6 +263,119 @@ def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, e
     if len(new_hellos) != len(old_hellos) + 1 or not any(
             row.get("text") == "REJECTED — wrong save/slot" for row in new_hellos):
         problems.append("A did not add exactly one WRONG SAVE rejection hello")
+    return problems
+
+
+BALL_GATE_FORBIDDEN_EVENTS = {"no_catch", "dead_zone", "force_faint", "force_explode",
+                              "memorialize"}
+
+
+def ball_gate_fact(receipt, label):
+    """Read one named, structured cartridge milestone; duplicate/missing facts fail closed."""
+    matches = [line[len(label) + 1:] for line in (receipt or "").splitlines()
+               if line.startswith(label + " ")]
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one {label} receipt, got {len(matches)}")
+    return json.loads(matches[0])
+
+
+def ball_gate_pre_problems(status, links, events, hellos):
+    """D-2: independent New Game identities, with both server gates still closed."""
+    problems = []
+    ids = []
+    for inst in ("a", "b"):
+        hello = hellos[inst]
+        ot_id = hello.get("ot_id")
+        ids.append(ot_id)
+        if not isinstance(ot_id, int) or ot_id <= 0 or ot_id > 0xFFFF:
+            problems.append(f"{inst} cold hello has no real trainer ID")
+        if (hello.get("map") != 0x26 or hello.get("party_count") != 0
+                or hello.get("has_pokeballs") is not False or hello.get("ball_count") != 0):
+            problems.append(f"{inst} first hello was not the empty-party, zero-ball bedroom")
+        player = (status.get("players") or {}).get(inst) or {}
+        if (not player.get("connected") or player.get("nuzlocke_active") is not False
+                or player.get("ball_count") != 0):
+            problems.append(f"{inst} server ball gate opened before the first ball")
+    if ids[0] == ids[1]:
+        problems.append("cold New Game trainer IDs are not distinct")
+    if links:
+        problems.append("a pair linked before the first Poké Ball")
+    if any(row.get("type") in BALL_GATE_FORBIDDEN_EVENTS for row in events):
+        problems.append("server emitted a linked/death event before the first Poké Ball")
+    return problems
+
+
+def ball_gate_starters_problems(status, links, events, pre_rival):
+    """Gifts link before balls, while both independent nuzlocke gates stay closed."""
+    problems = []
+    if len(links) != 1 or links[0].get("area_id") != "gift_map_40" or links[0].get("status") != "alive":
+        problems.append("starter gifts did not form one alive gift_map_40 pair")
+    else:
+        link = links[0]
+        for inst in ("a", "b"):
+            if (link.get(inst) or {}).get("key") != pre_rival[inst].get("key"):
+                problems.append(f"{inst} starter key differs from the gift link")
+    for inst in ("a", "b"):
+        fact = pre_rival[inst]
+        player = (status.get("players") or {}).get(inst) or {}
+        if (not fact.get("key") or fact.get("capture_count", 0) < 1
+                or fact.get("gift") is not True or fact.get("ball_count") != 0):
+            problems.append(f"{inst} starter was not captured as a zero-ball gift")
+        if player.get("nuzlocke_active") is not False or player.get("ball_count") != 0:
+            problems.append(f"{inst} server ball gate opened on the starter gift")
+        if not any(row.get("type") == "linked" and row.get("player") == inst for row in events):
+            problems.append(f"{inst} gift-link event missing from events.json")
+    if any(row.get("type") in BALL_GATE_FORBIDDEN_EVENTS for row in events):
+        problems.append("starter gifts resolved a wild encounter or caused a death")
+    return problems
+
+
+def ball_gate_lab_problems(status, links, expected_link, events, labs, pre_rival, released, server_log):
+    """Both real Rival1 losses must emit faint but leave the partner untouched."""
+    problems = []
+    for inst in ("a", "b"):
+        lab = labs[inst]
+        if (lab.get("result") != 1 or lab.get("hp", 0) <= 0 or lab.get("faint_count", 0) < 1
+                or lab.get("ball_count") != 0 or lab.get("has_pokeballs") is not False):
+            problems.append(f"{inst} lab loss lacked the real pre-ball faint/heal receipt")
+        if lab.get("force_faint") != 0 or lab.get("memorialize") != 0:
+            problems.append(f"{inst} received a partner death command before balls")
+        player = (status.get("players") or {}).get(inst) or {}
+        if player.get("nuzlocke_active") is not False or player.get("ball_count") != 0:
+            problems.append(f"{inst} server gate was open during the lab loss")
+        if f"[{inst}] faint key=" not in server_log:
+            problems.append(f"{inst} lab faint was absent from slink.log")
+    if pre_rival["b"].get("hp", 0) <= 0 or pre_rival["b"].get("hp") != released["b"].get("hp"):
+        problems.append("B's parked starter HP changed when A fainted")
+    if released["b"].get("force_faint") != 0 or released["b"].get("memorialize") != 0:
+        problems.append("B received a death command while parked outside battle")
+    if links != [expected_link] or any(row.get("type") in BALL_GATE_FORBIDDEN_EVENTS for row in events):
+        problems.append("starter pair changed or a wild encounter/death resolved before balls")
+    return problems
+
+
+def ball_gate_flip_problems(status, flips):
+    """Both activations must follow the filtered bag_received engine site and the bag read."""
+    problems = []
+    for inst in ("a", "b"):
+        fact = flips[inst]
+        player = (status.get("players") or {}).get(inst) or {}
+        if (fact.get("signal_count", 0) < 1 or fact.get("ball_count", 0) < 1
+                or fact.get("has_pokeballs") is not True):
+            problems.append(f"{inst} client did not activate from bag_received")
+        if player.get("nuzlocke_active") is not True or player.get("ball_count", 0) < 1:
+            problems.append(f"{inst} server did not activate after the bag tick")
+    return problems
+
+
+def ball_gate_after_labs_problems(labs, after):
+    """A and B each remain healthy while the other side's rival faint is delivered."""
+    problems = []
+    for inst in ("a", "b"):
+        if after[inst].get("hp") != labs[inst].get("hp"):
+            problems.append(f"{inst} starter HP changed after the partner's lab faint")
+        if after[inst].get("force_faint") != 0 or after[inst].get("memorialize") != 0:
+            problems.append(f"{inst} received a late pre-ball death command")
     return problems
 
 
@@ -422,6 +539,9 @@ class DuoRun:
         which is what actually prevents a crashed run's save leaking into the next one. Do not
         weaken that copy on the assumption this directory is fresh; it isn't.
         """
+        if self.cfg.get("cold_boot"):
+            # A fresh per-run path makes a cold cartridge independent of any older attempt.
+            return os.path.join(self.data_dir, f"saveram_{inst}")
         return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
 
     def _pydec_note(self, fact):
@@ -543,6 +663,8 @@ class DuoRun:
         duo = {
             "wt": WT_FWD, "player": inst, "scenario": self.scenario,
             "phase": phase, "expected_key": expected_key, "attempt": self.attempt,
+            "cold_boot": bool(self.cfg.get("cold_boot")),
+            "max_attempts": 1 if self.cfg.get("cold_boot") else 2,
             "game": self.gcfg.get("game", ""),
             "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
             "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
@@ -553,8 +675,10 @@ class DuoRun:
         if self.gcfg["uses_savestate"]:
             ss = self.cfg["savestate"]
             duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
-        elif seed:
+        elif seed and not self.cfg.get("cold_boot"):
             self._seed_instance_save(inst)
+        elif self.cfg.get("cold_boot"):
+            os.makedirs(self._saveram_dir(inst), exist_ok=True)
         with open(stub, "w") as f:
             f.write('SLINK_HOST = "127.0.0.1"\n')
             f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -597,7 +721,7 @@ class DuoRun:
                 if os.path.exists(f):
                     os.remove(f)
         for inst in ("a", "b"):
-            self.launch_instance(inst)
+            self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
         print("[duo] two EmuHawk instances launched")
 
     def wait_keys(self):
@@ -859,6 +983,88 @@ class DuoRun:
             return []
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
+
+    def _wait_ball_fact(self, inst, label, timeout=300):
+        def fact():
+            receipt = read_result(self.scenario, inst) or ""
+            if label + " " not in receipt:
+                return None
+            return ball_gate_fact(receipt, label)
+
+        return wait_for(f"{inst} {label}", fact, timeout)
+
+    def assert_ball_gate_new(self):
+        """Stage the lab rivals separately; take every verdict from the server and receipts."""
+        hellos = {inst: self._wait_ball_fact(inst, "BALL_HELLO", 180) for inst in ("a", "b")}
+        self.wait_connected()
+        self._ball_hellos = hellos
+        def check_pre():
+            return ball_gate_pre_problems(self._status() or {}, self._links_json(),
+                                          self._reconnect_events(), hellos)
+
+        problems = check_pre()
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        self._pydec_note("cold bedroom: two distinct OTs, zero balls, both gates closed")
+        self.go()
+        pre = {inst: self._wait_ball_fact(inst, "BALL_PRE_RIVAL", 300) for inst in ("a", "b")}
+        def starter_link():
+            links = self._links_json()
+            return links if len(links) == 1 else None
+
+        links = wait_for("starter gift pair", starter_link, 60)
+        problems = ball_gate_starters_problems(self._status() or {}, links,
+                                               self._reconnect_events(), pre)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        self._ball_starter_link = links[0]
+        self._pydec_note("starter gift_map_40 pair linked with both zero-ball gates closed")
+        self._append_reconnect_marker("a", "ALLOW_A_RIVAL")
+        a_lab = self._wait_ball_fact("a", "BALL_LAB", 300)
+        self._append_reconnect_marker("b", "ALLOW_B_RIVAL")
+        b_release = self._wait_ball_fact("b", "BALL_RELEASE_RIVAL", 30)
+        b_lab = self._wait_ball_fact("b", "BALL_LAB", 300)
+        log_path = os.path.join(self.data_dir, "slink.log")
+        with open(log_path, encoding="utf-8", errors="replace") as handle:
+            server_log = handle.read()
+        problems = ball_gate_lab_problems(self._status() or {}, self._links_json(),
+                                          self._ball_starter_link,
+                                          self._reconnect_events(), {"a": a_lab, "b": b_lab},
+                                          pre, {"b": b_release}, server_log)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        self._pydec_note("both real Rival1 faints suppressed; gift pair alive; parked B HP unchanged")
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "ALLOW_PARCEL")
+        after = {inst: self._wait_ball_fact(inst, "BALL_AFTER_LABS", 30) for inst in ("a", "b")}
+        problems = ball_gate_after_labs_problems({"a": a_lab, "b": b_lab}, after)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        flips = {inst: self._wait_ball_fact(inst, "BALL_FLIP", 360) for inst in ("a", "b")}
+        wait_for("both server ball gates active", lambda: all(
+            ((self._status() or {}).get("players") or {}).get(inst, {}).get("nuzlocke_active")
+            for inst in ("a", "b")), 60)
+        problems = ball_gate_flip_problems(self._status() or {}, flips)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        self._pydec_note("both filtered bag_received signals followed by client and server activation")
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "ALLOW_SAVE")
+
+    def assert_ball_gate_saved(self):
+        if self._links_json() != [self._ball_starter_link]:
+            raise RuntimeError("starter gift pair changed before the first wild encounter")
+        for process in self.emus:
+            process.wait(timeout=30)  # BizHawk flushes the normal SAVE on client.exit.
+        for inst, species in (("a", 0x99), ("b", 0xB0)):
+            receipt = read_result(self.scenario, inst) or ""
+            if "SAVE_WITNESS ball_gate_new" not in receipt or "BALL_SAVED " not in receipt:
+                raise RuntimeError(f"{inst} has no ordinary-button save witness")
+            _sram, party, _box, _codec = self._saved_gen1_party(inst)
+            if (len(party) != 1 or party[0]["species"] != species or party[0]["hp"] <= 0
+                    or party[0]["ot_id"] != self._ball_hellos[inst]["ot_id"]):
+                raise RuntimeError(f"{inst} qualified save lacks its living original starter")
+        self._pydec_note("both flushed SaveRAMs qualify; one living original starter per cartridge")
 
     def _append_reconnect_marker(self, inst, marker):
         with open(self.go_files[inst], "a", encoding="utf-8") as handle:
@@ -1398,6 +1604,9 @@ class DuoRun:
             self.assert_admit_randomized_new()
             self.go()  # passive clients hold for ~600 frames before RESULT: PASS
             return
+        if self.scenario == "ball_gate_new":
+            self.assert_ball_gate_new()
+            return
         ka, kb = self.wait_keys()
         self._boot_keys = {"a": ka[0], "b": kb[0]}
         self.wait_connected()
@@ -1508,7 +1717,7 @@ class DuoRun:
         if getattr(self, "_pydec_path", None):
             os.makedirs(os.path.dirname(self._pydec_path), exist_ok=True)
             with open(self._pydec_path, "w", encoding="utf-8") as handle:
-                handle.write(f"attempt {self.attempt} of 2\n")
+                handle.write(f"attempt {self.attempt} of {1 if self.cfg.get('cold_boot') else 2}\n")
         try:
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
@@ -1530,6 +1739,8 @@ class DuoRun:
                 self.assert_link_new_saved()
             if pa and pb and self.scenario == "deadzone_new":
                 self.assert_dead_zone_new_saved()
+            if pa and pb and self.scenario == "ball_gate_new":
+                self.assert_ball_gate_saved()
             if pa and pb and self.scenario in ("linked_faint_bench_new", "linked_faint_active_new"):
                 self.assert_linked_faint_saved({"a": ra, "b": rb},
                                                active=self.scenario == "linked_faint_active_new")
@@ -1558,7 +1769,7 @@ class DuoRun:
 
 def run_scenario_with_rng_retry(name, args):
     """A new DuoRun for each attempt means a new server/data dir and reseeded battery saves."""
-    limit = 2 if args.game == "gen1_new" else 1
+    limit = 2 if args.game == "gen1_new" and name != "ball_gate_new" else 1
     for attempt in range(1, limit + 1):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         ok = DuoRun(name, args, attempt=attempt).run()
@@ -1572,11 +1783,11 @@ def run_scenario_with_rng_retry(name, args):
         pydec = os.path.join(BUILD, f"e2e_{name}_pydec_result.txt")
         if os.path.exists(pydec):
             shutil.copyfile(pydec, os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
-        if ok or not retryable_gen1_rng(args.game, receipts, attempt):
+        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt 2 of 2 "
               "with a fresh server, run directory and SaveRAM seeds")
-    return False, 2
+    return False, limit
 
 
 def main():

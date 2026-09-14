@@ -49,7 +49,7 @@ local Driver = dofile(ROOT .. "/lua/tests/gen1_battle_driver.lua")
 local Play = dofile(ROOT .. "/lua/tests/gen1_scripted_play.lua")
 
 log("duo instance " .. D.player .. " scenario=" .. D.scenario .. " game=" .. D.game)
-log(fmt("attempt %d of 2", D.attempt or 1))
+log(fmt("attempt %d of %d", D.attempt or 1, D.max_attempts or 2))
 pcall(function() client.speedmode(D.speed or 1600) end)
 
 local title, header = Entry.detect_title(function(a) return memory.read_u8(a, "ROM") end)
@@ -67,7 +67,7 @@ C.send = function(line)
     local ok, msg = pcall(json.decode, line)
     local name = ok and type(msg) == "table" and msg.event or "?"
     seen[name] = (seen[name] or 0) + 1
-    if name == "hello" or name == "trade_offer" or name == "menu_result" or name == "trade_done"
+    if name == "hello" or name == "capture" or name == "trade_offer" or name == "menu_result" or name == "trade_done"
        or name == "faint" then
         sent_events[name] = msg
     end
@@ -106,6 +106,10 @@ local reads, ram = parts.reads, parts.profile.ram
 local battle_site_keys = {}
 local original_on_signal = gclient.on_signal
 gclient.on_signal = function(self, sig)
+    if sig.kind == "bag_received" then
+        seen.bag_received = (seen.bag_received or 0) + 1
+        log(fmt("BAG_RECEIVED item=%d quantity=%d", sig.point.item, sig.point.quantity))
+    end
     if sig.kind == "battle_faint" then
         local party = reads.read_party()
         local slot = sig.point and sig.point.active_slot
@@ -147,13 +151,22 @@ local function step(buttons)
 end
 
 -- ── Boot proof (gen1_gate.lua): the checkpoint holds 30 frames with a plausible party ────
+local play = Play.new(ROOT, title, D.player, { log = log })
 local booted, settled = false, 0
-for f = 1, 6000 do
-    local count = memory.read_u8(ram.wPartyCount, "System Bus")
-    local ok = count >= 1 and count <= 6 and overworld_ok()
-    settled = ok and settled + 1 or 0
-    if settled >= 30 then booted = true break end
-    step((not ok and f % 16 < 2) and { A = true } or nil)
+if D.cold_boot then
+    -- gen1_scripted_play.lua:116-132 uses the OverworldLoop checkpoint in the empty-party
+    -- bedroom; requiring a nonempty party here would skip the entire pre-ball window.
+    local ok, why = pcall(function() play.boot(step, overworld_ok, 20000) end)
+    if not ok then finish(false, "cold NEW GAME failed: " .. tostring(why)) end
+    booted = true
+else
+    for f = 1, 6000 do
+        local count = memory.read_u8(ram.wPartyCount, "System Bus")
+        local ok = count >= 1 and count <= 6 and overworld_ok()
+        settled = ok and settled + 1 or 0
+        if settled >= 30 then booted = true break end
+        step((not ok and f % 16 < 2) and { A = true } or nil)
+    end
 end
 if not booted then
     client.screenshot(ROOT .. "/patch/build/e2e_" .. D.scenario .. "_" .. D.player .. "_bootfail.png")
@@ -161,6 +174,16 @@ if not booted then
 end
 local map = reads.read_map()
 log(fmt("booted at frame %d party=%d map=%d (%d,%d)", frame, memory.read_u8(ram.wPartyCount, "System Bus"), map.map, map.x, map.y))
+if D.cold_boot then
+    for _ = 1, 600 do
+        if sent_events.hello then break end
+        step({})
+    end
+    local hello = sent_events.hello
+    if not hello then finish(false, "cold bedroom never sent a production hello") end
+    log("BALL_HELLO " .. json.encode({ot_id=hello.ot_id, has_pokeballs=hello.has_pokeballs,
+        ball_count=hello.ball_count, party_count=#hello.party, map=map.map}))
+end
 
 local function party_keys()
     local party = reads.read_party()
@@ -213,7 +236,6 @@ local function wait_partner_done(secs) return wait_until(partner_done, secs or 6
 
 -- The hunt: gen1_scripted_play's WRAM point extended with the hunt's fields, the battle driver
 -- over a step that yields, and the route module run to a terminal phase.
-local play = Play.new(ROOT, title, D.player, { log = log })
 local symbols = play.symbols
 local function rd(addr) return memory.read_u8(addr, "System Bus") end
 local rom = parts.profile.rom
@@ -286,6 +308,67 @@ end
 
 -- ── Scenarios ────────────────────────────────────────────────────────────────────────
 local scenarios = {}
+
+-- D-2: no SaveRAM seed, no injected link or bag bit. The starter gift pair links on arrival
+-- (server/state.py:1404-1408,1573-1628); the pre-ball gate suppresses faint propagation.
+-- The route is the ordinary-button S-1/S-7 chain: New Game -> lab loss -> parcel -> SAVE.
+-- The runner releases A's rival first while B holds before its own battle. That gives the
+-- partner-HP check a stable baseline instead of comparing two simultaneously fought rivals.
+function scenarios.ball_gate_new()
+    if not D.cold_boot then return false, "ball gate did not launch a cold cartridge" end
+    if not sent_events.hello or sent_events.hello.has_pokeballs or sent_events.hello.ball_count ~= 0 then
+        return false, "bedroom hello already had Poké Balls"
+    end
+    if not wait_go() then return false, "no ball-gate go-file" end
+    local parked = false
+    local function lab_phase(_, phase)
+        if phase == "rival-challenge-dialogue" and not parked then
+            parked = true
+            local hp = play.point().party_hp
+            local party = reads.read_party()
+            local starter = party and party[1]
+            log("BALL_PRE_RIVAL " .. json.encode({player=D.player, hp=hp,
+                key=starter and reads.key(starter) or "", capture_count=seen.capture or 0,
+                gift=sent_events.capture and sent_events.capture.gift or false,
+                faint_count=seen.faint or 0, ball_count=play.point().ball_count}))
+            local marker = D.player == "a" and "ALLOW_A_RIVAL" or "ALLOW_B_RIVAL"
+            if not wait_until(function() return file_contains(D.go_file, marker) end, 900, marker) then
+                error("runner never released " .. D.player .. " rival battle", 0)
+            end
+            log("BALL_RELEASE_RIVAL " .. json.encode({player=D.player, hp=play.point().party_hp,
+                force_faint=seen.force_faint or 0, memorialize=seen.memorialize or 0}))
+        end
+    end
+    local lab = play.run(yield_frame, {"lab"}, lab_phase, 120000)
+    if not lab.lab then return false, "lab route did not reach its loss terminal" end
+    local pt = play.point()
+    log("BALL_LAB " .. json.encode({player=D.player, result=pt.battle_result,
+        hp=pt.party_hp, faint_count=seen.faint or 0, ball_count=pt.ball_count,
+        has_pokeballs=gclient.has_pokeballs, force_faint=seen.force_faint or 0,
+        memorialize=seen.memorialize or 0}))
+    if not wait_until(function() return file_contains(D.go_file, "ALLOW_PARCEL") end,
+                      900, "ALLOW_PARCEL") then return false, "runner never released parcel route" end
+    log("BALL_AFTER_LABS " .. json.encode({player=D.player, hp=play.point().party_hp,
+        force_faint=seen.force_faint or 0, memorialize=seen.memorialize or 0}))
+    local parcel = play.run(yield_frame, {"parcel"}, function(name, phase)
+        log("BALL_PHASE " .. name .. " " .. phase)
+    end, 120000)
+    if not parcel.parcel then return false, "parcel route did not reach first ball" end
+    if not wait_until(function()
+        return (seen.bag_received or 0) > 0 and gclient.has_pokeballs and play.point().ball_count > 0
+    end, 60, "bag_received and positive bag readback") then
+        return false, "bag_received did not activate the client's Poké Ball state"
+    end
+    log("BALL_FLIP " .. json.encode({player=D.player, signal_count=seen.bag_received,
+        ball_count=play.point().ball_count, has_pokeballs=gclient.has_pokeballs}))
+    if not wait_until(function() return file_contains(D.go_file, "ALLOW_SAVE") end,
+                      900, "ALLOW_SAVE") then return false, "runner never released normal SAVE" end
+    local saved, why = game_save("ball_gate_new")
+    if not saved then return false, why end
+    log("BALL_SAVED " .. json.encode({player=D.player, hp=play.point().party_hp,
+        party_count=play.point().party_count}))
+    return true, "cold lab loss suppressed; bag site activated; normal SAVE witnessed"
+end
 
 local function link_prerequisite_failure(why)
     -- Preserve the exact game-RNG result so e2e_duo.py retries only a missed sole ball.

@@ -32,7 +32,8 @@ pytestmark = [
 GAME = "gen1_new"
 ROMS = ("red", "blue")
 SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
-             "linked_faint_active_new", "trade_new", "reconnect_new", "admit_randomized_new")
+             "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
+             "admit_randomized_new")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
@@ -51,11 +52,12 @@ def test_gen1_new_duo(scenario):
             if admission:
                 pytest.fail(f"clean {rom} ROM missing for admission gate: {play.ROMS[rom]}")
             pytest.skip(f"{play.ROMS[rom]} not present (ROMs are gitignored)")
-        fixture = os.path.join(play.FIXTURES, f"{rom}_{target}.SaveRAM")
-        if not os.path.exists(fixture):
-            if admission:
-                pytest.fail(f"town fixture missing for admission gate: {fixture}")
-            pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py {rom} {target}`")
+        if not RUNNER_SCENARIOS[scenario].get("cold_boot"):
+            fixture = os.path.join(play.FIXTURES, f"{rom}_{target}.SaveRAM")
+            if not os.path.exists(fixture):
+                if admission:
+                    pytest.fail(f"town fixture missing for admission gate: {fixture}")
+                pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py {rom} {target}`")
 
     cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
            "--game", GAME, "--scenario", scenario]

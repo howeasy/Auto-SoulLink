@@ -314,6 +314,110 @@ def test_existing_red_town_is_not_a_second_ot_save():
         run._wrong_red_save_ot(str(town), old_ot)
 
 
+def _ball_status(active=False, balls=0):
+    return {"players": {inst: {"connected": True, "nuzlocke_active": active,
+                               "ball_count": balls} for inst in ("a", "b")}}
+
+
+def _ball_hellos():
+    return {inst: {"ot_id": ot, "map": 0x26, "party_count": 0,
+                   "has_pokeballs": False, "ball_count": 0}
+            for inst, ot in (("a", 0x4190), ("b", 0xAFB9))}
+
+
+def test_ball_gate_cold_hellos_require_distinct_ids_zero_balls_and_no_link():
+    hellos = _ball_hellos()
+    assert duo.ball_gate_pre_problems(_ball_status(), [], [], hellos) == []
+    same_ot = {**hellos, "b": {**hellos["b"], "ot_id": hellos["a"]["ot_id"]}}
+    assert any("not distinct" in p for p in duo.ball_gate_pre_problems(
+        _ball_status(), [], [], same_ot))
+    assert any("before the first Poké Ball" in p for p in duo.ball_gate_pre_problems(
+        _ball_status(), [{"status": "alive"}], [], hellos))
+    assert any("gate opened" in p for p in duo.ball_gate_pre_problems(
+        _ball_status(active=True), [], [], hellos))
+
+
+def test_ball_gate_lab_loss_has_faint_events_without_partner_death_or_hp_change():
+    labs = {inst: {"result": 1, "hp": 19, "faint_count": 1, "ball_count": 0,
+                   "has_pokeballs": False, "force_faint": 0, "memorialize": 0}
+            for inst in ("a", "b")}
+    pre = {"b": {"hp": 20}}
+    release = {"b": {"hp": 20, "force_faint": 0, "memorialize": 0}}
+    events = [{"player": inst, "type": "faint"} for inst in ("a", "b")]
+    log = "[a] faint key=AAAA\n[b] faint key=BBBB\n"
+    assert duo.ball_gate_lab_problems(_ball_status(), [], events, labs, pre, release, log) == []
+    altered = {"b": {**release["b"], "hp": 0, "force_faint": 1}}
+    problems = duo.ball_gate_lab_problems(_ball_status(), [], events, labs, pre, altered, log)
+    assert any("starter HP changed" in p for p in problems)
+    assert any("death command" in p for p in problems)
+    assert any("linked or retired" in p for p in duo.ball_gate_lab_problems(
+        _ball_status(), [{"status": "alive"}], events, labs, pre, release, log))
+    after = {inst: {"hp": 19, "force_faint": 0, "memorialize": 0}
+             for inst in ("a", "b")}
+    assert duo.ball_gate_after_labs_problems(labs, after) == []
+    changed = {**after, "a": {**after["a"], "hp": 0}}
+    assert any("starter HP changed" in p for p in duo.ball_gate_after_labs_problems(
+        labs, changed))
+
+
+def test_ball_gate_flip_requires_bag_signal_client_bit_and_server_bit():
+    flips = {inst: {"signal_count": 1, "ball_count": 1, "has_pokeballs": True}
+             for inst in ("a", "b")}
+    assert duo.ball_gate_flip_problems(_ball_status(active=True, balls=1), flips) == []
+    assert any("server did not activate" in p for p in duo.ball_gate_flip_problems(
+        _ball_status(), flips))
+    no_site = {**flips, "b": {**flips["b"], "signal_count": 0}}
+    assert any("bag_received" in p for p in duo.ball_gate_flip_problems(
+        _ball_status(active=True, balls=1), no_site))
+
+
+def test_ball_gate_receipt_must_have_exactly_one_structured_milestone():
+    text = 'BALL_HELLO {"ot_id":16784}\n'
+    assert duo.ball_gate_fact(text, "BALL_HELLO") == {"ot_id": 16784}
+    with pytest.raises(RuntimeError, match="got 2"):
+        duo.ball_gate_fact(text + text, "BALL_HELLO")
+
+
+def test_cold_ball_gate_uses_a_fresh_save_directory_without_seeding(runner, tmp_path, monkeypatch):
+    runner.scenario = "ball_gate_new"
+    runner.cfg = duo.SCENARIOS[runner.scenario]
+    runner.battery_boot = True
+    runner.tcp_port = 1234
+    runner.attempt = 1
+    runner.go_files = {inst: str(tmp_path / f"{inst}.go") for inst in ("a", "b")}
+    runner.emus, runner.emu_by_inst = [], {}
+    Path(duo.BUILD).mkdir(exist_ok=True)
+    runner._seed_instance_save = lambda _inst: pytest.fail("cold boot seeded a battery save")
+    monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_args, **_kw: None)
+
+    class FakeProcess:
+        pid = 42
+
+    monkeypatch.setattr(duo.subprocess, "Popen", lambda *_args, **_kw: FakeProcess())
+    runner.launch_instance("a", seed=False)
+    assert Path(runner._saveram_dir("a")).is_dir()
+    assert list(Path(runner._saveram_dir("a")).iterdir()) == []
+    assert 'cold_boot = true' in (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+
+
+def test_ball_gate_driver_failure_never_gets_rng_retry(tmp_path, monkeypatch):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    calls = []
+
+    class FakeRun:
+        def __init__(self, name, _args, attempt):
+            calls.append((name, attempt))
+
+        def run(self):
+            return False
+
+    monkeypatch.setattr(duo, "DuoRun", FakeRun)
+    monkeypatch.setattr(duo, "read_result", lambda *_args: duo.RNG_OUT_OF_BALLS)
+    args = type("Args", (), {"game": "gen1_new"})()
+    assert duo.run_scenario_with_rng_retry("ball_gate_new", args) == (False, 1)
+    assert calls == [("ball_gate_new", 1)]
+
+
 @pytest.mark.parametrize(
     ("a", "b", "attempt", "expected"),
     [
