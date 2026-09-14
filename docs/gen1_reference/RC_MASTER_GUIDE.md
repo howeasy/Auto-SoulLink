@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T06:09:20+00:00",
+  "updated_at_utc": "2026-09-14T06:32:18+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "6ba8329",
+  "source_head": "c57de64",
   "live_lane": null,
-  "next_action": "Round-3 Codex review of 6075af1..HEAD; on ACCEPT grant the lane for rb_resume_roundtrip.",
+  "next_action": "Round-4 Codex review of 6075af1..HEAD; on ACCEPT grant the lane for rb_resume_roundtrip.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -617,6 +617,24 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "Codex REVIEW cx-f0798287 round 2 (2 majors) \u2014 addressed; round 3 pending"
       ]
+    },
+    {
+      "id": "p2a-8",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
+      "files": [
+        "server/manager.py",
+        "server/gen1_run_resume.py",
+        "tests/unit/test_gen1_run_resume.py",
+        "tests/integration/test_manager_gen1_resume.py",
+        "tests/unit/test_manager_http_hardening.py"
+      ],
+      "next_action": "None; integrated (8032/0). Round-4 review pending.",
+      "reuse_decision": "shared",
+      "receipt": "tests/integration/test_manager_gen1_resume.py (+88), tests/unit/test_gen1_run_resume.py, tests/unit/test_manager_http_hardening.py",
+      "independent_review_refs": [
+        "Codex REVIEW cx-03a237b0 round 3 \u2014 addressed; round 4 pending"
+      ]
     }
   ]
 }
@@ -640,6 +658,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| P2A-8 integrated | `handle_start` reserves `status="starting"` under the lock (409 if `resumed_by` set or already starting), spawns outside, commits `running`/reverts on failure; resume refuses `starting`/`running`; `_reconcile` normalises a stale `starting`; `shutil.rmtree(onerror=)` (3.11); `_pure_heartbeat` requires explicit `battle==0` and `trainer` null keys (native checkpoint may be absent); `_get`/`_active_stream_run` under the lock. 8032/0. |
+| P2A review round 3 | Codex `cx-03a237b0`: (3) heartbeat rule works; minor — absent `trainer` treated as pure; (5) all handlers commit on fresh loads; minor — `_get()` saves unlocked; (7) resolved. **New majors:** `handle_start` reserves no state before spawning and ignores `resumed_by`, so a start paused at spawn can overlap a resume of the same predecessor (`manager.py:681-698`); `shutil.rmtree(onexc=)` is Python 3.12-only while the repo supports 3.11 (`manager.py:740,887`). Inventory-observation concern withdrawn (idle publications suppressed, `gen1_observation_loop.lua:89-104`). REJECT (MODEL), LIVE hold. P2A-8 dispatched. |
 | P2A-7 integrated | Post-witness rule inverted: every committed event holds except a pure heartbeat (`observation` with no signals/inventory/acquisitions, battle 0, no trainer, no native checkpoint; absent optional fields count as not pure). Registry mutations serialised under `RunManager._registry_lock` via `_update_run` (spawn/slow work outside the lock, fresh reload before every save; the paused-spawn race is pinned by a test); refusal bodies carry fixed `reasons` + `details`; rmtree failures logged. 8029/0. |
 | P2A review round 2 | Codex headless REVIEW `cx-f0798287` of `6075af1..aa40b43`: findings 1, 2, 4, 6 resolved; **3 partially (MAJOR)** — trainer-only / nonzero-battle observations and completed trades still pass `_gameplay_bearing` (`gen1_run_resume.py:88-94`; `lua/gen1_observation_loop.lua:103-123`; `trade_coordinator.py:490-498`); **5 partially (MAJOR)** — `handle_start` saves a stale registry after its await and can erase a concurrent resume's successor + `resumed_by` (`manager.py:660-675`); 7 minor (interpolated reasons). Safety axis re-confirmed intact; digest convention consistent across all five sites. REJECT (MODEL), LIVE hold. P2A-7 dispatched. |
 | P2A-6/6C integrated | All seven round-1 findings addressed at `2064c60` (pin `aa40b43`): provenance-based inherited-identity verification (origin key/player from member history; evolution test), gameplay-bearing = non-empty signals/inventory/acquisitions, bounded event window refused on overflow, `resumed_by` written on the predecessor + status re-checked before registry save (single-use, race-checked), `_RUN_ID` validation + `MANAGER_DIR` containment + fixed-string 409 reasons (exception text to logging), continue observer retired after the acked initial observation (pre-ack hits still fail closed), flush outcome in `SLINK_RUNTIME_STATUS().engine_signals.last_flush` + console log (wire unchanged). 8021/0. |
