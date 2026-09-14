@@ -185,3 +185,20 @@ def test_buffer_cap_fails_closed_and_close_unregisters():
     assert "buffer full" in str(h.status().failed)
     h.svc.close(h.svc)
     assert sorted(h.unregistered) == sorted(h.hooks)
+
+
+def test_every_pinned_site_has_a_point_table():
+    h = Harness("red")
+    kinds = {str(k) for k in h.S.KINDS}  # lupa table iteration yields keys
+    assert set(SITES["red"]["sites"]) <= kinds, set(SITES["red"]["sites"]) - kinds
+
+
+def test_move_mon_point_reads_direction_and_slot():
+    h = Harness("red")
+    h.start()
+    ram = PROFILE["red"]["ram"]
+    h.bus[ram["wMoveMonType"]] = 1  # PARTY_TO_BOX
+    h.bus[ram["wWhichPokemon"]] = 2
+    h.arrive("move_mon")
+    (sig,) = h.drain()
+    assert sig["point"]["move_type"] == 1 and sig["point"]["which"] == 2

@@ -65,6 +65,74 @@ S.KINDS.save_witness = {
         return { save_file_status = io.read_u8(ram.wSaveFileStatus, "System Bus") }
     end,
 }
+S.KINDS.blackout = { point = battle_point }
+
+-- Battle lifecycle. InitBattleCommon runs for wild and trainer battles; wCurOpponent is the
+-- wild species, or trainer class + 200 (constants/trainer_constants.asm). InitWildBattle+5 is
+-- past `ld a,1 / ld [wIsInBattle],a` so the species/level are already staged.
+local function opponent_point(io, ram)
+    return { cur_opponent = io.read_u8(ram.wCurOpponent, "System Bus"),
+             species = io.read_u8(ram.wEnemyMonSpecies2, "System Bus"),
+             level = io.read_u8(ram.wCurEnemyLevel, "System Bus"),
+             battle_type = io.read_u8(ram.wBattleType, "System Bus"),
+             is_in_battle = io.read_u8(ram.wIsInBattle, "System Bus"),
+             map = io.read_u8(ram.wCurMap, "System Bus"),
+             link_state = io.read_u8(ram.wLinkState, "System Bus") }
+end
+S.KINDS.battle_begin = { point = opponent_point }
+S.KINDS.wild_begin = { point = opponent_point }
+S.KINDS.battle_end = {
+    point = function(io, ram)
+        local p = opponent_point(io, ram)
+        p.result = io.read_u8(ram.wBattleResult, "System Bus")  -- 0 won, 1 lost, 2 ran (core.asm)
+        return p
+    end,
+}
+
+-- Acquisition and storage. The mon is not in place yet when these fire (they are entries), so
+-- the client treats each as "a legitimate party/box change follows" and diffs once after.
+local function acquisition_point(io, ram)
+    return { in_battle = io.read_u8(ram.wIsInBattle, "System Bus"),
+             species = io.read_u8(ram.wCurPartySpecies, "System Bus"),
+             level = io.read_u8(ram.wCurEnemyLevel, "System Bus"),
+             map = io.read_u8(ram.wCurMap, "System Bus"),
+             party_count = io.read_u8(ram.wPartyCount, "System Bus") }
+end
+S.KINDS.add_party_mon = { point = acquisition_point }
+S.KINDS.capture_box = { point = acquisition_point }
+S.KINDS.move_mon = {
+    -- wMoveMonType: 0 BOX_TO_PARTY, 1 PARTY_TO_BOX, 2 DAYCARE_TO_PARTY, 3 PARTY_TO_DAYCARE
+    -- (constants/menu_constants.asm:60-63); wWhichPokemon is the source slot.
+    point = function(io, ram)
+        return { move_type = io.read_u8(ram.wMoveMonType, "System Bus"),
+                 which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+                 party_count = io.read_u8(ram.wPartyCount, "System Bus"),
+                 box_count = io.read_u8(ram.wBoxCount, "System Bus") }
+    end,
+}
+S.KINDS.remove_pokemon = {
+    -- wRemoveMonFromBox non-zero = the current box, else the party (ram/wram.asm:1120-1122).
+    point = function(io, ram)
+        return { from_box = io.read_u8(ram.wRemoveMonFromBox, "System Bus") ~= 0,
+                 which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+                 party_count = io.read_u8(ram.wPartyCount, "System Bus"),
+                 box_count = io.read_u8(ram.wBoxCount, "System Bus") }
+    end,
+}
+S.KINDS.evolve = {
+    point = function(io, ram)
+        return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+                 party = io.read_range(ram.wPartyCount, 404, "System Bus") }
+    end,
+}
+S.KINDS.npc_trade = {
+    point = function(io, ram)
+        return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+                 give = io.read_u8(ram.wInGameTradeGiveMonSpecies, "System Bus"),
+                 receive = io.read_u8(ram.wInGameTradeReceiveMonSpecies, "System Bus"),
+                 party = io.read_range(ram.wPartyCount, 404, "System Bus") }
+    end,
+}
 
 -- profile: the title's table from profile.json (ram/rom/derived); sites: the title's
 -- `sites` table from engine_signals.json (kind -> site).
