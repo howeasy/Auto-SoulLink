@@ -109,27 +109,6 @@ def live_server(server_port):
 # The jar is user-supplied and never redistributed (it is GPLv3 and not ours to ship),
 # so .cache/upr/ is the right home: gitignored, and shared by every worktree.
 def find_upr_jar() -> str | None:
-    """Absolute path to PokeRandoZX.jar, or None. Searches, in order:
-
-    $SLINK_UPR_JAR, then <repo>/PokeRandoZX.jar, <repo>/tools/, and .cache/upr/ walking
-    upward -- a git worktree has no .cache of its own, it lives under the main repo's
-    .claude/worktrees/.
-    """
-    env = os.environ.get("SLINK_UPR_JAR")
-    if env and os.path.exists(env):
-        return env
-    repo = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    for cand in (os.path.join(repo, "PokeRandoZX.jar"),
-                 os.path.join(repo, "tools", "PokeRandoZX.jar")):
-        if os.path.exists(cand):
-            return cand
-    d = repo
-    for _ in range(6):
-        cand = os.path.join(d, ".cache", "upr", "PokeRandoZX.jar")
-        if os.path.exists(cand):
-            return cand
-        parent = os.path.dirname(d)
-        if parent == d:
-            break
-        d = parent
-    return None
+    """Kept for the tests that import it from here; the server owns the search now."""
+    from server.upr_pipeline import find_upr_jar as _find
+    return _find()

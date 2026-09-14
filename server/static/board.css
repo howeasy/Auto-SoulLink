@@ -23,6 +23,7 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 .dash-main .mk-page { padding: var(--space-4) 0 var(--space-6); }
 
 #content > .phase-banner { margin-bottom: var(--space-4); }
+.phase-banner.phase-stopped .phase-dot { background: var(--c-dim); box-shadow: none; }
 
 /* Banners the old dashboard drew with inline styles. */
 .game-over { background: var(--c-dead); color: #fff; text-align: center; padding: 1em .5em; font-size: 1.8em; font-weight: bold; letter-spacing: .15em; border-radius: 8px; margin-bottom: 1em; }

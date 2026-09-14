@@ -36,10 +36,18 @@ import shutil
 import subprocess
 
 from server.adapters.gen1_rom_scan import (
-    RomScanError, evolution_graph, identify, scan, scan_base_stats,
+    RomScanError,
+    evolution_graph,
+    identify,
+    scan,
+    scan_base_stats,
 )
 from server.upr_settings import (
-    UprSettingsError, categories_enabled, forbidden_enabled, load, parse_settings_string,
+    UprSettingsError,
+    categories_enabled,
+    forbidden_enabled,
+    load,
+    parse_settings_string,
     unexpected_settings,
 )
 
@@ -86,6 +94,54 @@ def _parse_log(path: str) -> dict:
     if not 0 <= seed < (1 << 48):
         raise UprPipelineError(f"seed {seed} is outside the 48-bit range UPR produces")
     return {"seed": seed, "settings_string": settings, "version": version}
+
+
+def find_upr_jar() -> str | None:
+    """Absolute path to PokeRandoZX.jar, or None. Searches, in order: $SLINK_UPR_JAR,
+    <repo>/PokeRandoZX.jar, <repo>/tools/, and .cache/upr/ walking upward -- a git
+    worktree has no .cache of its own; it lives under the main repo's .claude/worktrees/."""
+    env = os.environ.get("SLINK_UPR_JAR")
+    if env and os.path.exists(env):
+        return env
+    repo = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    for cand in (os.path.join(repo, "PokeRandoZX.jar"),
+                 os.path.join(repo, "tools", "PokeRandoZX.jar")):
+        if os.path.exists(cand):
+            return cand
+    d = repo
+    for _ in range(6):
+        cand = os.path.join(d, ".cache", "upr", "PokeRandoZX.jar")
+        if os.path.exists(cand):
+            return cand
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return None
+
+
+def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
+    """Everything that can be checked in milliseconds before anything is spent: is the
+    jar there, is Java on PATH, is each ROM present and a clean dump of a title the
+    scanner knows. randomize() checks the same things, but 600 s deep inside a worker."""
+    from server.adapters.gen1_rom_scan import identify
+    out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
+           "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
+    for pid, path in sources.items():
+        info = {"path": path, "exists": bool(path) and os.path.isfile(path),
+                "clean": None, "title": ""}
+        if info["exists"]:
+            try:
+                with open(path, "rb") as f:
+                    ident = identify(f.read())
+                info["clean"] = bool(ident.get("clean"))
+                info["title"] = ident.get("title") or ""
+            except Exception as exc:                                 # noqa: BLE001
+                info["clean"], info["title"] = False, f"unreadable: {exc}"
+        out["roms"][pid] = info
+        out["ok"] = out["ok"] and info["exists"] and bool(info["clean"])
+    out["ok"] = out["ok"] and out["jar_found"] and out["java_found"]
+    return out
 
 
 def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,

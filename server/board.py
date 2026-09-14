@@ -236,7 +236,7 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
     rom_types = [str((players.get(pid) or {}).get("rom_type") or "") for pid in PIDS]
     rom_type = next((rt for rt in rom_types if rt and rt != "?"), "")
     rules = status.get("rules") or {}
-    slug, label = phase(status)
+    slug, label = phase(status) if live else ("stopped", "Run stopped")
     title = " — ".join(x for x in (variant_label(rom_type) if rom_type else "", run_name) if x)
     return {
         "status": status,

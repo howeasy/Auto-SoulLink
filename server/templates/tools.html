@@ -29,11 +29,11 @@
           <p class="mk-sub">One randomized ROM per player with the same settings and different seeds, using your own copy of Universal Pokémon Randomizer ZX. The run then admits only those cartridges.</p>
           {% if gen1_runs %}
             <div class="mk-opts">
-              {% for r in gen1_runs %}<a class="mk-btn" href="/runs/{{ r.run_id }}#randomizer">{{ r.name }}</a>{% endfor %}
+              {% for r in gen1_runs %}<a class="mk-btn" href="/runs/{{ r.run_id }}/randomizer">{{ r.name }}</a>{% endfor %}
             </div>
-            <span class="mk-cap">Built from a run's page, so the pair is bound to that run.</span>
+            <span class="mk-cap">Each pair is bound to its run: the run admits only those two cartridges.</span>
           {% else %}
-            <span class="mk-cap">Create a Red · Blue · Yellow run first; the builder lives on the run's page.</span>
+            <span class="mk-cap">Create a Red · Blue · Yellow run first; the builder is a page of that run.</span>
           {% endif %}
         </div>
       </section>

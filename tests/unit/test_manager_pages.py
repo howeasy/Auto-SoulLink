@@ -101,3 +101,53 @@ async def test_new_run_records_the_game_family(manager_client, monkeypatch):
 async def test_the_events_ping_stream_is_gone(manager_client):
     """It contacted no run and emitted an unconditional ping every 1.5 s; nothing read it."""
     assert (await manager_client.get("/api/events")).status == 404
+
+
+# ── the randomizer page and its endpoints ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_the_randomizer_page_is_a_gen1_run_page(manager_client, manager_dir):
+    run = _stopped_run(manager_dir)
+    resp = await manager_client.get(f"/runs/{run['run_id']}/randomizer")
+    assert resp.status == 200
+    body = await resp.text()
+    start = body.index("window.SLINK_RANDOMIZER = ") + len("window.SLINK_RANDOMIZER = ")
+    form = json.loads(body[start:body.index(";", start)])
+    assert set(form["categories"]) == {"wild", "starters", "statics", "trainers", "tms", "field_items"}
+    assert form["current"] is None
+    assert "'/api/runs/' + runId + '/randomize'" in body   # the builder posts to this run
+
+
+@pytest.mark.asyncio
+async def test_the_randomizer_page_refuses_a_non_gen1_run(manager_client, manager_dir):
+    run = _stopped_run(manager_dir, game="gen3_rr")
+    assert (await manager_client.get(f"/runs/{run['run_id']}/randomizer")).status == 404
+
+
+@pytest.mark.asyncio
+async def test_preflight_names_what_is_missing_without_spending_anything(manager_client, tmp_path):
+    resp = await manager_client.get("/api/randomizer/status", params={"jar": str(tmp_path / "nope.jar"),
+                                                                     "rom_a": str(tmp_path / "a.gb"), "rom_b": ""})
+    j = await resp.json()
+    assert j["ok"] is False and j["jar_found"] is False
+    assert j["roms"]["a"]["exists"] is False and j["roms"]["b"]["exists"] is False
+
+
+@pytest.mark.asyncio
+async def test_browse_lists_only_inside_the_roots(manager_client, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    (tmp_path / "roms").mkdir()
+    (tmp_path / "roms" / "red.gb").write_bytes(b"x")
+    (tmp_path / "roms" / "notes.txt").write_bytes(b"x")
+    j = await (await manager_client.get("/api/browse", params={"dir": str(tmp_path / "roms"), "ext": ".gb,.gbc"})).json()
+    assert j["ok"] and [e["name"] for e in j["entries"]] == ["red.gb"], "only the asked-for extensions, plus directories"
+    outside = await manager_client.get("/api/browse", params={"dir": str(tmp_path.parent.parent)})
+    assert outside.status == 403
+
+
+@pytest.mark.asyncio
+async def test_rom_download_is_404_until_a_pair_exists(manager_client, manager_dir):
+    run = _stopped_run(manager_dir)
+    assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/a")).status == 404
+    assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/c")).status == 400

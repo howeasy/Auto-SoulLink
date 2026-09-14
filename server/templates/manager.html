@@ -74,8 +74,19 @@
             </section>
           </template>
 
+          <section class="mk-zone" x-show="form.gen1_games.includes(draft.game)">
+            <h2 class="mk-h2"><span>Randomized ROM pair</span><i></i></h2>
+            <label class="mk-opt described" :class="draft.randomize ? 'on' : ''">
+              <input type="checkbox" x-model="draft.randomize">
+              <span class="mk-opt-txt">
+                <span class="mk-opt-name">Build a randomized pair after creating</span>
+                <span class="mk-opt-desc">One randomized ROM per player with the same settings and different seeds, using your own copy of Universal Pokémon Randomizer ZX. The run then admits only those cartridges. Opens the builder next.</span>
+              </span>
+            </label>
+          </section>
+
           <div class="mk-form-actions">
-            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy" @click="create()" x-text="busy ? 'Creating…' : 'Create run'"></button>
+            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy" @click="create()" x-text="busy ? 'Creating…' : (draft.randomize ? 'Create run, then randomize' : 'Create run')"></button>
             <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
             <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
           </div>
@@ -123,6 +134,7 @@
         {% if run.status != 'running' and run.status != 'archived' %}<button class="mk-btn primary" :disabled="busy" @click="act('start')">Start</button>{% endif %}
         {% if run.status == 'running' %}<button class="mk-btn" :disabled="busy" @click="act('stop')">Stop</button>{% endif %}
         {% if run.status == 'running' %}<button class="mk-btn{% if run.run_id == pinned_run_id %} active{% endif %}" :disabled="busy" @click="pin()">{% if run.run_id == pinned_run_id %}Pinned{% else %}Pin{% endif %}</button>{% endif %}
+        {% if run.gen1 %}<a class="mk-btn{% if run.randomizer %} active{% endif %}" href="/runs/{{ run.run_id }}/randomizer">{% if run.randomizer %}Randomized pair{% else %}Randomizer{% endif %}</a>{% endif %}
         <span class="mk-pop-anchor" @click.outside="launchers = false">
           <button class="mk-btn" @click="launchers = !launchers">Launchers ▾</button>
           <div class="mk-pop" x-show="launchers" x-cloak>
@@ -138,6 +150,7 @@
 
       <div class="mk-page">
         {% include "_board.html" %}
+
       </div>
 
     {% else %}
@@ -181,7 +194,7 @@
     return {
       form: form,
       ports: window.SLINK_NEXT_PORTS,
-      draft: { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true } },
+      draft: { name: '', game: '', randomize: false, opts: { battle_calc: true, pc_trade_npc: true } },
       busy: false, error: '',
       gameLabel(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).label || key; },
       gameMembers(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).members || []; },
@@ -196,7 +209,7 @@
           var res = await fetch('/api/runs/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           var j = await res.json();
           if (!j.ok) { this.error = j.error || 'Create failed'; return; }
-          window.location.href = '/runs/' + j.run.run_id;
+          window.location.href = '/runs/' + j.run.run_id + (this.draft.randomize ? '/randomizer' : '');
         } catch (e) { this.error = String(e); }
         finally { this.busy = false; }
       },

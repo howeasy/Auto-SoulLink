@@ -704,6 +704,22 @@ class RunManager:
             log.warning(f"could not rebuild status for {run['run_id']}: {e}")
             return empty_status_payload()
 
+    def _randomizer_form(self, run: dict) -> dict | None:
+        """The randomized-pair builder's state for a Gen 1 run: the categories the pipeline
+        supports (from the same table the allowlist is computed from), what the run has,
+        and where to start looking for the jar."""
+        if run.get("game") not in new_run_form()["gen1_games"]:
+            return None
+        from server.upr_pipeline import find_upr_jar
+        from server.upr_settings import _CATEGORY_MODES
+        return {
+            "categories": sorted(_CATEGORY_MODES),
+            "labels": {"wild": "Wild encounters", "starters": "Starters", "statics": "Static encounters",
+                       "trainers": "Trainer teams", "tms": "TMs", "field_items": "Field items"},
+            "jar": find_upr_jar() or "",
+            "current": run.get("randomizer"),
+        }
+
     def _augment_for_template(self, run: dict) -> dict:
         """Display strings for the rail: a short date, a filesystem-safe name, the game."""
         rid = run["run_id"]
@@ -711,6 +727,7 @@ class RunManager:
         r["created_short"] = (run.get("created_at") or "")[:16].replace("T", " ")
         r["safe_name"] = re.sub(r"[^\w-]", "_", run.get("name") or rid).strip("_") or rid
         r["game_label"] = GAME_LABELS.get(run.get("game") or "", "")
+        r["gen1"] = (run.get("game") or "") in new_run_form()["gen1_games"]
         return r
 
     async def handle_list(self, request: web.Request) -> web.Response:
@@ -887,10 +904,27 @@ class RunManager:
         except Exception:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
-        jar = str(body.get("jar", "")).strip() or os.environ.get("SLINK_UPR_JAR", "")
+        from server.upr_pipeline import UprPipelineError, find_upr_jar, prepare_pair
+        from server.upr_settings import UprSettingsError, build_categories
+
+        jar = str(body.get("jar", "")).strip() or find_upr_jar() or ""
         settings = str(body.get("settings", "")).strip()
         rom_a = str(body.get("rom_a", "")).strip()
         rom_b = str(body.get("rom_b", "")).strip()
+        # Either a settings file the user built in UPR's GUI, or the six categories the
+        # form offers -- from which the SAME builder the allowlist is computed from writes
+        # the file, so a file made here is by construction one the pipeline admits.
+        categories = body.get("categories")
+        if categories is not None and not settings:
+            try:
+                blob = build_categories(set(map(str, categories)),
+                                        fastest_text=bool(body.get("fastest_text", True)))
+            except UprSettingsError as exc:
+                return web.json_response({"ok": False, "error": str(exc)}, status=400)
+            settings = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")
+            os.makedirs(os.path.dirname(settings), exist_ok=True)
+            with open(settings, "wb") as f:
+                f.write(blob)
         missing = [n for n, v in (("jar", jar), ("settings", settings),
                                   ("rom_a", rom_a), ("rom_b", rom_b)) if not v]
         if missing:
@@ -898,7 +932,6 @@ class RunManager:
                 {"ok": False, "error": f"missing: {', '.join(missing)}"}, status=400)
 
         out_dir = os.path.join(MANAGER_DIR, run_id, "roms")
-        from server.upr_pipeline import UprPipelineError, prepare_pair
         try:
             result = await asyncio.to_thread(
                 prepare_pair, jar, settings, {"a": rom_a, "b": rom_b}, out_dir)
@@ -945,6 +978,66 @@ class RunManager:
         except OSError as exc:
             log.warning("could not write rom_contract.json for %s: %s", run_id, exc)
         return web.json_response({"ok": True, "randomizer": run["randomizer"]})
+
+    async def handle_randomizer_status(self, request: web.Request) -> web.Response:
+        """GET /api/randomizer/status?jar=&rom_a=&rom_b= — the checks that cost
+        milliseconds, before the ones that cost minutes."""
+        from server.upr_pipeline import find_upr_jar, preflight
+        q = request.query
+        jar = q.get("jar", "").strip() or find_upr_jar() or ""
+        sources = {p: q.get(f"rom_{p}", "").strip() for p in ("a", "b")}
+        return web.json_response(preflight(jar, sources))
+
+    async def handle_browse(self, request: web.Request) -> web.Response:
+        """GET /api/browse?dir=&ext=.gb,.gbc — a directory listing for the ROM and jar
+        pickers. Paths are typed rather than uploaded because everything stays on the
+        machine running the Manager; this is the picker that saves the typing. Listing only,
+        rooted at the user's home and at the repository; nothing is read."""
+        home = os.path.realpath(os.path.expanduser("~"))
+        roots = [home, os.path.realpath(PROJECT_ROOT)]
+        raw = request.query.get("dir", "").strip() or home
+        target = os.path.realpath(raw)
+        if not any(target == r or target.startswith(r + os.sep) for r in roots):
+            return web.json_response({"ok": False, "error": "outside the browsable roots"}, status=403)
+        if not os.path.isdir(target):
+            return web.json_response({"ok": False, "error": "not a directory"}, status=404)
+        exts = tuple(e.strip().lower() for e in request.query.get("ext", "").split(",") if e.strip())
+        entries = []
+        try:
+            for name in sorted(os.listdir(target), key=str.lower):
+                if name.startswith("."):
+                    continue
+                path = os.path.join(target, name)
+                is_dir = os.path.isdir(path)
+                if not is_dir and exts and not name.lower().endswith(exts):
+                    continue
+                entries.append({"name": name, "path": path, "dir": is_dir})
+        except OSError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=403)
+        parent = os.path.dirname(target)
+        return web.json_response({
+            "ok": True, "dir": target, "roots": roots,
+            "parent": parent if any(parent == r or parent.startswith(r + os.sep) for r in roots) else None,
+            "entries": entries,
+        })
+
+    async def handle_rom_download(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/rom/{player} — this player's randomized ROM, renamed
+        .gb on the way out so BizHawk picks the DMG core and finds the battery save."""
+        run_id, player = request.match_info["run_id"], request.match_info["player"]
+        if player not in ("a", "b"):
+            return web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
+        run = _find_run(_load_registry(), run_id)
+        if run is None or not run.get("randomizer"):
+            return web.json_response({"ok": False, "error": "no randomized pair for this run"}, status=404)
+        path = os.path.join(MANAGER_DIR, run_id, "roms", f"{player}_randomized.gbc")
+        if not os.path.isfile(path):
+            return web.json_response({"ok": False, "error": "ROM file is missing on disk"}, status=404)
+        safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
+        return web.FileResponse(path, headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": f'attachment; filename="slink_{safe_name}_{player}.gb"',
+        })
 
     # ── Stream pin ─────────────────────────────────────────────────────────────
 
@@ -1001,6 +1094,26 @@ class RunManager:
         ctx["sidebar_css"] = "board"
         ctx["body_class"] = "board mgr mgr-stream"
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
+
+    async def handle_randomizer_page(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/randomizer — the randomized-pair builder for a Gen 1 run."""
+        runs = self._get()
+        run = _find_run(runs, request.match_info["run_id"])
+        if run is None:
+            raise web.HTTPNotFound(text="Run not found")
+        form = self._randomizer_form(run)
+        if form is None:
+            raise web.HTTPNotFound(text="Randomized pairs are built for Gen 1 runs only")
+        ctx = self._rail_ctx(request, runs, page="run")
+        ctx.update({
+            "page_title": f"Randomizer — {run.get('name', '')}",
+            "theme": resolve_theme(request),
+            "is_stream": False, "hide_chrome": False,
+            "body_class": "board mgr",
+            "run": self._augment_for_template(run),
+            "randomizer_json": _json_for_script(form),
+        })
+        return aiohttp_jinja2.render_template("randomizer.html", request, ctx)
 
     async def handle_tools_page(self, request: web.Request) -> web.Response:
         """GET /tools — the patcher and the randomized-pair builder."""
@@ -1124,6 +1237,7 @@ async def main(host: str, port: int):
     app.router.add_get("/new",                        manager.handle_new_page)
     app.router.add_get("/runs/{run_id}",              manager.handle_run_page)
     app.router.add_get("/runs/{run_id}/board",        manager.handle_run_board)
+    app.router.add_get("/runs/{run_id}/randomizer",   manager.handle_randomizer_page)
     app.router.add_get("/api/runs",                   manager.handle_list)
     app.router.add_post("/api/runs/new",              manager.handle_new)
     app.router.add_post("/api/runs/{run_id}/start",   manager.handle_start)
@@ -1132,6 +1246,9 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
+    app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
+    app.router.add_get("/api/randomizer/status",      manager.handle_randomizer_status)
+    app.router.add_get("/api/browse",                 manager.handle_browse)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
 
     # Stream pin API

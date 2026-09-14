@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{#
+  The randomized-pair builder for a Gen 1 run: its own page, because the pair is bound to
+  the run (the contract the run admits cartridges against) and because building one is a
+  task, not a glance at the board.
+#}
+{% block title %}Randomizer — {{ run.name }} — Soul Link{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/board.css">
+  <script src="/static/dashboard.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<script>window.SLINK_RANDOMIZER = {{ randomizer_json | safe }};</script>
+<div class="mk">
+  {% include "_rail.html" %}
+  <main class="mk-main mk-body-root">
+    <header class="mk-runhdr">
+      <h1 class="mk-runname">{{ run.name }}</h1>
+      <span class="mk-meta">· randomized ROM pair</span>
+      <span class="mk-hdr-spacer"></span>
+      <a class="mk-btn" href="/runs/{{ run.run_id }}">Back to the board</a>
+    </header>
+    <div class="mk-page">
+        {# ── Randomized ROM pair (Gen 1) ───────────────────────────────── #}
+        <section class="mk-zone" id="randomizer" x-data='randomizer({{ run.run_id | tojson }})'>
+          <h2 class="mk-h2"><span>Randomized ROM pair</span><i></i><em>same settings, different seeds</em></h2>
+          <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <template x-if="form.current">
+              <div>
+                <table class="mk-tbl">
+                  <thead><tr><th>Player</th><th>Seed</th><th>ROM SHA1</th><th>Download</th></tr></thead>
+                  <tbody>
+                    <template x-for="pid in ['a', 'b']" :key="pid">
+                      <tr>
+                        <td x-text="pid.toUpperCase()"></td>
+                        <td><code class="num" x-text="form.current.players[pid].seed"></code></td>
+                        <td><code class="num" x-text="form.current.players[pid].rom_sha1.slice(0, 12)"></code></td>
+                        <td><a class="mk-btn" :href="'/api/runs/' + runId + '/rom/' + pid" x-text="'slink_' + pid + '.gb'"></a></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <p class="mk-sub" style="margin:var(--space-2) 0 0">UPR <span x-text="form.current.upr_version"></span> · randomized: <span x-text="(form.current.categories || []).join(', ') || 'nothing'"></span> · the run admits only these two cartridges. Building again replaces both.</p>
+              </div>
+            </template>
+
+            <div class="mk-optgrid">
+              <template x-for="key in form.categories" :key="key">
+                <label class="mk-opt" :class="draft.categories[key] ? 'on' : ''">
+                  <input type="checkbox" x-model="draft.categories[key]">
+                  <span x-text="form.labels[key] || key"></span>
+                </label>
+              </template>
+              <label class="mk-opt" :class="draft.fastest_text ? 'on' : ''">
+                <input type="checkbox" x-model="draft.fastest_text"><span>Fastest text</span>
+              </label>
+            </div>
+            <p class="mk-cap">Types, evolutions, movesets and base stats are never randomized: the species and type clauses have to mean the same thing on both cartridges.</p>
+
+            <div class="mk-optgrid">
+              <label class="mk-field"><span>Randomizer jar</span>
+                <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="draft.jar" placeholder="PokeRandoZX.jar" style="flex:1"><button type="button" class="mk-btn" @click="browse('jar', '.jar')">Browse</button></span></label>
+              <label class="mk-field"><span>Player A clean ROM</span>
+                <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="draft.rom_a" placeholder="a clean Red / Blue / Yellow dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_a', '.gb,.gbc')">Browse</button></span></label>
+              <label class="mk-field"><span>Player B clean ROM</span>
+                <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="draft.rom_b" placeholder="a clean Red / Blue / Yellow dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_b', '.gb,.gbc')">Browse</button></span></label>
+            </div>
+
+            <template x-if="picker.field">
+              <div class="mk-card" style="padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
+                <div style="display:flex;gap:var(--space-2);align-items:center"><code class="num" x-text="picker.dir" style="flex:1;overflow:hidden;text-overflow:ellipsis"></code>
+                  <button type="button" class="mk-btn" :disabled="!picker.parent" @click="list(picker.parent)">Up</button>
+                  <button type="button" class="mk-btn" @click="picker.field = ''">Close</button></div>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--space-1);max-height:14em;overflow:auto">
+                  <template x-for="e in picker.entries" :key="e.path">
+                    <button type="button" class="mk-btn" @click="e.dir ? list(e.path) : pick(e.path)" x-text="(e.dir ? '\u{1F4C1} ' : '') + e.name"></button>
+                  </template>
+                  <span class="mk-sub" x-show="!picker.entries.length">nothing here</span>
+                </div>
+              </div>
+            </template>
+
+            <div class="mk-preview-rules" x-show="pre">
+              <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? 'jar found' : 'jar not found'"></span>
+              <span class="mk-tag" :class="pre && pre.java_found ? 'on' : 'off'" x-text="pre && pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
+              <template x-for="pid in ['a', 'b']" :key="pid">
+                <span class="mk-tag" :class="pre && pre.roms[pid] && pre.roms[pid].clean ? 'on' : 'off'"
+                      x-text="pid.toUpperCase() + ': ' + (!pre || !pre.roms[pid] || !pre.roms[pid].exists ? 'no ROM' : pre.roms[pid].clean ? 'clean ' + pre.roms[pid].title : 'not a clean dump')"></span>
+              </template>
+            </div>
+
+            <div class="mk-form-actions">
+              <button class="mk-btn primary" :disabled="busy || !(pre && pre.ok)" @click="build()" x-text="busy ? 'Building (a few seconds per ROM)' : (form.current ? 'Build a new pair' : 'Build randomized pair')"></button>
+              <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+              <span class="mk-cap">Your randomizer, your ROMs. Nothing leaves this machine.</span>
+            </div>
+          </div>
+        </section>
+    </div>
+  </main>
+</div>
+<style>[x-cloak] { display: none !important; }</style>
+<script>
+  function randomizer(runId) {
+    var form = window.SLINK_RANDOMIZER;
+    return {
+      runId: runId, form: form, busy: false, error: '', pre: null,
+      draft: { jar: form.jar || '', rom_a: '', rom_b: '', fastest_text: true,
+               categories: Object.fromEntries(form.categories.map(function (k) { return [k, k === 'wild' || k === 'starters' || k === 'trainers']; })) },
+      picker: { field: '', ext: '', dir: '', parent: null, entries: [] },
+      // NOT named `init` with arguments: Alpine calls init() itself, once, with none.
+      init() {
+        var self = this;
+        this.preflight();
+        ['draft.jar', 'draft.rom_a', 'draft.rom_b'].forEach(function (k) { self.$watch(k, function () { self.preflight(); }); });
+      },
+      async preflight() {
+        var q = new URLSearchParams({ jar: this.draft.jar, rom_a: this.draft.rom_a, rom_b: this.draft.rom_b });
+        try { this.pre = await (await fetch('/api/randomizer/status?' + q)).json(); } catch (_) { this.pre = null; }
+      },
+      async browse(field, ext) {
+        this.picker.field = field; this.picker.ext = ext;
+        var cur = this.draft[field] || '';
+        var i = Math.max(cur.lastIndexOf('/'), cur.lastIndexOf('\\'));
+        await this.list(i > 0 ? cur.slice(0, i) : '');
+      },
+      async list(dir) {
+        var q = new URLSearchParams({ dir: dir || '', ext: this.picker.ext || '' });
+        var j = await (await fetch('/api/browse?' + q)).json();
+        if (!j.ok) { this.error = j.error; return; }
+        this.picker.dir = j.dir; this.picker.parent = j.parent; this.picker.entries = j.entries;
+      },
+      pick(path) { this.draft[this.picker.field] = path; this.picker.field = ''; },
+      async build() {
+        this.busy = true; this.error = '';
+        var self = this;
+        try {
+          var body = { jar: this.draft.jar, rom_a: this.draft.rom_a, rom_b: this.draft.rom_b, fastest_text: this.draft.fastest_text,
+                       categories: Object.keys(this.draft.categories).filter(function (k) { return self.draft.categories[k]; }) };
+          var res = await fetch('/api/runs/' + runId + '/randomize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          var j = await res.json();
+          // The server's reason verbatim: every refusal names the setting or the file to fix.
+          if (!j.ok) { this.error = j.error || 'Randomize failed'; return; }
+          this.form.current = j.randomizer;
+        } catch (e) { this.error = String(e); }
+        finally { this.busy = false; }
+      },
+    };
+  }
+
+</script>
+{% endblock %}
