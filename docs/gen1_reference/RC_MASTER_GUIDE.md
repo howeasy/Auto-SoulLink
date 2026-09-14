@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:03:11+00:00",
+  "updated_at_utc": "2026-09-14T09:04:54+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "60694d5",
+  "source_head": "c868282",
   "live_lane": null,
-  "next_action": "Feature build-out. Integrated candidates: UI-2 3050f0a (accepted), FT-2b 8467394 (accepted). Rejected candidates awaiting round 2 on the branch: FT-3 1b38696 (custom_names path), R5a ad6583a. Active: C1 (Sonnet), R5a-2 (Sonnet), FT-3-2 (Sonnet), HX-1 (OMP, hold visibility census), N3-CLAIM (Codex). Queued: C3 after C1; R5b after R5a-2.",
+  "next_action": "Feature build-out. Integrated candidates: UI-2 3050f0a (accepted), FT-2b 8467394 (accepted). Rejected candidates awaiting round 2 on the branch: FT-3 1b38696 (custom_names path), R5a ad6583a. Active: C1 (Sonnet), R5a-2 (Sonnet), HX-1 (OMP, hold visibility census); Codex: FT-3-2 review then N3-CLAIM. Queued: C3 after C1; R5b after R5a-2.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -961,14 +961,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-3",
-      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate 1b38696 stays on the branch)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidates 1b38696 + c868282 (isolated Sonnet worker authored two rounds)",
+      "state": "done",
       "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
       "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
       "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged",
-      "receipt": "commit 1b38696; tests/unit/test_gen1_prepared_cartridges.py 5 passed; prepared/admission/upr subset 350 passed; diff sha256 fb445836…1d83",
+      "receipt": "commits 1b38696 + c868282; tests/unit/test_gen1_prepared_cartridges.py 7 passed; prepared/admission/manager subset 64 passed; cumulative diff sha256 5fd4a06d…3b62",
       "independent_review_refs": [
-        "Codex REVIEW cx-a085e592: REJECT — generation.custom_names.selection.path is a second run-local absolute path (upr_runner.py:56-60,138,158-170); fixture used a fake shape; old persisted UPR identities need an explicit cutover note. Round 2 dispatched."
+        "Codex REVIEW cx-a085e592: REJECT — generation.custom_names.selection.path is a second run-local absolute path (upr_runner.py:56-60,138,158-170); fixture used a fake shape; old persisted UPR identities need an explicit cutover note.",
+        "Round 2 c868282: custom_names projected to its byte hash, real-shaped fixture, cutover documented; Codex REVIEW cx-6b02452f in flight"
       ]
     },
     {
