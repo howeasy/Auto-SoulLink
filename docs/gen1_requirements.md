@@ -117,7 +117,7 @@ Pairings Red/Blue and Yellow/Red; post-conditions read by PYDEC + SERVER.
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| T-1 | Receptionist menu at all 12 Centers + Indigo; CABLE CLUB/CANCEL fall through to vanilla | GAME (tilemap) | ✓ RC asm verbatim; 133 DEFs vs .sym; 3 ROM0 spans re-derived | ✓ `test_gen1_trade_patch.py` (23); Red/Blue banks identical | ◐ panel gates pass on the trade-carrying build; receptionist menu not yet driven live |
+| T-1 | Receptionist menu at all 12 Centers + Indigo; CABLE CLUB/CANCEL fall through to vanilla | GAME (tilemap) | ✓ RC asm verbatim; 133 DEFs vs .sym; 3 ROM0 spans re-derived | ✓ `test_gen1_trade_patch.py` (10 tests); Red/Blue banks identical; NOTE the shipped `.ups` + `server/patcher.py` md5s are still the panel-only build until dist is regenerated | ◐ panel gates pass on the trade-carrying build; receptionist menu not yet driven live |
 | T-2 | Ineligible offer refused in-game ("Trade unavailable."); eligible = one ALIVE pair, both halves in party | SERVER + GAME | · | · | · |
 | T-3 | Partner prompt YES/NO/B; screen restored | GAME | · | · | · |
 | T-4 | Apply: animation, evolution, `SavePartyAndDexData`; both sides decode swapped mons; link halves swapped; received mon in the LAST party slot | PYDEC + GAME (save reloads) + SERVER | · | · | · |

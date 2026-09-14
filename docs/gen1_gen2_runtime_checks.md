@@ -1,46 +1,135 @@
 # Gen 1 / Gen 2 runtime verification
 
-**Both are automated now.** Gen 2 executed against a cartridge for the first time; before
-that its only evidence was a green `pytest`, which is exactly the evidence Gen 1 had while
-its client was crashing on the first `box_mon` it received.
+**Gen 1 was rewritten, and this file now describes the rewrite.** The old Gen 1 sections — the
+manual checklist's descendants, the pre-rewrite gate list, and the ABI-3 panel narrative — were
+deleted with the code they described. Note what is *still* old: `lua/slink_gen1.lua` loads
+`lua/clients/gen1_rby_client.lua` to this day, so the launcher is not the source of truth until
+Phase 8. The new client is `lua/gen1/run.lua` (BizHawk entry: io, transport, HUD, frame loop)
+over `lua/gen1/entry.lua` (composition root), and the live gates load it directly.
 
-This file used to be a 30–60 minute manual checklist that nobody had ever executed — which
-is precisely why that crash shipped. Everything it asked a human to click through is now a
-test.
+**The Gen 2 sections below are unchanged.**
 
 ## Gen 1 — run these
 
 ```bash
-pytest tests/unit/ -q                                    # 1595 passed, 5 skipped; no emulator
-python tools/verify_profile_addresses.py                 # every address vs pret decomps
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q     # 18: 4 gates x 3 cartridges, + patched + AP
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q         # 18: 9 scenarios x Red/Blue and Yellow/Red
+python tools/verify_gen1_release.py --quick      # the 8 fast lanes; no emulator
+python tools/verify_gen1_release.py              # all 11 lanes, emulator lanes included
+python tools/verify_gen1_release.py --lane live-new-gates    # only the physical lane
+python tools/verify_gen1_release.py --list       # lanes + the requirement ids each serves
 ```
 
-| Old manual step | Now |
+A lane that did not run did not pass: a skip is a failure in this runner, which is why a
+missing ROM, jar or emulator fails the gate rather than shrinking it.
+
+Eleven lanes: `unit`, `rom-layout`, `lua-parse`, `profile-addresses`, `profile-generated`,
+`statics-generated`, `fixtures`, `patch-build` (fast) and `live-gates`, `live-new-gates`,
+`duo-pairs` (slow, emulator). The two that carry the rewrite:
+
+* **`live-new-gates`** (`SLINK_LIVE=1`) runs `tests/live/test_gen1_new_gates.py`: six inspect
+  cases (3 titles × town/battle) that boot a committed battery save in EmuHawk and run
+  `lua/tests/test_gen1_inspect_gate.lua` on the real cartridge, then decode the raw party bytes
+  the gate dumped with the Python codec — Lua on hardware and Python on the same bytes must
+  agree field for field — plus two scripted New Game runs (Red and Blue) driven by
+  `lua/tests/test_gen1_scripted_gate.lua` with ordinary buttons.
+* **`fixtures`** runs `python tools/gen1_fixtures.py --qualify`, which re-checks every committed
+  battery save against the codec without an emulator.
+
+## Gen 1 — the fixtures
+
+`tests/fixtures/gen1/<rom>_{town,battle}.SaveRAM` — six files, 32 KiB of plain SRAM each:
+
+| target | contents |
 |---|---|
-| 1. Memorialize routing (is it really Box 12?) | `test_duo_gen1.py::memorialize` — asserts the corpse leaves the party AND lands in the memorial box, and that `memorialize_done` is acked |
-| 2. Egg-gift classification | still manual for Gen 2; not applicable to Gen 1 (no eggs) |
-| 3. Status page rendering | party/enemy/moves/PP/stat-stage reads covered by `test_gen1_memory_gate.lua`; the HTML itself is unit-tested |
-| 4. Archipelago variant detection | `tests/unit/test_gen1_archipelago.py` — runs the real Lua against bytes measured from the actual AP basepatch, in **both** directions (AP detected, vanilla NOT misdetected) |
-| 5. SFX dispatch | CLOSED as "will not ship" — the only available hook is unsafe; see below |
-| 6. Encounter overlay | per-variant tables are generated from pret and asserted in `test_gen1_adapter.py` |
-| 7. Gen 3 regression | `/slink-test 3`, run before every change |
+| `town` | Oak's Lab after the rival battle, on encounter-free tiles |
+| `battle` | Route 1 at (10, 35), one Poké Ball in the bag |
 
-## What the automation covers that the checklist never could
+They are built from **scripted play**, not written byte-wise: `tools/gen1_fixtures.py` drives a
+cold cartridge through the `lab,save` / `lab,parcel,route1,save` chains and copies the SaveRAM
+out only if `qualify()` accepts it (game checksums, a decodable party, exp consistent with the
+level on the species' growth curve).
 
-The live gates boot a committed battery fixture (`tests/fixtures/gen1/*.SaveRAM`, built by
-`tools/gen1_playthrough.py`) and assert against a **running** game: mon keys, PP-Up masking,
-the nuzlocke bag gate, `force_faint`, the box round-trip, the 404-byte rival-team write, and
-the companion-patch beacon.
+Current state (`python tools/gen1_fixtures.py --qualify`): Red and Blue, 4 OK — a real game
+state each. **Yellow's two are LEGACY**: old tool-written bytes whose party mon has a level byte
+with exp 0, which no game state produces. They are named individually in
+`tools/gen1_fixtures.py` (`LEGACY`) so a regenerated fixture cannot hide behind a blanket
+tolerance; Yellow needs its own scripted route or an owner-made save.
 
-The duo E2E runs two emulators and a real server — Red as player A, Blue as player B — and
-proves the actual rules: a faint on one machine killing the linked mon on the other, a
-deposit auto-boxing the partner's half, a dead pair buried in Box 12, the rival fighting you
-with the partner's live team, and Explode Mode coercing Explosion.
+## Gen 1 — proven live
 
-Unlike the Gen 3 gates, none of this uses savestates, so nothing goes stale when BizHawk is
-upgraded — a `.SaveRAM` is plain SRAM.
+Exactly the rows of `docs/gen1_requirements.md` whose PHYSICAL column is ✓:
+
+| id | what a cartridge proved |
+|---|---|
+| F-2 | every pinned hook site's expected bytes are present in the running ROM (inspect gate, 3 titles) |
+| F-6 | the four R/B fixtures are real game states — scripted play, then `--qualify` |
+| R-1 | Lua on hardware decodes the live party identically to the Python codec (inspect gate, 6/6) |
+| S-1 | scripted NEW GAME → starter → rival on Red and Blue: the engine-signal sequence matches pret's script order; the starter is L5 with exp 135 |
+| W-7 | `gen1_write_safety.check()` reaches the verified overworld checkpoint, idle, on all three titles |
+
+## Gen 1 — not yet proven live
+
+Everything else in the ledger. Rows whose PHYSICAL column is `·`:
+
+| id | still open |
+|---|---|
+| F-3 | the differential gate over all 17 pinned sites |
+| R-2 | stats leg ✓ MODEL (blocked level leg: see the Yellow fixtures above) |
+| R-3 | trainer class/name, badges, PP-Ups, active box index |
+| R-4 | title screen never validates; soft reset revokes writes |
+| S-2 | wild encounter, capture, `no_catch`, ball detection |
+| S-3 | party-full capture via `SendNewMonToBox` |
+| S-4 | poison faint and blackout ordering |
+| S-5 | evolution and NPC-trade `key_change` |
+| S-6 | PC deposit / withdraw / release / `ChangeBox` |
+| S-7 | save witness and CONTINUE |
+| S-8 | `area_enter`, statics, gifts, fishing map ids |
+| W-1 | benched `force_faint` at the checkpoint |
+| W-2 | active-battler faint at the loop head |
+| W-3 | `force_explode` across all four move slots |
+| W-4 | `replace_rival_team` validation and atomicity |
+| W-5 | box / memorial writes that survive a save reload |
+| W-6 | gate revocation and every NACK path |
+| C-1 | hello identity / wrong-save rejection |
+| C-2 | reconnect mid-run |
+| C-3 | dashboard rendering for Gen 1 |
+| D-1 … D-14 | the whole duo lane: linking, the ball gate, the dead zone, the clauses, faint propagation, whiteout, memorial, PC sync, trade/evolution key migration, rival swap, game over, key non-uniqueness, reconnect |
+| T-1 | ◐ panel gates pass on the trade-carrying build; **the receptionist menu has not been driven live** |
+| T-2 … T-4 | offer eligibility, partner prompt, apply/evolution |
+
+Rows the ledger marks `—` (F-1 addresses, F-4 ROM tables, F-5 families and dex order, C-0
+protocol conformance, C-4 unwedgeable client, T-5 crash mid-trade) take no cartridge proof by
+design. For the first five that is because SOURCE or MODEL evidence is what they call for; T-5
+is different — its MODEL row is not written yet either, so the crash-mid-trade watchdog is open
+work even though no physical proof is owed.
+
+## Gen 1 — the three write windows
+
+Every byte SLink writes to a cartridge lands in one of these, and nowhere else:
+
+1. **The overworld checkpoint** — `lua/gen1_write_safety.lua` accepts the CPU only when parked
+   in `DelayFrame` from `OverworldLoop` in the idle state; deferred box/party/memorial writes
+   run one per frame from there.
+2. **The `MainInBattleLoop` head** — the only site where an in-battle write is allowed
+   (`wBattleMonHP=0` + `wPlayerSelectedMove=$FF`, and the Explode-mode coercion), behind its own
+   guards.
+3. **The trade lease** — the 16-byte lease the patched game hands the host at
+   `wSerialPartyMonsPatchList`; the staged trade writes happen inside it, not at the checkpoint.
+
+## Gen 1 — documented limits
+
+* **Pokémon Tower ghosts are not failed encounters.** A wild battle on `$8E–$94` without the
+  Silph Scope (`$48`) in the bag cannot be fought or caught, so the client suppresses `no_catch`
+  for it instead of dead-zoning the whole Tower.
+* **A trade whose native append returns 2 is held, not recovered.** The client shows
+  `TRADE UNCERTAIN - CHECK PARTY`, keeps the lease and claims nothing; there is no paired
+  recovery path (T-5).
+* **Yellow's two fixtures are legacy bytes** (see above), so the physical lane's Yellow coverage
+  is the `town`-shaped inspection only.
+* Carried forward from the pre-rewrite client, because the Gen 2 note below refers to it: the
+  rewrite does **not** run `M.protectSramBoxes()`'s one-time `EmptyAllSRAMBoxes` init. Instead
+  `lua/gen1/boxes.lua` refuses to write SRAM boxes until the game has initialised them
+  ("saved boxes not initialized"), so there is no window in which the game's first `ChangeBox`
+  could wipe a burial.
 
 ## Gen 2 — run these
 
@@ -90,59 +179,6 @@ save checksum, so unlike Gen 1 there is no `EmptyAllSRAMBoxes` to defend against
 `playthrough`, `deadzone` and `dupes` do **not** run on Gen 2, and that is a decision, not an
 omission — see "Still open" below.
 
-## Closed since
-
-**SFX dispatch.** Investigated, built, and then REMOVED. The note that used to sit here
-described a working feature; it no longer is one, and the reason is worth keeping.
-
-`wNewSoundID` (`0xC0EE`) is not a sound hook — `PlaySound` takes the id in register `a` and
-uses that address only as internal scratch (pokered `home/audio.asm:140`), and nothing in the
-game loop polls it. **Gen 1 has no RAM-writable sound trigger at all**, so the id has to reach
-a `call`. ABI 2 of the companion patch made that call from the VBlank hook. ABI 3 does not,
-and the capability byte says so.
-
-Two failure modes, both measured by disassembling `PlaySound` (`$23B1`) in the shipped ROM:
-
-* **Swallowed during fades.** It opens `ld a,[wAudioFadeOutControl] / and a / jr z,.noFadeOut`
-  then `ld a,[wNewSoundID] / and a / jr z,.done`. The patch passes the id in `a` and never
-  sets `wNewSoundID`, which is 0 in steady state, so during any fade the call returns without
-  playing — and the request byte has already been cleared, so the event is simply lost. Fades
-  run ~56-70 frames on map change and on battle start/end: exactly when capture, faint and
-  whiteout fire.
-* **Re-entrancy, in the ordinary case.** `.noFadeOut` does `xor a / ld [wNewSoundID], a` and
-  calls the audio engine several instructions later. A VBlank landing anywhere in that window
-  sees *both* guard bytes clear, passes the guard, and re-enters a non-reentrant routine. Our
-  hook **is** that VBlank, so no guard on our side can close it.
-
-Playing sound safely needs a main-thread dispatch point with its own displaced bytes and
-queue-drain timing. Until one exists and passes a full state matrix, the patch ships
-panel-only. The request byte is still drained so a client leaves no stale state; it simply
-never becomes a sound. `test_gen1_patch_gate.lua` asserts the inverse of what it used to:
-that a drained request never starts a sound, and that `call PlaySound` appears nowhere in
-bank `$3F`.
-
-**Memorial-box SRAM.** Resolved, and the risk was real but not the one recorded here. The
-box-bank checksums are **write-only** in vanilla — every reference in the decomp is a store
-or a range length, nothing ever reads or compares them — so a stale checksum could not have
-reported the save as damaged. SLink recomputes them anyway to keep SRAM self-consistent.
-
-The actual hazard was next door. `ChangeBox` opens with
-
-```
-bit BIT_HAS_CHANGED_BOXES, [hl]   ; hl = wCurrentBoxNum, bit 7
-call z, EmptyAllSRAMBoxes         ; if so, empty ALL boxes in SRAM
-```
-
-(`engine/menus/save.asm:366`, and identically in pokeyellow and Alchav's AP fork). The first
-time a player ever picks "CHANGE BOX", the game marks every SRAM box empty as a one-time
-init — **including box 12**. Any run that memorialised before the player first opened the box
-menu would have lost every buried pair, silently.
-
-`M.protectSramBoxes()` performs that init itself and sets the bit, so the game's wipe can
-never fire. Covered by `tests/unit/test_gen1_sram_boxes.py` (8 tests, all mutation-checked)
-and by the live writes gate on all three cartridges, which additionally reads the actual
-instruction bytes at the `ChangeBox` branch to confirm the game behaviour it defends against.
-
 ## Still open
 
 - **A Gen 2 playthrough — deliberately not bought.** Gen 2's fixture parks indoors, because
@@ -158,22 +194,3 @@ instruction bytes at the `ChangeBox` branch to confirm the game behaviour it def
   Note Gen 2's SRAM box layout and checksums differ from Gen 1's, so `sram_box_layout` is
   deliberately absent from its profiles and the `EmptyAllSRAMBoxes` guard above does not run —
   the writes gate proves the memorial survives without it.
-- **A Gen 1 playthrough.** The gates and duo scenarios prove mechanisms, not play. Concretely, with
-  numbers, so nobody has to re-derive this:
-
-  | Never exercised live | Why it matters |
-  |---|---|
-  | Whiteout, gender/type clauses | still injected. **Encounter linking, the ball gate, the dead zone and the species clause are covered** by `playthrough`, `deadzone` and `dupes`, which inject nothing |
-  | `area_enter` — **1 of 39** encounter areas | the playthrough resolves `route_1` from the real map, but never crosses a boundary, so no map *transition* is validated |
-  | ~~Any real wild encounter or capture~~ | **COVERED.** The playthrough loads the `battle` fixture, hunts, and catches — the `*_battle.SaveRAM` files are no longer dead weight |
-  | ~~`party_mon` / `retrieveBoxMon`~~ | **COVERED.** `playthrough` withdraws a linked mon through the real path, and `test_gen1_stat_rebuild.lua` recomputes every party mon's stats from the cartridge's own base-stat table and requires the game's stored values to match |
-  | A battle turn | the injected scenarios stage battles by poking `wIsInBattle`; the three PLAYING scenarios run real wild battles, so the engine does consume real turns there — but not the enemy-party or Explosion writes, which are still staged |
-  | Evolution / `key_change` | Gen 1 keys embed species, so every evolution rewrites the key |
-  | `red_ap` / `blue_ap` | never launched under an emulator; the AP profile relocates exactly the addresses the box and rival writes target |
-
-  Most live box/enemy assertions are also **self-referential** — SLink writes bytes and reads
-  them back through the same profile constants — so a uniformly wrong base address would still
-  pass. The exceptions, which do discriminate, are the box-level check (differential: level 9
-  vs 5), the Poké Ball count, the `ChangeBox` ROM-byte read, and the panel gate — which reads
-  what the client painted back off the Game Boy's own tile map, so a wrong address shows up as
-  the wrong glyphs rather than as a value SLink handed itself.
