@@ -29,11 +29,10 @@ gap from them: their rewritten client (`lua/gen1/client.lua`) was not sending `r
 in the hello — card ROM-CONTENT-1 is adding it with a test that
 `content_fingerprint(payload) == fingerprint_rom(dump)` on all three clean dumps; the live
 "admitted" boot of a randomized ROM is queued on their emulator lane. Owner to force-delete the three
-`claude/ui-mockup-track-b*` branches (a hook blocks it here). **Merge:** master is still
-`adf3362`; the Gen 1 session will fast-forward it to `79d5172` and message this session —
-then rebase, take their delete of `tests/unit/test_gen1_adapter.py`, resolve one hunk each
-in `server/manager.py` (imports) and `tests/unit/test_upr_pipeline.py` (SIM115), run the
-suite, FF master to this branch. Two Gen 1-owned docstrings still name `html_render.
+`claude/ui-mockup-track-b*` branches (a hook blocks it here). **Merged:** master is `e2fefa9` (the owner fast-forwarded master to `79d5172`; this branch
+was then fast-forwarded onto it in the root checkout, 2 630 green there; nothing pushed). The
+Gen 1 release branch rebases onto it next — their conflicts are the three listed in the
+Sequencing section. Two Gen 1-owned docstrings still name `html_render.
 status_icon_html` (`adapters/gen1_rby.py:476`, `adapters/gen3_frlge.py:326`) — tell that
 session; the decoder is now `templates/_macros.html::status_pill`.
 
