@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:02:05+00:00",
+  "updated_at_utc": "2026-09-14T09:03:11+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "8467394",
+  "source_head": "60694d5",
   "live_lane": null,
-  "next_action": "Feature build-out. Integrated candidates: UI-2 3050f0a (accepted), FT-2b 8467394 (accepted). Rejected candidates awaiting round 2 on the branch: FT-3 1b38696 (custom_names path), R5a ad6583a. Active: C1 (Sonnet), R5a-2 (Sonnet), FT-3-2 (Sonnet), FT-2c (OMP), N3-CLAIM (Codex). Queued: C3 after C1; R5b after R5a-2.",
+  "next_action": "Feature build-out. Integrated candidates: UI-2 3050f0a (accepted), FT-2b 8467394 (accepted). Rejected candidates awaiting round 2 on the branch: FT-3 1b38696 (custom_names path), R5a ad6583a. Active: C1 (Sonnet), R5a-2 (Sonnet), FT-3-2 (Sonnet), HX-1 (OMP, hold visibility census), N3-CLAIM (Codex). Queued: C3 after C1; R5b after R5a-2.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -941,11 +941,23 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-2c",
-      "owner": "OMP live pid 47172 (test quality; task cx-dc5865ee)",
-      "state": "active",
+      "owner": "integrated by coordinator as 60694d5 (OMP authored, task cx-dc5865ee)",
+      "state": "done",
       "files": ["tests/unit/test_manager_prepared_gen1.py"],
-      "next_action": "Handler happy-path tests against the real create_runtime with a synthetic prepared pair if the native binding allows it, else documented boundary test; one unsupported-rules 400 through the real runtime.",
-      "reuse_decision": "test only"
+      "next_action": "None; the native binding refuses any synthetic image (header title, HM table, evolution pointer), so the happy-path handler tests are labelled plumbing, the boundary is pinned by a real-create_runtime refusal test, and an unsupported rule key reaches the real 400 through the handler.",
+      "reuse_decision": "test only",
+      "receipt": "commit 60694d5; 24 passed (prepared_gen1 15 + resume_ui 9)",
+      "independent_review_refs": [
+        "closes the OPEN test-quality note of Codex review cx-fbbd022a; coordinator accepted the worker's measured refusal chain as the reason branch 1 is impossible"
+      ]
+    },
+    {
+      "id": "hx-1",
+      "owner": "OMP live pid 47172 (read-only research; task cx-2e4c8723)",
+      "state": "active",
+      "files": ["server/templates/manager.html (read-only)", "server/gen1_hud_feedback.py (read-only)"],
+      "next_action": "Table of every hold/refusal reason a human can hit vs. where (if anywhere) it is shown; Manager actions that clear holds.",
+      "reuse_decision": "research only; feeds R5b/N3 human-facing recovery UI"
     },
     {
       "id": "ft-3",
