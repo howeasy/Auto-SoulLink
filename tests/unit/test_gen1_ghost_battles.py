@@ -64,8 +64,8 @@ def test_the_tower_map_ids_match_the_decomp(game, decomp):
     first = re.search(r"map_const POKEMON_TOWER_1F,.*?; \$([0-9A-F]{2})", src)
     last = re.search(r"map_const POKEMON_TOWER_7F,.*?; \$([0-9A-F]{2})", src)
     assert first and last, "the map constants moved"
-    assert game.GHOST_MAP_FIRST == int(first.group(1), 16)
-    assert game.GHOST_MAP_LAST == int(last.group(1), 16)
+    assert int(first.group(1), 16) == game.GHOST_MAP_FIRST
+    assert int(last.group(1), 16) == game.GHOST_MAP_LAST
 
 
 @pytest.mark.parametrize("decomp", ["pokered", "pokeyellow"])
@@ -77,7 +77,7 @@ def test_the_silph_scope_id_matches_the_decomp(game, decomp):
         for line in f:
             if "const SILPH_SCOPE" in line:
                 expected = int(re.search(r"\$([0-9A-Fa-f]{2})", line).group(1), 16)
-                assert game.ITEM_SILPH_SCOPE == expected
+                assert expected == game.ITEM_SILPH_SCOPE
                 return
     pytest.fail("SILPH_SCOPE not found in the decomp")
 

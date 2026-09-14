@@ -49,8 +49,15 @@ PATCHABLE = ("red", "blue")
 def _rows_for(title: str, rom: bytes) -> list[tuple[str, bool, str]]:
     """(check, ok, detail) for one ROM."""
     from server.adapters.gen1_rom_scan import (
-        RomScanError, evolution_graph, identify, scan_base_stats, scan_fishing,
-        scan_pokedex_order, scan_wild, sym_to_offset, _syms_for,
+        RomScanError,
+        _syms_for,
+        evolution_graph,
+        identify,
+        scan_base_stats,
+        scan_fishing,
+        scan_pokedex_order,
+        scan_wild,
+        sym_to_offset,
     )
     rows: list[tuple[str, bool, str]] = []
 

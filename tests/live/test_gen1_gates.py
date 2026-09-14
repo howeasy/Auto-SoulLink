@@ -183,6 +183,7 @@ def test_gen1_panel_on_a_randomized_cartridge(emuhawk):
     The artifact is rebuilt rather than committed, because a randomized ROM is a ROM.
     """
     import subprocess
+
     from run_gb_gate import PATCHED
     _base, rom_rel, _sav = PATCHED["red_rand_patched"]
     rom_path = os.path.join(REPO, rom_rel)

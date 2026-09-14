@@ -25,7 +25,11 @@ lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the Gen 1 g
 
 from server.adapters import get_adapter
 from server.adapters.gen1_rom_scan import (
-    RomScanError, build_encounter_tables, parse_client_content, scan_fishing, scan_wild,
+    RomScanError,
+    build_encounter_tables,
+    parse_client_content,
+    scan_fishing,
+    scan_wild,
 )
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))

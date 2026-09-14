@@ -38,10 +38,17 @@ DIST = os.path.join(REPO, "patch", "gen1", "dist")
 PAYLOAD_FILE = os.path.join(DIST, "slink_bank3f.bin")
 
 from manifest import (  # noqa: E402
-    BANK_SIZE, HOOK_BANK, HOOK_ORIGINAL, HOOK_SITE, HOOK_TARGET, INJECT_OFFSET,
-    MENU_PATCHES, PANEL_ENTRY, PANEL_ENTRY_ADDR, PROTECTED_RANGE, ROMS, SLINK_PANEL_ADDR,
-    TRAMPOLINE, TRAMPOLINE_ADDR,
+    BANK_SIZE,
+    HOOK_BANK,
+    HOOK_ORIGINAL,
+    HOOK_SITE,
+    HOOK_TARGET,
+    INJECT_OFFSET,
+    MENU_PATCHES,
+    PROTECTED_RANGE,
+    ROMS,
 )
+
 
 def assemble() -> bytes:
     """rgbasm + rgblink the module; return the raw bytes of bank $3F."""

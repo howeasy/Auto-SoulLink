@@ -40,11 +40,11 @@ CATEGORIES = {"wild", "starters", "statics", "trainers", "tms", "field_items"}
 
 def build(jar: str | None = None, quiet: bool = False) -> str | None:
     """Returns the output path, or None when the inputs are not available."""
+    import inject as injector
+
     from server.upr_pipeline import UprPipelineError, randomize
     from server.upr_settings import build_categories
     from tests.conftest import find_upr_jar
-
-    import inject as injector
 
     jar = jar or find_upr_jar()
     if not jar:

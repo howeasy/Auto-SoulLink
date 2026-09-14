@@ -19,7 +19,11 @@ import pytest
 
 from server.adapters import get_adapter
 from server.adapters.gen1_rom_scan import (
-    RomScanError, content_fingerprint, fingerprint_rom, parse_client_content, scan_fishing,
+    RomScanError,
+    content_fingerprint,
+    fingerprint_rom,
+    parse_client_content,
+    scan_fishing,
     scan_wild,
 )
 

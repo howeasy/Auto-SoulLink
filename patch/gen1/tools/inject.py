@@ -32,8 +32,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from manifest import (  # noqa: E402
-    BANK_SIZE, HOOK_BANK, HOOK_ORIGINAL, HOOK_SITE, HOOK_TARGET, INJECT_OFFSET,
-    MENU_PATCHES, PROTECTED_RANGE,
+    BANK_SIZE,
+    HOOK_BANK,
+    HOOK_ORIGINAL,
+    HOOK_SITE,
+    HOOK_TARGET,
+    INJECT_OFFSET,
+    MENU_PATCHES,
+    PROTECTED_RANGE,
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

@@ -26,9 +26,18 @@ import re
 import pytest
 
 from server.adapters.gen1_rom_scan import (
-    evolution_graph, scan_evos_moves,
-    BASE_STATS_RECORD, RomScanError, identify, profile_hash, scan, scan_base_stats,
-    scan_fishing, scan_pokedex_order, scan_wild, sym_to_offset,
+    BASE_STATS_RECORD,
+    RomScanError,
+    evolution_graph,
+    identify,
+    profile_hash,
+    scan,
+    scan_base_stats,
+    scan_evos_moves,
+    scan_fishing,
+    scan_pokedex_order,
+    scan_wild,
+    sym_to_offset,
 )
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -437,6 +446,7 @@ class TestRandomizedRoms:
     def _randomize(cls, tmp_path, title: str, tag: str) -> bytes:
         import shutil
         import subprocess
+
         from server.upr_settings import build_categories
         if not shutil.which("java"):
             pytest.skip("java not on PATH")
@@ -544,7 +554,9 @@ class TestRandomizedRoms:
         none of it touches the allowlist.
         """
         from server.upr_settings import (
-            categories_enabled as cats, forbidden_enabled, parse_settings_string,
+            categories_enabled as cats,
+            forbidden_enabled,
+            parse_settings_string,
         )
         self._randomize(tmp_path, "red", "a")
         log = next(p for p in tmp_path.iterdir() if p.name.endswith(".log"))
