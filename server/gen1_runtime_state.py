@@ -161,6 +161,8 @@ class Gen1RuntimeState:
         verify_encounters(self)
         from server.gen1_storage_runtime import verify_state as verify_storage
         verify_storage(self)
+        from server.gen1_rebuild_runtime import verify_state as verify_rebuild
+        verify_rebuild(self)
         from server.gen1_evolution_runtime import verify_state as verify_evolutions
         verify_evolutions(self)
         from server.gen1_run_resume import verify_state as verify_resume

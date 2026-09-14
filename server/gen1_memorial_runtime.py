@@ -3,6 +3,7 @@
 import copy
 import re
 
+from server.gen1_engine_bridge import memorial_completion as record_memorial_completion
 from server.gen1_faint_runtime import COMPONENT as FAINT, synchronize
 from server.gen1_full_save import layout
 from server.gen1_held_faint import verify_owned_checkpoint
@@ -10,7 +11,6 @@ from server.gen1_initial_observation import inventory
 from server.gen1_memorial import expected, reservation, verify_receipt
 from server.gen1_party_codec import PartyCodec
 from server.held_write_permit import VerifiedHeldWrite
-from server.gen1_engine_bridge import memorial_completion as record_memorial_completion
 from server.operation_scope import command_scope
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
@@ -50,7 +50,19 @@ def key_for(death, player):
     return death["key"] if player == death["player"] else death["peer_key"]
 
 
-def schedule(document, operation):
+def schedule(document, operation, rules=None):
+    """rules (stage.rules, optional): when given, arbitrate against a pending whiteout rebuild
+    (C3 spec (3)). While this player has an ACTIVE rebuild_pending (state.py's own whiteout
+    auto-rebuild pick, not yet finished) and currently has at most one physical party member,
+    a memorial_observe for that last member is deferred -- gen1_memorial.py's own kernel refuses
+    to bury the last party member outright (party[0]<=1 raises), and a queued memorial_observe
+    would otherwise sit at the head of this player's obligation queue and block the rebuild
+    retrieval that could bring a survivor in first. Scoped to an active rebuild only: outside
+    one, a lone surviving party member's own death is memorialized exactly as before (this is
+    the ordinary, frequently-exercised case -- most Gen 1 single-link fixtures have no rebuild
+    in play at all). Every caller should pass rules; one caller (gen1_retirement_runtime.py) is
+    out of this card's write scope and still omits it, so the default preserves its exact
+    previous behaviour."""
     if FAINT not in document['components']:
         return {'a':[],'b':[]}
     component = document["components"].setdefault(COMPONENT, {"entries": {"a": [], "b": []}})
@@ -65,6 +77,12 @@ def schedule(document, operation):
         known = {entry["death_id"] for entry in entries}
         for death_id, death in document["components"][FAINT]["deaths"].items():
             if death["phase"] != "pending_memorial" or death_id in known:
+                continue
+            if (
+                rules is not None
+                and rules.rebuild_pending.get(player)
+                and rules.party_size.get(player, 0) <= 1
+            ):
                 continue
             entries.append(
                 {
@@ -131,8 +149,8 @@ def observation_metadata(command, receipt, document, player, binding, *, histori
 
 
 def preparation(command, receipt, document, player, binding, *, historical=False, journal=None):
-    from server.gen1_memorial_policy import storage_policy
     from server import gen1_grave_reservations as graves
+    from server.gen1_memorial_policy import storage_policy
 
     metadata = observation_metadata(command, receipt, document, player, binding, historical=historical)
     point = receipt['point']

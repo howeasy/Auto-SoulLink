@@ -100,6 +100,22 @@ def resolve(job, points, identities):
             p: "confirm" if place == desired else "withdraw" if desired == "party" else "deposit"
             for p, (place, _roster) in places.items()
         }, None
+    if job["kind"] == "rebuild":
+        # A rebuild's own targets are never sent back to the box: each side's target is either
+        # already in party (confirm) or withdrawn from the box, exactly. A boxed target whose
+        # side is already at capacity is an explicit HOLD -- the "linked" fallback above (move
+        # the whole pair to whichever side has room) is unsuitable here; a rebuild target the
+        # party cannot fit is never silently kept boxed either. A full side whose OWN target is
+        # already in party still needs confirm, not a capacity refusal.
+        directions = {}
+        for p, (place, roster) in places.items():
+            if place == "party":
+                directions[p] = "confirm"
+            elif roster["party_count"] >= 6:
+                raise StorageRefusal("rebuild-capacity")
+            else:
+                directions[p] = "withdraw"
+        return directions, None
     if job["kind"] != "pc":
         raise JournalError("unknown synchronized storage policy")
     actor = job["actor"]

@@ -106,10 +106,24 @@ def settle_whiteout(stage, document, player, entry, index, signal, *, trigger_de
 
     labels = dict.fromkeys(("a", "b"), "WHITEOUT")
     feedback = classify_death(captured, member_labels=labels, whiteout=True)
-    document["components"].setdefault(COMPONENT, {})[identifier(player, entry["operation_id"], index)] = {
+    whiteout_id = identifier(player, entry["operation_id"], index)
+    document["components"].setdefault(COMPONENT, {})[whiteout_id] = {
         "player": player, "engine_record": copy.deepcopy(entry), "index": index, "area_id": event["area_id"]}
     for p in ("a", "b"):
         collateral[p].extend(feedback[p])
+
+    # C3: capture the shared engine's own rebuild pick (if any) as a durable plan, and try to
+    # start its first pair's storage job immediately.
+    from server.event_reference import make as event_reference_make
+    from server.gen1_rebuild_runtime import plan as plan_rebuild, schedule_rebuild
+
+    plan_rebuild(stage, document, player, entry, index, captured, whiteout_id=whiteout_id)
+    origin = event_reference_make(
+        player, entry["operation_id"], {"event": "engine_signals", "payload": entry["payload"]}
+    )
+    more = schedule_rebuild(stage, document, origin)
+    for p in ("a", "b"):
+        collateral[p].extend(more[p])
     return collateral
 
 

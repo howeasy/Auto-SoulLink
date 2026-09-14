@@ -329,8 +329,19 @@ def acknowledge(runtime, player, operation, message):
     from server.gen1_memorial_runtime import schedule
 
     commands = schedule(
-        document, {"player": player, "operation_id": operation, "message": copy.deepcopy(message)}
+        document, {"player": player, "operation_id": operation, "message": copy.deepcopy(message)},
+        rules=stage.rules,
     )
+    from server.event_reference import make as event_reference_make
+    from server.gen1_rebuild_runtime import schedule_rebuild
+
+    # This faint settling to pending_memorial may have cleared _busy for a deferred rebuild
+    # plan (spec (2)/(3)): try to advance it in the same commit.
+    more = schedule_rebuild(
+        stage, document, event_reference_make(player, operation, message)
+    )
+    for recipient in ("a", "b"):
+        commands[recipient].extend(more[recipient])
     # Physical ACK starts read-only preparation; it does not imply a saved grave.
     return runtime.journal.commit(
         player,

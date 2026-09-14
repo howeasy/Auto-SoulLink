@@ -6,22 +6,43 @@ import pytest
 
 from server import gen1_semantic_events as ev, gen1_whiteout as wo
 from server.gen1_engine_signals import DATA
-from server.gen1_faint_runtime import COMPONENT as FAINT, record_death_obligation
+from server.gen1_faint_runtime import (
+    COMPONENT as FAINT,
+    acknowledge as faint_acknowledge,
+    record_death_obligation,
+    verify_journal as faint_verify_journal,
+    verify_state as faint_verify_state,
+)
 from server.gen1_hud_feedback import classify_death
 from server.gen1_initial_observation import COMPONENT as INITIAL
 from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_state import Gen1RuntimeState
 from server.gen1_staged_state import StagedGen1State
+from server.gen1_storage_runtime import (
+    COMPONENT as STORAGE,
+    verify_journal as storage_verify_journal,
+    verify_state as storage_verify_state,
+)
 from server.protocol_journal import JournalError
 from server.state import LinkEntry, LinkStatus, MonInfo
-from tests.unit.test_gen1_engine_signal_runtime import deliver
+from tests.unit.observation_fixture import (
+    checkpoint as p10_checkpoint,
+    commit as p10_commit,
+    observe as p10_observe,
+    party_blobs,
+    source as p10_source,
+    starters,
+)
+from tests.unit.test_gen1_engine_signal_runtime import deliver, payload as engine_payload
 from tests.unit.test_gen1_engine_signals import signal
-from tests.unit.test_gen1_faint_runtime import paired, signal_batch
+from tests.unit.test_gen1_faint_runtime import bag, paired, signal_batch
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_inventory_observation import party_point
 from tests.unit.test_gen1_party_codec import make_blob
 from tests.unit.test_gen1_semantic_events import KEY_A, KEY_B, cmds, find, linked_state
 from tests.unit.test_gen1_sessions import contract
+from tests.unit.test_gen1_storage_runtime import read as storage_read, write as storage_write
 
 
 def faint(variant, hps, *, kind="battle_faint", fainted=0, stale=None):
@@ -462,3 +483,215 @@ def test_collateral_death_defers_behind_a_busy_storage_job(tmp_path):
         faint_verify_state(fake)
     finally:
         runtime.close()
+
+
+def _settle_second_real_link(runtime, name, *, call, finish, after):
+    """Grant `name` to both players and settle it through a real storage "linked" job (identity
+    registration, storage_observe reads, storage_apply writes) -- the C1 debt: a genuine second
+    registered linked pair, not a hand-built LinkEntry. Mutates the real rules/document in place
+    (partner_blobs, party_keys); nothing meaningful is returned.
+    """
+    for player in ("a", "b"):
+        row = p10_source(runtime, player, name, call=call, finish=finish)
+        variant = runtime.contract["players"][player]["variant"]
+        current = runtime.state().document()["components"]["gen1-inventory-observations"][player][
+            "observation"]["source"]["fields"]["party"]
+        existing = party_blobs(current)
+        new_blob = party_blobs(row["receipt"]["return"]["point"]["party_hex"])[0]
+        combined = party_point(variant, [*existing, new_blob])["fields"]["party"]
+        point = p10_checkpoint(runtime, player, [row], after, party=combined)
+        p10_commit(runtime, player, [row], after=after, point=point)
+    acknowledge_hud(runtime)
+    storage_read(runtime, "a")
+    storage_read(runtime, "b")
+    storage_write(runtime, "a")
+    storage_write(runtime, "b")
+
+
+def _multi_mon_force_faint_ack(runtime, player, command):
+    """A force_faint ACK receipt for a party of N (not just the single-mon shape
+    tests/unit/test_gen1_faint_runtime.acknowledgement() builds): before/after differ only in the
+    target slot's HP."""
+    blobs = runtime.state().rules.partner_blobs[player]
+    variant = runtime.contract["players"][player]["variant"]
+    key = command["body"]["key"]
+    slot = next(i for i, m in enumerate(blobs) if m["key"] == key)
+    raws = [m["blob"] for m in blobs]
+    before = {"schema": "gen1-party-readback-v1", "variant": variant, "save_id": "0000",
+              "save_name": "SAME", "party_count": len(raws),
+              "party": [r.hex().upper() for r in raws], "species_list": [r[0] for r in raws] + [255],
+              "battle_flag": 1, "active_slot": slot, "battle_hp": int.from_bytes(raws[slot][1:3], "big")}
+    after_shape = copy.deepcopy(before)
+    post = bytearray(raws[slot])
+    post[1:3] = b"\0\0"
+    after_shape["party"] = list(before["party"])
+    after_shape["party"][slot] = post.hex().upper()
+    after_shape["battle_hp"] = 0
+    return {"event": "command_ack", "command_id": command["command_id"],
+            "command_sequence": command["command_sequence"], "outcome": "ACK",
+            "receipt": {"schema": "gen1-force-faint-receipt-v1", "before": before, "after": after_shape}}
+
+
+def test_real_second_linked_pair_produces_two_distinct_durable_deaths(tmp_path):
+    """The C1 debt (round-2 finding #4), driven for real: a second genuinely registered linked
+    pair (a real grant settled through storage_runtime's "linked" job: identity, storage_observe
+    reads, storage_apply writes), then a real whiteout batch that faints the sole active mon while
+    the second pair reads 0 HP in the SAME party capture. B must durably hold two distinct
+    force_faint commands; both ACK through the production path to pending_memorial; the whole
+    document -- faint, storage and whiteout components -- verifies and survives a restart.
+    """
+    runtime = create_runtime(tmp_path, contract("red", "red"))
+    try:
+        starters(runtime)  # L1: real starter, real identity, ALIVE, party
+        link0 = runtime.state().rules.links[0]
+        _settle_second_real_link(runtime, "grant:lapras:0", call=110, finish=130, after=140)
+        link1 = runtime.state().rules.links[1]
+        assert link1.status == LinkStatus.ALIVE
+        assert link1.a.key in runtime.state().rules.party_keys["a"]
+
+        blob0 = runtime.state().rules.partner_blobs["a"][0]["blob"]
+        blob1 = runtime.state().rules.partner_blobs["a"][1]["blob"]
+        raw = bytearray(bytes.fromhex(party_point("red", [blob0, blob1])["fields"]["party"]))
+        raw[9:11] = b"\0\0"    # L1 (slot 0, active) HP -> 0
+        raw[53:55] = b"\0\0"   # L2 (slot 1) HP -> 0: no faint signal of its own, the collateral case
+        batch = engine_payload(runtime, "a", ["battle_faint"], 2)
+        batch["signals"][0]["point"]["party_hex"] = raw.hex().upper()
+        batch["signals"][0]["point"]["active_slot"] = 0
+        batch["signals"][0]["point"]["battle_hp"] = 0
+        batch["signals"][0]["point"]["battle_species"] = blob0[0]
+        batch["signals"][0]["frame"] = 220
+        activation = bag("red")
+        activation["frame"] = 210
+        batch["signals"].insert(0, activation)
+        _, _, result = p10_observe(runtime, "a", signals=batch, frame=220)
+        assert result["ack"] == "ACK"
+
+        document = runtime.state().document()
+        deaths = document["components"][FAINT]["deaths"]
+        assert len(deaths) == 2
+        pending_b = runtime.journal.pending("b")
+        force_faints = [c for c in pending_b if c["cmd"] == "force_faint"]
+        assert len(force_faints) == 2
+        assert {c["key"] for c in force_faints} == {link0.b.key, link1.b.key}
+        assert force_faints[0]["death_id"] != force_faints[1]["death_id"]
+
+        for _ in range(2):
+            command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
+            message = _multi_mon_force_faint_ack(runtime, "b", command)
+            faint_acknowledge(runtime, "b", secrets.token_hex(16), message)
+        document = runtime.state().document()
+        deaths = document["components"][FAINT]["deaths"]
+        assert all(d["phase"] == "pending_memorial" for d in deaths.values())
+
+        state = runtime.state()
+        faint_verify_state(state)
+        faint_verify_journal(runtime.journal, state)
+        storage_verify_state(state)
+        storage_verify_journal(runtime.journal, state)
+        wo.verify_state(state)
+    finally:
+        runtime.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        assert reopened.state().document()["components"][FAINT]["deaths"] == deaths
+        faint_verify_state(reopened.state())
+        storage_verify_state(reopened.state())
+        wo.verify_state(reopened.state())
+    finally:
+        reopened.close()
+
+
+def test_real_collateral_death_defers_behind_a_busy_storage_job_then_issues_on_terminal_ack(tmp_path):
+    """The deferred variant, driven for real: a THIRD real grant is deliberately left with only
+    one side's storage_observe read done (a genuine busy job -- storage_runtime._busy is player-
+    scoped, so it holds BOTH players) when the whiteout batch arrives. The collateral death must
+    take the pending_issue path (no force_faint queued yet); completing the third job's real
+    terminal storage ACK (both storage_apply writes) is what actually issues it, through
+    gen1_faint_runtime.schedule_deferred -- not a special case here.
+    """
+    runtime = create_runtime(tmp_path, contract("red", "red"))
+    try:
+        starters(runtime)
+        link0 = runtime.state().rules.links[0]
+        _settle_second_real_link(runtime, "grant:lapras:0", call=110, finish=130, after=140)
+        link1 = runtime.state().rules.links[1]
+
+        # Third grant: settle only halfway (b's read, not a's) so BOTH players stay storage-busy.
+        for player in ("a", "b"):
+            row = p10_source(runtime, player, "grant:fossil_revival:0", call=150, finish=160)
+            variant = runtime.contract["players"][player]["variant"]
+            current = runtime.state().document()["components"]["gen1-inventory-observations"][player][
+                "observation"]["source"]["fields"]["party"]
+            combined = party_point(variant, [*party_blobs(current),
+                                              party_blobs(row["receipt"]["return"]["point"]["party_hex"])[0]]
+                                    )["fields"]["party"]
+            point = p10_checkpoint(runtime, player, [row], 170, party=combined)
+            p10_commit(runtime, player, [row], after=170, point=point)
+        acknowledge_hud(runtime)
+        third_job = next(j for j in runtime.state().document()["components"][STORAGE]["jobs"].values()
+                         if not j["complete"])
+        storage_read(runtime, "b")  # a's read is deliberately left open
+        assert not runtime.state().document()["components"][STORAGE]["jobs"][third_job["id"]]["complete"]
+
+        blob0 = runtime.state().rules.partner_blobs["a"][0]["blob"]
+        blob1 = runtime.state().rules.partner_blobs["a"][1]["blob"]
+        raw = bytearray(bytes.fromhex(party_point("red", [blob0, blob1])["fields"]["party"]))
+        raw[9:11] = b"\0\0"
+        raw[53:55] = b"\0\0"
+        batch = engine_payload(runtime, "a", ["battle_faint"], 2)
+        batch["signals"][0]["point"]["party_hex"] = raw.hex().upper()
+        batch["signals"][0]["point"]["active_slot"] = 0
+        batch["signals"][0]["point"]["battle_hp"] = 0
+        batch["signals"][0]["point"]["battle_species"] = blob0[0]
+        batch["signals"][0]["frame"] = 220
+        activation = bag("red")
+        activation["frame"] = 210
+        batch["signals"].insert(0, activation)
+        p10_observe(runtime, "a", signals=batch, frame=220)
+
+        document = runtime.state().document()
+        deaths = document["components"][FAINT]["deaths"]
+        assert len(deaths) == 2
+        collateral = next(d for d in deaths.values() if d["key"] == link1.a.key)
+        assert collateral["phase"] == "pending_issue"
+        assert not any(c["cmd"] == "force_faint" for c in runtime.journal.pending("b"))
+
+        # The real terminal storage ACK: finish the third job (a's read, both writes).
+        acknowledge_hud(runtime)
+        storage_read(runtime, "a")
+        acknowledge_hud(runtime)
+        storage_write(runtime, "a")
+        acknowledge_hud(runtime)
+        storage_write(runtime, "b")
+
+        document = runtime.state().document()
+        deaths = document["components"][FAINT]["deaths"]
+        collateral = next(d for d in deaths.values() if d["key"] == link1.a.key)
+        assert collateral["phase"] == "pending_faint"
+        pending_b = runtime.journal.pending("b")
+        force_faints = [c for c in pending_b if c["cmd"] == "force_faint"]
+        assert {c["key"] for c in force_faints} == {link0.b.key, link1.b.key}
+
+        for _ in range(2):
+            command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
+            message = _multi_mon_force_faint_ack(runtime, "b", command)
+            faint_acknowledge(runtime, "b", secrets.token_hex(16), message)
+        document = runtime.state().document()
+        deaths = document["components"][FAINT]["deaths"]
+        assert all(d["phase"] == "pending_memorial" for d in deaths.values())
+
+        state = runtime.state()
+        faint_verify_state(state)
+        faint_verify_journal(runtime.journal, state)
+        storage_verify_state(state)
+        storage_verify_journal(runtime.journal, state)
+        wo.verify_state(state)
+    finally:
+        runtime.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        assert reopened.state().document()["components"][FAINT]["deaths"] == deaths
+        faint_verify_state(reopened.state())
+        storage_verify_state(reopened.state())
+    finally:
+        reopened.close()

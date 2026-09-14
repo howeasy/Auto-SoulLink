@@ -205,6 +205,13 @@ def _job(stage, document, origin, kind, keys, *, actor=None, destination=None, s
         return {"a": [], "b": []}
     if _busy(document, keys):
         raise JournalError("physical storage ownership is already busy")
+    if kind != "rebuild":
+        # Plan priority gate (C3): unrelated PC/acquisition storage must not take ownership of a
+        # key a pending rebuild plan is about to move.
+        from server.gen1_rebuild_runtime import plan_reserved
+
+        if plan_reserved(document, keys.values()):
+            raise JournalError("physical storage ownership is reserved for a pending rebuild")
     from server.gen1_starter_settlement import context
 
     members = {
@@ -740,6 +747,18 @@ def acknowledge(runtime, player, operation, message):
             commands = schedule_pending(runtime, state, document, reference)
             for side in ("a", "b"):
                 commands[side] = deferred[side] + commands[side]
+            if job["kind"] == "rebuild":
+                from server.gen1_rebuild_runtime import completed as rebuild_completed
+
+                more = rebuild_completed(state, document, job)
+            else:
+                from server.gen1_rebuild_runtime import schedule_rebuild
+
+                # A completed non-rebuild job may have just cleared the physical ownership a
+                # deferred rebuild plan was waiting on (spec (2)/(3)): try to advance it.
+                more = schedule_rebuild(state, document, reference)
+            for side in ("a", "b"):
+                commands[side] = commands[side] + more[side]
     else:
         raise JournalError("storage ACK differs from its durable phase")
     if job["complete"]:
