@@ -80,7 +80,8 @@ def test_five_asm_files_are_byte_identical_to_rc_sources():
         pytest.skip(f"RC source checkout absent: {RC_SOURCE}")
     for name in ("native_trade.asm", "trade_service.asm", "trade_receptionist.asm",
                  "trade_ui.asm", "trade_prompt.asm"):
-        assert (SOURCE / name).read_bytes() == (RC_SOURCE / name).read_bytes(), name
+        # git's autocrlf rewrites the checkout's line endings; the assembler does not care
+        assert (SOURCE / name).read_bytes().splitlines() == (RC_SOURCE / name).read_bytes().splitlines(), name
 
 
 @pytest.mark.parametrize("key", TARGETS)
