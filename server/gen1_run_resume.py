@@ -83,6 +83,34 @@ def known_keys(document, rules):
     return {player: {"known_keys": sorted(values)} for player, values in keys.items()}
 
 
+# ponytail: journaled records that never carry gameplay, enumerated from their writers - extend only
+# with a citation. Anything not listed here (trade, native, engine_signals, inventory, an unknown
+# event) holds the resume.
+#   runtime_opened / runtime_reconciliation_refused / runtime_suspended
+#       server/durable_runtime.py _commit_system (:101 open, :212 refused reconciliation, :434 clean stop)
+#   hello   durable_runtime._admit dispatches {event, gen1_metadata, run_id}; gen1_runtime_state.handle_event
+#           refuses any other field ("RBY durable HELLO cannot carry gameplay observations")
+#   sync    gen1_runtime_state.handle_event: {event} only ("sync cannot carry gameplay observations")
+#   control durable_runtime.py:219 journals the control challenge when a reconciliation proof binds
+LIFECYCLE_EVENTS = frozenset({"runtime_opened", "runtime_reconciliation_refused", "runtime_suspended",
+                              "hello", "sync", "control"})
+# command_ack is display-only when the acked command is a HUD write (gen1_runtime.py:417-419, the
+# no-write receipt lane); every other receipt proves a physical mutation after the save.
+DISPLAY_COMMANDS = frozenset({"hud_notice", "hud_state"})
+
+
+def _no_gameplay(request, db):
+    if not isinstance(request, dict):
+        return False
+    event = request.get("event")
+    if event in LIFECYCLE_EVENTS:
+        return True
+    if event == "command_ack":
+        row = db.execute("SELECT body FROM commands WHERE command_id=?", (str(request.get("command_id")),)).fetchone()
+        return row is not None and json.loads(row[0]).get("cmd") in DISPLAY_COMMANDS
+    return _pure_heartbeat(request)
+
+
 def _pure_heartbeat(request):
     """The one event that proves nothing happened: lua/gen1_observation_loop.lua's idle publication
     (no signals, inventory or receipts, wIsInBattle 0, no trainer engagement, no native checkpoint).
@@ -164,7 +192,7 @@ def audit_predecessor(run_dir, *, registry_entry):
                                (player, row[0], EVENT_WINDOW + 1)).fetchall()
             if len(later) > EVENT_WINDOW:
                 reasons.append("resume audit exceeded the bounded event window")
-            elif not all(_pure_heartbeat(json.loads(r[0])) for r in later):
+            elif not all(_no_gameplay(json.loads(r[0]), db) for r in later):
                 reasons.append(f"player {player} has committed gameplay after the save witness; hold")
             required[player] = {"digest": witness["digest"], "projection": witness["projection"],
                                 "witness_index": witness["index"], "operation_id": witness["operation_id"]}

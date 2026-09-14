@@ -254,3 +254,56 @@ def test_starting_predecessor_refuses(tmp_path):
     predecessor(tmp_path)
     audit = audit_predecessor(tmp_path, registry_entry=entry(status="starting"))
     assert not audit.ok and any("running" in reason for reason in audit.reasons)
+
+
+SUSPENDED = {"event": "runtime_suspended"}   # server/durable_runtime.py _commit_system on a clean stop
+
+
+def test_a_clean_stop_after_the_witness_does_not_hold(tmp_path):
+    # LIVE r4: the only post-witness event was the lifecycle record of the clean stop.
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [SUSPENDED])
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert audit.ok, audit.reasons
+
+
+@pytest.mark.parametrize("lifecycle", [
+    {"event": "runtime_opened"}, {"event": "runtime_reconciliation_refused"},
+    {"event": "hello", "gen1_metadata": {}, "run_id": "0" * 32}, {"event": "sync"},
+    {"event": "control", "control": {"challenge": "0" * 32}},
+])
+def test_lifecycle_and_admission_records_after_the_witness_do_not_hold(tmp_path, lifecycle):
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [lifecycle, HEARTBEAT, SUSPENDED])
+    assert audit_predecessor(tmp_path, registry_entry=entry()).ok
+
+
+def test_gameplay_after_a_lifecycle_record_still_holds(tmp_path):
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [SUSPENDED, {**HEARTBEAT, "trainer": {"trainer_id": 200, "frame": 400}}])
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert not audit.ok and "player a has committed gameplay after the save witness; hold" in audit.reasons
+
+
+def test_command_acks_after_the_witness_hold_unless_display_only(tmp_path):
+    predecessor(tmp_path)
+    physical = "f" * 32
+    db = sqlite3.connect(tmp_path / "runtime.sqlite3")
+    try:
+        hud = db.execute("SELECT command_id FROM commands WHERE player='a' AND body LIKE '%hud_notice%' LIMIT 1").fetchone()[0]
+        # A synthetic physical command (same origin event as the HUD notice, so the FK holds).
+        db.execute("INSERT INTO commands(command_id,player,origin_player,origin_operation,body,digest) "
+                   "SELECT ?,player,origin_player,origin_operation,?,? FROM commands WHERE command_id=?",
+                   (physical, json.dumps({"cmd": "force_faint", "key": "1234:0000:99"}), "0" * 64, hud))
+        db.execute("UPDATE commands SET outcome='ACK', receipt='{}', receipt_digest=? WHERE command_id=?", ("0" * 64, physical))
+        db.commit()
+    finally:
+        db.close()
+    ack = {"event": "command_ack", "command_sequence": 1, "outcome": "ACK", "receipt": {}}
+    append_events(tmp_path, "a", [{**ack, "command_id": hud}])
+    assert audit_predecessor(tmp_path, registry_entry=entry()).ok
+    append_events(tmp_path, "a", [{**ack, "command_id": physical}])
+    assert not audit_predecessor(tmp_path, registry_entry=entry()).ok
+    append_events(tmp_path, "b", [{**ack, "command_id": "unknown"}])
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert "player b has committed gameplay after the save witness; hold" in audit.reasons
