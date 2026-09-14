@@ -116,14 +116,11 @@ The server writes state to `data/links.json` and `data/memorial.json`. Pass `--r
 ### 3. Open the status page
 
 Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. The page is a Jinja2 template polled by **HTMX** every ~2 s; **idiomorph** swaps changed nodes in place so `<details open>`, scroll position, and table-search focus survive each refresh. SSE remains available at `/api/events` for the calc bridge and external consumers, but the page itself no longer needs it. Theme + font pickers (Alpine.js widgets in the sidebar) persist to `localStorage` + a `slink-theme` cookie so the saved palette/font apply on the first byte (no FOUC). The page shows:
-- Both players' trainer name, connection status, gym badges (8 badge icons per player), current area, Pokéball count, TCP port, and live party (with nicknames, species, levels, **ability names** with description tooltips, **held items**)
-- Battle display panel ("⚔ IN BATTLE" with enemy party table including abilities) rendered **above** each player's party table for immediate visibility
-- Consolidated Encounters table with progress icons: ✅ (linked/alive), 💀 (dead/memorial), ⏳ (pending), ☠️ (dead zone) — each row shows area, Player A's mon (sprite/nickname/species/level), status icon, Player B's mon
-- Per-player PC box summary (occupied slots with nicknames/species/abilities)
-- **Upcoming Key Trainers** panel (Radical Red) — the next gym leaders / rivals / mini-bosses for each player's area, ranked Past / Current / Future against current party level, with sprites and an "Open in Calc" button that hands the trainer to the calc Prep tab
-- Linked-party view toggle — a `[Split | Combined]` segmented control beside the Players header; Combined renders a 5-column symmetric table (Mon · HP · Area · HP · Mon) of both players' linked pairs. Choice persists in `localStorage`.
-- Per-area encounter state (waiting for &lt;trainer name&gt; / linked / dead zone)
-- Identity error banner (red) when a player connects with the wrong save file
+- **Now** — one card per player in that player's column: trainer name, cartridge, badge pips, current area, Pokéball count, last event, *in battle* with the active mon, the wild encounters here, and (Radical Red) the **Upcoming Key Trainers** panel with its "Open in Calc" button
+- **One row per linked pair** — A's half, the bond (route, tie glyph, state), B's half; both HP bars face the bond and the row is tinted *at risk* when the weaker half is under 35 %, because both halves die if either faints. The foe nests under the fighting half and the partner's half says *at stake*: battle is a player state, never a pair state, since the board cannot know who is looking. Ability and held item under each half where the cartridge has them (`capabilities`)
+- Rows sorted into zones: **In party · Pending link · Split (one half boxed) · Boxed · Linked (stopped run) · Fallen** (memorials and dead zones, with the cause), then **Boxed, unlinked**
+- The **Log** beside the board from 1400 px
+- Banners first: save failure, game over, identity mismatch, cartridge not admitted; the run phase and alive/fallen counts inside the polled fragment
 - Flicker-free auto-refresh via HTMX + idiomorph morph swaps — sprites, HP bars, and table structure are preserved across updates; only changed text/values are patched in-place via a `beforeAttributeUpdated` hook that explicitly preserves the `open` attribute on `<details>` elements
 
 Additional pages:
@@ -344,7 +341,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 
 All pages refresh in-place via HTMX (2 s polling, idiomorph swaps) — no full reloads, no scroll jumps. SSE remains at `/api/events` for external consumers but is no longer used by the dashboard or overlays.
 
-**`GET /`** — Main status page showing both player cards with party, current area, ball count, linked pair table, area state table, and killfeed. Renders from `server/templates/dashboard.html` via `base.html`.
+**`GET /`** — The pair board. `server/board.py` joins the status payload into one row per bond and sorts the rows into zones; `server/templates/_board.html` draws it (the run server wraps it in `dashboard.html`, the Manager in `manager.html`). Polled every 2 s and morphed in place.
 
 **`GET /memorial`** — Tombstone cards for every dead linked pair with greyscale sprites, nicknames, species, level, cause of death, and killer details. Renders from `server/templates/memorial.html`.
 
@@ -775,8 +772,8 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Rival team swap (opt-in `--rival-team-swap`, RR-only `replace_rival_team`; requires companion patch) | ✅ Working |
 | Gift/egg `gift_<area>` namespace (standalone pairs, gate + quarantine bypass) | ✅ Working |
 | Status page — Upcoming Key Trainers panel (RR priority-trainer pipeline) | ✅ Working |
-| Status page — linked-party Split/Combined view toggle (localStorage) | ✅ Working |
-| Run Manager — simplified per-run Live Status panel (`/api/runs/<id>/live` proxy) | ✅ Working |
+| The pair board (`server/board.py` + `templates/_board.html`) on both the run server and the Manager | ✅ Working |
+| Run Manager — one origin: every run's board at `/runs/{id}`, New-run form with game families and greyed options, Broadcast, Tools, Gen 1 randomizer page | ✅ Working |
 | Stream overlays — interlocked-chain SVG separator + boxed-links marquee + focus gradient rows | ✅ Working |
 | State persistence (`links.json`) | ✅ Working |
 | Reconnect resilience (seq dedup + re-queue) | ✅ Working |
@@ -980,7 +977,13 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crysta
 | `data/games/gen5_bw/` | Gen 5 game data — BW/BW2 area maps and location tables |
 | `data/links.json` | Persisted link table — written after every state change |
 | `data/memorial.json` | Persisted memorial log |
-| `server/manager.py` | Run Manager — creates/starts/stops/archives named runs on port 8090 |
+| `server/manager.py` | Run Manager — the UI on port 8090: run pages, New-run form (`GAMES`, `OPTIONS`, `OPTION_SUPPORT`, `RUN_FLAGS`), Broadcast, Tools, the Gen 1 randomizer page |
+| `server/board.py` | The pair board: pure functions joining the status payload into pair rows and zones (`build_board`, `board_context`) |
+| `server/ui_capabilities.py` | `players.{pid}.capabilities` — what a cartridge can do, read from its adapter; also what `tools/gen_ui_capabilities.py` writes |
+| `server/status_payload.py` | The empty status payload the Manager serves with no run; pinned to `_build_status_dict` by test |
+| `server/templates/_board.html` | The board fragment (`#content`), included by `dashboard.html` (run server) and `manager.html` (Manager) |
+| `server/templates/pages/` | The debug, Twitch and OBS pages: raw HTML with a `{sidebar}` placeholder, substituted by `str.replace` |
+| `server/static/board.css` | The board and the Manager shell (rail, forms), on top of `slink.css` tokens; `--font-num` for figures lives in `slink.css` |
 | `server/patcher.py` | Companion-ROM patcher routes — `/patcher` page + `/companion/SLink-RR.ups` download, mounted on both the per-run server (8080) and the Manager (8090) |
 | `patch/` | RR companion ROM patch — C sources (`src/handlers.c` mailbox opcodes), build pipeline (`tools/build.py`), built UPS in `dist/`; see `patch/README.md` |
 | `server/obs_controller.py` | OBS Controller — per-player `simpleobsws` connections, coalescing queue workers, priority-based `submit_fired()` resolver, config I/O at `data/obs_config.json` |
@@ -1432,7 +1435,7 @@ python -m server.manager --host 0.0.0.0
 | `POST /api/runs/<id>/archive` | Archive a run |
 | `POST /api/runs/<id>/delete` | Delete a run |
 | `GET /api/runs/<id>/launcher/<player>` | Download launcher script (`player` = `"a"` or `"b"`) |
-| `GET /api/runs/<id>/live` | Same-origin proxy of a run's `/api/status` (feeds the manager's simplified Live Status panel without a cross-port request) |
+| `GET /api/runs/<id>/live` | Same-origin proxy of a run's `/api/status` |
 | `GET\|POST /api/stream/pin` | Read / set which run the manager's stream overlays are pinned to |
 | `GET /stream` / `GET /stream/{name}` | Overlay gallery + per-overlay proxy relaying to the pinned/active run's HTTP port (stable OBS browser-source URLs; `/stream/{name}/fragment` serves the HTMX poll) |
 | `GET /api/status` | Proxy of the active (pinned or latest) run's `/api/status` |
