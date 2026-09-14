@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T05:15:18+00:00",
+  "updated_at_utc": "2026-09-14T05:47:39+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "a99d8b4",
+  "source_head": "aa40b43",
   "live_lane": null,
-  "next_action": "Codex REVIEW of the resume feature (6075af1..a99d8b4); on ACCEPT grant the lane for rb_resume_roundtrip (.cache/rb-resume-r1).",
+  "next_action": "Round-2 Codex review of 6075af1..aa40b43; on ACCEPT grant the lane for rb_resume_roundtrip.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -560,6 +560,46 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "Codex headless REVIEW of 6075af1..a99d8b4 (in progress)"
       ]
+    },
+    {
+      "id": "p2a-6",
+      "owner": "integrated by coordinator (isolated Claude workers authored)",
+      "state": "done",
+      "files": [
+        "server/gen1_run_resume.py",
+        "server/manager.py",
+        "tests/unit/test_gen1_run_resume.py",
+        "tests/unit/test_gen1_resume_enrollment.py",
+        "tests/integration/test_manager_gen1_resume.py"
+      ],
+      "next_action": "None; integrated at 2064c60 (8021/0). Round-2 review pending.",
+      "reuse_decision": "shared",
+      "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, tests/integration/test_manager_gen1_resume.py, test_gen1_continue_observer.py, test_gen1_resume_client.py, test_gen1_engine_signals_client.py (105 in the re-run set)",
+      "independent_review_refs": [
+        "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) \u2014 all addressed",
+        "round 2 headless REVIEW pending"
+      ]
+    },
+    {
+      "id": "p2a-6c",
+      "owner": "integrated by coordinator (isolated Claude workers authored)",
+      "state": "done",
+      "files": [
+        "lua/gen1_continue_observer.lua",
+        "lua/gen1_client_entry.lua",
+        "lua/gen1_initial_observation.lua",
+        "lua/gen1_engine_signals.lua",
+        "tests/unit/test_gen1_continue_observer.py",
+        "tests/unit/test_gen1_resume_client.py",
+        "tests/unit/test_gen1_engine_signals_client.py"
+      ],
+      "next_action": "None; integrated at 2064c60 (8021/0). Round-2 review pending.",
+      "reuse_decision": "shared client lifecycle; Gen 1 site data unchanged",
+      "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, tests/integration/test_manager_gen1_resume.py, test_gen1_continue_observer.py, test_gen1_resume_client.py, test_gen1_engine_signals_client.py (105 in the re-run set)",
+      "independent_review_refs": [
+        "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) \u2014 all addressed",
+        "round 2 headless REVIEW pending"
+      ]
     }
   ]
 }
@@ -583,6 +623,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| P2A-6/6C integrated | All seven round-1 findings addressed at `2064c60` (pin `aa40b43`): provenance-based inherited-identity verification (origin key/player from member history; evolution test), gameplay-bearing = non-empty signals/inventory/acquisitions, bounded event window refused on overflow, `resumed_by` written on the predecessor + status re-checked before registry save (single-use, race-checked), `_RUN_ID` validation + `MANAGER_DIR` containment + fixed-string 409 reasons (exception text to logging), continue observer retired after the acked initial observation (pre-ack hits still fail closed), flush outcome in `SLINK_RUNTIME_STATUS().engine_signals.last_flush` + console log (wire unchanged). 8021/0. |
+| P2A review round 1 | Codex headless REVIEW `cx-9559ab65` of `6075af1..a99d8b4`: **REJECT (MODEL), LIVE hold**. Majors, all coordinator-accepted: continue observer stays armed after the receipt and rejects every later `SpecialEnterMap` hit — ordinary warps/Fly/blackout would kill the resumed client (`gen1_continue_observer.lua:49`, `gen1_client_entry.lua:503`, `home/overworld.asm:770,799`); inherited-identity verification compares the live key forever, breaking evolution (`gen1_run_resume.py:242-245` vs `gen1_evolution_runtime.py:199`); predecessors resumable repeatedly and status unchecked across the audit's await (`manager.py:786-824`); empty heartbeats (`acquisitions: []`) counted as gameplay → clean checkpoints refused (`gen1_run_resume.py:87`); audit silently ignores events past 4097 rows (`:149-152`). Minors: silent flush failure; `resume_from` containment/sanitised 409. TOCTOU concern withdrawn (`bizhawk_launch.py:124-136`). Fixes: P2A-6 (server) + P2A-6C (client). |
 | P2A-5 integrated | `handle_launcher` passes the run's `resume` into `render_launcher`/`bundle`; `_service_release_ready` accepts, per player, either the new-game bootstrap + initial-save pair or `gen1-resume.enrolled[player]`; the client calls `client.saveram()` once after a `save_witness` (pcall-guarded, no-op in models). 8010/0. Live-harness `source_cut` re-pinned to `c8f5465` (`a99d8b4`). |
 | RS-1 integrated (live resume harness) | `rb-save` chained driver from the lab overworld (START menu at Y2/X11, `wMaxMenuItem` 6 without Pokédex, SAVE = cursor index 3 per `home/start_menu.asm:60-74`; YES at the `$14` two-option box Y8/X1 index 0; terminal when `wSaveFileStatus==2` and `wFontLoaded` bit 0 clear), generic chain terminals in the bootstrap, `SelectedRun(resume_from=, resume_save=)` posting through the predecessor's Manager registry (registry id, `manager.py:786-788`), CONTINUE-safe boot inputs (asserts `wMaxMenuItem==2 && wSaveFileStatus==2 && index 0`, never Down), `rb_resume_roundtrip` live callable (status `rb-resume-checkpoint-observed`: both `gen1-resume.enrolled`, `oaks_lab` link ALIVE with the same species, `pokeballs_obtained` preserved, no death commands). Harness flushes SaveRAM via `client.saveram()` at the save terminal because EmuHawk is terminated, not closed. `source_cut` re-pinned `15727ec → b9658d7` (P2A-2 changed pinned product files). **Product gaps found (P2A-5):** (1) `manager.py:742-748 handle_launcher` never passes `resume` to `render_launcher`/`bundle`; (2) `gen1_runtime.py:235-247 _service_release_ready` requires `gen1-new-game-bootstrap` + `gen1-initial-save` that a resumed run never produces, so free service never releases; (3) nothing persists the witnessed save to `.SaveRAM` before an abrupt close. |
 | P2A-3/4 integrated (identity import + refusals) | Audit exports `identities = {a:{known_keys}, b:{known_keys}}` only (no contexts/events/member ids); inside the resume enrollment transition, living keys (ALIVE link halves, pending captures, pending memorials) are reconciled against the presented party/box (refusals: inherited living member absent; presented key the predecessor never knew) and minted as fresh members under the NEW context via the registry's ordinary `acquire`; identity links recreated once both are enrolled. Red: an inherited-pair faint that previously refused (`faint rule pair differs from logical identity linkage`) now settles and queues the partner's `force_faint`. 7983/0 full suite. P2A-4 closes the residuals by refusal: no resume with pending captures/memorials; faint before partner enrollment guarded. |
