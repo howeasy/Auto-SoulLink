@@ -272,10 +272,10 @@ content:
   same principle rather than left in by accident.
 
 Because this is now an allowlist, a key `upr_runner.py` adds to the generation record in the
-future does **not** silently enter `content_identity` (and does not silently get excluded
-either) — it requires a conscious decision to add it to `CONTENT_IDENTITY_GENERATION_KEYS`,
-which `test_content_identity_generation_allowlist_is_exact` pins so that decision cannot be
-skipped unnoticed.
+future does **not** silently enter `content_identity`; it IS silently excluded until someone
+adds it to `CONTENT_IDENTITY_GENERATION_KEYS` on purpose. The exact-set test pins the constant
+against accidental edits of the allowlist itself; it does not detect a new producer key
+(reviewer correction, cx-7de6c11c) — a producer change must be reviewed against this list.
 
 The `canonical_json(expected) != canonical_json(report)` provenance comparison in
 `PreparedCartridges.__init__` (unrelated to `content_identity`) still compares the full,
@@ -289,8 +289,8 @@ unfiltered record and was not touched in any round.
   constant and switching the comprehension to the allowlist, both pass and the log-only
   difference stops changing the digest.
 - `test_content_identity_generation_allowlist_is_exact` — asserts the exact 15-key allowlist
-  set, so a future producer-record change to `upr_runner.py` must touch this test (and the
-  allowlist) on purpose.
+  set against accidental edits of the allowlist; it does not notice a new producer key (those
+  are excluded until classified here on purpose).
 - All prior tests kept and still pass: `test_content_identity_ignores_the_absolute_output_path`,
   `test_content_identity_ignores_the_custom_names_selection_path_even_with_output_too`,
   `test_content_identity_changes_with_custom_names_sha256`,
