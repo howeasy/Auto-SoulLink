@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:06:45+00:00",
+  "updated_at_utc": "2026-09-14T08:15:52+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "6f1f2a1",
   "live_lane": null,
-  "next_action": "N1-1 (first native trade harness) and P2A-11 (last resume MODEL edge) in flight; OMP running the independent full suite on HEAD. Lane free.",
+  "next_action": "After P2A-11 commits: F0 live run (tests/live/test_gen1_native_selected_fresh.py::test_manager_selected_native_pair_free_runs_fresh_bedroom, R/B, once, criteria unchanged). N1-1 harness in flight; TK-4 suite in flight.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -787,6 +787,37 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       ],
       "next_action": "rb-native-trade chained route: mart-exit, walk to the Viridian Center counter, A initiates SLINK TRADE with the linked starter, B consents at (5,5); verifier per the paired-native test; live callable.",
       "reuse_decision": "shared scripted-host chain (N entries); Gen 1 route facts and trade-UI geometry in the module"
+    },
+    {
+      "id": "n1-ui",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-abf5641a)",
+      "state": "done",
+      "files": [
+        "patch/gen1/src/trade_receptionist.asm",
+        "patch/gen1/src/trade_ui.asm",
+        "patch/gen1/src/trade_prompt.asm"
+      ],
+      "next_action": "None; forwarded to N1-1 and recorded in the guide N1-UI row.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (N1-UI row)",
+      "independent_review_refs": [
+        "coordinator accepted as SOURCE-derived from the companion patch sources and trade_coordinator.py"
+      ]
+    },
+    {
+      "id": "f0-claim",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-d782d831)",
+      "state": "done",
+      "files": [
+        "tests/live/test_gen1_bare_speed.py",
+        "lua/tests/test_gen1_bare_speed_gate.lua"
+      ],
+      "next_action": "None; recorded READY as an execution-only card (coordinator runs the selected-native speed gate once after P2A-11 commits).",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (F0 claim row)",
+      "independent_review_refs": [
+        "coordinator spot-check: ACTIVE_THREE_X_MIN_FPS in tests/live/test_gen1_free_service.py:43-54; RC_LANE_B_STATUS.md:25,29"
+      ]
     }
   ]
 }
@@ -811,6 +842,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | Item | Verified state / next owner action |
 | --- | --- |
 | UI-1 integrated | Dashboard: "Resume as a new run" disclosure on stopped, un-resumed runs (posts `/api/runs/gen1` with `resume_from`; 409 reasons shown verbatim), `resumed from`/`resumed by` badges, Start disabled on a resumed predecessor, `--resume-save` hint on the launcher panel. Template only; 7 string-presence tests. |
+| F0 claim (FPS qualification) | Gen1-CodexPeer record. No manifest performance row exists; the contract lives in executable checks: `ACTIVE_THREE_X_MIN_FPS=173.0` (`tests/live/test_gen1_free_service.py:43-54`), targets 59.7275 @100% / 179.1825 @300%, 1× floor 59.130, quiet-3× floor 177.391; phase average AND every 600-frame window must clear; FrameSkip 0. Bare-speed is a negative control (no client) and cannot qualify the product. The product gate for the current client is `tests/live/test_gen1_native_selected_fresh.py::test_manager_selected_native_pair_free_runs_fresh_bedroom` (Manager companions + downloaded launcher + native runtime; N=3 active-3× windows per player). Last documented pass at `90853f5`: R/B a 173.203/173.906/173.543, b 173.860/173.456/173.513; the 0.070 miss was one Y/Y window (172.930) — R/B passed. No post-WB-1/P2A measurement exists; hook registration cost is not established as zero. **Coordinator decision:** READY as execution-only — one frozen R/B invocation after P2A-11 commits, all criteria unchanged, report min/median/max per player, a miss is recorded as FAIL and presented to the owner (no retune, no rerun). Receipt `.cache/native-selected-fresh-*/summary.json` (+ `performance_failures` / `harness-error.json` on failure). Bedroom workload only: save/resume/trade paths are not timed by it. |
+| N1-UI | Companion trade UI (SOURCE): availability query sets no `wJoyIgnore`/`wTextBoxID`, ≤30 frames, overlay marker restored after (`trade_receptionist.asm:140-184,235-239`); main menu Y2/X1/max 2, rows SLINK TRADE/CABLE CLUB/CANCEL (`:270-298`, `trade_ui.asm:23-46`); party list "TRADE WHICH?" Y3/X1/max popcount(mask)−1, row 0 = first eligible physical slot, B cancels (`:300-390`); every notice ends in `prompt` (`:418-429`) — "Trade offer sent" is an accepted OFFER, not consent. Partner prompt waits for released A/B twice; Yes/No T=$14 Y8/X15 index 0 = YES; screen restored silently after (`trade_prompt.asm:77-99`). No-input gate = held/native_reattach/recovery + pending native/prompt/receptionist phases (`gen1_native_runtime.lua:339-353,446-448`); routine: 100-frame delay, `InternalClockTradeAnim`, `TryEvolvingMon`, `SavePartyAndDexData`, map restored in place (`native_trade.asm:158-204`); received mon in slot 0 on each side. Verifier: `components["gen1-receptionist"]`, journal namespace `paired-trade` (applied/verified per player, `link_committed` clears `active_trade`), reuse `test_gen1_paired_native_trade.py:76-145` assertions with the selected host's window policy. |
 | N1-PATH | Verified x-first tables (pokered 405b624, decoded cell-by-cell): Mart exit `(3,7)` → city `(29,19)`; city `{29,20},{19,20},{19,26},{23,26},{23,25}` (door → Center `(3,7)`; never column 23 above row 26, wall at `(22,25)`); Center `{3,4},{11,4},{11,3}` then face Up (row 6 blocked at `(6,6)`/`(7,6)`); B waits at `(5,5)` via `{3,5},{5,5}`. Hazards: city walkers `(13,20)`/`(30,25)`; the Center gentleman walks column x10 and can occupy `(10,4)` — bounded wait, never blind A. Receptionist = object 4 at `(11,2)`, typed dispatch `script_cable_club_receptionist` intercepted by the companion; Center map script only tries the serial link and enables auto text boxes. Precondition: the Mart purchase UI must be closed first (parcel terminal fires inside it). |
 | N1 claim (native trade, first slice) | Gen1-CodexPeer record. Rows served: `trade.{red,blue}.canonical-physical/.durability/.foreground-overlay/.blob-fidelity` (first selected-path transaction evidence; not full closure). **Starters are tradeable** — eligibility needs one ALIVE linked pair with both halves in party, `pc_trade_npc` enabled, no pending work (`server/gen1_trade_rules.py:29-72`; one-mon pair modelled at `tests/unit/test_gen1_trade_rules.py:24-47`); D3 catch NOT required. Nearest counter: Viridian Pokémon Center (city entrance (23,25), interior map $29, receptionist object 4 at (11,2), interact from (11,3) facing Up). Companion patch offers SLINK TRADE / CABLE CLUB / CANCEL after an availability query (`patch/gen1/src/trade_receptionist.asm:1-15,44-60,119-176,270-298`); only ONE player initiates (server refuses concurrent visits, `gen1_receptionist_runtime.py:95`), the partner consents through the native prompt (`trade_prompt.asm:77-99`). Native execution stays the production executor's owned transaction (`lua/gen1_native_trade_executor.lua:187-208`, `gen1_native_execution.py:87-111`); the verifier waits for both applied + file-verified results and logical migration (`gen1_native_policy.py:141-171`, `gen1_trade_rules.py:74-85`). HYPOTHESIS: `rb-native-trade` chain starter → parcel → receptionist module (A initiates, B waits at a safe cell), optional START→SAVE on both afterwards. Files: new `lua/tests/gen1_rb_native_trade_inputs.lua`, unit + live tests, host/scenario/bootstrap, report. Recovery rows: only 'before PREPARE' is now addressable by clean resume; before/after COMMIT and during animation/save remain open. (9) READY WAIT(N1-PATH audit; P2A-11 release of shared files). |
 | P2A review round 5 | Codex `cx-aa100faf` on `c57de64..597f5ba`: B (lifecycle allowlist) and C (harness commits) resolved; A still MAJOR on the 120 s edge — timeout normalisation, stop and archive keep the old `starting_token`, so a slow spawn's final commit can write `running` over stopped/archived (`manager.py:346-352,501-522,771,785,748-750`), and an expired start's late failure overwrites a newer reservation (`:163-168,732-741`). REJECT (MODEL). P2A-11 dispatched: token cleared on every non-owner transition; token-gated failure cleanup. |
