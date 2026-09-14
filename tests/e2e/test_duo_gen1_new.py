@@ -31,7 +31,8 @@ pytestmark = [
 
 GAME = "gen1_new"
 ROMS = ("red", "blue")
-SCENARIOS = ("link_new", "deadzone_new", "trade_new", "admit_randomized_new")
+SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
+             "linked_faint_active_new", "trade_new", "admit_randomized_new")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

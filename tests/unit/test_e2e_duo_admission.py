@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from lupa import LuaRuntime
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
@@ -167,6 +168,35 @@ def test_admission_prestep_runs_before_server_start(runner):
     runner.args = type("Args", (), {"keep_alive": False})()
     assert runner.run() is True
     assert order == ["contract", "server", "emulators", "verdicts", "cleanup:True"]
+
+
+def test_python_oracle_receipt_persists_facts_and_terminal_result(runner, tmp_path):
+    runner._pydec_path = str(tmp_path / "e2e_admit_randomized_new_pydec_result.txt")
+    runner.attempt = 1
+    runner.prepare_admit_randomized_new = lambda: None
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: runner._pydec_note("public admission fact valid")
+    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.cleanup = lambda passed: None
+    runner.args = type("Args", (), {"keep_alive": False})()
+    assert runner.run() is True
+    assert Path(runner._pydec_path).read_text(encoding="utf-8").splitlines() == [
+        "attempt 1 of 2", "public admission fact valid", "PYDEC: PASS asserted scenario facts"]
+
+
+def test_python_oracle_receipt_ends_fail_on_an_assertion_error(runner, tmp_path):
+    runner._pydec_path = str(tmp_path / "e2e_admit_randomized_new_pydec_result.txt")
+    runner.attempt = 1
+    runner.prepare_admit_randomized_new = lambda: None
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: (_ for _ in ()).throw(RuntimeError("bad checksum"))
+    runner.cleanup = lambda passed: None
+    with pytest.raises(RuntimeError, match="bad checksum"):
+        runner.run()
+    assert Path(runner._pydec_path).read_text(encoding="utf-8").splitlines()[-1] == (
+        "PYDEC: FAIL bad checksum")
 
 
 @pytest.mark.parametrize(
@@ -345,7 +375,7 @@ def test_synthetic_link_saved_oracle_passes_and_rejects_a_torn_checksum(tmp_path
         run._link_keys[inst] = _add_caught_to_party(sram, rom)
         path.write_bytes(sram)
     run.assert_link_new_saved()
-    assert "PYDEC link_new" in capsys.readouterr().out
+    assert "saved slot 1 linked" in capsys.readouterr().out
     path, sram, _rom = paths["a"]
     sram[codec.SRAM_LAYOUT["sMainDataCheckSum"]] ^= 1
     path.write_bytes(sram)
@@ -362,10 +392,111 @@ def test_synthetic_deadzone_saved_oracle_passes_and_rejects_uninitialized_box(tm
     run._deadzone_b_key = _put_fainted_in_box12(b_sram, b_rom)
     b_path.write_bytes(b_sram)
     run.assert_dead_zone_new_saved()
-    assert "PYDEC deadzone_new" in capsys.readouterr().out
+    assert "B Box 12 holds" in capsys.readouterr().out
     b_sram[codec._CURRENT_BOX] &= ~codec._BOX_INITIALIZED
     _seal_main(b_sram)
     b_path.write_bytes(b_sram)
     with pytest.raises(RuntimeError, match="initialized flag invalid"):
         run.assert_dead_zone_new_saved()
     print("synthetic deadzone_new: PASS; cleared saved initialization flag: FAIL")
+
+
+def _linked_faint_fixture(tmp_path, scenario):
+    run, paths = _oracle_runner(tmp_path, scenario)
+    run.data_dir = str(tmp_path)
+    run._link_keys = {}
+    for inst, (path, sram, rom) in paths.items():
+        run._link_keys[inst] = _put_fainted_in_box12(sram, rom)
+        path.write_bytes(sram)
+    (tmp_path / "links.json").write_text(json.dumps({"links": [{
+        "area_id": "route_1", "status": "memorial", "cause": "battle",
+        "a": {"key": run._link_keys["a"]}, "b": {"key": run._link_keys["b"]},
+    }]}), encoding="utf-8")
+    (tmp_path / "slink.log").write_text(
+        f"[a] faint → force_faint b:{run._link_keys['b']}\n"
+        "pair in route_1 fully memorialized\n", encoding="utf-8")
+    a_text = (f'BATTLE_FAINT_SITE {run._link_keys["a"]} slot=1 battle_hp=0\n'
+              f'TX {{"event":"faint","key":"{run._link_keys["a"]}","player":"a"}}\n'
+              f'RX memorialize key={run._link_keys["a"]}\n'
+              'TX {"event":"memorialize_done"}\n')
+    b_text = (f'RX force_faint key={run._link_keys["b"]}\n'
+              f'RX memorialize key={run._link_keys["b"]}\n'
+              'TX {"event":"memorialize_done"}\n')
+    return run, paths, a_text, b_text
+
+
+def test_synthetic_bench_faint_oracle_passes_then_rejects_status_corruption(tmp_path, capsys):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, "linked_faint_bench_new")
+    results = {"a": a_text,
+               "b": b_text + "READY_BENCH map=12 x=8 y=31\nBENCH_HP_STATUS 0000 00\nTILEMAP_FNT row=2\n"}
+    run.assert_linked_faint_saved(results, active=False)
+    assert "Box 12" in capsys.readouterr().out
+    path, sram, _rom = paths["b"]
+    box = codec.verify_boxes(sram)["boxes"][12]["offset"]
+    sram[box + codec.BOX_LAYOUT["mons"] + 4] = 1  # status, not HP; preserve structure
+    bank_index = 1
+    sram[codec.SRAM_LAYOUT["individual_checksums"][bank_index] + 5] = (
+        codec.sav_checksum(sram[box:box + codec.BOX_SIZE]))
+    bank = codec.SRAM_LAYOUT["box_banks"][bank_index]
+    end = codec.SRAM_LAYOUT["all_boxes_checksums"][bank_index]
+    sram[end] = codec.sav_checksum(sram[bank:end])
+    path.write_bytes(sram)
+    with pytest.raises(RuntimeError, match="HP0000/status00"):
+        run.assert_linked_faint_saved(results, active=False)
+    print("synthetic bench faint: PASS; boxed status corruption: FAIL")
+
+
+def test_synthetic_active_faint_oracle_requires_loop_write_before_engine_site(tmp_path, capsys):
+    run, _paths, a_text, b_text = _linked_faint_fixture(tmp_path, "linked_faint_active_new")
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED\nBATTLE_RESULT b 2\n")
+    run.assert_linked_faint_saved({"a": a_text, "b": proper}, active=True)
+    assert "Box 12" in capsys.readouterr().out
+    reversed_order = (b_text + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+                      + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+                      + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+                      + "TILEMAP_FAINTED\nBATTLE_RESULT b 2\n")
+    with pytest.raises(RuntimeError, match="not followed by engine battle_faint"):
+        run.assert_linked_faint_saved({"a": a_text, "b": reversed_order}, active=True)
+    print("synthetic active faint: PASS; reversed loop/engine order: FAIL")
+
+
+@pytest.mark.parametrize(("mode", "faint_after", "expected", "encounters"), [
+    ("sacrifice", 2, "linked-fainted", 1),
+    ("sacrifice", 999, "linked-survived-3-battles", 3),
+    ("switch-hold", 999, "linked-active-menu", 1),
+])
+def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expected, encounters):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
+    moves = {"count": 0}
+    fainted = lua.eval("function(cb) return function() return cb() end end")(
+        lambda: moves["count"] >= faint_after)
+
+    def commit(_slot, _budget):
+        moves["count"] += 1
+        return lua.table(why="player_move" if faint_after < 999 else "battle_over")
+
+    driver = lua.table(wait_menu=lambda _budget: lua.table(ok=True, frames=1),
+                       switch_to=lambda _slot, _budget: lua.table(ok=True, why="switched"),
+                       choose=lambda _name: lua.table(ok=True), commit_move=commit)
+    route = module.new(lua.table(player="a"), lua.table(
+        driver=driver, step=lambda _buttons: None, rd=lambda _addr: 0,
+        symbols=lua.table(wNumBagItems=1, wBagItems=2),
+        mode=mode, move_slot=1, switch_slot=1, fainted=fainted))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=10,
+                       party_count=2, font_loaded=False, joy_ignore=0)
+    overworld = lua.table(map=12, x=10, y=35, battle=0, battle_type=0, party_hp=10,
+                          party_count=2, font_loaded=False, joy_ignore=0)
+    phase = None
+    for index in range(encounters):
+        _buttons, phase = route.step(None, None, battle, 2 * index + 1)
+        if phase == expected:
+            break
+        _buttons, phase = route.step(None, None, overworld, 2 * index + 2)
+        if phase == expected:
+            break
+    assert phase == expected
+    assert route.encounters == encounters

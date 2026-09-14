@@ -67,10 +67,14 @@ C.send = function(line)
     local ok, msg = pcall(json.decode, line)
     local name = ok and type(msg) == "table" and msg.event or "?"
     seen[name] = (seen[name] or 0) + 1
-    if name == "hello" or name == "trade_offer" or name == "menu_result" or name == "trade_done" then
+    if name == "hello" or name == "trade_offer" or name == "menu_result" or name == "trade_done"
+       or name == "faint" then
         sent_events[name] = msg
     end
     if name ~= "tick" then log("TX " .. (line:sub(1, 220))) end
+    if name == "faint" and D.player == "b" and D.scenario == "linked_faint_active_new" then
+        log("ENGINE_BATTLE_FAINT " .. tostring(msg.key)) -- client sends only from battle_faint site in this scenario
+    end
     return _send(line)
 end
 
@@ -80,7 +84,9 @@ local _handle = gclient.handle_command
 gclient.handle_command = function(self, cmd)
     local c = cmd and cmd.cmd or "?"
     seen[c] = (seen[c] or 0) + 1
-    if c == "trade_mask" or c == "show_menu" or c == "apply_trade" then received_commands[c] = cmd end
+    if c == "trade_mask" or c == "show_menu" or c == "apply_trade" or c == "force_faint" then
+        received_commands[c] = cmd
+    end
     if c ~= "noop" then
         log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
     end
@@ -92,6 +98,21 @@ SLINK_GEN1_CLIENT = gclient
 log(fmt("client built: title=%s player=%s rom=%s -> %s:%s", title, D.player, rom_sha1:sub(1, 8), SLINK_HOST, tostring(SLINK_PORT)))
 
 local reads, ram = parts.reads, parts.profile.ram
+local battle_site_keys = {}
+local original_on_signal = gclient.on_signal
+gclient.on_signal = function(self, sig)
+    if sig.kind == "battle_faint" then
+        local party = reads.read_party()
+        local slot = sig.point and sig.point.active_slot
+        local mon = party and slot and party[slot + 1]
+        if mon then
+            local key = reads.key(mon)
+            battle_site_keys[key] = (battle_site_keys[key] or 0) + 1
+            log(fmt("BATTLE_FAINT_SITE %s slot=%d battle_hp=%d", key, slot, sig.point.battle_hp))
+        end
+    end
+    return original_on_signal(self, sig)
+end
 local ws = assert(json.decode(assert(io.open(ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[title])
 local function overworld_ok() return safety.check(ws, deps) == true end
 
@@ -185,7 +206,8 @@ local play = Play.new(ROOT, title, D.player, { log = log })
 local symbols = play.symbols
 local function rd(addr) return memory.read_u8(addr, "System Bus") end
 local rom = parts.profile.rom
-local function hunt(mode)
+local function hunt(mode, options)
+    options = options or {}
     local driver = Driver.new({
         step = yield_buttons, u8 = rd,
         sites = { display_battle_menu = rom.DisplayBattleMenu.addr, move_selection_menu = rom.MoveSelectionMenu.addr,
@@ -204,9 +226,12 @@ local function hunt(mode)
                       wNumRunAttempts = symbols.wNumRunAttempts, hJoyPressed = symbols.hJoyPressed },
     })
     local route = Hunt.new({ player = D.player }, { driver = driver, step = yield_buttons, rd = rd, symbols = symbols,
-                                                   mode = mode, log = log })
+                                                   mode = mode, log = log, switch_slot = options.switch_slot,
+                                                   move_slot = options.move_slot, fainted = options.fainted })
     local last_phase, n = nil, 0
     local terminal = { caught = true, escaped = true, ["out-of-balls"] = true, ["hunt-exhausted"] = true,
+                       ["linked-fainted"] = true, ["linked-active-menu"] = true,
+                       ["linked-survived-3-battles"] = true,
                        whiteout = true, stuck = true, ["unexpected-battle"] = true }
     while true do
         n = n + 1
@@ -218,9 +243,9 @@ local function hunt(mode)
             log(fmt("phase %s @%d (%d,%d) battle=%d party=%d", phase, emu.framecount(), point.x, point.y, point.battle, point.party_count))
         end
         if terminal[phase] then
-            driver.close()
+            if not options.keep_driver then driver.close() end
             log(fmt("HUNT %s after %d frames, %d encounter(s)", phase, n, route.encounters))
-            return phase
+            return phase, options.keep_driver and driver or nil
         end
         yield_frame(buttons)
     end
@@ -249,6 +274,12 @@ end
 
 -- ── Scenarios ────────────────────────────────────────────────────────────────────────
 local scenarios = {}
+
+local function link_prerequisite_failure(why)
+    -- Preserve the exact game-RNG result so e2e_duo.py retries only a missed sole ball.
+    if why == "hunt ended out-of-balls" then return why end
+    return "link_new prerequisite failed: " .. tostring(why)
+end
 
 -- D-1: both catch on Route 1; the server pairs the two captures by area on its own.
 function scenarios.link_new()
@@ -281,7 +312,7 @@ end
 function scenarios.trade_new()
     if not gclient.trade_enabled then return false, "SLINK TRADE patch was not detected" end
     local linked, why = scenarios.link_new()
-    if not linked then return false, "link_new prerequisite failed: " .. tostring(why) end
+    if not linked then return false, link_prerequisite_failure(why) end
     if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned to party" end
     local linked_key = new_key()
     local linked_slot
@@ -423,6 +454,223 @@ function scenarios.trade_new()
     if not saved then return false, why end
     return true, "native trade applied once"
 end
+
+local function partner_has_mark(mark)
+    local file = io.open(D.partner_result, "r")
+    if not file then return false end
+    local text = file:read("*a");file:close()
+    return text:find(mark, 1, true) ~= nil
+end
+
+local function pulse_at_frame(button)
+    return frame % 16 < 2 and {[button] = true} or {}
+end
+
+local function tile_text(text, offset)
+    return Center.has_tiles(rd, ram.wTileMap, text, offset)
+end
+
+local function fainted_bang_on_tilemap()
+    -- pret/constants/charmap.asm:126-151,169; text_2.asm:881-885 prints "fainted!".
+    local word = "fainted"
+    for offset = 0, 20 * 18 - #word - 1 do
+        local match = true
+        for i = 1, #word do
+            if rd(ram.wTileMap + offset + i - 1) ~= 0xA0 + word:byte(i) - 97 then match = false;break end
+        end
+        if match and rd(ram.wTileMap + offset + #word) == 0xE7 then return offset end
+    end
+    return nil
+end
+
+local function linked_member()
+    local key, mon = new_key()
+    if not key or not mon or mon.slot ~= 1 or mon.hp <= 0 then return nil, "linked slot 1 not alive" end
+    return key, mon
+end
+
+local function bench_at_route_one_side(linked_slot)
+    -- The same input-only route used by the receptionist gate steps north off Route 1's
+    -- grass column to (8,31), and RUNs if a wild battle interrupts it.
+    local route = Center.new({
+        read = rd, ram = ram, row = function(off, n) return Center.row(rd, ram.wTileMap, off, n) end,
+        frame = function() return frame end, start = "route1", log = log,
+        invariant = function(label, ok, detail) if not ok then error(label .. ": " .. detail, 0) end end,
+        check = function(label, ok, detail) if not ok then error(label .. ": " .. detail, 0) end end,
+        menu_addr = {wTopMenuItemX=symbols.wTopMenuItemX, wTopMenuItemY=symbols.wTopMenuItemY},
+        linked_hp = function()
+            local addr = ram.wPartyMons + linked_slot * parts.profile.derived.party_struct_size + 1
+            return rd(addr) * 256 + rd(addr + 1)
+        end,
+    })
+    for _ = 1, 12000 do
+        local pos = reads.read_map()
+        if pos.map == 0x0C and pos.x == 8 and pos.y == 31 and overworld_ok() then
+            log("READY_BENCH map=12 x=8 y=31")
+            return true
+        end
+        local buttons = route.step()
+        yield_frame(buttons)
+    end
+    return false, "B could not leave Route 1 grass"
+end
+
+local function escape_after_faint(tag)
+    -- The game may demand a replacement starter before RUN becomes selectable. Handle
+    -- both the forced party list and the standard RUN column with ordinary joypad edges.
+    for _ = 1, 12000 do
+        if rd(ram.wIsInBattle) == 0 then
+            if not wait_until(overworld_ok, 30, "post-faint overworld checkpoint") then
+                return false, "post-faint battle ended without an overworld checkpoint"
+            end
+            log(fmt("BATTLE_RESULT %s %d", tag, rd(ram.wBattleResult)))
+            return true
+        end
+        local x, y = rd(symbols.wTopMenuItemX), rd(symbols.wTopMenuItemY)
+        local cur = rd(ram.wCurrentMenuItem)
+        local buttons
+        if x == 0 and y == 1 then
+            buttons = pulse_at_frame(cur == 0 and "A" or "Up") -- select living starter slot 0
+        elseif x == 0x0C and y == 0x0C and rd(ram.wMaxMenuItem) == 2 then
+            buttons = pulse_at_frame(cur == 0 and "A" or "Up") -- SWITCH
+        elseif rd(ram.wTextBoxID) == 0x0B and tile_text("FIGHT") and y == 14 then
+            if x == 9 then buttons = pulse_at_frame("Right")
+            elseif x == 15 and cur == 0 then buttons = pulse_at_frame("Down")
+            elseif x == 15 then buttons = pulse_at_frame("A") end
+        end
+        yield_frame(buttons or pulse_at_frame("A"))
+    end
+    return false, "post-faint battle did not end or RUN within 12000 frames"
+end
+
+local function show_bench_fnt(linked_slot)
+    -- An A-edge on the first frame after force_faint opens START before the next
+    -- overworld checkpoint can consume the queued memorialize. PartyMenuInit and
+    -- PrintStatusCondition draw slot i's FNT at tilemap + 40*i + 17 (pret
+    -- engine/menus/party_menu.asm:14,65-68; home/pokemon.asm:311-325).
+    local base = ram.wPartyMons + linked_slot * parts.profile.derived.party_struct_size
+    local hp = rd(base + 1) * 256 + rd(base + 2)
+    local status = rd(base + 4)
+    log(fmt("BENCH_HP_STATUS %04X %02X", hp, status))
+    if hp ~= 0 or status ~= 0 then return false, "B bench force_faint did not clear HP/status" end
+    for _ = 1, 240 do
+        local point = play.point()
+        if point.start_menu_save_index >= 0 and point.font_loaded then break end
+        yield_frame(pulse_at_frame("Start"))
+    end
+    local point = play.point()
+    if point.start_menu_save_index < 0 then return false, "START menu did not open before memorialize" end
+    local pokemon_row = point.start_menu_save_index - 3 -- POKEMON precedes ITEM/name/SAVE
+    for _ = 1, 180 do
+        if rd(ram.wCurrentMenuItem) == pokemon_row then break end
+        yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < pokemon_row and "Down" or "Up"))
+    end
+    if rd(ram.wCurrentMenuItem) ~= pokemon_row then return false, "START cursor missed POKEMON" end
+    for _ = 1, 180 do
+        if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 then break end
+        yield_frame(pulse_at_frame("A"))
+    end
+    local offset = 40 * linked_slot + 17
+    if not tile_text("FNT", offset) then return false, "party menu lacked linked slot FNT glyphs" end
+    log(fmt("TILEMAP_FNT row=%d offset=%d %s", 2 * linked_slot, offset,
+            Center.row(rd, ram.wTileMap, 40 * linked_slot, 20)))
+    for _ = 1, 600 do
+        if overworld_ok() then return true end
+        yield_frame(pulse_at_frame("B"))
+    end
+    return false, "party menu did not close after FNT readback"
+end
+
+local function linked_faint_scenario(active)
+    local linked, why = scenarios.link_new() -- real catch, server link, withdrawal, game SAVE
+    if not linked then return false, link_prerequisite_failure(why) end
+    if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned" end
+    local key, mon = linked_member()
+    if not key then return false, mon end
+    local first_faint = seen.faint or 0
+    if D.player == "a" then
+        local ready = active and "READY_ACTIVE" or "READY_BENCH"
+        if not wait_until(function() return partner_has_mark(ready) end, 180, "B " .. ready) then
+            return false, "B did not park in the required faint window"
+        end
+        local phase = hunt("sacrifice", {switch_slot=1, move_slot=1,
+                                        fainted=function() return (battle_site_keys[key] or 0) > 0 end})
+        if phase == "linked-survived-3-battles" then return false, "linked mon survived 3 battles" end
+        if phase ~= "linked-fainted" or not battle_site_keys[key] or
+           not sent_events.faint or sent_events.faint.key ~= key then
+            return false, "A linked mon did not faint at the engine battle_faint site: " .. tostring(phase)
+        end
+        log("A_ENGINE_FAINT " .. key)
+        local escaped, error_text = escape_after_faint("a")
+        if not escaped then return false, error_text end
+    elseif active then
+        local phase, driver = hunt("switch-hold", {switch_slot=1, keep_driver=true})
+        if phase ~= "linked-active-menu" then return false, "B could not hold its linked mon active: " .. tostring(phase) end
+        if rd(ram.wPlayerMonNumber) ~= 1 then return false, "B linked mon not active at hold menu" end
+        log("READY_ACTIVE linked_slot=1")
+        local old = gclient.on_battle_loop_head
+        gclient.on_battle_loop_head = function(self, sig)
+            local pending = self.pending_battle_writes[1]
+            old(self, sig)
+            if pending and pending.key == key and #self.pending_battle_writes == 0 and
+               rd(ram.wBattleMonHP) == 0 and rd(ram.wBattleMonHP + 1) == 0 and
+               rd(ram.wPlayerSelectedMove) == 0xFF then
+                log("LOOP_HEAD_WRITE key=" .. key .. " battle_hp=0000 selected=FF")
+            end
+        end
+        local forced = false
+        for _ = 1, 60000 do
+            if received_commands.force_faint and received_commands.force_faint.key == key then forced = true;break end
+            yield_frame()
+        end
+        if not forced then driver.close();return false, "force_faint never arrived" end
+        local chosen = driver.choose("FIGHT")
+        if not chosen.ok then driver.close();return false, "B could not choose FIGHT after force_faint" end
+        local committed = driver.commit_move(1, 900)
+        log("B_ACTIVE_COMMIT " .. tostring(committed.why))
+        driver.close()
+        local faint_text
+        for _ = 1, 1800 do
+            faint_text = fainted_bang_on_tilemap()
+            if faint_text and (seen.faint or 0) > first_faint then break end
+            yield_frame(pulse_at_frame("A"))
+        end
+        if not faint_text or not battle_site_keys[key] or
+           not sent_events.faint or sent_events.faint.key ~= key then
+            return false, "B engine fainted! text or battle_faint site was not observed"
+        end
+        log(fmt("TILEMAP_FAINTED offset=%d", faint_text))
+        local escaped, error_text = escape_after_faint("b")
+        if not escaped then return false, error_text end
+    else
+        local parked, error_text = bench_at_route_one_side(mon.slot)
+        if not parked then return false, error_text end
+        local forced = false
+        for _ = 1, 60000 do
+            if received_commands.force_faint and received_commands.force_faint.key == key then forced = true;break end
+            yield_frame()
+        end
+        if not forced then return false, "force_faint never arrived" end
+        local fainted = false
+        for _ = 1, 300 do
+            local base = ram.wPartyMons + mon.slot * parts.profile.derived.party_struct_size
+            if rd(base + 1) == 0 and rd(base + 2) == 0 then fainted = true;break end
+            yield_frame()
+        end
+        if not fainted then return false, "B bench force_faint never zeroed party HP" end
+        local shown, why_fnt = show_bench_fnt(mon.slot)
+        if not shown then return false, why_fnt end
+    end
+    if not wait_until(function() return (seen.memorialize_done or 0) >= 1 end, 180,
+                      "both linked memorial commands") then return false, "memorialize_done never arrived" end
+    log_party("POST_LINKED_FAINT")
+    local saved, save_why = game_save(active and "linked_faint_active_new" or "linked_faint_bench_new")
+    if not saved then return false, save_why end
+    return true, "engine linked faint and memorial saved"
+end
+
+function scenarios.linked_faint_bench_new() return linked_faint_scenario(false) end
+function scenarios.linked_faint_active_new() return linked_faint_scenario(true) end
 
 -- F-4: admission itself is decided by the server. Both cartridges only boot their town
 -- battery save, send the production hello, and hold the ordinary overworld for 600 frames.

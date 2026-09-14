@@ -94,6 +94,10 @@ SCENARIOS = {
                  "target": "battle", "no_setup": True, "frames": 2000000},
     "deadzone_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
                      "target": "battle", "no_setup": True, "frames": 2000000},
+    "linked_faint_bench_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
+                               "target": "battle", "no_setup": True, "frames": 2500000},
+    "linked_faint_active_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
+                                "target": "battle", "no_setup": True, "frames": 2500000},
     # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
     "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                   "target": "battle", "no_setup": True, "frames": 2500000,
@@ -308,6 +312,8 @@ class DuoRun:
         self.tcp_port = free_port()
         self.http_port = free_port()
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
+        self._pydec_path = (os.path.join(BUILD, f"e2e_{scenario}_pydec_result.txt")
+                            if self.game == "gen1_new" else None)
         self.server = None
         self.emus = []
         self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
@@ -342,6 +348,16 @@ class DuoRun:
         weaken that copy on the assumption this directory is fresh; it isn't.
         """
         return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
+
+    def _pydec_note(self, fact):
+        """Keep Python oracle facts beside both Lua receipts for the release ledger."""
+        line = str(fact).replace("\n", " ")
+        print(f"[duo] {line}")
+        path = getattr(self, "_pydec_path", None)
+        if path:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
 
     def _status(self):
         try:
@@ -815,6 +831,7 @@ class DuoRun:
         party = codec.decode_party(sram[start:start + codec.PARTY_LAYOUT["size"]])
         current = codec.SRAM_LAYOUT["sCurBoxData"]  # the WRAM mirror is copied here on SAVE
         current_box = codec.decode_box(sram[current:current + codec.BOX_SIZE])
+        self._pydec_note(f"{inst} main checksum/exp/recomputed stats valid; saved party/current box decode valid")
         return sram, party, current_box, codec
 
     def assert_link_new_saved(self):
@@ -831,8 +848,8 @@ class DuoRun:
                 raise RuntimeError(f"{inst} saved current box still holds its withdrawn linked mon")
             # qualify() above independently invokes codec.recompute_stats on both mons
             # (tools/gen1_fixtures.py:70-82; gen1_codec.py:738-751).
-            print(f"[duo] PYDEC link_new {inst}: saved slot 0 starter {keys[0]}, "
-                  f"slot 1 linked {keys[1]}, recomputed stats valid")
+            self._pydec_note(f"{inst} saved slot 0 starter {keys[0]}")
+            self._pydec_note(f"{inst} saved slot 1 linked {keys[1]}, no current-box duplicate")
 
     def assert_dead_zone_new_saved(self):
         """B's retired key is absent from party and durably present, fainted, in Box 12."""
@@ -861,8 +878,76 @@ class DuoRun:
         if len(memorial) != 1 or codec.key(memorial[0]) != self._deadzone_b_key or memorial[0]["hp"] != 0:
             raise RuntimeError(f"B Box 12 did not save the zero-HP retired key {self._deadzone_b_key}: "
                                f"{[(codec.key(mon), mon['hp']) for mon in memorial]}")
-        print(f"[duo] PYDEC deadzone_new B: saved party excludes {self._deadzone_b_key}; "
-              "Box 12 holds it at HP 0 with valid initialized banks")
+        self._pydec_note(f"B saved party/current box excludes {self._deadzone_b_key}")
+        self._pydec_note("B initialized box banks and all 12 counts/terminators/checksums valid")
+        self._pydec_note(f"B Box 12 holds {self._deadzone_b_key} at HP 0")
+
+    def assert_linked_faint_saved(self, results, *, active):
+        """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts."""
+        for process in self.emus:
+            process.wait(timeout=30)
+        matches = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
+        if len(matches) != 1:
+            raise RuntimeError(f"expected one durable Route 1 link, got {matches}")
+        link = matches[0]
+        # state.py:2661-2704 sets DEAD/cause=battle; :2745-2768 advances to MEMORIAL
+        # after BOTH physical memorialize_done events.
+        if link.get("status") != "memorial" or link.get("cause") != "battle":
+            raise RuntimeError(f"linked faint did not become a battle-caused memorial: {link}")
+        with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
+            log_text = handle.read()
+        dead_transition = log_text.find(f"[a] faint → force_faint b:{self._link_keys['b']}")
+        memorial_transition = log_text.find("pair in route_1 fully memorialized")
+        if dead_transition < 0 or memorial_transition <= dead_transition:
+            raise RuntimeError("server lacked ordered DEAD propagation then full memorial receipt")
+        self._pydec_note("server DEAD propagation precedes final MEMORIAL, cause=battle")
+        for inst in ("a", "b"):
+            key = self._link_keys[inst]
+            if link[inst]["key"] != key:
+                raise RuntimeError(f"{inst} persisted link key differs from captured {key}")
+            sram, party, current_box, codec = self._saved_gen1_party(inst)
+            if len(party) != 1 or codec.key(party[0]) != self._boot_keys[inst] or party[0]["hp"] == 0:
+                raise RuntimeError(f"{inst} saved party is not its living starter: "
+                                   f"{[(codec.key(m), m['hp']) for m in party]}")
+            if any(codec.key(mon) == key for mon in current_box):
+                raise RuntimeError(f"{inst} saved current box still holds the linked corpse")
+            verdict = codec.verify_boxes(sram)  # gen1_codec.py:636-668
+            if (not verdict["initialized"] or not all(v["valid"] for v in verdict["banks"].values())
+                    or not all(v["valid"] for v in verdict["boxes"].values())):
+                raise RuntimeError(f"{inst} memorial banks/checksums invalid: {verdict}")
+            for number, info in verdict["boxes"].items():
+                offset = info["offset"]
+                boxed = codec.decode_box(sram[offset:offset + codec.BOX_SIZE])  # validates count/FF
+                if number == 12:
+                    memorial = boxed
+            if len(memorial) != 1 or codec.key(memorial[0]) != key or (
+                    memorial[0]["hp"], memorial[0]["status"]) != (0, 0):
+                raise RuntimeError(f"{inst} Box 12 lacks the HP0000/status00 linked key {key}: "
+                                   f"{[(codec.key(m), m['hp'], m['status']) for m in memorial]}")
+            self._pydec_note(f"{inst} saved living starter; linked key {key} absent from party/current box")
+            self._pydec_note(f"{inst} Box 12 {key} HP0000/status00; initialized checksums/terminators valid")
+        a_text, b_text = results["a"], results["b"]
+        for inst, text in (("a", a_text), ("b", b_text)):
+            key = self._link_keys[inst]
+            if f"RX memorialize key={key}" not in text or '"event":"memorialize_done"' not in text:
+                raise RuntimeError(f"{inst} lacked memorialize command/ack for {key}")
+        if f"BATTLE_FAINT_SITE {self._link_keys['a']}" not in a_text:
+            raise RuntimeError("A's linked faint lacked the engine battle_faint site witness")
+        if f'"event":"faint","key":"{self._link_keys["a"]}"' not in a_text:
+            raise RuntimeError("A's engine battle_faint did not emit its linked key")
+        if f"RX force_faint key={self._link_keys['b']}" not in b_text:
+            raise RuntimeError("B never received the server force_faint for its linked key")
+        if active:
+            first = b_text.find("LOOP_HEAD_WRITE key=" + self._link_keys["b"])
+            second = b_text.find("BATTLE_FAINT_SITE " + self._link_keys["b"])
+            if (first < 0 or second <= first or "TILEMAP_FAINTED" not in b_text
+                    or f'"event":"faint","key":"{self._link_keys["b"]}"' not in b_text
+                    or "BATTLE_RESULT b " not in b_text):
+                raise RuntimeError("B active write was not followed by engine battle_faint/text")
+        elif ("READY_BENCH map=12 x=8 y=31" not in b_text or "BENCH_HP_STATUS 0000 00" not in b_text
+              or "TILEMAP_FNT row=2" not in b_text):
+            raise RuntimeError("B bench write lacked HP/status and party-menu FNT tile evidence")
+        self._pydec_note(f"D-6/W-{2 if active else 1} server battle cause and ordered engine receipts valid")
 
     def assert_trade_new(self, results):
         """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
@@ -919,8 +1004,8 @@ class DuoRun:
             errors = protocol_schema.validate_event(report)
             if errors or report.get("new_key") != incoming or report.get("slot") != len(party) - 1:
                 raise RuntimeError(f"{inst} trade_done disagrees with saved party: {report}, {errors}")
-            print(f"[duo] {inst} saved LAST slot {incoming}, OT {original_ot}, trade_done valid")
-        print(f"[duo] T-3/T-4 durable trade: a={before_b}, b={before_a}")
+            self._pydec_note(f"{inst} saved LAST slot {incoming}, OT {original_ot}, trade_done valid")
+        self._pydec_note(f"T-3/T-4 durable swapped halves: a={before_b}, b={before_a}")
 
     def assert_admit_randomized_new(self):
         """The server verdict and durable hello events, not the TCP connected bit, decide F-4."""
@@ -978,7 +1063,8 @@ class DuoRun:
         if ("[a] admission: admitted — cartridge matches the contract" not in log_text
                 or "[b] admission: rejected — " + reason not in log_text):
             raise RuntimeError("slink.log omitted an admission transition")
-        print(f"[duo] F-4 admitted A and rejected clean B: expected={want[:12]} reported={got[:12]}")
+        self._pydec_note(f"F-4 public verdicts: A admitted, clean B rejected; "
+                         f"expected={want[:12]} reported={got[:12]} (admission-only, no save mutation)")
 
     def assert_dead_zone_new(self):
         """D-3: A's RUN sends no_catch and locks route_1; B's later catch there is retired.
@@ -1097,7 +1183,7 @@ class DuoRun:
                 self.assert_dead_zone_refusal()
             elif self.scenario == "dupes":
                 self.assert_species_clause_rejection()
-            elif self.scenario == "link_new":
+            elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new"):
                 self.go()
                 self.assert_link_new()
             elif self.scenario == "trade_new":
@@ -1190,6 +1276,10 @@ class DuoRun:
 
     def run(self):
         passed = False
+        if getattr(self, "_pydec_path", None):
+            os.makedirs(os.path.dirname(self._pydec_path), exist_ok=True)
+            with open(self._pydec_path, "w", encoding="utf-8") as handle:
+                handle.write(f"attempt {self.attempt} of 2\n")
         try:
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
@@ -1211,7 +1301,13 @@ class DuoRun:
                 self.assert_link_new_saved()
             if pa and pb and self.scenario == "deadzone_new":
                 self.assert_dead_zone_new_saved()
+            if pa and pb and self.scenario in ("linked_faint_bench_new", "linked_faint_active_new"):
+                self.assert_linked_faint_saved({"a": ra, "b": rb},
+                                               active=self.scenario == "linked_faint_active_new")
             passed = pa and pb
+            if getattr(self, "_pydec_path", None):
+                self._pydec_note("PYDEC: PASS asserted scenario facts" if passed else
+                                 "PYDEC: FAIL client RESULT before saved-state oracle")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
             if not passed:
@@ -1220,6 +1316,10 @@ class DuoRun:
                     print("\n".join(text.splitlines()[-25:]))
             if self.args.keep_alive:
                 input("[duo] --keep-alive: press Enter to tear down…")
+        except Exception as exc:
+            if getattr(self, "_pydec_path", None):
+                self._pydec_note(f"PYDEC: FAIL {exc}")
+            raise
         finally:
             self.cleanup(passed)
         return passed
@@ -1235,9 +1335,12 @@ def run_scenario_with_rng_retry(name, args):
         # The next run deletes the normal result files; keep each attempt's receipts.
         for inst in ("a", "b"):
             if receipts[inst] is not None:
-                with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
+                    with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
                           "w", encoding="utf-8") as handle:
-                    handle.write(receipts[inst])
+                        handle.write(receipts[inst])
+        pydec = os.path.join(BUILD, f"e2e_{name}_pydec_result.txt")
+        if os.path.exists(pydec):
+            shutil.copyfile(pydec, os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
         if ok or not retryable_gen1_rng(args.game, receipts, attempt):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt 2 of 2 "

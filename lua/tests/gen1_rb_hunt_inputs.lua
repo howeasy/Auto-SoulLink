@@ -1,13 +1,15 @@
 -- Pure R/B Route 1 hunt for the duo lane. From the parking tile (10,35) pace the grass column
--- until a wild battle starts, then either CATCH (FIGHT once while the foe is at full HP, then
--- throw the bag's Poke Ball) or RUN. Same shape as gen1_rb_route1_inputs: point -> buttons,
+-- until a wild battle starts, then CATCH (FIGHT once while the foe is at full HP, then
+-- throw the bag's Poke Ball), RUN, or switch the linked slot in for a bounded faint window.
+-- Same shape as gen1_rb_route1_inputs: point -> buttons,
 -- phase; the caller owns frames. The battle itself is played through gen1_battle_driver.lua,
 -- whose synchronous step(buttons) is bridged with a coroutine so it still costs one frame per
 -- buttons returned from here.
 --
 -- Terminal phases: "caught" (party grew), "escaped" (mode "run": RUN succeeded),
--- "out-of-balls" (the throw failed, no ball left, RUN succeeded) and the failures
--- "hunt-exhausted" (max encounters without a decision), "whiteout", "stuck".
+-- "out-of-balls" (the throw failed, no ball left, RUN succeeded), "linked-fainted",
+-- "linked-active-menu" and failures "linked-survived-3-battles", "hunt-exhausted",
+-- "whiteout", "stuck".
 local M = {}
 M.PARK = {10, 35}
 -- Route 1 grass at the parking tile: pret maps/Route1.blk + gfx/blocksets/overworld.bst, grass
@@ -54,13 +56,20 @@ end
 -- opts.driver   gen1_battle_driver built by the caller with a step that yields the buttons
 -- opts.step     that same yielding step (for text-advancing taps between driver calls)
 -- opts.rd       read_u8 on the System Bus;  opts.symbols  the title's pret .sym table
--- opts.mode     "catch" | "run";  opts.log  optional line sink
+-- opts.mode     "catch" | "run" | "sacrifice" | "switch-hold"; opts.log optional line sink
+-- opts.switch_slot 0-based linked party slot; opts.move_slot 1-based move to play
+-- opts.fainted() read-only engine-faint receipt predicate for sacrifice mode.
 function M.new(expected, opts)
     assert(expected and (expected.player == "a" or expected.player == "b"), "R/B route identity required")
     assert(opts and opts.driver and opts.step and opts.rd and opts.symbols, "hunt needs driver/step/rd/symbols")
     local D, step, rd, S = opts.driver, opts.step, opts.rd, opts.symbols
     local mode = opts.mode or "catch"
-    assert(mode == "catch" or mode == "run", "mode catch|run")
+    assert(mode == "catch" or mode == "run" or mode == "sacrifice" or mode == "switch-hold",
+           "mode catch|run|sacrifice|switch-hold")
+    if mode == "sacrifice" then
+        assert(type(opts.move_slot) == "number" and opts.move_slot >= 1 and opts.move_slot <= 4
+               and type(opts.fainted) == "function", "sacrifice needs a move slot and faint receipt")
+    end
     local log = opts.log or function() end
     local self = {last_frame = -1, encounters = 0, target = 1, battle_co = nil, stage = "begin",
                   party_before = nil, terminal = nil, receipts = {}}
@@ -118,6 +127,36 @@ function M.new(expected, opts)
         local m = wait_menu(1800)
         if m ~= "menu" then return m end
         if mode == "run" then self.stage = "run"; return run_until_escaped() end
+        if mode == "sacrifice" or mode == "switch-hold" then
+            -- pret engine/battle/core.asm:2329-2419: PKMN -> PartyMenuInit (row = physical
+            -- slot) -> SWITCH/STATS/CANCEL. Driver.switch_to verifies Y/X and cursor.
+            self.stage = "switch"
+            local switched = D.switch_to(opts.switch_slot or 1, 900)
+            self.receipts[#self.receipts + 1] = "switch:" .. tostring(switched.why)
+            if mode == "sacrifice" and opts.fainted() then return "linked-fainted" end
+            if not switched.ok then return "stuck" end
+            log("[hunt] linked slot " .. tostring(opts.switch_slot or 1) .. " active")
+            if mode == "switch-hold" then
+                self.stage = "hold"
+                m = wait_menu(1800)
+                return m == "menu" and "linked-active-menu" or m
+            end
+            for turn = 1, 60 do
+                if opts.fainted() then return "linked-fainted" end
+                self.stage = "linked-turn"
+                m = wait_menu(1800)
+                if opts.fainted() then return "linked-fainted" end
+                if m ~= "menu" then return m end
+                local chosen = D.choose("FIGHT")
+                if not chosen.ok then return "stuck" end
+                local move = D.commit_move(opts.move_slot, 900)
+                self.receipts[#self.receipts + 1] = "gentle:" .. tostring(move.why)
+                log("[hunt] linked move turn " .. turn .. " -> " .. tostring(move.why))
+                if opts.fainted() then return "linked-fainted" end
+                if move.why == "battle_over" then return "battle_over" end
+            end
+            return "stuck"
+        end
         local dmax = nil -- largest Tackle damage seen so far (a non-crit roll is 217-255/255 of base)
         for turn = 1, 4 do
             local hp, maxhp = foe()
@@ -180,6 +219,10 @@ function M.new(expected, opts)
             log("[hunt] battle outcome " .. tostring(res) .. " receipts " .. table.concat(self.receipts, ","))
             self.receipts = {}
             if res == "stuck" or res == "timeout" then self.terminal = "stuck"; return idle(), self.terminal end
+            if res == "linked-fainted" or res == "linked-active-menu" then
+                self.terminal = res
+                return idle(), self.terminal
+            end
             return idle(), "wild-" .. tostring(res)
         end
         if point.battle ~= 0 then return idle(), "wild-ending" end
@@ -187,7 +230,10 @@ function M.new(expected, opts)
             -- the battle is over: classify it once, from the game's own state
             local o = self.outcome
             self.outcome = nil
-            if point.party_count > self.party_before then self.terminal = "caught"
+            if mode == "sacrifice" then
+                if opts.fainted() then self.terminal = "linked-fainted"
+                elseif self.encounters >= 3 then self.terminal = "linked-survived-3-battles" end
+            elseif point.party_count > self.party_before then self.terminal = "caught"
             elseif mode == "run" then self.terminal = "escaped"
             elseif balls() == 0 then self.terminal = "out-of-balls"
             elseif self.encounters >= M.MAX_ENCOUNTERS then self.terminal = "hunt-exhausted" end
