@@ -1,0 +1,53 @@
+duo instance b scenario=link_new game=gen1_new
+[client] [SLink] TCP connecting to 127.0.0.1:61570 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:61570
+[client] [SLink] TCP connected to 127.0.0.1:61570
+TX {"area_id":"","badges":255,"ball_count":0,"event":"hello","has_pokeballs":false,"in_battle":false,"loc_name":"map_255","ot_id":65535,"party":[],"pc_boxes":[],"player":"b","rom_sha1":"d7037c83e1ae5b39bde3c30787637ba1d4c48
+PARTY_COUNT nil -> 255 @1
+RX resolved_areas
+RX config
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @649
+PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+phase pace-grass @856 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,35) mode=catch balls=1
+phase wild-intro @1539 (10,35) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @2305 (10,35) battle=1 party=1
+[hunt] turn 2 foe hp 8/15 odds 0.63 dmax 9 -> throw
+phase wild-throw @3165 (10,35) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @5166
+PARTY_UNREADABLE @5170 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+[client] [SLink-gen1] writes REVOKED: party unreadable
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":8,"in_box":false,"key":"6CE2:AFB9:24","level":3,"maxHP":15,"nickname":"PIDGEY","player":"b","seq":153,"species_id":36,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"b","seq":154}
+RX hud_show text=>> Got RATTATA
+RX play_sound
+RX msgbox text=RATTATA and PIDGEY linked!
+RX party_mon key=6CE2:AFB9:24
+PARTY_READABLE @5690  (count=2 species=B0 24 FF 00 00 00 00)
+[client] [SLink-gen1] writes re-enabled after a live validation
+[hunt] battle outcome battle_over receipts move1:player_move,throw:timeout
+phase wild-battle_over @5703 (10,35) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @5704 (10,35) battle=0 party=2
+HUNT caught after 4849 frames, 1 encounter(s)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=14
+MYKEY 1 6CE2:AFB9:24
+PARTY slot=1 key=6CE2:AFB9:24 species=36 level=3 hp=8
+CAUGHT 6CE2:AFB9:24
+TX {"event":"sync_retrieve_done","key":"6CE2:AFB9:24","player":"b","seq":157}
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=14
+MYKEY 1 6CE2:AFB9:24
+PARTY slot=1 key=6CE2:AFB9:24 species=36 level=3 hp=8
+SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+RESULT: PASS (caught 6CE2:AFB9:24)
