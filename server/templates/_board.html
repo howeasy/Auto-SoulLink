@@ -12,13 +12,31 @@
   the spine, B's column. The board cannot know which player is looking at it, so column
   position is the only thing that says whose mon a mon is. A half shows ITS OWN game's
   state and nothing else: two cartridges, two save files, two battles that need not
-  coincide. Battle is drawn on the half that is in it, never on a row and never on the
-  partner; what the link means for the partner is the reader's to know.
+  coincide. The battle itself (own mon, foes, moves) is on the player's NOW card; the
+  pair row only marks which mon is out. What the link means for the partner is the
+  reader's to know.
 #}
+{% from "_macros.html" import status_pill, stat_stages_row %}
 {# ── macros ────────────────────────────────────────────────────────────── #}
 
 {% macro hp(mon) -%}
   <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num">{{ mon.hp }}/{{ mon.maxHP }}</span></span>
+{%- endmacro %}
+
+{# A mon as it stands in a battle (or the party lead when there is none): sprite, name,
+   status, HP, stat stages, and its moves with PP. Used only on the NOW card. #}
+{% macro combatant(mon, side, label='') -%}
+  <div class="mk-cbt {{ side }}{% if mon.active is sameas false %} bench{% endif %}">
+    <span class="mk-spr">{{ mon.sprite_html | safe }}</span>
+    <span class="mk-cbt-txt">
+      <span class="mk-cbt-name">{% if label %}<span class="mk-cbt-label">{{ label }}</span> {% endif %}<b>{{ mon.nickname or mon.species_name }}</b>{% if mon.nickname and mon.nickname != mon.species_name %} <span class="mk-sub">{{ mon.species_name }}</span>{% endif %} <span class="mk-sub">Lv <span class="num">{{ mon.level }}</span></span>{% if mon.status_cond %} {{ status_pill(mon.status_cond) }}{% endif %}</span>
+      {% if mon.hp is not none %}{{ hp(mon) }}{% endif %}
+      {% if mon.stat_stages %}{{ stat_stages_row(mon.stat_stages) }}{% endif %}
+      {% if mon.move_details and mon.active is not sameas false %}
+        <span class="mk-moves">{% for mv in mon.move_details %}<span class="mk-move mt-{{ mv.type_name or 'unknown' }}" title="{{ mv.type_name }} · {{ mv.power or '—' }} pow · {{ mv.accuracy or '—' }}% acc">{{ mv.name }}{% if mv.current_pp is not none %} <span class="num faint">{{ mv.current_pp }}/{{ mv.pp }}</span>{% endif %}</span>{% endfor %}</span>
+      {% endif %}
+    </span>
+  </div>
 {%- endmacro %}
 
 {% macro half(row, pid, p, other) -%}
@@ -35,17 +53,6 @@
             <span class="mk-sub faint">{% if h.ability %}{{ h.ability }}{% endif %}{% if h.item %}<span class="mk-item" title="{{ h.item }}"> ◆ {{ h.item }}</span>{% endif %}</span>
           {% endif %}
           {% if h.where == 'box' and row.section != 'boxed' %}<span class="mk-sub faint">in box</span>{% endif %}
-          {% if h.active and p.battle_state.in_battle %}
-            <span class="mk-foes">
-              {% for foe in p.battle_state.enemy_party %}
-                <span class="mk-foe">
-                  <span class="mk-spr">{{ foe.sprite_html | safe }}</span>
-                  <span class="mk-foe-txt"><span class="mk-vs">vs</span> {% if p.battle_state.is_trainer_battle %}{{ p.battle_state.opponent_name or 'Trainer' }}’s {% else %}wild {% endif %}{{ foe.species_name }} <span class="mk-sub">Lv {{ foe.level }}</span></span>
-                  {{ hp(foe) }}
-                </span>
-              {% endfor %}
-            </span>
-          {% endif %}
         </span>
       </div>
     {% else %}
@@ -120,8 +127,24 @@
                     <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
                     {% if not p.connected and live %}<span class="mk-tag off">disconnected</span>{% endif %}
                     {% if p.stale %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
-                    {% if p.battle_state.in_battle %}<span class="mk-tag fight">in battle{% if board.active[pid] %} · {{ p.party_details[board.active[pid]].nickname or p.party_details[board.active[pid]].species_name }}{% endif %}</span>{% endif %}
                   </div>
+                  {% set bs = p.battle_state %}
+                  {% set mine = p.party_details[board.active[pid]] if board.active[pid] else none %}
+                  {% if bs.in_battle %}
+                    <div class="mk-battle">
+                      <div class="mk-battle-head">
+                        <span class="mk-tag fight">in battle</span>
+                        <span class="mk-sub">{% if bs.is_trainer_battle %}vs {{ bs.opponent_class }} {{ bs.opponent_name or 'Trainer' }}{% else %}wild encounter{% endif %}{% if bs.is_doubles %} · doubles{% endif %}</span>
+                      </div>
+                      {% if mine %}{{ combatant(mine, 'mine') }}{% endif %}
+                      {% for foe in bs.enemy_party %}{{ combatant(foe, 'foe', 'vs') }}{% endfor %}
+                    </div>
+                  {% elif p.party_keys and p.party_details[p.party_keys[0]] %}
+                    <div class="mk-lead">
+                      <span class="mk-cap">Lead</span>
+                      {{ combatant(p.party_details[p.party_keys[0]], 'mine') }}
+                    </div>
+                  {% endif %}
                   {% if p.encounter_table %}
                     <details class="mk-wild" id="d-wild:{{ pid }}" data-details-key="wild:{{ pid }}">
                       <summary><span class="mk-cap">Wild here</span><span class="mk-sub">{{ p.encounter_table | length }} method{{ '' if p.encounter_table | length == 1 else 's' }}</span></summary>

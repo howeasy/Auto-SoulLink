@@ -205,15 +205,24 @@ async def test_a_pair_row_is_a_half_the_bond_and_a_half_in_that_order(dashboard)
 
 
 @pytest.mark.asyncio
-async def test_battle_is_drawn_on_the_fighting_half_only(dashboard):
-    """Player B is in a wild battle with the active mon of the Route 1 pair. The foe nests
-    under B's half and A's half says nothing about it: two games, two states. No
-    row-level battle state exists to get the owner wrong."""
+async def test_battle_is_on_the_player_card_and_marked_on_the_half(dashboard):
+    """Player B is in a wild battle with the active mon of the Route 1 pair. The battle
+    itself (own mon, then the foe with `vs`, each with HP and moves) is on B's NOW card;
+    the pair row only marks B's half as fighting, and A's half says nothing about it: two
+    games, two states. No row-level battle state exists to get the owner wrong."""
     _, dom = dashboard
     fighting = [n for n in dom.find_all("div") if {"mk-half", "fighting"} <= _classes(n)]
     assert len(fighting) == 1, "exactly one half is fighting on the mock cast"
     assert "b" in _classes(fighting[0])
-    assert any("mk-vs" in _classes(n) for n in fighting[0].walk()), "the foe is not nested under the fighting half"
+    assert not any("mk-cbt" in _classes(n) for n in fighting[0].walk()), "the battle leaked into the pair row"
+    cards = [n for n in dom.find_all("div") if "mk-nowcard" in _classes(n)]
+    battles = [n for c in cards for n in c.walk() if "mk-battle" in _classes(n)]
+    assert len(battles) == 1, "exactly one player card shows a battle"
+    sides = [n for n in battles[0].walk() if "mk-cbt" in _classes(n)]
+    assert {"mine", "foe"} <= {c for n in sides for c in _classes(n)}, "own mon and foe both on the card"
+    assert any("mk-move" in _classes(n) for n in battles[0].walk()), "the active mon's moves are on the card"
+    leads = [n for c in cards for n in c.walk() if "mk-lead" in _classes(n)]
+    assert len(leads) == 1, "the player not in battle shows their party lead"
     assert not [n for n in dom.find_all("div") if {"mk-half", "staked"} <= _classes(n)]
     assert "at stake" not in dom.text_content().lower()
     assert not [n for n in dom.find_all("article") if "at-risk" in _classes(n)]

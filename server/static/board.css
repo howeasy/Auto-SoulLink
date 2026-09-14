@@ -190,22 +190,28 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-now-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: .92em; color: var(--c-dim); }
 .mk-now-line b { color: var(--c-txt); font-weight: 600; font-size: 1.25em; }
 
-/* ── The foe, nested under the fighting half of a pair row ─────────────
- * Not a zone and not a card of its own: the board cannot know who is looking, so the only
- * thing that says whose mon a mon is, is which column it sits in. The foe is drawn
- * beneath the player's own mon, in that player's half, in red. */
-.mk-foes { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); width: 100%; }
-.mk-foe { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: 6px; background: color-mix(in srgb, var(--c-dead) 12%, transparent); font-size: .95em; }
-.mk-half.b .mk-foe { flex-direction: row-reverse; text-align: right; }
-.mk-foe .mk-spr { width: calc(var(--mk-spr-s) * .8); height: calc(var(--mk-spr-s) * .8); }
-.mk-foe .mk-spr img.mon-sprite { width: calc(var(--mk-spr-s) * .8); height: calc(var(--mk-spr-s) * .8); }
-.mk-foe .mk-spr > span { width: calc(var(--mk-spr-s) * .8) !important; height: calc(var(--mk-spr-s) * .8) !important; }
-.mk-foe .mk-spr > span > img { width: calc(var(--mk-spr-s) * 1.04) !important; height: calc(var(--mk-spr-s) * 1.04) !important; margin: calc(var(--mk-spr-s) * -0.12) !important; }
-.mk-foe-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mk-foe .mk-hp { flex: 1; flex-direction: row; align-items: center; gap: var(--space-2); min-width: calc(var(--scale-step) * 3); }
-.mk-half.b .mk-foe .mk-hp { flex-direction: row-reverse; }
-.mk-foe .mk-hp-bar { flex: 1; height: 6px; }
-.mk-vs { color: var(--c-dead); font-size: .85em; letter-spacing: .1em; font-weight: 600; }
+/* ── The battle, on the player's NOW card ──────────────────────────────
+ * Own active mon, then each foe (`vs`), each with status, HP, stat stages and moves; when
+ * there is no battle the card shows the party lead the same way. The pair rows only mark
+ * which mon is out (⚔ + the red edge). */
+.mk-battle, .mk-lead { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-edge); border-radius: calc(var(--mk-radius) - 2px); background: color-mix(in srgb, var(--c-bg) 40%, var(--c-card)); }
+.mk-battle { border-color: color-mix(in srgb, var(--c-dead) 40%, var(--c-edge)); }
+.mk-battle-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.mk-cbt { display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; }
+.mk-cbt.foe { padding-top: var(--space-2); border-top: 1px dashed color-mix(in srgb, var(--c-dead) 35%, var(--c-edge)); }
+.mk-cbt.bench { opacity: .6; }
+.mk-cbt .mk-spr { flex: none; width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-cbt-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.mk-cbt-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); }
+.mk-cbt-name b { font-weight: 600; }
+.mk-cbt-label { color: var(--c-dead); font-size: .8em; letter-spacing: .1em; font-weight: 600; text-transform: uppercase; }
+.mk-cbt .mk-hp { flex-direction: row; align-items: center; gap: var(--space-2); }
+.mk-cbt .mk-hp-bar { flex: 1; }
+.mk-moves { display: flex; flex-wrap: wrap; gap: 3px; }
+.mk-move { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 6px; border-radius: 3px; font-size: .8em; color: var(--c-txt); background: rgba(var(--mt, 145,145,145), .18); border: 1px solid rgba(var(--mt, 145,145,145), .5); white-space: nowrap; }
+.mk-move .faint { opacity: .7; }
+.mk-cbt .sc { font-size: .72em; }
+.mk-cbt .stat-stages-row { padding: 0; }
 
 .mk-wild { margin-top: auto; font-size: .86em; color: var(--c-dim); }
 .mk-wild summary { display: flex; align-items: baseline; gap: var(--space-2); cursor: pointer; list-style: none; }
