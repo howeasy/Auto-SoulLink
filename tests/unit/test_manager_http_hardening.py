@@ -158,7 +158,7 @@ def test_empty_status_has_the_run_serializers_complete_nested_schema(tmp_path):
     _assert_same_shape(empty, real)
     real["badge_slugs"] = []  # The Manager has no selected game catalogue.
     assert empty == real
-    assert manager._EMPTY_STATUS == empty
+    assert empty == manager._EMPTY_STATUS
 
 
 def test_empty_status_containers_are_independent():
