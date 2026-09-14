@@ -232,3 +232,91 @@ async def test_registry_mutations_are_serialised_under_one_lock(registry, tmp_pa
     await handler.handle_stop(Request({}, run_id="run_pred"))
     await handler.handle_archive(Request({}, run_id="run_pred"))
     assert seen and all(seen)
+
+
+@pytest.mark.asyncio
+async def test_a_start_paused_in_its_spawn_reserves_the_predecessor_against_resume(registry, tmp_path, monkeypatch):
+    import asyncio
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    gate = asyncio.Event()
+
+    async def paused_spawn(run, *args, **kwargs):
+        await gate.wait()
+        return 777
+    monkeypatch.setattr(manager, "_spawn_run", paused_spawn)
+    handler = manager.RunManager("127.0.0.1")
+    start = asyncio.create_task(handler.handle_start(Request({}, run_id="run_pred")))
+    await asyncio.sleep(0)
+    assert registry[0]["status"] == "starting"  # reserved under the lock before the spawn
+    refused = await handler.handle_create_gen1(Request(body(resume_from="run_pred")))
+    assert refused.status == 409 and any("running" in r for r in json.loads(refused.text)["reasons"])
+    gate.set()
+    assert json.loads((await start).text)["ok"]
+    assert registry[0]["status"] == "running" and registry[0]["pid"] == 777 and len(registry) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_resumed_predecessor_cannot_be_started(registry, tmp_path, monkeypatch):
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    handler = manager.RunManager("127.0.0.1")
+    created = json.loads((await handler.handle_create_gen1(Request(body(resume_from="run_pred")))).text)
+    assert created["ok"]
+    spawned = []
+
+    async def spawn(run, *args, **kwargs):
+        spawned.append(run["run_id"])
+        return 777
+    monkeypatch.setattr(manager, "_spawn_run", spawn)
+    response = await handler.handle_start(Request({}, run_id="run_pred"))
+    assert response.status == 409 and "resumed" in json.loads(response.text)["error"]
+    assert spawned == [] and registry[0]["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_spawn_reverts_the_reservation(registry, tmp_path, monkeypatch):
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+
+    async def failing_spawn(run, *args, **kwargs):
+        raise RuntimeError("no emulator here")
+    monkeypatch.setattr(manager, "_spawn_run", failing_spawn)
+    response = await manager.RunManager("127.0.0.1").handle_start(Request({}, run_id="run_pred"))
+    assert response.status == 500 and registry[0]["status"] == "stopped" and registry[0]["pid"] is None
+
+
+@pytest.fixture
+def python311_rmtree(monkeypatch):
+    """shutil.rmtree as Python 3.11 spells it: onerror only, no onexc keyword."""
+    import shutil
+    real = shutil.rmtree
+
+    def rmtree(path, ignore_errors=False, onerror=None, *, dir_fd=None):
+        return real(path, ignore_errors=ignore_errors, onerror=onerror, dir_fd=dir_fd)
+    monkeypatch.setattr(manager.shutil, "rmtree", rmtree)
+
+
+@pytest.mark.asyncio
+async def test_delete_cleans_up_with_a_python311_rmtree(registry, tmp_path, python311_rmtree):
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    response = await manager.RunManager("127.0.0.1").handle_delete(Request({}, run_id="run_pred"))
+    assert response.status == 200 and not (tmp_path / "run_pred").exists() and registry == []
+
+
+@pytest.mark.asyncio
+async def test_resume_refusal_cleanup_works_with_a_python311_rmtree(registry, tmp_path, monkeypatch, python311_rmtree):
+    from server import gen1_run_config
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    real = gen1_run_config.create_runtime
+
+    def create_then_steal(*args, **kwargs):
+        runtime = real(*args, **kwargs)
+        registry[0]["resumed_by"] = "run_someone_else"  # committed between the audit and our locked commit
+        return runtime
+    monkeypatch.setattr(gen1_run_config, "create_runtime", create_then_steal)
+    response = await manager.RunManager("127.0.0.1").handle_create_gen1(Request(body(resume_from="run_pred")))
+    assert response.status == 409 and json.loads(response.text)["reasons"] == ["predecessor already resumed"]
+    assert [p.name for p in tmp_path.iterdir() if p.name.startswith("run_")] == ["run_pred"] and len(registry) == 1

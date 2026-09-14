@@ -88,10 +88,12 @@ def _pure_heartbeat(request):
     (no signals, inventory or receipts, wIsInBattle 0, no trainer engagement, no native checkpoint).
     Every other committed event - trade, native, engine signals, inventory, anything unknown - is
     gameplay after the save and holds the resume."""
+    # battle/trainer must be PRESENT (the loop always sends both; absence is an older, unproven shape);
+    # native_checkpoint is omitted by non-native clients, so absent and null are both fine.
     return (isinstance(request, dict) and request.get("event") == "observation"
             and request.get("signals") is None and request.get("inventory") is None
-            and not request.get("acquisitions") and request.get("battle") == 0
-            and request.get("trainer") is None and request.get("native_checkpoint") is None)
+            and not request.get("acquisitions") and "battle" in request and request["battle"] == 0
+            and "trainer" in request and request["trainer"] is None and request.get("native_checkpoint") is None)
 
 
 def audit_predecessor(run_dir, *, registry_entry):
@@ -99,8 +101,8 @@ def audit_predecessor(run_dir, *, registry_entry):
     from server.gen1_run_config import FILENAME, SCHEMA
     from_run = str(registry_entry.get("run_id", ""))
     reasons = []
-    if registry_entry.get("status") == "running":
-        reasons.append("predecessor run is still marked running in the registry; stop it first")
+    if registry_entry.get("status") in ("starting", "running"):
+        reasons.append("predecessor run is starting or running in the registry; stop it first")
     directory = Path(run_dir).resolve()
     path = directory / FILENAME
     if not path.is_file() or not (directory / "runtime.sqlite3").is_file():

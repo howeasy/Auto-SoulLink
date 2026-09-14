@@ -144,8 +144,8 @@ def _resume_refusal(predecessor: dict | None) -> list[str] | None:
     """Registry-level reasons a predecessor cannot be resumed right now (the journal audit is separate)."""
     if predecessor is None:
         return ["predecessor run is not in the registry"]
-    if predecessor.get("status") == "running":
-        return ["predecessor run is still marked running in the registry; stop it first"]
+    if predecessor.get("status") in ("starting", "running"):
+        return ["predecessor run is starting or running in the registry; stop it first"]
     if predecessor.get("resumed_by"):
         return ["predecessor already resumed"]
     return None
@@ -483,7 +483,7 @@ def _reconcile(runs: list[dict]) -> bool:
     """Check live processes; update status for dead ones. Adopt orphan dirs. Returns True if any changed."""
     changed = False
     for run in runs:
-        if run["status"] == "running" and not _is_alive(run.get("pid")):
+        if run["status"] in ("running", "starting") and not _is_alive(run.get("pid")):
             run["status"] = "stopped"
             run["pid"] = None
             changed = True
@@ -520,13 +520,14 @@ class RunManager:
                 _save_registry(runs)
             return run
 
-    def _get(self) -> list[dict]:
-        runs = _load_registry()
-        if _reconcile(runs):
-            _save_registry(runs)
-        return runs
+    async def _get(self) -> list[dict]:
+        async with self._registry_lock:
+            runs = _load_registry()
+            if _reconcile(runs):
+                _save_registry(runs)
+            return runs
 
-    def _active_stream_run(self) -> dict | None:
+    async def _active_stream_run(self) -> dict | None:
         """Return the run that stream overlays should proxy to.
 
         Priority:
@@ -534,7 +535,7 @@ class RunManager:
         2. Most recently started running run (latest created_at).
         Returns None if no run is running.
         """
-        runs = self._get()
+        runs = await self._get()
         running = [r for r in runs if r.get("status") == "running" and _is_alive(r.get("pid"))]
         if not running:
             return None
@@ -547,7 +548,7 @@ class RunManager:
         return max(running, key=lambda r: r.get("created_at", ""))
 
     async def handle_index(self, request: web.Request) -> web.Response:
-        runs = self._get()
+        runs = await self._get()
         # Augment each run with display fields the master-detail template
         # expects (created_short, safe_name, game_label, last_event).
         augmented = [self._augment_for_template(r) for r in runs]
@@ -610,10 +611,10 @@ class RunManager:
         return r
 
     async def handle_list(self, request: web.Request) -> web.Response:
-        return web.json_response({"runs": self._get()})
+        return web.json_response({"runs": await self._get()})
 
     async def handle_run(self, request: web.Request) -> web.Response:
-        run = _find_run(self._get(), request.match_info["run_id"])
+        run = _find_run(await self._get(), request.match_info["run_id"])
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
         return web.json_response({"ok": True, "run": run})
@@ -680,21 +681,32 @@ class RunManager:
 
     async def handle_start(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        runs = _load_registry()
-        run = _find_run(runs, run_id)
-        if run is None:
-            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        if run["status"] == "archived":
-            return web.json_response({"ok": False, "error": "Archived runs cannot be started"}, status=400)
-        if run["status"] == "running" and _is_alive(run.get("pid")):
-            return web.json_response({"ok": True, "message": "Already running"})
+        # Reserve the run under the lock BEFORE the spawn: a resume of this run (which needs it stopped)
+        # sees "starting" and refuses; a run already resumed can never start again.
+        async with self._registry_lock:
+            runs = _load_registry()
+            run = _find_run(runs, run_id)
+            if run is None:
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            if run["status"] == "archived":
+                return web.json_response({"ok": False, "error": "Archived runs cannot be started"}, status=400)
+            if run.get("resumed_by"):
+                return web.json_response({"ok": False, "error": "This run was resumed; start its successor instead",
+                                          "details": {"resumed_by": run["resumed_by"]}}, status=409)
+            if run["status"] in ("running", "starting") and _is_alive(run.get("pid")):
+                return web.json_response({"ok": True, "message": "Already running"})
+            if run["status"] == "starting":
+                return web.json_response({"ok": False, "error": "Run is already starting"}, status=409)
+            run["status"] = "starting"
+            run["pid"] = None
+            _save_registry(runs)
         try:
             pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
                                    manager_port=self.manager_port)
         except Exception as e:
+            await self._update_run(run_id, lambda entry: entry.update(status="stopped", pid=None))
             return web.json_response({"ok": False, "error": str(e)}, status=500)
-        # The registry may have changed during the spawn (a resume commits a successor + resumed_by):
-        # mutate a fresh load under the lock, never the list read before the await.
+        # Commit on a fresh load under the lock, never the list read before the await.
         if await self._update_run(run_id, lambda entry: entry.update(status="running", pid=pid)) is None:
             _kill_run(pid)
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
@@ -737,7 +749,7 @@ class RunManager:
         # Remove data directory
         data_dir = os.path.join(MANAGER_DIR, run_id)
         if os.path.isdir(data_dir):
-            shutil.rmtree(data_dir, onexc=lambda fn, path, exc: log.warning("delete %s: %s left behind: %s", run_id, path, exc))
+            shutil.rmtree(data_dir, onerror=lambda fn, path, exc: log.warning("delete %s: %s left behind: %s", run_id, path, exc[1]))
             log.info(f"Deleted data directory for run {run_id}")
         # Remove from registry
         async with self._registry_lock:
@@ -884,7 +896,7 @@ class RunManager:
                     predecessor=_find_run(runs,resume['from_run'])
                     refused=_resume_refusal(predecessor)
                     if refused is not None:   # changed under the creation; the new directory must not survive
-                        shutil.rmtree(directory,onexc=lambda fn,path,exc:log.warning('resume refusal cleanup left %s: %s',path,exc))
+                        shutil.rmtree(directory,onerror=lambda fn,path,exc:log.warning('resume refusal cleanup left %s: %s',path,exc[1]))
                         return web.json_response(_refusal_body(predecessor,refused),status=409)
                     predecessor['resumed_by']=run_id
                 runs.append(run)
@@ -1041,7 +1053,7 @@ class RunManager:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
         run_id = body.get("run_id") or None
         if run_id is not None:
-            run = _find_run(self._get(), run_id)
+            run = _find_run(await self._get(), run_id)
             if run is None:
                 return web.json_response({"ok": False, "error": "Run not found"}, status=404)
             # A stopped or dead run can never serve an overlay: _active_stream_run would drop
@@ -1051,7 +1063,7 @@ class RunManager:
                 return web.json_response({"ok": False, "error": "Run is not running"}, status=409)
         self._stream_pin_id = run_id
         log.info(f"Stream overlay pin set to: {run_id!r}")
-        active = self._active_stream_run()
+        active = await self._active_stream_run()
         return web.json_response({
             "ok": True,
             "pinned": self._stream_pin_id,
@@ -1060,7 +1072,7 @@ class RunManager:
 
     async def handle_stream_pin_status(self, request: web.Request) -> web.Response:
         """GET /api/stream/pin — return current pin and active run."""
-        active = self._active_stream_run()
+        active = await self._active_stream_run()
         return web.json_response({
             "pinned": self._stream_pin_id,
             "active_run_id": active["run_id"] if active else None,
@@ -1092,7 +1104,7 @@ class RunManager:
         # The fragment route reuses this handler; aiohttp's match_info exposes
         # the suffix path (empty for the page route, "/fragment" for the poll).
         suffix = "/fragment" if request.match_info.get("suffix") else ""
-        active = self._active_stream_run()
+        active = await self._active_stream_run()
         if active is None:
             return web.Response(
                 status=404,
@@ -1124,7 +1136,7 @@ class RunManager:
 
     async def handle_proxy_status(self, request: web.Request) -> web.Response:
         """GET /api/status — proxy to the active run or return empty status."""
-        active = self._active_stream_run()
+        active = await self._active_stream_run()
         if active is None:
             return web.json_response(empty_status_payload())
         url = f"http://127.0.0.1:{active['http_port']}/api/status"
@@ -1182,7 +1194,7 @@ class RunManager:
 
     async def handle_proxy_attempts(self, request: web.Request) -> web.Response:
         """POST /api/attempts — proxy to the active run."""
-        active = self._active_stream_run()
+        active = await self._active_stream_run()
         if active is None:
             return web.json_response({"ok": False, "error": "No active run"}, status=503)
         url = f"http://127.0.0.1:{active['http_port']}/api/attempts"

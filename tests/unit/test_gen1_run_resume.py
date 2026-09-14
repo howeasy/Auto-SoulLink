@@ -236,8 +236,21 @@ def test_any_non_heartbeat_event_after_the_witness_holds(tmp_path, shape):
     assert not audit.ok and "player a has committed gameplay after the save witness; hold" in audit.reasons
 
 
-def test_heartbeat_without_the_battle_or_trainer_fields_is_not_pure(tmp_path):
-    older = {k: v for k, v in HEARTBEAT.items() if k not in ("battle", "trainer")}
+@pytest.mark.parametrize("missing", ["trainer", "battle"])
+def test_heartbeat_missing_the_battle_or_trainer_field_is_not_pure(tmp_path, missing):
+    older = {k: v for k, v in HEARTBEAT.items() if k != missing}
     predecessor(tmp_path)
     append_events(tmp_path, "a", [older])
     assert not audit_predecessor(tmp_path, registry_entry=entry()).ok
+
+
+def test_heartbeat_may_omit_native_checkpoint_but_not_carry_one(tmp_path):
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [HEARTBEAT, {**HEARTBEAT, "native_checkpoint": None}])
+    assert audit_predecessor(tmp_path, registry_entry=entry()).ok
+
+
+def test_starting_predecessor_refuses(tmp_path):
+    predecessor(tmp_path)
+    audit = audit_predecessor(tmp_path, registry_entry=entry(status="starting"))
+    assert not audit.ok and any("running" in reason for reason in audit.reasons)

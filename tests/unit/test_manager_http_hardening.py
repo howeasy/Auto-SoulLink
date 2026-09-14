@@ -312,9 +312,9 @@ async def test_browser_attempts_update_crosses_manager_and_run_middlewares(manag
     run_dir = tmp_path / "proxied-run"
     srv = SLinkServer(data_dir=str(run_dir))
     async with TestClient(TestServer(build_app(srv))) as run_client:
-        monkeypatch.setattr(manager.RunManager, "_active_stream_run", lambda self: {
-            "http_port": run_client.server.port,
-        })
+        async def active(self):  # _active_stream_run reads the registry under the manager's lock
+            return {"http_port": run_client.server.port}
+        monkeypatch.setattr(manager.RunManager, "_active_stream_run", active)
         response = await manager_client.post("/api/attempts", json={"count": 7}, headers={
             "Origin": str(manager_client.make_url("/")).rstrip("/"),
             "Sec-Fetch-Site": "same-origin",
