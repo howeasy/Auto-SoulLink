@@ -1,0 +1,388 @@
+/* board.css — the pair board (the run page).
+ *
+ * Loaded AFTER /static/slink.css and /static/dashboard.css; redefines none of their tokens.
+ * The page is zones — Now, then one per section of the board, then the log — each a real
+ * heading with a rule and space between them. Every zone sits on the same three-track
+ * grid: A's column, the spine, B's column — so a player's side reads straight down the
+ * page and the bond between two mons is drawn where it is, between them. The log is a
+ * column beside the zones from 1400px.
+ *
+ * Grew out of the Track A mockup (docs/ui_mockup_brief.md); the .mk- prefix stayed so the
+ * brief's rationale still names the classes it talks about.
+ */
+
+/* Jersey 20 as the board's UI face: pixel character with more of the glyph left in than
+ * Pixelify, which is what made the old dashboard the hardest page to read. Vendored, never
+ * fetched at runtime (see fonts/). Scoped to the board until the overlays are checked at
+ * their catalogue sizes -- Jersey is condensed and moves widths inside fixed OBS sources. */
+@font-face {
+  font-family: 'Jersey 20';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-20-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-20-latin-ext.woff2') format('woff2');
+}
+body.board { --font-ui: 'Jersey 20', 'Pixelify Sans', monospace; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; }
+/* Numbers are the reason the face matters most: HP and levels stack in columns that only
+ * read as columns when the digits are the same width. */
+body.board .mk-hp-num, body.board .mk-ev-ts, body.board .mk-badges { font-variant-numeric: tabular-nums; }
+
+/* The board lives inside the dashboard shell (sidebar + main) rather than owning the page. */
+.dash-main.mk-body-root { font-family: var(--font-ui); }
+.dash-main .mk-page { padding: var(--space-4) 0 var(--space-6); }
+
+/* Banners the old dashboard drew with inline styles. */
+.game-over { background: var(--c-dead); color: #fff; text-align: center; padding: 1em .5em; font-size: 1.8em; font-weight: bold; letter-spacing: .15em; border-radius: 8px; margin-bottom: 1em; }
+.identity-warn { margin-bottom: var(--space-3); padding: var(--space-3); border-left: 3px solid var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent); color: var(--c-txt); }
+.mk-tag.stale-warn { display: inline-block; }
+
+:root {
+  --density: 1;
+  --mk-rail: calc(var(--scale-step) * 8.2);
+  --mk-radius: 10px;
+  --mk-pad: calc(var(--space-3) * var(--density));
+  --mk-log: calc(var(--scale-step) * 14);
+  /* Sprite sizes, both tracking --scale-step. funnotbun sprites are 64px native and Gen
+   * 1's PokeAPI ones 56px, so the pair size sits at or above 1:1 on any real monitor and
+   * upscales pixelated past that; the small size is for the Now cards' fight rows. */
+  --mk-spr: clamp(60px, calc(var(--scale-step) * 3.1), 104px);
+  --mk-spr-s: clamp(44px, calc(var(--scale-step) * 2.2), 72px);
+  /* The spine: the bond column between the two players, same width in every zone so the
+   * halves line up straight down the page. */
+  --mk-spine: calc(var(--scale-step) * 6.2);
+}
+body.density-compact { --density: .7; }
+
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+
+
+/* ── Rail ──────────────────────────────────────────────────────────────── */
+
+.mk-rail {
+  position: sticky; top: 0; box-sizing: border-box; height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  background: color-mix(in srgb, var(--c-card) 60%, var(--c-bg)); border-right: 1px solid var(--c-edge);
+}
+.mk-rail-brand { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) var(--space-2); }
+.mk-rail-brand svg { width: calc(var(--scale-step) * 1.1); height: calc(var(--scale-step) * 1.1); flex: none; }
+.mk-rail-brandtext { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
+.mk-rail-brandtext b { color: var(--c-brand); font-size: .95em; letter-spacing: .04em; }
+.mk-rail-brandtext span { color: var(--c-dim); font-size: .68em; }
+.mk-rail-sep { border: none; border-top: 1px solid var(--c-sep); margin: var(--space-2); }
+.mk-rail-item {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%;
+  padding: var(--space-2); border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--c-txt); font: inherit; font-size: .95em; text-align: left; cursor: pointer;
+}
+.mk-rail-item:hover { background: var(--c-card); }
+.mk-rail-item.active { background: color-mix(in srgb, var(--c-brand) 16%, transparent); border-color: color-mix(in srgb, var(--c-brand) 45%, transparent); }
+.mk-rail-item.new { color: var(--c-brand); border-style: dashed; border-color: color-mix(in srgb, var(--c-brand) 35%, transparent); }
+.mk-rail-item svg { width: 1.05em; height: 1.05em; flex: none; }
+.mk-rail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.mk-rail-pin { font-size: .7em; color: var(--c-gold); }
+.mk-dot { width: .6em; height: .6em; border-radius: 50%; flex: none; background: var(--c-dim); }
+.mk-dot.running  { background: var(--c-alive); box-shadow: 0 0 6px var(--c-alive); }
+.mk-dot.archived { background: none; border: 1px solid var(--c-dim); }
+
+/* ── Run header: sticky, one line, tabs in the middle ──────────────────── */
+
+.mk-main { min-width: 0; }
+.mk-runhdr {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background: color-mix(in srgb, var(--c-bg) 92%, var(--c-card)); border-bottom: 1px solid var(--c-edge);
+  backdrop-filter: blur(6px);
+}
+.mk-runname { margin: 0; font-size: 1.3em; }
+.mk-pill { padding: 2px 9px; border-radius: 999px; font-size: .72em; letter-spacing: .1em; text-transform: uppercase; border: 1px solid currentColor; }
+.mk-pill.running  { color: var(--c-alive); }
+.mk-pill.stopped  { color: var(--c-dim); }
+.mk-pill.archived { color: var(--c-dim); opacity: .7; }
+.mk-hdr-spacer { flex: 1 1 auto; }
+.mk-meta { font-size: .8em; color: var(--c-dim); font-variant-numeric: tabular-nums; }
+.mk-meta b { color: var(--c-txt); font-weight: 400; }
+.mk-meta code { color: var(--c-dim); }
+.mk-tabs { display: flex; gap: var(--space-1); }
+.mk-tab { padding: var(--space-1) var(--space-3); border: 1px solid transparent; border-radius: 999px; background: none; color: var(--c-dim); font: inherit; font-size: .88em; cursor: pointer; }
+.mk-tab:hover { color: var(--c-txt); }
+.mk-tab.active { color: var(--c-brand); border-color: color-mix(in srgb, var(--c-brand) 45%, transparent); background: color-mix(in srgb, var(--c-brand) 12%, transparent); }
+
+.mk-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--c-edge); border-radius: 8px; background: var(--c-card); color: var(--c-txt);
+  font: inherit; font-size: .86em; cursor: pointer;
+}
+.mk-btn:hover { border-color: var(--c-brand); }
+.mk-btn.primary { border-color: var(--c-brand); color: var(--c-brand); }
+.mk-btn.danger:hover { border-color: var(--c-dead); color: var(--c-dead); }
+.mk-btn.active { background: color-mix(in srgb, var(--c-gold) 18%, transparent); border-color: var(--c-gold); color: var(--c-gold); }
+.mk-btn:disabled { opacity: .4; cursor: default; }
+.mk-pop-anchor { position: relative; }
+.mk-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+  display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); min-width: 240px;
+  border: 1px solid var(--c-edge); border-radius: 8px; background: color-mix(in srgb, var(--c-card) 96%, var(--c-bg)); box-shadow: 0 8px 28px rgba(0,0,0,.5);
+}
+.mk-pop .mk-cap { padding: 2px var(--space-2); }
+
+/* ── Page + zones ──────────────────────────────────────────────────────── */
+
+.mk-page { padding: var(--space-4) var(--space-5) var(--space-6); }
+.mk-boardpage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (min-width: 1400px) {
+  .mk-boardpage { grid-template-columns: minmax(0, 1fr) var(--mk-log); }
+  .mk-logcol { position: sticky; top: calc(var(--scale-step) * 3.2); }
+  .mk-logcol .mk-feed { max-height: calc(100vh - var(--scale-step) * 6); }
+}
+.mk-zones { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.mk-zone { display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: var(--space-5); align-items: start; }
+
+/* A real heading: the name, a rule that takes the rest of the line, a count. This is
+ * what divides the areas; the gap above does the rest. */
+.mk-h2 { display: flex; align-items: center; gap: var(--space-3); margin: 0; font-size: .92em; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--c-txt); }
+.mk-h2 i { flex: 1; height: 1px; background: var(--c-edge); }
+.mk-h2 em { font-style: normal; font-weight: 400; letter-spacing: .04em; text-transform: none; color: var(--c-dim); font-size: 1em; }
+.mk-h2.split { gap: var(--space-3); }
+.mk-h2-side { display: inline-flex; align-items: center; gap: var(--space-2); letter-spacing: .04em; text-transform: none; font-weight: 500; }
+.mk-h2-side.b { flex-direction: row-reverse; }
+.mk-h2-mid { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.zone-fallen .mk-h2 { color: var(--c-dim); }
+.zone-pending .mk-h2-mid > span:first-child { color: var(--c-pend); }
+
+.mk-card { border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card); overflow: hidden; }
+.mk-card-body { padding: var(--mk-pad); }
+.mk-cap { font-size: .78em; letter-spacing: .06em; color: var(--c-dim); }
+.mk-sub { font-size: .88em; color: var(--c-dim); }
+.mk-sub.faint { opacity: .75; }
+.mk-empty { padding: var(--space-5); text-align: center; color: var(--c-dim); font-size: .92em; }
+.mk-side { font-size: 1.2em; font-weight: 700; color: var(--c-brand); }
+.mk-side.small { font-size: .85em; margin-right: var(--space-2); }
+
+/* ── NOW ───────────────────────────────────────────────────────────────
+ * The two player cards, in the two player columns, equal height. The head names the
+ * player and counts their badges; the body leads with where they are; a fight, when there
+ * is one, is a tinted box with the foe and their own mon; wild encounters flow as chips so
+ * they spend width, not height. */
+
+.mk-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); align-items: stretch; }
+.mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); }
+.mk-nowcard.online { border-left-color: var(--c-alive); }
+.mk-now-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--mk-pad) var(--mk-pad) var(--space-2); border-bottom: 1px solid var(--c-sep); }
+.mk-now-head .mk-side { width: 1.6em; height: 1.6em; display: grid; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--c-brand) 18%, transparent); font-size: 1.05em; }
+.mk-now-name { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; flex: 1; }
+.mk-now-name b { font-weight: 600; font-size: 1.15em; }
+.mk-pchip-game { color: var(--c-info); font-size: .8em; }
+.mk-badges { display: flex; align-items: center; gap: var(--space-2); font-size: .82em; color: var(--c-dim); font-variant-numeric: tabular-nums; }
+.mk-pchip-badges { display: flex; gap: 3px; }
+.mk-badge-pip { width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--c-edge); }
+.mk-badge-pip.on { background: var(--c-gold); border-color: var(--c-gold); }
+.mk-now-body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--mk-pad) var(--mk-pad); flex: 1; }
+.mk-now-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: .92em; color: var(--c-dim); }
+.mk-now-line b { color: var(--c-txt); font-weight: 600; font-size: 1.25em; }
+
+/* ── The foe, nested under the fighting half of a pair row ─────────────
+ * Not a zone and not a card of its own: the board cannot know who is looking, so the only
+ * thing that says whose mon a mon is, is which column it sits in. The foe is drawn
+ * beneath the player's own mon, in that player's half, in red. */
+.mk-foes { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); width: 100%; }
+.mk-foe { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: 6px; background: color-mix(in srgb, var(--c-dead) 12%, transparent); font-size: .95em; }
+.mk-half.b .mk-foe { flex-direction: row-reverse; text-align: right; }
+.mk-foe .mk-spr { width: calc(var(--mk-spr-s) * .8); height: calc(var(--mk-spr-s) * .8); }
+.mk-foe .mk-spr img.mon-sprite { width: calc(var(--mk-spr-s) * .8); height: calc(var(--mk-spr-s) * .8); }
+.mk-foe .mk-spr > span { width: calc(var(--mk-spr-s) * .8) !important; height: calc(var(--mk-spr-s) * .8) !important; }
+.mk-foe .mk-spr > span > img { width: calc(var(--mk-spr-s) * 1.04) !important; height: calc(var(--mk-spr-s) * 1.04) !important; margin: calc(var(--mk-spr-s) * -0.12) !important; }
+.mk-foe-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-foe .mk-hp { flex: 1; flex-direction: row; align-items: center; gap: var(--space-2); min-width: calc(var(--scale-step) * 3); }
+.mk-half.b .mk-foe .mk-hp { flex-direction: row-reverse; }
+.mk-foe .mk-hp-bar { flex: 1; height: 6px; }
+.mk-vs { color: var(--c-dead); font-size: .85em; letter-spacing: .1em; font-weight: 600; }
+
+.mk-wild { margin-top: auto; font-size: .86em; color: var(--c-dim); }
+.mk-wild summary { display: flex; align-items: baseline; gap: var(--space-2); cursor: pointer; list-style: none; }
+.mk-wild summary::-webkit-details-marker { display: none; }
+.mk-wild summary::before { content: '▸'; font-size: .8em; color: var(--c-dim); }
+.mk-wild[open] summary::before { content: '▾'; }
+.mk-wild-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); padding-top: var(--space-2); }
+.mk-wild-row { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+.mk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: .8em; letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
+.mk-tag.off { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
+.mk-tag.fight { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
+
+/* ── Sprites (shared) ──────────────────────────────────────────────────
+ * Two shapes come out of the payload. Gen 3 is a bare <img class="mon-sprite">. Gen 1 is
+ * a 40px overflow-hidden <span> cropping a 52px <img> at margin:-6px, all inline styles.
+ * Scaling the second means scaling the wrapper AND its image by the same factor, in plain
+ * lengths -- `scale(calc(60px / 40px))` divides a length by a length, which CSS rejects,
+ * and that is why the previous attempt left Gen 1 at 40px. The inline styles need
+ * !important to lose; the proper fix is the server emitting a sprite that sizes itself,
+ * which is a Phase 1 line in the brief. */
+.mk-spr { flex: none; line-height: 0; display: grid; place-items: center; width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-spr img.mon-sprite { width: var(--mk-spr-s); height: var(--mk-spr-s); object-fit: contain; image-rendering: pixelated; }
+.mk-spr > span { width: var(--mk-spr-s) !important; height: var(--mk-spr-s) !important; }
+.mk-spr > span > img { width: calc(var(--mk-spr-s) * 1.3) !important; height: calc(var(--mk-spr-s) * 1.3) !important; margin: calc(var(--mk-spr-s) * -0.15) !important; image-rendering: pixelated; }
+.mk-spr.big { width: var(--mk-spr); height: var(--mk-spr); }
+.mk-spr.big img.mon-sprite { width: var(--mk-spr); height: var(--mk-spr); }
+.mk-spr.big > span { width: var(--mk-spr) !important; height: var(--mk-spr) !important; }
+.mk-spr.big > span > img { width: calc(var(--mk-spr) * 1.3) !important; height: calc(var(--mk-spr) * 1.3) !important; margin: calc(var(--mk-spr) * -0.15) !important; }
+
+.mk-hp { display: flex; flex-direction: column; gap: 3px; min-width: calc(var(--scale-step) * 3.4); }
+.mk-hp-num { font-size: .84em; font-variant-numeric: tabular-nums; color: var(--c-dim); }
+.mk-hp-bar { display: block; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--c-txt) 12%, transparent); overflow: hidden; }
+.mk-hp-fill { display: block; height: 100%; background: var(--c-hp-high); }
+.mk-hp-fill.mid { background: var(--c-hp-mid); }
+.mk-hp-fill.low { background: var(--c-hp-low); }
+
+/* ── Pair rows — the team ──────────────────────────────────────────────
+ * One row per pair, spanning both player columns: A's half, the bond, B's half. Each row
+ * is its own card so the pairs read as units, and the halves keep enough room to be read
+ * from a couch. B's half mirrors A's so the sprites sit at the outer edges. */
+
+.mk-pairs { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.mk-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); align-items: center;
+  border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card);
+}
+/* All three cells on one row. The halves are placed in columns 1 and 3 and the bond asks
+ * for column 2 after them; with an auto row, sparse placement will not step the cursor
+ * backwards, so the bond landed on a second row under the pair -- which read as "the
+ * route symbols don't line up" and doubled every row's height. */
+.mk-pair > * { grid-row: 1; }
+.mk-pair.at-risk { border-color: color-mix(in srgb, var(--c-pend) 60%, var(--c-edge)); background: color-mix(in srgb, var(--c-pend) 7%, var(--c-card)); }
+.mk-pair.fallen { background: color-mix(in srgb, var(--c-card) 50%, transparent); border-style: dashed; }
+.mk-pair.fallen .mk-spr { filter: grayscale(1); opacity: .55; }
+.mk-pair.fallen .mk-half-nick { text-decoration: line-through; color: var(--c-dim); }
+
+.mk-half { min-width: 0; padding: var(--mk-pad); }
+.mk-half-in { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.mk-half.b .mk-half-in { flex-direction: row-reverse; text-align: right; }
+.mk-half.b .mk-half-txt { align-items: flex-end; }
+.mk-half-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; line-height: 1.2; }
+.mk-half-nick { font-size: 1.1em; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mk-half-txt .mk-hp { flex-direction: row; align-items: center; gap: var(--space-2); margin-top: 3px; min-width: 0; width: 100%; }
+.mk-half-txt .mk-hp-bar { flex: 1; height: 8px; }
+.mk-half-txt .mk-hp-num { flex: none; }
+.mk-half.b .mk-half-txt .mk-hp { flex-direction: row-reverse; }
+.mk-active { color: var(--c-dead); font-size: .85em; margin-right: 3px; }
+/* Per half, never per row: battle is a player state. The fighting half gets a red outer
+ * edge; its partner -- the half the soul link puts at stake -- gets the tag. */
+.mk-half.fighting.a { box-shadow: inset 4px 0 0 var(--c-dead); }
+.mk-half.fighting.b { box-shadow: inset -4px 0 0 var(--c-dead); }
+.mk-stake { margin-left: var(--space-2); padding: 1px 6px; border-radius: 3px; font-size: .72em; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--c-pend); border: 1px solid color-mix(in srgb, var(--c-pend) 50%, transparent); vertical-align: middle; }
+.mk-half.b .mk-stake { margin-left: 0; margin-right: var(--space-2); }
+.mk-item { color: var(--c-gold); cursor: help; }
+.mk-half-in.slot { opacity: .7; }
+.mk-half.b .mk-half-in.slot { flex-direction: row-reverse; }
+.mk-slot { width: var(--mk-spr); height: var(--mk-spr); flex: none; border: 1px dashed var(--c-edge); border-radius: 8px; }
+
+/* The bond cell: route on top, the tie, and the state under it. It is the row's header,
+ * placed where the link actually is — between the two. */
+.mk-bond {
+  align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: var(--space-2) var(--space-1); text-align: center; min-width: 0;
+  border-inline: 1px solid var(--c-sep); background: color-mix(in srgb, var(--c-bg) 35%, transparent);
+}
+.mk-bond-area { font-size: .82em; color: var(--c-info); letter-spacing: .04em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mk-bond-glyph { font-family: var(--font-mono); font-size: 1.15em; letter-spacing: .1em; color: var(--c-alive); }
+.mk-bond.pending .mk-bond-glyph { color: var(--c-pend); }
+.mk-bond.dead .mk-bond-glyph, .mk-bond.memorial .mk-bond-glyph, .mk-bond.dead_zone .mk-bond-glyph { color: var(--c-dead); }
+.mk-bond-state { font-size: .78em; color: var(--c-dim); line-height: 1.15; }
+.mk-bond-state .risk { color: var(--c-pend); text-transform: uppercase; letter-spacing: .06em; }
+.mk-bond-state b { font-weight: 600; }
+.mk-bond.dead .mk-bond-state, .mk-bond.memorial .mk-bond-state, .mk-bond.dead_zone .mk-bond-state { color: color-mix(in srgb, var(--c-dead) 75%, var(--c-dim)); }
+.mk-pair.at-risk .mk-bond { border-color: color-mix(in srgb, var(--c-pend) 40%, transparent); }
+
+/* Compact rows for waiting / boxed. */
+.mk-pairs.compact .mk-half { padding: var(--space-2) var(--mk-pad); }
+.mk-pairs.compact .mk-spr.big { width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-pairs.compact .mk-spr.big img.mon-sprite { width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-pairs.compact .mk-spr.big > span { width: var(--mk-spr-s) !important; height: var(--mk-spr-s) !important; }
+.mk-pairs.compact .mk-spr.big > span > img { width: calc(var(--mk-spr-s) * 1.3) !important; height: calc(var(--mk-spr-s) * 1.3) !important; margin: calc(var(--mk-spr-s) * -0.15) !important; }
+.mk-pairs.compact .mk-slot { width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-pairs.compact .mk-sub.faint { display: none; }
+
+.mk-unlinked { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); padding: var(--mk-pad); }
+.mk-unlinked > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.mk-unlinked > div.b { justify-content: flex-end; }
+.mk-unlinked b { color: var(--c-txt); font-weight: 400; }
+
+@media (max-width: 760px) {
+  .mk-now, .mk-pair, .mk-unlinked { grid-template-columns: minmax(0, 1fr); }
+  .mk-now > *, .mk-pair > *, .mk-unlinked > * { grid-column: 1 !important; }
+  .mk-bond { border-inline: none; border-block: 1px solid var(--c-sep); }
+}
+
+/* ── Log ───────────────────────────────────────────────────────────────── */
+
+.mk-logcol { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mk-feed { display: flex; flex-direction: column; max-height: calc(var(--scale-step) * 14); overflow-y: auto; }
+.mk-ev { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--c-sep); font-size: .86em; }
+.mk-ev:last-child { border-bottom: none; }
+.mk-ev-ts { color: var(--c-dim); font-variant-numeric: tabular-nums; }
+.mk-ev-who { color: var(--c-brand); }
+
+/* ── Tables, forms ─────────────────────────────────────────────────────── */
+
+table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .9em; }
+.mk-tbl th { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--c-edge); text-align: left; font-weight: 400; font-size: .82em; letter-spacing: .1em; text-transform: uppercase; color: var(--c-dim); }
+.mk-tbl td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--c-sep); vertical-align: middle; }
+.mk-tbl tr:last-child td { border-bottom: none; }
+.mk-form { max-width: calc(var(--scale-step) * 42); display: flex; flex-direction: column; gap: var(--space-5); }
+.mk-group { display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-field { display: flex; flex-direction: column; gap: 4px; font-size: .88em; }
+.mk-field span { color: var(--c-dim); }
+.mk-field input { padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 6px; background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: 1em; }
+.mk-field input.big { font-size: 1.3em; }
+.mk-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--space-3); }
+.mk-opt { display: flex; flex-wrap: wrap; align-items: center; align-content: start; gap: var(--space-1) var(--space-2); padding: var(--space-3); border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card); font-size: .9em; cursor: pointer; }
+.mk-opt.on { border-color: color-mix(in srgb, var(--c-alive) 55%, transparent); }
+.mk-opt.off-unavailable { opacity: .5; cursor: default; }
+.mk-opt-why { flex: 1 1 100%; font-size: .88em; line-height: 1.4; color: var(--c-dim); }
+.mk-note { padding: var(--space-3); border-left: 2px solid var(--c-info); background: color-mix(in srgb, var(--c-info) 8%, transparent); font-size: .88em; color: var(--c-dim); }
+code { font-family: var(--font-mono); font-size: .92em; color: var(--c-link); }
+kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2px; border-radius: 3px; background: var(--c-bg); font-family: var(--font-mono); font-size: .85em; }
+
+/* ── New run ───────────────────────────────────────────────────────────
+ * Form on the left, the run-to-be on the right. Options carry their description; a game
+ * chosen up front greys what it cannot honour, with the reason, before anyone connects. */
+.mk-newpage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (min-width: 1100px) { .mk-newpage { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); } }
+.mk-newpage .mk-form { max-width: none; gap: var(--space-5); }
+.mk-field.big input { font-size: 1.5em; padding: var(--space-3); }
+.mk-games { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mk-gchip { padding: var(--space-2) var(--space-3); border: 1px solid var(--c-edge); border-radius: 999px; background: var(--c-card); color: var(--c-txt); font: inherit; font-size: .88em; cursor: pointer; }
+.mk-gchip:hover { border-color: var(--c-brand); }
+.mk-gchip.active { color: var(--c-bg); background: var(--c-brand); border-color: var(--c-brand); }
+.mk-gchip.detect { border-style: dashed; }
+.mk-gchip.detect.active { border-style: solid; }
+.mk-optgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--space-3); }
+.mk-opt.described { align-items: flex-start; flex-wrap: nowrap; gap: var(--space-3); }
+.mk-opt.described input { margin-top: 3px; }
+.mk-opt-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mk-opt-name { font-weight: 500; }
+.mk-opt-desc { font-size: .88em; color: var(--c-dim); line-height: 1.35; }
+.mk-opt.described .mk-opt-why { flex: none; color: var(--c-pend); }
+.mk-form-actions { display: flex; align-items: center; gap: var(--space-3); }
+.mk-btn.big { font-size: 1em; padding: var(--space-3) var(--space-5); }
+.mk-newside { display: flex; flex-direction: column; gap: var(--space-5); position: sticky; top: calc(var(--scale-step) * 3.2); }
+.mk-preview { padding: var(--space-2); }
+.mk-preview-body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-2); }
+.mk-preview-rules { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.mk-tag.on { color: var(--c-alive); border-color: color-mix(in srgb, var(--c-alive) 45%, transparent); }
+.mk-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); font-size: .92em; line-height: 1.4; color: var(--c-dim); }
+.mk-steps li::marker { color: var(--c-brand); font-weight: 600; }
+.mk-steps b { color: var(--c-txt); font-weight: 500; }
+.mk-steps em { color: var(--c-txt); font-style: normal; text-decoration: underline; text-decoration-color: var(--c-pend); }
+
+/* ── Debug drawer ──────────────────────────────────────────────────────── */
+
+.mk-drawer { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(520px, 92vw); display: flex; flex-direction: column; background: color-mix(in srgb, var(--c-card) 92%, var(--c-bg)); border-left: 1px solid var(--c-edge); box-shadow: -12px 0 40px rgba(0,0,0,.5); }
+.mk-drawer-hdr { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--c-sep); }
+.mk-drawer-body { padding: var(--space-4); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-drawer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); }
+.mk-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0,0,0,.45); }

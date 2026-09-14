@@ -44,11 +44,10 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 def _dashboard_sources() -> dict[str, str]:
     """Everything that renders the dashboard, wherever it lives right now.
 
-    The dashboard is moving from `SLinkServer._build_status_html` (f-strings) into
-    `server/templates/`. A test pinned to the method alone would raise AttributeError at
-    collection the day the method goes -- or worse, a grep of all of `server.py` would keep
-    passing vacuously while the literals lived on in a template. So: the builder while it
-    exists, plus every template, keyed by name so a failure says where.
+    The dashboard was `SLinkServer._build_status_html` (f-strings) and is now
+    `server/templates/dashboard.html`. This reads the builder while one exists, plus every
+    template, keyed by name so a failure says where; a grep of all of `server.py` would pass
+    vacuously while the literals lived on in a template.
 
     Scoping matters: the debug page, the launcher and the manager carry hex literals too, but
     they are separate surfaces with their own single-theme designs; the debug and OBS pages
@@ -100,16 +99,6 @@ def test_no_bare_hex_colour_properties_left_in_the_dashboard():
         if found:
             leftovers[name] = sorted(set(found))
     assert leftovers == {}, f"hardcoded colours remain: {leftovers}"
-
-
-@pytest.mark.xfail(strict=True, reason="GYM_BADGES hardcodes eight hex colours inside "
-                   "_build_status_html; Phase 4 replaces it with adapter.gym_badge_slugs")
-def test_no_quoted_hex_literals_in_the_dashboard_builder():
-    """Colour tables written as Python data (`("#a0a0a0", "Boulder Badge")`) never sit next
-    to a CSS property name, so the property regex above cannot see them."""
-    src = _dashboard_sources().get("SLinkServer._build_status_html", "")
-    quoted = re.findall(r"""["']#[0-9a-fA-F]{6}["']""", src)
-    assert quoted == [], f"colour data baked into the builder: {sorted(set(quoted))}"
 
 
 def test_no_stylesheet_suppresses_focus_rings():

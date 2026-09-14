@@ -7,9 +7,11 @@ An AGE cannot lie the same way — it is derived from when the client last actua
 import time
 
 import pytest
+import pytest_asyncio
+from aiohttp.test_utils import TestClient, TestServer
 
 from server.adapters.gen3_frlge import Gen3Adapter
-from server.server import STALE_AFTER_SECS, SLinkServer, _age_label, _age_secs
+from server.server import STALE_AFTER_SECS, SLinkServer, _age_label, _age_secs, build_app
 
 
 @pytest.fixture
@@ -17,6 +19,19 @@ def srv(tmp_path):
     s = SLinkServer(data_dir=str(tmp_path))
     s.state.adapter = s.adapter = Gen3Adapter(is_rr=True)
     return s
+
+
+@pytest_asyncio.fixture
+async def page(srv):
+    """GET / as text. The board is a template now, so the page comes from the router."""
+    c = TestClient(TestServer(build_app(srv)))
+    await c.start_server()
+    try:
+        async def get():
+            return await (await c.get("/")).text()
+        yield get
+    finally:
+        await c.close()
 
 
 def test_age_is_none_when_the_player_has_never_been_seen():
@@ -43,27 +58,33 @@ def test_status_dict_exposes_the_age(srv):
     assert srv._build_status_dict()["players"]["a"]["last_seen_age"] in (3, 4)
 
 
-def test_a_silent_client_is_called_out_even_though_it_still_reads_connected(srv):
+@pytest.mark.asyncio
+async def test_a_silent_client_is_called_out_even_though_it_still_reads_connected(srv, page):
     """The whole point: `connected` is still True here. Only the age reveals the truth."""
-    srv.connected_players["a"] = {"connected": True, "last_event": "tick", "last_seen": "12:00:00",
+    srv.connected_players["a"] = {"connected": True, "rom_type": "firered_rr", "last_event": "tick",
+                                  "last_seen": "12:00:00",
                                   "last_seen_ts": time.time() - (STALE_AFTER_SECS + 5)}
-    assert srv._build_status_dict()["players"]["a"]["connected"] is True
-    html = srv._build_status_html()
+    p = srv._build_status_dict()["players"]["a"]
+    assert p["connected"] is True and p["stale"] is True
+    html = await page()
     assert "stale-warn" in html
-    assert "No data for" in html
+    assert "No data" in html
 
 
-def test_a_live_client_gets_no_warning(srv):
-    srv.connected_players["a"] = {"connected": True, "last_event": "tick", "last_seen": "12:00:00",
-                                  "last_seen_ts": time.time()}
-    assert "stale-warn" not in srv._build_status_html()
+@pytest.mark.asyncio
+async def test_a_live_client_gets_no_warning(srv, page):
+    srv.connected_players["a"] = {"connected": True, "rom_type": "firered_rr", "last_event": "tick",
+                                  "last_seen": "12:00:00", "last_seen_ts": time.time()}
+    assert srv._build_status_dict()["players"]["a"]["stale"] is False
+    assert "stale-warn" not in await page()
 
 
-def test_save_failure_is_surfaced_not_just_logged(srv):
+@pytest.mark.asyncio
+async def test_save_failure_is_surfaced_not_just_logged(srv, page):
     """A run that has stopped persisting looks identical to a healthy one without this."""
-    assert "save-warn" not in srv._build_status_html()
+    assert "save-warn" not in await page()
     srv.state.save_failed = "[Errno 13] Permission denied: 'links.json'"
-    html = srv._build_status_html()
+    html = await page()
     assert "save-warn" in html
     assert "Permission denied" in html
 

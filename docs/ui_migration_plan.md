@@ -267,63 +267,37 @@ regenerated — by design; that test asserts set *equality*.
 
 ---
 
-# Phase 4 — Template the dashboard *(same URL, same markup)*
+# Phases 4 + 5 — The board *(done as one step)*
 
-The diff must be provably "same output, different generator". Phase 1's contract test is the proof.
+**Merged, and why.** Phase 4 was "port 1 460 lines of f-strings into Jinja, same markup";
+Phase 5 was "replace that markup with the board". Doing the first only to delete it in the
+second was double work with no bisection value once the contract test was rewritten for
+the board anyway. What survived from Phase 4's list: the pure-data context (now
+`server/board.py`, ~200 lines, tested on the fixtures), `_STATUS_HTML` and
+`_build_status_html` deleted (−1 846 lines from `server.py`), `_CALC_PREVIEW_JS` moved to
+`server/static/calc-preview.js`, `test_staleness` retargeted, the GYM_BADGES palette gone
+(the board draws badge pips from `capabilities.badges`), `_trainer_panel_html` kept in
+Python and shipped in the payload as `players.{pid}.trainer_panel_html`.
 
-- **Widen the context.** `_build_status_html` reaches *around* `_build_status_dict` into
-  `self.state`, `self.party_details`, `self._mon_cache`, `s._key_index`, `s.mon_stats`,
-  `s.bonus_keys`, `s.pending_bonus`, `s.pending_memorials`. Add `_build_dashboard_context()`
-  following the convention the ~25 overlays already prove: a pure-data dict, display
-  formatting done in Python, pre-rendered HTML in `_html` fields.
-- **Render one view, not two.** The dashboard emits *both* the split and the combined view
-  into every response, one hidden by CSS. That is the sole reason the `key_prefix=` /
-  `suppress_calc=` family exists, threaded through four functions. Picking one deletes
-  **~400–700 lines**, the prefix plumbing, and halves the DOM.
-- **Leave the two big widgets in Python.** `_encounter_html` (75) and `_trainer_panel_html`
-  (341) are self-contained and own fragile `data-details-key` contracts. `|safe` them in.
-- **Delete `_build_status_html` and `_STATUS_HTML`.** `_handle_dashboard_template` shrinks to
-  context-building plus `render_template`; the `<body>` slice and the
-  `str.replace('<main class="dash-main">', …)` exist *only* to bridge the two generators.
-- **Unify five divergent HP ladders.** Two live in `_macros.html` and emit *different CSS
-  families* — `hp_bar` → `.hp-high/.hp-mid/.hp-low`, `mon_card` → `.hp-h/.hp-m/.hp-l` —
-  different greens for the same 60% HP. Thresholds also differ (`>=50` vs `>50`).
-- **`GYM_BADGES` → `adapter.gym_badge_slugs`.** The dashboard hardcodes 8 Kanto badges with
-  hex colours, rebuilt twice per render, while `badge_slugs` is already in the payload.
-- Reuse `_battle_mon_card` in the party context (−28); add a `_link_side()` helper across
-  five overlay builders (−40).
-- Retarget `tests/unit/test_staleness.py` — four tests call `_build_status_html()` by name.
+**Server-rendered, not the mockup's Alpine.** The mockup fetched a fixture and rendered
+client-side. The board is a Jinja template polled by htmx/idiomorph exactly as the old
+dashboard was, because every page test in this suite renders in-process and CI has no
+browser: a client-rendered board would have made `test_routes_smoke`,
+`test_dashboard_contract` and `test_http_server_security` blind. `server/board.py` is the
+port of `mockup.js`'s `pairs()` / `sections()` / `unlinkedBoxed()`, function for function.
 
-Free coverage: `test_svg_symbols.py` sees none of the dashboard's 14 icons today because they
-live in an f-string. New page-level partials must `extends "base.html"` to reach
-`_svg_icons.html`.
+What the payload gained for it: `players.{pid}.stale`, `last_seen_label`,
+`trainer_panel_html`, `battle_state.calc_preview` (the data the calc script reads off
+`#calc-preview-{pid}`, computed in `_calc_preview`).
 
----
+Deleted with it: 224 lines of `dashboard.js` (encounter sort, filter, global search, the
+Split|Combined toggle) and the `lp-view` bootstrap in `base.html`. **Not yet deleted:**
+`dashboard.css` still carries the old dashboard's rules (player cards, tables, lp widget);
+it goes in Phase 9 with `manager.css`/`sidebar.css`. `server/static/mockups/` stays until
+Phase 6 has taken the rail and new-run form from it.
 
-# Phase 5 — The board *(the visible redesign)*
-
-Port `server/static/mockups/a/`. Design and rationale: `docs/ui_mockup_brief.md` §3.
-
-Zones on one three-track grid — Alice's column, the spine, Bob's column: **Now**, **In
-party**, **Pending link**, **Boxed**, **Fallen**, with the log beside from 1400 px. One row
-per pair, both HP bars facing the bond, tinted by the pair's *weaker* half (at risk under
-35%, because both halves die if either faints). The foe nests under the fighting half; its
-partner across the spine is tagged *at stake*. **Battle is a player state, never a pair
-state** — the board cannot know who is looking at it, so the only thing that says whose mon a
-mon is, is which column it sits in. Memorial and Boxes become zones, not pages. Jersey 20 as
-`--font-ui`, with the retuned size tiers already in `mockup.css`.
-
-Deletes with it: **216 lines of `dashboard.js`** (encounter sort, encounter filter, global
-table search, the Split|Combined toggle) and **146 lines of matching CSS**. The irreducible
-remainder is the sprite chroma-key (131) and the `<details>` morph-persistence (94) — the
-latter goes too if the board uses no `<details>`.
-
-Then **delete `server/static/mockups/`**, `ui/track-b/`, and the 24 font files they pin.
-
-⚠ `data-details-key` values are namespaced by `player_id`, so collapsing the two player panes
-changes every one of those localStorage keys — users lose open/closed state once. Accepted.
-
----
+⚠ `data-details-key` values changed (`wild:{pid}` and the trainer panel's own); users lose
+open/closed state once. Accepted.
 
 # Phase 6 — One origin
 

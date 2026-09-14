@@ -155,7 +155,10 @@ class _AttackTags(HTMLParser):
         self.markers.extend(value for key, value in attrs if key == "data-attack")
 
 
-def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
+@pytest.mark.asyncio
+async def test_dashboard_escapes_client_text_on_the_board(client, srv):
+    """Everything a client can name -- its rom_type, its last event, its area -- reaches the
+    board as text. Jinja autoescapes, but a `|safe` in the wrong place would undo that."""
     def attack(label):
         return f'<img data-attack="{label}" src=x onerror="alert(1)">'
 
@@ -167,29 +170,35 @@ def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
         srv.player_area_id[player] = attack("area-" + player)
     encounter_area = attack("encounter")
     srv.state.area_states[encounter_area] = AreaStatus.DEAD_ZONE
-    rendered = srv._build_status_html()
+    resp = await client.get("/")
+    assert resp.status == 200
+    rendered = await resp.text()
     parser = _AttackTags()
     parser.feed(rendered)
     assert parser.markers == []
+    # Jinja escapes through markupsafe (`"` -> &#34;), not html.escape (&quot;).
+    from markupsafe import escape
     for player in ("a", "b"):
-        assert rendered.count(html.escape(attack("rom-" + player))) >= 2
-        assert html.escape(attack("event-" + player)) in rendered
-        area_text = srv.adapter.area_display_name(attack("area-" + player))
-        assert rendered.count(html.escape(area_text)) >= 2
-    assert html.escape(srv.adapter.area_display_name(encounter_area)) in rendered
+        assert str(escape(attack("event-" + player))) in rendered
+        assert str(escape(srv.adapter.area_display_name(attack("area-" + player)))) in rendered
 
 
-def test_dashboard_keeps_trusted_unknown_area_markup(srv):
-    assert '<b class="area"><span class="dim">unknown</span></b>' in srv._build_status_html()
+@pytest.mark.asyncio
+async def test_dashboard_says_unknown_for_an_unnamed_area(client, srv):
+    srv.connected_players["a"] = {"connected": True, "rom_type": "firered_rr", "last_event": "hello"}
+    assert "unknown" in await (await client.get("/")).text()
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("value", [None, 42, True])
-def test_escaping_preserves_rendering_of_non_text_legacy_metadata(srv, value):
+async def test_escaping_preserves_rendering_of_non_text_legacy_metadata(client, srv, value):
     # The legacy TCP handler records metadata before its dispatch validation.
     # Output escaping must not turn formerly printable JSON scalars into 500s.
     srv.connected_players["a"] = {"rom_type": value, "last_event": value}
-    rendered = srv._build_status_html()
-    assert f'Last: <b>{html.escape(str(value))}</b>' in rendered
+    resp = await client.get("/")
+    assert resp.status == 200
+    if value is not None:   # None is "no data yet" and the card says so instead
+        assert html.escape(str(value)) in await resp.text()
     assert srv._build_status_dict()["players"]["a"]["last_event"] is value
 
 

@@ -1,19 +1,17 @@
-/* dashboard.js — client-side glue for the per-run status dashboard.
+/* dashboard.js — client-side chrome shared by the templated pages.
  *
- * Loaded by server.py:_STATUS_HTML with `defer` so it runs after the body
- * markup parses. Refresh is owned by HTMX — the #content div declares
- *   hx-ext="morph" (2s poll; the SSE path was retired)
- *   hx-trigger="sse:ping" hx-swap="morph:outerHTML"
- * — idiomorph preserves <img> identity (data-species) and <details open>
- * state across swaps. This file just handles:
+ * Loaded by base.html with `defer` whenever a page has the sidebar. Refresh of the board
+ * is owned by HTMX — #content polls every 2 s and swaps by idiomorph, which preserves
+ * <img> identity (data-species) and <details open> state across swaps. This file handles:
  *
  *   • Sprite background removal (funnotbun chroma-key)
  *   • Mouse-interaction pause via htmx:beforeSwap
- *   • Attempts +/- handler (delegates refresh to htmx.trigger)
- *   • Sort + filter re-application after each swap
+ *   • Theme + font switchers, sidebar collapse
+ *   • <details> open-state persistence across morph swaps
+ *   • The Upcoming Trainers calc button
  *
- * The calc-preview render is rendered separately by the inline {calc_js}
- * block in _STATUS_HTML because it consumes Python-injected state.
+ * The encounter-table sort, filter and global search went with the table they drove;
+ * the board has zones, not a table to sort. The calc preview lives in calc-preview.js.
  */
 
 // Idempotence sentinel — base.html loads dashboard.js conditionally on
@@ -84,13 +82,10 @@ if (window._slinkDashInit) {
     });
   }
 
-  // After HTMX swaps in new content, re-run sprite chroma-key + sort + filter
-  // + calc-preview pipeline. (DOMContentLoaded covers the initial paint;
+  // After HTMX swaps in new content, re-run the sprite chroma-key and the
+  // calc-preview pipeline. (DOMContentLoaded covers the initial paint;
   // htmx:afterSettle covers every refresh.)
   function refreshClientUI() {
-    if (window._slinkEncSort)   window._slinkEncSort();
-    if (window._slinkEncFilter) window._slinkEncFilter();
-    if (window._slinkSearch)    window._slinkSearch();
     processAllSprites();
     if (window._slinkCalcRender) window._slinkCalcRender();
   }
@@ -156,193 +151,6 @@ if (window._slinkDashInit) {
   processAllSprites();
 
   // Attempts +/- adjustor; posts the new count then asks HTMX to refresh.
-})();
-
-
-// ── Encounters table sort ───────────────────────────────────────────────────
-(function() {
-  var sortCol = -1, sortAsc = true;
-
-  function naturalCmp(a, b) {
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-  }
-
-  function getSortVal(td) {
-    var v = td.getAttribute('data-sort');
-    if (v !== null) return v;
-    return td.textContent.trim();
-  }
-
-  function applySort() {
-    var tbl = document.getElementById('enc-table');
-    if (!tbl) return;
-    var ths = tbl.querySelectorAll('thead th');
-    ths.forEach(function(th, i) {
-      th.classList.remove('sort-asc', 'sort-desc');
-      if (i === sortCol) th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
-    });
-    var tbody = tbl.querySelector('tbody');
-    if (!tbody) return;
-    var rows = Array.from(tbody.querySelectorAll('tr'));
-    rows.sort(function(ra, rb) {
-      var a = getSortVal(ra.children[sortCol]);
-      var b = getSortVal(rb.children[sortCol]);
-      var aNum = parseFloat(a), bNum = parseFloat(b);
-      var cmp = (!isNaN(aNum) && !isNaN(bNum)) ? aNum - bNum : naturalCmp(a, b);
-      return sortAsc ? cmp : -cmp;
-    });
-    rows.forEach(function(r) { tbody.appendChild(r); });
-  }
-
-  function bindHeaders() {
-    var tbl = document.getElementById('enc-table');
-    if (!tbl) return;
-    tbl.querySelectorAll('thead th.sortable').forEach(function(th) {
-      var ci = parseInt(th.getAttribute('data-col'), 10);
-      th.onclick = function() {
-        if (sortCol === ci) { sortAsc = !sortAsc; }
-        else { sortCol = ci; sortAsc = true; }
-        applySort();
-      };
-    });
-    if (sortCol >= 0) applySort();
-  }
-
-  window._slinkEncSort = bindHeaders;
-  bindHeaders();
-  // Idiomorph reorders rows to match the server's default ordering on every
-  // 2 s poll. refreshClientUI re-sorts on htmx:afterSettle, but settle fires
-  // ~20 ms after swap — long enough for the browser to paint the unsorted
-  // state, which reads as a flicker while a sort is active. Re-apply
-  // synchronously in afterSwap (same task as the morph, before paint), same
-  // pattern as the search filter above.
-  document.body.addEventListener('htmx:afterSwap', function() {
-    if (sortCol >= 0) applySort();
-  });
-})();
-
-
-// ── Encounters table filter ─────────────────────────────────────────────────
-(function() {
-  var activeFilter = 'all';
-  var FILTER_GROUPS = {
-    'linked':    ['alive', 'linked'],
-    'pending':   ['pending_a', 'pending_b', 'pending_both'],
-    'pending_a': ['pending_a', 'pending_both'],
-    'pending_b': ['pending_b', 'pending_both'],
-    'dead':      ['dead', 'dead_zone', 'memorial']
-  };
-
-  function applyFilter() {
-    var tbl = document.getElementById('enc-table');
-    if (!tbl) return;
-    var rows = tbl.querySelectorAll('tbody tr');
-    rows.forEach(function(tr) {
-      var st = tr.getAttribute('data-status') || '';
-      if (activeFilter === 'all') {
-        tr.style.display = '';
-      } else {
-        var group = FILTER_GROUPS[activeFilter] || [];
-        tr.style.display = group.indexOf(st) >= 0 ? '' : 'none';
-      }
-    });
-    var btns = document.querySelectorAll('#enc-filters .filter-btn');
-    btns.forEach(function(b) {
-      b.classList.toggle('active', b.getAttribute('data-filter') === activeFilter);
-    });
-  }
-
-  function bindFilters() {
-    var container = document.getElementById('enc-filters');
-    if (!container) return;
-    container.querySelectorAll('.filter-btn').forEach(function(btn) {
-      btn.onclick = function() {
-        activeFilter = btn.getAttribute('data-filter');
-        applyFilter();
-      };
-    });
-    applyFilter();
-  }
-
-  window._slinkEncFilter = bindFilters;
-  bindFilters();
-})();
-
-
-// ── Global table-row search ──────────────────────────────────────────────
-// Filters every <tr> in every table on the page based on a case-insensitive
-// substring match against the row's text. Lives in .dash-search, which is
-// outside the #content morph zone, so the input stays focused and the
-// query survives every 2 s polling swap.
-//
-// Implementation notes:
-//   * Pairs the input value to <tr.dash-search-hide> via a utility class so
-//     the encounter-filter and other consumers can stack without inline
-//     style fights.
-//   * Re-runs after every htmx:afterSettle (refreshClientUI wires this up
-//     via window._slinkSearch).
-//   * `move-row` rows are tied to the row immediately above (the mon they
-//     describe). When a mon row hides, its move row hides too; when a mon
-//     row matches, its move row is forced visible regardless of whether
-//     the move text itself matches the query.
-(function() {
-  var query = '';
-  function applySearch() {
-    // Scoped to tables that list POKEMON. It used to run over `table tr`, which swept the
-    // Recent Events log too — searching "pikachu" left the event feed showing 1 of 53 rows with
-    // no indication why, and the heading still claimed the full count.
-    var rows = document.querySelectorAll('table:not([data-no-search]) tr');
-    rows.forEach(function(tr) {
-      // Header rows must never disappear.
-      if (tr.parentElement && tr.parentElement.tagName === 'THEAD') {
-        tr.classList.remove('dash-search-hide');
-        return;
-      }
-      if (!query) { tr.classList.remove('dash-search-hide'); return; }
-      var text = (tr.textContent || '').toLowerCase();
-      tr.classList.toggle('dash-search-hide', text.indexOf(query) === -1);
-    });
-    // (The old `tr.move-row` follow-the-parent pass is gone — nothing emits that class.)
-  }
-
-  function bindSearch() {
-    var input = document.getElementById('dash-search-input');
-    if (!input) return;
-    var wrap = input.closest('.dash-search');
-    var clearBtn = wrap && wrap.querySelector('.dash-search-clear');
-    function setQuery(q) {
-      query = (q || '').trim().toLowerCase();
-      if (wrap) wrap.classList.toggle('has-query', !!query);
-      applySearch();
-    }
-    // Avoid double-binding when htmx:afterSettle re-runs us; the input lives
-    // outside #content so it's not replaced by the morph.
-    if (!input.dataset.searchBound) {
-      input.addEventListener('input', function() { setQuery(input.value); });
-      if (clearBtn) {
-        clearBtn.addEventListener('click', function() {
-          input.value = '';
-          setQuery('');
-          input.focus();
-        });
-      }
-      input.dataset.searchBound = '1';
-    }
-    // Re-apply against newly-morphed rows. Input value persists across
-    // refreshes because the input is outside #content.
-    setQuery(input.value);
-  }
-  window._slinkSearch = bindSearch;
-  bindSearch();
-  // Idiomorph strips `dash-search-hide` from rows on every 2 s poll to match
-  // the fresh server HTML. refreshClientUI's `htmx:afterSettle` hook re-adds
-  // it, but settle fires ~20 ms after swap — long enough for the browser to
-  // paint the unfiltered state, which reads as a flicker while a query is
-  // active. Re-apply synchronously in `afterSwap` (same task as the morph,
-  // before paint) so the final-state DOM is the only thing the user sees.
-  document.body.addEventListener('htmx:afterSwap', function() {
-    if (query) applySearch();
-  });
 })();
 
 
@@ -692,43 +500,6 @@ if (window._slinkDashInit) {
   apply(read());
   window.SLinkDash = Object.assign(window.SLinkDash || {}, {
     toggleSidebar: toggle,
-  });
-})();
-
-
-// ── Linked-party combined view toggle ────────────────────────────────────
-// Same body-class pattern as the sidebar — immune to HTMX morph resets.
-(function() {
-  var KEY = 'slink-lp-view';
-  function apply(on) {
-    document.body.classList.toggle('lp-view', on);
-  }
-  function read() {
-    try { return window.localStorage.getItem(KEY) === '1'; }
-    catch (_) { return false; }
-  }
-  function write(v) {
-    try { window.localStorage.setItem(KEY, v ? '1' : '0'); }
-    catch (_) {}
-  }
-  function toggle() {
-    var next = !document.body.classList.contains('lp-view');
-    apply(next);
-    write(next);
-  }
-  function setView(on) {
-    var v = !!on;
-    apply(v);
-    write(v);
-  }
-  document.body.addEventListener('htmx:afterSettle', function() { apply(read()); });
-  window.addEventListener('storage', function(ev) {
-    if (ev.key === KEY) apply(ev.newValue === '1');
-  });
-  apply(read());
-  window.SLinkDash = Object.assign(window.SLinkDash || {}, {
-    toggleLpView: toggle,
-    setLpView: setView,
   });
 })();
 

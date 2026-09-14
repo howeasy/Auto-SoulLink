@@ -16,6 +16,8 @@ def empty_status_payload() -> dict:
                 "last_event": "—",
                 "last_seen": "—",
                 "last_seen_age": None,
+                "last_seen_label": "—",
+                "stale": False,
                 "nuzlocke_active": False,
                 "current_area": "",
                 "current_area_id": "",
@@ -36,6 +38,7 @@ def empty_status_payload() -> dict:
                     "opponent_name": "",
                     "opponent_class": "",
                     "is_doubles": False,
+                    "calc_preview": None,
                 },
                 "identity_error": "",
                 "admission": "admitted",
@@ -49,6 +52,7 @@ def empty_status_payload() -> dict:
                     "badges": [],
                 },
                 "encounter_table": None,
+                "trainer_panel_html": "",
             }
             for pid in ("a", "b")
         },

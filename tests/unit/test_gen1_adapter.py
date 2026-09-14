@@ -742,10 +742,13 @@ def test_the_rule_area_ids_did_not_change():
 
 
 def test_a_multi_floor_area_renders_every_floor():
+    """The board's "Wild here" panel draws one row per method of the payload's encounter
+    table, so a floor is on the page exactly when it is a method key here."""
     import tempfile
+
     from server.server import SLinkServer
     srv = SLinkServer(data_dir=tempfile.mkdtemp())
     srv.state.adapter = srv.adapter = Gen1Adapter(variant="red")
-    html = srv._encounter_html("mt_moon")
+    table = srv._enc_table_for_status("mt_moon")
     for floor in ("Grass 1F", "Grass B1F", "Grass B2F"):
-        assert floor in html, f"{floor} is missing from the rendered widget"
+        assert floor in table, f"{floor} is missing from the encounter table the board draws"
