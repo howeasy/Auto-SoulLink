@@ -75,9 +75,25 @@ def test_party_entries_carry_the_enriched_fields(name):
         details = fixture["players"][pid]["party_details"]
         assert details, f"{name} players.{pid} has an empty party; the mockups need one."
         for key, mon in details.items():
-            for field in ("species_name", "sprite_html", "move_details"):
+            for field in ("species_name", "sprite_html", "move_details", "item_name"):
                 assert field in mon, f"{name} players.{pid}.party_details[{key}] lacks {field}"
             assert mon["species_name"], f"{name} players.{pid}.party_details[{key}] unnamed"
+            # The key is the dict key; a value that does not repeat it strands every
+            # consumer that iterates values (the mockup lost its whole partner column).
+            assert mon.get("key") == key, f"{name} players.{pid}.party_details[{key}] lacks key"
+    for area, sides in fixture["pending_captures"].items():
+        for pid, mon in sides.items():
+            assert mon.get("sprite_html"), f"{name} pending_captures[{area}].{pid} has no sprite"
+
+
+@pytest.mark.parametrize("name", STATUS_FIXTURES)
+def test_player_capabilities_come_from_the_shared_probe(name):
+    """`players.{pid}.capabilities` and capabilities.json[rom_type] are the same function's
+    answers; a fixture where they disagree was captured against a different adapter."""
+    fixture, caps = _load(name), _load("capabilities.json")
+    for pid in ("a", "b"):
+        p = fixture["players"][pid]
+        assert p["capabilities"] == caps[p["rom_type"]], f"{name} players.{pid}.capabilities drifted"
 
 
 @pytest.mark.parametrize("name", STATUS_FIXTURES)

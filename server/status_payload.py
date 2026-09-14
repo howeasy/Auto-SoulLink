@@ -40,6 +40,14 @@ def empty_status_payload() -> dict:
                 "identity_error": "",
                 "admission": "admitted",
                 "admission_reason": "",
+                # No cartridge, so no capabilities: every flag False, every list empty.
+                # The keys mirror server.ui_capabilities.ui_capabilities.
+                "capabilities": {
+                    "game_id": "", "abilities": False, "explode_mode": False,
+                    "info_panel": False, "info_panel_width": 0, "stat_stage_labels": [],
+                    "mons_per_box": 0, "memorial_box_index": 0, "party_blob_size": 0,
+                    "badges": [],
+                },
                 "encounter_table": None,
             }
             for pid in ("a", "b")

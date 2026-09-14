@@ -157,6 +157,8 @@ def test_empty_status_has_the_run_serializers_complete_nested_schema(tmp_path):
     empty = empty_status_payload()
     _assert_same_shape(empty, real)
     real["badge_slugs"] = []  # The Manager has no selected game catalogue.
+    for pid in ("a", "b"):    # ...and no cartridge to read capabilities from.
+        real["players"][pid]["capabilities"] = empty["players"][pid]["capabilities"]
     assert empty == real
     assert empty == manager._EMPTY_STATUS
 

@@ -252,10 +252,10 @@ In `_build_status_dict` and `_enrich_party`:
 
 Streamlining that belongs here because it is the same code:
 
-- **Memoize `_build_status_dict` per tick.** Called 15 times, 13 at the top of a context
-  builder, each rebuilding both parties' sprite HTML, move data and PP maths. Every overlay
-  polls every 2 s; six OBS sources is three full builds a second. ~10 lines, invalidated in
-  `_notify_sse`.
+- ~~Memoize `_build_status_dict` per tick.~~ **Dropped, measured:** 0.12 ms per build on the
+  full Gen 3 cast (0.06 ms Gen 1); `_build_status_html` is 2.6 ms. Six OBS sources at 2 s is
+  under 1 ms/s. A cache would have to survive every direct state mutation the tests and the
+  API handlers make without `_notify_sse`, for no measurable gain.
 - **Delete the `sprite_src` enrichment** — computed for every encounter entry on that hot
   path, read by nothing.
 - **`_move_details()` helper** — `_enrich_party` and `_enrich_battle_state` carry 20

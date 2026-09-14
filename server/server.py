@@ -35,6 +35,7 @@ from pathlib import Path
 from server.http_safety import csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
+from server.ui_capabilities import ui_capabilities
 
 try:
     from aiohttp import web as aiohttp_web
@@ -1567,6 +1568,8 @@ class SLinkServer:
         self._rom_contract_mtime: float | None = None
         self._rom_contract = self._load_rom_contract()
         self.admission: dict[str, dict] = {}
+        # Players whose last hello named a rom_type nothing routes (see handle_client).
+        self._rom_type_rejected: set[str] = set()
         # Track live connections: player_id → {rom_type, last_event, connected}
         self.connected_players: dict[str, dict] = {}
         # Per-player display data (updated from events, used only for status page)
@@ -2244,28 +2247,13 @@ class SLinkServer:
         )
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
-        """Return encounter table dict with sprite_src added to each entry.
-
-        sprite_src is just the image URL — much smaller than sprite_html
-        (~115 chars vs ~400 chars per entry). The overlay JS builds the
-        <img> tag. CFRU→NatDex conversion is handled by the adapter.
-
-        Returns None when no encounter data exists (non-RR or unmapped area).
+        """The encounter table for the payload, or None when no encounter data exists
+        (non-RR or unmapped area).
 
         ``player_id`` selects whose cartridge to describe; without it the run-global
         adapter answers, which is right only while both players hold the same content.
         """
-        adapter = self.adapter_for(player_id)
-        enc = adapter.encounter_table(area_id)
-        if not enc:
-            return None
-        return {
-            method: [
-                {**e, "sprite_src": adapter.sprite_src(e.get("species_id", 0))}
-                for e in entries
-            ]
-            for method, entries in enc.items()
-        }
+        return self.adapter_for(player_id).encounter_table(area_id) or None
 
     # rom_type → game_id and rom_type → variant-label maps live in
     # server.adapters (single source of truth alongside the registry).
@@ -2470,6 +2458,31 @@ class SLinkServer:
                         self.connected_players[player_id][carried] = prev_conn[carried]
                 if msg.get("event") == "hello":
                     self.connected_players[player_id]["rom_type"] = msg.get("rom_type", "?")
+                    # A rom_type the router does not know used to leave the server on
+                    # whichever adapter it already had -- silently -- and the run carried on
+                    # under the wrong generation (Gen 3 genders and abilities on Red/Blue
+                    # mons; adapters/__init__.py records the same for Gen 2). Refuse the
+                    # hello the way an identity mismatch is refused: the client sees a HUD
+                    # line, the dashboard sees identity_error, and nothing else gets through
+                    # until a hello with a rom_type we route.
+                    from server.adapters import game_id_for_rom_type
+                    _rt = msg.get("rom_type", "")
+                    if _rt and not game_id_for_rom_type(_rt):
+                        err = f"Unknown rom_type {_rt!r} for slot {player_id.upper()}: not a game this server routes"
+                        log.warning(f"[{player_id}] REJECTED: {err}")
+                        self.state.identity_error[player_id] = err
+                        self._rom_type_rejected.add(player_id)
+                        await self._respond(writer, [{
+                            "cmd": "hud_show", "text": f"[x] UNKNOWN ROM: {_rt}",
+                            "color": [255, 0, 0], "duration": 600,
+                        }])
+                        self._notify_sse()
+                        continue
+                    if player_id in self._rom_type_rejected:
+                        # The identity gate in state.py only clears its own errors; this one
+                        # is ours to clear, and only a routable hello gets this far.
+                        self._rom_type_rejected.discard(player_id)
+                        self.state.identity_error.pop(player_id, None)
                     # Panel capability is per CARTRIDGE: on Gen 1 it comes from the
                     # companion ROM patch, so a patched and an unpatched cartridge can
                     # sit in one run and the generation alone cannot answer.
@@ -3361,69 +3374,74 @@ class SLinkServer:
                 k["species_name"] = self.adapter.species_name(sp)
             return k
 
+        def _move_details(mon: dict, *, boxed: bool = False) -> list[dict]:
+            """Resolve a mon's raw move ids into full move dicts with PP applied.
+
+            Gen 3 sends pp_bonuses as a packed bitfield (2 bits per move); Gen 4 sends
+            pp_ups as a list[4]. Box mons carry no current PP, so they show the maximum.
+            """
+            raw_pp = mon.get("pp", [])
+            pp_bonuses = mon.get("pp_bonuses", 0)
+            pp_ups_list = mon.get("pp_ups") or []
+            out = []
+            for idx, mid in enumerate(mon.get("moves", [])):
+                if not mid or mid <= 0:
+                    continue
+                md = self.adapter.move_data(mid)
+                if not md:
+                    continue
+                md = dict(md)
+                if boxed:
+                    md["current_pp"] = md.get("pp", 0)
+                else:
+                    base_pp = md.get("pp", 0)
+                    pp_ups = (pp_ups_list[idx] if idx < len(pp_ups_list)
+                              else (pp_bonuses >> (idx * 2)) & 0x3)
+                    if base_pp:
+                        md["pp"] = base_pp + (base_pp * pp_ups) // 5
+                    md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
+                out.append(md)
+            return out
+
         def _enrich_party(pid):
-            """Add species_name, ability_name, sprite_html, and move_details to each party detail entry."""
-            raw = self.party_details.get(pid, {})
+            """Add key, species_name, ability_name, item_name, sprite_html and move_details
+            to each party detail entry."""
+            adapter = self.adapter_for(pid)
             enriched = {}
-            for key, det in raw.items():
+            for key, det in self.party_details.get(pid, {}).items():
                 d = dict(det)
+                # The key is the dict key and was not repeated in the value, so a consumer
+                # iterating values (a partner lookup, a template loop) had no way back to it.
+                d["key"] = key
                 sid = d.get("species_id", 0)
                 form = d.get("form", 0)
-                d["species_name"] = self.adapter.species_name(sid) if sid else ""
+                d["species_name"] = adapter.species_name(sid) if sid else ""
                 d["sprite_html"] = self._get_sprite_html(sid, form) if sid else ""
                 aid = d.get("ability_id", 0)
-                d["ability_name"] = self.adapter.ability_name(aid, sid) if aid else ""
-                # Enrich moves: resolve raw move IDs -> full move detail dicts.
-                # Gen 3 sends pp_bonuses as a packed bitfield (2 bits per move).
-                # Gen 4 sends pp_ups as a list[4]. Support both shapes.
-                raw_moves = d.get("moves", [])
-                raw_pp = d.get("pp", [])
-                pp_bonuses = d.get("pp_bonuses", 0)
-                pp_ups_list = d.get("pp_ups") or []
-                move_details = []
-                for idx, mid in enumerate(raw_moves):
-                    if mid and mid > 0:
-                        md = self.adapter.move_data(mid)
-                        if md:
-                            md = dict(md)
-                            base_pp = md.get("pp", 0)
-                            if idx < len(pp_ups_list):
-                                pp_ups = pp_ups_list[idx]
-                            else:
-                                pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
-                            if base_pp:
-                                md["pp"] = base_pp + (base_pp * pp_ups) // 5
-                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
-                            move_details.append(md)
-                d["move_details"] = move_details
+                d["ability_name"] = adapter.ability_name(aid, sid) if aid else ""
+                iid = d.get("held_item_id", 0)
+                d["item_name"] = adapter.item_name(iid) if iid else ""
+                d["move_details"] = _move_details(d)
                 enriched[key] = d
             return enriched
 
         def _enrich_box(pid):
-            """Add move_details to PC box entries."""
-            raw_boxes = self.pc_boxes.get(pid, [])
+            """Add item_name and move_details to PC box entries."""
+            adapter = self.adapter_for(pid)
             enriched = []
-            for bentry in raw_boxes:
+            for bentry in self.pc_boxes.get(pid, []):
                 b = dict(bentry)
-                raw_moves = b.get("moves", [])
-                move_details = []
-                for mid in raw_moves:
-                    if mid and mid > 0:
-                        md = self.adapter.move_data(mid)
-                        if md:
-                            md = dict(md)
-                            md["current_pp"] = md.get("pp", 0)  # box mons: show max PP
-                            move_details.append(md)
-                b["move_details"] = move_details
+                iid = b.get("held_item_id", 0)
+                b["item_name"] = adapter.item_name(iid) if iid else ""
+                b["move_details"] = _move_details(b, boxed=True)
                 enriched.append(b)
             return enriched
 
         def _enrich_battle_state(pid):
             """Add sprite_html, species_name, and move_details to each enemy_party entry."""
             bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
-            ep = bs.get("enemy_party", [])
             enriched = []
-            for em in ep:
+            for em in bs.get("enemy_party", []):
                 em2 = dict(em)
                 sid = em2.get("species_id", 0)
                 form = em2.get("form", 0)
@@ -3431,28 +3449,7 @@ class SLinkServer:
                     em2["sprite_html"] = self._get_sprite_html(sid, form)
                 if sid and not em2.get("species_name"):
                     em2["species_name"] = self.adapter.species_name(sid)
-                # Enrich moves: resolve raw move IDs -> full move detail dicts (mirrors _enrich_party).
-                # Gen 3 sends pp_bonuses (packed u8); Gen 4 sends pp_ups list[4]. Support both.
-                raw_moves = em2.get("moves", [])
-                raw_pp = em2.get("pp", [])
-                pp_bonuses = em2.get("pp_bonuses", 0)
-                pp_ups_list = em2.get("pp_ups") or []
-                move_details = []
-                for idx, mid in enumerate(raw_moves):
-                    if mid and mid > 0:
-                        md = self.adapter.move_data(mid)
-                        if md:
-                            md = dict(md)
-                            base_pp = md.get("pp", 0)
-                            if idx < len(pp_ups_list):
-                                pp_ups = pp_ups_list[idx]
-                            else:
-                                pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
-                            if base_pp:
-                                md["pp"] = base_pp + (base_pp * pp_ups) // 5
-                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
-                            move_details.append(md)
-                em2["move_details"] = move_details
+                em2["move_details"] = _move_details(em2)
                 enriched.append(em2)
             bs["enemy_party"] = enriched
             return bs
@@ -3491,6 +3488,12 @@ class SLinkServer:
                         "state", "admitted"),
                     "admission_reason": self.admission.get(pid, {}).get(
                         "reason", ""),
+                    # What THIS cartridge can do, so a template asks `caps.abilities`
+                    # rather than "is this RR". Per rom_type: firered and firered_rr
+                    # differ on explode_mode and info_panel through one adapter class.
+                    "capabilities": ui_capabilities(
+                        self.adapter_for(pid),
+                        str(self.connected_players.get(pid, {}).get("rom_type") or "")),
                     "encounter_table": self._enc_table_for_status(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, ""),
                         pid,
@@ -3531,6 +3534,7 @@ class SLinkServer:
                         "key": mon.key, "nickname": mon.nickname,
                         "species": mon.species, "level": mon.level,
                         "species_name": self.adapter.species_name(mon.species) if mon.species else "",
+                        "sprite_html": self._get_sprite_html(mon.species) if mon.species else "",
                     }
                     for pid, mon in players.items()
                 }
@@ -3708,7 +3712,6 @@ class SLinkServer:
             "firered_ap": "FireRed (AP)",
             "leafgreen_ap": "LeafGreen (AP)",
             "firered_rr": "FireRed (Radical Red)",
-            "leafgreen_rr": "LeafGreen (Radical Red)",
             "heartgold": "HeartGold",
             "soulsilver": "SoulSilver",
             "platinum": "Platinum",
