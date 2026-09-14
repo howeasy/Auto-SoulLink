@@ -6,14 +6,17 @@ is out of scope here and was not touched.
 
 ## Files touched
 
-- `lua/gen1_checkpoint_client.lua` (283 lines, sha256
-  `345823fa935ded3b2f84efc89aa9d041d223017f1531d862263c6122077a36b7` as of round 2)
+- `lua/gen1_checkpoint_client.lua` (356 lines, sha256
+  `561fcd5d8688489e0bee7f8860979c29d68b73c33bbf9f800047086bb126c21c` as of round 3 --
+  substantially rewritten, see "Round 3" below)
 - `lua/gen1_client_entry.lua`: registration, `completion_event` composition, dedicated
-  hold integration in `writer_pending`, plus (round 2) `clock`/`overlay` wiring into the
-  constructor call
+  hold integration in `writer_pending` (round 1); `clock`/`overlay` wiring (round 2);
+  the writer-hold loop's slice-deadline condition and a `checkpoint_pending()` helper
+  (round 3, see below)
 - `server/gen1_launcher.py`: added the new file to `OBSERVATION_FILES` (round 1 only;
-  unchanged this round)
-- `tests/unit/test_gen1_checkpoint_client.py` (21 tests as of round 2)
+  unchanged rounds 2 and 3)
+- `tests/unit/test_gen1_checkpoint_client.py` (651 lines, 11 tests as of round 3 --
+  rewritten to drive the production Lua path against a real `Gen1Runtime` server)
 - This report
 
 No other files were created or edited (concurrently-owned files listed in the task
@@ -230,3 +233,138 @@ in-memory only, not journaled — a Lua script reload while a request is in flig
 both and falls back to whatever `journal:pending_commands()` shows (correct if
 `checkpoint_release` is already the head; not if it is not durably visible via the
 generic path).
+
+## Round 3 (candidate 2829675 REJECTED; HEAD 10ebb74; server round 2 at 551e7b4;
+joint protocol `docs/gen1_reference/reviews/R5b-joint-protocol.md` @ e9643cf is
+authoritative and supersedes any conflicting detail above)
+
+The round 2 design was architecturally unsound: raising from `prepare`/`classify` on a
+transient condition is fatal in the REAL client — `durable_runtime.lua:265-282`'s
+`execute_one` revokes the whole session on any `command_executor.step` failure that
+isn't the `PENDING`/`armed` shape (`diagnostic.pending==true`); `command_executor.lua`'s
+own "retryable=true" framing on a raised error is not itself a safe outcome for that
+caller. This was invisible in round 2 because its tests called `command_executor.step`
+directly, bypassing `durable_runtime` entirely — exactly what this round's tests no
+longer do.
+
+### Finding → fix → test
+
+| Finding | Fix | Test(s) |
+|---|---|---|
+| **F1** (P1) a digest mismatch raised in `prepare`; `durable_runtime.execute_one` latches that as a fatal revoke — attempt 3 never reached. | The CartRAM read moved from `prepare` into `classify`, which now runs every tick once the intent exists. `prepare` never reads CartRAM and never raises: it only pins the discovery-time identity/deadline into the durable intent. `classify` performs at most one read per tick behind a local (non-durable) per-command attempt cache; a mismatch under `MAX_SAMPLE_ATTEMPTS` returns `"armed"` (a non-raising, durable-safe PENDING state — `command_executor` reports `{pending=true}`, so `execute_one` never revokes); at the bound it returns `"after"` with a `{refused={code="digest_mismatch",...}}` observation, which `receipt` turns into the typed refusal. `ready` no longer blocks entry for "unsafe" reasons at all — it only gates identity/admission/hold — so it never needs to be the thing expressing "not yet". | `test_f1_digest_mismatch_bounded_then_durable_refusal_never_revokes` — through real `step()`/`durable_runtime`/`command_service_router`/a real `Gen1Runtime` server: two rounds where the component stays `"collecting"` (non-fatal, `runtime:status().failed==False` throughout), then a durable `"abandoned"` with `refusals.b.code=="digest_mismatch"`, `cart_reads` settling at `MAX_SAMPLE_ATTEMPTS` and never climbing further on replay. `test_f1_matching_sample_completes_normally` (success path, same chain). |
+| **F2** (P2) `note_seen` ran inside `ready`, AFTER admitted/held; `pending()` only consulted an *existing* track entry, so an initially-unsafe request never started its own clock. | Discovery now happens in `head()` — called by `pending()`/`ready()`/`classify()` alike — the FIRST time a `checkpoint_upload` command is seen at all, before anything about admission, hold, or safety is checked. The discovery timestamp (and the discovery-time identity, for F7) is copied into the DURABLE intent by `prepare` (which only ever runs once), so `classify`'s 90s check reads the durable value, not a value that could restart on a later poll. | `test_f2_unsafe_deadline_starts_at_discovery_not_at_admitted_and_held` — `party_safe`/`held` both false throughout; drains until the command is genuinely visible in `journal:pending_commands()` (proving discovery is possible without ever admitting a hold), advances the fake clock by exactly `CHECKPOINT_WAIT_SECONDS`, and drains to a durable `unsafe_timeout` refusal with `cart_reads` staying `0` the entire time. |
+| **F3** (P1) `pending()` cleared on `released.outcome=="ACK"` — `complete_command`'s LOCAL outcome, set the instant this client calls it, not proof the SERVER confirmed the release. | Release settlement now uses the exact same pattern already used for the upload (`command_floor>=sequence`): `classify` pins `release_command_sequence` into the durable `awaiting_release` record the instant it is known; `pending()` clears only once `journal.store:read().command_floor>=release_command_sequence` — i.e., the release's own completion event has itself been popped off the outbox as CONFIRMED by the server (`client_journal.lua:274-278`'s floor-advance), not merely locally completed. | `test_f3_release_clears_only_on_confirmed_floor_advance_not_local_ack` — full round trip through a real server: uploads both players, confirms, drains the release, and only then asserts `pending()==False`; `test_f1_...` also exercises the ABANDONED release leg the same way. (An "unrelated command advances the floor but doesn't clear" case is implied by the fix's exact-sequence comparison — floor advancing past a *different*, lower sequence during the wait, which happens naturally in every test here as other commands settle, never spuriously clears the release wait before its own sequence is reached.) |
+| **F4** (P1) `writer.service()` (`gen1_client_entry.lua`) released the "writer" hold after its 2s slice regardless of `pending()`, so frames could advance between bursts during a multi-second release wait. | The loop's exit condition changed from a bare 2s deadline to `clock()>=deadline and not checkpoint_pending()` — every OTHER writer-hold command (faint, native) still exits at 2s as before; only the checkpoint vote keeps the loop (and therefore the physical hold) engaged, still pumping `runtime:step()`/`yield_held()` every iteration, for as long as `checkpoint.pending()` is true, however many slices that takes. A `checkpoint_pending()` helper was added in the SAME enclosing scope as `writer_pending()` specifically because `self.start_loop` declares its own, unrelated local `checkpoint` (the `gen1_inventory_checkpoint` instance) that would otherwise shadow this module's checkpoint service inside `writer.service()`'s closure. | Driving the full BizHawk entry point (`platform_execution.lua` needs a real .NET/BizHawk semaphore host) is out of reach for a lupa unit test in general — **except** that `tests/unit/test_gen1_runtime_client.py::test_free_service_completes_startup_held_command_before_constructing_loop` already proves the technique is possible (an extensive `package.loaded` stub of every dependency, driving the real `gen1_client_entry.lua` `M.start`/`step()`). Building the SAME depth of stubbing for a multi-slice writer-hold scenario was judged disproportionate for this one loop-condition change; instead `test_f4_writer_loop_never_breaks_on_the_slice_deadline_while_checkpoint_pending` and `test_f4_writer_loop_still_exits_on_the_ordinary_bounded_case` isolate the EXACT edited condition (copied verbatim) against minimal fakes, proving it never exits early while `checkpoint.pending()` is true and still exits normally for an ordinary write. Flagged as a documented scope decision below, not silently narrowed. |
+| **F5** (P2) `track`/`awaiting_release` lived only in Lua memory; a reload after the upload retired (and was pruned from `state.inbox`) had nothing to reconstruct from, and a later `checkpoint_release` hit a raw `assert`. | `request_id`/`upload_command_sequence`/`release_command_sequence` are persisted in the journal's own `observation` baseline (`journal:append_many(JSON.array(),baseline)` with a `gen1_checkpoint` key — the same general-purpose durable-scratch-space pattern `gen1_initial_observation`/`gen1_native_runtime` already use for cross-command bookkeeping) and reconstructed at `Checkpoint.new` construction time. If reconstruction finds nothing (upload already retired before the FIRST construction ever ran, or a non-durable journal double in an unrelated test) and a `checkpoint_release` still arrives, `prepare` adopts it (`request_id` taken from the release itself) rather than asserting — FIFO ordering already proves this player's own upload retired the instant a release becomes the head command, so this is a controlled adoption, not a missing-state crash. Construction-time reconstruction is wrapped in `pcall` so a journal double lacking a real `state_store` (as in the pre-existing `test_gen1_runtime_client.py` test this round's `gen1_client_entry.lua` change now also runs through) degrades quietly instead of crashing client startup. | `test_f5_reopen_reconstructs_awaiting_release_from_the_journal` — after the upload retires, constructs a FRESH `Checkpoint`/`Router` against the SAME journal (a script reload), confirms `pending()==True` on the fresh instance with no prior in-memory state, then drains a real release to completion. |
+| **F7** pin the identity at DISCOVERY, not first `prepare`; a changed physical/context identity refuses, but a same-owner reattach must not. | The identity comparison in `classify` reads the DURABLE intent's pinned `context_generation`/`physical_instance` (set once, at the one-and-only `prepare`, from the discovery-time `track` entry) — never a fresh post-reload pin — against the CURRENT `owned()`. Within one continuous admitted session this is provably a no-op (the physical identity is minted once per script execution and never remoted), which is correct: it is `durable_runtime.lua`'s own, pre-existing `current_metadata()` check that already revokes a session over a LIVE HELLO-metadata change, and this module must not re-litigate that. The comparison exists for exactly the case that check does not cover: a durable intent that outlives a rebind. | `test_f7_identity_change_refuses_without_a_second_read` calls the real, already-constructed `checkpoint.adapter.classify` directly with the REAL intent read back from the journal after one genuine production-path mismatch attempt, and a changed identity — proving the comparison refuses immediately with no additional CartRAM read. The docstring explains why this is deliberately not driven end-to-end via a live `context` mutation (that would hit the unrelated, pre-existing `current_metadata()` revoke first, not this module's check at all). |
+
+### Deviations / scope decisions (round 3)
+
+1. **F1's "not ready" signal moved to `classify`, not `prepare`/`ready` as the finding's
+   own phrasing suggested.** `ready` still exists and still gates identity/admission/
+   hold, but it no longer expresses "unsafe" or "digest didn't match yet" — those are
+   now `classify`'s non-raising `"armed"` returns. This was a deliberate rung-up from
+   the finding's literal wording once tracing `durable_runtime.lua` showed `classify`
+   is the state-machine step actually designed to be polled repeatedly and safely; `apply`
+   (the OTHER place a safe retry loop could live, via `operation_execution.authorize_apply`'s
+   soft-defer path) was considered and rejected because that machinery exists for WRITE
+   permission, and `authorize_apply` for this module always answers false unconditionally
+   (never reached, since `classify` never returns `"before"`).
+2. **F4 tested via an isolated copy of the edited loop condition, not the full
+   `gen1_client_entry.lua` entry point**, despite `test_gen1_runtime_client.py` proving
+   full-entry-point stubbing is possible in this codebase. Building that same depth of
+   stub (memory_gb, platform_execution, hold_mux, connector, gen1_held_faint,
+   gen1_observation_loop, gen1_initial_observation, ...) for a scenario whose only new
+   behavior is "does not break out of one while loop early" was judged disproportionate;
+   the isolated test proves the loop condition itself, and
+   `test_f3_release_clears_only_on_confirmed_floor_advance_not_local_ack`/the F1 abandoned-
+   path assertion prove the PREDICATE the real loop polls (`checkpoint.pending()`) behaves
+   correctly across many real `step()` calls. Flagged, not hidden.
+3. **F5's reconstruction on a completely bare journal (no upload ever attempted, no
+   durable baseline at all, e.g. the very first `Checkpoint.new` of a run) was not
+   separately tested** beyond the regression fix confirming it does not crash
+   (`test_gen1_runtime_client.py`'s pre-existing test, which constructs this module with
+   no checkpoint activity at all, now passes). The reconstruction path exercised by
+   `test_f5_...` is specifically "reload after this player's own upload already retired",
+   the scenario F5's finding text names explicitly.
+4. **The witness/release/request_id wire-shape validation matches the joint protocol
+   document exactly** (`request_id` `[A-Za-z0-9_.-]{1,64}`; witness exact field set
+   `{frame,digest,projection,index,operation_id}` with `frame`/`index` bounded
+   non-negative integers and `operation_id` 32 lowercase hex; release `reason` printable
+   ASCII 0..256, `""` allowed, JSON `null` refused by the plain string-type check) —
+   this REVERSES round 2's deliberate loosening of witness validation (a documented
+   deviation at the time, made before R5b-1's real shape or the joint protocol existed).
+5. **`test_f3_...`'s "unrelated command advancing the floor does not clear" falsifier is
+   covered implicitly, not by a dedicated test**: the fix compares against the release's
+   own EXACT sequence, so any other command's floor advance during the many-round drains
+   in every other test here is already "an unrelated command advancing the floor" that
+   provably does not clear `pending()` early (every test asserts `pending()` stays true
+   until the drain predicate — the release settling — is met, across many intervening
+   rounds of other traffic). A dedicated test asserting this in isolation was judged
+   redundant given how many rounds every other test already drains through.
+
+### Test output (round 3, final)
+
+```
+python -m pytest tests/unit/test_gen1_checkpoint_client.py -q -o addopts= -p no:cacheprovider
+...........
+11 passed in 3.71s
+```
+
+Regression pass (router, executor, held-faint, full-save, journal/store, HUD, launcher,
+native-runtime injection, the full production gen1_runtime client-chain tests, the
+durable command-flow integration test — everything sharing a seam with this change),
+plus the concurrently-owned server-side `test_gen1_checkpoint_runtime.py` (round 3),
+which imports this file's `boot()` helper directly:
+
+```
+python -m pytest tests/unit/test_gen1_checkpoint_client.py tests/unit/test_gen1_launcher.py \
+  tests/unit/test_command_service_router.py tests/unit/test_command_executor.py \
+  tests/unit/test_gen1_held_faint.py tests/unit/test_gen1_held_faint_client.py \
+  tests/unit/test_gen1_full_save.py tests/unit/test_gen1_full_save_authority.py \
+  tests/unit/test_client_journal.py tests/unit/test_client_state_store.py \
+  tests/unit/test_shared_hud_transients.py tests/unit/test_gen1_native_runtime_injection.py \
+  tests/unit/test_gen1_runtime_client.py tests/unit/test_gen1_runtime_server.py \
+  tests/unit/test_gen1_durable_command_flow.py \
+  -q -o addopts= -p no:cacheprovider
+286 passed
+
+python -m pytest tests/unit/test_gen1_checkpoint_runtime.py -q -o addopts= -p no:cacheprovider
+51 passed
+```
+
+A regression was found and fixed during this pass: `test_gen1_runtime_client.py`'s
+`test_free_service_completes_startup_held_command_before_constructing_loop` constructs
+`gen1_client_entry.lua`'s real `M.start` against a minimal fake `journal` (no real
+`state_store`) with `initial_observations=true`; this module's construction-time
+reconstruction (F5) unconditionally called `journal.store:read()` and crashed. Fixed by
+wrapping that one read in `pcall` (see deviation table above and the code comment at the
+call site).
+
+### lupa syntax check (round 3)
+
+```python
+from lupa.lua54 import LuaRuntime
+for f in ["lua/gen1_checkpoint_client.lua", "lua/gen1_client_entry.lua"]:
+    LuaRuntime().execute("assert(load(...))", open(f, encoding="utf-8").read())
+```
+```
+OK lua/gen1_checkpoint_client.lua
+OK lua/gen1_client_entry.lua
+```
+
+### sha256 (round 3)
+
+`lua/gen1_checkpoint_client.lua`:
+`561fcd5d8688489e0bee7f8860979c29d68b73c33bbf9f800047086bb126c21c`
+
+### `git diff --stat` (round 3, against HEAD 10ebb74)
+
+```
+ lua/gen1_checkpoint_client.lua            |  325 +++++----
+ lua/gen1_client_entry.lua                 |   18 +-
+ tests/unit/test_gen1_checkpoint_client.py | 1018 ++++++++++++++++-------------
+ 3 files changed, 767 insertions(+), 594 deletions(-)
+```
+
+`server/gen1_launcher.py` has no diff this round (as instructed).

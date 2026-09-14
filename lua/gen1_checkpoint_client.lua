@@ -1,38 +1,57 @@
--- R5b-2 (round 2): the read-only client side of paired checkpoint capture. This
--- service claims TWO commands: checkpoint_upload (sample one coherent CartRAM image,
--- take no write permit, never write cartridge memory) and checkpoint_release (the
--- server's terminal verdict on the paired request). It holds -- via pending() below,
--- polled by gen1_client_entry.lua's existing writer-hold loop -- from the moment its
--- sample/refusal is prepared until the release lands, because the paired capture is
--- not finished just because THIS player's half completed (F2). A capture that cannot
--- reach a verified sample within bounded attempts or a bounded wait completes with a
--- durable REFUSAL receipt instead of retrying forever (F1).
+-- R5b-2 (round 3): the read-only client side of paired checkpoint capture, matched to
+-- the authoritative joint protocol at docs/gen1_reference/reviews/R5b-joint-protocol.md
+-- and server/gen1_checkpoint_runtime.py (R5b-1 round 2). This service claims TWO
+-- commands: checkpoint_upload (sample one coherent CartRAM image, no write permit, no
+-- cartridge write) and checkpoint_release (the server's terminal verdict). It never
+-- raises a transient condition into durable_runtime's fatal path (F1): every
+-- "not ready yet" state -- unsafe, undrained, a mismatched sample, an identity change --
+-- is expressed as a non-raising classify() outcome (durable "armed"/PENDING, or a
+-- durable typed refusal), never a thrown error reaching command_executor while
+-- ready()==true. The 90s unsafe deadline and the identity pin both start at DISCOVERY
+-- (F2/F7), before admission/hold is even known, and both are carried in the durable
+-- intent so they survive a reload. The paired hold (F3) clears only once the matching
+-- checkpoint_release command's OWN sequence has itself been confirmed-retired
+-- (command_floor advance), never on this client's local completion alone; that
+-- request_id/upload-sequence/release-sequence triple is itself persisted durably in the
+-- journal's observation baseline (F5), reconstructed on open. gen1_client_entry.lua's
+-- writer-hold loop keeps the "writer" vote (and therefore the physical hold) engaged
+-- for as long as pending() is true, with no 2s bound, while this remains true (F4).
 local JSON=require("json_codec")
 local Full=require("gen1_full_save")
-local M={INTENT_SCHEMA="rby-checkpoint-upload-intent-v1",RELEASE_INTENT_SCHEMA="rby-checkpoint-release-intent-v1",
+local M={
+    INTENT_SCHEMA="rby-checkpoint-upload-intent-v1",
+    RELEASE_INTENT_SCHEMA="rby-checkpoint-release-intent-v1",
+    STATE_SCHEMA="rby-checkpoint-client-state-v1", -- durable observation-baseline record (F5)
     -- Matches gen1_engine_signals.PROJECTION: the persistent-save hex suffix after the
     -- three sprite work buffers (ram/sram.asm), same projection save_witness digests.
     PROJECTION="cartram-0498-8000-v1",
     -- F1 bounds: at most this many CartRAM samples per request, and at most this long
-    -- (wall clock, via the injected clock) waiting for a write-safe drained overworld
-    -- before refusing unsafe_timeout instead of retrying forever.
+    -- (wall clock, via the injected clock, from DISCOVERY) waiting for a write-safe
+    -- drained overworld before refusing unsafe_timeout instead of retrying forever.
     MAX_SAMPLE_ATTEMPTS=3,CHECKPOINT_WAIT_SECONDS=90}
 local UPLOAD_FIELDS={cmd=true,request_id=true,witness=true}
+local WITNESS_FIELDS={frame=true,digest=true,projection=true,index=true,operation_id=true}
 local RELEASE_FIELDS={cmd=true,request_id=true,outcome=true,reason=true}
 local RELEASE_OUTCOMES={confirmed=true,abandoned=true}
+local MAX_SEQ=9007199254740991
 local function hex(value,size)return type(value)=="string" and #value==size and value:match("^[0-9a-f]+$")~=nil end
+local function integer(value,min,max)return type(value)=="number" and value%1==0 and value>=min and value<=max end
+local function printable_ascii(value,min,max)
+    return type(value)=="string" and #value>=min and #value<=max and not value:find("[^ -~]")
+end
+local function request_id_ok(value)
+    return type(value)=="string" and #value>=1 and #value<=64 and value:match("^[A-Za-z0-9_.%-]+$")~=nil
+end
 local function copy(value)return assert(JSON.decode(assert(JSON.encode(value))))end
-local function request_id_ok(value)return type(value)=="string" and #value>=1 and #value<=256 end
 
 function M.handles(body)
     return type(body)=="table" and (body.cmd=="checkpoint_upload" or body.cmd=="checkpoint_release")
 end
 
--- The witness itself is server-owned (server/gen1_engine_signal_runtime.py's
--- SAVE_WITNESS component: frame/digest/projection/index/operation_id) and must
--- round-trip through the receipt byte-for-byte (server/gen1_checkpoint_runtime.py
--- compares it for exact equality), so only the two fields this client acts on are
--- checked here; anything else is opaque and passed through untouched.
+-- Wire shapes and bounds per the joint protocol §2: exact field sets, request_id
+-- [A-Za-z0-9_.-]{1,64}, the exact witness field set {frame,digest,projection,index,
+-- operation_id}, and a release reason that is a printable-ASCII string 0..256 (empty
+-- allowed, JSON null refused by the plain string type check).
 function M.validate(body)
     assert(M.handles(body),"complete checkpoint command required")
     if body.cmd=="checkpoint_release" then
@@ -40,7 +59,7 @@ function M.validate(body)
         for key in pairs(RELEASE_FIELDS)do assert(body[key]~=nil,"missing checkpoint_release field: "..key)end
         assert(request_id_ok(body.request_id),"invalid checkpoint request id")
         assert(RELEASE_OUTCOMES[body.outcome],"invalid checkpoint release outcome")
-        assert(type(body.reason)=="string" and #body.reason<=256,"invalid checkpoint release reason")
+        assert(printable_ascii(body.reason,0,256),"invalid checkpoint release reason")
         return body
     end
     for key in pairs(body)do assert(UPLOAD_FIELDS[key],"unknown checkpoint_upload field: "..tostring(key))end
@@ -48,8 +67,13 @@ function M.validate(body)
     assert(request_id_ok(body.request_id),"invalid checkpoint request id")
     local witness=body.witness
     assert(type(witness)=="table","checkpoint witness required")
+    for key in pairs(witness)do assert(WITNESS_FIELDS[key],"unknown checkpoint witness field: "..tostring(key))end
+    for key in pairs(WITNESS_FIELDS)do assert(witness[key]~=nil,"missing checkpoint witness field: "..key)end
+    assert(integer(witness.frame,0,MAX_SEQ),"invalid checkpoint witness frame")
     assert(hex(witness.digest,64),"invalid checkpoint witness digest")
     assert(witness.projection==M.PROJECTION,"unsupported checkpoint witness projection")
+    assert(integer(witness.index,0,MAX_SEQ),"invalid checkpoint witness index")
+    assert(hex(witness.operation_id,32),"invalid checkpoint witness operation id")
     return body
 end
 
@@ -74,19 +98,55 @@ function M.new(options)
     local journal,mem,owned,host,variant,clock,overlay=
         options.journal,options.memory,options.owned,options.host,options.variant,options.clock,options.overlay
     local unwrap=options.unwrap or function(body)return require("gen1_runtime").unwrap(body,options.player)end
-    local self={awaiting_release=nil,release_notice_at=nil}
-    local track={} -- command_id -> {first_seen,attempts,context_generation,physical_instance}
+    local self={awaiting_release=nil}
+    -- Local-only, per-command_id read-attempt cache: attempts/matched/refused/frame/
+    -- cart_hex. Deliberately NOT durable -- a reload just restarts the bounded attempt
+    -- count cleanly (still <=MAX_SAMPLE_ATTEMPTS more reads), never resampling past a
+    -- DURABLE completion (command_executor's own replay-before-prepare short circuit).
+    local track={}
+    local last_status=nil
     local function sha(text)return journal.store.backend.sha256(text)end
-    local function note_seen(command_id)
-        local info=track[command_id]
-        if not info then info={first_seen=clock(),attempts=0};track[command_id]=info end
-        return info
+    local function read_state()
+        local state,revision_or_error=journal.store:read() -- (payload,revision) on success
+        assert(state,revision_or_error)
+        return state
+    end
+    -- F5/joint-protocol §1: durable request_id + upload/release sequence, reconstructed
+    -- on open from the journal's own observation baseline (survives a reload). The
+    -- upload command's own durable intent is pruned the instant its sequence is
+    -- confirmed-retired (client_journal.lua's floor-advance), so it cannot carry this
+    -- information past that point; the baseline is the only surviving durable trace.
+    local function persist_awaiting(value)
+        local baseline=copy(read_state().observation)
+        baseline.gen1_checkpoint=value and {schema=M.STATE_SCHEMA,request_id=value.request_id,
+            upload_command_sequence=value.upload_command_sequence,
+            release_command_sequence=value.release_command_sequence or JSON.null} or JSON.null
+        assert(journal:append_many(JSON.array(),baseline))
+    end
+    do
+        -- Tolerate a minimal/synthetic journal double that has no real state_store
+        -- (this module is constructed unconditionally by gen1_client_entry.lua whenever
+        -- initial_observations is enabled, whether or not the caller cares about
+        -- checkpoint capture at all): a reconstruction failure here is never worse than
+        -- the in-memory-only behavior this replaced, so it degrades quietly rather than
+        -- taking down the whole client's startup.
+        local ok,saved=pcall(function()return read_state().observation.gen1_checkpoint end)
+        if ok and saved and saved~=JSON.null then
+            self.awaiting_release={request_id=saved.request_id,upload_command_sequence=saved.upload_command_sequence,
+                release_command_sequence=saved.release_command_sequence~=JSON.null and saved.release_command_sequence or nil}
+        end
     end
     -- Best-effort, side-effect-only local status text: never blocks or fails the
-    -- durable command flow. Routes through hud.lua's OWN sanitize() (H.present),
-    -- the same call gen1_hud_service uses for server-issued notices -- this one is
-    -- purely client-local (never a durable command, never ACKed to the server).
-    local function notify(text,r,g,b,frames)
+    -- durable command flow. F6: at most ONE retained hud.lua entry for this module at a
+    -- time -- a repeat of the SAME text is skipped while it is still retained (H.present
+    -- is the only sanitize-safe draw path hud.lua exposes; it has no in-place update, so
+    -- de-duplicating on the caller side is what keeps this bounded during a long hold).
+    local function status_line(text,r,g,b,frames)
+        if text==last_status then
+            local retained=type(overlay.retained)=="function" and overlay.retained() or nil
+            if retained and (retained.hud or 0)>0 then return end
+        end
+        last_status=text
         pcall(overlay.present,{surface="hud",text=text,r=r or 255,g=g or 255,b=b or 255,frames=frames or 180})
     end
     local function head()
@@ -94,6 +154,13 @@ function M.new(options)
         if not entry then return nil end
         entry=copy(entry);entry.body=unwrap(entry.body)
         if not M.handles(entry.body)then return nil end
+        if entry.body.cmd=="checkpoint_upload" and not track[entry.command_id] then
+            -- F2/F7: discovery-time pin -- BEFORE admission/hold/safety are even known --
+            -- of both the 90s wait clock and the identity this request is bound to.
+            local context=owned()
+            track[entry.command_id]={first_seen=clock(),attempts=0,
+                context_generation=context.context_generation,physical_instance=context.physical_instance}
+        end
         return entry
     end
     local function matches(body)
@@ -114,33 +181,25 @@ function M.new(options)
         assert(pending_events,err)
         return #pending_events==0
     end
-    local function timed_out(info)return (clock()-info.first_seen)>=M.CHECKPOINT_WAIT_SECONDS end
+    local function command_floor()return read_state().command_floor end
     -- command_service_router service shape: handles/ready/adapter/operations.
     self.handles=M.handles
     -- Cheap readiness the outer writer-hold loop polls every free-running tick (no
-    -- CartRAM read here): worth taking the hold once the durable outbox is drained
-    -- and the game state looks write-safe (or the wait budget has run out and we are
-    -- about to durably refuse instead) -- AND, per F2, for as long as this player's
-    -- own upload/refusal has completed but the server's paired checkpoint_release
-    -- verdict has not yet arrived: the paired capture is not finished at that point,
+    -- CartRAM read here): worth taking the hold once the durable outbox is drained and
+    -- the game state looks write-safe (or the wait budget has run out and we are about
+    -- to durably refuse instead) -- AND, per F2/F3, for as long as this player's own
+    -- upload/refusal has completed but the matching checkpoint_release has not yet
+    -- itself been CONFIRMED-retired: the paired capture is not finished at that point,
     -- so gameplay must not resume silently in between.
     self.pending=function()
         if self.awaiting_release then
-            -- Clear only once the release command's ACK is itself durable (the single
-            -- source of truth is the journal, not receipt()'s return value): if
-            -- complete_command ever failed after adapter.receipt ran, this keeps
-            -- waiting rather than releasing on an unpersisted assumption.
-            local release_id=self.awaiting_release.release_command_id
-            local released=release_id and journal:get_command(release_id)
-            if released and released.outcome=="ACK" then
+            local seq=self.awaiting_release.release_command_sequence
+            if seq and command_floor()>=seq then
                 self.awaiting_release=nil
+                persist_awaiting(nil)
                 return false
             end
-            local now=clock()
-            if not self.release_notice_at or now-self.release_notice_at>=3 then
-                self.release_notice_at=now
-                notify("Checkpoint pending - waiting for the server",255,220,120)
-            end
+            status_line("Checkpoint pending - waiting for the server",255,220,120)
             return true
         end
         local entry=head()
@@ -148,30 +207,24 @@ function M.new(options)
         if entry.body.cmd=="checkpoint_release" then return true end
         if mem.isPartyWriteSafe()==true and drained() then return true end
         local info=track[entry.command_id]
-        return info~=nil and timed_out(info)
+        return info~=nil and (clock()-info.first_seen)>=M.CHECKPOINT_WAIT_SECONDS
     end
+    -- F1: readiness gates only identity/admission/hold -- it never blocks entry into the
+    -- executor for an "unsafe" or "not yet matched" reason. classify() below is what
+    -- expresses those as a non-raising "armed"/PENDING state, which command_executor
+    -- reports as {pending=true} and durable_runtime.execute_one therefore never treats
+    -- as a fatal failure (contrast a raised error from prepare, which it always does).
     self.ready=function(body,intent,control)
         local ok,entry=matches(body)
         if not ok then return false,entry end
         if not control.admitted or not control.operation_held then return false,"waiting for a held checkpoint window"end
-        if body.cmd=="checkpoint_release" then return true end
-        local info=note_seen(entry.command_id)
-        if safe() and drained() then return true end
-        if timed_out(info) then return true end -- forced entry: prepare durably refuses unsafe_timeout
-        return false,"checkpoint capture requires the party write-safe, drained overworld hold"
+        return true
     end
     self.adapter={}
-    local function refusal_intent(body,identity,code,reason)
-        return {schema=M.INTENT_SCHEMA,command_id=identity.command_id,command_sequence=identity.command_sequence,
-            request_id=body.request_id,witness=copy(body.witness),refused={code=code,reason=reason}}
-    end
-    -- The one and only path that may read CartRAM. Everything upstream (ready, and
-    -- the guards repeated here in case prepare is ever invoked directly) must refuse
-    -- before this point. A digest mismatch or a still-unsafe state raises (a transient
-    -- NACK: no partial state is persisted, so a retry re-enters this same function) UNTIL
-    -- its bound is reached, at which point this returns a REFUSAL intent successfully --
-    -- and a successful return is what journal:prepare_command persists, so a refusal
-    -- (like a real sample) is taken exactly once and never revisited on replay.
+    -- Runs exactly once per command (command_executor never calls prepare again once
+    -- journal:prepare_command has persisted its intent). It never reads CartRAM and
+    -- never raises for a transient reason: it only pins the request/witness/identity
+    -- (from the discovery-time track entry) or reconstructs an in-flight release.
     function self.adapter.prepare(body,identity)
         M.validate(body)
         local ok,entry=matches(body)
@@ -179,68 +232,90 @@ function M.new(options)
         assert(entry.command_id==identity.command_id and entry.command_sequence==identity.command_sequence,
             "checkpoint command identity differs from the command head")
         if body.cmd=="checkpoint_release" then
-            assert(self.awaiting_release and self.awaiting_release.request_id==body.request_id,
+            -- F5: a same-owner reopen after this client's own upload already retired
+            -- (and was pruned) has no in-memory awaiting_release; reconstruct it from
+            -- the release's OWN request_id -- a controlled adoption, not a missing-
+            -- state assert. FIFO ordering (checkpoint_upload always precedes
+            -- checkpoint_release in the inbox) already proves the upload retired the
+            -- instant this release is even visible as the head command.
+            if not self.awaiting_release then
+                self.awaiting_release={request_id=body.request_id,upload_command_sequence=command_floor()}
+                persist_awaiting(self.awaiting_release)
+            end
+            assert(self.awaiting_release.request_id==body.request_id,
                 "checkpoint release does not match this client's awaited checkpoint request")
-            -- A confirmed command is pruned from state.inbox the moment it retires
-            -- (client_journal.lua's accept_response floor-advance), so get_command
-            -- cannot see it here: command_floor having reached this player's own
-            -- upload sequence is the durable proof accept_response actually leaves.
-            local state,revision_or_error=journal.store:read() -- state_store:read() returns (payload,revision) on success
-            assert(state,revision_or_error)
-            assert(state.command_floor>=self.awaiting_release.upload_command_sequence,
+            assert(command_floor()>=self.awaiting_release.upload_command_sequence,
                 "checkpoint release arrived before this client's own upload was acknowledged")
-            -- Remember which command_id to watch for durable ACK confirmation
-            -- (pending() below clears awaiting_release only once that is true).
-            self.awaiting_release.release_command_id=identity.command_id
             return {schema=M.RELEASE_INTENT_SCHEMA,command_id=identity.command_id,command_sequence=identity.command_sequence,
                 request_id=body.request_id,outcome=body.outcome,reason=body.reason}
         end
-        local info=note_seen(identity.command_id)
-        local context=owned()
-        if info.context_generation and (info.context_generation~=context.context_generation
-            or info.physical_instance~=context.physical_instance) then
-            return refusal_intent(body,identity,"identity_changed",
-                "the held physical context changed while this checkpoint request was pending")
-        end
-        info.context_generation=info.context_generation or context.context_generation
-        info.physical_instance=info.physical_instance or context.physical_instance
-        if not (safe() and drained()) then
-            if timed_out(info) then
-                return refusal_intent(body,identity,"unsafe_timeout",
-                    "the party write-safe drained overworld hold was not available within "
-                        ..M.CHECKPOINT_WAIT_SECONDS.." seconds")
-            end
-            error("checkpoint capture requires the party write-safe, drained overworld hold",0)
-        end
-        info.attempts=info.attempts+1
-        local frame=emu.framecount()
-        local point=Full.capture(mem,variant) -- lua/gen1_full_save.lua:12-40's bulk CartRAM read pattern
-        local digest=sha(point.cart_hex:sub(0x498*2+1))
-        if digest~=body.witness.digest then
-            if info.attempts>=M.MAX_SAMPLE_ATTEMPTS then
-                return refusal_intent(body,identity,"digest_mismatch",
-                    "the sampled save did not match the pinned witness after "..M.MAX_SAMPLE_ATTEMPTS.." attempts")
-            end
-            error("checkpoint witness digest differs from the sampled save",0)
-        end
-        assert(safe() and emu.framecount()==frame,"checkpoint sample requires a continuously held frame")
+        local info=track[identity.command_id]
+        assert(info,"checkpoint command was not discovered before preparation")
+        -- The discovery-time pin travels into the DURABLE intent (F5/F7): a reload
+        -- reads it back from here, not from track (which is reseeded fresh on reload),
+        -- so the identity/deadline this request is bound to survives intact.
         return {schema=M.INTENT_SCHEMA,command_id=identity.command_id,command_sequence=identity.command_sequence,
-            request_id=body.request_id,witness=copy(body.witness),frame=frame,
-            context_generation=context.context_generation,physical_instance=context.physical_instance,
-            final_sha1=gameinfo.getromhash():lower(),cart_hex=point.cart_hex}
+            request_id=body.request_id,witness=copy(body.witness),first_seen=info.first_seen,
+            context_generation=info.context_generation,physical_instance=info.physical_instance}
     end
-    -- The read (or the bounded refusal) already happened in prepare and is persisted
-    -- in the durable intent. A retry (durable replay, or a fresh executor pass before
-    -- the receipt lands) classifies that SAME intent; it is never reclassified into
-    -- "before" and therefore never triggers apply or a second CartRAM read.
+    -- Called every tick once the intent exists. Never raises: every "not yet" outcome
+    -- is the non-raising "armed" PENDING state; every terminal outcome (a real sample or
+    -- a bounded refusal) is "after". This is the ONE place that may read CartRAM.
     function self.adapter.classify(body,intent,identity)
         local ok,entry=matches(body)
         assert(ok,entry)
-        local schema=body.cmd=="checkpoint_release" and M.RELEASE_INTENT_SCHEMA or M.INTENT_SCHEMA
-        assert(type(intent)=="table" and intent.schema==schema and intent.command_id==identity.command_id
+        if body.cmd=="checkpoint_release" then
+            assert(type(intent)=="table" and intent.schema==M.RELEASE_INTENT_SCHEMA and intent.command_id==identity.command_id
+                and intent.command_sequence==identity.command_sequence,
+                "checkpoint command intent differs from the command head")
+            -- Pin the release's own sequence for the F3 floor-settlement check, durably
+            -- (F5), the instant it is known -- before this command can even ACK.
+            if not self.awaiting_release.release_command_sequence then
+                self.awaiting_release.release_command_sequence=identity.command_sequence
+                persist_awaiting(self.awaiting_release)
+            end
+            return "after",intent
+        end
+        assert(type(intent)=="table" and intent.schema==M.INTENT_SCHEMA and intent.command_id==identity.command_id
             and intent.command_sequence==identity.command_sequence,
             "checkpoint command intent differs from the command head")
-        return "after",intent
+        -- F7: compared against the identity pinned DURABLY in the intent (surviving a
+        -- reload), never a fresh post-reload discovery pin -- a plain same-owner
+        -- reattach is therefore never itself a refusal; only a genuinely different
+        -- physical context inheriting this exact durable command is.
+        local context=owned()
+        if context.context_generation~=intent.context_generation or context.physical_instance~=intent.physical_instance then
+            return "after",{refused={code="identity_changed",
+                reason="the held physical context changed while this checkpoint request was pending"}}
+        end
+        if not (safe() and drained()) then
+            if (clock()-intent.first_seen)>=M.CHECKPOINT_WAIT_SECONDS then
+                return "after",{refused={code="unsafe_timeout",
+                    reason="the party write-safe drained overworld hold was not available within "
+                        ..M.CHECKPOINT_WAIT_SECONDS.." seconds"}}
+            end
+            return "armed",{schema="rby-checkpoint-awaiting-safety-v1",command_id=identity.command_id}
+        end
+        local sample=track[identity.command_id]
+        if not sample then sample={attempts=0};track[identity.command_id]=sample end
+        if sample.matched then return "after",{frame=sample.frame,cart_hex=sample.cart_hex}end
+        if sample.refused then return "after",{refused=sample.refused}end
+        -- One bounded, owned read attempt per tick while safe+drained; never raises.
+        sample.attempts=sample.attempts+1
+        local frame=emu.framecount()
+        local point=Full.capture(mem,variant) -- lua/gen1_full_save.lua:12-40's bulk CartRAM read pattern
+        local digest=sha(point.cart_hex:sub(0x498*2+1))
+        if digest==body.witness.digest then
+            assert(safe() and emu.framecount()==frame,"checkpoint sample requires a continuously held frame")
+            sample.matched=true;sample.frame=frame;sample.cart_hex=point.cart_hex
+            return "after",{frame=frame,cart_hex=point.cart_hex}
+        end
+        if sample.attempts>=M.MAX_SAMPLE_ATTEMPTS then
+            sample.refused={code="digest_mismatch",
+                reason="the sampled save did not match the pinned witness after "..M.MAX_SAMPLE_ATTEMPTS.." attempts"}
+            return "after",{refused=sample.refused}
+        end
+        return "armed",{schema="rby-checkpoint-sample-retry-v1",command_id=identity.command_id,attempt=sample.attempts}
     end
     function self.adapter.apply()
         error("checkpoint_upload/checkpoint_release never write cartridge memory",0)
@@ -248,27 +323,25 @@ function M.new(options)
     function self.adapter.receipt(body,intent,observed,identity)
         local ok,entry=matches(body)
         assert(ok,entry)
-        assert(type(observed)=="table" and observed.command_id==identity.command_id,
-            "checkpoint receipt requires its completed read")
+        assert(type(observed)=="table","checkpoint receipt requires its completed read")
         if body.cmd=="checkpoint_release" then
-            -- awaiting_release itself clears lazily in pending(), once this command's
-            -- own ACK is durably confirmed in the journal (not eagerly here): if
-            -- complete_command later fails after this returns, pending() keeps
-            -- holding rather than releasing on an unpersisted assumption. The
-            -- terminal notice is cosmetic and safe to fire now, while still held.
-            if intent.outcome=="confirmed" then notify("Checkpoint saved",120,255,120)
-            else notify("Checkpoint abandoned: "..intent.reason,255,160,80,240)end
+            if intent.outcome=="confirmed" then status_line("Checkpoint saved",120,255,120)
+            else status_line("Checkpoint abandoned: "..intent.reason,255,160,80,240)end
             return {request_id=intent.request_id,outcome=intent.outcome}
         end
-        if intent.refused then
-            notify("Checkpoint refused: "..intent.refused.reason,255,120,120,240)
+        if observed.refused then
+            status_line("Checkpoint refused: "..observed.refused.reason,255,120,120,240)
             self.awaiting_release={request_id=intent.request_id,upload_command_sequence=identity.command_sequence}
-            return {request_id=intent.request_id,witness=copy(intent.witness),refused=copy(intent.refused)}
+            persist_awaiting(self.awaiting_release)
+            track[identity.command_id]=nil
+            return {request_id=intent.request_id,witness=copy(intent.witness),refused=copy(observed.refused)}
         end
         self.awaiting_release={request_id=intent.request_id,upload_command_sequence=identity.command_sequence}
-        return {request_id=intent.request_id,witness=copy(intent.witness),frame=intent.frame,
+        persist_awaiting(self.awaiting_release)
+        track[identity.command_id]=nil
+        return {request_id=intent.request_id,witness=copy(intent.witness),frame=observed.frame,
             context_generation=intent.context_generation,physical_instance=intent.physical_instance,
-            final_sha1=intent.final_sha1,cart_hex=intent.cart_hex}
+            final_sha1=gameinfo.getromhash():lower(),cart_hex=observed.cart_hex}
     end
     -- No write permit is ever requested: classify never returns "before", so apply
     -- (and therefore authorize_apply) is never reached for either command.

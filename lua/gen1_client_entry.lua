@@ -452,9 +452,16 @@ function M.start(launch,options)
                     and (not native or (self.reattach_verdict=="clean" and self.reattach_server~=nil
                         and self.reattach_server.verdict=="released" and self.reattach_server.read_digest==self.reattach_read_digest))
             end
+            -- Named separately from writer_pending (not inlined at its one call site
+            -- below) because self.start_loop, just below, declares its OWN local
+            -- `checkpoint` (the unrelated gen1_inventory_checkpoint instance) that
+            -- would otherwise shadow this module's checkpoint service inside
+            -- writer.service()'s closure; a function defined HERE still closes over
+            -- the correct outer `checkpoint` wherever it is later called from.
+            local function checkpoint_pending()return checkpoint~=nil and checkpoint.pending()end
             local function writer_pending()
                 return (faint~=nil and faint.pending()) or (self.native~=nil and self.native:pending())
-                    or (checkpoint~=nil and checkpoint.pending())
+                    or checkpoint_pending()
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
@@ -489,8 +496,15 @@ function M.start(launch,options)
                         assert(self.holds:set("writer",true,"servicing a held write command"))
                         local deadline=clock()+M.WRITE_SERVICE_SECONDS
                         local ok,why=pcall(function()
-                            while writer_pending() and clock()<deadline do
+                            while writer_pending() do
                                 assert(self.runtime:step());assert(self.host.yield_held())
+                                -- F4: the checkpoint hold has NO bound -- a bounded pump slice is not
+                                -- permission to advance frames. Every OTHER writer-hold command (faint,
+                                -- native's paired vote) still exits at its ordinary 2s slice deadline and
+                                -- is retried on the next loop tick; only checkpoint.pending() keeps this
+                                -- exact hold vote (and therefore the physical stop) engaged across
+                                -- however many slices the server round trip actually takes.
+                                if clock()>=deadline and not checkpoint_pending()then break end
                             end
                         end)
                         assert(self.holds:set("writer",false,"held write service complete"))

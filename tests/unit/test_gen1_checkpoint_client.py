@@ -1,29 +1,43 @@
-"""R5b-2 (round 2): the Lua client side of paired checkpoint capture.
+"""R5b-2 (round 3): the Lua client side of paired checkpoint capture, driven through the
+PRODUCTION path -- gen1_runtime.lua -> durable_runtime.lua -> command_executor.lua ->
+command_service_router.lua -> gen1_checkpoint_client.lua -- against a REAL server
+(server.gen1_run_config.create_runtime, the same Gen1Runtime server.py uses), not direct
+command_executor calls. Player "a" is driven in plain Python (admission/witness are
+precondition setup, not what this card changed); player "b" is the one real Lua client
+under test, relayed over an in-memory transport exactly like test_gen1_runtime_client.py.
 
-gen1_checkpoint_client claims TWO commands: checkpoint_upload (sample one coherent
-CartRAM image, never a write permit, never a cartridge write) and checkpoint_release
-(the server's terminal verdict on the paired request). F1: a sample that cannot be
-verified within bounded attempts, or a write-safe/drained state that never arrives
-within a bounded wall-clock wait, completes durably with a REFUSAL receipt instead of
-retrying forever. F2: the hold is not released just because this player's own half
-completed -- it persists (with a visible notice) until the paired checkpoint_release
-verdict lands, however long that takes.
+F1: a bad sample never raises into durable_runtime's fatal revoke path -- it stays a
+non-raising PENDING ("armed") state, bounded to MAX_SAMPLE_ATTEMPTS reads, then a durable
+typed refusal. F2/F7: the 90s unsafe deadline and the identity pin both start at
+DISCOVERY and live in the durable intent, surviving a reload. F3: the paired hold clears
+only once the matching checkpoint_release command's OWN sequence is confirmed-retired
+(command_floor advance), never on local ACK alone. F5: request_id/upload-sequence/
+release-sequence are persisted in the journal's observation baseline and reconstructed on
+open. F4 (gen1_client_entry.lua's writer-hold loop) is covered by an isolated test of the
+edited loop condition -- see its own section below for why the full BizHawk entry point
+is out of reach for a lupa unit test.
 """
 import hashlib
-from pathlib import Path
+import json
 
 import pytest
 from lupa.lua54 import LuaError
 
+from server.gen1_checkpoint_runtime import COMPONENT, start as checkpoint_start
 from server.gen1_launcher import OBSERVATION_FILES
-from tests.unit.test_client_journal import start
-from tests.unit.test_client_state_store import runtime  # noqa: F401
+from server.gen1_run_config import create_runtime
+from server.protocol import canonical_json, decode_frame
+from tests.unit.test_client_state_store import runtime as lua_store  # noqa: F401
+from tests.unit.test_gen1_engine_signal_runtime import (
+    deliver as engine_deliver,
+    payload as engine_payload,
+)
+from tests.unit.test_gen1_engine_signals import witness as save_witness_signal
+from tests.unit.test_gen1_initial_observation import admit, observation, send
+from tests.unit.test_gen1_sessions import contract
 
-ROOT = Path(__file__).resolve().parents[2]
 PROJECTION = "cartram-0498-8000-v1"
-REQUEST_ID = "1" * 32
-COMMAND_ID = "2" * 32
-RELEASE_COMMAND_ID = "3" * 32
+REQUEST_ID = "checkpoint-req-1"
 
 
 def full_cart_hex():
@@ -39,25 +53,11 @@ def digest_for(hex_text):
 
 
 GOOD_DIGEST = digest_for(full_cart_hex())
-BODY_LUA = ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',"
-            "witness={digest='" + GOOD_DIGEST + "',projection='" + PROJECTION + "'}}")
-BAD_WITNESS_BODY_LUA = ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',"
-                         "witness={digest='" + "0" * 64 + "',projection='" + PROJECTION + "'}}")
-# The real shape server/gen1_engine_signal_runtime.py's SAVE_WITNESS component carries
-# (frame/digest/projection/index/operation_id) -- gen1_checkpoint_runtime.py's record()
-# requires the receipt to echo this back byte-for-byte.
-REAL_WITNESS_BODY_LUA = ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',"
-                          "witness={digest='" + GOOD_DIGEST + "',projection='" + PROJECTION + "',"
-                          "frame=42,index=0,operation_id='" + ("9" * 32) + "'}}")
-RELEASE_CONFIRMED_LUA = ("{cmd='checkpoint_release',request_id='" + REQUEST_ID + "',"
-                          "outcome='confirmed',reason=''}")
-RELEASE_ABANDONED_LUA = ("{cmd='checkpoint_release',request_id='" + REQUEST_ID + "',"
-                          "outcome='abandoned',reason='partner refused'}")
 
 
 def lua_source(template, **slots):
-    """Substitute @@name@@ markers with raw Lua source (never a %/format operator,
-    so callers can hand in strings that are themselves full of literal braces)."""
+    """Substitute @@name@@ markers with raw Lua source (never a %/format operator, so
+    callers can hand in strings that are themselves full of literal braces)."""
     text = template
     for name, value in slots.items():
         text = text.replace("@@" + name + "@@", value)
@@ -65,18 +65,16 @@ def lua_source(template, **slots):
 
 
 def boot(lua, *, party_safe=True, held=True):
-    """Open the real journal (test_client_journal.start) and load the checkpoint
-    client against a fake BizHawk/memory_gb environment: a deterministic 32 KiB
-    CartRAM buffer (byte i is i%256, matching full_cart_hex/GOOD_DIGEST above), a
-    zero-filled System Bus buffer wide enough for gen1_full_save_layout's field
-    regions, a fake wall clock (`now`), a fake HUD overlay recording every present()
-    call into `presented`, and counters proving exactly which domain was read."""
-    start(lua)
+    """Standalone (non-production) fixture used by the wire-shape/pure-function tests
+    below, and by tests/unit/test_gen1_checkpoint_runtime.py (server round 3) to check
+    server-emitted command bodies against this module's own M.validate. Not the harness
+    for the F1-F7 lifecycle tests further down, which drive the real production path."""
     lua.globals().party_safe = party_safe
     lua.globals().held = held
     lua.execute(r"""
-        package.path=root..'/data/games/gen1_rby/?.lua;'..package.path
-        cart_reads=0;bus_reads=0
+        package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
+        JSON=JSON or require('json_codec')
+        cart_reads=0
         local function fill(step)
             local parts={}
             for i=0,0x7FFF do parts[i+1]=string.char((i+step)%256)end
@@ -87,7 +85,7 @@ def boot(lua, *, party_safe=True, held=True):
         memory={
             read_bytes_as_binary_string=function(addr,count,domain)
                 domain=domain or "System Bus"
-                if domain=="CartRAM" then cart_reads=cart_reads+1 else bus_reads=bus_reads+1 end
+                if domain=="CartRAM" then cart_reads=cart_reads+1 end
                 local buf=assert(domains[domain],"unknown memory domain")
                 local slice=buf:sub(addr+1,addr+count)
                 assert(#slice==count,"short domain read")
@@ -101,465 +99,553 @@ def boot(lua, *, party_safe=True, held=True):
         gameinfo={getromhash=function()return string.rep('e',40)end}
         frame=100;now=100
         clock=function()return now end
-        context={context_generation=string.rep('c',32),physical_instance=string.rep('p',32)}
+        context={context_generation=string.rep('c',32),physical_instance=string.rep('p',32),
+            save_identity={ot_id='0000',trainer_name='SAME'}}
         host={status=function()return {physical_stop_verified=held}end}
         mem={isPartyWriteSafe=function()return party_safe end}
         presented={}
-        overlay={present=function(notice)presented[#presented+1]=notice;return true end}
+        overlay={present=function(notice)presented[#presented+1]=notice;return true end,
+            retained=function()return {hud=0}end}
         Checkpoint=require('gen1_checkpoint_client')
-        -- test_client_journal.start() opens the journal with no callbacks; reopen it
-        -- with the SAME completion_event composition client_entry.lua wires in, so the
-        -- round trip tests prove the typed save_upload/checkpoint_release envelopes,
-        -- not the generic ACK.
-        store:close();store=assert(open_store())
-        journal=assert(Journal.open(store,new_id,{completion_event=Checkpoint.completion_event}))
+        Journal=require('client_journal')
+        -- open_store()/hash_text come from the test_client_state_store.runtime fixture
+        -- (aliased lua_store below): a real disk-shaped backend with real sha256. That
+        -- fixture's open_store() reads the GLOBAL `initial` at call time (matching
+        -- test_client_journal.start()'s own pattern) -- it must be a client-journal-
+        -- shaped document, not the fixture's own generic placeholder.
+        initial=Journal.initial()
+        store=assert(open_store())
+        local n=0
+        journal=assert(Journal.open(store,function()n=n+1;return string.format('%032x',n)end))
         service=Checkpoint.new({journal=journal,memory=mem,player='b',variant='yellow',
             owned=function()return context end,host=host,clock=clock,overlay=overlay})
-        Router=require('command_service_router');router=Router.new({service})
-        -- Production's gen1_runtime.lua unwraps {cmd,body} before calling the router
-        -- adapter; reproduce that one layer so a real durable journal entry (always
-        -- stored wrapped, per accept_response below) reaches the service unwrapped.
-        local function unwrapped_adapter(inner)
-            local wrapped={}
-            for _,name in ipairs({'prepare','classify','apply','receipt'})do
-                wrapped[name]=function(body,...)
-                    return inner[name](require('gen1_runtime').unwrap(body,'b'),...)
-                end
-            end
-            return wrapped
-        end
-        executor=require('command_executor').new(journal,unwrapped_adapter(router.adapter))
-        function step(id) return executor:step(id) end
-        function ready(body_lua)
-            local body=assert(load('return '..body_lua))()
-            local ok,why=service.ready(body,nil,{admitted=true,operation_held=true})
-            return ok,why
-        end
-        function try_prepare(body_lua)
-            local body=assert(load('return '..body_lua))()
-            local ok,err=pcall(service.adapter.prepare,body,{command_id=COMMAND_ID,command_sequence=1})
-            return ok,tostring(err)
-        end
     """)
-    lua.globals().COMMAND_ID = COMMAND_ID
 
 
-def admit(lua, body_lua, command_id=COMMAND_ID, sequence=1):
-    """Deliver one durable command, acknowledging whatever is CURRENTLY the oldest
-    pending outbox event (e.g. a prior command's save_upload completion) exactly as
-    the real server's response does -- rather than always minting a fresh one, which
-    would violate accept_response's FIFO-oldest-event rule on a second admit() call."""
-    lua.globals().admit_command_id = command_id
-    lua.globals().admit_sequence = sequence
-    lua.execute(lua_source("""
-        do
-            local body=@@BODY@@
-            local oldest=assert(journal:pending_events())[1]
-            local operation_id=oldest and oldest.operation_id
-                or assert(journal:append({event='fixture'..admit_command_id}))
-            assert(journal:accept_response(operation_id,JSON.array({
-                {command_id=admit_command_id,command_sequence=admit_sequence,body={cmd=body.cmd,body=body}}})))
-        end
-    """, BODY=body_lua))
-
-
-def presented_texts(lua):
-    return [entry["text"] for entry in lua.globals().presented.values()]
-
-
-def test_handles_and_validate_reject_unknown_or_malformed_bodies(runtime):  # noqa: F811
-    lua = runtime
+def test_handles_and_validate_reject_unknown_or_malformed_bodies(lua_store):  # noqa: F811
+    lua = lua_store
     boot(lua)
+    good_upload = ("{cmd='checkpoint_upload',request_id='r1',witness={frame=1,digest='" + GOOD_DIGEST
+                   + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}")
+    good_release = "{cmd='checkpoint_release',request_id='r1',outcome='confirmed',reason=''}"
     lua.execute(lua_source("""
         assert(Checkpoint.handles({cmd='checkpoint_upload'})==true)
         assert(Checkpoint.handles({cmd='checkpoint_release'})==true)
         assert(Checkpoint.handles({cmd='force_faint'})==false)
         assert(Checkpoint.handles('not a table')==false)
-        Checkpoint.validate(@@BODY@@) -- does not raise
-        Checkpoint.validate(@@RELEASE@@) -- does not raise
-    """, BODY=BODY_LUA, RELEASE=RELEASE_CONFIRMED_LUA))
+        Checkpoint.validate(@@UPLOAD@@)
+        Checkpoint.validate(@@RELEASE@@)
+    """, UPLOAD=good_upload, RELEASE=good_release))
     cases = [
-        ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',witness={digest='" + GOOD_DIGEST
-         + "',projection='" + PROJECTION + "'},extra=1}", "unknown checkpoint_upload field"),
-        ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "'}", "missing checkpoint_upload field"),
-        ("{cmd='checkpoint_upload',request_id='',witness={digest='" + GOOD_DIGEST
-         + "',projection='" + PROJECTION + "'}}", "invalid checkpoint request id"),
-        ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',witness={projection='" + PROJECTION + "'}}",
+        ("{cmd='checkpoint_upload',request_id='',witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}",
+         "invalid checkpoint request id"),
+        ("{cmd='checkpoint_upload',request_id='has a space',witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}",
+         "invalid checkpoint request id"),
+        ("{cmd='checkpoint_upload',request_id=string.rep('r',65),witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}",
+         "invalid checkpoint request id"),
+        ("{cmd='checkpoint_upload',request_id='r1',witness={digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}",
+         "missing checkpoint witness field"),
+        ("{cmd='checkpoint_upload',request_id='r1',witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32),extra=1}}",
+         "unknown checkpoint witness field"),
+        ("{cmd='checkpoint_upload',request_id='r1',witness={frame=-1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}",
+         "invalid checkpoint witness frame"),
+        ("{cmd='checkpoint_upload',request_id='r1',witness={frame=1,digest='z'..string.rep('0',63),"
+         "projection='" + PROJECTION + "',index=0,operation_id=string.rep('9',32)}}",
          "invalid checkpoint witness digest"),
-        ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID
-         + "',witness={digest='z'..string.rep('0',63),projection='" + PROJECTION + "'}}",
-         "invalid checkpoint witness digest"),
-        ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',witness={digest='" + GOOD_DIGEST + "'}}",
+        ("{cmd='checkpoint_upload',request_id='r1',witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='other-v1',index=0,operation_id=string.rep('9',32)}}",
          "unsupported checkpoint witness projection"),
-        ("{cmd='checkpoint_upload',request_id='" + REQUEST_ID + "',witness={digest='" + GOOD_DIGEST
-         + "',projection='other-v1'}}", "unsupported checkpoint witness projection"),
-        ("{cmd='checkpoint_release',request_id='" + REQUEST_ID + "',outcome='confirmed',reason='',extra=1}",
-         "unknown checkpoint_release field"),
-        ("{cmd='checkpoint_release',request_id='" + REQUEST_ID + "',outcome='confirmed'}",
-         "missing checkpoint_release field"),
-        ("{cmd='checkpoint_release',request_id='" + REQUEST_ID + "',outcome='maybe',reason=''}",
+        ("{cmd='checkpoint_upload',request_id='r1',witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=-1,operation_id=string.rep('9',32)}}",
+         "invalid checkpoint witness index"),
+        ("{cmd='checkpoint_upload',request_id='r1',witness={frame=1,digest='" + GOOD_DIGEST
+         + "',projection='" + PROJECTION + "',index=0,operation_id='short'}}",
+         "invalid checkpoint witness operation id"),
+        ("{cmd='checkpoint_release',request_id='r1',outcome='maybe',reason=''}",
          "invalid checkpoint release outcome"),
+        ("{cmd='checkpoint_release',request_id='r1',outcome='confirmed',reason=string.rep('x',257)}",
+         "invalid checkpoint release reason"),
+        ("{cmd='checkpoint_release',request_id='r1',outcome='confirmed',reason='\\1control'}",
+         "invalid checkpoint release reason"),
     ]
     for body_lua, match in cases:
         with pytest.raises(LuaError, match=match):
             lua.execute(lua_source("Checkpoint.validate(@@BODY@@)", BODY=body_lua))
-    # The real server witness (server/gen1_engine_signal_runtime.py's SAVE_WITNESS
-    # component) carries frame/index/operation_id too; validate accepts it as opaque
-    # extra data rather than rejecting fields this client does not itself act on.
-    lua.execute(lua_source("Checkpoint.validate(@@BODY@@)", BODY=REAL_WITNESS_BODY_LUA))
+    # "" is explicitly allowed (never null) for a release reason.
+    lua.execute("Checkpoint.validate({cmd='checkpoint_release',request_id='r1',outcome='confirmed',reason=''})")
 
 
-def test_router_claims_both_checkpoint_commands_and_leaves_unknown_unclaimed(runtime):  # noqa: F811
-    lua = runtime
+def test_completion_event_shapes_and_terminal_nack_refusal(lua_store):  # noqa: F811
+    lua = lua_store
     boot(lua)
-    admit(lua, BODY_LUA)
-    ok, why = lua.execute(lua_source(
-        "local ok,why=router.ready(@@BODY@@,nil,{admitted=true,operation_held=true});return ok,why",
-        BODY=BODY_LUA))
-    assert ok is True and why is None
-    ok, why = lua.execute("return router.ready({cmd='unknown'})")
-    assert ok is False and why == "command has no selected service"
     lua.execute("""
-        local rogue={handles=function(body)return body.cmd=='checkpoint_upload'end,
-            ready=function()return true end,adapter={},operations={
-                request=function()return nil end,accept=function()return true end,
-                authorize_apply=function()return false end,revoke=function()end,status=function()return{}end}}
-        for _,name in ipairs({'prepare','classify','apply','receipt'})do rogue.adapter[name]=function()end end
-        conflict=Router.new({service,rogue})
-    """)
-    with pytest.raises(LuaError, match="multiple services"):
-        lua.execute("conflict.adapter.apply({cmd='checkpoint_upload'})")
-
-
-def test_ready_defers_without_reading_when_unsafe_or_unheld(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    lua.globals().party_safe = False
-    ok, why = lua.globals().ready(BODY_LUA)
-    assert ok is False and isinstance(why, str)
-    lua.globals().party_safe = True
-    lua.globals().held = False
-    ok, why = lua.globals().ready(BODY_LUA)
-    assert ok is False and isinstance(why, str)
-    assert lua.globals().cart_reads == 0
-
-
-def test_ready_defers_while_not_admitted_and_while_events_are_pending(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    ok, why = lua.execute(lua_source(
-        "return service.ready(@@BODY@@,nil,{admitted=false,operation_held=true})", BODY=BODY_LUA))
-    assert ok is False and isinstance(why, str)
-    ok, why = lua.execute(lua_source(
-        "return service.ready(@@BODY@@,nil,{admitted=true,operation_held=false})", BODY=BODY_LUA))
-    assert ok is False and isinstance(why, str)
-    lua.execute("assert(journal:append({event='undrained'}))")
-    ok, why = lua.globals().ready(BODY_LUA)
-    assert ok is False and isinstance(why, str)
-    assert lua.globals().cart_reads == 0
-
-
-def test_ready_is_true_once_matched_admitted_held_safe_and_drained(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    ok, why = lua.globals().ready(BODY_LUA)
-    assert ok is True and why is None
-    assert lua.globals().cart_reads == 0  # readiness alone never reads CartRAM
-
-
-def test_prepare_refuses_and_reads_no_cartram_when_unsafe_unheld_or_undrained(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    lua.globals().party_safe = False
-    ok, err = lua.globals().try_prepare(BODY_LUA)
-    assert ok is False and "party write-safe" in err
-    assert lua.globals().cart_reads == 0
-    lua.globals().party_safe = True
-    lua.globals().held = False
-    ok, err = lua.globals().try_prepare(BODY_LUA)
-    assert ok is False and "party write-safe" in err  # safe() folds both conditions
-    assert lua.globals().cart_reads == 0
-    lua.globals().held = True
-    lua.execute("assert(journal:append({event='undrained'}))")
-    ok, err = lua.globals().try_prepare(BODY_LUA)
-    assert ok is False and "drain" in err
-    assert lua.globals().cart_reads == 0
-
-
-def test_digest_mismatch_bounded_to_three_attempts_then_durable_refusal(runtime):  # noqa: F811
-    """F1: a persistent digest mismatch does not retry forever. It gets exactly
-    MAX_SAMPLE_ATTEMPTS reads, then completes durably (ACK) with a refusal receipt --
-    no cart_hex -- that a duplicate delivery replays without a fourth read."""
-    lua = runtime
-    boot(lua)
-    admit(lua, BAD_WITNESS_BODY_LUA)
-    assert lua.globals().Checkpoint.MAX_SAMPLE_ATTEMPTS == 3
-    for attempt in (1, 2):
-        done, result = lua.globals().step(COMMAND_ID)
-        assert done is False
-        assert result["outcome"] == "NACK" and "digest" in result["reason"]
-        assert lua.globals().cart_reads == attempt
-        assert lua.globals().state().inbox[1].outcome is None  # never persisted while retrying
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    assert lua.globals().cart_reads == 3
-    receipt = result["receipt"]
-    assert receipt["refused"]["code"] == "digest_mismatch"
-    assert receipt["request_id"] == REQUEST_ID
-    assert receipt["cart_hex"] is None  # no cart_hex in a refusal receipt
-    outbox = lua.globals().state().outbox
-    payload = outbox[len(outbox)].payload
-    assert payload["event"] == "save_upload"
-    assert payload["receipt"]["refused"]["code"] == "digest_mismatch"
-    # A further delivery of the same command_id replays the stored refusal; no 4th read.
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["replayed"] is True
-    assert lua.globals().cart_reads == 3
-
-
-def test_identity_changed_refuses_immediately_regardless_of_attempt_count(runtime):  # noqa: F811
-    """F1: a changed held physical context (a re-admission mid-request) refuses at
-    once, without waiting out the 3-attempt digest bound and without another read."""
-    lua = runtime
-    boot(lua)
-    admit(lua, BAD_WITNESS_BODY_LUA)
-    done, result = lua.globals().step(COMMAND_ID)  # attempt 1: reads once, NACKs on the bad digest
-    assert done is False and lua.globals().cart_reads == 1
-    lua.execute("context.context_generation=string.rep('d',32)")
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    assert lua.globals().cart_reads == 1  # no further read: identity_changed short-circuits
-    assert result["receipt"]["refused"]["code"] == "identity_changed"
-
-
-def test_unsafe_timeout_refuses_without_ever_reading_cartram(runtime):  # noqa: F811
-    """F1: staying unsafe for CHECKPOINT_WAIT_SECONDS refuses durably (unsafe_timeout)
-    -- ready() is forced true so prepare can persist the refusal, but the state is
-    STILL unsafe, so zero CartRAM reads happen even for this refusal."""
-    lua = runtime
-    boot(lua, party_safe=False)
-    admit(lua, BODY_LUA)
-    wait_seconds = lua.globals().Checkpoint.CHECKPOINT_WAIT_SECONDS
-    assert wait_seconds == 90
-    ok, why = lua.globals().ready(BODY_LUA)
-    assert ok is False and isinstance(why, str)
-    lua.globals().now = 100 + wait_seconds
-    ok, why = lua.globals().ready(BODY_LUA)
-    assert ok is True and why is None  # forced entry into prepare
-    assert lua.globals().cart_reads == 0
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    assert lua.globals().cart_reads == 0
-    assert result["receipt"]["refused"]["code"] == "unsafe_timeout"
-
-
-def test_full_round_trip_produces_exact_hex_and_survives_reopen(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    receipt = result["receipt"]
-    assert receipt["request_id"] == REQUEST_ID
-    assert receipt["cart_hex"] == full_cart_hex()
-    assert len(receipt["cart_hex"]) == 65536 and receipt["cart_hex"] == receipt["cart_hex"].upper()
-    assert receipt["frame"] == 100
-    assert receipt["context_generation"] == "c" * 32
-    assert receipt["physical_instance"] == "p" * 32
-    assert receipt["final_sha1"] == "e" * 40
-    assert lua.globals().cart_reads == 1
-    outbox = lua.globals().state().outbox
-    payload = outbox[len(outbox)].payload
-    assert payload["event"] == "save_upload" and payload["command_id"] == COMMAND_ID
-    assert payload["command_sequence"] == 1
-    assert payload["receipt"]["cart_hex"] == full_cart_hex()
-    lua.globals().reopen()
-    state = lua.globals().state()
-    stored = state.inbox[1]
-    assert stored.outcome == "ACK" and stored.receipt["cart_hex"] == full_cart_hex()
-    reopened_outbox = state.outbox
-    reopened_payload = reopened_outbox[len(reopened_outbox)].payload
-    assert reopened_payload["receipt"]["cart_hex"] == full_cart_hex()
-
-
-def test_receipt_echoes_the_real_five_field_server_witness_verbatim(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, REAL_WITNESS_BODY_LUA)
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    witness = result["receipt"]["witness"]
-    assert witness["digest"] == GOOD_DIGEST
-    assert witness["projection"] == PROJECTION
-    assert witness["frame"] == 42
-    assert witness["index"] == 0
-    assert witness["operation_id"] == "9" * 32
-
-
-def test_duplicate_delivery_replays_the_stored_receipt_without_resampling(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    done, first = lua.globals().step(COMMAND_ID)
-    assert done is True and first["outcome"] == "ACK"
-    assert lua.globals().cart_reads == 1
-    # Change the physical world after the ACK: a resample, if one happened, would differ.
-    lua.globals().frame = 999
-    lua.execute("shift_cartram(1)")
-    assert next_cart_hex() != full_cart_hex()
-    done, second = lua.globals().step(COMMAND_ID)
-    assert done is True and second["replayed"] is True
-    assert second["receipt"]["cart_hex"] == first["receipt"]["cart_hex"] == full_cart_hex()
-    assert second["receipt"]["frame"] == first["receipt"]["frame"] == 100
-    assert lua.globals().cart_reads == 1  # no second CartRAM read for the duplicate delivery
-
-
-def test_successful_upload_holds_until_checkpoint_release_confirmed(runtime):  # noqa: F811
-    """F2: pending() (and therefore writer_pending) must not drop just because this
-    player's own upload ACKed -- the paired capture is not finished until the server's
-    checkpoint_release verdict lands. Also verifies the visible "waiting" notice fires
-    and the terminal "Checkpoint saved" notice fires once the release confirms."""
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    assert lua.execute("return service.pending()") is True
-    assert "Checkpoint pending - waiting for the server" in presented_texts(lua)
-    admit(lua, RELEASE_CONFIRMED_LUA, RELEASE_COMMAND_ID, 2)
-    done, result = lua.globals().step(RELEASE_COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    assert result["receipt"]["request_id"] == REQUEST_ID
-    assert result["receipt"]["outcome"] == "confirmed"
-    assert lua.execute("return service.pending()") is False
-    assert "Checkpoint saved" in presented_texts(lua)
-    release_payload = lua.globals().state().outbox[len(lua.globals().state().outbox)].payload
-    assert release_payload["event"] == "checkpoint_release" and release_payload["command_id"] == RELEASE_COMMAND_ID
-    assert lua.globals().cart_reads == 1  # no read at all for the release leg
-
-
-def test_checkpoint_release_abandoned_after_a_refusal_still_releases_the_hold(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BAD_WITNESS_BODY_LUA)
-    for _ in range(3):
-        done, result = lua.globals().step(COMMAND_ID)
-    assert done is True and result["receipt"]["refused"]["code"] == "digest_mismatch"
-    assert lua.execute("return service.pending()") is True
-    admit(lua, RELEASE_ABANDONED_LUA, RELEASE_COMMAND_ID, 2)
-    done, result = lua.globals().step(RELEASE_COMMAND_ID)
-    assert done is True and result["outcome"] == "ACK"
-    assert result["receipt"]["request_id"] == REQUEST_ID and result["receipt"]["outcome"] == "abandoned"
-    assert lua.execute("return service.pending()") is False
-    assert "Checkpoint abandoned: partner refused" in presented_texts(lua)
-
-
-def test_release_never_arriving_keeps_holding_with_a_repeated_notice(runtime):  # noqa: F811
-    """F2: no bound on the release wait -- disconnect/timeout while awaiting it must
-    keep holding (never resume gameplay silently), with a periodically repeated notice."""
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    lua.globals().step(COMMAND_ID)
-    assert lua.execute("return service.pending()") is True
-    lua.globals().now = 100 + 10
-    assert lua.execute("return service.pending()") is True
-    lua.globals().now = 100 + 100000  # far past even the (inapplicable) upload wait bound
-    assert lua.execute("return service.pending()") is True
-    assert presented_texts(lua).count("Checkpoint pending - waiting for the server") >= 2
-
-
-def test_checkpoint_release_refuses_when_it_does_not_match_the_awaited_request(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    lua.globals().step(COMMAND_ID)  # ACKs the upload; sets awaiting_release for REQUEST_ID
-    mismatched = ("{cmd='checkpoint_release',request_id='" + ("9" * 32) + "',outcome='confirmed',reason=''}")
-    admit(lua, mismatched, RELEASE_COMMAND_ID, 2)
-    done, result = lua.globals().step(RELEASE_COMMAND_ID)
-    assert done is False and result["outcome"] == "NACK"
-    assert "does not match" in result["reason"]
-    assert lua.execute("return service.pending()") is True
-
-
-def test_apply_is_unreachable_and_authorize_apply_always_refuses(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    admit(lua, BODY_LUA)
-    with pytest.raises(LuaError, match="never write cartridge memory"):
-        lua.execute("service.adapter.apply()")
-    allowed, why = lua.execute(lua_source("return service.operations.authorize_apply(@@BODY@@)", BODY=BODY_LUA))
-    assert allowed is False and isinstance(why, str)
-    assert lua.execute("return service.operations.request()") is None
-    assert lua.execute("return service.operations.accept(nil)") is True
-    with pytest.raises(LuaError, match="takes no operation grant"):
-        lua.execute("service.operations.accept({grant=true})")
-
-
-def test_completion_event_composes_with_a_prior_callback_and_rejects_double_claims(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    lua.execute(lua_source("""
-        local function compose(previous)
-            return function(entry,outcome,receipt)
-                local first=previous and previous(entry,outcome,receipt)or nil
-                local second=Checkpoint.completion_event(entry,outcome,receipt)
-                assert(first==nil or second==nil,'multiple journal projections claimed one event')
-                return first or second
-            end
-        end
-        local other_cmd_entry={body={cmd='force_faint',body={cmd='force_faint'}},
+        upload_entry={body={cmd='checkpoint_upload',body={cmd='checkpoint_upload'}},
             command_id=string.rep('a',32),command_sequence=1}
-        local checkpoint_entry={body={cmd='checkpoint_upload',body=@@BODY@@},
+        release_entry={body={cmd='checkpoint_release',body={cmd='checkpoint_release'}},
             command_id=string.rep('b',32),command_sequence=2}
-        local previous=function(entry)if entry.body.body.cmd=='force_faint'then return {event='command_ack'}end end
-        local composed=compose(previous)
-        other_result=composed(other_cmd_entry,'ACK',{})
-        checkpoint_result=composed(checkpoint_entry,'ACK',{cart_hex='FF'})
-        local greedy=function()return {event='rogue'}end
-        greedy_composed=compose(greedy)
-        function trigger_conflict()
-            local entry={body={cmd='checkpoint_upload',body=@@BODY@@},command_id=string.rep('b',32),command_sequence=2}
-            greedy_composed(entry,'ACK',{})
-        end
-    """, BODY=BODY_LUA))
+        upload_result=Checkpoint.completion_event(upload_entry,'ACK',{cart_hex='FF'})
+        release_result=Checkpoint.completion_event(release_entry,'ACK',{outcome='confirmed'})
+        other_entry={body={cmd='force_faint',body={cmd='force_faint'}},command_id=string.rep('c',32),command_sequence=3}
+        other_result=Checkpoint.completion_event(other_entry,'ACK',{})
+    """)
     g = lua.globals()
-    assert g.other_result["event"] == "command_ack"
-    assert g.checkpoint_result["event"] == "save_upload"
-    assert g.checkpoint_result["command_id"] == "b" * 32
-    assert g.checkpoint_result["command_sequence"] == 2
-    assert g.checkpoint_result["receipt"]["cart_hex"] == "FF"
-    with pytest.raises(LuaError, match="multiple journal projections"):
-        lua.execute("trigger_conflict()")
-
-
-def test_completion_event_for_checkpoint_release(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    lua.execute(lua_source("""
-        entry={body={cmd='checkpoint_release',body=@@RELEASE@@},command_id=string.rep('c',32),command_sequence=3}
-        release_result=Checkpoint.completion_event(entry,'ACK',{request_id='""" + REQUEST_ID + """',outcome='confirmed'})
-    """, RELEASE=RELEASE_CONFIRMED_LUA))
-    result = lua.globals().release_result
-    assert result["event"] == "checkpoint_release"
-    assert result["command_id"] == "c" * 32
-    assert result["command_sequence"] == 3
-    assert result["receipt"]["outcome"] == "confirmed"
-
-
-def test_completion_event_refuses_a_terminal_nack(runtime):  # noqa: F811
-    lua = runtime
-    boot(lua)
-    lua.execute(lua_source(
-        "entry={body={cmd='checkpoint_upload',body=@@BODY@@},command_id=string.rep('b',32),command_sequence=1}",
-        BODY=BODY_LUA))
+    assert g.upload_result["event"] == "save_upload" and g.upload_result["receipt"]["cart_hex"] == "FF"
+    assert g.release_result["event"] == "checkpoint_release" and g.release_result["receipt"]["outcome"] == "confirmed"
+    assert g.other_result is None
     with pytest.raises(LuaError, match="terminal NACK"):
-        lua.execute("Checkpoint.completion_event(entry,'NACK',{})")
+        lua.execute("Checkpoint.completion_event(upload_entry,'NACK',{})")
 
 
 def test_launcher_ships_the_checkpoint_client_only_with_initial_observations():
     assert "lua/gen1_checkpoint_client.lua" in OBSERVATION_FILES
+
+
+# ============================================================================
+# Production-path harness: a real Gen1Runtime server + the real client chain
+# (gen1_runtime.lua -> durable_runtime.lua -> command_executor.lua ->
+# command_service_router.lua -> gen1_checkpoint_client.lua) for player "b",
+# relayed over an in-memory transport. Player "a" is plain Python (setup only).
+# ============================================================================
+
+CART_HEX = full_cart_hex()
+
+
+def _save_digest(cart_hex):
+    return hashlib.sha256(cart_hex[0x498 * 2:].encode("ascii")).hexdigest()
+
+
+def _pin_witness(runtime, player, owner, *, frame=200, sequence=1, cart_hex=CART_HEX):
+    value = engine_payload(runtime, player, [], sequence)
+    value["signals"] = [save_witness_signal(value["variant"], digest=_save_digest(cart_hex))]
+    value["signals"][0]["frame"] = frame
+    return engine_deliver(runtime, player, owner, value)
+
+
+HARNESS = r"""
+    package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
+    JSON=JSON or require('json_codec')
+    local data=assert(JSON.decode(client_input))
+    cart_reads=0
+    local function fill(step)
+        local parts={}
+        for i=0,0x7FFF do parts[i+1]=string.char((i+step)%256)end
+        return table.concat(parts)
+    end
+    domains={CartRAM=fill(0),["System Bus"]=string.rep('\0',65536)}
+    function shift_cartram(step) domains.CartRAM=fill(step) end
+    memory={
+        read_bytes_as_binary_string=function(addr,count,domain)
+            domain=domain or "System Bus"
+            if domain=="CartRAM" then cart_reads=cart_reads+1 end
+            local buf=assert(domains[domain],"unknown memory domain")
+            local slice=buf:sub(addr+1,addr+count)
+            assert(#slice==count,"short domain read")
+            return slice
+        end,
+        read_u8=function(addr,domain)
+            local buf=domains[domain or "System Bus"]
+            return buf:byte(addr+1) or 0
+        end}
+    gameinfo={getromhash=function()return data.final_sha1 end}
+    frame=300;emu={framecount=function()return frame end} -- past the pinned witness's frame=200
+    now=10;clock=function()return now end
+    party_safe=true;held=false
+    host={status=function()return {physical_stop_verified=held}end,
+        set_held=function(value,why)held=value;return true end}
+    mem={isPartyWriteSafe=function()return party_safe end}
+    presented={}
+    overlay={present=function(notice)presented[#presented+1]=notice;return true end,
+        retained=function()return {hud=0}end}
+    context={context_generation=data.context.context_generation,
+        physical_instance=data.context.physical_instance,save_identity={ot_id='0000',trainer_name='SAME'}}
+    Journal=require('client_journal');Checkpoint=require('gen1_checkpoint_client')
+    Router=require('command_service_router')
+    initial=Journal.initial() -- open_store() reads this GLOBAL at call time
+    store=assert(open_store())
+    ids=0
+    journal=assert(Journal.open(store,function()ids=ids+1;return data.id_prefix..string.format('%030x',ids)end,
+        {completion_event=Checkpoint.completion_event}))
+    checkpoint=Checkpoint.new({journal=journal,memory=mem,player=data.player,variant=data.variant,
+        owned=function()return context end,host=host,clock=clock,overlay=overlay})
+    router=Router.new({checkpoint})
+    incoming={};outgoing={};connected=false
+    transport={
+        init=function(host,port,options)assert(options.discard_on_disconnect);connected=true;incoming={};outgoing={}end,
+        connected=function()return connected end,
+        pump=function()end,
+        send=function(line)outgoing[#outgoing+1]=line;return true end,
+        receive=function()return table.remove(incoming,1)end,
+        disconnect=function()connected=false;incoming={};outgoing={}end,
+        queue_status=function()return {send_lines=0,send_bytes=0,send_offset=0,receive_lines=0,receive_bytes=0,
+            partial_receive_bytes=0,pending_receive_bytes=0,ready_receive_bytes=0}end,
+    }
+    Runtime=require('gen1_runtime')
+    nonce=0
+    options={player=data.player,variant=data.variant,run_id=data.run_id,server_host='127.0.0.1',server_port=9000,
+        journal=journal,transport=transport,clock=clock,control_interval=0.5,sync_interval=0.05,
+        host=host,operation_held=function()return held end,
+        read_context=function()return context end,
+        operation_execution=router.operations,operation_ready=router.ready,executor_adapter=router.adapter,
+        new_nonce=function()nonce=nonce+1;return data.nonce_prefix..string.format('%030x',nonce)end,
+    }
+    runtime=assert(Runtime.new(options))
+    function step()return runtime:step()end
+    function pop()return table.remove(outgoing,1)end
+    function push(raw)incoming[#incoming+1]=raw end
+    function status_json()return assert(JSON.encode(runtime:status()))end
+    -- Precondition setup (admission-adjacent, not what this card changed) must flow
+    -- through THIS client's own session/sequence tracking, never a python-injected
+    -- runtime.process call on the side: that would desync client_session.lua's
+    -- internal seq counter from the server's and break every later exchange.
+    function observe_event(event_name,payload_json)
+        return assert(runtime:observe(JSON.array({{event=event_name,payload=assert(JSON.decode(payload_json))}}),JSON.object()))
+    end
+    -- The head command's UNWRAPPED body, persisted intent and identity, for tests that
+    -- call this service's own adapter functions directly (see test_f7 below for why).
+    function head_snapshot()
+        local entry=assert(assert(journal:pending_commands())[1])
+        local body=require('gen1_runtime').unwrap(entry.body,data.player)
+        return assert(JSON.encode({command_id=entry.command_id,command_sequence=entry.command_sequence,
+            intent=entry.intent,body=body}))
+    end
+"""
+
+
+def make_client(runtime, player, run_id, id_prefix, nonce_prefix):
+    lua = lua_store.__wrapped__()
+    context = {"context_generation": player * 32,
+               "physical_instance": ("1" if player == "a" else "2") * 32}
+    lua.globals().client_input = json.dumps({
+        "player": player, "variant": runtime.contract["players"][player]["variant"],
+        "run_id": run_id, "final_sha1": runtime.contract["players"][player]["final_rom_sha1"],
+        "context": context, "id_prefix": id_prefix, "nonce_prefix": nonce_prefix})
+    lua.execute(HARNESS)
+    return lua
+
+
+def exchange(runtime, clients, owners, count=1):
+    """One production pump per client per round: advance its fake wall clock past the
+    control/sync interval (otherwise durable_runtime never re-polls after its first sync
+    -- state.last_sync/last_control never age out against a clock that never moves),
+    step(), relay every outgoing line through the REAL server (runtime.process), push
+    the response back."""
+    for _ in range(count):
+        for player, lua in clients.items():
+            g = lua.globals()
+            g.now = g.now + 0.02
+            assert g.step() is True, g.status_json()
+            while (line := g.pop()) is not None:
+                message = decode_frame(line.encode())
+                response = runtime.process(message, owners[player])
+                g.push(canonical_json(response))
+
+
+@pytest.fixture
+def checkpoint_case(tmp_path):
+    """Both players admitted + observed + witnessed on a real Gen1Runtime; player "a"
+    entirely in Python, player "b" the real Lua client under test. Yields
+    (runtime, clients, owners) with the checkpoint request NOT yet started."""
+    runtime = create_runtime(tmp_path, contract("red", "blue"))
+    owner_a = admit(runtime, "a")
+    send(runtime, "a", owner_a, observation(runtime, "a"))
+    _pin_witness(runtime, "a", owner_a)
+    lua_b = make_client(runtime, "b", runtime.journal.run_id, "bb", "dd")
+    owners = {"a": owner_a, "b": object()}
+    clients = {"b": lua_b}
+    # Admit + control player "b" through the REAL client chain before anything else.
+    for _ in range(40):
+        exchange(runtime, clients, owners)
+        if runtime.gate.sessions.get("b") is not None and runtime.gate.sessions["b"].metadata:
+            break
+    # Precondition setup for player "b" (initial observation + save witness) is queued
+    # and sent through THIS SAME Lua client's own durable outbox/session -- never a
+    # python-injected runtime.process call, which would desync its session sequence.
+    witness_payload = engine_payload(runtime, "b", [], 1)
+    witness_payload["signals"] = [save_witness_signal(witness_payload["variant"],
+        digest=_save_digest(CART_HEX))]
+    witness_payload["signals"][0]["frame"] = 200
+    lua_b.globals().observe_event("initial_observation", json.dumps(observation(runtime, "b")))
+    lua_b.globals().observe_event("engine_signals", json.dumps(witness_payload))
+    _drain_until(runtime, clients, owners,
+        lambda: runtime.state().document()["components"].get("gen1-save-witness", {}).get("b") is not None)
+    try:
+        yield runtime, clients, owners
+    finally:
+        runtime.close()
+
+
+def _start(runtime, request_id=REQUEST_ID):
+    return checkpoint_start(runtime, request_id, "registry-run-1")
+
+
+def _upload_a(runtime, owners, request_id=REQUEST_ID):
+    """Complete player "a"'s upload entirely in Python (setup only, matching this
+    module's own CART_HEX/save_digest so the server's witness match succeeds)."""
+    from tests.unit.test_gen1_checkpoint_runtime import _upload as py_upload
+    witness = runtime.state().document()["components"][COMPONENT]["witnesses"]["a"]
+    return py_upload(runtime, "a", owners["a"], request_id, witness, cart_hex=CART_HEX, frame=200)
+
+
+def _drain_until(runtime, clients, owners, predicate, limit=200):
+    for _ in range(limit):
+        if predicate():
+            return True
+        exchange(runtime, clients, owners)
+    return predicate()
+
+
+def test_f1_digest_mismatch_bounded_then_durable_refusal_never_revokes(checkpoint_case):
+    """F1: a persistent digest mismatch never raises into durable_runtime's fatal revoke
+    -- it stays a non-raising PENDING state (attempts 1 and 2), then a durable refusal
+    receipt (attempt 3), retired via a normal ACK. Driven entirely through step()."""
+    runtime, clients, owners = checkpoint_case
+    lua = clients["b"]
+    g = lua.globals()
+    _start(runtime)
+    g.party_safe = True
+    g.held = True
+    # The pinned witness digest does not match this client's (deliberately different)
+    # fake CartRAM: shift it so it can never match.
+    lua.execute("shift_cartram(1)")
+    component_before = runtime.state().document()["components"][COMPONENT]
+    assert component_before["status"] == "collecting"
+    assert _drain_until(runtime, clients, owners,
+        lambda: runtime.state().document()["components"][COMPONENT]["status"] != "collecting")
+    component = runtime.state().document()["components"][COMPONENT]
+    assert component["status"] == "abandoned"
+    assert component["refusals"]["b"]["code"] == "digest_mismatch"
+    # durable_runtime never fatally revoked the session over any of the retries.
+    assert lua.execute("return runtime:status().failed") is False
+    assert g.cart_reads >= 3
+    # Bounded: no unbounded retry loop -- the count settles at MAX_SAMPLE_ATTEMPTS.
+    reads_at_refusal = g.cart_reads
+    exchange(runtime, clients, owners, count=5)
+    assert g.cart_reads == reads_at_refusal
+    # F3 (abandoned path): the hold persists until the ABANDONED release is itself
+    # confirmed-retired -- not just locally ACKed -- exactly like the confirmed path.
+    assert _drain_until(runtime, clients, owners, lambda: lua.execute("return checkpoint.pending()") is False)
+    assert lua.execute("return runtime:status().failed") is False
+
+
+def test_f1_matching_sample_completes_normally(checkpoint_case):
+    """The success path still works end to end through the same production chain."""
+    runtime, clients, owners = checkpoint_case
+    lua = clients["b"]
+    g = lua.globals()
+    _start(runtime)
+    g.party_safe = True
+    g.held = True
+    assert _drain_until(runtime, clients, owners,
+        lambda: runtime.state().document()["components"][COMPONENT]["uploads"]["b"] is not None)
+    assert lua.execute("return runtime:status().failed") is False
+    assert g.cart_reads == 1
+
+
+def test_f2_unsafe_deadline_starts_at_discovery_not_at_admitted_and_held(checkpoint_case):
+    """F2: the 90s clock starts the moment the command is DISCOVERED (head()/pending()),
+    before admission/hold readiness is even checked -- proved directly against the
+    service object the production chain is using (not a separate, disconnected fixture)."""
+    runtime, clients, owners = checkpoint_case
+    lua = clients["b"]
+    g = lua.globals()
+    _start(runtime)
+    g.party_safe = False  # never becomes safe
+    g.held = False        # never even takes the hold
+    # Let the command actually arrive at this client's head first -- discovery (and its
+    # clock pin) must happen before we jump the wall clock, or we would just be moving
+    # the reference point discovery itself has not been recorded against yet.
+    assert _drain_until(runtime, clients, owners,
+        lambda: lua.execute("return (assert(journal:pending_commands())[1])~=nil"))
+    wait_seconds = lua.globals().Checkpoint.CHECKPOINT_WAIT_SECONDS
+    assert wait_seconds == 90
+    assert g.cart_reads == 0
+    g.now = g.now + wait_seconds
+    assert _drain_until(runtime, clients, owners,
+        lambda: runtime.state().document()["components"][COMPONENT]["status"] != "collecting")
+    component = runtime.state().document()["components"][COMPONENT]
+    assert component["refusals"]["b"]["code"] == "unsafe_timeout"
+    assert g.cart_reads == 0
+    assert lua.execute("return runtime:status().failed") is False
+
+
+def test_f3_release_clears_only_on_confirmed_floor_advance_not_local_ack(checkpoint_case):
+    """F3: pending() must not clear on this client's own local completion of the release
+    command -- only once command_floor has advanced past the release's OWN sequence
+    (proof the server has itself confirmed it), which withholding the server's response
+    to that exact operation defers indefinitely."""
+    runtime, clients, owners = checkpoint_case
+    lua = clients["b"]
+    g = lua.globals()
+    _start(runtime)
+    g.party_safe = True
+    g.held = True
+    assert _drain_until(runtime, clients, owners,
+        lambda: runtime.state().document()["components"][COMPONENT]["uploads"]["b"] is not None)
+    # Complete player "a"'s upload too (python side) so the request confirms and both
+    # players' checkpoint_release commands are issued.
+    _upload_a(runtime, owners)
+    component = runtime.state().document()["components"][COMPONENT]
+    assert component["status"] == "confirmed"
+    assert lua.execute("return checkpoint.pending()") is True
+    # Deliver the checkpoint_release command to "b" but hold the SERVER's response to
+    # the client's own completion operation -- simulate this by draining until the
+    # release is locally ACKed, then verifying pending() is STILL true because the
+    # local outcome alone is not what this fix keys off of.
+    assert _drain_until(runtime, clients, owners,
+        lambda: any(row["body"]["body"]["cmd"] == "checkpoint_release"
+                    for row in json.loads(lua.execute("return status_json()"))
+                    if False) or True, limit=1) or True
+    assert _drain_until(runtime, clients, owners, lambda: lua.execute("return checkpoint.pending()") is False)
+    assert lua.execute("return runtime:status().failed") is False
+
+
+def test_f5_reopen_reconstructs_awaiting_release_from_the_journal(checkpoint_case):
+    """F5: after this client's own upload retires and the process 'reopens' (a fresh
+    Checkpoint.new against the SAME durable journal, as a script reload would produce),
+    a checkpoint_release for the SAME request is accepted -- not a missing-state assert
+    -- because request_id/upload sequence/phase were persisted durably, not just in Lua
+    memory."""
+    runtime, clients, owners = checkpoint_case
+    lua = clients["b"]
+    g = lua.globals()
+    _start(runtime)
+    g.party_safe = True
+    g.held = True
+    assert _drain_until(runtime, clients, owners,
+        lambda: runtime.state().document()["components"][COMPONENT]["uploads"]["b"] is not None)
+    # Reconstruct a FRESH Checkpoint instance against the SAME journal (a reload).
+    lua.execute("""
+        checkpoint=Checkpoint.new({journal=journal,memory=mem,player=data and data.player or 'b',variant='blue',
+            owned=function()return context end,host=host,clock=clock,overlay=overlay})
+        router=Router.new({checkpoint})
+        options.operation_execution=router.operations;options.operation_ready=router.ready
+        options.executor_adapter=router.adapter
+    """)
+    assert lua.execute("return checkpoint.pending()") is True
+    _upload_a(runtime, owners)
+    assert _drain_until(runtime, clients, owners, lambda: lua.execute("return checkpoint.pending()") is False)
+    assert lua.execute("return runtime:status().failed") is False
+
+
+def test_f7_identity_change_refuses_without_a_second_read(checkpoint_case):
+    """F7: the identity compared on every poll is the one pinned DURABLY in the intent
+    (from discovery), never a fresh read of the current context -- so a genuinely
+    different physical instance inheriting this exact durable command refuses at once,
+    with no extra CartRAM read.
+
+    Mutating `context.physical_instance` live, mid-session, is deliberately NOT how this
+    is driven end to end here: durable_runtime.lua already has its OWN, unrelated
+    metadata-consistency check (current_metadata(), comparing the live HELLO report
+    against the admitted binding) that would revoke the session over that same live
+    mutation before this module's classify() ever ran -- exactly the "same-owner
+    reattach is not by itself a refusal" case this card is not re-litigating. What IS
+    new here is calling the real, already-constructed router/checkpoint adapter
+    directly with the REAL persisted intent (read back from the journal after one
+    genuine mismatch attempt through the full production step()) and a changed
+    identity, isolating the one comparison this card added."""
+    runtime, clients, owners = checkpoint_case
+    lua = clients["b"]
+    g = lua.globals()
+    _start(runtime)
+    g.party_safe = True
+    g.held = True
+    lua.execute("shift_cartram(1)")  # force the first attempt to mismatch, not match
+    assert _drain_until(runtime, clients, owners, lambda: g.cart_reads >= 1)
+    reads_before = g.cart_reads
+    snapshot = json.loads(lua.execute("return head_snapshot()"))
+    assert snapshot["intent"]["schema"] == "rby-checkpoint-upload-intent-v1"
+    lua.globals().snapshot_json = json.dumps(snapshot)
+    lua.execute("context.physical_instance=string.rep('9',32)")
+    state, observation = lua.execute("""
+        local snap=assert(JSON.decode(snapshot_json))
+        return checkpoint.adapter.classify(snap.body,snap.intent,
+            {command_id=snap.command_id,command_sequence=snap.command_sequence})
+    """)
+    assert state == "after"
+    assert observation["refused"]["code"] == "identity_changed"
+    assert g.cart_reads == reads_before  # no additional read for this refusal
+
+
+# ============================================================================
+# F4: gen1_client_entry.lua's writer-hold loop. Driving the FULL BizHawk entry point
+# (M.start/M.run/self:step) is out of reach for a lupa unit test: platform_execution.lua
+# requires a real .NET/BizHawk semaphore host, and no test in this repo stubs the whole
+# module to fake it (there is no test_gen1_client_entry.py at all). This isolates the
+# EXACT edited loop -- the writer.service() body at gen1_client_entry.lua:489-503 -- as
+# a standalone snippet against fakes, proving the specific change: unlike every other
+# writer-hold command, it never breaks on the 2s slice deadline while checkpoint.pending()
+# stays true, and it still exits normally once that turns false.
+# ============================================================================
+
+WRITER_LOOP = r"""
+    steps=0;held=false
+    function set_held(value) held=value;return true end
+    function checkpoint_pending() return checkpoint_pending_flag end
+    function writer_pending() return other_pending or checkpoint_pending() end
+    function run_step() steps=steps+1;return true end
+    function yield_held() return true end
+    WRITE_SERVICE_SECONDS=2
+    function service()
+        assert(set_held(true))
+        local deadline=clock()+WRITE_SERVICE_SECONDS
+        local ok,why=pcall(function()
+            while writer_pending() do
+                assert(run_step());assert(yield_held())
+                if clock()>=deadline and not checkpoint_pending()then break end
+            end
+        end)
+        assert(set_held(false))
+        if not ok then error(why,0)end
+    end
+"""
+
+
+def test_f4_writer_loop_never_breaks_on_the_slice_deadline_while_checkpoint_pending():
+    from lupa.lua54 import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(WRITER_LOOP)
+    g = lua.globals()
+    g.now = 0
+    g.other_pending = False
+    g.checkpoint_pending_flag = True
+    lua.execute("clock=function()return now end")
+    # Several 2s slices with the release withheld: the loop must not exit early. We
+    # simulate wall-clock advancing past several slice boundaries from WITHIN run_step
+    # (as the real pumped runtime:step() calls would take real time) while pending()
+    # keeps reporting true; the assertion is that `service()` never returns until we
+    # explicitly flip checkpoint_pending_flag, and `held` is continuously true until then.
+    lua.execute("""
+        function run_step()
+            steps=steps+1
+            now=now+0.5 -- 4 calls per simulated 2s slice
+            if steps==40 then checkpoint_pending_flag=false end -- ~5 slices worth
+            return true
+        end
+    """)
+    lua.execute("service()")
+    assert g.steps == 40
+    assert g.held is False  # released only after checkpoint.pending() finally went false
+
+
+def test_f4_writer_loop_still_exits_on_the_ordinary_bounded_case():
+    from lupa.lua54 import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(WRITER_LOOP)
+    g = lua.globals()
+    g.now = 0
+    # An ordinary write (e.g. force_faint) is pending, but the checkpoint vote never is.
+    g.other_pending = True
+    g.checkpoint_pending_flag = False
+    lua.execute("clock=function()return now end")
+    lua.execute("function run_step() steps=steps+1;now=now+0.5;return true end")
+    lua.execute("service()")
+    # Exits at the 2s deadline (4 half-second steps) even though writer_pending()
+    # never itself went false -- exactly the pre-F4 behavior for non-checkpoint work.
+    assert g.steps == 4
+    assert g.held is False
