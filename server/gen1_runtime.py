@@ -212,11 +212,12 @@ class Gen1Runtime(DurableRuntime):
                 **options,
             )
             self.journal.enable_verified_row_cache()
-            from server.gen1_checkpoint_runtime import reconcile_on_open, server_source_manifest
-            # A live-process fact, not committed history (R5b-1): recomputed at every
-            # construction/reopen, never journaled. finalize_checkpoint refuses whenever this
-            # drifts from a fresh recompute, or was never set.
-            self._source_manifest = server_source_manifest()
+            from server.gen1_checkpoint_runtime import ensure_source_pin, reconcile_on_open
+            self._checkpoint_collect_watch = None
+            # F5 (round 2): the source-identity digest is persisted ONCE at this run's first
+            # open and compared on every open thereafter; a drift never refuses the runtime
+            # itself, only a future checkpoint capture (by name, via _source_pin_drift).
+            ensure_source_pin(self)
             reconcile_on_open(self)
             if trade_policy is not None:
                 self.trade = TradeCoordinator(
@@ -459,6 +460,8 @@ class Gen1Runtime(DurableRuntime):
         verify_encounters(self.journal, stage)
         from server.gen1_storage_runtime import verify_journal as verify_storage
         verify_storage(self.journal, stage)
+        from server.gen1_rebuild_runtime import verify_journal as verify_rebuild
+        verify_rebuild(self.journal, stage)
         from server.gen1_evolution_runtime import verify_journal as verify_evolutions
         verify_evolutions(self.journal, stage, rom_provider=(
             self.prepared_cartridges.rom if self.prepared_cartridges is not None else None))
@@ -478,6 +481,11 @@ class Gen1Runtime(DurableRuntime):
 
     def _dispatch_semantic(self, player, message, owner):
         event = message["event"]
+        # F6/addendum (round 2): a checkpoint request's collection deadline is checked
+        # opportunistically here rather than on a background thread — cheap (an attribute
+        # check) unless a request is actually collecting and overdue.
+        from server.gen1_checkpoint_runtime import check_collect_timeout
+        check_collect_timeout(self)
         if event in ('acquisition_observation', 'npc_exchange_observation', 'wild_encounter_observation', 'evolution_observation'):
             raise ProtocolError('acquisition receipts require an accounted frame completion')
         if event == 'observation':
@@ -511,6 +519,11 @@ class Gen1Runtime(DurableRuntime):
                 raise ProtocolError('checkpoint capture requires initial observations')
             from server.gen1_checkpoint_runtime import record as checkpoint_record
             return checkpoint_record(self,player,message['operation_id'],self._semantic(message))
+        if event=='checkpoint_release':
+            if not self.initial_observations:
+                raise ProtocolError('checkpoint capture requires initial observations')
+            from server.gen1_checkpoint_runtime import record_release
+            return record_release(self,player,message['operation_id'],self._semantic(message))
         if event=='inventory_observation':
             if not self.initial_observations:raise ProtocolError('inventory observation enrollment is not selected')
             from server.gen1_inventory_observation import record

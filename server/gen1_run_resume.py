@@ -133,6 +133,22 @@ def no_gameplay_since(journal, player, anchor_operation_id, *, extra_events=froz
     return all(_no_gameplay(json.loads(r[0]), db, extra_events=extra_events) for r in later)
 
 
+def witness_ends_its_batch(document, player, witness):
+    """True unless PLAYER's pinned WITNESS is followed by more signals inside its OWN committed
+    engine-signals batch (round-1 finding F1) — mirrors audit_predecessor's :223-225 check,
+    against the live document instead of a closed run's rows. `no_gameplay_since` only scans
+    events AFTER the anchor's own revision; a save_witness followed by a rules-changing signal
+    in the SAME commit would otherwise archive old SaveRAM under new rules undetected. Only
+    meaningful for the save_witness kind — a native-pretrade witness never comes from an
+    engine-signals batch, so it always passes."""
+    kind = witness.get("witness_kind", "save_witness") if isinstance(witness, dict) else None
+    if kind != "save_witness":
+        return True
+    entry = document["components"].get("gen1-engine-signals", {}).get(player)
+    return not (entry is not None and entry["operation_id"] == witness["operation_id"]
+                and witness["index"] != len(entry["payload"]["signals"]) - 1)
+
+
 def checkpoint_anchor_operation(witness):
     """Which committed operation a checkpoint witness's "no gameplay since" check anchors on:
     the START-menu save witness's own operation for the legacy kind, or the native-pretrade

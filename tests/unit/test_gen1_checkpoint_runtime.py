@@ -2,12 +2,14 @@
 cross-store reconciliation on reopen. Real journal commits throughout, no emulator."""
 import hashlib
 import secrets
+import time
 
 import pytest
 
 from server import gen1_checkpoint_runtime, paired_save_checkpoints
 from server.gen1_checkpoint_runtime import COMPONENT, reconcile_on_open, record, start
 from server.gen1_run_config import create_runtime, open_runtime
+from server.gen1_run_resume import witness_ends_its_batch
 from server.paired_save_checkpoints import CheckpointError, PairedCheckpointStore
 from server.protocol_journal import JournalError
 from tests.unit.test_gen1_engine_signal_runtime import deliver, payload
@@ -26,6 +28,19 @@ def _pin_witness(runtime, player, owner, *, frame=200, sequence=1, cart_hex=CART
     value = payload(runtime, player, [], sequence)
     value["signals"] = [save_witness_signal(value["variant"], digest=_save_digest(cart_hex))]
     value["signals"][0]["frame"] = frame
+    return deliver(runtime, player, owner, value)
+
+
+def _pin_witness_with_trailing_signal(runtime, player, owner, *, frame=200, sequence=1, cart_hex=CART_HEX):
+    """The save_witness is NOT the last signal in its own committed batch (F1 red-test setup):
+    a real gameplay signal lands in the SAME commit right after it. `payload(...)` (not a bare
+    `signal(...)`) fixes up player_id_hex to match the admitted identity."""
+    value = payload(runtime, player, ["battle_faint"], sequence)
+    witness_sig = save_witness_signal(value["variant"], digest=_save_digest(cart_hex))
+    witness_sig["frame"] = frame
+    trailing = value["signals"][0]
+    trailing["frame"] = frame + 1
+    value["signals"] = [witness_sig, trailing]
     return deliver(runtime, player, owner, value)
 
 
@@ -59,6 +74,31 @@ def _upload(runtime, player, owner, request_id, witness, *, operation=None, comm
     return runtime.process({**message, "protocol": runtime.protocol, "player": player,
         "session_id": session.session_id, "admission_epoch": runtime.gate.epoch, "seq": session.last_seq + 1,
         "operation_id": operation or secrets.token_hex(16)}, owner)
+
+
+def _envelope(runtime, player, owner, message, operation=None):
+    session = runtime.gate.sessions[player]
+    return runtime.process({**message, "protocol": runtime.protocol, "player": player,
+        "session_id": session.session_id, "admission_epoch": runtime.gate.epoch, "seq": session.last_seq + 1,
+        "operation_id": operation or secrets.token_hex(16)}, owner)
+
+
+def _refuse(runtime, player, owner, request_id, witness, *, code="digest_mismatch", reason="test refusal", operation=None):
+    command_id = runtime.journal.pending_ids(player)[0]
+    command = runtime.journal.command(player, command_id)
+    receipt = {"request_id": request_id, "witness": witness, "refused": {"code": code, "reason": reason}}
+    message = {"event": "save_upload", "command_id": command_id, "command_sequence": command["command_sequence"],
+        "receipt": receipt}
+    return _envelope(runtime, player, owner, message, operation)
+
+
+def _release(runtime, player, owner, request_id, outcome, *, operation=None):
+    command_id = runtime.journal.pending_ids(player)[0]
+    command = runtime.journal.command(player, command_id)
+    receipt = {"request_id": request_id, "outcome": outcome}
+    message = {"event": "checkpoint_release", "command_id": command_id, "command_sequence": command["command_sequence"],
+        "receipt": receipt}
+    return _envelope(runtime, player, owner, message, operation)
 
 
 def _component(runtime):
@@ -305,40 +345,39 @@ def test_confirmed_checkpoints_is_none_for_a_directory_with_no_run(tmp_path):
 
 # -- cross-store failure windows / reconciliation ------------------------------
 
-def test_intent_before_capture_failure_is_abandoned_on_reopen_previous_confirmed_stands(tmp_path, monkeypatch):
+def test_capture_failure_during_publish_abandons_with_reason_and_releases_both(tmp_path, monkeypatch):
+    # Round 2 (F2): the second upload's own ACK and the "preparing" intent are ONE atomic
+    # commit, so a synchronous publish failure right after can never leave the request wedged
+    # in "collecting" or "preparing" — it is abandoned (with a reason) in the same call, and
+    # the uploading client's own response is unaffected (its upload really did succeed).
     runtime = create_runtime(tmp_path, contract("red", "blue"))
     owners = _enroll_and_witness(runtime)
     start(runtime, "req-1", "registry-run-1")
     component = _component(runtime)
     _upload(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
 
-    real_capture = PairedCheckpointStore.capture
-
     def failing_capture(self, *args, **kwargs):
         raise CheckpointError("simulated store failure")
     monkeypatch.setattr(paired_save_checkpoints.PairedCheckpointStore, "capture", failing_capture)
-    with pytest.raises(JournalError, match="paired checkpoint capture failed"):
-        _upload(runtime, "b", owners["b"], "req-1", component["witnesses"]["b"])
-    monkeypatch.setattr(paired_save_checkpoints.PairedCheckpointStore, "capture", real_capture)
+    second = _upload(runtime, "b", owners["b"], "req-1", component["witnesses"]["b"])
+    assert second["ack"] == "ACK"  # the upload itself succeeded
+    monkeypatch.undo()
 
     component = _component(runtime)
-    assert component["status"] == "preparing"
+    assert component["status"] == "abandoned"
+    assert "simulated store failure" in component["abandoned_reason"]
     assert PairedCheckpointStore(runtime.data_dir).current() is None
-    runtime.close()
+    # Both players were released with the abandonment.
+    assert [c["cmd"] for c in runtime.journal.pending("a")] == ["checkpoint_release"]
+    assert [c["cmd"] for c in runtime.journal.pending("b")] == ["checkpoint_release"]
+    _release(runtime, "a", owners["a"], "req-1", "abandoned")
+    _release(runtime, "b", owners["b"], "req-1", "abandoned")
+    assert _component(runtime)["releases"] == {"a": True, "b": True}
 
-    reopened = open_runtime(tmp_path)
-    try:
-        component = _component(reopened)
-        assert component["status"] == "abandoned"
-        assert component["confirmed"] is None
-        assert PairedCheckpointStore(reopened.data_dir).current() is None
-        # A NEW checkpoint request is not blocked by the abandoned one (admissions and save
-        # witnesses are committed document state, not live-session state, so this needs no
-        # re-admission on the reopened, held-service runtime).
-        second = start(reopened, "req-2", "registry-run-1")
-        assert second["status"] == "collecting"
-    finally:
-        reopened.close()
+    # A brand new request is not blocked by the abandoned one, once released.
+    third = start(runtime, "req-2", "registry-run-1")
+    assert third["status"] == "collecting"
+    runtime.close()
 
 
 def test_archive_published_but_confirm_crashed_is_confirmed_on_reopen(tmp_path, monkeypatch):
@@ -391,3 +430,254 @@ def test_record_replays_a_committed_operation_without_redispatch(paired):
     first = record(runtime, "a", op, request)
     second = record(runtime, "a", op, request)
     assert first == second
+
+
+# -- round 2, F1: same-batch gameplay after the witness ------------------------
+
+def test_witness_ends_its_batch_pure_unit():
+    document = {"components": {"gen1-engine-signals": {"a": {"operation_id": "op1",
+        "payload": {"signals": [{"frame": 1}, {"frame": 2}]}}}}}
+    tail = {"witness_kind": "save_witness", "operation_id": "op1", "index": 1}
+    not_tail = {**tail, "index": 0}
+    other_batch = {**tail, "operation_id": "op2"}
+    native = {"witness_kind": "native_pretrade"}
+    assert witness_ends_its_batch(document, "a", tail) is True
+    assert witness_ends_its_batch(document, "a", not_tail) is False
+    assert witness_ends_its_batch(document, "a", other_batch) is True
+    assert witness_ends_its_batch(document, "a", native) is True
+
+
+def test_start_refuses_a_witness_not_at_the_tail_of_its_own_batch(tmp_path):
+    runtime = create_runtime(tmp_path, contract("red", "blue"))
+    try:
+        owners = {}
+        for player in ("a", "b"):
+            owners[player] = admit(runtime, player)
+            send(runtime, player, owners[player], observation(runtime, player))
+        _pin_witness_with_trailing_signal(runtime, "a", owners["a"])
+        _pin_witness(runtime, "b", owners["b"])
+        with pytest.raises(JournalError, match="same batch"):
+            start(runtime, "req-1", "registry-run-1")
+    finally:
+        runtime.close()
+
+
+# -- round 2, F3: request_id reuse / reconciliation binds full identity -------
+
+def _settle(runtime, owners, request_id):
+    """Drive one checkpoint request all the way to confirmed + both releases delivered."""
+    component = _component(runtime)
+    _upload(runtime, "a", owners["a"], request_id, component["witnesses"]["a"])
+    _upload(runtime, "b", owners["b"], request_id, component["witnesses"]["b"])
+    assert _component(runtime)["status"] == "confirmed"
+    _release(runtime, "a", owners["a"], request_id, "confirmed")
+    _release(runtime, "b", owners["b"], request_id, "confirmed")
+
+
+def test_start_refuses_reusing_a_request_id_from_a_settled_request(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    _settle(runtime, owners, "req-1")
+    start(runtime, "req-2", "registry-run-1")  # moves the tracked request on
+    _settle(runtime, owners, "req-2")          # settle it too, so it's not itself "busy"
+    with pytest.raises(JournalError, match="already been used"):
+        start(runtime, "req-1", "registry-run-1")
+
+
+def test_confirm_refuses_when_manifest_does_not_match_the_intent(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    _upload(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
+    _upload(runtime, "b", owners["b"], "req-1", component["witnesses"]["b"])
+    manifest = PairedCheckpointStore(runtime.data_dir).current()
+    intent = _component(runtime)["intent"]
+    tampered = {**intent, "rules_sha256": "0" * 64}
+    with pytest.raises(JournalError, match="does not match the prepared checkpoint intent"):
+        gen1_checkpoint_runtime._confirm(runtime, "req-1", tampered, manifest)
+
+
+def test_reconcile_on_open_abandons_when_archive_does_not_match_the_prepared_intent(tmp_path, monkeypatch):
+    runtime = create_runtime(tmp_path, contract("red", "blue"))
+    owners = _enroll_and_witness(runtime)
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    _upload(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
+
+    def failing_confirm(*args, **kwargs):
+        raise RuntimeError("simulated crash before confirm")
+    monkeypatch.setattr(gen1_checkpoint_runtime, "_confirm", failing_confirm)
+    with pytest.raises(Exception, match="simulated crash"):
+        _upload(runtime, "b", owners["b"], "req-1", component["witnesses"]["b"])
+    monkeypatch.undo()
+
+    # The archive really was published (round-1 behavior) -- but the journaled intent is now
+    # corrupted/stale relative to it (standing in for "reused id, different content"): the
+    # store's real manifest can no longer satisfy _intent_matches_manifest.
+    stage = runtime.state()
+    document = stage.document()
+    corrupted = dict(document["components"][COMPONENT])
+    corrupted["intent"] = {**corrupted["intent"], "rules_sha256": "0" * 64}
+    document["components"][COMPONENT] = corrupted
+    runtime.journal.commit("a", secrets.token_hex(16), {"event": "observation"},
+        expected_revision=stage.journal_revision, state=document, commands={"a": [], "b": []}, result={"ack": "ACK"})
+    runtime.close()
+
+    reopened = open_runtime(tmp_path)
+    try:
+        component = _component(reopened)
+        assert component["status"] == "abandoned"
+        assert "no matching confirmed archive" in component["abandoned_reason"]
+        # The confirmed pointer never moved off whatever it was before (None here).
+        assert component["confirmed"] is None
+    finally:
+        reopened.close()
+
+
+# -- round 2, F5: source pin drift refuses capture, never the runtime --------
+
+def test_source_pin_drift_refuses_capture_not_the_runtime(tmp_path, monkeypatch):
+    runtime = create_runtime(tmp_path, contract("red", "blue"))
+    _enroll_and_witness(runtime)
+    runtime.close()
+
+    monkeypatch.setattr(gen1_checkpoint_runtime, "server_source_manifest",
+        lambda: {"client_files": [], "server_files": [{"path": "x", "sha256": "1" * 64, "encoding": "raw"}]})
+    reopened = open_runtime(tmp_path)  # must NOT raise: the runtime itself opens fine
+    try:
+        assert reopened._source_pin_drift is not None
+        owners = {p: admit(reopened, p) for p in ("a", "b")}
+        start(reopened, "req-1", "registry-run-1")
+        component = _component(reopened)
+        _upload(reopened, "a", owners["a"], "req-1", component["witnesses"]["a"])
+        with pytest.raises(JournalError, match="checkpoint capture refused"):
+            _upload(reopened, "b", owners["b"], "req-1", component["witnesses"]["b"])
+        # The refused upload never committed (the pin is checked before anything is written):
+        # 'a' still shows uploaded, 'b' does not, and the request is still open to retry once
+        # the drift is resolved -- refusing capture is not the same as abandoning the request.
+        component = _component(reopened)
+        assert component["status"] == "collecting"
+        assert component["uploads"]["a"] is not None and component["uploads"]["b"] is None
+    finally:
+        reopened.close()
+
+
+def test_source_pin_is_recorded_once_and_matches_on_a_clean_reopen(tmp_path):
+    runtime = create_runtime(tmp_path, contract("red", "blue"))
+    runtime.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        assert reopened._source_pin_drift is None
+    finally:
+        reopened.close()
+
+
+# -- round 2, F6/addendum: refusal, release, timeout --------------------------
+
+def test_refusal_receipt_abandons_and_releases_both(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    _refuse(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"],
+        code="unsafe_timeout", reason="hold expired")
+    component = _component(runtime)
+    assert component["status"] == "abandoned"
+    assert component["refusals"]["a"] == {"code": "unsafe_timeout", "reason": "hold expired"}
+    assert "unsafe_timeout" in component["abandoned_reason"]
+    # 'a' refused (its own checkpoint_upload is consumed by that same commit); 'b' never
+    # uploaded at all, so its original checkpoint_upload is still sitting there too -- the
+    # durable outbox has no "retract", it is simply followed by the release.
+    assert [c["cmd"] for c in runtime.journal.pending("a")] == ["checkpoint_release"]
+    assert "checkpoint_release" in [c["cmd"] for c in runtime.journal.pending("b")]
+
+
+def test_refusal_receipt_is_never_treated_as_an_upload(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    _refuse(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
+    component = _component(runtime)
+    assert component["uploads"]["a"] is None
+    assert PairedCheckpointStore(runtime.data_dir).current() is None
+
+
+def test_release_completion_acks_and_marks_delivered(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    _refuse(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
+    result = _release(runtime, "a", owners["a"], "req-1", "abandoned")
+    assert result["ack"] == "ACK"
+    assert _component(runtime)["releases"] == {"a": True, "b": False}
+
+
+def test_release_refuses_a_mismatched_outcome(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    _refuse(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
+    with pytest.raises(JournalError, match="differs from the request's resolution"):
+        _release(runtime, "a", owners["a"], "req-1", "confirmed")
+
+
+def test_player_upload_status_transitions(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    component = _component(runtime)
+    assert gen1_checkpoint_runtime.player_upload_status(component, "a") == "waiting"
+    _upload(runtime, "a", owners["a"], "req-1", component["witnesses"]["a"])
+    component = _component(runtime)
+    assert gen1_checkpoint_runtime.player_upload_status(component, "a") == "uploaded"
+    assert gen1_checkpoint_runtime.player_upload_status(component, "b") == "waiting"
+    _upload(runtime, "b", owners["b"], "req-1", component["witnesses"]["b"])
+    component = _component(runtime)
+    assert component["status"] == "confirmed"
+    assert gen1_checkpoint_runtime.player_upload_status(component, "b") == "uploaded"
+    _release(runtime, "a", owners["a"], "req-1", "confirmed")
+    component = _component(runtime)
+    assert gen1_checkpoint_runtime.player_upload_status(component, "a") == "released"
+
+
+def test_collect_timeout_abandons_and_releases(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    runtime._checkpoint_collect_watch["deadline"] = 0
+    gen1_checkpoint_runtime.check_collect_timeout(runtime)
+    component = _component(runtime)
+    assert component["status"] == "abandoned"
+    assert component["abandoned_reason"] == "collect_timeout"
+    # Neither player uploaded, so both still carry their original checkpoint_upload too.
+    assert "checkpoint_release" in [c["cmd"] for c in runtime.journal.pending("a")]
+    assert "checkpoint_release" in [c["cmd"] for c in runtime.journal.pending("b")]
+
+
+def test_collect_timeout_triggers_via_a_real_dispatched_sync_event(paired):
+    runtime, owners = paired
+    start(runtime, "req-1", "registry-run-1")
+    runtime._checkpoint_collect_watch["deadline"] = 0
+    session = runtime.gate.sessions["a"]
+    runtime.process({"protocol": runtime.protocol, "player": "a", "session_id": session.session_id,
+        "admission_epoch": runtime.gate.epoch, "seq": session.last_seq + 1, "event": "sync",
+        "operation_id": secrets.token_hex(16)}, owners["a"])
+    assert _component(runtime)["status"] == "abandoned"
+
+
+def test_collect_timeout_is_caught_by_reconcile_on_open(tmp_path):
+    runtime = create_runtime(tmp_path, contract("red", "blue"))
+    _enroll_and_witness(runtime)
+    start(runtime, "req-1", "registry-run-1")
+    stage = runtime.state()
+    document = stage.document()
+    component = {**document["components"][COMPONENT], "started_at": time.time() - 10_000}
+    document["components"][COMPONENT] = component
+    runtime.journal.commit("a", secrets.token_hex(16), {"event": "observation"},
+        expected_revision=stage.journal_revision, state=document, commands={"a": [], "b": []}, result={"ack": "ACK"})
+    runtime.close()
+
+    reopened = open_runtime(tmp_path)
+    try:
+        component = _component(reopened)
+        assert component["status"] == "abandoned"
+        assert component["abandoned_reason"] == "collect_timeout"
+    finally:
+        reopened.close()

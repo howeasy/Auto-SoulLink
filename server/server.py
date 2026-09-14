@@ -5389,17 +5389,25 @@ class SLinkServer:
         """POST /api/checkpoint — admit a new paired-checkpoint request on this Gen1 durable
         run. Body: {"request_id": <str>, "registry_run_id": <str, optional>}. 202 with the
         request's status; never claims the checkpoint is saved (that needs both uploads plus
-        a journal-confirmed archive)."""
+        a journal-confirmed archive). F4 (round 2): every input is validated before it ever
+        reaches a journal mutation."""
         if self.gen1_runtime is None:
             return aiohttp_web.json_response({"ok": False, "error": "this run is not a Gen1 durable runtime"}, status=400)
         try:
             body = await request.json()
         except Exception:
             return aiohttp_web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
-        request_id = body.get("request_id") if isinstance(body, dict) else None
-        if not isinstance(request_id, str) or not request_id:
-            return aiohttp_web.json_response({"ok": False, "error": "request_id is required"}, status=400)
-        registry_run_id = body.get("registry_run_id") if isinstance(body, dict) else None
+        if not isinstance(body, dict):
+            return aiohttp_web.json_response({"ok": False, "error": "request body must be a JSON object"}, status=400)
+        from server.gen1_checkpoint_runtime import REQUEST_ID_RE
+        request_id = body.get("request_id")
+        if not isinstance(request_id, str) or not REQUEST_ID_RE.fullmatch(request_id):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "request_id must be 1-64 characters of [A-Za-z0-9_.-]"}, status=400)
+        registry_run_id = body.get("registry_run_id")
+        if registry_run_id is not None and (not isinstance(registry_run_id, str) or not registry_run_id or len(registry_run_id) > 64):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "registry_run_id must be a string of at most 64 characters, or omitted"}, status=400)
         from server.gen1_checkpoint_runtime import start
         from server.protocol_journal import JournalError
         try:
@@ -5410,16 +5418,21 @@ class SLinkServer:
 
     async def handle_checkpoint_status_api(self, request):
         """GET /api/checkpoint/{request_id} — the current status of one paired-checkpoint
-        request on this Gen1 durable run."""
+        request on this Gen1 durable run, including each player's upload/refusal/release
+        status and any abandonment reason (F6/addendum d)."""
         if self.gen1_runtime is None:
             return aiohttp_web.json_response({"ok": False, "error": "this run is not a Gen1 durable runtime"}, status=400)
-        from server.gen1_checkpoint_runtime import COMPONENT as CHECKPOINT_COMPONENT
+        from server.gen1_checkpoint_runtime import (
+            COMPONENT as CHECKPOINT_COMPONENT,
+            player_upload_status,
+        )
         component = self.gen1_runtime.state().document()["components"].get(CHECKPOINT_COMPONENT)
         request_id = request.match_info["request_id"]
         if component is None or component["request_id"] != request_id:
             return aiohttp_web.json_response({"ok": False, "error": "unknown checkpoint request_id"}, status=404)
-        return aiohttp_web.json_response({"ok": True, "request_id": request_id,
-            "status": component["status"], "confirmed": component["confirmed"]})
+        return aiohttp_web.json_response({"ok": True, "request_id": request_id, "status": component["status"],
+            "players": {p: player_upload_status(component, p) for p in ("a", "b")},
+            "reason": component["abandoned_reason"], "confirmed": component["confirmed"]})
 
     # ── RR Damage Calculator handlers ───────────────────────────────────────
 
@@ -8775,8 +8788,8 @@ def build_app(srv):
     app.router.add_get("/calc/{path:.*}", srv.handle_calc_files)
     app.router.add_get("/api/calc/mons",  srv.handle_calc_mons)
 
-    from server.patcher import setup_patcher_routes
     from server.gen1_patcher_targets import prepared_targets
+    from server.patcher import setup_patcher_routes
     setup_patcher_routes(app, srv._build_sidebar_html,
         prepared_targets=lambda request:prepared_targets(getattr(srv.gen1_runtime,"prepared_cartridges",None)))
     return app

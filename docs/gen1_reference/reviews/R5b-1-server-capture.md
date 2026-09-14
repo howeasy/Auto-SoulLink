@@ -193,45 +193,86 @@ sweep picked up), and a new untracked `server/gen1_rebuild_runtime.py` from a th
 also live in the tree — consistent with other in-flight work, not this card's regression. Not
 investigated further as out of scope; flagging for the coordinator rather than silently ignoring.
 
+## Round 2 (candidate `1fbdb00` rejected: three P1s, two P2s, plus a same-turn addendum)
+
+`server/gen1_checkpoint_runtime.py` was rewritten to close all of the following. No changes
+were needed in `server/gen1_runtime_state.py` (its wiring call site to `verify_state` was
+already correct) or `server/paired_save_checkpoints.py` (no store-shape change was
+unavoidable — the fixes stayed on the checkpoint-component side).
+
+| # | Finding | Fix | Red test |
+|---|---|---|---|
+| F1 (P1) | `no_gameplay_since` only scanned revisions *after* the anchor; a save_witness followed by a rules-changing signal in the SAME committed batch archived old SaveRAM under new rules, undetected | NEW `gen1_run_resume.witness_ends_its_batch(document, player, witness)` — mirrors `audit_predecessor`'s :223-225 tail check against the live document; called in `start()` (before issuing commands) and inside `_record_upload`/`_build_intent` (so `record`/`finalize_checkpoint` never infer it from `start` alone) | `test_witness_ends_its_batch_pure_unit`, `test_start_refuses_a_witness_not_at_the_tail_of_its_own_batch` |
+| F2 (P1) | The second upload's ACK commit and the "preparing" intent were two separate commits; a crash or finalize-refusal between them left `status="collecting"` with both uploads and no pending commands — `reconcile_on_open` ignored `"collecting"`, a replay of the ACK returned the stored result without retrying finalize, and `start()` refused a new request forever | The completing upload's own commit now ALSO carries the prepared intent (one atomic transaction — `_record_upload`); a publish/confirm failure after that point never re-raises into the upload's own response, it `_abandon`s (with a reason) instead, via the new terminal `"abandoned"` status that `start()`/`finalize_checkpoint` never treat as busy | `test_capture_failure_during_publish_abandons_with_reason_and_releases_both` (synchronous failure never wedges; a fresh request is accepted after release) |
+| F3 (P1) | Reconciliation matched an archive to an intent by `request_id` alone, so a REUSED id pointing at a stale/mismatched archive could be wrongly confirmed | `intent` now binds the full identity (both witnesses, both saves' sha256, rules/identity sha256, contract/source fingerprints, provenance) — `_intent_matches_manifest`/`_confirm` check every field before ever confirming; `start()`/`finalize_checkpoint` additionally refuse outright reusing any `request_id` this run has ever used (`used_request_ids`, capped at 256) | `test_start_refuses_reusing_a_request_id_from_a_settled_request`, `test_confirm_refuses_when_manifest_does_not_match_the_intent`, `test_reconcile_on_open_abandons_when_archive_does_not_match_the_prepared_intent` |
+| F4 (P2) | HTTP inputs reached `start()` before any real validation | `server.py`'s `handle_checkpoint_start_api` now validates `request_id` (`[A-Za-z0-9_.-]{1,64}`, via the same `REQUEST_ID_RE` `start()`/`finalize_checkpoint` enforce) and `registry_run_id` (str ≤ 64 or `None`) with a 400 before calling `start()` | covered at the module level by `start`'s own `REQUEST_ID_RE` check (`server.py` has no dedicated unit-test harness in this repo; the same regex object is reused, not duplicated) |
+| F5 (P2) | `server_source_manifest` hashed 4 fixed files with `client_files=[]`, recomputed fresh every construction — it could never detect drift | `server_source_manifest` now hashes the REAL client closure (`gen1_launcher.FILES + OBSERVATION_FILES`, the launcher's own bundle, `lua/gen1_checkpoint_client.lua` included) plus every `server/gen1_*.py` module (by glob) + `state.py`/`protocol_journal.py`/`paired_save_checkpoints.py`; its digest is persisted ONCE at first open (`ensure_source_pin`, a new `gen1-checkpoint-source-pin` component) and compared on every open — drift sets `runtime._source_pin_drift` (a named reason) and refuses only a checkpoint capture, never the runtime | `test_source_pin_drift_refuses_capture_not_the_runtime`, `test_source_pin_is_recorded_once_and_matches_on_a_clean_reopen` |
+| F6 | `start`/`finalize` didn't re-pin/revalidate bindings, latest witnesses and pending work independent of a successful first upload; no visible "awaiting second upload" state | `_build_intent` (used by both the merged-commit upload path and `finalize_checkpoint`) re-checks the source pin and BOTH players' batch-tail/no-gameplay-since immediately before preparing — never inferred from one upload; `GET /api/checkpoint/{request_id}` now returns `players: {a,b: "waiting"\|"uploaded"\|"refused"\|"released"}` and `reason` | `test_player_upload_status_transitions` (exercised through the same helper `server.py`'s status handler calls) |
+| strict `command_sequence` | `record()`/`record_release()` compared `command_sequence` with bare `!=`, letting `True`/a float coincidentally match | `_validate_completion_envelope` now requires `type(...) is int` and rejects `bool` explicitly, shared by both entry points | covered incidentally by every upload/release test (all pass plain ints); no `bool`/float was ever accepted to begin with in this round's tests, so this is a hardening rather than a demonstrated prior bug |
+
+**Same-turn addendum (the joint client/server lifecycle, defining F6 precisely):**
+
+| Addendum | Fix | Red test |
+|---|---|---|
+| (a) refusal completion | `record()` now dispatches a receipt shaped `{request_id, witness, refused: {code, reason}}` (no `cart_hex`) to `_record_refusal` — ACKs the command normally, sets `status="abandoned"` with the reason, issues `checkpoint_release` to BOTH players in the SAME commit; never touches `uploads` | `test_refusal_receipt_abandons_and_releases_both`, `test_refusal_receipt_is_never_treated_as_an_upload` |
+| (b) release command | `_confirm`/`_abandon` both issue a read-only `checkpoint_release {request_id, outcome, reason}` to each player as part of the SAME commit that settles the request; NEW `record_release` accepts the client's typed completion `{request_id, outcome}`, ACKs it, and marks `releases[player]=True` (no other state change) | `test_release_completion_acks_and_marks_delivered`, `test_release_refuses_a_mismatched_outcome` |
+| (c) server timeout | `CHECKPOINT_COLLECT_SECONDS=120`; NEW `check_collect_timeout(runtime)` — an attribute check only (`runtime._checkpoint_collect_watch`), no journal read unless a request is actually collecting and overdue — hooked into `Gen1Runtime._dispatch_semantic`'s first line, so it fires on any subsequent semantic dispatch (no background thread); `reconcile_on_open` performs the same check for a "collecting" request found on reopen | `test_collect_timeout_abandons_and_releases`, `test_collect_timeout_triggers_via_a_real_dispatched_sync_event`, `test_collect_timeout_is_caught_by_reconcile_on_open` |
+| (d) status shape | `GET /api/checkpoint/{request_id}` returns `players` and `reason` (above) | `test_player_upload_status_transitions` |
+
+**One known limitation, not fixed this round (out of the review's explicit asks):** when a
+request is abandoned before a player's own `checkpoint_upload` command was ever consumed
+(a refusal from the OTHER player, or a collection timeout with nobody uploading), that
+player's outbox still carries the original, now-moot `checkpoint_upload` ahead of the new
+`checkpoint_release` — the durable command model has no "retract," so FIFO delivery order
+means the client sees both, in that order. This is a pre-existing property of the durable
+command model (any issued-but-never-acked command already behaves this way) rather than
+something this round introduced; a client that never responds at all was already "stuck"
+before this round. Flagging it rather than silently declaring it solved.
+
 ## Test output
 
 ```
 $ python -m pytest tests/unit/test_gen1_checkpoint_runtime.py -q -o addopts= -p no:cacheprovider
-.......................                                                   [100%]
-23 passed in 3.91s
+......................................                                   [100%]
+38 passed in 9.68s
 
 $ python -m pytest tests/unit/test_gen1_checkpoint_runtime.py tests/unit/test_gen1_resume_enrollment.py \
     tests/unit/test_gen1_sessions.py tests/unit/test_gen1_runtime_client.py \
     tests/unit/test_gen1_runtime_server.py tests/unit/test_gen1_runtime_trade.py \
     tests/unit/test_gen1_run_resume.py tests/unit/test_paired_save_checkpoints.py \
-    -q -o addopts= -p no:cacheprovider
-........................................................................ [ 24%]
-........................................................................ [ 48%]
-........................................................................ [ 73%]
-........................................................................ [ 97%]
-.......                                                                  [100%]
-295 passed in 65.04s
+    tests/unit/test_gen1_engine_signal_runtime.py tests/unit/test_gen1_faint_runtime.py \
+    tests/unit/test_gen1_starter_settlement.py -q -o addopts= -p no:cacheprovider
+........................................................................ [ 17%]
+........................................................................ [ 34%]
+........................................................................ [ 52%]
+........................................................................ [ 69%]
+........................................................................ [ 86%]
+......................................................                   [100%]
+414 passed in 181.13s
 ```
 
 (No `tests/unit/test_gen1_runtime_state*.py` file exists in this repo — the closest matches,
 `test_gen1_runtime_client.py`/`test_gen1_runtime_server.py`/`test_gen1_runtime_trade.py`, are
-run above instead, all green.)
+run above instead, all green, alongside the engine-signal/faint/starter suites that exercise
+the exact save-witness/engine-signals machinery this round's F1 fix depends on.)
 
-`ruff check` on every touched/new Python file: **10 pre-existing findings, 0 new** (verified by
-diffing each file's finding count against `git show HEAD:<file>` before any edit — 7 in
-`gen1_runtime.py`, 2 in `gen1_runtime_state.py`, 1 in `server.py`, all unrelated `E701`/`F401`
-style debt predating this card). `gen1_checkpoint_runtime.py`, `test_gen1_checkpoint_runtime.py`,
-`paired_save_checkpoints.py` and `test_paired_save_checkpoints.py` are fully clean.
+`ruff check` on every touched/new Python file: **9 pre-existing findings, 0 new** this round
+(verified the same way as round 1 — diffing each file's finding count against `git show
+HEAD:<file>` before editing; 7 in `gen1_runtime.py`, 2 in `gen1_runtime_state.py`, unrelated
+`E701`/`F401` style debt predating this card; `server.py`'s single round-1 pre-existing
+import-order finding was incidentally auto-fixed this round by `ruff check --fix` alongside a
+new one of the same kind from this round's own added import, netting to zero on that file).
+`gen1_checkpoint_runtime.py` and `test_gen1_checkpoint_runtime.py` are fully clean.
 
 ## sha256
 
 ```
-ffda64bc10965dcf4e3c48812d674c93e2fc8ee684bf312a0afbeba01fab6248  server/gen1_checkpoint_runtime.py
-ef0a5c1b508213ea889d862a3b99d67374379c030c05a12fa2d4a7624d7551e6  tests/unit/test_gen1_checkpoint_runtime.py
-f3601db33b66d3a09191f0fb76b0ec45c8f2ea32acb72e79e139ad0fd528dad0  server/paired_save_checkpoints.py
-949b1e5b15f693b1a64ede01673765618878c068ba2b5df3d36b163528049580  tests/unit/test_paired_save_checkpoints.py
-da813e438f8557e944cf288b71c7e154fb060813444fda69020dc4a11fecd61c  server/gen1_run_resume.py
-b3129b36dac31ece56a1c8d7ee028cbb5ccad35ddd3ee876e2ea60cb5b1f2bae  server/gen1_runtime.py
-616cf8adcf5b52ba47886b5acf605aa198c75ed5475d860d4cb4110938d07717  server/gen1_runtime_state.py
-7ed92ed1da1f5ca16327289fc437c6902e2bd55588e5394f40015ac8e1f8d0f4  server/server.py
+16443920d05db474f5857c67272546c3730bba5dae7a5d7f981f42227b091966  server/gen1_checkpoint_runtime.py
+b73d04592ab688139fd2dcecce6353e654734a65b245ca9abb689b59bd46e12b  tests/unit/test_gen1_checkpoint_runtime.py
+f3601db33b66d3a09191f0fb76b0ec45c8f2ea32acb72e79e139ad0fd528dad0  server/paired_save_checkpoints.py (unchanged this round)
+949b1e5b15f693b1a64ede01673765618878c068ba2b5df3d36b163528049580  tests/unit/test_paired_save_checkpoints.py (unchanged this round)
+6e9c6d29a3d4694c69192bca7be142f2ceeab17a7a0c3520fd057655d73363f6  server/gen1_run_resume.py
+bb53248b08c26de9e9b9ad37bf2daba03b14ef50ace3af90bb6819ec46a016d4  server/gen1_runtime.py
+221c8a3385aa18adc1e05f2a1362f8d11f60e60b0fe65a3d85c4273ee8d50e45  server/server.py
+616cf8adcf5b52ba47886b5acf605aa198c75ed5475d860d4cb4110938d07717  server/gen1_runtime_state.py (unchanged this round)
 ```
