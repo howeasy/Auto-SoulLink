@@ -79,6 +79,7 @@ function M.new(opts)
     local read, ram, row, fmt = opts.read, opts.ram, opts.row, string.format
     local menu_addr = assert(opts.menu_addr)
     local stage_index = opts.start == "route1" and 3 or 1
+    local detour, detour_i, detour_side, detour_tries = nil, 1, -1, 0
     assert(opts.start == "lab" or opts.start == "route1", "center route start must be lab or route1")
     local waypoint_index, still, last_point = 1, 0, ""
     local wild_active, wild_attempts = false, 0
@@ -150,10 +151,33 @@ function M.new(opts)
         local point = fmt("%d:%d:%d:%d", map, x, y, waypoint_index)
         still = point == last_point and still + 1 or 0
         last_point = point
-        -- Route 1 NPCs can stand in the lane for many seconds (the passing gate allows 1800).
+        -- A blocked lane (trade_new B: 1800 frames at (14,12) heading north; Route 1's
+        -- Youngster 2 walks LEFT_RIGHT on y=13, data/maps/objects/Route1.asm) is walked
+        -- around: after 240 still frames, detour one column over for two rows, then resume;
+        -- the other side second; both exhausted = fail with the facing tilemap for diagnosis.
+        if still >= 240 and not detour then
+            detour_side = detour_side == 1 and -1 or 1
+            detour_tries = (detour_tries or 0) + 1
+            if detour_tries <= 2 then
+                local dy = y > target[2] and -2 or (y < target[2] and 2 or 0)
+                detour = { {x + detour_side, y}, {x + detour_side, y + dy}, target }
+                detour_i, still = 1, 0
+                ;(opts.log or function() end)(fmt("DETOUR side=%d from (%d,%d) frame %d",
+                                                    detour_side, x, y, opts.frame()))
+            end
+        end
+        if detour then
+            local d = detour[detour_i]
+            if x == d[1] and y == d[2] then
+                detour_i = detour_i + 1
+                if detour_i > #detour then detour, detour_tries = nil, 0 else d = detour[detour_i] end
+            end
+            if detour then target = d end
+        end
         opts.invariant("waypoint not blocked", still < 1800,
-                       fmt("%s waypoint=%d at (%d,%d) target=(%d,%d)",
-                           stage.name, waypoint_index, x, y, target[1], target[2]))
+                       fmt("%s waypoint=%d at (%d,%d) target=(%d,%d) joy_ignore=%d battle=%d row13=%s row14=%s",
+                           stage.name, waypoint_index, x, y, target[1], target[2], at("wJoyIgnore"),
+                           at("wIsInBattle"), row(261, 18), row(281, 18)))
         if at("wJoyIgnore") ~= 0 then return pulse("A") end
         if x < target[1] then return {Right=true} end
         if x > target[1] then return {Left=true} end
