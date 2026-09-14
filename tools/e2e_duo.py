@@ -84,6 +84,16 @@ SCENARIOS = {
     # the same area, and the later capture must be rejected as a same-family duplicate.
     "dupes": {"flags": ["--species-clause"], "timeout": 1500, "games": ("gen1",),
               "target": "battle", "no_setup": True, "frames": 200000},
+    # NEW Gen 1 client (lua/gen1/*, game "gen1_new"): docs/gen1_requirements.md D-1 and D-3
+    # from real play through lua/tests/duo/duo_gen1_main.lua. Both battle fixtures carry
+    # exactly ONE Poke Ball, so each side gets one throw; the hunt fights one Tackle first
+    # when the foe is at full HP (lua/tests/gen1_rb_hunt_inputs.lua).
+    # `frames` is only a runaway guard: the main runs at 16x, so 150000 frames (~156 s) expired
+    # inside a wall-clock wait; the real bound is `timeout`, enforced by this runner's cleanup.
+    "link_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
+                 "target": "battle", "no_setup": True, "frames": 2000000},
+    "deadzone_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
+                     "target": "battle", "no_setup": True, "frames": 2000000},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -192,6 +202,20 @@ GAMES = {
     "gen1": {
         "main": "lua/tests/duo/duo_gb_main.lua",
         "game": "gen1_rby",
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
+        "uses_savestate": False,
+        "fixture": {"a": "red", "b": "blue"},
+        "scenario_prefix": "gen1_",
+    },
+    # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
+    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). Only link_new
+    # and deadzone_new run here; duo_gen1_main refuses every other scenario name. NOTE the
+    # family rule in scenario_applies: `("gen1",)` entries also match "gen1_new", so
+    # `--scenario all --game gen1_new` would pull the old scenarios in -- run these two by name.
+    "gen1_new": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "game": "gen1_new",
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
         "uses_savestate": False,
@@ -602,6 +626,93 @@ class DuoRun:
                                f"for a retry, not lock or link it")
         print(f"[duo] SPECIES CLAUSE: {rejected}'s catch rejected, {area} reopened ({got})")
 
+    # ── NEW Gen 1 client (game gen1_new) ─────────────────────────────────────
+    def _links_json(self):
+        """The server's persisted link table (carries `cause`, which /api/status does not)."""
+        path = os.path.join(self.data_dir, "links.json")
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding="utf-8") as f:
+            return json.load(f).get("links") or []
+
+    def assert_link_new(self):
+        """D-1: ONE alive link on route_1 whose halves are the two keys the cartridges caught."""
+        def both_caught():
+            a, b = self._caught("a"), self._caught("b")
+            return (a, b) if a and b else None
+        a_key, b_key = wait_for("both instances to catch a wild mon", both_caught,
+                                self.cfg["timeout"])
+        print(f"[duo] real captures: a={a_key} b={b_key}")
+
+        def linked():
+            for link in (self._status() or {}).get("links") or []:
+                if {link.get("a_key"), link.get("b_key")} == {a_key, b_key}:
+                    return link
+            return None
+        link = wait_for("the SERVER to pair the two real captures", linked, 180)
+        st = self._status() or {}
+        links = st.get("links") or []
+        area_state = (st.get("area_states") or {}).get("route_1")
+        problems = []
+        if len(links) != 1:
+            problems.append(f"expected exactly one link, got {len(links)}: {links}")
+        if link.get("status") != "alive":
+            problems.append(f"link status is {link.get('status')!r}, not alive")
+        if link.get("area_id") != "route_1":
+            problems.append(f"link area is {link.get('area_id')!r}, not route_1")
+        if area_state != "linked":
+            problems.append(f"area_states.route_1 is {area_state!r}, not linked")
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        print(f"[duo] ENCOUNTER LINK FROM REAL PLAY (new client): {a_key} <-> {b_key} "
+              f"on route_1, alive")
+
+    def assert_dead_zone_new(self):
+        """D-3: A's RUN sends no_catch and locks route_1; B's later catch there is retired.
+
+        B is released only once the SERVER reports the lock, so "B caught inside a dead zone"
+        is a fact. Retirement is read two ways: the server's links.json carries the DEAD entry
+        with cause dead_zone, and B's result file shows the caught key at HP 0 in the party
+        (FAINTED, written by the client's force_faint) before memorialize moves it out.
+        """
+        self._go_one("a")
+        area = wait_for("A's failed encounter to lock an area", self._dead_zone_area,
+                        self.cfg["timeout"])
+        if area != "route_1":
+            raise RuntimeError(f"A locked {area!r}, expected route_1")
+        wait_for("A to report its no_catch",
+                 lambda: "NO_CATCH" in (read_result(self.scenario, "a") or ""), 60)
+        print(f"[duo] DEAD ZONE FROM REAL PLAY (new client): {area}")
+
+        self._go_one("b")
+        b_key = wait_for("B to catch inside the dead zone", lambda: self._caught("b"),
+                         self.cfg["timeout"])
+        wait_for("B's client to force-faint the refused capture",
+                 lambda: "FAINTED " in (read_result(self.scenario, "b") or ""), 300)
+        retired = "RETIRED " in (read_result(self.scenario, "b") or "")
+        print(f"[duo] B caught {b_key} in the dead zone; force-fainted"
+              f"{', memorialized' if retired else ' (memorialize not observed)'}")
+
+        st = self._status() or {}
+        area_state = (st.get("area_states") or {}).get(area)
+        problems = []
+        if area_state != "dead_zone":
+            problems.append(f"{area} is {area_state!r} after B's catch, not dead_zone")
+        for link in st.get("links") or []:
+            if b_key in (link.get("a_key"), link.get("b_key")) and link.get("status") == "alive":
+                problems.append(f"B's dead-zone catch {b_key} formed a LIVE link")
+        if ((st.get("pending_captures") or {}).get(area) or {}).get("b"):
+            problems.append(f"B's dead-zone catch is pending in {area}")
+        dead = [lnk for lnk in self._links_json()
+                if lnk.get("area_id") == area and lnk.get("status") == "dead"
+                and lnk.get("cause") == "dead_zone"]
+        if not dead:
+            problems.append(f"links.json has no DEAD/dead_zone entry for {area}: "
+                            f"{self._links_json()}")
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        print(f"[duo] links.json: {len(dead)} dead_zone entry for {area}; B's {b_key} retired")
+
     def set_pokeballs(self):
         """Faints are suppressed server-side until the nuzlocke is active (pokéballs obtained)."""
         for p in ("a", "b"):
@@ -662,6 +773,11 @@ class DuoRun:
                 self.assert_dead_zone_refusal()
             elif self.scenario == "dupes":
                 self.assert_species_clause_rejection()
+            elif self.scenario == "link_new":
+                self.go()
+                self.assert_link_new()
+            elif self.scenario == "deadzone_new":
+                self.assert_dead_zone_new()
             else:
                 self.go()
                 self.assert_real_link_formed()

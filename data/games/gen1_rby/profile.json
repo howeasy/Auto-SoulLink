@@ -269,6 +269,11 @@
      "bank": 0,
      "flat": 8371
     },
+    "DisplayBattleMenu": {
+     "addr": 20147,
+     "bank": 15,
+     "flat": 249523
+    },
     "DisplayPartyMenu": {
      "addr": 5116,
      "bank": 0,
@@ -303,6 +308,11 @@
      "addr": 27950,
      "bank": 14,
      "flat": 240942
+    },
+    "ExecuteEnemyMove": {
+     "addr": 26300,
+     "bank": 15,
+     "flat": 255676
     },
     "ExecutePlayerMove": {
      "addr": 22110,
@@ -379,6 +389,11 @@
      "bank": 1,
      "flat": 16987
     },
+    "MoveSelectionMenu": {
+     "addr": 21017,
+     "bank": 15,
+     "flat": 250393
+    },
     "OverworldLoop": {
      "addr": 1023,
      "bank": 0,
@@ -438,6 +453,11 @@
      "addr": 30735,
      "bank": 28,
      "flat": 473103
+    },
+    "SelectEnemyMove": {
+     "addr": 21860,
+     "bank": 15,
+     "flat": 251236
     },
     "SendNewMonToBox": {
      "addr": 26532,
@@ -754,6 +774,11 @@
      "bank": 0,
      "flat": 8371
     },
+    "DisplayBattleMenu": {
+     "addr": 20147,
+     "bank": 15,
+     "flat": 249523
+    },
     "DisplayPartyMenu": {
      "addr": 5116,
      "bank": 0,
@@ -788,6 +813,11 @@
      "addr": 27950,
      "bank": 14,
      "flat": 240942
+    },
+    "ExecuteEnemyMove": {
+     "addr": 26300,
+     "bank": 15,
+     "flat": 255676
     },
     "ExecutePlayerMove": {
      "addr": 22110,
@@ -864,6 +894,11 @@
      "bank": 1,
      "flat": 16987
     },
+    "MoveSelectionMenu": {
+     "addr": 21017,
+     "bank": 15,
+     "flat": 250393
+    },
     "OverworldLoop": {
      "addr": 1023,
      "bank": 0,
@@ -923,6 +958,11 @@
      "addr": 30735,
      "bank": 28,
      "flat": 473103
+    },
+    "SelectEnemyMove": {
+     "addr": 21860,
+     "bank": 15,
+     "flat": 251236
     },
     "SendNewMonToBox": {
      "addr": 26532,
@@ -1239,6 +1279,11 @@
      "bank": 0,
      "flat": 7784
     },
+    "DisplayBattleMenu": {
+     "addr": 20344,
+     "bank": 15,
+     "flat": 249720
+    },
     "DisplayPartyMenu": {
      "addr": 4552,
      "bank": 0,
@@ -1273,6 +1318,11 @@
      "addr": 28120,
      "bank": 14,
      "flat": 241112
+    },
+    "ExecuteEnemyMove": {
+     "addr": 26690,
+     "bank": 15,
+     "flat": 256066
     },
     "ExecutePlayerMove": {
      "addr": 22480,
@@ -1344,6 +1394,11 @@
      "bank": 1,
      "flat": 23683
     },
+    "MoveSelectionMenu": {
+     "addr": 21280,
+     "bank": 15,
+     "flat": 250656
+    },
     "OverworldLoop": {
      "addr": 578,
      "bank": 0,
@@ -1403,6 +1458,11 @@
      "addr": 31574,
      "bank": 28,
      "flat": 473942
+    },
+    "SelectEnemyMove": {
+     "addr": 22230,
+     "bank": 15,
+     "flat": 251606
     },
     "SendNewMonToBox": {
      "addr": 26344,

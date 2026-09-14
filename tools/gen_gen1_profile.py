@@ -111,6 +111,8 @@ ROM_SYMBOLS = [
     "TryEvolvingMon", "EvolutionAfterBattle", "Evolution_PartyMonLoop", "Evolution_ChangeMonPic",
     "InGameTrade_DoTrade", "CableClubNPC", "SoftReset", "Init",
     "DisplayPartyMenu", "StartMenu_Pokemon", "CalcStat", "CalcStats",
+    # battle menu sites the live battle driver hooks (lua/tests/gen1_battle_driver.lua header)
+    "DisplayBattleMenu", "MoveSelectionMenu", "SelectEnemyMove", "ExecuteEnemyMove",
     # ROM data tables the client reads (base stats for the withdraw rebuild; dex order)
     "BaseStats", "PokedexOrder",
 ]

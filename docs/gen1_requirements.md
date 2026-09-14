@@ -35,6 +35,8 @@ from it in Phase 8.
 
 `S` SOURCE, `M` MODEL, `P` PHYSICAL. `·` = not yet, `✓` = done with receipt path.
 
+Audit 2026-09-14 (HEAD 48f09ef): 3 cells corrected — S-4 M downgraded (poison leg untested), C-0 M and C-4 M now name their tests. Two artefacts the audit could not fix in place: C-0's requirement text names `tests/unit/test_protocol_conformance.py`, which does not exist (the work lives in `test_protocol_schema.py` + `test_gen1_client.py`), and three sub-clauses no unit test covers — S-2's ball-thrown detection, S-5's "SLINK trade emits no `key_change`", S-7's CONTINUE/New-Game distinction. Pinned engine sites: **17**, not 18.
+
 ---
 
 ## F — Facts (no emulator; lanes 1–5 of the runner)
@@ -64,7 +66,7 @@ from it in Phase 8.
 | S-1 | Scripted New Game → starter → rival on R/B/Y emits exactly `starter`, `battle_start(trainer)`, N×`faint`, `battle_end(lost)`, the map-load sequence; no spurious `capture`/`no_catch` | ENGINE sequence vs pret script order (`scripts/OaksLab.asm` 12→18) | ✓ site pinned | ✓ | ✓ `test_gen1_new_gates.py::lab_route` Red+Blue: cold NEW GAME → starter → rival by buttons; sequence == pret script order; L5 exp 135 |
 | S-2 | Route 1 wild encounter: `battle_start(wild, species, level)`; caught → one `capture(party)`; ran/lost → `battle_end` + `no_catch{species_id, level}`; ball thrown detected at the item-removal site | ENGINE + SERVER | ✓ site pinned | ✓ `test_gen1_client.py` | · |
 | S-3 | Party full + catch → `capture(box)` via `SendNewMonToBox`; box snapshot updated | ENGINE + PYDEC (SRAM) | ✓ site pinned | · | · |
-| S-4 | Poison faint in the overworld; blackout: faint-time party bytes captured before `HealParty`; `whiteout` emitted once | ENGINE + PYDEC | ✓ site pinned | ✓ `test_gen1_client.py` | · |
+| S-4 | Poison faint in the overworld; blackout: faint-time party bytes captured before `HealParty`; `whiteout` emitted once | ENGINE + PYDEC | ✓ site pinned | · `test_gen1_client.py` covers blackout + `whiteout` once; the poison-faint leg has no test (`poison_faint` appears in no test file) | · |
 | S-5 | Moon Stone evolution → `key_change{old,new}`; vanilla NPC trade → `key_change reason=npc_trade`; SLINK trade emits no `key_change` | ENGINE + GAME (new species on screen) | ✓ site pinned | ✓ `test_gen1_client.py` | · |
 | S-6 | PC deposit/withdraw/release/ChangeBox → `party_to_box`/`box_to_party`; Box 12 survives ChangeBox | ENGINE + PYDEC (SRAM after) | ✓ site pinned | ✓ `test_gen1_client.py` | · |
 | S-7 | Save → witness `sha256(hex(CartRAM[0x498:0x8000]))`; CONTINUE → loaded witness; New Game distinguished | ENGINE (`SaveMenu.save+3`, `TryLoadSaveFile`) | ✓ site pinned | ✓ `test_gen1_client.py` | · |
@@ -86,11 +88,11 @@ from it in Phase 8.
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| C-0 | `tests/unit/test_protocol_conformance.py` passes against the Gen 3 client AND the new Gen 1 client | MODEL (proves the suite tests the contract) | — | ✓ `protocol_schema.py` pinned to the server + 17 client scenarios validated | — |
+| C-0 | `tests/unit/test_protocol_conformance.py` passes against the Gen 3 client AND the new Gen 1 client | MODEL (proves the suite tests the contract) | — | ✓ `tests/unit/test_protocol_schema.py` pins the table to the server; `tests/unit/test_gen1_client.py` validates every line it sends (`assert_all_conform`) | — |
 | C-1 | Hello identity: `ot_id` = `wPlayerID`; a save with a different OT ⇒ `WRONG SAVE`, zero state mutation | SERVER (`links.json` unchanged) | · | · | · |
 | C-2 | Reconnect: kill EmuHawk mid-run, relaunch same save ⇒ links intact, party re-synced, no duplicate captures | SERVER | · | · | · |
 | C-3 | Dashboard renders Gen 1 correctly: 8-bit sprites (`mon-sprite`, `data-species`), status pill, stat stages (SPC, no SDEF), trainer name, badges, box counts, encounter panel from the player's own cartridge | browser + `test_sprite_html_contract.py` | · | · | · |
-| C-4 | Client never wedges: malformed command ⇒ NACK + continue; a raise in the executor is logged once | lupa fault injection | — | ✓ malformed/unknown commands, handler errors contained | — |
+| C-4 | Client never wedges: malformed command ⇒ NACK + continue; a raise in the executor is logged once | lupa fault injection | — | ✓ `tests/unit/test_gen1_client.py` (malformed/unknown commands do not wedge; handler errors contained) | — |
 
 ## D — Rules engine under Gen 1 (duo lane; `server/state.py` is proven, not rewritten)
 
