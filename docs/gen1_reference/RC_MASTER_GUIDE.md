@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T06:59:55+00:00",
+  "updated_at_utc": "2026-09-14T07:26:12+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "94bfa26",
+  "source_head": "4ddeed0",
   "live_lane": null,
-  "next_action": "Resume round-trip r2 HOLD in the starter-rival driver on an RNG-dependent unmodelled menu state (BI-2 hardening). Re-run as r3 after BI-2 lands.",
+  "next_action": "Resume round-trip r3 HOLD at the START menu (size 7 observed vs 6 expected). RS-3 fixing; r4 after.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -669,15 +669,32 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "bi-2",
-      "owner": "isolated Claude worker (BI-1 context resumed; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (Claude worker authored)",
+      "state": "done",
       "files": [
         "lua/tests/gen1_rb_ball_gate_inputs.lua",
         "tests/unit/test_gen1_selected_rb_ball_gate.py",
         "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
       ],
-      "next_action": "Battle refusals name the point; bounded idle on unknown geometry; enumerate source candidates for Y14/max!=1 or Y12/X!=5 during the lab battle.",
-      "reuse_decision": "game-specific test driver"
+      "next_action": "None; integrated. Latent hardening noted (index==0 gate before open-fight) \u2014 apply only if a live receipt shows it.",
+      "reuse_decision": "game-specific test driver",
+      "receipt": "tests/unit/test_gen1_selected_rb_ball_gate.py (33 passed; .cache/bi2-model.xml)",
+      "independent_review_refs": [
+        "coordinator re-ran 33 + lupa; source candidates enumerated in D1-RB-implementation-successor.md"
+      ]
+    },
+    {
+      "id": "rs-3",
+      "owner": "isolated Claude worker (harness; resumed context; ACK on report)",
+      "state": "active",
+      "files": [
+        "lua/tests/gen1_rb_save_inputs.lua",
+        "lua/tests/gen1_scripted_new_game.lua",
+        "tests/unit/test_gen1_rb_save_inputs.py",
+        "tests/unit/test_gen1_scripted_chain.py"
+      ],
+      "next_action": "SAVE row from the tilemap scan; accept START menu size 6 or 7; publish got_pokedex.",
+      "reuse_decision": "Gen 1 route facts"
     }
   ]
 }
@@ -701,6 +718,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| Resume round-trip attempt 3 | Battle passed (BI-2 hardening held); START menu opened on both cartridges but reported `wMaxMenuItem 7` where the driver expected 6 (no Pokédex yet per `draw_start_menu.asm:30-38`) → idle. RS-3: navigate to the SAVE row found by the tile scan, accept 6/7, publish `got_pokedex`. Not a product defect. Summary `99c8e01d…`. |
 | Resume round-trip attempt 2 | HOLD before the save: A's starter-rival driver (8 prior passes) hit `unknown battle menu; refuse blind A` on an RNG-dependent retained-geometry state the assert did not record. BI-2: refusals name the point, bounded idle before refusing, candidate states from source. Not a product defect. Summary `e7cf6a05…646d`. |
 | P2A-9 integrated | `starting_token`/`starting_at` reservation (120 s ceiling, `# ponytail:`) survives `_reconcile`/reads; stop/archive/delete refuse a live reservation; the final start commit requires the caller's own token and no `resumed_by`, otherwise kills what it spawned and returns 409. 232 manager/resume tests. Pin `94bfa26`. |
 | Resume round-trip attempt 1 | HOLD before any save: the `rb-save` driver treated `wSaveFileStatus` as a fresh-cartridge/save oracle, but the byte is battle-animation scratch (`ram/wram.asm:1371-1385`) and read 2 during the rival battle. Driver terminal changes to confirmed-YES + menus closed (RS-2); the acked `gen1-save-witness` remains the proof. No product code implicated; resume phase not reached. Summary `aed95181…`. |
