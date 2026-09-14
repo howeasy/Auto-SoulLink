@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T04:47:26+00:00",
+  "updated_at_utc": "2026-09-14T05:15:18+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "b9658d7",
+  "source_head": "a99d8b4",
   "live_lane": null,
-  "next_action": "P2A-4 suite pending. Then P2A-5 (server worker): Manager handle_launcher passes resume into render_launcher/bundle; _service_release_ready accepts the resume enrollment instead of new-game bootstrap/initial-save for resumed players; client flushes SaveRAM after save_witness. Then integrate all, re-pin source_cut, Codex review, live round-trip.",
+  "next_action": "Codex REVIEW of the resume feature (6075af1..a99d8b4); on ACCEPT grant the lane for rb_resume_roundtrip (.cache/rb-resume-r1).",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -541,6 +541,25 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator checks; Codex headless REVIEW of the whole resume diff scheduled after P2A-5"
       ]
+    },
+    {
+      "id": "p2a-5",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
+      "files": [
+        "server/manager.py",
+        "server/gen1_runtime.py",
+        "lua/gen1_engine_signals.lua",
+        "tests/integration/test_manager_gen1_resume.py",
+        "tests/unit/test_gen1_runtime_server.py",
+        "tests/unit/test_gen1_engine_signals_client.py"
+      ],
+      "next_action": "None; integrated MODEL ONLY (8010/0). Review of the whole resume diff pending.",
+      "reuse_decision": "shared Manager/runtime lifecycle; Gen 1 signal adapter for the flush hook",
+      "receipt": "tests/integration/test_manager_gen1_resume.py, tests/unit/test_gen1_runtime_server.py, tests/unit/test_gen1_engine_signals_client.py (5 new tests; 81 in the re-run set)",
+      "independent_review_refs": [
+        "Codex headless REVIEW of 6075af1..a99d8b4 (in progress)"
+      ]
     }
   ]
 }
@@ -564,6 +583,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| P2A-5 integrated | `handle_launcher` passes the run's `resume` into `render_launcher`/`bundle`; `_service_release_ready` accepts, per player, either the new-game bootstrap + initial-save pair or `gen1-resume.enrolled[player]`; the client calls `client.saveram()` once after a `save_witness` (pcall-guarded, no-op in models). 8010/0. Live-harness `source_cut` re-pinned to `c8f5465` (`a99d8b4`). |
 | RS-1 integrated (live resume harness) | `rb-save` chained driver from the lab overworld (START menu at Y2/X11, `wMaxMenuItem` 6 without Pokédex, SAVE = cursor index 3 per `home/start_menu.asm:60-74`; YES at the `$14` two-option box Y8/X1 index 0; terminal when `wSaveFileStatus==2` and `wFontLoaded` bit 0 clear), generic chain terminals in the bootstrap, `SelectedRun(resume_from=, resume_save=)` posting through the predecessor's Manager registry (registry id, `manager.py:786-788`), CONTINUE-safe boot inputs (asserts `wMaxMenuItem==2 && wSaveFileStatus==2 && index 0`, never Down), `rb_resume_roundtrip` live callable (status `rb-resume-checkpoint-observed`: both `gen1-resume.enrolled`, `oaks_lab` link ALIVE with the same species, `pokeballs_obtained` preserved, no death commands). Harness flushes SaveRAM via `client.saveram()` at the save terminal because EmuHawk is terminated, not closed. `source_cut` re-pinned `15727ec → b9658d7` (P2A-2 changed pinned product files). **Product gaps found (P2A-5):** (1) `manager.py:742-748 handle_launcher` never passes `resume` to `render_launcher`/`bundle`; (2) `gen1_runtime.py:235-247 _service_release_ready` requires `gen1-new-game-bootstrap` + `gen1-initial-save` that a resumed run never produces, so free service never releases; (3) nothing persists the witnessed save to `.SaveRAM` before an abrupt close. |
 | P2A-3/4 integrated (identity import + refusals) | Audit exports `identities = {a:{known_keys}, b:{known_keys}}` only (no contexts/events/member ids); inside the resume enrollment transition, living keys (ALIVE link halves, pending captures, pending memorials) are reconciled against the presented party/box (refusals: inherited living member absent; presented key the predecessor never knew) and minted as fresh members under the NEW context via the registry's ordinary `acquire`; identity links recreated once both are enrolled. Red: an inherited-pair faint that previously refused (`faint rule pair differs from logical identity linkage`) now settles and queues the partner's `force_faint`. 7983/0 full suite. P2A-4 closes the residuals by refusal: no resume with pending captures/memorials; faint before partner enrollment guarded. |
 | **P2A-2 integrated (resume at the run boundary)** | Server: `server/gen1_run_resume.py` audits a closed predecessor read-only (`read_journal`; refusals: missing witness, projection mismatch, pending commands, active trade, newer gameplay after the witness = HOLD, predecessor running, cartridge/contract mismatch, run over) and exports the typed rules via `StagedGen1State.restore(...).document()`; Manager `POST /api/runs/gen1` accepts `resume_from` (404 unknown / 409 with reasons), seeds the new runtime with the imported rules + `components["gen1-resume"]`, records `resume` in the registry, new `GET /api/runs/{id}`; `gen1_initial_observation.record()` requires, under a pending contract, the presented `cart_hex` projection digest (sha256 of the UPPERCASE HEX text of `[0x0498:0x8000]`, identical to the client formula) and a structurally valid `continue_witness`, lifts the established-history guard only for that player, journals the enrollment; inherited ball activation is a typed lineage fact effective from the player's initial observation frame (no forged signal). Client/launcher: `runtime_launcher.player_resume` → `launch.json.resume {from_run, required_digest, projection}`; `bizhawk_launch.prepare(resume_save=)` verifies the projection digest BEFORE copying the player's `.SaveRAM` into the new run's private directory with the ownership manifest (`tools/launch_bizhawk.py --resume-save`); the client builds the CONTINUE observer instead of the New Game bootstrap in resume mode, verifies the loaded save's digest at the `loaded` witness, and publishes `payload.continue_witness`. 50 new tests; full unit suite 7979/0. **Known gap (P2A-3):** the identity registry is not imported, so a linked death on an *inherited* pair would refuse settlement (`faint rule pair differs from logical identity linkage`); wild encounters, dead zones, clauses and the ball gate work from the imported rules. Dashboard affordance deferred. MODEL ONLY until the live resume check. |
