@@ -18,7 +18,8 @@ explains a failure later:
     5. patch-build        — the clean dumps still hold what the manifest displaces
     6. live-gates         — real engine behaviour on real cartridges, incl. the panel
                             on a randomized+injected ROM
-    7. duo-pairs          — every scenario on both pairings, through the real server
+    7. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
+    8. duo-pairs          — every scenario on both pairings, through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -30,6 +31,7 @@ defect, but the gate cannot tell the two apart and should not pretend to.
     python tools/verify_gen1_release.py                # everything
     python tools/verify_gen1_release.py --quick        # stop before the emulator lanes
     python tools/verify_gen1_release.py --list         # show the lanes and exit
+    python tools/verify_gen1_release.py --lane unit --lane lua-parse   # only these lanes
 """
 from __future__ import annotations
 
@@ -44,7 +46,7 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
-_SLOW = {"live-gates", "duo-pairs"}
+_SLOW = {"live-gates", "live-new-gates", "duo-pairs"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
 # The gate's whole point is that a skip is a failure, so an exception has to be argued for
@@ -101,12 +103,35 @@ LANES = [
          env={"SLINK_LIVE": "1"},
          why="real engine behaviour on real cartridges, including the panel on a "
              "randomized+injected ROM"),
+    Lane("live-new-gates",
+         [_PY, "-m", "pytest", "tests/live/test_gen1_new_gates.py", "-q", "-p",
+          "no:randomly", "-rs"],
+         env={"SLINK_LIVE": "1"},
+         why="the rewritten Gen 1 modules on all three cartridges: pinned engine sites "
+             "present, hooks armed, live party decoded identically in Lua and Python, "
+             "overworld write checkpoint reached (docs/gen1_requirements.md R-1, S, W-7, "
+             "F-6)"),
     Lane("duo-pairs",
          [_PY, "-m", "pytest", "tests/e2e/test_duo_gen1.py", "-q", "-p", "no:randomly",
           "-rs"],
          env={"SLINK_E2E": "1"},
          why="every scenario on both pairings, through the real server"),
 ]
+
+
+# What each lane is the evidence for, printed by --list. Requirement ids are the ones
+# docs/gen1_requirements.md carries; the parenthesised entries are lanes whose tests predate
+# the rewrite and are replaced later in the plan, so they certify nothing today.
+REQUIREMENTS = {
+    "unit": ["F-1", "F-2", "F-4", "F-5", "R-1", "R-2", "C-0", "C-4", "W-7"],
+    "rom-layout": ["F-2"],
+    "lua-parse": ["C-4"],
+    "profile-addresses": ["F-1"],
+    "patch-build": ["T-1"],
+    "live-gates": ["(pre-rewrite gates; retired in Phase 8)"],
+    "live-new-gates": ["R-1", "S", "W-7", "F-6"],
+    "duo-pairs": ["D-1..D-14 (pre-rewrite scenarios; rewritten in Phase 6)"],
+}
 
 
 def _count_outcomes(text: str) -> dict:
@@ -174,16 +199,29 @@ def main() -> int:
     ap.add_argument("--quick", action="store_true",
                     help="stop before the lanes that need an emulator")
     ap.add_argument("--list", action="store_true", help="show the lanes and exit")
+    ap.add_argument("--lane", action="append", metavar="NAME",
+                    help="run only this lane (repeatable); see --list for the names")
     ap.add_argument("--quiet", action="store_true", help="do not dump failing output")
     args = ap.parse_args()
+
+    names = [lane.name for lane in LANES]
+    if args.lane:
+        unknown = [name for name in args.lane if name not in names]
+        if unknown:
+            print(f"unknown lane(s): {', '.join(unknown)}", file=sys.stderr)
+            print(f"lanes: {', '.join(names)}", file=sys.stderr)
+            return 2
 
     if args.list:
         for lane in LANES:
             mark = "slow" if lane.name in _SLOW else "fast"
             print(f"  {lane.name:<18} [{mark}]  {lane.why}")
+            print(f"    requirements: {', '.join(REQUIREMENTS[lane.name])}")
         return 0
 
-    lanes = [x for x in LANES if not (args.quick and x.name in _SLOW)]
+    wanted = set(args.lane) if args.lane else set(names)
+    lanes = [x for x in LANES
+             if x.name in wanted and not (args.quick and x.name in _SLOW)]
     print(f"Gen 1 release gate — {len(lanes)} lanes\n")
     failed = []
     for lane in lanes:
