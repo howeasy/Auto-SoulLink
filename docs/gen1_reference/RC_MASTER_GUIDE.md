@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:00:38+00:00",
+  "updated_at_utc": "2026-09-14T10:03:32+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "1fbdb00",
+  "source_head": "645fa94",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-2 Lua client (Sonnet), R5b-3 Manager (OMP). R5b-1 candidate 1fbdb00 under adversarial review. C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C3 (Sonnet), R5b-1 round 2 (Sonnet: F1-F6), R5b-3 Manager (OMP). R5b-2 candidate 645fa94 under adversarial review. C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c now unblocked (R5b-1 released server.py/gen1_runtime.py) — dispatch to OMP after R5b-3. FT-2d integrated. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -950,14 +950,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-1",
-      "owner": "integrated by coordinator as candidate 1fbdb00 (isolated Sonnet worker authored; the R5a author)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate 1fbdb00 on the branch)",
+      "state": "active",
       "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
       "next_action": "Server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
       "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules",
       "receipt": "commit 1fbdb00; tests/unit/test_gen1_checkpoint_runtime.py 23 passed; checkpoint/envelope/resume-enrollment/sessions 170 passed; module sha256 ffda64bc…6248; docs/gen1_reference/reviews/R5b-1-server-capture.md (kept its own HTTP/journal shapes; deltas from the pin documented; contract re-pinned to R5b-3)",
       "independent_review_refs": [
-        "Codex ADVERSARIAL_REVIEW cx-823ee12a (de312cf..1fbdb00) in flight"
+        "Codex ADVERSARIAL_REVIEW cx-823ee12a: REJECT — F1 no_gameplay_since misses same-batch gameplay after the save signal (gen1_run_resume.py:114-132 vs audit_predecessor :228-231); F2 crash between the second upload ACK and finalize wedges capture in 'collecting' (checkpoint_runtime.py:183-195,279-280); F3 reconciliation by request_id alone can confirm an older archive (:285-286); F4 unbounded request_id/registry_run_id reach provenance after both ACKs; F5 source manifest pins four files, client_files=[], recomputed every construction (detects nothing); F6 no start-time binding/digest pin or awaiting-second-upload state. Hex/sequence/session checks, audit_predecessor unchanged, witness union, typed dispatch and CSRF middleware ACCEPTED. Round 2 dispatched."
       ]
     },
     {
@@ -1018,11 +1018,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-2",
-      "owner": "isolated Claude Sonnet worker (Lua implementation)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate 645fa94 (isolated Sonnet worker authored)",
+      "state": "done",
       "files": ["lua/gen1_checkpoint_client.lua", "lua/gen1_client_entry.lua", "server/gen1_launcher.py", "tests/unit/test_gen1_checkpoint_client.py", "docs/gen1_reference/reviews/R5b-2-client.md"],
       "next_action": "checkpoint_upload command service: dedicated hold + drained journal gate, one bulk CartRAM read to 65536 uppercase hex, local projection digest check, intent-persisted completion via complete_command typed envelope, ACK-only retirement; lupa red tests per spec §7.",
-      "reuse_decision": "reuses command_service_router/command_executor/client_journal; Gen 1 read/digest semantics in the new module"
+      "reuse_decision": "reuses command_service_router/command_executor/client_journal; Gen 1 read/digest semantics in the new module",
+      "receipt": "commit 645fa94; tests/unit/test_gen1_checkpoint_client.py 14 passed (+launcher 33 total); lupa clean; module sha256 01909e08…07f9; docs/gen1_reference/reviews/R5b-2-client.md",
+      "independent_review_refs": [
+        "Codex ADVERSARIAL_REVIEW cx-826736db (bf3ed49..645fa94) in flight"
+      ]
     },
     {
       "id": "n3-claim",
