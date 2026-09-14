@@ -356,3 +356,26 @@ def test_parcel_is_handed_to_oak_from_the_post_rival_noop_script():
     point.lab_script, point.joy_ignore, point.menu_kind = 18, 0, "none"
     buttons, phase = step(driver, handshake, status, point, 16)
     assert phase == "give-parcel-to-oak" and buttons["A"] and buttons["Up"]
+
+
+def test_oak_delivery_and_post_event_text_is_advanced_whenever_a_is_unmasked():
+    # Live parcel attempt 4: OaksLabRivalArrivesAtOaksRequestScript (15) shows the
+    # GRAMPS text with wJoyIgnore 0 and script 16 masks $F0 (scripts/OaksLab.asm:510-560);
+    # only $FF (scripted NPC walking) forbids A, so waiting for exactly $FC idles forever.
+    driver, handshake, status, point = model()
+    point.map, point.x, point.y = 0x28, 5, 3
+    point.parcel_count, point.got_parcel, point.oak_got_parcel = 1, True, False
+    point.lab_script, point.joy_ignore, point.menu_kind = 18, 0, "none"
+    step(driver, handshake, status, point, 16)  # admits the delivery
+    point.parcel_count, point.lab_script, point.joy_ignore = 0, 15, 0
+    buttons, phase = step(driver, handshake, status, point, 32)
+    assert phase == "oak-delivery-dialogue" and buttons["A"]
+    point.lab_script, point.joy_ignore = 16, 0xF0
+    buttons, phase = step(driver, handshake, status, point, 48)
+    assert phase == "oak-delivery-dialogue" and buttons["A"]
+    point.joy_ignore, point.npc_moving = 0xFF, True
+    buttons, phase = step(driver, handshake, status, point, 64)
+    assert phase == "oak-delivery-script-wait" and not buttons["A"]
+    point.oak_got_parcel, point.lab_script, point.joy_ignore, point.npc_moving = True, 17, 0xF0, False
+    buttons, phase = step(driver, handshake, status, point, 80)
+    assert phase == "oak-post-event-dialogue" and buttons["A"]

@@ -132,7 +132,8 @@ function M.new(expected)
                     assert(point.lab_script==15 or point.lab_script==16
                         or point.lab_script==17,
                         "parcel removed outside Oak delivery script")
-                    if point.joy_ignore==0xFC then
+                    -- Scripts 15-17 show text with wJoyIgnore 0 or $F0; only $FF (scripted NPC walk) forbids A.
+                    if point.joy_ignore~=0xFF and not point.npc_moving then
                         return tap("A",frame),"oak-delivery-dialogue"
                     end
                     return idle(),"oak-delivery-script-wait"
@@ -152,7 +153,7 @@ function M.new(expected)
                 self.segments={} -- second outbound journey starts at the lab again.
             end
             if point.lab_script~=18 or point.joy_ignore~=0 then
-                if point.joy_ignore==0xFC then
+                if point.joy_ignore~=0xFF and not point.npc_moving then
                     return tap("A",frame),"oak-post-event-dialogue"
                 end
                 return idle(),"oak-post-event-script-wait"

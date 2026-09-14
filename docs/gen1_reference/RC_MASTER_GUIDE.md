@@ -13,18 +13,18 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T02:48:25+00:00",
+  "updated_at_utc": "2026-09-14T03:05:36+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "975ab9c",
   "live_lane": {
-    "card": "parcel-r4",
+    "card": "parcel-r5",
     "owner": "coordinator slink-63",
-    "owned_root": ".cache/d1-rb-parcel-r4",
+    "owned_root": ".cache/d1-rb-parcel-r5",
     "titles": "red/blue",
     "requested_speed_percent": 300,
     "limit_seconds": 900
   },
-  "next_action": "Parcel r3: WB-1 fix PROVED live (Route 1 wild encounters crossed), parcel obtained; stalled talking to Oak in lab script 18 (one-line driver fix, red-tested). Running r4 (changed run). Then P2A-2 resume-at-run-boundary card.",
+  "next_action": "Parcel r4: parcel DELIVERED to Oak; stalled in the script-15 cutscene on a joy-mask gate (fixed, red-tested). Running r5. P2A-2 implementation slice dispatches after r5 releases the lane.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -445,6 +445,22 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator re-ran the set + generator --check + lupa; site bytes match P2A-SITE (Gen1-CodexPeer cx-b5dce65a)"
       ]
+    },
+    {
+      "id": "p2a-2-seams",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-a45bfe7d)",
+      "state": "done",
+      "files": [
+        "server/manager.py",
+        "server/gen1_run_config.py",
+        "server/gen1_initial_observation.py"
+      ],
+      "next_action": "None; recorded in the guide P2A-2 seams row. Implementation slice dispatches after parcel r4 releases the lane.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (P2A-2 seams row)",
+      "independent_review_refs": [
+        "coordinator spot-check of gen1_initial_observation.py:155-163 guard and bizhawk_launch.py:73-104 ownership"
+      ]
     }
   ]
 }
@@ -468,6 +484,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| P2A-2 seams (resume at the run boundary) | Gen1-CodexPeer record. **Why it is the top feature:** today a run can only be played in one sitting — every relaunch is refused, so a full playthrough is impossible without it. Seams: Manager `resume_from` joins the strict key check before staging (`manager.py:763-776`); predecessor inspected read-only via `journal_reader.read_journal` (`:26-62`, never `open_runtime`); rules import via typed `SoulLinkState.from_document` / staged restore (`state.py:783-847`, `staged_state.py:74-145`), carrying links/area states/pending captures/mon stats/`pokeballs_obtained`/player identity/memorial (`rules.memorial.retired_pairs`) and NOT admissions, bindings, engine counters, cursors, commands, trades, observations, leases. **Blockers to design around:** `initial_observation.record` refuses any established history (`:155-161`) → needs a resume-specific transition; the earliest byte-level gate is right after `validate()` at `:163` (`sha256(bytes.fromhex(cart_hex)[0x498:0x8000])` vs the required witness digest); a matched digest must be paired with a witnessed **CONTINUE** (compose `gen1_continue_observer.lua`; the client currently builds the New Game bootstrap observer, `gen1_client_entry.lua:118`); inherited ball activation must be a typed lineage fact consumed by `gen1_wild_encounter_runtime.py:100-117` / `gen1_faint_runtime.py:132-155` (never a forged signal or frame 0); SaveRAM lives under `root/<journal-run-id>/<player>/SaveRAM` with an ownership manifest (`bizhawk_launch.py:73-104`) → an ownership chain or a verified copy; witness/rules alignment: refuse when a player's last committed observation revision exceeds its witness revision (owner policy: saved-but-unwitnessed → HOLD); "unchanged bundle" = reviewed source/dependency + cartridge identity, not ZIP equality. Proposed files: new `server/gen1_run_resume.py`, `manager.py`, `gen1_run_config.py`, `gen1_initial_observation.py`, `gen1_runtime_state.py`, `gen1_runtime.py`, `gen1_faint_runtime.py`, `gen1_wild_encounter_runtime.py`, `bizhawk_launch.py`, `tools/launch_bizhawk.py`, `lua/gen1_client_entry.lua`, new resume observer; unit/integration/live tests; dashboard affordance deferred (API + CLI first). Falsifiers: `resume_from` rejected today; imported core rejected by initial enrollment; prepare refuses a nonempty unowned SaveRAM. |
+| Parcel attempt 4 | Parcel **delivered** to Oak on both cartridges (script 15); driver idled on a `wJoyIgnore == $FC` gate while the cutscene text runs with mask 0/$F0. Fix: tap A whenever unmasked and no scripted NPC walk; red model test. Receipts summary `de3e46fc…ae04`, console `b2411c4e…147f`. Attempt 5 is the changed run. |
 | Parcel attempt 3 | **HOLD at Oak's handoff, but the WB-1 fix is PROVED live**: both cartridges crossed Route 1 grass with wild encounters (RUN sub-path) and no observer crash, received the parcel, returned to Oak, then idled — the driver waited for lab script 0 while the post-rival state is `SCRIPT_OAKSLAB_NOOP` (18); one-line fix, red model test. Receipts summary `7e401a9a…ed11`, console `3f4ef3cf…8659`. Attempt 4 is the changed run. |
 | P2A-1 integrated (A+B) | `save_witness` engine signal at `SaveMenu.save` + 3 (anchor `0x772D`, `CD487821A5C4`, capture_offset 3; regenerated by `tools/gen_gen1_engine_signals.py` with source-text and ROM-byte asserts; Yellow site came for free from the same symbol, no branch) carrying `digest = sha256(hex(CartRAM[0x0498:0x8000]))`, `projection cartram-0498-8000-v1`, `save_file_status`. Server validates (`gen1_engine_signals.py` SAVE_PROJECTION; refuses bad digest/status/projection/extra keys) and records `components["gen1-save-witness"][player]` (latest wins) in `gen1_engine_signal_runtime.py`, audited by `verify_state`. 98 model tests. **Finding that re-scopes C:** `save_identity` at HELLO is only `{ot_id, trainer_name}`; the comparable presented bytes are `initial_observation.source.cart_hex` (server-side same projection). Admitting a relaunched emulator into the SAME runtime would require re-anchoring ~110 frame/identity comparisons across 33 modules (`emu.framecount()` restarts) plus the client's replaced-context refusal (`gen1_initial_observation.lua:70-75`) — 250–400 lines, ≥12 files. **Coordinator decision (vetoable):** implement resume at the RUN boundary instead (P2A-2): Manager `resume_from` creates a NEW run that imports the previous run's rules state and requires each player's presented `cart_hex` projection to equal that run's last acked `save_witness` digest; refuses otherwise. This honours the owner's P2a policy (both saved, files match acked checkpoints, no pending/trade, unchanged source) with a fresh frame line and no re-anchoring; it is the user-visible flow after a crash anyway. |
 | WB-1 fixed | **Root cause (SOURCE + live receipts):** inside a bus-exec hook `emu.framecount()` returns the frame the step was armed at (= `state.frame`), one below the assembling tick's count (pinned in [BATTLE_FORCE_FAINT_WINDOW.md](BATTLE_FORCE_FAINT_WINDOW.md) §10; `instruction_executor.lua:38`; every live engine signal sits one frame below its observation — 8 samples over R7 and parcel r2; WB-1-FC confirmed from BizHawk 2.11.1 source: `Gambatte.cs:486-495` increments `Frame` after `gambatte_runfor`, `EventsLuaLibrary.cs:131-166` fires `on_bus_exec` before the instruction). `gen1_acquisition_observers.lua:132/:167` demanded `witness.frame > state.frame`, which excluded **every** hook-stamped witness that could exist; latent because no acquisition witness had ever reached the non-fast path live (all prior `acquisitions` were `[]`; the starter is an engine signal, not a grant receipt). The first capture would have crashed identically. Fix: strict `witness.frame == state.frame` (`in_step`), no other assert touched; test models that stamped fake witnesses with the tick's count were corrected. Red replay `tests/unit/test_gen1_wild_assembly.py`; 165 passed across the loop/acquisition/native/inventory sets. MODEL ONLY until the next parcel run. |
