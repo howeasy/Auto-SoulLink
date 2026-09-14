@@ -351,3 +351,116 @@ def test_capture_failure_publishing_current_removes_promoted_directory(tmp_path,
     assert store.current() == first
     dirs = [p.name for p in (tmp_path / "checkpoints").iterdir() if p.is_dir()]
     assert dirs == [first["checkpoint_id"]]  # the promoted-but-unpublished dir was removed
+
+
+# -- round 3, finding 1: top-level schema completeness -----------------------
+
+def test_history_reports_missing_predecessor_field_as_broken_entry_not_keyerror(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    first = _capture(store, 1)
+    second = _capture(store, 2)
+    checkpoints_dir = tmp_path / "checkpoints"
+    first_path = checkpoints_dir / first["checkpoint_id"] / "manifest.json"
+    second_path = checkpoints_dir / second["checkpoint_id"] / "manifest.json"
+
+    document = json.loads(first_path.read_text())
+    del document["predecessor"]  # entirely absent, not null
+    encoded = json.dumps(document, sort_keys=True, indent=2).encode("utf-8")
+    first_path.write_bytes(encoded)
+    new_hash = hashlib.sha256(encoded).hexdigest()
+    second_hash = _rewrite_manifest(second_path, lambda doc: doc["predecessor"].__setitem__("manifest_sha256", new_hash))
+    _write_current(checkpoints_dir, second["checkpoint_id"], second_hash)
+
+    history = store.history()  # must not raise KeyError
+    assert history[0]["checkpoint_id"] == second["checkpoint_id"]
+    assert history[1]["checkpoint_id"] == first["checkpoint_id"]
+    assert "error" in history[1]
+    assert "top-level" in history[1]["error"]
+
+
+# -- round 3, finding 2: current() validates archived file bytes -------------
+
+def test_current_validates_archived_save_bytes(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    save_path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "a.sav"
+    save_path.write_bytes(b"\xff" * SAVE_SIZE)
+
+    with pytest.raises(CheckpointError, match="a.sav"):
+        store.current()
+
+
+def test_history_does_not_validate_archived_bytes(tmp_path):
+    # history() is metadata-only (see its docstring): a corrupt a.sav does not break it.
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    (tmp_path / "checkpoints" / manifest["checkpoint_id"] / "a.sav").write_bytes(b"\xff" * SAVE_SIZE)
+
+    history = store.history()
+    assert history == [manifest]
+
+
+# -- round 3, finding 3: _write_current cleans up its own temp file ----------
+
+def test_write_current_failure_leaves_no_orphan_temp_file(tmp_path, monkeypatch):
+    store = PairedCheckpointStore(tmp_path)
+    _capture(store, 1)
+    real_replace = os.replace
+    calls = {"n": 0}
+
+    def fail_second_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_replace(src, dst)  # directory promotion succeeds
+        raise OSError("simulated CURRENT publish failure")
+    monkeypatch.setattr(paired_save_checkpoints.os, "replace", fail_second_replace)
+
+    with pytest.raises(OSError):
+        _capture(store, 2)
+    monkeypatch.undo()
+
+    checkpoints_dir = tmp_path / "checkpoints"
+    leftover_temps = [p.name for p in checkpoints_dir.iterdir() if p.is_file() and p.name.startswith(".CURRENT.tmp-")]
+    assert leftover_temps == []
+
+
+# -- round 3, finding 4: provenance ------------------------------------------
+
+def test_capture_with_provenance_round_trips_through_load(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    provenance = {"journal_revision": 42, "predecessor_run_id": "run-a", "note": None}
+    manifest = store.capture(_players(1), b"rules", b"identity", "contract", "source", provenance=provenance)
+
+    assert manifest["provenance"] == provenance
+    checkpoint = store.load(manifest["checkpoint_id"])
+    assert checkpoint.provenance() == provenance
+
+
+def test_capture_defaults_provenance_to_empty_object(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = _capture(store, 1)
+    assert manifest["provenance"] == {}
+
+
+def test_tampering_provenance_makes_load_raise(tmp_path):
+    store = PairedCheckpointStore(tmp_path)
+    manifest = store.capture(_players(1), b"rules", b"identity", "contract", "source",
+                              provenance={"journal_revision": 1})
+    path = tmp_path / "checkpoints" / manifest["checkpoint_id"] / "manifest.json"
+    _rewrite_manifest(path, lambda doc: doc["provenance"].__setitem__("journal_revision", 999))
+
+    with pytest.raises(CheckpointError, match="manifest.json"):
+        store.load(manifest["checkpoint_id"])
+
+
+@pytest.mark.parametrize("provenance,message", [
+    ({str(i): "x" for i in range(33)}, "at most 32 keys"),
+    ({"": "x"}, "non-empty string"),
+    ({"k": True}, "must be str, int, or null"),
+    ({"k": ["nested"]}, "must be str, int, or null"),
+    ({"k": "x" * 513}, "exceeds 512 characters"),
+])
+def test_capture_refuses_malformed_provenance(tmp_path, provenance, message):
+    store = PairedCheckpointStore(tmp_path)
+    with pytest.raises(CheckpointError, match=message):
+        store.capture(_players(1), b"rules", b"identity", "contract", "source", provenance=provenance)

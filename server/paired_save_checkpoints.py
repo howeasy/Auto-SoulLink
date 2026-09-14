@@ -12,6 +12,9 @@ integrity verification on read. It has no opinion on which game produced the byt
 save was witnessed, or how rules are serialized — the caller supplies raw bytes and an
 opaque `witness` record per player (the shape used elsewhere: frame, digest, projection,
 index, operation_id — see server/gen1_engine_signal_runtime.py's SAVE_WITNESS component).
+A caller may also attach `provenance` (a small JSON object of plain scalars — e.g. a
+transaction id, predecessor run id, or journal revision) that rides through hash-verified
+but is never interpreted here.
 
 Trust chain: each manifest records its predecessor as {checkpoint_id, manifest_sha256} —
 not a bare id — so an older, superseded manifest can't be edited undetected. `load()`,
@@ -45,10 +48,15 @@ from pathlib import Path
 SCHEMA = "slink-paired-checkpoint-v1"
 PLAYERS = ("a", "b")
 WITNESS_KEYS = frozenset({"frame", "digest", "projection", "index", "operation_id"})
+TOP_LEVEL_KEYS = frozenset({"schema", "checkpoint_id", "created_at", "players", "rules_sha256",
+                            "identity_sha256", "contract_fingerprint", "source_fingerprint",
+                            "predecessor", "provenance"})
 HEX64 = re.compile(r"[0-9a-f]{64}")
 LOCK_NAME = ".capture.lock"
 LOCK_TIMEOUT = 5.0
 LOCK_POLL = 0.01
+PROVENANCE_MAX_KEYS = 32
+PROVENANCE_MAX_STR = 512
 
 
 class CheckpointError(Exception):
@@ -68,6 +76,9 @@ class Checkpoint:
 
     def identity_bytes(self):
         return self._files["identity"]
+
+    def provenance(self):
+        return self.manifest["provenance"]
 
 
 @contextlib.contextmanager
@@ -108,6 +119,23 @@ def _validate_witness_values(component, witness):
             raise CheckpointError(f"{component} witness {key} must be a non-empty string")
 
 
+def _validate_provenance(component, provenance):
+    """R5b/N3 bind a transaction id, predecessor run id, or journal revision here. Kept to
+    plain JSON scalars and a bounded size — it is stored and hash-verified like everything
+    else, never interpreted."""
+    if not isinstance(provenance, dict) or len(provenance) > PROVENANCE_MAX_KEYS:
+        raise CheckpointError(f"{component} provenance must be a JSON object with at most {PROVENANCE_MAX_KEYS} keys")
+    for key, value in provenance.items():
+        if not _nonempty_str(key):
+            raise CheckpointError(f"{component} provenance keys must be non-empty strings")
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            raise CheckpointError(f"{component} provenance value for {key!r} must be str, int, or null")
+        if isinstance(value, str) and len(value) > PROVENANCE_MAX_STR:
+            raise CheckpointError(f"{component} provenance value for {key!r} exceeds {PROVENANCE_MAX_STR} characters")
+
+
 class PairedCheckpointStore:
     """Immutable checkpoints under `<directory>/checkpoints/<checkpoint_id>/`."""
 
@@ -117,7 +145,7 @@ class PairedCheckpointStore:
         self.save_size = save_size
 
     def capture(self, players, rules, identity, contract_fingerprint, source_fingerprint,
-                *, allow_same_batch=False):
+                *, allow_same_batch=False, provenance=None):
         """Write one new immutable checkpoint and, only once it verifies, make it CURRENT."""
         witnesses = self._validate_players(players, allow_same_batch)
         if not isinstance(rules, bytes) or not rules:
@@ -128,6 +156,8 @@ class PairedCheckpointStore:
             raise CheckpointError("contract_fingerprint must be a non-empty string")
         if not _nonempty_str(source_fingerprint):
             raise CheckpointError("source_fingerprint must be a non-empty string")
+        provenance = {} if provenance is None else provenance
+        _validate_provenance("capture", provenance)
         self._checkpoints_dir.mkdir(parents=True, exist_ok=True)
         with _capture_lock(str(self._checkpoints_dir / LOCK_NAME), timeout=LOCK_TIMEOUT, poll=LOCK_POLL):
             # Held from here through the CURRENT publish below: the predecessor read and
@@ -155,6 +185,7 @@ class PairedCheckpointStore:
                     "contract_fingerprint": contract_fingerprint,
                     "source_fingerprint": source_fingerprint,
                     "predecessor": predecessor,
+                    "provenance": dict(provenance),
                 }
                 manifest_bytes = json.dumps(manifest, sort_keys=True, indent=2).encode("utf-8")
                 manifest_sha256 = self._write_verified(temp_dir / "manifest.json", manifest_bytes)
@@ -169,9 +200,12 @@ class PairedCheckpointStore:
             return manifest
 
     def current(self):
+        """The newest manifest, with its archived a.sav/b.sav/rules/identity bytes verified
+        the same way `load()` verifies them (not just the manifest's own hash)."""
         for checkpoint_id, manifest, _bytes, error in self._walk_chain():
             if error:
                 raise CheckpointError(f"CURRENT checkpoint {checkpoint_id} failed verification: {error}")
+            self._checkpoint_from_manifest(manifest)  # raises naming the file if any archive is bad
             return manifest
         return None
 
@@ -188,8 +222,11 @@ class PairedCheckpointStore:
 
     def history(self):
         """Newest first, following the CURRENT-anchored, hash-verified predecessor chain.
-        A broken link (missing/tampered/malformed manifest, or a cycle) stops the walk and
-        is recorded as an error entry instead of raised — a torn history is data, not a crash."""
+        Metadata-only: it verifies every manifest's own bytes but, unlike `load()`/`current()`,
+        does NOT open or hash a.sav/b.sav/rules.json/identity.json — a manifest can be trusted
+        from this list alone, an archived file cannot. A broken link (missing/tampered/
+        malformed manifest, or a cycle) stops the walk and is recorded as an error entry
+        instead of raised — a torn history is data, not a crash."""
         results = []
         for checkpoint_id, manifest, _bytes, error in self._walk_chain():
             if error:
@@ -276,7 +313,9 @@ class PairedCheckpointStore:
         return manifest_bytes, manifest
 
     def _validate_manifest_shape(self, checkpoint_id, manifest):
-        if not isinstance(manifest, dict) or manifest.get("schema") != SCHEMA or manifest.get("checkpoint_id") != checkpoint_id:
+        if not isinstance(manifest, dict) or set(manifest) != TOP_LEVEL_KEYS:
+            raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json is missing or has extra top-level fields")
+        if manifest["schema"] != SCHEMA or manifest["checkpoint_id"] != checkpoint_id:
             raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json has an invalid schema or self-id")
         if not _nonempty_str(manifest.get("created_at")):
             raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json is missing created_at")
@@ -302,11 +341,12 @@ class PairedCheckpointStore:
         for field in ("contract_fingerprint", "source_fingerprint"):
             if not _nonempty_str(manifest.get(field)):
                 raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json {field} must be a non-empty string")
-        predecessor = manifest.get("predecessor")
+        predecessor = manifest["predecessor"]
         if predecessor is not None and (not isinstance(predecessor, dict) or set(predecessor) != {"checkpoint_id", "manifest_sha256"}
                 or not _nonempty_str(predecessor["checkpoint_id"])
                 or not isinstance(predecessor["manifest_sha256"], str) or not HEX64.fullmatch(predecessor["manifest_sha256"])):
             raise CheckpointError(f"checkpoint {checkpoint_id} manifest.json predecessor is invalid")
+        _validate_provenance(f"checkpoint {checkpoint_id} manifest.json", manifest["provenance"])
 
     def _checkpoint_from_manifest(self, manifest):
         checkpoint_dir = self._safe_checkpoint_dir(manifest["checkpoint_id"])
@@ -357,8 +397,13 @@ class PairedCheckpointStore:
         # stale temp file left by an aborted capture can never collide with this one's.
         temp_path = self._checkpoints_dir / f".CURRENT.tmp-{secrets.token_hex(8)}"
         payload = json.dumps({"checkpoint_id": checkpoint_id, "manifest_sha256": manifest_sha256}).encode("utf-8")
-        with open(temp_path, "wb") as fh:
-            fh.write(payload)
-            fh.flush()
-            os.fsync(fh.fileno())  # best-effort: see module docstring on durability
-        os.replace(temp_path, self._current_path)
+        try:
+            with open(temp_path, "wb") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())  # best-effort: see module docstring on durability
+            os.replace(temp_path, self._current_path)
+        except Exception:
+            with contextlib.suppress(OSError):
+                os.remove(temp_path)
+            raise
