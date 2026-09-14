@@ -81,7 +81,6 @@ def test_mart_confirm_signature_and_sentinel():
     {"menu_watch_oob": 2},                       # list cancelled (ExitListMenu), geometry retained
     {"menu_watch_oob": 0, "menu_exit_method": 0, "quantity": 1},  # quantity geometry, no chosen item
     {"menu_watch_oob": 0, "menu_exit_method": 2, "quantity": 1},  # returned from a declined confirm
-    {"text_box": 0x0F},                          # MONEY_BOX only
     {"list_scroll_offset": 3},                   # scroll beyond the 4-entry list
     {"menu_index": 1.5},
     {"menu_index": "0"},
@@ -89,3 +88,15 @@ def test_mart_confirm_signature_and_sentinel():
 ])
 def test_ambiguous_displays_are_unknown(over):
     assert signature()(**in_mart(**over)) == ("unknown", 0, -1)
+
+
+def test_live_r5_quantity_prompt_with_message_box_id_is_mart_quantity():
+    # Parcel attempt 5, both cartridges: item accepted (exit 1, cur_item POKE_BALL, oob 0),
+    # quantity initialised to 1, but wTextBoxID still read 1 (MESSAGE_BOX): the list and
+    # quantity routines do not rewrite it, so text_box must not gate the item/quantity/confirm
+    # kinds; geometry + wMenuWatchMovingOutOfBounds + wMenuExitMethod carry the state.
+    assert signature()(**in_mart(text_box=1, menu_watch_oob=0, menu_exit_method=1, quantity=1,
+                                 cur_item=4)) == ("mart-quantity", 0, -1)
+    assert signature()(**in_mart(text_box=1))[0] == "mart-item"
+    assert signature()(**in_mart(text_box=1, menu_y=8, menu_x=15, menu_max=1, menu_watch_oob=0,
+                                 menu_exit_method=0)) == ("mart-confirm", 0, 0)

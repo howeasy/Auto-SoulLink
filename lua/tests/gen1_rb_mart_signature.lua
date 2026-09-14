@@ -28,7 +28,9 @@ function M.mart_menu(r)
     if type(i)~="number" or i%1~=0 then return "unknown",item,confirm end
     if r.list_menu_id==2 and r.text_box==0x0E and r.menu_y==1 and r.menu_x==1 and r.menu_max==2 and i>=0 and i<=2 then
         return "mart-choice",item,confirm
-    elseif r.list_menu_id==2 and r.text_box==0x0D and r.menu_y==4 and r.menu_x==5 and r.menu_max==2 and i>=0 and i<=2 then
+    elseif r.list_menu_id==2 and r.menu_y==4 and r.menu_x==5 and r.menu_max==2 and i>=0 and i<=2 then
+        -- text_box is deliberately not consulted here: live parcel attempt 5 showed wTextBoxID==1
+        -- (MESSAGE_BOX) through the item list and quantity prompt on both cartridges.
         if r.menu_watch_oob==1 then
             local s=r.list_scroll_offset
             if type(s)=="number" and s%1==0 and s>=0 and s<=2 then return "mart-item",inventory[i+s+1] or 0,confirm end
@@ -36,7 +38,7 @@ function M.mart_menu(r)
             return "mart-quantity",item,confirm
         end
         return "unknown",item,confirm
-    elseif r.list_menu_id==2 and r.text_box==0x14 and r.menu_y==8 and r.menu_x==15 and r.menu_max==1 and (i==0 or i==1) and r.menu_exit_method==0 then
+    elseif r.list_menu_id==2 and r.menu_y==8 and r.menu_x==15 and r.menu_max==1 and (i==0 or i==1) and r.menu_exit_method==0 then
         return "mart-confirm",item,i
     end
     return "unknown",item,confirm
