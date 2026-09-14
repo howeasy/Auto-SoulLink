@@ -58,6 +58,7 @@ function Client.new(p)
         deferred = {}, pending_battle_writes = {}, sync_written = {},
         pending_change = nil, battle = nil, has_pokeballs = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics,
+        trade = p.trade, trade_enabled = false, trade_state = nil,
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
@@ -258,13 +259,22 @@ function Client.new(p)
             hud.set_rebuilding(cmd.text)
         elseif c == "rebuild_done" then
             hud.clear_rebuilding()
+        elseif c == "trade_mask" then
+            self:trade_answer_query(cmd.mask or 0)
+        elseif c == "trade_offer_ack" then
+            self:trade_answer_offer(cmd.ok == true)
+        elseif c == "show_menu" and self.trade_enabled and cmd.blob_hex and cmd.slot ~= nil then
+            self:trade_prompt(cmd)
         elseif c == "show_choices" or c == "show_menu" or c == "choose_mon" then
-            ack_cancel(cmd) -- native prompts arrive with the trade port (Phase 7)
+            ack_cancel(cmd) -- no native picker outside the receptionist flow
         elseif c == "apply_trade" then
-            -- no trade path yet: report "nothing changed" with the pre-trade key (protocol §5)
-            local slot, mon = find_party_slot(cmd.old_key)
-            send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
-                                 new_species = mon and mon.species or 0 })
+            if self.trade_enabled then self:trade_apply(cmd)
+            else
+                -- no trade path on this cartridge: "nothing changed" with the pre-trade key (§5)
+                local slot, mon = find_party_slot(cmd.old_key)
+                send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
+                                     new_species = mon and mon.species or 0 })
+            end
         elseif c == "link_panel" or c == "ghost_pos" then
             -- presentation the Gen 1 client does not render yet
         else
@@ -618,11 +628,199 @@ function Client.new(p)
         })
     end
 
+    -- ── in-game SLINK TRADE (companion patch receptionist; T-rows) ───────────────────
+    -- The overlay is a 16-byte lease the patched game hands the host at wSerialPartyMonsPatchList;
+    -- writes to it (and the staged enemy party) happen inside that lease, not at the overworld
+    -- checkpoint: the receptionist waits <=30/180 frames in its own loop for our bytes.
+    local TRADE_DISPATCH = { 0x21, 0x00, 0x4C, 0x06, 0x3F } -- receptionist hook at 0x29C3 once patched
+    local PROMPT, APPLY = 3, 5
+
+    -- pret charmap subset for the partner name shown by the prompt/animation
+    local function encode_name11(text)
+        local out = {}
+        for ch in tostring(text or ""):upper():gmatch(".") do
+            local b = ch:byte()
+            local code
+            if b >= 65 and b <= 90 then code = 0x80 + (b - 65)
+            elseif b >= 48 and b <= 57 then code = 0xF6 + (b - 48)
+            elseif ch == " " then code = 0x7F end
+            if code and #out < 10 then out[#out + 1] = code end
+        end
+        out[#out + 1] = 0x50
+        while #out < 11 do out[#out + 1] = 0x50 end
+        return out
+    end
+    local function hex_bytes(hex)
+        local out = {}
+        for i = 1, #hex, 2 do out[#out + 1] = tonumber(hex:sub(i, i + 1), 16) end
+        return out
+    end
+    local function ot_of(blob)
+        local name = {}
+        for i = 45, 55 do name[#name + 1] = blob[i] end -- the incoming mon carries its OT name
+        return name
+    end
+    local function new_token()
+        local t = {}
+        for i = 1, 4 do t[i] = math.random(1, 255) end
+        return t
+    end
+
+    function self:trade_patch_present()
+        for i, b in ipairs(TRADE_DISPATCH) do
+            if io.read_u8(0x29C3 + i - 1, "ROM") ~= b then return false end
+        end
+        return true
+    end
+
+    local function trade_arm(fn)
+        writes:arm("trade_overlay")
+        local ok, a, b = pcall(fn)
+        writes:disarm()
+        if not ok then error(a, 0) end
+        return a, b
+    end
+
+    function self:trade_answer_query(mask)
+        local st = self.trade_state
+        if not st or st.kind ~= "query" then return end
+        local token = new_token()
+        local ok, why = trade_arm(function() return self.trade:answer_query(st.gen, mask, token) end)
+        if not ok then log("[SLink-gen1] trade query answer refused: " .. tostring(why)) end
+        self.trade_state = { kind = "visit", token = token }
+    end
+
+    function self:trade_answer_offer(ok)
+        local st = self.trade_state
+        if not st or st.kind ~= "offer" then return end
+        local done, why = trade_arm(function() return self.trade:answer_offer(st.gen, ok) end)
+        if not done then log("[SLink-gen1] trade offer answer refused: " .. tostring(why)) end
+        self.trade_state = { kind = "visit", token = st.token }
+    end
+
+    -- Partner side: the initiator mon is staged and the game asks YES/NO natively.
+    function self:trade_prompt(cmd)
+        local blob = hex_bytes(cmd.blob_hex)
+        local name = ot_of(blob)
+        local gen, why = trade_arm(function()
+            return self.trade:arm(PROMPT, cmd.slot, blob, name, new_token())
+        end)
+        if not gen then
+            log("[SLink-gen1] trade prompt arm refused: " .. tostring(why))
+            send("menu_result", { token = cmd.token, choice = 0 })
+            return
+        end
+        self.trade_state = { kind = "prompt", gen = gen, token = cmd.token, arm = { PROMPT, cmd.slot, blob, name } }
+    end
+
+    -- Both sides: apply_trade stages the OTHER mon; the game swaps, animates, evolves, saves.
+    function self:trade_apply(cmd)
+        local slot = find_party_slot(cmd.old_key)
+        if slot == nil then
+            log("[SLink-gen1] apply_trade: old_key not in party; nothing changed")
+            send("trade_done", { token = cmd.token, slot = cmd.slot, new_key = cmd.old_key, new_species = 0 })
+            return
+        end
+        local blob = hex_bytes(cmd.blob_hex)
+        local name = cmd.partner_name and encode_name11(cmd.partner_name) or ot_of(blob)
+        local gen, why = trade_arm(function()
+            return self.trade:arm(APPLY, slot, blob, name, new_token())
+        end)
+        if not gen then
+            log("[SLink-gen1] apply_trade arm refused: " .. tostring(why))
+            send("trade_done", { token = cmd.token, slot = slot, new_key = cmd.old_key, new_species = 0 })
+            return
+        end
+        self.trade_state = { kind = "apply", gen = gen, token = cmd.token, old_key = cmd.old_key, slot = slot,
+                             arm = { APPLY, slot, blob, name } }
+    end
+
+    -- Per-frame: watch the lease for the receptionist questions and the native completions.
+    function self:trade_tick()
+        if not self.trade_enabled or not self.trade then return end
+        local st = self.trade_state
+        if st and (st.kind == "prompt" or st.kind == "apply") then
+            if self.trade:clobbered() then
+                -- the borrowed tile bytes were overwritten before pickup: stage again
+                local gen = trade_arm(function() return self.trade:arm(st.arm[1], st.arm[2], st.arm[3], st.arm[4], new_token()) end)
+                if gen then st.gen = gen end
+                return
+            end
+            local done = self.trade:poll_done()
+            if not done then return end
+            if st.kind == "prompt" then
+                local released = trade_arm(function() return self.trade:release(st.gen) end)
+                send("menu_result", { token = st.token, choice = (done.result == 0 and released) and 1 or 0 })
+                self.trade_state = nil
+            else
+                if done.result == 2 then
+                    -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
+                    if not st.warned then
+                        st.warned = true
+                        hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
+                        log("[SLink-gen1] apply_trade: native result 2 (uncertain); holding, no release")
+                    end
+                    return
+                end
+                trade_arm(function() return self.trade:release(st.gen) end)
+                if done.result == 0 then
+                    local party = current_party()
+                    local received = party and party[#party]
+                    if received then
+                        local key = mon_key(received)
+                        self.known_keys[st.old_key] = nil
+                        self.known_keys[key] = true
+                        self.sync_written[key] = true
+                        send("trade_done", { token = st.token, slot = received.slot, new_key = key, new_species = received.species })
+                    else
+                        send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+                    end
+                else
+                    log("[SLink-gen1] apply_trade refused natively (result " .. tostring(done.result) .. "); nothing changed")
+                    send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+                end
+                self.trade_state = nil
+                self.pending_change = { kind = "rescan", frame = self.frame }
+            end
+            return
+        end
+        local q = self.trade:poll_query()
+        if q and not (st and st.kind == "query" and st.gen == q.gen) then
+            self.trade_state = { kind = "query", gen = q.gen }
+            if not send("trade_query", {}) then
+                trade_arm(function() return self.trade:answer_query(q.gen, 0, new_token()) end) -- offline: nothing eligible
+                self.trade_state = nil
+            end
+            return
+        end
+        local o = self.trade:poll_offer()
+        if o and not (st and st.kind == "offer" and st.gen == o.gen) then
+            self.trade_state = { kind = "offer", gen = o.gen, slot = o.slot, token = st and st.token }
+            if not send("trade_offer", { slot = o.slot }) then
+                trade_arm(function() return self.trade:answer_offer(o.gen, false) end)
+                self.trade_state = nil
+            end
+        end
+    end
+
     -- ── per-frame driver ─────────────────────────────────────────────────────────────
     function self:start()
-        self.signals = signals_mod.new(profile, sites, io, {
-            battle_loop_head = function(sig) self:on_battle_loop_head(sig) end,
-        })
+        local handlers = { battle_loop_head = function(sig) self:on_battle_loop_head(sig) end }
+        local all_sites = sites
+        if self.trade and self:trade_patch_present() then
+            -- the receptionist service entry (bank $3F:$4500) exists only in a patched cartridge,
+            -- so it is pinned against the running ROM here rather than in engine_signals.json
+            local svc = self.trade.service_address and self.trade.service_address() or { bank = 0x3F, addr = 0x4500 }
+            local flat = svc.bank * 0x4000 + (svc.addr - 0x4000)
+            local bytes = io.read_range(flat, 6, "ROM")
+            all_sites = {}
+            for k, v in pairs(sites) do all_sites[k] = v end
+            all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
+                                        capture_offset = 0, expected_hex = hex_of(bytes), symbol = "SlinkTradeService" }
+            handlers.trade_service = function() self.trade:picked_up() end
+            self.trade_enabled = true
+        end
+        self.signals = signals_mod.new(profile, all_sites, io, handlers)
     end
 
     function self:frame_end()
@@ -656,6 +854,8 @@ function Client.new(p)
                 log("[SLink-gen1] unreadable reply line")
             end
         end
+        local tok, terr = pcall(self.trade_tick, self)
+        if not tok then log("[SLink-gen1] trade: " .. tostring(terr)) end
         self:run_deferred()
     end
 

@@ -256,6 +256,10 @@ class SoulLinkState:
             self._handle_peer_interact(player_id, msg)
         elif event == "trade_request":
             self._handle_trade_request(player_id, msg)
+        elif event == "trade_query":
+            self._handle_trade_query(player_id)
+        elif event == "trade_offer":
+            self._handle_trade_offer(player_id, msg)
         elif event == "mon_chosen":
             self._handle_mon_chosen(player_id, msg)
         elif event == "menu_result":
@@ -509,7 +513,11 @@ class SoulLinkState:
             return                                # a trade is already in flight — ignore silently (no spam)
         self._trade_token += 1
         token = f"t{self._trade_token}"
-        self.pending_trade = {"phase": "menu", "initiator": player_id, "token": token, "reprompts": 0, "age": 0}
+        native_offer = msg.get("native_offer") is True and self.adapter.game_id == "gen1_rby"
+        self.pending_trade = {"phase": "choosing" if native_offer else "menu",
+                              "initiator": player_id, "token": token, "reprompts": 0, "age": 0}
+        if native_offer:
+            return  # the ROM receptionist already showed the action/party menus
         # Native multichoice list — the proper menu with labelled options. `text` is spoken by whoever
         # the player just talked to (the box stays open under the floating menu): presence OFF means the
         # Pokémon-Center trade NPC (Prof Oak), presence ON means the partner's overworld ghost.
@@ -522,6 +530,44 @@ class SoulLinkState:
         self.queued_commands[player_id].append({
             "cmd": "show_choices", "token": token, "options": ["Trade", "Say hey"], "text": text})
         log.info(f"[{player_id}] trade_request → action menu (Trade/Say hey) token={token}")
+
+    def _handle_trade_query(self, player_id: str):
+        """The native receptionist needs a six-bit eligible-party mask."""
+        mask = 0
+        if self.adapter.game_id == "gen1_rby" and self.pending_trade is None:
+            for slot, _key, _entry, _blob in self._eligible_trade_pairs(player_id):
+                if 0 <= slot < 6:
+                    mask |= 1 << slot
+        self.queued_commands[player_id].append({"cmd": "trade_mask", "mask": mask})
+
+    def _handle_trade_offer(self, player_id: str, msg: dict):
+        """Reuse the linked-pair picker after the ROM has chosen a physical slot."""
+        accepted = False
+        if self.adapter.game_id == "gen1_rby" and self.pending_trade is None:
+            try:
+                slot = int(msg.get("slot"))
+            except (TypeError, ValueError):
+                slot = -1
+            match = next((pair for pair in self._eligible_trade_pairs(player_id)
+                          if pair[0] == slot), None)
+            if match is not None:
+                _slot, my_key, entry, partner_blob = match
+                partner = _partner(player_id)
+                incoming_key = partner_blob.get("key", "")
+                # A Gen 1 DV:OT:species key is not guaranteed unique. Neither
+                # recipient may already hold the key it is about to receive.
+                if (my_key in self.party_keys[player_id]
+                        and incoming_key in self.party_keys[partner]
+                        and my_key not in self.party_keys[partner]
+                        and incoming_key not in self.party_keys[player_id]
+                        and entry.status == LinkStatus.ALIVE):
+                    self._handle_trade_request(player_id, {"native_offer": True})
+                    pt = self.pending_trade
+                    if pt is not None:
+                        self._handle_mon_chosen(player_id, {"token": pt["token"], "slot": slot})
+                        accepted = bool(self.pending_trade and
+                                        self.pending_trade.get("phase") == "confirming")
+        self.queued_commands[player_id].append({"cmd": "trade_offer_ack", "ok": accepted})
 
     def _handle_mon_chosen(self, player_id: str, msg: dict):
         """The initiator picked a party slot. Enforce the linked-pair invariant: the slot MUST be one
@@ -575,9 +621,12 @@ class SoulLinkState:
         self.queued_commands[player_id].append({
             "cmd": "hud_show", "text": "Trade offer sent - waiting for partner...",
             "r": 255, "g": 220, "b": 60, "frames": 600})
-        self.queued_commands[partner].append({
-            "cmd": "show_menu", "token": pt["token"],
-            "text": f"Trade your {p_gives} for {p_gets}?"})
+        prompt = {"cmd": "show_menu", "token": pt["token"],
+                  "text": f"Trade your {p_gives} for {p_gets}?"}
+        if self.adapter.game_id == "gen1_rby":
+            prompt.update({"slot": pt[f"{partner}_slot"],
+                           "blob_hex": pt[f"{player_id}_blob_hex"]})
+        self.queued_commands[partner].append(prompt)
         log.info(f"[{player_id}] chose slot {slot} → partner-confirm {entry.a.key[:8]}<->{entry.b.key[:8]}")
 
     def _handle_menu_result(self, player_id: str, msg: dict):
@@ -635,7 +684,10 @@ class SoulLinkState:
         entry = pt["link"]
         if (entry.status != LinkStatus.ALIVE
                 or pt["a_key"] not in self.party_keys["a"]
-                or pt["b_key"] not in self.party_keys["b"]):
+                or pt["b_key"] not in self.party_keys["b"]
+                or (self.adapter.game_id == "gen1_rby"
+                    and (pt["a_key"] in self.party_keys["b"]
+                         or pt["b_key"] in self.party_keys["a"]))):
             self.pending_trade = None
             for pid in ("a", "b"):
                 self.queued_commands[pid].append({
@@ -645,12 +697,17 @@ class SoulLinkState:
             return
         # old_key lets the client re-locate the mon if the party was reordered after mon_chosen
         # (the slot index is a snapshot); token lets trade_done reports be matched to THIS trade.
-        self.queued_commands["a"].append({
+        a_command = {
             "cmd": "apply_trade", "slot": pt["a_slot"], "blob_hex": pt["b_blob_hex"],
-            "old_key": pt["a_key"], "token": pt["token"]})
-        self.queued_commands["b"].append({
+            "old_key": pt["a_key"], "token": pt["token"]}
+        b_command = {
             "cmd": "apply_trade", "slot": pt["b_slot"], "blob_hex": pt["a_blob_hex"],
-            "old_key": pt["b_key"], "token": pt["token"]})
+            "old_key": pt["b_key"], "token": pt["token"]}
+        if self.adapter.game_id == "gen1_rby":
+            a_command["partner_name"] = (self.player_identity.get("b") or {}).get("trainer_name", "")
+            b_command["partner_name"] = (self.player_identity.get("a") or {}).get("trainer_name", "")
+        self.queued_commands["a"].append(a_command)
+        self.queued_commands["b"].append(b_command)
         pt["phase"] = "applying"
         pt["done"] = {"a": False, "b": False}
         pt["new"]  = {"a": None, "b": None}   # (new_key, new_species) reported by each client post-scene

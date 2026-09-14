@@ -562,3 +562,93 @@ def test_writes_are_revoked_after_five_invalid_validations(world):
     world.bus[world.ram["wPartyCount"]] = 2
     world.step(60)
     assert world.client.writes_enabled is True  # a live game again
+
+
+# ── in-game SLINK TRADE (companion patch receptionist) ───────────────────────────────────
+
+def _patched_world():
+    """A World whose ROM copy carries the receptionist dispatch hook, so the client enables trade."""
+    w = World("red")
+    rom = bytearray(w.rom)
+    rom[0x29C3:0x29C3 + 5] = bytes([0x21, 0x00, 0x4C, 0x06, 0x3F])
+    w.rom = bytes(rom)
+    w.client.trade_enabled = False
+    w.client.start(w.client)  # re-arm signals against the patched ROM (adds the service site)
+    rng = random.Random(11)
+    w.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    w.set_map(0x29)  # Viridian Pokemon Center
+    w.connect()
+    return w
+
+
+def _overlay(w):
+    base = w.ram["wSerialPartyMonsPatchList"]
+    return bytes(w.bus[base:base + 16])
+
+
+def _game_writes(w, cmd, gen, **fields):
+    """The patched game's side of the lease: header + command + generation (+6 last)."""
+    base = w.ram["wSerialPartyMonsPatchList"]
+    w.bus[base:base + 4] = b"SLT1"
+    w.bus[base + 4] = 1
+    w.bus[base + 5] = cmd
+    for off, val in fields.items():
+        w.bus[base + int(off[1:])] = val
+    w.bus[base + 6] = gen
+
+
+def test_receptionist_query_and_offer_round_trip_through_the_server(world):
+    w = _patched_world()
+    assert w.client.trade_enabled is True
+    _game_writes(w, 1, 5, _7=4)              # availability query, gen 5, ack stale
+    w.step()
+    assert w.events("trade_query"), "the client asked the server which slots are eligible"
+    w.reply({"cmd": "trade_mask", "mask": 0b1})
+    w.step()
+    ov = _overlay(w)
+    assert ov[10] == 1 and ov[11] == 0b1 and ov[7] == 5 and any(ov[12:16])
+    token = ov[12:16]
+    _game_writes(w, 2, 6, _7=5, _8=0xFF, _9=0)  # offer slot 0, gen 6
+    w.step()
+    assert w.events("trade_offer")[-1]["slot"] == 0
+    w.reply({"cmd": "trade_offer_ack", "ok": True})
+    w.step()
+    ov = _overlay(w)
+    assert ov[8] == 0 and ov[7] == 6 and ov[12:16] == token
+    w.assert_all_conform()
+
+
+def test_partner_prompt_and_apply_drive_the_lease_and_report_the_received_mon(world):
+    w = _patched_world()
+    rng = random.Random(12)
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    base = w.ram["wSerialPartyMonsPatchList"]
+    # partner side: YES/NO prompt with the initiator's mon staged
+    w.reply({"cmd": "show_menu", "token": "t7", "text": "Trade?", "slot": 0, "blob_hex": blob.hex().upper()})
+    w.step()
+    ov = _overlay(w)
+    assert ov[:4] == b"SLT1" and ov[5] == 3 and ov[9] == 0, "prompt armed on the lease"
+    staged = codec.decode_party_mon(bytes(w.bus[w.ram["wEnemyMons"]:w.ram["wEnemyMons"] + 44]))
+    assert staged["species"] == 0xB1 and staged["level"] == 7
+    gen = ov[6]
+    w.bus[base + 5], w.bus[base + 8], w.bus[base + 7] = 7, 0, gen  # game: DONE, YES, ack
+    w.step()
+    mr = w.events("menu_result")[-1]
+    assert mr == {"event": "menu_result", "player": "a", "seq": mr["seq"], "token": "t7", "choice": 1}
+    assert _overlay(w)[5] == 8, "released after the answer"
+    # apply on this side: the game swaps and the received mon lands LAST
+    old_key = codec.key(w.party()[0])
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(), "old_key": old_key,
+             "token": "t8", "partner_name": "BLUE"})
+    w.step()
+    ov = _overlay(w)
+    assert ov[5] == 5, "apply armed"
+    gen = ov[6]
+    w.seed_party([incoming])  # the native routine replaced our only mon with the incoming one
+    w.bus[base + 5], w.bus[base + 8], w.bus[base + 7] = 7, 0, gen
+    w.step()
+    td = w.events("trade_done")[-1]
+    assert td["new_key"] == codec.key(w.party()[0]) and td["new_species"] == 0xB1 and td["token"] == "t8"
+    assert _overlay(w)[5] == 8
+    w.assert_all_conform()

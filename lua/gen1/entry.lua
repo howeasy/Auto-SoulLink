@@ -31,6 +31,7 @@ function Entry.build(deps)
     local json = L("lua/json_codec.lua")
     local R, S, W, B, Rom = L("lua/gen1/reads.lua"), L("lua/gen1/signals.lua"), L("lua/gen1/writes.lua"),
                             L("lua/gen1/boxes.lua"), L("lua/gen1/rom.lua")
+    local T = L("lua/gen1/trade_overlay.lua")
     local safety = L("lua/gen1_write_safety.lua")
     local Client = L("lua/gen1/client.lua")
 
@@ -62,12 +63,13 @@ function Entry.build(deps)
     }
     local boxes = B.new(profile, reads, box_io)
     local rom = Rom.new(profile, bio)
+    local trade = T.new(profile, reads_io, writes)
 
     local client = Client.new({
         reads = reads, signals = S, writes = writes, boxes = boxes, rom = rom, safety = safety,
         net = deps.net, json = json, hud = deps.hud, io = bio,
         profile = profile, sites = sites, write_checkpoint = write_checkpoint, area_map = area_map,
-        statics = statics,
+        statics = statics, trade = trade,
         player = assert(deps.player, "deps.player required"), rom_type = Entry.ROM_TYPE[title],
         rom_sha1 = deps.rom_sha1, log = deps.log or function() end,
     })

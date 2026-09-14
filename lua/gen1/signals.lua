@@ -66,6 +66,7 @@ S.KINDS.save_witness = {
     end,
 }
 S.KINDS.blackout = { point = battle_point }
+S.KINDS.trade_service = {}  -- companion-patch receptionist pickup; registered by the client when patched
 -- MainInBattleLoop+0: the only instant the engine judges wBattleMonHP (W-2). The client's
 -- on_fire handler applies pending in-battle writes synchronously inside this hook.
 S.KINDS.battle_loop_head = {
