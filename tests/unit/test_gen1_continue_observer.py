@@ -198,3 +198,15 @@ def test_resume_options_are_all_or_nothing_and_strictly_shaped(probe, fault):
             "sha256": "required_digest=string.rep('d',64),projection='cartram-0498-8000-v1'"}[fault]
     probe.execute("local ok=pcall(function()require('gen1_continue_observer').new({variant='yellow',final_sha1=hash,"
                   "owned=function()return scope end,held=function()return held end," + code + "})end);assert(not ok)")
+
+
+def test_a_retired_observer_ignores_later_map_entries_and_reports_closed(probe):
+    """Fly, dungeon warps and blackout all execute SpecialEnterMap again: after the receipt is
+    published and the observer retired, those hits must be no-ops, not failures."""
+    probe.execute("""
+        boot();assert(probe.peek().enter.frame==frame)
+        probe.close()
+        local s=probe.status();assert(s.closed==true and s.complete==true and s.failed==nil)
+        assert(hooks['slink-continue-enter']==nil,'bus hooks unregistered on retirement')
+        local ok=pcall(fire,'enter');assert(not ok)   -- the harness has no hook left to call: nothing observes the warp
+    """)

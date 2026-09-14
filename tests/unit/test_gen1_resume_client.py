@@ -56,8 +56,12 @@ HARNESS = r"""
     local journal={store=store,hud_state=function()return nil end,pending_commands=function()return {}end,pending_events=function()return {}end}
     package.loaded['client_journal']={initial=function()return {}end,open=function()return journal end}
     package.loaded['gen1_bootstrap_observer']={new=function(o)built.bootstrap=o;return {close=function()end,status=function()return{}end}end}
-    package.loaded['gen1_continue_observer']={new=function(o)built.continue=o;return {close=function()end,status=function()return witness end,
-        peek=function()return witness.complete and {schema='rby-continue-receipt-v1'}or nil end}end}
+    -- Modeled continue observer: a map-entry hit after the receipt fails (as the real observer does)
+    -- unless the entry has retired it; retirement unregisters the hooks.
+    package.loaded['gen1_continue_observer']={new=function(o)built.continue=o
+        return {close=function()witness.closed=true end,status=function()return witness end,
+            peek=function()return witness.complete and {schema='rby-continue-receipt-v1'}or nil end}end}
+    function warp()if witness.closed then return end;if witness.complete then witness.failed='boot restarted after continue completion'end end
     package.loaded['gen1_initial_observation']={new=function(o)built.observation=o
         return {signals={status=function()return{}end},step=function()end,close=function()end}end}
     package.loaded['gen1_held_faint']={new=function()return {handles=function()return false end,ready=function()return false end,
@@ -137,3 +141,27 @@ def test_a_malformed_resume_contract_is_refused_at_launch(lua, fault):
         value["mode"] = "held_service"
     lua.globals().launch_json = json.dumps(value)
     lua.execute("local ok,why=pcall(start,launch_json);assert(not ok and tostring(why):find('resume'),tostring(why))")
+
+
+def test_the_continue_observer_is_retired_once_the_initial_observation_is_acknowledged(lua):
+    """Regression for cx-9559ab65 (1): SpecialEnterMap also runs on Fly/dungeon warps/blackout, so the
+    observer must stop listening after its receipt is acknowledged; before that, it still fails closed."""
+    lua.globals().launch_json = json.dumps(launch(resume=RESUME))
+    lua.execute(r'''
+        baseline.initial_inventory={phase='queued'}          -- witness published inside the initial observation, not yet ACKed
+        start(launch_json);assert(service:step());assert(not witness.closed and not loop_built)
+        baseline.initial_inventory={phase='acknowledged',operation_id=string.rep('9',32)}
+        assert(service:step())
+        assert(witness.closed==true,'observer retired on the initial ack')
+        warp();assert(service:step() and service.phase~='failed','a later warp is ignored')
+        assert(service:status().continue_observer.closed==true and loop_built)
+    ''')
+
+
+def test_a_warp_before_the_receipt_is_acknowledged_still_fails_closed(lua):
+    lua.globals().launch_json = json.dumps(launch(resume=RESUME))
+    lua.execute(r'''
+        baseline.initial_inventory={phase='queued'}
+        start(launch_json);assert(service:step())
+        warp();local ok,why=service:step();assert(ok==false and tostring(why):find('restarted') and service.phase=='failed')
+    ''')

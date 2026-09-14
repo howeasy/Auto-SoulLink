@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -30,6 +31,10 @@ CONTINUE = json.loads((Path(__file__).resolve().parents[1] / "data/games/gen1_rb
 # Events whose commit means gameplay after the save may have happened. A free-run 'observation'
 # (P10) counts when it carries signals, inventory or acquisitions; empty heartbeats do not.
 GAMEPLAY_EVENTS = {"engine_signals", "inventory_observation"}
+# ponytail: post-witness events are read in one bounded window and refused beyond it; page if a
+# predecessor ever legitimately heartbeats more than this after its last save.
+EVENT_WINDOW = 4096
+log = logging.getLogger("slink.gen1.resume")
 
 
 def save_digest(cart_hex):
@@ -84,7 +89,9 @@ def _gameplay_bearing(request):
     event = request.get("event")
     if event in GAMEPLAY_EVENTS:
         return True
-    return event == "observation" and any(request.get(k) is not None for k in ("signals", "inventory", "acquisitions"))
+    # A free-run heartbeat is {signals: None, inventory: None, acquisitions: []} (gen1_observation_runtime).
+    return event == "observation" and (request.get("signals") is not None or request.get("inventory") is not None
+                                       or bool(request.get("acquisitions")))
 
 
 def audit_predecessor(run_dir, *, registry_entry):
@@ -107,7 +114,8 @@ def audit_predecessor(run_dir, *, registry_entry):
         document = stored.snapshot.state
         rules = StagedGen1State.restore(document["rules"], data_dir=str(directory)).document()
     except (JournalError, KeyError, TypeError, ValueError, OSError) as error:
-        return ResumeAudit(from_run, (*reasons, f"predecessor journal could not be read: {error}"))
+        log.warning("resume audit of %s could not read the predecessor journal: %s", from_run, error)
+        return ResumeAudit(from_run, (*reasons, "predecessor journal could not be read"))
     if registry_entry.get("cartridges") != spec["contract"]["players"]:
         reasons.append("registry cartridges differ from the predecessor journal's contract")
     if document.get("active_trade") is not None:
@@ -146,14 +154,17 @@ def audit_predecessor(run_dir, *, registry_entry):
             if entry is not None and entry["operation_id"] == witness["operation_id"] \
                     and witness["index"] != len(entry["payload"]["signals"]) - 1:
                 reasons.append(f"player {player} played after the save inside the witness batch")
-            later = db.execute("SELECT request FROM events WHERE player=? AND revision>? ORDER BY revision LIMIT 4097",
-                               (player, row[0])).fetchall()
-            if any(_gameplay_bearing(json.loads(r[0])) for r in later):
+            later = db.execute("SELECT request FROM events WHERE player=? AND revision>? ORDER BY revision LIMIT ?",
+                               (player, row[0], EVENT_WINDOW + 1)).fetchall()
+            if len(later) > EVENT_WINDOW:
+                reasons.append("resume audit exceeded the bounded event window")
+            elif any(_gameplay_bearing(json.loads(r[0])) for r in later):
                 reasons.append(f"player {player} has committed gameplay after the save witness; hold")
             required[player] = {"digest": witness["digest"], "projection": witness["projection"],
                                 "witness_index": witness["index"], "operation_id": witness["operation_id"]}
     except sqlite3.Error as error:
-        return ResumeAudit(from_run, (*reasons, f"predecessor journal could not be queried: {error}"))
+        log.warning("resume audit of %s could not query the predecessor journal: %s", from_run, error)
+        return ResumeAudit(from_run, (*reasons, "predecessor journal could not be queried"))
     finally:
         db.close()
     if reasons:
@@ -239,9 +250,12 @@ def verify_state(stage):
         if not isinstance(enrolled, dict) or initial is None or enrolled != enrollment_record(
                 component, player, initial, enrolled.get("continue_witness"), enrolled.get("members"), enrolled.get("links")):
             raise JournalError("resume enrollment record differs from its initial observation")
+        # Provenance, not the live key: ordinary evolution/trade migrates a member's current key.
         if not isinstance(enrolled["members"], dict) or any(
-                members.get(member_id, {}).get("current", {}).get("key") != key
-                or members[member_id]["current"]["player"] != player for key, member_id in enrolled["members"].items()):
+                member_id not in members
+                or members[member_id]["history"][0]["location"]["player"] != player
+                or members[member_id]["history"][0]["location"]["key"] != key
+                for key, member_id in enrolled["members"].items()):
             raise JournalError("inherited members lost their logical identities")
         if not isinstance(enrolled["links"], list) or any(link not in document["identities"]["links"] for link in enrolled["links"]):
             raise JournalError("inherited links lost their logical identities")

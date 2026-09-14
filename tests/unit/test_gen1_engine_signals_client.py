@@ -168,3 +168,24 @@ def test_save_witness_without_a_bizhawk_client_still_captures(probe):
     probe.execute("cart={};memory.read_u8=function(address,domain)local d=domain=='ROM' and rom or domain=='CartRAM' and cart or bus;return d[address] or 0 end;client=nil")
     probe.globals().fire('save_witness')
     assert probe.globals().probe.status(probe.globals().probe)['pending']==1
+
+
+# --- P2A-6C: a silent flush failure must not let a server ACK imply persistence ---
+def test_save_witness_records_the_flush_outcome_in_status_not_on_the_wire(probe):
+    probe.globals().bus[0xD087]=2
+    probe.execute("""
+        cart={};memory.read_u8=function(address,domain)local d=domain=='ROM' and rom or domain=='CartRAM' and cart or bus;return d[address] or 0 end
+        logged={};console={log=function(text)logged[#logged+1]=text end}
+        client={saveram=function()error('disk full',0)end}
+    """)
+    probe.globals().fire('save_witness')
+    status=probe.globals().probe.status(probe.globals().probe)
+    assert status['pending']==1 and status['failed'] is None
+    assert dict(status['last_flush'])=={'kind':'save_witness','frame':status['last_flush']['frame'],'flushed':False,'error':'disk full'}
+    assert any('disk full' in line for line in probe.globals().logged.values())
+    point=probe.globals().probe.peek(probe.globals().probe)[1]['point']
+    assert set(point.keys())=={'digest','projection','save_file_status'}   # the server refuses extra keys
+    probe.execute("client={saveram=function()end}")
+    probe.globals().fire('save_witness')
+    status=probe.globals().probe.status(probe.globals().probe)
+    assert dict(status['last_flush'])=={'kind':'save_witness','frame':status['last_flush']['frame'],'flushed':True}

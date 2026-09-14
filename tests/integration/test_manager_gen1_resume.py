@@ -129,3 +129,62 @@ async def test_resumed_run_launcher_and_bundle_carry_the_player_resume_contract(
         assert bundled.status == 200
         with zipfile.ZipFile(io.BytesIO(bundled.body)) as archive:
             assert json.loads(archive.read("launch.json"))["resume"] == expected
+
+
+@pytest.mark.asyncio
+async def test_a_predecessor_can_be_resumed_only_once(registry, tmp_path):
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    handler = manager.RunManager("127.0.0.1")
+    first = json.loads((await handler.handle_create_gen1(Request(body(resume_from="run_pred")))).text)
+    assert first["ok"] and registry[0]["resumed_by"] == first["run"]["run_id"]
+    second = await handler.handle_create_gen1(Request(body(resume_from="run_pred")))
+    result = json.loads(second.text)
+    assert second.status == 409 and any("already resumed by " + first["run"]["run_id"] in r for r in result["reasons"])
+    assert len(registry) == 2
+
+
+@pytest.mark.asyncio
+async def test_predecessor_started_during_the_audit_is_refused_before_the_registry_is_written(registry, tmp_path, monkeypatch):
+    from server import gen1_run_resume
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    real = gen1_run_resume.audit_predecessor
+
+    def audit_then_start(*args, **kwargs):
+        audit = real(*args, **kwargs)
+        registry[0]["status"] = "running"
+        registry[0]["pid"] = 4242
+        return audit
+    monkeypatch.setattr(gen1_run_resume, "audit_predecessor", audit_then_start)
+    response = await manager.RunManager("127.0.0.1").handle_create_gen1(Request(body(resume_from="run_pred")))
+    result = json.loads(response.text)
+    assert response.status == 409 and any("running" in r for r in result["reasons"])
+    assert len(registry) == 1 and "resumed_by" not in registry[0]
+    assert [p.name for p in tmp_path.iterdir() if p.name.startswith("run_")] == ["run_pred"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["../run_pred", "run_pred/../x", "run pred", "C:\\runs\\run_pred", ""])
+async def test_resume_from_must_be_a_registry_id_and_never_touches_the_filesystem(registry, tmp_path, monkeypatch, bad):
+    from server import gen1_run_resume
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    monkeypatch.setattr(gen1_run_resume, "audit_predecessor", lambda *a, **k: pytest.fail("audit ran on an invalid id"))
+    response = await manager.RunManager("127.0.0.1").handle_create_gen1(Request(body(resume_from=bad)))
+    assert response.status in (400, 404) and len(registry) == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_failure_returns_a_generic_reason_without_exception_text(registry, tmp_path, monkeypatch):
+    from server import gen1_run_resume
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("secret path C:/private/journal")
+    monkeypatch.setattr(gen1_run_resume, "audit_predecessor", explode)
+    response = await manager.RunManager("127.0.0.1").handle_create_gen1(Request(body(resume_from="run_pred")))
+    result = json.loads(response.text)
+    assert response.status == 409 and result["reasons"] == ["predecessor audit failed"]
+    assert "secret" not in response.text and "private" not in response.text and len(registry) == 1

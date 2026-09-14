@@ -137,6 +137,20 @@ def _save_registry(runs: list[dict]):
     atomic_write_json(REGISTRY_PATH, document)
 
 
+_RUN_ID = re.compile(r"run_[0-9A-Za-z_]{1,64}")
+
+
+def _resume_refusal(predecessor: dict | None) -> list[str] | None:
+    """Registry-level reasons a predecessor cannot be resumed right now (the journal audit is separate)."""
+    if predecessor is None:
+        return ["predecessor run is not in the registry"]
+    if predecessor.get("status") == "running":
+        return ["predecessor run is still marked running in the registry; stop it first"]
+    if predecessor.get("resumed_by"):
+        return ["predecessor already resumed by " + str(predecessor["resumed_by"])]
+    return None
+
+
 def _find_run(runs: list[dict], run_id: str) -> dict | None:
     for r in runs:
         if r["run_id"] == run_id:
@@ -763,6 +777,7 @@ class RunManager:
         import secrets
         import sqlite3
         from pathlib import Path
+
         from server.gen1_admission import clean_contract, write_contract
         from server.gen1_run_config import create_runtime
         from server.protocol_journal import JournalError
@@ -782,14 +797,31 @@ class RunManager:
             resume=None
             if 'resume_from' in body:
                 # Owner policy P2a: a resume is a NEW run seeded from a closed predecessor's audited journal.
-                from server.gen1_run_resume import audit_predecessor
+                from server import gen1_run_resume
+                if not _RUN_ID.fullmatch(body['resume_from']):
+                    raise ValueError('resume_from must be a registry run id')
                 predecessor=_find_run(runs,body['resume_from'])
                 if predecessor is None:
                     return web.json_response({'ok':False,'error':'Run not found','reasons':['predecessor run is not in the registry']},status=404)
-                audit=await asyncio.to_thread(audit_predecessor,Path(MANAGER_DIR)/predecessor['run_id'],registry_entry=predecessor)
-                if not audit.ok:
-                    return web.json_response({'ok':False,'error':'predecessor cannot be resumed: '+'; '.join(audit.reasons),
-                        'reasons':list(audit.reasons)},status=409)
+                refused=_resume_refusal(predecessor)
+                if refused is None:
+                    root=Path(MANAGER_DIR).resolve()
+                    predecessor_dir=(root/predecessor['run_id']).resolve()
+                    if not predecessor_dir.is_relative_to(root):
+                        raise ValueError('resume_from must name a run under the manager directory')
+                    try:
+                        audit=await asyncio.to_thread(gen1_run_resume.audit_predecessor,predecessor_dir,registry_entry=predecessor)
+                    except Exception as error:
+                        log.warning('resume audit of %s failed: %s',predecessor['run_id'],error)
+                        refused=['predecessor audit failed']
+                    else:
+                        refused=None if audit.ok else list(audit.reasons)
+                        # The registry may have changed during the audit (a start, or another resume).
+                        runs=_load_registry()
+                        predecessor=_find_run(runs,body['resume_from'])
+                        refused=refused or _resume_refusal(predecessor)
+                if refused is not None:
+                    return web.json_response({'ok':False,'error':'predecessor cannot be resumed','reasons':refused},status=409)
                 resume=audit.resume_record()
             run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
             directory=Path(MANAGER_DIR)/run_id
@@ -798,7 +830,7 @@ class RunManager:
                 # Native trade: derive the canonical companion pair from those clean inputs inside the
                 # run (hash-pinned to the installed catalog), and select it; the launcher then ships the
                 # native manifest and the client boots the companion, not the clean ROM.
-                from server.gen1_prepared_cartridges import PreparedCartridges,stage_canonical_pair
+                from server.gen1_prepared_cartridges import PreparedCartridges, stage_canonical_pair
                 directory.mkdir(parents=True,exist_ok=False)
                 try:
                     await asyncio.to_thread(stage_canonical_pair,directory/'prepared',{'a':body['rom_a'],'b':body['rom_b']})
@@ -821,6 +853,13 @@ class RunManager:
                 # The launch contract each client must meet (runtime_launcher/bizhawk_launch emit it per player);
                 # the imported rules state lives in the runtime journal, not the registry.
                 run['resume']={'from_run':resume['from_run'],'contract_hash':resume['contract_hash'],'required':resume['required']}
+                runs=_load_registry()
+                predecessor=_find_run(runs,resume['from_run'])
+                refused=_resume_refusal(predecessor)
+                if refused is not None:   # changed under the creation; the new directory must not survive
+                    shutil.rmtree(directory,ignore_errors=True)
+                    return web.json_response({'ok':False,'error':'predecessor cannot be resumed','reasons':refused},status=409)
+                predecessor['resumed_by']=run_id
             _write_run_meta(run);runs.append(run);_save_registry(runs)
             if body.get('start',True):
                 run['pid']=await _spawn_run(run,self.bind_host,manager_port=self.manager_port)

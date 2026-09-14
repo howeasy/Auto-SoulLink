@@ -15,7 +15,7 @@ function M.new(options)
         "owned engine observation service required")
     local profile=assert(Data.titles[options.variant]);local addresses=profile.addresses
     local owner=copy(options.owned());local final=assert(options.final_sha1)
-    local hooks,pending={},JSON.array();local failure,closed=nil,false
+    local hooks,pending={},JSON.array();local failure,closed=nil,false;local last_flush
     local self={}
     local function check()
         assert(not closed and not failure,failure or "engine observation is closed")
@@ -73,7 +73,13 @@ function M.new(options)
                     pending[#pending+1]=signal
                     -- Flush the witnessed save to .SaveRAM now (BizHawk 2.11.1 client.saveram), so an abrupt close
                     -- after the ack cannot leave the acknowledged checkpoint only in emulator memory.
-                    if kind=="save_witness" and type(client)=="table" and client.saveram then pcall(client.saveram) end
+                    -- The outcome stays local (status().last_flush + console): the server refuses extra point keys,
+                    -- and a failed flush must not be laundered into an acknowledged witness.
+                    if kind=="save_witness" and type(client)=="table" and client.saveram then
+                        local flushed,why=pcall(client.saveram)
+                        last_flush={kind=kind,frame=frame,flushed=flushed==true,error=(not flushed) and tostring(why) or nil}
+                        if not flushed then console.log("[SLink] SaveRAM flush failed after save witness: "..tostring(why))end
+                    end
                 end)
                 if not observed then failure=tostring(reason)end
             end,site.address+(site.capture_offset or 0),"SLink-engine-"..kind,"System Bus")
@@ -127,7 +133,7 @@ function M.new(options)
         if not published then failure=tostring(reason);error(failure,0)end
         pending=JSON.array();return true
     end
-    function self:status()return {failed=failure,pending=#pending,closed=closed}end
+    function self:status()return {failed=failure,pending=#pending,closed=closed,last_flush=last_flush and copy(last_flush) or nil}end
     function self:close()closed=true;close_hooks()end
     return self
 end

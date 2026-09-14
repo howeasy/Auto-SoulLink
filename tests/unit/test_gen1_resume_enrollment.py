@@ -291,3 +291,30 @@ def test_inherited_faint_before_the_partner_enrolls_is_refused(tmp_path):
         assert successor.journal.snapshot() == before
     finally:
         successor.close()
+
+
+def test_inherited_member_may_evolve_after_resume(tmp_path):
+    from server.gen1_runtime_state import recovery_history
+    from server.gen1_starter_settlement import context
+    from server.identity_registry import IdentityRegistry, IdentityWitness, MigrationWitness
+    successor = build_successor(tmp_path)
+    try:
+        owner = admit(successor, "a")
+        send(successor, "a", owner, resumed_payload(successor, "a"))
+        document = successor.state().document()
+        identities = IdentityRegistry.restore(document["identities"], run_id=document["identities"]["run_id"])
+        own = context(document["components"]["gen1-initial-observations"]["a"], "a")
+        member_id = document["components"][COMPONENT]["enrolled"]["a"]["members"]["1234:0000:99"]
+        evolved = IdentityWitness(own, "1234:0000:09", "b" * 64, 1)  # Bulbasaur -> Ivysaur rekeys the species byte
+        identities.migrate_many("a", "c" * 32, [MigrationWitness(member_id, own, "1234:0000:99", "a" * 64, evolved)])
+        document["identities"] = identities.document()
+        document["components"]["gen1-runtime"]["recovery"]["history_digest"] = recovery_history(
+            document["rules"], document["identities"], document["active_trade"], document["components"].get("gen1-trade"))
+        restored = Gen1RuntimeState.restore(document, data_dir=successor.data_dir)  # provenance, not the live key
+        assert restored.identities.document()["members"][member_id]["current"]["key"] == "1234:0000:09"
+        stolen = copy.deepcopy(document)
+        stolen["components"][COMPONENT]["enrolled"]["a"]["members"] = {"1234:0000:99": "f" * 32}
+        with pytest.raises(JournalError, match="lost their logical identities"):
+            Gen1RuntimeState.restore(stolen, data_dir=successor.data_dir)
+    finally:
+        successor.close()

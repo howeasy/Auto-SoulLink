@@ -3,6 +3,7 @@ players saved before either exited, nothing is owed, and the exported rules roun
 import hashlib
 import json
 import secrets
+import sqlite3
 
 import pytest
 
@@ -162,3 +163,55 @@ def test_pending_capture_or_memorial_holds_the_resume(tmp_path):
     assert not audit.ok
     assert "resume requires no pending captures" in audit.reasons
     assert "resume requires completed memorials" in audit.reasons
+
+
+def append_events(directory, player, requests):
+    """Synthetic committed events after everything the fixture journaled (the audit reads only
+    request/revision). Lets a test shape the post-witness window without driving the client loop."""
+    db = sqlite3.connect(directory / "runtime.sqlite3")
+    try:
+        revision = db.execute("SELECT MAX(revision) FROM events").fetchone()[0]
+        rows = []
+        for request in requests:
+            revision += 1
+            text = json.dumps(request, sort_keys=True)
+            rows.append((player, secrets.token_hex(16), text, hashlib.sha256(text.encode()).hexdigest(), revision, "{}", "0" * 64))
+        db.executemany("INSERT INTO events(player,operation_id,request,request_digest,revision,result,result_digest) VALUES(?,?,?,?,?,?,?)", rows)
+        db.commit()
+    finally:
+        db.close()
+
+
+HEARTBEAT = {"event": "observation", "schema": "rby-observation-v1", "frame": 500, "sequence": 9, "context": {}, "rom": {},
+             "signals": None, "acquisitions": [], "inventory": None}
+
+
+def test_empty_heartbeats_after_the_witness_do_not_hold(tmp_path):
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [HEARTBEAT, HEARTBEAT])
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert audit.ok, audit.reasons
+
+
+@pytest.mark.parametrize("field", ["acquisitions", "signals", "inventory"])
+def test_gameplay_bearing_observations_after_the_witness_hold(tmp_path, field):
+    predecessor(tmp_path)
+    loaded = {**HEARTBEAT, field: [{"kind": "capture"}] if field == "acquisitions" else {"some": "payload"}}
+    append_events(tmp_path, "a", [HEARTBEAT, loaded])
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert not audit.ok and any("a" in reason and "after" in reason for reason in audit.reasons)
+
+
+def test_post_witness_window_overflow_is_refused_not_ignored(tmp_path):
+    predecessor(tmp_path)
+    append_events(tmp_path, "a", [HEARTBEAT] * 4098)
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert not audit.ok and "resume audit exceeded the bounded event window" in audit.reasons
+
+
+def test_unreadable_predecessor_reasons_carry_no_exception_text(tmp_path):
+    predecessor(tmp_path)
+    (tmp_path / "runtime.sqlite3").write_bytes(b"not a database, secret path C:/nowhere")
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert not audit.ok and "predecessor journal could not be read" in audit.reasons
+    assert not any("secret" in reason or "nowhere" in reason for reason in audit.reasons)

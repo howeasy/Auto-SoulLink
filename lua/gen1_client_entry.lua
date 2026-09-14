@@ -554,6 +554,12 @@ function M.start(launch,options)
             local serviced,reason=self.runtime:step()
             assert(serviced,reason)
             if self.observer then self.observer:step(self.runtime:is_bound())end
+            if self.continue_observer and not self.continue_observer.status().closed then
+                -- Retire the CONTINUE witness once the initial observation carrying it is acknowledged:
+                -- SpecialEnterMap runs again on every Fly/dungeon warp/blackout and must go unobserved.
+                local initial=assert(self.store:read()).observation.initial_inventory
+                if initial and initial.phase=="acknowledged" then self.continue_observer.close()end
+            end
             if self.start_loop then self.start_loop()end
         end)
         if not ok then
