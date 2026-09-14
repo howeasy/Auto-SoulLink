@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:13:57+00:00",
+  "updated_at_utc": "2026-09-14T09:16:02+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "0dd29bc",
+  "source_head": "66abc02",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. Under Codex review: FT-3-3 0dd29bc (cx-7de6c11c). R5a round 3 (Sonnet: complete key set, current() payload validation, temp cleanup, provenance field). C1 round 2 (Sonnet: decoded kind, whiteout cause, whiteout-record binding, real aggregate lifecycle test). HX-2 implementation (OMP). Next: C3 on the C1 worker after C1 acceptance; R5b after R5a-2; N3 after R5b.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. FT-3 ACCEPTED (integrated). Codex: R5b-SPEC. R5a round 3 (Sonnet: complete key set, current() payload validation, temp cleanup, provenance field). C1 round 2 (Sonnet: decoded kind, whiteout cause, whiteout-record binding, real aggregate lifecycle test). HX-2 implementation (OMP). Next: C3 on the C1 worker after C1 acceptance; R5b after R5a-2; N3 after R5b.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -936,6 +936,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       ]
     },
     {
+      "id": "r5b-spec",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-f84ca8bb)",
+      "state": "active",
+      "files": ["server/gen1_run_resume.py (read-only)", "server/bizhawk_launch.py (read-only)", "tools/launch_bizhawk.py (read-only)"],
+      "next_action": "Literal spec: client save upload protocol, server capture honesty predicates, recover → successor via the resume path, Manager buttons, tests, files.",
+      "reuse_decision": "research only"
+    },
+    {
       "id": "n3-claim",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-0afc641a)",
       "state": "done",
@@ -1002,7 +1010,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "Codex REVIEW cx-a085e592: REJECT — generation.custom_names.selection.path is a second run-local absolute path (upr_runner.py:56-60,138,158-170); fixture used a fake shape; old persisted UPR identities need an explicit cutover note.",
         "Round 2 c868282: Codex REVIEW cx-6b02452f REJECT — log_sha256 hashes the raw UPR log containing 'Time elapsed: <ms>' (Randomizer.java:690; bridge passes it through)",
-        "Round 3 0dd29bc: explicit allowlist CONTENT_IDENTITY_GENERATION_KEYS + key-set test; Codex REVIEW cx-7de6c11c in flight"
+        "Round 3 0dd29bc: Codex REVIEW cx-7de6c11c ACCEPT — every allowlisted key deterministic (effective_settings_string is UPR's Base64 settings string, no clock/path); doc claim about future keys corrected at 66abc02"
       ]
     },
     {
