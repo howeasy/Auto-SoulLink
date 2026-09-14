@@ -170,6 +170,27 @@ function B.new(profile, reads, io)
         end
         raw[info.all] = checksum(raw, 1, info.all - 1)
     end
+
+    local function saved_main_with_initialized_flag()
+        -- save.asm:208-240 copies wMainDataStart..End into sMainData separately from
+        -- wPlayerName, then CalcCheckSum covers sGameData..sGameDataEnd. ram/sram.asm:16-24.
+        -- The saved byte is sMainData+(wCurrentBoxNum-wMainDataStart), NOT an offset from
+        -- wPlayerName (pokered.sym:19158,19259,17399; gen1_codec.py:74-77).
+        local function flat(symbol)
+            return profile.sram_bank[symbol] * BANK_SIZE + ram[symbol] - SRAM_ADDR
+        end
+        local first, last = flat("sGameData"), flat("sGameDataEnd")
+        local saved = flat("sMainData") + ram.wCurrentBoxNum - ram.wMainDataStart
+        assert(first <= saved and saved < last and last == flat("sMainDataCheckSum"),
+               "saved current-box byte outside main checksum domain")
+        local raw = {}
+        for offset = first, last do raw[#raw + 1] = io.read_cart(offset) end
+        if not valid_bytes(raw, last - first + 1) then return nil, "invalid saved main-data range" end
+        local index = saved - first + 1
+        raw[index] = raw[index] % 128 + 128 -- preserve the SAVED box index, set only bit 7
+        raw[#raw] = checksum(raw, 1, #raw - 1) -- save.asm:297-310, game's complement sum
+        return {first = first, raw = raw}
+    end
     local function valid_bank(raw, info)
         if raw[info.all] ~= checksum(raw, 1, info.all - 1) then return false end
         for slot = 0, perbank - 1 do
@@ -232,7 +253,10 @@ function B.new(profile, reads, io)
             seal_bank(raw, info)
             changes[#changes + 1] = {base = info.base, raw = raw}
         end
+        local durable, error_text = saved_main_with_initialized_flag()
+        if not durable then return nil, error_text end
         for _, change in ipairs(changes) do io.write_cart_bytes(change.base, change.raw) end
+        io.write_cart_bytes(durable.first, durable.raw)
         io.write_bytes(ram.wCurrentBoxNum, {current.raw + 128})
         return true
     end

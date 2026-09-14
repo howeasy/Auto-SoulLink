@@ -49,6 +49,7 @@ local Driver = dofile(ROOT .. "/lua/tests/gen1_battle_driver.lua")
 local Play = dofile(ROOT .. "/lua/tests/gen1_scripted_play.lua")
 
 log("duo instance " .. D.player .. " scenario=" .. D.scenario .. " game=" .. D.game)
+log(fmt("attempt %d of 2", D.attempt or 1))
 pcall(function() client.speedmode(D.speed or 1600) end)
 
 local title, header = Entry.detect_title(function(a) return memory.read_u8(a, "ROM") end)
@@ -229,6 +230,23 @@ local function new_key()
     return nil
 end
 
+local function game_save(tag)
+    -- gen1_rb_save_inputs.lua drives START -> SAVE -> YES with ordinary buttons,
+    -- and gen1_scripted_play.lua:138-165 supplies its read-only point/handshake.
+    -- WRAM party/current-box changes only enter sPartyData/sCurBoxData on SAVE
+    -- (pret engine/menus/save.asm:208-295), so the disk PYDEC oracle needs this step.
+    if not wait_until(overworld_ok, 30, "overworld checkpoint before SAVE") then
+        return false, "not at a safe overworld SAVE checkpoint"
+    end
+    local receipts = play.run(yield_frame, {"save"}, function(_, phase)
+        log("SAVE_PHASE " .. tag .. " " .. phase)
+    end, 3600)
+    if not receipts.save then return false, "normal-button SAVE did not finish" end
+    log(fmt("SAVE_WITNESS %s frames=%d", tag, receipts.save))
+    frames(30) -- let the client's SaveMenu.save hook flush CartRAM before exit
+    return true
+end
+
 -- ── Scenarios ────────────────────────────────────────────────────────────────────────
 local scenarios = {}
 
@@ -252,6 +270,8 @@ function scenarios.link_new()
     log(fmt("SEEN capture=%d box_mon=%d stats_cache=%d party_mon=%d sync_retrieve_done=%d sync_retrieve_failed=%d box_mon_failed=%d",
             seen.capture or 0, seen.box_mon or 0, seen.stats_cache or 0, seen.party_mon or 0,
             seen.sync_retrieve_done or 0, seen.sync_retrieve_failed or 0, seen.box_mon_failed or 0))
+    local saved, why = game_save("link_new")
+    if not saved then return false, why end
     return true, "caught " .. key
 end
 
@@ -399,6 +419,8 @@ function scenarios.trade_new()
         return false, "partner did not finish native apply"
     end
     frames(120) -- let both trade_done frames reach the server before client.exit()
+    local saved, why = game_save("trade_new")
+    if not saved then return false, why end
     return true, "native trade applied once"
 end
 
@@ -450,6 +472,8 @@ function scenarios.deadzone_new()
         log_party("PARTY")
         -- Stay up while B plays (the server's dead-zone msgbox lands here too); bounded.
         wait_partner_done(420)
+        local saved, why = game_save("deadzone_new_a")
+        if not saved then return false, why end
         return true, "ran from the first encounter"
     end
     local phase = hunt("catch")
@@ -481,6 +505,9 @@ function scenarios.deadzone_new()
     log(fmt("SEEN capture=%d force_faint=%d memorialize=%d memorialize_done=%d memorialize_failed=%d",
             seen.capture or 0, seen.force_faint or 0, seen.memorialize or 0, seen.memorialize_done or 0, seen.memorialize_failed or 0))
     if not fainted then return false, "the dead-zone capture was never force-fainted" end
+    if not retired or not memorial then return false, "retired mon did not reach Box 12 before SAVE" end
+    local saved, why = game_save("deadzone_new_b")
+    if not saved then return false, why end
     return true, "dead-zone catch " .. key .. (retired and " retired" or " fainted only")
 end
 

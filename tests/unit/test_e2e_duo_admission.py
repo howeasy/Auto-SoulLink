@@ -17,7 +17,10 @@ import e2e_duo as duo  # noqa: E402
 from run_gb_gate import GENS  # noqa: E402
 
 from server import upr_pipeline  # noqa: E402
-from server.adapters import gen1_rom_scan as scan  # noqa: E402
+from server.adapters import (  # noqa: E402
+    gen1_codec as codec,
+    gen1_rom_scan as scan,
+)
 from server.upr_settings import build_categories  # noqa: E402
 
 
@@ -164,3 +167,205 @@ def test_admission_prestep_runs_before_server_start(runner):
     runner.args = type("Args", (), {"keep_alive": False})()
     assert runner.run() is True
     assert order == ["contract", "server", "emulators", "verdicts", "cleanup:True"]
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "attempt", "expected"),
+    [
+        ("RESULT: PASS (caught)", duo.RNG_OUT_OF_BALLS, 1, True),
+        (duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS, 1, True),
+        ("RESULT: PASS (caught)", "RESULT: FAIL (timeout)", 1, False),
+        (duo.RNG_OUT_OF_BALLS, "RESULT: FAIL (timeout)", 1, False),
+        ("RESULT: PASS (caught)", duo.RNG_OUT_OF_BALLS, 2, False),
+    ],
+)
+def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expected):
+    assert duo.retryable_gen1_rng("gen1_new", {"a": a, "b": b}, attempt) is expected
+    assert duo.retryable_gen1_rng("gen1", {"a": a, "b": b}, attempt) is False
+
+
+@pytest.mark.parametrize(("outcomes", "expected_attempts", "passed"), [
+    ([(False, "RESULT: PASS (caught)", duo.RNG_OUT_OF_BALLS),
+      (True, "RESULT: PASS (caught)", "RESULT: PASS (caught)")], 2, True),
+    ([(False, "RESULT: PASS (caught)", "RESULT: FAIL (timeout)")], 1, False),
+    ([(False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS),
+      (False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS)], 2, False),
+])
+def test_rng_retry_restarts_a_whole_run_once_with_labeled_receipts(
+    tmp_path, monkeypatch, outcomes, expected_attempts, passed,
+):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    built = []
+    active = {"attempt": 0}
+
+    class FakeRun:
+        def __init__(self, name, args, attempt):
+            built.append((name, attempt, object()))  # every attempt is a distinct run
+            active["attempt"] = attempt
+
+        def run(self):
+            return outcomes[active["attempt"] - 1][0]
+
+    monkeypatch.setattr(duo, "DuoRun", FakeRun)
+    monkeypatch.setattr(duo, "read_result", lambda _name, inst: outcomes[active["attempt"] - 1][
+        1 if inst == "a" else 2])
+    args = type("Args", (), {"game": "gen1_new"})()
+    assert duo.run_scenario_with_rng_retry("link_new", args) == (passed, expected_attempts)
+    assert [attempt for _, attempt, _ in built] == list(range(1, expected_attempts + 1))
+    assert len({id(run) for _, _, run in built}) == expected_attempts
+    for attempt in range(1, expected_attempts + 1):
+        for inst in ("a", "b"):
+            assert (tmp_path / f"e2e_link_new_{inst}_attempt{attempt}_result.txt").exists()
+
+
+@pytest.mark.parametrize(("other", "raises"), [
+    ("RESULT: PASS (caught)", False),
+    ("RESULT: FAIL (unrelated)", True),
+])
+def test_early_orchestration_rng_miss_exits_without_waiting_for_both_catches(runner, other, raises):
+    runner.scenario = "link_new"
+    runner.game = "gen1_new"
+    runner.attempt = 1
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: (_ for _ in ()).throw(duo.GameRngMiss("sole ball missed"))
+    runner.wait_results = lambda: (other, duo.RNG_OUT_OF_BALLS)
+    runner.cleanup = lambda passed: None
+    runner.args = type("Args", (), {"keep_alive": False})()
+    if raises:
+        with pytest.raises(duo.GameRngMiss):
+            runner.run()
+    else:
+        assert runner.run() is False
+
+
+def _fixture_save(title):
+    path = REPO / "tests" / "fixtures" / "gen1" / f"{title}_battle.SaveRAM"
+    rom_path = REPO / "patch" / "build" / f"gen1_{title}.gb"
+    if not path.exists() or not rom_path.exists():
+        pytest.skip(f"{title} battle fixture or clean dump absent")
+    return bytearray(path.read_bytes()), rom_path.read_bytes()
+
+
+def _new_mon_from_starter(sram, rom):
+    start = codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["mons"]
+    blob = bytearray(sram[start:start + codec.PARTY_MON_SIZE])
+    old_dv = int.from_bytes(blob[27:29], "big")
+    blob[27:29] = (old_dv ^ 0x0010).to_bytes(2, "big")
+    mon = codec.decode_party_mon(blob)
+    base = scan.scan_base_stats(rom)[codec.internal_to_natdex(mon["species"])]
+    stats = codec.recompute_stats(mon, base)
+    blob[1:3] = stats["max_hp"].to_bytes(2, "big")
+    for index, name in enumerate(("max_hp", "atk", "def", "spd", "spc")):
+        blob[34 + index * 2:36 + index * 2] = stats[name].to_bytes(2, "big")
+    return bytes(blob)
+
+
+def _seal_main(sram):
+    start = codec.SRAM_LAYOUT["sPlayerName"]
+    end = codec.SRAM_LAYOUT["sMainDataCheckSum"]
+    sram[end] = codec.sav_checksum(sram[start:end])
+
+
+def _add_caught_to_party(sram, rom):
+    blob = _new_mon_from_starter(sram, rom)
+    start = codec.SRAM_LAYOUT["sPartyData"]
+    layout = codec.PARTY_LAYOUT
+    sram[start] = 2
+    sram[start + layout["species"] + 1] = blob[0]
+    sram[start + layout["species"] + 2] = codec.SPECIES_END
+    mon2 = start + layout["mons"] + codec.PARTY_MON_SIZE
+    sram[mon2:mon2 + codec.PARTY_MON_SIZE] = blob
+    for field in ("ot_names", "nicknames"):
+        one = start + layout[field]
+        sram[one + codec.NAME_SIZE:one + 2 * codec.NAME_SIZE] = sram[one:one + codec.NAME_SIZE]
+    _seal_main(sram)
+    return codec.key(codec.decode_party_mon(blob))
+
+
+def _put_fainted_in_box12(sram, rom):
+    blob = bytearray(_new_mon_from_starter(sram, rom))
+    blob[1:3] = b"\x00\x00"
+    layout = codec.BOX_LAYOUT
+    for info in codec.verify_boxes(sram)["boxes"].values():
+        start = info["offset"]
+        sram[start:start + codec.BOX_SIZE] = bytes(codec.BOX_SIZE)
+        sram[start + layout["species"]] = codec.SPECIES_END
+    start = codec.verify_boxes(sram)["boxes"][12]["offset"]
+    sram[start] = 1
+    sram[start + layout["species"]] = blob[0]
+    sram[start + layout["species"] + 1] = codec.SPECIES_END
+    sram[start + layout["mons"]:start + layout["mons"] + codec.BOX_MON_SIZE] = blob[:codec.BOX_MON_SIZE]
+    party_start = codec.SRAM_LAYOUT["sPartyData"]
+    for field in ("ot_names", "nicknames"):
+        source = party_start + codec.PARTY_LAYOUT[field]
+        target = start + layout[field]
+        sram[target:target + codec.NAME_SIZE] = sram[source:source + codec.NAME_SIZE]
+    sram[codec._CURRENT_BOX] |= codec._BOX_INITIALIZED
+    for bank_index, bank_start in enumerate(codec.SRAM_LAYOUT["box_banks"]):
+        for slot in range(6):
+            box_start = bank_start + slot * codec.BOX_SIZE
+            sram[codec.SRAM_LAYOUT["individual_checksums"][bank_index] + slot] = (
+                codec.sav_checksum(sram[box_start:box_start + codec.BOX_SIZE]))
+        end = codec.SRAM_LAYOUT["all_boxes_checksums"][bank_index]
+        sram[end] = codec.sav_checksum(sram[bank_start:end])
+    _seal_main(sram)
+    return codec.key(codec.decode_party_mon(blob))
+
+
+def _oracle_runner(tmp_path, scenario):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario = scenario
+    run.cfg = duo.SCENARIOS[scenario]
+    run.gcfg = duo.GAMES["gen1_new"]
+    run._saveram_dir = lambda inst: str(tmp_path / f"save_{inst}")
+
+    class Finished:
+        def wait(self, timeout):
+            assert timeout == 30
+
+    run.emus = [Finished(), Finished()]
+    paths = {}
+    for inst, title in (("a", "red"), ("b", "blue")):
+        sram, rom = _fixture_save(title)
+        path = Path(run._saveram_dir(inst)) / GENS["gen1"]["saveram_names"][title]
+        path.parent.mkdir(parents=True)
+        paths[inst] = (path, sram, rom)
+        start = codec.SRAM_LAYOUT["sPartyData"]
+        run._boot_keys = getattr(run, "_boot_keys", {})
+        run._boot_keys[inst] = codec.key(codec.decode_party(
+            sram[start:start + codec.PARTY_LAYOUT["size"]])[0])
+    return run, paths
+
+
+def test_synthetic_link_saved_oracle_passes_and_rejects_a_torn_checksum(tmp_path, capsys):
+    run, paths = _oracle_runner(tmp_path, "link_new")
+    run._link_keys = {}
+    for inst, (path, sram, rom) in paths.items():
+        run._link_keys[inst] = _add_caught_to_party(sram, rom)
+        path.write_bytes(sram)
+    run.assert_link_new_saved()
+    assert "PYDEC link_new" in capsys.readouterr().out
+    path, sram, _rom = paths["a"]
+    sram[codec.SRAM_LAYOUT["sMainDataCheckSum"]] ^= 1
+    path.write_bytes(sram)
+    with pytest.raises(RuntimeError, match="saved game would not qualify"):
+        run.assert_link_new_saved()
+    print("synthetic link_new: PASS; torn main checksum: FAIL")
+
+
+def test_synthetic_deadzone_saved_oracle_passes_and_rejects_uninitialized_box(tmp_path, capsys):
+    run, paths = _oracle_runner(tmp_path, "deadzone_new")
+    a_path, a_sram, _a_rom = paths["a"]
+    a_path.write_bytes(a_sram)
+    b_path, b_sram, b_rom = paths["b"]
+    run._deadzone_b_key = _put_fainted_in_box12(b_sram, b_rom)
+    b_path.write_bytes(b_sram)
+    run.assert_dead_zone_new_saved()
+    assert "PYDEC deadzone_new" in capsys.readouterr().out
+    b_sram[codec._CURRENT_BOX] &= ~codec._BOX_INITIALIZED
+    _seal_main(b_sram)
+    b_path.write_bytes(b_sram)
+    with pytest.raises(RuntimeError, match="initialized flag invalid"):
+        run.assert_dead_zone_new_saved()
+    print("synthetic deadzone_new: PASS; cleared saved initialization flag: FAIL")

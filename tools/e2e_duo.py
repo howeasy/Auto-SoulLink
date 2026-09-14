@@ -158,6 +158,32 @@ def read_result(scenario, inst):
         return f.read()
 
 
+RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
+
+
+class GameRngMiss(Exception):
+    """The only early orchestration exit eligible for a whole-run Gen 1 retry."""
+
+
+def _has_exact_rng_miss(text):
+    return any(line.strip() == RNG_OUT_OF_BALLS for line in (text or "").splitlines())
+
+
+def retryable_gen1_rng(game, results, attempt):
+    """Only a game's missed sole ball may restart one whole gen1_new run."""
+    if game != "gen1_new" or attempt != 1:
+        return False
+    endings = []
+    for text in results.values():
+        lines = [line.strip() for line in (text or "").splitlines()
+                 if line.startswith("RESULT:")]
+        if len(lines) != 1:
+            return False
+        endings.append(lines[0])
+    return (any(line == RNG_OUT_OF_BALLS for line in endings)
+            and all(line == RNG_OUT_OF_BALLS or line.startswith("RESULT: PASS") for line in endings))
+
+
 def wait_for(desc, pred, timeout, interval=2.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -267,8 +293,9 @@ GAMES = {
 
 
 class DuoRun:
-    def __init__(self, scenario, args):
+    def __init__(self, scenario, args, attempt=1):
         self.scenario = scenario
+        self.attempt = attempt
         self.cfg = SCENARIOS[scenario]
         self.args = args
         self.game = getattr(args, "game", "gen3_rr")
@@ -432,6 +459,7 @@ class DuoRun:
             fillers = self.cfg.get("fillers", True)
             duo = {
                 "wt": WT_FWD, "player": inst, "scenario": self.scenario,
+                "attempt": self.attempt,
                 "game": self.gcfg.get("game", ""),
                 "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
                 "mutate_otid": inst == "b",
@@ -729,7 +757,11 @@ class DuoRun:
         """D-1: ONE alive link on route_1 whose halves are the two keys the cartridges caught."""
         def both_caught():
             a, b = self._caught("a"), self._caught("b")
-            return (a, b) if a and b else None
+            if a and b:
+                return a, b
+            if any(_has_exact_rng_miss(read_result(self.scenario, inst)) for inst in ("a", "b")):
+                raise GameRngMiss("a cartridge missed its sole ball before the pair formed")
+            return None
         a_key, b_key = wait_for("both instances to catch a wild mon", both_caught,
                                 self.cfg["timeout"])
         print(f"[duo] real captures: a={a_key} b={b_key}")
@@ -756,7 +788,81 @@ class DuoRun:
             raise RuntimeError("; ".join(problems))
         print(f"[duo] ENCOUNTER LINK FROM REAL PLAY (new client): {a_key} <-> {b_key} "
               f"on route_1, alive")
+        self._link_keys = {"a": a_key, "b": b_key}
         return a_key, b_key
+
+    def _saved_gen1_party(self, inst):
+        """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM."""
+        from pathlib import Path
+
+        if REPO not in sys.path:
+            sys.path.insert(0, REPO)
+        from gen1_fixtures import qualify
+        from run_gb_gate import GENS
+
+        from server.adapters import gen1_codec as codec
+
+        title = self.gcfg["fixture"][inst]
+        name = GENS["gen1"]["saveram_names"][title]
+        sram = (Path(self._saveram_dir(inst)) / name).read_bytes()
+        rom = (Path(REPO) / self.gcfg["rom"][inst]).read_bytes()
+        # tools/gen1_fixtures.py:57-83 uses codec.verify_bank1 (the game's CalcCheckSum),
+        # decode_party, level_from_exp and recompute_stats against this exact ROM.
+        problems = qualify(sram, rom)
+        if problems:
+            raise RuntimeError(f"{inst} saved game would not qualify: {problems}")
+        start = codec.SRAM_LAYOUT["sPartyData"]  # gen1_codec.py:66-72,587-595
+        party = codec.decode_party(sram[start:start + codec.PARTY_LAYOUT["size"]])
+        current = codec.SRAM_LAYOUT["sCurBoxData"]  # the WRAM mirror is copied here on SAVE
+        current_box = codec.decode_box(sram[current:current + codec.BOX_SIZE])
+        return sram, party, current_box, codec
+
+    def assert_link_new_saved(self):
+        """The caught halves are saved in slot 1, with PYDEC-rebuilt stored stats."""
+        for process in self.emus:
+            process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
+        for inst in ("a", "b"):
+            _sram, party, current_box, codec = self._saved_gen1_party(inst)
+            keys = [codec.key(mon) for mon in party]  # gen1_codec.py:602-610
+            expected = [self._boot_keys[inst], self._link_keys[inst]]
+            if keys != expected:
+                raise RuntimeError(f"{inst} saved link party {keys}, expected starter/withdrawn {expected}")
+            if any(codec.key(mon) == self._link_keys[inst] for mon in current_box):
+                raise RuntimeError(f"{inst} saved current box still holds its withdrawn linked mon")
+            # qualify() above independently invokes codec.recompute_stats on both mons
+            # (tools/gen1_fixtures.py:70-82; gen1_codec.py:738-751).
+            print(f"[duo] PYDEC link_new {inst}: saved slot 0 starter {keys[0]}, "
+                  f"slot 1 linked {keys[1]}, recomputed stats valid")
+
+    def assert_dead_zone_new_saved(self):
+        """B's retired key is absent from party and durably present, fainted, in Box 12."""
+        for process in self.emus:
+            process.wait(timeout=30)
+        _a_sram, a_party, _a_current, codec = self._saved_gen1_party("a")
+        b_sram, b_party, b_current, _codec = self._saved_gen1_party("b")
+        if [codec.key(mon) for mon in a_party] != [self._boot_keys["a"]]:
+            raise RuntimeError("A's failed encounter changed its saved starter party")
+        b_keys = [codec.key(mon) for mon in b_party]
+        if b_keys != [self._boot_keys["b"]] or self._deadzone_b_key in b_keys:
+            raise RuntimeError(f"B's retired key remained in saved party: {b_keys}")
+        if any(codec.key(mon) == self._deadzone_b_key for mon in b_current):
+            raise RuntimeError("B's saved current box still holds the Box 12 memorial")
+        # gen1_codec.py:636-668: raw individual and bank checksums, box count, saved
+        # initialized flag and offsets. decode_box validates every count/FF terminator.
+        verdict = codec.verify_boxes(b_sram)
+        if (not verdict["initialized"] or not all(v["valid"] for v in verdict["banks"].values())
+                or not all(v["valid"] for v in verdict["boxes"].values())):
+            raise RuntimeError(f"B's saved box banks/checksums/initialized flag invalid: {verdict}")
+        boxes = {}
+        for number, info in verdict["boxes"].items():
+            start = info["offset"]
+            boxes[number] = codec.decode_box(b_sram[start:start + codec.BOX_SIZE])
+        memorial = boxes[12]  # 1-based report key = Box 12; command index is 11
+        if len(memorial) != 1 or codec.key(memorial[0]) != self._deadzone_b_key or memorial[0]["hp"] != 0:
+            raise RuntimeError(f"B Box 12 did not save the zero-HP retired key {self._deadzone_b_key}: "
+                               f"{[(codec.key(mon), mon['hp']) for mon in memorial]}")
+        print(f"[duo] PYDEC deadzone_new B: saved party excludes {self._deadzone_b_key}; "
+              "Box 12 holds it at HP 0 with valid initialized banks")
 
     def assert_trade_new(self, results):
         """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
@@ -892,8 +998,14 @@ class DuoRun:
         print(f"[duo] DEAD ZONE FROM REAL PLAY (new client): {area}")
 
         self._go_one("b")
-        b_key = wait_for("B to catch inside the dead zone", lambda: self._caught("b"),
-                         self.cfg["timeout"])
+        def b_caught():
+            key = self._caught("b")
+            if not key and _has_exact_rng_miss(read_result(self.scenario, "b")):
+                raise GameRngMiss("B missed its sole ball inside the dead zone")
+            return key
+
+        b_key = wait_for("B to catch inside the dead zone", b_caught, self.cfg["timeout"])
+        self._deadzone_b_key = b_key
         wait_for("B's client to force-faint the refused capture",
                  lambda: "FAINTED " in (read_result(self.scenario, "b") or ""), 300)
         retired = "RETIRED " in (read_result(self.scenario, "b") or "")
@@ -975,6 +1087,7 @@ class DuoRun:
             self.go()  # passive clients hold for ~600 frames before RESULT: PASS
             return
         ka, kb = self.wait_keys()
+        self._boot_keys = {"a": ka[0], "b": kb[0]}
         self.wait_connected()
         if self.cfg.get("no_setup"):
             # Deliberately does NOT call set_pokeballs() or inject_link(): these scenarios
@@ -1082,12 +1195,22 @@ class DuoRun:
                 self.prepare_admit_randomized_new()
             self.start_server()
             self.start_instances()
-            self.orchestrate()
-            ra, rb = self.wait_results()
+            try:
+                self.orchestrate()
+            except GameRngMiss:
+                ra, rb = self.wait_results()
+                if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, 1):
+                    raise  # an unrelated failed half is never a game-RNG retry
+            else:
+                ra, rb = self.wait_results()
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb and self.scenario == "trade_new":
                 self.assert_trade_new({"a": ra, "b": rb})
+            if pa and pb and self.scenario == "link_new":
+                self.assert_link_new_saved()
+            if pa and pb and self.scenario == "deadzone_new":
+                self.assert_dead_zone_new_saved()
             passed = pa and pb
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
@@ -1100,6 +1223,26 @@ class DuoRun:
         finally:
             self.cleanup(passed)
         return passed
+
+
+def run_scenario_with_rng_retry(name, args):
+    """A new DuoRun for each attempt means a new server/data dir and reseeded battery saves."""
+    limit = 2 if args.game == "gen1_new" else 1
+    for attempt in range(1, limit + 1):
+        print(f"[duo] {name}: attempt {attempt} of {limit}")
+        ok = DuoRun(name, args, attempt=attempt).run()
+        receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
+        # The next run deletes the normal result files; keep each attempt's receipts.
+        for inst in ("a", "b"):
+            if receipts[inst] is not None:
+                with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
+                          "w", encoding="utf-8") as handle:
+                    handle.write(receipts[inst])
+        if ok or not retryable_gen1_rng(args.game, receipts, attempt):
+            return ok, attempt
+        print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt 2 of 2 "
+              "with a fresh server, run directory and SaveRAM seeds")
+    return False, 2
 
 
 def main():
@@ -1147,13 +1290,14 @@ def main():
                      f"in SCENARIOS if it should.")
         names = [args.scenario]
     results = {}
+    limit = 2 if args.game == "gen1_new" else 1
     for name in names:
         print(f"\n========== scenario: {name} ==========")
-        results[name] = DuoRun(name, args).run()
+        results[name] = run_scenario_with_rng_retry(name, args)
     print("\n========== summary ==========")
-    for name, ok in results.items():
-        print(f"  {name}: {'PASS' if ok else 'FAIL'}")
-    sys.exit(0 if all(results.values()) else 1)
+    for name, (ok, attempt) in results.items():
+        print(f"  {name}: {'PASS' if ok else 'FAIL'} (attempt {attempt} of {limit})")
+    sys.exit(0 if all(ok for ok, _ in results.values()) else 1)
 
 
 if __name__ == "__main__":

@@ -258,23 +258,21 @@ def test_first_change_initialisation_exact_bytes_and_idempotence(title):
     assert wram[PROFILE[title]["ram"]["wCurrentBoxNum"]] == 128
     assert _changed(before_wram, wram) == {PROFILE[title]["ram"]["wCurrentBoxNum"]}
     report = oracle.verify_boxes(cart)
-    assert not report["initialized"]  # saved main-data flag stays old until the game's SAVE
+    assert report["initialized"]  # ChangeBox must not erase an SRAM memorial after reset
     assert all(box["valid"] and box["count"] == 0 for box in report["boxes"].values())
     assert all(bank["valid"] for bank in report["banks"].values())
-    # Project the game's next SaveMainData (save.asm:208-240) into a COPY.
-    # The module itself must never touch bank-1 main data or its checksum.
+    # SaveMainData's compacted WRAM->SRAM offset: sMainData +
+    # (wCurrentBoxNum - wMainDataStart), save.asm:208-240; not wPlayerName-relative.
     ram, banks = PROFILE[title]["ram"], PROFILE[title]["sram_bank"]
-    projected = cart.copy()
     saved_flag = (banks["sMainData"] * 0x2000 + ram["sMainData"] - 0xA000
                   + ram["wCurrentBoxNum"] - ram["wMainDataStart"])
-    projected[saved_flag] = wram[ram["wCurrentBoxNum"]]
     main_start = banks["sPlayerName"] * 0x2000 + ram["sPlayerName"] - 0xA000
     main_checksum = (banks["sMainDataCheckSum"] * 0x2000
                      + ram["sMainDataCheckSum"] - 0xA000)
-    projected[main_checksum] = oracle.sav_checksum(projected[main_start:main_checksum])
-    saved_report = oracle.verify_boxes(projected)
-    assert saved_report["initialized"] and all(
-        box["valid"] and not box["populated"] for box in saved_report["boxes"].values()
+    assert cart[saved_flag] == 128 and oracle.verify_bank1(cart)
+    assert cart[main_checksum] == oracle.sav_checksum(cart[main_start:main_checksum])
+    assert all(
+        box["valid"] and not box["populated"] for box in report["boxes"].values()
     )
     # EmptySRAMBox changes only count and first species, preserving all tail
     # bytes; all other changed bytes must be its 14 checksum cells.
@@ -285,8 +283,9 @@ def test_first_change_initialisation_exact_bytes_and_idempotence(title):
     for bank in (2, 3):
         expected.update(range(bank * 0x2000 + 6 * oracle.BOX_SIZE,
                               bank * 0x2000 + 6 * oracle.BOX_SIZE + 7))
+    expected.update((saved_flag, main_checksum))
     assert _changed(before_cart, cart) <= expected
-    assert len(calls["cart"]) == 2 and len(calls["wram"]) == 1
+    assert len(calls["cart"]) == 3 and len(calls["wram"]) == 1
     snapshot = (wram[:], cart[:], {name: list(log) for name, log in calls.items()})
     assert boxes.ensure_boxes_initialised() is True
     assert (wram, cart, calls) == snapshot
@@ -311,8 +310,25 @@ def test_initialisation_preserves_arbitrary_tail_bytes():
     for bank in (2, 3):
         first_checksum = bank * 0x2000 + 6 * oracle.BOX_SIZE
         touched.update(range(first_checksum, first_checksum + 7))
+    touched.update((oracle._CURRENT_BOX, oracle.SRAM_LAYOUT["sMainDataCheckSum"]))
     assert _changed(old, cart) <= touched
     assert all(box["valid"] for box in oracle.verify_boxes(cart)["boxes"].values())
+    assert oracle.verify_bank1(cart)
+
+
+def test_initialization_flag_is_durable_before_the_next_game_save():
+    title = "red"
+    wram, cart = _seed(title, [_mon(ot_id=1)], initialized=False)
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    assert boxes.ensure_boxes_initialised() is True
+    assert cart[oracle._CURRENT_BOX] & oracle._BOX_INITIALIZED
+    assert oracle.verify_bank1(cart)
+    assert oracle.verify_boxes(cart)["initialized"]
+    assert any(offset <= oracle._CURRENT_BOX < offset + size for offset, size in calls["cart"])
+    corrupted = bytearray(cart)
+    corrupted[oracle._CURRENT_BOX] &= ~oracle._BOX_INITIALIZED
+    assert not oracle.verify_bank1(corrupted), "the game's checksum must detect a torn flag write"
 
 
 def test_withdraw_200_random_rebuilt_stat_vectors_and_checksums():
