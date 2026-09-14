@@ -56,8 +56,9 @@ async def test_manager_prepares_a_fresh_runtime_before_optional_server_start(tmp
         assert (path/'gen1_runtime.json').exists() and (path/'runtime.sqlite3').exists()
         started.append(run['run_id']);return 12345
     monkeypatch.setattr(manager,'_spawn_run',spawn)
+    rom_a,rom_b=_cartridges(tmp_path)
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
-        'name':'Fresh Yellow pair','rom_a':'a.gbc','rom_b':'b.gbc','rules':{'species_lock':True,'gender_lock':True},'start':start}))
+        'name':'Fresh Yellow pair','rom_a':rom_a,'rom_b':rom_b,'rules':{'species_lock':True,'gender_lock':True},'start':start}))
     result=json.loads(response.text)
     assert response.status==200 and result['ok'] and len(runs)==1
     assert result['runtime_mode']=='free_service'
@@ -83,8 +84,9 @@ async def test_unsupported_rules_cannot_start_or_register_a_prepared_run(tmp_pat
     monkeypatch.setattr(manager,'_load_registry',lambda:[])
     monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('invalid run registered'))
     monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
+    rom_a,rom_b=_cartridges(tmp_path)
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
-        'name':'invalid','rom_a':'a.gb','rom_b':'b.gb','rules':rules,'start':True}))
+        'name':'invalid','rom_a':rom_a,'rom_b':rom_b,'rules':rules,'start':True}))
     assert response.status==400
 
 
@@ -155,9 +157,54 @@ def _json_text(response):
     return _json.loads(response.text)['error']
 
 
+@pytest.mark.asyncio
+async def test_manager_refuses_a_cartridge_path_that_does_not_exist(tmp_path,monkeypatch):
+    """A mistyped path is the caller's error: 400 naming it, and admission never runs (it used to
+    surface as a 500 from the FileNotFoundError raised inside clean_contract)."""
+    runs=[]
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('nothing may be registered'))
+    monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:pytest.fail('admission must not run'))
+    missing=str(tmp_path/'never-written.gb')
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(
+        _fastest_text_request({}, missing, str(tmp_path/'b.gb'))))
+    error=_json_text(response)
+    assert response.status==400 and 'cartridge file not found' in error and missing in error
+    assert runs==[] and _run_directories(tmp_path)==[]
+
+
+@pytest.mark.asyncio
+async def test_manager_refuses_a_directory_as_a_cartridge_path(tmp_path,monkeypatch):
+    runs=[]
+    directory=tmp_path/'cartridge-dir'
+    directory.mkdir()
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('nothing may be registered'))
+    monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:pytest.fail('admission must not run'))
+    _rom_a,rom_b=_cartridges(tmp_path)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(
+        _fastest_text_request({}, str(directory), rom_b)))
+    error=_json_text(response)
+    assert response.status==400 and 'cartridge file not found' in error and str(directory) in error
+    assert runs==[] and _run_directories(tmp_path)==[]
+
+
 def _run_directories(tmp_path):
     """The run directories under the patched MANAGER_DIR (tests/conftest.py always makes `data`)."""
     return sorted(p.name for p in tmp_path.iterdir() if p.name.startswith('run_'))
+
+
+def _cartridges(tmp_path):
+    """Real (if minimal) cartridge paths: the handler refuses a path that is not an existing file,
+    so the happy paths must hand it files even though admission itself is stubbed."""
+    paths = []
+    for name in ('a.gb', 'b.gb'):
+        path = tmp_path / name
+        path.write_bytes(b'\x00' * 16)
+        paths.append(str(path))
+    return paths
 
 
 class _PreparedPair:
@@ -192,9 +239,9 @@ class _Runtime:
     def close(self):self.closed=True
 
 
-def _fastest_text_request(body):
+def _fastest_text_request(body, rom_a='a.gb', rom_b='b.gb'):
     return {
-        'name':'Fastest text pair','rom_a':'a.gb','rom_b':'b.gb','rules':{},'start':False,'native':True,
+        'name':'Fastest text pair','rom_a':rom_a,'rom_b':rom_b,'rules':{},'start':False,'native':True,
         **body}
 
 
@@ -233,13 +280,15 @@ async def test_manager_fastest_text_plumbs_the_policy_preset_pair_into_the_runti
         lambda *args,**kwargs:pytest.fail('the canonical pair must not be staged for fastest text'))
     monkeypatch.setenv('SLINK_UPR_JAR','C:/dummy/upr.jar')
     _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls)
-    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(_fastest_text_request({'fastest_text':True})))
+    rom_a,rom_b=_cartridges(tmp_path)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(
+        _fastest_text_request({'fastest_text':True}, rom_a, rom_b)))
     result=json.loads(response.text)
     assert response.status==200 and result['ok'] is True and len(runs)==1
     assert runs[0]['fastest_text'] is True and runs[0]['native_trade'] is True
     assert len(calls)==1
     jar,settings,sources,directory,seeds=calls[0]
-    assert jar=='C:/dummy/upr.jar' and settings==preset and sources=={'a':'a.gb','b':'b.gb'}
+    assert jar=='C:/dummy/upr.jar' and settings==preset and sources=={'a':rom_a,'b':rom_b}
     assert directory==tmp_path/runs[0]['run_id']/'prepared' and seeds=={'a':'123456789','b':'987654321'}
     assert (tmp_path/runs[0]['run_id']/'fastest-text.rnqs').read_bytes()==preset   # the exact settings stay with the run
     assert len(runtime_calls)==1 and runtime_calls[0][2]['native_trade'] is True
@@ -253,7 +302,7 @@ async def test_manager_refuses_fastest_text_without_native_and_leaves_no_run_dir
     monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('invalid run registered'))
     monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(_fastest_text_request(
-        {'fastest_text':True,'native':False})))
+        {'fastest_text':True,'native':False}, *_cartridges(tmp_path))))
     assert response.status==400 and 'fastest_text requires native' in _json_text(response)
     assert [p.name for p in tmp_path.iterdir() if p.is_dir() and p.name.startswith('run_')]==[]
 
@@ -271,10 +320,12 @@ async def test_manager_without_fastest_text_still_stages_the_canonical_pair(tmp_
     monkeypatch.setattr(gen1_upr_pipeline,'prepare_pair',
         lambda *args,**kwargs:pytest.fail('UPR must not run without fastest text'))
     _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls)
-    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(_fastest_text_request({})))
+    rom_a,rom_b=_cartridges(tmp_path)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(
+        _fastest_text_request({}, rom_a, rom_b)))
     result=json.loads(response.text)
     assert response.status==200 and result['ok'] is True
-    assert len(staged)==1 and staged[0][1]=={'a':'a.gb','b':'b.gb'}
+    assert len(staged)==1 and staged[0][1]=={'a':rom_a,'b':rom_b}
     assert runs[0]['native_trade'] is True and runs[0]['fastest_text'] is False
     assert len(runtime_calls)==1 and runtime_calls[0][2]['native_trade'] is True
 
@@ -297,8 +348,9 @@ async def test_manager_plumbs_the_exact_body_the_gen1_create_ui_posts(tmp_path,m
     _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls)
     async def spawn(*args,**kwargs):return 12345   # the UI body starts the run
     monkeypatch.setattr(manager,'_spawn_run',spawn)
+    rom_a,rom_b=_cartridges(tmp_path)
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
-        'name':'Gen 1 pair','rom_a':'a.gb','rom_b':'b.gb','rules':rules,'start':True,'native':True,
+        'name':'Gen 1 pair','rom_a':rom_a,'rom_b':rom_b,'rules':rules,'start':True,'native':True,
         'fastest_text':False}))
     result=json.loads(response.text)
     assert response.status==200 and result['ok'] is True and result['native_trade'] is True
@@ -331,8 +383,9 @@ async def test_manager_refuses_a_resume_that_changes_the_fastest_text_setting(tm
     monkeypatch.setattr(gen1_run_resume,'audit_predecessor',lambda *args,**kwargs:_Audit())
     monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',lambda *args,**kwargs:staged.append('canonical'))
     monkeypatch.setattr(gen1_upr_pipeline,'prepare_pair',lambda *args,**kwargs:staged.append('upr'))
+    rom_a,rom_b=_cartridges(tmp_path)
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
-        'name':'Changed setting','rom_a':'a.gb','rom_b':'b.gb','rules':{},'start':False,'native':True,
+        'name':'Changed setting','rom_a':rom_a,'rom_b':rom_b,'rules':{},'start':False,'native':True,
         'fastest_text':True,'resume_from':'run_pred'}))
     assert response.status==400 and 'must keep the predecessor fastest_text' in _json_text(response)
     assert staged==[] and runs==[predecessor]
@@ -353,7 +406,8 @@ async def test_manager_removes_the_staged_directory_when_runtime_creation_fails(
         return Path(directory)
     monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',stage_canonical_pair)
     _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls,create_runtime=create_runtime)
-    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(_fastest_text_request({})))
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(
+        _fastest_text_request({}, *_cartridges(tmp_path))))
     assert response.status==400 and 'after staging' in _json_text(response)
     assert len(runtime_calls)==1 and runs==[]
     assert _run_directories(tmp_path)==[]   # the half-built run directory is gone
@@ -393,8 +447,9 @@ async def test_manager_refuses_a_rule_key_the_gen1_runtime_does_not_accept(tmp_p
     monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
     monkeypatch.setattr(gen1_prepared_cartridges,'PreparedCartridges',_PreparedPair)
     monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',stage_canonical_pair)
+    rom_a,rom_b=_cartridges(tmp_path)
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
-        'name':'Extra rule key','rom_a':'a.gb','rom_b':'b.gb','rules':{'species_lock':True,'overworld_presence':True},
+        'name':'Extra rule key','rom_a':rom_a,'rom_b':rom_b,'rules':{'species_lock':True,'overworld_presence':True},
         'start':False,'native':True}))
     assert response.status==400 and 'explicit supported Gen1 rule options required' in _json_text(response)
     assert len(staged)==1 and runs==[]

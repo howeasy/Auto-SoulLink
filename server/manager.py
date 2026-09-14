@@ -889,6 +889,11 @@ class RunManager:
                 # Fastest text is a preset of the native path: it replaces the canonical companion
                 # pair, so without native there is no prepared directory to hold it.
                 raise ValueError('fastest_text requires native')
+            for name in ('rom_a','rom_b'):
+                # A mistyped path is the caller's error, not a server fault: name it and refuse
+                # before admission, where FileNotFoundError used to surface as a 500.
+                if not isinstance(body[name],str) or not body[name].strip() or not Path(body[name]).is_file():
+                    raise ValueError(f'cartridge file not found: {body[name]}')
             # The user's cartridges are admitted as exact canonical CLEAN ROMs either way.
             admitted=await asyncio.to_thread(clean_contract,{'a':body['rom_a'],'b':body['rom_b']})
             contract=admitted
