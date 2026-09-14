@@ -46,7 +46,7 @@ from it in Phase 8.
 | F-3 | Site table complete (see `docs/gen1_engine_sites.md`): battle start (wild/trainer), battle end + result, capture→party vs →box, player faint, poison faint, blackout (HealParty ordering), evolution species rewrite, in-game trade, PC deposit/withdraw/release/ChangeBox, map load, bag item received/removed, save, CONTINUE, New Game, soft reset | pret `405b624` per row; RC-verified rows cite `engine_signals.json` | S-1 differential gate | ✓ `docs/gen1_engine_sites.md`; 17 pinned | · | · (S-1 differential gate pending) |
 | F-4 | Wild/fishing tables and base stats: Lua ROM reader == Python `gen1_rom_scan.py`, byte-equal, all 59 tables; statics excluded; Pokémon Tower `$8E–$94` uncatchable without Silph Scope `$48` | two-path equality test | n/a | ✓ `test_gen1_rom_tables.py` (Lua ROM reader == scanner, 151 dex × 3 titles) | ✓ | — |
 | F-5 | Evolution families from pret `evos_moves.asm` (Gen 1 only); item ids from pret; internal index ↔ national dex from pret dex order | generators + `gen1_codec.internal_to_natdex` | n/a | ✓ codec dex table == ROM PokedexOrder; growth byte pinned | ✓ | — |
-| F-6 | Fixtures re-qualified: each `tests/fixtures/gen1/*.SaveRAM` passes the game's own checksums (`SAVCheckSum`, box checksums), loads with `TryLoadSaveFile`==2, PYDEC party matches the party-menu tilemap; `town` fixtures on encounter-free tiles; `battle` fixtures in grass with `BIT_NO_BATTLES` | pret `engine/menus/save.asm` | GAME + PYDEC | ✓ main checksums valid | ✗ FINDING: level 5 with exp 0, OT "RST" ≠ player — harness-written bytes, not game states (`test_gen1_stat_control.py`) | · regenerate from scripted play |
+| F-6 | Fixtures re-qualified: each `tests/fixtures/gen1/*.SaveRAM` passes the game's own checksums (`SAVCheckSum`, box checksums), loads with `TryLoadSaveFile`==2, PYDEC party matches the party-menu tilemap; `town` fixtures on encounter-free tiles; `battle` fixtures in grass with `BIT_NO_BATTLES` | pret `engine/menus/save.asm` | GAME + PYDEC | ✓ main checksums valid | ✓ `--qualify`: R/B 4 OK; Yellow 2 LEGACY (old tool bytes, pinned by name) | ✓ R/B: `tools/gen1_fixtures.py` from scripted play (town = Oak's Lab after the rival; battle = Route 1 (10,35) + one Poké Ball); Yellow open (needs its own route or an owner-made save) |
 
 ## R — Reads (`lua/gen1/reads.lua`)
 
@@ -61,7 +61,7 @@ from it in Phase 8.
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| S-1 | Scripted New Game → starter → rival on R/B/Y emits exactly `starter`, `battle_start(trainer)`, N×`faint`, `battle_end(lost)`, the map-load sequence; no spurious `capture`/`no_catch` | ENGINE sequence vs pret script order (`scripts/OaksLab.asm` 12→18) | ✓ site pinned | · | · |
+| S-1 | Scripted New Game → starter → rival on R/B/Y emits exactly `starter`, `battle_start(trainer)`, N×`faint`, `battle_end(lost)`, the map-load sequence; no spurious `capture`/`no_catch` | ENGINE sequence vs pret script order (`scripts/OaksLab.asm` 12→18) | ✓ site pinned | ✓ | ✓ `test_gen1_new_gates.py::lab_route` Red+Blue: cold NEW GAME → starter → rival by buttons; sequence == pret script order; L5 exp 135 |
 | S-2 | Route 1 wild encounter: `battle_start(wild, species, level)`; caught → one `capture(party)`; ran/lost → `battle_end` + `no_catch{species_id, level}`; ball thrown detected at the item-removal site | ENGINE + SERVER | ✓ site pinned | ✓ `test_gen1_client.py` | · |
 | S-3 | Party full + catch → `capture(box)` via `SendNewMonToBox`; box snapshot updated | ENGINE + PYDEC (SRAM) | ✓ site pinned | · | · |
 | S-4 | Poison faint in the overworld; blackout: faint-time party bytes captured before `HealParty`; `whiteout` emitted once | ENGINE + PYDEC | ✓ site pinned | ✓ `test_gen1_client.py` | · |
@@ -117,7 +117,7 @@ Pairings Red/Blue and Yellow/Red; post-conditions read by PYDEC + SERVER.
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| T-1 | Receptionist menu at all 12 Centers + Indigo; CABLE CLUB/CANCEL fall through to vanilla | GAME (tilemap) | · | · | · |
+| T-1 | Receptionist menu at all 12 Centers + Indigo; CABLE CLUB/CANCEL fall through to vanilla | GAME (tilemap) | ✓ RC asm verbatim; 133 DEFs vs .sym; 3 ROM0 spans re-derived | ✓ `test_gen1_trade_patch.py` (23); Red/Blue banks identical | ◐ panel gates pass on the trade-carrying build; receptionist menu not yet driven live |
 | T-2 | Ineligible offer refused in-game ("Trade unavailable."); eligible = one ALIVE pair, both halves in party | SERVER + GAME | · | · | · |
 | T-3 | Partner prompt YES/NO/B; screen restored | GAME | · | · | · |
 | T-4 | Apply: animation, evolution, `SavePartyAndDexData`; both sides decode swapped mons; link halves swapped; received mon in the LAST party slot | PYDEC + GAME (save reloads) + SERVER | · | · | · |
