@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:24:49+00:00",
+  "updated_at_utc": "2026-09-14T08:32:57+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "6931fdf",
   "live_lane": null,
-  "next_action": "PAUSED BY OWNER 2026-09-14 (wrap-up). F0 speed gate PASS recorded; D4-CLAIM recorded; N1-1 frozen mid-TDD (owner stopped the worker; WIP left dirty, patches under .cache/n1-1-wip-*.patch). Next on resume: coordinator finishes N1-1 (red chain test -> bootstrap go-file feed), Codex review, integrate, re-pin source_cut, one live rb-native-trade-r1; then D4a per the claim.",
+  "next_action": "OWNER PIVOT 2026-09-14: build product features for a single two-human live test session; scripted-harness proof lanes stopped (N1-1 parked). In flight: FG-1 human-play gap census (Codex), C1-CLAIM whiteout collateral (Sonnet), FT-2 Manager fastest_text option (OMP coding). On FG-1: rank MISSING/BROKEN, open claims, dispatch implementation cards with unit-level exit evidence; live proof deferred to the human session.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -777,9 +777,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "n1-1",
-      "owner": "coordinator (worker a0b11382536ae868f stopped by the owner mid-TDD)",
+      "owner": "parked (owner pivot 2026-09-14: harness work stopped; WIP moved to .cache/n1-1-wip/ + patches, tree restored to HEAD)",
       "state": "frozen",
-      "blocked_reason": "owner wrap-up 2026-09-14; WIP uncommitted",
+      "blocked_reason": "owner pivot 2026-09-14: scripted-harness lanes stopped; files released",
       "files": [
         "lua/tests/gen1_rb_native_trade_inputs.lua",
         "tests/unit/test_gen1_rb_native_trade_inputs.py",
@@ -850,6 +850,30 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "gate thresholds fixed before the run by F0 claim cx-d782d831; performance_failures=[] is the harness verdict"
       ]
+    },
+    {
+      "id": "fg-1",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-8d25617e)",
+      "state": "active",
+      "files": ["tests/gen1_release_requirements.json", "server/gen1_whiteout.py", "server/gen1_native_reattach_runtime.py"],
+      "next_action": "Human-play product gap census: BUILT/MISSING/BROKEN per playthrough step, ranked top 5 with files + red check.",
+      "reuse_decision": "research only"
+    },
+    {
+      "id": "c1-claim",
+      "owner": "isolated Claude Sonnet worker (read-only; scratch test only)",
+      "state": "active",
+      "files": ["server/gen1_whiteout.py", "server/gen1_faint_runtime.py", "server/state.py", "server/gen1_memorial.py"],
+      "next_action": "Nine-part claim for two-link whiteout collateral force_faint; scratch pytest showing what B receives today.",
+      "reuse_decision": "research only; fix location (shared state.py vs gen1_*) decided by the claim"
+    },
+    {
+      "id": "ft-2",
+      "owner": "OMP live pid 47172 (coding; task cx-3b69de07)",
+      "state": "active",
+      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_prepared_gen1.py"],
+      "next_action": "Optional fastest_text key on handle_create_gen1 (requires native): gen1_upr_pipeline.prepare_pair with build_preset({currentMiscTweaks: 8}), pinned seeds, PreparedCartridges as today; checkbox in manager.html; three unit tests.",
+      "reuse_decision": "Manager (shared lifecycle) owns the option; UPR policy stays in gen1_upr_policy"
     },
     {
       "id": "tk-5",
