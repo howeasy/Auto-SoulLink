@@ -258,7 +258,7 @@ def test_completed_first_outbound_does_not_skip_second_outbound():
         return last
 
     visit(0x28, [(5, 3), (5, 11)])
-    visit(0, [(12, 11), (9, 11), (9, 1), (10, 1), (10, 0)])
+    visit(0, [(12, 11), (9, 11), (9, 2), (10, 2), (10, 0)])
     visit(0x0C, [(10, 35), (10, 31), (8, 31), (8, 24), (12, 24),
                  (12, 22), (9, 22), (9, 14), (14, 14), (14, 4),
                  (11, 4), (11, 0)])
@@ -307,3 +307,39 @@ def test_unknown_menu_kind_idles():
     point.menu_kind, point.ball_count = "mart-item", 1
     with pytest.raises(LuaError, match="cancel changed"):
         step(driver, handshake, status, point, 96)
+
+
+def test_map_edges_keep_driving_until_the_engine_changes_map():
+    # Live parcel attempt 1: pallet_north ended on the edge cell and (9,1) is a tree
+    # (PalletTown.blk[4]=$4F -> overworld.bst[1278]=$3A); the engine only changes map
+    # once the player steps past the edge (home/overworld.asm:622-635), so a table that
+    # ends exactly on y0/y35 idles one step short. follow() advances only on visited
+    # waypoints, so walk each table in order like the real player does.
+    driver, handshake, status, point = model()
+    point.parcel_count, point.got_parcel, point.oak_got_parcel = 0, False, False
+    point.lab_script, point.menu_kind, point.ball_count, point.money = 18, "none", 0, 3000
+    frame = 0
+
+    def walk(map_id, positions):
+        nonlocal frame
+        point.map = map_id
+        last = None
+        for x, y in positions:
+            point.x, point.y = x, y
+            frame += 16
+            last = step(driver, handshake, status, point, frame)
+        return last
+
+    buttons, phase = walk(0, [(12, 11), (9, 11), (9, 2)])
+    assert phase == "pallet_north" and buttons["Right"] and not buttons["Up"]  # never Up into (9,1)
+    buttons, phase = walk(0, [(10, 2), (10, 0)])
+    assert phase == "pallet_north" and buttons["Up"]
+    buttons, phase = walk(0x0C, [(10, 35), (10, 31), (8, 31), (8, 24), (12, 24), (12, 22), (9, 22),
+                                 (9, 14), (14, 14), (14, 4), (11, 4), (11, 0)])
+    assert phase == "route_north" and buttons["Up"]
+    point.parcel_count, point.got_parcel = 1, True
+    buttons, phase = walk(1, [(29, 20), (19, 20), (19, 30), (20, 30), (20, 35)])
+    assert phase == "viridian_south" and buttons["Down"]
+    buttons, phase = walk(0x0C, [(10, 4), (14, 4), (14, 14), (9, 14), (9, 22), (12, 22), (12, 24),
+                                 (8, 24), (8, 31), (10, 31), (10, 35)])
+    assert phase == "route_south" and buttons["Down"]

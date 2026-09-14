@@ -124,7 +124,7 @@ async def rb_starter_rival(owned, *, emulator, base_config, limit=1800):
                     raise RuntimeError(f"{player} R/B route failed: {failure['error']}")
                 try:
                     marker = json.loads((directory / "rb_route_progress.json").read_text())
-                except FileNotFoundError:
+                except (FileNotFoundError, PermissionError, json.JSONDecodeError):  # publisher remove+rename race
                     continue
                 run.outcome.setdefault("route_progress", {})[player] = marker
                 if marker["stage"] == "lab-loss-complete":
@@ -204,7 +204,7 @@ async def rb_parcel_first_ball(owned, *, emulator, base_config, limit=1800):
                     raise RuntimeError(f"{player} R/B route failed: {failure['error']}")
                 try:
                     marker = json.loads((directory / "rb_route_progress.json").read_text())
-                except FileNotFoundError:
+                except (FileNotFoundError, PermissionError, json.JSONDecodeError):  # publisher remove+rename race
                     continue
                 run.outcome.setdefault("route_progress", {})[player] = marker
                 if marker["stage"] == "first-ball-readback":
