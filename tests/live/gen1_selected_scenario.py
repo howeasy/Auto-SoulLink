@@ -158,6 +158,62 @@ def enrollment_ready(components, pending):
             and not any(pending.values()))
 
 
+def resume_ready(components, pending):
+    """A resumed run enrolls on CONTINUE: no New Game bootstrap or initial-save obligation exists."""
+    resume = components.get("gen1-resume", {})
+    return (all(set(components.get(name, {})) == {"a", "b"} for name in
+                ("gen1-native-reattach", "gen1-initial-observations"))
+            and resume.get("pending") == {"a": False, "b": False}
+            and set(resume.get("enrolled", {})) == {"a", "b"}
+            and not any(pending.values()))
+
+
+async def resumed_manager(resume, variants, monkeypatch):
+    """Post a resumed run through the predecessor's Manager registry (mirrors selected_manager)."""
+    from aiohttp import web
+    from aiohttp.test_utils import TestClient, TestServer
+
+    from server import manager
+    from server.gen1_run_config import open_runtime
+    from tests.live.test_gen1_native_selected_fresh import clean_rom
+
+    manager_dir = Path(resume["manager_dir"]).resolve()
+    assert (manager_dir / "registry.json").is_file(), "predecessor Manager registry missing"
+    monkeypatch.setattr(manager, "MANAGER_DIR", str(manager_dir))
+    monkeypatch.setattr(manager, "REGISTRY_PATH", str(manager_dir / "registry.json"))
+    app = web.Application()
+    owner = manager.RunManager("127.0.0.1")
+    app.router.add_post("/api/runs/gen1", owner.handle_create_gen1)
+    app.router.add_get("/api/runs/{run_id}", owner.handle_run)
+    app.router.add_get("/api/runs/{run_id}/launcher/{player}", owner.handle_launcher)
+    client = TestClient(TestServer(app))
+    await client.start_server()
+    try:
+        response = await client.post("/api/runs/gen1", json={
+            "name": "Resumed native pair", "rom_a": str(clean_rom(variants[0])),
+            "rom_b": str(clean_rom(variants[1])), "rules": {}, "start": False, "native": True,
+            "resume_from": resume["run_id"]})
+        body = await response.json()
+        assert response.status == 200 and body["ok"], body
+        run = body["run"]
+        assert run["resume"]["from_run"] == resume["run_id"] and set(run["resume"]["required"]) == {"a", "b"}
+        shown = await client.get(f"/api/runs/{run['run_id']}")
+        assert shown.status == 200 and (await shown.json())["run"]["resume"] == run["resume"]
+        run_directory = manager_dir / run["run_id"]
+        runtime = open_runtime(run_directory)
+        try:
+            assert runtime.native_trade is True and runtime.free_service is True
+            session_id = runtime.journal.run_id
+            component = runtime.state().document()["components"]["gen1-resume"]
+            assert component["from_run"] == resume["run_id"] and component["pending"] == {"a": True, "b": True}
+        finally:
+            runtime.close()
+        return client, run, run_directory, session_id
+    except BaseException:
+        await client.close()
+        raise
+
+
 def observation_sequence(rows, player):
     observed = [row for row in rows if row[0] == player and row[2].get("event") == "observation"]
     assert all(row[3].get("ack") == "ACK" for row in observed), "non-ACKed observation"
@@ -281,11 +337,12 @@ class SelectedRun:
     """Own one selected Manager/CLI/TCP run and its preserved evidence directory."""
 
     enrollment_ready = staticmethod(enrollment_ready)
+    resume_ready = staticmethod(resume_ready)
     observation_sequence = staticmethod(observation_sequence)
 
-    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="15727ec",
+    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="b9658d7",
                  input_mode="human", launch_mode="product-cli", route_mode=None,
-                 requested_speed_percent=300):
+                 requested_speed_percent=300, resume_from=None):
         self.owned = Path(owned).resolve()
         self.variants = tuple(variants)
         assert len(self.variants) == 2 and all(v in {"red", "blue", "yellow"} for v in self.variants)
@@ -306,9 +363,16 @@ class SelectedRun:
         if route_mode not in (None, *ROUTE_MODULES) or route_mode is not None and (
                 launch_mode != "scripted-selected-launcher" or self.variants != ("red", "blue")):
             raise ValueError("R/B route requires the scripted Red/Blue pair")
+        if resume_from is not None and (
+                not isinstance(resume_from, dict) or set(resume_from) != {"run_id", "manager_dir", "saves"}
+                or not str(resume_from["run_id"]).startswith("run_") or set(resume_from["saves"]) != {"a", "b"}
+                or launch_mode != "scripted-selected-launcher" or route_mode is not None):
+            raise ValueError("resume_from needs the predecessor registry id, Manager directory and both "
+                             "players' saves, under the scripted launcher with no route")
         self.input_mode = input_mode
         self.launch_mode = launch_mode
         self.route_mode = route_mode
+        self.resume_from = resume_from
         self.source_cut = source_cut
         self.patch = MonkeyPatch()
         self.client = self.runtime = self.listener = None
@@ -321,6 +385,7 @@ class SelectedRun:
                         "owned": str(self.owned), "source_cut": source_cut,
                         "limit_seconds": limit, "input_mode": input_mode, "launch_mode": launch_mode,
                         "route_mode": route_mode, "requested_speed_percent": requested_speed_percent,
+                        "resume_from": None if resume_from is None else resume_from["run_id"],
                         "human_inputs_only": input_mode == "human"}
 
     async def __aenter__(self):
@@ -362,6 +427,8 @@ class SelectedRun:
             decoders = ["lua/tests/gen1_rb_point_fields.lua"]
             if self.route_mode == "rb-parcel":
                 decoders.append("lua/tests/gen1_rb_mart_signature.lua")
+            if self.route_mode == "rb-save":
+                decoders.append("tests/live/test_gen1_selected_rb_resume.py")
             for name in decoders:  # dofile()d by the bootstrap; not staged by the host.
                 self.outcome["source_files"][name] = sha(ROOT / name)
             for module in ROUTE_MODULES[self.route_mode]:
@@ -379,7 +446,10 @@ class SelectedRun:
         from tests.live.test_gen1_native_selected_fresh import selected_manager
 
         self._preflight()
-        self.client, run, run_dir, session_id = await selected_manager(self.owned, self.variants, self.patch)
+        if self.resume_from is None:
+            self.client, run, run_dir, session_id = await selected_manager(self.owned, self.variants, self.patch)
+        else:
+            self.client, run, run_dir, session_id = await resumed_manager(self.resume_from, self.variants, self.patch)
         self.runtime = open_runtime(run_dir)
         server = SLinkServer(data_dir=str(run_dir), gen1_runtime=self.runtime)
 
@@ -397,8 +467,10 @@ class SelectedRun:
         self.listener = await asyncio.start_server(accepted_client, "127.0.0.1", 0, limit=4 * 1024 * 1024)
         server._tcp_port = self.listener.sockets[0].getsockname()[1]
         records = manager._load_registry()
-        assert len(records) == 1 and records[0]["run_id"] == run["run_id"]
-        records[0]["tcp_port"] = server._tcp_port
+        assert self.resume_from is not None or len(records) == 1
+        record = manager._find_run(records, run["run_id"])
+        assert record is not None
+        record["tcp_port"] = server._tcp_port
         manager._save_registry(records)
         self.outcome["manager"] = {"run_id": run["run_id"], "session_id": session_id,
                                    "tcp_port": server._tcp_port, "run_directory": str(run_dir)}
@@ -422,6 +494,15 @@ class SelectedRun:
             spec = json.loads(manifest.read_text())
             assert spec["run_id"] == session_id and spec["player"] == player
             assert spec["launcher_sha256"] == hashlib.sha256(launcher).hexdigest()
+            if self.resume_from is not None:
+                required = run["resume"]["required"][player]
+                assert spec.get("resume") == {"from_run": run["resume"]["from_run"],
+                                              "required_digest": required["digest"],
+                                              "projection": required["projection"]}, (
+                    "launcher bundle lacks the run's resume contract (manager.handle_launcher must pass "
+                    "resume=run['resume'] to render_launcher and bundle)")
+            else:
+                assert "resume" not in spec
             rom = run_dir / "prepared/final" / player / f"slink_{variant}.gb"
             assert hashlib.sha1(rom.read_bytes()).hexdigest() == spec["rom_sha1"]
             self.downloads[player] = {"manifest": manifest, "rom": rom}
@@ -455,6 +536,8 @@ class SelectedRun:
                     "--root", str(self.owned / "clients")]
             if self.route_mode is not None:
                 argv.extend(("--route", self.route_mode))
+            if self.resume_from is not None:
+                argv.extend(("--resume-save", str(self.resume_from["saves"][player])))
             log = self.owned / f"{player}.log"
             with log.open("wb") as output:
                 process = subprocess.Popen(argv, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT,

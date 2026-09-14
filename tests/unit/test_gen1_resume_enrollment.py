@@ -9,12 +9,17 @@ from pathlib import Path
 import pytest
 
 from server.gen1_faint_runtime import COMPONENT as FAINTS, verify_state as verify_faints
+from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_run_resume import COMPONENT, audit_predecessor
 from server.gen1_runtime_state import Gen1RuntimeState
 from server.gen1_wild_encounter_runtime import _activation
 from server.protocol_journal import JournalError
+from server.state import LinkStatus
+from tests.unit.test_gen1_engine_signal_runtime import deliver
+from tests.unit.test_gen1_faint_runtime import signal_batch
 from tests.unit.test_gen1_initial_observation import admit, observation, send
+from tests.unit.test_gen1_party_codec import make_blob
 from tests.unit.test_gen1_run_resume import entry, predecessor
 from tests.unit.test_gen1_sessions import contract
 
@@ -33,10 +38,27 @@ def continue_witness(runtime, player, *, frame=90):
             "final_sha1": runtime.contract["players"][player]["final_rom_sha1"], **stages}
 
 
-def resumed_payload(runtime, player, *, cart_hex=None):
+def party_field(blobs):
+    """A wPartyDataStart image holding the given 66-byte codec blobs (44 data + 11 OT + 11 nick)."""
+    party = bytearray(404)
+    party[0] = len(blobs)
+    party[1:1 + len(blobs)] = bytes(blob[0] for blob in blobs)
+    party[1 + len(blobs)] = 255
+    for slot, blob in enumerate(blobs):
+        party[8 + 44 * slot:52 + 44 * slot] = blob[:44]
+        party[272 + 11 * slot:283 + 11 * slot] = blob[44:55]
+        party[338 + 11 * slot:349 + 11 * slot] = blob[55:66]
+    return party.hex().upper()
+
+
+def resumed_payload(runtime, player, *, cart_hex=None, party=None):
+    """The inherited living members (the predecessor's cached party blobs) are presented by default."""
     payload = observation(runtime, player)
     if cart_hex is not None:
         payload["source"]["cart_hex"] = cart_hex
+    if party is None:
+        party = [row["blob"] for row in runtime.state().rules.partner_blobs[player]]
+    payload["source"]["fields"]["party"] = party_field(party)
     payload["continue_witness"] = continue_witness(runtime, player)
     return payload
 
@@ -192,3 +214,80 @@ def test_fresh_run_refuses_a_continue_witness_and_keeps_its_guards(tmp_path):
         assert COMPONENT not in runtime.state().document()["components"]
     finally:
         runtime.close()
+
+
+def test_creation_imports_no_identity_contexts_or_events(tmp_path):
+    successor = build_successor(tmp_path)
+    try:
+        document = successor.state().document()
+        identities = document["identities"]
+        assert identities["contexts"] == {"a": None, "b": None} and identities["context_history"] == {"a": [], "b": []}
+        assert identities["members"] == {} and identities["links"] == {} and identities["events"] == {}
+        assert identities["acquisitions"] == {} and identities["ordinal"] == 0
+        resume = document["components"][COMPONENT]
+        assert set(resume["identities"]) == {"a", "b"}
+        for player in ("a", "b"):
+            assert set(resume["identities"][player]) == {"known_keys"}
+            assert "1234:0000:99" in resume["identities"][player]["known_keys"]
+    finally:
+        successor.close()
+
+
+def test_enrollment_refuses_when_an_inherited_living_member_is_absent(successor):
+    owner = admit(successor, "a")
+    before = successor.journal.snapshot()
+    with pytest.raises(JournalError, match="absent from the presented"):
+        send(successor, "a", owner, resumed_payload(successor, "a", party=[]))
+    assert successor.journal.snapshot() == before
+
+
+def test_enrollment_refuses_a_living_key_the_predecessor_never_knew(successor):
+    owner = admit(successor, "a")
+    stranger = make_blob(PartyCodec("red"), dv=0x4321, otid=0x0000)
+    party = [row["blob"] for row in successor.state().rules.partner_blobs["a"]] + [stranger]
+    before = successor.journal.snapshot()
+    with pytest.raises(JournalError, match="predecessor never"):
+        send(successor, "a", owner, resumed_payload(successor, "a", party=party))
+    assert successor.journal.snapshot() == before
+
+
+def test_enrollment_binds_inherited_members_and_links_to_the_new_contexts(tmp_path):
+    successor = build_successor(tmp_path)
+    try:
+        owner_a = admit(successor, "a")
+        send(successor, "a", owner_a, resumed_payload(successor, "a"))
+        identities = successor.state().identities.document()
+        assert len(identities["members"]) == 1 and identities["links"] == {}
+        member = next(iter(identities["members"].values()))
+        assert member["current"] == {"player": "a", "save_ref": member["current"]["save_ref"], "key": "1234:0000:99"}
+        owner_b = admit(successor, "b")
+        send(successor, "b", owner_b, resumed_payload(successor, "b"))
+        stage = successor.state()
+        identities = stage.identities.document()
+        assert len(identities["members"]) == 2 and len(identities["links"]) == 1
+        link = next(iter(identities["links"].values()))
+        assert set(link["members"]) == set(identities["members"])
+        assert all(identities["contexts"][p] is not None for p in ("a", "b"))
+        # A linked death on the INHERITED pair settles in the resumed run and reaches the partner.
+        value = signal_batch(successor, "a", sequence=1, activate=False)
+        assert deliver(successor, "a", owner_a, value)["ack"] == "ACK"
+        stage = successor.state()
+        assert stage.rules.links[0].status == LinkStatus.DEAD
+        assert [c["cmd"] for c in successor.journal.pending("b")][0] == "force_faint"
+        document = stage.document()
+        Gen1RuntimeState.restore(document, data_dir=successor.data_dir)
+    finally:
+        successor.close()
+
+
+def test_inherited_faint_before_the_partner_enrolls_is_refused(tmp_path):
+    successor = build_successor(tmp_path)
+    try:
+        owner_a = admit(successor, "a")
+        send(successor, "a", owner_a, resumed_payload(successor, "a"))
+        before = successor.journal.snapshot()
+        with pytest.raises(JournalError, match="paired enrollment required before linked faint settlement"):
+            deliver(successor, "a", owner_a, signal_batch(successor, "a", sequence=1, activate=False))
+        assert successor.journal.snapshot() == before
+    finally:
+        successor.close()

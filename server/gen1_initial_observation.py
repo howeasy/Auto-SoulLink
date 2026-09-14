@@ -157,6 +157,7 @@ def record(runtime,player,operation,message):
     from server.gen1_run_resume import (
         COMPONENT as RESUME,
         enrollment_record,
+        inherit_identities,
         save_digest,
         validate_continue_witness,
     )
@@ -187,15 +188,16 @@ def record(runtime,player,operation,message):
     record={'operation_id':operation,'metadata':copy.deepcopy(metadata),'binding':copy.deepcopy(binding),
             'observation':copy.deepcopy(observation),'inventory':result}
     entries[player]=record
-    records=[]
-    if resuming:
-        resumed=enrollment_record(resume,player,record,copy.deepcopy(payload['continue_witness']))
-        resume['pending'][player]=False
-        resume['enrolled'][player]=resumed
-        records.append({'namespace':RESUME,'key':resumed['record_key'],'value':copy.deepcopy(resumed)})
     stage.identities.bind_context(IdentityContext(player,'gen1_rby',SaveIdentity(**metadata['save_identity']),
         digest(metadata['gen1_metadata']['cartridge']),binding['context_generation'],metadata['gen1_metadata']['physical_instance']))
     stage.rules.player_identity[player]=copy.deepcopy(metadata['save_identity'])
+    records=[]
+    if resuming:
+        inherited=inherit_identities(stage,resume,player,record,result,operation)
+        resumed=enrollment_record(resume,player,record,copy.deepcopy(payload['continue_witness']),*inherited)
+        resume['pending'][player]=False
+        resume['enrolled'][player]=resumed
+        records.append({'namespace':RESUME,'key':resumed['record_key'],'value':copy.deepcopy(resumed)})
     document['rules']=stage.rules.document();document['identities']=stage.identities.document()
     blockers=stage.barrier.document()['blockers'];blockers[blocker(runtime.journal.run_id,player)]=REASON
     stage.barrier.set_blockers(blockers)

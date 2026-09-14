@@ -163,6 +163,8 @@ def settle(runtime, stage, document, player, entry):
         if document["active_trade"]:
             raise JournalError("trade owns the party until verified closure")
         partner = "b" if player == "a" else "a"
+        if partner not in initials:  # reachable only after a resume seeded inherited links
+            raise JournalError("paired enrollment required before linked faint settlement")
         members = [
             stage.identities.resolve(context(initials[p], p), getattr(link, p).key)
             for p in ("a", "b")

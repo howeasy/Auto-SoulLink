@@ -47,6 +47,7 @@ class ResumeAudit:
     cartridges: dict | None = None
     required: dict | None = None
     rules: dict | None = None
+    identities: dict | None = None
 
     @property
     def ok(self):
@@ -56,7 +57,27 @@ class ResumeAudit:
         if not self.ok:
             raise JournalError("resume record requires a clean predecessor audit")
         return {"from_run": self.from_run, "required": self.required, "rules": self.rules,
-                "contract_hash": self.contract_hash}
+                "contract_hash": self.contract_hash, "identities": self.identities}
+
+
+def known_keys(document, rules):
+    """Every compatibility key the predecessor ever attributed to each player: logical member history,
+    the rules' link halves / pending captures, and the initial inventory it enrolled with. Contexts,
+    events and member ids are NOT exported; the resumed run mints its own under fresh bindings."""
+    keys = {"a": set(), "b": set()}
+    for member in document["identities"]["members"].values():
+        for row in member["history"]:
+            keys[row["location"]["player"]].add(row["location"]["key"])
+    for player, initial in document["components"].get("gen1-initial-observations", {}).items():
+        keys[player].update(member["key"] for member in initial["inventory"]["members"])
+    for link in rules["core"]["links"]:
+        for player in ("a", "b"):
+            if link[player] is not None:
+                keys[player].add(link[player]["key"])
+    for rows in rules["core"]["pending_captures"].values():
+        for player, mon in rows.items():
+            keys[player].add(mon["key"])
+    return {player: {"known_keys": sorted(values)} for player, values in keys.items()}
 
 
 def _gameplay_bearing(request):
@@ -93,6 +114,13 @@ def audit_predecessor(run_dir, *, registry_entry):
         reasons.append("predecessor has an open trade")
     if rules["core"].get("run_over"):
         reasons.append("predecessor run is over; nothing to resume")
+    # ponytail: mid-pending states HOLD (owner policy). Resuming them would need the settled acquisition
+    # rows (gen1_acquisition_runtime._link_members) and death/memorial records imported too; add that
+    # only if a mid-pending resume is ever actually needed.
+    if rules["core"]["pending_captures"]:
+        reasons.append("resume requires no pending captures")
+    if any(rules["core"]["pending_memorials"].values()):
+        reasons.append("resume requires completed memorials")
     witnesses = document["components"].get(SAVE_WITNESS, {})
     signals = document["components"].get("gen1-engine-signals", {})
     required = {}
@@ -131,7 +159,8 @@ def audit_predecessor(run_dir, *, registry_entry):
     if reasons:
         return ResumeAudit(from_run, tuple(reasons), journal_run_id=stored.run_id, contract_hash=contract_hash)
     return ResumeAudit(from_run, (), journal_run_id=stored.run_id, contract_hash=contract_hash,
-                       cartridges=spec["contract"]["players"], required=required, rules=rules)
+                       cartridges=spec["contract"]["players"], required=required, rules=rules,
+                       identities=known_keys(document, rules))
 
 
 def validate_required(from_run, required):
@@ -147,10 +176,18 @@ def validate_required(from_run, required):
         _identifier(row["operation_id"])
 
 
+def validate_identities(identities):
+    if (not isinstance(identities, dict) or set(identities) != {"a", "b"}
+            or any(not isinstance(row, dict) or set(row) != {"known_keys"} or not isinstance(row["known_keys"], list)
+                   or any(not isinstance(key, str) for key in row["known_keys"]) for row in identities.values())):
+        raise JournalError("resume contract identities must be per-player known keys only")
+
+
 def validate_resume(resume):
     """Shape of the creation-time contract (manager -> create_runtime -> Gen1RuntimeState.initial)."""
-    if not isinstance(resume, dict) or set(resume) != {"from_run", "required", "rules", "contract_hash"}:
-        raise JournalError("resume contract needs from_run, required, rules and contract_hash")
+    if not isinstance(resume, dict) or set(resume) != {"from_run", "required", "rules", "contract_hash", "identities"}:
+        raise JournalError("resume contract needs from_run, required, rules, contract_hash and identities")
+    validate_identities(resume["identities"])
     if not isinstance(resume["contract_hash"], str) or len(resume["contract_hash"]) != 64:
         raise JournalError("resume contract needs the predecessor contract hash")
     validate_required(resume["from_run"], resume["required"])
@@ -161,7 +198,8 @@ def seed(document, resume):
     """At creation: the pending contract and, per activated player, an inherited ball activation."""
     validate_resume(resume)
     document["components"][COMPONENT] = {"from_run": resume["from_run"], "required": resume["required"],
-        "pending": {"a": True, "b": True}, "enrolled": {}, "imported_at": datetime.now(UTC).isoformat()}
+        "identities": resume["identities"], "pending": {"a": True, "b": True}, "enrolled": {},
+        "imported_at": datetime.now(UTC).isoformat()}
     activated = document["rules"]["core"]["pokeballs_obtained"]
     if any(activated.values()):
         faints = document["components"].setdefault("gen1-faint-settlement", {"activations": {}, "deaths": {}})
@@ -182,12 +220,15 @@ def verify_state(stage):
     component = document["components"].get(COMPONENT)
     if component is None:
         return
-    if (not isinstance(component, dict) or set(component) != {"from_run", "required", "pending", "enrolled", "imported_at"}
+    if (not isinstance(component, dict)
+            or set(component) != {"from_run", "required", "identities", "pending", "enrolled", "imported_at"}
             or set(component["pending"]) != {"a", "b"} or any(type(v) is not bool for v in component["pending"].values())
             or not isinstance(component["enrolled"], dict) or set(component["enrolled"]) - {"a", "b"}):
         raise JournalError("invalid resume component")
     validate_required(component["from_run"], component["required"])
+    validate_identities(component["identities"])
     initials = document["components"].get("gen1-initial-observations", {})
+    members = document["identities"]["members"]
     for player in ("a", "b"):
         enrolled = component["enrolled"].get(player)
         if component["pending"][player] == (enrolled is not None):
@@ -196,8 +237,14 @@ def verify_state(stage):
             continue
         initial = initials.get(player)
         if not isinstance(enrolled, dict) or initial is None or enrolled != enrollment_record(
-                component, player, initial, enrolled.get("continue_witness")):
+                component, player, initial, enrolled.get("continue_witness"), enrolled.get("members"), enrolled.get("links")):
             raise JournalError("resume enrollment record differs from its initial observation")
+        if not isinstance(enrolled["members"], dict) or any(
+                members.get(member_id, {}).get("current", {}).get("key") != key
+                or members[member_id]["current"]["player"] != player for key, member_id in enrolled["members"].items()):
+            raise JournalError("inherited members lost their logical identities")
+        if not isinstance(enrolled["links"], list) or any(link not in document["identities"]["links"] for link in enrolled["links"]):
+            raise JournalError("inherited links lost their logical identities")
         if save_digest(initial["observation"]["source"]["cart_hex"]) != component["required"][player]["digest"]:
             raise JournalError("resumed enrollment lost its witnessed save projection")
         metadata = initial["metadata"]
@@ -217,10 +264,54 @@ def inherited(component, player):
             "operation_id": row["operation_id"]}
 
 
-def enrollment_record(component, player, initial, witness):
+def enrollment_record(component, player, initial, witness, members, links):
     return {"player": player, "from_run": component["from_run"], "digest": component["required"][player]["digest"],
             "witness_index": component["required"][player]["witness_index"], "binding": initial["binding"],
-            "continue_witness": witness, "record_key": digest({"resume": player, "operation": initial["operation_id"]})[:32]}
+            "continue_witness": witness, "members": members, "links": links,
+            "record_key": digest({"resume": player, "operation": initial["operation_id"]})[:32]}
+
+
+def inherit_identities(stage, component, player, initial, inventory, operation):
+    """Bind the predecessor's living members for this player to the fresh physical context.
+
+    Living = ALIVE link halves, pending captures and pending memorials in the imported rules. Every
+    one must be in the presented party/box; every presented key must be one the predecessor knew.
+    Members are minted anew via the registry's ordinary acquire() under the new context (no
+    predecessor ids, contexts or events are copied); identity links for ALIVE pairs form once both
+    players are bound. Returns ({key: member_id}, [link_id]).
+    """
+    from server.gen1_starter_settlement import context
+    from server.identity_registry import IdentityWitness
+    from server.state import LinkStatus
+    rules = stage.rules
+    presented = {member["key"]: member["evidence_digest"] for member in inventory["members"]}
+    living = set(rules.pending_memorials[player])
+    living.update(rows[player].key for rows in rules.pending_captures.values() if player in rows)
+    living.update(getattr(link, player).key for link in rules.links
+                  if link.status == LinkStatus.ALIVE and getattr(link, player) is not None)
+    for key in sorted(living - set(presented)):
+        raise JournalError(f"inherited living member {key} is absent from the presented party/box")
+    for key in sorted(set(presented) - set(component["identities"][player]["known_keys"])):
+        raise JournalError(f"presented save carries key {key} the predecessor never knew")
+    own = context(initial, player)
+    members = {}
+    for key in sorted(living):
+        event = digest({"resume_member": key, "player": player, "operation": operation})[:32]
+        members[key] = stage.identities.acquire(event, event, IdentityWitness(own, key, presented[key], 1))["member_id"]
+    links = []
+    partner = "b" if player == "a" else "a"
+    peer_initial = stage.document()["components"].get("gen1-initial-observations", {}).get(partner)
+    if peer_initial is not None:
+        contexts = {player: own, partner: context(peer_initial, partner)}
+        for link in rules.links:
+            if link.status != LinkStatus.ALIVE or link.a is None or link.b is None:
+                continue
+            ids = [stage.identities.resolve(contexts[p], getattr(link, p).key) for p in ("a", "b")]
+            if None in ids:
+                raise JournalError(f"inherited link {link.area_id} lacks a bound logical member")
+            event = digest({"resume_link": link.area_id, "operation": operation})[:32]
+            links.append(stage.identities.create_link(player, event, ids)["link_id"])
+    return members, links
 
 
 def validate_continue_witness(witness, *, variant, context_generation, physical_instance, final_sha1, frame):

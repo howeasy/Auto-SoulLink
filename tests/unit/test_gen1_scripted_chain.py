@@ -33,6 +33,7 @@ SYMBOLS = {
     "wCurItem": 0xCF91, "wItemQuantity": 0xCF96, "wChosenMenuItem": 0xD12D,
     "wMenuExitMethod": 0xD12E, "wListScrollOffset": 0xCC36,
     "wMenuWatchMovingOutOfBounds": 0xCC37, "wFontLoaded": 0xCFC4,
+    "wSaveFileStatus": 0xD088, "wTileMap": 0xC3A0,
 }
 STUB_MODULE = """
 local NAME=%r
@@ -68,6 +69,7 @@ STATUS={observation_loop=true,
         context={context_generation=GEN,physical_instance=PHYS},
         runtime={connected=true,session_state="admitted",failed=false}}
 SLINK_RUNTIME_STATUS=function() return STATUS end
+client={saveram=function() LOG[#LOG+1]={kind="saveram",frame=framecount} end}
 """
 LAUNCHER = """
 for _=1,LAUNCH_FRAMES do
@@ -78,7 +80,7 @@ end
 
 
 class Harness:
-    def __init__(self, tmp_path, mode, chain, variant="red", frames=8):
+    def __init__(self, tmp_path, mode, chain, variant="red", frames=8, flush_saveram=False):
         root = tmp_path / "root"
         for name in ROOT_FILES:
             (root / name).parent.mkdir(parents=True, exist_ok=True)
@@ -89,7 +91,7 @@ class Harness:
             (root / ".cache/pret" / source / f"{target}.sym").write_text(sym)
         self.staged = tmp_path / "staged"
         self.staged.mkdir()
-        for name in ("rb", "parcel"):
+        for name in ("rb", "parcel", "save"):
             (self.staged / f"{name}.lua").write_text(STUB_MODULE % name)
         (self.staged / "launcher.lua").write_text(LAUNCHER)
         self.expected = {"run_id": "r" * 32, "player": "a", "rom_sha1": "a" * 40,
@@ -104,8 +106,11 @@ class Harness:
                       "route": {"mode": mode, "module": str(self.staged / "rb.lua"),
                                 "handshake": str(self.staged / "go.json"),
                                 "progress": str(self.staged / "route_progress.json"),
-                                "chain": [{"module": str(self.staged / "parcel.lua"), **entry}
+                                "chain": [{"module": str(self.staged / (entry.get("stub", "parcel") + ".lua")),
+                                           **{k: v for k, v in entry.items() if k != "stub"}}
                                           for entry in chain]}}
+        if flush_saveram:
+            self.input["route"]["flush_saveram"] = True
         (self.staged / "input.json").write_text(json.dumps(self.input))
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         g = self.lua.globals()
@@ -136,6 +141,7 @@ class Harness:
 
 
 PARCEL_CHAIN = [{"after": "lab-loss-complete", "terminal": "first-ball-readback"}]
+SAVE_CHAIN = [{"after": "lab-loss-complete", "terminal": "save-witnessed", "stub": "save"}]
 
 
 def test_chain_handoff_same_snapshot_once(tmp_path):
@@ -199,15 +205,49 @@ def test_yellow_route_refused(tmp_path):
     assert not any(e["kind"] == "new" for e in h.log())
 
 
+def test_save_chain_takes_terminal_from_entry_and_flushes_saveram_once(tmp_path):
+    h = Harness(tmp_path, "rb-save", SAVE_CHAIN, frames=6, flush_saveram=True)
+    calls = {"rb": 0, "save": 0}
+
+    def phase(name, frame):
+        calls[name] += 1
+        if name == "rb":
+            return "lab-loss-complete" if calls["rb"] >= 2 else "walking"
+        return "save-witnessed" if calls["save"] >= 3 else "save-open-start-menu"
+
+    h.lua.globals().PHASE = phase
+    log = h.run()
+    assert [e["module"] for e in log if e["kind"] == "new"] == ["rb", "save"]
+    progress = h.route_progress()
+    assert progress["stage"] == "save-witnessed" and progress["saveram_flushed"] is True
+    assert [entry["stage"] for entry in progress["chain_handoffs"]] == ["lab-loss-complete"]
+    # The flush happens exactly once, on the terminal frame, before the wrapper unhooks.
+    flushes = [e for e in log if e["kind"] == "saveram"]
+    steps = [e for e in log if e["kind"] == "step" and e["module"] == "save"]
+    assert len(flushes) == 1 and flushes[0]["frame"] == steps[-1]["frame"]
+    assert [e["wrapped"] for e in log if e["kind"] == "launch"] == [True] * 4 + [False] * 2
+
+
+def test_parcel_chain_never_flushes_saveram(tmp_path):
+    h = Harness(tmp_path, "rb-parcel", PARCEL_CHAIN, frames=6)
+    h.lua.globals().PHASE = lambda name, frame: "lab-loss-complete" if name == "rb" else "first-ball-readback"
+    log = h.run()
+    assert not any(e["kind"] == "saveram" for e in log)
+    assert "saveram_flushed" not in h.route_progress()
+
+
 @pytest.mark.parametrize("mode,chain", [
     ("rb-parcel", []),
     ("rb-starter-rival", PARCEL_CHAIN),
     ("rb-parcel", [{"after": "walking", "terminal": "first-ball-readback"}]),
     ("rb-parcel", PARCEL_CHAIN * 2),
+    ("rb-save", PARCEL_CHAIN),
+    ("rb-save", []),
+    ("rb-bogus", SAVE_CHAIN),
 ])
 def test_malformed_chain_refused(tmp_path, mode, chain):
     h = Harness(tmp_path, mode, chain, frames=2)
-    with pytest.raises(LuaError, match="assertion failed"):
+    with pytest.raises(LuaError, match="assertion failed|unknown scripted route mode"):
         h.run()
     assert not any(e["kind"] == "new" for e in h.log())
 

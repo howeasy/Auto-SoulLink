@@ -17,10 +17,14 @@ ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = ROOT / "lua/tests/gen1_scripted_new_game.lua"
 RB_ROUTE = ROOT / "lua/tests/gen1_rb_ball_gate_inputs.lua"
 PARCEL_ROUTE = ROOT / "lua/tests/gen1_rb_parcel_inputs.lua"
+SAVE_ROUTE = ROOT / "lua/tests/gen1_rb_save_inputs.lua"
 # Each mode's chain of Lua route modules, staged and hashed in order. The
 # scripted bootstrap (a separate card's file) hands off from one module to
 # the next; this host only stages them and records the handoff contract.
-ROUTE_MODULES = {"rb-starter-rival": (RB_ROUTE,), "rb-parcel": (RB_ROUTE, PARCEL_ROUTE)}
+ROUTE_MODULES = {"rb-starter-rival": (RB_ROUTE,), "rb-parcel": (RB_ROUTE, PARCEL_ROUTE),
+                 "rb-save": (RB_ROUTE, SAVE_ROUTE)}
+# Handoff after the first module's terminal; the last entry's terminal ends the chain.
+CHAIN_TERMINALS = {"rb-parcel": "first-ball-readback", "rb-save": "save-witnessed"}
 
 
 def sha(path):
@@ -28,14 +32,16 @@ def sha(path):
 
 
 def prepare_scripted_plan(root, spec, *, rom, launcher, base_config, bootstrap=BOOTSTRAP,
-                          route_mode=None):
+                          route_mode=None, resume_save=None):
     """Preserve product preflight and stage only test Lua beside checked launcher."""
     validate_manifest(spec)
+    if (resume_save is None) != (spec.get("resume") is None):
+        raise ValueError("a resume manifest and its resume save travel together")
     root = Path(root).resolve()
     bootstrap = Path(bootstrap).resolve()
     if bootstrap != BOOTSTRAP.resolve():
         raise ValueError("the checked test-only bootstrap source is required")
-    plan = prepare(root, spec, rom=rom, launcher=launcher, base_config=base_config)
+    plan = prepare(root, spec, rom=rom, launcher=launcher, base_config=base_config, resume_save=resume_save)
     match = re.fullmatch(r"slink_(red|blue|yellow)\.gb", Path(rom).name)
     if match is None:
         raise ValueError("scripted selected companion filename required")
@@ -70,15 +76,17 @@ def prepare_scripted_plan(root, spec, *, rom, launcher, base_config, bootstrap=B
                   "progress": str(staged / "scripted_progress.json"),
                   "failure": str(staged / "scripted_failure.json"),
                   "max_boot_frames": 20000, "deadline_seconds": 1800}
+    if spec.get("resume") is not None:
+        input_data["resume"] = spec["resume"]  # the bootstrap boots CONTINUE-safe, never New Game
     if route_mode is not None:
-        chain = []
-        if route_mode == "rb-parcel":
-            chain = [{"module": str(route_destinations[1]), "after": "lab-loss-complete",
-                     "terminal": "first-ball-readback"}]
+        chain = [{"module": str(module), "after": "lab-loss-complete", "terminal": CHAIN_TERMINALS[route_mode]}
+                 for module in route_destinations[1:]]
         input_data["route"] = {"mode": route_mode, "module": str(route_destinations[0]),
                                "handshake": str(staged / "rb_route_go.json"),
                                "progress": str(staged / "rb_route_progress.json"),
                                "chain": chain}
+        if route_mode == "rb-save":
+            input_data["route"]["flush_saveram"] = True  # persist the witnessed save like a normal close
     if input_path.exists() and json.loads(input_path.read_text()) != input_data:
         raise ValueError("existing scripted input differs")
     input_path.write_text(json.dumps(input_data, indent=2) + "\n")
@@ -128,6 +136,7 @@ def main(argv=None):
     for name in ("manifest", "rom", "emuhawk", "base-config", "root"):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--route", choices=tuple(ROUTE_MODULES))
+    parser.add_argument("--resume-save", type=Path, help="the predecessor's .SaveRAM (resumed runs only)")
     args = parser.parse_args(argv)
     spec = json.loads(args.manifest.read_text())
     validate_manifest(spec)
@@ -138,7 +147,8 @@ def main(argv=None):
     home.mkdir(parents=True, exist_ok=True)
     with RuntimeLease(home / ".process.lock"):
         plan = prepare_scripted_plan(root, spec, rom=args.rom, launcher=args.manifest.with_name("launcher.lua"),
-                                     base_config=args.base_config, route_mode=args.route)
+                                     base_config=args.base_config, route_mode=args.route,
+                                     resume_save=args.resume_save)
         receipt = {
             "launch_mode": "scripted-selected-launcher", "arguments": plan["arguments"],
             "checked_launcher_sha256": plan["checked_launcher_sha256"],
@@ -150,6 +160,8 @@ def main(argv=None):
             receipt["route_mode"] = args.route
             receipt["rb_route_sha256"] = plan["rb_route_sha256"]
             receipt["route_module_sha256"] = plan["route_module_sha256"]
+        if "resume_save" in plan:
+            receipt["resume_save"] = plan["resume_save"]
         (Path(plan["cwd"]) / "scripted_plan.json").write_text(json.dumps(receipt, indent=2) + "\n")
         return launch(plan, args.emuhawk).wait()
 

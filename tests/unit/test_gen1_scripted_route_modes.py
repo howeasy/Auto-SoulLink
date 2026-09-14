@@ -143,3 +143,87 @@ def test_verify_parcel_checkpoint_refuses_missing_activation():
     markers = {"a": _parcel_marker(), "b": _parcel_marker()}
     with pytest.raises(AssertionError):
         verify_parcel_checkpoint(document, markers)
+
+
+SAVE_MODULE = ROOT / "lua/tests/gen1_rb_save_inputs.lua"
+
+
+def test_route_rb_save_chains_the_save_driver_after_the_lab_loss(tmp_path):
+    root, spec, rom, launcher, base_config = _inputs(tmp_path)
+    plan = prepare_scripted_plan(root, spec, rom=rom, launcher=launcher, base_config=base_config,
+                                  route_mode="rb-save")
+    staged = Path(plan["cwd"])
+    route = json.loads((staged / "scripted_input.json").read_text())["route"]
+    assert route["mode"] == "rb-save" and route["module"] == str(staged / RB_MODULE.name)
+    assert route["chain"] == [{"module": str(staged / SAVE_MODULE.name),
+                               "after": "lab-loss-complete", "terminal": "save-witnessed"}]
+    assert route["flush_saveram"] is True
+    assert (staged / SAVE_MODULE.name).read_bytes() == SAVE_MODULE.read_bytes()
+    assert not (staged / PARCEL_MODULE.name).exists()
+    assert set(plan["route_module_sha256"]) == {RB_MODULE.name, SAVE_MODULE.name}
+    assert "resume" not in json.loads((staged / "scripted_input.json").read_text())
+
+
+def _resume_inputs(tmp_path):
+    root, spec, rom, launcher, base_config = _inputs(tmp_path)
+    save = bytearray(0x8000)
+    save[0x498:0x4A0] = b"SAVEDATA"
+    from server.bizhawk_launch import projection_digest
+    projection = "cartram-0498-8000-v1"
+    spec["resume"] = {"from_run": "run_pred", "projection": projection,
+                      "required_digest": projection_digest(bytes(save), projection)}
+    resume_save = tmp_path / "Pokemon Red.SaveRAM"
+    resume_save.write_bytes(bytes(save))
+    return root, spec, rom, launcher, base_config, resume_save
+
+
+def test_resume_save_is_imported_and_the_contract_reaches_the_bootstrap(tmp_path):
+    root, spec, rom, launcher, base_config, resume_save = _resume_inputs(tmp_path)
+    plan = prepare_scripted_plan(root, spec, rom=rom, launcher=launcher, base_config=base_config,
+                                  resume_save=resume_save)
+    assert plan["resume_save"]["projection_digest"] == spec["resume"]["required_digest"]
+    assert (Path(plan["save_directory"]) / resume_save.name).read_bytes() == resume_save.read_bytes()
+    scripted = json.loads((Path(plan["cwd"]) / "scripted_input.json").read_text())
+    assert scripted["resume"] == spec["resume"] and "route" not in scripted
+
+
+def test_tampered_required_digest_is_refused_before_launch(tmp_path):
+    root, spec, rom, launcher, base_config, resume_save = _resume_inputs(tmp_path)
+    spec["resume"]["required_digest"] = "0" * 64
+    with pytest.raises(ValueError, match="differs from the required predecessor witness"):
+        prepare_scripted_plan(root, spec, rom=rom, launcher=launcher, base_config=base_config,
+                              resume_save=resume_save)
+    assert not (root / spec["run_id"] / spec["player"] / "SaveRAM").exists()
+
+
+def test_resume_manifest_and_resume_save_must_travel_together(tmp_path):
+    root, spec, rom, launcher, base_config, resume_save = _resume_inputs(tmp_path)
+    with pytest.raises(ValueError, match="resume"):
+        prepare_scripted_plan(root, spec, rom=rom, launcher=launcher, base_config=base_config)
+    del spec["resume"]
+    with pytest.raises(ValueError, match="resume"):
+        prepare_scripted_plan(root, spec, rom=rom, launcher=launcher, base_config=base_config,
+                              resume_save=resume_save)
+
+
+RESUME = {"run_id": "run_20260914_000000_abc123", "manager_dir": "manager",
+          "saves": {"a": "a.SaveRAM", "b": "b.SaveRAM"}}
+
+
+def test_selected_run_accepts_resume_from_for_the_scripted_pair_only(tmp_path):
+    run = SelectedRun(tmp_path / "rb", ("red", "blue"), emulator=tmp_path / "emu",
+                      base_config=tmp_path / "cfg", limit=60, input_mode="scripted-normal-buttons",
+                      launch_mode="scripted-selected-launcher", resume_from=RESUME)
+    assert run.resume_from == RESUME and run.outcome["resume_from"] == RESUME["run_id"]
+    with pytest.raises(ValueError, match="resume"):
+        SelectedRun(tmp_path / "rb2", ("red", "blue"), emulator=tmp_path / "emu",
+                    base_config=tmp_path / "cfg", limit=60, input_mode="human",
+                    launch_mode="product-cli", resume_from=RESUME)
+    with pytest.raises(ValueError, match="resume"):
+        SelectedRun(tmp_path / "rb3", ("red", "blue"), emulator=tmp_path / "emu",
+                    base_config=tmp_path / "cfg", limit=60, input_mode="scripted-normal-buttons",
+                    launch_mode="scripted-selected-launcher", route_mode="rb-save", resume_from=RESUME)
+    with pytest.raises(ValueError, match="resume"):
+        SelectedRun(tmp_path / "rb4", ("red", "blue"), emulator=tmp_path / "emu",
+                    base_config=tmp_path / "cfg", limit=60, input_mode="scripted-normal-buttons",
+                    launch_mode="scripted-selected-launcher", resume_from={"run_id": "run_x"})

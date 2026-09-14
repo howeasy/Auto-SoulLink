@@ -25,9 +25,9 @@ def entry(run_id="run_20260913_000000_abcdef", status="stopped", **more):
             "pid": None, "cartridges": contract("red", "blue")["players"], "native_trade": False, **more}
 
 
-def predecessor(directory, *, witnesses=("a", "b"), faint=False, after=False, trailing=False, digests=DIGEST):
+def predecessor(directory, *, witnesses=("a", "b"), faint=False, after=False, trailing=False, digests=DIGEST, rule_options=None):
     """A paired starter link, both balls obtained, then each player's START-menu save witness."""
-    runtime = create_runtime(directory, contract("red", "blue"))
+    runtime = create_runtime(directory, contract("red", "blue"), rule_options=rule_options)
     try:
         owners = paired(runtime)
         sequence = {"a": 2, "b": 2}
@@ -72,7 +72,13 @@ def test_clean_predecessor_exports_typed_rules_and_both_witnesses(tmp_path):
     assert audit.rules["core"]["pokeballs_obtained"] == {"a": True, "b": True}
     assert audit.rules["runtime"]["queued_commands"] == {"a": [], "b": []}
     resume = audit.resume_record()
-    assert set(resume) == {"from_run", "required", "rules", "contract_hash"} and resume["rules"] == audit.rules
+    assert set(resume) == {"from_run", "required", "rules", "contract_hash", "identities"} and resume["rules"] == audit.rules
+    # Identities export = per-player known keys only; no contexts, events, members or ids cross runs.
+    assert set(resume["identities"]) == {"a", "b"}
+    for player in ("a", "b"):
+        assert set(resume["identities"][player]) == {"known_keys"}
+        assert resume["identities"][player]["known_keys"] == ["1234:0000:99"]
+    assert "contexts" not in json.dumps(resume["identities"]) and "events" not in json.dumps(resume["identities"])
 
 
 def test_missing_witness_for_either_player_refuses(tmp_path):
@@ -144,3 +150,15 @@ def test_client_style_digest_matches_server_projection():
     client = hashlib.sha256(cart_hex[0x498 * 2:].encode("ascii")).hexdigest()  # lua: sha256(cart_hex:sub(0x498*2+1))
     assert gen1_run_resume.save_digest(cart_hex) == client
     assert gen1_run_resume.save_digest(cart_hex) != hashlib.sha256(bytes.fromhex(cart_hex)[0x498:]).hexdigest()
+
+
+def test_pending_capture_or_memorial_holds_the_resume(tmp_path):
+    # Species clause on two Bulbasaur starters: A's half stays a pending capture and B's rejected
+    # starter is a pending memorial, with nothing left in the command queues (acked but unmoved).
+    document, _ = predecessor(tmp_path, rule_options={"species_lock": True})
+    core = document["rules"]["core"]
+    assert core["pending_captures"]["oaks_lab"].keys() == {"a"} and core["pending_memorials"]["b"]
+    audit = audit_predecessor(tmp_path, registry_entry=entry())
+    assert not audit.ok
+    assert "resume requires no pending captures" in audit.reasons
+    assert "resume requires completed memorials" in audit.reasons

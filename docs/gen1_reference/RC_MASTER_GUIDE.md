@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T04:07:29+00:00",
+  "updated_at_utc": "2026-09-14T04:47:26+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "c701e15",
+  "source_head": "b9658d7",
   "live_lane": null,
-  "next_action": "P2A-2 integrated. Next: P2A-3 identity-registry import (linked death on inherited pairs), then one Codex review of the whole resume diff, then the live resume check.",
+  "next_action": "P2A-4 suite pending. Then P2A-5 (server worker): Manager handle_launcher passes resume into render_launcher/bundle; _service_release_ready accepts the resume enrollment instead of new-game bootstrap/initial-save for resumed players; client flushes SaveRAM after save_witness. Then integrate all, re-pin source_cut, Codex review, live round-trip.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -498,6 +498,49 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator checks only so far; Codex headless REVIEW scheduled after P2A-3 on the combined resume diff"
       ]
+    },
+    {
+      "id": "p2a-3-4",
+      "owner": "integrated by coordinator (isolated Claude workers authored)",
+      "state": "done",
+      "files": [
+        "server/gen1_faint_runtime.py",
+        "server/gen1_initial_observation.py",
+        "server/gen1_run_config.py",
+        "server/gen1_run_resume.py",
+        "server/gen1_runtime_state.py",
+        "server/identity_registry.py",
+        "tests/unit/test_gen1_faint_runtime.py",
+        "tests/unit/test_gen1_resume_enrollment.py",
+        "tests/unit/test_gen1_run_resume.py"
+      ],
+      "next_action": "None; integrated MODEL ONLY (8006/0 full suite). P2A-5 closes the three launcher/service gaps before the live round-trip.",
+      "reuse_decision": "shared identity/lifecycle in server modules",
+      "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, test_gen1_faint_runtime.py, test_gen1_rb_save_inputs.py, test_gen1_scripted_chain.py, test_gen1_scripted_route_modes.py",
+      "independent_review_refs": [
+        "coordinator checks; Codex headless REVIEW of the whole resume diff scheduled after P2A-5"
+      ]
+    },
+    {
+      "id": "rs-1-resume-harness",
+      "owner": "integrated by coordinator (isolated Claude workers authored)",
+      "state": "done",
+      "files": [
+        "lua/tests/gen1_rb_save_inputs.lua",
+        "lua/tests/gen1_scripted_new_game.lua",
+        "tests/live/gen1_scripted_host.py",
+        "tests/live/gen1_selected_scenario.py",
+        "tests/live/test_gen1_selected_rb_resume.py",
+        "tests/unit/test_gen1_rb_save_inputs.py",
+        "tests/unit/test_gen1_scripted_route_modes.py",
+        "tests/unit/test_gen1_scripted_chain.py"
+      ],
+      "next_action": "None; integrated MODEL ONLY (8006/0 full suite). P2A-5 closes the three launcher/service gaps before the live round-trip.",
+      "reuse_decision": "shared scripted-host plumbing; the save driver and CONTINUE geometry are Gen 1 route facts",
+      "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, test_gen1_faint_runtime.py, test_gen1_rb_save_inputs.py, test_gen1_scripted_chain.py, test_gen1_scripted_route_modes.py",
+      "independent_review_refs": [
+        "coordinator checks; Codex headless REVIEW of the whole resume diff scheduled after P2A-5"
+      ]
     }
   ]
 }
@@ -521,6 +564,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| RS-1 integrated (live resume harness) | `rb-save` chained driver from the lab overworld (START menu at Y2/X11, `wMaxMenuItem` 6 without Pokédex, SAVE = cursor index 3 per `home/start_menu.asm:60-74`; YES at the `$14` two-option box Y8/X1 index 0; terminal when `wSaveFileStatus==2` and `wFontLoaded` bit 0 clear), generic chain terminals in the bootstrap, `SelectedRun(resume_from=, resume_save=)` posting through the predecessor's Manager registry (registry id, `manager.py:786-788`), CONTINUE-safe boot inputs (asserts `wMaxMenuItem==2 && wSaveFileStatus==2 && index 0`, never Down), `rb_resume_roundtrip` live callable (status `rb-resume-checkpoint-observed`: both `gen1-resume.enrolled`, `oaks_lab` link ALIVE with the same species, `pokeballs_obtained` preserved, no death commands). Harness flushes SaveRAM via `client.saveram()` at the save terminal because EmuHawk is terminated, not closed. `source_cut` re-pinned `15727ec → b9658d7` (P2A-2 changed pinned product files). **Product gaps found (P2A-5):** (1) `manager.py:742-748 handle_launcher` never passes `resume` to `render_launcher`/`bundle`; (2) `gen1_runtime.py:235-247 _service_release_ready` requires `gen1-new-game-bootstrap` + `gen1-initial-save` that a resumed run never produces, so free service never releases; (3) nothing persists the witnessed save to `.SaveRAM` before an abrupt close. |
+| P2A-3/4 integrated (identity import + refusals) | Audit exports `identities = {a:{known_keys}, b:{known_keys}}` only (no contexts/events/member ids); inside the resume enrollment transition, living keys (ALIVE link halves, pending captures, pending memorials) are reconciled against the presented party/box (refusals: inherited living member absent; presented key the predecessor never knew) and minted as fresh members under the NEW context via the registry's ordinary `acquire`; identity links recreated once both are enrolled. Red: an inherited-pair faint that previously refused (`faint rule pair differs from logical identity linkage`) now settles and queues the partner's `force_faint`. 7983/0 full suite. P2A-4 closes the residuals by refusal: no resume with pending captures/memorials; faint before partner enrollment guarded. |
 | **P2A-2 integrated (resume at the run boundary)** | Server: `server/gen1_run_resume.py` audits a closed predecessor read-only (`read_journal`; refusals: missing witness, projection mismatch, pending commands, active trade, newer gameplay after the witness = HOLD, predecessor running, cartridge/contract mismatch, run over) and exports the typed rules via `StagedGen1State.restore(...).document()`; Manager `POST /api/runs/gen1` accepts `resume_from` (404 unknown / 409 with reasons), seeds the new runtime with the imported rules + `components["gen1-resume"]`, records `resume` in the registry, new `GET /api/runs/{id}`; `gen1_initial_observation.record()` requires, under a pending contract, the presented `cart_hex` projection digest (sha256 of the UPPERCASE HEX text of `[0x0498:0x8000]`, identical to the client formula) and a structurally valid `continue_witness`, lifts the established-history guard only for that player, journals the enrollment; inherited ball activation is a typed lineage fact effective from the player's initial observation frame (no forged signal). Client/launcher: `runtime_launcher.player_resume` → `launch.json.resume {from_run, required_digest, projection}`; `bizhawk_launch.prepare(resume_save=)` verifies the projection digest BEFORE copying the player's `.SaveRAM` into the new run's private directory with the ownership manifest (`tools/launch_bizhawk.py --resume-save`); the client builds the CONTINUE observer instead of the New Game bootstrap in resume mode, verifies the loaded save's digest at the `loaded` witness, and publishes `payload.continue_witness`. 50 new tests; full unit suite 7979/0. **Known gap (P2A-3):** the identity registry is not imported, so a linked death on an *inherited* pair would refuse settlement (`faint rule pair differs from logical identity linkage`); wild encounters, dead zones, clauses and the ball gate work from the imported rules. Dashboard affordance deferred. MODEL ONLY until the live resume check. |
 | P2A-2 seams (resume at the run boundary) | Gen1-CodexPeer record. **Why it is the top feature:** today a run can only be played in one sitting — every relaunch is refused, so a full playthrough is impossible without it. Seams: Manager `resume_from` joins the strict key check before staging (`manager.py:763-776`); predecessor inspected read-only via `journal_reader.read_journal` (`:26-62`, never `open_runtime`); rules import via typed `SoulLinkState.from_document` / staged restore (`state.py:783-847`, `staged_state.py:74-145`), carrying links/area states/pending captures/mon stats/`pokeballs_obtained`/player identity/memorial (`rules.memorial.retired_pairs`) and NOT admissions, bindings, engine counters, cursors, commands, trades, observations, leases. **Blockers to design around:** `initial_observation.record` refuses any established history (`:155-161`) → needs a resume-specific transition; the earliest byte-level gate is right after `validate()` at `:163` (`sha256(bytes.fromhex(cart_hex)[0x498:0x8000])` vs the required witness digest); a matched digest must be paired with a witnessed **CONTINUE** (compose `gen1_continue_observer.lua`; the client currently builds the New Game bootstrap observer, `gen1_client_entry.lua:118`); inherited ball activation must be a typed lineage fact consumed by `gen1_wild_encounter_runtime.py:100-117` / `gen1_faint_runtime.py:132-155` (never a forged signal or frame 0); SaveRAM lives under `root/<journal-run-id>/<player>/SaveRAM` with an ownership manifest (`bizhawk_launch.py:73-104`) → an ownership chain or a verified copy; witness/rules alignment: refuse when a player's last committed observation revision exceeds its witness revision (owner policy: saved-but-unwitnessed → HOLD); "unchanged bundle" = reviewed source/dependency + cartridge identity, not ZIP equality. Proposed files: new `server/gen1_run_resume.py`, `manager.py`, `gen1_run_config.py`, `gen1_initial_observation.py`, `gen1_runtime_state.py`, `gen1_runtime.py`, `gen1_faint_runtime.py`, `gen1_wild_encounter_runtime.py`, `bizhawk_launch.py`, `tools/launch_bizhawk.py`, `lua/gen1_client_entry.lua`, new resume observer; unit/integration/live tests; dashboard affordance deferred (API + CLI first). Falsifiers: `resume_from` rejected today; imported core rejected by initial enrollment; prepare refuses a nonempty unowned SaveRAM. |
 | **Parcel attempt 6 — D2 PASS (CONTROLLED-SCRIPTED)** | `rb-parcel-checkpoint-observed` at `c701e15`: one chained process per player from New Game to the first bought POKé BALL with the server's ball-gate activation recorded for BOTH players (committed engine records), starter link alive, no deaths, clean cleanup. Receipts summary `3bd2aff9…dd55`, console `a4164c08…cbcf`; full record in the [D1 physical report](reviews/D1-RB-physical-successor.md). Closes D2 for the `false` text axis; catches (D3), the tweaked text axis (FT-2) and later rows remain open. |
