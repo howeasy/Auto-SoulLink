@@ -19,6 +19,24 @@ local W = { EXPLOSION = 0x99, CANNOT_MOVE = 0xFF }
 
 local function be16(v) return math.floor(v / 256) % 256, v % 256 end
 
+-- Guard for W-2 (pure; caller passes the reads). Returns ok, reason.
+--   battle: {in_battle, type, link_state, player_mon_number, battle_species, transformed}
+--   party_mon: the decoded party entry the server named (species = internal index)
+function W.active_faint_guard(battle, slot, party_mon)
+    if battle.in_battle ~= 1 and battle.in_battle ~= 2 then return false, "not in a battle" end
+    if battle.type ~= 0 then return false, "special battle type (old man / safari)" end
+    if battle.link_state == 4 then return false, "link battle" end
+    if battle.player_mon_number ~= slot then return false, "target is not the active battler" end
+    -- Transform rewrites wBattleMonSpecies to the foe's species; the party slot is still ours.
+    if not battle.transformed and battle.battle_species ~= party_mon.species then
+        return false, "battle struct species differs from the party slot"
+    end
+    return true
+end
+
+-- Helper for callers building a 16-bit big-endian pair.
+function W.u16be(v) return { be16(v) } end
+
 function W.new(profile, io)
     local ram, d = assert(profile.ram), assert(profile.derived)
     local self = { armed = nil, log = {} }
@@ -57,21 +75,6 @@ function W.new(profile, io)
         self:faint_party_slot(slot)
     end
 
-    -- Guard for W-2 (pure; caller passes the reads). Returns ok, reason.
-    --   battle: {in_battle, type, link_state, player_mon_number, battle_species, transformed}
-    --   party_mon: the decoded party entry the server named (species = internal index)
-    function W.active_faint_guard(battle, slot, party_mon)
-        if battle.in_battle ~= 1 and battle.in_battle ~= 2 then return false, "not in a battle" end
-        if battle.type ~= 0 then return false, "special battle type (old man / safari)" end
-        if battle.link_state == 4 then return false, "link battle" end
-        if battle.player_mon_number ~= slot then return false, "target is not the active battler" end
-        -- Transform rewrites wBattleMonSpecies to the foe's species; the party slot is still ours.
-        if not battle.transformed and battle.battle_species ~= party_mon.species then
-            return false, "battle struct species differs from the party slot"
-        end
-        return true
-    end
-
     -- W-3: Explode Mode — all four move slots become EXPLOSION with PP 1 (battle struct AND
     -- party mirror), so the engine offers nothing else. Slot-0-only was escapable (RC).
     function self:explode_active_battler(slot)
@@ -107,9 +110,7 @@ function W.new(profile, io)
         end
     end
 
-    -- Helper for callers building a 16-bit big-endian pair.
-    function W.u16be(v) return { be16(v) } end
-
+    self.active_faint_guard = W.active_faint_guard
     return self
 end
 

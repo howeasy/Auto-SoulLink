@@ -106,7 +106,11 @@ S.KINDS.battle_end = {
 -- Acquisition and storage. The mon is not in place yet when these fire (they are entries), so
 -- the client treats each as "a legitimate party/box change follows" and diffs once after.
 local function acquisition_point(io, ram)
+    -- wMonDataLocation: low nybble 0 = the player's party, else the ENEMY party being built
+    -- by ReadTrainer; $80 = the NPC in-game trade's incoming mon (add_mon.asm:6-10,
+    -- in_game_trades.asm:146-148). Only the first is an acquisition.
     return { in_battle = io.read_u8(ram.wIsInBattle, "System Bus"),
+             mon_location = io.read_u8(ram.wMonDataLocation, "System Bus"),
              species = io.read_u8(ram.wCurPartySpecies, "System Bus"),
              level = io.read_u8(ram.wCurEnemyLevel, "System Bus"),
              map = io.read_u8(ram.wCurMap, "System Bus"),
