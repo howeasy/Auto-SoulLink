@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:49:06+00:00",
+  "updated_at_utc": "2026-09-14T08:53:20+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "661b8ff",
+  "source_head": "ad6583a",
   "live_lane": null,
-  "next_action": "Feature build-out. FT-2 committed as candidate 661b8ff (Codex review cx-415ec52b in flight; fix-ups follow as commits). Active: UI-2 (OMP, manager.html Create form -> /api/runs/gen1), C1 (Sonnet, whiteout collateral), R5a (Sonnet, shared paired-checkpoint envelope, new files only). Queued: C3 after C1; R5b Gen 1/Manager seam after R5a + UI-2; N3 mid-trade crash claim (Codex) next.",
+  "next_action": "Feature build-out. Candidates on gen1/rc: FT-2 661b8ff (REJECTED by review cx-415ec52b; fix-ups FT-2b on OMP + FT-3 on Sonnet), UI-2 3050f0a and R5a ad6583a (review cx-fbbd022a in flight). Active: C1 (Sonnet), FT-3 (Sonnet), FT-2b (OMP). Queued: C3 after C1; R5b after R5a review + FT-2b; N3 mid-trade crash claim (Codex) when idle.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -916,24 +916,48 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "Manager (shared lifecycle) owns the option; UPR policy stays in gen1_upr_policy",
       "receipt": "commit 661b8ff; tests/unit/test_manager_prepared_gen1.py 17 passed + manager subset 59 passed",
       "independent_review_refs": [
-        "Codex REVIEW cx-415ec52b (diff e66206a..661b8ff) in flight; verdict and fix-ups recorded in the FT-2 result row when it lands"
+        "Codex REVIEW cx-415ec52b (diff e66206a..661b8ff): REJECT — P1 content_profile_hash carries the absolute UPR output path (identical FT recipes cannot resume) -> FT-3; Resume checkbox is an invalid mode switch and does not inherit predecessor.fastest_text -> FT-2b; PreparedCartridges blocks the event loop -> FT-2b; failed staging leaves an unregistered run dir -> FT-2b; positive tests stub the contract boundary (OPEN)"
       ]
     },
     {
-      "id": "ui-2",
-      "owner": "OMP live pid 47172 (coding; task cx-42319e7e)",
+      "id": "ft-2b",
+      "owner": "OMP live pid 47172 (coding; task cx-15e0c209)",
       "state": "active",
+      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_prepared_gen1.py", "tests/unit/test_manager_resume_ui.py", "tests/unit/test_manager_gen1_create_ui.py (one assertion)"],
+      "next_action": "Remove the Resume fastest_text control and inherit predecessor.fastest_text; refuse a changed setting before staging; to_thread PreparedCartridges; cleanup through create_runtime; move the Create error <p> outside the disclosure; tests that do not stub the refused path.",
+      "reuse_decision": "Manager shared lifecycle; no game facts"
+    },
+    {
+      "id": "ft-3",
+      "owner": "isolated Claude Sonnet worker (tdd bug fix)",
+      "state": "active",
+      "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
+      "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
+      "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged"
+    },
+    {
+      "id": "ui-2",
+      "owner": "integrated by coordinator as candidate 3050f0a (OMP authored, task cx-42319e7e)",
+      "state": "done",
       "files": ["server/templates/manager.html", "tests/unit/test_manager_gen1_create_ui.py", "tests/unit/test_manager_prepared_gen1.py"],
       "next_action": "Create form: optional Gen 1 cartridge paths + fastest_text; both filled -> POST /api/runs/gen1 with the six allowed rules + native_sounds:false, native:true, start:true; XOR refusal; four structural tests + one handler test.",
-      "reuse_decision": "Manager template (shared presentation); Gen 1 rule allowlist facts from gen1_run_config"
+      "reuse_decision": "Manager template (shared presentation); Gen 1 rule allowlist facts from gen1_run_config",
+      "receipt": "commit 3050f0a; 64 passed across the five Manager test files",
+      "independent_review_refs": [
+        "Codex REVIEW cx-fbbd022a (ccf8cb3..ad6583a, commit A) in flight; coordinator read of the template diff found the hidden-error <p> (queued in FT-2b)"
+      ]
     },
     {
       "id": "r5a",
-      "owner": "isolated Claude Sonnet worker (implementation; new files only)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate ad6583a (isolated Sonnet worker authored)",
+      "state": "done",
       "files": ["server/paired_save_checkpoints.py", "tests/unit/test_paired_save_checkpoints.py", "docs/gen1_reference/reviews/R5a-paired-checkpoints.md"],
       "next_action": "PairedCheckpointStore: capture (both saves + rules + identity, manifest last, CURRENT pointer atomic), load with hash re-validation, history; refusals per the R5 claim.",
-      "reuse_decision": "shared lifecycle module (game-neutral; save_size parameter); Gen 1 witness/Manager seam deferred to R5b"
+      "reuse_decision": "shared lifecycle module (game-neutral; save_size parameter); Gen 1 witness/Manager seam deferred to R5b",
+      "receipt": "commit ad6583a; tests/unit/test_paired_save_checkpoints.py 15 passed; module sha256 fb56b072…fb9c; docs/gen1_reference/reviews/R5a-paired-checkpoints.md",
+      "independent_review_refs": [
+        "Codex REVIEW cx-fbbd022a (ccf8cb3..ad6583a, commit B) in flight"
+      ]
     },
     {
       "id": "tk-5",
