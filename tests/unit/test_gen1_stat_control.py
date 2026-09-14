@@ -33,6 +33,8 @@ _FIXTURES = os.path.join(_REPO, "tests", "fixtures", "gen1")
 _SAVES = ("red_town", "blue_town", "yellow_town", "red_battle", "blue_battle", "yellow_battle")
 _ROM_FILES = {"red": "gen1_red.gb", "blue": "gen1_blue.gb", "yellow": "gen1_yellow.gbc"}
 STATS = ("max_hp", "atk", "def", "spd", "spc")
+# Not yet regenerated from scripted play (F-6): the Yellow saves are still the old tool's bytes.
+LEGACY_FIXTURES = {"yellow_town", "yellow_battle"}
 _base_stats_cache: dict[str, dict] = {}
 
 
@@ -73,9 +75,6 @@ def _entry(name: str, mon: dict) -> tuple[int, dict]:
 def test_party_stats_recompute_from_the_cartridge(name):
     """Stats must match field-for-field; the level byte is pinned as observed (see module)."""
     party = _party(name)
-    # Observed, not assumed: all six committed saves carry exactly one mon -- the starter
-    # Squirtle (dex 7) at level 5 with exp 0. A fixture that changes must be re-read here
-    # rather than silently skipped, so the count and the record are both pinned.
     assert len(party) == 1, f"{name}: {len(party)} party mons, expected the single starter"
 
     for mon in party:
@@ -84,18 +83,20 @@ def test_party_stats_recompute_from_the_cartridge(name):
         got = codec.recompute_stats(mon, entry)
         assert got == stored, (
             f"{name} dex {dex} level {mon['level']}: recomputed {got} != stored {stored}")
-
-        # The level leg. exp 0 is what these saves hold; 1 is what pret's own loop returns
-        # for it, so the oracle is not the thing that is wrong here.
-        assert (mon["level"], mon["exp"]) == (5, 0), (
-            f"{name} dex {dex}: (level, exp) = ({mon['level']}, {mon['exp']}), expected (5, 0)")
-        assert codec.level_from_exp(entry["growth_rate"], mon["exp"]) == 1, (
-            f"{name} dex {dex}: exp 0 did not resolve to level 1")
-        # And the oracle still tracks the level the record claims, given the exp the game
-        # itself would have stored for it (add_mon.asm:202-207).
-        assert codec.level_from_exp(
-            entry["growth_rate"], codec.exp_for_level(entry["growth_rate"], mon["level"])
-        ) == mon["level"], f"{name} dex {dex}: the level oracle is not a clean inverse"
+        if name in LEGACY_FIXTURES:
+            # Written byte-by-byte by the old tool: level 5 with exp 0, which the engine would
+            # call level 1. Pinned, not skipped, until tools/gen1_fixtures.py replaces them
+            # (Yellow needs its own route: its intro is not the R/B lab route).
+            assert (mon["level"], mon["exp"]) == (5, 0), (
+                f"{name}: legacy fixture changed; drop it from LEGACY_FIXTURES")
+        else:
+            # A real save (tools/gen1_fixtures.py, scripted play): the level byte is what the
+            # engine derives from exp on this curve (engine/pokemon/experience.asm) and exp is
+            # exactly what add_mon.asm:202-207 stored for a fresh starter of that level.
+            assert codec.level_from_exp(entry["growth_rate"], mon["exp"]) == mon["level"], (
+                f"{name} dex {dex}: exp {mon['exp']} is not level {mon['level']} on curve {entry['growth_rate']}")
+            assert mon["exp"] == codec.exp_for_level(entry["growth_rate"], mon["level"]), (
+                f"{name} dex {dex}: a fresh starter carries exactly exp_for_level")
 
 
 @pytest.mark.parametrize("name", _SAVES)

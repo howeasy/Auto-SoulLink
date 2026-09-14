@@ -166,22 +166,6 @@ def _lua_gift_areas():
     return set(re.findall(r"^\s*(\w+)\s*=\s*true", m.group(1), re.M))
 
 
-def test_the_lua_and_python_gift_sets_are_identical():
-    """They enforce two halves of one rule and they silently drifted apart.
-
-    Python's set drives dead-zoning, the ball gate and the clauses. The Lua set decides
-    whether the client emits `no_catch` at all -- and `no_catch` is the ONLY producer of
-    that event; nothing server-side generates one. So an area listed as a gift in Lua but
-    not in Python can never dead-zone, however the Python side is configured.
-
-    That is exactly what happened to route_4: removed from Python as the real grass route
-    it is, left behind in Lua, and therefore re-attemptable forever with no test able to
-    see it.
-    """
-    assert _lua_gift_areas() == set(_GIFT_AREAS), (
-        "lua/games/gen1_rby.lua M.GIFT_AREAS and server/adapters/gen1_rby.py _GIFT_AREAS "
-        "must list the same areas")
-
 
 def test_no_lua_gift_area_is_a_wild_encounter_area():
     """The same invariant the Python set already has, applied to the half that

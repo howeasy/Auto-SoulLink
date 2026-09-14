@@ -9,7 +9,9 @@ import re
 
 import pytest
 
-from server.adapters import get_adapter
+from server.adapters import gen1_codec as codec, get_adapter
+
+PIKACHU = codec.natdex_to_internal(25)  # the wire carries INTERNAL species indices
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,14 +30,14 @@ def test_sprite_html_carries_the_shared_class(a):
     against it, the fainted/dead greyscale rules match on it, and dashboard.js
     selects `img.mon-sprite, img.enc-sprite` for the chroma-key pass.
     """
-    html = a.sprite_html(25)
+    html = a.sprite_html(PIKACHU)
     assert 'class="mon-sprite"' in html
     assert 'data-species="25"' in html
 
 
 def test_the_encounter_icon_swap_is_no_longer_a_noop(a):
     """server.py:1659 does exactly this replace to get a 20px icon."""
-    swapped = a.sprite_html(25).replace('class="mon-sprite"', 'class="enc-sprite"')
+    swapped = a.sprite_html(PIKACHU).replace('class="mon-sprite"', 'class="enc-sprite"')
     assert 'class="enc-sprite"' in swapped, (
         "the enc-sprite swap silently did nothing, so encounter icons rendered at 40px "
         "in a list sized for 20")
@@ -51,8 +53,8 @@ def test_sprite_src_is_period_correct(a):
     Inheriting the base default served modern artwork here while sprite_html served
     8-bit Red/Blue sprites -- on the same stream layout.
     """
-    assert "generation-i/red-blue" in a.sprite_src(25)
-    assert "generation-i/red-blue" in a.sprite_html(25)
+    assert "generation-i/red-blue" in a.sprite_src(PIKACHU)
+    assert "generation-i/red-blue" in a.sprite_html(PIKACHU)
     assert a.sprite_src(0) == ""
 
 

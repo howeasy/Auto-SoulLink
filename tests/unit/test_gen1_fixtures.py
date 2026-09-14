@@ -25,7 +25,7 @@ _FIXTURES = os.path.join(_REPO, "tests", "fixtures", "gen1")
 CUR_MAP = 0x2000 + 0x598 + 11 + 0x67       # = 0x260A
 CUR_Y, CUR_X = CUR_MAP + 3, CUR_MAP + 4    # wYCoord / wXCoord follow wCurMap
 
-ROUTE_1, PALLET_TOWN = 0x0C, 0x00
+ROUTE_1, PALLET_TOWN, OAKS_LAB = 0x0C, 0x00, 0x28
 
 
 def _save(rom: str, kind: str) -> bytes:
@@ -59,8 +59,10 @@ def test_every_town_fixture_is_on_encounter_free_ground(rom):
     """Pallet Town has no wild table, which is what makes it safe for the gates that
     walk: an encounter mid-walk would end the proof rather than fail it."""
     save = _save(rom, "town")
-    assert save[CUR_MAP] == PALLET_TOWN, \
-        f"{rom} town fixture is on map 0x{save[CUR_MAP]:02X}, not Pallet Town (0x00)"
+    # Pallet Town (the old tool's parking tile) or Oak's Lab (where the scripted New Game
+    # route saves after the rival battle): neither has a wild table.
+    assert save[CUR_MAP] in (PALLET_TOWN, OAKS_LAB), \
+        f"{rom} town fixture is on map 0x{save[CUR_MAP]:02X}, not encounter-free ground"
 
 
 def test_the_offset_is_not_reading_a_constant():

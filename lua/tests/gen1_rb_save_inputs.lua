@@ -45,7 +45,8 @@ function M.new(expected)
             and type(point.text_box)=="number" and type(point.menu_y)=="number" and type(point.menu_x)=="number"
             and type(point.menu_max)=="number" and type(point.menu_index)=="number",
             "complete read-only save point required")
-        assert(point.map==0x28 and point.battle==0,"save route left the lab overworld")
+        -- Any overworld map: the chain saves wherever the previous route ended (lab, Mart, ...).
+        assert(point.battle==0,"save route is inside a battle")
         if not point.font_loaded then
             if self.confirmed then  -- buffer-2 restore briefly shows the START menu between the two closes
                 return idle(),point.start_menu_save_index>=0 and "save-await-close" or "save-witnessed"
@@ -66,7 +67,13 @@ function M.new(expected)
             self.confirmed=true
             return tap("A",frame),"save-confirm"
         end
-        if not self.confirmed then return idle(),"save-menu-wait" end
+        if not self.confirmed then
+            -- A foreign menu is open (the Mart purchase UI the parcel route ends inside; a text
+            -- box). Close it with B on the 16-frame cadence until the START menu can be opened.
+            self.closing_foreign=(self.closing_foreign or 0)+1
+            assert(self.closing_foreign<=1800,"foreign menu did not close before the save")
+            return tap("B",frame),"save-close-foreign-menu"
+        end
         self.closing=self.closing+1  -- "Now saving..." (120 frames) + GAME SAVED + two CloseTextDisplay
         assert(self.closing<=1800,"START menu did not close after the save")
         return idle(),"save-await-close"

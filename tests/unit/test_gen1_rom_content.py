@@ -21,7 +21,7 @@ import os
 
 import pytest
 
-from server.adapters import get_adapter
+from server.adapters import gen1_codec as codec, get_adapter
 from server.adapters.gen1_rom_scan import (
     RomScanError,
     build_encounter_tables,
@@ -131,7 +131,8 @@ def _tables_from_rom(title: str) -> dict:
         {"wild": scan_wild(rom), "fishing": scan_fishing(rom)},
         {int(k): v["area_id"] for k, v in area_map.items()},
         {int(k): v for k, v in species["index_to_national"].items()},
-        adapter.species_name)
+        # the scanner builds NATIONAL-dex tables; the adapter names INTERNAL indices
+        lambda dex: adapter.species_name(codec.natdex_to_internal(dex)))
 
 
 def _shipped(title: str) -> dict:

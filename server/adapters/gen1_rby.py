@@ -1,614 +1,473 @@
-"""
-server/adapters/gen1_rby.py — Game adapter for Gen 1 (Red, Blue, Yellow).
+"""Gen 1 Red/Blue/Yellow adapter over pret-derived tables and the raw-byte codec.
 
-Gen 1 has no gender, no abilities, no shinies, and uses a unique mon key format
-based on DVs, OT ID, and internal species index.
+Wire species are *internal* indices throughout, including indices below 152.
+The constants below are derived from pinned pret/pokered 405b624 (Yellow's
+shared dex order, stat layout, and evolution data agree at pokeyellow 0a08515).
+The contract test reads pret directly and checks every shipped table entry.
 """
+
+from __future__ import annotations
 
 import json
-import logging
-import os
 import re
+from pathlib import Path
 
-from server.data.items.gen1 import ITEM_NAMES as _ITEM_NAMES
-from server.pokemon_data import species_name as _species_name
+from server.data.items.gen1 import ITEM_NAMES
+from server.pokemon_data import species_name as national_species_name
 
-from .base import GameAdapter, gb_status_token, load_area_names_from_obj_map
+from . import gen1_codec
+from .base import GameAdapter, gb_status_token
 
-log = logging.getLogger(__name__)
+_DATA = Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_rby"
 
-# Areas where a Pokémon is HANDED to you by a script rather than caught.
-#
-# `route_4` used to be in here, and it was the single worst defect in the Gen 1
-# sweep: Route 4 is a real wild-grass route, so listing it as a gift area made
-# `_handle_area_enter` return early (it could never dead-zone), made
-# `_check_link_violation` be skipped entirely (all three clauses off), and stopped
-# the Pokéball gate ever arming. Route 4 was an unlimited free-catch zone.
-#
-# The Magikarp salesman is not on Route 4 at all — pret puts him on
-# MT_MOON_POKECENTER, map 68 (`scripts/MtMoonPokecenter.asm:47`, `lb bc, MAGIKARP, 5`),
-# which was simply missing from area_map.json. Every grant on an unmapped map fell
-# through to the literal area "gift", so the Magikarp and the Celadon Eevee
-# (CELADON_MANSION_ROOF_HOUSE, map 132) shared one bucket and PAIRED WITH EACH
-# OTHER. Both maps are now in area_map.json with their own ids.
-_GIFT_AREAS = frozenset({
-    "pallet_town",
-    "oaks_lab",
-    "celadon_city",
-    "saffron_city",
-    "silph_co",
-    "cinnabar_island",
-    "mt_moon_pokecenter",     # Magikarp salesman
-    "celadon_mansion_roof",   # Eevee
-    "celadon_game_corner",
-    "gift",
-})
 
-# Gift areas where the script hands over ONE predetermined species, so both
-# players necessarily receive the same thing and the clauses have nothing to
-# compare. Player-CHOICE gifts (the Oak's Lab starters, the Cinnabar fossils, the
-# Fighting Dojo pair) are deliberately absent — there the two players can pick
-# differently and the clauses must still apply.
-#
-# NOTE the coupling: `gift_link_area` only leaves an area id alone when it is
-# already a gift area, otherwise it namespaces it to `gift_<area>` — and
-# `is_fixed_species_gift` is checked AFTER that rewrite. So every member here
-# must also be in _GIFT_AREAS or the exemption silently stops firing.
-# `test_gen1_gift_areas.py` pins that.
-_FIXED_SPECIES_GIFTS = frozenset({
-    "mt_moon_pokecenter",  # Magikarp from the salesman, always level 5
-    "silph_co",            # Lapras on 7F
-})
+def _json(name: str) -> dict:
+    with (_DATA / name).open(encoding="utf-8") as stream:
+        return json.load(stream)
 
-# Gen 1 type IDs → names
-_TYPE_IDS = {
+
+_AREAS = _json("area_map.json")
+_AREA_BY_MAP = {int(map_id): row["area_id"] for map_id, row in _AREAS.items()}
+_AREA_NAMES: dict[str, str] = {}
+for _row in _AREAS.values():
+    _AREA_NAMES.setdefault(_row["area_id"], _row["name"])
+_INDEX_JSON = {int(key): int(value)
+               for key, value in _json("species_index.json")["index_to_national"].items()}
+_FAMILY = {int(key): int(value) for key, value in _json("evolutions.json")["family"].items()}
+_ENCOUNTERS = _json("encounter_tables.json")
+_MOVES = {int(row["id"]): row for row in _json("moves.json")["moves"]}
+_TRAINERS = _json("trainers.json")
+
+# constants/type_constants.asm:5-26, data/types/names.asm:1-29.
+_TYPE_NAMES = {
     0x00: "Normal", 0x01: "Fighting", 0x02: "Flying", 0x03: "Poison",
-    0x04: "Ground", 0x05: "Rock", 0x07: "Bug", 0x08: "Ghost",
+    0x04: "Ground", 0x05: "Rock", 0x06: "Bird", 0x07: "Bug", 0x08: "Ghost",
     0x14: "Fire", 0x15: "Water", 0x16: "Grass", 0x17: "Electric",
     0x18: "Psychic", 0x19: "Ice", 0x1A: "Dragon",
 }
-_TYPE_NAME_TO_ID = {v: k for k, v in _TYPE_IDS.items()}
+_TYPE_ID = {name: ident for ident, name in _TYPE_NAMES.items()}
+_SPLIT = {"Physical": 0, "Special": 1, "Status": 2}
 
-# Move split → integer ID expected by renderer (0=Physical, 1=Special, 2=Status)
-_SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
-
-# ── Load Gen 1 moves data (Phase 3) ─────────────────────────────────────
-_GEN1_DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen1_rby",
+# This tuple was generated from all 151 pret/data/pokemon/base_stats/*.asm
+# `db DEX_*` and `db TYPE1, TYPE2 ; type` lines, using the IDs in
+# constants/type_constants.asm:5-26. The independent test parses those source
+# files and checks every tuple; there is no ROM dependency at server runtime.
+_NATIONAL_TYPES = (
+    (0x16, 0x03),  # data/pokemon/base_stats/bulbasaur.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/ivysaur.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/venusaur.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/charmander.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/charmeleon.asm:5
+    (0x14, 0x02),  # data/pokemon/base_stats/charizard.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/squirtle.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/wartortle.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/blastoise.asm:5
+    (0x07, 0x07),  # data/pokemon/base_stats/caterpie.asm:5
+    (0x07, 0x07),  # data/pokemon/base_stats/metapod.asm:5
+    (0x07, 0x02),  # data/pokemon/base_stats/butterfree.asm:5
+    (0x07, 0x03),  # data/pokemon/base_stats/weedle.asm:5
+    (0x07, 0x03),  # data/pokemon/base_stats/kakuna.asm:5
+    (0x07, 0x03),  # data/pokemon/base_stats/beedrill.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/pidgey.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/pidgeotto.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/pidgeot.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/rattata.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/raticate.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/spearow.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/fearow.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/ekans.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/arbok.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/pikachu.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/raichu.asm:5
+    (0x04, 0x04),  # data/pokemon/base_stats/sandshrew.asm:5
+    (0x04, 0x04),  # data/pokemon/base_stats/sandslash.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/nidoranf.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/nidorina.asm:5
+    (0x03, 0x04),  # data/pokemon/base_stats/nidoqueen.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/nidoranm.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/nidorino.asm:5
+    (0x03, 0x04),  # data/pokemon/base_stats/nidoking.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/clefairy.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/clefable.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/vulpix.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/ninetales.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/jigglypuff.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/wigglytuff.asm:5
+    (0x03, 0x02),  # data/pokemon/base_stats/zubat.asm:5
+    (0x03, 0x02),  # data/pokemon/base_stats/golbat.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/oddish.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/gloom.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/vileplume.asm:5
+    (0x07, 0x16),  # data/pokemon/base_stats/paras.asm:5
+    (0x07, 0x16),  # data/pokemon/base_stats/parasect.asm:5
+    (0x07, 0x03),  # data/pokemon/base_stats/venonat.asm:5
+    (0x07, 0x03),  # data/pokemon/base_stats/venomoth.asm:5
+    (0x04, 0x04),  # data/pokemon/base_stats/diglett.asm:5
+    (0x04, 0x04),  # data/pokemon/base_stats/dugtrio.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/meowth.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/persian.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/psyduck.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/golduck.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/mankey.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/primeape.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/growlithe.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/arcanine.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/poliwag.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/poliwhirl.asm:5
+    (0x15, 0x01),  # data/pokemon/base_stats/poliwrath.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/abra.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/kadabra.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/alakazam.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/machop.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/machoke.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/machamp.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/bellsprout.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/weepinbell.asm:5
+    (0x16, 0x03),  # data/pokemon/base_stats/victreebel.asm:5
+    (0x15, 0x03),  # data/pokemon/base_stats/tentacool.asm:5
+    (0x15, 0x03),  # data/pokemon/base_stats/tentacruel.asm:5
+    (0x05, 0x04),  # data/pokemon/base_stats/geodude.asm:5
+    (0x05, 0x04),  # data/pokemon/base_stats/graveler.asm:5
+    (0x05, 0x04),  # data/pokemon/base_stats/golem.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/ponyta.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/rapidash.asm:5
+    (0x15, 0x18),  # data/pokemon/base_stats/slowpoke.asm:5
+    (0x15, 0x18),  # data/pokemon/base_stats/slowbro.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/magnemite.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/magneton.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/farfetchd.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/doduo.asm:5
+    (0x00, 0x02),  # data/pokemon/base_stats/dodrio.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/seel.asm:5
+    (0x15, 0x19),  # data/pokemon/base_stats/dewgong.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/grimer.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/muk.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/shellder.asm:5
+    (0x15, 0x19),  # data/pokemon/base_stats/cloyster.asm:5
+    (0x08, 0x03),  # data/pokemon/base_stats/gastly.asm:5
+    (0x08, 0x03),  # data/pokemon/base_stats/haunter.asm:5
+    (0x08, 0x03),  # data/pokemon/base_stats/gengar.asm:5
+    (0x05, 0x04),  # data/pokemon/base_stats/onix.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/drowzee.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/hypno.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/krabby.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/kingler.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/voltorb.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/electrode.asm:5
+    (0x16, 0x18),  # data/pokemon/base_stats/exeggcute.asm:5
+    (0x16, 0x18),  # data/pokemon/base_stats/exeggutor.asm:5
+    (0x04, 0x04),  # data/pokemon/base_stats/cubone.asm:5
+    (0x04, 0x04),  # data/pokemon/base_stats/marowak.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/hitmonlee.asm:5
+    (0x01, 0x01),  # data/pokemon/base_stats/hitmonchan.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/lickitung.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/koffing.asm:5
+    (0x03, 0x03),  # data/pokemon/base_stats/weezing.asm:5
+    (0x04, 0x05),  # data/pokemon/base_stats/rhyhorn.asm:5
+    (0x04, 0x05),  # data/pokemon/base_stats/rhydon.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/chansey.asm:5
+    (0x16, 0x16),  # data/pokemon/base_stats/tangela.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/kangaskhan.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/horsea.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/seadra.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/goldeen.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/seaking.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/staryu.asm:5
+    (0x15, 0x18),  # data/pokemon/base_stats/starmie.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/mrmime.asm:5
+    (0x07, 0x02),  # data/pokemon/base_stats/scyther.asm:5
+    (0x19, 0x18),  # data/pokemon/base_stats/jynx.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/electabuzz.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/magmar.asm:5
+    (0x07, 0x07),  # data/pokemon/base_stats/pinsir.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/tauros.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/magikarp.asm:5
+    (0x15, 0x02),  # data/pokemon/base_stats/gyarados.asm:5
+    (0x15, 0x19),  # data/pokemon/base_stats/lapras.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/ditto.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/eevee.asm:5
+    (0x15, 0x15),  # data/pokemon/base_stats/vaporeon.asm:5
+    (0x17, 0x17),  # data/pokemon/base_stats/jolteon.asm:5
+    (0x14, 0x14),  # data/pokemon/base_stats/flareon.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/porygon.asm:5
+    (0x05, 0x15),  # data/pokemon/base_stats/omanyte.asm:5
+    (0x05, 0x15),  # data/pokemon/base_stats/omastar.asm:5
+    (0x05, 0x15),  # data/pokemon/base_stats/kabuto.asm:5
+    (0x05, 0x15),  # data/pokemon/base_stats/kabutops.asm:5
+    (0x05, 0x02),  # data/pokemon/base_stats/aerodactyl.asm:5
+    (0x00, 0x00),  # data/pokemon/base_stats/snorlax.asm:5
+    (0x19, 0x02),  # data/pokemon/base_stats/articuno.asm:5
+    (0x17, 0x02),  # data/pokemon/base_stats/zapdos.asm:5
+    (0x14, 0x02),  # data/pokemon/base_stats/moltres.asm:5
+    (0x1a, 0x1a),  # data/pokemon/base_stats/dratini.asm:5
+    (0x1a, 0x1a),  # data/pokemon/base_stats/dragonair.asm:5
+    (0x1a, 0x02),  # data/pokemon/base_stats/dragonite.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/mewtwo.asm:5
+    (0x18, 0x18),  # data/pokemon/base_stats/mew.asm:5
 )
-_GEN1_MOVES: dict[int, dict] = {}
-_moves_path = os.path.join(_GEN1_DATA_DIR, "moves.json")
-if os.path.exists(_moves_path):
-    with open(_moves_path) as _f:
-        for _entry in json.load(_f).get("moves", []):
-            _GEN1_MOVES[int(_entry["id"])] = _entry
-else:
-    log.warning("Gen 1 moves.json not found: %s", _moves_path)
 
-# ── Load the Gen 1 evolution families ──────────────────────────────────
-# NatDex → family representative (the lowest NatDex in the line), generated from
-# pret/pokered by tools/gen_gen1_evos.py.
-#
-# This exists because the shared `pokemon_data.base_form()` is the CFRU/Gen 3+
-# table: it maps BOTH Hitmonlee (106) and Hitmonchan (107) to 236 (Tyrogue), a
-# species Gen 1 has no concept of — `evos_moves.asm:683,694` give both an empty
-# evolution list. The Fighting Dojo lets you take exactly one, so the canonical
-# Soul Link split was rejected by the species clause and a live mon was
-# force-fainted and buried.
-#
-# Clamping base_form() to 1..151 would NOT have been a fix: 236:[106,107] is the
-# only merge of unrelated species, while 172:[25,26], 173:[35,36] and
-# 174:[39,40] are real families remapped to a Gen 2 baby form — clamping splits
-# Pikachu/Raichu, Clefairy/Clefable and Jigglypuff/Wigglytuff.
-_GEN1_FAMILY: dict[int, int] = {}
-_evos_path = os.path.join(_GEN1_DATA_DIR, "evolutions.json")
-if os.path.exists(_evos_path):
-    with open(_evos_path) as _f:
-        for _k, _v in json.load(_f).get("family", {}).items():
-            _GEN1_FAMILY[int(_k)] = int(_v)
-else:
-    log.warning("Gen 1 evolutions.json not found: %s — evo_family will be identity "
-                "and the species clause will only reject exact duplicates", _evos_path)
+# Every in-script nonbattle grant in pret/scripts/*.asm: `GivePokemon` occurs
+# in the six files below; OaksLab.asm:931 calls AddPartyMon for the starter.
+# Prize Menu calls GivePokemon at engine/events/prize_menu.asm:225 in map $89.
+# Map IDs and area IDs: constants/map_constants.asm:41,107,171,219,251,256;
+# data/games/gen1_rby/area_map.json is tested against those constants.
+_GIFT_AREAS = frozenset({
+    "oaks_lab",                 # scripts/OaksLab.asm:931; map_constants.asm:82
+    "celadon_mansion_roof",    # scripts/CeladonMansionRoofHouse.asm:15-16
+    "cinnabar_island",         # scripts/CinnabarLabFossilRoom.asm:79-80
+    "saffron_city",            # scripts/FightingDojo.asm:245,279
+    "mt_moon_pokecenter",      # scripts/MtMoonPokecenter.asm:47-48
+    "silph_co",                # scripts/SilphCo7F.asm:310-311
+    "celadon_game_corner",     # engine/events/prize_menu.asm:225
+})
+# The three scripts below set one species; Oak, Dojo, Cinnabar and Game Corner
+# offer choices (same pret script lines as above).
+_FIXED_GIFTS = frozenset({"celadon_mansion_roof", "mt_moon_pokecenter", "silph_co"})
+# Existing read-only test imports used these names; aliases preserve the data
+# surface without restoring any pre-rewrite National-Dex interpretation.
+_FIXED_SPECIES_GIFTS = _FIXED_GIFTS
+_GEN1_ENCOUNTERS = _ENCOUNTERS
 
-# ── Load Gen 1 wild encounter tables (Phase 6) ─────────────────────────
-_GEN1_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
-_enc_path = os.path.join(_GEN1_DATA_DIR, "encounter_tables.json")
-if os.path.exists(_enc_path):
-    with open(_enc_path) as _f:
-        _GEN1_ENCOUNTERS = json.load(_f)
-else:
-    log.warning("Gen 1 encounter_tables.json not found: %s", _enc_path)
+# Script-set fixed wild battles, by (map id, National Dex number). These are
+# discovered from the event trainer/encounter setup and species constants:
+# Route12.asm:25-36; Route16.asm:25-36; PowerPlant.asm:39-52,113;
+# SeafoamIslandsB4F.asm:148,162; VictoryRoad2F.asm:100,142;
+# CeruleanCaveB1F.asm:25,37; PokemonTower6F.asm:35-39.
+# PowerPlant's six Voltorb and two Electrode object events are additionally
+# pinned by data/maps/objects/PowerPlant.asm:28-36.
+# Map IDs: constants/map_constants.asm:41-277; dex order: dex_order.asm:3-192.
+_STATIC_SITES = frozenset({
+    (23, 143), (27, 143), (83, 100), (83, 101), (83, 145), (162, 144),
+    (194, 146), (227, 150), (147, 105),
+})
+_STATIC_ID = re.compile(r"static_(\d+)_(\d+)\Z")
+_KEY = re.compile(r"[0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{2}\Z")
+_ROM_VARIANT = {"Red": "red", "red": "red", "red_ap": "red",
+                "Blue": "blue", "blue": "blue", "blue_ap": "blue",
+                "Yellow": "yellow", "yellow": "yellow"}
 
-# Gen 1 item names (common items)
 
-# Complete Gen 1 species type table: NatDex → (type1, type2)
-# Monotypes have both slots the same. Type IDs use Gen 1 encoding.
-_SPECIES_TYPES: dict[int, tuple[int, int]] = {
-    1: (0x16, 0x03),    # Bulbasaur: Grass/Poison
-    2: (0x16, 0x03),    # Ivysaur: Grass/Poison
-    3: (0x16, 0x03),    # Venusaur: Grass/Poison
-    4: (0x14, 0x14),    # Charmander: Fire
-    5: (0x14, 0x14),    # Charmeleon: Fire
-    6: (0x14, 0x02),    # Charizard: Fire/Flying
-    7: (0x15, 0x15),    # Squirtle: Water
-    8: (0x15, 0x15),    # Wartortle: Water
-    9: (0x15, 0x15),    # Blastoise: Water
-    10: (0x07, 0x07),   # Caterpie: Bug
-    11: (0x07, 0x07),   # Metapod: Bug
-    12: (0x07, 0x02),   # Butterfree: Bug/Flying
-    13: (0x07, 0x03),   # Weedle: Bug/Poison
-    14: (0x07, 0x03),   # Kakuna: Bug/Poison
-    15: (0x07, 0x03),   # Beedrill: Bug/Poison
-    16: (0x00, 0x02),   # Pidgey: Normal/Flying
-    17: (0x00, 0x02),   # Pidgeotto: Normal/Flying
-    18: (0x00, 0x02),   # Pidgeot: Normal/Flying
-    19: (0x00, 0x00),   # Rattata: Normal
-    20: (0x00, 0x00),   # Raticate: Normal
-    21: (0x00, 0x02),   # Spearow: Normal/Flying
-    22: (0x00, 0x02),   # Fearow: Normal/Flying
-    23: (0x03, 0x03),   # Ekans: Poison
-    24: (0x03, 0x03),   # Arbok: Poison
-    25: (0x17, 0x17),   # Pikachu: Electric
-    26: (0x17, 0x17),   # Raichu: Electric
-    27: (0x04, 0x04),   # Sandshrew: Ground
-    28: (0x04, 0x04),   # Sandslash: Ground
-    29: (0x03, 0x03),   # Nidoran♀: Poison
-    30: (0x03, 0x03),   # Nidorina: Poison
-    31: (0x03, 0x04),   # Nidoqueen: Poison/Ground
-    32: (0x03, 0x03),   # Nidoran♂: Poison
-    33: (0x03, 0x03),   # Nidorino: Poison
-    34: (0x03, 0x04),   # Nidoking: Poison/Ground
-    35: (0x00, 0x00),   # Clefairy: Normal
-    36: (0x00, 0x00),   # Clefable: Normal
-    37: (0x14, 0x14),   # Vulpix: Fire
-    38: (0x14, 0x14),   # Ninetales: Fire
-    39: (0x00, 0x00),   # Jigglypuff: Normal
-    40: (0x00, 0x00),   # Wigglytuff: Normal
-    41: (0x03, 0x02),   # Zubat: Poison/Flying
-    42: (0x03, 0x02),   # Golbat: Poison/Flying
-    43: (0x16, 0x03),   # Oddish: Grass/Poison
-    44: (0x16, 0x03),   # Gloom: Grass/Poison
-    45: (0x16, 0x03),   # Vileplume: Grass/Poison
-    46: (0x07, 0x16),   # Paras: Bug/Grass
-    47: (0x07, 0x16),   # Parasect: Bug/Grass
-    48: (0x07, 0x03),   # Venonat: Bug/Poison
-    49: (0x07, 0x03),   # Venomoth: Bug/Poison
-    50: (0x04, 0x04),   # Diglett: Ground
-    51: (0x04, 0x04),   # Dugtrio: Ground
-    52: (0x00, 0x00),   # Meowth: Normal
-    53: (0x00, 0x00),   # Persian: Normal
-    54: (0x15, 0x15),   # Psyduck: Water
-    55: (0x15, 0x15),   # Golduck: Water
-    56: (0x01, 0x01),   # Mankey: Fighting
-    57: (0x01, 0x01),   # Primeape: Fighting
-    58: (0x14, 0x14),   # Growlithe: Fire
-    59: (0x14, 0x14),   # Arcanine: Fire
-    60: (0x15, 0x15),   # Poliwag: Water
-    61: (0x15, 0x15),   # Poliwhirl: Water
-    62: (0x15, 0x01),   # Poliwrath: Water/Fighting
-    63: (0x18, 0x18),   # Abra: Psychic
-    64: (0x18, 0x18),   # Kadabra: Psychic
-    65: (0x18, 0x18),   # Alakazam: Psychic
-    66: (0x01, 0x01),   # Machop: Fighting
-    67: (0x01, 0x01),   # Machoke: Fighting
-    68: (0x01, 0x01),   # Machamp: Fighting
-    69: (0x16, 0x03),   # Bellsprout: Grass/Poison
-    70: (0x16, 0x03),   # Weepinbell: Grass/Poison
-    71: (0x16, 0x03),   # Victreebel: Grass/Poison
-    72: (0x15, 0x03),   # Tentacool: Water/Poison
-    73: (0x15, 0x03),   # Tentacruel: Water/Poison
-    74: (0x05, 0x04),   # Geodude: Rock/Ground
-    75: (0x05, 0x04),   # Graveler: Rock/Ground
-    76: (0x05, 0x04),   # Golem: Rock/Ground
-    77: (0x14, 0x14),   # Ponyta: Fire
-    78: (0x14, 0x14),   # Rapidash: Fire
-    79: (0x15, 0x18),   # Slowpoke: Water/Psychic
-    80: (0x15, 0x18),   # Slowbro: Water/Psychic
-    81: (0x17, 0x17),   # Magnemite: Electric
-    82: (0x17, 0x17),   # Magneton: Electric
-    83: (0x00, 0x02),   # Farfetch'd: Normal/Flying
-    84: (0x00, 0x02),   # Doduo: Normal/Flying
-    85: (0x00, 0x02),   # Dodrio: Normal/Flying
-    86: (0x15, 0x15),   # Seel: Water
-    87: (0x15, 0x19),   # Dewgong: Water/Ice
-    88: (0x03, 0x03),   # Grimer: Poison
-    89: (0x03, 0x03),   # Muk: Poison
-    90: (0x15, 0x15),   # Shellder: Water
-    91: (0x15, 0x19),   # Cloyster: Water/Ice
-    92: (0x08, 0x03),   # Gastly: Ghost/Poison
-    93: (0x08, 0x03),   # Haunter: Ghost/Poison
-    94: (0x08, 0x03),   # Gengar: Ghost/Poison
-    95: (0x05, 0x04),   # Onix: Rock/Ground
-    96: (0x18, 0x18),   # Drowzee: Psychic
-    97: (0x18, 0x18),   # Hypno: Psychic
-    98: (0x15, 0x15),   # Krabby: Water
-    99: (0x15, 0x15),   # Kingler: Water
-    100: (0x17, 0x17),  # Voltorb: Electric
-    101: (0x17, 0x17),  # Electrode: Electric
-    102: (0x16, 0x18),  # Exeggcute: Grass/Psychic
-    103: (0x16, 0x18),  # Exeggutor: Grass/Psychic
-    104: (0x04, 0x04),  # Cubone: Ground
-    105: (0x04, 0x04),  # Marowak: Ground
-    106: (0x01, 0x01),  # Hitmonlee: Fighting
-    107: (0x01, 0x01),  # Hitmonchan: Fighting
-    108: (0x00, 0x00),  # Lickitung: Normal
-    109: (0x03, 0x03),  # Koffing: Poison
-    110: (0x03, 0x03),  # Weezing: Poison
-    111: (0x04, 0x05),  # Rhyhorn: Ground/Rock
-    112: (0x04, 0x05),  # Rhydon: Ground/Rock
-    113: (0x00, 0x00),  # Chansey: Normal
-    114: (0x16, 0x16),  # Tangela: Grass
-    115: (0x00, 0x00),  # Kangaskhan: Normal
-    116: (0x15, 0x15),  # Horsea: Water
-    117: (0x15, 0x15),  # Seadra: Water
-    118: (0x15, 0x15),  # Goldeen: Water
-    119: (0x15, 0x15),  # Seaking: Water
-    120: (0x15, 0x15),  # Staryu: Water
-    121: (0x15, 0x18),  # Starmie: Water/Psychic
-    122: (0x18, 0x18),  # Mr. Mime: Psychic
-    123: (0x07, 0x02),  # Scyther: Bug/Flying
-    124: (0x19, 0x18),  # Jynx: Ice/Psychic
-    125: (0x17, 0x17),  # Electabuzz: Electric
-    126: (0x14, 0x14),  # Magmar: Fire
-    127: (0x07, 0x07),  # Pinsir: Bug
-    128: (0x00, 0x00),  # Tauros: Normal
-    129: (0x15, 0x15),  # Magikarp: Water
-    130: (0x15, 0x02),  # Gyarados: Water/Flying
-    131: (0x15, 0x19),  # Lapras: Water/Ice
-    132: (0x00, 0x00),  # Ditto: Normal
-    133: (0x00, 0x00),  # Eevee: Normal
-    134: (0x15, 0x15),  # Vaporeon: Water
-    135: (0x17, 0x17),  # Jolteon: Electric
-    136: (0x14, 0x14),  # Flareon: Fire
-    137: (0x00, 0x00),  # Porygon: Normal
-    138: (0x05, 0x15),  # Omanyte: Rock/Water
-    139: (0x05, 0x15),  # Omastar: Rock/Water
-    140: (0x05, 0x15),  # Kabuto: Rock/Water
-    141: (0x05, 0x15),  # Kabutops: Rock/Water
-    142: (0x05, 0x02),  # Aerodactyl: Rock/Flying
-    143: (0x00, 0x00),  # Snorlax: Normal
-    144: (0x19, 0x02),  # Articuno: Ice/Flying
-    145: (0x17, 0x02),  # Zapdos: Electric/Flying
-    146: (0x14, 0x02),  # Moltres: Fire/Flying
-    147: (0x1A, 0x1A),  # Dratini: Dragon
-    148: (0x1A, 0x1A),  # Dragonair: Dragon
-    149: (0x1A, 0x02),  # Dragonite: Dragon/Flying
-    150: (0x18, 0x18),  # Mewtwo: Psychic
-    151: (0x18, 0x18),  # Mew: Psychic
-}
-
-# Mon key validation pattern: XXXX:XXXX:XX (4 hex : 4 hex : 1-2 hex)
-_KEY_PATTERN = re.compile(r'^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{1,2}$')
-
-_AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen1_rby", "area_map.json"
-))
-
-# map id -> area id. area_map.json is already read above for display names; this is the
-# same file read for the other half of what it carries, so a client that reports its ROM's
-# tables by MAP can have them collapsed into the AREAS the rest of SLink keys on.
-_MAP_ID_TO_AREA: dict[int, str] = {}
-_area_map_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen1_rby", "area_map.json"
-)
-if os.path.exists(_area_map_path):
-    with open(_area_map_path) as _f:
-        for _k, _v in json.load(_f).items():
-            if isinstance(_v, dict) and _v.get("area_id"):
-                _MAP_ID_TO_AREA[int(_k)] = _v["area_id"]
-
-# Load species index conversion table
-_INDEX_TO_NATIONAL: dict[int, int] = {}
-_species_index_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen1_rby", "species_index.json"
-)
-if os.path.exists(_species_index_path):
-    with open(_species_index_path) as _f:
-        _raw_index = json.load(_f)
-        for k, v in _raw_index.get("index_to_national", {}).items():
-            _INDEX_TO_NATIONAL[int(k)] = int(v)
-else:
-    log.warning("Gen 1 species index not found: %s — to_national_dex() will passthrough", _species_index_path)
+def _natdex(internal: int) -> int:
+    try:
+        return gen1_codec.internal_to_natdex(internal)
+    except (TypeError, ValueError):
+        return 0
 
 
 class Gen1Adapter(GameAdapter):
-    """Adapter for Gen 1: Red, Blue, Yellow.
-
-    Gen 1 has no gender, no abilities, no shinies, and uses internal species
-    indices that must be converted to National Dex numbers.
-    """
-
-    # rom_type (as the Lua client sends it) → encounter-table variant. Red and Blue share
-    # a decomp but differ in 25 of 39 wild areas; Yellow is a separate decomp and differs
-    # from Red in 36 of 39. AP ROMs inherit their base game's tables.
-    _ROM_TYPE_TO_ENC_VARIANT = {
-        "Red": "red", "red": "red", "red_ap": "red", "Red (AP)": "red",
-        "Blue": "blue", "blue": "blue", "blue_ap": "blue", "Blue (AP)": "blue",
-        "Yellow": "yellow", "yellow": "yellow",
-    }
-    _DEFAULT_ENC_VARIANT = "red"
+    """One per-player view of a Gen 1 cartridge; ROM encounters can override retail."""
 
     def __init__(self, **kwargs):
-        # Gen 1's only variant axis is the game version, which selects the wild encounter
-        # tables. rom_type is passed by the hello path and restored from links.json on
-        # reload; when it is absent we fall back to Red rather than serving no tables.
-        rom_type = kwargs.get("rom_type") or ""
-        self._enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(
-            rom_type, self._DEFAULT_ENC_VARIANT)
-        # None means "nobody has told us what this cartridge holds", which is different
-        # from an empty table and must keep the shipped data in use.
+        rom_type = kwargs.get("rom_type") or "red"
+        self._variant = _ROM_VARIANT.get(rom_type, "red")
+        self._enc_variant = self._variant  # existing AP/table consumers inspect this label
         self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
 
     @property
     def game_id(self) -> str:
         return "gen1_rby"
 
-    # ── GameRulesAdapter ─────────────────────────────────────────────────
-
-    def supports_abilities(self) -> bool:
-        """This generation predates abilities — the party table must not render the column."""
-        return False
-
-    # RIVAL1 / RIVAL2 / RIVAL3 in OPP space: pret trainer_constants.asm gives $19/$2A/$2B
-    # and OPP_ID_OFFSET = 200, which is what wCurOpponent holds and what the client sends
-    # on trainer_battle_start. Mirrored in lua/games/gen1_rby_trainers.lua RIVAL_CLASS_IDS
-    # and pinned to pret by tests/unit/test_gen1_trainer_tables.py.
-    _RIVAL_IDS = frozenset({225, 242, 243})
-
-    def rival_trainer_ids(self) -> set[int]:
-        """Gen 1's rival is identified by CLASS, not by individual trainer number — all
-        three rival classes are rival-only, so the class alone is unambiguous."""
-        return set(self._RIVAL_IDS)
-
-    def supports_explode_mode(self) -> bool:
-        """Gen 1 needs no ROM patch for this. Explosion is move 153, and the engine takes
-        the player's choice from wPlayerSelectedMove, so coercing it is a plain RAM write —
-        unlike Gen 3, where the same feature required the companion patch."""
-        return True
-
-    def party_blob_size(self) -> int:
-        """44-byte party struct + 11-byte OT name + 11-byte nickname.
-
-        Gen 1 stores names in arrays parallel to the struct rather than inside it, so a
-        faithful copy — the kind a rival-team swap writes back into wEnemyMons and its two
-        name arrays — is this composite, not just the struct.
-        """
-        return 44 + 11 + 11
-
     def is_gift_area(self, area_id: str) -> bool:
-        return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+        if not isinstance(area_id, str):
+            return False
+        static = _STATIC_ID.fullmatch(area_id)
+        return (area_id in _GIFT_AREAS or area_id == "gift" or area_id.startswith("gift_")
+                or bool(static and (int(static[1]), int(static[2])) in _STATIC_SITES))
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        return area_id in _FIXED_SPECIES_GIFTS
+        static = _STATIC_ID.fullmatch(area_id) if isinstance(area_id, str) else None
+        return area_id in _FIXED_GIFTS or bool(
+            static and (int(static[1]), int(static[2])) in _STATIC_SITES)
 
     def evo_family(self, species_id: int) -> int:
-        """Gen 1's own evolution families — see _GEN1_FAMILY above.
-
-        Falls back to the species itself, never to `base_form()`: an unknown
-        species should be its own family (rejecting only exact duplicates)
-        rather than inheriting a modern-generation grouping Gen 1 does not have.
-        """
-        return _GEN1_FAMILY.get(species_id, species_id)
+        # Representative in the SAME id space as the input (internal index), so the clause's
+        # equality test composes: evo_family(evo_family(x)) == evo_family(x). Ids with no dex
+        # entry (MissingNo. holes, glitch bytes) are their own family, never one shared bucket.
+        dex = _natdex(species_id)
+        if not dex:
+            return species_id
+        return gen1_codec.natdex_to_internal(_FAMILY.get(dex, dex))
 
     def gender_from_key(self, key: str, species_id: int) -> str:
-        # Gen 1 has no gender mechanic
-        return "genderless"
+        # No gender byte/ratio in the R/B/Y struct: pokemon_data_constants.asm:26-56.
+        return ""
 
     def species_types(self, species_id: int) -> tuple[int, int] | None:
-        return _SPECIES_TYPES.get(species_id)
+        dex = _natdex(species_id)
+        return _NATIONAL_TYPES[dex - 1] if dex else None
 
     def is_shiny(self, key: str) -> bool:
-        # Gen 1 has no shiny mechanic
+        # No shiny predicate in the Gen 1 mon struct: pokemon_data_constants.asm:26-56.
         return False
 
     def parse_ot_id(self, key: str) -> str:
-        """Extract OT ID from Gen 1 key format (DDDD:TTTT:II) — middle segment."""
-        try:
-            parts = key.split(":")
-            if len(parts) == 3:
-                return parts[1]
-        except (ValueError, IndexError):
-            pass
-        return ""
+        return key.split(":")[1] if self.is_valid_mon_key(key) else ""
 
     def is_valid_mon_key(self, key: str) -> bool:
-        """Validate Gen 1 key format: XXXX:XXXX:XX."""
-        return bool(_KEY_PATTERN.match(key))
+        return isinstance(key, str) and _KEY.fullmatch(key) is not None
 
     def species_name(self, species_id: int) -> str:
-        return _species_name(species_id, False)
+        dex = _natdex(species_id)
+        # The contract test checks all 151 shared display names against
+        # pret/data/pokemon/names.asm:1-193 in internal-index order.
+        return national_species_name(dex, False) if dex else f"#{species_id}"
 
     def type_name(self, type_id: int) -> str:
-        return _TYPE_IDS.get(type_id, f"Type #{type_id}")
+        return _TYPE_NAMES.get(type_id, f"Type #{type_id}")
 
-    # ── GamePresentationAdapter ──────────────────────────────────────────
+    def rival_trainer_ids(self) -> set[int]:
+        # trainer_constants.asm:42,59-60; OPP_ID_OFFSET at :1.
+        return {int(ident) for ident, name in _TRAINERS["classes"].items() if name == "Rival"}
 
-    def sprite_html(self, species_id: int, form: int = 0) -> str:
-        # form unused (no alternate forms in Gen 1)
-        if not species_id or species_id < 1:
-            return ""
-        # Use Gen 1 Red/Blue sprites from PokeAPI, cropped 5px on each edge via overflow
-        url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/{species_id}.png"
-        # `class="mon-sprite"` and `data-species` are NOT decoration -- shared code keys off
-        # both, and Gen 1 rendered without them:
-        #   * server.py:1659 rewrites the class to `enc-sprite` to shrink encounter icons to
-        #     20px; with no class to rewrite that is a silent no-op and the icons render at
-        #     40px in a list sized for 20;
-        #   * every responsive rule is written against `.mon-sprite` (slink.css:381,
-        #     dashboard.css:1159/1161), so party, foe and overlay sprites ignored theme
-        #     sizing entirely and stayed locked at 40px;
-        #   * the greyscale rules for a fainted mon (`slink.css:450`) and a dead link row
-        #     (`:487`) never matched, so KO'd Pokemon never greyed out;
-        #   * dashboard.js:70 / overlay-helpers.js:65 select `img.mon-sprite, img.enc-sprite`
-        #     for the chroma-key pass and skipped Gen 1 entirely.
-        # `onerror` collapses a 404 instead of showing the browser's broken-image glyph.
-        return (
-            f'<span style="display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle">'
-            f'<img class="mon-sprite" data-species="{species_id}" src="{url}" '
-            f'width="52" height="52" loading="lazy" '
-            f'onerror="this.style.visibility=&#39;hidden&#39;" '
-            f'style="image-rendering:pixelated;margin:-6px">'
-            f'</span>'
-        )
+    def party_blob_size(self) -> int:
+        # pokemon_data_constants.asm:47,56,58-61; text_constants.asm:3.
+        return gen1_codec.PARTY_MON_SIZE + 2 * gen1_codec.NAME_SIZE
 
-    def sprite_src(self, species_id: int) -> str:
-        """Bare sprite URL, used by _enc_table_for_status() for the JSON payload.
+    def validate_party_blob(self, blob_hex: str | bytes) -> bool:
+        """Validate the 66-byte transfer blob. The base interface has no call hook."""
+        try:
+            blob = bytes.fromhex(blob_hex) if isinstance(blob_hex, str) else blob_hex
+            if not isinstance(blob, bytes) or len(blob) != self.party_blob_size():
+                return False
+            mon = gen1_codec.decode_party_mon(blob[:gen1_codec.PARTY_MON_SIZE])
+            return _natdex(mon["species"]) > 0
+        except ValueError:
+            return False
 
-        Without this the base default serves modern PokeAPI artwork, so the encounter
-        table showed Gen 8-era renders next to the 8-bit Red/Blue sprites `sprite_html`
-        returns everywhere else -- on the same stream layout. Gen 2 already overrides this
-        for the same reason (gen2_crystal.py).
-        """
-        if not species_id or species_id < 1:
-            return ""
-        return ("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/"
-                f"versions/generation-i/red-blue/transparent/{species_id}.png")
+    def supports_abilities(self) -> bool:
+        return False
+
+    def supports_explode_mode(self) -> bool:
+        return True
 
     def status_token(self, status_cond: int) -> str:
-        """SLP/PSN/BRN/FRZ/PAR for Gen 1's status byte, or "".
-
-        Inherited the base "" until now, which cost the partner column on the dashboard its
-        status pill (server.py:3901) -- "is my linked partner asleep?" was unanswerable. The
-        player's OWN party was unaffected: html_render.status_icon_html decodes the bitfield
-        directly and its layout happens to be right for Gen 1.
-
-        The bit layout is shared with Gen 2 byte for byte, so the decode lives in
-        base.gb_status_token with the citations for both.
-        """
+        # constants/status_constants.asm: SLP low three bits, PSN/BRN/FRZ/PAR.
         return gb_status_token(status_cond)
 
+    def supports_info_panel(self) -> bool:
+        # The companion patch's native panel exists for Red/Blue, not Yellow.
+        return self._variant != "yellow"
+
+    def info_panel_width(self) -> int:
+        # Game Boy tilemap width; constants/map_constants.asm map geometry uses 20.
+        return 20 if self.supports_info_panel() else 0
+
+    def sprite_src(self, species_id: int) -> str:
+        dex = _natdex(species_id)
+        if not dex:
+            return ""
+        return ("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/"
+                f"versions/generation-i/red-blue/transparent/{dex}.png")
+
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
+        dex = _natdex(species_id)
+        if not dex:
+            return ""
+        url = self.sprite_src(species_id)
+        return (
+            '<span style="display:inline-block;width:40px;height:40px;'
+            'overflow:hidden;vertical-align:middle">'
+            f'<img class="mon-sprite" data-species="{dex}" src="{url}" '
+            'width="52" height="52" loading="lazy" '
+            'onerror="this.style.visibility=&#39;hidden&#39;" '
+            'style="image-rendering:pixelated;margin:-6px"></span>'
+        )
+
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
-        # Gen 1 has no abilities
         return ""
 
     def ability_description(self, ability_id: int) -> str:
-        # Gen 1 has no abilities
         return ""
 
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        # Gen 1 doesn't have a trainer table
-        return ("", "")
+        cls = _TRAINERS["classes"].get(str(trainer_id), "")
+        if not cls:
+            return "", ""
+        named = _TRAINERS["named_trainers"].get(str(trainer_id), {})
+        names = set(named.values())
+        return (next(iter(names)) if len(names) == 1 else "", cls)
 
-    # ── Move data (Phase 3) ───────────────────────────────────────────────
+    def item_name(self, item_id: int) -> str:
+        return ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
+
+    def area_display_name(self, area_id: str) -> str:
+        if area_id in _AREA_NAMES:
+            return _AREA_NAMES[area_id]
+        static = _STATIC_ID.fullmatch(area_id)
+        if static:
+            map_id, dex = int(static[1]), int(static[2])
+            location = _AREA_NAMES.get(_AREA_BY_MAP.get(map_id, ""), f"Map {map_id}")
+            name = national_species_name(dex, False) if 1 <= dex <= 151 else f"#{dex}"
+            return f"{location} — {name}"
+        return area_id.replace("_", " ").title()
+
+    def to_national_dex(self, species_id: int) -> int:
+        # codec table is generated from pret/data/pokemon/dex_order.asm:3-192.
+        return _natdex(species_id)
+
+    def gender_symbol(self, gender: str) -> str:
+        return ""
+
+    def form_sprite_id(self, species_id: int) -> int | None:
+        return None
 
     def move_name(self, move_id: int) -> str:
-        m = _GEN1_MOVES.get(move_id)
-        return m["name"] if m else ""
+        row = _MOVES.get(move_id)
+        return row["name"] if row else ""
 
     def move_data(self, move_id: int) -> dict | None:
-        m = _GEN1_MOVES.get(move_id)
-        if not m:
+        row = _MOVES.get(move_id)
+        if not row:
             return None
-        type_name = m["type"]
-        return {
-            "name": m["name"],
-            "type_id": _TYPE_NAME_TO_ID.get(type_name, 0),
-            "type_name": type_name,
-            "power": m["power"],
-            "accuracy": m["accuracy"],
-            "pp": m["pp"],
-            "split": _SPLIT_NAME_TO_ID.get(m["split"], 2),
-        }
-
-    # ── Encounter tables (Phase 6) ───────────────────────────────────────
+        return {"name": row["name"], "type_id": _TYPE_ID[row["type"]],
+                "type_name": row["type"], "power": row["power"],
+                "accuracy": row["accuracy"], "pp": row["pp"],
+                "split": _SPLIT[row["split"]]}
 
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
-        """Return wild encounter data for the given area, or None if unknown.
-
-        The table file is keyed by game version first — Red, Blue and Yellow have
-        genuinely different wild tables, and the generator used to blend Red's and Blue's
-        into one set that matched neither.
-        """
-        # A ROM-derived table wins when the client supplied one: it describes the
-        # cartridge actually being played, whereas the shipped file describes retail.
         if self._rom_encounters is not None:
-            return self._rom_encounters.get(area_id)
-        return _GEN1_ENCOUNTERS.get(self._enc_variant, {}).get(area_id)
+            raw = self._rom_encounters.get(area_id)
+        else:
+            raw = _ENCOUNTERS[self._variant].get(area_id)
+        if raw is None:
+            return None
+        # Shipped/scanned encounter entries are NatDex-keyed (see
+        # tools/gen_gen1_encounters.py:350-390 and gen1_rom_scan.py:682-692),
+        # while the shared renderer calls sprite_html(entry.species_id) and the
+        # client/adapter contract makes that parameter an INTERNAL index.
+        return {
+            method: [{**entry, "species_id": gen1_codec.natdex_to_internal(entry["species_id"])}
+                     for entry in entries]
+            for method, entries in raw.items()
+        }
 
     def ingest_rom_content(self, payload: dict) -> dict[str, dict[str, list[dict]]] | None:
-        """Decode a client's report of its own cartridge into encounter tables.
+        from .gen1_rom_scan import build_encounter_tables, parse_client_content
 
-        Raises RomScanError on anything malformed -- see the base class for why refusing
-        beats returning partial data here.
-        """
-        from server.adapters.gen1_rom_scan import build_encounter_tables, parse_client_content
         content = parse_client_content(payload)
-        return build_encounter_tables(
-            content, _MAP_ID_TO_AREA, _INDEX_TO_NATIONAL, self.species_name)
-
-    def supports_info_panel(self) -> bool:
-        """Red and Blue only, and only with the companion patch — but the ADAPTER cannot
-        know which ROM a given player is running. This says the generation is capable; the
-        server gates the actual send on what each client reports at hello, because a
-        patched and an unpatched cartridge can sit in the same run.
-        """
-        return True
-
-    def info_panel_width(self) -> int:
-        return 20      # the Game Boy tile map is 20 columns
+        # The scanner names a NatDex entry before the presentation projection.
+        return build_encounter_tables(content, _AREA_BY_MAP, _INDEX_JSON,
+                                      lambda dex: national_species_name(dex, False))
 
     def rom_content_fingerprint(self, payload: dict) -> str | None:
-        from server.adapters.gen1_rom_scan import content_fingerprint, parse_client_content
+        from .gen1_rom_scan import content_fingerprint, parse_client_content
+
         content = parse_client_content(payload)
         return content_fingerprint(content["variant"], content["wild"], content["fishing"])
 
     def use_rom_encounters(self, tables: dict[str, dict[str, list[dict]]] | None) -> None:
-        """Adopt ROM-derived tables for this adapter instance, or clear them.
-
-        Per INSTANCE rather than per class: two players in one run may hold ROMs randomized
-        with different seeds, so the run cannot have a single answer. get_adapter() builds a
-        fresh object every call, which is what makes one adapter per player affordable.
-        """
         self._rom_encounters = tables
 
-    def item_name(self, item_id: int) -> str:
-        if not item_id:
-            return ""
-        return _ITEM_NAMES.get(item_id, f"Item #{item_id}")
-
-    def area_display_name(self, area_id: str) -> str:
-        if area_id in _AREA_DISPLAY_NAMES:
-            return _AREA_DISPLAY_NAMES[area_id]
-        return area_id.replace("_", " ").title()
-
-    def to_national_dex(self, species_id: int) -> int:
-        """Convert species ID to National Dex number.
-
-        If species_id is already in 1-151 range, returns as-is.
-        Otherwise looks up the internal index conversion table.
-        """
-        if 1 <= species_id <= 151:
-            return species_id
-        return _INDEX_TO_NATIONAL.get(species_id, species_id)
-
-    def gender_symbol(self, gender: str) -> str:
-        # No gender in Gen 1
-        return ""
-
-    def form_sprite_id(self, species_id: int) -> int | None:
-        # No forms in Gen 1
-        return None
-
     def stat_stage_labels(self) -> list[str]:
-        # ONE Special, not two. RBY has no Sp.Atk/Sp.Def split (that arrives in Gen 2),
-        # so the fifth slot is blanked and the fourth is named for what it actually is.
-        # Mirroring Special into both Gen 3 slots made a single Psychic drop render as
-        # "-1 SATK -1 SDEF": two chips for one stat the cartridge does not have twice.
+        # ram/wram.asm:543-576; base renderer has 7 slots, Gen 1 only 6 mods.
         return ["ATK", "DEF", "SPD", "SPC", "", "ACC", "EVA"]
 
     @property
     def mons_per_box(self) -> int:
-        # pokered/constants/pokemon_data_constants.asm:60 — DEF MONS_PER_BOX EQU 20.
-        return 20
+        # constants/pokemon_data_constants.asm:58-61.
+        return gen1_codec.BOX_CAPACITY
 
     @property
     def memorial_box_index(self) -> int:
-        # Gen 1 R/B/Y: 12 boxes (0-indexed 0–11), memorial = Box 12 (index 11).
-        # Lua-side depositMemorialMon writes to SRAM CartRAM offset 0x75EA;
-        # the Gen 1 client reads it back into pc_boxes with box=11 so the
-        # server's memorial-contents filter picks it up.
-        return 11
+        # constants/pokemon_data_constants.asm:61: twelve boxes, last is index 11.
+        return gen1_codec.BOX_COUNT - 1

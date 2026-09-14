@@ -25,7 +25,13 @@ import os
 
 import pytest
 
+from server.adapters import gen1_codec as codec
 from server.adapters.gen1_rby import Gen1Adapter
+
+# The adapter speaks the wire's species ids: Gen 1 INTERNAL indices (internal 1 = Rhydon,
+# 153 = Bulbasaur; data/pokemon/dex_order.asm). The dex numbers below are converted at the
+# boundary so the tests keep reading as Pokedex facts.
+INTERNAL = codec.natdex_to_internal
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EVOS = os.path.join(REPO, "data", "games", "gen1_rby", "evolutions.json")
@@ -45,7 +51,7 @@ def test_evolutions_json_exists():
 
 def test_the_hitmons_are_not_the_same_family(adapter):
     """The bug this file exists for. Tyrogue does not exist in Gen 1."""
-    assert adapter.evo_family(106) != adapter.evo_family(107), (
+    assert adapter.evo_family(INTERNAL(106)) != adapter.evo_family(INTERNAL(107)), (
         "Hitmonlee and Hitmonchan share an evolution family — the Fighting Dojo "
         "split will be rejected by the species clause and one mon buried")
 
@@ -57,7 +63,7 @@ def test_the_hitmons_are_not_the_same_family(adapter):
 ])
 def test_real_families_stay_together(adapter, a, b):
     """These are the three lines a `base_form()` clamp would have wrongly split."""
-    assert adapter.evo_family(a) == adapter.evo_family(b)
+    assert adapter.evo_family(INTERNAL(a)) == adapter.evo_family(INTERNAL(b))
 
 
 @pytest.mark.parametrize("members", [
@@ -69,7 +75,7 @@ def test_real_families_stay_together(adapter, a, b):
     (133, 134, 135, 136),   # Eevee + the three eeveelutions
 ])
 def test_known_lines_share_one_family(adapter, members):
-    fams = {adapter.evo_family(m) for m in members}
+    fams = {adapter.evo_family(INTERNAL(m)) for m in members}
     assert len(fams) == 1, f"{members} split across families {fams}"
 
 
@@ -80,21 +86,23 @@ def test_known_lines_share_one_family(adapter, members):
     (83, 84),     # Farfetch'd / Doduo  — adjacent dex, unrelated
 ])
 def test_unrelated_species_stay_apart(adapter, a, b):
-    assert adapter.evo_family(a) != adapter.evo_family(b)
+    assert adapter.evo_family(INTERNAL(a)) != adapter.evo_family(INTERNAL(b))
 
 
 def test_family_is_an_equivalence_relation(adapter):
     """Reflexive, symmetric and transitive — a clause comparing representatives
     for equality is only correct if the mapping is a genuine partition."""
-    for sid in range(1, 152):
+    for dex in range(1, 152):
+        sid = INTERNAL(dex)
         assert adapter.evo_family(sid) == adapter.evo_family(adapter.evo_family(sid)), (
             f"species {sid}: family representative is not its own representative")
 
 
 def test_every_gen1_species_is_classified(adapter):
-    for sid in range(1, 152):
+    internals = {INTERNAL(dex) for dex in range(1, 152)}
+    for sid in internals:
         fam = adapter.evo_family(sid)
-        assert 1 <= fam <= 151, f"species {sid} maps outside Gen 1 range: {fam}"
+        assert fam in internals, f"species {sid} maps outside the 151 real internal ids: {fam}"
 
 
 def test_family_count_matches_edge_count():
