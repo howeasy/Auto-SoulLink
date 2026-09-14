@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:32:53+00:00",
+  "updated_at_utc": "2026-09-14T09:33:38+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "1c20573",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance (literal spec in flight on Codex); R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -978,6 +978,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator: client_journal.lua:42-50 completion validator requirement accepted as a hard protocol constraint for both R5b-1 and R5b-2"
       ]
+    },
+    {
+      "id": "c3-spec",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-3610046a)",
+      "state": "active",
+      "files": ["server/gen1_storage_runtime.py (read-only)", "server/gen1_storage_policy.py (read-only)", "lua/gen1_storage*.lua (read-only)"],
+      "next_action": "Literal C3 spec: plan capture, rebuild job kind through the storage machinery, scheduler order with C1 collaterals/memorials, restart reconciliation, tests.",
+      "reuse_decision": "research only"
     },
     {
       "id": "r5b-2",
