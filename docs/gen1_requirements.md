@@ -35,7 +35,7 @@ from it in Phase 8.
 
 `S` SOURCE, `M` MODEL, `P` PHYSICAL. `·` = not yet, `✓` = done with receipt path.
 
-Audit 2026-09-14 (HEAD 48f09ef): 3 cells corrected — S-4 M downgraded (poison leg untested), C-0 M and C-4 M now name their tests. Two artefacts the audit could not fix in place: C-0's requirement text names `tests/unit/test_protocol_conformance.py`, which does not exist (the work lives in `test_protocol_schema.py` + `test_gen1_client.py`), and three sub-clauses no unit test covers — S-2's ball-thrown detection, S-5's "SLINK trade emits no `key_change`", S-7's CONTINUE/New-Game distinction. Pinned engine sites: **17**, not 18.
+Audit 2026-09-14 (HEAD 48f09ef): 3 cells corrected — S-4 M downgraded (poison leg untested), C-0 M and C-4 M now name their tests. Two artefacts the audit could not fix in place: C-0's requirement text named `tests/unit/test_protocol_conformance.py`, which does not exist — **fixed in the C-0 row on 2026-09-14** (the work lives in `test_protocol_schema.py` + `test_gen1_client.py`) — and three sub-clauses no unit test covers — S-2's ball-thrown detection, S-5's "SLINK trade emits no `key_change`", S-7's CONTINUE/New-Game distinction. Update 2026-09-14 (HEAD 1a5941f): D-1/D-3 PHYSICAL from the duo harness; W-6/R-4 reworded to pause-not-drop after DUO-1's receipts showed a revoke inside the AskName window; S-2/S-5/S-7 downgraded under the strict rule.
 
 ---
 
@@ -57,19 +57,19 @@ Audit 2026-09-14 (HEAD 48f09ef): 3 cells corrected — S-4 M downgraded (poison 
 | R-1 | Party/box/name decode == PYDEC on raw dumps from all three titles | PYDEC | ✓ | ✓ 12k records + fixtures (`test_gen1_reads.py`) | ✓ inspect gate 6/6: Lua-on-hardware == Python on the dumped bytes |
 | R-2 | Stats pass the known-positive control (recompute from DVs/stat-exp/base stats == stored) | CONTROL (`test_gen1_stat_rebuild.lua`) | ✓ | ✓ stats leg (`test_gen1_stat_control.py`); level leg blocked by F-6 | · |
 | R-3 | Trainer class/name from `wCurOpponent` (200+ form), badges as bitmask, PP-Ups preserved, active box index reported | GAME (trainer name tilemap at battle start) | · | · | · |
-| R-4 | Title screen never validates (`wPlayerID==0 && partyCount==0` ⇒ not live); soft reset revokes writes | GAME (boot to title; A+B+Start+Select mid-run) | · | · | · |
+| R-4 | Title screen never validates (`wPlayerID==0 && partyCount==0` ⇒ not live); soft reset pauses writes (home/init.asm zero-fills WRAM until MainMenu -> TryLoadSaveFile reloads the save); hello waits for a live game | GAME (boot to title; A+B+Start+Select mid-run) | · | ✓ test_gen1_client.py::test_hello_waits_for_a_live_game_after_the_init_wram_clear | · |
 
 ## S — Signals (`lua/gen1/signals.lua`)
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| S-1 | Scripted New Game → starter → rival on R/B/Y emits exactly `starter`, `battle_start(trainer)`, N×`faint`, `battle_end(lost)`, the map-load sequence; no spurious `capture`/`no_catch` | ENGINE sequence vs pret script order (`scripts/OaksLab.asm` 12→18) | ✓ site pinned | ✓ | ✓ `test_gen1_new_gates.py::lab_route` Red+Blue: cold NEW GAME → starter → rival by buttons; sequence == pret script order; L5 exp 135 |
-| S-2 | Route 1 wild encounter: `battle_start(wild, species, level)`; caught → one `capture(party)`; ran/lost → `battle_end` + `no_catch{species_id, level}`; ball thrown detected at the item-removal site | ENGINE + SERVER | ✓ site pinned | ✓ `test_gen1_client.py` | · |
+| S-1 | Scripted New Game → starter → rival on R/B/Y emits exactly `starter`, `battle_start(trainer)`, N×`faint`, `battle_end(lost)`, the map-load sequence; no spurious `capture`/`no_catch` | ENGINE sequence vs pret script order (`scripts/OaksLab.asm` 12→18) | ✓ site pinned | ✓ tests/unit/test_gen1_signal_receipts.py (lab-route sequence pinned from a physical receipt) | ✓ `test_gen1_new_gates.py::lab_route` Red+Blue: cold NEW GAME → starter → rival by buttons; sequence == pret script order; L5 exp 135 |
+| S-2 | Route 1 wild encounter: `battle_start(wild, species, level)`; caught → one `capture(party)`; ran/lost → `battle_end` + `no_catch{species_id, level}`; ball thrown detected at the item-removal site | ENGINE + SERVER | ✓ site pinned | · `test_gen1_client.py` covers capture/no_catch; the ball-thrown-at-the-item-removal-site clause has no test | · |
 | S-3 | Party full + catch → `capture(box)` via `SendNewMonToBox`; box snapshot updated | ENGINE + PYDEC (SRAM) | ✓ site pinned | · | · |
 | S-4 | Poison faint in the overworld; blackout: faint-time party bytes captured before `HealParty`; `whiteout` emitted once | ENGINE + PYDEC | ✓ site pinned | · `test_gen1_client.py` covers blackout + `whiteout` once; the poison-faint leg has no test (`poison_faint` appears in no test file) | · |
-| S-5 | Moon Stone evolution → `key_change{old,new}`; vanilla NPC trade → `key_change reason=npc_trade`; SLINK trade emits no `key_change` | ENGINE + GAME (new species on screen) | ✓ site pinned | ✓ `test_gen1_client.py` | · |
+| S-5 | Moon Stone evolution → `key_change{old,new}`; vanilla NPC trade → `key_change reason=npc_trade`; SLINK trade emits no `key_change` | ENGINE + GAME (new species on screen) | ✓ site pinned | · `test_gen1_client.py` covers evolution and NPC-trade key_change; SLINK-trade-emits-no-key_change has no test | · |
 | S-6 | PC deposit/withdraw/release/ChangeBox → `party_to_box`/`box_to_party`; Box 12 survives ChangeBox | ENGINE + PYDEC (SRAM after) | ✓ site pinned | ✓ `test_gen1_client.py` | · |
-| S-7 | Save → witness `sha256(hex(CartRAM[0x498:0x8000]))`; CONTINUE → loaded witness; New Game distinguished | ENGINE (`SaveMenu.save+3`, `TryLoadSaveFile`) | ✓ site pinned | ✓ `test_gen1_client.py` | · |
+| S-7 | Save → witness `sha256(hex(CartRAM[0x498:0x8000]))`; CONTINUE → loaded witness; New Game distinguished | ENGINE (`SaveMenu.save+3`, `TryLoadSaveFile`) | ✓ site pinned | · `test_gen1_client.py` covers the save-witness flush; CONTINUE witness / New Game distinction has no test | · |
 | S-8 | `area_enter` on every map load; area id from generated `area_map.json`; statics `static_<map>_<dex>`; gifts `gift_map_<id>`; fishing maps mapped | ENGINE + SERVER | ✓ site pinned | · | · |
 
 ## W — Writes (`lua/gen1/writes.lua` + `lua/gen1_write_safety.lua`)
@@ -81,14 +81,14 @@ Audit 2026-09-14 (HEAD 48f09ef): 3 cells corrected — S-4 M downgraded (poison 
 | W-3 | `force_explode`: all four move/PP slots, battle struct + party mirror | slot-0-only was escapable | GAME (move menu) | ✓ | ✓ `test_gen1_writes.py` | · |
 | W-4 | `replace_rival_team`: every blob validated (66 B, count 1–6) before any write; atomic | — | GAME (rival team on screen) | ✓ | ✓ `test_gen1_writes.py` atomic validation | · |
 | W-5 | `box_mon`/`party_mon`/`memorialize`: SRAM box write + `CalcIndividualBoxCheckSums`/`SAVCheckSum`; memorial = BOX12 (index 11); refuse when party ≤ 1; full memorial box → `memorialize_failed` (never the open box); withdraw rebuilds stats (never zeros) | pret `engine/menus/save.asm` | GAME (save reloads, Bill's PC lists it) + PYDEC | ✓ save.asm cited in `boxes.lua` | ✓ `test_gen1_boxes.py` (27); NOTE the game checks only sMainDataCheckSum on load | · |
-| W-6 | Writes gate is revocable (5 consecutive validation failures ⇒ off, pending cleared); every give-up path NACKs (`box_mon_failed`) | — | GAME (soft reset) + SERVER | — | ✓ `test_gen1_client.py` revoke after 5 invalid | · |
+| W-6 | Writes gate pauses after 5 consecutive validation failures (queue kept — an unreadable party is an engine transient, AddPartyMon's AskName window); every give-up path NACKs (`box_mon_failed`) | — | GAME (soft reset) + SERVER | — | ✓ test_gen1_client.py::test_writes_pause_after_five_invalid_validations_and_the_queue_survives | · |
 | W-7 | No write lands outside `write_safety.check()` or the W-2 site | assert in `writes.lua` | lupa fake-io + RC write-safety gates | ✓ | ✓ armed-window refusal (`test_gen1_writes.py`, `test_gen1_boxes.py`) | ✓ checkpoint reached idle on all three titles (inspect gate) |
 
 ## C — Client and adapter (`lua/gen1/client.lua`, `server/adapters/gen1_rby.py`)
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| C-0 | `tests/unit/test_protocol_conformance.py` passes against the Gen 3 client AND the new Gen 1 client | MODEL (proves the suite tests the contract) | — | ✓ `tests/unit/test_protocol_schema.py` pins the table to the server; `tests/unit/test_gen1_client.py` validates every line it sends (`assert_all_conform`) | — |
+| C-0 | `tests/unit/test_protocol_schema.py` + `tests/unit/test_gen1_client.py` passes against the Gen 3 client AND the new Gen 1 client | MODEL (proves the suite tests the contract) | — | ✓ `tests/unit/test_protocol_schema.py` pins the table to the server; `tests/unit/test_gen1_client.py` validates every line it sends (`assert_all_conform`) | — |
 | C-1 | Hello identity: `ot_id` = `wPlayerID`; a save with a different OT ⇒ `WRONG SAVE`, zero state mutation | SERVER (`links.json` unchanged) | · | · | · |
 | C-2 | Reconnect: kill EmuHawk mid-run, relaunch same save ⇒ links intact, party re-synced, no duplicate captures | SERVER | · | · | · |
 | C-3 | Dashboard renders Gen 1 correctly: 8-bit sprites (`mon-sprite`, `data-species`), status pill, stat stages (SPC, no SDEF), trainer name, badges, box counts, encounter panel from the player's own cartridge | browser + `test_sprite_html_contract.py` | · | · | · |
@@ -100,9 +100,9 @@ Pairings Red/Blue and Yellow/Red; post-conditions read by PYDEC + SERVER.
 
 | id | Rule × mechanism | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| D-1 | Encounter link by area from real play (Route 1) | SERVER + PYDEC | · | · | · |
+| D-1 | Encounter link by area from real play (Route 1) | SERVER + PYDEC | · | · | ✓ link_new PASS live (Red x2 through the real server; receipts patch/build/e2e_link_new_{a,b}_result.txt; commit c210b4f; oracle = links.json + CartRAM decode, never the client) |
 | D-2 | Ball gate: nothing links or dies before `pokeballs_obtained` (per player, from the bag site) | SERVER (lab loss propagates nothing) | · | · | · |
-| D-3 | Dead zone: A fails Route 1 ⇒ B's Route 1 catch retired (`paired_no_catch`) | SERVER + PYDEC | · | · | · |
+| D-3 | Dead zone: A fails Route 1 ⇒ B's Route 1 catch retired (`paired_no_catch`) | SERVER + PYDEC | · | · | ✓ deadzone_new PASS live (Red x2 through the real server; receipts patch/build/e2e_deadzone_new_{a,b}_result.txt; commit c210b4f; oracle = links.json + CartRAM decode, never the client) |
 | D-4 | Species (dupes) clause reroll fires on Gen 1 | SERVER | · | · | · |
 | D-5 | Type clause; gender clause inert (Gen 1 has no gender) | SERVER | · | · | · |
 | D-6 | Linked faint ⇒ partner `force_faint`, partner in overworld (W-1) and mid-battle (W-2) | GAME + PYDEC | · | · | · |
@@ -119,7 +119,7 @@ Pairings Red/Blue and Yellow/Red; post-conditions read by PYDEC + SERVER.
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| T-1 | Receptionist menu at all 12 Centers + Indigo; CABLE CLUB/CANCEL fall through to vanilla | GAME (tilemap) | ✓ RC asm verbatim; 133 DEFs vs .sym; 3 ROM0 spans re-derived | ✓ `test_gen1_trade_patch.py` (10 tests); Red/Blue banks identical; NOTE the shipped `.ups` + `server/patcher.py` md5s are still the panel-only build until dist is regenerated | ◐ panel gates pass on the trade-carrying build; receptionist menu not yet driven live |
+| T-1 | Receptionist menu at all 12 Centers + Indigo; CABLE CLUB/CANCEL fall through to vanilla | GAME (tilemap) | ✓ RC asm verbatim; 133 DEFs vs .sym; 3 ROM0 spans re-derived | ✓ `test_gen1_trade_patch.py` (10 tests); Red/Blue banks identical; dist regenerated 76ba1ff (apply round-trip verified) | ◐ panel gates pass on the trade-carrying build; receptionist menu not yet driven live |
 | T-2 | Ineligible offer refused in-game ("Trade unavailable."); eligible = one ALIVE pair, both halves in party | SERVER + GAME | · | · | · |
 | T-3 | Partner prompt YES/NO/B; screen restored | GAME | · | · | · |
 | T-4 | Apply: animation, evolution, `SavePartyAndDexData`; both sides decode swapped mons; link halves swapped; received mon in the LAST party slot | PYDEC + GAME (save reloads) + SERVER | · | · | · |
