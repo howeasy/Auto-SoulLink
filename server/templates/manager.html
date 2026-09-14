@@ -415,16 +415,16 @@
           </span>
           <div class="mgr-new-opts mgr-rand-form">
             <template x-if="current && current.status === 'running'">
-              <button class="mgr-btn" :disabled="checkpoint.busy" @click="requestCheckpoint()"
-                      x-text="checkpoint.busy ? 'Requesting…' : 'Checkpoint'"></button>
+              <button class="mgr-btn" :disabled="checkpointFor(current.run_id).busy" @click="requestCheckpoint()"
+                      x-text="checkpointFor(current.run_id).busy ? 'Requesting…' : 'Checkpoint'"></button>
             </template>
             <template x-if="current && current.status === 'stopped'">
               <button class="mgr-btn" :disabled="recovery.busy || !checkpoints.current"
                       @click="recoverToCheckpoint()"
                       x-text="recovery.busy ? 'Recovering…' : 'Recover'"></button>
             </template>
-            <p class="mgr-rand-note" x-show="checkpoint.status" x-text="checkpoint.status"></p>
-            <p class="mgr-rand-error" x-show="checkpoint.error" x-text="checkpoint.error"></p>
+            <p class="mgr-rand-note" x-show="checkpointFor(current.run_id).status" x-text="checkpointFor(current.run_id).status"></p>
+            <p class="mgr-rand-error" x-show="checkpointFor(current.run_id).error" x-text="checkpointFor(current.run_id).error"></p>
             <p class="mgr-rand-error" x-show="recovery.error" x-text="recovery.error"></p>
             <p class="mgr-rand-note" x-show="!checkpoints.current && current && current.status === 'stopped'">
               No confirmed checkpoint yet — a checkpoint needs both players to save in-game first.
@@ -1041,10 +1041,26 @@ function runManager() {
     // re-entered by hand — everything else the server needs is read straight off the
     // predecessor's own registry entry, same as it was recorded at its own creation.
     resume: { rom_a: '', rom_b: '', busy: false, error: '' },
-    // R5b: one paired save checkpoint, and recovering to the last journal-confirmed one.
-    checkpoint: { busy: false, status: '', error: '', request_id: '' },
+    // R5b: one paired save checkpoint per RUN — state is keyed by run id so switching runs
+    // never shows another run's request, and the id minted at click time is reused on retry.
     checkpoints: { current: null },
     recovery: { busy: false, error: '', result: null },
+    checkpointState: {},
+
+    checkpointFor(runId) {
+      if (!this.checkpointState[runId]) {
+        this.checkpointState[runId] = { busy: false, status: '', error: '', request_id: '' };
+      }
+      return this.checkpointState[runId];
+    },
+
+    newRequestId() {
+      var bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      var hex = '';
+      for (var i = 0; i < bytes.length; i++) hex += ('0' + bytes[i].toString(16)).slice(-2);
+      return hex;
+    },
 
     async loadCheckpoints() {
       if (!this.current) { this.checkpoints.current = null; return; }
@@ -1056,35 +1072,59 @@ function runManager() {
     },
 
     async requestCheckpoint() {
-      if (!this.current || this.checkpoint.busy) return;
-      this.checkpoint.busy = true; this.checkpoint.error = '';
-      this.checkpoint.status = 'Checkpoint requested: waiting for A/B';
+      if (!this.current) return;
+      var runId = this.current.run_id;      // captured once: the poll must not re-read this.current
+      var state = this.checkpointFor(runId);
+      if (state.busy) return;
+      if (!state.request_id) state.request_id = this.newRequestId();
+      var requestId = state.request_id;
+      state.busy = true; state.error = '';
+      state.status = 'Checkpoint requested: waiting for A/B';
       try {
-        var res = await fetch('/api/runs/' + this.current.run_id + '/checkpoint', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+        var res = await fetch('/api/runs/' + runId + '/checkpoint', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ request_id: requestId }) });
         var j = await res.json();
-        if (!res.ok || !j.ok) { this.checkpoint.error = j.error || 'Checkpoint failed'; this.checkpoint.status = ''; return; }
-        this.checkpoint.request_id = j.request_id || '';
-        this.pollCheckpoint();
-      } catch (e) { this.checkpoint.error = String(e); this.checkpoint.status = ''; }
-      finally { this.checkpoint.busy = false; }
+        if (!res.ok || !j.ok) {
+          state.error = j.error || ('Checkpoint failed (HTTP ' + res.status + ')');
+          state.status = '';
+          return;
+        }
+        state.request_id = j.request_id || requestId;
+        this.pollCheckpoint(runId, state.request_id);
+      } catch (e) { state.error = String(e); state.status = ''; }
+      finally { state.busy = false; }
     },
 
-    async pollCheckpoint() {
-      if (!this.current || !this.checkpoint.request_id) return;
-      try {
-        var res = await fetch('/api/runs/' + this.current.run_id + '/checkpoint/' + this.checkpoint.request_id);
-        var j = await res.json();
+    async pollCheckpoint(runId, requestId) {
+      var state = this.checkpointFor(runId);
+      for (;;) {
+        if (this.current?.run_id !== runId) return;   // the operator switched runs; abandon this poll
+        var res, j;
+        try {
+          res = await fetch('/api/runs/' + runId + '/checkpoint/' + requestId);
+          j = await res.json();
+        } catch (e) { state.error = String(e); state.status = ''; return; }
+        if (!res.ok || !j.ok) {
+          var detail = (j && (j.reason || j.error)) || ('HTTP ' + res.status);
+          state.error = (res.status === 502 || res.status === 504)
+            ? detail + ' — retry reuses request ' + requestId : detail;
+          state.status = '';
+          return;
+        }
         if (j.status === 'confirmed') {
-          this.checkpoint.status = 'Last checkpoint: ' + ((j.confirmed && j.confirmed.created_at) || 'confirmed') + ', both players';
+          state.status = 'Last checkpoint: ' + ((j.confirmed && j.confirmed.created_at) || 'confirmed') + ', both players';
           await this.loadCheckpoints();
           return;
         }
-        if (j.status === 'abandoned') { this.checkpoint.error = j.reason || 'Checkpoint refused'; this.checkpoint.status = ''; return; }
-        this.checkpoint.status = (j.status === 'preparing')
-          ? 'Checkpoint publishing…' : 'Checkpoint requested: waiting for A/B';
-      } catch (e) { this.checkpoint.error = String(e); this.checkpoint.status = ''; return; }
-      setTimeout(() => this.pollCheckpoint(), 2000);
+        if (j.status === 'abandoned' || j.status === 'refused') {
+          state.error = j.reason || ('Checkpoint ' + j.status);
+          state.status = '';
+          return;
+        }
+        state.status = (j.status === 'preparing') ? 'Checkpoint publishing…' : 'Checkpoint requested: waiting for A/B';
+        await new Promise(done => setTimeout(done, 2000));
+      }
     },
 
     async recoverToCheckpoint() {

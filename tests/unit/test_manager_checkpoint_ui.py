@@ -24,19 +24,39 @@ def html():
 
 def test_the_checkpoint_button_posts_and_the_recover_button_is_gated_on_a_confirmed_checkpoint(html):
     assert re.search(r'@click="requestCheckpoint\(\)"', html), "no Checkpoint action"
-    assert re.search(r':disabled="checkpoint\.busy"', html), "the Checkpoint button has no busy gate"
+    assert ':disabled="checkpointFor(current.run_id).busy"' in html, "the Checkpoint button has no busy gate"
     assert re.search(r'@click="recoverToCheckpoint\(\)"', html), "no Recover action"
     assert re.search(r':disabled="recovery\.busy \|\| !checkpoints\.current"', html), \
         "Recover must stay disabled until a confirmed checkpoint exists"
 
 
-def test_the_poll_waits_for_the_request_and_stops_when_it_settles(html):
-    match = re.search(r"async pollCheckpoint\(\)\s*\{([\s\S]*?)\n\s*\},", html)
-    assert match, "no pollCheckpoint() in the inline script"
+def test_the_poll_uses_the_captured_ids_and_stops_on_every_terminal_condition(html):
+    match = re.search(r"async pollCheckpoint\(runId, requestId\)\s*\{([\s\S]*?)\n\s*\},", html)
+    assert match, "no pollCheckpoint(runId, requestId) in the inline script"
     body = re.sub(r"//[^\n]*", "", match.group(1))
-    assert "setTimeout" in body and "2000" in body, "the poll must re-arm every 2 s"
-    assert "'confirmed'" in body and "'abandoned'" in body, "the poll must stop on both terminal statuses"
-    assert "waiting for A/B" in body, "the waiting wording is the run's own collecting state"
+    assert "runId" in body and "requestId" in body, "the poll must use the ids captured at click time"
+    assert "this.current.run_id" not in body, "the poll must not re-read the selected run"
+    assert "this.current?.run_id !== runId" in body, "the poll must stop when the operator switches runs"
+    assert "!res.ok || !j.ok" in body, "a failed fetch must stop the poll and show its error"
+    assert "'confirmed'" in body and "'abandoned'" in body and "'refused'" in body, \
+        "every terminal status must stop the poll"
+    assert "setTimeout" in body and "2000" in body, "the poll must still wait 2 s between attempts"
+
+
+def test_the_request_id_is_minted_once_per_click_and_reused(html):
+    mint = re.search(r"newRequestId\(\)\s*\{([\s\S]*?)\n\s*\},", html)
+    assert mint and "crypto.getRandomValues" in mint.group(1), "the request id must be minted client-side"
+    body = re.sub(r"//[^\n]*", "", re.search(r"async requestCheckpoint\(\)\s*\{([\s\S]*?)\n\s*\},", html).group(1))
+    assert "if (!state.request_id) state.request_id = this.newRequestId();" in body, \
+        "a failed POST must reuse the id already minted for this run"
+    assert "request_id: requestId" in body, "the POST body must carry the minted id"
+
+
+def test_the_checkpoint_state_is_keyed_by_run_id(html):
+    assert re.search(r"checkpointState: \{\}", html), "no per-run checkpoint state map"
+    helper = re.search(r"checkpointFor\(runId\)\s*\{([\s\S]*?)\n\s*\},", html)
+    assert helper and "this.checkpointState[runId]" in helper.group(1), "the state map is not keyed by run id"
+    assert "checkpointFor(current.run_id)" in html, "the panel does not read this run's state"
 
 
 def test_both_confirm_texts_name_the_cost(html):
@@ -58,7 +78,6 @@ def test_the_recovery_result_shows_downloads_and_the_resume_instruction(html):
 
 
 def test_the_state_blocks_match_the_script(html):
-    assert re.search(r"checkpoint: \{ busy: false, status: '', error: '', request_id: '' \}", html)
     assert re.search(r"checkpoints: \{ current: null \}", html)
     assert re.search(r"recovery: \{ busy: false, error: '', result: null \}", html)
     assert "loadCheckpoints()" in html, "the confirmed checkpoint is never fetched"
