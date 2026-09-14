@@ -626,6 +626,18 @@ hello adds `ot_id`, `rom_sha1`, `pc_boxes`, `writes_enabled`, which the server m
 trade port touches only `state.py`; no trade UI is needed for the release. A "randomized
 pair" badge, if ever built, keys off the run's ROM contract, never the client hello.
 
+**What the randomizer needs from Gen 1-owned code** (sent to the Gen 1 session 2026-09-14):
+`gen1_rom_scan.identify/scan/scan_base_stats/evolution_graph/profile_hash/fingerprint_rom`
+with `fingerprint_rom` client-reproducible (it is the contract value);
+`Gen1Adapter.rom_content_fingerprint(payload)` returning the same string for the same
+cartridge (that equality *is* admission, `server.py::_decide_admission`, re-run on every
+hello) and `ingest_rom_content` feeding the board the randomized encounter tables; the
+client hello carrying `rom_content` + `rom_sha1`. Randomized cartridges differ in wild/
+static/trainer species and levels, starters, TMs, field items, trainer names, catch rates
+and misc tweaks — never in types, evolutions, movesets, base stats, move data, EXP curves
+or in-game trades, so shipped species/type/evo tables stay valid and trade logic may
+assume vanilla.
+
 **Lua clients reference no HTTP at all.** The emulator half — and therefore the whole Gen 1
 release — is insulated from this work.
 
