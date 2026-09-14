@@ -8,10 +8,12 @@
   Zones, in the order a player cares about them during a run: NOW (where each player is
   and what they are fighting, because that is where the partner's mon dies too), then one
   zone per section of the board (in party, pending, split, boxed, fallen), and the log
-  beside it all from 1400 px. A pair whose weaker half is low is tinted, not captioned. Every zone sits on the same
-  three-track grid: A's column, the spine, B's column. The board cannot know which player
-  is looking at it, so column position is the only thing that says whose mon a mon is;
-  battle is drawn on a HALF, never on a row.
+  beside it all from 1400 px. Every zone sits on the same three-track grid: A's column,
+  the spine, B's column. The board cannot know which player is looking at it, so column
+  position is the only thing that says whose mon a mon is. A half shows ITS OWN game's
+  state and nothing else: two cartridges, two save files, two battles that need not
+  coincide. Battle is drawn on the half that is in it, never on a row and never on the
+  partner; what the link means for the partner is the reader's to know.
 #}
 {# ── macros ────────────────────────────────────────────────────────────── #}
 
@@ -21,13 +23,12 @@
 
 {% macro half(row, pid, p, other) -%}
   {% set h = row[pid] %}
-  {% set o = row[other] %}
-  <div class="mk-half {{ pid }}{% if not h %} empty{% endif %}{% if h and h.active %} fighting{% endif %}{% if o and o.active %} staked{% endif %}">
+  <div class="mk-half {{ pid }}{% if not h %} empty{% endif %}{% if h and h.active %} fighting{% endif %}">
     {% if h %}
       <div class="mk-half-in">
         {% if h.sprite %}<span class="mk-spr big">{{ h.sprite | safe }}</span>{% else %}<span class="mk-slot"></span>{% endif %}
         <span class="mk-half-txt">
-          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle">⚔</span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star">✦</span>{% endif %}{% if o and o.active %}<span class="mk-stake">at stake</span>{% endif %}</span>
+          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle">⚔</span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star">✦</span>{% endif %}</span>
           <span class="mk-sub">{{ h.species_name }} · Lv {{ h.level }}</span>
           {% if h.hp is not none and row.section != 'fallen' %}{{ hp(h) }}{% endif %}
           {% if (h.ability or h.item) and row.section != 'fallen' %}
@@ -166,7 +167,7 @@
           </h2>
           <div class="mk-pairs{% if sect in ('boxed', 'pending') %} compact{% endif %}">
             {% for row in rows %}
-              <article class="mk-pair {{ row.section }}{% if row.at_risk %} at-risk{% endif %}" id="pair-{{ sect }}-{{ row.area }}">
+              <article class="mk-pair {{ row.section }}" id="pair-{{ sect }}-{{ row.area }}">
                 {{ half(row, 'a', status.players.a, 'b') }}
                 <div class="mk-bond {{ row.status }}" style="grid-column:2">
                   <span class="mk-bond-area">{{ row.area_name }}</span>

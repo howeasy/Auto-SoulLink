@@ -18,10 +18,6 @@ from __future__ import annotations
 
 import re
 
-# A pair is "at risk" when its weaker half is below this. Both halves die if either
-# faints, so the pair's health is its minimum, not its average.
-RISK_PCT = 35
-
 SECTION_LABELS = {
     "party": "In party",
     "pending": "Pending link",
@@ -129,14 +125,11 @@ def pairs(status: dict) -> list[dict]:
             section = "split"
         else:
             section = "linked"   # nothing is located: the run is not live
-        pcts = [hp_pct(h) for h in (a, b) if h and h.get("hp") is not None]
-        risk = min(pcts) if pcts else None
         rows.append({
             "area": link.get("area_id") or "",
             "area_name": link.get("area_display") or area_name(link.get("area_id")),
             "status": "dead_zone" if dead_zone else link.get("status"),
-            "section": section, "a": a, "b": b, "risk": risk,
-            "at_risk": section == "party" and risk is not None and risk < RISK_PCT,
+            "section": section, "a": a, "b": b,
             "death": killfeed.get(link.get("area_id")),
         })
     return rows
@@ -154,7 +147,7 @@ def pending_rows(status: dict) -> list[dict]:
                            if mon else None)
         out.append({"area": area, "area_name": area_name(area), "section": "pending",
                     "status": "pending", "a": halves["a"], "b": halves["b"],
-                    "risk": None, "at_risk": False, "death": None})
+                    "death": None})
     return out
 
 

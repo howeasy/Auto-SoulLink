@@ -205,18 +205,18 @@ async def test_a_pair_row_is_a_half_the_bond_and_a_half_in_that_order(dashboard)
 
 
 @pytest.mark.asyncio
-async def test_battle_is_drawn_on_the_fighting_half_and_the_partner_is_at_stake(dashboard):
+async def test_battle_is_drawn_on_the_fighting_half_only(dashboard):
     """Player B is in a wild battle with the active mon of the Route 1 pair. The foe nests
-    under B's half; A's half, the one the soul link puts at stake, carries the tag. No
+    under B's half and A's half says nothing about it: two games, two states. No
     row-level battle state exists to get the owner wrong."""
     _, dom = dashboard
     fighting = [n for n in dom.find_all("div") if {"mk-half", "fighting"} <= _classes(n)]
     assert len(fighting) == 1, "exactly one half is fighting on the mock cast"
     assert "b" in _classes(fighting[0])
     assert any("mk-vs" in _classes(n) for n in fighting[0].walk()), "the foe is not nested under the fighting half"
-    staked = [n for n in dom.find_all("div") if {"mk-half", "staked"} <= _classes(n)]
-    assert len(staked) == 1 and "a" in _classes(staked[0])
-    assert "at stake" in staked[0].text_content()
+    assert not [n for n in dom.find_all("div") if {"mk-half", "staked"} <= _classes(n)]
+    assert "at stake" not in dom.text_content().lower()
+    assert not [n for n in dom.find_all("article") if "at-risk" in _classes(n)]
     rows = [n for n in dom.find_all("article") if "mk-pair" in _classes(n)]
     assert not any("fighting" in _classes(r) or "in-battle" in _classes(r) for r in rows)
 
