@@ -340,7 +340,7 @@ class SelectedRun:
     resume_ready = staticmethod(resume_ready)
     observation_sequence = staticmethod(observation_sequence)
 
-    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="8ab25a7",
+    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="79f04a3",
                  input_mode="human", launch_mode="product-cli", route_mode=None,
                  requested_speed_percent=300, resume_from=None):
         self.owned = Path(owned).resolve()
@@ -425,10 +425,12 @@ class SelectedRun:
                 self.outcome["source_files"][name] = sha(ROOT / name)
         if self.route_mode is not None:
             decoders = ["lua/tests/gen1_rb_point_fields.lua"]
-            if self.route_mode == "rb-parcel":
+            if self.route_mode in ("rb-parcel", "rb-native-trade"):
                 decoders.append("lua/tests/gen1_rb_mart_signature.lua")
             if self.route_mode == "rb-save":
                 decoders.append("tests/live/test_gen1_selected_rb_resume.py")
+            if self.route_mode == "rb-native-trade":
+                decoders.append("tests/live/test_gen1_selected_rb_native_trade.py")
             for name in decoders:  # dofile()d by the bootstrap; not staged by the host.
                 self.outcome["source_files"][name] = sha(ROOT / name)
             for module in ROUTE_MODULES[self.route_mode]:
