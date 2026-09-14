@@ -115,10 +115,15 @@ ROM_SYMBOLS = [
     "DisplayBattleMenu", "MoveSelectionMenu", "SelectEnemyMove", "ExecuteEnemyMove",
     # ROM data tables the client reads (base stats for the withdraw rebuild; dex order)
     "BaseStats", "PokedexOrder",
+    # pret data/wild/grass_water.asm:1,251-252; data/wild/good_rod.asm:2;
+    # engine/items/item_effects.asm:1826-1830 (Yellow:2026-2030).
+    "WildDataPointers", "GoodRodMons", "ItemUseOldRod",
 ]
 # Symbols a title may legitimately lack (recorded when present, no failure when absent).
 OPTIONAL_ROM_SYMBOLS = [
     "MewBaseStats",  # R/B keep Mew outside the table; Yellow has it inline as record 150
+    "SuperRodData",  # pokered data/wild/super_rod.asm:2,35-38 (R/B only)
+    "SuperRodFishingSlots",  # pokeyellow data/wild/super_rod.asm:1-2 (Yellow only)
 ]
 
 
@@ -184,6 +189,7 @@ def build() -> dict:
             "sram_box_banks": [sram_banks["sBox1"], sram_banks["sBox7"]],
         }
         profile["titles"][title] = {
+            "variant": title,  # server/adapters/gen1_rom_scan.py:70 maps these title keys to variants
             "repo": repo,
             "sym": sym_name,
             "rom_sha1": rom_syms[rom_key]["rom_sha1"],

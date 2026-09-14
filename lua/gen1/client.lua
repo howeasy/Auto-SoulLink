@@ -606,12 +606,21 @@ function Client.new(p)
         self:rescan_boxes()
         for _, e in ipairs(party or {}) do self.known_keys[e.key] = true end
         for _, e in ipairs(self.box_cache) do self.known_keys[e.key] = true end
+        local rom_content
+        if self.rom and self.rom.rom_content then
+            local ok, result = pcall(self.rom.rom_content)
+            if ok then rom_content = result
+            elseif not self.rom_content_error_logged then
+                log("[SLink-gen1] rom_content unavailable: " .. tostring(result))
+                self.rom_content_error_logged = true
+            end
+        end
         send("hello", {
             rom_type = self.rom_type, party = party or arr({}), ot_id = reads.read_player_id(),
             trainer_name = reads.read_player_name(), has_pokeballs = self.has_pokeballs,
             ball_count = ball_count(), badges = reads.read_badges(), area_id = area_id, loc_name = loc,
             pc_boxes = pc_boxes_wire(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
-            in_battle = battle and battle.in_battle ~= 0 or false,
+            in_battle = battle and battle.in_battle ~= 0 or false, rom_content = rom_content,
         })
         self.hello_sent = true
     end

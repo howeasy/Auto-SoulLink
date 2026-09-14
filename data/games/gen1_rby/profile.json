@@ -319,6 +319,11 @@
      "bank": 15,
      "flat": 251486
     },
+    "GoodRodMons": {
+     "addr": 25215,
+     "bank": 3,
+     "flat": 57983
+    },
     "HandlePlayerBlackOut": {
      "addr": 18487,
      "bank": 15,
@@ -353,6 +358,11 @@
      "addr": 28555,
      "bank": 15,
      "flat": 257931
+    },
+    "ItemUseOldRod": {
+     "addr": 25164,
+     "bank": 3,
+     "flat": 57932
     },
     "Joypad": {
      "addr": 410,
@@ -479,6 +489,11 @@
      "bank": 4,
      "flat": 77993
     },
+    "SuperRodData": {
+     "addr": 26905,
+     "bank": 3,
+     "flat": 59673
+    },
     "TryEvolvingMon": {
      "addr": 27918,
      "bank": 14,
@@ -493,6 +508,11 @@
      "addr": 30234,
      "bank": 28,
      "flat": 472602
+    },
+    "WildDataPointers": {
+     "addr": 20203,
+     "bank": 3,
+     "flat": 52971
     },
     "_Joypad": {
      "addr": 16384,
@@ -522,7 +542,8 @@
     "sSpriteData": 1,
     "sTileAnimations": 1
    },
-   "sym": "pokeblue.sym"
+   "sym": "pokeblue.sym",
+   "variant": "blue"
   },
   "red": {
    "derived": {
@@ -824,6 +845,11 @@
      "bank": 15,
      "flat": 251486
     },
+    "GoodRodMons": {
+     "addr": 25215,
+     "bank": 3,
+     "flat": 57983
+    },
     "HandlePlayerBlackOut": {
      "addr": 18487,
      "bank": 15,
@@ -858,6 +884,11 @@
      "addr": 28555,
      "bank": 15,
      "flat": 257931
+    },
+    "ItemUseOldRod": {
+     "addr": 25164,
+     "bank": 3,
+     "flat": 57932
     },
     "Joypad": {
      "addr": 410,
@@ -984,6 +1015,11 @@
      "bank": 4,
      "flat": 77993
     },
+    "SuperRodData": {
+     "addr": 26905,
+     "bank": 3,
+     "flat": 59673
+    },
     "TryEvolvingMon": {
      "addr": 27918,
      "bank": 14,
@@ -998,6 +1034,11 @@
      "addr": 30234,
      "bank": 28,
      "flat": 472602
+    },
+    "WildDataPointers": {
+     "addr": 20203,
+     "bank": 3,
+     "flat": 52971
     },
     "_Joypad": {
      "addr": 16384,
@@ -1027,7 +1068,8 @@
     "sSpriteData": 1,
     "sTileAnimations": 1
    },
-   "sym": "pokered.sym"
+   "sym": "pokered.sym",
+   "variant": "red"
   },
   "yellow": {
    "derived": {
@@ -1329,6 +1371,11 @@
      "bank": 15,
      "flat": 251856
     },
+    "GoodRodMons": {
+     "addr": 24876,
+     "bank": 3,
+     "flat": 57644
+    },
     "HandlePlayerBlackOut": {
      "addr": 18588,
      "bank": 15,
@@ -1363,6 +1410,11 @@
      "addr": 24700,
      "bank": 61,
      "flat": 1007740
+    },
+    "ItemUseOldRod": {
+     "addr": 24825,
+     "bank": 3,
+     "flat": 57593
     },
     "Joypad": {
      "addr": 441,
@@ -1484,6 +1536,11 @@
      "bank": 4,
      "flat": 72758
     },
+    "SuperRodFishingSlots": {
+     "addr": 24282,
+     "bank": 61,
+     "flat": 1007322
+    },
     "TryEvolvingMon": {
      "addr": 28088,
      "bank": 14,
@@ -1498,6 +1555,11 @@
      "addr": 31115,
      "bank": 28,
      "flat": 473483
+    },
+    "WildDataPointers": {
+     "addr": 19349,
+     "bank": 3,
+     "flat": 52117
     },
     "_Joypad": {
      "addr": 16429,
@@ -1527,7 +1589,8 @@
     "sSpriteData": 1,
     "sTileAnimations": 1
    },
-   "sym": "pokeyellow.sym"
+   "sym": "pokeyellow.sym",
+   "variant": "yellow"
   }
  }
 }
