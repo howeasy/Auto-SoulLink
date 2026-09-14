@@ -1,36 +1,45 @@
 duo instance a scenario=deadzone_new game=gen1_new
-[client] [SLink] TCP connecting to 127.0.0.1:61590 (non-blocking)…
-client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:61590
-[client] [SLink] TCP connected to 127.0.0.1:61590
-TX {"area_id":"","badges":255,"ball_count":0,"event":"hello","has_pokeballs":false,"in_battle":false,"loc_name":"map_255","ot_id":65535,"party":[],"pc_boxes":[],"player":"a","rom_sha1":"ea9bcae617fdf159b045185467ae58b2e4a48
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:64083 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:64083
+[client] [SLink] TCP connected to 127.0.0.1:64083
 PARTY_COUNT nil -> 255 @1
-RX resolved_areas
-RX config
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
 PARTY_COUNT 0 -> 1 @641
 PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
 [client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"party":[{"active":false,"blob_hex":"990013000016032D212D00004190000087000000000000
+RX resolved_areas
+RX config
 booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
-phase pace-grass @935 (10,35) battle=0 party=1
-[hunt] encounter 1 at (10,33) mode=run balls=1
-phase wild-intro @1311 (10,33) battle=1 party=1
-phase wild-run @2076 (10,33) battle=1 party=1
-TX {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":79,"species_id":36}
-TX {"event":"safe","player":"a","seq":80}
+phase pace-grass @1022 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=run balls=1
+phase wild-intro @1348 (10,34) battle=1 party=1
+phase wild-run @2113 (10,34) battle=1 party=1
+TX {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":74,"species_id":165}
+TX {"event":"safe","player":"a","seq":75}
 RX play_sound
 RX msgbox text=Route 1 is a dead zone!
 [hunt] battle outcome battle_over receipts run:timeout
-phase wild-battle_over @2972 (10,33) battle=0 party=1
+phase wild-battle_over @3009 (10,34) battle=0 party=1
 [hunt] after battle: outcome=battle_over result=2 party=1 balls=1 -> escaped
-phase escaped @2973 (10,33) battle=0 party=1
-HUNT escaped after 2039 frames, 1 encounter(s)
+phase escaped @3010 (10,34) battle=0 party=1
+HUNT escaped after 1989 frames, 1 encounter(s)
 NO_CATCH sent
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
 heartbeat f=3600 party=1 connected=true
 heartbeat f=7200 party=1 connected=true
 heartbeat f=10800 party=1 connected=true
+SAVE_PHASE deadzone_new_a save-open-start-menu
+SAVE_PHASE deadzone_new_a save-close-foreign-menu
+SAVE_PHASE deadzone_new_a save-select-save
+SAVE_PHASE deadzone_new_a save-choose-save
+SAVE_PHASE deadzone_new_a save-confirm
+SAVE_PHASE deadzone_new_a save-await-close
+SAVE_PHASE deadzone_new_a save-witnessed
+SAVE_WITNESS deadzone_new_a frames=540
 RESULT: PASS (ran from the first encounter)
