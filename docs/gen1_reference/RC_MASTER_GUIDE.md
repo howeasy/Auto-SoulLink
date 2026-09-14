@@ -13,18 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T03:24:36+00:00",
+  "updated_at_utc": "2026-09-14T03:30:29+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "975ab9c",
-  "live_lane": {
-    "card": "parcel-r6",
-    "owner": "coordinator slink-63",
-    "owned_root": ".cache/d1-rb-parcel-r6",
-    "titles": "red/blue",
-    "requested_speed_percent": 300,
-    "limit_seconds": 900
-  },
-  "next_action": "Parcel r5 reached the Mart quantity prompt (delivery cutscene + second trip proved); text_box over-constraint fixed from the live point. Running r6. P2A-2 implementation slice dispatches after r6 releases the lane.",
+  "source_head": "c701e15",
+  "live_lane": null,
+  "next_action": "D2 parcel/first-ball/ball-gate checkpoint PASSED (controlled-scripted, r6). Lane released. Next: P2A-2 resume-at-run-boundary implementation slice (the feature that makes multi-session play possible); D3 catch remains parked unless the owner reopens the scripted campaign.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -485,6 +478,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 | Item | Verified state / next owner action |
 | --- | --- |
 | P2A-2 seams (resume at the run boundary) | Gen1-CodexPeer record. **Why it is the top feature:** today a run can only be played in one sitting — every relaunch is refused, so a full playthrough is impossible without it. Seams: Manager `resume_from` joins the strict key check before staging (`manager.py:763-776`); predecessor inspected read-only via `journal_reader.read_journal` (`:26-62`, never `open_runtime`); rules import via typed `SoulLinkState.from_document` / staged restore (`state.py:783-847`, `staged_state.py:74-145`), carrying links/area states/pending captures/mon stats/`pokeballs_obtained`/player identity/memorial (`rules.memorial.retired_pairs`) and NOT admissions, bindings, engine counters, cursors, commands, trades, observations, leases. **Blockers to design around:** `initial_observation.record` refuses any established history (`:155-161`) → needs a resume-specific transition; the earliest byte-level gate is right after `validate()` at `:163` (`sha256(bytes.fromhex(cart_hex)[0x498:0x8000])` vs the required witness digest); a matched digest must be paired with a witnessed **CONTINUE** (compose `gen1_continue_observer.lua`; the client currently builds the New Game bootstrap observer, `gen1_client_entry.lua:118`); inherited ball activation must be a typed lineage fact consumed by `gen1_wild_encounter_runtime.py:100-117` / `gen1_faint_runtime.py:132-155` (never a forged signal or frame 0); SaveRAM lives under `root/<journal-run-id>/<player>/SaveRAM` with an ownership manifest (`bizhawk_launch.py:73-104`) → an ownership chain or a verified copy; witness/rules alignment: refuse when a player's last committed observation revision exceeds its witness revision (owner policy: saved-but-unwitnessed → HOLD); "unchanged bundle" = reviewed source/dependency + cartridge identity, not ZIP equality. Proposed files: new `server/gen1_run_resume.py`, `manager.py`, `gen1_run_config.py`, `gen1_initial_observation.py`, `gen1_runtime_state.py`, `gen1_runtime.py`, `gen1_faint_runtime.py`, `gen1_wild_encounter_runtime.py`, `bizhawk_launch.py`, `tools/launch_bizhawk.py`, `lua/gen1_client_entry.lua`, new resume observer; unit/integration/live tests; dashboard affordance deferred (API + CLI first). Falsifiers: `resume_from` rejected today; imported core rejected by initial enrollment; prepare refuses a nonempty unowned SaveRAM. |
+| **Parcel attempt 6 — D2 PASS (CONTROLLED-SCRIPTED)** | `rb-parcel-checkpoint-observed` at `c701e15`: one chained process per player from New Game to the first bought POKé BALL with the server's ball-gate activation recorded for BOTH players (committed engine records), starter link alive, no deaths, clean cleanup. Receipts summary `3bd2aff9…dd55`, console `a4164c08…cbcf`; full record in the [D1 physical report](reviews/D1-RB-physical-successor.md). Closes D2 for the `false` text axis; catches (D3), the tweaked text axis (FT-2) and later rows remain open. |
 | Parcel attempt 5 | Oak's cutscene completed and the second trip to the Viridian Mart PROVED; BUY → POKé BALL accepted → quantity prompt reached, then `mart-unknown-wait` because `wTextBoxID` read 1 (not 0x0D) — the list/quantity routines never rewrite it. Item/quantity/confirm signatures now ignore `text_box` (geometry + oob + exit method); red test from the live point. Receipts summary `11e4371c…8afe`, console `ddf4892d…3ec8`. Attempt 6 is the changed run. |
 | Parcel attempt 4 | Parcel **delivered** to Oak on both cartridges (script 15); driver idled on a `wJoyIgnore == $FC` gate while the cutscene text runs with mask 0/$F0. Fix: tap A whenever unmasked and no scripted NPC walk; red model test. Receipts summary `de3e46fc…ae04`, console `b2411c4e…147f`. Attempt 5 is the changed run. |
 | Parcel attempt 3 | **HOLD at Oak's handoff, but the WB-1 fix is PROVED live**: both cartridges crossed Route 1 grass with wild encounters (RUN sub-path) and no observer crash, received the parcel, returned to Oak, then idled — the driver waited for lab script 0 while the post-rival state is `SCRIPT_OAKSLAB_NOOP` (18); one-line fix, red model test. Receipts summary `7e401a9a…ed11`, console `3f4ef3cf…8659`. Attempt 4 is the changed run. |
