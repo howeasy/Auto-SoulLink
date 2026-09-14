@@ -15,7 +15,8 @@ local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen1_gat
 local t = G.start("test_gen1_receptionist_gate")
 local fmt = string.format
 local r, json, ram = t.parts.reads, t.parts.json, t.parts.profile.ram
-local MAP = {lab = 0x28, pallet = 0x00, route1 = 0x0C, viridian = 0x01, center = 0x29}
+local Center = dofile(t.ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
+local MAP = Center.MAP
 local TILE_COUNT = 20 * 18 -- pret/constants/gfx_constants.asm SCREEN_WIDTH/HEIGHT
 
 local function read(addr) return memory.read_u8(addr, "System Bus") end
@@ -102,113 +103,12 @@ local function wait_for(predicate, frames, label, repulse)
                                    frames, at("wCurMap"), at("wXCoord"), at("wYCoord"), row(281, 18)))
 end
 
--- The profile intentionally omits the two menu cursor geometry symbols. Read
--- their committed pret .sym addresses (pokered.sym:18329-18330), not an R/B
--- hardcoded WRAM guess.
-local function menu_symbols()
-    local path = t.ROOT .. "/data/pret/pokered.sym"
-    local file = assert(io.open(path, "r"))
-    local addresses = {}
-    for line in file:lines() do
-        local bank, addr, name = line:match("^(%x+):(%x+) (%S+)")
-        if (name == "wTopMenuItemX" or name == "wTopMenuItemY") and bank == "00" then
-            addresses[name] = tonumber(addr, 16)
-        end
-    end
-    file:close()
-    assert(addresses.wTopMenuItemX and addresses.wTopMenuItemY, "menu geometry missing from pret sym")
-    return addresses
-end
-local menu_addr = menu_symbols()
-
-local stages = {
-    {name="lab_exit", map=MAP.lab, next=MAP.pallet, waypoints={{5,11}}},
-    {name="pallet_north", map=MAP.pallet, next=MAP.route1,
-     waypoints={{12,11},{9,11},{9,2},{10,2},{10,-1}}},
-    {name="route_one_north", map=MAP.route1, next=MAP.viridian,
-     waypoints={{10,31},{8,31},{8,24},{12,24},{12,22},{9,22},
-                {9,14},{14,14},{14,4},{11,4},{11,-1}}},
-    {name="viridian_center", map=MAP.viridian, next=MAP.center,
-     waypoints={{20,30},{19,30},{19,26},{23,26},{23,25}}},
-    {name="center_receptionist", map=MAP.center,
-     waypoints={{3,4},{11,4},{11,3}}},
-}
-local stage_index, waypoint_index, still, last_point = 1, 1, 0, ""
-local wild_active, wild_attempts = false, 0
-local function route_buttons()
-    local map, x, y = at("wCurMap"), at("wXCoord"), at("wYCoord")
-    local battle = at("wIsInBattle")
-    if battle ~= 0 then
-        invariant("only an ordinary Route 1 wild battle interrupted the walk",
-            map == MAP.route1 and battle == 1 and at("wBattleType") == 0,
-            fmt("map=%d battle=%d type=%d", map, battle, at("wBattleType")))
-        wild_active = true
-        invariant("wild RUN attempts stay bounded", wild_attempts < 8,
-                      fmt("attempts=%d tile=%s", wild_attempts, row(281, 18)))
-        -- gen1_rb_route1_inputs.lua:41-60: BATTLE_MENU_TEMPLATE, right column,
-        -- second item RUN. All actions are normal joypad pulses.
-        -- wTextBoxID stays 0x0B through "Can't escape!" and the enemy's turn while the
-        -- cursor bytes hold stale values (receipt: index=3 max=1 with a blank row); only
-        -- a drawn menu (FIGHT on the tilemap row) is the menu
-        if at("wTextBoxID") == 0x0B and row(281, 18):find("FIGHT", 1, true) then
-            local mx, my = read(menu_addr.wTopMenuItemX), read(menu_addr.wTopMenuItemY)
-            local index = at("wCurrentMenuItem")
-            invariant("observed standard wild battle menu", my == 14 and at("wMaxMenuItem") == 1,
-                          fmt("x=%d y=%d index=%d max=%d", mx, my, index, at("wMaxMenuItem")))
-            if mx == 9 then return t.frame % 16 < 2 and {Right=true} or {} end
-            invariant("wild RUN column observed", mx == 15, fmt("x=%d", mx))
-            if index == 0 then return t.frame % 16 < 2 and {Down=true} or {} end
-            invariant("wild RUN row observed", index == 1, fmt("index=%d", index))
-            if t.frame % 16 < 2 then wild_attempts = wild_attempts + 1;return {A=true} end
-            return {}
-        end
-        return t.frame % 16 < 2 and {A=true} or {}
-    end
-    if wild_active then
-        require_check("wild battle ended by RUN with starter alive", at("wBattleResult") == 2 and
-                      read(ram.wPartyMons + 1) + 256 * read(ram.wPartyMons + 2) > 0,
-                      fmt("result=%d hp=%d", at("wBattleResult"),
-                          read(ram.wPartyMons + 1) * 256 + read(ram.wPartyMons + 2)))
-        wild_active, wild_attempts = false, 0
-    end
-    local stage = stages[stage_index]
-    if map == stage.next then
-        t.log(fmt("ROUTE %s -> map %d at (%d,%d) frame %d", stage.name, map, x, y, t.frame))
-        stage_index, waypoint_index, still, last_point = stage_index + 1, 1, 0, ""
-        stage = stages[stage_index]
-    end
-    invariant("walk stayed on the planned map chain", map == stage.map,
-                  fmt("expected %s map=%d, got map=%d (%d,%d)", stage.name, stage.map, map, x, y))
-    if stage_index == #stages and waypoint_index > #stage.waypoints then return nil, true end
-    local target = stage.waypoints[waypoint_index]
-    if not target and stage.next then
-        target = {x, stage.name == "lab_exit" and y + 1 or y - 1}
-    end
-    if target[2] >= 0 and x == target[1] and y == target[2] and
-       waypoint_index <= #stage.waypoints then
-        waypoint_index = waypoint_index + 1
-        target = stage.waypoints[waypoint_index]
-        if not target then
-            if stage.next then target = {x, y + (stage.name == "lab_exit" and 1 or -1)}
-            else return nil, true end
-        end
-    end
-    local point = fmt("%d:%d:%d:%d", map, x, y, waypoint_index)
-    still = point == last_point and still + 1 or 0
-    last_point = point
-    -- Route 1's two wandering NPCs can stand in the lane for many seconds (Blue run: 300
-    -- frames at (14,14) heading north); the parcel driver simply holds the direction
-    invariant("waypoint not blocked", still < 1800,
-                  fmt("%s waypoint=%d at (%d,%d) target=(%d,%d)",
-                      stage.name, waypoint_index, x, y, target[1], target[2]))
-    if at("wJoyIgnore") ~= 0 then
-        return t.frame % 16 < 2 and {A=true} or {}
-    end
-    if x < target[1] then return {Right=true} end
-    if x > target[1] then return {Left=true} end
-    if y < target[2] then return {Down=true} end
-    return {Up=true}
-end
+local route = Center.new({
+    read = read, ram = ram, row = row, frame = function() return t.frame end,
+    log = t.log, invariant = invariant, check = require_check, start = "lab",
+    menu_addr = Center.menu_symbols(t.ROOT, t.title),
+})
+local function route_buttons() return route.step() end
 
 local ok, err = xpcall(function()
     require_check("patched Red/Blue client enabled SLINK TRADE", t.title == "red" or t.title == "blue")

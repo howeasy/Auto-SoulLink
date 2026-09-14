@@ -94,6 +94,12 @@ SCENARIOS = {
                  "target": "battle", "no_setup": True, "frames": 2000000},
     "deadzone_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
                      "target": "battle", "no_setup": True, "frames": 2000000},
+    # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
+    "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
+                  "target": "battle", "no_setup": True, "frames": 2500000,
+                  "rom": {"a": "patch/gen1/build/slink_red.gb",
+                          "b": "patch/gen1/build/slink_blue.gb"},
+                  "patched_saves": {"a": "red_patched", "b": "blue_patched"}},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -363,8 +369,13 @@ class DuoRun:
                 # write_run_config redirected to, above. Seeding the shared directory instead
                 # would leave the emulator booting an empty save from the redirected one.
                 from run_gb_gate import seed_saveram
-                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
-                             dest_dir=self._saveram_dir(inst))
+                seeded = seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
+                                      dest_dir=self._saveram_dir(inst))
+                if self.cfg.get("patched_saves"):
+                    from run_gb_gate import GENS
+                    patch_key = self.cfg["patched_saves"][inst]
+                    save_name = GENS["gen1"]["patched"][patch_key][2]
+                    shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), save_name))
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -381,7 +392,8 @@ class DuoRun:
                 f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
             p = subprocess.Popen(
                 [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
-                 f"--lua=patch/build/duo_{inst}.lua", self.gcfg["rom"][inst]],
+                 f"--lua=patch/build/duo_{inst}.lua",
+                 self.cfg.get("rom", self.gcfg["rom"])[inst]],
                 cwd=REPO)
             self.emus.append(p)
         print("[duo] two EmuHawk instances launched")
@@ -666,6 +678,65 @@ class DuoRun:
             raise RuntimeError("; ".join(problems))
         print(f"[duo] ENCOUNTER LINK FROM REAL PLAY (new client): {a_key} <-> {b_key} "
               f"on route_1, alive")
+        return a_key, b_key
+
+    def assert_trade_new(self, results):
+        """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
+        from pathlib import Path
+
+        if REPO not in sys.path:
+            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from run_gb_gate import GENS
+
+        from server.adapters import gen1_codec as codec
+        from tests.unit import protocol_schema
+
+        for process in self.emus:
+            process.wait(timeout=30)  # client.exit flushes CartRAM to its per-instance SaveRAM
+        with open(os.path.join(self.data_dir, "links.json"), encoding="utf-8") as handle:
+            document = json.load(handle)
+        matches = [entry for entry in document.get("links", [])
+                   if entry.get("area_id") == "route_1" and entry.get("status") == "alive"]
+        if len(matches) != 1:
+            raise RuntimeError(f"expected one durable alive route_1 link, got {matches}")
+        before_a, before_b = self._trade_before
+        link = matches[0]
+        if link["a"]["key"] != before_b or link["b"]["key"] != before_a:
+            raise RuntimeError(f"links.json halves were not swapped: {link['a']['key']} / {link['b']['key']}")
+
+        for inst, incoming, partner in (("a", before_b, "b"), ("b", before_a, "a")):
+            save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
+            save = Path(self._saveram_dir(inst)) / save_name
+            sram = save.read_bytes()
+            if len(sram) != codec.SRAM_SIZE:
+                raise RuntimeError(f"{inst} SaveRAM is {len(sram)} bytes, expected {codec.SRAM_SIZE}")
+            start = codec.SRAM_LAYOUT["sPartyData"]
+            party = codec.decode_party(sram[start:start + codec.PARTY_LAYOUT["size"]])
+            if len(party) != 2 or codec.key(party[-1]) != incoming:
+                raise RuntimeError(f"{inst} saved party lacks partner's mon in LAST slot: "
+                                   f"{[codec.key(mon) for mon in party]}")
+            dv, ot, species = incoming.split(":")
+            received = party[-1]
+            if (received["dvs"]["raw"] != int(dv, 16)
+                    or received["ot_id"] != int(ot, 16)
+                    or received["species"] != int(species, 16)):
+                raise RuntimeError(f"{inst} received mon identity fields differ from {incoming}")
+            # Hello locks this name in player_identity; trainer_names is an older field
+            # that Gen 1 never populates (server/state.py:953-989,3071-3073).
+            original_ot = document.get("player_identity", {}).get(partner, {}).get("trainer_name")
+            if not original_ot or received["ot_name"] != original_ot:
+                raise RuntimeError(f"{inst} received OT name {received['ot_name']!r}, "
+                                   f"expected partner's original {original_ot!r}")
+            trade_lines = [json.loads(line[3:]) for line in results[inst].splitlines()
+                           if line.startswith("TX {") and '"event":"trade_done"' in line]
+            if len(trade_lines) != 1:
+                raise RuntimeError(f"{inst} sent {len(trade_lines)} trade_done lines, expected one")
+            report = trade_lines[0]
+            errors = protocol_schema.validate_event(report)
+            if errors or report.get("new_key") != incoming or report.get("slot") != len(party) - 1:
+                raise RuntimeError(f"{inst} trade_done disagrees with saved party: {report}, {errors}")
+            print(f"[duo] {inst} saved LAST slot {incoming}, OT {original_ot}, trade_done valid")
+        print(f"[duo] T-3/T-4 durable trade: a={before_b}, b={before_a}")
 
     def assert_dead_zone_new(self):
         """D-3: A's RUN sends no_catch and locks route_1; B's later catch there is retired.
@@ -776,6 +847,14 @@ class DuoRun:
             elif self.scenario == "link_new":
                 self.go()
                 self.assert_link_new()
+            elif self.scenario == "trade_new":
+                self.go()
+                self.assert_link_new()
+                before = [entry for entry in self._links_json()
+                          if entry.get("area_id") == "route_1" and entry.get("status") == "alive"]
+                if len(before) != 1:
+                    raise RuntimeError("trade_new has no durable post-link_new pair")
+                self._trade_before = (before[0]["a"]["key"], before[0]["b"]["key"])
             elif self.scenario == "deadzone_new":
                 self.assert_dead_zone_new()
             else:
@@ -865,6 +944,8 @@ class DuoRun:
             ra, rb = self.wait_results()
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
+            if pa and pb and self.scenario == "trade_new":
+                self.assert_trade_new({"a": ra, "b": rb})
             passed = pa and pb
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")

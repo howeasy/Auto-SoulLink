@@ -31,13 +31,16 @@ pytestmark = [
 
 GAME = "gen1_new"
 ROMS = ("red", "blue")
-SCENARIOS = ("link_new", "deadzone_new")
+SCENARIOS = ("link_new", "deadzone_new", "trade_new")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_gen1_new_duo(scenario):
     if not os.path.exists(play.EMUHAWK):
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
+    for rom_path in RUNNER_SCENARIOS[scenario].get("rom", {}).values():
+        if not os.path.exists(os.path.join(REPO, rom_path)):
+            pytest.skip(f"trade-carrying ROM {rom_path} not built")
     target = RUNNER_SCENARIOS[scenario].get("target", "town")
     for rom in ROMS:
         if not os.path.exists(os.path.join(REPO, play.ROMS[rom])):

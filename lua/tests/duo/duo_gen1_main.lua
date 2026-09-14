@@ -44,6 +44,7 @@ local H = require("hud")
 local json = dofile(ROOT .. "/lua/json_codec.lua")
 local safety = dofile(ROOT .. "/lua/gen1_write_safety.lua")
 local Hunt = dofile(ROOT .. "/lua/tests/gen1_rb_hunt_inputs.lua")
+local Center = dofile(ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
 local Driver = dofile(ROOT .. "/lua/tests/gen1_battle_driver.lua")
 local Play = dofile(ROOT .. "/lua/tests/gen1_scripted_play.lua")
 
@@ -59,11 +60,13 @@ C.init(SLINK_HOST, tonumber(SLINK_PORT))
 
 -- Wire receipts: every line the client sends and every command it receives.
 local seen = {} -- event/cmd name -> count
+local sent_events, received_commands = {}, {}
 local _send = C.send
 C.send = function(line)
     local ok, msg = pcall(json.decode, line)
     local name = ok and type(msg) == "table" and msg.event or "?"
     seen[name] = (seen[name] or 0) + 1
+    if name == "trade_offer" or name == "menu_result" or name == "trade_done" then sent_events[name] = msg end
     if name ~= "tick" then log("TX " .. (line:sub(1, 220))) end
     return _send(line)
 end
@@ -74,6 +77,7 @@ local _handle = gclient.handle_command
 gclient.handle_command = function(self, cmd)
     local c = cmd and cmd.cmd or "?"
     seen[c] = (seen[c] or 0) + 1
+    if c == "trade_mask" or c == "show_menu" or c == "apply_trade" then received_commands[c] = cmd end
     if c ~= "noop" then
         log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
     end
@@ -247,6 +251,153 @@ function scenarios.link_new()
             seen.capture or 0, seen.box_mon or 0, seen.stats_cache or 0, seen.party_mon or 0,
             seen.sync_retrieve_done or 0, seen.sync_retrieve_failed or 0, seen.box_mon_failed or 0))
     return true, "caught " .. key
+end
+
+-- T-3/T-4: reuse the real Route 1 capture/link, walk to the *native* receptionist, then
+-- let the two cartridges perform one prompt and one apply. The Python runner checks SRAM
+-- and the server's durable link after both instances have exited.
+function scenarios.trade_new()
+    if not gclient.trade_enabled then return false, "SLINK TRADE patch was not detected" end
+    local linked, why = scenarios.link_new()
+    if not linked then return false, "link_new prerequisite failed: " .. tostring(why) end
+    if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned to party" end
+    local linked_key = new_key()
+    local linked_slot
+    for _, mon in ipairs(party_keys()) do if mon.key == linked_key then linked_slot = mon.slot end end
+    if not linked_slot or #party_keys() ~= 2 then return false, "linked mon missing from two-mon party" end
+    log_party("PRE_TRADE")
+
+    local function tile_row(offset, length) return Center.row(rd, ram.wTileMap, offset, length) end
+    local function tiles(text, offset) return Center.has_tiles(rd, ram.wTileMap, text, offset) end
+    local function require_route(label, ok, detail)
+        if not ok then error(label .. ": " .. tostring(detail), 0) end
+    end
+    local linked_hp_addr = ram.wPartyMons + linked_slot * parts.profile.derived.party_struct_size + 1
+    local route = Center.new({
+        read = rd, ram = ram, row = tile_row, frame = function() return frame end,
+        log = log, invariant = require_route, check = require_route, start = "route1",
+        menu_addr = {wTopMenuItemX=symbols.wTopMenuItemX, wTopMenuItemY=symbols.wTopMenuItemY},
+        linked_hp = function() return rd(linked_hp_addr) * 256 + rd(linked_hp_addr + 1) end,
+    })
+    local arrived = false
+    for _ = 1, 20000 do
+        local buttons, done = route.step()
+        if done then arrived = true;break end
+        yield_frame(buttons)
+    end
+    if not arrived or rd(ram.wCurMap) ~= Center.MAP.center or rd(ram.wXCoord) ~= 11 or rd(ram.wYCoord) ~= 3 then
+        return false, fmt("Center walk stopped map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord))
+    end
+    log(fmt("CENTER_RECEPTIONIST map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
+    if not wait_until(overworld_ok, 30, "Center overworld checkpoint") then return false, "Center not overworld-safe" end
+
+    local function tap(key)
+        yield_frame({[key]=true});yield_frame({[key]=true});yield_frame({});yield_frame({})
+    end
+    local function wait_tiles(label, pred, budget, button)
+        for _ = 1, budget do
+            if pred() then log(label .. " tile=" .. tile_row(281, 18) .. " | " .. tile_row(321, 18));return true end
+            yield_frame(button and frame % 16 < 2 and {[button]=true} or {})
+        end
+        return false
+    end
+    local function partner_has(mark)
+        local file = io.open(D.partner_result, "r")
+        if not file then return false end
+        local text = file:read("*a");file:close()
+        return text:find(mark, 1, true) ~= nil
+    end
+
+    local first_done = seen.trade_done or 0
+
+    if D.player == "a" then
+        local first_query, first_offer = seen.trade_query or 0, seen.trade_offer or 0
+        tap("Up");yield_frame({}) -- receptionist object at (11,2)
+        local talked = frame
+        tap("A")
+        if not wait_until(function() return (seen.trade_query or 0) > first_query end, 30, "native trade_query") then
+            return false, "receptionist did not query eligibility"
+        end
+        if frame - talked > 30 then return false, "native query exceeded 30 frames" end
+        local mask_command = wait_until(function() return received_commands.trade_mask end, 30, "trade_mask")
+        local mask = mask_command and mask_command.mask or 0
+        if math.floor(mask / (2 ^ linked_slot)) % 2 ~= 1 then
+            return false, fmt("linked physical slot %d absent from eligibility mask %d", linked_slot, mask)
+        end
+        -- trade_receptionist.asm:335-381: the picker lists set mask bits in ascending
+        -- physical slot order, then maps the selected *visible row* back to a physical slot.
+        local picker_row = 0
+        for slot = 0, linked_slot - 1 do
+            if math.floor(mask / (2 ^ slot)) % 2 == 1 then picker_row = picker_row + 1 end
+        end
+        log(fmt("TRADE_MASK %d linked_slot=%d picker_row=%d", mask, linked_slot, picker_row))
+        if not wait_tiles("NATIVE_MENU", function()
+            return tiles("SLINK TRADE", 42) and tiles("CABLE CLUB", 82) and tiles("CANCEL", 122)
+        end, 120) then return false, "SLINK TRADE native menu not drawn" end
+        if not wait_tiles("TRADE_WHICH", function() return tiles("TRADE WHICH?", 22) end, 180, "A") then
+            return false, "TRADE WHICH? picker not drawn"
+        end
+        for _ = 1, 90 do
+            if rd(ram.wCurrentMenuItem) == picker_row then break end
+            yield_frame(frame % 16 < 2 and {Down=true} or {})
+        end
+        if rd(ram.wCurrentMenuItem) ~= picker_row then return false, "picker cursor did not reach linked row" end
+        for _ = 1, 180 do
+            if (seen.trade_offer or 0) > first_offer then break end
+            yield_frame(frame % 16 < 2 and {A=true} or {})
+        end
+        local offered = sent_events.trade_offer
+        if (seen.trade_offer or 0) ~= first_offer + 1 or not offered or offered.slot ~= linked_slot then
+            return false, fmt("trade_offer was not the linked slot %d", linked_slot)
+        end
+        log(fmt("TRADE_OFFER slot=%d", offered.slot))
+        if not wait_tiles("OFFER_SENT", function() return tiles("Trade offer sent.") end, 180) then
+            return false, "native Trade offer sent. text not drawn"
+        end
+        local returned = false
+        for _ = 1, 600 do
+            if overworld_ok() then returned = true;break end
+            yield_frame(frame % 16 < 2 and {A=true} or {})
+        end
+        if not returned then return false, "offer text did not return to overworld" end
+        log("OFFER_RETURNED")
+    else
+        local prompt = wait_until(function() return received_commands.show_menu end, 300, "partner show_menu")
+        if not prompt or prompt.blob_hex == nil or prompt.slot == nil then
+            return false, "partner show_menu omitted native prompt fields"
+        end
+        -- trade_prompt.asm:77-83 calls PrintText then YesNoChoice; :106-115 renders
+        -- `Trade <player>` / `for <nickname>?`. pret data/yes_no_menu_strings.asm:24-26
+        -- renders YES and NO as distinct tilemap rows.
+        if not wait_tiles("PARTNER_YES_NO", function()
+            return tiles("Trade ") and tiles("for ") and tiles("YES") and tiles("NO")
+        end, 600) then return false, "native partner Trade/for/YES/NO prompt not drawn" end
+        if not wait_until(function() return partner_has("OFFER_RETURNED") end, 180,
+                          "initiator to clear the offer notice") then return false, "initiator still in offer text" end
+        if rd(ram.wCurrentMenuItem) ~= 0 then return false, "native prompt did not default to YES" end
+        local first_result = seen.menu_result or 0
+        for _ = 1, 240 do
+            if (seen.menu_result or 0) > first_result then break end
+            yield_frame(frame % 16 < 2 and {A=true} or {})
+        end
+        if (seen.menu_result or 0) ~= first_result + 1 or not sent_events.menu_result or
+           sent_events.menu_result.choice ~= 1 then return false, "partner YES did not send menu_result choice=1" end
+        log("PARTNER_ACCEPTED")
+    end
+
+    local done = wait_until(function() return (seen.trade_done or 0) > first_done end, 300, "native apply trade_done")
+    if not done then return false, "native apply never reported trade_done" end
+    local report = sent_events.trade_done
+    if not report or report.new_key == linked_key or report.new_species == 0 then
+        return false, "trade_done reported no received mon"
+    end
+    log(fmt("TRADE_DONE slot=%d key=%s species=%d", report.slot or -1, report.new_key, report.new_species))
+    log_party("POST_TRADE")
+    if not wait_until(function() return partner_has("TRADE_DONE") end, 120, "partner trade_done") then
+        return false, "partner did not finish native apply"
+    end
+    frames(120) -- let both trade_done frames reach the server before client.exit()
+    return true, "native trade applied once"
 end
 
 -- D-3: A runs from its first encounter (no_catch -> dead zone); B then catches there and the
