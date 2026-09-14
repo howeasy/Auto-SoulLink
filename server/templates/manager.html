@@ -241,9 +241,9 @@
     <div class="mgr-detail-grid">
       <section class="mgr-detail-info">
         <div class="mgr-detail-meta">
-          <span><b>Created</b> <span x-text="current?.created_short"></span></span>
-          <span><b>TCP</b> <span x-text="current?.tcp_port"></span></span>
-          <span><b>HTTP</b> <span x-text="current?.http_port"></span></span>
+          <span><b>Created</b> <span class="num" x-text="current?.created_short"></span></span>
+          <span><b>TCP</b> <span class="num" x-text="current?.tcp_port"></span></span>
+          <span><b>HTTP</b> <span class="num" x-text="current?.http_port"></span></span>
           <template x-if="current?.game_label">
             <span class="mgr-badge mgr-badge-game">
               <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-game"/></svg>
@@ -451,11 +451,11 @@
                           </span>
                           <span title="Pokéballs in bag">
                             <span class="mgr-live-stat-label">balls</span>
-                            <span x-text="liveStatus.players[pid].ball_count"></span>
+                            <span class="num" x-text="liveStatus.players[pid].ball_count"></span>
                           </span>
                           <span title="Badges earned">
                             <span class="mgr-live-stat-label">badges</span>
-                            <span x-text="livePopCount(liveStatus.players[pid].badges)"></span>
+                            <span class="num" x-text="livePopCount(liveStatus.players[pid].badges)"></span>
                           </span>
                         </div>
                         <div class="mgr-live-party" x-show="livePartyList(pid).length">

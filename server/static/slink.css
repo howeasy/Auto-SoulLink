@@ -6,6 +6,18 @@
  */
 
 
+/* ── @font-face — vendored Jersey 20 ──────────────────────────────
+ * The figures face (--font-num) and the board's UI face. Vendored, never fetched at
+ * runtime: an OBS browser source caches CDN assets unpredictably. */
+@font-face {
+  font-family: 'Jersey 20';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-20-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-20-latin-ext.woff2') format('woff2');
+}
+
 /* ── @font-face — vendored Pixelify Sans ────────────────────────
  * Used by the Funtastic theme family as the body font. Pixelify Sans is a
  * monolinear pixel font: Google ships the same WOFF2 for weights 400/600/700,
@@ -116,6 +128,11 @@
   --font-body:  system-ui, 'Segoe UI', sans-serif;
   --font-heading: 'Pixelify Sans', 'Press Start 2P', ui-monospace, monospace;
   --font-mono:  ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  /* Figures. Pixelify has no tabular set and its digits are the least legible glyphs it
+   * has, so NOTHING numeric renders in it: HP, levels, ports, counts, timestamps, badges
+   * all go through --font-num (`.num`), whatever --font-ui is. Jersey 20 keeps the pixel
+   * voice with the glyph left in, and every candidate here has tabular figures. */
+  --font-num:   'Jersey 20', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   /* `--font-ui` is the active body / sidebar / chrome font. Defaults to
    * the Pixelify-led chain (the post-rework voice). The body class
    * `font-classic` flips this to the system-ui chain (the pre-rework
@@ -177,6 +194,17 @@ body.font-classic {
 }
 body.dark-theme.font-classic .dash-sidebar {
   --font-ui: var(--font-mono);
+}
+
+/* ── Figures ──────────────────────────────────────────────────────────
+ * Anything that is a number wears this. A page font is a voice; digits are data, and
+ * they line up only when every one is the same width. */
+.num, .enc-lv, .tomb-mon .level, .dash-sidebar-port, .phase-stats,
+.mk-hp-num, .mk-ev-ts, .mk-badges, .mk-bond-state, .mk-meta, .mk-tag, .mk-sub,
+.mgr-rail-family-count, .mgr-live-mon-lv {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── Per-context --scale-step overrides ──────────────────────────────

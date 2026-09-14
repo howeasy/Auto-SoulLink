@@ -11,23 +11,12 @@
  * brief's rationale still names the classes it talks about.
  */
 
-/* Jersey 20 as the board's UI face: pixel character with more of the glyph left in than
- * Pixelify, which is what made the old dashboard the hardest page to read. Vendored, never
- * fetched at runtime (see fonts/). Scoped to the board until the overlays are checked at
- * their catalogue sizes -- Jersey is condensed and moves widths inside fixed OBS sources. */
-@font-face {
-  font-family: 'Jersey 20';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/static/fonts/jersey-20-latin.woff2') format('woff2'),
-       url('/static/fonts/jersey-20-latin-ext.woff2') format('woff2');
-}
+/* Jersey 20 as the board's whole UI face, not only its figures (the face itself is
+ * declared in slink.css beside --font-num). Scoped to the board until the overlays are
+ * checked at their catalogue sizes -- Jersey is condensed and moves widths inside fixed
+ * OBS sources. */
 body.board { --font-ui: 'Jersey 20', 'Pixelify Sans', monospace; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; }
-/* Numbers are the reason the face matters most: HP and levels stack in columns that only
- * read as columns when the digits are the same width. */
-body.board .mk-hp-num, body.board .mk-ev-ts, body.board .mk-badges { font-variant-numeric: tabular-nums; }
 
 /* The board lives inside the dashboard shell (sidebar + main) rather than owning the page. */
 .dash-main.mk-body-root { font-family: var(--font-ui); }

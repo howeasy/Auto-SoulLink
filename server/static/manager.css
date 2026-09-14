@@ -292,7 +292,7 @@ body {
 .mgr-stream-banner a:hover { background: color-mix(in srgb, var(--c-link) 18%, transparent); }
 .mgr-stream-banner .stream-port {
   color: var(--c-alive);
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-weight: 700;
 }
 .mgr-stream-ico {
@@ -444,7 +444,7 @@ body {
 }
 .mgr-last-event .mgr-section-label { margin-bottom: 6px; display: block; }
 .mgr-last-event b { color: var(--c-txt); margin: 0 6px; }
-.mgr-ev-ts { color: color-mix(in srgb, var(--c-dim) 70%, var(--c-bg)); font-family: var(--font-mono); margin-right: 4px; }
+.mgr-ev-ts { color: color-mix(in srgb, var(--c-dim) 70%, var(--c-bg)); font-family: var(--font-num); font-variant-numeric: tabular-nums; margin-right: 4px; }
 
 .mgr-section-label {
   display: inline-flex;

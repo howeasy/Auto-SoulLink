@@ -123,7 +123,7 @@ h3 { color: var(--c-txt); margin: 0 0 0.55em 0; font-size: 1.05em; }
   text-shadow: 0 0 8px color-mix(in srgb, var(--c-brand) 55%, transparent);
 }
 .dash-sidebar-port {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);   /* a port is a number; see --font-num in slink.css */
   font-size: 0.6em;
   color: var(--c-dim);
   letter-spacing: 0.08em;
