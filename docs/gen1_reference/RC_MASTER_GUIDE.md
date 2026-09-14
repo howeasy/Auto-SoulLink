@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T06:41:23+00:00",
+  "updated_at_utc": "2026-09-14T06:59:55+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "c57de64",
+  "source_head": "94bfa26",
   "live_lane": null,
-  "next_action": "Resume round-trip r1 HOLD in the save driver (wSaveFileStatus is battle-clobbered; RS-2 fixing). P2A-9 (start reservation) in flight. Then re-run the round-trip (changed run).",
+  "next_action": "Resume round-trip r2 HOLD in the starter-rival driver on an RNG-dependent unmodelled menu state (BI-2 hardening). Re-run as r3 after BI-2 lands.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -638,26 +638,46 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "p2a-9",
-      "owner": "isolated Claude worker (server; resumed context; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
       "files": [
         "server/manager.py",
         "tests/integration/test_manager_gen1_resume.py",
         "tests/unit/test_manager_http_hardening.py"
       ],
-      "next_action": "Starting reservation token respected by reconcile/stop/archive/delete; final start commit conditional on token + resumed_by; bounded timeout normalisation.",
-      "reuse_decision": "shared"
+      "next_action": "None; integrated at 8ab25a7 (232 manager/resume tests; suite 8029 + the 3 RS-2 mid-edit transients since green).",
+      "reuse_decision": "shared",
+      "receipt": "tests/integration/test_manager_gen1_resume.py (+7 reservation tests)",
+      "independent_review_refs": [
+        "Codex REVIEW cx-69ce8923 round 4 finding A \u2014 addressed; final MODEL gate after the live check"
+      ]
     },
     {
       "id": "rs-2",
-      "owner": "isolated Claude worker (harness; resumed RS-1 context; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (harness worker authored)",
+      "state": "done",
       "files": [
         "lua/tests/gen1_rb_save_inputs.lua",
         "tests/unit/test_gen1_rb_save_inputs.py"
       ],
-      "next_action": "Save driver terminal without wSaveFileStatus (confirmed YES + menus closed); red model from the live point.",
-      "reuse_decision": "Gen 1 route facts"
+      "next_action": "None; integrated at 0e3292e (13 driver models). Live re-run after P2A-9 lands and the pin is reset.",
+      "reuse_decision": "Gen 1 route facts",
+      "receipt": "tests/unit/test_gen1_rb_save_inputs.py (13 passed)",
+      "independent_review_refs": [
+        "coordinator re-ran 25 in the driver/chain sets + lupa; fact of record = live r1 observation (save_status 2 mid-battle)"
+      ]
+    },
+    {
+      "id": "bi-2",
+      "owner": "isolated Claude worker (BI-1 context resumed; ACK on report)",
+      "state": "active",
+      "files": [
+        "lua/tests/gen1_rb_ball_gate_inputs.lua",
+        "tests/unit/test_gen1_selected_rb_ball_gate.py",
+        "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
+      ],
+      "next_action": "Battle refusals name the point; bounded idle on unknown geometry; enumerate source candidates for Y14/max!=1 or Y12/X!=5 during the lab battle.",
+      "reuse_decision": "game-specific test driver"
     }
   ]
 }
@@ -681,6 +701,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| Resume round-trip attempt 2 | HOLD before the save: A's starter-rival driver (8 prior passes) hit `unknown battle menu; refuse blind A` on an RNG-dependent retained-geometry state the assert did not record. BI-2: refusals name the point, bounded idle before refusing, candidate states from source. Not a product defect. Summary `e7cf6a05…646d`. |
+| P2A-9 integrated | `starting_token`/`starting_at` reservation (120 s ceiling, `# ponytail:`) survives `_reconcile`/reads; stop/archive/delete refuse a live reservation; the final start commit requires the caller's own token and no `resumed_by`, otherwise kills what it spawned and returns 409. 232 manager/resume tests. Pin `94bfa26`. |
 | Resume round-trip attempt 1 | HOLD before any save: the `rb-save` driver treated `wSaveFileStatus` as a fresh-cartridge/save oracle, but the byte is battle-animation scratch (`ram/wram.asm:1371-1385`) and read 2 during the rival battle. Driver terminal changes to confirmed-YES + menus closed (RS-2); the acked `gen1-save-witness` remains the proof. No product code implicated; resume phase not reached. Summary `aed95181…`. |
 | P2A review round 4 | Codex `cx-69ce8923`: B/C/D resolved; **A not resolved (MAJOR, MODEL only):** `_reconcile` erases an active `starting` reservation on any read (`manager.py:486-488,523-527`), stop/archive overwrite it, and the final start commit is unconditional (`:893-903`), so a start paused at spawn can still overlap a resume. Not on the live path (harness posts `start=False`, `gen1_selected_scenario.py:191-194`): **LIVE go**. P2A-9 dispatched; live `rb_resume_roundtrip` running. |
 | P2A-8 integrated | `handle_start` reserves `status="starting"` under the lock (409 if `resumed_by` set or already starting), spawns outside, commits `running`/reverts on failure; resume refuses `starting`/`running`; `_reconcile` normalises a stale `starting`; `shutil.rmtree(onerror=)` (3.11); `_pure_heartbeat` requires explicit `battle==0` and `trainer` null keys (native checkpoint may be absent); `_get`/`_active_stream_run` under the lock. 8032/0. |
