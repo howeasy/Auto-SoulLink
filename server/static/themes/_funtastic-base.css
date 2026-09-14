@@ -10,12 +10,8 @@
  * transparent background.
  */
 
-/* Body font flows through `--font-ui` (slink.css default = Pixelify chain;
- * `body.font-classic` swaps in system-ui via the sidebar font picker).
- * Excludes `body.dark-theme` (the calc) so its Bootstrap typography is
- * left alone — the picker still controls the calc's sidebar font via a
- * separate ``body.dark-theme.font-classic .dash-sidebar`` rule in
- * slink.css. */
+/* Body font flows through `--font-ui` (slink.css: the Pixelify chain). Excludes
+ * `body.dark-theme` (the calc) so its Bootstrap typography is left alone. */
 html, body:not(.dark-theme) {
   font-family: var(--font-ui);
   letter-spacing: .02em;

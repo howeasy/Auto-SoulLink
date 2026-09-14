@@ -133,12 +133,6 @@ def build_sidebar_html(
         '<nav class="dash-sidebar-nav" aria-label="Primary">'
         + ''.join(nav_parts) +
         '</nav>'
-        # Font picker sits ABOVE the theme picker — dashboard.js builds the
-        # widget and drops it into the .dash-sidebar-font slot at parse
-        # time. Stacked so the user reads "font then theme" top-to-bottom,
-        # which matches the visual weight of the two controls (font is a
-        # broader voice choice; theme is the palette).
-        '<div class="dash-sidebar-font"></div>'
         '<div class="dash-sidebar-theme"></div>'
         '</aside>'
     )

@@ -17,10 +17,7 @@
 @import url("sidebar.css");
 
 body {
-  /* `--font-ui` is the active body font from slink.css. Defaults to the
-   * Pixelify chain — `body.font-classic` swaps in the system-ui chain via
-   * the picker in the sidebar. Keeping it variable means the toggle hits
-   * every body-scoped text rule in one stroke. */
+  /* `--font-ui` is the body font from slink.css (the Pixelify chain). */
   font-family: var(--font-ui);
   /* Body font + rail width both flow from --scale-step (slink.css :root).
    * The token is `clamp(1rem, .52vw + .64rem, 2.25rem)` — shared across

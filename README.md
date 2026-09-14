@@ -61,7 +61,7 @@ From the dashboard:
 
 > Load the script **after** loading your save file. Writes are disabled until SaveBlock validation passes.
 
-> Theme + font pickers in the sidebar let you swap palette (default / Funtastic grape / jungle / fire / ice / watermelon / smoke / light / transparent) and font (Pixelify Sans / Classic monospace). Choices are persisted in `localStorage` + a `slink-theme` cookie so they survive page loads and apply on the first byte (no FOUC).
+> The theme picker in the rail swaps the palette (default / Funtastic grape / jungle / fire / ice / watermelon / smoke / light / transparent). The choice is persisted in `localStorage` + a `slink-theme` cookie so it survives page loads and applies on the first byte (no FOUC).
 
 ## How It Works
 
@@ -73,7 +73,7 @@ BizHawk B ─── Lua client ──┘
 
 - **Lua clients** diff RAM each frame and send JSON events only on changes (capture, faint, area change, party move)
 - **Server** returns commands in the TCP response (`force_faint`, `box_mon`, `party_mon`, `memorialize`; plus `force_explode` / `replace_rival_team` for the RR run augmentations)
-- **Web UI** is Jinja2 templates served by aiohttp, swapped in-place by HTMX (idiomorph) every ~2 s, with small Alpine.js widgets for the theme/font pickers
+- **Web UI** is Jinja2 templates served by aiohttp, swapped in-place by HTMX (idiomorph) every ~2 s, with small Alpine.js widgets for the theme picker
 - **State** persists to `data/links.json` after every mutation
 
 ## Soul Link Rules

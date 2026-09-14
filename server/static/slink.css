@@ -133,11 +133,8 @@
    * all go through --font-num (`.num`), whatever --font-ui is. Jersey 20 keeps the pixel
    * voice with the glyph left in, and every candidate here has tabular figures. */
   --font-num:   'Jersey 20', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  /* `--font-ui` is the active body / sidebar / chrome font. Defaults to
-   * the Pixelify-led chain (the post-rework voice). The body class
-   * `font-classic` flips this to the system-ui chain (the pre-rework
-   * voice), letting the user A/B between the two via a sidebar picker
-   * without touching every individual rule that sets a font-family. */
+  /* `--font-ui` is the body / sidebar / chrome font: the Pixelify-led chain. One token,
+   * so a page (the board) can set its own without touching every font-family rule. */
   --font-ui: var(--font-heading);
 
   /* ── Scaling system ────────────────────────────────────────────────
@@ -181,19 +178,6 @@
   --size-sprite-table:   clamp(40px, calc(var(--scale-step) * 1.6), 72px);
   --size-hp-bar:         calc(var(--scale-step) * 3.2);
   --size-iframe-min:     calc(var(--scale-step) * 18);
-}
-
-/* Font picker — `body.font-classic` swaps in the pre-HTMX-rework body font.
- * Pre-rework `_STATUS_HTML` used a `monospace` body (see git history for
- * the commit at master~ — `body { font-family: monospace; font-size: 20px; }`
- * on the dashboard). That's the "classic" voice the picker restores, not
- * the system-ui chain that debug/twitch/OBS happened to use. Stays out of
- * the overlays (body.stream) — those keep their pixel-art treatment. */
-body.font-classic {
-  --font-ui: var(--font-mono);
-}
-body.dark-theme.font-classic .dash-sidebar {
-  --font-ui: var(--font-mono);
 }
 
 /* ── Figures ──────────────────────────────────────────────────────────

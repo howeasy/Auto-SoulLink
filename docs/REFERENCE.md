@@ -115,7 +115,7 @@ The server writes state to `data/links.json` and `data/memorial.json`. Pass `--r
 
 ### 3. Open the status page
 
-Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. The page is a Jinja2 template polled by **HTMX** every ~2 s; **idiomorph** swaps changed nodes in place so `<details open>`, scroll position, and table-search focus survive each refresh. SSE remains available at `/api/events` for the calc bridge and external consumers, but the page itself no longer needs it. Theme + font pickers (Alpine.js widgets in the sidebar) persist to `localStorage` + a `slink-theme` cookie so the saved palette/font apply on the first byte (no FOUC). The page shows:
+Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. The page is a Jinja2 template polled by **HTMX** every ~2 s; **idiomorph** swaps changed nodes in place so `<details open>`, scroll position, and table-search focus survive each refresh. SSE remains available at `/api/events` for the calc bridge and external consumers, but the page itself no longer needs it. The theme picker (an Alpine.js widget in the sidebar) persists to `localStorage` + a `slink-theme` cookie so the saved palette applies on the first byte (no FOUC). The page shows:
 - **Now** — one card per player in that player's column: trainer name, cartridge, badge pips, current area, Pokéball count, last event, *in battle* with the active mon, the wild encounters here, and (Radical Red) the **Upcoming Key Trainers** panel with its "Open in Calc" button
 - **One row per linked pair** — A's half, the bond (route, tie glyph, state), B's half; both HP bars face the bond. Each half shows only its own game's state: two cartridges, two save files, two battles that need not coincide. The foe nests under the fighting half and the partner's half says nothing about it — battle is a player state, never a pair state, since the board cannot know who is looking, and what the link means for the partner is the reader's to know. Ability and held item under each half where the cartridge has them (`capabilities`)
 - Rows sorted into zones: **In party · Pending link · Split (one half boxed) · Boxed · Linked (stopped run) · Fallen** (memorials and dead zones, with the cause)
@@ -355,7 +355,6 @@ All overlays are designed as OBS browser sources. Each is a Jinja2 template that
 
 URL parameters supported by all overlays:
 - `?theme=<id>` — one of `default`, `funtastic-grape`, `funtastic-jungle`, `funtastic-fire`, `funtastic-ice`, `funtastic-watermelon`, `funtastic-smoke`, `light`, `transparent`. Falls back to the `slink-theme` cookie when omitted (set by the dashboard/manager picker).
-- `?font=pixelify` (default Pixelify Sans chain) / `?font=classic` (pre-rework monospace voice). Falls back to the `slink-font` localStorage value across tabs.
 - `?layout=h` / `?layout=thin-h` / `?layout=thin-v` (party overlays only)
 
 Scrolling overlays additionally accept:
