@@ -34,15 +34,20 @@ SPAN_OPTIONS={"protected":((0x100,0x150),),"bank_size":0x4000}
 def content_identity(semantic_profile,manifest_sha256,generation):
     """Hash a location-free view of a reproduced-UPR pair's content for content_profile_hash.
 
-    `generation` is upr_runner.py's per-player record, which carries `"output": str(output)`
-    — an absolute path unique to the run directory it was prepared in. Byte-identical
+    `generation` is upr_runner.py's per-player record. Two of its fields are run-local
+    absolute paths, not content: `"output": str(output)` (run_pinned, upr_runner.py:140),
+    and `custom_names.selection` (selected_custom_names, upr_runner.py:56-66 -> run_pinned,
+    upr_runner.py:138) which carries `{"kind": ..., "path": str(resolved_path)}` (or
+    "jar-resource"/"member") even when the Manager passed no explicit override. Byte-identical
     ROM+settings+seed prepared into two different run directories must still compare equal
     here, or a resumed run is wrongly refused as a cartridge mismatch (gen1_run_config.py's
-    "resumed run must use the predecessor cartridge pair" check). Every other field of
-    `generation` (settings/seed/output hashes etc.) still participates.
+    "resumed run must use the predecessor cartridge pair" check). custom_names keeps its
+    content hash (`sha256`) — only its location-carrying `selection` is dropped. Every other
+    field of `generation` (settings/seed/output hashes etc.) still participates.
     """
     return digest({"semantic_profile":semantic_profile,"manifest_sha256":manifest_sha256,
-        "generation":{k:v for k,v in generation.items() if k!="output"}})
+        "generation":{k:({"sha256":v["sha256"]} if k=="custom_names" else v)
+            for k,v in generation.items() if k!="output"}})
 
 
 def _companion_from_clean(rom):
