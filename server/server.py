@@ -3319,56 +3319,18 @@ class SLinkServer:
 
     async def _handle_dashboard_template(self, request):
         """The pair board. `server/board.py` joins the status payload into pair rows and
-        zones; the template draws them. Everything display-shaped is computed here, in
-        Python, so the template is loops and ifs."""
-        from server import board as _board
-        from server.adapters import variant_label
+        zones and computes everything display-shaped; the template draws it."""
+        from server.board import board_context
 
-        status = self._build_status_dict()
-        s = self.state
-        po = s.pokeballs_obtained or {}
-        if s.run_over:
-            phase_slug, phase_label = "game_over", "Game over"
-        elif not (po.get("a") and po.get("b")):
-            phase_slug, phase_label = "pre", "Waiting for Pokéballs"
-        else:
-            phase_slug, phase_label = "running", "Run in progress"
-
-        # The sidebar already says "Soul Link"; the page title is the variant and the run.
-        concise_parts = []
-        if s.rom_type:
-            concise_parts.append(variant_label(s.rom_type))
-        if self._run_name:
-            concise_parts.append(self._run_name)
-
-        rules = [(icon, label) for flag, icon, label in (
-            (s.species_lock, "dna", "Species Clause"),
-            (s.gender_lock, "gender", "Gender Clause"),
-            (s.type_lock, "type", "Type Clause"),
-            (s.explode_mode, "explode", "Explode Mode"),
-            (s.rival_team_swap, "rival-swap", "Rival Team Swap"),
-            (s.overworld_presence, "presence", "Overworld Presence"),
-        ) if flag]
-
-        ctx = {
-            "page_title":    self._page_title(),
-            "theme":         resolve_theme(request),
-            "is_stream":     False,
-            "hide_chrome":   False,
-            "body_class":    "board",
-            "sidebar_html":  self._build_sidebar_html("status"),
-            "concise_title": " — ".join(concise_parts) or "Soul Link",
-            "phase_slug":    phase_slug,
-            "phase_label":   phase_label,
-            "status":        status,
-            "board":         _board.build_board(status),
-            "rules":         rules,
-            "calc_preview":  bool(s.is_rr),
-            "rom_label":     variant_label,
-            "hp_pct":        _board.hp_pct,
-            "hp_class":      _board.hp_class,
-            "bond_glyph":    _board.bond_glyph,
-        }
+        ctx = board_context(self._build_status_dict(), run_name=self._run_name or "", poll_url="/")
+        ctx.update({
+            "page_title":   self._page_title(),
+            "theme":        resolve_theme(request),
+            "is_stream":    False,
+            "hide_chrome":  False,
+            "body_class":   "board",
+            "sidebar_html": self._build_sidebar_html("status"),
+        })
         return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 
     async def handle_status_json(self, request):

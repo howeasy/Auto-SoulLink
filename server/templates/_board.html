@@ -1,0 +1,217 @@
+{#
+  _board.html — the pair board itself: the `#content` fragment that polls itself.
+
+  Included by dashboard.html (the run server's page) and rendered standalone by the
+  Manager for `GET /runs/{run_id}/board`, which is why nothing here reaches for a request
+  or a server: the whole context is `server.board.board_context(status)`.
+
+  Zones, in the order a player cares about them during a run: NOW (where each player is
+  and what they are fighting, because that is where the partner's mon dies too), then one
+  zone per section of the board (in party, pending, split, boxed, fallen), the unlinked
+  box mons, and the log beside it all from 1400 px. Every zone sits on the same
+  three-track grid: A's column, the spine, B's column. The board cannot know which player
+  is looking at it, so column position is the only thing that says whose mon a mon is;
+  battle is drawn on a HALF, never on a row.
+#}
+{# ── macros ────────────────────────────────────────────────────────────── #}
+
+{% macro hp(mon) -%}
+  <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num">{{ mon.hp }}/{{ mon.maxHP }}</span></span>
+{%- endmacro %}
+
+{% macro half(row, pid, p, other) -%}
+  {% set h = row[pid] %}
+  {% set o = row[other] %}
+  <div class="mk-half {{ pid }}{% if not h %} empty{% endif %}{% if h and h.active %} fighting{% endif %}{% if o and o.active %} staked{% endif %}">
+    {% if h %}
+      <div class="mk-half-in">
+        {% if h.sprite %}<span class="mk-spr big">{{ h.sprite | safe }}</span>{% else %}<span class="mk-slot"></span>{% endif %}
+        <span class="mk-half-txt">
+          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle">⚔</span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star">✦</span>{% endif %}{% if o and o.active %}<span class="mk-stake">at stake</span>{% endif %}</span>
+          <span class="mk-sub">{{ h.species_name }} · Lv {{ h.level }}</span>
+          {% if h.hp is not none and row.section != 'fallen' %}{{ hp(h) }}{% endif %}
+          {% if (h.ability or h.item) and row.section != 'fallen' %}
+            <span class="mk-sub faint">{% if h.ability %}{{ h.ability }}{% endif %}{% if h.item %}<span class="mk-item" title="{{ h.item }}"> ◆ {{ h.item }}</span>{% endif %}</span>
+          {% endif %}
+          {% if h.where == 'box' and row.section != 'boxed' %}<span class="mk-sub faint">in box</span>{% endif %}
+          {% if h.active and p.battle_state.in_battle %}
+            <span class="mk-foes">
+              {% for foe in p.battle_state.enemy_party %}
+                <span class="mk-foe">
+                  <span class="mk-spr">{{ foe.sprite_html | safe }}</span>
+                  <span class="mk-foe-txt"><span class="mk-vs">vs</span> {% if p.battle_state.is_trainer_battle %}{{ p.battle_state.opponent_name or 'Trainer' }}’s {% else %}wild {% endif %}{{ foe.species_name }} <span class="mk-sub">Lv {{ foe.level }}</span></span>
+                  {{ hp(foe) }}
+                </span>
+              {% endfor %}
+            </span>
+          {% endif %}
+        </span>
+      </div>
+    {% else %}
+      <div class="mk-half-in slot">
+        <span class="mk-slot"></span>
+        <span class="mk-sub">{% if row.status == 'dead_zone' %}missed{% elif row.section == 'pending' %}waiting for {{ p.trainer_name or pid | upper }}{% else %}—{% endif %}</span>
+      </div>
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+<div id="content" hx-ext="morph" hx-get="{{ poll_url }}" hx-trigger="every 2s" hx-swap="morph:outerHTML" hx-target="this" hx-select="#content">
+  {# The run's phase lives inside the polled fragment so it moves with the run. #}
+  <div class="phase-banner phase-{{ phase_slug }}">
+    <span class="phase-dot"></span>
+    <span class="phase-label">{{ phase_label }}</span>
+    {% if board.counts.alive or board.counts.fallen %}
+      <span class="phase-stats">
+        <span class="phase-alive">{{ board.counts.alive }} alive</span> ·
+        <span class="phase-dead">{{ board.counts.fallen }} fallen</span>
+        {% if status.attempts_count %} · attempt <span class="num">#{{ status.attempts_count }}</span>{% endif %}
+      </span>
+    {% endif %}
+  </div>
+
+  {# ── banners: things that are wrong get said first ───────────────── #}
+  {% if status.save_failed %}
+    <div class="save-warn">&#9888; <b>Run progress is not being saved.</b> {{ status.save_failed }}
+      &mdash; check the data directory is writable (a syncing folder can hold the lock). The run continues in memory; fix this before restarting the server.</div>
+  {% endif %}
+  {% if status.run_over %}
+    <div class="game-over"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>
+  {% endif %}
+  {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
+    {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
+    {% if p.admission != 'admitted' %}<div class="identity-warn">&#9888; Player {{ pid | upper }} not admitted: {{ p.admission_reason }}</div>{% endif %}
+  {% endfor %}
+
+  {% if rules %}
+    <div class="lock-rules">Rules:
+      {% for icon, label in rules %}<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-{{ icon }}"/></svg> {{ label }}</span>{% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="mk-page mk-boardpage">
+    <div class="mk-zones">
+
+      {# ── NOW: one card per player ──────────────────────────────── #}
+      <section class="mk-zone">
+        <h2 class="mk-h2"><span>Now</span><i></i></h2>
+        <div class="mk-now">
+          {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
+            <div class="mk-card mk-nowcard {{ 'online' if p.connected else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
+              <div class="mk-now-head">
+                <span class="mk-side">{{ pid | upper }}</span>
+                <span class="mk-now-name">
+                  <b>{{ p.trainer_name or 'not connected' }}</b>
+                  {% if p.rom_type and p.rom_type != '?' %}<span class="mk-pchip-game">{{ rom_label(p.rom_type) }}</span>{% endif %}
+                </span>
+                {% if board.has_data[pid] %}
+                  <span class="mk-badges">
+                    <span class="mk-pchip-badges">{% for i in range(board.badges[pid].slots) %}<span class="mk-badge-pip{% if i < board.badges[pid].count %} on{% endif %}"></span>{% endfor %}</span>
+                    <span>{{ board.badges[pid].count }}/{{ board.badges[pid].slots }}</span>
+                  </span>
+                {% endif %}
+              </div>
+              {% if board.has_data[pid] %}
+                <div class="mk-now-body">
+                  <div class="mk-now-line">
+                    <b>{{ p.current_area_display or 'unknown' }}</b>
+                    <span><span class="num">{{ p.ball_count }}</span> balls</span>
+                    <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
+                    {% if not p.connected and live %}<span class="mk-tag off">disconnected</span>{% endif %}
+                    {% if p.stale %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
+                    {% if p.battle_state.in_battle %}<span class="mk-tag fight">in battle{% if board.active[pid] %} · {{ p.party_details[board.active[pid]].nickname or p.party_details[board.active[pid]].species_name }}{% endif %}</span>{% endif %}
+                  </div>
+                  {% if p.encounter_table %}
+                    <details class="mk-wild" id="d-wild:{{ pid }}" data-details-key="wild:{{ pid }}">
+                      <summary><span class="mk-cap">Wild here</span><span class="mk-sub">{{ p.encounter_table | length }} method{{ '' if p.encounter_table | length == 1 else 's' }}</span></summary>
+                      <div class="mk-wild-list">
+                        {% for method, list in p.encounter_table.items() %}
+                          <span class="mk-wild-row"><span class="mk-tag">{{ method }}</span><span>{{ list | map(attribute='name') | unique | list | join(', ') }}</span></span>
+                        {% endfor %}
+                      </div>
+                    </details>
+                  {% endif %}
+                  {% if p.trainer_panel_html %}{{ p.trainer_panel_html | safe }}{% endif %}
+                  {% if p.battle_state.calc_preview %}{% set c = p.battle_state.calc_preview %}
+                    <div id="calc-preview-{{ pid }}" class="calc-preview" data-in-battle="1"
+                         data-trainer-key="{{ c.trainer_key }}" data-is-trainer="{{ '1' if c.is_trainer else '0' }}"
+                         data-player-species="{{ c.player_species }}" data-player-level="{{ c.player_level }}"
+                         data-player-nature="{{ c.player_nature }}" data-player-ability="{{ c.player_ability }}"
+                         data-player-item="{{ c.player_item }}" data-player-moves="{{ c.player_moves | tojson }}"
+                         data-enemy-species="{{ c.enemy_species }}" data-enemy-level="{{ c.enemy_level }}"
+                         data-enemy-hp-pct="{{ c.enemy_hp_pct }}" style="display:none"></div>
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="mk-now-body"><span class="mk-sub">{{ 'waiting for hello' if live else 'run not running' }}</span></div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% if not board.sections %}
+        <section class="mk-zone"><div class="mk-card mk-empty">No links yet. Load each save, then the launcher script — the first catch in a shared area starts the board.</div></section>
+      {% endif %}
+
+      {# ── one zone per section, same geometry as the Now cards ──────── #}
+      {% for sect, rows in board.sections %}
+        <section class="mk-zone zone-{{ sect }}">
+          <h2 class="mk-h2 split">
+            <span class="mk-h2-side"><span class="mk-side small">A</span><span>{{ status.players.a.trainer_name or '—' }}</span></span>
+            <i></i>
+            <span class="mk-h2-mid"><span>{{ board.section_labels[sect] }}</span><em><span class="num">{{ rows | length }}</span> pair{{ '' if rows | length == 1 else 's' }}</em></span>
+            <i></i>
+            <span class="mk-h2-side b"><span>{{ status.players.b.trainer_name or '—' }}</span><span class="mk-side small">B</span></span>
+          </h2>
+          <div class="mk-pairs{% if sect in ('boxed', 'pending') %} compact{% endif %}">
+            {% for row in rows %}
+              <article class="mk-pair {{ row.section }}{% if row.at_risk %} at-risk{% endif %}" id="pair-{{ sect }}-{{ row.area }}">
+                {{ half(row, 'a', status.players.a, 'b') }}
+                <div class="mk-bond {{ row.status }}" style="grid-column:2">
+                  <span class="mk-bond-area">{{ row.area_name }}</span>
+                  <span class="mk-bond-glyph">{{ bond_glyph(row.status) }}</span>
+                  <span class="mk-bond-state">
+                    {% if row.at_risk %}<span class="risk">at risk · <b>{{ row.risk }}%</b></span>
+                    {% elif row.status == 'dead_zone' %}<span>dead zone</span>
+                    {% elif row.section == 'fallen' and row.death %}<span>{{ row.death.cause | replace('_', ' ') }}{% if row.death.killer %} · {{ row.death.killer.trainer_name or row.death.killer.species_name }}{% endif %}</span>
+                    {% elif row.section == 'pending' %}<span>waiting</span>
+                    {% elif row.section == 'boxed' %}<span>boxed together</span>
+                    {% elif row.section == 'split' %}<span>split</span>
+                    {% endif %}
+                  </span>
+                </div>
+                {{ half(row, 'b', status.players.b, 'a') }}
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+
+      {% if board.unlinked.a or board.unlinked.b %}
+        <section class="mk-zone">
+          <h2 class="mk-h2"><span>Boxed, unlinked</span><i></i></h2>
+          <div class="mk-card mk-unlinked">
+            {% for pid in ('a', 'b') %}
+              <div class="{{ pid }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}"><span class="mk-side small">{{ pid | upper }}</span>
+                {% for b in board.unlinked[pid] %}<span class="mk-sub"><b>{{ b.nickname }}</b> box <span class="num">{{ b.box + 1 }}·{{ b.slot + 1 }}</span></span>{% else %}<span class="mk-sub">—</span>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    </div>
+
+    {# ── LOG: beside the zones on a wide screen, under them otherwise ─── #}
+    {% if status.recent_events %}
+      <aside class="mk-logcol">
+        <h2 class="mk-h2"><span>Log</span><i></i></h2>
+        <div class="mk-card mk-feed">
+          {% for e in status.recent_events[:60] %}
+            <div class="mk-ev"><span class="mk-ev-ts">{{ (e.ts or '')[11:19] }}</span><span class="mk-ev-who">{{ (e.player or '') | upper }}</span><span>{{ e.text }}</span></div>
+          {% endfor %}
+        </div>
+      </aside>
+    {% endif %}
+  </div>
+</div>

@@ -1,6 +1,6 @@
 """The manager's inline run JSON must be inert as markup.
 
-`manager.html` does `window.SLINK_RUNS = {{ runs_json | safe }}` inside a <script>
+`manager.html` does `window.SLINK_FORM = {{ form_json | safe }}` inside a <script>
 element. `json.dumps` escapes quotes and backslashes but NOT `<`, so a run whose name
 contained `</script>` closed the element and everything after it was parsed as markup --
 stored XSS, reachable through the API that creates runs, not just by typing it into the
@@ -59,6 +59,6 @@ def test_the_template_still_marks_it_safe():
     repo = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
     with open(os.path.join(repo, "server", "templates", "manager.html"), encoding="utf-8") as f:
         src = f.read()
-    assert "runs_json | safe" in src, (
-        "manager.html no longer injects runs_json with | safe — _json_for_script's "
+    assert "form_json | safe" in src, (
+        "manager.html no longer injects form_json with | safe — _json_for_script's "
         "escaping may now be double-applied")

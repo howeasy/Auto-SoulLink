@@ -195,7 +195,64 @@ def build_board(status: dict) -> dict:
                          "slots": len((players.get(pid, {}).get("capabilities") or {}).get("badges") or []) or 8}
                    for pid in PIDS},
         "active": {pid: active_key(players.get(pid, {})) for pid in PIDS},
-        "has_data": {pid: bool(players.get(pid, {}).get("rom_type") or players.get(pid, {}).get("party_keys"))
+        # "?" is what a player who never said hello reports as rom_type.
+        "has_data": {pid: bool((players.get(pid, {}).get("rom_type") or "?") != "?"
+                               or players.get(pid, {}).get("party_keys"))
                      for pid in PIDS},
         "dead_zones": sorted(k for k, v in (status.get("area_states") or {}).items() if v == "dead_zone"),
+    }
+
+
+RULE_BADGES = (
+    ("species_lock", "dna", "Species Clause"),
+    ("gender_lock", "gender", "Gender Clause"),
+    ("type_lock", "type", "Type Clause"),
+    ("explode_mode", "explode", "Explode Mode"),
+    ("rival_team_swap", "rival-swap", "Rival Team Swap"),
+    ("overworld_presence", "presence", "Overworld Presence"),
+)
+
+
+def phase(status: dict) -> tuple[str, str]:
+    """Run lifecycle from the payload alone: nuzlocke_active is pokeballs_obtained."""
+    if status.get("run_over"):
+        return "game_over", "Game over"
+    players = status.get("players") or {}
+    if all((players.get(pid) or {}).get("nuzlocke_active") for pid in PIDS):
+        return "running", "Run in progress"
+    return "pre", "Waiting for Pokéballs"
+
+
+def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live: bool = True) -> dict:
+    """Everything `_board.html` needs, from the payload alone -- so the run server and the
+    Manager (which has only the payload, live or persisted) render the same board.
+
+    `poll_url` is what `#content` fetches every 2 s: `/` on a run server, the run's board
+    route on the Manager. It has to be passed down because a root-relative URL baked into
+    the fragment would poll the wrong page once the fragment is served under a prefix."""
+    from server.adapters import variant_label
+
+    players = status.get("players") or {}
+    rom_types = [str((players.get(pid) or {}).get("rom_type") or "") for pid in PIDS]
+    rom_type = next((rt for rt in rom_types if rt and rt != "?"), "")
+    rules = status.get("rules") or {}
+    slug, label = phase(status)
+    title = " — ".join(x for x in (variant_label(rom_type) if rom_type else "", run_name) if x)
+    return {
+        "status": status,
+        "board": build_board(status),
+        "rules": [(icon, text) for key, icon, text in RULE_BADGES if rules.get(key)],
+        "phase_slug": slug,
+        "phase_label": label,
+        "concise_title": title or "Soul Link",
+        # The damage calculator is pinned to modern mechanics: Radical Red only.
+        "calc_preview": any(rt.endswith("_rr") for rt in rom_types),
+        "poll_url": poll_url,
+        # False for a stopped run on the Manager: the board is what it persisted, and
+        # "waiting for hello" would be a lie about a server that is not listening.
+        "live": live,
+        "rom_label": variant_label,
+        "hp_pct": hp_pct,
+        "hp_class": hp_class,
+        "bond_glyph": bond_glyph,
     }

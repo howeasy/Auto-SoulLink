@@ -1,70 +1,70 @@
 """The Manager must not tell a Gen 1 player that a feature needs a ROM patch it doesn't.
 
-Explode Mode and Rival Swap sat under a heading that said "These need the companion ROM
-patch applied to BOTH players' games", with a "Get patch" link beside them. That is true on
-Gen 3, where gEnemyParty is encrypted and checksummed, and false on Gen 1, where the enemy
-party is plaintext at a fixed address and the move choice is a plain RAM write — both are
-live-tested that way by the `rivalswap` and `explode_g1` duo scenarios.
+Explode Mode and Rival Swap once sat under a heading that said "These need the companion
+ROM patch applied to BOTH players' games". That is true on Gen 3, where gEnemyParty is
+encrypted and checksummed, and false on Gen 1, where the enemy party is plaintext at a
+fixed address and the move choice is a plain RAM write — both are live-tested that way by
+the `rivalswap` and `explode_g1` duo scenarios.
 
-A player reading that would either apply a patch they did not need or, worse, conclude the
-feature was unavailable to them.
-
-There is deliberately no run-creation game picker to gate on: the generation is only known
-when a client connects. So the fix is accurate labelling rather than invented gating, and
-what these tests pin is that the labels stay accurate.
+The New-run form now names the game family up front and greys what that family cannot
+honour, with the reason on the option. That knowledge is one table, `OPTION_SUPPORT`, read
+through `option_support()`; these tests pin that its answers stay accurate.
 """
 from __future__ import annotations
 
-import os
-import re
-
 import pytest
 
-_REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from server.manager import GAMES, OPTIONS, new_run_form, option_support
+
+GEN1 = ["red", "blue"]
+RR = ["firered_rr", "firered_rr"]
 
 
-@pytest.fixture(scope="module")
-def html():
-    with open(os.path.join(_REPO, "server", "templates", "manager.html"), encoding="utf-8") as f:
-        return f.read()
+@pytest.mark.parametrize("key", ["explode_mode", "rival_team_swap"])
+def test_the_no_patch_generations_are_allowed_and_say_so(key):
+    """These two work on an unmodified Gen 1 cartridge and the form has to say so."""
+    s = option_support(key, GEN1)
+    assert s["ok"], s
+    assert "no patch" in s["why"].lower(), s
 
 
-def _tip_for(html: str, model: str) -> str:
-    """The data-tip on the label wrapping a given x-model checkbox."""
-    m = re.search(r'<label data-tip="([^"]*)"[^>]*>\s*<input[^>]*x-model="newOpts\.'
-                  + re.escape(model) + r'"', html, re.S)
-    assert m, f"no labelled checkbox found for {model}"
-    return m.group(1)
+@pytest.mark.parametrize("key", ["overworld_presence", "native_messages", "native_sounds",
+                                 "battle_calc", "pc_trade_npc"])
+def test_the_radical_red_only_features_are_greyed_elsewhere(key):
+    """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
+    so they cannot be switched on."""
+    assert not option_support(key, GEN1)["ok"]
+    assert option_support(key, RR)["ok"]
 
 
-def test_the_section_no_longer_claims_a_patch_is_always_required(html):
-    assert 'data-tip="These need the companion ROM patch applied to BOTH players\' games."' \
-        not in html, "the blanket ROM-patch claim is back; it is false on Gen 1"
-
-
-@pytest.mark.parametrize("model", ["explode_mode", "rival_team_swap"])
-def test_the_no_patch_generations_are_named(html, model):
-    """These two work on an unmodified Gen 1 cartridge and the UI has to say so."""
-    tip = _tip_for(html, model)
-    assert "Gen 1" in tip and "no patch" in tip.lower(), tip
-
-
-@pytest.mark.parametrize("model", ["overworld_presence", "native_messages", "native_sounds",
-                                   "battle_calc", "pc_trade_npc"])
-def test_the_gen3_only_features_say_so(html, model):
-    """The other half of the same honesty: these genuinely are Gen 3 only, and a Gen 1
-    player switching them on gets nothing."""
-    assert "Gen 3 only" in _tip_for(html, model), _tip_for(html, model)
-
-
-def test_the_gender_clause_warns_it_cannot_fire_on_gen1(html):
+def test_the_gender_clause_cannot_be_chosen_on_gen1():
     """Gen 1 has no gender at all, so the clause is not merely unlikely to fire — it
     cannot. Leaving it silently inert is how a player concludes the rules are broken."""
-    tip = _tip_for(html, "gender_lock")
-    assert "Gen 1" in tip and "never fire" in tip, tip
+    s = option_support("gender_lock", GEN1)
+    assert not s["ok"] and "never fire" in s["why"], s
+    assert option_support("gender_lock", RR)["ok"]
 
 
-def test_the_sound_option_explains_why_gen1_has_none(html):
+def test_the_sound_option_explains_why_gen1_has_none():
     """Not just 'unsupported': the reason is a measured property of the audio engine, and
     someone will ask."""
-    assert "re-enters a non-reentrant" in _tip_for(html, "native_sounds")
+    assert "re-enters a non-reentrant" in option_support("native_sounds", GEN1)["why"]
+
+
+def test_a_mixed_pair_takes_the_stricter_answer():
+    """A soul link is symmetric: if either cartridge cannot honour an option, the run
+    cannot."""
+    assert not option_support("battle_calc", ["firered_rr", "red"])["ok"]
+
+
+def test_an_unnamed_game_forbids_nothing():
+    """Detect-on-connect: nothing is known to be impossible yet."""
+    assert all(option_support(k, [""])["ok"] for k in OPTIONS)
+
+
+def test_the_form_table_covers_every_family_and_option():
+    form = new_run_form()
+    assert set(form["support"]) == {k for k, _, _ in GAMES}
+    for family in form["support"].values():
+        assert set(family) == set(OPTIONS)
+        assert all({"ok", "why"} <= set(v) for v in family.values())

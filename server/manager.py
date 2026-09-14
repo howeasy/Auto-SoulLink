@@ -42,13 +42,110 @@ except ImportError:
 
 import aiohttp_jinja2
 
-from server.adapters import variant_label
 from server.http_safety import csrf_protection, theme_cache
 from server.json_files import atomic_write_json
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 from server.status_payload import empty_status_payload
 from server.templating import resolve_theme, setup_templating
+
+# ── Game families ─────────────────────────────────────────────────────────────
+# The unit of link compatibility is the FAMILY, not the cartridge: Red, Blue and Yellow
+# share an adapter and an area map, so any two of them can link; the same holds for
+# FireRed/LeafGreen, Gold/Silver/Crystal, HeartGold/SoulSilver, Black/White. What
+# separates families is a different map (Radical Red from vanilla FireRed, Emerald,
+# Platinum from HGSS, B2W2 from BW) or a reshuffled world (the Archipelago builds).
+# "" is today's behaviour: the run learns its cartridges from the first hellos.
+GAMES = [
+    ("", "Detect when players connect", []),
+    ("gen1", "Red · Blue · Yellow", ["red", "blue", "yellow"]),
+    ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
+    ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
+    ("gen2_ap", "Crystal (Archipelago)", ["crystal_ap"]),
+    ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
+    ("gen3_ap", "FireRed · LeafGreen (Archipelago)", ["firered_ap", "leafgreen_ap"]),
+    ("gen3_rr", "Radical Red", ["firered_rr"]),
+    ("gen3_e", "Emerald", ["emerald"]),
+    ("gen4_hgss", "HeartGold · SoulSilver", ["heartgold", "soulsilver"]),
+    ("gen4_pt", "Platinum · Renegade Platinum", ["platinum", "renegade_platinum"]),
+    ("gen5_bw", "Black · White", ["pokemon_black", "pokemon_white"]),
+    ("gen5_bw2", "Black 2 · White 2", ["pokemon_black_2", "pokemon_white_2"]),
+]
+GAME_LABELS = {key: label for key, label, _ in GAMES}
+GAME_MEMBERS = {key: members for key, _, members in GAMES}
+
+# Run options: what each does, in the form's own words, and which cartridges can honour
+# it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
+# different. Keyed by game_id, with a "_rr" suffix for the Radical Red build of Gen 3.
+OPTION_GROUPS = [
+    ("Link clauses", ["species_lock", "gender_lock", "type_lock"]),
+    ("Battle", ["explode_mode", "rival_team_swap", "overworld_presence"]),
+    ("Native UI", ["native_messages", "native_sounds", "battle_calc", "pc_trade_npc"]),
+]
+OPTIONS = {
+    "species_lock": ("Species Clause", "Reject links where both mons are in the same evolution family."),
+    "gender_lock": ("Gender Clause", "Reject links where both mons share a gender."),
+    "type_lock": ("Type Clause", "Reject links where both mons share any type."),
+    "explode_mode": ("Explode Mode", "On a partner's death, force the linked mon to auto-Explode."),
+    "rival_team_swap": ("Rival Swap", "Rival battles load your partner's exact team instead of the canned one."),
+    "overworld_presence": ("Overworld Presence", "See your partner walking in your overworld as a live peer ghost."),
+    "native_messages": ("Native Messages", "Notifications as native in-game text boxes instead of the Lua HUD overlay."),
+    "native_sounds": ("Native Sounds", "Notification sounds through the game's own audio engine."),
+    "battle_calc": ("Battle Calc", "The bundled in-battle damage and type-effectiveness calculator."),
+    "pc_trade_npc": ("PC Trade NPC", "A Pokémon-Center trade NPC, when Overworld Presence is off."),
+}
+OPTION_SUPPORT = {
+    "species_lock": {"all": True},
+    "gender_lock": {"all": True, "gen1_rby": {"ok": False, "why": "Gen 1 has no gender mechanic, so the clause can never fire."}},
+    "type_lock": {"all": True},
+    "explode_mode": {"all": False, "why": "Only the Radical Red client handles force_explode.",
+                     "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
+                     "gen3_frlge_rr": {"ok": True}},
+    "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
+                        "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
+                        "gen3_frlge_rr": {"ok": True}},
+    "overworld_presence": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
+    "native_messages": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
+    "native_sounds": {"all": False, "why": "Radical Red only.",
+                      "gen1_rby": {"ok": False, "why": "The Gen 1 companion patch ships without audio: its only hook re-enters a non-reentrant sound routine."},
+                      "gen3_frlge_rr": {"ok": True}},
+    "battle_calc": {"all": False, "why": "Radical Red only.",
+                    "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
+                    "gen3_frlge_rr": {"ok": True}},
+    "pc_trade_npc": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
+}
+
+
+def option_support(key: str, rom_types: list[str]) -> dict:
+    """Can a run on these cartridges honour this option, and if not, why. A soul link is
+    symmetric, so the more restrictive answer across the pair wins. An unknown rom_type
+    means "not known yet", and nothing is known to be impossible."""
+    from server.adapters import game_id_for_rom_type
+    rule = OPTION_SUPPORT.get(key, {"all": True})
+    ok, why = True, ""
+    for rt in rom_types:
+        gid = game_id_for_rom_type(rt) if rt else None
+        if not gid:
+            continue
+        specific = rule.get(gid + ("_rr" if rt.endswith("_rr") else "")) or rule.get(gid)
+        decided = specific["ok"] if specific else rule["all"]
+        if not decided:
+            return {"ok": False, "why": (specific or {}).get("why") or rule.get("why", "")}
+        if specific and specific.get("why") and not why:
+            why = specific["why"]
+    return {"ok": ok, "why": why}
+
+
+def new_run_form() -> dict:
+    """Everything the New-run form needs, computed here so the reasons and the greying
+    come from one table: per game family, per option, (ok, why)."""
+    return {
+        "games": [{"key": k, "label": lbl, "members": m} for k, lbl, m in GAMES],
+        "groups": [{"label": lbl, "keys": keys} for lbl, keys in OPTION_GROUPS],
+        "options": {k: {"label": lbl, "desc": d} for k, (lbl, d) in OPTIONS.items()},
+        "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
+        "gen1_games": [k for k, _, m in GAMES if m and all(rt in ("red", "blue", "yellow", "red_ap", "blue_ap") for rt in m)],
+    }
 
 
 def _json_for_script(obj) -> str:
@@ -134,6 +231,18 @@ def _save_registry(runs: list[dict]):
     document = {"runs": runs}
     _registry_runs(document)
     atomic_write_json(REGISTRY_PATH, document)
+
+
+def _update_run(run_id: str, **fields) -> dict | None:
+    """Re-read, patch one run, save. Handlers that awaited between their read and their
+    write (start: spawn; new: spawn) used to write a stale snapshot over whatever the
+    2 s overlay polls had reconciled in the meantime."""
+    runs = _load_registry()
+    run = _find_run(runs, run_id)
+    if run is not None:
+        run.update(fields)
+        _save_registry(runs)
+    return run
 
 
 def _find_run(runs: list[dict], run_id: str) -> dict | None:
@@ -498,7 +607,9 @@ class RunManager:
         2. Most recently started running run (latest created_at).
         Returns None if no run is running.
         """
-        runs = self._get()
+        # A plain read. _get() reconciles and can rewrite registry.json, and this is
+        # called on every 2 s overlay poll from every browser source.
+        runs = _load_registry()
         running = [r for r in runs if r.get("status") == "running" and _is_alive(r.get("pid"))]
         if not running:
             return None
@@ -511,66 +622,95 @@ class RunManager:
         return max(running, key=lambda r: r.get("created_at", ""))
 
     async def handle_index(self, request: web.Request) -> web.Response:
+        """GET / — the shell with the first running run (or the first run) selected."""
         runs = self._get()
-        # Augment each run with display fields the master-detail template
-        # expects (created_short, safe_name, game_label, last_event).
-        augmented = [self._augment_for_template(r) for r in runs]
-        return aiohttp_jinja2.render_template(
-            "manager.html", request,
-            {
-                "page_title":   "Soul Link Run Manager",
-                "theme":        resolve_theme(request),
-                "is_stream":    False,
-                "hide_chrome":  False,
-                # ESCAPED, not just serialized. This lands inside a <script> block via
-                # `| safe`, and json.dumps does not escape "<" -- so a run NAME containing
-                # "</script>" closed the element and everything after it was parsed as
-                # markup. Run names reach here from the API as well as the UI, so this is
-                # stored XSS rather than a self-inflicted footgun. Escaping the three
-                # characters that can end or open a tag keeps the JSON valid (they are
-                # legal inside JS strings as unicode escapes) and inert as markup.
-                "runs_json":    _json_for_script(augmented),
-                "manager_port": self.manager_port,
-            },
-        )
+        first = next((r for r in runs if r.get("status") == "running"), runs[0] if runs else None)
+        return await self._render_shell(request, runs, first, page="run" if first else "new")
+
+    async def handle_run_page(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id} — the shell with that run's board."""
+        runs = self._get()
+        run = _find_run(runs, request.match_info["run_id"])
+        if run is None:
+            raise web.HTTPNotFound(text="Run not found")
+        return await self._render_shell(request, runs, run, page="run")
+
+    async def handle_new_page(self, request: web.Request) -> web.Response:
+        """GET /new — the shell with the New-run form."""
+        return await self._render_shell(request, self._get(), None, page="new")
+
+    async def _render_shell(self, request, runs, run, *, page):
+        from server.board import board_context
+        status = await self._run_status(request, run) if run else None
+        ctx = {
+            "page_title":   "Soul Link",
+            "theme":        resolve_theme(request),
+            "is_stream":    False,
+            "hide_chrome":  False,
+            "body_class":   "board mgr",
+            "page":         page,
+            "runs":         [self._augment_for_template(r) for r in runs],
+            "run":          self._augment_for_template(run) if run else None,
+            "pinned_run_id": self._stream_pin_id,
+            "form_json":    _json_for_script(new_run_form()),
+            "next_ports":   _next_ports(runs),
+            "manager_port": self.manager_port,
+            # Links to a run's own port (calc, debug) use the host the browser used for us.
+            "host":         (request.host or "127.0.0.1").split(":")[0] or "127.0.0.1",
+        }
+        if run:
+            ctx.update(board_context(status, run_name=run.get("name", ""),
+                                     poll_url=f"/runs/{run['run_id']}/board",
+                                     live=run.get("status") == "running"))
+        return aiohttp_jinja2.render_template("manager.html", request, ctx)
+
+    async def handle_run_board(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
+        from server.board import board_context
+        run = _find_run(_load_registry(), request.match_info["run_id"])
+        if run is None:
+            raise web.HTTPNotFound(text="Run not found")
+        ctx = board_context(await self._run_status(request, run), run_name=run.get("name", ""),
+                            poll_url=f"/runs/{run['run_id']}/board",
+                            live=run.get("status") == "running")
+        return aiohttp_jinja2.render_template("_board.html", request, ctx)
+
+    async def _run_status(self, request: web.Request, run: dict) -> dict:
+        """The run's status payload: live from its server when it is running, otherwise
+        rebuilt from what it persisted. A stopped run's own loader reads its own files,
+        so the board for it is the board it had -- links, memorial, events -- with no
+        player connected."""
+        if run.get("status") == "running" and run.get("http_port"):
+            live = await self._fetch_live(request, run)
+            if live is not None:
+                return live
+        run_dir = os.path.join(MANAGER_DIR, run["run_id"])
+        if not os.path.isdir(run_dir):
+            return empty_status_payload()
+        try:
+            from server.server import SLinkServer
+            return SLinkServer(data_dir=run_dir, run_id=run["run_id"], run_name=run.get("name", ""),
+                               species_lock=run.get("species_lock", False),
+                               gender_lock=run.get("gender_lock", False),
+                               type_lock=run.get("type_lock", False),
+                               explode_mode=run.get("explode_mode", False),
+                               rival_team_swap=run.get("rival_team_swap", False),
+                               overworld_presence=run.get("overworld_presence", False),
+                               native_messages=run.get("native_messages", False),
+                               native_sounds=run.get("native_sounds", False),
+                               battle_calc=run.get("battle_calc", True),
+                               pc_trade_npc=run.get("pc_trade_npc", True))._build_status_dict()
+        except Exception as e:
+            log.warning(f"could not rebuild status for {run['run_id']}: {e}")
+            return empty_status_payload()
 
     def _augment_for_template(self, run: dict) -> dict:
-        """Add display strings to a run dict for the master-detail template.
-
-        Avoids putting this logic in the JS so the initial page render has
-        everything it needs without an extra round-trip.
-        """
+        """Display strings for the rail: a short date, a filesystem-safe name, the game."""
         rid = run["run_id"]
         r = dict(run)
         r["created_short"] = (run.get("created_at") or "")[:16].replace("T", " ")
         r["safe_name"] = re.sub(r"[^\w-]", "_", run.get("name") or rid).strip("_") or rid
-
-        # Read game label from the run's links.json (best effort).
-        links_path = os.path.join(MANAGER_DIR, rid, "links.json")
-        try:
-            with open(links_path) as f:
-                rom_type = json.load(f).get("rom_type", "")
-            # variant_label, not .title(): the latter renders gen1_rby as "Gen1 Rby".
-            r["game_label"] = variant_label(rom_type) if rom_type else ""
-        except (json.JSONDecodeError, OSError, FileNotFoundError):
-            r["game_label"] = ""
-
-        # Read the most recent event (newest-first list) so the right pane
-        # can surface it without an extra API call.
-        events_path = os.path.join(MANAGER_DIR, rid, "events.json")
-        r["last_event"] = None
-        try:
-            with open(events_path) as f:
-                evts = json.load(f)
-            if evts:
-                ev = evts[0]
-                r["last_event"] = {
-                    "ts":     (ev.get("ts", "") or "")[-8:],
-                    "player": (ev.get("player", "") or "").upper(),
-                    "text":   ev.get("text", "") or "",
-                }
-        except (json.JSONDecodeError, OSError, FileNotFoundError):
-            pass
+        r["game_label"] = GAME_LABELS.get(run.get("game") or "", "")
         return r
 
     async def handle_list(self, request: web.Request) -> web.Response:
@@ -615,6 +755,8 @@ class RunManager:
             "battle_calc": bool(body.get("battle_calc", True)),
             "pc_trade_npc": bool(body.get("pc_trade_npc", True)),
             "verbose": bool(body.get("verbose", False)),
+            # The game FAMILY, when named up front; "" means detect from the first hello.
+            "game": str(body.get("game", "") or "") if str(body.get("game", "") or "") in GAME_MEMBERS else "",
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
@@ -626,9 +768,7 @@ class RunManager:
         try:
             pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
                                    manager_port=self.manager_port)
-            run["status"] = "running"
-            run["pid"] = pid
-            _save_registry(runs)
+            run = _update_run(run_id, status="running", pid=pid) or run
         except Exception as e:
             log.error(f"Failed to auto-start run {run_id}: {e}")
 
@@ -649,9 +789,7 @@ class RunManager:
                                    manager_port=self.manager_port)
         except Exception as e:
             return web.json_response({"ok": False, "error": str(e)}, status=500)
-        run["status"] = "running"
-        run["pid"] = pid
-        _save_registry(runs)
+        _update_run(run_id, status="running", pid=pid)
         return web.json_response({"ok": True, "pid": pid})
 
     async def handle_stop(self, request: web.Request) -> web.Response:
@@ -899,58 +1037,30 @@ class RunManager:
         active = self._active_stream_run()
         if active is None:
             return web.json_response(empty_status_payload())
-        url = f"http://127.0.0.1:{active['http_port']}/api/status"
-        try:
-            async with request.app["proxy_session"].get(
-                url, timeout=aiohttp.ClientTimeout(total=3)
-            ) as resp:
-                data = await resp.json(content_type=None)
-                return web.json_response(data)
-        except Exception as e:
-            log.debug(f"Proxy /api/status → run {active['run_id']} failed: {e}")
-            return web.json_response(empty_status_payload())
+        return web.json_response(await self._fetch_live(request, active) or empty_status_payload())
 
-    async def handle_run_live(self, request: web.Request) -> web.Response:
-        """GET /api/runs/{run_id}/live — same-origin proxy to a specific run's
-        /api/status JSON.  Used by the manager detail-pane's compact live-status
-        panel so the browser doesn't hit cross-origin CORS against the run's
-        port.  Returns 404 if the run is unknown/stopped, 504 on timeout."""
-        run_id = request.match_info.get("run_id", "")
-        runs = _load_registry()
-        run = next((r for r in runs if r["run_id"] == run_id), None)
-        if run is None or run.get("status") != "running" or not run.get("http_port"):
-            return web.json_response({"error": "run not running"}, status=404)
+    async def _fetch_live(self, request: web.Request, run: dict) -> dict | None:
+        """One run's /api/status, or None if it did not answer in time."""
         url = f"http://127.0.0.1:{run['http_port']}/api/status"
         try:
             async with request.app["proxy_session"].get(
                 url, timeout=aiohttp.ClientTimeout(total=3)
             ) as resp:
-                data = await resp.json(content_type=None)
-                return web.json_response(data)
-        except TimeoutError:
-            return web.json_response({"error": "timeout"}, status=504)
+                return await resp.json(content_type=None)
         except Exception as e:
-            log.debug(f"Proxy /api/runs/{run_id}/live failed: {e}")
-            return web.json_response({"error": str(e)}, status=502)
+            log.debug(f"live status for {run['run_id']} failed: {e}")
+            return None
 
-    async def handle_proxy_events(self, request: web.Request) -> web.StreamResponse:
-        """GET /api/events — SSE ping stream that triggers overlay re-renders."""
-        response = web.StreamResponse(headers={
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        })
-        await response.prepare(request)
-        try:
-            await response.write(b"retry: 3000\n\n")
-            while True:
-                await response.write(b"event: ping\ndata:\n\n")
-                await asyncio.sleep(1.5)
-        except (asyncio.CancelledError, ConnectionResetError):
-            pass
-        except Exception as e:
-            log.debug(f"SSE /api/events closed: {e}")
-        return response
+    async def handle_run_live(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/live — same-origin proxy to a specific run's /api/status
+        JSON. 404 if the run is unknown or stopped, 502 if it did not answer."""
+        run = _find_run(_load_registry(), request.match_info.get("run_id", ""))
+        if run is None or run.get("status") != "running" or not run.get("http_port"):
+            return web.json_response({"error": "run not running"}, status=404)
+        data = await self._fetch_live(request, run)
+        if data is None:
+            return web.json_response({"error": "run unreachable"}, status=502)
+        return web.json_response(data)
 
     async def handle_proxy_attempts(self, request: web.Request) -> web.Response:
         """POST /api/attempts — proxy to the active run."""
@@ -982,6 +1092,9 @@ async def main(host: str, port: int):
 
     # Run-management routes
     app.router.add_get("/",                           manager.handle_index)
+    app.router.add_get("/new",                        manager.handle_new_page)
+    app.router.add_get("/runs/{run_id}",              manager.handle_run_page)
+    app.router.add_get("/runs/{run_id}/board",        manager.handle_run_board)
     app.router.add_get("/api/runs",                   manager.handle_list)
     app.router.add_post("/api/runs/new",              manager.handle_new)
     app.router.add_post("/api/runs/{run_id}/start",   manager.handle_start)
@@ -1009,7 +1122,6 @@ async def main(host: str, port: int):
 
     # API proxy — relays to the active (pinned or latest) run
     app.router.add_get("/api/status",         manager.handle_proxy_status)
-    app.router.add_get("/api/events",         manager.handle_proxy_events)
     app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
 
     # Companion ROM patcher — global setup tool, reachable from the manager too.

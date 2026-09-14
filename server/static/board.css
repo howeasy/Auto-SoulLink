@@ -22,6 +22,8 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 .dash-main.mk-body-root { font-family: var(--font-ui); }
 .dash-main .mk-page { padding: var(--space-4) 0 var(--space-6); }
 
+#content > .phase-banner { margin-bottom: var(--space-4); }
+
 /* Banners the old dashboard drew with inline styles. */
 .game-over { background: var(--c-dead); color: #fff; text-align: center; padding: 1em .5em; font-size: 1.8em; font-weight: bold; letter-spacing: .15em; border-radius: 8px; margin-bottom: 1em; }
 .identity-warn { margin-bottom: var(--space-3); padding: var(--space-3); border-left: 3px solid var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent); color: var(--c-txt); }
@@ -47,6 +49,11 @@ body.density-compact { --density: .7; }
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
 
+/* ── Shell: the Manager's rail + main ──────────────────────────────────── */
+
+.mk { display: grid; grid-template-columns: var(--mk-rail) minmax(0, 1fr); min-height: 100vh; align-items: start; }
+body.mgr { margin: 0; }
+
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 
 .mk-rail {
@@ -62,6 +69,7 @@ body.density-compact { --density: .7; }
 .mk-rail-brandtext span { color: var(--c-dim); font-size: .68em; }
 .mk-rail-sep { border: none; border-top: 1px solid var(--c-sep); margin: var(--space-2); }
 .mk-rail-item {
+  text-decoration: none; box-sizing: border-box;
   display: flex; align-items: center; gap: var(--space-2); width: 100%;
   padding: var(--space-2); border: 1px solid transparent; border-radius: 8px;
   background: none; color: var(--c-txt); font: inherit; font-size: .95em; text-align: left; cursor: pointer;
@@ -375,3 +383,138 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-drawer-body { padding: var(--space-4); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); }
 .mk-drawer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); }
 .mk-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0,0,0,.45); }
+
+/* ── Rail switcher slots (from the retired manager.css) ────────────────
+ * dashboard.js relocates the theme switcher and builds the font picker into these. */
+/* Theme switcher slot — dashboard.js relocates the floating switcher here,
+ * styled to fill the rail width with its dropdown opening upward to avoid
+ * colliding with the runs list above. */
+.mgr-rail-theme {
+  padding: 10px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
+}
+.mgr-rail-theme:empty { display: none; }
+/* Font picker slot — same chrome as the theme slot, sits directly above
+ * it. `margin-top: auto` on .mgr-rail-font pins the picker pair to the
+ * bottom of the rail (above the runs list) so it doesn't drift up as
+ * runs are added/removed. */
+.mgr-rail-font {
+  margin-top: auto;
+  padding: 10px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
+}
+.mgr-rail-font:empty { display: none; }
+
+/* Font picker chrome — duplicated from dashboard.css since the manager
+ * page intentionally doesn't load dashboard.css (its body grid would
+ * clobber .mgr-launcher). Same visual treatment as the theme picker:
+ * 12px wrapper font-size, 6×9 summary padding, 16×16 sample box. */
+.font-switcher {
+  font-size: 12px;
+  font-family: var(--font-ui);
+}
+.mgr-rail-font .font-switcher--in-sidebar {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+}
+.mgr-rail-font .font-switcher--in-sidebar details {
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+  position: relative;
+}
+.mgr-rail-font .font-switcher--in-sidebar summary {
+  display: flex; align-items: center; gap: 6px; padding: 6px 9px;
+  cursor: pointer; user-select: none; color: var(--c-txt); list-style: none;
+  font-family: var(--font-ui);
+}
+.mgr-rail-font .font-switcher--in-sidebar summary::-webkit-details-marker { display: none; }
+.mgr-rail-font .font-switcher--in-sidebar .font-sample {
+  width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--c-bg) 60%, var(--c-card));
+  font-size: 9px; line-height: 1; font-weight: 700; letter-spacing: 0;
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-caret {
+  margin-left: auto; opacity: .6; font-size: .8em;
+}
+.mgr-rail-font .font-switcher--in-sidebar details[open] .font-caret {
+  transform: rotate(180deg);
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-pills {
+  position: absolute; bottom: calc(100% + 4px); left: 0; right: 0;
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px; padding: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  z-index: 60; display: flex; flex-direction: column; gap: 2px;
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-pill {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  color: var(--c-txt); font: inherit; cursor: pointer; text-align: left;
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-pill:hover {
+  background: color-mix(in srgb, var(--c-edge) 35%, transparent);
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-pill.active {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: var(--c-brand);
+}
+.mgr-rail-font .font-switcher--in-sidebar .font-pill .font-label { flex: 1; }
+.mgr-rail-theme .theme-switcher--in-sidebar {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+}
+.mgr-rail-theme .theme-switcher--in-sidebar details {
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+  width: 100%;
+  /* Override the inline `min-width: 130px` from `_theme_switcher.html`
+   * (loaded after this stylesheet) so the picker fits the rail width
+   * rather than overflowing into the runs list. */
+  min-width: 0 !important;
+  max-width: 100%;
+  position: relative;
+}
+.mgr-rail-theme .theme-switcher--in-sidebar summary {
+  padding: 7px 10px;
+  font-family: var(--font-heading);
+  font-size: 0.95em;
+  letter-spacing: 0.04em;
+}
+.mgr-rail-theme .theme-switcher--in-sidebar .theme-pills {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
+  z-index: 60;
+}
+
+/* Pin the new run input + create button to the top so the rail-theme slot
+ * can use margin-top:auto to stick to the bottom (above the natural rail
+ * scrollable area). Already in flex flow via .mgr-rail. */
+.mgr-rail { display: flex; flex-direction: column; }
+
+/* Stack rail on top at very narrow widths (rare for desktop). */
+@media (max-width: 900px) {
+  .mgr-launcher { grid-template-columns: 1fr; max-height: none; min-height: auto; }
+  .mgr-rail { border-right: 0; border-bottom: 1px solid var(--c-edge); max-height: 360px; }
+}

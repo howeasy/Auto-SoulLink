@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
 
 import server.json_files as json_files
@@ -15,46 +14,7 @@ from server.lua_literals import lua_comment, lua_string
 from server.server import SLinkServer, build_app
 from server.status_payload import empty_status_payload
 
-
-@pytest.fixture(autouse=True)
-def manager_dir(tmp_path, monkeypatch):
-    directory = tmp_path / "runs"
-    directory.mkdir()
-    monkeypatch.setattr(manager, "MANAGER_DIR", str(directory))
-    monkeypatch.setattr(manager, "REGISTRY_PATH", str(directory / "registry.json"))
-    return directory
-
-
-@pytest_asyncio.fixture
-async def manager_client(monkeypatch):
-    """Capture the app built by main, then serve it with an isolated test client."""
-    captured = {}
-
-    class AppCaptured(Exception):
-        pass
-
-    class Runner:
-        def __init__(self, app):
-            captured["app"] = app
-
-        async def setup(self):
-            pass
-
-    class Site:
-        def __init__(self, runner, host, port):
-            pass
-
-        async def start(self):
-            raise AppCaptured
-
-    with monkeypatch.context() as lifecycle:
-        lifecycle.setattr(manager.web, "AppRunner", Runner)
-        lifecycle.setattr(manager.web, "TCPSite", Site)
-        with pytest.raises(AppCaptured):
-            await manager.main("127.0.0.1", 0)
-
-    async with TestClient(TestServer(captured["app"])) as client:
-        yield client
+pytest_plugins = ["tests.unit.manager_harness"]
 
 
 def test_missing_registry_is_empty_and_can_be_created(manager_dir):
