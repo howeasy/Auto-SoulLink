@@ -31,6 +31,20 @@ CANONICAL_SCHEMA="slink-gen1-canonical-companion-pair-v1"
 SPAN_OPTIONS={"protected":((0x100,0x150),),"bank_size":0x4000}
 
 
+def content_identity(semantic_profile,manifest_sha256,generation):
+    """Hash a location-free view of a reproduced-UPR pair's content for content_profile_hash.
+
+    `generation` is upr_runner.py's per-player record, which carries `"output": str(output)`
+    — an absolute path unique to the run directory it was prepared in. Byte-identical
+    ROM+settings+seed prepared into two different run directories must still compare equal
+    here, or a resumed run is wrongly refused as a cartridge mismatch (gen1_run_config.py's
+    "resumed run must use the predecessor cartridge pair" check). Every other field of
+    `generation` (settings/seed/output hashes etc.) still participates.
+    """
+    return digest({"semantic_profile":semantic_profile,"manifest_sha256":manifest_sha256,
+        "generation":{k:v for k,v in generation.items() if k!="output"}})
+
+
 def _companion_from_clean(rom):
     """The canonical companion for one admitted clean cartridge, or a ValueError."""
     clean=clean_profiles()
@@ -169,9 +183,8 @@ class PreparedCartridges:
                 raise ValueError("prepared final artifact/manifest/profile differs")
             profile={"schema":"gen1-rby-scanned-companion-content-v1","variant":variant,
                 "final_rom_sha1":expected["final_sha1"],"patch_version":3,"party_codec":clean[variant]["party_codec"],
-                "capabilities":expected["capabilities"],"content_profile_hash":digest({
-                    "semantic_profile":expected["semantic_profile"],"manifest_sha256":expected["manifest_sha256"],
-                    "generation":run})}
+                "capabilities":expected["capabilities"],"content_profile_hash":content_identity(
+                    expected["semantic_profile"],expected["manifest_sha256"],run)}
             self._profiles[player]=profile;self._roms[player]=final;self._manifests[player]=manifest
             self._unpatched[player]=candidate;self._patches[player]=encoded
         if seeds[0]==seeds[1]:raise ValueError("prepared paired seeds must differ")
