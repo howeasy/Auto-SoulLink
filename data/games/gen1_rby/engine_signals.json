@@ -63,6 +63,14 @@
      "rom_offset": 247617,
      "symbol": "RemoveFaintedPlayerMon"
     },
+    "battle_loop_head": {
+     "address": 16947,
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD434D2115D0",
+     "rom_offset": 246323,
+     "symbol": "MainInBattleLoop"
+    },
     "blackout": {
      "address": 16560,
      "bank": 1,
@@ -214,6 +222,14 @@
      "rom_offset": 247617,
      "symbol": "RemoveFaintedPlayerMon"
     },
+    "battle_loop_head": {
+     "address": 16947,
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD434D2115D0",
+     "rom_offset": 246323,
+     "symbol": "MainInBattleLoop"
+    },
     "blackout": {
      "address": 16560,
      "bank": 1,
@@ -364,6 +380,14 @@
      "expected_hex": "FA2FCC4F2157D006",
      "rom_offset": 247646,
      "symbol": "RemoveFaintedPlayerMon"
+    },
+    "battle_loop_head": {
+     "address": 16969,
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD084E2114D0",
+     "rom_offset": 246345,
+     "symbol": "MainInBattleLoop"
     },
     "blackout": {
      "address": 17012,

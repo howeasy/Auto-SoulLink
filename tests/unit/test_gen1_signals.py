@@ -202,3 +202,18 @@ def test_move_mon_point_reads_direction_and_slot():
     h.arrive("move_mon")
     (sig,) = h.drain()
     assert sig["point"]["move_type"] == 1 and sig["point"]["which"] == 2
+
+
+def test_on_fire_handler_runs_inside_the_hook_and_its_error_is_recorded():
+    h = Harness("red")
+    seen = []
+    handlers = h.lua.table(battle_loop_head=lambda sig: seen.append(int(sig["point"]["active_slot"])))
+    h.svc = h.S.new(h._profile, h._sites, h._io, handlers)
+    h.bus[PROFILE["red"]["ram"]["wPlayerMonNumber"]] = 3
+    h.arrive("battle_loop_head")
+    assert seen == [3] and h.drain()[0]["kind"] == "battle_loop_head"
+    h2 = Harness("red")
+    bad = h2.lua.table(battle_loop_head=h2.lua.eval("function() error('boom') end"))
+    h2.svc = h2.S.new(h2._profile, h2._sites, h2._io, bad)
+    h2.arrive("battle_loop_head")
+    assert "boom" in str(h2.status().handler_error) and h2.status().failed is None

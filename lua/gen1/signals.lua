@@ -66,6 +66,20 @@ S.KINDS.save_witness = {
     end,
 }
 S.KINDS.blackout = { point = battle_point }
+-- MainInBattleLoop+0: the only instant the engine judges wBattleMonHP (W-2). The client's
+-- on_fire handler applies pending in-battle writes synchronously inside this hook.
+S.KINDS.battle_loop_head = {
+    point = function(io, ram)
+        return { active_slot = io.read_u8(ram.wPlayerMonNumber, "System Bus"),
+                 battle_hp = io.read_u8(ram.wBattleMonHP, "System Bus") * 256
+                           + io.read_u8(ram.wBattleMonHP + 1, "System Bus"),
+                 battle_species = io.read_u8(ram.wBattleMonSpecies, "System Bus"),
+                 in_battle = io.read_u8(ram.wIsInBattle, "System Bus"),
+                 battle_type = io.read_u8(ram.wBattleType, "System Bus"),
+                 link_state = io.read_u8(ram.wLinkState, "System Bus"),
+                 status3 = io.read_u8(ram.wPlayerBattleStatus3, "System Bus") }
+    end,
+}
 
 -- Battle lifecycle. InitBattleCommon runs for wild and trainer battles; wCurOpponent is the
 -- wild species, or trainer class + 200 (constants/trainer_constants.asm). InitWildBattle+5 is
@@ -135,10 +149,12 @@ S.KINDS.npc_trade = {
 }
 
 -- profile: the title's table from profile.json (ram/rom/derived); sites: the title's
--- `sites` table from engine_signals.json (kind -> site).
-function S.new(profile, sites, io)
+-- `sites` table from engine_signals.json (kind -> site); on_fire: optional kind -> function(signal)
+-- run synchronously inside the hook (for writes that must land at that exact instant).
+function S.new(profile, sites, io, on_fire)
     local ram = assert(profile.ram, "profile.ram required")
-    local self = { pending = {}, hooks = {}, failure = nil, closed = false }
+    local self = { pending = {}, hooks = {}, failure = nil, closed = false, handler_error = nil }
+    on_fire = on_fire or {}
 
     -- Load-time anchor: every site's bytes must be in the ROM where the JSON says.
     local bad = {}
@@ -166,10 +182,15 @@ function S.new(profile, sites, io)
                    kind .. ": bank/bytes differ at fire time")
             assert(#self.pending < S.MAX_PENDING, "engine signal buffer full; client stopped draining")
             local frame = io.framecount()
-            self.pending[#self.pending + 1] = {
+            local signal = {
                 kind = kind, frame = frame, pc = pc, bank = site.bank, sp = io.register("SP"),
                 point = spec.point and spec.point(io, ram) or nil,
             }
+            self.pending[#self.pending + 1] = signal
+            if on_fire[kind] then
+                local hok, herr = pcall(on_fire[kind], signal)
+                if not hok then self.handler_error = kind .. ": " .. tostring(herr) end
+            end
         end)
         if not ok then self.failure = tostring(why) end
     end
@@ -189,7 +210,8 @@ function S.new(profile, sites, io)
     end
 
     function self:status()
-        return { failed = self.failure, pending = #self.pending, closed = self.closed }
+        return { failed = self.failure, pending = #self.pending, closed = self.closed,
+                 handler_error = self.handler_error }
     end
 
     function self:close()
