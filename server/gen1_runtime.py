@@ -214,9 +214,10 @@ class Gen1Runtime(DurableRuntime):
             self.journal.enable_verified_row_cache()
             from server.gen1_checkpoint_runtime import ensure_source_pin, reconcile_on_open
             self._checkpoint_collect_watch = None
-            # F5 (round 2): the source-identity digest is persisted ONCE at this run's first
-            # open and compared on every open thereafter; a drift never refuses the runtime
-            # itself, only a future checkpoint capture (by name, via _source_pin_drift).
+            # F5 (round 3): the source-identity digest is persisted ONCE at this run's first
+            # open; every capture-adjacent call (start/_build_intent) recomputes and compares
+            # FRESH via gen1_checkpoint_runtime._check_source_pin -- never a cached attribute
+            # here. A drift never refuses the runtime itself, only a future checkpoint request.
             ensure_source_pin(self)
             reconcile_on_open(self)
             if trade_policy is not None:
@@ -606,6 +607,10 @@ class Gen1Runtime(DurableRuntime):
         # This serialized control turn has one checked view per committed state.
         # Return detached stages; a commit or changed snapshot invalidates it.
         # Semantic events and subsequent control turns always re-audit records.
+        # F6/joint doc: the control/heartbeat path also evaluates a checkpoint request's
+        # collection deadline, so it expires even without any semantic traffic at all.
+        from server.gen1_checkpoint_runtime import check_collect_timeout
+        check_collect_timeout(self)
         self._control_cache_active = True
         self._control_state_cache = None
         try:
