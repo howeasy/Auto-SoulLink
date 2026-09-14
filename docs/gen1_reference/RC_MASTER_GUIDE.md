@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:59:01+00:00",
+  "updated_at_utc": "2026-09-14T09:02:05+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "8467394",
   "live_lane": null,
-  "next_action": "Feature build-out. Candidates: FT-2 661b8ff + FT-3 1b38696 + FT-2b 8467394 (review cx-a085e592 in flight), UI-2 3050f0a (ACCEPT-WITH-NOTES), R5a ad6583a (REJECT; round 2 on the original worker). Active: C1 (Sonnet), R5a-2 (Sonnet), FT-2c (OMP, handler tests against the real create_runtime). Queued: C3 after C1; R5b after R5a-2; N3 claim on Codex after this review.",
+  "next_action": "Feature build-out. Integrated candidates: UI-2 3050f0a (accepted), FT-2b 8467394 (accepted). Rejected candidates awaiting round 2 on the branch: FT-3 1b38696 (custom_names path), R5a ad6583a. Active: C1 (Sonnet), R5a-2 (Sonnet), FT-3-2 (Sonnet), FT-2c (OMP), N3-CLAIM (Codex). Queued: C3 after C1; R5b after R5a-2.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -928,8 +928,16 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "Manager shared lifecycle; no game facts",
       "receipt": "commit 8467394; 74 passed across the six Manager/prepared test files; worker neutralised both fixes and saw both new tests fail",
       "independent_review_refs": [
-        "Codex REVIEW cx-a085e592 (30c9ca5..8467394) in flight"
+        "Codex REVIEW cx-a085e592: ACCEPT — all four FT-2 findings closed; refusal reaches the client as 400 (audit refusals stay 409); generic-path directory leak is pre-existing, not a regression"
       ]
+    },
+    {
+      "id": "n3-claim",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-0afc641a)",
+      "state": "active",
+      "files": ["server/gen1_native_execution.py (read-only)", "server/gen1_native_reattach_runtime.py (read-only)", "lua/gen1_native_trade_executor.lua (read-only)"],
+      "next_action": "State table + nine-part claim for crash during a native trade; per-state minimal safe policy; whether to auto-checkpoint before COMMIT.",
+      "reuse_decision": "research only"
     },
     {
       "id": "ft-2c",
@@ -941,14 +949,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-3",
-      "owner": "integrated by coordinator as candidate 1b38696 (isolated Sonnet worker authored)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate 1b38696 stays on the branch)",
+      "state": "active",
       "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
       "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
       "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged",
       "receipt": "commit 1b38696; tests/unit/test_gen1_prepared_cartridges.py 5 passed; prepared/admission/upr subset 350 passed; diff sha256 fb445836…1d83",
       "independent_review_refs": [
-        "Codex review to be requested together with FT-2b (same finding set cx-415ec52b P1)"
+        "Codex REVIEW cx-a085e592: REJECT — generation.custom_names.selection.path is a second run-local absolute path (upr_runner.py:56-60,138,158-170); fixture used a fake shape; old persisted UPR identities need an explicit cutover note. Round 2 dispatched."
       ]
     },
     {
