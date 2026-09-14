@@ -1,4 +1,4 @@
-# Gen 1 master release — resume note (2026-09-14, refreshed 14:30Z)
+# Gen 1 master release — resume note (2026-09-14, refreshed 14:47Z)
 
 Read this first after a context reset. The ledger `docs/gen1_requirements.md` is the authority on
 evidence; this note is the working state around it. Plan (owner-approved):
@@ -8,7 +8,7 @@ evidence; this note is the working state around it. Plan (owner-approved):
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch
   `claude/gen1-master-release-plan-6b4279` = `79d5172` (gen1/rc's adapter sweep, FF, 0 conflicts)
-  + `07ba1ca` cherry-pick + ~85 commits of the rewrite. HEAD `1a5941f` at the time of writing.
+  + `07ba1ca` cherry-pick + ~90 commits of the rewrite. HEAD `02344b3` at the time of writing.
 - **master is still `adf3362`.** The UI-migration session (Claude, worktree `dreamy-pike-09f3e3`,
   branch `claude/soul-link-ui-mockups-40f67b`, based on `79d5172`) holds all its merges until master
   contains `79d5172`. The owner has NOT yet said go for `git -C "E:/Google Drive/SLink" merge
@@ -35,7 +35,10 @@ scenarios `link_new`/`deadzone_new`).
 
 PHYSICAL so far: inspect gate 6/6 (`tests/live/test_gen1_new_gates.py`), S-1 lab route Red+Blue,
 panel gates on the trade-carrying build, D-1/D-3 (`link_new`/`deadzone_new` through the real server,
-receipts `patch/build/e2e_*_new_*_result.txt`). Everything else is SOURCE/MODEL — the ledger says which.
+receipts `patch/build/e2e_*_new_*_result.txt`), T-2 + T-1(one Center) — the receptionist gate PASSES on
+Red and Blue (`3650ace`; 8 s per cartridge once per-frame console.log was silenced; drivers must
+re-pulse A on the 16-frame cadence for native menus and gate the RUN menu on the drawn FIGHT row).
+Everything else is SOURCE/MODEL — the ledger says which.
 
 Client facts learned from the duo receipts (fixed in 1a5941f): after every capture the party is
 unreadable for the AskName window (add_mon.asm bumps count + list before the struct) — the writes
@@ -47,9 +50,8 @@ the save).
 
 | Card | Worker | Files | State |
 |---|---|---|---|
-| ROM-CONTENT-1 | Codex live `Gen1-SunkCost` (cx-63321b33) | `lua/gen1/rom.lua`, hello line in `lua/gen1/client.lua`, `tools/gen_gen1_profile.py` + `profile.json`, `tests/unit/test_gen1_rom_tables.py`, `protocol_schema.py` (hello `rom_content`), one test in `test_gen1_client.py` | hello must carry `rom_content` for randomized-ROM admission (UI session's requirement); Lua wild/fishing reader == `gen1_rom_scan` fingerprint on all three dumps (F-4) |
-| LEDGER-2 | OMP (cx-6068cb3b) | `docs/gen1_requirements.md` | C-0 text, S-1 M ✓, strict S-2/S-5/S-7, D-1/D-3 P ✓, T-1 dist note, W-6/R-4 pause wording |
-| receptionist gate | coordinator (emulator lane) | `lua/tests/test_gen1_receptionist_gate.lua` | run 1 failed: driver read stale cursor bytes during "Can't escape!" (index=3 with a blank row); gated on the drawn FIGHT row; rerun in progress |
+| TRADE-DUO-1 | Codex live `Gen1-SunkCost` (cx-5c08cf80) | `lua/tests/duo/duo_gen1_main.lua`, NEW `lua/tests/gen1_rb_center_inputs.lua` (Center walk factored out of the receptionist gate; gate requires it), `tools/e2e_duo.py` (`trade_new`), `tests/e2e/test_duo_gen1_new.py` | paired SLINK trade scenario (T-3/T-4), MODEL only; its on-disk WIP broke the gate at `:137` (format args) — reported; do not run the trade lane until it reports |
+| REVIEW-CLIENT-1 | OMP (cx-887161cd) | none (read-only) | adversarial review of `1a5941f` (pause-not-drop, deferred force_faint, live-game hello) |
 
 Receptionist gate: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_trade_gates.py -q`; never rerun an
 unchanged failure — read `patch/build/test_gen1_receptionist_gate_result.txt` first. Next on the lane after
@@ -58,7 +60,7 @@ it: paired trade scenario (T-3/T-4) on the duo harness, then a randomized-output
 
 ## Next steps, in order
 
-1. Integrate ROM-CONTENT-1 / LEDGER-2 reports (verify, commit, `outcome` the task, re-dispatch —
+1. Integrate TRADE-DUO-1 / REVIEW-CLIENT-1 reports (verify, commit, `outcome` the task, re-dispatch —
    keep both peers busy; the Stop hook blocks the turn otherwise).
 2. Run the receptionist gate (T-1/T-2 PHYSICAL); then a paired trade duo scenario (T-3/T-4) on top
    of the duo harness.
