@@ -189,7 +189,9 @@ function B.new(profile, reads, io)
         local index = saved - first + 1
         raw[index] = raw[index] % 128 + 128 -- preserve the SAVED box index, set only bit 7
         raw[#raw] = checksum(raw, 1, #raw - 1) -- save.asm:297-310, game's complement sum
-        return {first = first, raw = raw}
+        -- only the two bytes that changed are written (review: a ~4 KiB byte-by-byte image
+        -- with its checksum last is a tear window that would reject the whole save on boot)
+        return {flag = {offset = saved, value = raw[index]}, sum = {offset = last, value = raw[#raw]}}
     end
     local function valid_bank(raw, info)
         if raw[info.all] ~= checksum(raw, 1, info.all - 1) then return false end
@@ -256,7 +258,8 @@ function B.new(profile, reads, io)
         local durable, error_text = saved_main_with_initialized_flag()
         if not durable then return nil, error_text end
         for _, change in ipairs(changes) do io.write_cart_bytes(change.base, change.raw) end
-        io.write_cart_bytes(durable.first, durable.raw)
+        io.write_cart_bytes(durable.sum.offset, {durable.sum.value})
+        io.write_cart_bytes(durable.flag.offset, {durable.flag.value})
         io.write_bytes(ram.wCurrentBoxNum, {current.raw + 128})
         return true
     end

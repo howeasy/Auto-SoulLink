@@ -285,7 +285,7 @@ def test_first_change_initialisation_exact_bytes_and_idempotence(title):
                               bank * 0x2000 + 6 * oracle.BOX_SIZE + 7))
     expected.update((saved_flag, main_checksum))
     assert _changed(before_cart, cart) <= expected
-    assert len(calls["cart"]) == 3 and len(calls["wram"]) == 1
+    assert len(calls["cart"]) == 4 and len(calls["wram"]) == 1  # two banks + checksum + flag
     snapshot = (wram[:], cart[:], {name: list(log) for name, log in calls.items()})
     assert boxes.ensure_boxes_initialised() is True
     assert (wram, cart, calls) == snapshot
