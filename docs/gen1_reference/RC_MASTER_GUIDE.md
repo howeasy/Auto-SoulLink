@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:55:30+00:00",
+  "updated_at_utc": "2026-09-14T08:59:01+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "1b38696",
+  "source_head": "8467394",
   "live_lane": null,
-  "next_action": "Feature build-out. Candidates on gen1/rc: FT-2 661b8ff (REJECTED by review cx-415ec52b; fix-ups FT-2b on OMP + FT-3 on Sonnet), UI-2 3050f0a and R5a ad6583a (review cx-fbbd022a in flight). Active: C1 (Sonnet), FT-3 (Sonnet), FT-2b (OMP). Queued: C3 after C1; R5b after R5a review + FT-2b; N3 mid-trade crash claim (Codex) when idle.",
+  "next_action": "Feature build-out. Candidates: FT-2 661b8ff + FT-3 1b38696 + FT-2b 8467394 (review cx-a085e592 in flight), UI-2 3050f0a (ACCEPT-WITH-NOTES), R5a ad6583a (REJECT; round 2 on the original worker). Active: C1 (Sonnet), R5a-2 (Sonnet), FT-2c (OMP, handler tests against the real create_runtime). Queued: C3 after C1; R5b after R5a-2; N3 claim on Codex after this review.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -921,11 +921,23 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-2b",
-      "owner": "OMP live pid 47172 (coding; task cx-15e0c209)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidate 8467394 (OMP authored, task cx-15e0c209)",
+      "state": "done",
       "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_prepared_gen1.py", "tests/unit/test_manager_resume_ui.py", "tests/unit/test_manager_gen1_create_ui.py (one assertion)"],
       "next_action": "Remove the Resume fastest_text control and inherit predecessor.fastest_text; refuse a changed setting before staging; to_thread PreparedCartridges; cleanup through create_runtime; move the Create error <p> outside the disclosure; tests that do not stub the refused path.",
-      "reuse_decision": "Manager shared lifecycle; no game facts"
+      "reuse_decision": "Manager shared lifecycle; no game facts",
+      "receipt": "commit 8467394; 74 passed across the six Manager/prepared test files; worker neutralised both fixes and saw both new tests fail",
+      "independent_review_refs": [
+        "Codex REVIEW cx-a085e592 (30c9ca5..8467394) in flight"
+      ]
+    },
+    {
+      "id": "ft-2c",
+      "owner": "OMP live pid 47172 (test quality; task cx-dc5865ee)",
+      "state": "active",
+      "files": ["tests/unit/test_manager_prepared_gen1.py"],
+      "next_action": "Handler happy-path tests against the real create_runtime with a synthetic prepared pair if the native binding allows it, else documented boundary test; one unsupported-rules 400 through the real runtime.",
+      "reuse_decision": "test only"
     },
     {
       "id": "ft-3",
@@ -948,19 +960,19 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "Manager template (shared presentation); Gen 1 rule allowlist facts from gen1_run_config",
       "receipt": "commit 3050f0a; 64 passed across the five Manager test files",
       "independent_review_refs": [
-        "Codex REVIEW cx-fbbd022a (ccf8cb3..ad6583a, commit A) in flight; coordinator read of the template diff found the hidden-error <p> (queued in FT-2b)"
+        "Codex REVIEW cx-fbbd022a (commit A): ACCEPT-WITH-NOTES — extracted JS executed with a stubbed fetch for both/neither/one path; old template fails the new structural test; OPEN: handler test asserts its own fake (-> FT-2c)"
       ]
     },
     {
       "id": "r5a",
-      "owner": "integrated by coordinator as candidate ad6583a (isolated Sonnet worker authored)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate ad6583a stays on the branch)",
+      "state": "active",
       "files": ["server/paired_save_checkpoints.py", "tests/unit/test_paired_save_checkpoints.py", "docs/gen1_reference/reviews/R5a-paired-checkpoints.md"],
       "next_action": "PairedCheckpointStore: capture (both saves + rules + identity, manifest last, CURRENT pointer atomic), load with hash re-validation, history; refusals per the R5 claim.",
       "reuse_decision": "shared lifecycle module (game-neutral; save_size parameter); Gen 1 witness/Manager seam deferred to R5b",
       "receipt": "commit ad6583a; tests/unit/test_paired_save_checkpoints.py 15 passed; module sha256 fb56b072…fb9c; docs/gen1_reference/reviews/R5a-paired-checkpoints.md",
       "independent_review_refs": [
-        "Codex REVIEW cx-fbbd022a (ccf8cb3..ad6583a, commit B) in flight"
+        "Codex REVIEW cx-fbbd022a (commit B): REJECT — concurrent captures share CURRENT.tmp (dangling pointer), historical manifests unanchored, load fails open on ID/schema/size, JSON/OS errors leak, post-promotion failure cases untested; round 2 dispatched with those reds"
       ]
     },
     {
