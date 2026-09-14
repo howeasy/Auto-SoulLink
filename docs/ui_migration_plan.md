@@ -6,8 +6,11 @@ reader has none of that conversation.*
 **Status (2026-09-14, later):** Phases 0–8 and the first half of 9 are committed on
 `claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`).
 Done in 7: the three raw pages moved to `templates/pages/`, `/broadcast` and `/tools` on the
-Manager. Done in 8: `/runs/{id}/randomizer` (categories → `build_categories`, preflight,
-browse, download; verified against the real jar in ~4 s, so no job queue). Done in 9: mockups,
+Manager. Done in 8: randomizing is part of creating a Gen 1 run (the creator's Randomizer section;
+`/runs/{id}/randomizer` rebuilds a pair later); categories → `build_categories`, preflight,
+browse, download; verified against the real jar in ~1 s per pair, so no job queue. Owner
+feedback applied: no *Boxed, unlinked* zone (only fallen and pending are exceptional), the
+randomizer is called *Randomizer*, and an at-risk pair is tinted, not captioned. Done in 9: mockups,
 Track B and 22 fonts deleted, fixtures moved to `tests/fixtures/ui/`, requirements split,
 README rewritten for the one-origin Manager. Also done in 9: the overlay handlers are one table (`STREAM_OVERLAYS`, −220),
 `RUN_FLAGS` replaces four hand-written option lists, `dashboard.css` lost the 205 rules nothing

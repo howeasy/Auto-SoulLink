@@ -1,0 +1,51 @@
+{#
+  _randomizer_fields.html — the randomizer's inputs: categories, jar, the two clean ROMs
+  with a picker, and the preflight tags. Included inside an Alpine scope that carries the
+  `randomizerFields()` mixin (static/randomizer.js): `rform`, `rdraft`, `picker`, `pre`,
+  `browse()`, `list()`, `pick()`. Used by the run creator (the normal path) and by
+  /runs/{id}/randomizer (rebuilding a pair on an existing run).
+#}
+<div class="mk-optgrid">
+  <template x-for="key in rform.categories" :key="key">
+    <label class="mk-opt" :class="rdraft.categories[key] ? 'on' : ''">
+      <input type="checkbox" x-model="rdraft.categories[key]">
+      <span x-text="rform.labels[key] || key"></span>
+    </label>
+  </template>
+  <label class="mk-opt" :class="rdraft.fastest_text ? 'on' : ''">
+    <input type="checkbox" x-model="rdraft.fastest_text"><span>Fastest text</span>
+  </label>
+</div>
+<p class="mk-cap">Types, evolutions, movesets and base stats are never randomized: the species and type clauses have to mean the same thing on both cartridges.</p>
+
+<div class="mk-optgrid">
+  <label class="mk-field"><span>Randomizer jar</span>
+    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.jar" placeholder="PokeRandoZX.jar" style="flex:1"><button type="button" class="mk-btn" @click="browse('jar', '.jar')">Browse</button></span></label>
+  <label class="mk-field"><span>Player A clean ROM</span>
+    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_a" placeholder="a clean Red / Blue / Yellow dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_a', '.gb,.gbc')">Browse</button></span></label>
+  <label class="mk-field"><span>Player B clean ROM</span>
+    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_b" placeholder="a clean Red / Blue / Yellow dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_b', '.gb,.gbc')">Browse</button></span></label>
+</div>
+
+<template x-if="picker.field">
+  <div class="mk-card" style="padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
+    <div style="display:flex;gap:var(--space-2);align-items:center"><code class="num" x-text="picker.dir" style="flex:1;overflow:hidden;text-overflow:ellipsis"></code>
+      <button type="button" class="mk-btn" :disabled="!picker.parent" @click="list(picker.parent)">Up</button>
+      <button type="button" class="mk-btn" @click="picker.field = ''">Close</button></div>
+    <div style="display:flex;flex-wrap:wrap;gap:var(--space-1);max-height:14em;overflow:auto">
+      <template x-for="e in picker.entries" :key="e.path">
+        <button type="button" class="mk-btn" @click="e.dir ? list(e.path) : pick(e.path)" x-text="(e.dir ? '\u{1F4C1} ' : '') + e.name"></button>
+      </template>
+      <span class="mk-sub" x-show="!picker.entries.length">nothing here</span>
+    </div>
+  </div>
+</template>
+
+<div class="mk-preview-rules" x-show="pre">
+  <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? 'jar found' : 'jar not found'"></span>
+  <span class="mk-tag" :class="pre && pre.java_found ? 'on' : 'off'" x-text="pre && pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
+  <template x-for="pid in ['a', 'b']" :key="pid">
+    <span class="mk-tag" :class="pre && pre.roms[pid] && pre.roms[pid].clean ? 'on' : 'off'"
+          x-text="pid.toUpperCase() + ': ' + (!pre || !pre.roms[pid] || !pre.roms[pid].exists ? 'no ROM' : pre.roms[pid].clean ? 'clean ' + pre.roms[pid].title : 'not a clean dump')"></span>
+  </template>
+</div>

@@ -24,16 +24,16 @@
         </div>
       </section>
       <section class="mk-zone">
-        <h2 class="mk-h2"><span>Randomized ROM pair</span><i></i><em>Gen 1</em></h2>
+        <h2 class="mk-h2"><span>Randomizer</span><i></i><em>Gen 1</em></h2>
         <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
-          <p class="mk-sub">One randomized ROM per player with the same settings and different seeds, using your own copy of Universal Pokémon Randomizer ZX. The run then admits only those cartridges.</p>
+          <p class="mk-sub">Randomizing is part of creating a Red · Blue · Yellow run. These runs have a pair already, or can build one again:</p>
           {% if gen1_runs %}
             <div class="mk-opts">
               {% for r in gen1_runs %}<a class="mk-btn" href="/runs/{{ r.run_id }}/randomizer">{{ r.name }}</a>{% endfor %}
             </div>
             <span class="mk-cap">Each pair is bound to its run: the run admits only those two cartridges.</span>
           {% else %}
-            <span class="mk-cap">Create a Red · Blue · Yellow run first; the builder is a page of that run.</span>
+            <span class="mk-cap">No Gen 1 runs yet. <a href="/new">Create one</a> and tick Randomize.</span>
           {% endif %}
         </div>
       </section>

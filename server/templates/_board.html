@@ -7,8 +7,8 @@
 
   Zones, in the order a player cares about them during a run: NOW (where each player is
   and what they are fighting, because that is where the partner's mon dies too), then one
-  zone per section of the board (in party, pending, split, boxed, fallen), the unlinked
-  box mons, and the log beside it all from 1400 px. Every zone sits on the same
+  zone per section of the board (in party, pending, split, boxed, fallen), and the log
+  beside it all from 1400 px. A pair whose weaker half is low is tinted, not captioned. Every zone sits on the same
   three-track grid: A's column, the spine, B's column. The board cannot know which player
   is looking at it, so column position is the only thing that says whose mon a mon is;
   battle is drawn on a HALF, never on a row.
@@ -172,8 +172,7 @@
                   <span class="mk-bond-area">{{ row.area_name }}</span>
                   <span class="mk-bond-glyph">{{ bond_glyph(row.status) }}</span>
                   <span class="mk-bond-state">
-                    {% if row.at_risk %}<span class="risk">at risk · <b>{{ row.risk }}%</b></span>
-                    {% elif row.status == 'dead_zone' %}<span>dead zone</span>
+                    {% if row.status == 'dead_zone' %}<span>dead zone</span>
                     {% elif row.section == 'fallen' and row.death %}<span>{{ row.death.cause | replace('_', ' ') }}{% if row.death.killer %} · {{ row.death.killer.trainer_name or row.death.killer.species_name }}{% endif %}</span>
                     {% elif row.section == 'pending' %}<span>waiting</span>
                     {% elif row.section == 'boxed' %}<span>boxed together</span>
@@ -188,18 +187,6 @@
         </section>
       {% endfor %}
 
-      {% if board.unlinked.a or board.unlinked.b %}
-        <section class="mk-zone">
-          <h2 class="mk-h2"><span>Boxed, unlinked</span><i></i></h2>
-          <div class="mk-card mk-unlinked">
-            {% for pid in ('a', 'b') %}
-              <div class="{{ pid }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}"><span class="mk-side small">{{ pid | upper }}</span>
-                {% for b in board.unlinked[pid] %}<span class="mk-sub"><b>{{ b.nickname }}</b> box <span class="num">{{ b.box + 1 }}·{{ b.slot + 1 }}</span></span>{% else %}<span class="mk-sub">—</span>{% endfor %}
-              </div>
-            {% endfor %}
-          </div>
-        </section>
-      {% endif %}
     </div>
 
     {# ── LOG: beside the zones on a wide screen, under them otherwise ─── #}

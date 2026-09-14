@@ -649,6 +649,9 @@ class RunManager:
             "run":          self._augment_for_template(run) if run else None,
             "pinned_run_id": self._stream_pin_id,
             "form_json":    _json_for_script(new_run_form()),
+            # The creator randomizes as part of creating a Gen 1 run; it needs the same
+            # categories / labels / jar the standalone page does, with no current pair.
+            "randomizer_json": _json_for_script(self._randomizer_form(None)),
             "next_ports":   _next_ports(runs),
             "manager_port": self.manager_port,
             # Links to a run's own port (calc, debug) use the host the browser used for us.
@@ -692,11 +695,11 @@ class RunManager:
             log.warning(f"could not rebuild status for {run['run_id']}: {e}")
             return empty_status_payload()
 
-    def _randomizer_form(self, run: dict) -> dict | None:
+    def _randomizer_form(self, run: dict | None) -> dict | None:
         """The randomized-pair builder's state for a Gen 1 run: the categories the pipeline
         supports (from the same table the allowlist is computed from), what the run has,
         and where to start looking for the jar."""
-        if run.get("game") not in new_run_form()["gen1_games"]:
+        if run is not None and run.get("game") not in new_run_form()["gen1_games"]:
             return None
         from server.upr_pipeline import find_upr_jar
         from server.upr_settings import _CATEGORY_MODES
@@ -705,7 +708,7 @@ class RunManager:
             "labels": {"wild": "Wild encounters", "starters": "Starters", "statics": "Static encounters",
                        "trainers": "Trainer teams", "tms": "TMs", "field_items": "Field items"},
             "jar": find_upr_jar() or "",
-            "current": run.get("randomizer"),
+            "current": run.get("randomizer") if run else None,
         }
 
     def _augment_for_template(self, run: dict) -> dict:

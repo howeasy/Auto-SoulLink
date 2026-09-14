@@ -158,17 +158,6 @@ def pending_rows(status: dict) -> list[dict]:
     return out
 
 
-def unlinked_boxed(status: dict, pid: str) -> list[dict]:
-    """Box mons that belong to no bond. Rare on a soul link — the quarantine rule deposits
-    an unlinked catch until it is linked — but they exist and the board should not
-    pretend otherwise. A pending catch sits in the box but is spoken for: it already has
-    a row under "pending", and listing it here too showed it twice."""
-    spoken = {lk.get(f"{p}_key") for lk in status.get("links") or [] for p in PIDS}
-    for sides in (status.get("pending_captures") or {}).values():
-        spoken.update(m.get("key") for m in sides.values())
-    return [b for b in status["players"][pid].get("pc_boxes") or [] if b.get("key") not in spoken]
-
-
 def sections(status: dict) -> list[tuple[str, list[dict]]]:
     rows = pending_rows(status) + pairs(status)
     out = []
@@ -186,7 +175,6 @@ def build_board(status: dict) -> dict:
     return {
         "sections": sections(status),
         "section_labels": SECTION_LABELS,
-        "unlinked": {pid: unlinked_boxed(status, pid) for pid in PIDS},
         "counts": {
             "alive": sum(1 for r in rows if r["section"] != "fallen"),
             "fallen": sum(1 for r in rows if r["section"] == "fallen"),

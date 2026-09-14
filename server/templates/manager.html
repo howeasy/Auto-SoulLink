@@ -21,6 +21,7 @@
   {# dashboard.js: the <details> morph veto, the sprite chroma-key, the theme + font
      switchers relocated into the rail slots. Without dashboard.css: the rail is .mk-rail. #}
   <script src="/static/dashboard.js" defer></script>
+  {% if page == 'new' %}<script src="/static/randomizer.js"></script>{% endif %}
   {% if calc_preview %}<script src="/static/calc-preview.js" defer></script>{% endif %}
 {% endblock %}
 
@@ -28,6 +29,7 @@
 <script>
   window.SLINK_FORM = {{ form_json | safe }};
   window.SLINK_NEXT_PORTS = {{ next_ports | list | tojson }};
+  window.SLINK_RANDOMIZER = {{ randomizer_json | safe }};
 </script>
 
 <div class="mk" x-data="manager()">
@@ -75,18 +77,21 @@
           </template>
 
           <section class="mk-zone" x-show="form.gen1_games.includes(draft.game)">
-            <h2 class="mk-h2"><span>Randomized ROM pair</span><i></i></h2>
+            <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
             <label class="mk-opt described" :class="draft.randomize ? 'on' : ''">
               <input type="checkbox" x-model="draft.randomize">
               <span class="mk-opt-txt">
-                <span class="mk-opt-name">Build a randomized pair after creating</span>
-                <span class="mk-opt-desc">One randomized ROM per player with the same settings and different seeds, using your own copy of Universal Pokémon Randomizer ZX. The run then admits only those cartridges. Opens the builder next.</span>
+                <span class="mk-opt-name">Randomize</span>
+                <span class="mk-opt-desc">One randomized ROM per player, built from your own copy of Universal Pokémon Randomizer ZX and two clean dumps. The run then admits only those two cartridges. Your ROMs stay on this machine.</span>
               </span>
             </label>
+            <div x-show="draft.randomize" style="display:flex;flex-direction:column;gap:var(--space-4)">
+              {% include "_randomizer_fields.html" %}
+            </div>
           </section>
 
           <div class="mk-form-actions">
-            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy" @click="create()" x-text="busy ? 'Creating…' : (draft.randomize ? 'Create run, then randomize' : 'Create run')"></button>
+            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (draft.randomize && !(pre && pre.ok))" @click="create()" x-text="busy ? (stage || 'Creating…') : (draft.randomize ? 'Create and randomize' : 'Create run')"></button>
             <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
             <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
           </div>
@@ -134,7 +139,7 @@
         {% if run.status != 'running' and run.status != 'archived' %}<button class="mk-btn primary" :disabled="busy" @click="act('start')">Start</button>{% endif %}
         {% if run.status == 'running' %}<button class="mk-btn" :disabled="busy" @click="act('stop')">Stop</button>{% endif %}
         {% if run.status == 'running' %}<button class="mk-btn{% if run.run_id == pinned_run_id %} active{% endif %}" :disabled="busy" @click="pin()">{% if run.run_id == pinned_run_id %}Pinned{% else %}Pin{% endif %}</button>{% endif %}
-        {% if run.gen1 %}<a class="mk-btn{% if run.randomizer %} active{% endif %}" href="/runs/{{ run.run_id }}/randomizer">{% if run.randomizer %}Randomized pair{% else %}Randomizer{% endif %}</a>{% endif %}
+        {% if run.gen1 %}<a class="mk-btn{% if run.randomizer %} active{% endif %}" href="/runs/{{ run.run_id }}/randomizer">Randomizer</a>{% endif %}
         <span class="mk-pop-anchor" @click.outside="launchers = false">
           <button class="mk-btn" @click="launchers = !launchers">Launchers ▾</button>
           <div class="mk-pop" x-show="launchers" x-cloak>
@@ -191,11 +196,12 @@
 
   function newRun() {
     var form = window.SLINK_FORM;
-    return {
+    return Object.assign(randomizerFields(window.SLINK_RANDOMIZER), {
       form: form,
       ports: window.SLINK_NEXT_PORTS,
       draft: { name: '', game: '', randomize: false, opts: { battle_calc: true, pc_trade_npc: true } },
-      busy: false, error: '',
+      busy: false, error: '', stage: '',
+      init() { this.watchRandomizer(); },
       gameLabel(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).label || key; },
       gameMembers(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).members || []; },
       support(key) { return (form.support[this.draft.game] || {})[key] || { ok: true, why: '' }; },
@@ -203,17 +209,25 @@
       async create() {
         var name = this.draft.name.trim();
         if (!name || this.busy) return;
-        this.busy = true; this.error = '';
+        this.busy = true; this.error = ''; this.stage = 'Creating…';
         try {
           var body = Object.assign({ name: name, game: this.draft.game }, this.draft.opts);
           var res = await fetch('/api/runs/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           var j = await res.json();
           if (!j.ok) { this.error = j.error || 'Create failed'; return; }
-          window.location.href = '/runs/' + j.run.run_id + (this.draft.randomize ? '/randomizer' : '');
+          var runId = j.run.run_id;
+          if (this.draft.randomize) {
+            // The run exists either way; a refusal here lands on its randomizer page with
+            // the reason, rather than losing the run.
+            this.stage = 'Randomizing (a few seconds per ROM)…';
+            var r = await this.randomizePair(runId);
+            if (!r.ok) { window.location.href = '/runs/' + runId + '/randomizer?error=' + encodeURIComponent(r.error || 'Randomize failed'); return; }
+          }
+          window.location.href = '/runs/' + runId;
         } catch (e) { this.error = String(e); }
-        finally { this.busy = false; }
+        finally { this.busy = false; this.stage = ''; }
       },
-    };
+    });
   }
 </script>
 {% endblock %}

@@ -115,7 +115,7 @@ async def test_the_randomizer_page_is_a_gen1_run_page(manager_client, manager_di
     form = json.loads(body[start:body.index(";", start)])
     assert set(form["categories"]) == {"wild", "starters", "statics", "trainers", "tms", "field_items"}
     assert form["current"] is None
-    assert "'/api/runs/' + runId + '/randomize'" in body   # the builder posts to this run
+    assert "/static/randomizer.js" in body and "randomizerPage(" in body
 
 
 @pytest.mark.asyncio

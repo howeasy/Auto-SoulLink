@@ -118,7 +118,7 @@ The server writes state to `data/links.json` and `data/memorial.json`. Pass `--r
 Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. The page is a Jinja2 template polled by **HTMX** every ~2 s; **idiomorph** swaps changed nodes in place so `<details open>`, scroll position, and table-search focus survive each refresh. SSE remains available at `/api/events` for the calc bridge and external consumers, but the page itself no longer needs it. Theme + font pickers (Alpine.js widgets in the sidebar) persist to `localStorage` + a `slink-theme` cookie so the saved palette/font apply on the first byte (no FOUC). The page shows:
 - **Now** — one card per player in that player's column: trainer name, cartridge, badge pips, current area, Pokéball count, last event, *in battle* with the active mon, the wild encounters here, and (Radical Red) the **Upcoming Key Trainers** panel with its "Open in Calc" button
 - **One row per linked pair** — A's half, the bond (route, tie glyph, state), B's half; both HP bars face the bond and the row is tinted *at risk* when the weaker half is under 35 %, because both halves die if either faints. The foe nests under the fighting half and the partner's half says *at stake*: battle is a player state, never a pair state, since the board cannot know who is looking. Ability and held item under each half where the cartridge has them (`capabilities`)
-- Rows sorted into zones: **In party · Pending link · Split (one half boxed) · Boxed · Linked (stopped run) · Fallen** (memorials and dead zones, with the cause), then **Boxed, unlinked**
+- Rows sorted into zones: **In party · Pending link · Split (one half boxed) · Boxed · Linked (stopped run) · Fallen** (memorials and dead zones, with the cause)
 - The **Log** beside the board from 1400 px
 - Banners first: save failure, game over, identity mismatch, cartridge not admitted; the run phase and alive/fallen counts inside the polled fragment
 - Flicker-free auto-refresh via HTMX + idiomorph morph swaps — sprites, HP bars, and table structure are preserved across updates; only changed text/values are patched in-place via a `beforeAttributeUpdated` hook that explicitly preserves the `open` attribute on `<details>` elements
@@ -408,7 +408,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/new` | GET | New-run form: game family, options greyed with reasons, preview |
 | `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers / archive / delete) and its board — live from the run's server, or what it persisted once stopped |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
-| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: build a randomized ROM pair (categories, jar, clean ROMs, preflight, downloads) |
+| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs. Randomizing is normally part of `/new` |
 | `/broadcast` | GET | The overlay gallery wearing the Manager's rail (`/stream` serves the same page for OBS) |
 | `/tools` | GET | The patcher and the randomized-pair builders |
 | `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned (else most recent running) run — the URLs pasted into OBS |
