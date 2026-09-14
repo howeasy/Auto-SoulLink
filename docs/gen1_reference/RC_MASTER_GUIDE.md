@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:33:38+00:00",
+  "updated_at_utc": "2026-09-14T09:37:02+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "1c20573",
+  "source_head": "dc7b970",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance (literal spec in flight on Codex); R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). C1 round 2 dc7b970 under adversarial review (cx-d92e3a06). Next: C3 (spec recorded) on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -865,14 +865,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "c1",
-      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate 8ea6f25 on the branch)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidates 8ea6f25 + dc7b970 (isolated Sonnet worker, two rounds)",
+      "state": "done",
       "files": ["server/gen1_whiteout.py", "server/gen1_faint_runtime.py", "tests/unit/test_gen1_whiteout.py", "docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md"],
       "next_action": "Extract the per-command death-obligation block of gen1_faint_runtime.py:176-229 into a helper; settle_whiteout records collateral force_faint/force_explode as real obligations (own death_id/blocker/pending phase, warning for the missed faint signal) and keeps the JournalError only for a duplicate of the triggering key; three unit tests + report.",
       "reuse_decision": "Gen 1 specific (gen1_whiteout/gen1_faint_runtime); shared state.py _handle_whiteout already correct, untouched",
-      "receipt": "commit 8ea6f25; tests/unit/test_gen1_whiteout.py + test_gen1_faint_runtime.py + test_gen1_memorial_runtime.py 90 passed; diff sha256 3d160149…2b5e; docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md (MODEL-only; identifier() gained an optional discriminant; verify_state accepts collateral_of records)",
+      "receipt": "commits 8ea6f25 + dc7b970; whiteout/faint/memorial suites 96 passed; round-2 diff sha256 cf1843a0…8ca5; docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md (MODEL-only). OPEN test debt: the fully real two-link ACK lifecycle test (review finding 4) was not delivered — second real link needs a settled storage linked job; to be absorbed by C3 fixtures.",
       "independent_review_refs": [
-        "Codex ADVERSARIAL_REVIEW cx-221a8234: REJECT — collateral branch checks raw signal names but verify_state sees the decoded kind 'faint' (gen1_engine_signals.py:88,93); shared whiteout sets link.cause='whiteout' vs the common cause check (state.py:2062, faint_runtime.py:588-594); collateral binding to a real whiteout record/link halves missing; positive test bypasses the validator with fakes. Primary path, deferred machinery, ACK/memorial reuse, killed_at and HUD ordering ACCEPTED. Round 2 dispatched."
+        "Codex ADVERSARIAL_REVIEW cx-221a8234: REJECT — collateral branch checks raw signal names but verify_state sees the decoded kind 'faint' (gen1_engine_signals.py:88,93); shared whiteout sets link.cause='whiteout' vs the common cause check (state.py:2062, faint_runtime.py:588-594); collateral binding to a real whiteout record/link halves missing; positive test bypasses the validator with fakes. Primary path, deferred machinery, ACK/memorial reuse, killed_at and HUD ordering ACCEPTED.",
+        "Round 2 dc7b970: findings 1,2,3,5,6 fixed red-then-green; finding 4 (fully real two-link lifecycle test) not delivered; Codex ADVERSARIAL_REVIEW cx-d92e3a06 in flight"
       ]
     },
     {
@@ -981,11 +982,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "c3-spec",
-      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-3610046a)",
-      "state": "active",
+      "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-3610046a)",
+      "state": "done",
       "files": ["server/gen1_storage_runtime.py (read-only)", "server/gen1_storage_policy.py (read-only)", "lua/gen1_storage*.lua (read-only)"],
-      "next_action": "Literal C3 spec: plan capture, rebuild job kind through the storage machinery, scheduler order with C1 collaterals/memorials, restart reconciliation, tests.",
-      "reuse_decision": "research only"
+      "next_action": "None; recorded as docs/gen1_reference/reviews/C3-implementation-spec.md; READY WAIT(C1 accepted). Boundary: blackout-heal timing / re-fainting a healed dead target is NOT covered.",
+      "reuse_decision": "research only",
+      "receipt": "docs/gen1_reference/reviews/C3-implementation-spec.md",
+      "independent_review_refs": [
+        "coordinator: memorial_runtime.schedule arbitration seam (gen1_faint_runtime.py:310-334 -> gen1_memorial_runtime.py:53-67) accepted as the deadlock fix location"
+      ]
     },
     {
       "id": "r5b-2",
