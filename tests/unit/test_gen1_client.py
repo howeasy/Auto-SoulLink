@@ -593,6 +593,16 @@ def test_reconnect_inside_a_battle_hellos_without_waiting_for_the_checkpoint(wor
     assert len(world.events("hello")) == 2 and world.events("hello")[-1]["in_battle"] is True
 
 
+def test_box_refusals_carry_the_box_module_reason(world):
+    world.connect()
+    world.step(60)
+    world.reply({"cmd": "box_mon", "key": "0000:0000:99"})  # never in the party
+    world.overworld_safe()
+    world.step(2)
+    failed = world.events("box_mon_failed")
+    assert len(failed) == 1 and failed[0]["reason"] == "key not in party"
+
+
 def test_deferred_force_faint_whose_mon_left_the_party_writes_nothing_and_says_so(world):
     world.connect()
     world.step(60)
@@ -780,12 +790,19 @@ def test_partner_prompt_and_apply_drive_the_lease_and_report_the_received_mon(wo
     ov = _overlay(w)
     assert ov[5] == 5, "apply armed"
     gen = ov[6]
-    w.seed_party([incoming])  # the native routine replaced our only mon with the incoming one
+    # the native routine removes the offered mon through _RemovePokemon (the pinned site fires
+    # mid-apply, from the party) and appends the incoming one; neither is a PC event
+    w.seed_party([incoming])
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0
+    w.bus[w.ram["wWhichPokemon"]] = 0
+    w.fire("remove_pokemon")
+    w.step()
     w.bus[base + 5], w.bus[base + 8], w.bus[base + 7] = 7, 0, gen
     w.step()
     td = w.events("trade_done")[-1]
     assert td["new_key"] == codec.key(w.party()[0]) and td["new_species"] == 0xB1 and td["token"] == "t8"
     assert _overlay(w)[5] == 8
+    assert w.events("party_to_box") == [] and w.events("box_to_party") == []
     w.assert_all_conform()
 
 

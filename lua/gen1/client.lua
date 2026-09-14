@@ -346,25 +346,29 @@ function Client.new(p)
             elseif cmd.cmd == "box_mon" then
                 local slot, mon = find_party_slot(cmd.key)
                 if slot then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
-                local done, reason = self.boxes and self.boxes:deposit(cmd.key)
-                if not done then send("box_mon_failed", { key = cmd.key, reason = reason or "no box module" })
+                -- `x and f()` keeps only f's first value: bind both explicitly
+                local done, reason = nil, "no box module"
+                if self.boxes then done, reason = self.boxes:deposit(cmd.key) end
+                if not done then send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
                 else self.sync_written[cmd.key] = true; self:rescan_boxes() end
             elseif cmd.cmd == "party_mon" then
                 -- the withdrawn mon's stats are rebuilt from the cartridge's own base stats
                 local species
                 for _, e in ipairs(self.box_cache) do if e.key == cmd.key then species = e.species_id end end
                 local base = species and self.rom and self.rom.base_stats_for(species) or nil
-                local done, reason = self.boxes and self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname)
+                local done, reason = nil, "no box module"
+                if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
                 if done then send("sync_retrieve_done", { key = cmd.key }); self.sync_written[cmd.key] = true; self:rescan_boxes()
-                else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "no box module" }) end
+                else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
-                local done, reason = self.boxes and self.boxes:memorialize(cmd.key)
+                local done, reason = nil, "no box module"
+                if self.boxes then done, reason = self.boxes:memorialize(cmd.key) end
                 if done then send("memorialize_done", { key = cmd.key, box = 11 }); self.sync_written[cmd.key] = true; self:rescan_boxes()
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
                     table.insert(self.deferred, 1, cmd) -- block until a party_mon lands
-                else send("memorialize_failed", { key = cmd.key, reason = reason or "no box module" }) end
+                else send("memorialize_failed", { key = cmd.key, reason = reason or "memorial refused" }) end
             end
             writes:disarm()
         end)
@@ -503,7 +507,11 @@ function Client.new(p)
             end
             self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "remove_pokemon" then
-            if not pt.from_box and not self.moved_this_frame then
+            -- the native SLINK apply removes the offered mon through _RemovePokemon and appends
+            -- the received one; trade_done accounts for both (receipt: a spurious party_to_box
+            -- for the INCOMING key went out mid-apply and the server ordered a box_mon back)
+            local trading = self.trade_state and self.trade_state.kind == "apply"
+            if not pt.from_box and not self.moved_this_frame and not trading then
                 local party = current_party()
                 local key = party and key_at(party, pt.which)
                 if key and not self.sync_written[key] then send("party_to_box", { key = key }) end -- release
