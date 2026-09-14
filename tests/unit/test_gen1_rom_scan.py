@@ -502,7 +502,7 @@ class TestRandomizedRoms:
         assert sa != sc and sb != sc, "the ROM was not actually randomized"
         assert sa != sb, "two runs produced identical tables — seeds are not independent"
         # Not merely "differs somewhere": a real randomization moves most of the table.
-        assert sum(x != y for x, y in zip(sa, sc)) > len(sc) // 2
+        assert sum(x != y for x, y in zip(sa, sc, strict=True)) > len(sc) // 2
 
     def test_two_seeds_hash_differently_but_a_rescan_does_not(self, tmp_path):
         a = scan(self._randomize(tmp_path, "red", "a"))
@@ -617,7 +617,7 @@ class TestEvosMoves:
     @pytest.mark.parametrize("title", TITLES)
     def test_every_evolution_names_a_real_species(self, title):
         for internal, edges in evolution_graph(_rom(title)).items():
-            for method, param, target in edges:
+            for method, _param, target in edges:
                 assert method in ("level", "item", "trade"), (internal, method)
                 assert 1 <= target <= 190, f"index {internal} evolves into {target}"
 

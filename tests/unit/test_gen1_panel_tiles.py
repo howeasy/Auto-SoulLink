@@ -42,7 +42,8 @@ def mem():
                                              t[a] = v % 256; t[a+1] = math.floor(v/256) % 256 end,
         }
     """)
-    p = lambda *x: os.path.join(_REPO, *x).replace("\\", "/")
+    def p(*x):
+        return os.path.join(_REPO, *x).replace("\\", "/")
     M = lua.eval(f'dofile("{p("lua", "memory_gb.lua")}")')
     G = lua.eval(f'dofile("{p("lua", "games", "gen1_rby.lua")}")')
     M.initProfile(G, "red")
@@ -142,7 +143,7 @@ def test_rows_past_the_bottom_are_dropped(mem):
     """panelStage writes whatever the patch is about to reveal; spilling past row 17
     would run into whatever follows wTileMap."""
     lua, M = mem
-    rows = lua.table_from(["R%d" % i for i in range(ROWS + 5)])
+    rows = lua.table_from([f"R{i}" for i in range(ROWS + 5)])
     M.panelStage(rows)
     last = lua.eval(f"bus[{TILEMAP + ROWS * COLS}] or 0")
     assert last == 0, "panelStage wrote past the bottom row of the screen"

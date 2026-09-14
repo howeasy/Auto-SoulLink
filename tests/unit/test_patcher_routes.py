@@ -195,5 +195,5 @@ class TestTheShippedPatchesActuallyApply:
         """The CRC32 embedded in the UPS is the entire safety mechanism. A patcher that
         ignored it would quietly hand the player a corrupt cartridge."""
         src, patch_bytes = self._bytes(self._clean(wrong), patcher.patch_path(slug))
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="source ROM CRC mismatch"):
             self._tools().ups_apply(src, patch_bytes)

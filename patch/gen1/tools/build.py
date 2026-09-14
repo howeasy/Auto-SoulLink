@@ -145,7 +145,9 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     assert check[INJECT_OFFSET:INJECT_OFFSET + 8] == bank[:8]
     for off, _original, new, why in MENU_PATCHES:
         assert bytes(check[off:off + len(new)]) == new, f"{why} did not land at {off:#06x}"
-    assert check[lo:hi + 1] == bytes(open(src, "rb").read()[lo:hi + 1]),         "the cartridge header changed"
+    with open(src, "rb") as f:
+        pristine = f.read()[lo:hi + 1]
+    assert check[lo:hi + 1] == pristine, "the cartridge header changed"
     return (f"{rom_key}: {os.path.relpath(dst, REPO)}  "
             f"md5={hashlib.md5(check).hexdigest()}")
 

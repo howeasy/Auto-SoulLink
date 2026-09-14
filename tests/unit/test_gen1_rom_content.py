@@ -21,8 +21,6 @@ import os
 
 import pytest
 
-lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the Gen 1 game module")
-
 from server.adapters import get_adapter
 from server.adapters.gen1_rom_scan import (
     RomScanError,
@@ -31,6 +29,8 @@ from server.adapters.gen1_rom_scan import (
     scan_fishing,
     scan_wild,
 )
+
+lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the Gen 1 game module")
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 _ROMS = {
@@ -120,10 +120,12 @@ def test_the_payload_is_a_realistic_size_for_one_line(title):
 # ── what the UI is given ─────────────────────────────────────────────────────────────────
 def _tables_from_rom(title: str) -> dict:
     rom = _rom(title)
-    area_map = json.load(open(os.path.join(
-        _REPO, "data", "games", "gen1_rby", "area_map.json"), encoding="utf-8"))
-    species = json.load(open(os.path.join(
-        _REPO, "data", "games", "gen1_rby", "species_index.json"), encoding="utf-8"))
+    with open(os.path.join(_REPO, "data", "games", "gen1_rby", "area_map.json"),
+              encoding="utf-8") as f:
+        area_map = json.load(f)
+    with open(os.path.join(_REPO, "data", "games", "gen1_rby", "species_index.json"),
+              encoding="utf-8") as f:
+        species = json.load(f)
     adapter = get_adapter("gen1_rby", rom_type=title.capitalize())
     return build_encounter_tables(
         {"wild": scan_wild(rom), "fishing": scan_fishing(rom)},
