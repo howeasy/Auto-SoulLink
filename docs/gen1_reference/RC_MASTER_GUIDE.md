@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T08:32:57+00:00",
+  "updated_at_utc": "2026-09-14T08:33:04+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "6931fdf",
   "live_lane": null,
@@ -855,7 +855,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "fg-1",
       "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-8d25617e)",
       "state": "active",
-      "files": ["tests/gen1_release_requirements.json", "server/gen1_whiteout.py", "server/gen1_native_reattach_runtime.py"],
+      "files": ["tests/gen1_release_requirements.json", "server/gen1_native_reattach_runtime.py"],
       "next_action": "Human-play product gap census: BUILT/MISSING/BROKEN per playthrough step, ranked top 5 with files + red check.",
       "reuse_decision": "research only"
     },
