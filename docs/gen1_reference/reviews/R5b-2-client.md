@@ -6,12 +6,14 @@ is out of scope here and was not touched.
 
 ## Files touched
 
-- NEW `lua/gen1_checkpoint_client.lua` (157 lines, sha256
-  `01909e084174eb6c945783a142d0c9f562b8c2dc44d40d26c4632013861107f9`)
+- `lua/gen1_checkpoint_client.lua` (283 lines, sha256
+  `345823fa935ded3b2f84efc89aa9d041d223017f1531d862263c6122077a36b7` as of round 2)
 - `lua/gen1_client_entry.lua`: registration, `completion_event` composition, dedicated
-  hold integration in `writer_pending` (+22/-0 lines; see `git diff --stat` below)
-- `server/gen1_launcher.py`: added the new file to `OBSERVATION_FILES`
-- NEW `tests/unit/test_gen1_checkpoint_client.py` (14 tests)
+  hold integration in `writer_pending`, plus (round 2) `clock`/`overlay` wiring into the
+  constructor call
+- `server/gen1_launcher.py`: added the new file to `OBSERVATION_FILES` (round 1 only;
+  unchanged this round)
+- `tests/unit/test_gen1_checkpoint_client.py` (21 tests as of round 2)
 - This report
 
 No other files were created or edited (concurrently-owned files listed in the task
@@ -91,31 +93,35 @@ brief were left untouched; verified by `git status` below).
   `durable_runtime`'s existing `state.deferred`/`runtime:status()` machinery the same
   way every other service's refusal does.
 
-## Test output
+## Test output (round 2, final)
 
 ```
 python -m pytest tests/unit/test_gen1_checkpoint_client.py -q -o addopts= -p no:cacheprovider
-..............
-14 passed in 0.82s
+.....................
+21 passed in 1.35s
 ```
 
 Regression pass (router, executor, held-faint, full-save, journal/store, HUD, launcher,
 native-runtime injection — everything sharing a seam with this change):
 
 ```
-python -m pytest tests/unit/test_gen1_launcher.py tests/unit/test_command_service_router.py \
-  tests/unit/test_command_executor.py tests/unit/test_gen1_held_faint.py \
-  tests/unit/test_gen1_held_faint_client.py tests/unit/test_gen1_full_save.py \
-  tests/unit/test_gen1_full_save_authority.py tests/unit/test_client_journal.py \
-  tests/unit/test_client_state_store.py tests/unit/test_shared_hud_transients.py \
-  tests/unit/test_gen1_native_runtime_injection.py -q -o addopts= -p no:cacheprovider
-219 passed   # (14 new + 205 pre-existing)
+python -m pytest tests/unit/test_gen1_checkpoint_client.py tests/unit/test_gen1_launcher.py \
+  tests/unit/test_command_service_router.py tests/unit/test_command_executor.py \
+  tests/unit/test_gen1_held_faint.py tests/unit/test_gen1_held_faint_client.py \
+  tests/unit/test_gen1_full_save.py tests/unit/test_gen1_full_save_authority.py \
+  tests/unit/test_client_journal.py tests/unit/test_client_state_store.py \
+  tests/unit/test_shared_hud_transients.py tests/unit/test_gen1_native_runtime_injection.py \
+  -q -o addopts= -p no:cacheprovider
+226 passed
 ```
 
-A full `tests/unit` background run was also kicked off as a broader sanity check; the
-targeted regression pass above already covers every module this card's diff touches or
-composes with (router, executor, journal/store, held-faint, full-save, HUD, launcher,
-native-runtime injection) and found nothing.
+A full `tests/unit` background run (round 1) turned up 64 pre-existing failures, all in
+`test_gen1_memorial_runtime.py` and `test_gen1_observation_runtime.py` — files this card
+never touches, and other worktree workers' concurrent uncommitted edits to
+`server/gen1_memorial_runtime.py`/`server/gen1_runtime.py`/etc. (visible in `git status`
+throughout this session) are the far likelier cause. Not re-run in full this round given
+the ~14 minute cost and that the targeted regression pass above already covers every
+module this card's diff touches or composes with and is fully green.
 
 ## lupa syntax check
 
@@ -129,16 +135,17 @@ OK lua/gen1_checkpoint_client.lua
 OK lua/gen1_client_entry.lua
 ```
 
-## `git diff --stat`
+## `git diff --stat` (round 2, against HEAD 3b592a2 / candidate 645fa94)
 
 ```
- lua/gen1_client_entry.lua | 22 ++++++++++++++++++++++
- server/gen1_launcher.py   |  3 ++-
- 2 files changed, 24 insertions(+), 1 deletion(-)
+ lua/gen1_checkpoint_client.lua            | 238 +++++++++++++++++++++++-------
+ lua/gen1_client_entry.lua                 |   3 +-
+ tests/unit/test_gen1_checkpoint_client.py | 236 ++++++++++++++++++++++++-----
+ 3 files changed, 385 insertions(+), 92 deletions(-)
 ```
 
-plus two new untracked files: `lua/gen1_checkpoint_client.lua`,
-`tests/unit/test_gen1_checkpoint_client.py` (and this report).
+`server/gen1_launcher.py` and this report file are the other two files in scope; the
+report is rewritten in place for round 2 and `gen1_launcher.py` has no diff this round.
 
 ## Deviations from the spec
 
@@ -178,3 +185,48 @@ plus two new untracked files: `lua/gen1_checkpoint_client.lua`,
 5. No change was made to `lua/gen1_held_faint.lua` (the card brief said not to; the spec
    agrees no router change is needed there since routing composition lives in
    `gen1_client_entry.lua`).
+
+## Round 2 (adversarial review on candidate 645fa94, HEAD 3b592a2)
+
+Files this round: `lua/gen1_checkpoint_client.lua`, `lua/gen1_client_entry.lua`,
+`tests/unit/test_gen1_checkpoint_client.py`, this report. `server/gen1_launcher.py`
+unchanged. The server counterpart (R5b-1, `server/gen1_checkpoint_runtime.py`) landed
+concurrently as its own round 2; coded against its mirror protocol as given.
+
+### Finding → fix → test
+
+| Finding | Fix | Test(s) |
+|---|---|---|
+| **F1** digest mismatch / identity change / perpetual-unsafe asserted in `prepare` → transient NACK forever, re-reading 32 KiB every retry, never a durable receipt. | `prepare` now: (1) refuses **identity_changed** immediately (no read) if the pinned `context_generation`/`physical_instance` for this command_id changed since the first attempt; (2) bounds unsafe/undrained retries to `CHECKPOINT_WAIT_SECONDS` (90s wall clock via the now-required `clock` option) → **unsafe_timeout** refusal with zero reads; (3) bounds digest-mismatch retries to `MAX_SAMPLE_ATTEMPTS` (3) → **digest_mismatch** refusal after exactly 3 reads. Each refusal is a *successful* `prepare` return (a `{refused={code,reason}}` intent, no `cart_hex`), so `journal:prepare_command` persists it, `classify` always answers `"after"`, and `receipt`/`complete_command` retire the command via a normal ACK carrying `{event="save_upload",...,receipt:{request_id,witness,refused:{code,reason}}}` — never a NACK loop. `ready()` is forced `true` once the wait budget expires specifically so `prepare` gets to run and persist that refusal (it still performs zero CartRAM reads in that case, since the state is still unsafe). A `Checkpoint refused: <reason>` notice fires via `hud.lua`'s `H.present` (sanitize-safe) the moment the refusal receipt is built. | `test_digest_mismatch_bounded_to_three_attempts_then_durable_refusal` (2 NACKs at 1/2 reads, 3rd call ACKs with `refused.code=="digest_mismatch"`, `cart_hex==nil`, a 4th delivery replays with no further read); `test_identity_changed_refuses_immediately_regardless_of_attempt_count` (refuses on attempt 2 with zero extra reads, independent of the 3-attempt bound); `test_unsafe_timeout_refuses_without_ever_reading_cartram` (`ready()` false pre-budget, forced `true` post-budget, `prepare`/`step` refuse with `cart_reads==0` throughout). |
+| **F2** `pending()` dropped to false the instant `checkpoint_upload` locally ACKed, so the writer hold released before the `save_upload` event shipped or the paired capture (the OTHER player, or a refusal) resolved. | `gen1_checkpoint_client` now also claims **`checkpoint_release {request_id,outcome,reason}`**. `receipt()` for `checkpoint_upload` (success or refusal alike) sets `self.awaiting_release={request_id,upload_command_sequence}`; `pending()` returns `true` for as long as that is set, clearing it only once it independently observes — via `journal.store:read().command_floor`, since a confirmed command is pruned from `state.inbox` the moment it retires, so `journal:get_command` cannot see it later — that this player's own upload retired *and* the matching `checkpoint_release` command has itself durably ACKed (checked the same way, via a remembered `release_command_id` and `journal:get_command(...).outcome`). While waiting, `pending()` fires a rate-limited (every ≥3s) "Checkpoint pending - waiting for the server" notice; there is deliberately **no** timeout on this wait (release can take arbitrarily long; F1's bound is upload-side only). `checkpoint_release`'s own `prepare` refuses (a plain NACK, no state change) if its `request_id` doesn't match the awaited one. On completion it shows "Checkpoint saved" or "Checkpoint abandoned: <reason>" and is retired the normal way (`{event="checkpoint_release",...,receipt:{request_id,outcome}}`), after which `pending()` goes false on its next poll. `writer_pending()` in `gen1_client_entry.lua` needed no further change: it already routes through `checkpoint.pending()`, which now itself reflects the extended state. | `test_successful_upload_holds_until_checkpoint_release_confirmed` (pending stays true + "waiting" notice after the upload ACKs; a `checkpoint_release{confirmed}` retires it, pending goes false, "Checkpoint saved" fires); `test_checkpoint_release_abandoned_after_a_refusal_still_releases_the_hold` (same, starting from a *refused* upload, ending in `abandoned`); `test_release_never_arriving_keeps_holding_with_a_repeated_notice` (pending stays true and the notice re-fires across a simulated 100000s wait — no bound); `test_checkpoint_release_refuses_when_it_does_not_match_the_awaited_request` (mismatched `request_id` → NACK, hold stays engaged). |
+
+Per the finding's own permitted fallback ("drive the production writer loop if your
+harness can, else the hold predicate"): driving the real `M.run` entry loop needs the
+full BizHawk/luanet environment (`emu`, `event`, `gameinfo`, `luanet`), which no unit
+test in this repo constructs (there is no `test_gen1_client_entry.py`). The tests above
+drive the **hold predicate** (`service.pending()`, which is exactly what
+`writer_pending()` polls) across multiple simulated pumps instead, matching every other
+falsifier's `runtime`/`command_executor`/real-journal harness used throughout this file.
+
+### Known limitation surfaced, not fixed (out of scope this round)
+
+`writer.service()` in `gen1_client_entry.lua` (unedited, shared with `gen1_held_faint`
+and native) bounds ITS OWN internal servicing loop to `M.WRITE_SERVICE_SECONDS` (2s)
+before releasing the "writer" hold regardless of whether `writer_pending()` is still
+true. A `checkpoint_release` round trip will usually take far longer than 2s (network
+latency to the server and, transitively, to the OTHER player). Between one
+`writer.service()` burst ending and the next one starting (`writer_pending()` is
+re-checked and, seeing `checkpoint.pending()==true`, re-invokes `service()`), the outer
+`M.run` loop's `if ... not service.host.status().held then emu.frameadvance() end`
+could let a stray frame of gameplay run. This card's fix makes the *predicate* correct
+(`pending()` now genuinely reflects "still waiting for the release" for as long as
+needed); it does not change the *shared* 2-second-bounded hold-reacquisition loop that
+every writer-hold command already relies on, since that is out-of-file-scope
+(`writer.service()`'s body is untouched) and touches `force_faint`/native too. Flagging
+for a follow-up card if truly zero-gap holding through a multi-second release wait
+turns out to matter in practice (a live emulator gate would show it either way).
+`self.awaiting_release` and the per-command attempt/timeout tracking (`track`) are also
+in-memory only, not journaled — a Lua script reload while a request is in flight forgets
+both and falls back to whatever `journal:pending_commands()` shows (correct if
+`checkpoint_release` is already the head; not if it is not durably visible via the
+generic path).

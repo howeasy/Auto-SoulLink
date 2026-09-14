@@ -253,7 +253,8 @@ function M.start(launch,options)
         -- No write permit, no cartridge write; the same held write-service window
         -- (writer_pending below) grants it a coherent, drained-outbox read point.
         local checkpoint=CheckpointClient and CheckpointClient.new({journal=journal,memory=memory,player=launch.player,
-            variant=launch.cartridge.variant,owned=free and source_owned or owned,host=self.host})or nil
+            variant=launch.cartridge.variant,owned=free and source_owned or owned,host=self.host,
+            clock=clock,overlay=self.overlay})or nil
         -- Free-run boundary predicate (P4 section 4): "held" also reads "between frames, inside the loop".
         local function at_boundary()return self.loop_ctx~=nil and self.loop_ctx.at_boundary==true end
         -- free_service: no standalone engine flush and no inventory stream from the observer;
