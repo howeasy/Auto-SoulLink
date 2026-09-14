@@ -1,4 +1,4 @@
-# Gen 1 master release — resume note (2026-09-14)
+# Gen 1 master release — resume note (2026-09-14, refreshed 14:30Z)
 
 Read this first after a context reset. The ledger `docs/gen1_requirements.md` is the authority on
 evidence; this note is the working state around it. Plan (owner-approved):
@@ -8,7 +8,7 @@ evidence; this note is the working state around it. Plan (owner-approved):
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch
   `claude/gen1-master-release-plan-6b4279` = `79d5172` (gen1/rc's adapter sweep, FF, 0 conflicts)
-  + `07ba1ca` cherry-pick + ~50 commits of the rewrite. HEAD `5e24919` at the time of writing.
+  + `07ba1ca` cherry-pick + ~85 commits of the rewrite. HEAD `1a5941f` at the time of writing.
 - **master is still `adf3362`.** The UI-migration session (Claude, worktree `dreamy-pike-09f3e3`,
   branch `claude/soul-link-ui-mockups-40f67b`, based on `79d5172`) holds all its merges until master
   contains `79d5172`. The owner has NOT yet said go for `git -C "E:/Google Drive/SLink" merge
@@ -22,33 +22,43 @@ evidence; this note is the working state around it. Plan (owner-approved):
 
 ## What is built (all committed; see `git log adf3362..HEAD`)
 
-profile (`tools/gen_gen1_profile.py` from `data/pret/*.sym`, pret 405b624/0a08515) · 18 pinned
-engine sites (`tools/pin_gen1_site.py`, F-2 tested) · `docs/protocol.md` + `tests/unit/protocol_schema.py`
+profile (`tools/gen_gen1_profile.py` from `data/pret/*.sym`, pret 405b624/0a08515) · 17 pinned
+engine sites (+ `trade_service` registered at runtime on a patched ROM) (`tools/pin_gen1_site.py`, F-2 tested) · `docs/protocol.md` + `tests/unit/protocol_schema.py`
 (pinned to the server) · `docs/gen1_engine_sites.md` · `server/adapters/gen1_codec.py` (oracle) ·
 `lua/gen1/{reads,signals,writes,boxes,rom,trade_overlay,client,entry,run}.lua` · adapter rewritten
 (species on the wire = INTERNAL index) · `static_encounters.json` · trade patch assembled on master's
-toolchain (bank $3F spans; dist NOT yet regenerated) · state.py trade events (`trade_query/offer`,
+toolchain (bank $3F spans; dist `.ups` + patcher md5s regenerated, 76ba1ff) · state.py trade events (`trade_query/offer`,
 `trade_mask/offer_ack`) · real R/B fixtures from scripted play (`tools/gen1_fixtures.py`; Yellow
-still legacy) · release runner `tools/verify_gen1_release.py` (12 lanes incl. `live-trade-gates`).
+still legacy) · release runner `tools/verify_gen1_release.py` (12 lanes incl. `live-trade-gates`) ·
+duo harness on the rewrite (`lua/tests/duo/duo_gen1_main.lua`, `tools/e2e_duo.py` game `gen1_new`,
+scenarios `link_new`/`deadzone_new`).
 
 PHYSICAL so far: inspect gate 6/6 (`tests/live/test_gen1_new_gates.py`), S-1 lab route Red+Blue,
-panel gates on the trade-carrying build. Everything else is SOURCE/MODEL — the ledger says which.
+panel gates on the trade-carrying build, D-1/D-3 (`link_new`/`deadzone_new` through the real server,
+receipts `patch/build/e2e_*_new_*_result.txt`). Everything else is SOURCE/MODEL — the ledger says which.
 
-## In flight at compaction (peers; coordinator integrates and commits, peers never commit)
+Client facts learned from the duo receipts (fixed in 1a5941f): after every capture the party is
+unreadable for the AskName window (add_mon.asm bumps count + list before the struct) — the writes
+gate now pauses and keeps its queue instead of revoking and dropping; `force_faint` during that
+window is deferred; hello waits for a live game (home/init.asm clears WRAM until MainMenu reloads
+the save).
+
+## In flight (peers; coordinator integrates and commits, peers never commit)
 
 | Card | Worker | Files | State |
 |---|---|---|---|
-| DUO-1 | Claude subagent (background) | NEW `lua/tests/duo/duo_gen1_main.lua`, `lua/tests/gen1_rb_hunt_inputs.lua`, `tests/e2e/test_duo_gen1_new.py`; EDIT `tools/e2e_duo.py`, `tools/gen_gen1_profile.py` + regenerated `profile.json` | **holds the emulator lane**; building the two-instance harness + `link_new`/`deadzone_new` (D-1, D-3); ≤8 live attempts then report |
-| DIST-1 | Codex live `Gen1-SunkCost` (task cx-40d8c6ed) | `patch/dist/SLink-RB-{Red,Blue}.ups`, `server/patcher.py` hashes, `patch/README.md`, hash-pinning tests | regenerating dist; verify apply round-trip; then commit |
+| ROM-CONTENT-1 | Codex live `Gen1-SunkCost` (cx-63321b33) | `lua/gen1/rom.lua`, hello line in `lua/gen1/client.lua`, `tools/gen_gen1_profile.py` + `profile.json`, `tests/unit/test_gen1_rom_tables.py`, `protocol_schema.py` (hello `rom_content`), one test in `test_gen1_client.py` | hello must carry `rom_content` for randomized-ROM admission (UI session's requirement); Lua wild/fishing reader == `gen1_rom_scan` fingerprint on all three dumps (F-4) |
+| LEDGER-2 | OMP (cx-6068cb3b) | `docs/gen1_requirements.md` | C-0 text, S-1 M ✓, strict S-2/S-5/S-7, D-1/D-3 P ✓, T-1 dist note, W-6/R-4 pause wording |
+| receptionist gate | coordinator (emulator lane) | `lua/tests/test_gen1_receptionist_gate.lua` | run 1 failed: driver read stale cursor bytes during "Can't escape!" (index=3 with a blank row); gated on the drawn FIGHT row; rerun in progress |
 
-Written but NOT yet run (needs the lane): `lua/tests/test_gen1_receptionist_gate.lua` +
-`tests/live/test_gen1_trade_gates.py` — run `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_trade_gates.py -q`
-once DUO-1 releases EmuHawk. Expect driver iteration (Center NPC, dialogue timing); never rerun an
-unchanged failure — read `patch/build/test_gen1_receptionist_gate_result.txt` first.
+Receptionist gate: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_trade_gates.py -q`; never rerun an
+unchanged failure — read `patch/build/test_gen1_receptionist_gate_result.txt` first. Next on the lane after
+it: paired trade scenario (T-3/T-4) on the duo harness, then a randomized-output admission boot
+(UI session's line 3: hello lands "admitted").
 
 ## Next steps, in order
 
-1. Integrate DUO-1 / DIST-1 / RUNNER-3 reports (verify, commit, `outcome` the task, re-dispatch —
+1. Integrate ROM-CONTENT-1 / LEDGER-2 reports (verify, commit, `outcome` the task, re-dispatch —
    keep both peers busy; the Stop hook blocks the turn otherwise).
 2. Run the receptionist gate (T-1/T-2 PHYSICAL); then a paired trade duo scenario (T-3/T-4) on top
    of the duo harness.
