@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T07:34:57+00:00",
+  "updated_at_utc": "2026-09-14T07:55:57+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "bbf82fb",
+  "source_head": "597f5ba",
   "live_lane": null,
-  "next_action": "r4: save phase PASSED physically; resume refused by a false hold on runtime_suspended (P2A-10 fixing). Then r5.",
+  "next_action": "RESUME PROVED LIVE (r5). Next: final MODEL gate (round-5 review of P2A-9/10 deltas), then the next feature lane: post-resume gameplay proof (inherited-pair faint) or native trade N1/N2 \u2014 coordinator picks by dependency.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -702,14 +702,18 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "p2a-10",
-      "owner": "isolated Claude worker (server; resumed context; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
       "files": [
         "server/gen1_run_resume.py",
         "tests/unit/test_gen1_run_resume.py"
       ],
-      "next_action": "Lifecycle event allowlist (runtime_suspended etc.) excluded from the post-witness gameplay scan; red from the r4 journal shape.",
-      "reuse_decision": "shared"
+      "next_action": "None; integrated (37 audit tests; suite 8049/0).",
+      "reuse_decision": "shared",
+      "receipt": "tests/unit/test_gen1_run_resume.py (+9)",
+      "independent_review_refs": [
+        "allowlist cited from durable_runtime.py:101,165,212,219,434 and gen1_runtime.py:417-419; coordinator re-ran 37"
+      ]
     }
   ]
 }
@@ -722,7 +726,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 - **Coordinator/integrator:** Claude Opus 5 session `9a7ac120-04eb-489f-8fd1-c9ecb67b31a6` (peer name `slink-63`), appointed by the owner's explicit resume authorization of 2026-09-13/14; the retired coordinator (Codex `01a09ae0-…`) is now the contextual peer `Gen1-p2` only. Roles, not providers, carry authority: the coordinator alone grants file/live ownership, reviews receipts and integrates; isolated workers implement bounded cards; independent reviewers never author the cut they review; OMP takes short bounded checks; the contextual peer supplies source support.
 - **Canonical checkout:** `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, `gen1/rc`, HEAD `59b6b0b` at takeover (docs); reviewed code freeze `c647f9126e79909f2b5976beec65d7b3beedd737`; product core baseline `15727ec`. Verified at takeover: dirty state is exactly the four preserved candidates below; parcel Lua/unit hashes match their report; R6 receipts match the D1 physical report; no EmuHawk/pytest/Java process. Root master is not the RC checkout.
 - **Current input authority:** unchanged — scripts and normal game buttons only; no Computer Use, no RAM/register/SaveRAM/savestate/CPU staging; read-only game-state inspection allowed; each live run needs the coordinator's sole-lane grant. Route tests request 300%; explicit 100% only for qualification.
-- **Live state:** RESUMED. No emulator lane granted yet; R7 waits for the reviewed BI-1 fix. Mute is DONE; Yellow-specific work deferred.
+- **Live state:** lane free. Proved live so far (controlled-scripted): lab checkpoint (R7), parcel/first ball/ball-gate (parcel r6), in-game save witness (r4), session resume (r5). Mute is DONE; Yellow-specific work deferred.
 - **Dispatch:** fully specified cards may be ACTIVE conditional on the first matching Git/hash/scope acknowledgment; a mismatch means HOLD.
 
 ### R6 diagnosis and next action
@@ -733,6 +737,7 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| **Resume round-trip attempt 5 — RESUME PASS (CONTROLLED-SCRIPTED)** | `rb-resume-checkpoint-observed` at `597f5ba`: save → clean stop → `resume_from` accepted → save files imported after digest verification → both clients CONTINUE-booted and enrolled (`gen1-resume.enrolled` digests = predecessor witnesses) → `oaks_lab` link ALIVE with species 1/4 carried across, identities re-minted, no activations/deaths, clean cleanup. First physical proof that a run survives a session boundary. Open (MODEL only): post-resume gameplay (inherited-pair faint, catch with inherited activation) and the refusal cases. Receipts summary `b70b0c78…`, resumed `c50bb01d…`, console `fa7ccf25…`; [D1 physical report](reviews/D1-RB-physical-successor.md). |
 | **Resume round-trip attempt 4 — save phase PASS (CONTROLLED-SCRIPTED)** | Both players saved in-game via START→SAVE→YES; server-acked `save_witness` for both (A rev 558, B rev 588); SaveRAM flushed; clean stop — first physical proof of the P2A-1 witness. Resume creation was refused: the only post-witness event for A is `runtime_suspended` (the clean stop's lifecycle record), which the inverted P2A-7 rule counts as gameplay → false hold. P2A-10: allowlist lifecycle events from source. Summary `7b02af23…`, resumed `f571f0fc…`. |
 | START menu fact | The companion patch (`patch/gen1/tools/manifest.py:114-130`) adds a **SLINK** row after EXIT: `wMaxMenuItem` is 7 without the Pokédex and 8 with (vanilla 6/7); SAVE remains index 3/4. Confirmed in the r3 cartridge bytes at DrawStartMenu (`$710B`). Any driver counting rows from `wMaxMenuItem` must use index+4 on companion cartridges; the save driver now walks to the tilemap-located SAVE row. |
 | Resume round-trip attempt 3 | Battle passed (BI-2 hardening held); START menu opened on both cartridges but reported `wMaxMenuItem 7` where the driver expected 6 (no Pokédex yet per `draw_start_menu.asm:30-38`) → idle. RS-3: navigate to the SAVE row found by the tile scan, accept 6/7, publish `got_pokedex`. Not a product defect. Summary `99c8e01d…`. |
