@@ -25,7 +25,8 @@ OBSERVATION_FILES=("lua/gen1_held_initial_save.lua","lua/gen1_held_save_image.lu
     "lua/gen1_engine_signals.lua","data/games/gen1_rby/gen1_engine_signal_data.lua",
     "data/games/gen1_rby/gen1_full_save_layout.lua","data/games/gen1_rby/gen1_rival_team_checkpoint.lua",
     "lua/gen1_bootstrap_observer.lua","data/games/gen1_rby/gen1_bootstrap_sites.lua",
-    "lua/gen1_continue_observer.lua","data/games/gen1_rby/gen1_continue_sites.lua")
+    "lua/gen1_continue_observer.lua","data/games/gen1_rby/gen1_continue_sites.lua",
+    "lua/gen1_checkpoint_client.lua")
 
 
 # The read-only acquisition sources the free-running loop drains.

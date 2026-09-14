@@ -186,6 +186,7 @@ function M.start(launch,options)
              cartridge=launch.cartridge,save_identity=context.save_identity},Journal.initial()))
         local Observation=launch.initial_observations and require("gen1_initial_observation")or nil
         local Native=native and require("gen1_native_runtime") or nil
+        local CheckpointClient=Observation and require("gen1_checkpoint_client") or nil
         local callbacks=Native and Native.journal_options(Observation,function()return self.native end) or Observation
         if native then
             -- The server's verdict on the published held read arrives as the event's acknowledged
@@ -208,6 +209,21 @@ function M.start(launch,options)
                 if acknowledge then return acknowledge(event,operation_id,baseline,result)end
                 return nil
             end
+        end
+        if CheckpointClient then
+            -- Compose the checkpoint's typed save_upload completion on top of whatever
+            -- native/observation already contributed above; preserve their fallthrough
+            -- (mirrors gen1_native_runtime.journal_options' at-most-one-claims composition).
+            local inner={}
+            if callbacks then for k,v in pairs(callbacks)do inner[k]=v end end
+            local previous_completion=inner.completion_event
+            inner.completion_event=function(entry,outcome,receipt)
+                local first=previous_completion and previous_completion(entry,outcome,receipt) or nil
+                local second=CheckpointClient.completion_event(entry,outcome,receipt)
+                assert(first==nil or second==nil,"multiple journal projections claimed one event")
+                return first or second
+            end
+            callbacks=inner
         end
         local journal=assert(Journal.open(self.store,nil,callbacks))
         -- Source hooks may run inside a free-running frame. They validate the stable
@@ -234,6 +250,10 @@ function M.start(launch,options)
         local faint=Observation and require("gen1_held_faint").new({journal=journal,memory=memory,player=launch.player,
             variant=launch.cartridge.variant,owned=free and source_owned or owned,host=self.host,clock=clock,
             saveram_directory=self.saveram_directory})or nil
+        -- No write permit, no cartridge write; the same held write-service window
+        -- (writer_pending below) grants it a coherent, drained-outbox read point.
+        local checkpoint=CheckpointClient and CheckpointClient.new({journal=journal,memory=memory,player=launch.player,
+            variant=launch.cartridge.variant,owned=free and source_owned or owned,host=self.host})or nil
         -- Free-run boundary predicate (P4 section 4): "held" also reads "between frames, inside the loop".
         local function at_boundary()return self.loop_ctx~=nil and self.loop_ctx.at_boundary==true end
         -- free_service: no standalone engine flush and no inventory stream from the observer;
@@ -247,6 +267,7 @@ function M.start(launch,options)
         self.hud=require("gen1_hud_service").new({journal=journal,overlay=self.overlay,player=launch.player})
         local services={self.hud}
         if faint then services[#services+1]=faint end
+        if checkpoint then services[#services+1]=checkpoint end
         if Native then
             -- Construct the native service under the startup hold with its host ARMED so it can
             -- verify a held, bounded owner; then disarm so ordinary gameplay stays free. A later
@@ -432,6 +453,7 @@ function M.start(launch,options)
             end
             local function writer_pending()
                 return (faint~=nil and faint.pending()) or (self.native~=nil and self.native:pending())
+                    or (checkpoint~=nil and checkpoint.pending())
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
