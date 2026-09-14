@@ -1,4 +1,4 @@
-# Gen 1 master release — resume note (2026-09-14, refreshed 14:47Z)
+# Gen 1 master release — resume note (2026-09-14, refreshed 15:00Z)
 
 Read this first after a context reset. The ledger `docs/gen1_requirements.md` is the authority on
 evidence; this note is the working state around it. Plan (owner-approved):
@@ -7,18 +7,18 @@ evidence; this note is the working state around it. Plan (owner-approved):
 ## Where things are
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch
-  `claude/gen1-master-release-plan-6b4279` = `79d5172` (gen1/rc's adapter sweep, FF, 0 conflicts)
-  + `07ba1ca` cherry-pick + ~90 commits of the rewrite. HEAD `02344b3` at the time of writing.
-- **master is still `adf3362`.** The UI-migration session (Claude, worktree `dreamy-pike-09f3e3`,
-  branch `claude/soul-link-ui-mockups-40f67b`, based on `79d5172`) holds all its merges until master
-  contains `79d5172`. The owner has NOT yet said go for `git -C "E:/Google Drive/SLink" merge
-  --ff-only 79d5172` (pure FF; touches the shared root checkout). Ask, do it, then message that
-  session (`local_2c735b55-b185-4adc-9986-38df0aac44f2`, name "Soul Link UI mockups").
+  `claude/gen1-master-release-plan-6b4279` = **master `e2fefa9`** (the merged UI-migration branch; master
+  was FF'd to `79d5172` by the owner, then the UI session merged) **+ 47 rewrite commits**, rebased
+  2026-09-14 (pre-rebase tip tagged `pre-rebase-gen1-release-912a7df`). HEAD `b7f9668` at the time of writing.
+- The UI-migration session is done and waits for the "admitted" hello receipt (randomized cartridge);
+  message it via `mcp__ccd_session_mgmt__send_message` to `local_2c735b55-b185-4adc-9986-38df0aac44f2`.
 - gen1/rc (`gen1-rby-code-sweep-8d06e2`) stays parked; its RC_MASTER_GUIDE.md checkpoint has a
   `master-release-lane` worker entry that is refreshed at transitions (owner courtesy only).
 - Old Gen 1 code is reference-only until Phase 8: `lua/slink_gen1.lua` still launches
   `lua/clients/gen1_rby_client.lua`; the rewrite is launched by `lua/gen1/run.lua` (over
   `lua/gen1/entry.lua`). `tests/unit/test_gen1_adapter.py` is already deleted.
+- Receipts for every PHYSICAL row proven by the duo harness or the receptionist gate are committed under
+  `tests/fixtures/gen1/receipts/`.
 
 ## What is built (all committed; see `git log adf3362..HEAD`)
 
@@ -34,8 +34,9 @@ duo harness on the rewrite (`lua/tests/duo/duo_gen1_main.lua`, `tools/e2e_duo.py
 scenarios `link_new`/`deadzone_new`).
 
 PHYSICAL so far: inspect gate 6/6 (`tests/live/test_gen1_new_gates.py`), S-1 lab route Red+Blue,
-panel gates on the trade-carrying build, D-1/D-3 (`link_new`/`deadzone_new` through the real server,
-receipts `patch/build/e2e_*_new_*_result.txt`), T-2 + T-1(one Center) — the receptionist gate PASSES on
+panel gates on the trade-carrying build, D-1/D-3 (`link_new`/`deadzone_new` through the real server),
+T-3/T-4 (`trade_new` PASS first run: native prompt, apply, swapped halves in links.json + both SaveRAMs),
+T-2 + T-1(one Center) — the receptionist gate PASSES on
 Red and Blue (`3650ace`; 8 s per cartridge once per-frame console.log was silenced; drivers must
 re-pulse A on the 16-frame cadence for native menus and gate the RUN menu on the drawn FIGHT row).
 Everything else is SOURCE/MODEL — the ledger says which.
@@ -50,8 +51,9 @@ the save).
 
 | Card | Worker | Files | State |
 |---|---|---|---|
-| TRADE-DUO-1 | Codex live `Gen1-SunkCost` (cx-5c08cf80) | `lua/tests/duo/duo_gen1_main.lua`, NEW `lua/tests/gen1_rb_center_inputs.lua` (Center walk factored out of the receptionist gate; gate requires it), `tools/e2e_duo.py` (`trade_new`), `tests/e2e/test_duo_gen1_new.py` | paired SLINK trade scenario (T-3/T-4), MODEL only; its on-disk WIP broke the gate at `:137` (format args) — reported; do not run the trade lane until it reports |
+| ADMIT-LIVE-1 | Codex live `Gen1-SunkCost` (cx-afc8ce97) | `tools/e2e_duo.py` (`admit_randomized_new`), `lua/tests/duo/duo_gen1_main.lua` (passive hello scenario), `tests/e2e/test_duo_gen1_new.py`, NEW `tests/unit/test_e2e_duo_admission.py` | randomized Red (unpatched UPR output) admitted + clean Blue rejected against a real prepare_pair contract; MODEL only, coordinator runs it (UPR ≤600 s per call) |
 | REVIEW-CLIENT-1 | OMP (cx-887161cd) | none (read-only) | adversarial review of `1a5941f` (pause-not-drop, deferred force_faint, live-game hello) |
+| live-new-gates | coordinator (lane) | — | re-running the inspect + S-1 lanes on the rebased tree |
 
 Receptionist gate: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_trade_gates.py -q`; never rerun an
 unchanged failure — read `patch/build/test_gen1_receptionist_gate_result.txt` first. Next on the lane after
@@ -60,7 +62,7 @@ it: paired trade scenario (T-3/T-4) on the duo harness, then a randomized-output
 
 ## Next steps, in order
 
-1. Integrate TRADE-DUO-1 / REVIEW-CLIENT-1 reports (verify, commit, `outcome` the task, re-dispatch —
+1. Integrate ADMIT-LIVE-1 / REVIEW-CLIENT-1 reports (verify, commit, `outcome` the task, re-dispatch —
    keep both peers busy; the Stop hook blocks the turn otherwise).
 2. Run the receptionist gate (T-1/T-2 PHYSICAL); then a paired trade duo scenario (T-3/T-4) on top
    of the duo harness.
