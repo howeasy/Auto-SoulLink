@@ -100,6 +100,10 @@ SCENARIOS = {
                   "rom": {"a": "patch/gen1/build/slink_red.gb",
                           "b": "patch/gen1/build/slink_blue.gb"},
                   "patched_saves": {"a": "red_patched", "b": "blue_patched"}},
+    # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
+    # Blue contract. The second UPR output is required by prepare_pair but is not launched.
+    "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
+                             "target": "town", "no_setup": True, "frames": 100000},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -318,6 +322,87 @@ class DuoRun:
         except Exception:
             return None
 
+    def prepare_admit_randomized_new(self):
+        """Build the real two-seed contract before the server or either cartridge starts."""
+        import hashlib
+
+        if REPO not in sys.path:
+            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from server.adapters.gen1_rom_scan import fingerprint_rom
+        from server.upr_pipeline import find_upr_jar, prepare_pair
+        from server.upr_settings import build_categories
+
+        jar = find_upr_jar()  # upr_pipeline.py:101-123 searches the main checkout's .cache/upr
+        if not jar:
+            raise RuntimeError("PokeRandoZX.jar missing; randomized admission cannot be skipped")
+        sources = {p: os.path.join(REPO, self.gcfg["rom"][p]) for p in ("a", "b")}
+        for player, source in sources.items():
+            if not os.path.isfile(source):
+                raise FileNotFoundError(f"clean {player} ROM missing: {source}")
+        settings = os.path.join(self.data_dir, "settings.rnqs")
+        with open(settings, "wb") as handle:
+            handle.write(build_categories({"wild"}))  # upr_settings.py:483-491
+        # prepare_pair requires BOTH players, writes .gbc outputs and verifies distinct seeds
+        # and rule-bearing data (upr_pipeline.py:254-335). One invocation, no retry.
+        result = prepare_pair(jar, settings, sources, os.path.join(self.data_dir, "roms"))
+        players = result["players"]
+        contract = {
+            "upr_version": result["upr_version"],
+            "settings_sha256": result["settings_sha256"],
+            "categories": result["categories"],
+            "players": {p: {"fingerprint": players[p]["fingerprint"], "seed": str(players[p]["seed"]),
+                            "rom_sha1": players[p]["sha1"]} for p in ("a", "b")},
+        }  # Manager-shaped: manager.py:954-964; spec belongs to the registry, not this file.
+        # BizHawk opens a .gbc as a Color title and misses the DMG battery save
+        # (tools/make_randomized_patched.py:30-34). Stage unchanged bytes under a known
+        # space-free .gb basename; never apply UPS or the structural injector in this gate.
+        stage_dir = os.path.join(BUILD, "e2e_admit_randomized_new")
+        os.makedirs(stage_dir, exist_ok=True)
+        stage = os.path.join(stage_dir, "slink_red_randomized.gb")
+        shutil.copyfile(players["a"]["output"], stage)
+        with open(stage, "rb") as handle:
+            staged = handle.read()
+        if hashlib.sha1(staged).hexdigest() != contract["players"]["a"]["rom_sha1"]:
+            raise RuntimeError("staged randomized Red SHA-1 differs from the contract")
+        if fingerprint_rom(staged) != contract["players"]["a"]["fingerprint"]:
+            raise RuntimeError("staged randomized Red fingerprint differs from the contract")
+        with open(sources["b"], "rb") as handle:
+            clean_blue_fingerprint = fingerprint_rom(handle.read())
+        if clean_blue_fingerprint == contract["players"]["b"]["fingerprint"]:
+            raise RuntimeError("clean Blue equals randomized Blue fingerprint; negative control is invalid")
+        self._admit_roms = {"a": os.path.relpath(stage, REPO).replace("\\", "/"),
+                            "b": self.gcfg["rom"]["b"]}
+        # run_gb_gate.py:47-80: patched/unknown-hash ROMs use the filename-derived SaveRAM
+        # name. Seed both that fallback and the clean gamedb name into the same isolated dir.
+        from run_gb_gate import GENS
+
+        self._admit_extra_saves = {
+            "a": GENS["gen1"]["patched"]["red_rand_patched"][2],
+        }
+        self._admit_fingerprints = {"expected_b": contract["players"]["b"]["fingerprint"],
+                                    "reported_b": clean_blue_fingerprint}
+        # server.py:468-505 reads this exact path from --data-dir, including on hello refresh.
+        with open(os.path.join(self.data_dir, "rom_contract.json"), "w", encoding="utf-8") as handle:
+            json.dump(contract, handle, indent=2)
+        print(f"[duo] admission contract staged: A={contract['players']['a']['fingerprint'][:12]} "
+              f"B expected={contract['players']['b']['fingerprint'][:12]} "
+              f"B clean={clean_blue_fingerprint[:12]}")
+        return contract
+
+    def _seed_instance_save(self, inst):
+        from run_gb_gate import GENS, seed_saveram
+
+        seeded = seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
+                              dest_dir=self._saveram_dir(inst))
+        if self.cfg.get("patched_saves"):
+            patch_key = self.cfg["patched_saves"][inst]
+            save_name = GENS["gen1"]["patched"][patch_key][2]
+            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), save_name))
+        extra_name = getattr(self, "_admit_extra_saves", {}).get(inst)
+        if extra_name:
+            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
+        return seeded
+
     def start_instances(self):
         if self.battery_boot:
             play = importlib.import_module(self.gcfg["play"])
@@ -368,14 +453,7 @@ class DuoRun:
                 # Seed this instance's battery save into the SAME per-instance directory
                 # write_run_config redirected to, above. Seeding the shared directory instead
                 # would leave the emulator booting an empty save from the redirected one.
-                from run_gb_gate import seed_saveram
-                seeded = seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
-                                      dest_dir=self._saveram_dir(inst))
-                if self.cfg.get("patched_saves"):
-                    from run_gb_gate import GENS
-                    patch_key = self.cfg["patched_saves"][inst]
-                    save_name = GENS["gen1"]["patched"][patch_key][2]
-                    shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), save_name))
+                self._seed_instance_save(inst)
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -393,7 +471,7 @@ class DuoRun:
             p = subprocess.Popen(
                 [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
                  f"--lua=patch/build/duo_{inst}.lua",
-                 self.cfg.get("rom", self.gcfg["rom"])[inst]],
+                 getattr(self, "_admit_roms", self.cfg.get("rom", self.gcfg["rom"]))[inst]],
                 cwd=REPO)
             self.emus.append(p)
         print("[duo] two EmuHawk instances launched")
@@ -738,6 +816,64 @@ class DuoRun:
             print(f"[duo] {inst} saved LAST slot {incoming}, OT {original_ot}, trade_done valid")
         print(f"[duo] T-3/T-4 durable trade: a={before_b}, b={before_a}")
 
+    def assert_admit_randomized_new(self):
+        """The server verdict and durable hello events, not the TCP connected bit, decide F-4."""
+        def both_verdicts():
+            status = self._status() or {}
+            players = status.get("players") or {}
+            a, b = players.get("a") or {}, players.get("b") or {}
+            return status if a.get("admission") == "admitted" and b.get("admission") == "rejected" else None
+
+        status = wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
+        a, b = status["players"]["a"], status["players"]["b"]
+        if a.get("admission_reason") != "cartridge matches the contract":
+            raise RuntimeError(f"A admission reason differs: {a.get('admission_reason')!r}")
+        got, want = self._admit_fingerprints["reported_b"], self._admit_fingerprints["expected_b"]
+        reason = b.get("admission_reason", "")
+        if ("not the cartridge built for player b" not in reason
+                or got[:12] not in reason or want[:12] not in reason):
+            raise RuntimeError(f"B wrong-cartridge reason lacks the fingerprint prefixes: {reason!r}")
+        # server.py:1574-1591 returns only noop on a rejected hello. Status is the public
+        # evidence that no B party snapshot or trainer identity was adopted.
+        if b.get("party_keys") or b.get("trainer_name") or b.get("current_area_id"):
+            raise RuntimeError(f"rejected B adopted party/identity/area: {b}")
+
+        def receipts():
+            a_text = read_result(self.scenario, "a") or ""
+            b_text = read_result(self.scenario, "b") or ""
+            if all(tag in text for text in (a_text, b_text)
+                   for tag in ("ADMIT_MAP 40 5 6", "ADMIT_PARTY ", "HELLO_RECEIPT ")):
+                return a_text, b_text
+            return None
+
+        a_text, b_text = wait_for("live town save and hello receipts", receipts, 120)
+        for player, text in (("a", a_text), ("b", b_text)):
+            party_line = next((line for line in text.splitlines() if line.startswith("ADMIT_PARTY ")), "")
+            if not party_line or int(party_line.split()[1]) < 1:
+                raise RuntimeError(f"{player} booted without a live party: {party_line!r}")
+
+        def durable_events():
+            path = os.path.join(self.data_dir, "events.json")
+            if not os.path.isfile(path):
+                return None
+            with open(path, encoding="utf-8") as handle:
+                rows = json.load(handle)
+            hellos = [row for row in rows if row.get("type") == "hello"]
+            return hellos if len(hellos) >= 2 else None
+
+        hellos = wait_for("durable admitted/rejected hello events", durable_events, 30)
+        a_events = [row for row in hellos if row.get("player") == "a"]
+        b_events = [row for row in hellos if row.get("player") == "b"]
+        if (len(a_events) != 1 or not a_events[0].get("text", "").startswith("Connected (Red, ")
+                or len(b_events) != 1 or not b_events[0].get("text", "").startswith("REJECTED — ")):
+            raise RuntimeError(f"unexpected durable hello events: {hellos}")
+        with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
+            log_text = handle.read()
+        if ("[a] admission: admitted — cartridge matches the contract" not in log_text
+                or "[b] admission: rejected — " + reason not in log_text):
+            raise RuntimeError("slink.log omitted an admission transition")
+        print(f"[duo] F-4 admitted A and rejected clean B: expected={want[:12]} reported={got[:12]}")
+
     def assert_dead_zone_new(self):
         """D-3: A's RUN sends no_catch and locks route_1; B's later catch there is retired.
 
@@ -834,6 +970,10 @@ class DuoRun:
 
     # ── per-scenario orchestration ───────────────────────────────────────────
     def orchestrate(self):
+        if self.scenario == "admit_randomized_new":
+            self.assert_admit_randomized_new()
+            self.go()  # passive clients hold for ~600 frames before RESULT: PASS
+            return
         ka, kb = self.wait_keys()
         self.wait_connected()
         if self.cfg.get("no_setup"):
@@ -938,6 +1078,8 @@ class DuoRun:
     def run(self):
         passed = False
         try:
+            if self.scenario == "admit_randomized_new":
+                self.prepare_admit_randomized_new()
             self.start_server()
             self.start_instances()
             self.orchestrate()

@@ -31,12 +31,15 @@ pytestmark = [
 
 GAME = "gen1_new"
 ROMS = ("red", "blue")
-SCENARIOS = ("link_new", "deadzone_new", "trade_new")
+SCENARIOS = ("link_new", "deadzone_new", "trade_new", "admit_randomized_new")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_gen1_new_duo(scenario):
+    admission = scenario == "admit_randomized_new"
     if not os.path.exists(play.EMUHAWK):
+        if admission:
+            pytest.fail(f"EmuHawk missing for admission gate: {play.EMUHAWK}")
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
     for rom_path in RUNNER_SCENARIOS[scenario].get("rom", {}).values():
         if not os.path.exists(os.path.join(REPO, rom_path)):
@@ -44,9 +47,13 @@ def test_gen1_new_duo(scenario):
     target = RUNNER_SCENARIOS[scenario].get("target", "town")
     for rom in ROMS:
         if not os.path.exists(os.path.join(REPO, play.ROMS[rom])):
+            if admission:
+                pytest.fail(f"clean {rom} ROM missing for admission gate: {play.ROMS[rom]}")
             pytest.skip(f"{play.ROMS[rom]} not present (ROMs are gitignored)")
         fixture = os.path.join(play.FIXTURES, f"{rom}_{target}.SaveRAM")
         if not os.path.exists(fixture):
+            if admission:
+                pytest.fail(f"town fixture missing for admission gate: {fixture}")
             pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py {rom} {target}`")
 
     proc = subprocess.run(

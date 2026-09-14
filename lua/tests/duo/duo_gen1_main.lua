@@ -66,7 +66,9 @@ C.send = function(line)
     local ok, msg = pcall(json.decode, line)
     local name = ok and type(msg) == "table" and msg.event or "?"
     seen[name] = (seen[name] or 0) + 1
-    if name == "trade_offer" or name == "menu_result" or name == "trade_done" then sent_events[name] = msg end
+    if name == "hello" or name == "trade_offer" or name == "menu_result" or name == "trade_done" then
+        sent_events[name] = msg
+    end
     if name ~= "tick" then log("TX " .. (line:sub(1, 220))) end
     return _send(line)
 end
@@ -398,6 +400,42 @@ function scenarios.trade_new()
     end
     frames(120) -- let both trade_done frames reach the server before client.exit()
     return true, "native trade applied once"
+end
+
+-- F-4: admission itself is decided by the server. Both cartridges only boot their town
+-- battery save, send the production hello, and hold the ordinary overworld for 600 frames.
+-- The runner reads /api/status, events.json, and slink.log for opposite verdicts.
+function scenarios.admit_randomized_new()
+    local party = reads.read_party()
+    local place = reads.read_map()
+    -- The disclosed town fixtures park at Oak's Lab $28 (5,6):
+    -- lua/tests/test_gen1_receptionist_gate.lua:1-12, pret/map_constants.asm.
+    if not party or #party < 1 or place.map ~= 0x28 or place.x ~= 5 or place.y ~= 6 then
+        return false, fmt("town save not live: party=%s map=%d (%d,%d)",
+                          party and #party or "unreadable", place.map, place.x, place.y)
+    end
+    log(fmt("ADMIT_MAP %d %d %d", place.map, place.x, place.y))
+    log(fmt("ADMIT_PARTY %d", #party))
+    if not wait_until(function() return sent_events.hello end, 120, "production hello") then
+        return false, "client did not send hello from the live game"
+    end
+    local hello = sent_events.hello
+    local content = hello.rom_content
+    if not content or not content.wild or not content.variant then
+        return false, "hello omitted its raw ROM content"
+    end
+    local maps = 0
+    for _ in pairs(content.wild) do maps = maps + 1 end
+    if maps == 0 then return false, "hello ROM content carried no wild maps" end
+    log(fmt("HELLO_RECEIPT %s %d wild_maps", content.variant, maps))
+    if not wait_go() then return false, "no go-file after admission verdicts" end
+    frames(600)
+    local again = reads.read_party()
+    local pos = reads.read_map()
+    if not again or #again < 1 or pos.map ~= 0x28 or pos.x ~= 5 or pos.y ~= 6 then
+        return false, "town save stopped being a live party during passive hold"
+    end
+    return true, "live hello held for 600 frames"
 end
 
 -- D-3: A runs from its first encounter (no_catch -> dead zone); B then catches there and the
