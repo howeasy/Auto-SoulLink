@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,7 +13,9 @@ from server.gen1_engine_signals import DATA, validate_signal
 def probe(runtime):  # noqa: F811
     lua=runtime;start(lua)
     lua.globals().data_json=json.dumps(DATA)
+    lua.globals().layout_path=str(Path(__file__).resolve().parents[2]/'data/games/gen1_rby')
     lua.execute('''
+        package.path=layout_path..'/?.lua;'..package.path
         package.loaded.gen1_engine_signal_data=assert(JSON.decode(data_json))
         Signals=require('gen1_engine_signals');profile=JSON.decode(data_json).titles.yellow
         bus={};rom={};hooks={};removed=0;frame=100;pc=0;sp=0xDFFE;held=true
@@ -91,7 +94,7 @@ def test_uncertain_storage_cannot_clear_or_duplicate_signals(probe,mode):
 
 def test_close_unregisters_every_hook(probe):
     probe.globals().probe.close(probe.globals().probe)
-    assert probe.globals().removed==5
+    assert probe.globals().removed==6
     assert probe.globals().flush()[0] is False
 
 
@@ -124,3 +127,23 @@ def test_ball_hook_uses_actual_h_and_l_registers_and_success_carry(probe,fault):
     if fault is None:
         value=saved(probe)['outbox'][0]['payload']['payload']['signals'][0]
         assert validate_signal(value,'yellow',{'ot_id':'1234','trainer_name':'SAME'})['kind']=='pokeballs_obtained'
+
+
+def test_save_witness_digests_the_persistent_cartram_projection(probe):
+    site=DATA['titles']['yellow']['sites']['save_witness']
+    probe.globals().bus[0xD087]=2  # wSaveFileStatus (yellow)
+    probe.execute("cart={};memory.read_u8=function(address,domain)local d=domain=='ROM' and rom or domain=='CartRAM' and cart or bus;return d[address] or 0 end")
+    probe.globals().cart[0x497]=0xEE  # sprite work buffer: outside the projection
+    probe.globals().cart[0x498]=0x12;probe.globals().cart[0x7FFF]=0x34
+    probe.globals().fire('save_witness')
+    assert probe.globals().flush()==(True,True)
+    value=saved(probe)['outbox'][0]['payload']['payload']['signals'][0]
+    import hashlib
+    expected=hashlib.sha256(('12'+'00'*(0x8000-0x498-2)+'34').encode()).hexdigest()
+    assert value['pc']==site['address']+3 and value['point']=={'digest':expected,'projection':'cartram-0498-8000-v1','save_file_status':2}
+    assert validate_signal(value,'yellow',{'ot_id':'1234','trainer_name':'SAME'})['kind']=='save_witness'
+
+
+def test_save_witness_ignores_the_shared_ret_reached_from_other_banks(probe):
+    probe.execute("bus[profile.addresses.hLoadedROMBank]=3;hooks['SLink-engine-save_witness'].fn()")
+    assert probe.globals().probe.status(probe.globals().probe)['pending']==0

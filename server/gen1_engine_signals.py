@@ -9,6 +9,9 @@ from server.protocol_journal import JournalError
 
 DATA=json.loads((Path(__file__).resolve().parents[1]/'data/games/gen1_rby/engine_signals.json').read_text())
 SCHEMA='rby-engine-signals-v1'
+# sha256 over the uppercase hex text of CartRAM[0x0498:0x8000] (the persistent save; ram/sram.asm), the
+# same text the client's journal backend hashes. A whole-file or WRAM-projected hash is not comparable.
+SAVE_PROJECTION='cartram-0498-8000-v1'
 
 
 def integer(value, low, high, label):
@@ -33,6 +36,13 @@ def validate_signal(signal, variant, identity):
         raise JournalError('engine signal source differs')
     integer(signal['frame'],0,2**53-1,'frame');integer(signal['sp'],0xC000,0xDFFF,'stack')
     point=signal['point']
+    if kind=='save_witness':
+        if not isinstance(point,dict) or set(point)!={'digest','projection','save_file_status'}:
+            raise JournalError('complete save witness required')
+        if (not isinstance(point['digest'],str) or not re.fullmatch('[0-9a-f]{64}',point['digest'])
+                or point['projection']!=SAVE_PROJECTION or point['save_file_status']!=2):
+            raise JournalError('save witness needs a completed save and the persistent CartRAM projection')
+        return {'kind':'save_witness','digest':point['digest'],'projection':point['projection']}
     if kind=='bag_received':
         from server.gen1_bag import decode_bag, BALLS
         if not isinstance(point,dict) or set(point)!={'bag_hex','trainer_hex','player_id_hex','destination','flags','item','quantity'}:

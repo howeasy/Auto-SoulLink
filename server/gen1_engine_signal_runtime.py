@@ -6,9 +6,19 @@ from server.gen1_engine_signals import validate_batch
 from server.gen1_initial_observation import COMPONENT as INITIAL
 from server.gen1_observation_provenance import semantic_receipt, stage_origin, validate_entry_origin
 from server.protocol import digest
-from server.protocol_journal import JournalError
+from server.protocol_journal import JournalError, _identifier
 
 COMPONENT='gen1-engine-signals'
+SAVE_WITNESS='gen1-save-witness'
+
+
+def witness_save(document,player,operation,entry):
+    """Latest acknowledged START-menu save checkpoint per player (the clean-resume anchor)."""
+    rows=[(index,signal) for index,signal in enumerate(entry['payload']['signals']) if signal['kind']=='save_witness']
+    if not rows:return
+    index,signal=rows[-1]
+    document['components'].setdefault(SAVE_WITNESS,{})[player]={'frame':signal['frame'],'digest':signal['point']['digest'],
+        'projection':signal['point']['projection'],'index':index,'operation_id':operation}
 
 
 def key(player):return digest({'component':COMPONENT,'player':player})[:32]
@@ -43,7 +53,6 @@ def verify_state(stage):
         validate_entry_origin(entry,player)
         initial=document['components'].get(INITIAL,{}).get(player)
         if initial is None:raise JournalError('engine signals require initial context')
-        from server.protocol_journal import _identifier
         _identifier(entry['operation_id'])
         prior=entry['prior_starter']
         if prior is not None:
@@ -55,6 +64,17 @@ def verify_state(stage):
             raise JournalError('engine signal record differs from source evidence')
         if entry['payload']['signals'][0]['frame']<initial['observation']['frame']:
             raise JournalError('engine signal predates initial inventory')
+    witnesses=document['components'].get(SAVE_WITNESS,{})
+    if not isinstance(witnesses,dict) or set(witnesses)-{'a','b'}:raise JournalError('invalid save witness component')
+    for player,witness in witnesses.items():
+        if (not isinstance(witness,dict) or set(witness)!={'frame','digest','projection','index','operation_id'}
+                or player not in entries or type(witness['frame']) is not int or type(witness['index']) is not int):
+            raise JournalError('incomplete save witness record')
+        _identifier(witness['operation_id']);entry=entries[player]
+        if witness['operation_id']==entry['operation_id']:
+            probe={'components':{}};witness_save(probe,player,entry['operation_id'],entry)
+            if probe['components'].get(SAVE_WITNESS,{}).get(player)!=witness:
+                raise JournalError('save witness differs from its engine record')
 
 
 def record(runtime,player,operation,request):
@@ -97,6 +117,7 @@ def stage_observation(runtime,stage,document,player,operation,request,*,frame_or
     entries[player]=entry
     from server.gen1_starter_settlement import remember_source
     remember_source(document,player,entry)
+    witness_save(document,player,operation,entry)
     from server.gen1_faint_runtime import settle
     commands=settle(runtime,stage,document,player,entry)
     return {'entry':entry,'commands':commands,

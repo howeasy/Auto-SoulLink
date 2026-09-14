@@ -84,3 +84,30 @@ def test_batch_checks_admission_order_and_capacity():
 def test_generated_signal_artifacts_match_pinned_source_and_original_rom_bytes():
     subprocess.run([sys.executable,str(ROOT/'tools/gen_gen1_engine_signals.py'),'--check'],cwd=ROOT,check=True)
     assert json.loads((ROOT/'data/games/gen1_rby/engine_signals.json').read_text())==DATA
+
+
+def witness(variant,**overrides):
+    site=DATA['titles'][variant]['sites']['save_witness']
+    value={'kind':'save_witness','frame':100,'pc':site['address']+site['capture_offset'],'bank':site['bank'],'sp':0xDFFE,
+        'point':{'digest':'a'*64,'projection':'cartram-0498-8000-v1','save_file_status':2}}
+    value['point'].update(overrides);return value
+
+
+@pytest.mark.parametrize('variant',['red','blue'])
+def test_save_witness_site_is_the_start_menu_save_completion(variant):
+    # pokered 405b624 engine/menus/save.asm:165-166 — SaveMenu.save: call SaveGameData ; hlcoord 1,13.
+    site=DATA['titles'][variant]['sites']['save_witness']
+    assert site=={'address':0x772D,'bank':0x1C,'capture_offset':3,'expected_hex':'CD487821A5C4','rom_offset':0x7372D,'symbol':'SaveMenu.save'}
+    assert validate_signal(witness(variant),variant,SAVE)=={'kind':'save_witness','digest':'a'*64,'projection':'cartram-0498-8000-v1'}
+
+
+@pytest.mark.parametrize('fault',['short_digest','lowercase_digest','status','projection','extra','pc'])
+def test_save_witness_refuses_partial_or_foreign_saves(fault):
+    value=witness('red')
+    if fault=='short_digest':value['point']['digest']='a'*63
+    elif fault=='lowercase_digest':value['point']['digest']='A'*64
+    elif fault=='status':value['point']['save_file_status']=1
+    elif fault=='projection':value['point']['projection']='cartram-0000-8000-v1'
+    elif fault=='extra':value['point']['frame']=1
+    else:value['pc']-=3
+    with pytest.raises(JournalError):validate_signal(value,'red',SAVE)

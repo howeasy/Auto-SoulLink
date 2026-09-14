@@ -58,6 +58,15 @@ def build():
         quantity = syms['wItemQuantity'][1]
         assert bytes.fromhex(done['expected_hex']) == bytes((0xE1,0xD1,0xC1,0xC1,0x78,0xEA,quantity&255,quantity>>8,0xC9))
         sites['bag_received'] = {**done, 'capture_offset': 8}
+        # START-menu save completion: SaveMenu.save is `call SaveGameData` then `hlcoord`/`ld hl`; the
+        # capture point is the instruction after the call, reached only once SaveGameData has returned.
+        # (SaveGameData's own RET is shared with the Cable Club partial save, ChangeBox and the Hall of Fame.)
+        save = (repo/'engine/menus/save.asm').read_text()
+        assert '.save\n\tcall SaveGameData\n' in save and 'SaveGameData::\n\tld a, $2\n\tld [wSaveFileStatus], a\n' in save
+        menu = site('SaveMenu.save', length=6)
+        callee = syms['SaveGameData'][1]
+        assert bytes.fromhex(menu['expected_hex'])[:4] == bytes((0xCD, callee&255, callee>>8, 0x21))
+        sites['save_witness'] = {**menu, 'capture_offset': 3}
         names = ['hLoadedROMBank', 'wPartyDataStart', 'wPlayerName', 'wPlayerID', 'wCurMap', 'wIsInBattle',
                  'wPlayerMonNumber', 'wBattleMonHP', 'wBattleMonSpecies', 'wWhichPokemon',
                  'wMonDataLocation', 'wCurPartySpecies', 'wCurEnemyLevel', 'wNumBagItems', 'wCurItem', 'wItemQuantity',

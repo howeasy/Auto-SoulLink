@@ -2,7 +2,8 @@
 -- frame boundary before authorizing another frame; this module grants none.
 local JSON=require("json_codec")
 local Data=require("gen1_engine_signal_data")
-local M={SCHEMA="rby-engine-signals-v1",MAX_PENDING=32}
+local Full=require("gen1_full_save")
+local M={SCHEMA="rby-engine-signals-v1",MAX_PENDING=32,PROJECTION="cartram-0498-8000-v1"}
 local function copy(value)return assert(JSON.decode(assert(JSON.encode(value))))end
 local function equal(a,b)return JSON.encode(a)==JSON.encode(b)end
 local function hex(address,count,domain)
@@ -21,6 +22,13 @@ function M.new(options)
         assert(gameinfo.getromhash():lower()==final and equal(owner,options.owned()),"engine observation context changed")
     end
     local function point(kind)
+        if kind=="save_witness"then
+            -- The persistent save is CartRAM[0x0498,0x8000): everything after the three sprite work
+            -- buffers (ram/sram.asm). Digest that hex projection with the journal's own sha256.
+            local image=Full.capture(nil,options.variant)
+            return {digest=options.journal.store.backend.sha256(image.cart_hex:sub(0x498*2+1)),projection=M.PROJECTION,
+                save_file_status=image.save_status}
+        end
         if kind=="bag_received"then
             return {bag_hex=hex(addresses.wNumBagItems,42),trainer_hex=hex(addresses.wPlayerName,11),
                 player_id_hex=hex(addresses.wPlayerID,2),destination=emu.getregister("H")*256+emu.getregister("L"),flags=emu.getregister("F"),

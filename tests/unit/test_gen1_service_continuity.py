@@ -411,3 +411,38 @@ def test_held_no_write_command_can_settle_then_same_epoch_proofs_restore_service
         assert all(runtime.gate.owns(player, original_owners[player]) for player in ("a", "b"))
     finally:
         runtime.close()
+
+
+def test_relaunched_process_is_refused_even_after_both_players_witnessed_a_save(tmp_path):
+    """P2a baseline: a new physical instance/context generation cannot resume today, even with
+    acknowledged save-witness checkpoints on both sides (the clean-resume admission is not built)."""
+    from server.gen1_engine_signals import DATA
+    from tests.unit.test_gen1_engine_signals import witness
+    from tests.unit.test_gen1_initial_observation import METADATA_SCHEMA, PROTOCOL
+
+    runtime = create_runtime(tmp_path, contract("red", "blue"), free_service=True)
+    try:
+        owners = enroll_progress(runtime)
+        for player in ("a", "b"):
+            variant = runtime.contract["players"][player]["variant"]
+            deliver(runtime, player, owners[player], batch(runtime, player, 2, frame=140, signals={
+                "schema": "rby-engine-signals-v1", "source_sha256": DATA["sha256"],
+                "variant": variant, "context_generation": player * 32, "sequence": 1,
+                "final_sha1": runtime.contract["players"][player]["final_rom_sha1"], "signals": [witness(variant)]}))
+        assert set(runtime.state().document()["components"]["gen1-save-witness"]) == {"a", "b"}
+        assert runtime.disconnect("a", owners["a"])  # suspends the pair; b reconnects as itself
+        owners["b"] = admit(runtime, "b")
+        nonce = secrets.token_hex(16)
+        relaunched = object()
+        hello = runtime.process({"protocol": PROTOCOL, "run_id": runtime.journal.run_id, "player": "a", "event": "hello", "seq": 0,
+            "client_nonce": nonce, "operation_id": nonce, "context_generation": "c" * 32,
+            "gen1_metadata": {"schema": METADATA_SCHEMA, "cartridge": runtime.contract["players"]["a"],
+                "save_identity": {"ot_id": "0000", "trainer_name": "SAME"}, "physical_instance": "3" * 32}}, relaunched)
+        assert hello["admission"]["state"] == "admitted"  # HELLO admits metadata only; the gates refuse later
+        owners["a"] = relaunched
+        runtime._service_release_ready = lambda stage: True
+        response = control(runtime, owners, "a", proof(runtime, "a"))
+        assert response["control"]["authority"] == "hold"
+        assert "differs from the initial physical identity" in response["control"]["reason"]
+    finally:
+        runtime.close()

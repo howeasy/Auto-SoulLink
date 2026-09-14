@@ -1,6 +1,6 @@
 {
   "schema": "rby-engine-signal-sites-v1",
-  "sha256": "d57a72a411f7328a7c52cde8ffe5b90123aeff173296e60a6814f46a5688ce0b",
+  "sha256": "018f8c6f89a15749ec5470b5c1c54c9c40a50d7079c5c9deb39ba0bd15b4356f",
   "titles": {
     "blue": {
       "addresses": {
@@ -45,6 +45,14 @@
           "expected_hex": "E52323771AEA1ED1",
           "rom_offset": 50905,
           "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+        },
+        "save_witness": {
+          "address": 30509,
+          "bank": 28,
+          "capture_offset": 3,
+          "expected_hex": "CD487821A5C4",
+          "rom_offset": 472877,
+          "symbol": "SaveMenu.save"
         },
         "starter_begin": {
           "address": 21005,
@@ -109,6 +117,14 @@
           "rom_offset": 50905,
           "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
         },
+        "save_witness": {
+          "address": 30509,
+          "bank": 28,
+          "capture_offset": 3,
+          "expected_hex": "CD487821A5C4",
+          "rom_offset": 472877,
+          "symbol": "SaveMenu.save"
+        },
         "starter_begin": {
           "address": 21005,
           "bank": 7,
@@ -171,6 +187,14 @@
           "expected_hex": "E52323771AEA1DD1",
           "rom_offset": 50222,
           "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+        },
+        "save_witness": {
+          "address": 31381,
+          "bank": 28,
+          "capture_offset": 3,
+          "expected_hex": "CD917B21D67A",
+          "rom_offset": 473749,
+          "symbol": "SaveMenu.save"
         },
         "starter_begin": {
           "address": 19309,

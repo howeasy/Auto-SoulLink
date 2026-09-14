@@ -94,3 +94,36 @@ def test_sequence_and_unpaired_source_faults_leave_no_partial_semantics(tmp_path
         with pytest.raises(JournalError):deliver(runtime,'a',owner,value)
         assert runtime.journal.snapshot()==before
     finally:runtime.close()
+
+
+def test_save_witness_records_the_latest_acknowledged_checkpoint_per_player(tmp_path):
+    from tests.unit.test_gen1_engine_signals import witness
+    runtime=create_runtime(tmp_path,contract('red','blue'))
+    try:
+        for player in ('a','b'):
+            owner=admit(runtime,player);send(runtime,player,owner,observation(runtime,player))
+            value=payload(runtime,player,[]);value['signals']=[witness(value['variant'],digest='1'*64)]
+            assert deliver(runtime,player,owner,value)['ack']=='ACK'
+            value=payload(runtime,player,[],2);value['signals']=[witness(value['variant'],digest='2'*64)]
+            value['signals'][0]['frame']=200;op=secrets.token_hex(16)
+            assert deliver(runtime,player,owner,value,op)['ack']=='ACK'
+            entry=runtime.state().document()['components']['gen1-save-witness'][player]
+            assert entry=={'frame':200,'digest':'2'*64,'projection':'cartram-0498-8000-v1','index':0,'operation_id':op}
+        state=runtime.state().document()
+        assert not state['rules']['core']['links'] and not runtime.journal.pending_ids('a')
+    finally:runtime.close()
+    runtime=open_runtime(tmp_path)
+    try:assert runtime.state().document()['components']['gen1-save-witness']==state['components']['gen1-save-witness']
+    finally:runtime.close()
+
+
+@pytest.mark.parametrize('fault',[{'save_file_status':1},{'digest':'a'*63},{'projection':'whole-file'}])
+def test_partial_or_foreign_save_witnesses_record_no_checkpoint(tmp_path,fault):
+    from tests.unit.test_gen1_engine_signals import witness
+    runtime=create_runtime(tmp_path,contract('red','red'))
+    try:
+        owner=admit(runtime,'a');send(runtime,'a',owner,observation(runtime,'a'))
+        value=payload(runtime,'a',[]);value['signals']=[witness('red',**fault)]
+        with pytest.raises(JournalError):deliver(runtime,'a',owner,value)
+        assert 'gen1-save-witness' not in runtime.state().document()['components']
+    finally:runtime.close()
