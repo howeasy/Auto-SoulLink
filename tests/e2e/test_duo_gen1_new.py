@@ -32,7 +32,7 @@ pytestmark = [
 GAME = "gen1_new"
 ROMS = ("red", "blue")
 SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
-             "linked_faint_active_new", "trade_new", "admit_randomized_new")
+             "linked_faint_active_new", "trade_new", "reconnect_new", "admit_randomized_new")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
@@ -57,9 +57,12 @@ def test_gen1_new_duo(scenario):
                 pytest.fail(f"town fixture missing for admission gate: {fixture}")
             pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py {rom} {target}`")
 
+    cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
+           "--game", GAME, "--scenario", scenario]
+    if scenario == "reconnect_new" and os.environ.get("SLINK_WRONG_SAVE"):
+        cmd.extend(("--wrong-save", os.environ["SLINK_WRONG_SAVE"]))
     proc = subprocess.run(
-        [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
-         "--game", GAME, "--scenario", scenario],
+        cmd,
         cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
         # Always outlive the runner's own per-scenario timeout (plus boot and teardown).
         timeout=RUNNER_SCENARIOS[scenario]["timeout"] + 300)

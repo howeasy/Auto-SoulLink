@@ -98,6 +98,8 @@ SCENARIOS = {
                                "target": "battle", "no_setup": True, "frames": 2500000},
     "linked_faint_active_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                                 "target": "battle", "no_setup": True, "frames": 2500000},
+    "reconnect_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
+                      "target": "battle", "no_setup": True, "frames": 2000000},
     # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
     "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                   "target": "battle", "no_setup": True, "frames": 2500000,
@@ -206,6 +208,58 @@ def retryable_gen1_rng(game, results, attempt):
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
     return "CAUSE_RNG" in classes and all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes)
+
+
+RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
+
+
+def _event_counts(rows):
+    return {name: sum(row.get("type") == name for row in rows) for name in RECONNECT_GAMEPLAY_EVENTS}
+
+
+def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id):
+    """Public/persisted C-2 facts; empty means a safe same-save reconnect."""
+    problems = []
+    a = (after.get("status", {}).get("players") or {}).get("a") or {}
+    b = (after.get("status", {}).get("players") or {}).get("b") or {}
+    if not a.get("connected") or a.get("identity_error"):
+        problems.append("A did not reconnect with accepted identity")
+    if not b.get("connected"):
+        problems.append("B stopped being connected during A relaunch")
+    if linked_key not in (a.get("party_keys") or []):
+        problems.append("A's resumed party lacks the linked key")
+    if before.get("links") != after.get("links"):
+        problems.append("the link changed across the same-save relaunch")
+    if str((after.get("player_identity", {}).get("a") or {}).get("ot_id")) != str(ot_id):
+        problems.append("A's locked OT ID changed")
+    if _event_counts(events_before) != _event_counts(events_after):
+        problems.append("a capture/link/no_catch/dead_zone event duplicated")
+    new_hellos = [row for row in events_after if row.get("type") == "hello" and row.get("player") == "a"]
+    old_hellos = [row for row in events_before if row.get("type") == "hello" and row.get("player") == "a"]
+    if len(new_hellos) != len(old_hellos) + 1 or not any(
+            row.get("text", "").startswith("Connected (Red, ") for row in new_hellos):
+        problems.append("A did not add exactly one accepted reconnect hello")
+    return problems
+
+
+def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, events_after):
+    """C-1: only the rejected hello event is allowed; the link file is byte-identical."""
+    problems = []
+    a = (status.get("players") or {}).get("a") or {}
+    if "Identity mismatch for slot A" not in (a.get("identity_error") or ""):
+        problems.append("A's different-OT save was not rejected")
+    if not ((status.get("players") or {}).get("b") or {}).get("connected"):
+        problems.append("B disconnected during A's wrong-save rejection")
+    if before_bytes != after_bytes:
+        problems.append("links.json bytes changed after the rejected hello")
+    if _event_counts(events_before) != _event_counts(events_after):
+        problems.append("a rejected save added a gameplay event")
+    new_hellos = [row for row in events_after if row.get("type") == "hello" and row.get("player") == "a"]
+    old_hellos = [row for row in events_before if row.get("type") == "hello" and row.get("player") == "a"]
+    if len(new_hellos) != len(old_hellos) + 1 or not any(
+            row.get("text") == "REJECTED — wrong save/slot" for row in new_hellos):
+        problems.append("A did not add exactly one WRONG SAVE rejection hello")
+    return problems
 
 
 def wait_for(desc, pred, timeout, interval=2.0):
@@ -336,6 +390,7 @@ class DuoRun:
                             if self.game == "gen1_new" else None)
         self.server = None
         self.emus = []
+        self.emu_by_inst = {}
         self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
                          for inst in ("a", "b")}
 
@@ -466,78 +521,83 @@ class DuoRun:
             shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
         return seeded
 
+    def _phase_result_path(self, inst, phase="initial"):
+        if phase == "initial":
+            return self._result_path(inst)
+        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_{phase}_result.txt")
+
+    def launch_instance(self, inst, *, phase="initial", seed=True, expected_key=""):
+        """Launch one cartridge; reconnect phases keep the existing per-instance SaveRAM."""
+        cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
+        if self.battery_boot:
+            from gen1_playthrough import write_run_config
+
+            write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst))
+        else:
+            shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+        result = self._phase_result_path(inst, phase)
+        if os.path.exists(result):
+            os.remove(result)  # stale phase receipts cannot satisfy a new relaunch
+        stub = os.path.join(BUILD, f"duo_{inst}.lua")
+        fillers = self.cfg.get("fillers", True)
+        duo = {
+            "wt": WT_FWD, "player": inst, "scenario": self.scenario,
+            "phase": phase, "expected_key": expected_key, "attempt": self.attempt,
+            "game": self.gcfg.get("game", ""),
+            "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
+            "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
+            "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
+            "go_file": self.go_files[inst].replace("\\", "/"),
+            "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
+        }
+        if self.gcfg["uses_savestate"]:
+            ss = self.cfg["savestate"]
+            duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
+        elif seed:
+            self._seed_instance_save(inst)
+        with open(stub, "w") as f:
+            f.write('SLINK_HOST = "127.0.0.1"\n')
+            f.write(f"SLINK_PORT = {self.tcp_port}\n")
+            f.write(f'SLINK_PLAYER = "{inst}"\n')
+            f.write("SLINK_DUO = {\n")
+            for k, v in duo.items():
+                if isinstance(v, str):
+                    f.write(f'  {k} = "{v}",\n')
+                elif isinstance(v, bool):
+                    f.write(f"  {k} = {str(v).lower()},\n")
+                else:
+                    f.write(f"  {k} = {v},\n")
+            f.write("}\n")
+            f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
+        p = subprocess.Popen(
+            [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
+             f"--lua=patch/build/duo_{inst}.lua",
+             getattr(self, "_admit_roms", self.cfg.get("rom", self.gcfg["rom"]))[inst]],
+            cwd=REPO)
+        self.emus.append(p)
+        self.emu_by_inst[inst] = p
+        print(f"[duo] launched {inst} phase={phase} seed={seed}")
+        return p
+
+    def terminate_instance(self, inst):
+        """Harness-only crash; keep the server and the other emulator running."""
+        p = self.emu_by_inst[inst]
+        if p.poll() is None:
+            subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
+            p.wait(timeout=15)
+        print(f"[duo] terminated {inst} pid={p.pid}; server retained")
+
     def start_instances(self):
         if self.battery_boot:
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
-                play.staged_rom(key)   # space-free copy; BizHawk's CLI splits on spaces
+                play.staged_rom(key)  # space-free relative ROM paths for BizHawk
         for inst in ("a", "b"):
             for f in (self._result_path(inst), self.go_files[inst]):
                 if os.path.exists(f):
                     os.remove(f)
         for inst in ("a", "b"):
-            cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
-            if self.battery_boot:
-                # Muted, on the second monitor: two emulators for several minutes each.
-                #
-                # Each instance also gets its OWN SaveRAM directory. BizHawk names a SaveRAM
-                # file from its gamedb entry, keyed on the ROM hash rather than the path we
-                # launched, so two instances of the SAME cartridge resolve to one file and
-                # stamp on each other. Gen 1 avoided that by pairing Red with Blue, which is
-                # a constraint on what can be tested together rather than a fix — and Gen 2
-                # has only one dump. Per-instance dirs make a same-cartridge duo work.
-                from gen1_playthrough import write_run_config
-                write_run_config(BIZHAWK_CONFIG, cfg_ini,
-                                 saveram_dir=self._saveram_dir(inst))
-            else:
-                shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
-            stub = os.path.join(BUILD, f"duo_{inst}.lua")
-            fillers = self.cfg.get("fillers", True)
-            duo = {
-                "wt": WT_FWD, "player": inst, "scenario": self.scenario,
-                "attempt": self.attempt,
-                "game": self.gcfg.get("game", ""),
-                "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
-                "mutate_otid": inst == "b",
-                "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
-                # So an instance can wait for its partner to finish before exiting —
-                # client.exit() kills the emulator, and a side that leaves early stops
-                # sending the very events the other side is waiting on.
-                "partner_result": (f"{WT_FWD}/patch/build/e2e_{self.scenario}_"
-                                   f"{'b' if inst == 'a' else 'a'}_result.txt"),
-                "go_file": self.go_files[inst].replace("\\", "/"),
-                # Scenarios that PLAY the game need a frame budget set by how long the game
-                # takes, not by the wall-clock timeout: at 400x, timeout*60 runs out mid-hunt.
-                "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
-            }
-            if self.gcfg["uses_savestate"]:
-                ss = self.cfg["savestate"]
-                duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
-            else:
-                # Seed this instance's battery save into the SAME per-instance directory
-                # write_run_config redirected to, above. Seeding the shared directory instead
-                # would leave the emulator booting an empty save from the redirected one.
-                self._seed_instance_save(inst)
-            with open(stub, "w") as f:
-                f.write('SLINK_HOST = "127.0.0.1"\n')
-                f.write(f"SLINK_PORT = {self.tcp_port}\n")
-                f.write(f'SLINK_PLAYER = "{inst}"\n')
-                f.write("SLINK_DUO = {\n")
-                for k, v in duo.items():
-                    if isinstance(v, str):
-                        f.write(f'  {k} = "{v}",\n')
-                    elif isinstance(v, bool):
-                        f.write(f"  {k} = {str(v).lower()},\n")
-                    else:
-                        f.write(f"  {k} = {v},\n")
-                f.write("}\n")
-                f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
-            p = subprocess.Popen(
-                [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
-                 f"--lua=patch/build/duo_{inst}.lua",
-                 getattr(self, "_admit_roms", self.cfg.get("rom", self.gcfg["rom"]))[inst]],
-                cwd=REPO)
-            self.emus.append(p)
+            self.launch_instance(inst)
         print("[duo] two EmuHawk instances launched")
 
     def wait_keys(self):
@@ -788,6 +848,147 @@ class DuoRun:
             return []
         with open(path, encoding="utf-8") as f:
             return json.load(f).get("links") or []
+
+    def _reconnect_document(self):
+        with open(os.path.join(self.data_dir, "links.json"), encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _reconnect_events(self):
+        path = os.path.join(self.data_dir, "events.json")
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _append_reconnect_marker(self, inst, marker):
+        with open(self.go_files[inst], "a", encoding="utf-8") as handle:
+            handle.write(marker + "\n")
+
+    def _wrong_red_save_ot(self, path, expected_ot):
+        """Require a real, independently played Red save with a different saved trainer ID."""
+        from pathlib import Path
+
+        if REPO not in sys.path:
+            sys.path.insert(0, REPO)
+        from gen1_fixtures import qualify
+
+        from server.adapters import gen1_codec as codec
+
+        source = Path(path)
+        name = source.name.lower()
+        if (not source.is_file() or source.suffix != ".SaveRAM"
+                or not (name.startswith("red") or "red version" in name)):
+            raise RuntimeError("--wrong-save must name an existing second-OT Red SaveRAM")
+        sram = source.read_bytes()
+        rom = (Path(REPO) / self.gcfg["rom"]["a"]).read_bytes()
+        problems = qualify(sram, rom)  # gen1_fixtures.py:57-83, game's checksum/stat oracle
+        if problems:
+            raise RuntimeError(f"--wrong-save is not a game-loadable Red save: {problems}")
+        profile = json.loads((Path(REPO) / "data/games/gen1_rby/profile.json").read_text(
+            encoding="utf-8"))["titles"]["red"]["ram"]
+        # save.asm:208-220 copies wMainDataStart..End to sMainData; never subtract
+        # wPlayerName here (gen1_codec.py:74-77 uses the same compacted offset rule).
+        offset = codec.SRAM_LAYOUT["sMainData"] + profile["wPlayerID"] - profile["wMainDataStart"]
+        other_ot = int.from_bytes(sram[offset:offset + 2], "big")
+        if str(other_ot) == str(expected_ot):
+            raise RuntimeError(f"--wrong-save has the original OT {other_ot}; need a second-OT Red save")
+        return other_ot
+
+    def _wrong_save_missing(self):
+        self._pydec_note("WRONG_SAVE_LEG NOT RUN — supply --wrong-save <second-OT red*.SaveRAM>")
+        self._reconnect_complete = False
+
+    def assert_reconnect_new(self):
+        """C-2 crash/reload while B stays online, then optional fail-closed C-1 wrong save."""
+        from pathlib import Path
+
+        from run_gb_gate import GENS
+
+        self.go()
+        self.assert_link_new()
+        for inst in ("a", "b"):
+            wait_for(f"{inst} link_new SAVE and reconnect hold",
+                     lambda i=inst: "RECONNECT_READY " + i in (read_result(self.scenario, i) or ""), 300)
+        _sram, party, _current, codec = self._saved_gen1_party("a")
+        if [codec.key(mon) for mon in party] != [self._boot_keys["a"], self._link_keys["a"]]:
+            raise RuntimeError("A's flushed Red save does not hold the linked pair before the crash")
+        correct_save = Path(self._saveram_dir("a")) / GENS["gen1"]["saveram_names"]["red"]
+        shutil.copyfile(correct_save, os.path.join(self.data_dir, "a_original_before_reconnect.SaveRAM"))
+        baseline = {"links": self._reconnect_document(), "events": self._reconnect_events()}
+        shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
+
+        self.terminate_instance("a")
+        wait_for("A disconnected while B stays online", lambda: (
+            (s := self._status()) and not s["players"]["a"]["connected"]
+            and s["players"]["b"]["connected"]), 45)
+        if self._reconnect_document().get("links") != baseline["links"].get("links"):
+            raise RuntimeError("the live link changed when A's EmuHawk was killed")
+        self._pydec_note("C-2 A EmuHawk terminated; server/B live, link unchanged while A disconnected")
+        self.launch_instance("a", phase="same_save", seed=False, expected_key=self._link_keys["a"])
+        same_path = self._phase_result_path("a", "same_save")
+        wait_for("same-save A hello", lambda: "RECONNECT_HELLO same_save count=1" in (
+            Path(same_path).read_text(encoding="utf-8") if os.path.exists(same_path) else ""), 180)
+        wait_for("server accepts A's same-save party", lambda: (
+            (s := self._status()) and (a := s["players"]["a"]).get("connected")
+            and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])), 60)
+        old_a_hellos = sum(row.get("type") == "hello" and row.get("player") == "a"
+                           for row in baseline["events"])
+        wait_for("durable accepted reconnect hello", lambda: sum(
+            row.get("type") == "hello" and row.get("player") == "a"
+            for row in self._reconnect_events()) == old_a_hellos + 1, 30)
+        same_after = {"links": self._reconnect_document(), "events": self._reconnect_events(),
+                      "status": self._status() or {}}
+        problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
+                                           same_after["events"], self._link_keys["a"],
+                                           baseline["links"]["player_identity"]["a"]["ot_id"])
+        same_receipt = Path(same_path).read_text(encoding="utf-8")
+        if "RX force_faint" in same_receipt or "RX box_mon" in same_receipt:
+            problems.append("A relaunch received force_faint/box_mon")
+        if problems:
+            raise RuntimeError("C-2 same-save reconnect failed: " + "; ".join(problems))
+        self._pydec_note(f"C-2 same OT accepted; alive link {self._link_keys['a']} / "
+                         f"{self._link_keys['b']}; party re-synced, zero duplicate gameplay events")
+        self._append_reconnect_marker("a", "A_DONE_SAME")
+        wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in (
+            Path(same_path).read_text(encoding="utf-8") if os.path.exists(same_path) else ""), 60)
+        final_same_receipt = Path(same_path).read_text(encoding="utf-8")
+        if "RX force_faint" in final_same_receipt or "RX box_mon" in final_same_receipt:
+            raise RuntimeError("A received a late force_faint/box_mon after reconnect validation")
+        self.emu_by_inst["a"].wait(timeout=30)
+        self.terminate_instance("a")
+        wait_for("same-save A socket closed before the wrong-save relaunch", lambda: (
+            (s := self._status()) and not s["players"]["a"]["connected"]), 45)
+
+        wrong = getattr(self.args, "wrong_save", None)
+        if not wrong:
+            self._wrong_save_missing()
+            final_a = same_path
+        else:
+            other_ot = self._wrong_red_save_ot(wrong, baseline["links"]["player_identity"]["a"]["ot_id"])
+            before_wrong_bytes = Path(self.data_dir, "links.json").read_bytes()
+            before_wrong_events = self._reconnect_events()
+            shutil.copyfile(wrong, correct_save)
+            self.launch_instance("a", phase="wrong_save", seed=False)
+            wrong_path = self._phase_result_path("a", "wrong_save")
+            wait_for("A wrong-save HUD", lambda: "WRONG_SAVE_HUD [x] WRONG SAVE: slot A" in (
+                Path(wrong_path).read_text(encoding="utf-8") if os.path.exists(wrong_path) else ""), 180)
+            after_wrong = self._status() or {}
+            problems = reconnect_wrong_problems(before_wrong_bytes, Path(self.data_dir, "links.json").read_bytes(),
+                                                after_wrong, before_wrong_events, self._reconnect_events())
+            if problems:
+                raise RuntimeError("C-1 wrong-save refusal failed: " + "; ".join(problems))
+            self._pydec_note(f"C-1 wrong OT {other_ot} rejected; links.json byte-identical, no gameplay events")
+            self._append_reconnect_marker("a", "A_DONE_WRONG")
+            wait_for("wrong-save A phase PASS", lambda: "RESULT: PASS" in (
+                Path(wrong_path).read_text(encoding="utf-8") if os.path.exists(wrong_path) else ""), 60)
+            self.emu_by_inst["a"].wait(timeout=30)
+            self._reconnect_complete = True
+            final_a = wrong_path
+        shutil.copyfile(final_a, self._result_path("a"))
+        self._append_reconnect_marker("b", "B_DONE")
+        wait_for("B stayed online through reconnect legs", lambda: "RESULT: PASS" in (
+            read_result(self.scenario, "b") or ""), 120)
+        return self._reconnect_complete
 
     def assert_link_new(self):
         """D-1: ONE alive link on route_1 whose halves are the two keys the cartridges caught."""
@@ -1200,6 +1401,9 @@ class DuoRun:
         ka, kb = self.wait_keys()
         self._boot_keys = {"a": ka[0], "b": kb[0]}
         self.wait_connected()
+        if self.scenario == "reconnect_new":
+            self.assert_reconnect_new()
+            return
         if self.cfg.get("no_setup"):
             # Deliberately does NOT call set_pokeballs() or inject_link(): these scenarios
             # exist to prove the paths those shortcuts bypass. The fixture carries real
@@ -1329,10 +1533,12 @@ class DuoRun:
             if pa and pb and self.scenario in ("linked_faint_bench_new", "linked_faint_active_new"):
                 self.assert_linked_faint_saved({"a": ra, "b": rb},
                                                active=self.scenario == "linked_faint_active_new")
-            passed = pa and pb
+            passed = pa and pb and (self.scenario != "reconnect_new" or self._reconnect_complete)
             if getattr(self, "_pydec_path", None):
-                self._pydec_note("PYDEC: PASS asserted scenario facts" if passed else
-                                 "PYDEC: FAIL client RESULT before saved-state oracle")
+                reason = ("asserted scenario facts" if passed else
+                          "wrong-save leg not run" if pa and pb and self.scenario == "reconnect_new" else
+                          "client RESULT before saved-state oracle")
+                self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
             if not passed:
@@ -1386,6 +1592,8 @@ def main():
                     help="pause before teardown for manual inspection")
     ap.add_argument("--keep-data", action="store_true",
                     help="never delete the temp server data dir")
+    ap.add_argument("--wrong-save", default=None,
+                    help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg")
     ap.add_argument("--server-flags", nargs="*", default=[],
                     help="extra flags for server.server")
     ap.add_argument("--list", action="store_true",

@@ -91,6 +91,10 @@ gclient.handle_command = function(self, cmd)
         log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
     end
     if c == "game_over" then log("GAME_OVER RX game_over") end
+    if c == "hud_show" and cmd.text and cmd.text:find("WRONG SAVE", 1, true) then
+        received_commands.wrong_save = cmd
+        log("WRONG_SAVE_HUD " .. cmd.text)
+    end
     return _handle(self, cmd)
 end
 local okc, errc = pcall(function() gclient:start() end)
@@ -192,6 +196,12 @@ local function wait_until(pred, secs, what)
     return nil
 end
 local function file_exists(p) local f = io.open(p, "r"); if f then f:close() return true end return false end
+local function file_contains(p, marker)
+    local file = io.open(p, "r")
+    if not file then return false end
+    local text = file:read("*a");file:close()
+    return text:find(marker, 1, true) ~= nil
+end
 local function wait_go() return wait_until(function() return file_exists(D.go_file) or nil end, 900, "go-file") end
 local function partner_done()
     local f = io.open(D.partner_result, "r")
@@ -306,6 +316,51 @@ function scenarios.link_new()
     local saved, why = game_save("link_new")
     if not saved then return false, why end
     return true, "caught " .. key
+end
+
+-- C-2/C-1: the first A instance is deliberately killed by the runner AFTER the
+-- source game's normal SAVE. B stays online; replacement A instances use the same
+-- clean Red ROM and either the flushed Red SaveRAM or an independently played Red save.
+function scenarios.reconnect_new()
+    if D.phase == "initial" then
+        local linked, why = scenarios.link_new()
+        if not linked then return false, link_prerequisite_failure(why) end
+        local key = new_key()
+        if not key then return false, "linked member missing before reconnect kill" end
+        log("RECONNECT_READY " .. D.player .. " linked_key=" .. key)
+        if D.player == "a" then
+            while true do yield_frame() end -- runner kills ONLY this EmuHawk process
+        end
+        if not wait_until(function() return file_contains(D.go_file, "B_DONE") end, 600,
+                          "B_DONE after A's reconnect legs") then return false, "B never got reconnect completion" end
+        return true, "B remained online through both A relaunches"
+    end
+    if D.phase ~= "same_save" and D.phase ~= "wrong_save" then
+        return false, "unknown reconnect phase " .. tostring(D.phase)
+    end
+    if not wait_until(function() return (seen.hello or 0) >= 1 end, 120, "relaunch hello") then
+        return false, "relaunch did not hello from a live save"
+    end
+    local party = reads.read_party()
+    if not party or #party < 1 then return false, "relaunch save has no readable party" end
+    local found = false
+    for _, mon in ipairs(party) do if D.expected_key ~= "" and reads.key(mon) == D.expected_key then found = true end end
+    log(fmt("RECONNECT_HELLO %s count=%d ot_id=%d linked=%s",
+            D.phase, seen.hello or 0, reads.read_player_id(), tostring(found)))
+    if D.phase == "same_save" and not found then return false, "same-save relaunch lost the linked key" end
+    if D.phase == "wrong_save" then
+        if not wait_until(function() return received_commands.wrong_save end, 120, "WRONG SAVE hud") then
+            return false, "wrong-save relaunch did not receive WRONG SAVE hud"
+        end
+    end
+    local finish_marker = D.phase == "same_save" and "A_DONE_SAME" or "A_DONE_WRONG"
+    if not wait_until(function() return file_contains(D.go_file, finish_marker) end, 300,
+                      finish_marker) then return false, "runner did not finish reconnect phase" end
+    if (seen.hello or 0) ~= 1 or (seen.force_faint or 0) ~= 0 or (seen.box_mon or 0) ~= 0 then
+        return false, "relaunch sent multiple hellos or received force_faint/box_mon"
+    end
+    frames(60)
+    return true, D.phase .. " hello observed once"
 end
 
 -- T-3/T-4: reuse the real Route 1 capture/link, walk to the *native* receptionist, then
@@ -472,6 +527,31 @@ local function tile_text(text, offset)
     return Center.has_tiles(rd, ram.wTileMap, text, offset)
 end
 
+local function menu_probe()
+    local rows = {}
+    for row = 0, 3 do rows[#rows + 1] = fmt("row%d=%s", row,
+        Center.row(rd, ram.wTileMap, row * 20, 18)) end
+    return fmt("cur=%d text=%d joy=%d %s", rd(ram.wCurrentMenuItem), rd(ram.wTextBoxID),
+               rd(ram.wJoyIgnore), table.concat(rows, " | "))
+end
+
+local function menu_failure(reason)
+    local detail = menu_probe()
+    log("MENU_PROBE_FAIL " .. reason .. " " .. detail)
+    return false, reason .. " [" .. detail .. "]"
+end
+
+local function start_menu_ready(point)
+    -- DrawStartMenu restores wCurrentMenuItem from wBattleAndStartSavedMenuItem
+    -- (pret engine/menus/draw_start_menu.asm:17-23; home/start_menu.asm:52-55).
+    -- Probe the actual SAVE and POKéMON rows before trusting that cursor.
+    local save = point.start_menu_save_index
+    local pokemon = save - 3
+    return save >= 3 and point.font_loaded and point.menu_y == 2 and point.menu_x == 11
+       and tile_text("SAVE", (2 + 2 * save) * 20 + 12)
+       and tile_text("POK", (2 + 2 * pokemon) * 20 + 12)
+end
+
 local function fainted_bang_on_tilemap()
     -- pret/constants/charmap.asm:126-151,169; text_2.asm:881-885 prints "fainted!".
     local word = "fainted"
@@ -575,19 +655,19 @@ local function show_bench_fnt(linked_slot, key, faint_frame)
     for _ = 1, 240 do
         if removed() then return unavailable() end
         local point = play.point()
-        if point.start_menu_save_index >= 0 and point.font_loaded then break end
+        if start_menu_ready(point) then break end
         yield_frame(pulse_at_frame("Start"))
     end
     local point = play.point()
     if removed() then return unavailable() end
-    if point.start_menu_save_index < 0 then return false, "START menu did not open before memorialize" end
+    if not start_menu_ready(point) then return menu_failure("START menu did not open before memorialize") end
     local pokemon_row = point.start_menu_save_index - 3 -- POKEMON precedes ITEM/name/SAVE
     for _ = 1, 180 do
         if removed() then return unavailable() end
         if rd(ram.wCurrentMenuItem) == pokemon_row then break end
         yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < pokemon_row and "Down" or "Up"))
     end
-    if rd(ram.wCurrentMenuItem) ~= pokemon_row then return false, "START cursor missed POKEMON" end
+    if rd(ram.wCurrentMenuItem) ~= pokemon_row then return menu_failure("START cursor missed POKEMON") end
     for _ = 1, 180 do
         if removed() then return unavailable() end
         if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 then break end
@@ -595,19 +675,23 @@ local function show_bench_fnt(linked_slot, key, faint_frame)
     end
     if rd(symbols.wTopMenuItemY) ~= 1 or rd(symbols.wTopMenuItemX) ~= 0 then
         if removed() then return unavailable() end
-        return false, "party menu did not open for linked FNT readback"
+        return menu_failure("party menu did not open for linked FNT readback")
     end
     local offset = 40 * linked_slot + 17
+    for _ = 1, 120 do
+        if tile_text("FNT", offset) or removed() then break end
+        yield_frame({}) -- wait for the party menu's text renderer; no further selection
+    end
     if not tile_text("FNT", offset) then
         if removed() then return unavailable() end
         local party = reads.read_party()
         if not party or not party[linked_slot + 1] then
-            return false, "party unreadable while checking linked FNT slot"
+            return menu_failure("party unreadable while checking linked FNT slot")
         end
         if not tile_text(party[linked_slot + 1].nickname, 40 * linked_slot + 3) then
-            return false, "linked party slot was not drawn for FNT readback"
+            return menu_failure("linked party slot was not drawn for FNT readback")
         end
-        return false, "party menu lacked linked slot FNT glyphs"
+        return menu_failure("party menu lacked linked slot FNT glyphs")
     end
     log(fmt("TILEMAP_FNT row=%d offset=%d %s", 2 * linked_slot, offset,
             Center.row(rd, ram.wTileMap, 40 * linked_slot, 20)))
@@ -633,55 +717,59 @@ local function reorder_linked_to_lead(key)
     end
     for _ = 1, 300 do
         local point = play.point()
-        if point.start_menu_save_index >= 0 and point.font_loaded then break end
+        if start_menu_ready(point) then break end
         yield_frame(pulse_at_frame("Start"))
     end
     local point = play.point()
-    if point.start_menu_save_index < 0 then return false, "START menu did not open for reorder" end
+    if not start_menu_ready(point) then return menu_failure("START menu did not open for reorder") end
     local pokemon_row = point.start_menu_save_index - 3
     for _ = 1, 240 do
         if rd(ram.wCurrentMenuItem) == pokemon_row then break end
         yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < pokemon_row and "Down" or "Up"))
     end
-    if rd(ram.wCurrentMenuItem) ~= pokemon_row then return false, "START cursor missed POKEMON row" end
+    if rd(ram.wCurrentMenuItem) ~= pokemon_row then return menu_failure("START cursor missed POKEMON row") end
     for _ = 1, 240 do
         if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 then break end
         yield_frame(pulse_at_frame("A"))
     end
+    for _ = 1, 120 do
+        if tile_text(before[2].nickname, 40 + 3) then break end
+        yield_frame({})
+    end
     if rd(symbols.wTopMenuItemY) ~= 1 or rd(symbols.wTopMenuItemX) ~= 0 or
        not tile_text(before[2].nickname, 40 + 3) then
-        return false, "party menu did not draw linked slot 1 nickname"
+        return menu_failure("party menu did not draw linked slot 1 nickname")
     end
     for _ = 1, 240 do
         if rd(ram.wCurrentMenuItem) == 1 then break end
         yield_frame(pulse_at_frame(rd(ram.wCurrentMenuItem) < 1 and "Down" or "Up"))
     end
-    if rd(ram.wCurrentMenuItem) ~= 1 then return false, "party cursor missed linked slot 1" end
+    if rd(ram.wCurrentMenuItem) ~= 1 then return menu_failure("party cursor missed linked slot 1") end
     for _ = 1, 240 do
         if rd(ram.wTextBoxID) == 4 and rd(symbols.wTopMenuItemY) ~= 1 and rd(ram.wMaxMenuItem) >= 2 then break end
         yield_frame(pulse_at_frame("A"))
     end
     -- FIELD_MOVE_MON_MENU=$04 (pret constants/menu_constants.asm:9); the dynamic
     -- field-move list places SWITCH one row before CANCEL (start_sub_menus.asm:67-94).
-    if rd(ram.wTextBoxID) ~= 4 then return false, "field move menu did not open for SWITCH" end
+    if rd(ram.wTextBoxID) ~= 4 then return menu_failure("field move menu did not open for SWITCH") end
     local switch_row = rd(ram.wMaxMenuItem) - 1
     for _ = 1, 240 do
         local cur = rd(ram.wCurrentMenuItem)
         if cur == switch_row then break end
         yield_frame(pulse_at_frame(cur < switch_row and "Down" or "Up"))
     end
-    if rd(ram.wCurrentMenuItem) ~= switch_row then return false, "field menu cursor missed SWITCH" end
+    if rd(ram.wCurrentMenuItem) ~= switch_row then return menu_failure("field menu cursor missed SWITCH") end
     for _ = 1, 240 do
         if rd(symbols.wTopMenuItemY) == 1 and rd(symbols.wTopMenuItemX) == 0 and
            rd(symbols.wMenuItemToSwap) == 2 then break end
         yield_frame(pulse_at_frame("A"))
     end
-    if rd(symbols.wMenuItemToSwap) ~= 2 then return false, "first SWITCH choice did not latch slot 1" end
+    if rd(symbols.wMenuItemToSwap) ~= 2 then return menu_failure("first SWITCH choice did not latch slot 1") end
     for _ = 1, 240 do
         if rd(ram.wCurrentMenuItem) == 0 then break end
         yield_frame(pulse_at_frame("Up"))
     end
-    if rd(ram.wCurrentMenuItem) ~= 0 then return false, "second SWITCH cursor missed slot 0" end
+    if rd(ram.wCurrentMenuItem) ~= 0 then return menu_failure("second SWITCH cursor missed slot 0") end
     for _ = 1, 240 do
         local now = reads.read_party()
         if now and reads.key(now[1]) == key and reads.key(now[2]) == starter_key and
@@ -690,13 +778,13 @@ local function reorder_linked_to_lead(key)
     end
     local after = reads.read_party()
     if not after or reads.key(after[1]) ~= key or reads.key(after[2]) ~= starter_key then
-        return false, "overworld SWITCH did not put linked mon in lead slot 0"
+        return menu_failure("overworld SWITCH did not put linked mon in lead slot 0")
     end
     for _ = 1, 120 do
         if tile_text(after[1].nickname, 3) then break end
         yield_frame({})
     end
-    if not tile_text(after[1].nickname, 3) then return false, "reordered party tilemap lacks lead nickname" end
+    if not tile_text(after[1].nickname, 3) then return menu_failure("reordered party tilemap lacks lead nickname") end
     log("REORDER_LEAD " .. key .. " slot=0 from=1 tilemap=" ..
         Center.row(rd, ram.wTileMap, 0, 20))
     for _ = 1, 600 do

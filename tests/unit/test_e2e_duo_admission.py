@@ -199,6 +199,121 @@ def test_python_oracle_receipt_ends_fail_on_an_assertion_error(runner, tmp_path)
         "PYDEC: FAIL bad checksum")
 
 
+def _reconnect_snapshots():
+    link = {"area_id": "route_1", "status": "alive",
+            "a": {"key": "AAAA:1111:01"}, "b": {"key": "BBBB:2222:02"}}
+    before = {"links": [link], "player_identity": {"a": {"ot_id": "1234"}}}
+    after = {**before, "status": {"players": {
+        "a": {"connected": True, "identity_error": "", "party_keys": ["AAAA:1111:01"]},
+        "b": {"connected": True}}}}
+    events = [{"player": "a", "type": "hello", "text": "Connected (Red, 2 mons)"},
+              {"player": "b", "type": "hello", "text": "Connected (Blue, 2 mons)"},
+              {"player": "a", "type": "capture", "text": "caught"},
+              {"player": "b", "type": "linked", "text": "linked"}]
+    return before, after, events
+
+
+def test_same_save_reconnect_keeps_identity_link_and_event_counts():
+    before, after, events = _reconnect_snapshots()
+    resumed = events + [{"player": "a", "type": "hello", "text": "Connected (Red, 2 mons)"}]
+    assert duo.reconnect_same_problems(before, after, events, resumed, "AAAA:1111:01", "1234") == []
+    duplicated = resumed + [{"player": "a", "type": "capture", "text": "duplicate"}]
+    assert any("duplicated" in p for p in duo.reconnect_same_problems(
+        before, after, events, duplicated, "AAAA:1111:01", "1234"))
+    mutated = {**after, "links": []}
+    assert any("link changed" in p for p in duo.reconnect_same_problems(
+        before, mutated, events, resumed, "AAAA:1111:01", "1234"))
+
+
+def test_wrong_save_reconnect_only_adds_a_rejected_hello():
+    _before, _after, events = _reconnect_snapshots()
+    rejected = events + [{"player": "a", "type": "hello", "text": "REJECTED — wrong save/slot"}]
+    status = {"players": {"a": {"identity_error": "Identity mismatch for slot A: wrong OT"},
+                          "b": {"connected": True}}}
+    assert duo.reconnect_wrong_problems(b"unchanged", b"unchanged", status, events, rejected) == []
+    assert any("bytes changed" in p for p in duo.reconnect_wrong_problems(
+        b"before", b"after", status, events, rejected))
+    assert any("gameplay event" in p for p in duo.reconnect_wrong_problems(
+        b"same", b"same", status, events,
+        rejected + [{"player": "a", "type": "no_catch", "text": "bad"}]))
+
+
+def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):
+    runner._pydec_path = str(tmp_path / "reconnect_pydec.txt")
+    runner._wrong_save_missing()
+    assert runner._reconnect_complete is False
+    assert "WRONG_SAVE_LEG NOT RUN" in Path(runner._pydec_path).read_text(encoding="utf-8")
+
+
+def test_reconnect_cannot_pass_on_two_client_passes_when_wrong_save_leg_was_not_run(runner):
+    runner.scenario = "reconnect_new"
+    runner.game = "gen1_new"
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: setattr(runner, "_reconnect_complete", False)
+    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.cleanup = lambda passed: None
+    runner.args = type("Args", (), {"keep_alive": False})()
+    assert runner.run() is False
+
+
+def test_a_only_relaunch_does_not_reseed_the_flushed_save(runner, tmp_path, monkeypatch):
+    runner.scenario = "reconnect_new"
+    runner.cfg = duo.SCENARIOS[runner.scenario]
+    runner.battery_boot = True
+    runner.tcp_port = 1234
+    runner.attempt = 1
+    runner.go_files = {"a": str(tmp_path / "a.go"), "b": str(tmp_path / "b.go")}
+    runner.emus, runner.emu_by_inst = [], {}
+    Path(duo.BUILD).mkdir()
+    runner._seed_instance_save = lambda _inst: pytest.fail("relaunch reseeded SaveRAM")
+    monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_args, **_kw: None)
+
+    class FakeProcess:
+        pid = 42
+
+    monkeypatch.setattr(duo.subprocess, "Popen", lambda *_args, **_kw: FakeProcess())
+    runner.launch_instance("a", phase="same_save", seed=False, expected_key="AAAA:1111:01")
+    stub = (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+    assert 'phase = "same_save"' in stub and 'expected_key = "AAAA:1111:01"' in stub
+    assert runner.emu_by_inst["a"].pid == 42 and len(runner.emus) == 1
+
+
+def test_reconnect_kills_only_a_and_leaves_b_process_running(runner, monkeypatch):
+    calls = []
+
+    class Process:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout):
+            calls.append(("wait", self.pid, timeout))
+
+    runner.emu_by_inst = {"a": Process(41), "b": Process(42)}
+    monkeypatch.setattr(duo.subprocess, "run", lambda cmd, **_kwargs: calls.append(tuple(cmd)))
+    runner.terminate_instance("a")
+    assert calls == [("taskkill", "/PID", "41", "/T", "/F"), ("wait", 41, 15)]
+
+
+def test_existing_red_town_is_not_a_second_ot_save():
+    town = REPO / "tests/fixtures/gen1/red_town.SaveRAM"
+    battle = REPO / "tests/fixtures/gen1/red_battle.SaveRAM"
+    if not town.exists() or not battle.exists() or not (REPO / "patch/build/gen1_red.gb").exists():
+        pytest.skip("Red town/battle saves or clean ROM absent")
+    profile = json.loads((REPO / "data/games/gen1_rby/profile.json").read_text(
+        encoding="utf-8"))["titles"]["red"]["ram"]
+    offset = codec.SRAM_LAYOUT["sMainData"] + profile["wPlayerID"] - profile["wMainDataStart"]
+    old_ot = int.from_bytes(battle.read_bytes()[offset:offset + 2], "big")
+    assert int.from_bytes(town.read_bytes()[offset:offset + 2], "big") == old_ot
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg = duo.GAMES["gen1_new"]
+    with pytest.raises(RuntimeError, match="original OT"):
+        run._wrong_red_save_ot(str(town), old_ot)
+
+
 @pytest.mark.parametrize(
     ("a", "b", "attempt", "expected"),
     [
