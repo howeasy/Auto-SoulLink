@@ -151,3 +151,17 @@ async def test_rom_download_is_404_until_a_pair_exists(manager_client, manager_d
     run = _stopped_run(manager_dir)
     assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/a")).status == 404
     assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/c")).status == 400
+
+
+# ── the flag table ────────────────────────────────────────────────────────────────────
+
+def test_run_flags_follow_one_table():
+    """Four sites wrote the option list out by hand and drifted: an adopted orphan run
+    dropped `verbose`, so it could never be started verbose. One table now."""
+    from server.manager import RUN_FLAGS, run_flags, run_options
+    defaults = run_options({})
+    assert defaults["battle_calc"] is True and defaults["pc_trade_npc"] is True
+    assert run_flags(defaults) == [], "defaults pass no flags"
+    everything_on = run_options({k: True for k, _, _ in RUN_FLAGS})
+    assert "--verbose" in run_flags(everything_on) and "--no-battle-calc" not in run_flags(everything_on)
+    assert run_flags(run_options({"battle_calc": False})) == ["--no-battle-calc"]

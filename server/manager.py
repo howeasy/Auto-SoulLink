@@ -116,6 +116,35 @@ OPTION_SUPPORT = {
 }
 
 
+# The run options a registry entry carries and how each reaches the spawned server: the
+# registry key, the CLI flag that turns it AWAY from its default, and the default. Written
+# out by hand at four sites before, and they had drifted: handle_new stored `verbose`,
+# _adopt_orphans did not, so an adopted run could never be started verbose.
+RUN_FLAGS = (
+    ("species_lock", "--species-clause", False),
+    ("gender_lock", "--gender-clause", False),
+    ("type_lock", "--type-clause", False),
+    ("explode_mode", "--explode-mode", False),
+    ("rival_team_swap", "--rival-team-swap", False),
+    ("overworld_presence", "--overworld-presence", False),
+    ("native_messages", "--native-messages", False),
+    ("native_sounds", "--native-sounds", False),
+    ("battle_calc", "--no-battle-calc", True),
+    ("pc_trade_npc", "--no-pc-trade-npc", True),
+    ("verbose", "--verbose", False),
+)
+
+
+def run_options(source: dict) -> dict:
+    """The option fields of a registry entry, read from a request body or a run_meta."""
+    return {key: bool(source.get(key, default)) for key, _, default in RUN_FLAGS}
+
+
+def run_flags(run: dict) -> list[str]:
+    """The CLI flags for this run's options: one per option whose value is not the default."""
+    return [flag for key, flag, default in RUN_FLAGS if bool(run.get(key, default)) != default]
+
+
 def option_support(key: str, rom_types: list[str]) -> dict:
     """Can a run on these cartridges honour this option, and if not, why. A soul link is
     symmetric, so the more restrictive answer across the pair wins. An unknown rom_type
@@ -381,31 +410,7 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
     ]
     if manager_port:
         cmd += ["--manager-port", str(manager_port)]
-    if run.get("species_lock"):
-        cmd.append("--species-clause")
-    if run.get("gender_lock"):
-        cmd.append("--gender-clause")
-    if run.get("type_lock"):
-        cmd.append("--type-clause")
-    if run.get("explode_mode"):
-        cmd.append("--explode-mode")
-    if run.get("rival_team_swap"):
-        cmd.append("--rival-team-swap")
-    if run.get("overworld_presence"):
-        cmd.append("--overworld-presence")
-    if run.get("native_messages"):
-        cmd.append("--native-messages")
-    if run.get("native_sounds"):
-        cmd.append("--native-sounds")
-    # Every registry entry has carried a `verbose` key since the first release, but nothing
-    # ever passed it through — a per-run DEBUG log was silently impossible from the manager.
-    if run.get("verbose"):
-        cmd.append("--verbose")
-    # battle_calc / pc_trade_npc default ON — the CLI flags are the inverse (--no-*).
-    if not run.get("battle_calc", True):
-        cmd.append("--no-battle-calc")
-    if not run.get("pc_trade_npc", True):
-        cmd.append("--no-pc-trade-npc")
+    cmd += run_flags(run)
     # Keep the child's stderr. It used to go to DEVNULL, so a run that died on startup — a taken
     # port, a bad ROM path, a stack trace — vanished without trace and the Manager just showed it
     # as stopped.
@@ -546,16 +551,7 @@ def _adopt_orphans(runs: list[dict]) -> bool:
             "http_port":    http_port,
             "status":       "stopped",
             "pid":          None,
-            "species_lock": bool(rules.get("species_lock", False)),
-            "gender_lock":  bool(rules.get("gender_lock", False)),
-            "type_lock":    bool(rules.get("type_lock", False)),
-            "explode_mode": bool(rules.get("explode_mode", False)),
-            "rival_team_swap": bool(rules.get("rival_team_swap", False)),
-            "overworld_presence": bool(rules.get("overworld_presence", False)),
-            "native_messages": bool(rules.get("native_messages", False)),
-            "native_sounds": bool(rules.get("native_sounds", False)),
-            "battle_calc": bool(rules.get("battle_calc", True)),
-            "pc_trade_npc": bool(rules.get("pc_trade_npc", True)),
+            **run_options(rules),
         }
         runs.append(run)
         known_ids.add(run_id)  # avoid port collision across multiple orphans
@@ -689,17 +685,9 @@ class RunManager:
             return empty_status_payload()
         try:
             from server.server import SLinkServer
+            opts = {k: v for k, v in run_options(run).items() if k != "verbose"}
             return SLinkServer(data_dir=run_dir, run_id=run["run_id"], run_name=run.get("name", ""),
-                               species_lock=run.get("species_lock", False),
-                               gender_lock=run.get("gender_lock", False),
-                               type_lock=run.get("type_lock", False),
-                               explode_mode=run.get("explode_mode", False),
-                               rival_team_swap=run.get("rival_team_swap", False),
-                               overworld_presence=run.get("overworld_presence", False),
-                               native_messages=run.get("native_messages", False),
-                               native_sounds=run.get("native_sounds", False),
-                               battle_calc=run.get("battle_calc", True),
-                               pc_trade_npc=run.get("pc_trade_npc", True))._build_status_dict()
+                               **opts)._build_status_dict()
         except Exception as e:
             log.warning(f"could not rebuild status for {run['run_id']}: {e}")
             return empty_status_payload()
@@ -761,17 +749,7 @@ class RunManager:
             "http_port":  http_port,
             "status":     "stopped",
             "pid":        None,
-            "species_lock": bool(body.get("species_lock", False)),
-            "gender_lock":  bool(body.get("gender_lock", False)),
-            "type_lock":    bool(body.get("type_lock", False)),
-            "explode_mode": bool(body.get("explode_mode", False)),
-            "rival_team_swap": bool(body.get("rival_team_swap", False)),
-            "overworld_presence": bool(body.get("overworld_presence", False)),
-            "native_messages": bool(body.get("native_messages", False)),
-            "native_sounds": bool(body.get("native_sounds", False)),
-            "battle_calc": bool(body.get("battle_calc", True)),
-            "pc_trade_npc": bool(body.get("pc_trade_npc", True)),
-            "verbose": bool(body.get("verbose", False)),
+            **run_options(body),
             # The game FAMILY, when named up front; "" means detect from the first hello.
             "game": str(body.get("game", "") or "") if str(body.get("game", "") or "") in GAME_MEMBERS else "",
         }
