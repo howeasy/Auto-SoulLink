@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:12:11+00:00",
+  "updated_at_utc": "2026-09-14T09:13:57+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "0dd29bc",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. Under Codex review: R5a-2 fd870b7 (cx-d1cafa3d), FT-3-3 0dd29bc (cx-7de6c11c). C1 round 2 (Sonnet: decoded kind, whiteout cause, whiteout-record binding, real aggregate lifecycle test). HX-2 implementation (OMP). Next: C3 on the C1 worker after C1 acceptance; R5b after R5a-2; N3 after R5b.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. Under Codex review: FT-3-3 0dd29bc (cx-7de6c11c). R5a round 3 (Sonnet: complete key set, current() payload validation, temp cleanup, provenance field). C1 round 2 (Sonnet: decoded kind, whiteout cause, whiteout-record binding, real aggregate lifecycle test). HX-2 implementation (OMP). Next: C3 on the C1 worker after C1 acceptance; R5b after R5a-2; N3 after R5b.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -1019,15 +1019,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5a",
-      "owner": "integrated by coordinator as candidates ad6583a + fd870b7 (isolated Sonnet worker authored two rounds)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 3; candidates ad6583a + fd870b7 on the branch)",
+      "state": "active",
       "files": ["server/paired_save_checkpoints.py", "tests/unit/test_paired_save_checkpoints.py", "docs/gen1_reference/reviews/R5a-paired-checkpoints.md"],
       "next_action": "PairedCheckpointStore: capture (both saves + rules + identity, manifest last, CURRENT pointer atomic), load with hash re-validation, history; refusals per the R5 claim.",
       "reuse_decision": "shared lifecycle module (game-neutral; save_size parameter); Gen 1 witness/Manager seam deferred to R5b",
       "receipt": "commits ad6583a + fd870b7; tests/unit/test_paired_save_checkpoints.py 28 passed; module sha256 b2101960…8bff; docs/gen1_reference/reviews/R5a-paired-checkpoints.md (disposition table)",
       "independent_review_refs": [
         "Codex REVIEW cx-fbbd022a (commit B): REJECT — concurrent captures share CURRENT.tmp (dangling pointer), historical manifests unanchored, load fails open on ID/schema/size, JSON/OS errors leak, post-promotion failure cases untested",
-        "Round 2 fd870b7: Codex REVIEW cx-d1cafa3d in flight"
+        "Round 2 fd870b7: Codex REVIEW cx-d1cafa3d REJECT — lock + hash chain ACCEPTED; remaining: missing predecessor key leaks KeyError from the chain walk, current() skips payload validation, pointer temps not cleaned; OPEN: stale lock is not auto-stolen (operator procedure), ID policy is containment not 32-hex, R5b needs a provenance field. Round 3 dispatched."
       ]
     },
     {
