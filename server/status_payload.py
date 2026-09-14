@@ -38,6 +38,8 @@ def empty_status_payload() -> dict:
                     "is_doubles": False,
                 },
                 "identity_error": "",
+                "admission": "admitted",
+                "admission_reason": "",
                 "encounter_table": None,
             }
             for pid in ("a", "b")

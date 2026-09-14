@@ -16,7 +16,12 @@ import pytest
 
 from server import upr_pipeline
 from server.upr_pipeline import (
-    UprPipelineError, _check_content, _parse_log, prepare_pair, randomize,
+    UprPipelineError,
+    _check_content,
+    _parse_log,
+    _sha1,
+    prepare_pair,
+    randomize,
 )
 from server.upr_settings import build, build_categories
 
@@ -90,6 +95,7 @@ def test_randomizing_a_rom_over_itself_is_refused(tmp_path):
     s = _settings(tmp_path)
     # __file__ stands in for the jar: it exists, so the existence checks pass and the
     # refusal under test is the one that fires.
+    _roms()   # the refusal fires after the existence checks, so the dump must be present
     with pytest.raises(UprPipelineError, match="same file"):
         randomize(__file__, s, _RED, _RED)
 
@@ -100,6 +106,7 @@ def test_a_non_gbc_output_is_refused(tmp_path):
     Refusing up front is better than discovering the artifact somewhere unexpected.
     """
     s = _settings(tmp_path)
+    _roms()
     with pytest.raises(UprPipelineError, match="must end in .gbc"):
         randomize(__file__, s, _RED, str(tmp_path / "out.gb"))
 
@@ -182,10 +189,10 @@ class TestAgainstTheRealJar:
 
     def test_the_source_rom_is_left_untouched(self, tmp_path):
         """Randomizing must never consume the clean dump it was given."""
-        import hashlib
-        before = hashlib.sha1(open(_RED, "rb").read()).hexdigest()
-        prepare_pair(_jar(), _settings(tmp_path), _roms(), str(tmp_path / "out"))
-        assert hashlib.sha1(open(_RED, "rb").read()).hexdigest() == before
+        roms = _roms()
+        before = _sha1(_RED)
+        prepare_pair(_jar(), _settings(tmp_path), roms, str(tmp_path / "out"))
+        assert _sha1(_RED) == before
 
     def test_an_already_randomized_source_is_refused(self, tmp_path):
         """Randomizing a randomized ROM makes the result unreproducible: its provenance is
@@ -242,7 +249,7 @@ class TestEvolutionDrift:
         Deliberately not a byte-scramble: the point is to prove the check sees a semantic
         change, not that it notices corruption.
         """
-        from server.adapters.gen1_rom_scan import sym_to_offset, _syms_for
+        from server.adapters.gen1_rom_scan import _syms_for, sym_to_offset
         _, syms = _syms_for(rom)
         base = sym_to_offset(syms["EvosMovesPointerTable"])
         bank = base & ~0x3FFF

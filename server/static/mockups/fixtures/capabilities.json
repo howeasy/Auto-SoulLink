@@ -13,12 +13,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "Crystal": {
     "abilities": false,
@@ -43,11 +51,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "Crystal (AP)": {
     "abilities": false,
@@ -72,11 +88,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "Gold": {
     "abilities": false,
@@ -101,11 +125,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "Red": {
     "abilities": false,
@@ -121,12 +153,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "Silver": {
     "abilities": false,
@@ -151,11 +191,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "Yellow": {
     "abilities": false,
@@ -171,12 +219,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "blue": {
     "abilities": false,
@@ -192,12 +248,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "blue_ap": {
     "abilities": false,
@@ -213,12 +277,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "crystal": {
     "abilities": false,
@@ -243,11 +315,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "crystal_ap": {
     "abilities": false,
@@ -272,11 +352,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "emerald": {
     "abilities": true,
@@ -293,11 +381,19 @@
     "explode_mode": false,
     "game_id": "gen3_frlge",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "firered": {
     "abilities": true,
@@ -314,11 +410,19 @@
     "explode_mode": false,
     "game_id": "gen3_frlge",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "firered_ap": {
     "abilities": true,
@@ -335,11 +439,19 @@
     "explode_mode": false,
     "game_id": "gen3_frlge",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "firered_rr": {
     "abilities": true,
@@ -356,11 +468,19 @@
     "explode_mode": true,
     "game_id": "gen3_frlge",
     "info_panel": true,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 24,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "gold": {
     "abilities": false,
@@ -385,11 +505,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "heartgold": {
     "abilities": true,
@@ -414,11 +542,19 @@
     "explode_mode": false,
     "game_id": "gen4_hgsspt",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 17,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "hgss": {
     "abilities": true,
@@ -443,11 +579,19 @@
     "explode_mode": false,
     "game_id": "gen4_hgsspt",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 17,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "leafgreen": {
     "abilities": true,
@@ -464,11 +608,19 @@
     "explode_mode": false,
     "game_id": "gen3_frlge",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "leafgreen_ap": {
     "abilities": true,
@@ -485,11 +637,19 @@
     "explode_mode": false,
     "game_id": "gen3_frlge",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "platinum": {
     "abilities": true,
@@ -506,11 +666,19 @@
     "explode_mode": false,
     "game_id": "gen4_hgsspt",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 17,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "pokemon_black": {
     "abilities": true,
@@ -527,11 +695,19 @@
     "explode_mode": false,
     "game_id": "gen5_bw",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 23,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "pokemon_black_2": {
     "abilities": true,
@@ -548,11 +724,19 @@
     "explode_mode": false,
     "game_id": "gen5_bw",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 23,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "pokemon_white": {
     "abilities": true,
@@ -569,11 +753,19 @@
     "explode_mode": false,
     "game_id": "gen5_bw",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 23,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "pokemon_white_2": {
     "abilities": true,
@@ -590,11 +782,19 @@
     "explode_mode": false,
     "game_id": "gen5_bw",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 23,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "red": {
     "abilities": false,
@@ -610,12 +810,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "red_ap": {
     "abilities": false,
@@ -631,12 +839,20 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   },
   "renegade_platinum": {
     "abilities": true,
@@ -661,11 +877,19 @@
     "explode_mode": false,
     "game_id": "gen4_hgsspt",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 17,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "silver": {
     "abilities": false,
@@ -690,11 +914,19 @@
     "explode_mode": false,
     "game_id": "gen2_crystal",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 13,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 70,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "soulsilver": {
     "abilities": true,
@@ -719,11 +951,19 @@
     "explode_mode": false,
     "game_id": "gen4_hgsspt",
     "info_panel": false,
-    "info_panel_width": null,
+    "info_panel_width": 0,
     "memorial_box_index": 17,
-    "mons_per_box": null,
+    "mons_per_box": 30,
     "party_blob_size": 0,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
   },
   "yellow": {
     "abilities": false,
@@ -739,11 +979,19 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": false,
-    "info_panel_width": null,
+    "info_panel": true,
+    "info_panel_width": 20,
     "memorial_box_index": 11,
-    "mons_per_box": null,
+    "mons_per_box": 20,
     "party_blob_size": 66,
-    "stat_stage_labels": null
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
   }
 }

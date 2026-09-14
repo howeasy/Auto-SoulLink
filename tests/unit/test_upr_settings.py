@@ -18,8 +18,16 @@ import struct
 import pytest
 
 from server.upr_settings import (
-    FLAGS, MISC_TWEAKS, VERSION, UprSettingsError, build, build_categories,
-    categories_enabled, forbidden_enabled, load, parse_settings_string,
+    FLAGS,
+    MISC_TWEAKS,
+    VERSION,
+    UprSettingsError,
+    build,
+    build_categories,
+    categories_enabled,
+    forbidden_enabled,
+    load,
+    parse_settings_string,
 )
 
 ALL_CATEGORIES = {"wild", "starters", "statics", "trainers", "tms", "field_items"}
@@ -228,6 +236,7 @@ def test_an_unmodelled_byte_is_reported_by_index_rather_than_guessed_at():
     """Level modifiers and percentages have no entry in FLAGS. They must still be refused,
     and the message has to say which byte rather than inventing a name for it."""
     import binascii
+
     from server.upr_settings import unexpected_settings
     raw = bytearray(build_categories({"wild"}))
     length = struct.unpack(">i", raw[4:8])[0]

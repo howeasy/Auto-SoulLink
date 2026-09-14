@@ -14,7 +14,7 @@ aiohttp = pytest.importorskip("aiohttp")
 pytest_asyncio = pytest.importorskip("pytest_asyncio")
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 
-from server.adapters.gen1_rby import Gen1Adapter
+from server.adapters.gen1_rby import Gen1Adapter  # noqa: E402
 from server.adapters.gen3_frlge import Gen3Adapter  # noqa: E402
 from server.server import SLinkServer, build_app  # noqa: E402
 from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo  # noqa: E402

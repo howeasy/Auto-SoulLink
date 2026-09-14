@@ -42,11 +42,11 @@ except ImportError:
 
 import aiohttp_jinja2
 
+from server.adapters import variant_label
 from server.http_safety import csrf_protection, theme_cache
 from server.json_files import atomic_write_json
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
-from server.adapters import variant_label
 from server.status_payload import empty_status_payload
 from server.templating import resolve_theme, setup_templating
 

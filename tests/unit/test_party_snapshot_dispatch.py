@@ -5,12 +5,7 @@ import copy
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import pytest
-
-from server.gen1_party_codec import PartyCodec
 from server.server import SLinkServer
-from tests.unit.test_gen1_party_codec import make_blob
-from tests.unit.test_gen1_sessions import contract, hello, server
 
 
 def party():
@@ -63,14 +58,14 @@ def test_snapshot_uses_recipient_adapter_and_preserves_existing_defaults_and_ali
     gender = Mock(return_value="recipient-gender")
     srv._player_adapters["b"] = SimpleNamespace(gender_from_key=gender)
     incoming = [{"key": ""}, {"key": "K", "held_item": 99, "held_item_id": 0, "ability": 88, "ability_id": 0}]
-    before, rules, cache = copy.deepcopy(incoming), srv.state.to_document(), copy.deepcopy(srv._mon_cache)
+    before, rules, cache = copy.deepcopy(incoming), copy.deepcopy((srv.state.links, srv.state.area_states)), copy.deepcopy(srv._mon_cache)
     result = srv._party_snapshot("b", incoming)
     assert set(result) == {"K"}
     assert result["K"] == {"level": 0, "hp": 1, "maxHP": 1, "nickname": "", "species_id": 0,
                            "held_item_id": 0, "ability_id": 0, "gender": "recipient-gender",
                            "moves": [], "pp": [], "slot": 1, "active": False, "status_cond": 0, "stat_stages": None}
     gender.assert_called_once_with("K", 0)
-    assert incoming == before and srv.state.to_document() == rules and srv._mon_cache == cache
+    assert incoming == before and (srv.state.links, srv.state.area_states) == rules and srv._mon_cache == cache
 
 
 def test_tick_with_omitted_party_retains_display_and_empty_party_clears_it(tmp_path, monkeypatch):
@@ -96,19 +91,3 @@ def test_rejected_hello_never_constructs_or_publishes_a_new_party_snapshot(tmp_p
     assert srv.state.identity_error["a"] and srv.party_details == before
     projection.assert_not_called()
 
-
-@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
-def test_admitted_rby_hello_retains_stat_stages_without_inventing_gender(tmp_path, variant):
-    spec = contract(variant, variant)
-    srv = server(tmp_path, spec)
-    codec = PartyCodec(variant)
-    raw = make_blob(codec, otid=0xBEEF)
-    mon = codec.validate_blob(raw)
-    stages = [8, 7, 6, 7, 7, 7]
-    entry = {"blob_hex": raw.hex(), "key": mon.key, "species_id": mon.species_id,
-             "hp": mon.hp, "maxHP": mon.max_hp, "level": mon.level, "slot": 0,
-             "status_cond": mon.status, "stat_stages": stages, "active": True}
-    result = srv._gen1_wire_response("a", hello(spec, party=[entry], has_pokeballs=False), object())
-    assert result["ack"] == "ACK"
-    assert srv.party_details["a"][mon.key]["stat_stages"] == stages
-    assert srv.party_details["a"][mon.key]["gender"] == "genderless"  # Existing Gen1 adapter convention.

@@ -259,7 +259,7 @@ async def test_standalone_launcher_keeps_untrusted_values_out_of_lua_code(srv, s
     """)
     runtime.execute(response.text)
     assert runtime.globals().SLINK_ATTACKED is None
-    assert runtime.globals().SLINK_HOST == host
-    assert runtime.globals().SLINK_PLAYER == player
+    assert host == runtime.globals().SLINK_HOST
+    assert player == runtime.globals().SLINK_PLAYER
     assert runtime.globals().SLINK_PORT == 54321
     assert runtime.globals().SLINK_LOADED_PATH == "safe/lua/slink.lua"
