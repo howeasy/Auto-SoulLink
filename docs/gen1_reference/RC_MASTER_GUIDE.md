@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:41:33+00:00",
+  "updated_at_utc": "2026-09-14T09:53:59+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "dc7b970",
+  "source_head": "de312cf",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); NET-1 done (BUILT, no card); Codex queue: reviews as R5b-1/R5b-2/C3/FT-2d land; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: R5b-3 Manager checkpoint/recover (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. FT-2d integrated. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -1079,11 +1079,23 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-2d",
-      "owner": "OMP live pid 47172 (coding; task cx-c302cb5d)",
-      "state": "active",
+      "owner": "integrated by coordinator as de312cf (OMP authored, task cx-c302cb5d)",
+      "state": "done",
       "files": ["server/manager.py", "tests/unit/test_manager_prepared_gen1.py"],
-      "next_action": "Nonexistent/non-file cartridge path -> 400 'cartridge file not found: <path>' before clean_contract; two tests.",
-      "reuse_decision": "Manager input validation (shared)"
+      "next_action": "None; missing/non-file cartridge path -> 400 before admission (also covers resume); 7 existing tests now use real temp files.",
+      "reuse_decision": "Manager input validation (shared)",
+      "receipt": "commit de312cf; 31 passed (prepared_gen1 17 + resume_ui 9 + create_ui 5); worker neutralised the guard and saw both new tests fail",
+      "independent_review_refs": [
+        "coordinator read of the five-line guard; found in the coordinator's own browser run (render check row)"
+      ]
+    },
+    {
+      "id": "r5b-3",
+      "owner": "OMP live pid 47172 (coding; task cx-4e6db174)",
+      "state": "active",
+      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_checkpoint_recovery.py", "tests/unit/test_manager_checkpoint_ui.py"],
+      "next_action": "Manager checkpoint request/status proxy, checkpoints list (running: proxy; stopped: confirmed_checkpoints + store validation), recover -> exact resume record from the checkpoint -> successor via the resume tail without audit_predecessor, recovered_from/recovered_by, per-player save download with hash header, UI buttons/confirm texts/poll; tests. Contracts pinned with R5b-1 (run-server /api/checkpoint routes, components['gen1-checkpoint'] shape, confirmed_checkpoints helper).",
+      "reuse_decision": "Manager shared lifecycle; checkpoint semantics from R5a/R5b-1; native_pretrade witness mapping flagged for the R5b-1 tagged resume extension"
     },
     {
       "id": "hx-2",
