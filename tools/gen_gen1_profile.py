@@ -78,6 +78,7 @@ RAM_SYMBOLS = [
     "wEnemyMonAttackMod", "wEnemyMonDefenseMod", "wEnemyMonSpeedMod", "wEnemyMonSpecialMod",
     "wEnemyMonAccuracyMod", "wEnemyMonEvasionMod",
     "wCapturedMonSpecies", "wGrassRate", "wGrassMons", "wWaterRate", "wWaterMons",
+    "wWhichPokemon", "wMoveMonType", "wRemoveMonFromBox", "wEngagedTrainerClass", "wEngagedTrainerSet",
     # evolution / trade
     "wForceEvolution", "wEvolutionOccurred",
     "wTradedPlayerMonSpecies", "wTradedEnemyMonSpecies",

@@ -1,219 +1,459 @@
 {
-  "schema": "rby-engine-signal-sites-v1",
-  "sha256": "018f8c6f89a15749ec5470b5c1c54c9c40a50d7079c5c9deb39ba0bd15b4356f",
-  "titles": {
-    "blue": {
-      "addresses": {
-        "hLoadedROMBank": 65464,
-        "wBattleMonHP": 53269,
-        "wBattleMonSpecies": 53268,
-        "wCurEnemyLevel": 53543,
-        "wCurItem": 53137,
-        "wCurMap": 54110,
-        "wCurOpponent": 53337,
-        "wCurPartySpecies": 53137,
-        "wIsInBattle": 53335,
-        "wItemQuantity": 53142,
-        "wMonDataLocation": 52297,
-        "wNumBagItems": 54045,
-        "wPartyDataStart": 53603,
-        "wPlayerID": 54105,
-        "wPlayerMonNumber": 52271,
-        "wPlayerName": 53592,
-        "wWhichPokemon": 53138
-      },
-      "clean_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
-      "sites": {
-        "bag_received": {
-          "address": 20075,
-          "bank": 3,
-          "capture_offset": 8,
-          "expected_hex": "E1D1C1C178EA96CFC9",
-          "rom_offset": 52843,
-          "symbol": "AddItemToInventory_.done"
-        },
-        "battle_faint": {
-          "address": 18241,
-          "bank": 15,
-          "expected_hex": "FA2FCC4F2158D006",
-          "rom_offset": 247617,
-          "symbol": "RemoveFaintedPlayerMon"
-        },
-        "poison_faint": {
-          "address": 18137,
-          "bank": 3,
-          "expected_hex": "E52323771AEA1ED1",
-          "rom_offset": 50905,
-          "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
-        },
-        "save_witness": {
-          "address": 30509,
-          "bank": 28,
-          "capture_offset": 3,
-          "expected_hex": "CD487821A5C4",
-          "rom_offset": 472877,
-          "symbol": "SaveMenu.save"
-        },
-        "starter_begin": {
-          "address": 21005,
-          "bank": 7,
-          "expected_hex": "CD2739",
-          "rom_offset": 119309,
-          "symbol": "OaksLabMonChoiceMenu.continue"
-        },
-        "starter_end": {
-          "address": 21008,
-          "bank": 7,
-          "expected_hex": "212ED7CBDE3EFCEA",
-          "rom_offset": 119312,
-          "symbol": "OaksLabMonChoiceMenu.continue"
-        }
-      },
-      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
-      "starter_map": 40,
-      "symbols_sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d"
+ "schema": "rby-engine-signal-sites-v1",
+ "sha256": "018f8c6f89a15749ec5470b5c1c54c9c40a50d7079c5c9deb39ba0bd15b4356f",
+ "titles": {
+  "blue": {
+   "addresses": {
+    "hLoadedROMBank": 65464,
+    "wBattleMonHP": 53269,
+    "wBattleMonSpecies": 53268,
+    "wCurEnemyLevel": 53543,
+    "wCurItem": 53137,
+    "wCurMap": 54110,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wMonDataLocation": 52297,
+    "wNumBagItems": 54045,
+    "wPartyDataStart": 53603,
+    "wPlayerID": 54105,
+    "wPlayerMonNumber": 52271,
+    "wPlayerName": 53592,
+    "wWhichPokemon": 53138
+   },
+   "clean_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+   "sites": {
+    "add_party_mon": {
+     "address": 14631,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "E5D5C5060321",
+     "rom_offset": 14631,
+     "symbol": "AddPartyMon"
     },
-    "red": {
-      "addresses": {
-        "hLoadedROMBank": 65464,
-        "wBattleMonHP": 53269,
-        "wBattleMonSpecies": 53268,
-        "wCurEnemyLevel": 53543,
-        "wCurItem": 53137,
-        "wCurMap": 54110,
-        "wCurOpponent": 53337,
-        "wCurPartySpecies": 53137,
-        "wIsInBattle": 53335,
-        "wItemQuantity": 53142,
-        "wMonDataLocation": 52297,
-        "wNumBagItems": 54045,
-        "wPartyDataStart": 53603,
-        "wPlayerID": 54105,
-        "wPlayerMonNumber": 52271,
-        "wPlayerName": 53592,
-        "wWhichPokemon": 53138
-      },
-      "clean_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
-      "sites": {
-        "bag_received": {
-          "address": 20075,
-          "bank": 3,
-          "capture_offset": 8,
-          "expected_hex": "E1D1C1C178EA96CFC9",
-          "rom_offset": 52843,
-          "symbol": "AddItemToInventory_.done"
-        },
-        "battle_faint": {
-          "address": 18241,
-          "bank": 15,
-          "expected_hex": "FA2FCC4F2158D006",
-          "rom_offset": 247617,
-          "symbol": "RemoveFaintedPlayerMon"
-        },
-        "poison_faint": {
-          "address": 18137,
-          "bank": 3,
-          "expected_hex": "E52323771AEA1ED1",
-          "rom_offset": 50905,
-          "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
-        },
-        "save_witness": {
-          "address": 30509,
-          "bank": 28,
-          "capture_offset": 3,
-          "expected_hex": "CD487821A5C4",
-          "rom_offset": 472877,
-          "symbol": "SaveMenu.save"
-        },
-        "starter_begin": {
-          "address": 21005,
-          "bank": 7,
-          "expected_hex": "CD2739",
-          "rom_offset": 119309,
-          "symbol": "OaksLabMonChoiceMenu.continue"
-        },
-        "starter_end": {
-          "address": 21008,
-          "bank": 7,
-          "expected_hex": "212ED7CBDE3EFCEA",
-          "rom_offset": 119312,
-          "symbol": "OaksLabMonChoiceMenu.continue"
-        }
-      },
-      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
-      "starter_map": 40,
-      "symbols_sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9"
+    "bag_received": {
+     "address": 20075,
+     "bank": 3,
+     "capture_offset": 8,
+     "expected_hex": "E1D1C1C178EA96CFC9",
+     "rom_offset": 52843,
+     "symbol": "AddItemToInventory_.done"
     },
-    "yellow": {
-      "addresses": {
-        "hLoadedROMBank": 65464,
-        "wBattleMonHP": 53268,
-        "wBattleMonSpecies": 53267,
-        "wCurEnemyLevel": 53542,
-        "wCurItem": 53136,
-        "wCurMap": 54109,
-        "wCurOpponent": 53336,
-        "wCurPartySpecies": 53136,
-        "wIsInBattle": 53334,
-        "wItemQuantity": 53141,
-        "wMonDataLocation": 52297,
-        "wNumBagItems": 54044,
-        "wPartyDataStart": 53602,
-        "wPlayerID": 54104,
-        "wPlayerMonNumber": 52271,
-        "wPlayerName": 53591,
-        "wWhichPokemon": 53137
-      },
-      "clean_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
-      "sites": {
-        "bag_received": {
-          "address": 23512,
-          "bank": 61,
-          "capture_offset": 8,
-          "expected_hex": "E1D1C1C178EA95CFC9",
-          "rom_offset": 1006552,
-          "symbol": "AddItemToInventory_.done"
-        },
-        "battle_faint": {
-          "address": 18270,
-          "bank": 15,
-          "expected_hex": "FA2FCC4F2157D006",
-          "rom_offset": 247646,
-          "symbol": "RemoveFaintedPlayerMon"
-        },
-        "poison_faint": {
-          "address": 17454,
-          "bank": 3,
-          "expected_hex": "E52323771AEA1DD1",
-          "rom_offset": 50222,
-          "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
-        },
-        "save_witness": {
-          "address": 31381,
-          "bank": 28,
-          "capture_offset": 3,
-          "expected_hex": "CD917B21D67A",
-          "rom_offset": 473749,
-          "symbol": "SaveMenu.save"
-        },
-        "starter_begin": {
-          "address": 19309,
-          "bank": 7,
-          "expected_hex": "CD1C39",
-          "rom_offset": 117613,
-          "symbol": "OaksLabPlayerReceivedMonText"
-        },
-        "starter_end": {
-          "address": 19312,
-          "bank": 7,
-          "expected_hex": "3EA3EA71D1CD2D15",
-          "rom_offset": 117616,
-          "symbol": "OaksLabPlayerReceivedMonText"
-        }
-      },
-      "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653",
-      "starter_map": 40,
-      "symbols_sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4"
+    "battle_begin": {
+     "address": 28477,
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "FA5DD3F52158",
+     "rom_offset": 257853,
+     "symbol": "InitBattleCommon"
+    },
+    "battle_end": {
+     "address": 30634,
+     "bank": 4,
+     "capture_offset": 0,
+     "expected_hex": "FA2BD1FE0420",
+     "rom_offset": 79786,
+     "symbol": "EndOfBattle"
+    },
+    "battle_faint": {
+     "address": 18241,
+     "bank": 15,
+     "expected_hex": "FA2FCC4F2158D006",
+     "rom_offset": 247617,
+     "symbol": "RemoveFaintedPlayerMon"
+    },
+    "blackout": {
+     "address": 16560,
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "AFEA0BCFEA00",
+     "rom_offset": 16560,
+     "symbol": "ResetStatusAndHalveMoneyOnBlackout"
+    },
+    "capture_box": {
+     "address": 26532,
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "1180DA1A3C12",
+     "rom_offset": 59300,
+     "symbol": "SendNewMonToBox"
+    },
+    "evolve": {
+     "address": 27918,
+     "bank": 14,
+     "capture_offset": 0,
+     "expected_hex": "21D3CCAF77FA",
+     "rom_offset": 240910,
+     "symbol": "TryEvolvingMon"
+    },
+    "move_mon": {
+     "address": 14952,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "F0B8F53E03E0",
+     "rom_offset": 14952,
+     "symbol": "MoveMon"
+    },
+    "npc_trade": {
+     "address": 23559,
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "AFEA7DD03DEA",
+     "rom_offset": 465927,
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "poison_faint": {
+     "address": 18137,
+     "bank": 3,
+     "expected_hex": "E52323771AEA1ED1",
+     "rom_offset": 50905,
+     "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+    },
+    "remove_pokemon": {
+     "address": 14623,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "21687B0601C3",
+     "rom_offset": 14623,
+     "symbol": "RemovePokemon"
+    },
+    "save_witness": {
+     "address": 30509,
+     "bank": 28,
+     "capture_offset": 3,
+     "expected_hex": "CD487821A5C4",
+     "rom_offset": 472877,
+     "symbol": "SaveMenu.save"
+    },
+    "starter_begin": {
+     "address": 21005,
+     "bank": 7,
+     "expected_hex": "CD2739",
+     "rom_offset": 119309,
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "starter_end": {
+     "address": 21008,
+     "bank": 7,
+     "expected_hex": "212ED7CBDE3EFCEA",
+     "rom_offset": 119312,
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "wild_begin": {
+     "address": 28555,
+     "bank": 15,
+     "capture_offset": 5,
+     "expected_hex": "3E01EA57D0CD016B",
+     "rom_offset": 257931,
+     "symbol": "InitWildBattle"
     }
+   },
+   "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+   "starter_map": 40,
+   "symbols_sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d"
+  },
+  "red": {
+   "addresses": {
+    "hLoadedROMBank": 65464,
+    "wBattleMonHP": 53269,
+    "wBattleMonSpecies": 53268,
+    "wCurEnemyLevel": 53543,
+    "wCurItem": 53137,
+    "wCurMap": 54110,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wMonDataLocation": 52297,
+    "wNumBagItems": 54045,
+    "wPartyDataStart": 53603,
+    "wPlayerID": 54105,
+    "wPlayerMonNumber": 52271,
+    "wPlayerName": 53592,
+    "wWhichPokemon": 53138
+   },
+   "clean_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+   "sites": {
+    "add_party_mon": {
+     "address": 14631,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "E5D5C5060321",
+     "rom_offset": 14631,
+     "symbol": "AddPartyMon"
+    },
+    "bag_received": {
+     "address": 20075,
+     "bank": 3,
+     "capture_offset": 8,
+     "expected_hex": "E1D1C1C178EA96CFC9",
+     "rom_offset": 52843,
+     "symbol": "AddItemToInventory_.done"
+    },
+    "battle_begin": {
+     "address": 28477,
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "FA5DD3F52158",
+     "rom_offset": 257853,
+     "symbol": "InitBattleCommon"
+    },
+    "battle_end": {
+     "address": 30634,
+     "bank": 4,
+     "capture_offset": 0,
+     "expected_hex": "FA2BD1FE0420",
+     "rom_offset": 79786,
+     "symbol": "EndOfBattle"
+    },
+    "battle_faint": {
+     "address": 18241,
+     "bank": 15,
+     "expected_hex": "FA2FCC4F2158D006",
+     "rom_offset": 247617,
+     "symbol": "RemoveFaintedPlayerMon"
+    },
+    "blackout": {
+     "address": 16560,
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "AFEA0BCFEA00",
+     "rom_offset": 16560,
+     "symbol": "ResetStatusAndHalveMoneyOnBlackout"
+    },
+    "capture_box": {
+     "address": 26532,
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "1180DA1A3C12",
+     "rom_offset": 59300,
+     "symbol": "SendNewMonToBox"
+    },
+    "evolve": {
+     "address": 27918,
+     "bank": 14,
+     "capture_offset": 0,
+     "expected_hex": "21D3CCAF77FA",
+     "rom_offset": 240910,
+     "symbol": "TryEvolvingMon"
+    },
+    "move_mon": {
+     "address": 14952,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "F0B8F53E03E0",
+     "rom_offset": 14952,
+     "symbol": "MoveMon"
+    },
+    "npc_trade": {
+     "address": 23559,
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "AFEA7DD03DEA",
+     "rom_offset": 465927,
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "poison_faint": {
+     "address": 18137,
+     "bank": 3,
+     "expected_hex": "E52323771AEA1ED1",
+     "rom_offset": 50905,
+     "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+    },
+    "remove_pokemon": {
+     "address": 14623,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "21687B0601C3",
+     "rom_offset": 14623,
+     "symbol": "RemovePokemon"
+    },
+    "save_witness": {
+     "address": 30509,
+     "bank": 28,
+     "capture_offset": 3,
+     "expected_hex": "CD487821A5C4",
+     "rom_offset": 472877,
+     "symbol": "SaveMenu.save"
+    },
+    "starter_begin": {
+     "address": 21005,
+     "bank": 7,
+     "expected_hex": "CD2739",
+     "rom_offset": 119309,
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "starter_end": {
+     "address": 21008,
+     "bank": 7,
+     "expected_hex": "212ED7CBDE3EFCEA",
+     "rom_offset": 119312,
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "wild_begin": {
+     "address": 28555,
+     "bank": 15,
+     "capture_offset": 5,
+     "expected_hex": "3E01EA57D0CD016B",
+     "rom_offset": 257931,
+     "symbol": "InitWildBattle"
+    }
+   },
+   "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+   "starter_map": 40,
+   "symbols_sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9"
+  },
+  "yellow": {
+   "addresses": {
+    "hLoadedROMBank": 65464,
+    "wBattleMonHP": 53268,
+    "wBattleMonSpecies": 53267,
+    "wCurEnemyLevel": 53542,
+    "wCurItem": 53136,
+    "wCurMap": 54109,
+    "wCurOpponent": 53336,
+    "wCurPartySpecies": 53136,
+    "wIsInBattle": 53334,
+    "wItemQuantity": 53141,
+    "wMonDataLocation": 52297,
+    "wNumBagItems": 54044,
+    "wPartyDataStart": 53602,
+    "wPlayerID": 54104,
+    "wPlayerMonNumber": 52271,
+    "wPlayerName": 53591,
+    "wWhichPokemon": 53137
+   },
+   "clean_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+   "sites": {
+    "add_party_mon": {
+     "address": 14620,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "E5D5C5060321",
+     "rom_offset": 14620,
+     "symbol": "AddPartyMon"
+    },
+    "bag_received": {
+     "address": 23512,
+     "bank": 61,
+     "capture_offset": 8,
+     "expected_hex": "E1D1C1C178EA95CFC9",
+     "rom_offset": 1006552,
+     "symbol": "AddItemToInventory_.done"
+    },
+    "battle_begin": {
+     "address": 24605,
+     "bank": 61,
+     "capture_offset": 0,
+     "expected_hex": "FA5CD3F52157",
+     "rom_offset": 1007645,
+     "symbol": "InitBattleCommon"
+    },
+    "battle_end": {
+     "address": 30565,
+     "bank": 4,
+     "capture_offset": 0,
+     "expected_hex": "FA2AD1FE0420",
+     "rom_offset": 79717,
+     "symbol": "EndOfBattle"
+    },
+    "battle_faint": {
+     "address": 18270,
+     "bank": 15,
+     "expected_hex": "FA2FCC4F2157D006",
+     "rom_offset": 247646,
+     "symbol": "RemoveFaintedPlayerMon"
+    },
+    "blackout": {
+     "address": 17012,
+     "bank": 60,
+     "capture_offset": 0,
+     "expected_hex": "AFEA34D4AFEA",
+     "rom_offset": 983668,
+     "symbol": "ResetStatusAndHalveMoneyOnBlackout"
+    },
+    "capture_box": {
+     "address": 26344,
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "117FDA1A3C12",
+     "rom_offset": 59112,
+     "symbol": "SendNewMonToBox"
+    },
+    "evolve": {
+     "address": 28088,
+     "bank": 14,
+     "capture_offset": 0,
+     "expected_hex": "21D3CCAF77FA",
+     "rom_offset": 241080,
+     "symbol": "TryEvolvingMon"
+    },
+    "move_mon": {
+     "address": 14937,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "F0B8F53E03CD",
+     "rom_offset": 14937,
+     "symbol": "MoveMon"
+    },
+    "npc_trade": {
+     "address": 23721,
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "AFEA7CD03DEA",
+     "rom_offset": 466089,
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "poison_faint": {
+     "address": 17454,
+     "bank": 3,
+     "expected_hex": "E52323771AEA1DD1",
+     "rom_offset": 50222,
+     "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+    },
+    "remove_pokemon": {
+     "address": 14612,
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "210F7A0601C3",
+     "rom_offset": 14612,
+     "symbol": "RemovePokemon"
+    },
+    "save_witness": {
+     "address": 31381,
+     "bank": 28,
+     "capture_offset": 3,
+     "expected_hex": "CD917B21D67A",
+     "rom_offset": 473749,
+     "symbol": "SaveMenu.save"
+    },
+    "starter_begin": {
+     "address": 19309,
+     "bank": 7,
+     "expected_hex": "CD1C39",
+     "rom_offset": 117613,
+     "symbol": "OaksLabPlayerReceivedMonText"
+    },
+    "starter_end": {
+     "address": 19312,
+     "bank": 7,
+     "expected_hex": "3EA3EA71D1CD2D15",
+     "rom_offset": 117616,
+     "symbol": "OaksLabPlayerReceivedMonText"
+    },
+    "wild_begin": {
+     "address": 24700,
+     "bank": 61,
+     "capture_offset": 5,
+     "expected_hex": "3E01EA56D021876C",
+     "rom_offset": 1007740,
+     "symbol": "InitWildBattle"
+    }
+   },
+   "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653",
+   "starter_map": 40,
+   "symbols_sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4"
   }
+ }
 }
