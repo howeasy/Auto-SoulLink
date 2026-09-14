@@ -240,62 +240,94 @@ def _real_initials(runtime):
     return runtime.state().document()["components"][INITIAL]
 
 
+def _collateral_fixture(tmp_path):
+    """L1 (real starter identity) faints in a real, decodable 2-slot battle_faint batch; L2 is a
+    second ALIVE linked pair (hand-built LinkEntry + a minimal identities double -- _link_identity
+    only needs resolve()/document()["links"], and the real IdentityRegistry's own correctness is
+    exercised elsewhere, e.g. gen1_starter_settlement/gen1_acquisition_runtime) that reads 0 HP in
+    the SAME party capture without ever firing its own battle_faint/poison_faint signal (a missed
+    or debounced faint, or simply never sampled mid-battle -- see docs/gen1_reference/reviews/
+    C1-reachability-successor.md for a source-grounded natural route to this exact shape).
+
+    Returns (fake_stage, document, component, entry, index, signal, trigger_key, key_a2, key_b2).
+    entry/index/signal are REAL: two_mon_batch's own battle_faint signal, decodable by
+    validate_batch/verified_source -- so verify_state (not just the happy-path settle_whiteout
+    call) is a real check here, not bypassed.
+    """
+    runtime = create_runtime(tmp_path, contract("red", "red"))
+    paired(runtime)  # L1: real identity + real initials, enrolled by the runtime itself
+    stage = runtime.state()
+    initials = _real_initials(runtime)
+    rules = stage.rules
+    link1 = rules.links[0]
+    trigger_key = link1.a.key
+
+    key_a2, key_b2 = "AAAA:0001:07", "BBBB:0002:6A"
+    l2 = LinkEntry(area_id="route_2", a=MonInfo(key=key_a2, level=5, species=0x07),
+                    b=MonInfo(key=key_b2, level=7, species=0x6A), status=LinkStatus.ALIVE)
+    rules.links.append(l2)
+    rules._index_entry(l2)
+    rules.party_keys["a"].add(key_a2)
+    rules.party_keys["b"].add(key_b2)
+    rules.pokeballs_obtained["a"] = rules.pokeballs_obtained["b"] = True  # nuzlocke gate active
+
+    batch = two_mon_batch(runtime, "a", second_hp=0)  # signals[0]=bag (activation), [1]=battle_faint
+    entry = {"operation_id": secrets.token_hex(16), "payload": batch}
+    index = 1
+    signal = batch["signals"][index]
+
+    # L1's own faint settles first, exactly like gen1_faint_runtime.settle()'s per-signal loop
+    # (handle_event, then take_commands to drain the peer force_faint it queued).
+    immediate = rules.handle_event("a", ev.faint_event(key=trigger_key, level=link1.a.level))
+    assert link1.status == LinkStatus.DEAD
+    assert l2.status == LinkStatus.ALIVE  # still alive and still in a's party: the collateral case
+    drained = rules.take_commands("a", immediate)
+    trigger_command = next(c for c in drained["b"] if c.get("cmd") == "force_faint")
+
+    identities = _FakeIdentities({
+        "1" * 32: {"members": [link1.a.key, link1.b.key]},
+        "2" * 32: {"members": [key_a2, key_b2]},
+    })
+    document = {"components": {
+        INITIAL: initials,
+        FAINT: {"activations": {"a": {"engine_record": entry, "index": 0}}, "deaths": {}},
+    }}
+    component = document["components"][FAINT]
+
+    class _Stage:
+        def document(self):
+            return document
+
+    fake = _Stage()
+    fake.rules = rules
+    fake.identities = identities
+    fake.barrier = _FakeBlockers()
+
+    trigger_death_id = record_death_obligation(
+        fake, document, component, {"a": [], "b": []}, player="a", partner="b", entry=entry,
+        index=index, key=trigger_key, link=link1, command=trigger_command, at=link1.killed_at,
+    )
+    return runtime, fake, document, component, entry, index, signal, trigger_key, trigger_death_id, key_a2, key_b2
+
+
 def test_two_alive_links_whiteout_produces_collateral_force_faint(tmp_path):
     """CLAUDE.md 'Whiteout': every partner of a remaining linked party mon gets force-fainted --
     even for a second linked pair that reads 0 HP in the SAME party capture without ever firing
-    its own battle_faint/poison_faint signal (a missed/debounced faint, or simply never sampled
-    mid-battle). Falsifies C1-CLAIM: settle_whiteout must no longer discard this as an error.
+    its own battle_faint/poison_faint signal. Falsifies C1-CLAIM: settle_whiteout must no longer
+    discard this as an error -- and, per the round-2 review, verify_state must actually accept the
+    resulting record on restore, not just the happy-path settle_whiteout return value.
     """
-    runtime = create_runtime(tmp_path, contract("red", "red"))
+    from server.gen1_faint_runtime import REASON, verify_state as faint_verify_state
+
+    runtime, fake, document, component, entry, index, signal, trigger_key, trigger_death_id, key_a2, key_b2 = (
+        _collateral_fixture(tmp_path)
+    )
     try:
-        paired(runtime)  # L1: real identity + real initials, enrolled by the runtime itself
-        stage = runtime.state()
-        initials = _real_initials(runtime)
-        rules = stage.rules
-        link1 = rules.links[0]
-        trigger_key = link1.a.key
-
-        key_a2, key_b2 = "AAAA:0001:07", "BBBB:0002:6A"
-        l2 = LinkEntry(area_id="route_2", a=MonInfo(key=key_a2, level=5, species=0x07),
-                        b=MonInfo(key=key_b2, level=7, species=0x6A), status=LinkStatus.ALIVE)
-        rules.links.append(l2)
-        rules._index_entry(l2)
-        rules.party_keys["a"].add(key_a2)
-        rules.party_keys["b"].add(key_b2)
-        rules.pokeballs_obtained["a"] = rules.pokeballs_obtained["b"] = True  # nuzlocke gate active
-
-        # L1's own faint settles first, exactly like gen1_faint_runtime.settle()'s per-signal loop
-        # (handle_event, then take_commands to drain the peer force_faint it queued).
-        immediate = rules.handle_event("a", ev.faint_event(key=trigger_key, level=link1.a.level))
-        assert link1.status == LinkStatus.DEAD
-        assert l2.status == LinkStatus.ALIVE  # still alive and still in a's party: the collateral case
-        drained = rules.take_commands("a", immediate)
-        trigger_command = next(c for c in drained["b"] if c.get("cmd") == "force_faint")
-
-        identities = _FakeIdentities({
-            "1" * 32: {"members": [link1.a.key, link1.b.key]},
-            "2" * 32: {"members": [key_a2, key_b2]},
-        })
-        document = {"components": {INITIAL: initials, FAINT: {"activations": {}, "deaths": {}}}}
-        component = document["components"][FAINT]
-
-        class _Stage:
-            pass
-
-        fake = _Stage()
-        fake.rules = rules
-        fake.identities = identities
-        fake.barrier = _FakeBlockers()
-
-        entry = {"operation_id": "op-collateral"}
-        trigger_death_id = record_death_obligation(
-            fake, document, component, {"a": [], "b": []}, player="a", partner="b", entry=entry,
-            index=0, key=trigger_key, link=link1, command=trigger_command, at=link1.killed_at,
-        )
+        rules = fake.rules
+        l2 = next(link for link in rules.links if link.a.key == key_a2)
         assert len(component["deaths"]) == 1
 
-        value = faint("red", [0, 0], fainted=0)
-        feedback = wo.settle_whiteout(fake, document, "a", entry, 0, value,
+        feedback = wo.settle_whiteout(fake, document, "a", entry, index, signal,
                                       trigger_death_id=trigger_death_id, trigger_key=trigger_key)
 
         assert l2.status == LinkStatus.DEAD  # the shared engine's own collateral force-faint still ran
@@ -309,11 +341,16 @@ def test_two_alive_links_whiteout_produces_collateral_force_faint(tmp_path):
         b_force_faints = [c for c in feedback["b"] if c.get("cmd") == "force_faint"]
         assert len(b_force_faints) == 1
         assert b_force_faints[0]["key"] == key_b2 and b_force_faints[0]["death_id"] == collateral_id
-        from server.gen1_faint_runtime import REASON
-
         blockers = fake.barrier.document()["blockers"]
         assert blockers.get(trigger_death_id) == REASON
         assert blockers.get(collateral_id) == REASON
+
+        # The round-2 finding: verify_state must accept this on restore, not just settle_whiteout's
+        # happy-path return. Both battle_faint and poison_faint decode to kind=="faint" (see
+        # gen1_engine_signals.py) -- the old collateral branch demanded the raw kind names from the
+        # DECODED row and could never pass; this must actually succeed now.
+        faint_verify_state(fake)
+        wo.verify_state(fake)
     finally:
         runtime.close()
 
@@ -339,3 +376,89 @@ def test_whiteout_still_refuses_a_genuine_duplicate_of_the_triggering_mon(tmp_pa
     with pytest.raises(JournalError, match="its faint settlement left alive"):
         wo.settle_whiteout(fake, document, "a", {"operation_id": "op-dup"}, 0, value,
                             trigger_death_id="dummy-trigger", trigger_key=KEY_A)
+
+
+@pytest.mark.parametrize("fault,message", [
+    ("non_whiteout_trigger", "not anchored to its triggering whiteout"),
+    ("unrelated_pair", "differs from committed rules"),
+    ("wrong_peer_key", "does not bind to its own actual link"),
+    ("reused_trigger_key", "not anchored to its triggering whiteout"),
+    ("swapped_identity", "differs from its resolved logical identity"),
+])
+def test_collateral_death_binding_is_refused_when_tampered(tmp_path, fault, message):
+    """Round-2 finding #3: a collateral death record must genuinely bind to its own actual link
+    and to a real triggering whiteout -- not just carry plausible-looking fields. Each corruption
+    below is refused by verify_state."""
+    from server.gen1_faint_runtime import verify_state as faint_verify_state
+
+    runtime, fake, document, component, entry, index, signal, trigger_key, trigger_death_id, key_a2, key_b2 = (
+        _collateral_fixture(tmp_path)
+    )
+    try:
+        rules = fake.rules
+        wo.settle_whiteout(fake, document, "a", entry, index, signal,
+                          trigger_death_id=trigger_death_id, trigger_key=trigger_key)
+        collateral_id = next(d for d in component["deaths"] if d != trigger_death_id)
+        collateral = component["deaths"][collateral_id]
+
+        if fault == "non_whiteout_trigger":
+            document["components"][wo.COMPONENT].pop(trigger_death_id)
+        elif fault == "unrelated_pair":
+            # A third, untouched ALIVE pair the whiteout never retired (still boxed/unaffected):
+            # a self-consistent record (identifier included) claiming IT is the collateral death.
+            from server.gen1_faint_runtime import identifier as death_identifier
+
+            key_a3, key_b3 = "CCCC:0003:01", "DDDD:0004:02"
+            l3 = LinkEntry(area_id="route_3", a=MonInfo(key=key_a3, level=5, species=0x01),
+                            b=MonInfo(key=key_b3, level=7, species=0x02), status=LinkStatus.ALIVE)
+            rules.links.append(l3)
+            rules._index_entry(l3)
+            fake.identities._links["3" * 32] = {"members": [key_a3, key_b3]}
+            collateral["key"], collateral["peer_key"] = key_a3, key_b3
+            collateral["link_id"], collateral["members"] = "3" * 32, [key_a3, key_b3]
+            new_id = death_identifier(collateral["player"], collateral["engine_record"]["operation_id"],
+                                       collateral["index"], discriminant=key_a3)
+            component["deaths"][new_id] = component["deaths"].pop(collateral_id)
+            collateral_id = new_id
+        elif fault == "wrong_peer_key":
+            collateral["peer_key"] = rules.find_link("a", trigger_key).b.key  # the trigger's own peer
+        elif fault == "reused_trigger_key":
+            collateral["key"] = trigger_key
+        elif fault == "swapped_identity":
+            collateral["link_id"], collateral["members"] = "1" * 32, [trigger_key, rules.find_link("a", trigger_key).b.key]
+
+        with pytest.raises(JournalError, match=message):
+            faint_verify_state(fake)
+    finally:
+        runtime.close()
+
+
+def test_collateral_death_defers_behind_a_busy_storage_job(tmp_path):
+    """Round-2 finding #5: exactly like the primary path (gen1_faint_runtime.record_death_obligation
+    checks _storage_jobs before appending the physical command), a collateral death whose peer pair
+    has an unfinished storage job takes the pending_issue path instead of issuing immediately."""
+    from server.gen1_faint_runtime import verify_state as faint_verify_state
+    from server.gen1_storage_runtime import COMPONENT as STORAGE
+
+    runtime, fake, document, component, entry, index, signal, trigger_key, trigger_death_id, key_a2, key_b2 = (
+        _collateral_fixture(tmp_path)
+    )
+    try:
+        document["components"][STORAGE] = {
+            "jobs": {"a" * 32: {"complete": False, "keys": {"a": key_a2, "b": key_b2}}}
+        }
+        feedback = wo.settle_whiteout(fake, document, "a", entry, index, signal,
+                                      trigger_death_id=trigger_death_id, trigger_key=trigger_key)
+
+        collateral_id = next(d for d in component["deaths"] if d != trigger_death_id)
+        collateral = component["deaths"][collateral_id]
+        assert collateral["phase"] == "pending_issue"
+        assert collateral["deferred"]["origin"] is None
+        assert collateral["deferred"]["jobs"] == ["a" * 32]
+        assert collateral["deferred"]["command"]["key"] == key_b2
+        # Not issued yet: no force_faint for b in the returned feedback.
+        assert not any(c.get("cmd") == "force_faint" for c in feedback["b"])
+
+        faint_verify_state(fake)
+    finally:
+        runtime.close()

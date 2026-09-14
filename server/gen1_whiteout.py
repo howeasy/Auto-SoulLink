@@ -98,7 +98,7 @@ def settle_whiteout(stage, document, player, entry, index, signal, *, trigger_de
             collateral_of=trigger_death_id,
         )
         log.warning(f"[{player}] whiteout collateral: no faint signal fired for {own_key}; "
-                    f"force-faulting {partner}:{command['key']} from party HP evidence")
+                    f"force-fainting {partner}:{command['key']} from party HP evidence")
     # The durable HUD closes its explicit game-over/rebuild transitions.  This
     # presentation path neither executes nor falsely acknowledges the engine's
     # legacy party_mon/memorialize commands; those require their own physical lane.

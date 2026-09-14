@@ -503,22 +503,38 @@ def verify_state(stage):
             raise JournalError("faint precedes its activation evidence")
         if "collateral_of" in death:
             # A whiteout collateral death: no faint signal of its own ever fired, so its
-            # evidence IS the whiteout-causing signal, not a "faint" decode at this index.
+            # anchoring evidence is the trigger's OWN battle_faint/poison_faint signal, not a
+            # decoded key match at this index. Both battle_faint and poison_faint decode to
+            # kind=="faint" (gen1_engine_signals.py) -- the collateral/whiteout distinction lives
+            # in the RAW, un-decoded signal kind, inspected separately from the decoded `row`.
             trigger = component["deaths"].get(death["collateral_of"])
+            raw_kind = death["engine_record"]["payload"]["signals"][death["index"]]["kind"]
+            from server.gen1_whiteout import COMPONENT as WHITEOUT
+
             if (
                 trigger is None
                 or "collateral_of" in trigger
                 or trigger["player"] != player
                 or trigger["engine_record"] != death["engine_record"]
                 or trigger["index"] != death["index"]
+                or death["key"] == trigger["key"]
+                or document["components"].get(WHITEOUT, {}).get(death["collateral_of"]) is None
             ):
                 raise JournalError("collateral death is not anchored to its triggering whiteout")
             if (
-                row["kind"] not in ("battle_faint", "poison_faint")
+                row["kind"] != "faint"
+                or row["key"] != trigger["key"]
+                or raw_kind not in ("battle_faint", "poison_faint")
                 or death_id
                 != identifier(player, death["engine_record"]["operation_id"], death["index"], discriminant=death["key"])
             ):
                 raise JournalError("collateral death differs from source evidence")
+            collateral_link = stage.rules.find_link(player, death["key"])
+            if collateral_link is None or getattr(collateral_link, peer).key != death["peer_key"]:
+                raise JournalError("collateral death does not bind to its own actual link")
+            resolved_id, resolved_members = _link_identity(stage, initials, collateral_link)
+            if resolved_id != death["link_id"] or resolved_members != death["members"]:
+                raise JournalError("collateral death differs from its resolved logical identity")
         elif (
             row["kind"] != "faint"
             or row["key"] != death["key"]
@@ -585,10 +601,14 @@ def verify_state(stage):
         expected_status = (
             LinkStatus.MEMORIAL if death["phase"] == "memorial_complete" else LinkStatus.DEAD
         )
+        # The shared engine's _handle_whiteout always records cause="whiteout" for a collateral
+        # retirement (state.py); only a primary death's link carries the trigger's own decoded
+        # cause ("battle"/"poison").
+        expected_cause = "whiteout" if "collateral_of" in death else row["cause"]
         if (
             link is None
             or link.status != expected_status
-            or link.cause != row["cause"]
+            or link.cause != expected_cause
             or link.killed_at != death["at"]
         ):
             raise JournalError("linked death differs from committed rules")
