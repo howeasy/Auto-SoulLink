@@ -923,6 +923,10 @@ class RunManager:
                         refused=refused or _resume_refusal(predecessor)
                 if refused is not None:
                     return web.json_response(_refusal_body(predecessor,refused,details),status=409)
+                if bool(body.get('fastest_text',False))!=bool(predecessor.get('fastest_text',False)):
+                    # A resumed run must stay the predecessor's run: switching the prepared pair at
+                    # resume time would silently change what the imported journal describes.
+                    raise ValueError('resumed run must keep the predecessor fastest_text setting')
                 resume=audit.resume_record()
             run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
             directory=Path(MANAGER_DIR)/run_id
@@ -949,37 +953,45 @@ class RunManager:
                             directory/'prepared',seeds={'a':'123456789','b':'987654321'})
                     else:
                         await asyncio.to_thread(stage_canonical_pair,directory/'prepared',{'a':body['rom_a'],'b':body['rom_b']})
-                    cartridges=PreparedCartridges(directory/'prepared')
+                    cartridges=await asyncio.to_thread(PreparedCartridges,directory/'prepared')
                 except Exception:
                     shutil.rmtree(directory,ignore_errors=True);raise   # no half-staged run directory survives
                 contract=cartridges.contract()
-            runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}),free_service=True,
-                prepared_cartridges=cartridges,native_trade=cartridges is not None,resume=resume)
+            staged_here=cartridges is not None   # the native branch made this directory; the runtime has not adopted it yet
             try:
-                rules=runtime.state().rules
-                settings={key:bool(getattr(rules,key)) for key in ('species_lock','gender_lock','type_lock','explode_mode',
-                    'rival_team_swap','overworld_presence','native_messages','native_sounds','battle_calc','pc_trade_npc')}
-            finally:runtime.close()
-            write_contract(directory/'rom_contract.json',admitted)   # the user's admitted clean cartridges; the runtime binds the pair
-            run={'run_id':run_id,'name':body['name'].strip(),'created_at':datetime.now(UTC).isoformat(),
-                'tcp_port':tcp_port,'http_port':http_port,'status':'stopped','pid':None,'cartridges':contract['players'],
-                'native_trade':cartridges is not None,'fastest_text':bool(body.get('fastest_text',False)),**settings}
-            if resume is not None:
-                # The launch contract each client must meet (runtime_launcher/bizhawk_launch emit it per player);
-                # the imported rules state lives in the runtime journal, not the registry.
-                run['resume']={'from_run':resume['from_run'],'contract_hash':resume['contract_hash'],'required':resume['required']}
-            _write_run_meta(run)
-            async with self._registry_lock:   # the commit: fresh load, final predecessor check, one save
-                runs=_load_registry()
+                runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}),free_service=True,
+                    prepared_cartridges=cartridges,native_trade=cartridges is not None,resume=resume)
+                try:
+                    rules=runtime.state().rules
+                    settings={key:bool(getattr(rules,key)) for key in ('species_lock','gender_lock','type_lock','explode_mode',
+                        'rival_team_swap','overworld_presence','native_messages','native_sounds','battle_calc','pc_trade_npc')}
+                finally:runtime.close()
+                write_contract(directory/'rom_contract.json',admitted)   # the user's admitted clean cartridges; the runtime binds the pair
+                run={'run_id':run_id,'name':body['name'].strip(),'created_at':datetime.now(UTC).isoformat(),
+                    'tcp_port':tcp_port,'http_port':http_port,'status':'stopped','pid':None,'cartridges':contract['players'],
+                    'native_trade':cartridges is not None,'fastest_text':bool(body.get('fastest_text',False)),**settings}
                 if resume is not None:
-                    predecessor=_find_run(runs,resume['from_run'])
-                    refused=_resume_refusal(predecessor)
-                    if refused is not None:   # changed under the creation; the new directory must not survive
-                        shutil.rmtree(directory,onerror=lambda fn,path,exc:log.warning('resume refusal cleanup left %s: %s',path,exc[1]))
-                        return web.json_response(_refusal_body(predecessor,refused),status=409)
-                    predecessor['resumed_by']=run_id
-                runs.append(run)
-                _save_registry(runs)
+                    # The launch contract each client must meet (runtime_launcher/bizhawk_launch emit it per player);
+                    # the imported rules state lives in the runtime journal, not the registry.
+                    run['resume']={'from_run':resume['from_run'],'contract_hash':resume['contract_hash'],'required':resume['required']}
+                _write_run_meta(run)
+                async with self._registry_lock:   # the commit: fresh load, final predecessor check, one save
+                    runs=_load_registry()
+                    if resume is not None:
+                        predecessor=_find_run(runs,resume['from_run'])
+                        refused=_resume_refusal(predecessor)
+                        if refused is not None:   # changed under the creation; the new directory must not survive
+                            shutil.rmtree(directory,onerror=lambda fn,path,exc:log.warning('resume refusal cleanup left %s: %s',path,exc[1]))
+                            return web.json_response(_refusal_body(predecessor,refused),status=409)
+                        predecessor['resumed_by']=run_id
+                    runs.append(run)
+                    _save_registry(runs)
+            except Exception:
+                # Only this request's own directory: a failure before the registry commit must not
+                # leave a half-built run behind, and the predecessor's directory is never touched.
+                if staged_here:
+                    shutil.rmtree(directory,ignore_errors=True)
+                raise
             if body.get('start',True):
                 run['pid']=await _spawn_run(run,self.bind_host,manager_port=self.manager_port)
                 run['status']='running'

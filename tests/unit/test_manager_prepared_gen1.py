@@ -8,6 +8,7 @@ from server import (
     gen1_admission,
     gen1_prepared_cartridges,
     gen1_run_config,
+    gen1_run_resume,
     gen1_upr_pipeline,
     manager,
 )
@@ -152,6 +153,11 @@ def _json_text(response):
     return _json.loads(response.text)['error']
 
 
+def _run_directories(tmp_path):
+    """The run directories under the patched MANAGER_DIR (tests/conftest.py always makes `data`)."""
+    return sorted(p.name for p in tmp_path.iterdir() if p.name.startswith('run_'))
+
+
 class _PreparedPair:
     """The prepared-pair surface the create handler reads before the runtime is built."""
 
@@ -177,9 +183,9 @@ def _fastest_text_request(body):
         **body}
 
 
-def _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls):
+def _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls,create_runtime=None):
     """Wire the registry, admission and runtime fakes the create handler needs."""
-    def create_runtime(directory,contract,**options):
+    def record(directory,contract,**options):
         runtime_calls.append((Path(directory),contract,options))
         return _Runtime()
     monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
@@ -187,7 +193,7 @@ def _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls):
     monkeypatch.setattr(manager,'_save_registry',lambda value:runs.__setitem__(slice(None),value))
     monkeypatch.setattr(manager,'_spawn_run',lambda *args,**kwargs:pytest.fail('this run must not start'))
     monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
-    monkeypatch.setattr(gen1_run_config,'create_runtime',create_runtime)   # the handler imports it from here
+    monkeypatch.setattr(gen1_run_config,'create_runtime',create_runtime or record)
     monkeypatch.setattr(gen1_prepared_cartridges,'PreparedCartridges',_PreparedPair)
 
 
@@ -281,3 +287,54 @@ async def test_manager_accepts_the_exact_body_the_gen1_create_ui_posts(tmp_path,
     options=runtime_calls[0][2]
     assert options['rule_options']==rules and options['native_trade'] is True
     assert runs[0]['status']=='running' and runs[0]['native_trade'] is True
+
+
+class _Audit:
+    """A predecessor audit that passed; the mismatch refusal must fire before it matters."""
+    ok=True
+    reasons=()
+    details=None
+    def resume_record(self):return {'from_run':'run_pred','contract_hash':'deadbeef','required':[]}
+
+
+@pytest.mark.asyncio
+async def test_manager_refuses_a_resume_that_changes_the_fastest_text_setting(tmp_path,monkeypatch):
+    """A resume inherits the predecessor's prepared pair, so switching fastest_text at resume
+    time is refused before any staging - and the real create_runtime is never reached."""
+    predecessor={'run_id':'run_pred','name':'Predecessor','tcp_port':5000,'http_port':8080,
+        'status':'stopped','native_trade':True,'fastest_text':False}
+    runs=[predecessor]
+    staged=[]
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('no run may be registered'))
+    monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
+    monkeypatch.setattr(gen1_run_resume,'audit_predecessor',lambda *args,**kwargs:_Audit())
+    monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',lambda *args,**kwargs:staged.append('canonical'))
+    monkeypatch.setattr(gen1_upr_pipeline,'prepare_pair',lambda *args,**kwargs:staged.append('upr'))
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
+        'name':'Changed setting','rom_a':'a.gb','rom_b':'b.gb','rules':{},'start':False,'native':True,
+        'fastest_text':True,'resume_from':'run_pred'}))
+    assert response.status==400 and 'must keep the predecessor fastest_text' in _json_text(response)
+    assert staged==[] and runs==[predecessor]
+    assert _run_directories(tmp_path)==[]   # no run directory was ever made
+
+
+@pytest.mark.asyncio
+async def test_manager_removes_the_staged_directory_when_runtime_creation_fails(tmp_path,monkeypatch):
+    """The window from staging to the registry commit owns the directory: a create_runtime
+    failure must leave neither the half-built run nor a registry entry."""
+    runs=[]
+    runtime_calls=[]
+    def create_runtime(directory,contract,**options):
+        runtime_calls.append((Path(directory),contract,options))
+        raise ValueError('runtime creation failed after staging')
+    def stage_canonical_pair(directory,clean_paths):
+        Path(directory).mkdir(parents=True)
+        return Path(directory)
+    monkeypatch.setattr(gen1_prepared_cartridges,'stage_canonical_pair',stage_canonical_pair)
+    _manager_with_runtime(monkeypatch,tmp_path,runs,runtime_calls,create_runtime=create_runtime)
+    response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request(_fastest_text_request({})))
+    assert response.status==400 and 'after staging' in _json_text(response)
+    assert len(runtime_calls)==1 and runs==[]
+    assert _run_directories(tmp_path)==[]   # the half-built run directory is gone

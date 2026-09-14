@@ -50,7 +50,6 @@
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-script"/></svg>
             Fastest text (UPR, no other randomization)
           </label>
-          <p class="mgr-rand-error" x-show="gen1Create.error" x-text="gen1Create.error"></p>
         </div>
       </details>
       <div class="mgr-new-opts-section">
@@ -144,6 +143,7 @@
         <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-plus"/></svg>
         Create
       </button>
+      <p class="mgr-rand-error" x-show="gen1Create.error" x-text="gen1Create.error"></p>
     </div>
 
     <template x-for="group in groupedRuns" :key="group.label">
@@ -364,12 +364,6 @@
               <div class="mgr-new-opts mgr-rand-form">
                 <label>Player A ROM<input type="text" x-model="resume.rom_a" placeholder="Local .gb or .gbc path"></label>
                 <label>Player B ROM<input type="text" x-model="resume.rom_b" placeholder="Local .gb or .gbc path"></label>
-                <label data-tip="Build the pair with UPR's fastest-text misc tweak and nothing else randomized, instead of the canonical companion pair. Needs the native path — only a predecessor created with native trade can use it.">
-                  <input type="checkbox" id="gen1-fastest-text" x-model="resume.fastest_text"
-                         :disabled="!current?.native_trade">
-                  <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-script"/></svg>
-                  Fastest text (UPR, no other randomization)
-                </label>
                 <button class="mgr-btn" :disabled="resume.busy" @click="resumeRun()"
                         x-text="resume.busy ? 'Resuming…' : 'Resume'"></button>
                 <p class="mgr-rand-error" x-show="resume.error" x-text="resume.error"></p>
@@ -979,7 +973,7 @@ function runManager() {
     // Resumed run creation (POST /api/runs/gen1, resume_from). Only rom_a/rom_b are
     // re-entered by hand — everything else the server needs is read straight off the
     // predecessor's own registry entry, same as it was recorded at its own creation.
-    resume: { rom_a: '', rom_b: '', fastest_text: false, busy: false, error: '' },
+    resume: { rom_a: '', rom_b: '', busy: false, error: '' },
     gen1Create: { rom_a: '', rom_b: '', fastest_text: false, busy: false, error: '' },
 
     // Both paths or neither: one path cannot name a pair, and neither means the generic run.
@@ -1001,7 +995,7 @@ function runManager() {
         rom_b: romB,
         rules: this.resumeRuleOptions(run),
         native: !!run.native_trade,
-        fastest_text: !!this.resume.fastest_text,
+        fastest_text: !!run.fastest_text,
         start: false,
         resume_from: run.run_id,
       };

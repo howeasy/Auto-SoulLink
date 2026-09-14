@@ -16,8 +16,8 @@ the function builds:
     the both-or-neither refusal text
   * its rule keys are exactly the six `create_runtime` accepts for Gen 1, with
     `native_sounds` forced off — the other newOpts keys would 400 the request
-  * `/api/runs/new` survives as the generic fallback, and the Resume form's own
-    checkbox is untouched
+  * `/api/runs/new` survives as the generic fallback, and the error line sits
+    outside the closed disclosure so a generic-run refusal is visible
 
 Runtime dispatch (that this body really creates a run) is covered by
 tests/unit/test_manager_prepared_gen1.py, which posts it to the handler.
@@ -88,7 +88,14 @@ def test_create_run_sends_only_the_gen1_rule_keys(html):
         assert rejected not in body, f"createRun must not send the server-rejected key {rejected}"
 
 
-def test_the_generic_path_and_the_resume_checkbox_survive(html):
+def test_the_generic_path_survives(html):
     body = _create_run_body(html)
     assert "'/api/runs/new'" in body or '"/api/runs/new"' in body, "the generic run fallback is gone"
-    assert re.search(r'<input[^>]*id="gen1-fastest-text"[^>]*>', html), "the Resume form's checkbox was removed"
+
+
+def test_the_create_error_line_is_visible_outside_the_disclosure(html):
+    """A "Enter a run name" refusal on the generic path must not hide inside a closed <details>."""
+    match = re.search(r'<button class="mgr-create-btn"[\s\S]*?</button>([\s\S]{0,200})', html)
+    assert match, "Create button markup not found"
+    assert re.search(r'<p class="mgr-rand-error" x-show="gen1Create\.error" x-text="gen1Create\.error"></p>', match.group(1)), \
+        "the create error line is not directly below the Create button"

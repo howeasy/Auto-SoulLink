@@ -94,3 +94,21 @@ def test_resume_rule_options_only_uses_server_allowed_keys(html):
         assert key in body, f"resumeRuleOptions should carry forward {key}"
     for key in disallowed:
         assert key not in body, f"resumeRuleOptions must not send server-rejected key {key}"
+
+
+def test_resume_inherits_the_predecessor_fastest_text_setting(html):
+    """A resume is not a mode switch: the body carries the predecessor's own registry value,
+    exactly like native (server/manager.py refuses a changed fastest_text on resume)."""
+    m = re.search(r'resumeRequestBody\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},', html)
+    assert m, "no resumeRequestBody(...) function found in the inline script"
+    body = re.sub(r'//[^\n]*', '', m.group(1))
+    assert re.search(r'fastest_text\s*:\s*!!run\.fastest_text', body), \
+        "the resume body must carry the predecessor's fastest_text value"
+    assert 'this.resume.fastest_text' not in body, "the resume body must not read a control of its own"
+
+
+def test_the_resume_form_offers_no_fastest_text_control(html):
+    """The control belongs to Create (gen1-create-fastest-text); on Resume it would offer a
+    setting change the server refuses."""
+    assert 'id="gen1-fastest-text"' not in html, "the Resume form still exposes a fastest_text control"
+    assert 'x-model="resume.fastest_text"' not in html, "the resume state still carries fastest_text"
