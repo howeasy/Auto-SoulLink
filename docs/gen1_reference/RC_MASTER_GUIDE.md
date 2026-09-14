@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:30:24+00:00",
+  "updated_at_utc": "2026-09-14T10:31:03+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "10ebb74",
   "live_lane": null,
@@ -1073,6 +1073,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "files": ["lua/gen1_client_entry.lua", "lua/gen1_hud_service.lua", "server/gen1_hud_feedback.py", "tests/unit/test_gen1_hud*.py"],
       "next_action": "In-game lifecycle notice: 'Waiting for the first verified overworld checkpoint' / 'Connected - waiting for partner' / 'Both players ready' through the sanitize path; distinct 'partner death applied' completion toast.",
       "reuse_decision": "HUD presentation shared (hud.lua sanitize); Gen 1 lifecycle facts from the client entry/server feedback"
+    },
+    {
+      "id": "r5b-proto",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-f42accec)",
+      "state": "active",
+      "files": ["server/gen1_checkpoint_runtime.py (read-only)", "lua/gen1_checkpoint_client.lua (read-only)"],
+      "next_action": "Joint client<->server state-pair audit of the paired checkpoint protocol; ordering rule that makes the queue-block impossible; wire bounds table; Manager-recover-while-collecting rule; five joint tests.",
+      "reuse_decision": "research only; feeds R5b-1/R5b-2 round 3"
     },
     {
       "id": "c3",
