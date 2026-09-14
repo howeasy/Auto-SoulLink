@@ -552,16 +552,45 @@ def test_malformed_and_unknown_commands_do_not_wedge_the_client(world):
     assert world.events("tick"), "the client kept ticking"
 
 
-def test_writes_are_revoked_after_five_invalid_validations(world):
+def test_writes_pause_after_five_invalid_validations_and_the_queue_survives(world):
     world.connect()
     world.step(60)
     assert world.client.writes_enabled is True
-    world.bus[world.ram["wPartyCount"]] = 9  # torn/garbage party
+    key = codec.key(world.party()[1])
+    # the engine's own transient: AddPartyMon bumps the count and species list, then runs the
+    # AskName prompt before the struct lands (engine/pokemon/add_mon.asm) -> list/struct disagree
+    world.bus[world.ram["wPartyCount"]] = 3
+    world.bus[world.ram["wPartySpecies"] + 2] = 0xA5
+    world.bus[world.ram["wPartySpecies"] + 3] = 0xFF
+    world.reply({"cmd": "force_faint", "key": key})
+    world.regs["PC"] = 0x1234  # a prompt, not the checkpoint
     world.step(60 * 5)
     assert world.client.writes_enabled is False
+    assert [c["key"] for c in world.client.deferred.values()] == [key]  # paused, not dropped
     world.bus[world.ram["wPartyCount"]] = 2
+    world.bus[world.ram["wPartySpecies"] + 2] = 0xFF
+    world.overworld_safe()
     world.step(60)
     assert world.client.writes_enabled is True  # a live game again
+    assert world.party()[1]["hp"] == 0 and len(world.client.deferred) == 0
+
+
+def test_hello_waits_for_a_live_game_after_the_init_wram_clear(world):
+    # home/init.asm zero-fills WRAM: count 0 with no terminator and wPlayerID 0 until the main
+    # menu's TryLoadSaveFile reloads the save
+    saved = bytes(world.bus)
+    r = world.ram
+    for a in range(r["wPartyCount"], r["wPartyCount"] + 8):
+        world.bus[a] = 0
+    world.bus[r["wPlayerID"]] = world.bus[r["wPlayerID"] + 1] = 0
+    world.connect()
+    world.step(90)
+    assert world.sent == []
+    world.bus[:] = saved
+    world.step(60)
+    hello = world.events("hello")
+    assert len(hello) == 1 and hello[0]["ot_id"] == 0x1234 and hello[0]["seq"] == 1
+    world.assert_all_conform()
 
 
 # ── in-game SLINK TRADE (companion patch receptionist) ───────────────────────────────────

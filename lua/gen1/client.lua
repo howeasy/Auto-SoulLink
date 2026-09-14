@@ -52,7 +52,7 @@ function Client.new(p)
 
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
-        seq = 0, frame = 0, connected_last = false, hello_sent = false,
+        seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
         deferred = {}, pending_battle_writes = {}, sync_written = {},
@@ -181,16 +181,18 @@ function Client.new(p)
                 log("[SLink-gen1] writes ENABLED")
             end
             if self.gate_revoked and self.invalid_streak == 0 then
-                -- a live game after a revoke: re-enable, but the deferred queue was cleared
                 self.gate_revoked, self.writes_enabled = false, true
                 log("[SLink-gen1] writes re-enabled after a live validation")
             end
         else
             self.invalid_streak = self.invalid_streak + 1
             if self.invalid_streak >= Client.MAX_INVALID and self.writes_enabled then
+                -- pause, never drop: the queues survive (an unreadable party is a transient the
+                -- engine creates itself, e.g. AddPartyMon's AskName prompt before the struct
+                -- lands; a soft reset clears WRAM until the main menu reloads the save). Every
+                -- command still needs its key to match at the checkpoint before a byte moves.
                 self.writes_enabled, self.gate_revoked = false, true
-                self.deferred, self.pending_battle_writes = {}, {}
-                log("[SLink-gen1] writes REVOKED: " .. tostring(why))
+                log("[SLink-gen1] writes PAUSED: " .. tostring(why))
             end
         end
         return ok, why
@@ -219,7 +221,14 @@ function Client.new(p)
         local c = cmd.cmd
         if c == "noop" then return end
         if c == "force_faint" or c == "force_explode" then
-            local slot, mon = find_party_slot(cmd.key)
+            local slot, mon, party = find_party_slot(cmd.key)
+            if not party then
+                -- unreadable right now (AddPartyMon's AskName window): keep it; the checkpoint
+                -- re-finds the key (a server command is never resent)
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key }
+                self.known_keys[cmd.key] = true
+                return
+            end
             if not slot then log("[SLink-gen1] " .. c .. ": key not in party " .. tostring(cmd.key)) return end
             local battle = reads.read_battle()
             if battle.in_battle ~= 0 and battle.player_mon_number == slot then
@@ -827,8 +836,12 @@ function Client.new(p)
         self.frame = io.framecount()
         net.pump()
         local connected = net.connected()
-        if connected and not self.connected_last then self:send_hello() end
-        self.connected_last = connected
+        -- hello only from a live game: at power-on/soft reset WRAM is cleared until the main
+        -- menu reloads the save (home/init.asm, MainMenu -> TryLoadSaveFile), so an immediate
+        -- hello would carry ot_id 0/65535 and an empty party
+        if not connected then self.hello_sent = false end
+        if connected and not self.hello_sent and game_is_live() then self:send_hello() end
+        connected = connected and self.hello_sent
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
