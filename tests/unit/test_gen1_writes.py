@@ -123,7 +123,7 @@ def test_active_faint_guard_rules():
     assert "not the active" in guard(L(in_battle=1, type=0, link_state=0, player_mon_number=2, battle_species=4), 0, mon)[1]
     assert "species differs" in guard(L(in_battle=1, type=0, link_state=0, player_mon_number=0, battle_species=9), 0, mon)[1]
     # Transform: the battle struct shows the foe's species; the party slot is still ours
-    assert guard(L(in_battle=1, type=0, link_state=0, player_mon_number=0, battle_species=9, transformed=True), 0, mon)[0] is True
+    assert guard(L(in_battle=1, type=0, link_state=0, player_mon_number=0, battle_species=9, transformed=True), 0, mon) is True
 
 
 def test_explode_fills_all_four_slots_in_both_structs():
