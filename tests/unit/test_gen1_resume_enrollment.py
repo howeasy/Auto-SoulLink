@@ -67,14 +67,14 @@ def digest_of(cart_hex):
     return hashlib.sha256(cart_hex[0x498 * 2:].encode("ascii")).hexdigest()
 
 
-def build_successor(tmp_path):
+def build_successor(tmp_path, **options):
     """A predecessor whose witnessed saves are exactly the fixture observation's CartRAM image."""
     cart_hex = "FF" * 0x8000  # tests.unit.test_gen1_initial_observation.source()
     pred = tmp_path / "pred"
     predecessor(pred, digests={"a": digest_of(cart_hex), "b": digest_of(cart_hex)})
     audit = audit_predecessor(pred, registry_entry=entry())
     assert audit.ok, audit.reasons
-    return create_runtime(tmp_path / "next", contract("red", "blue"), resume=audit.resume_record())
+    return create_runtime(tmp_path / "next", contract("red", "blue"), resume=audit.resume_record(), **options)
 
 
 @pytest.fixture

@@ -147,3 +147,24 @@ def test_save_witness_digests_the_persistent_cartram_projection(probe):
 def test_save_witness_ignores_the_shared_ret_reached_from_other_banks(probe):
     probe.execute("bus[profile.addresses.hLoadedROMBank]=3;hooks['SLink-engine-save_witness'].fn()")
     assert probe.globals().probe.status(probe.globals().probe)['pending']==0
+
+
+def test_save_witness_flushes_saveram_exactly_once_and_other_kinds_never(probe):
+    probe.globals().bus[0xD087]=2
+    probe.execute("""
+        cart={};memory.read_u8=function(address,domain)local d=domain=='ROM' and rom or domain=='CartRAM' and cart or bus;return d[address] or 0 end
+        flushes=0;client={saveram=function()flushes=flushes+1 end}
+    """)
+    probe.globals().fire('save_witness')
+    assert probe.globals().flushes==1
+    probe.globals().fire('battle_faint')
+    assert probe.globals().flushes==1
+    probe.globals().fire('save_witness')
+    assert probe.globals().flushes==2
+
+
+def test_save_witness_without_a_bizhawk_client_still_captures(probe):
+    probe.globals().bus[0xD087]=2
+    probe.execute("cart={};memory.read_u8=function(address,domain)local d=domain=='ROM' and rom or domain=='CartRAM' and cart or bus;return d[address] or 0 end;client=nil")
+    probe.globals().fire('save_witness')
+    assert probe.globals().probe.status(probe.globals().probe)['pending']==1

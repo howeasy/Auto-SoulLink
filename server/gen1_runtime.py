@@ -240,15 +240,17 @@ class Gen1Runtime(DurableRuntime):
         initial = components.get("gen1-initial-observations", {})
         bootstrap = components.get("gen1-new-game-bootstrap", {})
         saves = components.get("gen1-initial-save", {})
-        return (set(initial) == {"a", "b"}
-                and set(bootstrap) == {"a", "b"}
-                and set(saves) == {"a", "b"}
-                and all(isinstance(saves[player], dict)
-                        and saves[player].get("receipt_operation") is not None
-                        for player in ("a", "b")))
+        # A player of a resumed run (gen1_run_resume) booted the witnessed save via CONTINUE: its
+        # enrollment record stands in for the New Game bootstrap + initial-save pair.
+        resumed = components.get("gen1-resume", {}).get("enrolled", {})
+        return set(initial) == {"a", "b"} and all(
+            player in resumed
+            or (player in bootstrap and isinstance(saves.get(player), dict)
+                and saves[player].get("receipt_operation") is not None)
+            for player in ("a", "b"))
 
     def _service_release_reason(self, stage):
-        return "waiting for both initial observations, new-game bootstraps, and initial-save receipts"
+        return "waiting for both initial observations and, per player, new-game bootstrap + initial-save receipts or resumed enrollment"
 
     def _verify_service_continuity(self, player, evidence, stage, binding):
         from server.gen1_service_continuity import verify

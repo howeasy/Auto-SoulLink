@@ -14,9 +14,11 @@ from tests.unit.test_gen1_sessions import contract
 
 
 class Request:
-    def __init__(self, body, **match):
+    def __init__(self, body, query=None, **match):
         self.body = body
         self.match_info = match
+        self.query = query or {}
+        self.host = "127.0.0.1:8090"
 
     async def json(self):
         return self.body
@@ -101,3 +103,29 @@ async def test_clean_predecessor_creates_a_resumed_run_with_the_contract_publish
 async def test_resume_keys_are_rejected_when_absent_or_malformed(registry):
     response = await manager.RunManager("127.0.0.1").handle_create_gen1(Request(body(resume_from=7)))
     assert response.status == 400
+
+
+@pytest.mark.asyncio
+async def test_resumed_run_launcher_and_bundle_carry_the_player_resume_contract(registry, tmp_path):
+    import io
+    import zipfile
+
+    from lupa.lua54 import LuaRuntime
+
+    from server.runtime_launcher import player_resume
+    predecessor(tmp_path / "run_pred")
+    registry.append(entry("run_pred"))
+    handler = manager.RunManager("127.0.0.1")
+    created = json.loads((await handler.handle_create_gen1(Request(body(resume_from="run_pred")))).text)
+    run = created["run"]
+    for player in ("a", "b"):
+        expected = player_resume(run["resume"], player)
+        launcher = await handler.handle_launcher(Request({}, run_id=run["run_id"], player=player))
+        assert launcher.status == 200, launcher.text
+        line = next(row for row in launcher.text.splitlines() if row.startswith("SLINK_RUNTIME_LAUNCH_JSON="))
+        configuration = json.loads(LuaRuntime().eval(line.split("=", 1)[1]))
+        assert configuration["resume"] == expected
+        bundled = await handler.handle_launcher(Request({}, query={"bundle": "1"}, run_id=run["run_id"], player=player))
+        assert bundled.status == 200
+        with zipfile.ZipFile(io.BytesIO(bundled.body)) as archive:
+            assert json.loads(archive.read("launch.json"))["resume"] == expected

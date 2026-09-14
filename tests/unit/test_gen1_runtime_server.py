@@ -524,3 +524,30 @@ def test_configured_http_reads_work_and_unbound_launch_writes_refuse(case):
             await client.close()
 
     asyncio.run(scenario())
+
+
+def test_free_service_releases_for_resumed_players_without_new_game_bootstraps(tmp_path):
+    from tests.unit.test_gen1_initial_observation import admit, send
+    from tests.unit.test_gen1_resume_enrollment import build_successor, resumed_payload
+    runtime = build_successor(tmp_path, free_service=True)
+    try:
+        assert runtime.free_service and runtime.status()["service"]["release_ready"] is False
+        for player in ("a", "b"):
+            owner = admit(runtime, player)
+            send(runtime, player, owner, resumed_payload(runtime, player))
+        components = runtime.state().document()["components"]
+        assert "gen1-new-game-bootstrap" not in components and "gen1-initial-save" not in components
+        assert runtime.status()["service"]["release_ready"] is True
+    finally:
+        runtime.close()
+
+
+def test_free_service_release_still_needs_both_enrollments_on_a_resumed_run(tmp_path):
+    from tests.unit.test_gen1_initial_observation import admit, send
+    from tests.unit.test_gen1_resume_enrollment import build_successor, resumed_payload
+    runtime = build_successor(tmp_path, free_service=True)
+    try:
+        send(runtime, "a", admit(runtime, "a"), resumed_payload(runtime, "a"))
+        assert runtime.status()["service"]["release_ready"] is False
+    finally:
+        runtime.close()

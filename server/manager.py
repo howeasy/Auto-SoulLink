@@ -740,11 +740,11 @@ class RunManager:
                     native_trade=prepared.get('native_trade',False),
                     free_service=prepared.get('free_service',False))
                 content = render_launcher(configuration,
-                    host=connect_host, port=run["tcp_port"], name=run.get("name") or run_id)
+                    host=connect_host, port=run["tcp_port"], name=run.get("name") or run_id, resume=run.get("resume"))
                 if getattr(request,'query',{}).get('bundle')=='1':
                     from server.bizhawk_launch import bundle
                     return web.Response(body=bundle(run_id=prepared['run_id'],player=player,profile='gambatte',
-                        rom_sha1=configuration['cartridge']['final_rom_sha1'],launcher=content),content_type='application/zip',
+                        rom_sha1=configuration['cartridge']['final_rom_sha1'],launcher=content,resume=run.get("resume")),content_type='application/zip',
                         headers={'Content-Disposition':f'attachment; filename="slink_{player}_launch.zip"'})
             else:
                 content = _build_launcher(run, player, connect_host)

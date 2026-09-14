@@ -71,6 +71,9 @@ function M.new(options)
                     local signal={kind=kind,frame=frame,pc=site.address+(site.capture_offset or 0),bank=site.bank,sp=emu.getregister("SP"),point=point(kind)}
                     check();assert(frame==emu.framecount(),"engine signal frame changed")
                     pending[#pending+1]=signal
+                    -- Flush the witnessed save to .SaveRAM now (BizHawk 2.11.1 client.saveram), so an abrupt close
+                    -- after the ack cannot leave the acknowledged checkpoint only in emulator memory.
+                    if kind=="save_witness" and type(client)=="table" and client.saveram then pcall(client.saveram) end
                 end)
                 if not observed then failure=tostring(reason)end
             end,site.address+(site.capture_offset or 0),"SLink-engine-"..kind,"System Bus")
