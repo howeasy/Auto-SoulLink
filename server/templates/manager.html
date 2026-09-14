@@ -400,6 +400,45 @@
               Start with --resume-save &lt;your previous .SaveRAM&gt;
             </p>
           </div>
+
+        {# R5b: one paired save checkpoint while the run is live; recover to the last one the
+           journal confirmed. Recovery REPLACES both players' progress after that checkpoint. #}
+        <div class="mgr-launcher-info">
+          <span class="mgr-section-label">
+            <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-archive"/></svg>
+            Checkpoints
+          </span>
+          <div class="mgr-new-opts mgr-rand-form">
+            <template x-if="current && current.status === 'running'">
+              <button class="mgr-btn" :disabled="checkpoint.busy" @click="requestCheckpoint()"
+                      x-text="checkpoint.busy ? 'Requesting…' : 'Checkpoint'"></button>
+            </template>
+            <template x-if="current && current.status === 'stopped'">
+              <button class="mgr-btn" :disabled="recovery.busy || !checkpoints.current"
+                      @click="recoverToCheckpoint()"
+                      x-text="recovery.busy ? 'Recovering…' : 'Recover'"></button>
+            </template>
+            <p class="mgr-rand-note" x-show="checkpoint.status" x-text="checkpoint.status"></p>
+            <p class="mgr-rand-error" x-show="checkpoint.error" x-text="checkpoint.error"></p>
+            <p class="mgr-rand-error" x-show="recovery.error" x-text="recovery.error"></p>
+            <p class="mgr-rand-note" x-show="!checkpoints.current && current && current.status === 'stopped'">
+              No confirmed checkpoint yet — a checkpoint needs both players to save in-game first.
+            </p>
+            <template x-if="recovery.result">
+              <div class="mgr-rand-note">
+                <div x-text="'Recovered to checkpoint ' + recovery.result.checkpoint_id"></div>
+                <div class="mgr-new-opts">
+                  <a class="mgr-btn" :href="recovery.result.downloads.a" download>Download A save</a>
+                  <a class="mgr-btn" :href="recovery.result.downloads.b" download>Download B save</a>
+                </div>
+                <div>
+                  Each player: download YOUR save on YOUR machine and start the new launcher with
+                  --resume-save &lt;file&gt;.
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
         </template>
 
         <template x-if="current && current.status !== 'archived'">
@@ -908,6 +947,7 @@ function runManager() {
         if (j && j.runs) this.runs = j.runs.map(r => this.augmentRun(r));
       } catch (_) {}
       this.fetchPin();
+      this.loadCheckpoints();
     },
 
     augmentRun(r) {
@@ -988,6 +1028,72 @@ function runManager() {
     // re-entered by hand — everything else the server needs is read straight off the
     // predecessor's own registry entry, same as it was recorded at its own creation.
     resume: { rom_a: '', rom_b: '', busy: false, error: '' },
+    // R5b: one paired save checkpoint, and recovering to the last journal-confirmed one.
+    checkpoint: { busy: false, status: '', error: '', request_id: '' },
+    checkpoints: { current: null },
+    recovery: { busy: false, error: '', result: null },
+
+    async loadCheckpoints() {
+      if (!this.current) { this.checkpoints.current = null; return; }
+      try {
+        var res = await fetch('/api/runs/' + this.current.run_id + '/checkpoints');
+        var j = await res.json();
+        this.checkpoints.current = (j && j.current) ? j.current : null;
+      } catch (_) { this.checkpoints.current = null; }
+    },
+
+    async requestCheckpoint() {
+      if (!this.current || this.checkpoint.busy) return;
+      this.checkpoint.busy = true; this.checkpoint.error = '';
+      this.checkpoint.status = 'Checkpoint requested: waiting for A/B';
+      try {
+        var res = await fetch('/api/runs/' + this.current.run_id + '/checkpoint', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+        var j = await res.json();
+        if (!res.ok || !j.ok) { this.checkpoint.error = j.error || 'Checkpoint failed'; this.checkpoint.status = ''; return; }
+        this.checkpoint.request_id = j.request_id || '';
+        this.pollCheckpoint();
+      } catch (e) { this.checkpoint.error = String(e); this.checkpoint.status = ''; }
+      finally { this.checkpoint.busy = false; }
+    },
+
+    async pollCheckpoint() {
+      if (!this.current || !this.checkpoint.request_id) return;
+      try {
+        var res = await fetch('/api/runs/' + this.current.run_id + '/checkpoint/' + this.checkpoint.request_id);
+        var j = await res.json();
+        if (j.status === 'confirmed') {
+          this.checkpoint.status = 'Last checkpoint: ' + ((j.confirmed && j.confirmed.created_at) || 'confirmed') + ', both players';
+          await this.loadCheckpoints();
+          return;
+        }
+        if (j.status === 'abandoned') { this.checkpoint.error = j.reason || 'Checkpoint refused'; this.checkpoint.status = ''; return; }
+        this.checkpoint.status = (j.status === 'preparing')
+          ? 'Checkpoint publishing…' : 'Checkpoint requested: waiting for A/B';
+      } catch (e) { this.checkpoint.error = String(e); this.checkpoint.status = ''; return; }
+      setTimeout(() => this.pollCheckpoint(), 2000);
+    },
+
+    async recoverToCheckpoint() {
+      if (!this.current || this.recovery.busy) return;
+      var current = this.checkpoints.current || {};
+      var before = current.provenance && current.provenance.witness_kind === 'native_pretrade';
+      var text = before
+        ? 'Recover both players to before this trade. Both players must close their games and start the new launcher. This trade and all progress after the checkpoint will be discarded.'
+        : 'Recover both players to the last checkpoint. Both players must close their games and start the new launcher. All progress after ' + (current.created_at || 'the checkpoint') + ' will be discarded.';
+      if (!confirm(text)) return;
+      this.recovery.busy = true; this.recovery.error = '';
+      try {
+        var res = await fetch('/api/runs/' + this.current.run_id + '/recover', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ checkpoint_id: current.checkpoint_id || undefined }) });
+        var j = await res.json();
+        if (!res.ok || !j.ok) { this.recovery.error = j.error || 'Recover failed'; return; }
+        this.recovery.result = { checkpoint_id: j.checkpoint_id, run: j.run, downloads: j.downloads };
+        await this.refreshRuns();
+      } catch (e) { this.recovery.error = String(e); }
+      finally { this.recovery.busy = false; }
+    },
     gen1Create: { rom_a: '', rom_b: '', fastest_text: false, busy: false, error: '' },
 
     // Both paths or neither: one path cannot name a pair, and neither means the generic run.

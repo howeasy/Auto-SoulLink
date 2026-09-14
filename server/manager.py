@@ -15,6 +15,7 @@ Run dirs:  data/runs/<run_id>/links.json
 
 import argparse
 import asyncio
+import hashlib
 import html
 import json
 import logging
@@ -25,6 +26,7 @@ import shutil
 import signal
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 try:
     import psutil
@@ -158,6 +160,61 @@ def _refusal_body(predecessor: dict | None, reasons: list[str], details: dict | 
     if predecessor and predecessor.get("resumed_by"):
         details["resumed_by"] = predecessor["resumed_by"]
     return {"ok": False, "error": "predecessor cannot be resumed", "reasons": reasons, "details": details}
+
+
+# ── R5b: paired checkpoints (Manager side) ───────────────────────────────────────────────────
+
+CHECKPOINT_RULE_KEYS = ("species_lock", "gender_lock", "type_lock", "explode_mode", "rival_team_swap",
+                        "native_sounds", "pc_trade_npc")
+
+
+def resume_record_from_checkpoint(run_id: str, manifest: dict, checkpoint) -> dict:
+    """The ONE mapping from an R5b checkpoint to the resume contract `validate_resume` accepts.
+
+    A save_witness carries index/operation_id; the tagged native-pretrade variant carries
+    ready_operation_id instead and has no index, so it maps to witness_index 0 and that ready
+    operation — the one place this shape is decided, so R5b-1's validator has a single caller
+    to change if the tagged extension needs different fields.
+    """
+    required = {}
+    for player in ("a", "b"):
+        witness = manifest["players"][player]["witness"]
+        if witness.get("witness_kind", "save_witness") == "native_pretrade":
+            required[player] = {"digest": witness["digest"], "projection": witness["projection"],
+                "witness_index": 0, "operation_id": witness["ready_operation_id"]}
+        else:
+            required[player] = {"digest": witness["digest"], "projection": witness["projection"],
+                "witness_index": witness["index"], "operation_id": witness["operation_id"]}
+    return {"from_run": run_id, "required": required,
+        "rules": json.loads(checkpoint.rules_bytes().decode("utf-8")),
+        "contract_hash": manifest["contract_fingerprint"],
+        "identities": json.loads(checkpoint.identity_bytes().decode("utf-8"))}
+
+
+def _confirmed_checkpoint_component(run_directory):
+    """(component, error) for a STOPPED run's journal-confirmed checkpoint.
+
+    R5b-1's module owns the cross-store reconciliation; a tree without it must still start the
+    Manager, so the import is guarded and reported as unavailable rather than crashing.
+    """
+    try:
+        from server import gen1_checkpoint_runtime
+    except ImportError:   # pragma: no cover - present in this tree, guarded for older checkouts
+        return None, "checkpoint runtime unavailable"
+    return gen1_checkpoint_runtime.confirmed_checkpoints(run_directory), None
+
+
+def _confirmed_entry(component):
+    """The recoverable checkpoint entry, or None: status must be confirmed AND name one id."""
+    if not isinstance(component, dict) or component.get("status") != "confirmed":
+        return None
+    return component.get("confirmed") or None
+
+
+def _run_directory(run_id: str):
+    root = Path(MANAGER_DIR).resolve()
+    directory = (root / run_id).resolve()
+    return directory if directory.is_relative_to(root) else None
 
 
 def _release(entry: dict, token: str, **fields) -> bool:
@@ -736,6 +793,9 @@ class RunManager:
             if run.get("resumed_by"):
                 return web.json_response({"ok": False, "error": "This run was resumed; start its successor instead",
                                           "details": {"resumed_by": run["resumed_by"]}}, status=409)
+            if run.get("recovered_by"):
+                return web.json_response({"ok": False, "error": "This run was recovered; start its successor instead",
+                                          "details": {"recovered_by": run["recovered_by"]}}, status=409)
             if run["status"] == "running" and _is_alive(run.get("pid")):
                 return web.json_response({"ok": True, "message": "Already running"})
             if _reservation_live(run):
@@ -1269,6 +1329,241 @@ class RunManager:
             log.debug(f"Proxy /api/runs/{run_id}/live failed: {e}")
             return web.json_response({"error": str(e)}, status=502)
 
+    # ── R5b: paired checkpoint request / status / recover / save download ─────────────────────
+
+    async def _run_json(self, request: web.Request, run: dict, method: str, path: str,
+                        body: dict | None = None) -> web.Response:
+        """One JSON round trip to a RUNNING run server, with the live proxy's status mapping."""
+        url = f"http://127.0.0.1:{run['http_port']}{path}"
+        timeout = aiohttp.ClientTimeout(total=5)
+        try:
+            if method == "GET":
+                context = request.app["proxy_session"].get(url, timeout=timeout)
+            else:
+                context = request.app["proxy_session"].post(url, json=body or {}, timeout=timeout)
+            async with context as resp:
+                return web.json_response(await resp.json(content_type=None), status=resp.status)
+        except TimeoutError:
+            return web.json_response({"ok": False, "error": "timeout"}, status=504)
+        except Exception as error:
+            log.debug(f"Checkpoint proxy {method} {path} failed: {error}")
+            return web.json_response({"ok": False, "error": "proxy_failed"}, status=502)
+
+    def _running_run(self, run_id: str):
+        """The registry entry and whether it can answer a run-server proxy right now."""
+        run = _find_run(_load_registry(), run_id)
+        if run is None:
+            return None
+        return run if run.get("status") == "running" and run.get("http_port") else None
+
+    async def handle_run_checkpoint(self, request: web.Request) -> web.Response:
+        """POST /api/runs/{run_id}/checkpoint — start one paired capture on the run server.
+
+        The Manager mints the request id, because it is the side that can still read the reply
+        after a restart: the run server's `/api/checkpoint/{request_id}` is the only status
+        route it exposes.
+        """
+        run_id = request.match_info.get("run_id", "")
+        run = self._running_run(run_id)
+        if run is None:
+            return web.json_response({"ok": False, "error": "run not running"}, status=404)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        request_id = body.get("request_id") if isinstance(body, dict) else None
+        if not isinstance(request_id, str) or not re.fullmatch(r"[0-9a-f]{32}", request_id):
+            request_id = secrets.token_hex(16)
+        response = await self._run_json(request, run, "POST", "/api/checkpoint",
+                                        {"request_id": request_id, "registry_run_id": run_id})
+        if response.status in (200, 202):
+            payload = json.loads(response.text)
+            payload.setdefault("request_id", request_id)
+            response = web.json_response(payload, status=response.status)
+        return response
+
+    async def handle_run_checkpoint_status(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/checkpoint/{request_id} — the run server's own status."""
+        run_id = request.match_info.get("run_id", "")
+        request_id = request.match_info.get("request_id", "")
+        run = self._running_run(run_id)
+        if run is None:
+            return web.json_response({"ok": False, "error": "run not running"}, status=404)
+        if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+            return web.json_response({"ok": False, "error": "checkpoint request id required"}, status=400)
+        return await self._run_json(request, run, "GET", f"/api/checkpoint/{request_id}")
+
+    async def handle_run_checkpoints(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/checkpoints — the recoverable checkpoint, or null.
+
+        A running run reports the request the caller is polling; a stopped run reports ONLY the
+        checkpoint its journal confirmed, re-validated against the store (a CURRENT pointer that
+        no journal names is never offered for recovery).
+        """
+        run_id = request.match_info.get("run_id", "")
+        run = _find_run(_load_registry(), run_id)
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if run.get("status") == "running" and run.get("http_port"):
+            request_id = request.query.get("request_id", "")
+            if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+                return web.json_response({"ok": True, "current": None})
+            status = await self._run_json(request, run, "GET", f"/api/checkpoint/{request_id}")
+            if status.status != 200:
+                return web.json_response({"ok": True, "current": None})
+            payload = json.loads(status.text)
+            return web.json_response({"ok": True, "current": {
+                "checkpoint_id": (payload.get("confirmed") or {}).get("checkpoint_id"),
+                "manifest_sha256": (payload.get("confirmed") or {}).get("manifest_sha256"),
+                "status": payload.get("status")}})
+        directory = _run_directory(run_id)
+        if directory is None:
+            return web.json_response({"ok": False, "error": "checkpoint unavailable"}, status=400)
+        component, error = _confirmed_checkpoint_component(directory)
+        if error:
+            return web.json_response({"ok": False, "error": error}, status=503)
+        entry = _confirmed_entry(component)
+        if entry is None:
+            return web.json_response({"ok": True, "current": None})
+        from server.paired_save_checkpoints import PairedCheckpointStore
+        try:
+            checkpoint = await asyncio.to_thread(PairedCheckpointStore(directory).load, entry["checkpoint_id"])
+        except Exception as problem:
+            log.warning("confirmed checkpoint %s did not validate: %s", entry["checkpoint_id"], problem)
+            return web.json_response({"ok": True, "current": None})
+        return web.json_response({"ok": True, "current": {
+            "checkpoint_id": checkpoint.manifest["checkpoint_id"],
+            "manifest_sha256": entry["manifest_sha256"],
+            "created_at": checkpoint.manifest["created_at"],
+            "provenance": checkpoint.provenance()}})
+
+    async def handle_recover(self, request: web.Request) -> web.Response:
+        """POST /api/runs/{run_id}/recover — a NEW successor seeded from a confirmed checkpoint.
+
+        The checkpoint's state is the authority here: `audit_predecessor` is deliberately NOT
+        run (it audits the predecessor's LATER journal, which is exactly what recovery discards).
+        """
+        run_id = request.match_info.get("run_id", "")
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        wanted = body.get("checkpoint_id") if isinstance(body, dict) else None
+        runs = _load_registry()
+        run = _find_run(runs, run_id)
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if run.get("status") in ("running", "starting") or _reservation_live(run):
+            return web.json_response({"ok": False, "error": "stop the run before recovering it"}, status=409)
+        if run.get("recovered_by"):
+            return web.json_response({"ok": False, "error": "this run was already recovered"}, status=409)
+        directory = _run_directory(run_id)
+        if directory is None:
+            return web.json_response({"ok": False, "error": "checkpoint unavailable"}, status=400)
+        component, error = _confirmed_checkpoint_component(directory)
+        if error:
+            return web.json_response({"ok": False, "error": error}, status=503)
+        entry = _confirmed_entry(component)
+        if entry is None:
+            return web.json_response({"ok": False, "error": "no journal-confirmed checkpoint to recover"}, status=409)
+        if wanted is not None and wanted != entry["checkpoint_id"]:
+            return web.json_response({"ok": False, "error": "checkpoint is not the one this journal confirmed"}, status=409)
+        checkpoint_id = entry["checkpoint_id"]
+        from server.gen1_prepared_cartridges import PreparedCartridges
+        from server.gen1_run_config import FILENAME as RUNTIME_FILENAME, create_runtime
+        from server.paired_save_checkpoints import PairedCheckpointStore
+        from server.protocol import decode_frame
+        try:
+            checkpoint = await asyncio.to_thread(PairedCheckpointStore(directory).load, checkpoint_id)
+        except Exception as problem:
+            return web.json_response({"ok": False, "error": f"checkpoint did not validate: {problem}"}, status=409)
+        manifest = checkpoint.manifest
+        record = resume_record_from_checkpoint(run_id, manifest, checkpoint)
+        spec = decode_frame((directory / RUNTIME_FILENAME).read_bytes())
+        contract = spec["contract"]
+        native = bool(spec.get("native_trade")) and bool(run.get("native_trade"))
+        successor_id = 'run_' + datetime.now(UTC).strftime('%Y%m%d_%H%M%S') + '_' + secrets.token_hex(3)
+        successor_dir = Path(MANAGER_DIR) / successor_id
+        tcp_port, http_port = _next_ports(runs)
+        successor_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            if native and spec.get("prepared_artifacts"):
+                # The successor needs its OWN prepared pair (configure_runtime refuses artifacts
+                # outside the run), and the pair must stay byte-identical: copy the predecessor's
+                # verified directory and let PreparedCartridges re-verify every hash on open.
+                source = (directory / spec["prepared_artifacts"]).resolve()
+                if not source.is_relative_to(directory) or not source.is_dir():
+                    raise ValueError('predecessor prepared cartridge pair is unavailable')
+                await asyncio.to_thread(shutil.copytree, source, successor_dir / "prepared")
+            cartridges = None
+            if (successor_dir / "prepared").is_dir():
+                cartridges = await asyncio.to_thread(PreparedCartridges, successor_dir / "prepared")
+            rule_options = {key: bool(run.get(key, False)) for key in CHECKPOINT_RULE_KEYS}
+            runtime = create_runtime(successor_dir, contract, rule_options=rule_options, free_service=True,
+                prepared_cartridges=cartridges, native_trade=cartridges is not None, resume=record)
+            try:
+                rules = runtime.state().rules
+                settings = {key: bool(getattr(rules, key)) for key in ('species_lock', 'gender_lock', 'type_lock',
+                    'explode_mode', 'rival_team_swap', 'overworld_presence', 'native_messages', 'native_sounds',
+                    'battle_calc', 'pc_trade_npc')}
+            finally:
+                runtime.close()
+            shutil.copyfile(directory / "rom_contract.json", successor_dir / "rom_contract.json")
+            successor = {'run_id': successor_id, 'name': f"{run.get('name', run_id)} (recovered)",
+                'created_at': datetime.now(UTC).isoformat(), 'tcp_port': tcp_port, 'http_port': http_port,
+                'status': 'stopped', 'pid': None, 'cartridges': contract["players"],
+                'native_trade': cartridges is not None,
+                'fastest_text': bool(run.get('fastest_text', False)), **settings}
+            successor['resume'] = {'from_run': record['from_run'], 'contract_hash': record['contract_hash'],
+                'required': record['required']}
+            successor['recovered_from'] = {'run_id': run_id, 'checkpoint_id': checkpoint_id,
+                'manifest_sha256': entry['manifest_sha256'],
+                'discarded_through_revision': manifest['provenance'].get('journal_revision')}
+            _write_run_meta(successor)
+            async with self._registry_lock:
+                runs = _load_registry()
+                predecessor = _find_run(runs, run_id)
+                if predecessor is None or predecessor.get('recovered_by') or predecessor.get('resumed_by'):
+                    shutil.rmtree(successor_dir, ignore_errors=True)
+                    return web.json_response({"ok": False, "error": "predecessor changed under the recovery"}, status=409)
+                predecessor['recovered_by'] = successor_id
+                runs.append(successor)
+                _save_registry(runs)
+        except Exception:
+            shutil.rmtree(successor_dir, ignore_errors=True)
+            raise
+        return web.json_response({"ok": True, "run": successor, "checkpoint_id": checkpoint_id,
+            "downloads": {"a": f"/api/runs/{successor_id}/recovery-save/a",
+                          "b": f"/api/runs/{successor_id}/recovery-save/b"}})
+
+    async def handle_recovery_save(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/recovery-save/{player} — that player's archived SaveRAM bytes.
+
+        Only a recovered run has them, only from the checkpoint its registry entry names, and the
+        path never leaves the Manager: the bytes are the checkpoint's own, hash-labelled.
+        """
+        run_id = request.match_info.get("run_id", "")
+        player = request.match_info.get("player", "")
+        if player not in ("a", "b"):
+            return web.json_response({"ok": False, "error": "unknown player"}, status=404)
+        run = _find_run(_load_registry(), run_id)
+        recovered = (run or {}).get("recovered_from") or {}
+        if not recovered:
+            return web.json_response({"ok": False, "error": "this run has no recovery save"}, status=404)
+        source_dir = _run_directory(recovered["run_id"])
+        if source_dir is None:
+            return web.json_response({"ok": False, "error": "this run has no recovery save"}, status=404)
+        from server.paired_save_checkpoints import PairedCheckpointStore
+        try:
+            checkpoint = await asyncio.to_thread(PairedCheckpointStore(source_dir).load, recovered["checkpoint_id"])
+            data = checkpoint.save_bytes(player)
+        except Exception as problem:
+            log.warning("recovery save for %s did not validate: %s", run_id, problem)
+            return web.json_response({"ok": False, "error": "recovery save unavailable"}, status=404)
+        return web.Response(body=data, content_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{player}.SaveRAM"',
+                     "X-SLink-Save-SHA256": hashlib.sha256(data).hexdigest()})
+
     async def handle_proxy_events(self, request: web.Request) -> web.StreamResponse:
         """GET /api/events — SSE ping stream that triggers overlay re-renders."""
         response = web.StreamResponse(headers={
@@ -1330,6 +1625,11 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
+    app.router.add_post("/api/runs/{run_id}/checkpoint", manager.handle_run_checkpoint)
+    app.router.add_get("/api/runs/{run_id}/checkpoint/{request_id}", manager.handle_run_checkpoint_status)
+    app.router.add_get("/api/runs/{run_id}/checkpoints", manager.handle_run_checkpoints)
+    app.router.add_post("/api/runs/{run_id}/recover", manager.handle_recover)
+    app.router.add_get("/api/runs/{run_id}/recovery-save/{player}", manager.handle_recovery_save)
 
     # Stream pin API
     app.router.add_get("/api/stream/pin",  manager.handle_stream_pin_status)
