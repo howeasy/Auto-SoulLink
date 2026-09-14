@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:25:30+00:00",
+  "updated_at_utc": "2026-09-14T09:26:16+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "4dec149",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b; OMP: HX-2b dashboard holds (active), then HX-2c (HX-2 review fix-ups), then FT-2d missing-file 400. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). Next: C3 on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 after R5b (spec in flight on Codex); OMP: HX-2b dashboard holds (active), then HX-2c (HX-2 review fix-ups), then FT-2d missing-file 400. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -954,6 +954,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
       "next_action": "Server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
       "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules"
+    },
+    {
+      "id": "n3-spec",
+      "owner": "contextual Codex peer Gen1-CodexPeer (read-only; task cx-fc6b3995)",
+      "state": "active",
+      "files": ["server/trade_coordinator.py (read-only)", "server/gen1_native_preparation.py (read-only)", "server/gen1_full_save.py (read-only)"],
+      "next_action": "Literal N3 spec reusing R5b-1 capture: pretrade images retained?, COMMIT prerequisite seam, recover-before-trade selection/abandonment, UI wording, tests, files.",
+      "reuse_decision": "research only"
     },
     {
       "id": "n3-claim",
