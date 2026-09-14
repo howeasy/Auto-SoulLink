@@ -131,10 +131,11 @@ LANES = [
              "refusal and acceptance texts, every client line schema-valid "
              "(docs/gen1_requirements.md T-1, T-2)"),
     Lane("duo-pairs",
-         [_PY, "-m", "pytest", "tests/e2e/test_duo_gen1.py", "-q", "-p", "no:randomly",
+         [_PY, "-m", "pytest", "tests/e2e/test_duo_gen1_new.py", "-q", "-p", "no:randomly",
           "-rs"],
-         env={"SLINK_E2E": "1"},
-         why="every scenario on both pairings, through the real server"),
+         env={"SLINK_E2E": "1", "SLINK_LIVE": "1"},
+         why="the rewritten client on two real cartridges through the real server: encounter "
+             "link, dead zone, in-game SLINK trade (docs/gen1_requirements.md D-1, D-3, T-3, T-4)"),
 ]
 
 
@@ -153,7 +154,7 @@ REQUIREMENTS = {
     "live-gates": ["(pre-rewrite gates; retired in Phase 8)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
     "live-trade-gates": ["T-1", "T-2"],
-    "duo-pairs": ["D-1..D-14 (pre-rewrite scenarios; rewritten in Phase 6)"],
+    "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],
 }
 
 
