@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T05:47:39+00:00",
+  "updated_at_utc": "2026-09-14T06:09:20+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "aa40b43",
+  "source_head": "6ba8329",
   "live_lane": null,
-  "next_action": "Round-2 Codex review of 6075af1..aa40b43; on ACCEPT grant the lane for rb_resume_roundtrip.",
+  "next_action": "Round-3 Codex review of 6075af1..HEAD; on ACCEPT grant the lane for rb_resume_roundtrip.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -600,6 +600,23 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) \u2014 all addressed",
         "round 2 headless REVIEW pending"
       ]
+    },
+    {
+      "id": "p2a-7",
+      "owner": "integrated by coordinator (isolated Claude worker authored)",
+      "state": "done",
+      "files": [
+        "server/gen1_run_resume.py",
+        "server/manager.py",
+        "tests/unit/test_gen1_run_resume.py",
+        "tests/integration/test_manager_gen1_resume.py"
+      ],
+      "next_action": "None; integrated (8029/0). Round-3 review pending.",
+      "reuse_decision": "shared",
+      "receipt": "tests/unit/test_gen1_run_resume.py, tests/integration/test_manager_gen1_resume.py (11 new tests)",
+      "independent_review_refs": [
+        "Codex REVIEW cx-f0798287 round 2 (2 majors) \u2014 addressed; round 3 pending"
+      ]
     }
   ]
 }
@@ -623,6 +640,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| P2A-7 integrated | Post-witness rule inverted: every committed event holds except a pure heartbeat (`observation` with no signals/inventory/acquisitions, battle 0, no trainer, no native checkpoint; absent optional fields count as not pure). Registry mutations serialised under `RunManager._registry_lock` via `_update_run` (spawn/slow work outside the lock, fresh reload before every save; the paused-spawn race is pinned by a test); refusal bodies carry fixed `reasons` + `details`; rmtree failures logged. 8029/0. |
+| P2A review round 2 | Codex headless REVIEW `cx-f0798287` of `6075af1..aa40b43`: findings 1, 2, 4, 6 resolved; **3 partially (MAJOR)** — trainer-only / nonzero-battle observations and completed trades still pass `_gameplay_bearing` (`gen1_run_resume.py:88-94`; `lua/gen1_observation_loop.lua:103-123`; `trade_coordinator.py:490-498`); **5 partially (MAJOR)** — `handle_start` saves a stale registry after its await and can erase a concurrent resume's successor + `resumed_by` (`manager.py:660-675`); 7 minor (interpolated reasons). Safety axis re-confirmed intact; digest convention consistent across all five sites. REJECT (MODEL), LIVE hold. P2A-7 dispatched. |
 | P2A-6/6C integrated | All seven round-1 findings addressed at `2064c60` (pin `aa40b43`): provenance-based inherited-identity verification (origin key/player from member history; evolution test), gameplay-bearing = non-empty signals/inventory/acquisitions, bounded event window refused on overflow, `resumed_by` written on the predecessor + status re-checked before registry save (single-use, race-checked), `_RUN_ID` validation + `MANAGER_DIR` containment + fixed-string 409 reasons (exception text to logging), continue observer retired after the acked initial observation (pre-ack hits still fail closed), flush outcome in `SLINK_RUNTIME_STATUS().engine_signals.last_flush` + console log (wire unchanged). 8021/0. |
 | P2A review round 1 | Codex headless REVIEW `cx-9559ab65` of `6075af1..a99d8b4`: **REJECT (MODEL), LIVE hold**. Majors, all coordinator-accepted: continue observer stays armed after the receipt and rejects every later `SpecialEnterMap` hit — ordinary warps/Fly/blackout would kill the resumed client (`gen1_continue_observer.lua:49`, `gen1_client_entry.lua:503`, `home/overworld.asm:770,799`); inherited-identity verification compares the live key forever, breaking evolution (`gen1_run_resume.py:242-245` vs `gen1_evolution_runtime.py:199`); predecessors resumable repeatedly and status unchecked across the audit's await (`manager.py:786-824`); empty heartbeats (`acquisitions: []`) counted as gameplay → clean checkpoints refused (`gen1_run_resume.py:87`); audit silently ignores events past 4097 rows (`:149-152`). Minors: silent flush failure; `resume_from` containment/sanitised 409. TOCTOU concern withdrawn (`bizhawk_launch.py:124-136`). Fixes: P2A-6 (server) + P2A-6C (client). |
 | P2A-5 integrated | `handle_launcher` passes the run's `resume` into `render_launcher`/`bundle`; `_service_release_ready` accepts, per player, either the new-game bootstrap + initial-save pair or `gen1-resume.enrolled[player]`; the client calls `client.saveram()` once after a `save_witness` (pcall-guarded, no-op in models). 8010/0. Live-harness `source_cut` re-pinned to `c8f5465` (`a99d8b4`). |
