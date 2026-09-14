@@ -163,29 +163,48 @@ def read_result(scenario, inst):
 
 
 RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
+# Classification table for RESULT reasons in duo_gen1_main.lua:286-758:
+#   CAUSE_RNG   bare/nested `hunt ended out-of-balls` (the game's only missed ball)
+#   CONSEQUENCE exact linked-capture-not-returned phrases when the other side has CAUSE_RNG
+#   FINAL       every other return-false template: no-go/boot/save, other hunt phase,
+#               trade menu/prompt/apply, faint window/force_faint/battle/text/Box 12,
+#               and admission hello/party/map errors. A nested link prerequisite with
+#               any cause OTHER than out-of-balls is FINAL, too.
+GEN1_RNG_REASON_CLASS = {
+    "hunt ended out-of-balls": "CAUSE_RNG",  # link_new/deadzone_new direct
+    "link_new prerequisite failed: hunt ended out-of-balls": "CAUSE_RNG",  # nested trade/faint
+    "linked capture was not returned": "CONSEQUENCE",  # linked_faint_* without pair
+    "linked capture was not returned to party": "CONSEQUENCE",  # trade_new without pair
+}
 
 
 class GameRngMiss(Exception):
     """The only early orchestration exit eligible for a whole-run Gen 1 retry."""
 
 
+def classify_gen1_result(text):
+    """PASS, CAUSE_RNG, CONSEQUENCE, FINAL, or None for missing/ambiguous RESULT."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.startswith("RESULT:")]
+    if len(lines) != 1:
+        return None
+    line = lines[0]
+    if line.startswith("RESULT: PASS"):
+        return "PASS"
+    if not line.startswith("RESULT: FAIL (") or not line.endswith(")"):
+        return "FINAL"
+    return GEN1_RNG_REASON_CLASS.get(line[len("RESULT: FAIL ("):-1], "FINAL")
+
+
 def _has_exact_rng_miss(text):
-    return any(line.strip() == RNG_OUT_OF_BALLS for line in (text or "").splitlines())
+    return classify_gen1_result(text) == "CAUSE_RNG"
 
 
 def retryable_gen1_rng(game, results, attempt):
     """Only a game's missed sole ball may restart one whole gen1_new run."""
     if game != "gen1_new" or attempt != 1:
         return False
-    endings = []
-    for text in results.values():
-        lines = [line.strip() for line in (text or "").splitlines()
-                 if line.startswith("RESULT:")]
-        if len(lines) != 1:
-            return False
-        endings.append(lines[0])
-    return (any(line == RNG_OUT_OF_BALLS for line in endings)
-            and all(line == RNG_OUT_OF_BALLS or line.startswith("RESULT: PASS") for line in endings))
+    classes = [classify_gen1_result(text) for text in results.values()]
+    return "CAUSE_RNG" in classes and all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes)
 
 
 def wait_for(desc, pred, timeout, interval=2.0):

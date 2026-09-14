@@ -204,14 +204,36 @@ def test_python_oracle_receipt_ends_fail_on_an_assertion_error(runner, tmp_path)
     [
         ("RESULT: PASS (caught)", duo.RNG_OUT_OF_BALLS, 1, True),
         (duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS, 1, True),
+        ("RESULT: FAIL (linked capture was not returned)",
+         "RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", 1, True),
+        ("RESULT: FAIL (linked capture was not returned to party)",
+         "RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", 1, True),
+        ("RESULT: FAIL (linked capture was not returned)",
+         "RESULT: FAIL (force_faint never arrived)", 1, False),
+        ("RESULT: FAIL (force_faint never arrived)", duo.RNG_OUT_OF_BALLS, 1, False),
+        ("RESULT: FAIL (linked capture was not returned)", "RESULT: PASS (caught)", 1, False),
         ("RESULT: PASS (caught)", "RESULT: FAIL (timeout)", 1, False),
         (duo.RNG_OUT_OF_BALLS, "RESULT: FAIL (timeout)", 1, False),
         ("RESULT: PASS (caught)", duo.RNG_OUT_OF_BALLS, 2, False),
+        ("RESULT: FAIL (linked capture was not returned)",
+         "RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", 2, False),
     ],
 )
 def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expected):
     assert duo.retryable_gen1_rng("gen1_new", {"a": a, "b": b}, attempt) is expected
     assert duo.retryable_gen1_rng("gen1", {"a": a, "b": b}, attempt) is False
+
+
+@pytest.mark.parametrize(("line", "classification"), [
+    ("RESULT: FAIL (hunt ended out-of-balls)", "CAUSE_RNG"),
+    ("RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", "CAUSE_RNG"),
+    ("RESULT: FAIL (linked capture was not returned)", "CONSEQUENCE"),
+    ("RESULT: FAIL (linked capture was not returned to party)", "CONSEQUENCE"),
+    ("RESULT: FAIL (force_faint never arrived)", "FINAL"),
+    ("RESULT: FAIL (link_new prerequisite failed: hunt ended stuck)", "FINAL"),
+])
+def test_gen1_result_reason_table_is_exact(line, classification):
+    assert duo.classify_gen1_result(line) == classification
 
 
 @pytest.mark.parametrize(("outcomes", "expected_attempts", "passed"), [
