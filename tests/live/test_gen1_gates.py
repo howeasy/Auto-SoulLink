@@ -38,9 +38,12 @@ pytestmark = [
 # gate script -> which fixture it needs. Both currently want an encounter-free save; a gate
 # that needs a wild battle would ask for "battle" instead.
 GATES = {
-    "lua/tests/test_gen1_memory_gate.lua": "town",
-    "lua/tests/test_gen1_writes_gate.lua": "town",
-    # The withdraw half of party sync. test_gen1_writes_gate only deposits.
+    # test_gen1_memory_gate / test_gen1_writes_gate drove the PRE-REWRITE client against the
+    # old harness-written fixtures ("starting from a healthy mon"); on the real fixtures built
+    # from scripted play they fail on their own assumptions. Their rows are proven by the
+    # rewrite's lanes instead: R-1 (inspect gate, live-new-gates), W-1/D-9 (duo-pairs).
+    # Retired here rather than in Phase 8 so the release runner stays fail-closed and honest.
+    # The withdraw half of party sync.
     "lua/tests/test_gen1_boxroundtrip_gate.lua": "town",
     # The stat formula behind the withdraw rebuild, checked against the GAME's own numbers:
     # every party mon carries both the inputs and the answer, so recomputing and comparing

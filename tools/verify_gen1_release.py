@@ -151,7 +151,7 @@ REQUIREMENTS = {
     "statics-generated": ["F-5", "S-8"],
     "fixtures": ["F-6"],
     "patch-build": ["T-1"],
-    "live-gates": ["(pre-rewrite gates; retired in Phase 8)"],
+    "live-gates": ["R-2 (stat rebuild vs the game)", "S-5/D-10 (Moon Stone key rewrite)", "T-1 prerequisites (panel, menu row, randomized+injected panel)", "(pre-rewrite box round trip; retired in Phase 8)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
     "live-trade-gates": ["T-1", "T-2"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],
