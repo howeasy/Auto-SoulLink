@@ -340,7 +340,7 @@ class SelectedRun:
     resume_ready = staticmethod(resume_ready)
     observation_sequence = staticmethod(observation_sequence)
 
-    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="1e556c5",
+    def __init__(self, owned, variants, *, emulator, base_config, limit, source_cut="d4d9efd",
                  input_mode="human", launch_mode="product-cli", route_mode=None,
                  requested_speed_percent=300, resume_from=None):
         self.owned = Path(owned).resolve()
