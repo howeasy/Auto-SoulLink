@@ -400,3 +400,62 @@ Related, not in the requested list but used by the above: `lua/tests/gen1_rb_poi
   excluded by `wBattleType`, not traced.
 - **`wDestinationMap` for Dig/Escape Rope** (`ItemUseEscapeRope`) — the departure site is
   exact; the target-map source for those two items was not traced (Fly's is).
+
+## 7. Facts learned from the live lanes (2026-09-14)
+
+Line numbers are pret/pokered `405b624` (`E:/Google Drive/SLink/.cache/pret/pokered`). Each
+bullet names the receipt or commit that showed the fact; client consequences point at
+`lua/gen1/client.lua` in this worktree.
+
+- **`_AddPartyMon` names the mon before its struct exists.** `engine/pokemon/add_mon.asm` bumps
+  `wPartyCount` (`:6`, `:16`), writes the species and the `$ff` sentinel into the list (`:24-28`),
+  then runs `predef AskName` (`:52`), and only after that resolves the `wPartyMons` slot (`:53-63`)
+  and writes the first struct field (`:123-124`). For the whole prompt the party reads list/struct
+  disagree — 520 frames under a B-mashing driver, unbounded for a human (receipt
+  `tests/fixtures/gen1/receipts/e2e_link_new_a_result.txt` as refreshed by `a478ae7`:
+  `PARTY_UNREADABLE @6460 … species list and struct disagree` → `PARTY_READABLE @6980`). Client:
+  the writes gate pauses and keeps its queue; a `force_faint` arriving in the window is deferred
+  (`lua/gen1/client.lua:189-196`, `:223-229`; fixes `1a5941f`, `cb2fe26`).
+- **Boot and reset are not "in the game".** `home/init.asm` zero-fills the whole WRAM0 segment
+  (`:33-41`: `ld hl, STARTOF(WRAM0)` / `ld bc, SIZEOF(WRAM0)` / clear loop) — the `$C000-$DFFF` GB
+  block that holds every symbol in our generated profile (`$C100-$DEE2`). `wPartyCount` and
+  `wPlayerID` therefore read 0 until the save returns, and it returns only when `MainMenu` runs
+  `predef TryLoadSaveFile` (`engine/menus/main_menu.asm:11`) — *before* the CONTINUE/NEW GAME
+  choice, so a readable party at the menu is still not a running game. Client: hello waits for the
+  overworld checkpoint or a running battle, and a WRAM clear re-hellos the next game (`cb2fe26`;
+  `tests/unit/test_gen1_client.py::test_hello_waits_for_the_overworld_checkpoint_not_the_main_menu`).
+- **Out-of-battle poison names its victim.** `ApplyOutOfBattlePoisonDamage` walks the party with
+  `wWhichPokemon` as the slot (`engine/events/poison.asm:13`, `:71-72`); the faint check at
+  `.noBorrow` (`:37-40`) is reached with the mon's HP already decremented to zero (`:28-30`); the
+  pinned bytes start at the `push hl` after that check, so the site fires ONLY on a faint, with the
+  status byte still poisoned until the `ld [hl],a` three bytes later (`:42-45`). The point must
+  read `wWhichPokemon` — the pinned site is
+  `ApplyOutOfBattlePoisonDamage.noBorrow` (`03:46D9`, `data/games/gen1_rby/engine_signals.json
+  poison_faint`). Before the fix an overworld poison faint emitted nothing (`202045b`).
+- **A SLINK apply removes and adds behind the client's back.** `patch/gen1/src/native_trade.asm`
+  calls `RemovePokemon` (`:158`) for the offered mon and `AddEnemyMonToPlayerParty` (`:167`) for the
+  received one, both on a live party, so the pinned `_RemovePokemon` hook fires mid-apply unless the
+  client ignores `remove_pokemon` while a SLINK apply is armed (`8d2f0e8`, whose message carries the
+  pre-fix run's spurious `party_to_box` for the incoming key and the `box_mon_failed "no box
+  module"` it drew). The refreshed trade receipts (`a478ae7`) contain neither line — grep for
+  `party_to_box`/`box_mon_failed` in `tests/fixtures/gen1/receipts/e2e_trade_new_a_result.txt`
+  returns nothing.
+- **Saving.** `SaveMainData` (`engine/menus/save.asm:208`) copies `wPlayerName`→`sPlayerName`
+  (`:216-219`), then `wMainDataStart..wMainDataEnd`→`sMainData` (`:220-223`), then the current box
+  `wBoxDataStart..End`→`sCurBoxData` (`:230-233`), and stores `sMainDataCheckSum = CalcCheckSum`
+  over `sGameData..sGameDataEnd` (`:237-240`). `wCurrentBoxNum` lives inside that main block
+  (`ram/wram.asm:1749` `wMainDataStart`, `:1899` `wCurrentBoxNum` — "bit 7: whether the player has
+  changed boxes before", `:2219` `wMainDataEnd`), so its saved byte is at
+  `sMainData + (wCurrentBoxNum - wMainDataStart)` — not an offset from `wPlayerName`, which is a
+  separate copy. The non-current boxes are the two SRAM sections pret names "Saved Boxes
+  1"/"Saved Boxes 2" (`ram/sram.asm:37-48`; banks 2 and 3 by their own checksum labels
+  `sBank2AllBoxesChecksum`/`sBank3AllBoxesChecksum`; `sCurBoxData` at `:21` is the current one). A
+  flushed SaveRAM is therefore stale until the player saves; the client now makes pret's bit-7 flag
+  durable in the saved copy (`36b3772`).
+- **Wild-battle menu state.** `wTextBoxID` (`ram/wram.asm:1616`) stays `$0B` through "Can't
+  escape!" (`data/text/text_2.asm:937`) and the enemy turn while `wCurrentMenuItem` holds stale
+  values, so drivers must gate on the drawn FIGHT row (observed; `3650ace`). Native menus poll one
+  snapshot per loop: `HandleMenuInput` (`home/window.asm:1`) does `call JoypadLowSensitivity`
+  (`:29`) → `ldh a, [hJoy5]` (`:30`) → `and a` / `jr nz, .keyPressed` (`:31-32`), so a press that
+  is not present at a poll instant is lost; the driver re-pulses on the 16-frame cadence
+  (observed; `3650ace`).
