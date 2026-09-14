@@ -31,7 +31,7 @@ _DISCONNECT_SUFFIX = "disconnected; paired reconciliation required"
 # payload's `reason` (and the dashboard tooltip); these are only the one-line instructions.
 HOLD_TEXT = {
     "Linked death requires verified physical faint and memorial closure":
-        "A linked faint is waiting - get both games outdoors and safe so the death can be applied and buried",
+        "A linked faint is waiting - stand still in a safe overworld spot so it can be applied",
     "Synchronized storage requires verified disposition and save":
         "Party/box sync is waiting - reach a PC or a safe save point in-game",
     "No-catch partner retirement requires verified physical archive and save":
@@ -56,12 +56,12 @@ HOLD_TEXT = {
         "Waiting for both games to finish their first save so the run can start",
 }
 REATTACH_TEXT = {
-    "armed": "Trade write armed - do not close the emulator; if it already closed, use Recover",
-    "done_unreleased": "A native write finished but was not released - reopen the same run",
-    "lease_open": "A native write lease is still open - reopen the same run",
-    "pending_native_command": "A native command is still pending - reopen the same run",
-    "active_trade": "A trade is still active - finish it in-game",
-    "trade_open": "A trade record is not closed - finish it in-game",
+    "armed": "Trade write armed - keep this emulator open; a recovery step is required if it closed",
+    "done_unreleased": "A native write is unreleased - recovery is required before play continues",
+    "lease_open": "A native write is unreleased - recovery is required before play continues",
+    "pending_native_command": "A native write is unreleased - recovery is required before play continues",
+    "active_trade": "A trade is still open - finish it in-game or wait for recovery",
+    "trade_open": "A trade is still open - finish it in-game or wait for recovery",
 }
 
 
