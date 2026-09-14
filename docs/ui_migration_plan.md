@@ -3,36 +3,28 @@
 *Handoff document. Rewritten 2026-09-14 by the session that built the mockups. Assume the
 reader has none of that conversation.*
 
-**Status (2026-09-14, later):** Phases 0–8 and the first half of 9 are committed on
-`claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`).
-Done in 7: the three raw pages moved to `templates/pages/`, `/broadcast` and `/tools` on the
-Manager. Done in 8: randomizing is part of creating a Gen 1 run (the creator's Randomizer section;
-`/runs/{id}/randomizer` rebuilds a pair later); categories → `build_categories`, preflight,
-browse, download; verified against the real jar in ~1 s per pair, so no job queue. Owner
-feedback applied: no *Boxed, unlinked* zone (only fallen and pending are exceptional), the
-randomizer is called *Randomizer*, and an at-risk pair is tinted, not captioned. Done in 9: mockups,
-Track B and 22 fonts deleted, fixtures moved to `tests/fixtures/ui/`, requirements split,
-README rewritten for the one-origin Manager. Also done in 9: the overlay handlers are one table (`STREAM_OVERLAYS`, −220),
-`RUN_FLAGS` replaces four hand-written option lists, `dashboard.css` lost the 205 rules nothing
-emits (1 769 → 1 090 lines; sidebar/switcher/phase-banner chrome kept). **Still open in 9:**
-`sidebar.css` (calc page only; 230 lines shared with dashboard.css), `--font-ui` flip after
-checking every overlay at catalogue size, the route-docs test, `calc/src/js/slink_bridge.js`
-palette, `html_render.py` helpers now only tests call. Not done
-from 7: Debug as a drawer (rail links to the run's `/debug` instead) and the Manager owning
-`obs_config.json` (OBS/Twitch stay on the run's port, linked from Broadcast). Three
-`claude/ui-mockup-track-b*` branches remain for the owner to force-delete (a hook blocks it here). Gate per phase: `pytest tests/unit tests/integration -q` and
-`ruff check . --select E9,F6,F7,F81,F82`. Dev: `.claude/launch.json` has `run-server` (8098/54331)
-and `manager` (8090); populate a run with
-`SLINK_MOCK_TCP_PORT=… SLINK_MOCK_HTTP=… SLINK_MOCK_HOLD=100000 python tools/inject_full_mocks.py --game gen1`.
+**Status (2026-09-14, end of session):** Phases 0–8 and most of 9 are committed on
+`claude/soul-link-ui-mockups-40f67b` (worktree `dreamy-pike-09f3e3`, based on `79d5172`,
+HEAD `6a66b57`, suite 2 553 green). **Next up: Phase 8b below — expose the rest of UPR's
+SLink-compatible settings (level curve, difficulty).** Its research is finished and recorded
+there; no code for it exists yet. After that, what is left of 9: `sidebar.css` (calc page
+only), `--font-ui` flip after checking every overlay at catalogue size,
+`calc/src/js/slink_bridge.js` palette, `html_render.py` helpers only tests call. Deliberately
+not done: Debug as a drawer (the rail links to the run's `/debug`), the Manager owning
+`obs_config.json`. Owner to force-delete the three `claude/ui-mockup-track-b*` branches (a
+hook blocks it here). **Merge:** master is still `adf3362`; the Gen 1 session will
+fast-forward it to `79d5172` and message this session — then rebase, take their delete of
+`tests/unit/test_gen1_adapter.py`, resolve one hunk each in `server/manager.py` (imports) and
+`tests/unit/test_upr_pipeline.py` (SIM115), run the suite, FF master to this branch.
 
 ## Read this first
 
-- **The design is already built and reviewed.** `server/static/mockups/a/index.html` on branch
-  `claude/soul-link-ui-mockups-40f67b` is a working mockup of the target UI, refined over
-  six rounds of feedback. Run `python -m server.manager --host 127.0.0.1` and open
-  `http://localhost:8090/static/mockups/a/index.html` (the explicit `index.html` matters —
-  `/static/` is mounted without `show_index`). Rationale: `docs/ui_mockup_brief.md` §3.
-  **Do not redesign it.** Port it.
+- **The design is built and shipped.** The pair board is `server/board.py` +
+  `server/templates/_board.html`; the Manager shell is `server/templates/manager.html`; the
+  styling is `server/static/board.css` on the `slink.css` tokens. It was ported from a mockup
+  refined over six rounds of owner feedback (the mockup itself was deleted in Phase 9a and is
+  in history at `aa246f6^`). Rationale: `docs/ui_mockup_brief.md` §3–4. **Do not redesign
+  it.** Run it: `python -m server.manager --host 127.0.0.1` → `http://localhost:8090/`.
 - **This is master work.** The `gen1/rc` durable-runtime line (135 `server/gen1_*.py`
   modules, `protocol.py`, `staged_state.py`, `rom_contract` admission) is **on hold** and is
   not a dependency of anything here. Ignore it and every `gen1-*` worktree.
@@ -110,11 +102,11 @@ method in a one-line PR and tell the Gen 1 session.
 
 | Worktree / branch | State |
 |---|---|
-| `dreamy-pike-09f3e3` → `claude/soul-link-ui-mockups-40f67b` @ `121fb1c` | **This work.** Clean; 61 files / +6 375 over master: mockups, fixtures, brief, `inject_full_mocks` upgrades. |
-| `gen1-master-release-plan-6b4279` @ `adf3362` | The parallel Gen 1 release. Coordinate, don't touch. |
+| `dreamy-pike-09f3e3` → `claude/soul-link-ui-mockups-40f67b` @ `6a66b57` | **This work.** Clean, based on `79d5172`. |
+| `gen1-master-release-plan-6b4279` @ `e653e86`+ | The parallel Gen 1 release (adapter rewrite from pret, on `79d5172` + `07ba1ca`). Coordinate, don't touch. |
 | `gen1-rby-code-sweep-8d06e2` → `gen1/rc` @ `827b810` | On hold. **Read-only** — cherry-pick source for Phase 0 only. Never check anything out in it. |
 | 16 other `gen1-*` / `codex/*` worktrees | On hold. Ignore. |
-| `agent-a7f68e4f2daf34d8d` → `claude/ui-mockup-track-b` @ `05c419b` | Track B's failed first attempt, merged into this branch at `f309699`. Prunable (Phase 9). |
+| (removed) `claude/ui-mockup-track-b*` | Track B branches; the worktree is gone, the three branches await the owner's force-delete. |
 | `recursing-hopper-86c382` → `claude/codex-claude-connect-402b4e` @ `adf3362` | Unrelated. Ignore. |
 
 ---
@@ -445,6 +437,90 @@ Note `ALL_CATEGORIES` is hardcoded in three test files, duplicating `_CATEGORY_M
 them import it.
 
 ---
+
+# Phase 8b — Expose the rest of the randomizer *(researched, not built)*
+
+Owner (2026-09-14): *"we need to expose more of the randomizer settings, such as level curve
+and other difficulty adjustments. If it's compatible with SLink, we should allow it."*
+
+## What "compatible" means here
+
+The pipeline's refusal rule (`upr_settings.forbidden_enabled`) is the definition: anything
+that changes **types, evolutions, level-up movesets, base stats or move data** is out,
+because the species and type clauses must mean the same thing on both cartridges and
+`_check_content` verifies base stats + the evolution graph survived. Everything that only
+changes *which* species appears where, at what level, with what items/TMs, is in. Two
+extra exclusions found while researching: **`standardizeEXPCurves` / `selectedEXPCurve`**
+write the growth-rate byte inside Gen 1's base-stats table, so `_check_content` would
+refuse the ROM; and **`ALLOW_PIKACHU_EVOLUTION`** (Yellow) changes an evolution. In-game
+trade randomization is left out too: the Gen 1 client's NPC-trade `key_change` path and the
+gift-area logic reason about specific species, and nobody has tested them on randomized
+trades.
+
+## The byte layout, from the primary source
+
+`Settings.toString()` in UPR ZX **v4.6.1** — fetched and read this session from
+`https://raw.githubusercontent.com/Ajarmar/universal-pokemon-randomizer-zx/v4.6.1/src/com/dabomstew/pkrandom/Settings.java`
+(2 389 lines; `toString()` starts at line 364). `makeByteSelected(a, b, c, …)` puts argument
+*i* at bit *i*. The bytes the new options touch, verbatim from that method:
+
+| Byte | Layout | Options it carries |
+|---|---|---|
+| 0 | bit3 `randomizeTrainerNames`, bit4 `randomizeTrainerClassNames` (bits 0,1,2,5,6 are forbidden evo/move tweaks) | trainer names |
+| 4 | bit0 CUSTOM, bit1 COMPLETELY_RANDOM, bit2 UNCHANGED, bit3 RANDOM_WITH_TWO_EVOLUTIONS, bit4 `randomizeStartersHeldItems`, bit5 `banBadRandomStarterHeldItems`, bit6 `allowStarterAltFormes` | starters mode |
+| 13 | bit0 UNCHANGED, bit1 RANDOM, bit2 DISTRIBUTED, bit3 MAINPLAYTHROUGH (Gen 5 only — `tweakForRom` demotes it), bit4 TYPE_THEMED, bit5 TYPE_THEMED_ELITE4_GYMS | trainers mode |
+| 14 | `(trainersForceFullyEvolved ? 0x80 : 0) \| trainersForceFullyEvolvedLevel` | force fully evolved from level N |
+| 15 | bit0 CATCH_EM_ALL, bit1 AREA_MAPPING, bit2 restriction NONE, bit3 TYPE_THEME_AREAS, bit4 GLOBAL_MAPPING, bit5 wild RANDOM, bit6 wild UNCHANGED, bit7 `useTimeBasedEncounters` | wild mode + restriction |
+| 16 | bit0 `useMinimumCatchRate`, bit1 `blockWildLegendaries`, bit2 SIMILAR_STRENGTH, bit3/4 held items (Gen 1: cleared by `tweakForRom`), bit7 `balanceShakingGrass` | min catch rate, legendaries, similar strength |
+| 17 | bit0 UNCHANGED, bit1 RANDOM_MATCHING, bit2 COMPLETELY_RANDOM, bit3 SIMILAR_STRENGTH, bit4 `limitMainGameLegendaries`, bit5 `limit600`, bit6/7 alt formes / megas | statics mode |
+| 18 | bit0 compat COMPLETELY_RANDOM, bit1 RANDOM_PREFER_TYPE, bit2 compat UNCHANGED, bit3 tms RANDOM, bit4 tms UNCHANGED, bit5 `tmLevelUpMoveSanity`, bit6 `keepFieldMoveTMs`, bit7 compat FULL | TM moves + compatibility |
+| 24 | bit0 RANDOM, bit1 SHUFFLE, bit2 UNCHANGED, bit3 `banBadRandomFieldItems`, bit4 RANDOM_EVEN | field items |
+| 27 | bit0 `trainersUsePokemonOfSimilarStrength`, bit1 `rivalCarriesStarterThroughout`, bit2 `trainersMatchTypingDistribution`, bit3 `trainersBlockLegendaries`, bit4 `trainersBlockEarlyWonderGuard` (Gen 1: cleared), bit5 swap megas, bit6 `shinyChance`, bit7 `betterTrainerMovesets` | trainer difficulty |
+| 32–35 | misc tweaks, big-endian int (`MISC_TWEAKS` already transcribed) | fastest text, PC potion, lower-case names, nerf X Accuracy, fix crit rate, update type effectiveness |
+| 36 | `(trainersLevelModified ? 0x80 : 0) \| (trainersLevelModifier + 50)` | **trainer level curve −50…+50 %** |
+| 38 | `(wildLevelsModified ? 0x80 : 0) \| (wildLevelModifier + 50)` | wild level curve |
+| 47 | `(staticLevelModified ? 0x80 : 0) \| (staticLevelModifier + 50)` | static level curve |
+| 50 | `eliteFourUniquePokemonNumber \| ((minimumCatchRateLevel − 1) << 3)` | min catch rate level 1–5 |
+
+**Why the level modifier probes "did nothing":** the session's first experiment set bit 7 of
+*byte 13* — the boolean lives in byte 36's own top bit (`0x80 | (mod+50)`), and likewise
+byte 38 / 47 / 14 carry their own enable bit. Every byte in the table above was read from
+`toString()`, not guessed; the existing `FLAGS` dict in `upr_settings.py` is consistent with
+it (bytes 13, 15, 16, 17, 18, 24, 27 match exactly).
+
+`tweakForRom()` (Settings.java:904) for `Gen1RomHandler` clears: `limitPokemon`, wild and
+starter held items, `trainersBlockEarlyWonderGuard`, time-based encounters, move tutors,
+in-game trade items/IVs, abilities. Offering those to a Gen 1 run is harmless but pointless;
+the form should not.
+
+## The option set to expose
+
+| Group | Option | Bytes | Compatible | UI |
+|---|---|---|---|---|
+| Wild | mode: random / 1-to-1 area mapping / global 1-to-1 | 15 | ✓ | choice |
+| Wild | restriction: none / similar strength / catch 'em all / type-themed areas | 15, 16 | ✓ | choice |
+| Wild | block legendaries (default on) | 16 | ✓ | bool |
+| Wild | minimum catch rate level 0(off)…5 | 16, 50 | ✓ | int |
+| Wild | **level curve** −50…+50 % | 38 | ✓ | int |
+| Starters | random / random with two evolutions | 4 | ✓ | choice |
+| Statics | random / random matching / similar strength; level curve | 17, 47 | ✓ | choice + int |
+| Trainers | mode: random / distributed / type-themed / type-themed gyms+E4 | 13 | ✓ (not MAINPLAYTHROUGH) | choice |
+| Trainers | similar strength · rival carries starter · block legendaries (default on) · match typing distribution | 27 | ✓ | bools |
+| Trainers | **level curve** −50…+50 % | 36 | ✓ | int |
+| Trainers | force fully evolved from level 1…100 (0 = off) | 14 | ✓ | int |
+| Trainers | randomize trainer names / class names | 0 | ✓ (cosmetic; killfeed shows whatever the cartridge says) | bools |
+| TMs | TM moves random; compatibility unchanged / random / prefer type / full; level-up sanity; keep field-move TMs | 18 | ✓ (TM compat is not a learnset) | choice + bools |
+| Field items | random / shuffle / random even; ban bad items | 24 | ✓ | choice + bool |
+| Misc | fastest text (on) · randomize PC potion · lower-case names · nerf X Accuracy · fix crit rate · update type effectiveness | 32–35 | ✓ (none touch species/types/evos; Gen 1 has no calc to mislead) | bools |
+| — | in-game trades, held items, EXP curves, `ALLOW_PIKACHU_EVOLUTION`, movesets/types/evos/base stats/move data | | ✗ | not offered |
+
+## How to build it (the shape, so it is one change)
+
+1. **`upr_settings.py`:** an `OPTIONS` table — name → `{kind: bool|choice|int, default, choices|range, group, label, help, writes}` where `writes` is how a value lands (flag names, or `(byte, mask, fn)` for the numeric bytes). Extend `build(flags, misc, rom_name, *, bytes_override)` to take raw byte values for 14/36/38/47/50. `build_spec(spec) -> bytes` validates against `OPTIONS` and writes; `build_categories(enabled, fastest_text)` becomes a thin wrapper (its callers — `manager.handle_randomize`, four test files — keep working). `spec_from_parsed(parsed) -> dict` is the inverse, so the run's `randomizer` record and the "randomized: …" line can say *trainers +30 %, force evolved from 36* instead of a category list.
+2. **The envelope stays exact:** `permitted_byte_values()` currently enumerates 2⁶×2 whole files. Replace with per-byte products: for each byte, the options that touch it (discover by building each single-option variant against the default and diffing), then enumerate the product of their value sets for that byte only. The level-modifier bytes each have 1 option × 102 values; byte 15 has 3 × 4; byte 16 has 2 × 2 × 6; nothing explodes. `unexpected_settings()` needs no change — it reads the envelope.
+3. **`handle_randomize`:** accept `spec: {...}` (the form's state) as the third alternative to `settings`/`categories`; `categories` stays for the tests and for `tools/`.
+4. **`_randomizer_fields.html` + `static/randomizer.js`:** render `OPTIONS` by group (chips for choices, `.mk-opt` for bools, a range or number input for the curves with the value shown in `.num`); `rdraft` becomes the spec; the preflight and browse parts are unchanged. Ship `OPTIONS` to the page inside `SLINK_RANDOMIZER` (from `_randomizer_form`).
+5. **Tests:** `tests/unit/test_upr_settings.py` — round-trip every option through `build_spec` → `load` → `spec_from_parsed`; the envelope accepts every `build_spec` output and still refuses the hand-built forbidden files; `test_manager_randomize.py` — a `spec` body. **Then one real run against the jar with trainers +50 % and force-evolved-from-1, reading the log's `#1 (YOUNGSTER)` line** (baseline Lv11 → expect Lv16, all evolved) — the log lists every trainer's team and every wild slot, which is how each option's effect is provable in seconds (`scratchpad/upr_probe.py` from this session did exactly that; 0.5 s per randomize).
 
 # Phase 9 — Cleanup
 
