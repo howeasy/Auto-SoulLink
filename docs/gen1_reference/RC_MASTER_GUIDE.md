@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:37:02+00:00",
+  "updated_at_utc": "2026-09-14T09:39:17+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "dc7b970",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). C1 round 2 dc7b970 under adversarial review (cx-d92e3a06). Next: C3 (spec recorded) on the C1 worker after C1 acceptance; R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2 (+2b/2c), FT-3. Under Codex review: HX-2 f4f74da + R5a-3 4dec149 (cx-5a3222f5). Active: C1 round 2 (Sonnet), R5b-1 server capture (Sonnet, spec docs/gen1_reference/reviews/R5b-implementation-spec.md). C1 ACCEPTED (bounded). C3 active on the C1 worker (owns the C1 open lifecycle test); R5b-2 Lua client + R5b-3 Manager after R5b-1; N3 spec recorded (READY WAIT R5b-1); R5b-2 Lua client active (Sonnet); OMP: FT-2d (active); HX-2b + HX-2c wait for R5b-1 to release server.py/gen1_runtime.py. R5a ACCEPTED.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -873,7 +873,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "receipt": "commits 8ea6f25 + dc7b970; whiteout/faint/memorial suites 96 passed; round-2 diff sha256 cf1843a0…8ca5; docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md (MODEL-only). OPEN test debt: the fully real two-link ACK lifecycle test (review finding 4) was not delivered — second real link needs a settled storage linked job; to be absorbed by C3 fixtures.",
       "independent_review_refs": [
         "Codex ADVERSARIAL_REVIEW cx-221a8234: REJECT — collateral branch checks raw signal names but verify_state sees the decoded kind 'faint' (gen1_engine_signals.py:88,93); shared whiteout sets link.cause='whiteout' vs the common cause check (state.py:2062, faint_runtime.py:588-594); collateral binding to a real whiteout record/link halves missing; positive test bypasses the validator with fakes. Primary path, deferred machinery, ACK/memorial reuse, killed_at and HUD ordering ACCEPTED.",
-        "Round 2 dc7b970: findings 1,2,3,5,6 fixed red-then-green; finding 4 (fully real two-link lifecycle test) not delivered; Codex ADVERSARIAL_REVIEW cx-d92e3a06 in flight"
+        "Round 2 dc7b970: Codex ADVERSARIAL_REVIEW cx-d92e3a06 ACCEPT-WITH-NOTES as bounded MODEL-level product code — kind/cause/binding fixes verified by direct component-validator tests; OPEN: real collateral validate->commit->reopen->ACK lifecycle (finding 4) and deferred completion leg (finding 5) owned by C3. C1 INTEGRATED (bounded)."
       ]
     },
     {
@@ -979,6 +979,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "independent_review_refs": [
         "coordinator: client_journal.lua:42-50 completion validator requirement accepted as a hard protocol constraint for both R5b-1 and R5b-2"
       ]
+    },
+    {
+      "id": "c3",
+      "owner": "isolated Claude Sonnet worker (implementation; the C1 author)",
+      "state": "active",
+      "files": ["server/gen1_rebuild_runtime.py", "tests/unit/test_gen1_rebuild_runtime.py", "server/gen1_whiteout.py", "server/gen1_storage_runtime.py", "server/gen1_storage_policy.py", "server/gen1_faint_runtime.py", "server/gen1_memorial_runtime.py", "tests/unit/test_gen1_whiteout.py", "tests/unit/test_gen1_storage_runtime.py", "docs/gen1_reference/reviews/C3-RB-rebuild.md", "server/gen1_runtime_state.py (verify hook registration only, last, sequenced with R5b-1)", "server/gen1_runtime.py (audit hook only, last, sequenced with R5b-1)"],
+      "next_action": "Whiteout rebuild per the C3 spec: plan capture, rebuild storage job kind, completion -> sync_retrieve_done after both verified writes, memorial arbitration, restart reconciliation; PLUS the C1 open test (real second linked pair with settled storage job, commit/reopen, both ACKs via production path, deferred variant).",
+      "reuse_decision": "reuses the shared rebuild plan (state.py) and the Gen 1 storage-job machinery; all new code Gen 1; state.py untouched"
     },
     {
       "id": "c3-spec",
