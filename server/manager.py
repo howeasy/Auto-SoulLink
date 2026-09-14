@@ -24,6 +24,7 @@ import re
 import secrets
 import shutil
 import signal
+import socket
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -927,6 +928,35 @@ class RunManager:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    async def handle_run_cartridge(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/cartridge/{player} — the FINAL admitted cartridge bytes.
+
+        Only a native run has one, and it comes from that run's own verified prepared pair
+        (`PreparedCartridges` re-checks every hash when it opens), never from a caller-supplied
+        path: the two machines are on different filesystems, so the bytes have to travel.
+        """
+        run_id = request.match_info.get("run_id", "")
+        player = request.match_info.get("player", "")
+        if player not in ("a", "b"):
+            return web.json_response({"ok": False, "error": "unknown player"}, status=404)
+        run = _find_run(_load_registry(), run_id)
+        if run is None or not run.get("native_trade"):
+            return web.json_response({"ok": False, "error": "this run has no downloadable cartridge"}, status=404)
+        directory = _run_directory(run_id)
+        if directory is None or not (directory / "prepared").is_dir():
+            return web.json_response({"ok": False, "error": "this run has no prepared cartridge"}, status=404)
+        from server.gen1_prepared_cartridges import PreparedCartridges
+        try:
+            cartridges = await asyncio.to_thread(PreparedCartridges, directory / "prepared")
+            data = cartridges.rom(player)
+        except Exception as problem:
+            log.warning("prepared cartridge for %s/%s did not validate: %s", run_id, player, problem)
+            return web.json_response({"ok": False, "error": "prepared cartridge unavailable"}, status=404)
+        variant = (run.get("cartridges", {}).get(player) or {}).get("variant", "cartridge")
+        return web.Response(body=data, content_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="slink_{variant}_{player}.gb"',
+                     "X-SLink-ROM-SHA1": hashlib.sha1(data).hexdigest()})
+
     async def handle_create_gen1(self, request: web.Request) -> web.Response:
         """Prepare a fresh RBY runtime before starting its server process."""
         import sqlite3
@@ -1606,6 +1636,33 @@ class RunManager:
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
+def _lan_addresses() -> list[str]:
+    """Best-effort non-loopback IPv4 addresses of this host. Never raises: a machine with no
+    usable interface still starts, it just cannot tell a partner where to connect."""
+    found = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if address and address not in found and not address.startswith("127."):
+                found.append(address)
+    except OSError:
+        pass
+    return found
+
+
+def startup_banner(host: str, port: int) -> list[str]:
+    """The lines a human reads at startup. On 0.0.0.0 the partner's URL matters as much as
+    the local one: the second machine cannot reach 'localhost'."""
+    display = "localhost" if host in ("0.0.0.0", "127.0.0.1") else host
+    lines = [f"SLink Manager running at http://{display}:{port}/",
+             f"Stream overlays at http://{display}:{port}/stream (fixed port — safe for OBS)"]
+    if host == "0.0.0.0":
+        for address in _lan_addresses():
+            lines.append(f"Partner joins at: http://{address}:{port}/")
+        lines.append(f"Allow inbound TCP {port} (Manager) plus each run's TCP/HTTP ports in the firewall")
+    return lines
+
+
 async def main(host: str, port: int):
     manager = RunManager(bind_host=host, manager_port=port)
     app = web.Application(middlewares=[csrf_protection, theme_cache, registry_errors])
@@ -1621,6 +1678,7 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_get("/api/runs/{run_id}/cartridge/{player}", manager.handle_run_cartridge)
     app.router.add_post("/api/runs/gen1", manager.handle_create_gen1)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
@@ -1677,9 +1735,8 @@ async def main(host: str, port: int):
     await runner.setup()
     site = web.TCPSite(runner, host, port)
     await site.start()
-    display = "localhost" if host in ("0.0.0.0", "127.0.0.1") else host
-    log.info(f"SLink Manager running at http://{display}:{port}/")
-    log.info(f"Stream overlays at http://{display}:{port}/stream (fixed port — safe for OBS)")
+    for line in startup_banner(host, port):
+        log.info(line)
 
     try:
         await asyncio.Event().wait()

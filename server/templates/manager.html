@@ -384,18 +384,23 @@
             </span>
             <div class="mgr-launcher-btns">
               <a class="mgr-btn mgr-btn-launcher"
-                 :href="'/api/runs/' + current.run_id + '/launcher/a'"
-                 :download="'slink_' + (current.safe_name || current.run_id) + '_a.lua'">
+                 :href="'/api/runs/' + current.run_id + '/launcher/a?bundle=1'"
+                 :download="'slink_a_launch.zip'">
                 <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-arrow-down"/></svg>
-                Player A
+                Player A bundle (.zip)
               </a>
               <a class="mgr-btn mgr-btn-launcher"
-                 :href="'/api/runs/' + current.run_id + '/launcher/b'"
-                 :download="'slink_' + (current.safe_name || current.run_id) + '_b.lua'">
+                 :href="'/api/runs/' + current.run_id + '/launcher/b?bundle=1'"
+                 :download="'slink_b_launch.zip'">
                 <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-arrow-down"/></svg>
-                Player B
+                Player B bundle (.zip)
               </a>
             </div>
+            <p class="mgr-rand-note">
+              Each player downloads THEIR OWN bundle on THEIR OWN machine from this page, unzips it
+              inside their SLink installation, then runs: python tools/launch_bizhawk.py --manifest
+              &lt;path to launch.json&gt;
+            </p>
             <p class="mgr-rand-note" x-show="current.resume">
               Start with --resume-save &lt;your previous .SaveRAM&gt;
             </p>
@@ -451,8 +456,16 @@
                     <strong x-text="'Player ' + pid.toUpperCase()"></strong>
                     <span x-text="current.cartridges[pid].variant"></span>
                     <code x-text="current.cartridges[pid].final_rom_sha1"></code>
+                    <template x-if="current.native_trade">
+                      <a class="mgr-btn" :href="'/api/runs/' + current.run_id + '/cartridge/' + pid"
+                         :download="'slink_' + current.cartridges[pid].variant + '_' + pid + '.gb'"
+                         x-text="'Download final cartridge (Player ' + pid.toUpperCase() + ')'"></a>
+                    </template>
                   </div>
                 </template>
+                <p class="mgr-rand-note" x-show="current.native_trade">
+                  The launcher verifies this file's SHA1 — download YOUR OWN cartridge.
+                </p>
               </div>
             </template>
             <template x-if="!current.cartridges">

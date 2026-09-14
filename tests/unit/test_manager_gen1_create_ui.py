@@ -93,6 +93,26 @@ def test_the_generic_path_survives(html):
     assert "'/api/runs/new'" in body or '"/api/runs/new"' in body, "the generic run fallback is gone"
 
 
+def test_the_launcher_buttons_download_the_bundle_not_the_bare_lua(html):
+    """The isolated launch tool needs launch.json plus the launcher Lua, which only the ZIP
+    carries; a bare .lua download leaves the partner unable to start."""
+    assert re.search(r":href=\"'/api/runs/' \+ current\.run_id \+ '/launcher/a\?bundle=1'\"", html), \
+        "Player A's button does not request the bundle"
+    assert re.search(r":href=\"'/api/runs/' \+ current\.run_id \+ '/launcher/b\?bundle=1'\"", html), \
+        "Player B's button does not request the bundle"
+    assert "Player A bundle (.zip)" in html and "Player B bundle (.zip)" in html
+    assert re.search(r"downloads THEIR OWN bundle on THEIR OWN machine", html), "the handoff instruction is missing"
+    assert re.search(r"tools/launch_bizhawk\.py --manifest", html), "the launch command is not named"
+    assert not re.search(r"/launcher/[ab]'", html), "a bare .lua launcher link is still offered"
+
+
+def test_the_run_card_offers_the_final_cartridge_with_its_sha1_note(html):
+    assert re.search(r":href=\"'/api/runs/' \+ current\.run_id \+ '/cartridge/' \+ pid\"", html), \
+        "no per-player cartridge download link"
+    assert re.search(r"current\.native_trade", html), "the link is not gated on a native run"
+    assert re.search(r"verifies this file's SHA1", html), "the SHA1 note is missing"
+
+
 def test_the_create_error_line_is_visible_outside_the_disclosure(html):
     """A "Enter a run name" refusal on the generic path must not hide inside a closed <details>."""
     match = re.search(r'<button class="mgr-create-btn"[\s\S]*?</button>([\s\S]{0,200})', html)

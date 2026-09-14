@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +21,9 @@ from tests.unit.test_gen1_sessions import contract
 
 
 class Request:
-    def __init__(self,body):self.body=body
+    def __init__(self,body,match_info=None):
+        self.body=body
+        self.match_info=match_info or {}
     async def json(self):return self.body
 
 
@@ -155,6 +158,43 @@ async def test_manager_native_run_refuses_a_patched_input_and_leaves_no_run_dire
 def _json_text(response):
     import json as _json
     return _json.loads(response.text)['error']
+
+
+@pytest.mark.asyncio
+async def test_manager_serves_the_final_cartridge_only_for_a_native_run(tmp_path,monkeypatch):
+    """The remote player needs the exact admitted bytes: the run's own verified prepared pair
+    serves them, and a run with no native pair has nothing to hand over."""
+    runs=[{'run_id':'run_native','name':'Native','tcp_port':5001,'http_port':8081,'status':'stopped',
+        'native_trade':True,'cartridges':{'a':{'variant':'red'},'b':{'variant':'blue'}}}]
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:runs.copy())
+    monkeypatch.setattr(gen1_prepared_cartridges,'PreparedCartridges',_PreparedPair)
+    (tmp_path/'run_native'/'prepared').mkdir(parents=True)
+    handler=manager.RunManager('127.0.0.1')
+    response=await handler.handle_run_cartridge(Request({},match_info={'run_id':'run_native','player':'b'}))
+    expected=_PreparedPair(tmp_path/'run_native'/'prepared').rom('b')
+    assert response.status==200 and response.body==expected
+    assert response.headers['X-SLink-ROM-SHA1']==hashlib.sha1(expected).hexdigest()
+    assert response.headers['Content-Disposition']=='attachment; filename="slink_blue_b.gb"'
+    runs[0]['native_trade']=False
+    assert (await handler.handle_run_cartridge(Request({},match_info={'run_id':'run_native','player':'b'}))).status==404
+    runs[0]['native_trade']=True
+    assert (await handler.handle_run_cartridge(Request({},match_info={'run_id':'run_native','player':'c'}))).status==404
+    assert (await handler.handle_run_cartridge(Request({},match_info={'run_id':'run_missing','player':'a'}))).status==404
+
+
+def test_the_startup_banner_names_the_partner_address_and_the_firewall(monkeypatch):
+    """Two humans, two machines: 'localhost' is useless to the partner, so a 0.0.0.0 bind has
+    to print the LAN URL and say which ports the firewall must allow."""
+    monkeypatch.setattr(manager,'_lan_addresses',lambda:['192.168.1.50'])
+    lines=manager.startup_banner('0.0.0.0',8090)
+    assert lines[0]=='SLink Manager running at http://localhost:8090/'
+    assert 'Partner joins at: http://192.168.1.50:8090/' in lines
+    assert any('firewall' in line and '8090' in line for line in lines)
+    monkeypatch.setattr(manager,'_lan_addresses',lambda:[])
+    assert not any('Partner joins at:' in line for line in manager.startup_banner('0.0.0.0',8090))
+    assert not any('Partner joins at:' in line for line in manager.startup_banner('127.0.0.1',8090))
+    assert manager.startup_banner('10.0.0.7',9000)[0]=='SLink Manager running at http://10.0.0.7:9000/'
 
 
 @pytest.mark.asyncio
