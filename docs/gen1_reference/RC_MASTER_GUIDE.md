@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:29:07+00:00",
+  "updated_at_utc": "2026-09-14T10:30:02+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "10ebb74",
   "live_lane": null,
@@ -950,15 +950,15 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "r5b-1",
-      "owner": "integrated by coordinator as candidates 1fbdb00 + 551e7b4 (isolated Sonnet worker, two rounds)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 3 after a second REJECT; candidates 1fbdb00 + 551e7b4 on the branch)",
+      "state": "active",
       "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
       "next_action": "Server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
       "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules",
       "receipt": "commits 1fbdb00 + 551e7b4; tests/unit/test_gen1_checkpoint_runtime.py 38 passed; 414 across adjacent suites; docs/gen1_reference/reviews/R5b-1-server-capture.md (finding->fix->test table; one documented limitation)",
       "independent_review_refs": [
         "Codex ADVERSARIAL_REVIEW cx-823ee12a: REJECT — F1 no_gameplay_since misses same-batch gameplay after the save signal (gen1_run_resume.py:114-132 vs audit_predecessor :228-231); F2 crash between the second upload ACK and finalize wedges capture in 'collecting' (checkpoint_runtime.py:183-195,279-280); F3 reconciliation by request_id alone can confirm an older archive (:285-286); F4 unbounded request_id/registry_run_id reach provenance after both ACKs; F5 source manifest pins four files, client_files=[], recomputed every construction (detects nothing); F6 no start-time binding/digest pin or awaiting-second-upload state. Hex/sequence/session checks, audit_predecessor unchanged, witness union, typed dispatch and CSRF middleware ACCEPTED.",
-        "Round 2 551e7b4: Codex ADVERSARIAL_REVIEW cx-a66d67ae in flight"
+        "Round 2 551e7b4: Codex ADVERSARIAL_REVIEW cx-a66d67ae REJECT — A1 abandonment leaves the other player's upload pending behind the release (queue blocked forever); A2 confirmed release reason=None / abandon reasons 500 chars violate the client's string<=256 bound; F2 _build_intent raise before the atomic commit and OSError from the store are non-terminal; F5 closure omits FREE/NATIVE client files and shared server deps, drift not rechecked at start/finalize; F6 no start-time binding/digest pins, timeout only on semantic activity; F3 used-id history truncated to 256; F4 start() does not validate metadata. F1 same-batch check, atomic intent and exact archive matching ACCEPTED. Round 3 dispatched (A1/A2 first)."
       ]
     },
     {
