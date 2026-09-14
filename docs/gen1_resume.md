@@ -9,7 +9,7 @@ evidence; this note is the working state around it. Plan (owner-approved):
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch
   `claude/gen1-master-release-plan-6b4279` = **master `e2fefa9`** (the merged UI-migration branch; master
   was FF'd to `79d5172` by the owner, then the UI session merged) **+ ~75 rewrite commits**, rebased
-  2026-09-14 (pre-rebase tip tagged `pre-rebase-gen1-release-912a7df`). HEAD `eb50d45`+ at the time of writing.
+  2026-09-14 (pre-rebase tip tagged `pre-rebase-gen1-release-912a7df`). HEAD `9a8c586` at the time of writing.
   master has since moved to `5c2611e` (UI-only files) — re-rebase once before the final FF.
 - The UI-migration session is done; it received the admission receipt (C-5) and closed its last item.
   Reach it via `mcp__ccd_session_mgmt__send_message` to `local_2c735b55-b185-4adc-9986-38df0aac44f2`.
@@ -57,7 +57,7 @@ START menu reopens on the last-used row; memorialize follows force_faint within 
 
 | Item | State |
 |---|---|
-| BALLGATE-DUO-1 (Codex, cx-19c2bbe2) | `ball_gate_new` MODEL cut — committed if it reported before the stop (see git log); NOT run live. Asserts: starters link on arrival (by design), no propagation before `bag_received`, has_pokeballs flips after it, SAVE + PYDEC |
+| BALLGATE-DUO-1 (Codex, cx-19c2bbe2) | `ball_gate_new` MODEL cut committed (378a386 + 9a8c586, the author's report reconciled); NOT run live. Asserts: the starter gift pair links on arrival with nuzlocke_active=false/ball_count=0 (by design), no propagation from the lab loss, bag_received flips has_pokeballs, SAVE + PYDEC; cold per-run saves, bedroom-checkpoint boot |
 | `reconnect_new` (C-2/C-1, committed 1431d08) | first live contact FAILED: "the link changed across the same-save relaunch; A's locked OT ID changed". Hypothesis: `taskkill` does not flush BizHawk's SaveRAM, so the relaunch booted the on-disk save (or a fresh New Game -> new wPlayerID). Diagnose from the kept run dir before changing anything. Wrong-save leg needs a second-OT Red save (`tools/gen1_fixtures.py` plays a fresh New Game -> random wPlayerID; verify it differs from 0x4190, name it red_town_ot2.SaveRAM) |
 | duo-pairs lane | link/deadzone/trade/admit PASS as a lane; the faint scenarios PASS individually; a full-lane pass with all scenarios not yet recorded |
 | master | `5c2611e` (UI-only files after e2fefa9); the branch is on e2fefa9 — re-rebase before the final FF |
