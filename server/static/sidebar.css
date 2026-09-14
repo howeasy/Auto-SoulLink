@@ -294,7 +294,6 @@ body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
 body.dash-collapsed .dash-sidebar-title,
 body.dash-collapsed .dash-side-label,
 body.dash-collapsed .dash-sidebar-toggle,
-body.dash-collapsed .dash-sidebar-foot .dash-sidebar-clock { display: none; }
 body.dash-collapsed .dash-sidebar-brand {
   padding: 14px 0 12px;
   justify-content: center;

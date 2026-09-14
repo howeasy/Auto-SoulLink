@@ -494,17 +494,6 @@ body {
 .mgr-preview-pop:hover {
   background: color-mix(in srgb, var(--c-link) 18%, transparent);
 }
-.mgr-preview-iframe {
-  width: 100%;
-  /* Height scales with viewport via --scale-step. At step=22px (≈1920px
-   * viewport) ≈ 484px; at step=36px (≈4600px+) ≈ 792px. The min-height
-   * keeps it usable on narrow desktops without needing a @media rule. */
-  height: calc(var(--scale-step) * 22);
-  min-height: var(--size-iframe-min);
-  border: 0;
-  background: var(--c-bg);
-  display: block;
-}
 
 /* Compact live status panel — replaces the full-page iframe.  Reads the
    run's /api/status every ~2.5s and renders just the connection +

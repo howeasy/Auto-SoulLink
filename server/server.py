@@ -1628,9 +1628,7 @@ class SLinkServer:
         Optional `form` byte (default 0) is the alt-form discriminator from Block B
         (Gen 4+). Adapters that ignore it still produce correct base-form sprites.
         """
-        if self.adapter and hasattr(self.adapter, "sprite_html"):
-            return self.adapter.sprite_html(species_id, form)
-        return ""  # Dead fallback
+        return self.adapter.sprite_html(species_id, form)
 
     _METHOD_ICON: dict[str, str] = {
         "Day":        "☀",
@@ -1719,7 +1717,7 @@ class SLinkServer:
             mtime = os.path.getmtime(path)
         except OSError:
             mtime = None
-        if mtime != getattr(self, "_rom_contract_mtime", "unset"):
+        if mtime != self._rom_contract_mtime:
             self._rom_contract = self._load_rom_contract()
             self._rom_contract_mtime = mtime
 
@@ -1775,11 +1773,11 @@ class SLinkServer:
         The distinction is only meaningful when there IS something to check, so an
         uncontracted run keeps the old behaviour exactly.
         """
-        state = (getattr(self, "admission", {}).get(player_id) or {}).get("state")
+        state = (self.admission.get(player_id) or {}).get("state")
         if state is None:
             # getattr for the same reason adapter_for uses it: some tests build an
             # SLinkServer without running __init__.
-            return not getattr(self, "_rom_contract", None)
+            return not self._rom_contract
         return state == "admitted"
 
     def _player_has_panel(self, player_id: str) -> bool:
@@ -1812,7 +1810,7 @@ class SLinkServer:
         # getattr, not a plain attribute read: some tests build an SLinkServer without
         # running __init__, and a lookup helper should answer for those rather than raise.
         # A class-level dict would be shared across instances, which is worse.
-        return (getattr(self, "_player_adapters", None) or {}).get(player_id) or self.adapter
+        return self._player_adapters.get(player_id) or self.adapter
 
     def _encounter_html(self, area_id: str, player_id: str = "",
                         key_prefix: str = "") -> str:
@@ -2317,15 +2315,6 @@ class SLinkServer:
             with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait(True)
 
-    async def _sse_heartbeat_loop(self):
-        """Send SSE keepalive comments every 15 seconds to detect dead clients."""
-        try:
-            while True:
-                await asyncio.sleep(15)
-                # Heartbeat is handled inside handle_sse via a timeout on queue.get
-        except asyncio.CancelledError:
-            pass
-
     # ── Rolling backups ───────────────────────────────────────────────────────
 
     def _both_connected(self) -> bool:
@@ -2824,7 +2813,7 @@ class SLinkServer:
         if event == "memorialize_done":
             _pre_memorial_link = self.state._key_index.get(msg.get("key", ""))
             if _pre_memorial_link:
-                _pre_memorial_status = getattr(_pre_memorial_link.status, "value", _pre_memorial_link.status)
+                _pre_memorial_status = _pre_memorial_link.status.value
 
         # Block all events from a player whose identity was rejected.
         # Only a hello with correct identity can clear the error.
@@ -3157,7 +3146,7 @@ class SLinkServer:
             _new_state = self.state.area_states.get(_area_id)
             if _new_state is not None and _new_state != _pre_area_state:
                 _area_disp = self.adapter.area_display_name(_area_id)
-                _sv = _new_state.value if hasattr(_new_state, "value") else str(_new_state)
+                _sv = _new_state.value
                 if _sv == "linked":
                     _cap_key = msg.get("key", "")
                     _link = self.state._key_index.get(_cap_key) if _cap_key else None
@@ -3325,7 +3314,7 @@ class SLinkServer:
         if event in ("capture", "no_catch") and _area_id:
             _new_state = self.state.area_states.get(_area_id)
             if _new_state is not None and _new_state != pre_area_state:
-                _sv = _new_state.value if hasattr(_new_state, "value") else str(_new_state)
+                _sv = _new_state.value
                 if _sv == "linked":
                     fired.append(("linked", player_id, {}))
                     fired.append(("linked", _partner, {}))
@@ -3355,7 +3344,7 @@ class SLinkServer:
         state = self.state.area_states.get(area_id)
         if state is None:
             return False
-        sv = state.value if hasattr(state, "value") else str(state)
+        sv = state.value
         return sv not in ("linked", "dead_zone")
 
     def _build_status_dict(self) -> dict:
@@ -3470,7 +3459,7 @@ class SLinkServer:
 
         return {
             # "" when the last save succeeded; the error text when it did not.
-            "save_failed": getattr(s, "save_failed", ""),
+            "save_failed": s.save_failed,
             "players": {
                 pid: {
                     "connected":      self.connected_players.get(pid, {}).get("connected", False),
@@ -3498,9 +3487,9 @@ class SLinkServer:
                     # Surfaced rather than only logged: a player whose events are being
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.
-                    "admission": getattr(self, "admission", {}).get(pid, {}).get(
+                    "admission": self.admission.get(pid, {}).get(
                         "state", "admitted"),
-                    "admission_reason": getattr(self, "admission", {}).get(pid, {}).get(
+                    "admission_reason": self.admission.get(pid, {}).get(
                         "reason", ""),
                     "encounter_table": self._enc_table_for_status(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, ""),
@@ -4070,10 +4059,6 @@ class SLinkServer:
             conn_badge = ('<span class="badge badge-online">&#9679; online</span>'
                           if is_online else
                           '<span class="badge badge-offline">&#9675; offline</span>')
-            # Per-player Nuzlocke status badges removed — the top-of-page
-            # phase banner is the single source for run lifecycle state
-            # ("Waiting for Pokéballs" / "Run in progress" / "Game over").
-            nuz_badge = ""
             pending_bonus_cnt = len(s.pending_bonus.get(pid, []))
             pending_bonus_badge = (
                 f'<span class="badge badge-bonus">&#10022; {pending_bonus_cnt} bonus pending</span>'
@@ -4126,7 +4111,7 @@ class SLinkServer:
                 highest_party_level=_hi_lv)
             parts.append(
                 f'<div class="card-hdr">'
-                f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{nuz_badge}{pending_bonus_badge}{gym_html}</h3>'
+                f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{pending_bonus_badge}{gym_html}</h3>'
                 f'<div class="card-hdr-right">{dl_icon}</div></div>'
             )
             parts.append(
@@ -5093,9 +5078,9 @@ class SLinkServer:
         # Phase resolution — read run lifecycle signals from the state machine.
         s = self.state
         po = s.pokeballs_obtained or {}
-        alive = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) == "alive")
-        dead  = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) in ("dead", "memorial"))
-        if getattr(s, "run_over", False):
+        alive = sum(1 for lk in s.links if lk.status.value == "alive")
+        dead  = sum(1 for lk in s.links if lk.status.value in ("dead", "memorial"))
+        if s.run_over:
             phase_slug, phase_label = "game_over", "Game over"
         elif not (po.get("a") and po.get("b")):
             phase_slug, phase_label = "pre", "Waiting for Pokéballs"
@@ -5108,7 +5093,7 @@ class SLinkServer:
         # since it can't reach into the sliced body markup's main pane.
         # The page title lives in the main pane (not the sidebar) so long
         # run names like "Pokémon Soul Link" aren't truncated.
-        attempts_count = getattr(s, "attempts_count", 0) or 0
+        attempts_count = s.attempts_count or 0
         stats_html = ""
         if alive or dead:
             stats_html = (
@@ -5155,7 +5140,7 @@ class SLinkServer:
             "phase_label":     phase_label,
             "alive_links":     alive,
             "dead_links":      dead,
-            "attempts_count":  getattr(s, "attempts_count", 0) or 0,
+            "attempts_count":  s.attempts_count or 0,
         }
         return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 
@@ -5804,7 +5789,7 @@ class SLinkServer:
         """Alive vs dead link counts for the SOUL LINK overlay."""
         alive = dead = 0
         for lnk in self.state.links:
-            status = lnk.status.value if hasattr(lnk.status, "value") else lnk.status
+            status = lnk.status.value
             if status == "alive":
                 alive += 1
             elif status in ("dead", "memorial"):
@@ -5944,7 +5929,7 @@ class SLinkServer:
     def _build_areas_overlay_context(self) -> dict:
         linked = dead = pending = 0
         for st in self.state.area_states.values():
-            sv = st.value if hasattr(st, "value") else str(st)
+            sv = st.value
             if sv == "linked":
                 linked += 1
             elif sv == "dead_zone":

@@ -171,6 +171,9 @@ def _make_server(tmp_path, battle_state=None):
     # before it ever reaches the enemy-party enrichment.
     srv.pc_boxes = {}
     srv._recent_events = {}
+    # Set by __init__ on a real server; the status builder reads them without a guard.
+    srv.admission = {}
+    srv._player_adapters = {}
     return srv
 
 

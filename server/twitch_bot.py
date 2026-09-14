@@ -364,7 +364,6 @@ class SLinkChatBot(_ReplyHelper):
         self._cooldown = int(cfg.get("command_cooldown_sec", 5))
         self._nick = cfg.get("nick", "").lower().strip()
         self._last_cmd_ts: dict[str, float] = {}
-        self._tio_bot = None
 
     async def start(self):
         """Validate token, then build and run the twitchio 3.x bot."""
@@ -550,5 +549,4 @@ class SLinkChatBot(_ReplyHelper):
                     helper._srv._bot_activity = helper._srv._bot_activity[-50:]
 
         async with _TioBot() as bot_instance:
-            helper._tio_bot = bot_instance
             await bot_instance.start()

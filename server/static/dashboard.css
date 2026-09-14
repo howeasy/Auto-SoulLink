@@ -48,7 +48,6 @@ body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0
 body.dash-collapsed .dash-sidebar-title,
 body.dash-collapsed .dash-side-label,
 body.dash-collapsed .dash-sidebar-toggle,
-body.dash-collapsed .dash-sidebar-foot .dash-sidebar-clock { display: none; }
 body.dash-collapsed .dash-sidebar-brand {
   padding: 14px 0 12px;
   justify-content: center;
@@ -62,7 +61,6 @@ body.dash-collapsed .dash-sidebar-brand .slink-logo {
 }
 body.dash-collapsed .dash-side-item { justify-content: center; padding: 10px 6px; }
 body.dash-collapsed .dash-sidebar-nav { padding: 8px 4px; }
-body.dash-collapsed .dash-sidebar-foot { justify-content: center; padding: 10px 6px; }
 h2 {
   color: var(--c-info);
   font-family: var(--font-heading);
@@ -542,30 +540,6 @@ body.dash-collapsed .font-switcher--in-sidebar .font-pills {
   min-width: 180px;
 }
 
-.dash-sidebar-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px 12px;
-  border-top: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
-  font-family: var(--font-mono);
-  font-size: 0.5em;
-  color: var(--c-dim);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.dash-sidebar-pulse {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--c-alive);
-  box-shadow: 0 0 8px var(--c-alive);
-  animation: dashPulse 1.8s ease-in-out infinite;
-}
-@keyframes dashPulse {
-  0%, 100% { opacity: 0.45; transform: scale(0.85); }
-  50%      { opacity: 1;    transform: scale(1.05); }
-}
-
 .dash-main {
   padding: var(--space-4) var(--space-5) var(--space-5);
   min-width: 0;
@@ -676,8 +650,6 @@ tr.dash-search-hide { display: none !important; }
   .dash-side-item { border-left: 0; border-bottom: 3px solid transparent; }
   .dash-side-item:hover { border-left-color: transparent; border-bottom-color: var(--item-accent); }
   .dash-side-item[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--item-accent); }
-  .dash-sidebar-foot { width: 100%; border-top: 1px solid color-mix(in srgb, var(--c-brand) 18%, var(--c-edge)); }
-  .dash-sidebar-foot .dash-sidebar-clock { display: inline; }
   /* At true mobile widths the held-item line is information density that
    * crowds the Pokémon cell — drop it. (Moved from the deleted 650px
    * @media block during the scaling-system refactor.) */
@@ -1351,7 +1323,6 @@ td .mon-sprite, td img.mon-sprite {
 .kf-battle    { color: color-mix(in srgb, var(--c-dead) 60%, var(--c-pend)); }
 .kf-dead_zone { color: var(--c-dead); }
 .kf-whiteout  { color: var(--c-pend); }
-.kf-unknown   { color: var(--c-dim); }
 
 .battle-panel {
   /* Border picks up `--c-brand` for clear per-theme variance — the panel
