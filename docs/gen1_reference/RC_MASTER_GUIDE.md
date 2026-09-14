@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T09:08:37+00:00",
+  "updated_at_utc": "2026-09-14T09:11:08+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "fd870b7",
+  "source_head": "0dd29bc",
   "live_lane": null,
-  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. Candidates under Codex review: C1 8ea6f25 (adversarial, cx-221a8234), R5a-2 fd870b7 (cx-d1cafa3d). FT-3 round 3 (Sonnet: allowlist projection, log_sha256 excluded). HX-2-SPEC (OMP) in flight. Next: C3 implementation on the C1 worker once C1 is accepted; R5b seam once R5a-2 is accepted; N3 after R5b.",
+  "next_action": "Feature build-out. Accepted: UI-2, FT-2b, FT-2c. Under Codex review: R5a-2 fd870b7 (cx-d1cafa3d), FT-3-3 0dd29bc (cx-7de6c11c). C1 round 2 (Sonnet: decoded kind, whiteout cause, whiteout-record binding, real aggregate lifecycle test). HX-2-SPEC (OMP). Next: C3 on the C1 worker after C1 acceptance; R5b after R5a-2; N3 after R5b; HX-2 implementation on OMP after spec acceptance.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -865,14 +865,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "c1",
-      "owner": "integrated by coordinator as candidate 8ea6f25 (isolated Sonnet worker authored)",
-      "state": "done",
+      "owner": "isolated Claude Sonnet worker (round 2 after REJECT; candidate 8ea6f25 on the branch)",
+      "state": "active",
       "files": ["server/gen1_whiteout.py", "server/gen1_faint_runtime.py", "tests/unit/test_gen1_whiteout.py", "docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md"],
       "next_action": "Extract the per-command death-obligation block of gen1_faint_runtime.py:176-229 into a helper; settle_whiteout records collateral force_faint/force_explode as real obligations (own death_id/blocker/pending phase, warning for the missed faint signal) and keeps the JournalError only for a duplicate of the triggering key; three unit tests + report.",
       "reuse_decision": "Gen 1 specific (gen1_whiteout/gen1_faint_runtime); shared state.py _handle_whiteout already correct, untouched",
       "receipt": "commit 8ea6f25; tests/unit/test_gen1_whiteout.py + test_gen1_faint_runtime.py + test_gen1_memorial_runtime.py 90 passed; diff sha256 3d160149…2b5e; docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md (MODEL-only; identifier() gained an optional discriminant; verify_state accepts collateral_of records)",
       "independent_review_refs": [
-        "Codex ADVERSARIAL_REVIEW cx-221a8234 (f97247c..8ea6f25) in flight"
+        "Codex ADVERSARIAL_REVIEW cx-221a8234: REJECT — collateral branch checks raw signal names but verify_state sees the decoded kind 'faint' (gen1_engine_signals.py:88,93); shared whiteout sets link.cause='whiteout' vs the common cause check (state.py:2062, faint_runtime.py:588-594); collateral binding to a real whiteout record/link halves missing; positive test bypasses the validator with fakes. Primary path, deferred machinery, ACK/memorial reuse, killed_at and HUD ordering ACCEPTED. Round 2 dispatched."
       ]
     },
     {
@@ -981,15 +981,16 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "ft-3",
-      "owner": "isolated Claude Sonnet worker (round 3; candidates 1b38696 + c868282 on the branch)",
-      "state": "active",
+      "owner": "integrated by coordinator as candidates 1b38696 + c868282 + 0dd29bc (isolated Sonnet worker, three rounds)",
+      "state": "done",
       "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
       "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
       "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged",
-      "receipt": "commits 1b38696 + c868282; tests/unit/test_gen1_prepared_cartridges.py 7 passed; prepared/admission/manager subset 64 passed; cumulative diff sha256 5fd4a06d…3b62",
+      "receipt": "commits 1b38696 + c868282 + 0dd29bc; tests/unit/test_gen1_prepared_cartridges.py 9 passed; prepared/admission/manager subset 66 passed; cumulative diff sha256 de913a5e…191e",
       "independent_review_refs": [
         "Codex REVIEW cx-a085e592: REJECT — generation.custom_names.selection.path is a second run-local absolute path (upr_runner.py:56-60,138,158-170); fixture used a fake shape; old persisted UPR identities need an explicit cutover note.",
-        "Round 2 c868282: Codex REVIEW cx-6b02452f REJECT — log_sha256 hashes the raw UPR log containing 'Time elapsed: <ms>' (Randomizer.java:690; bridge passes it through); round 3 = explicit allowlist projection"
+        "Round 2 c868282: Codex REVIEW cx-6b02452f REJECT — log_sha256 hashes the raw UPR log containing 'Time elapsed: <ms>' (Randomizer.java:690; bridge passes it through)",
+        "Round 3 0dd29bc: explicit allowlist CONTENT_IDENTITY_GENERATION_KEYS + key-set test; Codex REVIEW cx-7de6c11c in flight"
       ]
     },
     {
