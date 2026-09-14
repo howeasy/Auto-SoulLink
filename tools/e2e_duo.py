@@ -300,8 +300,8 @@ def ball_gate_pre_problems(status, links, events, hellos):
         problems.append("cold New Game trainer IDs are not distinct")
     if links:
         problems.append("a pair linked before the first Poké Ball")
-    if any(row.get("type") in BALL_GATE_FORBIDDEN_EVENTS for row in events):
-        problems.append("server emitted a linked/death event before the first Poké Ball")
+    if any(row.get("type") in BALL_GATE_FORBIDDEN_EVENTS | {"linked"} for row in events):
+        problems.append("server emitted a link/death event before either starter arrived")
     return problems
 
 

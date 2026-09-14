@@ -325,7 +325,7 @@ def _ball_hellos():
             for inst, ot in (("a", 0x4190), ("b", 0xAFB9))}
 
 
-def test_ball_gate_cold_hellos_require_distinct_ids_zero_balls_and_no_link():
+def test_ball_gate_cold_hellos_require_distinct_ids_zero_balls_and_no_link_yet():
     hellos = _ball_hellos()
     assert duo.ball_gate_pre_problems(_ball_status(), [], [], hellos) == []
     same_ot = {**hellos, "b": {**hellos["b"], "ot_id": hellos["a"]["ot_id"]}}
@@ -337,21 +337,36 @@ def test_ball_gate_cold_hellos_require_distinct_ids_zero_balls_and_no_link():
         _ball_status(active=True), [], [], hellos))
 
 
-def test_ball_gate_lab_loss_has_faint_events_without_partner_death_or_hp_change():
+def test_ball_gate_gift_link_forms_before_balls_but_does_not_open_the_gate():
+    link = {"area_id": "gift_map_40", "status": "alive",
+            "a": {"key": "AAAA:4190:99"}, "b": {"key": "BBBB:AFB9:B0"}}
+    pre = {inst: {"key": link[inst]["key"], "capture_count": 1, "gift": True,
+                  "ball_count": 0} for inst in ("a", "b")}
+    events = [{"player": inst, "type": "linked"} for inst in ("a", "b")]
+    assert duo.ball_gate_starters_problems(_ball_status(), [link], events, pre) == []
+    assert any("server ball gate opened" in p for p in duo.ball_gate_starters_problems(
+        _ball_status(active=True), [link], events, pre))
+    assert any("wild encounter" in p for p in duo.ball_gate_starters_problems(
+        _ball_status(), [link], events + [{"player": "a", "type": "no_catch"}], pre))
+
+
+def test_ball_gate_lab_loss_preserves_gift_pair_and_partner_hp():
+    link = {"area_id": "gift_map_40", "status": "alive"}
     labs = {inst: {"result": 1, "hp": 19, "faint_count": 1, "ball_count": 0,
                    "has_pokeballs": False, "force_faint": 0, "memorialize": 0}
             for inst in ("a", "b")}
     pre = {"b": {"hp": 20}}
     release = {"b": {"hp": 20, "force_faint": 0, "memorialize": 0}}
-    events = [{"player": inst, "type": "faint"} for inst in ("a", "b")]
+    events = ([{"player": inst, "type": "linked"} for inst in ("a", "b")]
+              + [{"player": inst, "type": "faint"} for inst in ("a", "b")])
     log = "[a] faint key=AAAA\n[b] faint key=BBBB\n"
-    assert duo.ball_gate_lab_problems(_ball_status(), [], events, labs, pre, release, log) == []
+    assert duo.ball_gate_lab_problems(_ball_status(), [link], link, events, labs, pre, release, log) == []
     altered = {"b": {**release["b"], "hp": 0, "force_faint": 1}}
-    problems = duo.ball_gate_lab_problems(_ball_status(), [], events, labs, pre, altered, log)
+    problems = duo.ball_gate_lab_problems(_ball_status(), [link], link, events, labs, pre, altered, log)
     assert any("starter HP changed" in p for p in problems)
     assert any("death command" in p for p in problems)
-    assert any("linked or retired" in p for p in duo.ball_gate_lab_problems(
-        _ball_status(), [{"status": "alive"}], events, labs, pre, release, log))
+    assert any("starter pair changed" in p for p in duo.ball_gate_lab_problems(
+        _ball_status(), [], link, events, labs, pre, release, log))
     after = {inst: {"hp": 19, "force_faint": 0, "memorialize": 0}
              for inst in ("a", "b")}
     assert duo.ball_gate_after_labs_problems(labs, after) == []
