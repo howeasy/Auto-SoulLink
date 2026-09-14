@@ -60,6 +60,19 @@ def _optional_call(obj, name):
     return method() if callable(method) else method
 
 
+def read_runtime_holds(server) -> list:
+    """The runtime's own waits, or nothing when the runtime cannot answer.
+
+    Optional on purpose: a run with no Gen 1 runtime - or a runtime that does not publish
+    holds - presents no holds rather than an error. This is the only place shared code
+    reaches the runtime for them, so no game-specific branch is added anywhere else.
+    """
+    holds = _optional_call(getattr(server, "gen1_runtime", None), "holds")
+    if not isinstance(holds, list):
+        return []
+    return copy.deepcopy(holds)
+
+
 def read_rule_state(server) -> dict:
     """Detached live rules. A live document is not a durable commit receipt."""
     runtime = getattr(server, "gen1_runtime", None)

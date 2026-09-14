@@ -24,6 +24,59 @@ TRADE_EVENTS = {
     "trade_ack",
 }
 
+REATTACH_COMPONENT = "gen1-native-reattach"
+_DISCONNECT_SUFFIX = "disconnected; paired reconciliation required"
+
+# What each hold means to the two humans watching the Manager. The runtime's own words stay the
+# payload's `reason` (and the dashboard tooltip); these are only the one-line instructions.
+HOLD_TEXT = {
+    "Linked death requires verified physical faint and memorial closure":
+        "A linked faint is waiting - get both games outdoors and safe so the death can be applied and buried",
+    "Synchronized storage requires verified disposition and save":
+        "Party/box sync is waiting - reach a PC or a safe save point in-game",
+    "No-catch partner retirement requires verified physical archive and save":
+        "A no-catch partner must be retired - finish the battle and save",
+    "Acquisition requires verified physical constraint or retirement settlement":
+        "A capture is waiting for the partner's matching obligation to settle",
+    "RBY native trade awaiting verified closure":
+        "A native trade is open - finish the trade in-game",
+    "RBY native receptionist awaiting verified return":
+        "The trade receptionist is waiting for the client to come back",
+    "Initial inventory observed; gameplay history and execution remain unqualified":
+        "The run is enrolled but has no verified play history yet",
+    "pending obligations changed; paired reconciliation required":
+        "Recovery needs both players re-admitted",
+    "waiting for paired admission and reconciliation":
+        "Waiting for both players to be admitted and reconciled",
+    "waiting for fresh paired control roundtrips":
+        "Waiting for both clients to report in",
+    "service release prerequisites are incomplete":
+        "Service cannot be released yet - finish the pending in-game obligation",
+    "waiting for both initial observations and, per player, new-game bootstrap + initial-save receipts or resumed enrollment":
+        "Waiting for both games to finish their first save so the run can start",
+}
+REATTACH_TEXT = {
+    "armed": "Trade write armed - do not close the emulator; if it already closed, use Recover",
+    "done_unreleased": "A native write finished but was not released - reopen the same run",
+    "lease_open": "A native write lease is still open - reopen the same run",
+    "pending_native_command": "A native command is still pending - reopen the same run",
+    "active_trade": "A trade is still active - finish it in-game",
+    "trade_open": "A trade record is not closed - finish it in-game",
+}
+
+
+def hold_text(reason):
+    """The one-line instruction for one reason; an unknown reason shows its own words."""
+    if reason in HOLD_TEXT:
+        return HOLD_TEXT[reason]
+    if reason.startswith("player ") and reason.endswith(_DISCONNECT_SUFFIX):
+        return "A client disconnected - reconnect BizHawk; the run resumes when both report in"
+    return reason
+
+
+def reattach_text(kind):
+    return REATTACH_TEXT.get(kind, "Cartridge reads " + str(kind) + " - reattach needs classification")
+
 
 class _OwnedTradePolicy:
     """Session ownership is checked here in addition to physical policy authority."""
@@ -251,6 +304,66 @@ class Gen1Runtime(DurableRuntime):
 
     def _service_release_reason(self, stage):
         return "waiting for both initial observations and, per player, new-game bootstrap + initial-save receipts or resumed enrollment"
+
+    @staticmethod
+    def _blocker_actor(document, identifier):
+        """Who a pending obligation belongs to, when that is cheap to say.
+
+        A faint obligation is applied by the PEER (gen1_faint_runtime's record["peer"]); an
+        acquisition constraint is named by digest over its player and acquisition ids
+        (gen1_acquisition_runtime.constraint_id). Anything else stays unattributed.
+        """
+        from server.gen1_acquisition_runtime import constraint_id
+        from server.gen1_faint_runtime import COMPONENT as FAINT
+
+        deaths = (document["components"].get(FAINT) or {}).get("deaths") or {}
+        record = deaths.get(identifier)
+        if isinstance(record, dict) and record.get("peer") in ("a", "b"):
+            return record["peer"], record["peer"]
+        for identity in (document.get("identities", {}).get("acquisitions") or {}):
+            player, _, acquisition = identity.partition(":")
+            if player in ("a", "b") and acquisition and constraint_id(player, acquisition) == identifier:
+                return player, player
+        return None, None
+
+    def holds(self):
+        """Everything a human is waiting on right now, for the Manager's live panel.
+
+        Three sources, each reported with its verbatim runtime reason: the barrier's
+        outstanding obligations, the service continuity/lease state, and the player's
+        accepted reattach read. `text` is the one-line instruction; `since` has no source in
+        any of the three documents and stays None.
+        """
+        stage = self.state()
+        document = stage.document()
+        service = self.status()["service"]
+        holds = []
+        for identifier, reason in stage.barrier.status()["pending_obligations"].items():
+            player, actor = self._blocker_actor(document, identifier)
+            text = hold_text(reason) + (" (" + actor.upper() + " must act)" if actor else "")
+            holds.append({"player": player, "kind": "blocker", "reason": reason, "text": text, "since": None})
+        refusals = service.get("continuity_refusals") or {}
+        for player in ("a", "b"):
+            refusal = refusals.get(player)
+            if refusal:
+                holds.append({"player": player, "kind": "service", "reason": refusal,
+                              "text": hold_text(refusal), "since": None})
+        global_reasons = []
+        if service.get("recovery_required") and not any(refusals.values()):
+            global_reasons.append(service.get("reason") or "service authority is unavailable")
+        if not service.get("release_ready") and service.get("release_reason"):
+            global_reasons.append(service["release_reason"])
+        for reason in global_reasons:
+            if not any(entry["reason"] == reason for entry in holds):
+                holds.append({"player": None, "kind": "service", "reason": reason,
+                              "text": hold_text(reason), "since": None})
+        reads = document["components"].get(REATTACH_COMPONENT) or {}
+        for player, entry in reads.items():
+            if isinstance(entry, dict) and entry.get("verdict") == "held":
+                kind = entry.get("class")
+                holds.append({"player": player, "kind": "reattach", "reason": kind,
+                              "text": reattach_text(kind), "since": None})
+        return holds
 
     def _verify_service_continuity(self, player, evidence, stage, binding):
         from server.gen1_service_continuity import verify

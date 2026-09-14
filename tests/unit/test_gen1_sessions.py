@@ -40,6 +40,63 @@ def server(tmp_path, spec):
     return SLinkServer(data_dir=str(tmp_path))
 
 
+def _commit_blocker(runtime, identifier, reason):
+    """Commit one barrier obligation the way the runtime's own modules do."""
+    stage = runtime.state()
+    blockers = stage.barrier.document()["blockers"]
+    blockers[identifier] = reason
+    stage.barrier.set_blockers(blockers)
+    runtime.journal.commit("a", secrets.token_hex(16), {"event": "observation"},
+        expected_revision=stage.journal_revision, state=stage.document(),
+        commands={"a": [], "b": []}, result={"ack": "ACK"})
+
+
+def test_a_quiet_runtime_publishes_no_holds(tmp_path):
+    from server.gen1_run_config import create_runtime
+
+    runtime = create_runtime(tmp_path / "run_quiet", contract("red", "blue"))
+    try:
+        assert runtime.holds() == []
+    finally:
+        runtime.close()
+
+
+def test_a_committed_blocker_is_a_hold_with_its_instruction(tmp_path):
+    from server.gen1_faint_runtime import REASON as FAINT_REASON
+    from server.gen1_run_config import create_runtime
+
+    runtime = create_runtime(tmp_path / "run_blocker", contract("red", "blue"))
+    try:
+        _commit_blocker(runtime, "a" * 32, FAINT_REASON)
+        holds = runtime.holds()
+        assert len(holds) == 1
+        entry = holds[0]
+        assert (entry["kind"], entry["reason"]) == ("blocker", FAINT_REASON)   # the raw words survive
+        assert entry["text"] != entry["reason"] and "faint" in entry["text"]   # and a human gets a line
+        assert entry["since"] is None
+    finally:
+        runtime.close()
+
+
+def test_a_held_reattach_read_is_a_reattach_hold(tmp_path):
+    from server.gen1_native_reattach_runtime import record
+    from tests.unit.test_gen1_native_reattach_runtime import request as reattach_request
+    from tests.unit.test_gen1_runtime_trade import TradeCase
+
+    case = TradeCase(tmp_path)
+    try:
+        case.admit("a")
+        case.admit("b")
+        case.control("a")
+        case.control("b")
+        record(case.runtime, "a", secrets.token_hex(16), reattach_request(case, physical="armed"))
+        holds = [entry for entry in case.runtime.holds() if entry["kind"] == "reattach"]
+        assert len(holds) == 1 and holds[0]["player"] == "a" and holds[0]["reason"] == "armed"
+        assert holds[0]["text"].startswith("Trade write armed")
+    finally:
+        case.close()
+
+
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
 def test_admitted_save_identity_survives_a_foreign_trade_lead_on_reconnect(tmp_path, variant):
     from server.gen1_party_codec import PartyCodec

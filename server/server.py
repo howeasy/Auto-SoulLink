@@ -3808,6 +3808,8 @@ class SLinkServer:
                 reverse=True,
             ),
             "run_over": s.run_over,
+            # What each human is waiting on right now (Gen 1 publishes these; [] otherwise).
+            "holds": runtime_boundary.read_runtime_holds(self),
             "attempts_count": s.attempts_count,
             "bonus_keys": {
                 pid: sorted(s.bonus_keys.get(pid, set()))

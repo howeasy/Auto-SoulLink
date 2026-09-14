@@ -520,6 +520,9 @@
                   <template x-if="liveStatus.run_over">
                     <div class="mgr-live-gameover">Game Over</div>
                   </template>
+                  <template x-if="liveStatus.holds && liveStatus.holds.length">
+                    <div class="mgr-live-gameover" x-text="'Run held - ' + liveStatus.holds[0].text"></div>
+                  </template>
                   <div class="mgr-live-players">
                     <template x-for="pid in ['a','b']" :key="pid">
                       <div class="mgr-live-player"
@@ -545,6 +548,12 @@
                             <span class="mgr-live-stat-label">badges</span>
                             <span x-text="livePopCount(liveStatus.players[pid].badges)"></span>
                           </span>
+                        </div>
+                        <div class="mgr-live-row mgr-live-hold" x-show="liveHoldsFor(pid).length">
+                          <span class="mgr-live-stat-label">waiting on</span>
+                          <span class="mgr-live-area"
+                                x-text="liveHoldsFor(pid).map(h => h.text).join(' - ')"
+                                :title="liveHoldsFor(pid).map(h => h.kind + ': ' + h.reason).join('\n')"></span>
                         </div>
                         <div class="mgr-live-party" x-show="livePartyList(pid).length">
                           <template x-for="mon in livePartyList(pid)" :key="mon.key">
@@ -784,6 +793,11 @@ function runManager() {
       if (!this.liveStatus) return 0;
       var det = this.liveStatus.players[pid].party_details || {};
       return Object.keys(det).length;
+    },
+    liveHoldsFor(pid) {
+      // Holds with no player attribution (a shared blocker or a global service hold) belong to
+      // both cards; the raw reason rides in the row's tooltip.
+      return (this.liveStatus?.holds || []).filter(h => !h.player || h.player === pid);
     },
     livePartyAlive(pid) {
       if (!this.liveStatus) return 0;

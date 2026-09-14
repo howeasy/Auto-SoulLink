@@ -62,6 +62,7 @@ def empty_status_payload() -> dict:
         "recent_events": [],
         "killfeed": [],
         "run_over": False,
+        "holds": [],
         "attempts_count": 0,
         "bonus_keys": {"a": [], "b": []},
         "pending_bonus": {"a": [], "b": []},
