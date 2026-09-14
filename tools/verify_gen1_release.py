@@ -22,7 +22,8 @@ explains a failure later:
     9. live-gates         — real engine behaviour on real cartridges, incl. the panel
                             on a randomized+injected ROM
    10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
-   11. duo-pairs          — every scenario on both pairings, through the real server
+   11. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
+   12. duo-pairs          — every scenario on both pairings, through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -49,7 +50,7 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
-_SLOW = {"live-gates", "live-new-gates", "duo-pairs"}
+_SLOW = {"live-gates", "live-new-gates", "live-trade-gates", "duo-pairs"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
 # The gate's whole point is that a skip is a failure, so an exception has to be argued for
@@ -122,6 +123,13 @@ LANES = [
              "present, hooks armed, live party decoded identically in Lua and Python, "
              "overworld write checkpoint reached (docs/gen1_requirements.md R-1, S, W-7, "
              "F-6)"),
+    Lane("live-trade-gates",
+         [_PY, "-m", "pytest", "tests/live/test_gen1_trade_gates.py", "-q", "-p",
+          "no:randomly", "-rs"],
+         env={"SLINK_LIVE": "1"},
+         why="the SLINK TRADE receptionist on the patched Red/Blue cartridges: menu, offer, "
+             "refusal and acceptance texts, every client line schema-valid "
+             "(docs/gen1_requirements.md T-1, T-2)"),
     Lane("duo-pairs",
          [_PY, "-m", "pytest", "tests/e2e/test_duo_gen1.py", "-q", "-p", "no:randomly",
           "-rs"],
@@ -144,6 +152,7 @@ REQUIREMENTS = {
     "patch-build": ["T-1"],
     "live-gates": ["(pre-rewrite gates; retired in Phase 8)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
+    "live-trade-gates": ["T-1", "T-2"],
     "duo-pairs": ["D-1..D-14 (pre-rewrite scenarios; rewritten in Phase 6)"],
 }
 

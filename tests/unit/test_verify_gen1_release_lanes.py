@@ -18,7 +18,7 @@ import verify_gen1_release as gate  # noqa: E402  (tools/ is not a package; the 
 
 LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-addresses", "profile-generated",
               "statics-generated", "fixtures", "patch-build", "live-gates", "live-new-gates",
-              "duo-pairs"]
+              "live-trade-gates", "duo-pairs"]
 
 
 def test_lane_order_is_the_gate_order():
@@ -46,7 +46,7 @@ def test_the_generated_artifact_lanes_serve_what_they_claim():
 
 def test_slow_lanes_are_exactly_the_emulator_lanes():
     """--quick's promise is that it stops before anything that needs an emulator."""
-    assert {"live-gates", "live-new-gates", "duo-pairs"} == gate._SLOW
+    assert {"live-gates", "live-new-gates", "live-trade-gates", "duo-pairs"} == gate._SLOW
 
 
 def test_every_plain_lane_runs_a_script_that_exists():
