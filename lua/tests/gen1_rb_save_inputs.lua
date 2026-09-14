@@ -1,9 +1,12 @@
 -- Test-only R/B START-menu save from the lab overworld. Read-only point and ordinary
 -- buttons; the caller owns emu.frameadvance and the paired handshake. Geometry (pret pokered):
---   START menu  engine/menus/draw_start_menu.asm:17-38: wTopMenuItemY=2, wTopMenuItemX=11,
---               wMaxMenuItem=6 without the Pokedex (7 with). Rows POKeMON/ITEM/<name>/SAVE/OPTION/EXIT
---               two rows apart from (12,2) (:83-89), so the SAVE glyphs sit at tilemap (12,8) and
---               SAVE is cursor index 3 (home/start_menu.asm:60-74 offsets no-Pokedex indices by one).
+--   START menu  engine/menus/draw_start_menu.asm:17-38: wTopMenuItemY=2, wTopMenuItemX=11, rows two
+--               tile rows apart from (12,2) (:83-89): [POKeDEX]/POKeMON/ITEM/<name>/SAVE/OPTION/EXIT,
+--               wMaxMenuItem = row COUNT (6 without the Pokedex, 7 with; home/start_menu.asm:27-51
+--               wraps on its own counts). The SLink companion cartridge appends a SLINK row
+--               (patch/gen1/tools/manifest.py:114-117): counts 7/8, SAVE row unchanged. So the cursor
+--               target is the row whose glyphs read SAVE (route_point start_menu_save_index) and the
+--               count must be that index + 3 (vanilla) or + 4 (companion); anything else is refused.
 --   Save prompt engine/menus/save.asm:150-153,186-194: TWO_OPTION_MENU ($14) at wTopMenuItemY=8,
 --               wTopMenuItemX=1, wMaxMenuItem=1, index 0 = YES; the "older file" prompt has the same shape.
 --   Witness     the client's save_witness site is SaveMenu.save+3; the server-acked gen1-save-witness
@@ -38,21 +41,24 @@ function M.new(expected)
         self.last_frame=frame
         assert(point and type(point.map)=="number" and type(point.battle)=="number"
             and type(point.joy_ignore)=="number" and type(point.font_loaded)=="boolean"
-            and type(point.start_menu_save)=="boolean"
+            and type(point.start_menu_save_index)=="number"
             and type(point.text_box)=="number" and type(point.menu_y)=="number" and type(point.menu_x)=="number"
             and type(point.menu_max)=="number" and type(point.menu_index)=="number",
             "complete read-only save point required")
         assert(point.map==0x28 and point.battle==0,"save route left the lab overworld")
         if not point.font_loaded then
             if self.confirmed then  -- buffer-2 restore briefly shows the START menu between the two closes
-                return idle(),point.start_menu_save and "save-await-close" or "save-witnessed"
+                return idle(),point.start_menu_save_index>=0 and "save-await-close" or "save-witnessed"
             end
             if point.joy_ignore~=0 then return idle(),"save-overworld-wait" end
             return tap("Start",frame),"save-open-start-menu"
         end
-        if point.start_menu_save and point.menu_y==2 and point.menu_x==11 and point.menu_max==6 then
-            if point.menu_index<3 then return tap("Down",frame),"save-select-save" end
-            if point.menu_index>3 then return tap("Up",frame),"save-select-save" end
+        local save=point.start_menu_save_index
+        if save>=0 and point.menu_y==2 and point.menu_x==11 then
+            assert((save==3 or save==4) and (point.menu_max==save+3 or point.menu_max==save+4),
+                "START menu row count disagrees with the SAVE row")
+            if point.menu_index<save then return tap("Down",frame),"save-select-save" end
+            if point.menu_index>save then return tap("Up",frame),"save-select-save" end
             return tap("A",frame),"save-choose-save"
         end
         if point.text_box==0x14 and point.menu_y==8 and point.menu_x==1 and point.menu_max==1 then

@@ -62,6 +62,15 @@ local function menu_inputs()
     local pressed={};for key,value in pairs(idle)do pressed[key]=buttons[key]or value end
     joypad.set(pressed)
 end
+-- 0-based START menu row whose glyphs read "SAVE" (S,A,V,E = $92,$80,$95,$84; constants/charmap.asm),
+-- items sit at tilemap (12, 2+2*i) (engine/menus/draw_start_menu.asm:28-57, PrintStartMenuItem :83-89); -1 if none.
+local function save_row()
+    for i=0,7 do
+        local at=assert(symbols.wTileMap)+(2+2*i)*20+12
+        if rd(at)==0x92 and rd(at+1)==0x80 and rd(at+2)==0x95 and rd(at+3)==0x84 then return i end
+    end
+    return -1
+end
 local function route_point()
     local event_byte=memory.read_u8(assert(symbols.wEventFlags)+4,"System Bus")
     local hp=memory.read_u8(assert(symbols.wPartyMon1HP),"System Bus")*256
@@ -89,10 +98,8 @@ local function route_point()
         chosen_menu_item=sym("wChosenMenuItem"),menu_exit_method=sym("wMenuExitMethod"),
         list_scroll_offset=sym("wListScrollOffset"),menu_watch_oob=sym("wMenuWatchMovingOutOfBounds"),
         font_loaded=sym("wFontLoaded")%2==1,save_file_status=sym("wSaveFileStatus"),
-        -- "SAVE" glyphs (S,A,V,E = $92,$80,$95,$84; constants/charmap.asm) at tilemap (12,8): the
-        -- no-Pokedex START menu's fourth row (engine/menus/draw_start_menu.asm:28-57, two rows apart).
-        start_menu_save=rd(assert(symbols.wTileMap)+172)==0x92 and rd(symbols.wTileMap+173)==0x80
-            and rd(symbols.wTileMap+174)==0x95 and rd(symbols.wTileMap+175)==0x84}
+        got_pokedex=FIELDS.event_bit(rd,assert(symbols.wEventFlags),37), -- EVENT_GOT_POKEDEX, constants/event_constants.asm:20
+        start_menu_save_index=save_row()}
     raw.menu_kind,raw.item_id,raw.confirm_index=SIG.mart_menu(raw)
     return raw
 end

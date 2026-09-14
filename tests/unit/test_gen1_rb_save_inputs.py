@@ -25,7 +25,7 @@ def model():
                                                         "failed": False})})
     # Lab overworld after the rival loss: no text, stale battle-menu geometry, no in-game save yet.
     point = lua.table_from({"map": 0x28, "battle": 0, "joy_ignore": 0, "font_loaded": False,
-                            "save_file_status": 1, "start_menu_save": False, "text_box": 0x0B,
+                            "save_file_status": 1, "start_menu_save_index": -1, "text_box": 0x0B,
                             "menu_y": 14, "menu_x": 15, "menu_max": 1, "menu_index": 1})
     return lua, driver, handshake, status, point
 
@@ -65,11 +65,11 @@ def test_save_file_status_is_never_an_oracle():
     point.save_file_status = 2
     pressed, phase = driver.step(handshake, status, point, 16)
     assert phase == "save-open-start-menu" and buttons(pressed) == {**IDLE, "Start": True}
-    point.font_loaded, point.start_menu_save = True, True
-    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 2, 11, 6, 3
+    point.font_loaded, point.start_menu_save_index = True, 3
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 2, 11, 7, 3
     pressed, phase = driver.step(handshake, status, point, 17)
     assert phase == "save-choose-save" and buttons(pressed) == {**IDLE, "A": True}
-    point.start_menu_save, point.text_box = False, 0x14
+    point.start_menu_save_index, point.text_box = -1, 0x14
     point.menu_y, point.menu_x, point.menu_max, point.menu_index = 8, 1, 1, 0
     pressed, phase = driver.step(handshake, status, point, 32)
     assert phase == "save-confirm" and buttons(pressed) == {**IDLE, "A": True}
@@ -81,25 +81,41 @@ def test_save_file_status_is_never_an_oracle():
     assert phase == "save-witnessed" and buttons(pressed) == IDLE
 
 
-@pytest.mark.parametrize("index,button,phase", [
-    (0, "Down", "save-select-save"), (2, "Down", "save-select-save"),
-    (5, "Up", "save-select-save"), (3, "A", "save-choose-save")])
-def test_start_menu_without_pokedex_selects_save_at_index_3(index, button, phase):
+@pytest.mark.parametrize("save_row,menu_max", [(3, 6), (3, 7), (4, 7), (4, 8)])
+def test_cursor_walks_to_the_save_row_read_from_the_tilemap(save_row, menu_max):
+    """Vanilla: 6/7 rows, SAVE index 3/4 (draw_start_menu.asm:28-57). The SLink companion adds a
+    SLINK row below EXIT (patch/gen1/tools/manifest.py:114-117): 7/8 rows, SAVE index unchanged."""
     _, driver, handshake, status, point = model()
-    point.font_loaded, point.start_menu_save = True, True
-    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 2, 11, 6, index
-    pressed, seen = driver.step(handshake, status, point, 16)
-    assert seen == phase and buttons(pressed) == {**IDLE, button: True}
+    point.font_loaded, point.start_menu_save_index = True, save_row
+    point.menu_y, point.menu_x, point.menu_max = 2, 11, menu_max
+    frame = 16
+    for index in range(0, save_row):
+        point.menu_index = index
+        pressed, phase = driver.step(handshake, status, point, frame)
+        assert phase == "save-select-save" and buttons(pressed) == {**IDLE, "Down": True}
+        frame += 16
+    point.menu_index = save_row + 1
+    pressed, phase = driver.step(handshake, status, point, frame)
+    assert phase == "save-select-save" and buttons(pressed) == {**IDLE, "Up": True}
+    point.menu_index = save_row
+    pressed, phase = driver.step(handshake, status, point, frame + 16)
+    assert phase == "save-choose-save" and buttons(pressed) == {**IDLE, "A": True}
 
 
-def test_start_menu_with_pokedex_geometry_or_missing_save_row_is_never_pressed():
+@pytest.mark.parametrize("save_row,menu_max", [(3, 5), (3, 8), (4, 6), (4, 9), (2, 6), (5, 8)])
+def test_start_menu_row_count_that_disagrees_with_the_save_row_is_refused(save_row, menu_max):
     _, driver, handshake, status, point = model()
-    point.font_loaded, point.start_menu_save = True, True
+    point.font_loaded, point.start_menu_save_index = True, save_row
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 2, 11, menu_max, 0
+    with pytest.raises(LuaError, match="START menu row count"):
+        driver.step(handshake, status, point, 16)
+
+
+def test_start_menu_without_a_save_row_is_never_pressed():
+    _, driver, handshake, status, point = model()
+    point.font_loaded, point.start_menu_save_index = True, -1
     point.menu_y, point.menu_x, point.menu_max, point.menu_index = 2, 11, 7, 3
     pressed, phase = driver.step(handshake, status, point, 16)
-    assert phase == "save-menu-wait" and buttons(pressed) == IDLE
-    point.menu_max, point.start_menu_save = 6, False
-    pressed, phase = driver.step(handshake, status, point, 17)
     assert phase == "save-menu-wait" and buttons(pressed) == IDLE
 
 
@@ -118,10 +134,10 @@ def test_save_prompt_yes_then_terminal_only_after_menus_closed():
     point.text_box = 0  # "Now saving..." / GAME SAVED text: unknown menu geometry, wait
     pressed, phase = driver.step(handshake, status, point, 19)
     assert phase == "save-await-close" and buttons(pressed) == IDLE
-    point.font_loaded, point.start_menu_save = False, True  # START menu screen restored from buffer 2
+    point.font_loaded, point.start_menu_save_index = False, 3  # START menu screen restored from buffer 2
     pressed, phase = driver.step(handshake, status, point, 20)
     assert phase == "save-await-close" and buttons(pressed) == IDLE
-    point.start_menu_save = False
+    point.start_menu_save_index = -1
     pressed, phase = driver.step(handshake, status, point, 21)
     assert phase == "save-witnessed" and buttons(pressed) == IDLE
 
