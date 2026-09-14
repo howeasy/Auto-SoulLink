@@ -6,9 +6,12 @@
 --               SAVE is cursor index 3 (home/start_menu.asm:60-74 offsets no-Pokedex indices by one).
 --   Save prompt engine/menus/save.asm:150-153,186-194: TWO_OPTION_MENU ($14) at wTopMenuItemY=8,
 --               wTopMenuItemX=1, wMaxMenuItem=1, index 0 = YES; the "older file" prompt has the same shape.
---   Witness     SaveGameData (save.asm:290-292) writes wSaveFileStatus=2 before SRAM; the client's
---               save_witness site is SaveMenu.save+3. Any text/menu sets wFontLoaded bit 0 and
---               CloseTextDisplay (home/text_script.asm:105-131) clears it and redraws the map.
+--   Witness     the client's save_witness site is SaveMenu.save+3; the server-acked gen1-save-witness
+--               is the only proof of the save. wSaveFileStatus ($D088, ram/wram.asm:1371-1385) sits in
+--               the battle-animation scratch block and read 2 during the rival battle on a fresh
+--               cartridge (live r1): it is neither a fresh-cartridge nor a completion oracle here.
+--   Menu closed any text/menu sets wFontLoaded bit 0; CloseTextDisplay (home/text_script.asm:105-131)
+--               clears it and redraws the map, so YES confirmed + menus closed ends the driver.
 local M={}
 local function idle()return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false}end
 local function tap(button,frame)local b=idle();b[button]=frame%16<2;return b end
@@ -16,7 +19,7 @@ function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
         "complete R/B save identity required")
-    local self={last_frame=-1,confirmed=false}
+    local self={last_frame=-1,confirmed=false,closing=0}
     function self.step(handshake,status,point,frame)
         if not handshake then return idle(),"await-pair-handshake" end
         assert(handshake.ready==true and handshake.run_id==expected.run_id
@@ -35,18 +38,15 @@ function M.new(expected)
         self.last_frame=frame
         assert(point and type(point.map)=="number" and type(point.battle)=="number"
             and type(point.joy_ignore)=="number" and type(point.font_loaded)=="boolean"
-            and type(point.save_file_status)=="number" and type(point.start_menu_save)=="boolean"
+            and type(point.start_menu_save)=="boolean"
             and type(point.text_box)=="number" and type(point.menu_y)=="number" and type(point.menu_x)=="number"
             and type(point.menu_max)=="number" and type(point.menu_index)=="number",
             "complete read-only save point required")
         assert(point.map==0x28 and point.battle==0,"save route left the lab overworld")
-        if point.save_file_status==2 then
-            assert(self.confirmed,"save file status changed without a scripted confirmation")
-            if point.font_loaded or point.start_menu_save then return idle(),"save-await-close" end
-            return idle(),"save-witnessed"
-        end
-        assert(point.save_file_status==1,"save file status is not the fresh-cartridge 1")
         if not point.font_loaded then
+            if self.confirmed then  -- buffer-2 restore briefly shows the START menu between the two closes
+                return idle(),point.start_menu_save and "save-await-close" or "save-witnessed"
+            end
             if point.joy_ignore~=0 then return idle(),"save-overworld-wait" end
             return tap("Start",frame),"save-open-start-menu"
         end
@@ -60,7 +60,10 @@ function M.new(expected)
             self.confirmed=true
             return tap("A",frame),"save-confirm"
         end
-        return idle(),"save-menu-wait"
+        if not self.confirmed then return idle(),"save-menu-wait" end
+        self.closing=self.closing+1  -- "Now saving..." (120 frames) + GAME SAVED + two CloseTextDisplay
+        assert(self.closing<=1800,"START menu did not close after the save")
+        return idle(),"save-await-close"
     end
     return self
 end
