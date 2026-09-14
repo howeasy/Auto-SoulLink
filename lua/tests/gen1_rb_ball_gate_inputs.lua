@@ -13,6 +13,16 @@ local function walk(point,x,y)
     elseif point.y>y then buttons.Up=true end
     return buttons
 end
+-- Refusals inside the battle carry the point so a live failure receipt is diagnosable.
+local DESCRIBE_KEYS={"map","x","y","battle","opponent","menu_y","menu_x","menu_max","menu_index",
+    "move2","move2_pp","text_box","joy_ignore","font_loaded"}
+local function describe(point)
+    local parts={}
+    for _,key in ipairs(DESCRIBE_KEYS) do
+        if point[key]~=nil then parts[#parts+1]=key.."="..tostring(point[key]) end
+    end
+    return " point{"..table.concat(parts,",").."}"
+end
 function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
@@ -94,7 +104,7 @@ function M.new(expected)
             self.nickname_declined=true -- script 8 follows AddPartyMon/AskName completion.
         end
         if point.battle~=0 then
-            assert(point.opponent==225,"first battle was not lab Rival1")
+            assert(point.opponent==225,"first battle was not lab Rival1"..describe(point))
             self.battle_seen=true
             if self.pending_growl_pp and point.move2_pp<self.pending_growl_pp then
                 self.pending_growl_pp=nil
@@ -108,7 +118,7 @@ function M.new(expected)
                 end
             end
             if self.pending_growl_pp then
-                assert(frame-self.pending_growl_frame<600,"selected Growl has no accepted PP/action evidence")
+                assert(frame-self.pending_growl_frame<600,"selected Growl has no accepted PP/action evidence"..describe(point))
                 -- ponytail: HandleMenuInput_ runs Delay3 after each cursor placement and drops presses; keep pulsing A
                 -- while the move menu still shows index 2. The index decrement (core.asm:2620-2626) precedes validation;
                 -- the PP drop is the acceptance oracle. Until then pulse B: the driver never presses B inside the open
@@ -119,8 +129,18 @@ function M.new(expected)
                 end
                 return press("B",frame),"await-growl-acceptance"
             end
-            if point.menu_y==12 and point.menu_x==5 and point.menu_max>=2 then
-                assert(point.move2==0x2d and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage")
+            local move_menu=point.menu_y==12 and point.menu_x==5 and point.menu_max>=2
+            local main_menu=point.menu_y==14 and point.menu_max==1
+            if (point.menu_y==12 or point.menu_y==14) and not move_menu and not main_menu then
+                -- ponytail: retained/transient menu geometry between game routines is common (cf. the Mart
+                -- signature history); wait bounded instead of crashing the run, but still never blind-A here.
+                self.unknown_menu_frame=self.unknown_menu_frame or frame
+                assert(frame-self.unknown_menu_frame<600,"unknown battle menu; refuse blind A"..describe(point))
+                return idle(),"unknown-battle-menu-wait"
+            end
+            self.unknown_menu_frame=nil
+            if move_menu then
+                assert(point.move2==0x2d and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage"..describe(point))
                 if point.menu_index<2 then return press("Down",frame),"select-growl" end
                 if point.menu_index==2 then
                     local buttons=press("A",frame)
@@ -132,11 +152,10 @@ function M.new(expected)
                 end
                 return press("Up",frame),"correct-growl-cursor"
             end
-            if point.menu_y==14 and point.menu_max==1 then
+            if main_menu then
                 if point.menu_x~=9 then return press("Left",frame),"select-fight" end
                 return press("A",frame),"open-fight"
             end
-            assert(point.menu_y~=12 and point.menu_y~=14,"unknown battle menu; refuse blind A")
             return press("A",frame),"rival-dialogue"
         end
         if point.lab_script==8 then return idle(),"rival-walks-to-ball" end

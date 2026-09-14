@@ -181,6 +181,42 @@ def test_enemy_first_prompt_before_pp_drop_is_advanced_with_b():
     assert phase == "rival-exit-dialogue" and buttons["B"]  # pending must not block the post-battle flow
 
 
+def test_unknown_battle_menu_geometry_waits_bounded_then_refuses_with_point():
+    # Live R7 failure: `unknown battle menu; refuse blind A` raised on a point the receipt did not
+    # carry. Transient/retained geometry between routines is common; wait bounded, then refuse
+    # with the point in the message so the next receipt is diagnosable.
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 9, 3, 1
+    point.move2, point.move2_pp = 0x2D, 40
+    buttons, phase = driver.step(handshake, status, point, 16)
+    assert phase == "unknown-battle-menu-wait" and not buttons["A"] and not buttons["B"] and not buttons["Down"]
+    buttons, phase = driver.step(handshake, status, point, 615)
+    assert phase == "unknown-battle-menu-wait" and not buttons["A"]
+    point.menu_x = 5  # a known state inside the window resets the latch
+    buttons, phase = driver.step(handshake, status, point, 624)
+    assert phase == "select-growl" and buttons["Down"]
+    point.menu_x = 9
+    buttons, phase = driver.step(handshake, status, point, 625)
+    assert phase == "unknown-battle-menu-wait"
+    buttons, phase = driver.step(handshake, status, point, 1224)
+    assert phase == "unknown-battle-menu-wait"
+    with pytest.raises(LuaError, match=r"unknown battle menu; refuse blind A.*menu_y=12.*menu_x=9.*menu_max=3"):
+        driver.step(handshake, status, point, 1225)
+
+
+def test_battle_refusals_carry_the_point():
+    _, driver, handshake, status, point = model()
+    point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
+    point.menu_y, point.menu_x, point.menu_max, point.menu_index = 12, 5, 3, 2
+    point.move2, point.move2_pp = 0x2D, 0
+    with pytest.raises(LuaError, match=r"Growl unavailable.*move2=45.*move2_pp=0"):
+        driver.step(handshake, status, point, 16)
+    point.opponent = 1
+    with pytest.raises(LuaError, match=r"not lab Rival1.*opponent=1"):
+        driver.step(handshake, status, point, 17)
+
+
 def test_rb_route_requires_lab_loss_and_heal_before_complete():
     _, driver, handshake, status, point = model()
     point.map, point.party_count, point.battle, point.opponent = 0x28, 1, 2, 225
