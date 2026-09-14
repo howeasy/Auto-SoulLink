@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OBS Triggers — Soul Link</title>
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:var(--font-heading);color:var(--c-txt);min-height:100vh}
+    .dash-main{padding:1.2em 1.4em 2em;font-family:var(--font-heading)}
+    h1{font-family:var(--font-heading);color:var(--c-info);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
+    .sub{color:var(--c-dim);font-size:.85em;margin-bottom:1.5em}
+    .sub a{color:#6af;text-decoration:none}
+    .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
+    .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:#b8f0ff;margin-bottom:.8em;letter-spacing:.05em}
+    .sb{display:inline-block;padding:3px 10px;border-radius:3px;font-size:.8em;font-weight:700}
+    .sb-ok{background:#1a4a1a;color:#3de85a;border:1px solid #3de85a}
+    .sb-off{background:#3a1a1a;color:#f03838;border:1px solid #f03838}
+    .sb-mid{background:#3a2a1a;color:#f8a030;border:1px solid #f8a030}
+    label{display:block;color:#aaa;font-size:.8em;margin-bottom:.2em;margin-top:.6em}
+    input[type=text],input[type=number],input[type=password],select{width:100%;background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em}
+    input:focus,select:focus{outline:none;border-color:#b8f0ff}
+    .btn{background:#1a2a3a;color:#6af;border:1px solid #6af;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:.82em}
+    .btn:hover{background:#2a3a4a}
+    .btn-g{color:#3de85a;border-color:#3de85a}.btn-g:hover{background:#1a3a1a}
+    .btn-r{color:#f03838;border-color:#f03838}.btn-r:hover{background:#3a1a1a}
+    .btn-s{color:#b8f0ff;border-color:#b8f0ff}.btn-s:hover{background:#1a3050}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.2em}
+    table{width:100%;border-collapse:collapse;font-size:.82em}
+    th{color:var(--c-dim);font-weight:600;padding:5px 8px;text-align:left;border-bottom:1px solid #2a2c3a}
+    td{padding:5px 8px;border-bottom:1px solid #1e2030;vertical-align:middle}
+    tr:hover td{background:#1a1c28}
+    .frow{display:flex;gap:.5em;align-items:flex-end;flex-wrap:wrap}
+    .frow>*{flex:1;min-width:110px}
+    .frow>.btn{flex:0;margin-top:1.1em}
+    #msg{margin:.6em 0;font-size:.82em;color:#3de85a;min-height:1.2em}
+    #msg.err{color:#f03838}
+    .cbtns{display:flex;gap:.4em;margin-top:.7em;flex-wrap:wrap}
+    code{color:#b8f0ff;background:#1a1c28;padding:1px 5px;border-radius:3px;font-size:.9em}
+  </style>
+</head>
+<body>
+<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+{sidebar}
+<main class="dash-main">
+  <h1>&#128225; OBS Scene Triggers</h1>
+  <div id="msg"></div>
+
+  <div class="panel">
+    <h2>CONNECTIONS</h2>
+    <div class="grid2">
+      <div>
+        <div style="display:flex;align-items:center;gap:.5em;margin-bottom:.4em">
+          <strong style="font-size:.9em">Player A</strong>
+          <span id="status-a" class="sb sb-off">disconnected</span>
+        </div>
+        <label>Host<input id="host-a" type="text" placeholder="192.168.1.x"></label>
+        <label>Port<input id="port-a" type="number" value="4455" min="1" max="65535"></label>
+        <label>Password <small style="color:var(--c-dim)">(blank = keep current)</small>
+          <input id="pw-a" type="password" placeholder=""></label>
+        <div class="cbtns">
+          <button class="btn btn-g" onclick="connect('a')">Connect</button>
+          <button class="btn btn-r" onclick="disconnect('a')">Disconnect</button>
+          <button class="btn" onclick="testScene('a')">Test Scene</button>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:.5em;margin-bottom:.4em">
+          <strong style="font-size:.9em">Player B</strong>
+          <span id="status-b" class="sb sb-off">disconnected</span>
+        </div>
+        <label>Host<input id="host-b" type="text" placeholder="192.168.1.x"></label>
+        <label>Port<input id="port-b" type="number" value="4455" min="1" max="65535"></label>
+        <label>Password <small style="color:var(--c-dim)">(blank = keep current)</small>
+          <input id="pw-b" type="password" placeholder=""></label>
+        <div class="cbtns">
+          <button class="btn btn-g" onclick="connect('b')">Connect</button>
+          <button class="btn btn-r" onclick="disconnect('b')">Disconnect</button>
+          <button class="btn" onclick="testScene('b')">Test Scene</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:1em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+      <label style="margin:0;display:flex;align-items:center;gap:.4em;color:#e0e0e0;cursor:pointer">
+        <input type="checkbox" id="enabled"> Enable OBS integration
+      </label>
+      <button class="btn btn-s" onclick="saveConfig()">&#128190; Save Config</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>TRIGGER RULES</h2>
+    <p style="margin:0 0 .6em;color:var(--c-dim);font-size:.85em">Rules are evaluated <strong>top-to-bottom</strong> — when multiple events fire at once, the highest row wins per OBS player. Drag <span style="font-size:1em">⠿</span> to reorder.</p>
+    <table id="triggers-table">
+      <thead><tr><th style="width:1.6em"></th><th>#</th><th>Event</th><th>Player Filter</th><th>Target OBS</th><th>Scene</th><th>Area Filter</th><th></th></tr></thead>
+      <tbody id="triggers-body"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>ADD TRIGGER</h2>
+    <div class="frow">
+      <div>
+        <label>Event</label>
+        <select id="new-evt">
+          <option value="battle_start">battle_start</option>
+          <option value="wild_battle_start">wild_battle_start</option>
+          <option value="trainer_battle_start">trainer_battle_start</option>
+          <option value="battle_end">battle_end</option>
+          <option value="faint">faint (own mon)</option>
+          <option value="link_death">link_death (partner)</option>
+          <option value="whiteout">whiteout</option>
+          <option value="capture">capture</option>
+          <option value="shiny">shiny</option>
+          <option value="linked">linked (area linked)</option>
+          <option value="dead_zone">dead_zone</option>
+          <option value="area_enter">area_enter</option>
+          <option value="area_enter_new">area_enter_new (open slot)</option>
+          <option value="battle_start_new">battle_start_new (open slot)</option>
+          <option value="party_to_box">party_to_box</option>
+          <option value="box_to_party">box_to_party</option>
+          <option value="run_over">run_over</option>
+          <option value="memorialize_done">memorialize_done</option>
+        </select>
+      </div>
+      <div>
+        <label>Player Filter</label>
+        <select id="new-pf">
+          <option value="any">any</option>
+          <option value="a">Player A only</option>
+          <option value="b">Player B only</option>
+        </select>
+      </div>
+      <div>
+        <label>Target OBS</label>
+        <select id="new-tgt">
+          <option value="own">own (triggering player)</option>
+          <option value="a">Player A</option>
+          <option value="b">Player B</option>
+          <option value="both">both</option>
+        </select>
+      </div>
+      <div>
+        <label>Scene Name</label>
+        <input id="new-scene" type="text" list="scene-list-both" placeholder="e.g. Battle Scene">
+        <datalist id="scene-list-a"></datalist>
+        <datalist id="scene-list-b"></datalist>
+        <datalist id="scene-list-both"></datalist>
+      </div>
+      <div>
+        <label>Area Filter <small style="color:var(--c-dim)">(area_enter only)</small></label>
+        <select id="new-area">
+          <option value="">(any area)</option>
+        </select>
+      </div>
+      <button class="btn btn-g" onclick="addTrigger()">+ Add</button>
+    </div>
+  </div>
+
+  <style>
+    .drag-handle { cursor: grab; color: #888; font-size: 1.1em; user-select: none; padding: 0 4px; }
+    .drag-handle:active { cursor: grabbing; }
+    tr.drag-over td { border-top: 2px solid #58a6ff; }
+    .priority-badge { display:inline-block;min-width:1.6em;text-align:center;background:#30363d;color:#8b949e;border-radius:3px;font-size:.75em;padding:1px 4px;font-family:monospace; }
+  </style>
+
+  <script>
+    var triggers = [];
+    var triggersLoaded = false;
+    var _dragSrcIdx = null;
+    // Area picker data, loaded once from /api/obs/areas.
+    // _areaNameById maps both literal area_ids and "group:<id>" to display labels.
+    var _areaGroups = [];   // [{id,label,count}]
+    var _areaList   = [];   // [{id,name,group}]
+    var _areaNameById = {}; // {area_id_or_group_key: friendly_label}
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function msg(text, isErr) {
+      var el = document.getElementById('msg');
+      el.textContent = text;
+      el.className = isErr ? 'err' : '';
+    }
+
+    function areaFilterLabel(v) {
+      if (!v) return '<span style="color:var(--c-dim)">—</span>';
+      if (v.indexOf('group:') === 0) {
+        var label = _areaNameById[v] || v.slice(6);
+        return '<span style="background:#1a2a3a;color:#6af;border:1px solid #2a4a6a;border-radius:3px;padding:1px 6px;font-size:.78em">☰ '
+          + esc(label) + '</span>';
+      }
+      var name = _areaNameById[v];
+      if (name) return '<code title="' + esc(v) + '">' + esc(name) + '</code>';
+      return '<code>' + esc(v) + '</code>';
+    }
+
+    function renderTriggers() {
+      var tbody = document.getElementById('triggers-body');
+      if (!triggers.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="color:var(--c-dim);text-align:center;padding:1em">No triggers — add one below</td></tr>';
+        return;
+      }
+      tbody.innerHTML = triggers.map(function(t, i) {
+        var af = areaFilterLabel(t.area_id_filter);
+        return '<tr draggable="true" data-idx="' + i + '">' +
+          '<td><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span></td>' +
+          '<td><span class="priority-badge">#' + (i+1) + '</span></td>' +
+          '<td><code>' + esc(t.event) + '</code></td>' +
+          '<td>' + esc(t.player_filter || 'any') + '</td>' +
+          '<td>' + esc(t.target || 'own') + '</td>' +
+          '<td>' + esc(t.scene) + '</td>' +
+          '<td>' + af + '</td>' +
+          '<td><button class="btn btn-r" style="padding:2px 8px;font-size:.75em" onclick="delTrigger(' + i + ')">&#10005;</button></td>' +
+          '</tr>';
+      }).join('');
+      // Attach drag events to rows
+      Array.from(tbody.querySelectorAll('tr[draggable]')).forEach(function(row) {
+        row.addEventListener('dragstart', function(e) {
+          _dragSrcIdx = parseInt(row.dataset.idx);
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(_dragSrcIdx));
+        });
+        row.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          tbody.querySelectorAll('tr').forEach(function(r){ r.classList.remove('drag-over'); });
+          row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', function() {
+          row.classList.remove('drag-over');
+        });
+        row.addEventListener('drop', function(e) {
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          var destIdx = parseInt(row.dataset.idx);
+          if (_dragSrcIdx === null || _dragSrcIdx === destIdx) return;
+          var moved = triggers.splice(_dragSrcIdx, 1)[0];
+          triggers.splice(destIdx, 0, moved);
+          _dragSrcIdx = null;
+          renderTriggers();
+          autoSaveTriggers();
+        });
+      });
+    }
+
+    function autoSaveTriggers() {
+      fetch('/api/obs/triggers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({triggers:triggers})})
+        .then(function(r){return r.json();}).then(function(d) {
+          msg(d.ok ? '\u2714 Triggers saved' : 'Save error: '+(d.error||'unknown'), !d.ok);
+        }).catch(function(e){ msg('Save failed: '+e, true); });
+    }
+
+    function addTrigger() {
+      var scene = document.getElementById('new-scene').value.trim();
+      if (!scene) { msg('Scene name is required', true); return; }
+      triggers.push({
+        id: 't' + Date.now(),
+        event: document.getElementById('new-evt').value,
+        player_filter: document.getElementById('new-pf').value,
+        target: document.getElementById('new-tgt').value,
+        scene: scene,
+        area_id_filter: document.getElementById('new-area').value
+      });
+      document.getElementById('new-scene').value = '';
+      document.getElementById('new-area').value = '';
+      renderTriggers();
+      autoSaveTriggers();
+    }
+
+    function delTrigger(i) {
+      triggers.splice(i, 1);
+      renderTriggers();
+      autoSaveTriggers();
+    }
+
+    function loadStatus() {
+      fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
+        ['a','b'].forEach(function(p) {
+          var badge = document.getElementById('status-' + p);
+          var cs = (d.connections && d.connections[p]) ? d.connections[p].status : 'disconnected';
+          badge.textContent = cs;
+          badge.className = 'sb ' + (cs==='connected'?'sb-ok':cs==='connecting'?'sb-mid':'sb-off');
+        });
+        ['a','b'].forEach(function(p) {
+          var c = d.connections && d.connections[p];
+          if (c) {
+            var he = document.getElementById('host-' + p);
+            var pe = document.getElementById('port-' + p);
+            if (document.activeElement !== he) he.value = c.host || '';
+            if (document.activeElement !== pe) pe.value = c.port || 4455;
+          }
+        });
+        var en = document.getElementById('enabled');
+        if (document.activeElement !== en) en.checked = !!d.enabled;
+        if (!triggersLoaded && d.triggers) {
+          triggers = d.triggers;
+          triggersLoaded = true;
+          renderTriggers();
+        }
+        loadScenes('a');
+        loadScenes('b');
+      }).catch(function(){});
+    }
+
+    var _scenesCache = {a: [], b: []};
+    function loadScenes(player) {
+      fetch('/api/obs/scenes/' + player).then(function(r){return r.json();}).then(function(d) {
+        _scenesCache[player] = d.scenes || [];
+        _updateSceneLists();
+      }).catch(function(){});
+    }
+    function _updateSceneLists() {
+      var setA = new Set(_scenesCache.a);
+      var setB = new Set(_scenesCache.b);
+      // Per-player datalists (raw scene names)
+      ['a','b'].forEach(function(p) {
+        var dl = document.getElementById('scene-list-' + p);
+        if (!dl) return;
+        dl.innerHTML = '';
+        _scenesCache[p].forEach(function(s) {
+          var o = document.createElement('option'); o.value = s; dl.appendChild(o);
+        });
+      });
+      // Combined datalist: common scenes unlabeled, unique scenes prefixed with [A]/[B]
+      var dlBoth = document.getElementById('scene-list-both');
+      if (!dlBoth) return;
+      dlBoth.innerHTML = '';
+      var added = new Set();
+      _scenesCache.a.forEach(function(s) {
+        var o = document.createElement('option');
+        o.value = setB.has(s) ? s : '[A] ' + s;
+        dlBoth.appendChild(o); added.add(s);
+      });
+      _scenesCache.b.forEach(function(s) {
+        if (added.has(s)) return;
+        var o = document.createElement('option');
+        o.value = '[B] ' + s;
+        dlBoth.appendChild(o);
+      });
+    }
+    // Strip [A]/[B] prefix inserted by combined datalist when user selects an entry
+    document.getElementById('new-scene').addEventListener('change', function() {
+      var m = this.value.match(/^\[(?:A|B)\] (.+)/);
+      if (m) this.value = m[1];
+    });
+
+    function saveConfig() {
+      var cfg = {
+        enabled: document.getElementById('enabled').checked,
+        connections: {
+          a: { host: document.getElementById('host-a').value.trim(),
+               port: parseInt(document.getElementById('port-a').value)||4455,
+               password: document.getElementById('pw-a').value },
+          b: { host: document.getElementById('host-b').value.trim(),
+               port: parseInt(document.getElementById('port-b').value)||4455,
+               password: document.getElementById('pw-b').value }
+        },
+        triggers: triggers
+      };
+      fetch('/api/obs/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})
+        .then(function(r){return r.json();}).then(function(d) {
+          if (d.ok) {
+            msg('Config saved!', false);
+            document.getElementById('pw-a').value = '';
+            document.getElementById('pw-b').value = '';
+          } else { msg('Error: ' + (d.error||'unknown'), true); }
+        }).catch(function(e){ msg('Request failed: '+e, true); });
+    }
+
+    function connect(player) {
+      var host = document.getElementById('host-'+player).value.trim();
+      var port = parseInt(document.getElementById('port-'+player).value)||4455;
+      var pw   = document.getElementById('pw-'+player).value;
+      var body = {player:player, host:host, port:port};
+      if (pw) body.password = pw;
+      fetch('/api/obs/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(function(r){return r.json();}).then(function(d){
+          if (d.ok && pw) document.getElementById('pw-'+player).value='';
+          msg(d.ok ? ('Connecting player '+player.toUpperCase()+'...') : ('Error: '+d.error), !d.ok);
+          setTimeout(loadStatus, 1500);
+        });
+    }
+
+    function disconnect(player) {
+      fetch('/api/obs/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player})})
+        .then(function(r){return r.json();}).then(function(d){
+          msg(d.ok ? ('Disconnected player '+player.toUpperCase()) : ('Error: '+d.error), !d.ok);
+          setTimeout(loadStatus, 500);
+        });
+    }
+
+    function testScene(player) {
+      var scene = prompt('Scene name to switch to for Player ' + player.toUpperCase() + ':');
+      if (!scene) return;
+      fetch('/api/obs/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player,scene:scene})})
+        .then(function(r){return r.json();}).then(function(d){
+          msg(d.ok ? ('\u2714 Scene changed to "'+scene+'"') : ('Error: '+d.error), !d.ok);
+        });
+    }
+
+    // Populate the area-filter <select> with grouped entries from the active game.
+    // The select has:
+    //   - "(any area)"
+    //   - <optgroup "Area Groups">   group:<id> options (e.g. group:route)
+    //   - <optgroup "<Group label>"> one per non-empty group, with the areas inside
+    // If an existing trigger's area_id_filter isn't in the loaded list (legacy
+    // free-text value), we add a "Custom" optgroup so the dropdown can still
+    // round-trip it on re-render.
+    function loadAreas() {
+      fetch('/api/obs/areas').then(function(r){return r.json();}).then(function(d){
+        _areaGroups = d.groups || [];
+        _areaList   = d.areas  || [];
+        _areaNameById = {};
+        _areaGroups.forEach(function(g){
+          _areaNameById['group:' + g.id] = 'All ' + g.label + ' (' + g.count + ')';
+        });
+        _areaList.forEach(function(a){ _areaNameById[a.id] = a.name; });
+        rebuildAreaSelect();
+        // Re-render triggers so existing area filters get pretty labels.
+        if (triggersLoaded) renderTriggers();
+      }).catch(function(){});
+    }
+
+    function rebuildAreaSelect() {
+      var sel = document.getElementById('new-area');
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = '';
+      var defaultOpt = document.createElement('option');
+      defaultOpt.value = ''; defaultOpt.textContent = '(any area)';
+      sel.appendChild(defaultOpt);
+      // Groups optgroup
+      if (_areaGroups.length) {
+        var og = document.createElement('optgroup');
+        og.label = 'Area Groups';
+        _areaGroups.forEach(function(g){
+          var o = document.createElement('option');
+          o.value = 'group:' + g.id;
+          o.textContent = 'All ' + g.label + ' (' + g.count + ')';
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      }
+      // One optgroup per group, listing specific areas
+      _areaGroups.forEach(function(g){
+        var items = _areaList.filter(function(a){ return a.group === g.id; });
+        if (!items.length) return;
+        var og = document.createElement('optgroup');
+        og.label = g.label;
+        items.forEach(function(a){
+          var o = document.createElement('option');
+          o.value = a.id; o.textContent = a.name;
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      });
+      // Preserve any prior selection (incl. legacy free-text values)
+      if (prev) {
+        var have = Array.prototype.some.call(sel.options, function(o){ return o.value === prev; });
+        if (!have) {
+          var og2 = document.createElement('optgroup');
+          og2.label = 'Custom';
+          var o = document.createElement('option');
+          o.value = prev; o.textContent = prev;
+          og2.appendChild(o);
+          sel.appendChild(og2);
+        }
+        sel.value = prev;
+      }
+    }
+
+    loadAreas();
+    loadStatus();
+    setInterval(loadStatus, 5000);
+  </script>
+  <script src="/static/dashboard.js" defer></script>
+</main>
+</body>
+</html>

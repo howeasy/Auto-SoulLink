@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Twitch Bot — Soul Link</title>
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:var(--font-heading);color:var(--c-txt);min-height:100vh}
+    .dash-main{padding:1.2em 1.4em 2em;font-family:var(--font-heading)}
+    h1{font-family:var(--font-heading);color:var(--c-gold);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
+    .sub{color:var(--c-dim);font-size:.85em;margin-bottom:1.5em}
+    .sub a{color:#6af;text-decoration:none}
+    .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
+    .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:#f8d030;margin-bottom:.8em;letter-spacing:.05em}
+    .status-badge{display:inline-block;padding:3px 12px;border-radius:3px;font-size:.82em;font-weight:700;letter-spacing:.05em}
+    .sb-on{background:#1a4a1a;color:#3de85a;border:1px solid #3de85a}
+    .sb-off{background:#3a1a1a;color:#f03838;border:1px solid #f03838}
+    .sb-dis{background:#2a2a2a;color:var(--c-dim);border:1px solid #888}
+    label{display:block;color:#aaa;font-size:.8em;margin-bottom:.2em;margin-top:.7em}
+    input[type=text],input[type=number]{width:100%;background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em}
+    input[type=text]:focus,input[type=number]:focus{outline:none;border-color:#f8d030}
+    .btn{background:#1a2a3a;color:#6af;border:1px solid #6af;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:.82em;white-space:nowrap}
+    .btn:hover{background:#2a3a4a}
+    .btn-red{color:#f03838;border-color:#f03838}.btn-red:hover{background:#3a1a1a}
+    .btn-grn{color:#3de85a;border-color:#3de85a}.btn-grn:hover{background:#1a3a1a}
+    .btn-row{display:flex;gap:.6em;flex-wrap:wrap;margin-top:.8em}
+    .hint{color:var(--c-dim);font-size:.75em;margin-top:.3em}
+    table{width:100%;border-collapse:collapse;font-size:.83em}
+    th{text-align:left;color:var(--c-dim);padding:4px 8px;border-bottom:1px solid #2a2c3a;font-weight:400}
+    td{padding:4px 8px;border-bottom:1px solid #1a1c24;vertical-align:top}
+    td.cmd{font-family:monospace;color:#f8d030;white-space:nowrap}
+    td.arg{font-family:monospace;color:#aaa;white-space:nowrap}
+    .log-entry{font-size:.78em;padding:4px 0;border-bottom:1px solid #1a1c24;display:flex;gap:.7em}
+    .log-ts{color:var(--c-dim);flex-shrink:0;white-space:nowrap}
+    .log-txt{color:#ccc;word-break:break-all}
+    #log-list .log-entry:last-child{border-bottom:none}
+    .empty{color:var(--c-dim);font-size:.82em;font-style:italic}
+    .preview-box{background:#1a1c28;border:1px solid #363850;border-radius:4px;padding:8px 12px;font-size:.82em;min-height:2em;color:#6af;font-family:monospace;white-space:pre-wrap;word-break:break-all}
+    select{background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em;width:100%}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:1em}
+    @media(max-width:600px){.row2{grid-template-columns:1fr}}
+    .sec-note{color:#f8d030;background:rgba(248,208,48,.07);border:1px solid rgba(248,208,48,.2);border-radius:4px;padding:8px 12px;font-size:.78em;margin-bottom:.8em}
+  </style>
+</head>
+<body>
+<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+{sidebar}
+<main class="dash-main">
+  <h1>&#x1F916; Twitch Bot</h1>
+
+  <div class="panel">
+    <h2>STATUS</h2>
+    <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
+    <span id="status-channel" style="margin-left:.8em;color:var(--c-dim);font-size:.85em"></span>
+    <span id="token-badge" style="margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <span id="clientid-badge" style="margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <div id="status-error" style="display:none;margin-top:.7em;background:rgba(240,56,56,.1);border:1px solid #f03838;border-radius:4px;padding:7px 12px;color:#f03838;font-size:.82em;font-family:monospace;word-break:break-all"></div>
+  </div>
+
+  <div class="panel">
+    <h2>CONFIGURATION</h2>
+    <div class="sec-note">
+      &#x26A0; <strong>twitchio 3.x setup — Twitch IRC is discontinued. You must use EventSub.</strong><br>
+      <strong>Step 1 — Register your app</strong> at <a href="https://dev.twitch.tv/console" target="_blank" style="color:#f8d030">dev.twitch.tv/console</a> → Register Your Application.<br>
+      &nbsp;&nbsp;• Name: anything &nbsp;• Category: Chat Bot &nbsp;• OAuth Redirect URL: <code>https://twitchtokengenerator.com/</code> &nbsp;• Client Type: Confidential<br>
+      &nbsp;&nbsp;Copy your <strong>Client ID</strong> and click <em>New Secret</em> to generate a <strong>Client Secret</strong>.<br>
+      <strong>Step 2 — Get tokens</strong> at <a href="https://twitchtokengenerator.com" target="_blank" style="color:#f8d030">twitchtokengenerator.com</a> → Custom Scope Token → paste your Client ID → enable scopes: <code>user:read:chat</code> <code>user:write:chat</code> <code>user:bot</code> <code>channel:bot</code> → Generate. Copy <strong>Access Token</strong> and <strong>Refresh Token</strong>.<br>
+      <strong>Step 3 — Set env vars</strong> before starting the server (cmd.exe — no spaces, no quotes):<br>
+      &nbsp;&nbsp;<code>set TWITCH_ACCESS_TOKEN=...</code> &nbsp; ← from twitchtokengenerator<br>
+      &nbsp;&nbsp;<code>set TWITCH_REFRESH_TOKEN=...</code> &nbsp; ← from twitchtokengenerator<br>
+      &nbsp;&nbsp;<code>set TWITCH_CLIENT_SECRET=...</code> &nbsp; ← from dev.twitch.tv/console → your app → New Secret<br>
+      <strong>Step 4 — Fill in Channel and Client ID below</strong>, click Save Config, then Reconnect.
+    </div>
+    <div class="row2">
+      <div>
+        <label>Channel (without #)</label>
+        <input type="text" id="cfg-channel" placeholder="your_channel">
+        <label>Bot Nick</label>
+        <input type="text" id="cfg-nick" placeholder="slink_bot">
+      </div>
+      <div>
+        <label>Client ID (from dev.twitch.tv/console)</label>
+        <input type="text" id="cfg-client-id" placeholder="abcdef1234567890abcdef1234567890" style="width:260px">
+        <label>Command Prefix</label>
+        <input type="text" id="cfg-prefix" value="!" maxlength="3" style="width:80px">
+        <label>Command Cooldown (seconds)</label>
+        <input type="number" id="cfg-cooldown" min="1" max="60" value="5" style="width:80px">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="saveConfig()">Save Config</button>
+      <button class="btn" onclick="reloadBot()">Reconnect</button>
+      <button class="btn btn-grn" onclick="enableBot()">Enable</button>
+      <button class="btn btn-red" onclick="disableBot()">Disable</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>COMMAND PREVIEW</h2>
+    <p style="color:var(--c-dim);font-size:.82em;margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
+    <div style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label>Command</label>
+        <select id="prev-cmd">
+          <option value="soullink">!soullink</option>
+          <option value="clauses">!clauses</option>
+          <option value="rip">!rip</option>
+          <option value="runstats">!runstats</option>
+          <option value="alltime">!alltime</option>
+          <option value="lastrun">!lastrun</option>
+          <option value="attempts">!attempts</option>
+          <option value="partner">!partner &lt;name&gt;</option>
+          <option value="area">!area &lt;name&gt;</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label>Argument (optional)</label>
+        <input type="text" id="prev-arg" placeholder="e.g. PIDGEY">
+      </div>
+      <button class="btn" onclick="previewCmd()" style="margin-bottom:2px">Preview</button>
+    </div>
+    <div id="preview-out" class="preview-box" style="margin-top:.7em">&hellip;</div>
+  </div>
+
+  <div class="panel">
+    <h2>COMMAND REFERENCE</h2>
+    <table>
+      <thead><tr><th>Command</th><th>Arg</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">!soullink</td><td class="arg"></td><td>Plain-English Soul Link rules for new viewers</td></tr>
+        <tr><td class="cmd">!clauses</td><td class="arg"></td><td>Active clause rules (Species / Gender / Type)</td></tr>
+        <tr><td class="cmd">!rip</td><td class="arg"></td><td>Most recent death with killer detail</td></tr>
+        <tr><td class="cmd">!runstats</td><td class="arg"></td><td>Attempt #, alive/dead/shinies, oldest linked pair</td></tr>
+        <tr><td class="cmd">!alltime</td><td class="arg"></td><td>Cross-run aggregate: attempts, deaths, shinies, best run</td></tr>
+        <tr><td class="cmd">!lastrun</td><td class="arg"></td><td>How the previous run ended</td></tr>
+        <tr><td class="cmd">!attempts</td><td class="arg"></td><td>Current attempt number</td></tr>
+        <tr><td class="cmd">!partner</td><td class="arg">&lt;name&gt;</td><td>Look up a mon's Soul Link partner by nickname</td></tr>
+        <tr><td class="cmd">!area</td><td class="arg">&lt;name&gt;</td><td>Look up the link status of an area</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>RECENT ACTIVITY</h2>
+    <div id="log-list"><span class="empty">No activity yet.</span></div>
+  </div>
+
+  <script>
+    var _cfgLoaded = false;
+    function showToast(msg, ok) {
+      var t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:1.5em;right:1.5em;background:'+(ok?'#1a3a1a':'#3a1a1a')+';color:'+(ok?'#3de85a':'#f03838')+';border-radius:5px;padding:8px 16px;font-size:.85em;z-index:999';
+      document.body.appendChild(t);
+      setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},2500);
+    }
+    function post(url, body) {
+      return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json();});
+    }
+    var _cfgInputIds = ['cfg-channel','cfg-nick','cfg-prefix','cfg-cooldown','cfg-client-id'];
+    function _anyConfigFocused() {
+      var a = document.activeElement;
+      return a && _cfgInputIds.indexOf(a.id) !== -1;
+    }
+    function loadStatus(forceConfig) {
+      fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
+        var badge = document.getElementById('status-badge');
+        var chan  = document.getElementById('status-channel');
+        var tBadge = document.getElementById('token-badge');
+        var cidBadge = document.getElementById('clientid-badge');
+        var errBox = document.getElementById('status-error');
+        if (!badge) return;
+        if (j.status === 'connected') { badge.className='status-badge sb-on'; badge.textContent='Connected'; }
+        else if (j.status === 'disabled') { badge.className='status-badge sb-dis'; badge.textContent='Disabled'; }
+        else { badge.className='status-badge sb-off'; badge.textContent='Disconnected'; }
+        chan.textContent = j.channel ? '#' + j.channel : '';
+        // Inline SVG icons match the sidebar theming better than ✓/✗
+        // emojis — labels are static strings so innerHTML is safe (no
+        // user input flows through here).
+        const _icoCheck = '<svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg>';
+        const _icoX     = '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>';
+        if (tBadge) {
+          if (j.access_token_set) {
+            tBadge.style.cssText = 'background:#1a2a1a;color:#3de85a;border:1px solid #3de85a;margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            tBadge.innerHTML = _icoCheck + ' Access Token set';
+          } else {
+            tBadge.style.cssText = 'background:#3a1a1a;color:#f03838;border:1px solid #f03838;margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            tBadge.innerHTML = _icoX + ' TWITCH_ACCESS_TOKEN not set';
+          }
+        }
+        if (cidBadge) {
+          if (j.client_id_set) {
+            cidBadge.style.cssText = 'background:#1a2a1a;color:#3de85a;border:1px solid #3de85a;margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            cidBadge.innerHTML = _icoCheck + ' Client ID set';
+          } else {
+            cidBadge.style.cssText = 'background:#3a1a1a;color:#f03838;border:1px solid #f03838;margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            cidBadge.innerHTML = _icoX + ' Client ID not set';
+          }
+        }
+        if (errBox) {
+          if (j.last_error) {
+            errBox.style.display = 'block';
+            errBox.textContent = j.last_error;
+          } else {
+            errBox.style.display = 'none';
+            errBox.textContent = '';
+          }
+        }
+        if (j.config && (forceConfig || !_cfgLoaded) && !_anyConfigFocused()) {
+          document.getElementById('cfg-channel').value = j.config.channel || '';
+          document.getElementById('cfg-nick').value = j.config.nick || '';
+          document.getElementById('cfg-prefix').value = j.config.prefix || '!';
+          document.getElementById('cfg-cooldown').value = j.config.command_cooldown_sec || 5;
+          var ciEl = document.getElementById('cfg-client-id');
+          if (ciEl) ciEl.value = j.config.client_id || '';
+          _cfgLoaded = true;
+        }
+        var ll = document.getElementById('log-list');
+        if (j.activity && j.activity.length) {
+          ll.innerHTML = '';
+          j.activity.forEach(function(e){
+            var d = document.createElement('div'); d.className='log-entry';
+            d.innerHTML='<span class="log-ts">'+e.ts.substring(11,19)+'</span><span class="log-txt">'+e.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</span>';
+            ll.appendChild(d);
+          });
+        }
+      }).catch(function(){});
+    }
+    function saveConfig() {
+      var ciEl = document.getElementById('cfg-client-id');
+      var body = {
+        channel:  document.getElementById('cfg-channel').value.trim(),
+        nick:     document.getElementById('cfg-nick').value.trim(),
+        prefix:   document.getElementById('cfg-prefix').value.trim() || '!',
+        command_cooldown_sec: parseInt(document.getElementById('cfg-cooldown').value,10)||5,
+        client_id: ciEl ? ciEl.value.trim() : ''
+      };
+      post('/api/bot/config', body).then(function(j){ showToast(j.ok?'Saved':'Error: '+(j.error||'?'), j.ok); loadStatus(true); });
+    }
+    function reloadBot() { post('/api/bot/reload').then(function(j){ showToast(j.ok?'Reconnecting…':'Error', j.ok); setTimeout(loadStatus,1200); }); }
+    function enableBot()  { post('/api/bot/enable').then(function(j){ showToast(j.ok?'Enabled':'Error', j.ok); loadStatus(); }); }
+    function disableBot() { post('/api/bot/disable').then(function(j){ showToast(j.ok?'Disabled':'Error', j.ok); loadStatus(); }); }
+    function previewCmd() {
+      var cmd = document.getElementById('prev-cmd').value;
+      var arg = document.getElementById('prev-arg').value.trim();
+      var box = document.getElementById('preview-out');
+      box.textContent = 'Loading…';
+      post('/api/bot/preview', {command: cmd, arg: arg}).then(function(j){
+        box.textContent = j.reply || '(no reply)';
+      }).catch(function(){ box.textContent = 'Error'; });
+    }
+    loadStatus();
+    setInterval(loadStatus, 5000);
+  </script>
+  <script src="/static/dashboard.js" defer></script>
+</main>
+</body>
+</html>

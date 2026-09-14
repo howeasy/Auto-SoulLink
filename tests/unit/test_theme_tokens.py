@@ -63,6 +63,11 @@ def _dashboard_sources() -> dict[str, str]:
         out["SLinkServer._build_status_html"] = inspect.getsource(builder)
     for path in sorted(glob.glob(os.path.join(_ROOT, "server", "templates", "**", "*.html"),
                                  recursive=True)):
+        # templates/pages/ are the raw debug / Twitch / OBS pages, single-theme by design and
+        # substituted with str.replace, not rendered by Jinja. They join this set when they
+        # are re-themed on the tokens, not before.
+        if os.sep + "pages" + os.sep in path:
+            continue
         with open(path, encoding="utf-8") as f:
             out[os.path.relpath(path, _ROOT)] = f.read()
     assert out, "no dashboard source found -- the test is pointed at nothing"

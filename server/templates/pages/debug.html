@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>Debug — {page_title}</title>
+<link rel="stylesheet" href="/static/slink.css">
+<link rel="stylesheet" href="/static/dashboard.css">
+<style>
+  /* Map the debug page's private design tokens to slink.css so themes flow
+   * through automatically (same pattern as the calc body theming). Anything
+   * inside this page's panels keeps its existing rules. */
+  :root {
+    --bg:     var(--c-bg);
+    --panel:  var(--c-card);
+    --border: var(--c-edge);
+    --text:   var(--c-txt);
+    --muted:  var(--c-dim);
+    --green:  var(--c-alive);
+    --red:    var(--c-dead);
+    --yellow: var(--c-gold);
+    --blue:   var(--c-link);
+    --orange: var(--c-pend);
+  }
+  * { box-sizing:border-box; }
+  /* The sidebar grid is set by dashboard.css. The debug-page body styles
+   * below apply to .dash-main where the page content lives. */
+  .dash-main { padding:1.2em 1.4em 2em; font-family:var(--font-heading); font-size:0.95em; }
+  h1 { color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
+  .nav { color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
+  .nav a { color:var(--blue); text-decoration:none; }
+  .nav a:hover { text-decoration:underline; }
+
+  /* ── Live status banner ── */
+  .live-bar { display:flex; gap:1.2em; flex-wrap:wrap; align-items:center;
+              background:#0d1117; border:1px solid var(--border); border-radius:6px;
+              padding:0.6em 1em; margin-bottom:1em; font-size:0.85em; }
+  .live-bar .sse-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  .live-bar .sse-ok { background:var(--green); box-shadow:0 0 4px var(--green); }
+  .live-bar .sse-off { background:var(--red); box-shadow:0 0 4px var(--red); }
+  .live-bar .player-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
+                           border-radius:12px; font-weight:600; font-size:0.9em; }
+  .live-bar .player-pill.on { background:#14532d; color:var(--green); }
+  .live-bar .player-pill.off { background:#1c1c1c; color:var(--c-dim); }
+  .live-bar .stat { color:var(--muted); }
+  .live-bar .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
+  .live-bar .event-log { flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
+                         overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
+
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:1em; }
+  @media(max-width:900px) { .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:1em; }
+  .panel h2 { color:var(--orange); font-size:1em; margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
+              display:flex; align-items:center; justify-content:space-between; }
+  .panel h2 .h2-left { display:flex; align-items:center; gap:0.3em; }
+  .panel.full { grid-column:1/-1; }
+  label { display:block; color:var(--muted); font-size:0.85em; margin-bottom:2px; }
+  input, select, textarea { background:#0d1b2a; border:1px solid var(--border); color:var(--text);
+    padding:5px 8px; border-radius:4px; font-size:0.88em; font-family:inherit; width:100%; }
+  select { cursor:pointer; }
+  textarea { min-height:100px; resize:vertical; }
+  .row { display:flex; gap:0.6em; margin-bottom:0.6em; }
+  .row > * { flex:1; }
+  .btn { padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:0.85em; font-weight:600;
+         transition:filter 0.15s; }
+  .btn-orange { background:#7c2d12; color:var(--orange); }
+  .btn-red { background:#7f1d1d; color:var(--red); }
+  .btn-green { background:#14532d; color:var(--green); }
+  .btn-blue { background:#1e3a5f; color:var(--blue); }
+  .btn:hover { filter:brightness(1.3); }
+  .btn:active { filter:brightness(0.9); }
+  .btn-sm { padding:3px 10px; font-size:0.8em; }
+  .result { margin-top:0.6em; padding:0.5em; background:#0d1b2a; border-radius:4px;
+    font-family:monospace; font-size:0.82em; white-space:pre-wrap; word-break:break-all;
+    max-height:300px; overflow-y:auto; color:var(--muted); display:none; }
+  .result.ok { border-left:3px solid var(--green); }
+  .result.err { border-left:3px solid var(--red); }
+  .flash { animation: flash-border 0.5s ease-out; }
+  @keyframes flash-border { 0% { border-color:#4af; } 100% { border-color:var(--border); } }
+  #raw-state { max-height:500px; overflow:auto; }
+  #raw-state pre { white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:0.82em; }
+  .backup-table { width:100%; font-size:0.9em; border-collapse:collapse; }
+  .backup-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
+  .backup-table td { padding:3px 6px; }
+  .backup-table tr:hover { background:#1a1a2a; }
+  .backup-table .slot-link { color:var(--c-link); cursor:pointer; text-decoration:underline; }
+  .backup-table .slot-link:hover { color:#4cf; }
+  .ml-table { width:100%; font-size:0.85em; border-collapse:collapse; }
+  .ml-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
+  .ml-table td { padding:3px 6px; font-family:monospace; }
+  .ml-table tr:hover { background:#1a1a2a; }
+  .ml-table .st-alive { color:var(--green); }
+  .ml-table .st-dead { color:var(--red); }
+  .ml-table .st-memorial { color:var(--c-dim); }
+  .ml-table .btn-unlink { padding:2px 8px; font-size:0.8em; }
+  .ml-table .btn-revive { padding:2px 8px; font-size:0.8em; background:#2a6; color:#fff; border:none; border-radius:3px; cursor:pointer; }
+  .ml-table .btn-revive:hover { background:#3b7; }
+</style>
+</head><body>
+<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+{sidebar}
+<main class="dash-main">
+<h1>&#128295; Debug Console</h1>
+
+<!-- Live status banner -->
+<div class="live-bar">
+  <span id="sse-badge"><span class="sse-dot sse-off"></span> connecting…</span>
+  <span class="player-pill off" id="pill-a">A: offline</span>
+  <span class="player-pill off" id="pill-b">B: offline</span>
+  <span class="stat">Links: <b id="lb-links">0</b></span>
+  <span class="stat">Areas: <b id="lb-areas">0</b></span>
+  <span class="stat">Queued: <b id="lb-queued">0/0</b></span>
+  <span class="event-log" id="lb-last-event">—</span>
+</div>
+
+<div class="grid">
+
+  <!-- Inject Event -->
+  <div class="panel">
+    <h2><span class="h2-left">&#9889; Inject Event</span></h2>
+    <div class="row">
+      <div><label>Player</label><select id="ev-player"><option value="a">A</option><option value="b">B</option></select></div>
+      <div><label>Event</label><select id="ev-type">
+        <option value="area_enter">area_enter</option>
+        <option value="capture">capture</option>
+        <option value="faint">faint</option>
+        <option value="no_catch">no_catch</option>
+        <option value="whiteout">whiteout</option>
+        <option value="party_to_box">party_to_box</option>
+        <option value="box_to_party">box_to_party</option>
+        <option value="key_change">key_change</option>
+        <option value="hello">hello</option>
+        <option value="tick">tick</option>
+        <option value="stats_cache">stats_cache</option>
+        <option value="sync_retrieve_done">sync_retrieve_done</option>
+        <option value="sync_retrieve_failed">sync_retrieve_failed</option>
+        <option value="safe">safe</option>
+      </select></div>
+    </div>
+    <div class="row">
+      <div><label>Mon Key</label><input id="ev-key" placeholder="AABBCCDD:11223344" list="dl-keys"></div>
+      <div><label>Area ID</label><input id="ev-area" placeholder="route_1" list="dl-areas"></div>
+    </div>
+    <div class="row">
+      <div><label>Extra JSON fields</label><input id="ev-extra" placeholder='{"level":12,"species_id":25}'></div>
+    </div>
+    <button class="btn btn-orange" onclick="injectEvent()">Send Event</button>
+    <div class="result" id="ev-result"></div>
+  </div>
+
+  <!-- Queue Command -->
+  <div class="panel">
+    <h2><span class="h2-left">&#128228; Queue Command</span></h2>
+    <div class="row">
+      <div><label>Target Player</label><select id="cmd-player"><option value="a">A</option><option value="b">B</option></select></div>
+      <div><label>Command</label><select id="cmd-type">
+        <option value="force_faint">force_faint</option>
+        <option value="force_explode">force_explode</option>
+        <option value="box_mon">box_mon</option>
+        <option value="party_mon">party_mon</option>
+        <option value="memorialize">memorialize</option>
+        <option value="unresolve_area">unresolve_area</option>
+        <option value="hud_show">hud_show</option>
+        <option value="noop">noop</option>
+      </select></div>
+    </div>
+    <div class="row">
+      <div><label>Mon Key</label><input id="cmd-key" placeholder="AABBCCDD:11223344" list="dl-keys"></div>
+    </div>
+    <div class="row">
+      <div><label>Extra JSON fields</label><input id="cmd-extra" placeholder='{"text":"Hello","r":255,"g":0,"b":0}'></div>
+    </div>
+    <button class="btn btn-blue" onclick="queueCmd()">Queue Command</button>
+    <div class="result" id="cmd-result"></div>
+  </div>
+
+  <!-- Toggle State -->
+  <div class="panel">
+    <h2><span class="h2-left">&#9881; State Toggles</span></h2>
+    <div class="row">
+      <div><label>Player</label><select id="tog-player"><option value="a">A</option><option value="b">B</option></select></div>
+    </div>
+    <div class="row">
+      <button class="btn btn-green" onclick="toggleBalls(true)">Set Pokeballs &#10003;</button>
+      <button class="btn btn-red" onclick="toggleBalls(false)">Clear Pokeballs &#10007;</button>
+    </div>
+    <div class="result" id="tog-result"></div>
+    <h2 style="margin-top:1em"><span class="h2-left">&#128506; Area State</span></h2>
+    <div class="row">
+      <div><label>Area ID</label><input id="area-id" placeholder="route_1" list="dl-areas"></div>
+      <div><label>New State</label><select id="area-state">
+        <option value="unseen">unseen</option>
+        <option value="pending_a">pending_a</option>
+        <option value="pending_b">pending_b</option>
+        <option value="pending_both">pending_both</option>
+        <option value="linked">linked</option>
+        <option value="dead_zone">dead_zone</option>
+      </select></div>
+    </div>
+    <button class="btn btn-orange" onclick="setAreaState()">Set Area State</button>
+    <div class="result" id="area-result"></div>
+  </div>
+
+  <!-- Live State Info -->
+  <div class="panel">
+    <h2><span class="h2-left">&#128270; Live State</span>
+      <button class="btn btn-blue btn-sm" onclick="loadLiveState()">&#8635; Refresh</button></h2>
+    <div id="live-state-content" style="font-size:0.85em;color:var(--muted)">Loading…</div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="panel">
+    <h2><span class="h2-left">&#9888; Danger Zone</span></h2>
+    <div class="row">
+      <button class="btn btn-red" onclick="resetRun()">&#128163; Reset Run</button>
+      <button class="btn btn-red" onclick="clearPending()">Clear All Pending</button>
+    </div>
+    <div class="row">
+      <div><label>Clear Pending for Area</label><input id="clear-area" placeholder="route_1" list="dl-areas"></div>
+      <button class="btn btn-orange" onclick="clearPendingArea()" style="flex:0 0 auto;align-self:flex-end">Clear</button>
+    </div>
+    <div class="result" id="danger-result"></div>
+    <h2 style="margin-top:1em"><span class="h2-left">&#128190; Rollback to Backup</span></h2>
+    <div id="backup-list" style="color:var(--c-dim)">Loading backups…</div>
+    <div class="result" id="rollback-result"></div>
+  </div>
+
+  <!-- Manual Link / Unlink -->
+  <div class="panel full">
+    <h2><span class="h2-left">&#128279; Link Management</span>
+      <button class="btn btn-blue btn-sm" onclick="mlRefresh()">&#8635; Refresh</button></h2>
+
+    <!-- Current links table -->
+    <div id="ml-links-table" style="margin-bottom:1em;max-height:250px;overflow-y:auto"></div>
+
+    <!-- Create new link -->
+    <h3 style="color:var(--green);font-size:0.9em;margin-bottom:0.5em">Create Link</h3>
+    <div class="row">
+      <div><label id="ml-label-a">Player A</label>
+        <select id="ml-a" onchange="mlMonChanged('a')" style="font-family:monospace;font-size:0.88em"></select></div>
+      <div><label id="ml-label-b">Player B</label>
+        <select id="ml-b" onchange="mlMonChanged('b')" style="font-family:monospace;font-size:0.88em"></select></div>
+    </div>
+    <div class="row">
+      <div><label>Area</label>
+        <select id="ml-area" style="font-family:monospace;font-size:0.88em"></select></div>
+      <div><label>Filter areas</label>
+        <input id="ml-area-filter" type="text" placeholder="type to filter…" oninput="mlFilterAreas()" style="font-family:monospace;font-size:0.85em"></div>
+    </div>
+    <div style="display:flex;gap:0.6em;align-items:center;margin-top:0.4em">
+      <button class="btn btn-green" onclick="doManualLink()">&#128279; Link</button>
+      <label style="display:inline;font-size:0.8em;cursor:pointer;color:var(--muted)">
+        <input type="checkbox" id="ml-override" style="width:auto"> Override existing links
+      </label>
+      <span id="ml-warn" style="font-size:0.85em;color:var(--yellow)"></span>
+    </div>
+    <div class="result" id="ml-result"></div>
+  </div>
+
+  <!-- Memorial Box Monitor -->
+  <div class="panel full">
+    <h2><span class="h2-left">&#129702; Memorial Box Monitor</span>
+      <button class="btn btn-blue btn-sm" onclick="loadMemorial()">&#8635; Refresh</button></h2>
+    <div id="memorial-content" style="font-size:0.85em;color:var(--muted)">Loading…</div>
+  </div>
+
+  <!-- Raw State -->
+  <div class="panel full" id="raw-state">
+    <h2><span class="h2-left">&#128196; Raw State</span>
+      <span>
+        <label style="display:inline;font-size:0.75em;cursor:pointer;color:var(--muted);margin-right:0.5em">
+          <input type="checkbox" id="raw-auto" checked style="width:auto"> auto
+        </label>
+        <button class="btn btn-blue btn-sm" onclick="loadRaw()">&#8635; Refresh</button>
+      </span>
+    </h2>
+    <pre id="raw-json">Loading…</pre>
+  </div>
+
+</div>
+
+<!-- Shared datalists for autofill -->
+<datalist id="dl-keys"></datalist>
+<datalist id="dl-areas"></datalist>
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────
+function showResult(el, ok, data) {
+  el.style.display = 'block';
+  el.className = 'result ' + (ok ? 'ok' : 'err');
+  el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+async function api(method, path, body) {
+  var opts = {method: method, headers: {'Content-Type':'application/json'}};
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  var r = await fetch(path, opts);
+  return await r.json();
+}
+function flashPanel(el) {
+  while (el && !el.classList.contains('panel')) el = el.parentElement;
+  if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+}
+
+// ── SSE live updates ────────────────────────────────────────────────────
+var _sseOk = false;
+var _lastStatus = null;
+var _refreshQueued = false;
+
+function initSSE() {
+  var src = new EventSource('/api/events');
+  src.addEventListener('status', function(e) {
+    _sseOk = true;
+    updateSSEBadge(true);
+    try { _lastStatus = JSON.parse(e.data); } catch(x) {}
+    scheduleRefresh();
+  });
+  src.addEventListener('ping', function() {
+    _sseOk = true;
+    updateSSEBadge(true);
+    scheduleRefresh();
+  });
+  src.onerror = function() {
+    _sseOk = false;
+    updateSSEBadge(false);
+  };
+  src.onopen = function() {
+    _sseOk = true;
+    updateSSEBadge(true);
+  };
+}
+
+function updateSSEBadge(ok) {
+  var el = document.getElementById('sse-badge');
+  el.innerHTML = '<span class="sse-dot ' + (ok ? 'sse-ok' : 'sse-off') + '"></span> ' + (ok ? 'live' : 'disconnected');
+}
+
+function scheduleRefresh() {
+  if (_refreshQueued) return;
+  _refreshQueued = true;
+  requestAnimationFrame(function() {
+    _refreshQueued = false;
+    refreshAll();
+  });
+}
+
+function refreshAll() {
+  updateLiveBar();
+  // Skip DOM-rebuilding refreshes if user is interacting with a form element
+  var ae = document.activeElement;
+  var interacting = ae && (ae.tagName === 'SELECT' || ae.tagName === 'INPUT');
+  if (!interacting) {
+    updateDataLists();
+    renderLinksTable();
+    mlRefresh();
+    loadBackups();
+  }
+  if (document.getElementById('raw-auto').checked) { loadRaw(); loadLiveState(); loadMemorial(); }
+}
+
+function updateLiveBar() {
+  var d = _lastStatus;
+  if (!d || !d.players) return;
+  ['a','b'].forEach(function(pid) {
+    var p = d.players[pid];
+    var pill = document.getElementById('pill-' + pid);
+    var on = p && p.connected;
+    pill.className = 'player-pill ' + (on ? 'on' : 'off');
+    var name = (p && p.trainer_name) || pid.toUpperCase();
+    var area = (p && p.current_area_display) || '';
+    pill.textContent = name + ': ' + (on ? (area || 'connected') : 'offline');
+  });
+  var alive = 0, dead = 0;
+  (d.links || []).forEach(function(l) { if (l.status === 'alive') alive++; else dead++; });
+  document.getElementById('lb-links').textContent = alive + ' alive / ' + dead + ' dead';
+  var areaCount = Object.keys(d.area_states || {}).length;
+  document.getElementById('lb-areas').textContent = areaCount;
+  var qa = d.players.a.queued || 0, qb = d.players.b.queued || 0;
+  var qEl = document.getElementById('lb-queued');
+  qEl.textContent = qa + ' / ' + qb;
+  qEl.style.color = (qa + qb > 0) ? '#fbbf24' : '';
+  // Last event
+  var events = [];
+  ['a','b'].forEach(function(pid) {
+    var p = d.players[pid];
+    if (p && p.last_event && p.last_event !== '\\u2014') {
+      events.push(pid.toUpperCase() + ': ' + p.last_event);
+    }
+  });
+  document.getElementById('lb-last-event').textContent = events.join('  \\u2502  ') || '\\u2014';
+}
+
+// ── Datalist autofill ───────────────────────────────────────────────────
+var _allAreas = null;  // {aid: display_name} — loaded once from manual_link_data
+
+function updateDataLists() {
+  var d = _lastStatus;
+  if (!d) return;
+
+  // ── Mon keys ──
+  var keys = {};
+  ['a','b'].forEach(function(pid) {
+    var p = d.players && d.players[pid];
+    if (!p) return;
+    var det = p.party_details || {};
+    Object.keys(det).forEach(function(k) {
+      var m = det[k];
+      var nick = m.nickname || '';
+      var sp = m.species_name || '';
+      var short = k.substring(0, 8);
+      keys[k] = pid.toUpperCase() + ' party: ' + short + ' ' + nick + (sp ? ' (' + sp + ')' : '');
+    });
+  });
+  (d.links || []).forEach(function(lnk) {
+    if (lnk.a_key && !keys[lnk.a_key]) {
+      keys[lnk.a_key] = 'A link: ' + lnk.a_key.substring(0,8) + ' ' + (lnk.a_nickname||'') + ' (' + (lnk.a_species_name||'') + ') [' + lnk.status + ']';
+    }
+    if (lnk.b_key && !keys[lnk.b_key]) {
+      keys[lnk.b_key] = 'B link: ' + lnk.b_key.substring(0,8) + ' ' + (lnk.b_nickname||'') + ' (' + (lnk.b_species_name||'') + ') [' + lnk.status + ']';
+    }
+  });
+  var pc = d.pending_captures || {};
+  Object.keys(pc).forEach(function(area) {
+    Object.keys(pc[area]).forEach(function(pid) {
+      var info = pc[area][pid];
+      var k = info.key;
+      if (k && !keys[k]) {
+        keys[k] = pid.toUpperCase() + ' pending@' + area + ': ' + k.substring(0,8) + ' ' + (info.nickname||'');
+      }
+    });
+  });
+  var dlKeys = document.getElementById('dl-keys');
+  var kh = '';
+  Object.keys(keys).forEach(function(k) { kh += '<option value="' + k + '">' + keys[k] + '</option>'; });
+  dlKeys.innerHTML = kh;
+
+  // ── Areas (all from area_map + state annotations) ──
+  if (!_allAreas) return;  // not loaded yet
+  var states = d.area_states || {};
+  var dlAreas = document.getElementById('dl-areas');
+  var ah = '';
+  // Pending first
+  var pendingIds = Object.keys(pc).sort();
+  var seen = {};
+  pendingIds.forEach(function(aid) {
+    seen[aid] = true;
+    var pids = Object.keys(pc[aid]).map(function(p){return p.toUpperCase();}).join('+');
+    var disp = _allAreas[aid] || aid;
+    ah += '<option value="' + aid + '">\\u26a0 ' + disp + ' [PENDING ' + pids + ']</option>';
+  });
+  // Then all areas, grouped by state
+  var active = [], rest = [];
+  Object.keys(_allAreas).sort().forEach(function(aid) {
+    if (seen[aid]) return;
+    var st = states[aid] || '';
+    if (st && st !== 'unseen') active.push(aid);
+    else rest.push(aid);
+  });
+  active.forEach(function(aid) {
+    var st = states[aid];
+    var disp = _allAreas[aid] || aid;
+    ah += '<option value="' + aid + '">' + disp + ' [' + st + ']</option>';
+  });
+  rest.forEach(function(aid) {
+    var disp = _allAreas[aid] || aid;
+    ah += '<option value="' + aid + '">' + disp + '</option>';
+  });
+  dlAreas.innerHTML = ah;
+}
+
+async function loadAllAreas() {
+  try {
+    var r = await fetch('/api/debug/manual_link_data');
+    var ml = await r.json();
+    _allAreas = {};
+    var areas = ml.areas || {};
+    (ml.area_ids || []).forEach(function(aid) {
+      _allAreas[aid] = (areas[aid] && areas[aid].d) || aid;
+    });
+    updateDataLists();
+  } catch(e) {}
+}
+
+// ── Inject Event ────────────────────────────────────────────────────────
+async function injectEvent() {
+  var ev = {event: document.getElementById('ev-type').value,
+            player: document.getElementById('ev-player').value};
+  var key = document.getElementById('ev-key').value.trim();
+  var area = document.getElementById('ev-area').value.trim();
+  if (key) ev.key = key;
+  if (area) ev.area_id = area;
+  var extra = document.getElementById('ev-extra').value.trim();
+  if (extra) { try { Object.assign(ev, JSON.parse(extra)); } catch(e) { showResult(document.getElementById('ev-result'), false, 'Invalid JSON: '+e); return; } }
+  var j = await api('POST', '/api/debug/inject_event', ev);
+  showResult(document.getElementById('ev-result'), j.ok, j);
+  flashPanel(document.getElementById('ev-result'));
+}
+
+// ── Queue Command ───────────────────────────────────────────────────────
+async function queueCmd() {
+  var cmd = {cmd: document.getElementById('cmd-type').value,
+             player: document.getElementById('cmd-player').value};
+  var key = document.getElementById('cmd-key').value.trim();
+  if (key) cmd.key = key;
+  var extra = document.getElementById('cmd-extra').value.trim();
+  if (extra) { try { Object.assign(cmd, JSON.parse(extra)); } catch(e) { showResult(document.getElementById('cmd-result'), false, 'Invalid JSON: '+e); return; } }
+  var j = await api('POST', '/api/debug/queue_command', cmd);
+  showResult(document.getElementById('cmd-result'), j.ok, j);
+  flashPanel(document.getElementById('cmd-result'));
+}
+
+// ── Toggles ─────────────────────────────────────────────────────────────
+async function toggleBalls(val) {
+  var p = document.getElementById('tog-player').value;
+  var j = await api('POST', '/api/debug/set_pokeballs', {player: p, value: val});
+  showResult(document.getElementById('tog-result'), j.ok, j);
+}
+async function setAreaState() {
+  var j = await api('POST', '/api/debug/set_area_state', {
+    area_id: document.getElementById('area-id').value.trim(),
+    state: document.getElementById('area-state').value
+  });
+  showResult(document.getElementById('area-result'), j.ok, j);
+}
+
+// ── Danger Zone ─────────────────────────────────────────────────────────
+async function resetRun() {
+  if (!confirm('Reset ALL run state? This cannot be undone.')) return;
+  var j = await api('POST', '/api/reset');
+  showResult(document.getElementById('danger-result'), j.ok, j);
+}
+async function clearPending() {
+  if (!confirm('Clear ALL pending captures?')) return;
+  var j = await api('POST', '/api/debug/clear_pending', {});
+  showResult(document.getElementById('danger-result'), j.ok, j);
+}
+async function clearPendingArea() {
+  var area = document.getElementById('clear-area').value.trim();
+  if (!area) { alert('Enter an area ID'); return; }
+  var j = await api('POST', '/api/debug/clear_pending', {area_id: area});
+  showResult(document.getElementById('danger-result'), j.ok, j);
+}
+
+// ── Backups ─────────────────────────────────────────────────────────────
+async function loadBackups() {
+  var r = await fetch('/api/debug/backups');
+  var j = await r.json();
+  var el = document.getElementById('backup-list');
+  if (!j.backups || j.backups.length === 0) {
+    el.innerHTML = '<span style="color:var(--c-dim);font-size:0.9em">No backups yet — created every 5 min when both players connected.</span>';
+    return;
+  }
+  window._backupData = {};
+  var rows = j.backups.map(function(b) {
+    window._backupData[b.slot] = b;
+    var sum = b.summary;
+    var detail = sum ? '<span style="color:#4f8">'+sum.links_alive+'&#x2764;</span> <span style="color:#f55">'+sum.links_dead+'&#x2620;</span> '+sum.areas_pending+' pending '+sum.areas_dead_zone+' dz' : '<span style="color:var(--c-dim)">?</span>';
+    return '<tr><td class="slot-link" onclick="doRollback('+b.slot+')">#' + b.slot + '</td><td>' + b.modified + '</td><td>' + detail + '</td><td>' + (b.size/1024).toFixed(1) + 'K</td></tr>';
+  });
+  el.innerHTML = '<table class="backup-table"><tr><th>Slot</th><th>Time</th><th>State</th><th>Size</th></tr>' + rows.join('') + '</table>';
+}
+async function doRollback(slot) {
+  if (slot === undefined) return;
+  var info = window._backupData && window._backupData[slot];
+  var msg = 'Roll back to backup slot #' + slot + '?';
+  if (info) {
+    msg += '\\n\\nBackup from: ' + info.modified;
+    if (info.summary) {
+      var s = info.summary;
+      msg += '\\n  ' + s.links_alive + ' alive links, ' + s.links_dead + ' dead';
+      msg += '\\n  ' + s.areas_pending + ' pending areas, ' + s.areas_dead_zone + ' dead zones';
+    }
+  }
+  msg += '\\n\\nCurrent state will be saved as pre_rollback.';
+  if (!confirm(msg)) return;
+  var j = await api('POST', '/api/debug/rollback', {slot: slot});
+  showResult(document.getElementById('rollback-result'), j.ok, j.message || j.error);
+  if (j.ok) loadBackups();
+}
+
+// ── Raw State ───────────────────────────────────────────────────────────
+async function loadRaw() {
+  try {
+    var r = await fetch('/api/debug/raw_state');
+    var j = await r.json();
+    document.getElementById('raw-json').textContent = JSON.stringify(j, null, 2);
+  } catch(e) {}
+}
+
+// ── Live State Info ─────────────────────────────────────────────────────
+async function loadLiveState() {
+  try {
+    var r = await fetch('/api/debug/raw_state');
+    var j = await r.json();
+    var live = j._live || {};
+    var h = '';
+
+    // Lock rules
+    var rules = j.rules || {};
+    var ruleItems = [];
+    if (rules.species_lock) ruleItems.push('<span style="color:#f97316">Species</span>');
+    if (rules.gender_lock) ruleItems.push('<span style="color:#a78bfa">Gender</span>');
+    if (rules.type_lock) ruleItems.push('<span style="color:#38bdf8">Type</span>');
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Lock Rules:</b> ' + (ruleItems.length ? ruleItems.join(' \\u00b7 ') : '<span style="color:var(--c-dim)">none</span>') + '</div>';
+
+    // Player identity
+    var ident = j.player_identity || {};
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Identity Lock:</b><br>';
+    ['a','b'].forEach(function(pid) {
+      var id = ident[pid];
+      if (id) {
+        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--green)">' + (id.trainer_name||'?') + '</span> (OT: ' + (id.ot_id||'?') + ')<br>';
+      } else {
+        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--c-dim)">not locked</span><br>';
+      }
+    });
+    h += '</div>';
+
+    // Identity errors
+    var identErr = live.identity_errors || {};
+    if (identErr.a || identErr.b) {
+      h += '<div style="margin-bottom:0.6em;color:var(--red)"><b>Identity Errors:</b><br>';
+      if (identErr.a) h += '&nbsp;&nbsp;A: ' + identErr.a + '<br>';
+      if (identErr.b) h += '&nbsp;&nbsp;B: ' + identErr.b + '<br>';
+      h += '</div>';
+    }
+
+    // Party keys
+    var pk = live.party_keys || {};
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Party Keys:</b><br>';
+    ['a','b'].forEach(function(pid) {
+      var keys = pk[pid] || [];
+      h += '&nbsp;&nbsp;' + pid.toUpperCase() + ' (' + keys.length + '): ';
+      h += keys.length ? keys.map(function(k){return '<code style="color:#60a5fa">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">empty</span>';
+      h += '<br>';
+    });
+    h += '</div>';
+
+    // Bonus keys (shinies)
+    var bk = live.bonus_keys || j.bonus_keys || {};
+    var hasBk = (bk.a && bk.a.length) || (bk.b && bk.b.length);
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Bonus Keys (Shinies):</b><br>';
+    ['a','b'].forEach(function(pid) {
+      var keys = bk[pid] || [];
+      h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
+      h += keys.length ? keys.map(function(k){return '<code style="color:#fbbf24">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">none</span>';
+      h += '<br>';
+    });
+    h += '</div>';
+
+    // Pending bonus (shiny bonus queue — waiting for partner catch)
+    var pb_bonus = live.pending_bonus || j.pending_bonus || {};
+    var hasPbBonus = (pb_bonus.a && pb_bonus.a.length) || (pb_bonus.b && pb_bonus.b.length);
+    if (hasPbBonus) {
+      h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Pending Bonus (Awaiting Partner):</b><br>';
+      ['a','b'].forEach(function(pid) {
+        var keys = pb_bonus[pid] || [];
+        if (!keys.length) return;
+        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
+        h += keys.map(function(k){return '<code style="color:var(--c-gold)">\u23f3 '+k.substring(0,8)+'</code>';}).join(', ');
+        h += '<br>';
+      });
+      h += '</div>';
+    }
+
+    // Pokeballs obtained
+    var pb = j.pokeballs_obtained || {};
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Pok\\u00e9balls Obtained:</b> ';
+    h += 'A: ' + (pb.a ? '<span style="color:var(--green)">\\u2713</span>' : '<span style="color:var(--red)">\\u2717</span>');
+    h += ' &nbsp; B: ' + (pb.b ? '<span style="color:var(--green)">\\u2713</span>' : '<span style="color:var(--red)">\\u2717</span>');
+    h += '</div>';
+
+    // Party size (physical)
+    var ps = live.party_size || {};
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Party Size (physical):</b> ';
+    h += 'A: ' + (ps.a !== undefined ? ps.a : '?') + ' &nbsp; B: ' + (ps.b !== undefined ? ps.b : '?');
+    h += '</div>';
+
+    // Mon stats cache count
+    var msCount = Object.keys(j.mon_stats || {}).length;
+    h += '<div><b style="color:var(--text)">Mon Stats Cached:</b> ' + msCount + ' entries</div>';
+
+    document.getElementById('live-state-content').innerHTML = h;
+  } catch(e) {
+    document.getElementById('live-state-content').innerHTML = '<span style="color:var(--red)">Error loading state</span>';
+  }
+}
+
+// ── Memorial Box Monitor ────────────────────────────────────────────────
+async function loadMemorial() {
+  try {
+    var r = await fetch('/api/debug/raw_state');
+    var j = await r.json();
+    var mem = j._memorial || {};
+    var boxIdx = mem.memorial_box_index;
+    var boxContents = mem.memorial_box_contents || {};
+    var pendingMem = mem.pending_memorials || {};
+    var memLog = mem.memorial_log || [];
+    var h = '';
+
+    // 1. Memorial box info
+    if (boxIdx >= 0) {
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> Box ' + (boxIdx + 1) + ' (index ' + boxIdx + ')</div>';
+    } else {
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> <span style="color:var(--c-dim)">No dedicated memorial box (Gen 1/2)</span></div>';
+    }
+
+    // 2. Pending memorials
+    var hasPending = false;
+    ['a','b'].forEach(function(pid) {
+      var pkeys = pendingMem[pid] || [];
+      if (pkeys.length > 0) hasPending = true;
+    });
+    if (hasPending) {
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--yellow)">\\u23f3 Pending Memorials</b> <span style="color:var(--muted);font-size:0.85em">(awaiting Lua confirmation)</span><br>';
+      ['a','b'].forEach(function(pid) {
+        var pkeys = pendingMem[pid] || [];
+        if (!pkeys.length) return;
+        h += '&nbsp;&nbsp;<b>' + pid.toUpperCase() + ':</b> ';
+        h += pkeys.map(function(pk) {
+          return '<code style="color:var(--yellow)">' + pk.species_name + '</code> <span style="color:var(--c-dim)">[' + pk.key.substring(0,8) + ']</span>';
+        }).join(', ');
+        h += '<br>';
+      });
+      h += '</div>';
+    }
+
+    // 3. Memorial box contents (live PC scan)
+    if (boxIdx >= 0) {
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Box ' + (boxIdx + 1) + ' Contents</b>';
+      var totalSlots = 0;
+      ['a','b'].forEach(function(pid) {
+        var entries = boxContents[pid] || [];
+        totalSlots += entries.length;
+      });
+      if (totalSlots === 0) {
+        h += ' <span style="color:var(--c-dim);font-size:0.9em">— empty or not scanned by emulator</span></div>';
+      } else {
+        h += '</div>';
+        ['a','b'].forEach(function(pid) {
+          var entries = boxContents[pid] || [];
+          if (!entries.length) return;
+          h += '<div style="margin-left:0.5em;margin-bottom:0.5em">';
+          h += '<b style="color:var(--muted)">' + pid.toUpperCase() + '</b>';
+          h += '<table class="ml-table" style="margin-top:0.3em"><thead><tr>';
+          h += '<th>Slot</th><th>Species</th><th>Nickname</th><th>Key</th><th>Status</th>';
+          h += '</tr></thead><tbody>';
+          entries.forEach(function(e) {
+            var statusColor = '#888';
+            var statusLabel = e.status;
+            if (e.status === 'dead') { statusColor = 'var(--red)'; statusLabel = '\\u2620 dead'; }
+            else if (e.status === 'pending_memorial') { statusColor = 'var(--yellow)'; statusLabel = '\\u23f3 pending'; }
+            else if (e.status === 'quarantined') { statusColor = 'var(--orange)'; statusLabel = '\\u26a0 QUARANTINED'; }
+            else if (e.status === 'unknown') { statusColor = 'var(--yellow)'; statusLabel = '? unknown'; }
+            h += '<tr' + (e.status === 'quarantined' ? ' style="background:#3a1a0a"' : '') + '>';
+            h += '<td>' + (e.slot + 1) + '</td>';
+            h += '<td>' + (e.species_name || '#' + e.species_id) + '</td>';
+            h += '<td>' + (e.nickname || '<span style="color:var(--c-dim)">—</span>') + '</td>';
+            h += '<td style="font-family:monospace;font-size:0.9em">' + e.key.substring(0,8) + '</td>';
+            h += '<td style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</td>';
+            h += '</tr>';
+          });
+          h += '</tbody></table></div>';
+        });
+      }
+    }
+
+    // 4. Memorial log (completed memorializations)
+    if (memLog.length > 0) {
+      h += '<details style="margin-top:0.6em"><summary style="cursor:pointer;color:var(--text);font-weight:600">\\u1FAA6 Memorial Log (' + memLog.length + ' pairs)</summary>';
+      h += '<table class="ml-table" style="margin-top:0.3em"><thead><tr>';
+      h += '<th>Area</th><th>Player A</th><th>Player B</th><th>Cause</th>';
+      h += '</tr></thead><tbody>';
+      memLog.forEach(function(entry) {
+        var a = entry.a || {};
+        var b = entry.b || {};
+        h += '<tr>';
+        h += '<td>' + (entry.area_id || '?') + '</td>';
+        h += '<td style="color:var(--red)">' + (a.nickname || a.species || '?') + '</td>';
+        h += '<td style="color:var(--red)">' + (b.nickname || b.species || '?') + '</td>';
+        h += '<td style="color:var(--muted)">' + (entry.cause || '?') + '</td>';
+        h += '</tr>';
+      });
+      h += '</tbody></table></details>';
+    } else {
+      h += '<div style="margin-top:0.6em;color:var(--c-dim)">No memorial log entries yet.</div>';
+    }
+
+    document.getElementById('memorial-content').innerHTML = h;
+  } catch(e) {
+    document.getElementById('memorial-content').innerHTML = '<span style="color:var(--red)">Error loading memorial data</span>';
+  }
+}
+
+// ── Manual Link ─────────────────────────────────────────────────────────
+var _mlData = {a_options:[], b_options:[], areas:{}, area_ids:[], name_a:"Player A", name_b:"Player B"};
+var _mlForceLink = false;
+
+async function mlRefresh() {
+  try {
+    var r = await fetch('/api/debug/manual_link_data');
+    _mlData = await r.json();
+  } catch(e) { _mlData = {a_options:[], b_options:[], areas:{}, area_ids:[], name_a:"Player A", name_b:"Player B"}; }
+  document.getElementById('ml-label-a').textContent = _mlData.name_a;
+  document.getElementById('ml-label-b').textContent = _mlData.name_b;
+  _mlPopulateMons('a');
+  _mlPopulateMons('b');
+  mlFilterAreas();
+}
+
+function _mlPopulateMons(pid) {
+  var sel = document.getElementById('ml-' + pid);
+  var cur = sel.value;
+  var opts = (pid === 'a') ? _mlData.a_options : _mlData.b_options;
+  var h = '<option value="">-- select --</option>';
+  for (var i = 0; i < opts.length; i++) {
+    var o = opts[i];
+    var dis = o.linked ? ' disabled' : '';
+    var lbl = o.label + (o.linked ? ' \\u2714' : '');
+    h += '<option value="' + o.key + '" data-area="' + (o.pending_area||'') + '"' + dis + '>' + lbl + '</option>';
+  }
+  sel.innerHTML = h;
+  if (cur) { sel.value = cur; }
+}
+
+function mlFilterAreas() {
+  var sel = document.getElementById('ml-area');
+  var cur = sel.value;
+  var fi = (document.getElementById('ml-area-filter').value || '').toLowerCase();
+  var areas = _mlData.areas || {};
+  var ids = _mlData.area_ids || [];
+  var groups = {pending:[], unseen:[], other:[]};
+  for (var i = 0; i < ids.length; i++) {
+    var aid = ids[i];
+    var info = areas[aid] || {d:aid, s:'unseen', p:''};
+    if (fi && info.d.toLowerCase().indexOf(fi) === -1 && aid.indexOf(fi) === -1) continue;
+    if (info.p) groups.pending.push(aid);
+    else if (info.s === 'unseen' || info.s === 'pending_a' || info.s === 'pending_b' || info.s === 'pending_both') groups.unseen.push(aid);
+    else groups.other.push(aid);
+  }
+  var h = '<option value="">-- select area --</option>';
+  function addGroup(label, arr, color) {
+    if (!arr.length) return;
+    h += '<option disabled style="color:' + color + ';font-weight:bold">\\u2500\\u2500\\u2500 ' + label + ' \\u2500\\u2500\\u2500</option>';
+    for (var j = 0; j < arr.length; j++) {
+      var aid = arr[j];
+      var info = areas[aid] || {d:aid, s:'unseen', p:''};
+      var suffix = '';
+      if (info.p) suffix = ' [pending: ' + info.p.toUpperCase() + ']';
+      else if (info.s === 'linked') suffix = ' [linked]';
+      else if (info.s === 'dead_zone') suffix = ' [dead]';
+      h += '<option value="' + aid + '">' + info.d + suffix + '</option>';
+    }
+  }
+  addGroup('Pending Captures', groups.pending, '#fa0');
+  addGroup('Available', groups.unseen, '#4f4');
+  addGroup('Resolved', groups.other, '#888');
+  sel.innerHTML = h;
+  if (cur) { sel.value = cur; }
+}
+
+function mlMonChanged(player) {
+  var areas = _mlData.areas || {};
+  var aOpt = document.getElementById('ml-a').selectedOptions[0];
+  var bOpt = document.getElementById('ml-b').selectedOptions[0];
+  var warnEl = document.getElementById('ml-warn');
+  warnEl.innerHTML = '';
+  var aArea = aOpt ? aOpt.getAttribute('data-area') || '' : '';
+  var bArea = bOpt ? bOpt.getAttribute('data-area') || '' : '';
+  var targetArea = (player === 'a') ? (aArea || bArea) : (bArea || aArea);
+  if (targetArea) {
+    var sel = document.getElementById('ml-area');
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === targetArea) { sel.selectedIndex = i; break; }
+    }
+  }
+  if (aArea && bArea && aArea !== bArea) {
+    var aDisp = (areas[aArea]||{}).d || aArea;
+    var bDisp = (areas[bArea]||{}).d || bArea;
+    warnEl.innerHTML = '\\u26a0 A pending on ' + aDisp + ', B pending on ' + bDisp;
+  }
+}
+
+async function doManualLink() {
+  var aKey = document.getElementById('ml-a').value;
+  var bKey = document.getElementById('ml-b').value;
+  var area = document.getElementById('ml-area').value;
+  var res = document.getElementById('ml-result');
+  var override = document.getElementById('ml-override').checked;
+  if (!aKey || !bKey) { showResult(res, false, 'Select a mon from each player.'); return; }
+  if (!area) { showResult(res, false, 'Select an area.'); return; }
+  var j = await api('POST', '/api/inject_link', {a_key: aKey, b_key: bKey, area_id: area, force: _mlForceLink, override: override});
+  if (j.ok) {
+    showResult(res, true, j.message || 'Linked!');
+    _mlForceLink = false;
+    document.getElementById('ml-warn').innerHTML = '';
+  } else if (j.requires_force) {
+    document.getElementById('ml-warn').innerHTML = '\\u26a0 ' + j.error;
+    res.style.display = 'block';
+    res.className = 'result err';
+    res.innerHTML = '<button class="btn btn-orange" onclick="_mlForceLink=true;doManualLink()">Link anyway</button>';
+  } else {
+    showResult(res, false, j.error || 'Unknown error');
+  }
+}
+
+// ── Links table + unlink ────────────────────────────────────────────────
+function renderLinksTable() {
+  var d = _lastStatus;
+  var el = document.getElementById('ml-links-table');
+  if (!d || !d.links || d.links.length === 0) {
+    el.innerHTML = '<span style="color:var(--c-dim);font-size:0.85em">No links yet.</span>';
+    return;
+  }
+  var h = '<table class="ml-table"><thead><tr><th>Area</th><th>A</th><th>B</th><th>Status</th><th></th></tr></thead><tbody>';
+  d.links.forEach(function(lnk, idx) {
+    var stCls = lnk.status === 'alive' ? 'st-alive' : (lnk.status === 'dead' || lnk.status === 'memorial' ? 'st-dead' : 'st-memorial');
+    var aLbl = lnk.a_nickname ? lnk.a_nickname + ' (' + (lnk.a_species_name||'') + ')' : (lnk.a_key ? lnk.a_key.substring(0,8) : '\\u2014');
+    var bLbl = lnk.b_nickname ? lnk.b_nickname + ' (' + (lnk.b_species_name||'') + ')' : (lnk.b_key ? lnk.b_key.substring(0,8) : '\\u2014');
+    h += '<tr>';
+    h += '<td>' + (lnk.area_display || lnk.area_id) + '</td>';
+    h += '<td>' + aLbl + '</td>';
+    h += '<td>' + bLbl + '</td>';
+    h += '<td class="' + stCls + '">' + lnk.status + '</td>';
+    h += '<td>';
+    // data-* attributes feed a single delegated click handler on document.body
+    // (see init block). Inline onclick="" handlers used to drop the first
+    // click here whenever an SSE ping rebuilt the panel between mousedown and
+    // mouseup — the click event requires both targets to share an ancestor,
+    // and the original button had been detached. Delegation moves the
+    // listener to a stable node that no refresh ever touches.
+    if (lnk.status === 'dead' || lnk.status === 'memorial') {
+      h += '<button class="btn btn-revive" data-action="revive" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'" title="Revive this pair">&#x2764;</button> ';
+    }
+    h += '<button class="btn btn-red btn-unlink" data-action="unlink" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'">\\u2716</button>';
+    h += '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
+}
+
+async function doUnlink(areaId, idx) {
+  var d = _lastStatus;
+  var lnk = d && d.links && d.links[idx];
+  var desc = lnk ? (lnk.a_nickname||'?') + ' <-> ' + (lnk.b_nickname||'?') + ' on ' + (lnk.area_display || areaId) : 'link #' + idx;
+  if (!confirm('Unlink ' + desc + '?\\n\\nThis removes the link entry. Both mons become available for relinking.')) return;
+  var j = await api('POST', '/api/debug/unlink', {area_id: areaId, index: idx});
+  showResult(document.getElementById('ml-result'), j.ok, j.message || j.error || JSON.stringify(j));
+}
+
+async function doRevive(areaId, idx) {
+  var d = _lastStatus;
+  var lnk = d && d.links && d.links[idx];
+  var desc = lnk ? (lnk.a_nickname||'?') + ' <-> ' + (lnk.b_nickname||'?') + ' on ' + (lnk.area_display || areaId) : 'link #' + idx;
+  if (!confirm('Revive ' + desc + '?\\n\\nThis sets the link back to alive. You will need to manually restore the mons from the memorial box in-game.')) return;
+  var j = await api('POST', '/api/debug/revive', {area_id: areaId, index: idx});
+  showResult(document.getElementById('ml-result'), j.ok, j.message || j.error || JSON.stringify(j));
+}
+
+// ── Init ────────────────────────────────────────────────────────────────
+// Delegated click handler — survives every innerHTML rebuild because it's
+// bound to document.body, which renderLinksTable / mlRefresh / loadBackups
+// never replace. Buttons inside refresh-rebuilt panels carry data-action +
+// the parameters they used to bake into inline onclick="". See
+// renderLinksTable above for the matching markup.
+document.body.addEventListener('click', function(ev) {
+  var btn = ev.target && ev.target.closest && ev.target.closest('[data-action]');
+  if (!btn) return;
+  var act  = btn.getAttribute('data-action');
+  var area = btn.getAttribute('data-area-id');
+  var idx  = parseInt(btn.getAttribute('data-link-idx'), 10);
+  if      (act === 'unlink') doUnlink(area, idx);
+  else if (act === 'revive') doRevive(area, idx);
+});
+
+initSSE();
+// Fetch initial status to populate datalists immediately
+(async function() {
+  try {
+    var r = await fetch('/api/status');
+    _lastStatus = await r.json();
+    updateLiveBar();
+    updateDataLists();
+  } catch(e) {}
+})();
+loadAllAreas();
+loadRaw();
+loadLiveState();
+loadMemorial();
+mlRefresh();
+loadBackups();
+// Fallback poll in case SSE disconnects
+setInterval(function() { if (!_sseOk) refreshAll(); }, 10000);
+</script>
+<script src="/static/dashboard.js" defer></script>
+</main>
+</body></html>
