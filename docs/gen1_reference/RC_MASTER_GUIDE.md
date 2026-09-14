@@ -13,11 +13,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T07:26:12+00:00",
+  "updated_at_utc": "2026-09-14T07:34:57+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
-  "source_head": "4ddeed0",
+  "source_head": "bbf82fb",
   "live_lane": null,
-  "next_action": "Resume round-trip r3 HOLD at the START menu (size 7 observed vs 6 expected). RS-3 fixing; r4 after.",
+  "next_action": "r4: save phase PASSED physically; resume refused by a false hold on runtime_suspended (P2A-10 fixing). Then r5.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
@@ -685,16 +685,31 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
     },
     {
       "id": "rs-3",
-      "owner": "isolated Claude worker (harness; resumed context; ACK on report)",
-      "state": "active",
+      "owner": "integrated by coordinator (harness worker authored)",
+      "state": "done",
       "files": [
         "lua/tests/gen1_rb_save_inputs.lua",
         "lua/tests/gen1_scripted_new_game.lua",
         "tests/unit/test_gen1_rb_save_inputs.py",
         "tests/unit/test_gen1_scripted_chain.py"
       ],
-      "next_action": "SAVE row from the tilemap scan; accept START menu size 6 or 7; publish got_pokedex.",
-      "reuse_decision": "Gen 1 route facts"
+      "next_action": "None; integrated. Fact of record: SLink's companion patch adds a SLINK START-menu row (patch/gen1/tools/manifest.py:114-130), so wMaxMenuItem is 7 without the Pokedex / 8 with; SAVE stays index 3 / 4.",
+      "reuse_decision": "Gen 1 route facts",
+      "receipt": "tests/unit/test_gen1_rb_save_inputs.py (18 passed)",
+      "independent_review_refs": [
+        "coordinator re-ran 45 in the driver/chain/route sets + lupa"
+      ]
+    },
+    {
+      "id": "p2a-10",
+      "owner": "isolated Claude worker (server; resumed context; ACK on report)",
+      "state": "active",
+      "files": [
+        "server/gen1_run_resume.py",
+        "tests/unit/test_gen1_run_resume.py"
+      ],
+      "next_action": "Lifecycle event allowlist (runtime_suspended etc.) excluded from the post-witness gameplay scan; red from the r4 journal shape.",
+      "reuse_decision": "shared"
     }
   ]
 }
@@ -718,6 +733,8 @@ Updated at the owner-authorized resume after R6; see machine checkpoint timestam
 
 | Item | Verified state / next owner action |
 | --- | --- |
+| **Resume round-trip attempt 4 — save phase PASS (CONTROLLED-SCRIPTED)** | Both players saved in-game via START→SAVE→YES; server-acked `save_witness` for both (A rev 558, B rev 588); SaveRAM flushed; clean stop — first physical proof of the P2A-1 witness. Resume creation was refused: the only post-witness event for A is `runtime_suspended` (the clean stop's lifecycle record), which the inverted P2A-7 rule counts as gameplay → false hold. P2A-10: allowlist lifecycle events from source. Summary `7b02af23…`, resumed `f571f0fc…`. |
+| START menu fact | The companion patch (`patch/gen1/tools/manifest.py:114-130`) adds a **SLINK** row after EXIT: `wMaxMenuItem` is 7 without the Pokédex and 8 with (vanilla 6/7); SAVE remains index 3/4. Confirmed in the r3 cartridge bytes at DrawStartMenu (`$710B`). Any driver counting rows from `wMaxMenuItem` must use index+4 on companion cartridges; the save driver now walks to the tilemap-located SAVE row. |
 | Resume round-trip attempt 3 | Battle passed (BI-2 hardening held); START menu opened on both cartridges but reported `wMaxMenuItem 7` where the driver expected 6 (no Pokédex yet per `draw_start_menu.asm:30-38`) → idle. RS-3: navigate to the SAVE row found by the tile scan, accept 6/7, publish `got_pokedex`. Not a product defect. Summary `99c8e01d…`. |
 | Resume round-trip attempt 2 | HOLD before the save: A's starter-rival driver (8 prior passes) hit `unknown battle menu; refuse blind A` on an RNG-dependent retained-geometry state the assert did not record. BI-2: refusals name the point, bounded idle before refusing, candidate states from source. Not a product defect. Summary `e7cf6a05…646d`. |
 | P2A-9 integrated | `starting_token`/`starting_at` reservation (120 s ceiling, `# ponytail:`) survives `_reconcile`/reads; stop/archive/delete refuse a live reservation; the final start commit requires the caller's own token and no `resumed_by`, otherwise kills what it spawned and returns 409. 232 manager/resume tests. Pin `94bfa26`. |
