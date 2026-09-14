@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T10:30:02+00:00",
+  "updated_at_utc": "2026-09-14T10:30:24+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "10ebb74",
   "live_lane": null,
@@ -952,8 +952,8 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-1",
       "owner": "isolated Claude Sonnet worker (round 3 after a second REJECT; candidates 1fbdb00 + 551e7b4 on the branch)",
       "state": "active",
-      "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
-      "next_action": "Server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
+      "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
+      "next_action": "Round 3 (A1/A2/F2/F5/F6/F3/F4); server/gen1_runtime.py edits deferred until HX-2c-A2 lands (sequenced by message). Original scope: server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
       "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules",
       "receipt": "commits 1fbdb00 + 551e7b4; tests/unit/test_gen1_checkpoint_runtime.py 38 passed; 414 across adjacent suites; docs/gen1_reference/reviews/R5b-1-server-capture.md (finding->fix->test table; one documented limitation)",
       "independent_review_refs": [
