@@ -457,7 +457,7 @@ local function pc_drive(ops, tag)
     local driver = PC.new({ player = D.player }, {
         rd = rd, symbols = symbols, center = Center, ops = ops,
         log = function(line)
-            local op, what = line:match("^PC op %d+ (%a+)%(%d+%) (%a+)")
+            local op, what = line:match("^PC op %d+ ([%a_]+)%(%d+%) (%a+)")
             if what then log(fmt("PC_OP %s %s", op, what)) end
             log(line)
         end,
