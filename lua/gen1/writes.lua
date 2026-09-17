@@ -7,8 +7,8 @@
 --   2. Every multi-byte write is validated completely before the first byte lands (W-4).
 --
 -- Facts (pret pokered 405b624 / pokeyellow 0a08515; all addresses come from profile.ram):
---   party_struct (macros/ram.asm:20-38): HP @+1 (BE u16), Status @+4, Moves @+8..11, PP @+29..32
---   battle_struct (macros/ram.asm:39-57): HP @+1, Status @+4, Moves @+8..11, PP @+25..28
+--   party_struct (macros/ram.asm:7-37): HP @+1 (BE u16), Status @+4, Moves @+8..11, PP @+29..32
+--   battle_struct (macros/ram.asm:39-59): HP @+1, Status @+4, Moves @+8..11, PP @+25..28
 --   The engine judges "fainted" at MainInBattleLoop from wBattleMonHP == 0; a zero written
 --   only to the party struct is copied over from the battle struct each turn (RC
 --   BATTLE_FORCE_FAINT_WINDOW.md), so an active battler needs BOTH plus

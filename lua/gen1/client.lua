@@ -428,8 +428,8 @@ function Client.new(p)
             return
         end
         -- The enemy party may only be rewritten between InitBattleCommon staging it
-        -- (core.asm:6689-6690 sets wEnemyMonPartyPos = $FF) and EnemySendOutFirstMon clearing it
-        -- before LoadEnemyMonData (:1292,:1326). $FF means nobody has been sent out: write now.
+        -- (core.asm:6689-6690 sets wEnemyMonPartyPos = $FF) and EnemySendOutFirstMon calling
+        -- LoadEnemyMonData (:1358), which sets it at :6055 after HP reads (:6046-6053). $FF means nobody has been sent out: write now.
         -- Not $FF and never staged means the transition is still running: park the reply and let
         -- rival_window_tick apply it at the frame the byte flips. Not $FF after it HAS been $FF
         -- means the engine already read the bytes we would replace.
@@ -762,7 +762,7 @@ function Client.new(p)
                 -- from the SNAPSHOT, like the sibling branches: _RemovePokemon has already shifted
                 -- the rest of the party down by drain time, so a live read names the mon that
                 -- moved INTO the slot (engine/events/in_game_trades.asm:145,
-                -- engine/link/cable_club.asm:799 are the two standalone callers).
+                -- engine/link/cable_club.asm:800 are the two standalone callers).
                 -- A DEPOSIT's MoveMon (bills_pc.asm:230-235) has already appended the mon to the
                 -- box, so its key is in the box snapshot and `move_mon` has reported it already.
                 -- PARTY_TO_DAYCARE (scripts/Daycare.asm:51-56) leaves it in neither collection,
