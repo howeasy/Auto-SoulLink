@@ -92,29 +92,39 @@ SCENARIOS = {
     # `frames` is only a runaway guard: the main runs at 16x, so 150000 frames (~156 s) expired
     # inside a wall-clock wait; the real bound is `timeout`, enforced by this runner's cleanup.
     "link_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
-                 "target": "battle", "no_setup": True, "frames": 2000000},
+                 "target": "battle", "no_setup": True, "frames": 2000000,
+                 "oracle": "assert_link_new_saved"},
     "deadzone_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
-                     "target": "battle", "no_setup": True, "frames": 2000000},
+                     "target": "battle", "no_setup": True, "frames": 2000000,
+                     "oracle": "assert_dead_zone_new_saved"},
     "linked_faint_bench_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
-                               "target": "battle", "no_setup": True, "frames": 2500000},
+                               "target": "battle", "no_setup": True, "frames": 2500000,
+                               "oracle": "assert_linked_faint_saved",
+                               "oracle_kwargs": {"active": False}},
     "linked_faint_active_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
-                                "target": "battle", "no_setup": True, "frames": 2500000},
+                                "target": "battle", "no_setup": True, "frames": 2500000,
+                                "oracle": "assert_linked_faint_saved",
+                                "oracle_kwargs": {"active": True}},
     "reconnect_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
-                      "target": "battle", "no_setup": True, "frames": 2000000},
+                      "target": "battle", "no_setup": True, "frames": 2000000,
+                      "oracle": "assert_reconnect_saved"},
     # D-2: the starters form a gift pair; the pre-ball rival faints do not kill that pair.
     # Both cartridges start cold and play lab/parcel/save with sequential rival turns.
     "ball_gate_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
-                      "cold_boot": True, "no_setup": True, "frames": 400000},
+                      "cold_boot": True, "no_setup": True, "frames": 400000,
+                      "oracle": "assert_ball_gate_saved"},
     # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
     "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                   "target": "battle", "no_setup": True, "frames": 2500000,
                   "rom": {"a": "patch/gen1/build/slink_red.gb",
                           "b": "patch/gen1/build/slink_blue.gb"},
-                  "patched_saves": {"a": "red_patched", "b": "blue_patched"}},
+                  "patched_saves": {"a": "red_patched", "b": "blue_patched"},
+                  "oracle": "assert_trade_new"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
-                             "target": "town", "no_setup": True, "frames": 100000},
+                             "target": "town", "no_setup": True, "frames": 100000,
+                             "oracle": "assert_admit_randomized_saved"},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -131,10 +141,24 @@ SCENARIOS = {
 }
 
 
+# Titles that share a family for `games` matching. `gen1_new` runs the same hardware as the
+# `gen1` entries but is a DIFFERENT client: lua/tests/duo/duo_gen1_main.lua refuses every
+# scenario the old drivers own. The old prefix rule therefore handed it six scenarios it cannot
+# run, and `--scenario all --game gen1_new` died on the first of them.
+FAMILIES = {"gen1": ("gen1", "gen1_yellow")}
+
+# Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
+# title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
+# `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
+OPT_IN_GAMES = ("gen1_new",)
+
+
 def scenario_applies(name, game):
-    """Does `name` apply to `game`? Absent `games` means every title; entries match families."""
+    """Does `name` apply to `game`? Absent `games` means every title but the opt-in ones."""
     allowed = SCENARIOS[name].get("games")
-    return allowed is None or any(game == a or game.startswith(a + "_") for a in allowed)
+    if allowed is None:
+        return game not in OPT_IN_GAMES
+    return any(game in FAMILIES.get(entry, (entry,)) for entry in allowed)
 
 
 def scenarios_for(game):
@@ -245,6 +269,11 @@ def jitter_problems(text, expected_requested):
         return ["JITTER applied != requested"]
     return []
 
+
+# Scenarios whose verdict needs a LIVE leg to have finished, not just two client RESULT lines:
+# the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
+# and the post-result oracle refuses to describe a save that leg never produced.
+LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -567,6 +596,15 @@ class DuoRun:
         self.emu_by_inst = {}
         self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
                          for inst in ("a", "b")}
+        # When this attempt started, and when each instance was launched: artifact freshness is
+        # measured against these, because a leftover file from an earlier run would otherwise
+        # read as this run's evidence.
+        self._started = time.time()
+        self._launch_times = {}
+        # Live legs that finished, by scenario name. Set ONLY by the live assert, never by the
+        # post-result oracle: a client RESULT must not stand in for a leg that never ran.
+        self._live_complete = {}
+        self._same_save_artifact = None
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def start_server(self):
@@ -766,6 +804,7 @@ class DuoRun:
             cwd=REPO)
         self.emus.append(p)
         self.emu_by_inst[inst] = p
+        self._launch_times[inst] = time.time()
         print(f"[duo] launched {inst} phase={phase} seed={seed}")
         return p
 
@@ -1117,7 +1156,8 @@ class DuoRun:
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "ALLOW_SAVE")
 
-    def assert_ball_gate_saved(self):
+    def assert_ball_gate_saved(self, results):
+        """Post-result oracle; `results` is the dispatcher contract, consumed by the live leg."""
         if self._links_json() != [self._ball_starter_link]:
             raise RuntimeError("starter gift pair changed before the first wild encounter")
         for process in self.emus:
@@ -1168,7 +1208,7 @@ class DuoRun:
 
     def _wrong_save_missing(self):
         self._pydec_note("WRONG_SAVE_LEG NOT RUN — supply --wrong-save <second-OT red*.SaveRAM>")
-        self._reconnect_complete = False
+        self._live_complete["reconnect_new"] = False
 
     def assert_reconnect_new(self):
         """C-2 crash/reload while B stays online, then optional fail-closed C-1 wrong save."""
@@ -1227,6 +1267,11 @@ class DuoRun:
         if "RX force_faint" in final_same_receipt or "RX box_mon" in final_same_receipt:
             raise RuntimeError("A received a late force_faint/box_mon after reconnect validation")
         self.emu_by_inst["a"].wait(timeout=30)
+        # The wrong-OT relaunch overwrites this file IN PLACE (shutil.copyfile(wrong,
+        # correct_save), further down), so the same-save leg's flush is copied out here, while
+        # it is still the same-save leg's bytes, and read back by assert_reconnect_saved.
+        self._same_save_artifact = os.path.join(BUILD, "e2e_reconnect_new_a_same.SaveRAM")
+        shutil.copyfile(correct_save, self._same_save_artifact)
         self.terminate_instance("a")
         wait_for("same-save A socket closed before the wrong-save relaunch", lambda: (
             (s := self._status()) and not s["players"]["a"]["connected"]), 45)
@@ -1254,13 +1299,55 @@ class DuoRun:
             wait_for("wrong-save A phase PASS", lambda: "RESULT: PASS" in (
                 Path(wrong_path).read_text(encoding="utf-8") if os.path.exists(wrong_path) else ""), 60)
             self.emu_by_inst["a"].wait(timeout=30)
-            self._reconnect_complete = True
+            self._live_complete["reconnect_new"] = True
             final_a = wrong_path
         shutil.copyfile(final_a, self._result_path("a"))
         self._append_reconnect_marker("b", "B_DONE")
         wait_for("B stayed online through reconnect legs", lambda: "RESULT: PASS" in (
             read_result(self.scenario, "b") or ""), 120)
-        return self._reconnect_complete
+        return self._live_complete.get("reconnect_new", False)
+
+    def assert_reconnect_saved(self, results):
+        """C-2/C-1 saved states: each leg's flushed SaveRAM, read as the cartridge that wrote it.
+
+        The wrong-OT relaunch overwrites A's SaveRAM in place, so the same-save leg has to be
+        read from the artifact the live assert copied out before that (`_same_save_artifact`);
+        the instance's own file then describes the wrong-save phase. Both reads name their file
+        and phase in the PYDEC receipt: the OT expectation is what tells the two apart, so a
+        wrong-path or stale read cannot pass as the other leg.
+        """
+        if not self._live_complete.get("reconnect_new"):
+            raise RuntimeError("reconnect_new's live legs did not complete — the final A save "
+                               "belongs to the wrong-save phase and the same-save flush was "
+                               "never copied out")
+        from gen1_fixtures import DEFAULT_OT, saved_ot
+
+        for process in self.emus:
+            process.wait(timeout=30)  # client.exit flushes CartRAM
+        same = self._artifact(self._same_save_artifact, "C-2 same-save SaveRAM")
+        same_sram, same_party, _same_box, codec = self._saved_gen1_party("a", save_name=str(same))
+        same_keys = [codec.key(mon) for mon in same_party]
+        same_ot = saved_ot(same_sram, "red")
+        if self._link_keys["a"] not in same_keys:
+            raise RuntimeError(f"same-save artifact lacks A's linked key {self._link_keys['a']}: "
+                               f"{same_keys}")
+        if same_ot != DEFAULT_OT:
+            raise RuntimeError(f"same-save artifact carries OT 0x{same_ot:04X}, not the clean "
+                               f"Red OT 0x{DEFAULT_OT:04X} — it is not the same-save flush")
+        self._pydec_note(f"phase same_save: {os.path.relpath(same, REPO)} OT 0x{same_ot:04X}, "
+                         f"linked key present, party {same_keys}")
+
+        final_sram, final_party, _final_box, _codec = self._saved_gen1_party("a")
+        final_keys = [codec.key(mon) for mon in final_party]
+        final_ot = saved_ot(final_sram, "red")
+        if final_ot == DEFAULT_OT:
+            raise RuntimeError(f"final A save still carries the clean Red OT 0x{final_ot:04X}; "
+                               f"the wrong-OT relaunch did not replace the same-save file")
+        if self._link_keys["a"] in final_keys:
+            raise RuntimeError(f"the wrong-OT save still holds A's linked key "
+                               f"{self._link_keys['a']}: {final_keys}")
+        self._pydec_note(f"phase wrong_save: OT 0x{final_ot:04X} != 0x{DEFAULT_OT:04X}, "
+                         f"linked key absent, party {final_keys}")
 
     def assert_link_new(self):
         """D-1: ONE alive link on route_1 whose halves are the two keys the cartridges caught."""
@@ -1300,8 +1387,47 @@ class DuoRun:
         self._link_keys = {"a": a_key, "b": b_key}
         return a_key, b_key
 
-    def _saved_gen1_party(self, inst):
-        """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM."""
+    def _artifact(self, path, label):
+        """A file this run wrote, with its provenance checked.
+
+        Existence alone is not provenance: a leftover from an earlier run would read as this
+        run's evidence, so the mtime has to be later than the attempt's start.
+        """
+        from pathlib import Path
+
+        if not path:
+            raise RuntimeError(f"{label} artifact was never produced by this run")
+        file = Path(path)
+        if not file.is_file():
+            raise RuntimeError(f"{label} artifact missing: {file}")
+        age = self._started - file.stat().st_mtime
+        if age > 0:
+            raise RuntimeError(f"{label} artifact is stale: {file} predates this run's start "
+                               f"by {age:.0f}s")
+        return file
+
+    def _fixture_save_path(self, inst):
+        """The committed fixture this instance was seeded from — the bag baseline's source.
+
+        `run_gb_gate.seed_saveram` copies `<rom>_<target>.SaveRAM` from this directory into the
+        instance's SaveRAM dir, so reading it here compares the flushed bag with the bytes the
+        cartridge actually booted from.
+        """
+        import gen1_playthrough as play
+
+        return os.path.join(play.FIXTURES,
+                            f"{self.gcfg['fixture'][inst]}_{self.cfg.get('target', 'town')}.SaveRAM")
+
+    def _saved_gen1_party(self, inst, rom=None, save_name=None):
+        """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM.
+
+        `rom` (repo-relative, the path the instance launched) and `save_name` override the
+        clean-title defaults, which name the wrong file for two scenarios: admit_randomized_new
+        launches the staged randomized Red, whose SaveRAM carries the filename-derived name a
+        hash BizHawk does not know resolves to, and reconnect_new's same-save leg is overwritten
+        in place by the wrong-OT copy before the run ends. An absolute `save_name` is read as
+        given; a relative one resolves inside the instance's own SaveRAM directory.
+        """
         from pathlib import Path
 
         if REPO not in sys.path:
@@ -1312,12 +1438,13 @@ class DuoRun:
         from server.adapters import gen1_codec as codec
 
         title = self.gcfg["fixture"][inst]
-        name = GENS["gen1"]["saveram_names"][title]
-        sram = (Path(self._saveram_dir(inst)) / name).read_bytes()
-        rom = (Path(REPO) / self.gcfg["rom"][inst]).read_bytes()
+        name = save_name or GENS["gen1"]["saveram_names"][title]
+        path = Path(name) if os.path.isabs(str(name)) else Path(self._saveram_dir(inst)) / name
+        sram = path.read_bytes()
+        rom_bytes = (Path(REPO) / (rom or self.gcfg["rom"][inst])).read_bytes()
         # tools/gen1_fixtures.py:57-83 uses codec.verify_bank1 (the game's CalcCheckSum),
         # decode_party, level_from_exp and recompute_stats against this exact ROM.
-        problems = qualify(sram, rom)
+        problems = qualify(sram, rom_bytes)
         if problems:
             raise RuntimeError(f"{inst} saved game would not qualify: {problems}")
         start = codec.SRAM_LAYOUT["sPartyData"]  # gen1_codec.py:66-72,587-595
@@ -1327,12 +1454,15 @@ class DuoRun:
         self._pydec_note(f"{inst} main checksum/exp/recomputed stats valid; saved party/current box decode valid")
         return sram, party, current_box, codec
 
-    def assert_link_new_saved(self):
-        """The caught halves are saved in slot 1, with PYDEC-rebuilt stored stats."""
+    def assert_link_new_saved(self, results):
+        """The caught halves are saved in slot 1, with PYDEC-rebuilt stored stats, and each
+        half's bag is exactly one Poke Ball lighter than the fixture it booted from."""
+        from pathlib import Path
+
         for process in self.emus:
             process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
         for inst in ("a", "b"):
-            _sram, party, current_box, codec = self._saved_gen1_party(inst)
+            sram, party, current_box, codec = self._saved_gen1_party(inst)
             keys = [codec.key(mon) for mon in party]  # gen1_codec.py:602-610
             expected = [self._boot_keys[inst], self._link_keys[inst]]
             if keys != expected:
@@ -1341,10 +1471,18 @@ class DuoRun:
                 raise RuntimeError(f"{inst} saved current box still holds its withdrawn linked mon")
             # qualify() above independently invokes codec.recompute_stats on both mons
             # (tools/gen1_fixtures.py:70-82; gen1_codec.py:738-751).
+            fixture = Path(self._fixture_save_path(inst)).read_bytes()
+            baseline = codec.bag_quantity(fixture, codec.POKE_BALL)  # gen1_codec.py:642-645
+            final = codec.bag_quantity(sram, codec.POKE_BALL)
+            self._pydec_note(f"BAG_BALLS baseline={baseline} final={final} inst={inst}")
+            if final != baseline - 1:
+                raise RuntimeError(
+                    f"{inst} saved bag holds {final} Poke Balls; the fixture it booted from "
+                    f"carried {baseline}, and this route throws exactly one")
             self._pydec_note(f"{inst} saved slot 0 starter {keys[0]}")
             self._pydec_note(f"{inst} saved slot 1 linked {keys[1]}, no current-box duplicate")
 
-    def assert_dead_zone_new_saved(self):
+    def assert_dead_zone_new_saved(self, results):
         """B's retired key is absent from party and durably present, fainted, in Box 12."""
         for process in self.emus:
             process.wait(timeout=30)
@@ -1563,6 +1701,60 @@ class DuoRun:
             raise RuntimeError("slink.log omitted an admission transition")
         self._pydec_note(f"F-4 public verdicts: A admitted, clean B rejected; "
                          f"expected={want[:12]} reported={got[:12]} (admission-only, no save mutation)")
+        self._live_complete["admit_randomized_new"] = True
+
+    def assert_admit_randomized_saved(self, results):
+        """F-4's saved half, with explicit provenance for both cartridges.
+
+        A runs the STAGED randomized Red, whose SaveRAM carries the filename-derived name
+        BizHawk resolves for a hash it does not know — so the default read would qualify the
+        untouched clean-name seed against the clean ROM and prove nothing. B's readback shows
+        the rejected cartridge's save was not touched by the server: party and current box
+        unchanged from the seed it booted with, its rejection the only durable record, and none
+        of its keys anywhere in links.json.
+        """
+        if not self._live_complete.get("admit_randomized_new"):
+            raise RuntimeError("admit_randomized_new's live verdict did not complete")
+        from pathlib import Path
+
+        for process in self.emus:
+            process.wait(timeout=30)  # client.exit flushes CartRAM
+
+        a_rom = self._admit_roms["a"]
+        a_save = self._admit_extra_saves["a"]
+        a_path = Path(self._saveram_dir("a")) / a_save
+        launched = self._launch_times.get("a")
+        if not launched or a_path.stat().st_mtime < launched:
+            raise RuntimeError(f"A's randomized SaveRAM was not written after its launch: {a_path}")
+        a_sram, a_party, _a_box, codec = self._saved_gen1_party("a", rom=a_rom, save_name=a_save)
+        if not a_party:
+            raise RuntimeError("A's admitted save holds no party")
+        self._pydec_note(f"phase initial: {os.path.relpath(a_path, REPO)} written after launch, "
+                         f"qualifies against {a_rom}, party {[codec.key(m) for m in a_party]}")
+
+        b_sram, b_party, b_box, _codec = self._saved_gen1_party("b", rom=self._admit_roms["b"])
+        seed = Path(self._fixture_save_path("b")).read_bytes()
+        party_start = codec.SRAM_LAYOUT["sPartyData"]
+        box_start = codec.SRAM_LAYOUT["sCurBoxData"]
+        seed_party = codec.decode_party(seed[party_start:party_start + codec.PARTY_LAYOUT["size"]])
+        seed_box = codec.decode_box(seed[box_start:box_start + codec.BOX_SIZE])
+        for what, got, want in (("party", b_party, seed_party), ("current box", b_box, seed_box)):
+            if [codec.key(mon) for mon in got] != [codec.key(mon) for mon in want]:
+                raise RuntimeError(
+                    f"rejected B's saved {what} changed vs the seed it booted with: "
+                    f"{[codec.key(m) for m in got]} != {[codec.key(m) for m in want]}")
+
+        hellos = [row for row in self._reconnect_events()
+                  if row.get("type") == "hello" and row.get("player") == "b"]
+        if len(hellos) != 1 or not hellos[0].get("text", "").startswith("REJECTED — "):
+            raise RuntimeError(f"B's rejection is not the durable record: {hellos}")
+        document = Path(self.data_dir, "links.json").read_text(encoding="utf-8")
+        leaked = sorted(key for key in {codec.key(mon) for mon in b_party + b_box}
+                        if key in document)
+        if leaked:
+            raise RuntimeError(f"links.json carries rejected B's keys: {leaked}")
+        self._pydec_note("B's saved party/current box identical to the seed; one durable "
+                         "REJECTED hello; no B key in links.json")
 
     def assert_dead_zone_new(self):
         """D-3: A's RUN sends no_catch and locks route_1; B's later catch there is retired.
@@ -1778,6 +1970,28 @@ class DuoRun:
         else:
             raise ValueError(self.scenario)
 
+    def _run_oracle(self, results):
+        """The scenario's post-result oracle, from the SCENARIOS registry.
+
+        A gen1_new scenario with no `oracle` entry FAILS: the saved-state readback is the
+        independent half of every Gen 1 verdict, and a scenario that silently skipped it would
+        print PYDEC: PASS on the client's own word. Gen 2/Gen 3 entries carry no `oracle` field
+        and keep the legacy path, where a client RESULT is the whole verdict.
+        """
+        method = self.cfg.get("oracle")
+        if not method:
+            if getattr(self, "game", "") == "gen1_new":
+                raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
+                                   f"a Gen 1 verdict needs a saved-state readback")
+            return
+        getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+
+    def _live_ok(self) -> bool:
+        """True when every live leg this scenario needs ran to completion."""
+        if self.scenario not in LIVE_LEG_SCENARIOS:
+            return True
+        return bool(self._live_complete.get(self.scenario))
+
     def run(self):
         passed = False
         if getattr(self, "_pydec_path", None):
@@ -1799,17 +2013,8 @@ class DuoRun:
                 ra, rb = self.wait_results()
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
-            if pa and pb and self.scenario == "trade_new":
-                self.assert_trade_new({"a": ra, "b": rb})
-            if pa and pb and self.scenario == "link_new":
-                self.assert_link_new_saved()
-            if pa and pb and self.scenario == "deadzone_new":
-                self.assert_dead_zone_new_saved()
-            if pa and pb and self.scenario == "ball_gate_new":
-                self.assert_ball_gate_saved()
-            if pa and pb and self.scenario in ("linked_faint_bench_new", "linked_faint_active_new"):
-                self.assert_linked_faint_saved({"a": ra, "b": rb},
-                                               active=self.scenario == "linked_faint_active_new")
+            if pa and pb:
+                self._run_oracle({"a": ra, "b": rb})
             if pa and pb and getattr(self, "game", "") == "gen1_new":
                 # Harness finding, not a scenario verdict: the harness wrote the expected count
                 # into the stub, so the driver's echo is checkable without the game. Checked
@@ -1820,10 +2025,10 @@ class DuoRun:
                 if jitter_findings:
                     raise RuntimeError("idle-jitter contract violated — "
                                        + "; ".join(jitter_findings))
-            passed = pa and pb and (self.scenario != "reconnect_new" or self._reconnect_complete)
+            passed = pa and pb and self._live_ok()
             if getattr(self, "_pydec_path", None):
                 reason = ("asserted scenario facts" if passed else
-                          "wrong-save leg not run" if pa and pb and self.scenario == "reconnect_new" else
+                          "live leg did not complete" if pa and pb and not self._live_ok() else
                           "client RESULT before saved-state oracle")
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "

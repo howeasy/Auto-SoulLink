@@ -18,7 +18,11 @@ import pytest
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-from e2e_duo import GAMES, SCENARIOS, scenario_applies, scenarios_for  # noqa: E402
+from e2e_duo import GAMES, SCENARIOS, DuoRun, scenario_applies, scenarios_for  # noqa: E402
+
+GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
+                      "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
+                      "admit_randomized_new")
 
 
 @pytest.mark.parametrize("game", sorted(GAMES))
@@ -89,3 +93,36 @@ def test_the_pytest_wrappers_agree_with_the_runner():
         for name in mod.SCENARIOS:
             assert scenario_applies(name, game), (
                 f"{module}.py runs '{name}' on {game}, but the runner would refuse it")
+
+
+def test_every_gen1_new_scenario_declares_an_oracle_that_exists():
+    """A client RESULT is not a verdict: each Gen 1 scenario names the post-result method that
+    reads the saved state, and the method has to exist on DuoRun."""
+    for name in scenarios_for("gen1_new"):
+        method = SCENARIOS[name].get("oracle")
+        assert method, f"{name} declares no oracle"
+        assert callable(getattr(DuoRun, method, None)), f"{name} names {method}, not a DuoRun method"
+        assert isinstance(SCENARIOS[name].get("oracle_kwargs", {}), dict)
+
+
+def test_other_generations_keep_the_legacy_verdict_path():
+    """Gen 2/Gen 3 entries carry no oracle: for them a client RESULT is the whole verdict."""
+    for game in ("gen2", "gen3_rr"):
+        for name in scenarios_for(game):
+            assert "oracle" not in SCENARIOS[name], f"{name} ({game}) declares an oracle"
+
+
+def test_gen1_new_does_not_inherit_the_old_gen1_family():
+    """The family rule exists for gen1_yellow. `gen1_new` is a different client whose driver
+    refuses every old scenario name, so `--scenario all --game gen1_new` must select only its
+    own eight rather than six scenarios it cannot run."""
+    assert sorted(scenarios_for("gen1_new")) == sorted(GEN1_NEW_SCENARIOS)
+    assert not scenario_applies("playthrough", "gen1_new")
+    assert scenarios_for("gen1_yellow") == scenarios_for("gen1")
+
+
+def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen1_new")
+    assert mod.GAME == "gen1_new"
+    assert sorted(mod.SCENARIOS) == sorted(GEN1_NEW_SCENARIOS)

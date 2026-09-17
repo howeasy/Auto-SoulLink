@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -42,10 +43,21 @@ def runner(tmp_path, monkeypatch):
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario = "admit_randomized_new"
     run.cfg = dict(duo.SCENARIOS[run.scenario])
+    # The stub drives the verdict path, so the scenario's real oracle is replaced by a no-op of
+    # the same shape: a Gen 1 scenario with NO oracle is a deliberate failure (pinned below),
+    # and each saved-state oracle has its own tests in the synthetic-oracle section.
+    run.cfg["oracle"] = "assert_stub_oracle"
+    run.assert_stub_oracle = lambda results, **kwargs: None
     run.gcfg = dict(duo.GAMES["gen1_new"])
     run.data_dir = str(tmp_path / "run")
     Path(run.data_dir).mkdir()
     run._saveram_dir = lambda inst: str(tmp_path / f"saves_{inst}")
+    # State the real __init__ provides: the live legs are assumed complete unless a test is
+    # about them, and the artifact clock starts now.
+    run._live_complete = {run.scenario: True}
+    run._started = time.time()
+    run._launch_times = {}
+    run._same_save_artifact = None
     return run
 
 
@@ -306,7 +318,7 @@ def test_wrong_save_reconnect_only_adds_a_rejected_hello():
 def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):
     runner._pydec_path = str(tmp_path / "reconnect_pydec.txt")
     runner._wrong_save_missing()
-    assert runner._reconnect_complete is False
+    assert runner._live_complete["reconnect_new"] is False
     assert "WRONG_SAVE_LEG NOT RUN" in Path(runner._pydec_path).read_text(encoding="utf-8")
 
 
@@ -341,7 +353,7 @@ def test_a_gen1_new_run_without_the_jitter_echo_is_a_harness_finding(runner):
     runner.scenario = "reconnect_new"
     runner.game = "gen1_new"
     runner.attempt = 1
-    runner._reconnect_complete = True
+    runner._live_complete = {"reconnect_new": True}
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: None
@@ -356,7 +368,7 @@ def test_a_gen1_new_run_whose_echo_matches_is_unaffected(runner):
     runner.scenario = "reconnect_new"
     runner.game = "gen1_new"
     runner.attempt = 1
-    runner._reconnect_complete = True
+    runner._live_complete = {"reconnect_new": True}
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: None
@@ -393,7 +405,7 @@ def test_reconnect_cannot_pass_on_two_client_passes_when_wrong_save_leg_was_not_
     runner.attempt = 1
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
-    runner.orchestrate = lambda: setattr(runner, "_reconnect_complete", False)
+    runner.orchestrate = lambda: runner._live_complete.update(reconnect_new=False)
     runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
@@ -714,6 +726,11 @@ def _add_caught_to_party(sram, rom):
     for field in ("ot_names", "nicknames"):
         one = start + layout[field]
         sram[one + codec.NAME_SIZE:one + 2 * codec.NAME_SIZE] = sram[one:one + codec.NAME_SIZE]
+    # The route pays for the catch: the fixture carries ONE Poke Ball and the saved bag has to
+    # show it gone, which is exactly the baseline assert_link_new_saved compares against.
+    sram[codec._BAG_COUNT] = 1
+    sram[codec._BAG_COUNT + 1] = codec.POKE_BALL
+    sram[codec._BAG_COUNT + 2] = 0
     _seal_main(sram)
     return codec.key(codec.decode_party_mon(blob))
 
@@ -779,13 +796,13 @@ def test_synthetic_link_saved_oracle_passes_and_rejects_a_torn_checksum(tmp_path
     for inst, (path, sram, rom) in paths.items():
         run._link_keys[inst] = _add_caught_to_party(sram, rom)
         path.write_bytes(sram)
-    run.assert_link_new_saved()
+    run.assert_link_new_saved({"a": "", "b": ""})
     assert "saved slot 1 linked" in capsys.readouterr().out
     path, sram, _rom = paths["a"]
     sram[codec.SRAM_LAYOUT["sMainDataCheckSum"]] ^= 1
     path.write_bytes(sram)
     with pytest.raises(RuntimeError, match="saved game would not qualify"):
-        run.assert_link_new_saved()
+        run.assert_link_new_saved({"a": "", "b": ""})
     print("synthetic link_new: PASS; torn main checksum: FAIL")
 
 
@@ -796,13 +813,13 @@ def test_synthetic_deadzone_saved_oracle_passes_and_rejects_uninitialized_box(tm
     b_path, b_sram, b_rom = paths["b"]
     run._deadzone_b_key = _put_fainted_in_box12(b_sram, b_rom)
     b_path.write_bytes(b_sram)
-    run.assert_dead_zone_new_saved()
+    run.assert_dead_zone_new_saved({"a": "", "b": ""})
     assert "B Box 12 holds" in capsys.readouterr().out
     b_sram[codec._CURRENT_BOX] &= ~codec._BOX_INITIALIZED
     _seal_main(b_sram)
     b_path.write_bytes(b_sram)
     with pytest.raises(RuntimeError, match="initialized flag invalid"):
-        run.assert_dead_zone_new_saved()
+        run.assert_dead_zone_new_saved({"a": "", "b": ""})
     print("synthetic deadzone_new: PASS; cleared saved initialization flag: FAIL")
 
 
@@ -921,3 +938,95 @@ def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expe
     assert phase == expected
     assert route.encounters == encounters
     assert switches == ([] if start_active else [1] * encounters)
+
+
+# ── A0-H2: the post-result oracle registry, artifact provenance and the bag baseline ─────
+# The verdict is a REGISTRY lookup, not an if-chain, and a Gen 1 scenario that declares no
+# oracle FAILS: the saved-state readback is the independent half of every Gen 1 verdict, and
+# printing PYDEC: PASS on the client's own word is the failure mode this closes.
+
+
+def test_a_gen1_new_scenario_without_an_oracle_never_passes(runner):
+    runner.scenario = "link_new"
+    runner.game = "gen1_new"
+    runner.attempt = 1
+    runner.cfg = dict(duo.SCENARIOS["link_new"])
+    runner.cfg.pop("oracle", None)  # being listed in the wrapper is not the oracle
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: None
+    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.cleanup = lambda passed: None
+    runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
+    with pytest.raises(RuntimeError, match="declares no post-result oracle"):
+        runner.run()
+
+
+def test_the_dispatcher_always_passes_results_and_the_oracle_kwargs(runner):
+    seen = {}
+    runner.cfg = {"oracle": "record_oracle", "oracle_kwargs": {"active": True}}
+    runner.record_oracle = lambda results, **kwargs: seen.update(results=results, **kwargs)
+    runner._run_oracle({"a": "ra", "b": "rb"})
+    assert seen == {"results": {"a": "ra", "b": "rb"}, "active": True}
+
+
+def test_a_non_gen1_new_scenario_without_an_oracle_keeps_the_legacy_path(runner):
+    runner.game = "gen3_rr"
+    runner.cfg = {"flags": []}
+    runner._run_oracle({"a": "", "b": ""})  # a client RESULT is this scenario's whole verdict
+
+
+def test_reconnect_saved_refuses_when_the_live_legs_did_not_complete(runner):
+    runner._live_complete = {}
+    runner._same_save_artifact = None
+    with pytest.raises(RuntimeError, match="live legs did not complete"):
+        runner.assert_reconnect_saved({"a": "", "b": ""})
+
+
+def test_reconnect_saved_fails_on_a_missing_same_save_artifact(runner, tmp_path):
+    runner._live_complete = {"reconnect_new": True}
+    runner._same_save_artifact = str(tmp_path / "never_written.SaveRAM")
+    runner.emus = []
+    with pytest.raises(RuntimeError, match="artifact missing"):
+        runner.assert_reconnect_saved({"a": "", "b": ""})
+
+
+def test_reconnect_saved_fails_on_a_stale_same_save_artifact(runner, tmp_path):
+    stale = tmp_path / "stale.SaveRAM"
+    stale.write_bytes(bytes(0x8000))
+    old = runner._started - 600
+    os.utime(stale, (old, old))
+    runner._live_complete = {"reconnect_new": True}
+    runner._same_save_artifact = str(stale)
+    runner.emus = []
+    with pytest.raises(RuntimeError, match="stale"):
+        runner.assert_reconnect_saved({"a": "", "b": ""})
+
+
+def _fake_mon(key):
+    dv, ot, species = key.split(":")
+    return {"dvs": {"raw": int(dv, 16)}, "ot_id": int(ot, 16), "species": int(species, 16)}
+
+
+def test_link_new_saved_requires_the_encounter_to_have_cost_one_ball(runner, tmp_path, monkeypatch):
+    """The baseline is the FIXTURE's bag, so a run that spent nothing fails as loudly as one
+    that spent two."""
+    from server.adapters import gen1_codec as codec
+
+    fixture = tmp_path / "red_battle.SaveRAM"
+    fixture.write_bytes(b"F" + bytes(codec.SRAM_SIZE - 1))
+    boot, link = "AAAA:1111:01", "CCCC:3333:03"
+    runner.cfg = dict(duo.SCENARIOS["link_new"])
+    runner._boot_keys = {"a": boot, "b": boot}
+    runner._link_keys = {"a": link, "b": link}
+    runner.emus = []
+    monkeypatch.setattr(runner, "_fixture_save_path", lambda inst: str(fixture))
+    monkeypatch.setattr(runner, "_saved_gen1_party", lambda inst, **kw: (
+        b"S" + bytes(codec.SRAM_SIZE - 1), [_fake_mon(boot), _fake_mon(link)], [], codec))
+    spent = {"n": 1}
+    monkeypatch.setattr(codec, "bag_quantity",
+                        lambda sram, item: 2 if sram[:1] == b"F" else spent["n"])
+    runner.assert_link_new_saved({"a": "", "b": ""})  # fixture 2, saved 1: the ball was thrown
+    spent["n"] = 2  # the same count survives the encounter: nothing was spent
+    with pytest.raises(RuntimeError, match="Poke Balls"):
+        runner.assert_link_new_saved({"a": "", "b": ""})
