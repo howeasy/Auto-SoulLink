@@ -1,8 +1,8 @@
 duo instance b scenario=changebox_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:64233 (non-blocking)…
-client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:64233
-[client] [SLink] TCP connected to 127.0.0.1:64233
+[client] [SLink] TCP connecting to 127.0.0.1:57527 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:57527
+[client] [SLink] TCP connected to 127.0.0.1:57527
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -16,112 +16,112 @@ booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
-heartbeat f=3600 party=1 connected=true
 RX play_sound
 RX msgbox text=Route 1 is a dead zone!
-heartbeat f=7200 party=1 connected=true
-phase pace-grass @7739 (10,35) battle=0 party=1
-[hunt] encounter 1 at (10,34) mode=catch balls=1
-phase wild-intro @7826 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+phase pace-grass @4458 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,35) mode=catch balls=1
+phase wild-intro @4597 (10,35) battle=1 party=1
 [hunt] turn 1 foe hp 13/13 odds 0.36 dmax nil -> fight
-phase wild-fight @8592 (10,34) battle=1 party=1
-[hunt] turn 2 foe hp 8/13 odds 0.54 dmax 6 -> fight
-[hunt] turn 3 foe hp 1/13 odds 1.00 dmax 9 -> throw
-phase wild-throw @10040 (10,34) battle=1 party=1
+phase wild-fight @5363 (10,35) battle=1 party=1
+[hunt] turn 2 foe hp 6/13 odds 1.00 dmax 9 -> throw
+phase wild-throw @5951 (10,35) battle=1 party=1
 [hunt] threw ball index 0 -> timeout
-heartbeat f=10800 party=1 connected=true
-PARTY_COUNT 1 -> 2 @12041
-PARTY_UNREADABLE @12050 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+heartbeat f=7200 party=1 connected=true
+PARTY_COUNT 1 -> 2 @7952
+PARTY_UNREADABLE @7960 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":1,"in_box":false,"key":"AD68:AFB9:24","level":2,"maxHP":13,"nickname":"PIDGEY","player":"b","seq":376,"species_id":36,"stats":{"level":2,"maxHP":13}}
-TX {"event":"safe","player":"b","seq":377}
-RX force_faint key=AD68:AFB9:24
-RX memorialize key=AD68:AFB9:24
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":6,"in_box":false,"key":"B66C:AFB9:24","level":2,"maxHP":13,"nickname":"PIDGEY","player":"b","seq":240,"species_id":36,"stats":{"level":2,"maxHP":13}}
+TX {"event":"safe","player":"b","seq":241}
+RX force_faint key=B66C:AFB9:24
+RX memorialize key=B66C:AFB9:24
 RX play_sound
 RX hud_show text=[x] DZ: PIDGEY
-PARTY_READABLE @12570  (count=2 species=B0 24 FF 00 00 00 00)
-[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @12578 (10,34) battle=0 party=2
+PARTY_READABLE @8480  (count=2 species=B0 24 FF 00 00 00 00)
+[hunt] battle outcome battle_over receipts move1:player_move,throw:timeout
+phase wild-battle_over @8489 (10,35) battle=0 party=2
 [hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @12579 (10,34) battle=0 party=2
-HUNT caught after 4841 frames, 1 encounter(s)
+phase caught @8490 (10,35) battle=0 party=2
+HUNT caught after 4033 frames, 1 encounter(s)
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=13
-MYKEY 1 AD68:AFB9:24
-PARTY slot=1 key=AD68:AFB9:24 species=36 level=2 hp=1
-CAUGHT AD68:AFB9:24
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=16
+MYKEY 1 B66C:AFB9:24
+PARTY slot=1 key=B66C:AFB9:24 species=36 level=2 hp=6
+CAUGHT B66C:AFB9:24
 [client] [SLink-gen1] writes re-enabled after a live validation
-FAINTED AD68:AFB9:24 hp=0 in party slot 1
-TX {"box":11,"event":"memorialize_done","key":"AD68:AFB9:24","player":"b","seq":380}
-PARTY_COUNT 2 -> 1 @12611
-RETIRED AD68:AFB9:24 left the party
-MEMORIAL AD68:AFB9:24 in box 12: true
+FAINTED B66C:AFB9:24 hp=0 in party slot 1
+TX {"box":11,"event":"memorialize_done","key":"B66C:AFB9:24","player":"b","seq":244}
+PARTY_COUNT 2 -> 1 @8522
+RETIRED B66C:AFB9:24 left the party
+MEMORIAL B66C:AFB9:24 in box 12: true
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=13
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=16
 SEEN capture=1 force_faint=1 memorialize=1 memorialize_done=1 memorialize_failed=0
 SAVE_PHASE deadzone_new_b save-open-start-menu
 SAVE_PHASE deadzone_new_b save-close-foreign-menu
 SAVE_PHASE deadzone_new_b save-select-save
 SAVE_PHASE deadzone_new_b save-choose-save
 SAVE_PHASE deadzone_new_b save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_changebox_new_b_1_witness.bin bytes=31592 saves=1 frame=12880
+SAVE_WITNESS_DUMP path=patch/build/e2e_changebox_new_b_1_witness.bin bytes=31592 saves=1 frame=8784
 SAVE_PHASE deadzone_new_b save-await-close
 SAVE_PHASE deadzone_new_b save-witnessed
-SAVE_WITNESS deadzone_new_b frames=544
-ROUTE route_one_north -> map 1 at (21,35) frame 14070
-TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":430}
-ROUTE viridian_center -> map 41 at (23,25) frame 14343
-heartbeat f=14400 party=1 connected=true
+SAVE_WITNESS deadzone_new_b frames=536
+TX {"event":"safe","player":"b","seq":292}
+ROUTE route_one_north -> map 1 at (21,35) frame 10750
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":320}
+heartbeat f=10800 party=1 connected=true
+ROUTE viridian_center -> map 41 at (23,25) frame 11023
 CENTER_RECEPTIONIST map=41 (11,3)
-PC_PHASE changebox-12 pc-walk @14617 (11,3) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-face @14668 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-activate @14670 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-main-open @14790 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-menu-changebox @14998 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-walk @11297 (11,3) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-face @11348 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-activate @11350 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-main-open @11478 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-menu-changebox @11686 (13,4) party=1 box=1 count=0 init=true
 PC_OP changebox start
-PC op 1 changebox(12) start frame=15041
-PC_PHASE changebox-12 pc-enter-changebox @15041 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-yes @15109 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-text @15136 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-box-move @15180 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-box-pick @15345 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-12 pc-box-move @15437 (13,4) party=1 box=12 count=1 init=true
+PC op 1 changebox(12) start frame=11729
+PC_PHASE changebox-12 pc-enter-changebox @11729 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-yes @11797 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-text @11824 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-box-move @11868 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-box-pick @12033 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-12 pc-box-move @12125 (13,4) party=1 box=12 count=1 init=true
 PC_OP changebox done
-PC op 1 changebox(12) done frame=15438 party=1 box_count=1 box=12
-PC_PHASE changebox-12 pc-see-ya @15438 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-12 pc-logging-off @15473 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-12 pc-log-off @15478 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-12 pc-logging-off @15520 (13,4) party=1 box=12 count=1 init=true
-PC pc-done frame=15574 op=2
-PC_PHASE changebox-12 pc-done @15574 (13,4) party=1 box=12 count=1 init=true
+PC op 1 changebox(12) done frame=12126 party=1 box_count=1 box=12
+PC_PHASE changebox-12 pc-see-ya @12126 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-12 pc-logging-off @12161 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-12 pc-log-off @12166 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-12 pc-logging-off @12208 (13,4) party=1 box=12 count=1 init=true
+PC pc-done frame=12262 op=2
+PC_PHASE changebox-12 pc-done @12262 (13,4) party=1 box=12 count=1 init=true
 CHANGEBOX_TO 12 initialised=true count=1
-PC_PHASE changebox-1 pc-activate @15574 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-main-open @15701 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-activate @15910 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-menu-changebox @15911 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-activate @12262 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-main-open @12374 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-menu-changebox @12582 (13,4) party=1 box=12 count=1 init=true
 PC_OP changebox start
-PC op 1 changebox(1) start frame=15953
-PC_PHASE changebox-1 pc-enter-changebox @15953 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-yes @16021 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-text @16048 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-box-move @16092 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-box-pick @16257 (13,4) party=1 box=12 count=1 init=true
-PC_PHASE changebox-1 pc-box-move @16349 (13,4) party=1 box=1 count=0 init=true
+PC op 1 changebox(1) start frame=12625
+PC_PHASE changebox-1 pc-enter-changebox @12625 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-yes @12693 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-text @12720 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-box-move @12764 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-box-pick @12929 (13,4) party=1 box=12 count=1 init=true
+PC_PHASE changebox-1 pc-box-move @13021 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-1 pc-text @13022 (13,4) party=1 box=1 count=0 init=true
 PC_OP changebox done
-PC op 1 changebox(1) done frame=16350 party=1 box_count=0 box=1
-PC_PHASE changebox-1 pc-see-ya @16350 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-1 pc-logging-off @16385 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-1 pc-log-off @16390 (13,4) party=1 box=1 count=0 init=true
-PC_PHASE changebox-1 pc-logging-off @16432 (13,4) party=1 box=1 count=0 init=true
-PC pc-done frame=16486 op=2
-PC_PHASE changebox-1 pc-done @16486 (13,4) party=1 box=1 count=0 init=true
+PC op 1 changebox(1) done frame=13023 party=1 box_count=0 box=1
+PC_PHASE changebox-1 pc-see-ya @13023 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-1 pc-logging-off @13057 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-1 pc-log-off @13061 (13,4) party=1 box=1 count=0 init=true
+PC_PHASE changebox-1 pc-logging-off @13104 (13,4) party=1 box=1 count=0 init=true
+PC pc-done frame=13159 op=2
+PC_PHASE changebox-1 pc-done @13159 (13,4) party=1 box=1 count=0 init=true
 CHANGEBOX_BACK 1
 SAVE_PHASE changebox_new_b save-open-start-menu
 SAVE_PHASE changebox_new_b save-close-foreign-menu
+SAVE_PHASE changebox_new_b save-select-save
 SAVE_PHASE changebox_new_b save-choose-save
 SAVE_PHASE changebox_new_b save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_changebox_new_b_1_witness.bin bytes=31592 saves=2 frame=16688
+SAVE_WITNESS_DUMP path=patch/build/e2e_changebox_new_b_1_witness.bin bytes=31592 saves=2 frame=13424
 SAVE_PHASE changebox_new_b save-await-close
 SAVE_PHASE changebox_new_b save-witnessed
-SAVE_WITNESS changebox_new_b frames=467
+SAVE_WITNESS changebox_new_b frames=530
 RESULT: PASS (changed to Box 12 with the memorial listed and back to Box 1)

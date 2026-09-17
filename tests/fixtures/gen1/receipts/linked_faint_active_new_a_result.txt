@@ -1,8 +1,8 @@
 duo instance a scenario=linked_faint_active_new game=gen1_new
-attempt 2 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:57674 (non-blocking)…
-client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:57674
-[client] [SLink] TCP connected to 127.0.0.1:57674
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:62063 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:62063
+[client] [SLink] TCP connected to 127.0.0.1:62063
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -15,78 +15,88 @@ RX config
 booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
-JITTER requested=37 applied=37 attempt=2
-phase pace-grass @2123 (10,35) battle=0 party=1
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @874 (10,35) battle=0 party=1
 [hunt] encounter 1 at (10,33) mode=catch balls=1
-phase wild-intro @2431 (10,33) battle=1 party=1
-[hunt] turn 1 foe hp 16/16 odds 0.34 dmax nil -> fight
-phase wild-fight @3196 (10,33) battle=1 party=1
+phase wild-intro @1659 (10,33) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @2424 (10,33) battle=1 party=1
+[hunt] turn 2 foe hp 11/15 odds 0.63 dmax 5 -> fight
+[hunt] turn 3 foe hp 7/15 odds 1.00 dmax 5 -> throw
+phase wild-throw @3486 (10,33) battle=1 party=1
 heartbeat f=3600 party=1 connected=true
-[hunt] turn 2 foe hp 12/16 odds 0.45 dmax 5 -> fight
-[hunt] turn 3 foe hp 8/16 odds 0.67 dmax 5 -> fight
-[hunt] turn 4 foe hp 4/16 odds 1.00 dmax 5 -> throw
-phase wild-throw @6505 (10,33) battle=1 party=1
 [hunt] threw ball index 0 -> timeout
-heartbeat f=7200 party=1 connected=true
-RX hud_show text=>> Got RATTATA
-PARTY_COUNT 1 -> 2 @8506
-PARTY_UNREADABLE @8510 species list and struct disagree (count=2 species=99 A5 FF 00 00 00 00)
+PARTY_COUNT 1 -> 2 @5487
+PARTY_UNREADABLE @5490 species list and struct disagree (count=2 species=99 24 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":4,"in_box":false,"key":"02A3:4190:A5","level":4,"maxHP":16,"nickname":"RATTATA","player":"a","seq":258,"species_id":165,"stats":{"level":4,"maxHP":16}}
-TX {"event":"safe","player":"a","seq":259}
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":7,"in_box":false,"key":"4923:4190:24","level":3,"maxHP":15,"nickname":"PIDGEY","player":"a","seq":157,"species_id":36,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"a","seq":158}
+RX hud_show text=>> Got PIDGEY
 RX play_sound
-RX msgbox text=RATTATA and RATTATA linked!
-RX party_mon key=02A3:4190:A5
-PARTY_READABLE @9030  (count=2 species=99 A5 FF 00 00 00 00)
-[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @9043 (10,33) battle=0 party=2
+RX msgbox text=PIDGEY and PIDGEY linked!
+RX party_mon key=4923:4190:24
+PARTY_READABLE @6010  (count=2 species=99 24 FF 00 00 00 00)
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @6024 (10,33) battle=0 party=2
 [hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @9044 (10,33) battle=0 party=2
-HUNT caught after 6922 frames, 1 encounter(s)
+phase caught @6025 (10,33) battle=0 party=2
+HUNT caught after 5152 frames, 1 encounter(s)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=13
-MYKEY 1 02A3:4190:A5
-PARTY slot=1 key=02A3:4190:A5 species=165 level=4 hp=4
-CAUGHT 02A3:4190:A5
+MYKEY 1 4923:4190:24
+PARTY slot=1 key=4923:4190:24 species=36 level=3 hp=7
+CAUGHT 4923:4190:24
 [client] [SLink-gen1] writes re-enabled after a live validation
-TX {"event":"sync_retrieve_done","key":"02A3:4190:A5","player":"a","seq":262}
+TX {"event":"sync_retrieve_done","key":"4923:4190:24","player":"a","seq":161}
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=13
-MYKEY 1 02A3:4190:A5
-PARTY slot=1 key=02A3:4190:A5 species=165 level=4 hp=4
+MYKEY 1 4923:4190:24
+PARTY slot=1 key=4923:4190:24 species=36 level=3 hp=7
 SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
 SAVE_PHASE link_new save-open-start-menu
 SAVE_PHASE link_new save-close-foreign-menu
 SAVE_PHASE link_new save-select-save
 SAVE_PHASE link_new save-choose-save
 SAVE_PHASE link_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_new_a_2_witness.bin bytes=31592 saves=1 frame=9456
+SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_new_a_1_witness.bin bytes=31592 saves=1 frame=6448
 SAVE_PHASE link_new save-await-close
 SAVE_PHASE link_new save-witnessed
-SAVE_WITNESS link_new frames=532
-heartbeat f=10800 party=2 connected=true
-phase pace-grass @12209 (10,33) battle=0 party=2
-[hunt] encounter 1 at (10,34) mode=sacrifice balls=0
-phase wild-intro @12331 (10,34) battle=1 party=2
-phase wild-switch @13096 (10,34) battle=1 party=2
+SAVE_WITNESS link_new frames=540
+heartbeat f=7200 party=2 connected=true
+phase pace-grass @8343 (10,33) battle=0 party=2
+[hunt] encounter 1 at (10,35) mode=sacrifice balls=0
+phase wild-intro @8516 (10,35) battle=1 party=2
+phase wild-switch @9281 (10,35) battle=1 party=2
 [hunt] linked slot 1 active
-phase wild-linked-turn @13302 (10,34) battle=1 party=2
+phase wild-linked-turn @9487 (10,35) battle=1 party=2
+heartbeat f=10800 party=2 connected=true
 [hunt] linked move turn 1 -> player_move
+[hunt] linked move turn 2 -> player_move
+[hunt] linked move turn 3 -> player_move
 heartbeat f=14400 party=2 connected=true
-BATTLE_FAINT_SITE 02A3:4190:A5 slot=1 battle_hp=0
-TX {"area_id":"route_1","event":"faint","key":"02A3:4190:A5","player":"a","seq":450}
-RX memorialize key=02A3:4190:A5
+TX {"event":"safe","player":"a","seq":468}
+[hunt] battle outcome battle_over receipts switch:switched,gentle:player_move,gentle:player_move,gentle:player_move
+phase wild-battle_over @15294 (10,35) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=0 party=2 balls=0 -> hunt again
+phase close-text @15295 (10,35) battle=0 party=2
+phase pace-grass @15311 (10,35) battle=0 party=2
+[hunt] encounter 2 at (10,35) mode=sacrifice balls=0
+phase wild-intro @15380 (10,35) battle=1 party=2
+phase wild-switch @16145 (10,35) battle=1 party=2
+[hunt] linked slot 1 active
+phase wild-linked-turn @16351 (10,35) battle=1 party=2
+BATTLE_FAINT_SITE 4923:4190:24 @16726 slot=1 battle_hp=0
+TX {"area_id":"route_1","event":"faint","key":"4923:4190:24","player":"a","seq":518}
+RX memorialize key=4923:4190:24
 RX game_over
 GAME_OVER RX game_over
-heartbeat f=18000 party=2 connected=true
-[hunt] linked move turn 2 -> timeout
-[hunt] battle outcome linked-fainted receipts switch:switched,gentle:player_move,gentle:timeout
-phase linked-fainted @18574 (10,34) battle=1 party=2
-HUNT linked-fainted after 6366 frames, 1 encounter(s)
-A_ENGINE_FAINT 02A3:4190:A5
-TX {"event":"safe","player":"a","seq":592}
-TX {"box":11,"event":"memorialize_done","key":"02A3:4190:A5","player":"a","seq":594}
-PARTY_COUNT 2 -> 1 @18946
+TX {"event":"safe","player":"a","seq":542}
+[hunt] battle outcome linked-fainted receipts switch:switched
+phase linked-fainted @17439 (10,35) battle=0 party=2
+HUNT linked-fainted after 9097 frames, 2 encounter(s)
+A_ENGINE_FAINT 4923:4190:24
+TX {"box":11,"event":"memorialize_done","key":"4923:4190:24","player":"a","seq":545}
+PARTY_COUNT 2 -> 1 @17471
 BATTLE_RESULT a 2
 MYKEY 0 06C3:4190:99
 POST_LINKED_FAINT slot=0 key=06C3:4190:99 species=153 level=5 hp=13
@@ -95,8 +105,9 @@ SAVE_PHASE linked_faint_active_new save-close-foreign-menu
 SAVE_PHASE linked_faint_active_new save-select-save
 SAVE_PHASE linked_faint_active_new save-choose-save
 SAVE_PHASE linked_faint_active_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_new_a_2_witness.bin bytes=31592 saves=2 frame=19216
+SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_new_a_1_witness.bin bytes=31592 saves=2 frame=17728
 SAVE_PHASE linked_faint_active_new save-await-close
 SAVE_PHASE linked_faint_active_new save-witnessed
-SAVE_WITNESS linked_faint_active_new frames=545
+SAVE_WITNESS linked_faint_active_new frames=528
+heartbeat f=18000 party=1 connected=true
 RESULT: PASS (engine linked faint and memorial saved)

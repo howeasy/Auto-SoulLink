@@ -1,0 +1,60 @@
+sweep start 2026-09-17T22:26:27Z HEAD 3475c6f
+=== poison_new start 22:26:27
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_poison_new_g2rx_u_i
+  poison_new: PASS (attempt 1 of 2)
+=== poison_new rc=0 end 22:27:18
+=== pc_ops_new start 22:27:18
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_pc_ops_new_2ld53ogr
+  pc_ops_new: PASS (attempt 1 of 2)
+=== pc_ops_new rc=0 end 22:27:45
+=== soft_reset_new start 22:27:45
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_soft_reset_new_26shiqin
+  soft_reset_new: FAIL (attempt 1 of 2) — RuntimeError: the pre-reset baseline saw 2 A hellos, not the one the checkpoint hello produces
+=== soft_reset_new rc=1 end 22:27:54
+=== explode_new start 22:27:54
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_explode_new_v5zrik15
+  explode_new: FAIL (attempt 1 of 4) — RuntimeError: B post-write move menu: marker /MOVE_MENU_AFTER EXPLOSION \| EXPLOSION \| EXPLOSION \| EXPLOSION/ not found in the receipt
+=== explode_new rc=1 end 22:28:43
+=== rival_swap_new start 22:28:43
+RESULT: FAIL (the rival battle plan stalled (battle-stuck))
+RESULT: PASS (idled through the partner's rival battle and saved)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_54_yalq9
+  rival_swap_new: FAIL (attempt 1 of 2)
+=== rival_swap_new rc=1 end 22:31:38
+=== changebox_new start 22:31:38
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_changebox_new_kwi6e__3
+  changebox_new: PASS (attempt 1 of 2)
+=== changebox_new rc=0 end 22:32:09
+=== linked_faint_active_new start 22:32:09
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_new_k4s_zzvq
+  linked_faint_active_new: PASS (attempt 1 of 2)
+=== linked_faint_active_new rc=0 end 22:32:52
+=== trade_decline_new start 22:32:52
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_decline_new_owsdnw7e
+  trade_decline_new: PASS (attempt 1 of 2)
+=== trade_decline_new rc=0 end 22:33:19
+=== trade_new start 22:33:19
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_new_dxrp13le
+  trade_new: PASS (attempt 1 of 2)
+=== trade_new rc=0 end 22:33:49
+=== reconnect_new start 22:33:49
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_new__5ws6ju0
+  reconnect_new: FAIL (attempt 1 of 2) — RuntimeError: reconnect_new's live legs did not complete — the final A save belongs to the wrong-save phase and the same-save flush was never copied out
+=== reconnect_new rc=1 end 22:34:16
+=== admit_randomized_new start 22:34:16
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_admit_randomized_new_w8kut9dx
+  admit_randomized_new: PASS (attempt 1 of 2)
+=== admit_randomized_new rc=0 end 22:34:25
+=== ball_gate_new start 22:34:25
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_new_aqh7x67v
+  ball_gate_new: PASS (attempt 1 of 1)
+=== ball_gate_new rc=0 end 22:36:03
+=== gen3_rr trade start 22:36:03
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_jixzakyd
+  trade: PASS (attempt 1 of 1)
+=== gen3_rr trade rc=0 end 22:36:34
+=== gen3_rr faint start 22:36:34
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_faint_jlqpzcwk
+  faint: PASS (attempt 1 of 1)
+=== gen3_rr faint rc=0 end 22:36:41
+sweep end 2026-09-17T22:36:41Z

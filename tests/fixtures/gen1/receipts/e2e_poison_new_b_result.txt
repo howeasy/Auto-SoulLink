@@ -1,0 +1,179 @@
+duo instance b scenario=poison_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:53518 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:53518
+[client] [SLink] TCP connected to 127.0.0.1:53518
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @649
+PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"B00013000014142D0A
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+MYKEY 0 4519:AFB9:B0
+PRE_POISON slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+POISON_BASELINE key=4519:AFB9:B0 faint=0 whiteout=0 no_catch=0 signals=0
+POISON_PHASE walk route1_north @889 map=12 (10,35) battle=0 hp=19
+INCIDENTAL_BATTLE 1 map=12 (10,35)
+POISON_PHASE walk wild-text-state-unknown @891 map=12 (10,35) battle=1 hp=19
+POISON_PHASE walk wild-dialogue @1069 map=12 (10,35) battle=1 hp=19
+POISON_PHASE walk wild-select-right-column @1482 map=12 (10,35) battle=1 hp=19
+POISON_PHASE walk wild-select-run @1489 map=12 (10,35) battle=1 hp=19
+POISON_PHASE walk wild-attempt-run @1505 map=12 (10,35) battle=1 hp=19
+POISON_PHASE walk unknown-wild-menu @1521 map=12 (10,35) battle=1 hp=19
+POISON_PHASE walk wild-dialogue @1538 map=12 (10,35) battle=1 hp=19
+TX {"area_id":"route_1","event":"no_catch","level":3,"player":"b","seq":28,"species_id":36}
+TX {"event":"safe","player":"b","seq":29}
+POISON_PHASE walk route1_north @1603 map=12 (10,35) battle=0 hp=19
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+POISON_PHASE walk close-text @1613 map=12 (10,35) battle=0 hp=19
+POISON_PHASE walk route1_north @1650 map=12 (10,35) battle=0 hp=19
+POISON_PHASE walk route1_north-detour @1651 map=12 (10,35) battle=0 hp=19
+POISON_PHASE walk route1_north @1715 map=12 (10,34) battle=0 hp=19
+INCIDENTAL_BATTLE 2 map=12 (8,28)
+POISON_PHASE walk wild-dialogue @1836 map=12 (8,28) battle=1 hp=19
+POISON_PHASE walk wild-select-right-column @2426 map=12 (8,28) battle=1 hp=19
+POISON_PHASE walk wild-select-run @2433 map=12 (8,28) battle=1 hp=19
+POISON_PHASE walk wild-attempt-run @2449 map=12 (8,28) battle=1 hp=19
+POISON_PHASE walk unknown-wild-menu @2465 map=12 (8,28) battle=1 hp=19
+POISON_PHASE walk wild-dialogue @2482 map=12 (8,28) battle=1 hp=19
+TX {"event":"safe","player":"b","seq":61}
+POISON_PHASE walk route1_north @2547 map=12 (8,28) battle=0 hp=19
+POISON_PHASE walk close-text @2557 map=12 (8,28) battle=0 hp=19
+POISON_PHASE walk route1_north @2594 map=12 (8,28) battle=0 hp=19
+POISON_PHASE walk route1_north-detour @2595 map=12 (8,28) battle=0 hp=19
+POISON_PHASE walk route1_north @2659 map=12 (10,28) battle=0 hp=19
+POISON_PHASE walk viridian_north @3440 map=1 (21,35) battle=0 hp=19
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":92}
+heartbeat f=3600 party=1 connected=true
+POISON_PHASE walk route2_north @4104 map=13 (8,71) battle=0 hp=19
+TX {"area_id":"route_2","event":"area_enter","loc_name":"Route 2","player":"b","seq":115}
+POISON_PHASE walk gate_north @4870 map=50 (3,43) battle=0 hp=19
+TX {"area_id":"","event":"area_enter","loc_name":"map_50","player":"b","seq":142}
+POISON_PHASE walk close-text @4902 map=50 (3,43) battle=0 hp=19
+POISON_PHASE walk gate_north @4913 map=50 (4,7) battle=0 hp=19
+POISON_PHASE walk forest_park @5075 map=51 (5,0) battle=0 hp=19
+TX {"area_id":"viridian_forest","event":"area_enter","loc_name":"Viridian Forest","player":"b","seq":150}
+POISON_PHASE walk close-text @5107 map=51 (5,0) battle=0 hp=19
+POISON_PHASE walk forest_park @5118 map=51 (17,47) battle=0 hp=19
+POISON_PHASE walk forest-parked @5264 map=51 (18,41) battle=0 hp=19
+FOREST_PARKED map=51 (18,41)
+POISON_PHASE hunt pace-grass @5264 map=51 (18,41) battle=0 hp=19
+HUNT_ENCOUNTER 1 species=124 (18,40)
+POISON_PHASE hunt wild-intro @6234 map=51 (18,40) battle=1 hp=19
+HUNT_RUN_WRONG_SPECIES species=124
+POISON_PHASE hunt wild-run-wrong-species @6996 map=51 (18,40) battle=1 hp=19
+heartbeat f=7200 party=1 connected=true
+TX {"area_id":"viridian_forest","event":"no_catch","level":4,"player":"b","seq":223,"species_id":124}
+TX {"event":"safe","player":"b","seq":224}
+POISON_PHASE hunt wild-ran @7245 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @7246 map=51 (18,40) battle=0 hp=19
+RX play_sound
+RX msgbox text=Viridian Forest is a dead zone!
+POISON_PHASE hunt close-text @7255 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @7290 map=51 (18,40) battle=0 hp=19
+HUNT_ENCOUNTER 2 species=124 (18,41)
+POISON_PHASE hunt wild-intro @7546 map=51 (18,41) battle=1 hp=19
+HUNT_RUN_WRONG_SPECIES species=124
+POISON_PHASE hunt wild-run-wrong-species @8308 map=51 (18,41) battle=1 hp=19
+TX {"event":"safe","player":"b","seq":269}
+POISON_PHASE hunt wild-ran @8557 map=51 (18,41) battle=0 hp=19
+POISON_PHASE hunt pace-grass @8558 map=51 (18,41) battle=0 hp=19
+POISON_PHASE hunt close-text @8567 map=51 (18,41) battle=0 hp=19
+POISON_PHASE hunt pace-grass @8602 map=51 (18,41) battle=0 hp=19
+HUNT_ENCOUNTER 3 species=123 (18,41)
+POISON_PHASE hunt wild-intro @9419 map=51 (18,41) battle=1 hp=19
+HUNT_RUN_WRONG_SPECIES species=123
+POISON_PHASE hunt wild-run-wrong-species @10181 map=51 (18,41) battle=1 hp=19
+TX {"event":"safe","player":"b","seq":332}
+POISON_PHASE hunt wild-ran @10430 map=51 (18,41) battle=0 hp=19
+POISON_PHASE hunt pace-grass @10431 map=51 (18,41) battle=0 hp=19
+POISON_PHASE hunt close-text @10440 map=51 (18,41) battle=0 hp=19
+POISON_PHASE hunt pace-grass @10475 map=51 (18,41) battle=0 hp=19
+heartbeat f=10800 party=1 connected=true
+HUNT_ENCOUNTER 4 species=123 (18,40)
+POISON_PHASE hunt wild-intro @10901 map=51 (18,40) battle=1 hp=19
+HUNT_RUN_WRONG_SPECIES species=123
+POISON_PHASE hunt wild-run-wrong-species @11663 map=51 (18,40) battle=1 hp=19
+TX {"event":"safe","player":"b","seq":383}
+POISON_PHASE hunt wild-ran @11912 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @11913 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt close-text @11922 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @11957 map=51 (18,40) battle=0 hp=19
+HUNT_ENCOUNTER 5 species=123 (18,40)
+POISON_PHASE hunt wild-intro @12094 map=51 (18,40) battle=1 hp=19
+HUNT_RUN_WRONG_SPECIES species=123
+POISON_PHASE hunt wild-run-wrong-species @12856 map=51 (18,40) battle=1 hp=19
+TX {"event":"safe","player":"b","seq":423}
+POISON_PHASE hunt wild-ran @13105 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @13106 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt close-text @13115 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @13150 map=51 (18,40) battle=0 hp=19
+HUNT_ENCOUNTER 6 species=123 (18,40)
+POISON_PHASE hunt wild-intro @13389 map=51 (18,40) battle=1 hp=19
+HUNT_RUN_WRONG_SPECIES species=123
+POISON_PHASE hunt wild-run-wrong-species @14151 map=51 (18,40) battle=1 hp=19
+TX {"event":"safe","player":"b","seq":468}
+POISON_PHASE hunt wild-ran @14400 map=51 (18,40) battle=0 hp=19
+heartbeat f=14400 party=1 connected=true
+POISON_PHASE hunt pace-grass @14401 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt close-text @14410 map=51 (18,40) battle=0 hp=19
+POISON_PHASE hunt pace-grass @14445 map=51 (18,40) battle=0 hp=19
+HUNT_ENCOUNTER 7 species=112 (18,40)
+POISON_PHASE hunt wild-intro @14616 map=51 (18,40) battle=1 hp=19
+POISON_PHASE hunt wild-growl @15378 map=51 (18,40) battle=1 hp=19
+HUNT_GROWL turn=1 why=player_move
+HUNT_GROWL turn=2 why=player_move
+HUNT_GROWL turn=3 why=player_move
+HUNT_GROWL turn=4 why=player_move
+heartbeat f=18000 party=1 connected=true
+HUNT_GROWL turn=5 why=player_move
+POISON_PHASE hunt wild-run @19860 map=51 (18,40) battle=1 hp=10
+TX {"event":"safe","player":"b","seq":693}
+POISON_PHASE hunt wild-poisoned @21123 map=51 (18,40) battle=0 hp=4
+HUNT_POISONED encounters=7 steps=165
+POISON_PHASE hunt poisoned @21124 map=51 (18,40) battle=0 hp=4
+POISON_PSN encounters=7 steps=165 status=08
+MONEY_BEFORE 2800
+POISON_SHUTTLE hp=4
+POISON_PHASE shuttle shuttle-approach @21244 map=51 (18,40) battle=0 hp=4
+POISON_PHASE shuttle shuttle-poison @21296 map=51 (18,43) battle=0 hp=4
+POISON_FAINT_SITE frame=21528 slot=0
+TX {"area_id":"viridian_forest","event":"faint","key":"4519:AFB9:B0","player":"b","seq":707}
+TX {"event":"whiteout","player":"b","seq":708}
+POISON_FAINT steps=15
+POISON_PHASE shuttle poison-fainted @21529 map=51 (18,44) battle=0 hp=0
+TX faint 4519:AFB9:B0
+TX whiteout x1
+heartbeat f=21600 party=1 connected=true
+SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
+SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
+SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
+SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
+SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
+BLACKOUT_SIGNAL frame=21905 whiteout_so_far=1
+TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"b","seq":722}
+BLACKED_OUT_TEXT unavailable: the text advanced before the probe
+BLACKOUT_FLAG frame=21801 value=FF
+BLACKOUT_SITE map=0 x=5 y=6
+MONEY_AFTER 1400
+MONEY_HALVED before=2800 after=1400
+PARTY_HEALED key=4519:AFB9:B0 hp=19
+SIGNAL_ORDER poison_faint->blackout ok faints=1 suffix=2
+SAVE_PHASE poison_new_b save-open-start-menu
+SAVE_PHASE poison_new_b save-close-foreign-menu
+SAVE_PHASE poison_new_b save-select-save
+SAVE_PHASE poison_new_b save-choose-save
+SAVE_PHASE poison_new_b save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_poison_new_b_1_witness.bin bytes=31592 saves=1 frame=22207
+SAVE_PHASE poison_new_b save-await-close
+SAVE_PHASE poison_new_b save-witnessed
+SAVE_WITNESS poison_new_b frames=544
+RESULT: PASS (poisoned in Viridian Forest, blacked out to Pallet and saved 4519:AFB9:B0)

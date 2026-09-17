@@ -1,0 +1,11 @@
+attempt 1 of 2
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=09aa92051dfcccaf361dd96c5b23688d0bda7b63a283fde3d7f62c6d76fc45a3 file=09aa92051dfcccaf361dd96c5b23688d0bda7b63a283fde3d7f62c6d76fc45a3 match=true saves=2
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=cbc99288c821dbe44a3631882b84eb90ec2b709b82ac7046f71810856ce5af3b file=cbc99288c821dbe44a3631882b84eb90ec2b709b82ac7046f71810856ce5af3b match=true saves=2
+S-6 markers: Box 1 empty->deposit->withdraw->deposit->release; 2/1 storage sends, one RELEASE_SEEN after the third send, no wire event
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+4720:4190:A5 released: A's saved party is the starter alone and its active box (sCurBoxData) decodes empty; B still holds 9705:AFB9:24
+server bookkeeping UNCHANGED by the release (documented limit): alive route_1 pair still lists a=4720:4190:A5; the release is invisible
+PYDEC: PASS asserted scenario facts

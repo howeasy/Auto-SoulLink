@@ -1,5 +1,9 @@
 attempt 1 of 2
-F-4 public verdicts: A admitted, clean B rejected; expected=ef885b9303ae reported=98381ab26d01 (admission-only, no save mutation)
+F-4 public verdicts: A admitted, clean B rejected; expected=d28d5cd6a54f reported=98381ab26d01 (admission-only, no save mutation)
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=97f7189006105f70de59d027fa37f5a1076df28a5a8407459c5c75580dff8dd5 file=97f7189006105f70de59d027fa37f5a1076df28a5a8407459c5c75580dff8dd5 match=true saves=1
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=9e614bb2acfe9a6a784a91ad3f4ce356ba8a66c98de3480acdff9444d3ee3445 file=9e614bb2acfe9a6a784a91ad3f4ce356ba8a66c98de3480acdff9444d3ee3445 match=true saves=1
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
 phase initial: patch\build\saveram_admit_randomized_new_a\slink red randomized.SaveRAM written after launch, qualifies against patch/build/e2e_admit_randomized_new/slink_red_randomized.gb, party ['06C3:4190:99']
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid

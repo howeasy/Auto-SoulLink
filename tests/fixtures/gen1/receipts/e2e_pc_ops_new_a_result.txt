@@ -1,0 +1,160 @@
+duo instance a scenario=pc_ops_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:57871 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:57871
+[client] [SLink] TCP connected to 127.0.0.1:57871
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @641
+PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"990013000016032D21
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @943 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @1030 (10,34) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @1795 (10,34) battle=1 party=1
+[hunt] turn 2 foe hp 10/15 odds 0.63 dmax 6 -> fight
+[hunt] turn 3 foe hp 6/15 odds 1.00 dmax 6 -> throw
+phase wild-throw @2971 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @4972
+PARTY_UNREADABLE @4980 species list and struct disagree (count=2 species=99 A5 FF 00 00 00 00)
+[client] [SLink-gen1] writes PAUSED: party unreadable
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":6,"in_box":false,"key":"4720:4190:A5","level":3,"maxHP":15,"nickname":"RATTATA","player":"a","seq":140,"species_id":165,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"a","seq":141}
+RX hud_show text=>> Got PIDGEY
+RX play_sound
+RX msgbox text=RATTATA and PIDGEY linked!
+RX party_mon key=4720:4190:A5
+PARTY_READABLE @5500  (count=2 species=99 A5 FF 00 00 00 00)
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @5509 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @5510 (10,34) battle=0 party=2
+HUNT caught after 4568 frames, 1 encounter(s)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+MYKEY 1 4720:4190:A5
+PARTY slot=1 key=4720:4190:A5 species=165 level=3 hp=6
+CAUGHT 4720:4190:A5
+[client] [SLink-gen1] writes re-enabled after a live validation
+TX {"event":"sync_retrieve_done","key":"4720:4190:A5","player":"a","seq":143}
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+MYKEY 1 4720:4190:A5
+PARTY slot=1 key=4720:4190:A5 species=165 level=3 hp=6
+SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+SAVE_PHASE link_new save-open-start-menu
+SAVE_PHASE link_new save-close-foreign-menu
+SAVE_PHASE link_new save-select-save
+SAVE_PHASE link_new save-choose-save
+SAVE_PHASE link_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_pc_ops_new_a_1_witness.bin bytes=31592 saves=1 frame=5920
+SAVE_PHASE link_new save-await-close
+SAVE_PHASE link_new save-witnessed
+SAVE_WITNESS link_new frames=530
+MYKEY 0 06C3:4190:99
+PRE_PC slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+MYKEY 1 4720:4190:A5
+PRE_PC slot=1 key=4720:4190:A5 species=165 level=3 hp=6
+heartbeat f=7200 party=2 connected=true
+TX {"event":"safe","player":"a","seq":214}
+ROUTE route_one_north -> map 1 at (21,35) frame 7869
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":223}
+ROUTE viridian_center -> map 41 at (23,25) frame 8142
+CENTER_RECEPTIONIST map=41 (11,3)
+PC_BOX_BEFORE box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-walk @8416 (11,3) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-face @8467 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-activate @8469 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-main-open @8581 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-menu-deposit @8790 (13,4) party=2 box=1 count=0 init=false
+PC_OP deposit start
+PC op 1 deposit(2) start frame=8801
+PC_PHASE deposit-withdraw pc-enter-deposit @8801 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-text @8817 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-list-move @8827 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-list-pick @8833 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-sub-confirm @8849 (13,4) party=2 box=1 count=0 init=false
+TX {"event":"party_to_box","key":"4720:4190:A5","player":"a","seq":257,"stats":{"level":3,"maxHP":15}}
+PARTY_COUNT 2 -> 1 @8864
+PC_PHASE deposit-withdraw pc-text @8888 (13,4) party=1 box=1 count=1 init=false
+PC_OP deposit done
+PC op 1 deposit(2) done frame=8978 party=1 box_count=1 box=1
+PC_PHASE deposit-withdraw pc-menu-withdraw @8978 (13,4) party=1 box=1 count=1 init=false
+PC_OP withdraw start
+PC op 2 withdraw(1) start frame=9009
+PC_PHASE deposit-withdraw pc-enter-withdraw @9009 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-withdraw pc-text @9025 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-withdraw pc-list-pick @9035 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-withdraw pc-sub-confirm @9057 (13,4) party=1 box=1 count=1 init=false
+TX {"area_id":"","event":"box_to_party","key":"4720:4190:A5","player":"a","seq":265}
+PARTY_COUNT 1 -> 2 @9072
+PC_PHASE deposit-withdraw pc-text @9096 (13,4) party=2 box=1 count=0 init=false
+PC_OP withdraw done
+PC op 2 withdraw(1) done frame=9202 party=2 box_count=0 box=1
+PC_PHASE deposit-withdraw pc-see-ya @9202 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-logging-off @9233 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-log-off @9238 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-withdraw pc-logging-off @9280 (13,4) party=2 box=1 count=0 init=false
+PC pc-done frame=9334 op=3
+PC_PHASE deposit-withdraw pc-done @9334 (13,4) party=2 box=1 count=0 init=false
+PC_DEPOSIT_KEY 4720:4190:A5
+PC_WITHDRAW_KEY 4720:4190:A5
+PC_MID party=2 box=1 count=0
+PC_PHASE deposit-release pc-activate @9572 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-release pc-main-open @9685 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-release pc-menu-deposit @9894 (13,4) party=2 box=1 count=0 init=false
+PC_OP deposit start
+PC op 1 deposit(2) start frame=9905
+PC_PHASE deposit-release pc-enter-deposit @9905 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-release pc-text @9921 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-release pc-list-move @9931 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-release pc-list-pick @9937 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-release pc-sub-confirm @9953 (13,4) party=2 box=1 count=0 init=false
+TX {"event":"party_to_box","key":"4720:4190:A5","player":"a","seq":296,"stats":{"level":3,"maxHP":15}}
+PARTY_COUNT 2 -> 1 @9968
+PC_PHASE deposit-release pc-text @9992 (13,4) party=1 box=1 count=1 init=false
+PC_OP deposit done
+PC op 1 deposit(2) done frame=10082 party=1 box_count=1 box=1
+PC_PHASE deposit-release pc-menu-release_box @10082 (13,4) party=1 box=1 count=1 init=false
+PC_OP release_box start
+PC op 2 release_box(1) start frame=10113
+PC_PHASE deposit-release pc-enter-release_box @10113 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-release pc-text @10129 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-release pc-list-pick @10139 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-release pc-yes @10294 (13,4) party=1 box=1 count=1 init=false
+[client] [SLink-gen1] RELEASE_SEEN key=4720:4190:A5 box=0
+PC_PHASE deposit-release pc-text @10320 (13,4) party=1 box=1 count=0 init=false
+PC_OP release_box done
+PC op 2 release_box(1) done frame=10482 party=1 box_count=0 box=1
+PC_PHASE deposit-release pc-see-ya @10482 (13,4) party=1 box=1 count=0 init=false
+PC_PHASE deposit-release pc-logging-off @10513 (13,4) party=1 box=1 count=0 init=false
+PC_PHASE deposit-release pc-log-off @10518 (13,4) party=1 box=1 count=0 init=false
+PC_PHASE deposit-release pc-logging-off @10560 (13,4) party=1 box=1 count=0 init=false
+PC pc-done frame=10614 op=3
+PC_PHASE deposit-release pc-done @10614 (13,4) party=1 box=1 count=0 init=false
+PC_RELEASE_SEEN 4720:4190:A5
+PC_FINAL party=1 box=1 count=0 init=false
+MYKEY 0 06C3:4190:99
+POST_PC slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+SAVE_PHASE pc_ops_new_a save-open-start-menu
+SAVE_PHASE pc_ops_new_a save-close-foreign-menu
+SAVE_PHASE pc_ops_new_a save-select-save
+SAVE_PHASE pc_ops_new_a save-choose-save
+heartbeat f=10800 party=1 connected=true
+SAVE_PHASE pc_ops_new_a save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_pc_ops_new_a_1_witness.bin bytes=31592 saves=2 frame=10880
+SAVE_PHASE pc_ops_new_a save-await-close
+SAVE_PHASE pc_ops_new_a save-witnessed
+SAVE_WITNESS pc_ops_new_a frames=528
+RESULT: PASS (deposited, withdrew, deposited and released 4720:4190:A5)

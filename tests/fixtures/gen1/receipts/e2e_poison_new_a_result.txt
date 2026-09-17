@@ -1,0 +1,40 @@
+duo instance a scenario=poison_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:53518 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:53518
+[client] [SLink] TCP connected to 127.0.0.1:53518
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @641
+PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"oaks_lab","badges":0,"ball_count":0,"event":"hello","has_pokeballs":false,"in_battle":false,"loc_name":"Oak's Lab","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"99001300001603
+RX resolved_areas
+RX config
+booted at frame 844 party=1 map=40 (5,6)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+POISON_IDLE a
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+heartbeat f=3600 party=1 connected=true
+RX play_sound
+RX msgbox text=Viridian Forest is a dead zone!
+heartbeat f=7200 party=1 connected=true
+heartbeat f=10800 party=1 connected=true
+heartbeat f=14400 party=1 connected=true
+heartbeat f=18000 party=1 connected=true
+heartbeat f=21600 party=1 connected=true
+SAVE_PHASE poison_new_a save-open-start-menu
+SAVE_PHASE poison_new_a save-close-foreign-menu
+SAVE_PHASE poison_new_a save-select-save
+SAVE_PHASE poison_new_a save-choose-save
+SAVE_PHASE poison_new_a save-close-foreign-menu
+SAVE_PHASE poison_new_a save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_poison_new_a_1_witness.bin bytes=31592 saves=1 frame=22080
+SAVE_PHASE poison_new_a save-await-close
+SAVE_PHASE poison_new_a save-witnessed
+SAVE_WITNESS poison_new_a frames=495
+RESULT: PASS (idled through the partner's poison faint and blackout)

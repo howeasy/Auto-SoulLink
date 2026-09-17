@@ -1,8 +1,8 @@
 duo instance a scenario=admit_randomized_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:65245 (non-blocking)…
-client built: title=red player=a rom=2199efe6 -> 127.0.0.1:65245
-[client] [SLink] TCP connected to 127.0.0.1:65245
+[client] [SLink] TCP connecting to 127.0.0.1:51976 (non-blocking)…
+client built: title=red player=a rom=88e2b6d6 -> 127.0.0.1:51976
+[client] [SLink] TCP connected to 127.0.0.1:51976
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -25,7 +25,8 @@ SAVE_PHASE admit_randomized_new save-select-save
 SAVE_PHASE admit_randomized_new save-choose-save
 SAVE_PHASE admit_randomized_new save-close-foreign-menu
 SAVE_PHASE admit_randomized_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_admit_randomized_new_a_1_witness.bin bytes=31592 saves=1 frame=1056
 SAVE_PHASE admit_randomized_new save-await-close
 SAVE_PHASE admit_randomized_new save-witnessed
-SAVE_WITNESS admit_randomized_new frames=365
+SAVE_WITNESS admit_randomized_new frames=360
 RESULT: PASS (live hello held for 600 frames)

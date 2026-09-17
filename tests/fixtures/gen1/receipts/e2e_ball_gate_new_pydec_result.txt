@@ -4,6 +4,10 @@ starter gift_map_40 pair linked with both zero-ball gates closed
 both real Rival1 faints suppressed; gift pair alive; parked B HP unchanged
 both filtered bag_received signals followed by client and server activation
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=505fbca954a83e0b4f7f221cd6dee8c88eada4472bed3bcd56b3c28a3c29380a file=505fbca954a83e0b4f7f221cd6dee8c88eada4472bed3bcd56b3c28a3c29380a match=true saves=1
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=c568cd4658e1e8a7e5a8363212589fdbc79f4f96b5e12e053f9cc3a4f3e6f957 file=c568cd4658e1e8a7e5a8363212589fdbc79f4f96b5e12e053f9cc3a4f3e6f957 match=true saves=1
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
 both flushed SaveRAMs qualify; one living original starter per cartridge
 PYDEC: PASS asserted scenario facts
