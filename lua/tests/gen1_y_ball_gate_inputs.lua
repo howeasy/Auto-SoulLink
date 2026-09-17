@@ -66,8 +66,13 @@
 -- Inherited from the R/B module (the plan records the .blk layouts of the bedroom, the house,
 -- Pallet and the lab as byte-identical): the house/bedroom walk, the lab row-4 approach, and
 -- the whole rival-battle block, which is copy-portable move for move.
+-- The shared input shapes (idle/hold/tap/move): this file's own directory locates the module,
+-- the way the sibling drivers are already loaded.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
+
 local M={}
-local function idle()return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false}end
 local function press(button,frame)
     local buttons=idle();buttons[button]=frame%16<2;return buttons
 end

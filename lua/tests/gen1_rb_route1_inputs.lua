@@ -2,19 +2,13 @@
 -- south edge tile (10,35), the parking tile the duo scenarios start from. Same shape as
 -- gen1_rb_parcel_inputs: point -> buttons, phase; the caller owns frames. Wild battles on the
 -- way are escaped with RUN exactly as the parcel route does.
+-- The shared input shapes (idle/hold/tap/move): this file's own directory locates the module,
+-- the way the sibling drivers are already loaded.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
+
 local M = {}
-local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false} end
-local function tap(key, frame)
-    local b=idle(); b[key]=frame%16<2; return b
-end
-local function move(point, target)
-    local b=idle()
-    if point.x<target[1] then b.Right=true
-    elseif point.x>target[1] then b.Left=true
-    elseif point.y<target[2] then b.Down=true
-    elseif point.y>target[2] then b.Up=true end
-    return b
-end
 -- Waypoints are the parcel route's own southbound paths (proven live), ending ON Route 1.
 local paths={
     mart_exit={{3,7}},                                             -- Mart door -> Viridian (29,19)

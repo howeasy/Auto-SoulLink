@@ -10,6 +10,12 @@
 -- "out-of-balls" (the throw failed, no ball left, RUN succeeded), "linked-fainted",
 -- "linked-active-menu" and failures "linked-survived-3-battles", "hunt-exhausted",
 -- "whiteout", "stuck".
+-- The shared input shapes (idle/hold/tap/move): this file's own directory locates the module,
+-- the way the sibling drivers are already loaded.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
+
 local M = {}
 M.PARK = {10, 35}
 -- Route 1 grass at the parking tile: pret maps/Route1.blk + gfx/blocksets/overworld.bst, grass
@@ -18,16 +24,6 @@ M.PARK = {10, 35}
 M.GRASS = {{10, 33}, {10, 35}}
 M.MAX_ENCOUNTERS = 6
 
-local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false} end
-local function tap(key, frame) local b = idle(); b[key] = frame % 16 < 2; return b end
-local function move(point, target)
-    local b = idle()
-    if point.x < target[1] then b.Right = true
-    elseif point.x > target[1] then b.Left = true
-    elseif point.y < target[2] then b.Down = true
-    elseif point.y > target[2] then b.Up = true end
-    return b
-end
 
 -- Fields gen1_scripted_play's point lacks: the foe's HP for the fight/throw decision and the
 -- bag index of the first ball (MASTER..POKE = 1..4, constants/item_constants.asm:10-13).

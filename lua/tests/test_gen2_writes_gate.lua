@@ -27,8 +27,8 @@
      sGameData..sGameDataEnd only (save.asm SaveChecksum / VerifyChecksum) — the box banks
      are outside it. So the memorial write needs no checksum maintenance, and, unlike Gen 1,
      there is no EmptyAllSRAMBoxes to defend against: ChangeBoxSaveGame only does
-     SaveBox/LoadBox. protectSramBoxes correctly no-ops here, and this gate proves the
-     memorial survives without it.
+     SaveBox/LoadBox, so there is nothing to protect against and this gate proves the
+     memorial survives without any SRAM-box maintenance.
 
   Runs on tests/fixtures/gen2/crystal_town.SaveRAM.
   Result file: patch/build/test_gen2_writes_gate_result.txt

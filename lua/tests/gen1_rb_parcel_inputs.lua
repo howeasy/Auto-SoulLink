@@ -1,4 +1,10 @@
 -- Pure R/B parcel route. Caller owns frames, observation, and the paired grant.
+-- The shared input shapes (idle/hold/tap/move): this file's own directory locates the module,
+-- the way the sibling drivers are already loaded.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
+
 local M = {}
 -- The Oak's-lab script indices are per-title: pokered scripts/OaksLab.asm:31-33,490-495 use
 -- 15/16/17 with SCRIPT_OAKSLAB_NOOP 18, pokeyellow scripts/OaksLab.asm:31-33,490-495 use
@@ -10,24 +16,12 @@ local LAB = {
     yellow = { delivery = {19, 20, 21}, noop = 22 },
 }
 M.LAB = LAB
-local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false} end
-local function tap(key, frame)
-    local b=idle(); b[key]=frame%16<2; return b
-end
 -- Stall guard, same shape as the sibling route drivers (gen1_y_ball_gate_inputs.lua:74-77):
 -- the first frame in a window is latched under `key`, and the window has a bound. The gate
 -- harness prints the whole point on a failed route, so the message carries no dump of its own.
 local function bounded(self, key, frame, limit, message)
     self[key]=self[key] or frame
     assert(frame-self[key]<limit, message)
-end
-local function move(point, target)
-    local b=idle()
-    if point.x<target[1] then b.Right=true
-    elseif point.x>target[1] then b.Left=true
-    elseif point.y<target[2] then b.Down=true
-    elseif point.y>target[2] then b.Up=true end
-    return b
 end
 local paths={
     lab_exit={{5,11}},

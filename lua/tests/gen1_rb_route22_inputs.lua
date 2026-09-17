@@ -98,6 +98,12 @@
 --   recognises the "choose a POKéMON" screen after a KO instead of pressing A blind.
 --
 -- †wBattleResult (ram/wram.asm:998-1002): $00 win, $01 lose, $02 draw.
+-- The shared input shapes (idle/hold/tap/move): this file's own directory locates the module,
+-- the way the sibling drivers are already loaded.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
+
 local M = {}
 
 M.MAP = { route1 = 0x0C, viridian = 0x01, route22 = 0x21 }
@@ -130,17 +136,6 @@ local paths = {
 }
 M.PATHS = paths
 
-local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false} end
-local function hold(name) local b=idle(); b[name]=true; return b end
--- Native menus and text boxes are re-pulsed on the 16-frame cadence, never held.
-local function tap(name, frame) local b=idle(); b[name]=frame%16<2; return b end
-local function move(point, target)
-    if point.x<target[1] then return hold("Right") end
-    if point.x>target[1] then return hold("Left") end
-    if point.y<target[2] then return hold("Down") end
-    if point.y>target[2] then return hold("Up") end
-    return idle()
-end
 local function check_point(point, what)
     assert(point and type(point.map)=="number" and type(point.x)=="number" and type(point.y)=="number"
         and type(point.battle)=="number" and type(point.party_hp)=="number"

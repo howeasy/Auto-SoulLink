@@ -2,9 +2,9 @@
   lua/tests/test_gen1_menu_row_gate.lua — the SLINK row in the START menu and the panel
   behind it, driven by the REWRITTEN client (lua/gen1/*), not by memory_gb.lua.
 
-  WHAT CHANGED FROM THE OLD GATE. It used to stand in for the client: it called
-  M.panelStage() itself, so the painter it proved was the gate's own call into a helper,
-  and the handshake it proved had no client in it. Here the gate is only the SERVER: rows
+  WHAT CHANGED FROM THE OLD GATE. It used to stand in for the client: it painted the
+  panel itself through the old client's helper, so the painter it proved was the gate's own
+  call and the handshake it proved had no client in it. Here the gate is only the SERVER: rows
   arrive as a real `link_panel` reply on t.replies, lua/gen1/client.lua hands them to
   lua/gen1/panel.lua, and panel:service() decides — from the mailbox alone — whether it is
   allowed to paint. Every frame therefore drives t.client:frame_end(); nothing else would

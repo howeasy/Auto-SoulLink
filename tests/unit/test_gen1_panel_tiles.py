@@ -133,8 +133,8 @@ def test_an_over_long_row_is_truncated_not_wrapped(panel):
 
 
 def test_rows_past_the_bottom_start_a_new_page_rather_than_spilling(panel):
-    """memory_gb's panelStage dropped anything past row 17; panel.lua pages instead, and
-    a page still occupies exactly one screen."""
+    """The old client's panel painter dropped anything past row 17; panel.lua pages
+    instead, and a page still occupies exactly one screen."""
     lua, P = panel
     rows = [f"R{i}" for i in range(ROWS + 5)]
     first = _held_page(lua, P, rows, page=0)

@@ -76,6 +76,12 @@
 --    (constants/ram_constants.asm:51-52): bit 7 set means the SRAM boxes have been initialised,
 --    the low 7 bits are the 0-based box. wMoveMonType and wRemoveMonFromBox are the SAME byte
 --    ($cf95 in data/pret/pokered.sym:18688-18689).
+-- The shared input shapes (idle/hold/tap/move): this file's own directory locates the module,
+-- the way the sibling drivers are already loaded.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
+
 local M = {}
 local fmt = string.format
 
@@ -107,8 +113,6 @@ M.TERMINALS = {["pc-done"] = true, ["pc-stuck"] = true, ["pc-left-the-center"] =
                ["pc-op-unconfirmed"] = true}
 for _, refusal in ipairs(REFUSALS) do M.TERMINALS[refusal[3]] = true end
 
-local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false} end
-local function tap(key, frame) local b = idle(); b[key] = frame % 16 < 2; return b end
 
 -- Box bookkeeping the scripted point does not carry. party_count is already on the point;
 -- gen1_rb_point_fields.lua has no box decoder to reuse, so the three bytes are read here.
