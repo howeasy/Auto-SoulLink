@@ -1,0 +1,10 @@
+attempt 1 of 2
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+BAG_BALLS baseline=1 final=0 inst=a
+a saved slot 0 starter 06C3:4190:99
+a saved slot 1 linked E132:4190:24, no current-box duplicate
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+BAG_BALLS baseline=1 final=0 inst=b
+b saved slot 0 starter 4519:AFB9:B0
+b saved slot 1 linked 3E6F:AFB9:A5, no current-box duplicate
+PYDEC: PASS asserted scenario facts
