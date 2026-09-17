@@ -763,7 +763,7 @@ Everything above for Gen 3 is a human clicking through BizHawk. The Game Boy gen
 not — there is nothing to run by hand.
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 24 cases: 5 gates x 3 carts, + patch/menu-row + AP
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 5 cases: patch + menu-row + the randomized panel
 python tools/verify_gen1_release.py                    # ALL of it, fail-closed (a skip is a failure)
 SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
 SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18 cases: 9 scenarios × 2 pairings
@@ -788,18 +788,16 @@ writes `RESULT: PASS|FAIL`:
 
 | Gate | Runs on | Covers |
 |---|---|---|
-| `test_gen1_memory_gate.lua` | red, blue, yellow | mon keys, party/box reads, PP with its PP-Up mask, stat stages, enemy struct, the Pokéball nuzlocke gate |
-| `test_gen1_writes_gate.lua` | red, blue, yellow | `force_faint`, the deposit half of party sync, the ~404-byte enemy-party write, Explosion into the move slot |
-| `test_gen1_boxroundtrip_gate.lua` | red, blue, yellow | the withdraw half — the writes gate only deposits, so without this a corrupt restore would never show up |
-| `test_gen1_evolution_gate.lua` | red, blue, yellow | a Gen 1 key is DVs:OTID:SPECIES, so evolving rewrites it. Drives a real Moon Stone through the real bag menus (no battle, no encounter RNG, uncancellable) |
-| `test_gen1_stat_rebuild.lua` | red, blue, yellow | recomputes every party mon's stats from the cartridge's OWN base-stat table and requires the game's stored values to match — the withdraw path rebuilds stats rather than refusing |
 | `test_gen1_patch_gate.lua` | red, blue (patched) | the companion patch's VBlank hook and mailbox, and that it does **not** reach `PlaySound` — see [patch/gen1/README.md](../patch/gen1/README.md) |
 | `test_gen1_menu_row_gate.lua` | red, blue (patched) | the START-menu SLINK row and the panel it opens: the row draws and is reachable, the client's staged rows are what appears, **A turns to page 2**, **B closes**, EXIT keeps its original index, and the player can still walk |
 | the panel on a randomized cartridge | red (randomized + injected) | the structural injector's only real question — a ROM that patches "successfully" and then does not boot is a failure no hash comparison can see, so the whole panel gate runs on one |
-| `test_gen1_ap_gate.lua` | red/blue AP **and** red/blue vanilla | Archipelago detection. The vanilla pair is the negative control: without it, a detector stuck at "yes" would pass on its own |
 
-Parametrised over all three cartridges deliberately: **Yellow shifts nearly every WRAM
-address by −1**, so a Red-only run would never exercise the profile most likely to be wrong.
+The pre-rewrite cartridge gates (memory, writes, box round trip, evolution, stat rebuild) and
+the Archipelago gate were retired with their Lua in Phase 8. What they covered is carried by
+`tests/live/test_gen1_new_gates.py`, `test_gen1_trade_gates.py` and the duo pairs, which are
+parametrised over all three cartridges for the same reason those were: **Yellow shifts nearly
+every WRAM address by −1**, so a Red-only run would never exercise the profile most likely to
+be wrong.
 
 ### Gen 2 gates
 
@@ -961,7 +959,7 @@ This deletes `data/links.json` and clears all in-memory state. The Lua clients w
 
 | Behaviour | Reason | Impact |
 |---|---|---|
-| Live play covers Route 1 only | The scripted warp is undrivable from Lua — `hWarpDestinationMap` at `$FF81` is shared HRAM the renderer overwrites within the frame (`lua/tests/probe_gen1_warp.lua` measures it three ways) — and the fly warp reaches thirteen destinations, two with encounters | The other 38 areas rest on the generated oracle and the ROM scanner, which agree via two independent paths. Area *resolution* elsewhere is untested by play |
+| Live play covers Route 1 only | The scripted warp is undrivable from Lua — `hWarpDestinationMap` at `$FF81` is shared HRAM the renderer overwrites within the frame (measured three ways before the probe was retired) — and the fly warp reaches thirteen destinations, two with encounters | The other 38 areas rest on the generated oracle and the ROM scanner, which agree via two independent paths. Area *resolution* elsewhere is untested by play |
 | No fishing rod has ever been cast in-engine | Rods are scanned from ROM on all three titles, including Yellow's distinct super-rod format, but never used | A rod encounter's area resolution is unproven live |
 | Stat rebuild has no stat-exp coverage on hardware | Every fixture is a level-5 mon that has never fought, so `ceil(sqrt(stat_exp))` is always 0 | The formula is verified in Python against `CalcStat` over levels 1-100 and the stat-exp boundaries; what is untested live is the Lua reading a trained mon's bytes |
 | The memorial box IS Box 12 | Gen 1 has no spare box — SRAM `0x75EA` decodes to exactly `sBox12` | Anything you ever stored there reads as contamination and logs an advisory warning (deduped per key). Nothing is corrupted; the checks do not act on it |

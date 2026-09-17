@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """run_gb_gate.py — launch ONE headless Game Boy gate and report PASS/FAIL.
 
-    python tools/run_gb_gate.py lua/tests/test_gen1_memory_gate.lua
-    python tools/run_gb_gate.py lua/tests/test_gen1_memory_gate.lua --rom yellow --target battle
+    python tools/run_gb_gate.py lua/tests/test_gen1_inspect_gate.lua
+    python tools/run_gb_gate.py lua/tests/test_gen1_inspect_gate.lua --rom yellow --target battle
     python tools/run_gb_gate.py lua/tests/test_gen2_memory_gate.lua --rom crystal
 
 The GB counterpart to tools/run_gate.py, which is bound to the GBA/Radical Red setup. The
@@ -49,16 +49,14 @@ from gen1_playthrough import (  # noqa: E402
 # Crystal dump is "(USA)" while its gamedb entry is "(USA, Europe)". To make a fixture visible
 # to the emulator it has to be copied under THAT name.
 #
-# The companion-patch and Archipelago builds do NOT inherit their base ROM's name: BizHawk
+# The companion-patch builds do NOT inherit their base ROM's name: BizHawk
 # looks the game up by ROM HASH, and a patched ROM is unknown, so it falls back to a name
 # derived from the FILENAME — `slink_red.gb` becomes "slink red.SaveRAM". Seeding only the
 # vanilla name meant the patched build found no save, started a NEW GAME, and the gate
 # reported party=0.
 #
 # In `patched`, a base fixture of None means COLD BOOT: there is no battery save to seed, and
-# any stale one is removed so the ROM reaches NEW GAME. The Archipelago builds are in that
-# category — the fork's save block is 4 bytes longer (sMainDataCheckSum 0xB523 -> 0xB527), so
-# a vanilla .SaveRAM fails the AP checksum and CONTINUE is not offered at all.
+# any stale one is removed so the ROM reaches NEW GAME — that is what the `*_cold` keys are.
 #   key -> (fixture to seed from, ROM path, SaveRAM filename BizHawk will use)
 GENS = {
     "gen1": {
@@ -78,12 +76,9 @@ GENS = {
             "red_rand_patched": ("red", "patch/gen1/build/slink_red_randomized.gb",
                                  "slink red randomized.SaveRAM"),
             "blue_patched": ("blue", "patch/gen1/build/slink_blue.gb", "slink blue.SaveRAM"),
-            "red_ap": (None, "patch/build/gen1_red_ap.gb", "gen1 red ap.SaveRAM"),
-            "blue_ap": (None, "patch/build/gen1_blue_ap.gb", "gen1 blue ap.SaveRAM"),
-            # The AP gate's negative control: the SAME gate on the VANILLA cartridge, cold,
-            # so it reaches the same intro and every AP assertion has to come out the other
-            # way. Without that pair a detector stuck at "yes" would pass on its own. A ROM
-            # path of None means "the vanilla dump for the key before _cold".
+            # Cold-boot keys: the vanilla cartridge with no save at all, so it reaches the
+            # intro rather than CONTINUE. A ROM path of None means "the vanilla dump for the
+            # key before _cold" (tests/live/test_gen1_new_gates.py, tools/gen1_fixtures.py).
             "red_cold": (None, None, "Pokemon - Red Version (USA, Europe).SaveRAM"),
             "blue_cold": (None, None, "Pokemon - Blue Version (USA, Europe).SaveRAM"),
             # Yellow's cold key for the scripted host: `rom_key.rsplit("_", 1)[0]` resolves the
@@ -177,9 +172,8 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
         if rom_rel is None:
             rom_rel = play.staged_rom(rom_key.rsplit("_", 1)[0])
         if not os.path.exists(os.path.join(REPO, rom_rel)):
-            builder = ("python tools/gen1_ap_rom.py" if base_key is None
-                       else "python patch/gen1/tools/build.py")
-            raise FileNotFoundError(f"{rom_rel} missing — build it with `{builder}`")
+            raise FileNotFoundError(f"{rom_rel} missing — build it with "
+                                    f"`python patch/gen1/tools/build.py`")
         os.makedirs(SAVERAM_DIR, exist_ok=True)
         if base_key is None:
             # Cold boot. A leftover save from an earlier run would put the title screen on
@@ -234,7 +228,7 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("script", help="path to the gate, e.g. lua/tests/test_gen1_memory_gate.lua")
+    ap.add_argument("script", help="path to the gate, e.g. lua/tests/test_gen1_inspect_gate.lua")
     ap.add_argument("--rom", choices=sorted(ROM_TO_GEN), default="red")
     ap.add_argument("--target", choices=("town", "battle"), default="town")
     ap.add_argument("--timeout", type=int, default=240)

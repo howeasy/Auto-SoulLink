@@ -19,8 +19,8 @@ explains a failure later:
     6. statics-generated  — static_encounters.json is what pret's scripts/objects say
     7. fixtures           — every committed battery save qualifies as a real game state
     8. patch-build        — the clean dumps still hold what the manifest displaces
-    9. live-gates         — real engine behaviour on real cartridges, incl. the panel
-                            on a randomized+injected ROM
+    9. live-gates         — the companion patch on real cartridges: hook, mailbox, START-menu
+                            row, and the panel on a randomized+injected ROM
    10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
    11. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
    12. duo-pairs          — every scenario on both pairings, through the real server
@@ -71,12 +71,6 @@ ALLOWED_SKIPS = [
      "template fragments have no <svg> root of their own, by design"),
     ("stream/memorial.html not present",
      "optional OBS overlay template"),
-    ("not built — `python tools/gen1_ap_rom.py`",
-     "Archipelago is DEFERRED for this release by scope, and its ROMs are built from a "
-     "third-party apworld that is not ours to ship. The AP gate exists and passes when "
-     "those ROMs are present; it is not part of the vanilla Gen 1 verdict. This is the "
-     "one Gen 1 entry on this list, and it is here because of scope rather than "
-     "convenience — if Archipelago is ever un-deferred, delete this line first."),
 ]
 
 
@@ -113,8 +107,8 @@ LANES = [
          [_PY, "-m", "pytest", "tests/live/test_gen1_gates.py", "-q", "-p", "no:randomly",
           "-rs"],
          env={"SLINK_LIVE": "1"},
-         why="real engine behaviour on real cartridges, including the panel on a "
-             "randomized+injected ROM"),
+         why="the companion patch on real cartridges: VBlank hook, mailbox, START-menu row, "
+             "and the panel on a randomized+injected ROM"),
     Lane("live-new-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_new_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
@@ -151,7 +145,7 @@ REQUIREMENTS = {
     "statics-generated": ["F-5", "S-8"],
     "fixtures": ["F-6"],
     "patch-build": ["T-1"],
-    "live-gates": ["R-2 (stat rebuild vs the game)", "S-5/D-10 (Moon Stone key rewrite)", "T-1 prerequisites (panel, menu row, randomized+injected panel)", "(pre-rewrite box round trip; retired in Phase 8)"],
+    "live-gates": ["T-1 prerequisites (panel, menu row, randomized+injected panel)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
     "live-trade-gates": ["T-1", "T-2"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],

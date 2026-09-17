@@ -10,7 +10,7 @@ is not. Every profile address is checked against the pret decomp .sym output by
 that:
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 24 gates across R/B/Y + patched + AP
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 5: patched + menu row + randomized panel
 SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q       # 18: 9 scenarios x 2 ROM pairings
 python tools/verify_gen1_release.py                    # all of the above, fail-closed
 ```
@@ -27,9 +27,9 @@ clause with no injection at all. The other six inject the state they verify, whi
 — they isolate one rule each.
 
 **What that does NOT cover.** Route 1 is the only encounter area any live test visits: the
-scripted warp turned out to be undrivable from Lua (`lua/tests/probe_gen1_warp.lua` measures
-why — `hWarpDestinationMap` at `$FF81` is shared HRAM the renderer overwrites within the
-frame), and the fly warp reaches thirteen destinations of which only two carry wild
+scripted warp turned out to be undrivable from Lua (`hWarpDestinationMap` at `$FF81` is
+shared HRAM the renderer overwrites within the frame, measured three ways before the probe was
+retired), and the fly warp reaches thirteen destinations of which only two carry wild
 encounters. So the remaining areas are covered by the source-derived oracle and the ROM
 scanner, not by play. Fishing is scanned from ROM on all three titles but no rod has ever
 been used in-engine.
@@ -100,8 +100,8 @@ Archipelago variants have never been launched. See
   clones. Explode Mode writes Explosion (move 153) into the active battler's move slot 0 and
   `wPlayerSelectedMove`; the active slot comes from `wPlayerMonNumber` (`0xCC2F`), never
   assumed to be slot 0.
-  Timing of both writes was derived from pret source and then measured on hardware by
-  `lua/tests/probe_gen1_{rivalswap,explode}.lua`: the swap must land **before the first
+  Timing of both writes was derived from pret source and then measured on hardware by the
+  rivalswap/explode probes (retired in Phase 8): the swap must land **before the first
   send-out** (`LoadEnemyMonData` re-derives the active mon from the party arrays), so the
   client writes on `trainer_battle_start`, gated on three stable frames of `wIsInBattle == 2`.
   Both are exercised end-to-end by the `rivalswap` and `explode_g1` duo scenarios.

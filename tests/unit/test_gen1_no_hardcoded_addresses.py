@@ -26,36 +26,30 @@ lupa = pytest.importorskip("lupa")
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# The one script whose literals ARE the point. test_gen1_ap_gate.lua exists to check the
-# loaded profile against addresses derived independently of it, so reading them from
-# `M.SOMETHING_ADDR` would make it compare the profile with itself and pass unconditionally.
-# It is also the only Gen 1 gate that cannot run on Yellow: Yellow has no upstream
-# Archipelago world, and gen1_rby.detect_variant() returns "yellow" without ever consulting
-# the seed slot, so the Red/Blue literals below can never be applied to a Yellow cartridge.
-ORACLE_SCRIPTS = {"test_gen1_ap_gate.lua"}
-
 # Scripts that drive a real cartridge and are (or could be) run against more than one variant.
+#
+# There is no exemption list: test_gen1_ap_gate.lua used to be one, because its literals were
+# the point, and it was retired with the rest of the Archipelago gate in Phase 8. If a script
+# ever needs literals again, exempt it here by NAME and say why — never by widening the glob.
 SCRIPTS = sorted(
-    p for p in (
-        glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gen1_*.lua"))
-        # The generation-agnostic scenarios and the shared duo wrapper. These were named
-        # scenario_gen1_* until Gen 2 became their second caller, and renaming them silently
-        # dropped three files out of this guard — the exact way coverage disappears without
-        # anything going red.
-        #
-        # WHAT THIS GUARD DOES NOT COVER, so nobody reads the glob above as more than it is:
-        # the banned set is derived from `red_profile != yellow_profile`, so it catches only
-        # literals that DIFFER between Red and Yellow. An address identical in both (wJoyIgnore
-        # 0xCD6B, wCurrentMenuItem 0xCC26) is explicitly allowed and is still wrong on Crystal.
-        # Adding these files closes the Yellow hole for shared code, not the Gen 2 one; the
-        # Gen 2 half is currently held by the shared files containing no WRAM literals at all.
-        + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gb_*.lua"))
-        + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "duo_gb_main.lua"))
-        # gen1_hunt.lua is not a scenario, but the scenarios delegate every cartridge read to
-        # it — leaving it out would let the literals simply move one file over.
-        + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "gen1_*.lua"))
-        + glob.glob(os.path.join(REPO, "lua", "tests", "test_gen1_*_gate.lua"))
-    ) if os.path.basename(p) not in ORACLE_SCRIPTS
+    glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gen1_*.lua"))
+    # The generation-agnostic scenarios and the shared duo wrapper. These were named
+    # scenario_gen1_* until Gen 2 became their second caller, and renaming them silently
+    # dropped three files out of this guard — the exact way coverage disappears without
+    # anything going red.
+    #
+    # WHAT THIS GUARD DOES NOT COVER, so nobody reads the glob above as more than it is:
+    # the banned set is derived from `red_profile != yellow_profile`, so it catches only
+    # literals that DIFFER between Red and Yellow. An address identical in both (wJoyIgnore
+    # 0xCD6B, wCurrentMenuItem 0xCC26) is explicitly allowed and is still wrong on Crystal.
+    # Adding these files closes the Yellow hole for shared code, not the Gen 2 one; the
+    # Gen 2 half is currently held by the shared files containing no WRAM literals at all.
+    + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gb_*.lua"))
+    + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "duo_gb_main.lua"))
+    # gen1_hunt.lua is not a scenario, but the scenarios delegate every cartridge read to
+    # it — leaving it out would let the literals simply move one file over.
+    + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "gen1_*.lua"))
+    + glob.glob(os.path.join(REPO, "lua", "tests", "test_gen1_*_gate.lua"))
 )
 
 HEX = re.compile(r"0x[0-9A-Fa-f]{4}")

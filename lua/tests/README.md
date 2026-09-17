@@ -49,8 +49,7 @@ BizHawk Lua test scripts. Three families:
   address-discovery one-shots (interactive; load in the Lua console). The exception is
   `test_gen{1,2}_*_gate.lua`, which run HEADLESS off a committed battery save via
   `tests/live/test_gen1_gates.py` / `test_gen2_gates.py` (`SLINK_LIVE=1 pytest tests/live/ -q`)
-  and share `gatelib.lua` — `gen1_gatelib.lua` is just a one-line shim over it for the Gen 1
-  gates that predate the split.
+  and share `gatelib.lua`.
 
 One-off discovery probes are DELETED once their findings land in
 `patch/src/ADDRESSES.md` — that file records the provenance. Don't resurrect them; write a

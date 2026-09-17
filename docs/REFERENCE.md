@@ -31,9 +31,9 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     playing scenario stays on Route 1, so 1 of 39 encounter areas is exercised); evolution
     `key_change`; and the Archipelago variants, which have never been launched. The scripted
     warp that would reach the other 38 is undrivable from Lua — `hWarpDestinationMap` at
-    `$FF81` is shared HRAM the renderer overwrites within the frame
-    (`lua/tests/probe_gen1_warp.lua` measures it three ways) — and the fly warp reaches
-    thirteen destinations of which two carry encounters.
+    `$FF81` is shared HRAM the renderer overwrites within the frame (measured three ways
+    before the probe was retired) — and the fly warp reaches thirteen destinations of which
+    two carry encounters.
   Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums).
   The optional Red/Blue companion patch adds the in-game SLINK panel and **no sound**: the
   VBlank `PlaySound` path ABI 2 used is swallowed during music fades and re-enters a
@@ -923,7 +923,7 @@ pytest tests/unit/test_phase1_comms.py -v
 **Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 18: 4 gates x 3 cartridges, + patched + AP
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 5: patched + menu row + randomized panel
 SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18: 9 scenarios x Red/Blue and Yellow/Red
 python tools/e2e_duo.py --game gen1 --scenario all     # the same duo run, directly
 
@@ -937,7 +937,7 @@ SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # 3 duo scenarios, two Cr
 > reasons unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2 --scenario faint`
 > (likewise `boxsync`, `memorialize`).
 
-The Gen 1 gates (`test_gen1_memory_gate.lua`, `test_gen1_writes_gate.lua`, plus box-roundtrip and evolution) run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong — plus the companion-patch gate on the two patched builds and the Archipelago detection checks. Every Gen 1 duo scenario is parameterised over **two pairings**, Red/Blue and Yellow/Red, and needs no patched ROM.
+`tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua in Phase 8; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. Every Gen 1 duo scenario is parameterised over **two pairings**, Red/Blue and Yellow/Red, and needs no patched ROM.
 
 The Gen 2 gates (`test_gen2_memory_gate.lua`, `test_gen2_writes_gate.lua`) run on **Crystal only** — see the Supported Games caveat above for why a silently-skipping Gold/Silver entry would be worse than none. Its three duo scenarios (`faint`, `boxsync`, `memorialize`) run **two instances of the same Crystal dump**. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
 
