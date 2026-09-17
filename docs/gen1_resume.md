@@ -18,7 +18,8 @@ worker contract every card brief points at is `docs/agents/worker_card.md`.
   is leased** (a run on a half-edited tree is void evidence).
 - Checkpoint (hook contract): `gen1-rby-code-sweep-8d06e2/docs/gen1_reference/RC_MASTER_GUIDE.md`
   worker `master-release-lane` + `WORKTREE_REGISTER.md`; refreshed by
-  `scratchpad/refresh_checkpoint.py` (session-local; rewrite it if lost: it edits the JSON block
+  `gen1-rby-code-sweep-8d06e2/docs/gen1_reference/refresh_master_lane_checkpoint.py`
+  (args: state, files-json, next_action, live_lane, head, register-note; it edits the JSON block
   between the AGENT_CHECKPOINT markers and the register's master-release paragraph).
 
 ## PHYSICAL today (receipts under `tests/fixtures/gen1/receipts/`, all committed)
