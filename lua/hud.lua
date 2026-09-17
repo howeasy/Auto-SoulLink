@@ -128,7 +128,19 @@ end
 function H.init(opts)
     if not opts then return end
     for k, v in pairs(opts) do cfg[k] = v end
-    -- Derive defaults if not explicitly set
+    -- Derive defaults if not explicitly set. Small screens (GB/GBC, 144 px high)
+    -- take the 8/5 font so the bottom bar fits; the bar's top is derived from the
+    -- screen height so it never lands below the screen (the GBA default 146 sat
+    -- two pixels under a 144-px screen: LANE-BOOT2 found the Gen 1 HUD invisible).
+    if not opts.font_size then
+        cfg.font_size = (cfg.screen_h <= 144) and 8 or 10
+    end
+    if not opts.char_width then
+        cfg.char_width = (cfg.screen_h <= 144) and 5 or 6
+    end
+    if not opts.hud_y then
+        cfg.hud_y = cfg.screen_h - cfg.font_size - 4
+    end
     if not opts.hud_right then
         cfg.hud_right = cfg.screen_w - 3
     end
@@ -136,7 +148,7 @@ function H.init(opts)
         cfg.prompt_y = math.floor(cfg.screen_h * 0.275)
     end
     if not opts.prompt_h then
-        cfg.prompt_h = 14
+        cfg.prompt_h = cfg.font_size + 4
     end
     if not opts.gameover_y then
         cfg.gameover_y = math.floor(cfg.screen_h * 0.375)
