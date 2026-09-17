@@ -1118,6 +1118,7 @@ def _reset_stub(tmp_path, monkeypatch):
     run.cfg = dict(duo.SCENARIOS["soft_reset_new"])
     run.gcfg = dict(duo.GAMES["gen1_new"])
     run.data_dir = str(tmp_path / "run")
+    run._boot_keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
     (tmp_path / "run").mkdir()
     links = b'{"links": [], "player_identity": {}}'
     (tmp_path / "run" / "links.json").write_bytes(links)
@@ -1624,50 +1625,66 @@ def test_pc_ops_oracle_refuses_an_initialised_box_flag(tmp_path, monkeypatch):
         run.assert_pc_ops_new_saved(receipts)
 
 
-def test_soft_reset_baseline_waits_for_both_boot_keys_stats(tmp_path, monkeypatch):
-    """H-2 (p): the lane's baseline held only B's key, so A's stats arriving on the next tick
-    read as a change. The quiescence predicate has to see both keys before the baseline is
-    taken, and mon_stats itself is still compared."""
+def test_soft_reset_oracle_reads_a_missing_mon_stats_document_as_empty(tmp_path, monkeypatch):
+    """The pydec note's key list has to survive a links.json that is absent or unparseable —
+    it is read before the baseline, i.e. before any client has been released."""
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.data_dir = str(tmp_path)
-    run._boot_keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
     (tmp_path / "links.json").write_text(
         json.dumps({"mon_stats": {"BBBB:2222:02": {"level": 5}}}), encoding="utf-8")
     assert run._mon_stats_keys() == ["BBBB:2222:02"]
-    assert not run._boot_stats_present()
-    (tmp_path / "links.json").write_text(
-        json.dumps({"mon_stats": {"AAAA:1111:01": {"level": 5},
-                                  "BBBB:2222:02": {"level": 5}}}), encoding="utf-8")
-    assert run._boot_stats_present()
-    # and a document that is missing entirely is "not present", not a crash
     (tmp_path / "links.json").unlink()
-    assert run._mon_stats_keys() == [] and not run._boot_stats_present()
-
-
-def test_soft_reset_baseline_names_the_key_whose_stats_never_arrived(tmp_path, monkeypatch):
-    """H-5: the quiescence wait now runs AFTER the go-file (the stats ride the first party
-    tick, which needs the release), and its failure names the missing key instead of timing
-    out with no explanation."""
-    run = duo.DuoRun.__new__(duo.DuoRun)
-    run.scenario = "soft_reset_new"
-    run.data_dir = str(tmp_path)
-    run.cfg = dict(duo.SCENARIOS["soft_reset_new"])
-    run.cfg["timeout"] = 0.2
-    run._boot_keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
-    run._pydec_note = lambda fact: None
-    run._mon_stats_keys = lambda: ["BBBB:2222:02"]
-    monkeypatch.setattr(duo, "read_result", lambda scenario, inst: "")
-    with pytest.raises(RuntimeError, match=r"never saw stats for \['AAAA:1111:01'\]"):
-        run._wait_for_boot_stats()
+    assert run._mon_stats_keys() == []
 
 
 def test_soft_reset_oracle_refuses_a_stat_that_changed(tmp_path, monkeypatch):
-    """mon_stats is compared, not excluded: a stat change across the reset is a real finding."""
+    """A stat that MOVED across the reset is a real finding, and it fails on its own message —
+    mon_stats is reconciled before the canonical compare, not diffed by it."""
     run = _reset_stub(tmp_path, monkeypatch)
     run._reset_baseline = dict(
         run._reset_baseline,
         links_bytes=b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 5}}}')
     (tmp_path / "run" / "links.json").write_bytes(
         b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 6}}}')
-    with pytest.raises(RuntimeError, match=r"at \$\.mon_stats\.AAAA:1111:01\.level: 5 -> 6"):
+    with pytest.raises(RuntimeError, match=r"mon_stats changed across the soft reset"):
+        run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+def test_soft_reset_oracle_refuses_a_stat_that_vanished(tmp_path, monkeypatch):
+    """The flush only ever ADDS. A key the baseline held that is gone at the end is a loss."""
+    run = _reset_stub(tmp_path, monkeypatch)
+    run._reset_baseline = dict(
+        run._reset_baseline,
+        links_bytes=b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 5}}}')
+    (tmp_path / "run" / "links.json").write_bytes(b'{"links": [], "mon_stats": {}}')
+    with pytest.raises(RuntimeError, match=r"mon_stats changed across the soft reset"):
+        run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+def test_soft_reset_oracle_accepts_the_deferred_stats_flush(tmp_path, monkeypatch):
+    """DIAG-SR2: server.py's hello handler mutates state.mon_stats AFTER its only `_save()`, so
+    hello N persists hello N-1's stats and the last half's reach disk on the next save of any
+    kind — A's re-hello. The baseline is pre-reset and holds ONE boot key; the end state holds
+    both. That arrival is a write that was already owed, not a change, and it is accepted with
+    the flushed key named in the receipt."""
+    run = _reset_stub(tmp_path, monkeypatch)
+    notes = []
+    run._pydec_note = notes.append
+    run._reset_baseline = dict(
+        run._reset_baseline,
+        links_bytes=b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 5, "maxHP": 19}}}')
+    (tmp_path / "run" / "links.json").write_bytes(
+        b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 5, "maxHP": 19}, '
+        b'"BBBB:2222:02": {"level": 5, "maxHP": 19}}}')
+    run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+    assert any("deferred mon_stats flush for ['BBBB:2222:02']" in note for note in notes), notes
+
+
+def test_soft_reset_oracle_refuses_a_stat_for_a_mon_that_was_never_booted(tmp_path, monkeypatch):
+    """The flush tolerance is bounded by the boot keys: nothing was caught during this scenario,
+    so a third mon_stats entry is a capture that should not exist, not a deferred write."""
+    run = _reset_stub(tmp_path, monkeypatch)
+    (tmp_path / "run" / "links.json").write_bytes(
+        b'{"links": [], "mon_stats": {"CCCC:3333:03": {"level": 7}}}')
+    with pytest.raises(RuntimeError, match=r"mon_stats gained \['CCCC:3333:03'\]"):
         run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})

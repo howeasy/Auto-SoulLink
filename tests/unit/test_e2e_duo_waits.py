@@ -141,6 +141,31 @@ def test_a_mid_wait_ball_miss_still_retries(tmp_path, monkeypatch):
         1)
 
 
+# H-7: species_clause_new at e803b91 — A wrote `RESULT: FAIL (hunt ended out-of-balls)` while B
+# was still hunting, the wait aborted, and the run ended `FAIL (attempt 1 of 8)` with no retry.
+# The silent half is silent BECAUSE the abort tore it down, so it must not disqualify the pair.
+_SILENT_HALF = "duo instance b scenario=species_clause_new\nheartbeat f=10800 party=1\n"
+
+
+def test_a_one_sided_ball_miss_retries_although_the_partner_never_reported():
+    assert duo.retryable_gen1_rng("gen1_new", {"a": duo.RNG_OUT_OF_BALLS, "b": _SILENT_HALF},
+                                  1, limit=8)
+    assert duo.retryable_gen1_rng("gen1_new", {"a": _SILENT_HALF, "b": duo.RNG_OUT_OF_BALLS},
+                                  1, limit=8)
+
+
+def test_a_one_sided_non_retryable_fail_still_aborts():
+    """The abort is not weakened: a FINAL phrase beside a silent half is still no retry, and two
+    silent halves are no verdict at all."""
+    final = "RESULT: FAIL (A is not at the overworld checkpoint)"
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": final, "b": _SILENT_HALF}, 1, limit=8)
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": _SILENT_HALF, "b": _SILENT_HALF},
+                                      1, limit=8)
+    # and a silent half never buys a LATE attempt for the ball miss either (addendum (j))
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": duo.RNG_OUT_OF_BALLS, "b": _SILENT_HALF},
+                                      2, limit=8)
+
+
 # ── H-3: the phase receipts, a dead process, and the run's own deadline ─────
 
 def test_a_failed_phase_receipt_ends_the_wait(tmp_path, monkeypatch):

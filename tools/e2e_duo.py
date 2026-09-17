@@ -324,13 +324,23 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
     on the other. Later attempts are only for the species hunt's own budget phrase — its
     reroll observation and its RNG budget are the same attempts, so a duplicate-flooded hunt
     gets another whole run within `limit` (addendum (j)); a second ball miss does not.
+
+    A half with NO RESULT is NOT "worse than CONSEQUENCE" — it made no claim at all. The RNG
+    half's FAIL is what ended the wait (`DuoRun.wait_for` -> `ClientFinishedEarly`) and the
+    runner tore the other cartridge down mid-play, so its silence is an EFFECT of the retryable
+    failure, not a second one. Reading it as disqualifying is what cost species_clause_new its
+    whole 8-attempt budget on one ball miss (H-7: A `RESULT: FAIL (hunt ended out-of-balls)`,
+    B still hunting, run ended `FAIL (attempt 1 of 8)` with no retry) while the same phrase on
+    linked_faint_active_new DID retry — there both halves had written a RESULT first. This is
+    the seam BOTH paths share: `run()`'s GameRngMiss branch calls it after `wait_results`, where
+    both halves are present by construction, so only the early-finish path changes.
     """
     if game != "gen1_new" or attempt >= limit:
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
     if "CAUSE_RNG" not in classes:
         return False
-    if not all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes):
+    if not all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS", None) for c in classes):
         return False
     if attempt == 1:
         return True
@@ -1263,33 +1273,6 @@ class DuoRun:
         except (OSError, ValueError):
             return []
 
-    def _wait_for_boot_stats(self):
-        """Bounded wait for both boot keys' stats, whose failure NAMES the missing key.
-
-        Bounded by the smaller of 120 s and the scenario's own timeout, so the pins can shrink
-        it. Called after the go-file (see the soft-reset branch), which is why it polls at
-        0.25 s rather than the default 2 s: the window between the release and A's reset
-        re-hello is ~1.8 s at unthrottled speed, and a 2 s poll cannot land inside it (H-6).
-        """
-        try:
-            self.wait_for("both boot keys' stats on the server", self._boot_stats_present,
-                          min(120, self.cfg["timeout"]), interval=0.25)
-        except TimeoutError as exc:
-            missing = [self._boot_keys[inst] for inst in ("a", "b")
-                       if self._boot_keys.get(inst) not in self._mon_stats_keys()]
-            raise RuntimeError(
-                f"the server never saw stats for {missing} after the release; a baseline now "
-                f"would compare a half-populated mon_stats") from exc
-
-    def _boot_stats_present(self) -> bool:
-        """True when the server holds a `mon_stats` entry for BOTH boot keys.
-
-        The soft-reset baseline is only meaningful at a quiescent point: stats arrive with the
-        tick after each hello, so a baseline taken earlier misses whichever half arrived last.
-        """
-        stats = self._mon_stats_keys()
-        return all(self._boot_keys.get(inst) in stats for inst in ("a", "b"))
-
     def _clear_attempt_artifacts(self):
         """Drop every receipt, go-file and witness this scenario could read as its own.
 
@@ -1928,21 +1911,42 @@ class DuoRun:
         if _event_counts(baseline["events"]) != _event_counts(rows):
             raise RuntimeError("gameplay event counts changed across the soft reset")
         current_bytes = self._links_bytes()
+        # Byte identity was the old claim, and it is too strong: a re-hello re-inserts
+        # per-player entries (dict order) and the set-derived lists are `list(set)`, so the
+        # same state can be written in a different order (see _LINKS_SET_PATHS). Canonical
+        # equality is the state claim; anything else fails with the first differing path.
+        original = json.loads((baseline["links_bytes"] or b"{}").decode("utf-8"))
+        current = json.loads((current_bytes or b"{}").decode("utf-8"))
+        # mon_stats is a DEFERRED FLUSH, not state. server/server.py:1685-1687 backfills it from
+        # each hello's own party snapshot (_cache_mon_info :1438-1446) and never saves; the hello
+        # handler's only `_save()` is the `_dirty` rom/trainer commit ~30 lines earlier (:1652)
+        # and ticks never save (server/state.py:395-412), so hello N persists hello N-1's stats
+        # and the last half's sit in RAM until the next save of any kind — here A's re-hello
+        # (server/state.py:1013-1015). The pre-reset baseline therefore holds the FIRST half to
+        # hello and the end state holds both: a write that was already owed before the chord, not
+        # a change the reset caused. So the node is reconciled rather than diffed — values may not
+        # move and no key outside the two boot mons may appear — and then dropped from the compare.
+        base_stats = original.pop("mon_stats", None) or {}
+        now_stats = current.pop("mon_stats", None) or {}
+        moved = {key: (was, now_stats.get(key, "<missing>"))
+                 for key, was in base_stats.items() if now_stats.get(key) != was}
+        if moved:
+            raise RuntimeError(f"mon_stats changed across the soft reset: {moved}")
+        strays = sorted(set(now_stats) - set(self._boot_keys.values()))
+        if strays:
+            raise RuntimeError(f"mon_stats gained {strays} across a reset in which nothing was "
+                               f"caught; only the two boot mons may ever appear")
+        flushed = sorted(set(now_stats) - set(base_stats))
         if current_bytes != baseline["links_bytes"]:
-            # Byte identity was the old claim, and it is too strong: a re-hello re-inserts
-            # per-player entries (dict order) and the set-derived lists are `list(set)`, so the
-            # same state can be written in a different order (see _LINKS_SET_PATHS). Canonical
-            # equality is the state claim; anything else fails with the first differing path.
-            original = json.loads((baseline["links_bytes"] or b"{}").decode("utf-8"))
-            current = json.loads((current_bytes or b"{}").decode("utf-8"))
             if canonical_json(original) != canonical_json(current):
                 path, was, now = first_json_difference(original, current)
                 raise RuntimeError(f"links.json changed across the soft reset at {path}: "
                                    f"{was!r} -> {now!r}")
-            self._pydec_note(f"links.json differs from the baseline only in ORDER "
-                             f"({'; '.join(reordered_json_keys(original, current)) or 'nested maps'}); "
-                             f"the state is identical, baseline kept at "
-                             f"{rel_to_repo(baseline['links_baseline_path'])}")
+            reordered = "; ".join(reordered_json_keys(original, current)) or "nested maps"
+            self._pydec_note(f"links.json differs from the baseline only in ORDER ({reordered})"
+                             + (f" and the deferred mon_stats flush for {flushed}" if flushed else "")
+                             + f"; the state is identical, baseline kept at "
+                               f"{rel_to_repo(baseline['links_baseline_path'])}")
         self._pydec_note(f"server: A hellos {len(a_hellos)} = baseline {baseline['a_hellos']}+1, "
                          f"B {len(b_hellos)}, 0 REJECTED, gameplay counts unchanged, "
                          f"links.json canonically identical to the baseline")
@@ -3579,23 +3583,24 @@ class DuoRun:
                 # The reset's evidence is that NOTHING changed, so the baseline is taken before
                 # either client acts: the end state is compared against it, which is what stops
                 # a duplicated or rewritten log from passing as "the same save reconnected".
-                # TWO SNAPSHOTS, BECAUSE THE TWO HALVES ARE QUIESCENT AT DIFFERENT MOMENTS.
-                #  * The hello/event rows are quiescent BEFORE the release: `wait_connected`
-                #    above is gated on both hellos being on the server (run 26shiqin's
-                #    server.log: `[b] hello` 18:27:50.324, `[a] hello` 18:27:50.350, status 200
-                #    at 18:27:50.474, go-file after that), and nothing else may happen until
-                #    the go-file lands. AFTER the release they are NOT: A's body helloes at the
-                #    checkpoint and takes the chord ~55 frames later, and at unthrottled speed
-                #    its re-hello is only ~1.8 s behind the first one (18:27:52.160), so a
-                #    post-release snapshot races it — tonight it lost and the baseline held 2 A
-                #    hellos (H-6).
-                #  * mon_stats rides the clients' first party tick, which is only sent once
-                #    they are RELEASED — snapshotting before the go-file timed out at 120 s
-                #    with the clients merely connected (H-5). A baseline taken mid-arrival
-                #    holds whichever half landed first and the comparison then reports the
-                #    other's arrival as a change (`$.mon_stats.<key>: '<missing>' -> {...}`),
-                #    so the links.json bytes wait for both keys. mon_stats is NOT excluded from
-                #    the compare: a stat change across a reset would be a real finding.
+                # ONE SNAPSHOT, TAKEN BEFORE THE RELEASE. Both halves are quiescent there and
+                # nowhere later: `wait_connected` above is gated on both hellos being on the
+                # server, and nothing else may happen until the go-file lands. AFTER the release
+                # they are NOT — A's body helloed at the checkpoint before the go-file and takes
+                # the chord ~55 frames after it, and at unthrottled speed its re-hello is only
+                # ~1.8 s behind the first one, so any post-release snapshot races it (H-6).
+                # The old code waited post-release for both boot keys' mon_stats, which DEADLOCKED
+                # once the chord gate stopped A from resetting (DIAG-SR2): mon_stats is not
+                # a client message at all. server/server.py:1685-1687 backfills it from the
+                # hello's OWN party snapshot via _cache_mon_info (:1438-1446), which mutates
+                # state.mon_stats WITHOUT saving, and the hello handler's only `_save()` is the
+                # `_dirty` rom/trainer commit ~30 lines earlier (:1652); ticks never save
+                # (server/state.py:395-412). So each hello persists the PREVIOUS hello's stats
+                # and the last one's sit in RAM until the next save of any kind — in the passing
+                # 2c17161 run that was A's post-reset re-hello (server/state.py:1013-1015,
+                # server.log 18:44:28.160, baseline status GET 18:44:28.210). The "pre-reset"
+                # baseline was therefore taken AFTER the reset, i.e. vacuous; with the gate in
+                # place it can never be taken at all. The flush is reconciled in the oracle.
                 # Waited for, not read blind: `connected` flips on a player's first message
                 # (server/server.py:1146-1149) and the hello's event row is persisted a few
                 # lines later in the handler (:1604, _log_event -> _save_events :1516), so
@@ -3606,8 +3611,6 @@ class DuoRun:
                                         for row in rows) for inst in ("a", "b")}
                     return rows if counts == {"a": 1, "b": 1} else None
                 events = self.wait_for("one durable hello row per player", helloed, 30)
-                self.go()
-                self._wait_for_boot_stats()
                 self._pydec_note(f"baseline mon_stats keys: {self._mon_stats_keys()}")
                 baseline_bytes = self._links_bytes()
                 baseline_path = os.path.join(self.data_dir, "links_baseline.json")
@@ -3623,10 +3626,13 @@ class DuoRun:
                     "a_hellos": sum(row.get("type") == "hello" and row.get("player") == "a"
                                     for row in events),
                 }
-                # Two-step release: the go-file starts the checkpoint hello, the stats wait makes
-                # mon_stats quiescent, the baseline captures links.json — and only then does the
-                # .chord file let A's body take the reset chord (H-6 defect 2: the chord used to
-                # run ~55 frames behind the release, a margin rather than a guarantee).
+                # Release only now: the baseline is already on disk, so BOTH files are ordered
+                # after it and the ~55-frame margin between them stops mattering (H-6 defect 2).
+                # The .chord file is what lua/tests/duo/duo_gen1_main.lua's body waits on before
+                # the reset chord; it is written unconditionally and immediately, because there
+                # is nothing left to wait for — a frame-counted Lua deadline (3600) can never be
+                # made to cover a wall-clock-bounded Python wait anyway.
+                self.go()
                 chord_path = self.go_files["a"] + ".chord"
                 with open(chord_path, "w") as handle:
                     handle.write("GO\n")
