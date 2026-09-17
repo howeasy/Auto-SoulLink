@@ -192,3 +192,7 @@ In flight: OMP D-1 (setNoBattles removal, stale comments, driver dedup across ge
 rival(new oracle)/changebox/linked_faint_active/trade/trade_decline/reconnect/admit after D-1; Yellow S-1 gate -s;
 verify_gen1_release.py full pass; Gen 3 gen3_rr trade + faint duo; ledger cells for new receipts; P8-6b final docs;
 P8-7 (rebase plan docs/gen1_rebase_plan.md, FF master, owner tag) needs owner authority.
+Lane note (2026-09-17 ~21:50Z): gen3_rr trade/faint failed at the MYKEY handshake because `patch/build/slink_RR.gba`
+(gitignored build artifact) was absent from this worktree — EmuHawk started with no core. Copied from the main
+checkout; rerun queued after the Gen 1 sweep (LANE-REG2). HUD-3 / hud.lua / memory_gb / gatelib changes were ruled
+out as causes (DIAG-G3). Package boot + HUD pixel proof committed at 05bc4f1.
