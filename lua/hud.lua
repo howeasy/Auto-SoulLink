@@ -147,17 +147,20 @@ end
 -- BizHawk's lua draw surface is PERSISTENT: whatever gui.drawBox/gui.drawText
 -- painted stays on screen until something overdraws it or the surface is
 -- cleared (EmuHawk 2.11, _docs_luacats/gui.d.lua:21-25 "clears all lua drawn
--- graphics from the screen"; :34-39 gui.cleartext "clears all text created by
--- gui.text()"). Painting a fully transparent box over the old area erases
--- nothing, so an expired banner used to sit there forever. Instead we wipe the
--- whole surface at the top of every render and repaint only what is still live.
--- clearGraphics covers drawBox/drawText; cleartext covers gui.text, which no
--- SLink client draws today but the sibling test harnesses in lua/tests do.
+-- graphics from the screen"). Painting a fully transparent box over the old
+-- area erases nothing, so an expired banner used to sit there forever.
+-- Instead we wipe the whole surface at the top of every render and repaint
+-- only what is still live.
+-- clearGraphics is the only call needed: it covers drawBox/drawText, which
+-- is all this module draws with. gui.cleartext (gui.d.lua:34-39) clears only
+-- text drawn with the separate gui.text() API, which this module never
+-- calls but the diagnostic harnesses (lua/tests/test_*_force_faint.lua,
+-- test_force_explosion.lua, sprite_gallery.lua) do -- calling cleartext here
+-- would erase their output every frame this HUD renders alongside them.
 -- Guarded so the module still loads outside BizHawk (lupa, unit tests).
 local function clear_surface()
     if type(gui) ~= "table" then return end
     if type(gui.clearGraphics) == "function" then gui.clearGraphics() end
-    if type(gui.cleartext) == "function" then gui.cleartext() end
 end
 
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────
@@ -280,8 +283,10 @@ end
 -- ── Master render (call once per frame, after all game logic) ───────────────
 function H.render()
     -- Wipe first, then repaint only the live elements: anything whose duration
-    -- ran out simply stops being drawn and is gone the same frame. Every SLink
-    -- gui.* drawer goes through here, so nothing else's pixels are lost.
+    -- ran out simply stops being drawn and is gone the same frame. This only
+    -- clears drawBox/drawText (see clear_surface above) -- callers that draw
+    -- via gui.text() directly (the lua/tests diagnostic harnesses) are not
+    -- routed through here and are unaffected by this wipe.
     clear_surface()
     render_prompt()
     render_hud()
