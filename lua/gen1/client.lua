@@ -550,7 +550,16 @@ function Client.new(p)
                 for _, m in ipairs(party) do if not self.known_keys[mon_key(m)] then found = m end end
             end
             if not found then return end -- not written yet; try next frame
+            -- add_mon.asm:58-243 writes the struct AFTER the AskName prompt (:45-52), in the
+            -- order species, DVs, moves, OT, exp, EVs, PP, level, stats, and a frame boundary
+            -- can fall inside that run (ball_gate_new receipts 2026-09-17: OT 0000, level 0).
+            -- Level and stats are the last writes: require them, and the same key on two
+            -- consecutive frames, before the mon is reported.
             local key = mon_key(found)
+            if found.level == 0 or (not pc.to_box and found.max_hp == 0) or pc.candidate ~= key then
+                pc.candidate = key
+                return
+            end
             self.known_keys[key] = true
             local gift = not pc.in_battle
             local area_id = pc.area_id

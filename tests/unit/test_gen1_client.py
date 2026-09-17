@@ -270,7 +270,7 @@ def test_wild_capture_emits_one_capture_with_the_new_key_and_suppresses_no_catch
     rng = random.Random(2)
     party = world.party() + [_mon(rng, 0xA5, level=3, nick="RATTA")]
     world.seed_party(party)
-    world.step()
+    world.step(2)  # the struct must read complete on two consecutive frames (add_mon.asm:58-243)
     caps = world.events("capture")
     assert len(caps) == 1
     c = caps[0]
@@ -401,7 +401,7 @@ def test_gift_mon_outside_battle_is_a_gift_capture_on_a_gift_area(world):
     world.step()
     rng = random.Random(3)
     world.seed_party(world.party() + [_mon(rng, 0xB0, level=5, nick="CHARM")])
-    world.step()
+    world.step(2)
     c = world.events("capture")[-1]
     assert c["gift"] is True and c["area_id"] == "gift_map_40"
 
@@ -833,3 +833,30 @@ def test_slink_trade_reports_trade_done_and_never_key_change(world):
     assert w.events("key_change") == []
     assert _overlay(w)[5] == 8
     w.assert_all_conform()
+
+
+def test_gift_capture_waits_for_the_whole_struct_not_a_half_written_one(world):
+    """ball_gate_new live receipts 2026-09-17 (both cartridges): _AddPartyMon runs the AskName
+    prompt (add_mon.asm:45-52) and only then writes the struct in order species, DVs,
+    moves, OT, exp, EVs, PP, level, stats (add_mon.asm:58-243). The client settled on a
+    read taken between the DV write and the OT write: capture key 74C2:0000:99, level 0,
+    while the party a moment later held 74C2:4190:99. The server linked the wrong key."""
+    world.connect()
+    world.set_map(0x28)  # Oak's Lab
+    world.step()
+    world.bus[world.ram["wMonDataLocation"]] = 0
+    world.fire("add_party_mon")
+    world.step()
+    rng = random.Random(3)
+    full = _mon(rng, 0xB0, level=5, nick="CHARM")
+    half = dict(full)
+    half.update(ot_id=0, level=0, hp=0, max_hp=0, exp=0)
+    before = len(world.events("capture"))
+    world.seed_party(world.party() + [half])
+    world.step()
+    assert len(world.events("capture")) == before, "a half-written struct must not be reported"
+    world.seed_party(world.party()[:-1] + [full])
+    world.step(3)
+    caps = world.events("capture")[before:]
+    assert [c["key"] for c in caps] == [codec.key(full)]
+    assert caps[0]["level"] == 5 and caps[0]["gift"] is True
