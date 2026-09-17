@@ -510,6 +510,297 @@ function scenarios.link_new()
     return true, "caught " .. key
 end
 
+-- ── A4: the clause scenarios (D-5 type clause, D-4 species clause) ───────────────────
+--
+-- Both ride link_new's Route 1 body against a server started with --type-clause /
+-- --species-clause. Everything asserted here is what the cartridge and THIS client's own
+-- RX log can show; /api/status, links.json and events.json are the runner's half, which
+-- reads the markers these bodies log.
+--
+-- Command names are the client's own handler (lua/gen1/client.lua:252 force_faint,
+-- :273 memorialize, :278 gui_prompt, :284 play_sound, :290 unresolve_area).
+-- The prompt literals are the server's:
+--   server/state.py:1596-1618  the REJECTED half gets force_faint, memorialize,
+--                              play_sound 26, gui_prompt "[x] " .. violation and
+--                              unresolve_area; its PARTNER gets play_sound 22 (SE_BOO)
+--                              and nothing else. Sound 22 is queued at exactly this one
+--                              site in the whole server, so it is a safe verdict signal.
+--   server/state.py:2634-2635  violation = "Type clause: shared <type names, sorted>"
+--   server/state.py:1726-1738  the dupes reroll: gui_prompt "Dupes clause: <SPECIES> --
+--                              reroll!" + unresolve_area, queued from the wild-battle-start
+--                              tick (server/server.py:1815-1835, state.py:1739-1828).
+--
+-- Why Route 1 makes D-5 deterministic: its entire grass table is PIDGEY and RATTATA
+-- (pret data/wild/maps/Route1.asm), Normal/Flying and Normal/Normal
+-- (pret data/pokemon/base_stats/pidgey.asm:6, rattata.asm:6) -- any two catches here
+-- always share Normal. Neither line evolves inside the level 2-5 band that table rolls,
+-- so on this route "same evolution family" and "same species byte" are the same test,
+-- which is what lets B recognise A's duplicate from its own WRAM below.
+local clause_rx = {}
+local function clause_watch()
+    -- The file-wide tee above keeps only a handful of commands and drops `sound`, and every
+    -- other scenario shares it; the clause receipts are membership tests over cmd + sound +
+    -- text, so wrap the (already wrapped) handler once more here instead of widening it.
+    local prev = gclient.handle_command
+    gclient.handle_command = function(self, cmd)
+        clause_rx[#clause_rx + 1] = { cmd = cmd and cmd.cmd, key = cmd and cmd.key,
+                                      text = cmd and cmd.text, sound = cmd and cmd.sound,
+                                      area_id = cmd and cmd.area_id }
+        return prev(self, cmd)
+    end
+end
+-- Membership, not order: the LAST command matching `name` (and `test`) -- the newest one, so a
+-- second reroll prompt logs itself and not its predecessor -- plus how many matched in all.
+local function clause_got(name, test)
+    local hit, n = nil, 0
+    for _, c in ipairs(clause_rx) do
+        if c.cmd == name and (not test or test(c)) then n = n + 1; hit = c end
+    end
+    return hit, n
+end
+local function dupes_prompt(c)
+    return (c.text and c.text:find("Dupes clause:", 1, true) == 1) or false
+end
+
+-- D-5: link_new's body with the server's --type-clause. Both catches share Normal, so the
+-- LATER capturer is rejected at link formation and Route 1 stays pending for it. Which half
+-- that is falls out of the game's encounter RNG, so both halves run this ONE body and read
+-- their verdict off the wire: the rejected half is the one that receives force_faint for its
+-- own key, its partner the one that receives SE_BOO. Deterministic: one catch each, no retry.
+function scenarios.type_clause_new()
+    if not wait_go() then return false, "no go-file" end
+    clause_watch()
+    local phase = hunt("catch")
+    if phase ~= "caught" then return false, "hunt ended " .. phase end
+    local key, mon = new_key()
+    if not key then return false, "party grew but no new key" end
+    log_party("PARTY")
+    log("CAUGHT " .. key)
+    log(fmt("CLAUSE_CAPTURE %s species=%d level=%d", key, mon.species, mon.level))
+    -- The server can only compare once BOTH halves have captured, so this wait spans the
+    -- partner's whole hunt.
+    local verdict = wait_until(function()
+        if clause_got("force_faint", function(c) return c.key == key end) then return "rejected" end
+        if clause_got("play_sound", function(c) return c.sound == 22 end) then return "accepted" end
+        return partner_done() and "partner-gone" or nil
+    end, 900, "the server's type-clause verdict")
+    if verdict ~= "rejected" and verdict ~= "accepted" then
+        return false, "no type-clause verdict (" .. tostring(verdict) .. ")"
+    end
+    if verdict == "rejected" then
+        local prompt = clause_got("gui_prompt", function(c)
+            return (c.text and c.text:find("[x] Type clause: shared", 1, true) == 1) or false
+        end)
+        local memo = clause_got("memorialize", function(c) return c.key == key end)
+        local fail_sfx = clause_got("play_sound", function(c) return c.sound == 26 end)
+        local unres = clause_got("unresolve_area")
+        log("TYPE_CLAUSE " .. json.encode({player = D.player, verdict = "rejected", key = key,
+            species = mon.species, prompt = prompt and prompt.text or "",
+            memorialize = memo ~= nil, sound26 = fail_sfx ~= nil,
+            unresolve_area = unres and (unres.area_id or "?") or ""}))
+        if not prompt then return false, "rejected half never got the [x] Type clause prompt" end
+        if not prompt.text:find("Normal", 1, true) then
+            return false, "type-clause prompt did not name Normal: " .. prompt.text
+        end
+        if not memo then return false, "rejected capture was never memorialized" end
+        if not fail_sfx then return false, "rejected half never got play_sound 26" end
+        if not unres then return false, "rejected half never got unresolve_area" end
+        -- The mon leaves the party and lands in Box 12 at HP 0, the same receipt
+        -- deadzone_new takes: force_faint zeroes it, memorialize moves it to sBox12
+        -- (lua/gen1/boxes.lua:460-517, ram/sram.asm:44-49 -> box index 11).
+        local retired, memorial_hp = nil, nil
+        wait_until(function()
+            for _, m in ipairs(party_keys()) do if m.key == key then return nil end end
+            local sram = deps.read_range(0, 0x8000, "CartRAM")
+            for _, m in ipairs(reads.read_sram_box(sram, 11) or {}) do
+                if reads.key(m) == key then retired, memorial_hp = true, m.hp end
+            end
+            return retired or (seen.memorialize_failed and true) or nil
+        end, 240, "the rejected capture to reach Box 12")
+        log(fmt("MEMORIAL %s box12=%s hp=%s memorialize_done=%d memorialize_failed=%d",
+                key, tostring(retired == true), tostring(memorial_hp),
+                seen.memorialize_done or 0, seen.memorialize_failed or 0))
+        if not retired then return false, "rejected capture never reached Box 12" end
+        if memorial_hp ~= 0 then
+            return false, fmt("Box 12 memorial hp=%s, expected 0", tostring(memorial_hp))
+        end
+    else
+        -- The accepted half keeps its capture pending (quarantined in its current box by the
+        -- capture-time box_mon, state.py:1554-1557) -- no link, so no party_mon ever follows.
+        local ff = clause_got("force_faint")
+        local tp = clause_got("gui_prompt", function(c)
+            return (c.text and c.text:find("Type clause", 1, true)) and true or false
+        end)
+        local unres = clause_got("unresolve_area")
+        log("TYPE_CLAUSE " .. json.encode({player = D.player, verdict = "accepted", key = key,
+            species = mon.species, force_faint = ff ~= nil, type_prompt = tp and tp.text or "",
+            unresolve_area = unres and (unres.area_id or "?") or ""}))
+        if ff then return false, "the accepted half was force-fainted" end
+        if tp then return false, "the accepted half got the rejection prompt" end
+    end
+    frames(120)
+    log_party("PARTY")
+    log(fmt("SEEN capture=%d box_mon=%d party_mon=%d force_faint=%d memorialize=%d",
+            seen.capture or 0, seen.box_mon or 0, seen.party_mon or 0,
+            seen.force_faint or 0, seen.memorialize or 0))
+    local saved, why = game_save("type_clause_new")
+    if not saved then return false, why end
+    return true, "type clause " .. verdict .. " " .. key
+end
+
+-- D-4: link_new's body with the server's --species-clause, ORDERED. A catches first; the
+-- runner writes "A_PENDING species=<n>" into B's go-file once /api/status shows A's pending
+-- capture on route_1 (n = the species byte A logs as PENDING_CAPTURE below, so both halves
+-- compare the same WRAM numbering), and only then is B released. B's first encounter
+-- therefore always meets a partner pending capture, which is check 2 of
+-- server/state.py:1788-1800.
+--
+-- B has exactly ONE free look: a RUN from a NON-duplicate sends no_catch
+-- (lua/gen1/client.lua:553) and dead-zones Route 1, and only the notified duplicate is
+-- exempt (state.py:1866-1872). So B runs ONLY from A's family and otherwise catches, and it
+-- decides that from its OWN cartridge (wEnemyMonSpecies against the A_PENDING species) the
+-- moment the battle starts -- see the loop for why the server's prompt cannot be the trigger
+-- without racing the battle menu. The prompt is then required after the fact: run but no
+-- prompt = the server missed the reroll = FAIL. Roughly half the time (Route 1's table is 6
+-- Pidgey and 4 Rattata slots) the first encounter is A's family and the reroll branch runs; the
+-- other half B just catches the other species, the link forms and the reroll goes
+-- unobserved -- the run still PASSES, and carries "reroll_unobserved" in its message so the
+-- runner can retry the whole scenario with fresh state.
+function scenarios.species_clause_new()
+    if not wait_go() then return false, "no go-file" end
+    clause_watch()
+    if D.player == "a" then
+        local phase = hunt("catch")
+        if phase ~= "caught" then return false, "hunt ended " .. phase end
+        local key, mon = new_key()
+        if not key then return false, "party grew but no new key" end
+        log_party("PARTY")
+        log("CAUGHT " .. key)
+        log(fmt("PENDING_CAPTURE %s species=%d level=%d", key, mon.species, mon.level))
+        -- Hold while B hunts: the link only forms on B's valid catch, and this side's half of
+        -- that sync is the party_mon un-quarantine ACK (same wait as link_new).
+        wait_until(function()
+            return (seen.sync_retrieve_done or seen.sync_retrieve_failed or seen.box_mon_failed)
+                   and true or partner_done()
+        end, 900, "B's catch to link this pending capture")
+        frames(120)
+        log_party("PARTY")
+        log("SPECIES_CLAUSE " .. json.encode({player = "a", key = key, species = mon.species,
+            capture = seen.capture or 0, box_mon = seen.box_mon or 0,
+            party_mon = seen.party_mon or 0, force_faint = seen.force_faint or 0,
+            sync_retrieve_done = seen.sync_retrieve_done or 0}))
+        local saved, why = game_save("species_clause_new_a")
+        if not saved then return false, why end
+        return true, "A pending " .. key
+    end
+
+    if not wait_until(function() return file_contains(D.go_file, "A_PENDING") end, 900,
+                      "A_PENDING from the runner") then
+        return false, "runner never released B (A_PENDING)"
+    end
+    local gof = io.open(D.go_file, "r")
+    local gotext = gof and gof:read("*a") or ""
+    if gof then gof:close() end
+    local dupe = tonumber(gotext:match("A_PENDING species=(%d+)") or "")
+    log("A_PENDING species=" .. tostring(dupe))
+    if not dupe then return false, "A_PENDING carried no species" end
+
+    -- Pace Route 1's grass to the next encounter. gen1_rb_hunt_inputs does this too, but its
+    -- catch-or-run mode is fixed when the route is BUILT (gen1_rb_hunt_inputs.lua:68) while
+    -- the reroll is only knowable once the foe is on screen -- so walk here, decide, and hand
+    -- the battle that is ALREADY up to hunt(): a route built mid-battle starts its plan on the
+    -- first step that sees wIsInBattle == 1 (gen1_rb_hunt_inputs.lua:212-219), so the split
+    -- costs nothing. Target order (x before y) and the close-text tap are the module's own
+    -- (gen1_rb_hunt_inputs.lua:23-31,243-252).
+    local target = 1
+    local function pace_grass()
+        for _ = 1, (D.hunt_frames or 90000) do
+            local p = play.point()
+            if p.battle == 1 then return true end
+            if p.battle ~= 0 then return false, fmt("battle flag %d while pacing", p.battle) end
+            if p.font_loaded or p.joy_ignore ~= 0 then
+                yield_frame({B = frame % 16 < 2})
+            elseif p.map ~= 0x0C then
+                return false, fmt("left Route 1 (map %d)", p.map)
+            else
+                local t = Hunt.GRASS[target]
+                if p.x == t[1] and p.y == t[2] then target = 3 - target; t = Hunt.GRASS[target] end
+                local b = {}
+                if p.x < t[1] then b.Right = true elseif p.x > t[1] then b.Left = true
+                elseif p.y < t[2] then b.Down = true elseif p.y > t[2] then b.Up = true end
+                yield_frame(b)
+            end
+        end
+        return false, "no encounter while pacing the grass"
+    end
+
+    local caught_key, rerolls = nil, 0
+    for battle = 1, 4 do
+        local paced, why = pace_grass()
+        if not paced then return false, why end
+        -- InitWildBattle sets wIsInBattle and then calls LoadEnemyMonData with no DelayFrame
+        -- between them (pret engine/battle/core.asm:6695-6698), so the foe is live on the next
+        -- frame boundary; four frames of margin make a stale read impossible.
+        frames(4)
+        local foe = wait_until(function()
+            local p = Hunt.extend_point(play.point(), rd, symbols)
+            local sp = reads.read_battle().enemy_species
+            return (sp ~= 0 and p.enemy_max_hp ~= 0 and p.enemy_hp == p.enemy_max_hp) and sp or nil
+        end, 30, "the foe's species")
+        if not foe then return false, "wild battle never loaded an enemy mon" end
+        log(fmt("ENCOUNTER %d species=%d dupe_of_a=%s", battle, foe, tostring(foe == dupe)))
+        -- The route is handed the battle IMMEDIATELY, before its first DisplayBattleMenu:
+        -- the driver counts that site from the frame it is built and D.wait_menu only accepts
+        -- a LATER execution (gen1_battle_driver.lua:110-118), so idling here to wait for the
+        -- server's prompt first would race the menu and hang the plan. The decision is the
+        -- cartridge's own species byte; the server's prompt is then ACCOUNTED FOR below,
+        -- where a missing one fails the scenario rather than steering it.
+        local _, before = clause_got("gui_prompt", dupes_prompt)
+        if foe ~= dupe then
+            local caught = hunt("catch")
+            if caught ~= "caught" then return false, "hunt ended " .. caught end
+            caught_key = new_key()
+            if not caught_key then return false, "party grew but no new key" end
+            break
+        end
+        local ran = hunt("run")
+        if ran ~= "escaped" then return false, "reroll battle ended " .. ran end
+        -- Back in the overworld nothing is waiting on a button, so this window is free.
+        local prompt, after = nil, before
+        for _ = 1, 600 do
+            prompt, after = clause_got("gui_prompt", dupes_prompt)
+            if after > before then break end
+            yield_frame()
+        end
+        if after == before then
+            return false, fmt("no dupes-clause prompt for species %d (A's family)", foe)
+        end
+        rerolls = rerolls + 1
+        local unres = clause_got("unresolve_area")
+        log(fmt("REROLL_SEEN species=%d prompt=%s", foe, prompt.text))
+        log(fmt("REROLL_RAN no_catch=%d unresolve_area=%s", seen.no_catch or 0,
+                unres and (unres.area_id or "?") or "none"))
+    end
+    if not caught_key then return false, "B never landed a non-duplicate catch" end
+    log_party("PARTY")
+    log("CAUGHT " .. caught_key)
+    wait_until(function()
+        return (seen.sync_retrieve_done or seen.sync_retrieve_failed or seen.box_mon_failed)
+               and true or partner_done()
+    end, 240, "post-link party sync or partner")
+    frames(120)
+    log_party("PARTY")
+    local path = rerolls > 0 and "reroll_observed" or "reroll_unobserved"
+    log("PATH " .. path)
+    log("SPECIES_CLAUSE " .. json.encode({player = "b", key = caught_key, dupe_species = dupe,
+        rerolls = rerolls, path = path, no_catch = seen.no_catch or 0,
+        capture = seen.capture or 0, force_faint = seen.force_faint or 0,
+        party_mon = seen.party_mon or 0, sync_retrieve_done = seen.sync_retrieve_done or 0}))
+    local saved, why = game_save("species_clause_new_b")
+    if not saved then return false, why end
+    return true, path .. ": B linked " .. caught_key .. " after " .. rerolls .. " reroll(s)"
+end
+
 -- C-2/C-1: the first A instance is deliberately killed by the runner AFTER the
 -- source game's normal SAVE. B stays online; replacement A instances use the same
 -- clean Red ROM and either the flushed Red SaveRAM or an independently played Red save.
@@ -1135,6 +1426,7 @@ local function linked_faint_scenario(active, explode)
            reads.key(reads.read_party()[1]) ~= key then return false, "B linked lead not active at hold menu" end
         log("READY_ACTIVE linked_slot=0")
         if explode then log_panel_counter_in_battle() end
+        local wrote = false
         local old = gclient.on_battle_loop_head
         gclient.on_battle_loop_head = function(self, sig)
             local pending = self.pending_battle_writes[1]
@@ -1146,6 +1438,7 @@ local function linked_faint_scenario(active, explode)
                 log(fmt("LOOP_HEAD_EXPLODE moves=%s pp=%s", hex4(ram.wBattleMonMoves), hex4(ram.wBattleMonPP)))
             elseif rd(ram.wBattleMonHP) == 0 and rd(ram.wBattleMonHP + 1) == 0 and
                    rd(ram.wPlayerSelectedMove) == 0xFF then
+                wrote = true
                 log("LOOP_HEAD_WRITE key=" .. key .. " battle_hp=0000 selected=FF")
             end
         end
@@ -1164,13 +1457,46 @@ local function linked_faint_scenario(active, explode)
             end
             local reentered, reentry_why = explode_free_reentry(driver, key)
             if not reentered then driver.close();return false, reentry_why end
+            local committed = driver.commit_move(1, 900)
+            log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(committed.why),
+                    committed.selected_move or 0xFF, tostring(committed.pp_before)))
         else
-            local chosen = driver.choose("FIGHT")
-            if not chosen.ok then driver.close();return false, "B could not choose FIGHT after force_faint" end
+            -- B is parked INSIDE DisplayBattleMenu, one loop head too late for the queued write,
+            -- and the linked mon is still at its capture HP (5/15 in the run that failed).
+            -- COMMITTING a move spends the turn: core.asm:337-341 falls through to
+            -- SelectEnemyMove/Execute*, the foe swings, and a capture-HP mon is a coin flip --
+            -- exactly the natural KO that left W-2 with no LOOP_HEAD_WRITE (the earlier pass
+            -- predates e95cefa, when the kept-alive driver's presses were silent). Take the same
+            -- free re-entry explode_free_reentry documents instead: cancel the MOVE menu with B
+            -- and core.asm:332-337 (`call MoveSelectionMenu ... jr nz, MainInBattleLoop`) jumps
+            -- straight back to the loop head without reaching SelectEnemyMove, so the write lands
+            -- before any enemy move can run. The signal is a synchronous on_bus_exec at
+            -- MainInBattleLoop+0 (signals.lua:76-78), i.e. before `call
+            -- ReadPlayerMonCurHPAndStatus`, so the very same head takes `jp z,
+            -- HandlePlayerMonFainted`. No turn is spent and no RNG decides the outcome.
+            if not driver.choose("FIGHT").ok then
+                driver.close();return false, "B could not choose FIGHT after force_faint"
+            end
+            local opened = false
+            for _ = 1, 900 do
+                if rd(symbols.wTopMenuItemX) == MOVE_MENU_X and
+                   rd(symbols.wTopMenuItemY) == MOVE_MENU_Y then opened = true break end
+                yield_frame()
+            end
+            if not opened then
+                driver.close();return false, "B's move menu never opened for the free cancel"
+            end
+            -- stop pressing the moment the menu is gone, so no stray edge reaches the battle menu
+            local cancelled = false
+            for _ = 1, 900 do
+                if rd(symbols.wTopMenuItemX) ~= MOVE_MENU_X then cancelled = true end
+                if wrote then break end
+                yield_frame((not cancelled) and pulse_at_frame("B") or nil)
+            end
+            if not wrote then
+                driver.close();return false, "the force_faint write never landed at the loop head"
+            end
         end
-        local committed = driver.commit_move(1, 900)
-        log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(committed.why),
-                committed.selected_move or 0xFF, tostring(committed.pp_before)))
         driver.close()
         local faint_text
         for _ = 1, 1800 do
@@ -1942,6 +2268,242 @@ function scenarios.whiteout_new()
     local saved, save_why = game_save("whiteout_new_a")
     if not saved then return false, save_why end
     return true, "whited out with an empty party and was rebuilt from the PC: " .. linked_key
+end
+
+-- A7 (S-4): a REAL poison faint and the blackout that follows it, on Blue's lone Charmander.
+--
+-- Shape: B (Blue) leaves the BATTLE fixture's Route 1 park tile (10,35), walks north to
+-- Viridian Forest, paces the two grass half-blocks (18,41)<->(18,40) running from everything
+-- that is not a Weedle and Growling at the Weedle until Charmander is PSN, RUNs, then shuttles
+-- the non-grass pair (18,43)<->(18,44) -- encounter-free by construction, not by luck -- until
+-- the 1-HP-per-4th-step poison tick (pret engine/events/poison.asm:10-12,26-41) drops the ONLY
+-- mon. Every route, geometry, wild-data and poison fact this leg stands on is pinned to a pret
+-- file:line in the driver's own header (lua/tests/gen1_rb_forest_inputs.lua:1-120); nothing is
+-- restated here, and nothing below is a remembered constant.
+--
+-- The blackout is the point. With one mon the client's emit_faint must send `whiteout` AT the
+-- poison_faint site (lua/gen1/client.lua:562-563 -> :495-504), one hook BEFORE the engine
+-- reaches the blackout site (ResetStatusAndHalveMoneyOnBlackout, bank 1 $40B0 --
+-- data/games/gen1_rby/engine_signals.json:74-81), so the blackout site's own fallback
+-- (client.lua:565-566) must find whiteout_sent already true. That ordering is asserted.
+--
+-- A (Red) has no leg here: it only has to outlive B's walk, hunt, shuttle and blackout, the
+-- same idle half deadzone_new's A plays (:1557-1558).
+--
+-- RNG, never a driver fault: the hunt bound is 3x the pinned mean (60 encounters,
+-- gen1_rb_forest_inputs.lua:130) and roughly a fifth of Weedle battles KO Charmander before
+-- the poison lands. Both come back as "RNG: ..." reasons -- tools/e2e_duo.py:242-248
+-- GEN1_RNG_REASON_CLASS must map them to CAUSE_RNG for the bounded retry to see them.
+function scenarios.poison_new()
+    if not wait_go() then return false, "no go-file" end
+    if D.player ~= "b" then
+        log("POISON_IDLE a")
+        if not wait_partner_done(1800) then
+            return false, "the idle partner never finished the poison leg"
+        end
+        local saved_a, why_a = game_save("poison_new_a")
+        if not saved_a then return false, why_a end
+        return true, "idled through the partner's poison faint and blackout"
+    end
+
+    local Forest = dofile(ROOT .. "/lua/tests/gen1_rb_forest_inputs.lua")
+    local start = party_keys()
+    if #start ~= 1 then
+        return false, fmt("the poison fixture must hold exactly one mon, not %d", #start)
+    end
+    local starter_key = start[1].key
+    log_party("PRE_POISON")
+
+    -- Ordered signal trace plus the poison_faint site receipt. The harness already wrapped the
+    -- client's on_signal once (:124-142); wrapping it again here keeps this leg's trace its own.
+    -- `frame` and `seen` are the main loop's, and both are readable from the hook.
+    local sigs, sites, whiteouts_at_blackout = {}, {}, nil
+    local prev_on_signal = gclient.on_signal
+    gclient.on_signal = function(self_, sig)
+        sigs[#sigs + 1] = sig.kind
+        if sig.kind == "poison_faint" then
+            -- signals.lua:60-66: the point carries wWhichPokemon, the slot that just fainted.
+            local which = (sig.point and sig.point.which) or -1
+            sites[#sites + 1] = which
+            log(fmt("POISON_FAINT_SITE frame=%d slot=%d", frame, which))
+        elseif sig.kind == "blackout" then
+            whiteouts_at_blackout = seen.whiteout or 0
+            log(fmt("BLACKOUT_SIGNAL frame=%d whiteout_so_far=%d", frame, whiteouts_at_blackout))
+        end
+        return prev_on_signal(self_, sig)
+    end
+    local base = {}
+    for _, name in ipairs({"faint", "whiteout", "no_catch"}) do base[name] = seen[name] or 0 end
+    log(fmt("POISON_BASELINE key=%s faint=%d whiteout=%d no_catch=%d signals=%d",
+            starter_key, base.faint, base.whiteout, base.no_catch, #sigs))
+
+    -- One loop for all three forest drivers: they share the route-module protocol
+    -- (gen1_rb_forest_inputs.lua:4-12), so only the terminal set differs. The caller owns the
+    -- frame, exactly as hunt() drives the Route 1 module (:305-319).
+    local function drive(route, tag, terminals)
+        local last = nil
+        for _ = 1, (D.hunt_frames or 90000) do
+            local point = play.point()
+            -- A wild foe that KOs the lone starter is the game's RNG. Name it HERE, before the
+            -- route modules' own `party_hp > 0` assertions (gen1_rb_route1_inputs.lua:42-43)
+            -- turn it into a bare scenario error no retry rule could classify.
+            if point.battle ~= 0 and point.party_hp == 0 then return "starter-koed" end
+            local buttons, phase = route.step(nil, nil, point, emu.framecount())
+            if phase ~= last then
+                last = phase
+                log(fmt("POISON_PHASE %s %s @%d map=%d (%d,%d) battle=%d hp=%d", tag, phase,
+                        emu.framecount(), point.map, point.x, point.y, point.battle, point.party_hp))
+            end
+            if terminals[phase] then return phase end
+            yield_frame(buttons)
+        end
+        return tag .. "-timeout"
+    end
+
+    -- Leg 1: Route 1 (10,35) -> Viridian Forest (18,41). Route 1's only northbound corridor is
+    -- solid grass (15 forced steps at 25/256, gen1_rb_forest_inputs.lua:112-120), so incidental
+    -- wild battles on this leg are EXPECTED; the module RUNs from them and logs
+    -- INCIDENTAL_BATTLE. They are not failures.
+    local walked = drive(Forest.new({ player = D.player }, { log = log }), "walk",
+                         { ["forest-parked"] = true, ["unknown-map"] = true })
+    if walked == "starter-koed" then
+        return false, "RNG: a wild foe knocked the starter out before the poisoning"
+    end
+    if walked ~= "forest-parked" then return false, "the walk to Viridian Forest ended " .. walked end
+    log(fmt("FOREST_PARKED map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
+
+    -- Leg 2: the hunt. Same battle driver the Route 1 hunt builds (:279-297). The driver only
+    -- looks addresses up by NAME and never iterates that table (gen1_battle_driver.lua:63-80),
+    -- so the whole .sym map is a valid bundle; `sites` IS iterated (:69), so it stays curated.
+    local driver = Driver.new({
+        step = yield_buttons, u8 = rd, addresses = symbols,
+        sites = { display_battle_menu = rom.DisplayBattleMenu.addr,
+                  move_selection_menu = rom.MoveSelectionMenu.addr,
+                  select_enemy_move = rom.SelectEnemyMove.addr,
+                  execute_player_move = rom.ExecutePlayerMove.addr,
+                  execute_enemy_move = rom.ExecuteEnemyMove.addr },
+    })
+    local forest_hunt = Forest.hunt({ player = D.player }, { driver = driver, step = yield_buttons,
+                                                            rd = rd, symbols = symbols, log = log })
+    local hunted = drive(forest_hunt, "hunt", { poisoned = true, ["hunt-exhausted"] = true,
+                                                ["starter-koed"] = true, ["hunt-stuck"] = true })
+    driver.close()
+    if hunted == "hunt-exhausted" then
+        return false, "RNG: the forest hunt spent its encounter budget without a poisoning"
+    end
+    if hunted == "starter-koed" then
+        return false, "RNG: a wild foe knocked the starter out before the poisoning"
+    end
+    if hunted ~= "poisoned" then return false, "the forest hunt ended " .. hunted end
+    -- PSN is bit 3 of the status byte (constants/battle_constants.asm:64), mask $08, and
+    -- ReadPlayerMonCurHPAndStatus has copied it into the party struct (core.asm:280-281).
+    local status_addr = assert(symbols.wPartyMon1Status, "no symbol wPartyMon1Status")
+    local status = rd(status_addr)
+    if math.floor(status / 8) % 2 ~= 1 then
+        return false, fmt("wPartyMon1Status is $%02X, which carries no PSN bit ($08)", status)
+    end
+    log(fmt("POISON_PSN encounters=%d steps=%d status=%02X",
+            forest_hunt.encounters, forest_hunt.grass_steps, status))
+
+    -- gen1_rb_point_fields.lua:11-18 decodes wPlayerMoney's three raw BCD bytes and nothing
+    -- else in the point touches money, so this IS the raw read the oracle halves.
+    local money_before = play.point().money
+    log(fmt("MONEY_BEFORE %d", money_before))
+    frames(120) -- let the final RUN's own battle_end land BEFORE the suffix mark
+    local mark = #sigs
+
+    -- Leg 3: the shuttle. (18,43)/(18,44) are non-grass, and a non-grass half-block in the
+    -- FOREST tileset can never roll (wild_encounters.asm:38-46), so nothing can interrupt the
+    -- poison ticks -- which is what makes the suffix assertion below meaningful.
+    local fell = drive(Forest.shuttle({ player = D.player }, { log = log }), "shuttle",
+                       { ["poison-fainted"] = true, ["unknown-map"] = true })
+    if fell ~= "poison-fainted" then return false, "the poison shuttle ended " .. fell end
+
+    if not wait_until(function() return (seen.faint or 0) > base.faint end, 120, "TX faint") then
+        return false, "the client never sent faint for the poisoned starter"
+    end
+    local faint_key = sent_events.faint and sent_events.faint.key
+    if faint_key ~= starter_key then
+        return false, fmt("the faint event named %s, not the starter %s", tostring(faint_key), starter_key)
+    end
+    log("TX faint " .. starter_key)
+    if not wait_until(function() return (seen.whiteout or 0) > base.whiteout end, 120, "TX whiteout") then
+        return false, "the client never sent whiteout"
+    end
+    log(fmt("TX whiteout x%d", (seen.whiteout or 0) - base.whiteout))
+
+    local blackout_addr = assert(symbols.wOutOfBattleBlackout, "no symbol wOutOfBattleBlackout")
+    local blacked_out, flagged, arrived = nil, nil, false
+    for _ = 1, 9000 do
+        if not blacked_out and tile_text("blacked out") then blacked_out = frame end
+        -- poison.asm:107-114 writes $ff here and home/overworld.asm:318-320 turns it into
+        -- `jp HandleBlackOut`; nothing clears it before the next completed step, and the loop
+        -- breaks at the Pallet checkpoint without taking one.
+        if not flagged and rd(blackout_addr) == 0xFF then flagged = frame end
+        if rd(ram.wCurMap) == 0 and overworld_ok() then arrived = true;break end
+        yield_frame(pulse_at_frame("B")) -- B advances text and never talks to an NPC
+    end
+    if not arrived then
+        return false, fmt("B never reached the Pallet Town blackout checkpoint (map=%d)", rd(ram.wCurMap))
+    end
+    log(blacked_out and fmt("BLACKED_OUT_TEXT frame=%d", blacked_out)
+        or "BLACKED_OUT_TEXT unavailable: the text advanced before the probe")
+    if not flagged then
+        return false, "wOutOfBattleBlackout never read 0xFF, so the game never took HandleBlackOut"
+    end
+    log(fmt("BLACKOUT_FLAG frame=%d value=FF", flagged))
+    local site = reads.read_map()
+    log(fmt("BLACKOUT_SITE map=%d x=%d y=%d", site.map, site.x, site.y))
+    if site.map ~= 0 or site.x ~= 5 or site.y ~= 6 then
+        return false, fmt("the blackout warp was map=%d (%d,%d), not Pallet Town (5,6)",
+                          site.map, site.x, site.y)
+    end
+    local money_after = play.point().money
+    log(fmt("MONEY_AFTER %d", money_after))
+    if money_after ~= math.floor(money_before / 2) then
+        return false, fmt("money went %d -> %d, not the BCD halving to %d",
+                          money_before, money_after, math.floor(money_before / 2))
+    end
+    log(fmt("MONEY_HALVED before=%d after=%d", money_before, money_after))
+    -- ResetStatusAndHalveMoneyOnBlackout ends `predef_jump HealParty`, so HP coming back is
+    -- proof HandleBlackOut ran to completion rather than wedging on a text box.
+    local healed = party_keys()
+    if #healed ~= 1 or healed[1].hp <= 0 then
+        return false, fmt("after the blackout the party held %d mon(s) at hp=%d, not one healed starter",
+                          #healed, healed[1] and healed[1].hp or -1)
+    end
+    log(fmt("PARTY_HEALED key=%s hp=%d", healed[1].key, healed[1].hp))
+
+    if (seen.whiteout or 0) - base.whiteout ~= 1 then
+        return false, fmt("%d whiteout event(s) for one blackout, not 1",
+                          (seen.whiteout or 0) - base.whiteout)
+    end
+    if #sites < 1 then return false, "the client never reached the poison_faint site" end
+    if sites[#sites] ~= 0 then
+        return false, fmt("the last poison_faint site named wWhichPokemon=%d, not slot 0", sites[#sites])
+    end
+    if (whiteouts_at_blackout or base.whiteout) <= base.whiteout then
+        return false, "whiteout was sent at the blackout site, not from the poison faint"
+    end
+    -- The suffix, i.e. everything after the last RUN: a battle_faint or a battle_end in here
+    -- would mean this blackout came out of a battle, not the poison. Earlier battles emit both
+    -- legitimately, which is why the window starts at `mark` and not at 0.
+    local order, stray = {}, nil
+    for i = mark + 1, #sigs do
+        local kind = sigs[i]
+        if kind == "poison_faint" or kind == "blackout" then order[#order + 1] = kind end
+        if kind == "battle_faint" or kind == "battle_end" then stray = stray or kind end
+    end
+    if stray then return false, "a " .. stray .. " signal fired after the final RUN" end
+    if order[1] ~= "poison_faint" or order[#order] ~= "blackout" then
+        return false, "the post-RUN signal order was [" .. table.concat(order, ",")
+                      .. "], not poison_faint->blackout"
+    end
+    log(fmt("SIGNAL_ORDER poison_faint->blackout ok faints=%d suffix=%d", #sites, #sigs - mark))
+
+    local saved, why = game_save("poison_new_b")
+    if not saved then return false, why end
+    return true, "poisoned in Viridian Forest, blacked out to Pallet and saved " .. starter_key
 end
 
 local scen = scenarios[D.scenario]
