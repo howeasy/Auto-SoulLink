@@ -1,0 +1,24 @@
+=== SLink Lua boot Thu Sep 17 17:34:42 2026 ===
+[SLink] Console tee -> C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/../slink_lua.log
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/entry.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/run.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/entry.lua
+[SLink] TCP connecting to 127.0.0.1:60409 (non-blocking)…
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/json_codec.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/reads.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/signals.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/writes.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/boxes.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/rom.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/trade_overlay.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/panel.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1_write_safety.lua
+[boot-zip3] dofile C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/gen1/client.lua
+[SLink-gen1] red player a -> 127.0.0.1:60409 (rom ea9bcae6)
+[boot-zip3] launcher past dofile(lua/slink.lua)
+[boot-zip3] hud module -> @C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/boot_zip3/extracted/SLink-player-bootzip3/lua/hud.lua
+[SLink] TCP connected to 127.0.0.1:60409
+[SLink-gen1] writes ENABLED
+[boot-zip3] screenshot at frame 1500
+[boot-zip3] screenshot at frame 3000
+[boot-zip3] exiting at frame 3600
