@@ -143,9 +143,25 @@ function H.init(opts)
     end
 end
 
+-- ── Surface clearing ────────────────────────────────────────────────────────
+-- BizHawk's lua draw surface is PERSISTENT: whatever gui.drawBox/gui.drawText
+-- painted stays on screen until something overdraws it or the surface is
+-- cleared (EmuHawk 2.11, _docs_luacats/gui.d.lua:21-25 "clears all lua drawn
+-- graphics from the screen"; :34-39 gui.cleartext "clears all text created by
+-- gui.text()"). Painting a fully transparent box over the old area erases
+-- nothing, so an expired banner used to sit there forever. Instead we wipe the
+-- whole surface at the top of every render and repaint only what is still live.
+-- clearGraphics covers drawBox/drawText; cleartext covers gui.text, which no
+-- SLink client draws today but the sibling test harnesses in lua/tests do.
+-- Guarded so the module still loads outside BizHawk (lupa, unit tests).
+local function clear_surface()
+    if type(gui) ~= "table" then return end
+    if type(gui.clearGraphics) == "function" then gui.clearGraphics() end
+    if type(gui.cleartext) == "function" then gui.cleartext() end
+end
+
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────
 local hud_queue = {}
-local hud_visible = false
 
 function H.show(text, r, g, b, duration_frames)
     text = fit_hud(sanitize(text))
@@ -157,29 +173,19 @@ function H.show(text, r, g, b, duration_frames)
 end
 
 local function render_hud()
-    if #hud_queue == 0 then
-        if hud_visible then
-            gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
-                        cfg.hud_right, cfg.hud_y + cfg.font_size,
-                        0x00000000, 0x00000000)
-            hud_visible = false
-        end
-        return
-    end
+    if #hud_queue == 0 then return end
     local msg = hud_queue[1]
     gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
                 cfg.hud_right, cfg.hud_y + cfg.font_size,
                 0xFF000000, 0xBB000000)
     gui.drawText(cfg.hud_x, cfg.hud_y - 1, msg.text, msg.color,
                  nil, cfg.font_size, "Courier New", "Bold")
-    hud_visible = true
     msg.frames = msg.frames - 1
     if msg.frames <= 0 then remove(hud_queue, 1) end
 end
 
 -- ── Center-screen prompt (prominent banner, auto-dismiss) ───────────────────
 local prompt_queue = {}
-local prompt_visible = false
 
 function H.prompt(text, r, g, b, duration_frames)
     text = fit_prompt(sanitize(text))
@@ -191,19 +197,12 @@ function H.prompt(text, r, g, b, duration_frames)
 end
 
 local function render_prompt()
+    if #prompt_queue == 0 then return end
     local py = cfg.prompt_y
     local py2 = py + cfg.prompt_h
-    if #prompt_queue == 0 then
-        if prompt_visible then
-            gui.drawBox(1, py, cfg.screen_w - 1, py2, 0x00000000, 0x00000000)
-            prompt_visible = false
-        end
-        return
-    end
     local p = prompt_queue[1]
     gui.drawBox(1, py, cfg.screen_w - 1, py2, 0xFF000000, 0xCC000000)
     gui.drawText(4, py + 1, p.text, p.color, nil, cfg.font_size, "Courier New", "Bold")
-    prompt_visible = true
     p.frames = p.frames - 1
     if p.frames <= 0 then remove(prompt_queue, 1) end
 end
@@ -256,9 +255,8 @@ end
 -- ── Nuzlocke-start transient banner ─────────────────────────────────────────
 -- Blue celebratory banner shown the moment the player first picks up Pokéballs.
 -- Auto-dismisses; a later rebuild/game_over banner overdraws if both collide.
-local nuzlocke_start_text    = nil
-local nuzlocke_start_frames  = 0
-local nuzlocke_start_visible = false
+local nuzlocke_start_text   = nil
+local nuzlocke_start_frames = 0
 
 function H.nuzlocke_start(text, duration_frames)
     nuzlocke_start_text   = sanitize(text or "Nuzlocke Start!")
@@ -270,30 +268,21 @@ function H.is_nuzlocke_start()
 end
 
 local function render_nuzlocke_start()
-    -- When inactive (text cleared or game_over overdrawing): if we painted
-    -- the banner last frame, paint a transparent box over the same region
-    -- once to erase it. BizHawk's gui surface persists last-painted pixels
-    -- until something overdraws them, so without this the banner stays
-    -- on-screen until the next map transition repaints the area.
-    if not nuzlocke_start_text or game_over then
-        if nuzlocke_start_visible then
-            local ny = cfg.gameover_y
-            gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0x00000000, 0x00000000)
-            nuzlocke_start_visible = false
-        end
-        return
-    end
+    if not nuzlocke_start_text or game_over then return end
     local ny = cfg.gameover_y
     gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0xFF0066AA, 0xDD003388)
     gui.drawText(8, ny + 4, nuzlocke_start_text, "#FFFFFF",
                  nil, cfg.font_size + 2, "Courier New", "Bold")
-    nuzlocke_start_visible = true
     nuzlocke_start_frames = nuzlocke_start_frames - 1
     if nuzlocke_start_frames <= 0 then nuzlocke_start_text = nil end
 end
 
 -- ── Master render (call once per frame, after all game logic) ───────────────
 function H.render()
+    -- Wipe first, then repaint only the live elements: anything whose duration
+    -- ran out simply stops being drawn and is gone the same frame. Every SLink
+    -- gui.* drawer goes through here, so nothing else's pixels are lost.
+    clear_surface()
     render_prompt()
     render_hud()
     render_nuzlocke_start()
@@ -305,12 +294,10 @@ end
 function H.clear()
     hud_queue = {}
     prompt_queue = {}
-    hud_visible = false
-    prompt_visible = false
     rebuild_text = nil
     nuzlocke_start_text = nil
     nuzlocke_start_frames = 0
-    nuzlocke_start_visible = false
+    clear_surface()   -- take effect now, not on the next frame's render
 end
 
 return H
