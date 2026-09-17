@@ -539,6 +539,10 @@ class SoulLinkState:
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
+            for pid in ("a", "b"):
+                self.queued_commands[pid].append({
+                    "cmd": "msgbox", "text": "Trade canceled - no response.",
+                    "fb": "prompt"})
 
     def _handle_trade_request(self, player_id: str, msg: dict):
         """Talk-to-partner → show the native action menu (TRADE / SAY HEY). TRADE opens the party
