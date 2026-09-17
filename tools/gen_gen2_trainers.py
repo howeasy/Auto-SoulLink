@@ -132,7 +132,7 @@ def main() -> int:
 
 
 def write_lua_module(classes: dict[str, str], named: dict[str, dict[str, str]]) -> None:
-    """Write the Lua trainer module. Mirrors gen1_rby_trainers.lua format."""
+    """Write the Lua trainer module."""
     lines: list[str] = []
     lines.append("--[[")
     lines.append("  lua/games/gen2_crystal_trainers.lua — Gen 2 trainer class + named lookup.")

@@ -8,8 +8,8 @@
       t.check("party is loaded", t.M.getPartyCount() == 1)
       t.finish()
 
-  `game` defaults to gen1_rby, so lua/tests/gen1_gatelib.lua is a one-line shim and the six
-  Gen 1 gates that predate this file are untouched.
+  `game` is required (currently only "gen2_crystal" — Gen 1 gates boot through
+  lua/tests/gen1_gate.lua instead, built on lua/gen1/entry.lua).
 
   WHY NO SAVESTATES: the Gen 3 gates each load a slink_*.State, which is version-locked —
   BizHawk stops on a modal dialog when handed a state from another release, so
@@ -36,16 +36,6 @@ local Lib = {}
 --   pokered    wCurMap    0xD35E -> wYCoord +3, wXCoord +4   (pokeyellow: same deltas)
 --   pokecrystal wMapNumber 0xDCB6 -> wYCoord +1, wXCoord +2  (pokegold:   same deltas)
 local GAMES = {
-    gen1_rby = {
-        module     = "games.gen1_rby",
-        data_dir   = "gen1_rby",
-        label      = "Gen 1",
-        client     = "gen1_rby_client.lua",
-        scenario_prefix = "gen1_",
-        coord_base = function(M) return M.MAP_ID_ADDR end,
-        coord_dy   = 3,
-        coord_dx   = 4,
-    },
     gen2_crystal = {
         module     = "games.gen2_crystal",
         data_dir   = "gen2_crystal",
@@ -175,13 +165,13 @@ function Lib.prove_booted(M, game_key, step, hold)
     return false, x_addr, y_addr
 end
 
--- opts.game    → key into GAMES above (default "gen1_rby")
+-- opts.game    → key into GAMES above (required)
 -- opts.no_boot → set up M/G and the check helpers but skip the boot-to-CONTINUE drive, for
 --                gates that have no battery save to boot FROM (the Archipelago builds) and
 --                assert on the ROM rather than on a loaded game.
 function Lib.start(gate_name, opts)
     opts = opts or {}
-    local spec = GAMES[opts.game or "gen1_rby"]
+    local spec = GAMES[opts.game]
     assert(spec, "unknown game " .. tostring(opts.game) .. " — add it to GAMES in gatelib.lua")
 
     local ROOT = SLINK_ROOT or os.getenv("SLINK_ROOT")
@@ -264,7 +254,7 @@ function Lib.start(gate_name, opts)
     -- Walking cannot be faked: if the coordinates change, the overworld loop is live. See
     -- Lib.prove_booted for the two weaker versions of that claim that were measured passing
     -- on a title screen and on a blank screen.
-    local booted, x_addr, y_addr = Lib.prove_booted(M, opts.game or "gen1_rby", t.step, t.hold)
+    local booted, x_addr, y_addr = Lib.prove_booted(M, opts.game, t.step, t.hold)
 
     if not booted then
         client.screenshot(ROOT .. "/patch/build/" .. gate_name .. "_bootfail.png")

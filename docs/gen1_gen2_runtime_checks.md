@@ -8,9 +8,8 @@ universal `lua/slink.lua` routes any GB/GBC cartridge through `Entry.detect_titl
 `lua/gen1/run.lua` before it ever reaches the legacy `game_detect`/`_CLIENT_MAP` path. The new
 client is `lua/gen1/run.lua` (BizHawk entry: io, transport, HUD, frame loop) over
 `lua/gen1/entry.lua` (composition root), and the live gates load it directly. The old
-`lua/clients/gen1_rby_client.lua` / `lua/games/gen1_rby.lua` client still exists and still ships
-in the player ZIP alongside the new one — it is legacy, kept only until Track B step 5 (P8-4)
-retires it, and production routing no longer reaches it.
+`lua/clients/gen1_rby_client.lua` / `lua/games/gen1_rby.lua` client was retired in Track B
+step 5 (P8-4) and no longer ships in the player ZIP or exists in the tree.
 
 **The Gen 2 sections below are unchanged.**
 

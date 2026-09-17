@@ -2,7 +2,7 @@
   lua/clients/gen2_crystal_client.lua — SLink Gen 2 Client (Production Script)
   ============================================================================
   Supports Pokémon Crystal (US English) in BizHawk.
-  Forked from gen1_rby_client.lua with Gen 2 adaptations.
+  Forked from the (since-retired) legacy Gen 1 client with Gen 2 adaptations.
 
   Key differences from Gen 1:
     - 2-byte map addressing (mapGroup + mapNumber) via G.resolve_area(g, n)
@@ -1377,7 +1377,7 @@ local function on_frame()
                 -- the key in `pending_memorials` until a `memorialize_done` arrives, so the pair
                 -- never reached LinkStatus.MEMORIAL, `_write_memorial` never ran (the Memorial
                 -- page stayed empty for an entire Gen 2 run), and every reconnect re-queued the
-                -- same memorialize command forever. Mirrors gen1_rby_client.lua.
+                -- same memorialize command forever. Mirrors the other client generations.
                 if found_slot then
                     local ok, err = M.depositMemorialMon(found_slot)
                     if ok then

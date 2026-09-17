@@ -39,9 +39,7 @@ Archipelago variants have never been launched. See
 
 ## Files
 
-- `area_map.json` — Map ID → `{area_id, display name}` source (86 entries; all three games share IDs). Generates the `.lua` lookup tables.
-- `gen1_rby_areas.lua` — Generated Map ID → encounter area_id lookup (from `area_map.json`)
-- `gen1_rby_locations.lua` — Generated Map ID → display name lookup
+- `area_map.json` — Map ID → `{area_id, display name}` source (86 entries; all three games share IDs). Read directly by the new client's closure (`lua/gen1/entry.lua`); no longer generates standalone `.lua` lookup tables (those, and their `gen_gen1_area_map.py` generator, were retired with the legacy client in P8-4b).
 - `moves.json` — 165 moves: name, type, power, accuracy, pp, split
 - `trainers.json` — `classes` (class_id → class name) + `named_trainers` (gym leaders, E4, rivals)
 - `encounter_tables.json` — Wild encounter slots, keyed **by game version first**

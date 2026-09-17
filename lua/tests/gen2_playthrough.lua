@@ -6,8 +6,8 @@
 
       tests/fixtures/gen2/crystal_town.SaveRAM
 
-  Same shape as gen1_playthrough.lua, and for the same reason: a .SaveRAM is plain SRAM and
-  is NOT BizHawk-version-locked, so it survives emulator upgrades. This is a ONE-SHOT
+  Same shape as the Gen 1 cold-boot driver, and for the same reason: a .SaveRAM is plain
+  SRAM and is NOT BizHawk-version-locked, so it survives emulator upgrades. This is a ONE-SHOT
   bootstrapper whose output is committed.
 
   IT NEVER WRITES SRAM. It writes WRAM and then drives the in-game SAVE menu, letting the

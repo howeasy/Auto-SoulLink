@@ -78,7 +78,7 @@ python tools/lua_syntax_check.py
 
 ## Project Overview
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Emerald, Radical Red/CFRU), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a game-specific Lua client (`lua/clients/gen1_rby_client.lua`, `lua/clients/gen2_crystal_client.lua`, `lua/clients/gen3_frlge_client.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game RAM each frame and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
+SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Emerald, Radical Red/CFRU), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a game-specific Lua client (`lua/gen1/client.lua`, `lua/clients/gen2_crystal_client.lua`, `lua/clients/gen3_frlge_client.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game RAM each frame and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
 
 ### Game Maturity
 
@@ -217,9 +217,10 @@ SLink-RR/
 │   │   ├── gen2_crystal.lua
 │   │   ├── gen3_frlge.lua
 │   │   ├── gen4_hgsspt.lua
-│   │   ├── gen1_rby.lua         # Gen 1 game module (R/B/Y, + AP variants)
 │   │   ├── gen2_gsc.lua         # Gen 2 game module
 │   │   └── gen5_bw.lua          # Gen 5 game module
+│   ├── gen1/                    # Gen 1 client (R/B/Y, + AP variants): entry.lua, client.lua,
+│   │   └── ...                  # reads.lua, writes.lua, signals.lua, boxes.lua, rom.lua, panel.lua
 │   ├── memory_gba.lua           # GBA memory read/write helpers (Gen 3)
 │   ├── memory_gb.lua            # GB/GBC memory read/write helpers (Gen 1 & Gen 2)
 │   ├── memory_nds.lua           # NDS memory read/write helpers (Gen 4 & Gen 5)

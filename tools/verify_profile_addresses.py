@@ -1,7 +1,7 @@
 """
 tools/verify_profile_addresses.py — Phase 10 address-correctness verifier
 
-Diffs Lua profile addresses (lua/games/gen1_rby.lua, lua/games/gen2_crystal.lua)
+Diffs Lua profile addresses (lua/games/gen2_crystal.lua)
 against pret-authoritative addresses (data/pret_syms.json, produced by
 tools/build_pret_syms.py).
 
@@ -32,7 +32,6 @@ import re
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-PROFILE_GEN1 = REPO_ROOT / "lua" / "games" / "gen1_rby.lua"
 PROFILE_GEN2 = REPO_ROOT / "lua" / "games" / "gen2_crystal.lua"
 PRET_SYMS = REPO_ROOT / "data" / "pret_syms.json"
 
@@ -53,133 +52,9 @@ def _add(variant: str, repo: str, mapping: dict[str, str | None]) -> None:
         PROFILE_TO_PRET[(variant, field)] = (repo, sym) if sym else None
 
 
-# ── Red / Blue (pokered) ─────────────────────────────────────────────────────
-_RED_MAP: dict[str, str | None] = {
-    "PARTY_COUNT_ADDR": "wPartyCount",
-    "PARTY_SPECIES_ADDR": "wPartySpecies",
-    "PARTY_BASE_ADDR": "wPartyMon1",
-    "PARTY_OT_NAMES_ADDR": "wPartyMonOT",
-    "PARTY_NICKS_ADDR": "wPartyMonNicks",
-    "party_struct_size": None,  # constant, not an address
-    "ENEMY_COUNT_ADDR": "wEnemyPartyCount",
-    "ENEMY_BASE_ADDR": "wEnemyMons",
-    "ENEMY_SPECIES_LIST_ADDR": "wEnemyPartySpecies",
-    "BOX_COUNT_ADDR": "wBoxCount",
-    "BOX_SPECIES_ADDR": "wBoxSpecies",
-    "BOX_BASE_ADDR": "wBoxMon1",
-    "BOX_OT_NAMES_ADDR": "wBoxMonOT",
-    "BOX_NICKS_ADDR": "wBoxMonNicks",
-    "box_struct_size": None,
-    "box_max_mons": None,
-    "BAG_COUNT_ADDR": "wNumBagItems",
-    "BAG_ITEMS_ADDR": "wBagItems",
-    "bag_max_items": None,
-    "BATTLE_FLAG_ADDR": "wIsInBattle",
-    # Rival Team Swap / Explode Mode (Gen 1 does both from RAM, no ROM patch).
-    "CUR_OPPONENT_ADDR": "wCurOpponent",
-    "ENEMY_OT_NAMES_ADDR": "wEnemyMonOT",
-    "ENEMY_NICKS_ADDR": "wEnemyMonNicks",
-    "PLAYER_SELECTED_MOVE_ADDR": "wPlayerSelectedMove",
-    "PLAYER_MOVE_LIST_INDEX_ADDR": "wPlayerMoveListIndex",
-    "PLAYER_MON_NUMBER_ADDR": "wPlayerMonNumber",
-    "BATTLE_MON_MOVES_ADDR": "wBattleMonMoves",
-    "BATTLE_MON_PP_ADDR": "wBattleMonPP",
-    # What MainInBattleLoop actually reads for the faint check. force_faint writes
-    # this as well as the party struct — see M.forceFaint in lua/memory_gb.lua.
-    "BATTLE_MON_HP_ADDR": "wBattleMonHP",
-    "JOY_IGNORE_ADDR": "wJoyIgnore",
-    "FONT_LOADED_ADDR": "wFontLoaded",
-    "CURRENT_BOX_NUM_ADDR": "wCurrentBoxNum",
-
-    # The game's own wild-encounter preconditions (see M.isInGrass).
-    "TILE_MAP_ADDR": "wTileMap",
-    "GRASS_TILE_ADDR": "wGrassTile",
-    "GRASS_RATE_ADDR": "wGrassRate",
-    "STATUS_FLAGS_4_ADDR": "wStatusFlags4",
-    "MOVEMENT_FLAGS_ADDR": "wMovementFlags",
-
-    # ── Memorial-box SRAM guard (see M.protectSramBoxes) ──────────────────────
-    # This one IS worth verifying: it is the same wCurrentBoxNum the client reads, and the
-    # guard is wrong in a save-destroying way if it points anywhere else.
-    "changed_boxes_addr": "wCurrentBoxNum",
-    "changed_boxes_bit": None,          # BIT_HAS_CHANGED_BOXES = 7, a constant
-    "checksum_offset": None,            # offset within an SRAM bank, not an address
-    "box_len": None,                    # wBoxDataEnd - wBoxDataStart, a size
-    "boxes_per_bank": None,             # NUM_BOXES / 2, a constant
-    # $DEE2 is the free WRAM the companion patch claims — it has no pret symbol precisely
-    # because pret's linker reports it as empty (WRAM0 TOTAL EMPTY $001E).
-    "companion_patch_mailbox": None,
-    # A flat ROM offset, not a WRAM symbol. Verified far more strongly at runtime: the
-    # writes gate reads the actual instruction bytes there and asserts CB 7E CC.
-    "change_box_bit_test_rom_addr": None,
-    "ENEMY_MON_SPECIES_ADDR": "wEnemyMon",
-    "ENEMY_MON_HP_ADDR": "wEnemyMonHP",
-    "ENEMY_MON_LEVEL_ADDR": "wEnemyMonLevel",
-    "ENEMY_MON_MAXHP_ADDR": "wEnemyMonMaxHP",
-    "MAP_ID_ADDR": "wCurMap",
-    "PLAYER_NAME_ADDR": "wPlayerName",
-    "PLAYER_ID_ADDR": "wPlayerID",
-    "dv_offset_1": None,
-    "dv_offset_2": None,
-    "otid_offset": None,
-    "species_offset": None,
-    "hp_offset": None,
-    "maxhp_offset": None,
-    "level_offset": None,
-    # Derived offset, not an address. Gen 1's box struct keeps BoxLevel at +0x03
-    # (pret wBoxMon1BoxLevel) while the party level lives at +0x21.
-    "box_level_offset": None,
-    # Derived offset: start of the computed stat block (wPartyMon1Attack, party+0x24).
-    "stats_offset": None,
-    "status_offset": None,
-    "enemy_status_offset": None,
-    "ball_item_ids": None,
-    "BADGES_ADDR": "wObtainedBadges",
-    "PLAYER_STAT_STAGES_ADDR": "wPlayerMonAttackMod",
-    "ENEMY_STAT_STAGES_ADDR": "wEnemyMonAttackMod",
-    "stat_stages_count": None,
-    "stat_stages_layout": None,
-    "moves_offset": None,
-    "pp_offset": None,
-    "pp_encoding": None,
-    "ENEMY_BATTLE_MOVES_ADDR": "wEnemyMonMoves",
-    "ENEMY_BATTLE_PP_ADDR": "wEnemyMonPP",
-    "enemy_battle_pp_encoding": None,
-    "TRAINER_CLASS_ADDR": "wTrainerClass",
-    "TRAINER_ID_ADDR": "wTrainerNo",
-    # SFX dispatch. This IS a pret WRAM symbol, so verify it rather than skipping.
-    # It was skipped, and that is how Gen 2 shipped 0xC2BD (wCryTracks) under a comment
-    # naming wMusicID. Gen 1's is nil (no RAM sound trigger exists there), and a nil profile
-    # value is skipped anyway, so mapping it costs Gen 1 nothing.
-    "SFX_DISPATCH_ADDR": "wMusicID",
-    "capture":   None,
-    "gift":      None,
-    "faint":     None,
-    "whiteout":  None,
-    "no_catch":  None,
-    "success":   None,
-    "failure":   None,
-    "boo":       None,
-    "shiny":     None,
-}
-_add("red", "pokered", _RED_MAP)
-_add("blue", "pokered", _RED_MAP)  # blue shares red profile in Lua
-
-# ── Archipelago Red/Blue (Alchav's fork, NOT pret) ────────────────────────────
-# The AP fork adds WRAM for item/event tracking, moving 861 of 2171 shared symbols —
-# wCurMap +216, wEnemyMons -18, the box block +11. Same field names, different repo, so
-# the AP profiles get verified against `alchav_pokered` instead of `pokered`. Without
-# this the AP blocks would be unverified and free to rot back into inheriting vanilla.
-# blue_ap inherits red_ap, exactly as vanilla blue inherits red, so only red_ap is listed.
-_add("red_ap", "alchav_pokered", _RED_MAP)
-# The fork predates pret's symbol rename, so a handful of fields answer to the OLD name.
-# Without the override the lookup misses, the field is reported WARN instead of FAIL, and an
-# address that is simply absent from the profile looks like a deliberate opt-out.
-PROFILE_TO_PRET[("red_ap", "MOVEMENT_FLAGS_ADDR")] = ("alchav_pokered", "wd736")
-
-# ── Yellow (pokeyellow) ───────────────────────────────────────────────────────
-# Same field-name shape as Red/Blue.
-_add("yellow", "pokeyellow", _RED_MAP)
+# The Gen 1 (Red/Blue/Yellow/Archipelago) address table used to live here. It was removed
+# with the legacy lua/games/gen1_rby.lua client (P8-4b) — the Gen 1 profile is now proven by
+# tests/unit/test_gen1_profile.py against the generated data/games/gen1_rby/*.json instead.
 
 # ── Crystal (pokecrystal) ─────────────────────────────────────────────────────
 _CRYSTAL_MAP: dict[str, str | None] = {
@@ -255,7 +130,9 @@ _CRYSTAL_MAP: dict[str, str | None] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wOtherTrainerClass",
     "TRAINER_ID_ADDR": "wOtherTrainerID",
-    # SFX dispatch — a real symbol, verified. See the Gen 1 table for why this is not skipped.
+    # SFX dispatch. This IS a pret WRAM symbol, so verify it rather than skipping — a
+    # skipped-by-default field is how Gen 2 shipped 0xC2BD (wCryTracks) under a comment
+    # naming wMusicID.
     "SFX_DISPATCH_ADDR": "wMusicID",
     "capture":   None,
     "gift":      None,
@@ -466,10 +343,7 @@ def main() -> int:
 
     pret_syms_data: dict[str, dict[str, int]] = json.loads(PRET_SYMS.read_text(encoding="utf-8"))
 
-    profile_addrs = {
-        **_extract_variant_addresses(PROFILE_GEN1),
-        **_extract_variant_addresses(PROFILE_GEN2),
-    }
+    profile_addrs = _extract_variant_addresses(PROFILE_GEN2)
 
     results = verify(profile_addrs, pret_syms_data)
 

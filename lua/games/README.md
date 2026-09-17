@@ -22,13 +22,13 @@ lua/
 ├── memory_gba.lua         ← GBA memory helpers (Gen 3)
 ├── memory_nds.lua         ← NDS memory helpers (Gen 4 & Gen 5)
 ├── games/                 ← Game modules (this directory)
-│   ├── gen1_rby.lua           — Gen 1 (Red / Blue / Yellow)
 │   ├── gen2_crystal.lua       — Gen 2 (Crystal)
 │   ├── gen3_frlge.lua         — Gen 3 (FRLG / Emerald)
 │   ├── gen4_hgsspt.lua        — Gen 4 (HGSS / Platinum)
 │   └── gen5_bw.lua            — Gen 5 (Black / White / BW2)
+├── gen1/                  ← Gen 1 (Red / Blue / Yellow) — composition root, not a
+│                             games/ module; see lua/gen1/entry.lua
 ├── clients/               ← Game-specific client scripts
-│   ├── gen1_rby_client.lua    — Gen 1 client (Red / Blue / Yellow)
 │   ├── gen2_crystal_client.lua — Gen 2 client (Crystal)
 │   ├── gen3_frlge_client.lua  — Gen 3 client (FRLG / Emerald / RR)
 │   ├── gen4_hgsspt_client.lua — Gen 4 client (HGSS / Platinum)
@@ -90,20 +90,12 @@ return {
 
 ## Implemented Modules
 
-### Gen 1 — `gen1_rby.lua`
+### Gen 1 — `lua/gen1/`
 
-Game module for Pokémon Red, Blue, and Yellow (US English).
-
-- **ROM titles**: `POKEMON RED`, `POKEMON BLUE`, `POKEMON YELLOW` — read from GB ROM header at `0x0134` (16 bytes)
-- **Variants**: `red` (shared with Blue), `yellow` (shifted addresses)
-- **Platform**: GB/GBC — uses `memory_gb.lua` for party/box reads
-- **Memory domain**: System Bus (WRAM addresses)
-- **Area lookup**: single-byte map ID → area_id via `data/games/gen1_rby/gen1_rby_areas.lua`
-- **Gift areas**: `pallet_town`, `oaks_lab`, `celadon_city`, `saffron_city`, `silph_co`, `cinnabar_island`, `route_4`, `celadon_game_corner`
-- **Mon key format**: `DDDD:TTTT:II` (DVs + OT ID + species index) — evolves on species change
-- **Badge tracking**: wObtainedBadges bitfield (8 badges)
-- **Commands**: `force_faint`, `box_mon`, `party_mon`, `memorialize`, `hud_show`, `resolved_areas`, `unresolve_area`, `game_over`
-- **Exports**: `PROFILES` (red/yellow address tables), `detect()`, `detect_variant()`, `rom_type_for_variant()`, `is_gift_area()`, `resolve_area()`, `toNatDex()`, `INDEX_TO_NATDEX`
+Pokémon Red, Blue, and Yellow (US English) do not use the `games/` module contract above —
+Gen 1 is its own composition root. See `lua/gen1/entry.lua` (wiring) and
+`lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` (the modules it
+composes), and `docs/gen1_gen2_runtime_checks.md` for the live-verification story.
 
 ### Gen 3 — `gen3_frlge.lua`
 

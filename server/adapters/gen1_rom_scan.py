@@ -310,7 +310,7 @@ def scan_base_stats(rom: bytes) -> dict[int, dict]:
     # discount Mew` and stores Mew at its own symbol; pokeyellow's ends
     # `assert_table_length NUM_POKEMON` with mew.asm included, so Yellow's Mew is record 150.
     # Reading a flat 150 on Yellow silently dropped dex 151 from every Python scan -- while
-    # lua/games/gen1_rby.lua got it right, so the two disagreed -- and _check_content diffs
+    # the Lua client got it right, so the two disagreed -- and _check_content diffs
     # the scan against itself, giving the pipeline's only rule-data guard a species-shaped
     # hole on Yellow.
     count = BASE_STATS_COUNT if "MewBaseStats" in syms else BASE_STATS_COUNT_YELLOW
@@ -742,7 +742,7 @@ def content_fingerprint(variant: str, wild: dict, fishing: dict) -> str:
     """A digest of the tables a CLIENT can report, so both sides compute the same value.
 
     Deliberately narrower than ``profile_hash``: it covers only wild encounters and fishing,
-    because that is all lua/games/gen1_rby.lua reads out of the cartridge. A hash that
+    because that is all the Lua client reads out of the cartridge. A hash that
     included base stats could never be reproduced by a client and so could not be used to
     answer the question this exists for -- "is the player running the ROM we made for them?"
 
