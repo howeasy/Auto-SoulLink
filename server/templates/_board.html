@@ -25,13 +25,13 @@
 
 {# A mon as it stands in a battle (or the party lead when there is none): sprite, name,
    status, HP, stat stages, and its moves with PP. Used only on the NOW card. #}
-{% macro combatant(mon, side, label='') -%}
+{% macro combatant(mon, side, label='', labels=None) -%}
   <div class="mk-cbt {{ side }}{% if mon.active is sameas false %} bench{% endif %}">
     <span class="mk-spr">{{ mon.sprite_html | safe }}</span>
     <span class="mk-cbt-txt">
       <span class="mk-cbt-name">{% if label %}<span class="mk-cbt-label">{{ label }}</span> {% endif %}<b>{{ mon.nickname or mon.species_name }}</b>{% if mon.nickname and mon.nickname != mon.species_name %} <span class="mk-sub">{{ mon.species_name }}</span>{% endif %} <span class="mk-sub">Lv <span class="num">{{ mon.level }}</span></span>{% if mon.status_cond %} {{ status_pill(mon.status_cond) }}{% endif %}</span>
       {% if mon.hp is not none %}{{ hp(mon) }}{% endif %}
-      {% if mon.stat_stages %}{{ stat_stages_row(mon.stat_stages) }}{% endif %}
+      {% if mon.stat_stages %}{{ stat_stages_row(mon.stat_stages, labels) }}{% endif %}
       {% if mon.move_details and mon.active is not sameas false %}
         <span class="mk-moves">{% for mv in mon.move_details %}<span class="mk-move mt-{{ mv.type_name or 'unknown' }}" title="{{ mv.type_name }} · {{ mv.power or '—' }} pow · {{ mv.accuracy or '—' }}% acc">{{ mv.name }}{% if mv.current_pp is not none %} <span class="num faint">{{ mv.current_pp }}/{{ mv.pp }}</span>{% endif %}</span>{% endfor %}</span>
       {% endif %}
@@ -136,13 +136,13 @@
                         <span class="mk-tag fight">in battle</span>
                         <span class="mk-sub">{% if bs.is_trainer_battle %}vs {{ bs.opponent_class }} {{ bs.opponent_name or 'Trainer' }}{% else %}wild encounter{% endif %}{% if bs.is_doubles %} · doubles{% endif %}</span>
                       </div>
-                      {% if mine %}{{ combatant(mine, 'mine') }}{% endif %}
-                      {% for foe in bs.enemy_party %}{{ combatant(foe, 'foe', 'vs') }}{% endfor %}
+                      {% if mine %}{{ combatant(mine, 'mine', labels=p.capabilities.stat_stage_labels) }}{% endif %}
+                      {% for foe in bs.enemy_party %}{{ combatant(foe, 'foe', 'vs', labels=p.capabilities.stat_stage_labels) }}{% endfor %}
                     </div>
                   {% elif p.party_keys and p.party_details[p.party_keys[0]] %}
                     <div class="mk-lead">
                       <span class="mk-cap">Lead</span>
-                      {{ combatant(p.party_details[p.party_keys[0]], 'mine') }}
+                      {{ combatant(p.party_details[p.party_keys[0]], 'mine', labels=p.capabilities.stat_stage_labels) }}
                     </div>
                   {% endif %}
                   {% if p.encounter_table %}

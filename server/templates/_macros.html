@@ -49,22 +49,27 @@
 
 
 {# ── stat_stages_row ───────────────────────────────────────────────────
-   Inline ATK/DEF/SPD/SATK/SDEF/ACC/EVA chips for the active mon. `stages`
-   is the raw 7-tuple where 6 == neutral. Anything outside [-6, +6] is
-   dropped.                                                               #}
-{% macro stat_stages_row(stages) -%}
+   Inline stat-stage chips for the active mon. `stages` is the raw 7-tuple
+   where 6 == neutral, anything outside [-6, +6] is dropped. `labels` is the
+   caller's `capabilities.stat_stage_labels` (server/ui_capabilities.py);
+   omitted, it falls back to the Gen 3 ATK/DEF/SPD/SATK/SDEF/ACC/EVA set so
+   every stream-overlay call site that doesn't pass one keeps working. A
+   blank label (Gen 1 has one Special, not a SATK/SDEF split) drops that
+   slot's chip outright rather than rendering it unlabelled.              #}
+{% macro stat_stages_row(stages, labels=None) -%}
   {%- if stages -%}
-    {%- set labels = ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
+    {%- set labels = labels or ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
     {%- set ns = namespace(any=false) -%}
     {%- for raw in stages[:7] -%}
       {%- set s = (raw | int) - 6 -%}
-      {%- if s != 0 and s >= -6 and s <= 6 -%}
+      {%- set lbl = labels[loop.index0] if loop.index0 < labels | length else '' -%}
+      {%- if s != 0 and s >= -6 and s <= 6 and lbl -%}
         {%- if not ns.any %}<div class="stat-stages-row">{%- endif -%}
         {%- set ns.any = true -%}
         {%- set cls = 'ss-up' if s > 0 else 'ss-dn' -%}
         {%- set sign = '+' if s > 0 else '−' -%}
         {%- set mag = s if s > 0 else -s -%}
-        <span class="stat-stage {{ cls }}">{{ sign }}{{ mag }} {{ labels[loop.index0] }}</span>
+        <span class="stat-stage {{ cls }}">{{ sign }}{{ mag }} {{ lbl }}</span>
       {%- endif -%}
     {%- endfor -%}
     {%- if ns.any %}</div>{%- endif -%}

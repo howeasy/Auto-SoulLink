@@ -311,6 +311,91 @@ class TestStatusIconHtml:
         )
 
 
+# ── stat_stages_row's adapter-supplied labels ─────────────────────────────────
+
+def _stages_html(stages, labels=None) -> str:
+    """Render templates/_macros.html's stat_stages_row the way mon_card/combatant do."""
+    import jinja2
+
+    from server.templating import TEMPLATES_DIR
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True)
+    return env.from_string(
+        '{% from "_macros.html" import stat_stages_row %}'
+        '{{ stat_stages_row(stages, labels) }}'
+    ).render(stages=stages, labels=labels).strip()
+
+
+class TestStatStageLabels:
+    """The chips must read the adapter's `capabilities.stat_stage_labels`
+    (server/adapters/gen1_rby.py:461-462 for Gen 1) rather than a hard-coded Gen 3 set —
+    a Gen 1 board showing SATK/SDEF is lying, Gen 1 has one Special stat, not two."""
+
+    GEN1_LABELS = ["ATK", "DEF", "SPD", "SPC", "", "ACC", "EVA"]
+
+    def test_gen1_shaped_stages_render_def_never_satk_sdef(self):
+        # index1 = DEF, raw 5 -> stage -1
+        stages = [6, 5, 6, 6, 6, 6, 6]
+        html = _stages_html(stages, self.GEN1_LABELS)
+        assert "DEF" in html
+        assert "SATK" not in html
+        assert "SDEF" not in html
+
+    def test_gen3_shaped_stages_still_render_satk_sdef(self):
+        # index3 = SATK, raw 8 -> stage +2; index4 = SDEF, raw 4 -> stage -2
+        stages = [6, 6, 6, 8, 4, 6, 6]
+        html = _stages_html(stages)  # no labels arg -> falls back to the Gen 3 set
+        assert "SATK" in html
+        assert "SDEF" in html
+
+    def test_blank_label_suppresses_its_chip_even_when_the_stage_is_nonzero(self):
+        # index4 is Gen 1's unused slot ('') — a nonzero raw there must not render a chip.
+        stages = [6, 6, 6, 6, 9, 6, 6]  # index4 raw 9 -> stage +3, everything else neutral
+        html = _stages_html(stages, self.GEN1_LABELS)
+        assert html == ""
+
+    def test_no_labels_arg_keeps_stream_overlays_working(self):
+        """mon_card / stat_stages_row(stages) with no labels arg (every stream overlay
+        template) must still render the current Gen 3 labels — the default cannot regress
+        just because combatant() in _board.html now threads a labels kwarg through."""
+        stages = [8, 6, 6, 6, 6, 6, 6]  # ATK +2
+        html = _stages_html(stages)
+        assert "ATK" in html
+        assert "+2" in html
+
+
+class TestCombatantLabelsWiring:
+    """_board.html's combatant() macro is the only call site the NOW cards use for a mon's
+    stat stages. Source-level regression guard (same style as
+    test_status_pill_tox_before_psn above) rather than rendering _board.html whole: the
+    template's top level polls `board`/`status`/`rules` outside any macro, so importing
+    just the macro still executes that top-level code and needs a full board_context to
+    render — disproportionate for checking one kwarg is threaded through."""
+
+    def test_combatant_signature_takes_labels(self):
+        import pathlib
+        src = pathlib.Path("server/templates/_board.html").read_text(encoding="utf-8")
+        assert "macro combatant(mon, side, label='', labels=None)" in src, (
+            "combatant() must accept a labels kwarg to pass the player's "
+            "capabilities.stat_stage_labels through to stat_stages_row"
+        )
+        assert "stat_stages_row(mon.stat_stages, labels)" in src, (
+            "combatant() must forward its labels kwarg into stat_stages_row, "
+            "not render with stat_stages_row's hard-coded Gen 3 default"
+        )
+
+    def test_every_combatant_call_site_passes_the_players_labels(self):
+        import pathlib
+        src = pathlib.Path("server/templates/_board.html").read_text(encoding="utf-8")
+        call_sites = [line for line in src.splitlines() if "combatant(" in line
+                      and "macro combatant" not in line]
+        assert call_sites, "no combatant(...) call sites found in _board.html"
+        for line in call_sites:
+            assert "labels=p.capabilities.stat_stage_labels" in line, (
+                f"combatant() call site does not pass the player's adapter-supplied "
+                f"labels, still on stat_stages_row's Gen 3 default: {line.strip()!r}"
+            )
+
+
 # ── is_doubles passthrough via tick handler ───────────────────────────────────
 
 class TestDoublesPassthrough:
