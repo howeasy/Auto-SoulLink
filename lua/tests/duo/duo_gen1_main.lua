@@ -1599,6 +1599,11 @@ local function linked_faint_scenario(active, explode)
             --     3/15 in that run -- `.enemyMovesFirst` goes `jp z, HandlePlayerMonFainted`
             --     (core.asm:410-417) and EXPLOSION can never run at all. Say so HERE: the receipt
             --     otherwise carried a bare `timeout` and then 12000 frames of escape_after_faint.
+            --     The foe-first probability is not a coin flip: speed order is compared and only
+            --     ties are randomised (pret engine/battle/core.asm:389-409 at 405b624). The hunt
+            --     weakens the linked mon by catch odds (gen1_rb_hunt_inputs.lua:167-186), so the
+            --     catch can sit at 3/15 HP going in, and a natural KO here is classified RNG so
+            --     the harness retries within scenario_attempt_limit.
             local why = committed.why
             local function battle_hp() return rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1) end
             if why ~= "player_move" then
@@ -1612,9 +1617,13 @@ local function linked_faint_scenario(active, explode)
             log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(why),
                     committed.selected_move or 0xFF, tostring(committed.pp_before)))
             if why ~= "player_move" then
+                local final_hp = battle_hp()
                 driver.close()
+                if final_hp == 0 then
+                    return false, "RNG: the wild foe knocked the linked mon out before EXPLOSION"
+                end
                 return false, fmt("EXPLOSION never executed (%s): the wild foe took the turn "
-                                  .. "first and the linked mon is at %d HP", tostring(why), battle_hp())
+                                  .. "first and the linked mon is at %d HP", tostring(why), final_hp)
             end
         else
             -- B is parked INSIDE DisplayBattleMenu, one loop head too late for the queued write,
