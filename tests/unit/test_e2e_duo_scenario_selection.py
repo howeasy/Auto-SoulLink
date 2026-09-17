@@ -23,7 +23,8 @@ from e2e_duo import GAMES, SCENARIOS, DuoRun, scenario_applies, scenarios_for  #
 GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
                       "admit_randomized_new", "soft_reset_new", "trade_decline_new",
-                      "explode_new", "pc_ops_new", "changebox_new", "whiteout_new")
+                      "explode_new", "pc_ops_new", "changebox_new", "whiteout_new",
+                      "type_clause_new", "species_clause_new", "poison_new")
 
 
 @pytest.mark.parametrize("game", sorted(GAMES))
@@ -142,6 +143,39 @@ def test_whiteout_new_is_registered_for_gen1_new_and_nothing_else():
     assert not scenario_applies("whiteout_new", "gen1_yellow")
     assert not scenario_applies("whiteout_new", "gen3_rr")
     assert "whiteout_new" not in scenarios_for("gen2")
+
+
+def test_the_clause_and_poison_scenarios_opt_in_to_gen1_new_alone():
+    """A4's two clause scenarios and A7's poison run gen1_new's driver and nothing else: the
+    gen1 family's own table has no such names, and neither does another generation's client."""
+    for name in ("type_clause_new", "species_clause_new", "poison_new"):
+        assert scenario_applies(name, "gen1_new")
+        assert name in scenarios_for("gen1_new")
+        assert not scenario_applies(name, "gen1")
+        assert not scenario_applies(name, "gen1_yellow")
+        assert not scenario_applies(name, "gen3_rr")
+        assert name not in scenarios_for("gen2")
+
+
+def test_the_clause_and_poison_entries_carry_their_flags_oracles_and_fixtures():
+    """--type-clause / --species-clause are what make the server's clause machinery run at all
+    (state.py:1750 gates the reroll on species_lock, :2629 on type_lock), and poison_new is the
+    per-instance fixture case: A on the town fixture, B on the battle one."""
+    assert SCENARIOS["type_clause_new"]["flags"] == ["--type-clause"]
+    assert SCENARIOS["species_clause_new"]["flags"] == ["--species-clause"]
+    assert SCENARIOS["poison_new"]["flags"] == []
+    assert SCENARIOS["poison_new"]["target"] == {"a": "town", "b": "battle"}
+    assert SCENARIOS["poison_new"]["timeout"] >= 2400
+    assert SCENARIOS["poison_new"]["frames"] >= 300000
+    for name, oracle in (("type_clause_new", "assert_type_clause_new_saved"),
+                         ("species_clause_new", "assert_species_clause_new_saved"),
+                         ("poison_new", "assert_poison_new_saved")):
+        entry = SCENARIOS[name]
+        assert entry["games"] == ("gen1_new",), name
+        assert entry["no_setup"] is True and entry["target"], name
+        assert entry["oracle"] == oracle
+        assert callable(getattr(DuoRun, oracle, None)), name
+    assert callable(getattr(DuoRun, "assert_species_clause_release", None))
 
 
 def test_whiteout_new_carries_the_gen1_new_shape_and_both_of_its_gates():

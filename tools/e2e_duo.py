@@ -166,6 +166,30 @@ SCENARIOS = {
     "whiteout_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                      "target": "battle", "no_setup": True, "frames": 2500000,
                      "oracle": "assert_whiteout_new_saved"},
+    # ── A4 (ledger D-5 / D-4) and A7 (S-4): the clause scenarios and the poison blackout ────
+    # D-5 type clause: link_new's Route 1 body against `--type-clause`. Route 1's whole table is
+    # Pidgey and Rattata (Normal/Flying and Normal, pret data/wild/maps/Route1.asm), so both
+    # catches always share Normal and the LATER catcher is rejected at link formation; which
+    # half that is falls out of the encounter RNG, so both halves run one body and read their
+    # verdict off the wire.
+    "type_clause_new": {"flags": ["--type-clause"], "timeout": 1800, "games": ("gen1_new",),
+                        "target": "battle", "no_setup": True, "frames": 2500000,
+                        "oracle": "assert_type_clause_new_saved"},
+    # D-4 species clause, ORDERED: A catches first, the runner releases B only once /api/status
+    # shows A's pending capture on route_1 (A_PENDING species=<n>), and B's first encounter then
+    # meets check 2 of the dupes clause (server/state.py:1788-1800). The reroll branch is a coin
+    # flip on Route 1's table, so a PASS that never observed it re-runs the whole scenario --
+    # see run_scenario_with_rng_retry / scenario_attempt_limit.
+    "species_clause_new": {"flags": ["--species-clause"], "timeout": 1800,
+                           "games": ("gen1_new",), "target": "battle", "no_setup": True,
+                           "frames": 2500000, "oracle": "assert_species_clause_new_saved"},
+    # S-4's poison half: B walks Route 1 into Viridian Forest, poisons its lone starter and
+    # blacks out to Pallet Town with NO link formed; A idles. The per-instance `target` is what
+    # keeps A encounter-free -- B needs the battle fixture (post parcel, on Route 1) and A the
+    # town one, so neither can meet a wild mon it was not driven to.
+    "poison_new": {"flags": [], "timeout": 2400, "games": ("gen1_new",),
+                   "target": {"a": "town", "b": "battle"}, "no_setup": True,
+                   "frames": 2500000, "oracle": "assert_poison_new_saved"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
@@ -250,6 +274,11 @@ RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
 GEN1_RNG_REASON_CLASS = {
     "hunt ended out-of-balls": "CAUSE_RNG",  # link_new/deadzone_new direct
     "link_new prerequisite failed: hunt ended out-of-balls": "CAUSE_RNG",  # nested trade/faint
+    # poison_new's two forest legs (duo_gen1_main.lua:2352,2385): the poisoning is a race
+    # between the wild table and the starter's HP, so both outcomes are the game's RNG and a
+    # whole-run retry is the right response. Any other poison leg failure is FINAL.
+    "RNG: the forest hunt spent its encounter budget without a poisoning": "CAUSE_RNG",
+    "RNG: a wild foe knocked the starter out before the poisoning": "CAUSE_RNG",
     "linked capture was not returned": "CONSEQUENCE",  # linked_faint_* without pair
     "linked capture was not returned to party": "CONSEQUENCE",  # trade_new without pair
     "B could not hold its linked mon active: out-of-balls": "FINAL",  # switch-turn death, not catch RNG
@@ -283,6 +312,33 @@ def retryable_gen1_rng(game, results, attempt):
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
     return "CAUSE_RNG" in classes and all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes)
+
+
+def scenario_attempt_limit(name, game):
+    """How many whole-run attempts a scenario may take.
+
+    One for everything that is not a `gen1_new` scenario; two for the ball-RNG retry
+    (`retryable_gen1_rng`); three for species_clause_new, whose PASS may still be a
+    coin-flip outcome (see `run_scenario_with_rng_retry`).
+    """
+    if game != "gen1_new" or name == "ball_gate_new":
+        return 1
+    return 3 if name == "species_clause_new" else 2
+
+
+def species_reroll_state(receipts):
+    """Did B's half of species_clause_new see the dupes reroll? 'observed' | 'unobserved' | 'unknown'.
+
+    B's own `PATH` line (duo_gen1_main.lua:779) is the source: `reroll_observed` means at
+    least one Route 1 encounter was A's family and the reroll prompt arrived, `unobserved`
+    means B caught the other species first and the branch never ran — a PASS either way.
+    """
+    text = receipts.get("b") or ""
+    if "PATH reroll_observed" in text:
+        return "observed"
+    if "PATH reroll_unobserved" in text:
+        return "unobserved"
+    return "unknown"
 
 
 JITTER_MARKER_RE = re.compile(r"JITTER requested=(\d+) applied=(\d+) attempt=(\d+)")
@@ -511,6 +567,14 @@ def ball_gate_after_labs_problems(labs, after):
     return problems
 
 
+def seen_counters(text, label):
+    """The driver's `SEEN name=<n> ...` line as a dict, or a failure that names it."""
+    match = re.search(r"^SEEN (.*)$", text or "", re.M)
+    if not match:
+        raise RuntimeError(f"{label}: no SEEN line in the receipt")
+    return {name: int(value) for name, value in re.findall(r"(\w+)=(\d+)", match.group(1))}
+
+
 def wait_for(desc, pred, timeout, interval=2.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -553,6 +617,33 @@ def extract_marks(text, tag):
         if len(parts) == 2 and parts[0] == tag:
             out.append(parts[1])
     return out
+
+
+# The saved money sits in the main-data block at sMainData + (wPlayerMoney - wMainDataStart),
+# the same derivation gen1_codec._BAG_COUNT uses for the bag. wMainDataStart/wPlayerMoney are
+# $D2F7/$D347 in R/B (pokered.sym:19158,19167) and $D2F6/$D346 in Yellow
+# (pokeyellow.sym:22386,22395) — the delta is +$50 either way, so the SAVED offset is the same
+# in all three titles: $25A3 + $50 = $25F3. ram/wram.asm:1749,1761 ('ds 3 ; BCD').
+# lua/tests/gen1_rb_point_fields.lua:11-19 is the WRAM twin of this decoder.
+SAVED_MONEY_DELTA = 0x50
+SAVED_MONEY_SIZE = 3
+
+
+def saved_money(sram):
+    """The player's money from a 32 KiB SRAM image, decoded from its three BCD bytes.
+
+    No helper existed for this: server/adapters/gen1_codec.py decodes the party, the boxes,
+    the bag and the checksums, but not money (grep 'money' over it returns nothing).
+    """
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+    from server.adapters import gen1_codec as codec
+
+    base = codec.SRAM_LAYOUT["sMainData"] + SAVED_MONEY_DELTA
+    value = 0
+    for byte in sram[base:base + SAVED_MONEY_SIZE]:
+        value = value * 100 + (byte >> 4) * 10 + (byte & 0x0F)
+    return value
 
 
 # ── Games ────────────────────────────────────────────────────────────────────
@@ -798,10 +889,23 @@ class DuoRun:
               f"B clean={clean_blue_fingerprint[:12]}")
         return contract
 
+    def _target_for(self, inst):
+        """The fixture target for ONE instance.
+
+        A scenario declares `target` as a string (both halves) or per instance as
+        {"a": ..., "b": ...}. poison_new is the reason for the second form: B has to boot the
+        battle fixture (post parcel, standing on Route 1) while A idles on the town one, or the
+        idle half would meet wild mons of its own and muddle the receipt.
+        """
+        target = self.cfg.get("target", "town")
+        if isinstance(target, dict):
+            return target[inst]
+        return target
+
     def _seed_instance_save(self, inst):
         from run_gb_gate import GENS, seed_saveram
 
-        seeded = seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
+        seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
                               dest_dir=self._saveram_dir(inst))
         if self.cfg.get("patched_saves"):
             patch_key = self.cfg["patched_saves"][inst]
@@ -1602,7 +1706,7 @@ class DuoRun:
         import gen1_playthrough as play
 
         return os.path.join(play.FIXTURES,
-                            f"{self.gcfg['fixture'][inst]}_{self.cfg.get('target', 'town')}.SaveRAM")
+                            f"{self.gcfg['fixture'][inst]}_{self._target_for(inst)}.SaveRAM")
 
     def _saved_gen1_party(self, inst, rom=None, save_name=None):
         """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM.
@@ -2183,6 +2287,394 @@ class DuoRun:
             self._pydec_note(f"{inst} saved party {len(party)} mon(s) = starter + rebuilt {key}, "
                              f"active box empty, decode valid")
 
+    def assert_species_clause_release(self):
+        """D-4's ordered release: the SERVER sees A's pending capture, then A_PENDING in B's file.
+
+        B blocks on its go-file (duo_gen1_main.lua:706-711) and then compares the species byte
+        it finds there against its own `wEnemyMonSpecies`, so the number has to be A's own WRAM
+        numbering. A logs it as `PENDING_CAPTURE <key> species=<n> level=<n>`; the server's
+        `pending_captures` entry is the independent confirmation that there is a capture for B
+        to duplicate (server/state.py:1556-1558). Both are waited for before the file is
+        written, the number written is A's, and what was written is recorded so the oracle can
+        hold B's own echo to it.
+        """
+        def a_pending():
+            return re.search(r"PENDING_CAPTURE (\S+) species=(\d+) level=(\d+)",
+                             read_result(self.scenario, "a") or "")
+
+        match = wait_for("A's PENDING_CAPTURE marker", a_pending, self.cfg["timeout"])
+        key, species = match.group(1), int(match.group(2))
+
+        def server_pending():
+            pending = (self._status() or {}).get("pending_captures") or {}
+            entry = (pending.get("route_1") or {}).get("a")
+            return entry if entry and entry.get("key") == key else None
+
+        entry = wait_for("the SERVER to hold A's pending capture on route_1", server_pending,
+                         self.cfg["timeout"])
+        if int(entry.get("species") or 0) != species:
+            raise RuntimeError(f"the server holds species {entry.get('species')} for {key}, "
+                               f"but A's receipt says {species} — the numbering B compares "
+                               f"against would be wrong")
+        self._go_one("b", [f"A_PENDING species={species}"])
+        self._species_release = {"key": key, "species": species}
+        print(f"[duo] species_clause_new: released B with A_PENDING species={species} "
+              f"(A's pending {key} confirmed on the server)")
+
+    def assert_type_clause_new_saved(self, results):
+        """D-5: one Route 1 catch each; the later one is rejected for the shared Normal type.
+
+        The rejected half's receipt: force_faint + memorialize + play_sound 26 + gui_prompt
+        "[x] Type clause: shared ..." + unresolve_area (server/state.py:1588-1618), then Box 12
+        at hp 0. The accepted half gets play_sound 22 and NOTHING else (:1593) — no
+        unresolve_area, which is why its JSON's unresolve_area is empty — and keeps its capture
+        quarantined in the CURRENT BOX: an unlinked capture with a non-empty party is boxed by
+        the capture-time box_mon (:1554-1557) and no party_mon follows while the area is
+        pending (duo_gen1_main.lua:657-659 says the same).
+
+        The card expected the rejected half's JSON to carry `force_faint`; the body's rejected
+        form carries prompt/memorialize/sound26/unresolve_area (duo_gen1_main.lua:592-596) and
+        force_faint is a COMMAND, so it is asserted from the half's own SEEN counter and from
+        the Box 12 read instead.
+
+        The area side: `pending_<rejected>`, `retry_areas[<rejected>]` gaining route_1
+        (:1596-1598, :1618). The `reason=` string the card quotes lives only in a DEBUG log
+        line (:913-925) and is published nowhere, so what is asserted is the durable pair.
+        """
+        for process in self.emus:
+            process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
+        self._artifact(self._result_path("a"), "A result receipt")
+        self._artifact(self._result_path("b"), "B result receipt")
+        verdicts = {}
+        for inst in ("a", "b"):
+            rows = re.findall(r"^TYPE_CLAUSE (\{.*\})$", results[inst], re.M)
+            if len(rows) != 1:
+                raise RuntimeError(f"{inst} logged {len(rows)} TYPE_CLAUSE line(s), expected "
+                                   f"exactly one")
+            try:
+                verdicts[inst] = json.loads(rows[0])
+            except ValueError as exc:
+                raise RuntimeError(f"{inst}'s TYPE_CLAUSE line is not JSON: {rows[0]!r}") from exc
+        by_verdict = {row.get("verdict"): inst for inst, row in verdicts.items()}
+        if set(by_verdict) != {"rejected", "accepted"}:
+            raise RuntimeError(f"the halves' verdicts were "
+                               f"{sorted(row.get('verdict') for row in verdicts.values())}, "
+                               f"expected exactly one rejected and one accepted")
+        rejected, accepted = by_verdict["rejected"], by_verdict["accepted"]
+        rj, ac = verdicts[rejected], verdicts[accepted]
+
+        prompt = rj.get("prompt") or ""
+        if not prompt.startswith("[x] Type clause: shared"):
+            raise RuntimeError(f"{rejected}'s prompt is {prompt!r}, not an [x] Type clause: "
+                               f"shared one")
+        if "Normal" not in prompt:
+            raise RuntimeError(f"the type-clause prompt did not name Normal: {prompt!r}")
+        if rj.get("memorialize") is not True or rj.get("sound26") is not True:
+            raise RuntimeError(f"{rejected}'s verdict lacks memorialize/sound26: {rj}")
+        if not rj.get("unresolve_area"):
+            raise RuntimeError(f"{rejected} was never sent unresolve_area: {rj}")
+        marker(results[rejected],
+               re.escape(f"MEMORIAL {rj['key']} box12=true hp=0"), "rejected Box 12 receipt")
+
+        rj_seen = seen_counters(results[rejected], f"{rejected} SEEN line")
+        ac_seen = seen_counters(results[accepted], f"{accepted} SEEN line")
+        if rj_seen.get("force_faint", 0) < 1 or rj_seen.get("memorialize", 0) < 1:
+            raise RuntimeError(f"{rejected}'s SEEN counters are {rj_seen}; the rejected capture "
+                               f"had to be force-fainted and memorialized")
+        if ac_seen.get("force_faint", 0) or ac_seen.get("memorialize", 0):
+            raise RuntimeError(f"{accepted}'s SEEN counters are {ac_seen}; the accepted half is "
+                               f"told SE_BOO and nothing else")
+        if ac.get("force_faint") is not False:
+            raise RuntimeError(f"{accepted}'s verdict reports force_faint={ac.get('force_faint')!r}")
+        if ac.get("type_prompt"):
+            raise RuntimeError(f"{accepted} got the rejection prompt too: {ac['type_prompt']!r}")
+        if ac.get("unresolve_area"):
+            raise RuntimeError(f"{accepted} was sent unresolve_area ({ac['unresolve_area']!r}); "
+                               f"only the rejected half is told to retry")
+
+        status = self._status() or {}
+        keyed = [entry for entry in (status.get("links") or [])
+                 if {entry.get("a_key"), entry.get("b_key")} & {rj.get("key"), ac.get("key")}]
+        if keyed:
+            raise RuntimeError(f"a clause-rejected pair still formed a link: {keyed}")
+        pending = (status.get("pending_captures") or {}).get("route_1") or {}
+        if set(pending) != {accepted}:
+            raise RuntimeError(f"route_1's pending captures are {sorted(pending)}, expected "
+                               f"only the accepted half {accepted}")
+        if pending[accepted].get("key") != ac.get("key"):
+            raise RuntimeError(f"route_1 holds {pending[accepted].get('key')} for {accepted}, "
+                               f"expected {ac.get('key')}")
+        area_state = (status.get("area_states") or {}).get("route_1")
+        if area_state != f"pending_{rejected}":
+            raise RuntimeError(f"area_states.route_1 is {area_state!r}, expected "
+                               f"pending_{rejected}")
+        document = self._reconnect_document()
+        retry = (document.get("retry_areas") or {}).get(rejected) or []
+        if "route_1" not in retry:
+            raise RuntimeError(f"retry_areas[{rejected}] is {retry}; the rejection has to leave "
+                               f"route_1 retryable")
+        self._pydec_note(f"D-5 {rejected} rejected for {prompt!r} and left route_1 pending_"
+                         f"{rejected} (retry_areas); {accepted} holds {ac.get('key')} pending")
+
+        for inst, key, boxed in ((rejected, rj["key"], "memorial"), (accepted, ac["key"], "current")):
+            sram, party, current_box, codec = self._saved_gen1_party(inst)
+            in_party = [codec.key(mon) for mon in party]
+            in_box = [codec.key(mon) for mon in current_box]
+            if key in in_party:
+                raise RuntimeError(f"{inst}'s saved party still holds {key}: {in_party}")
+            if boxed == "memorial":
+                if key in in_box:
+                    raise RuntimeError(f"{inst}'s current box still holds the rejected {key}: "
+                                       f"{in_box}")
+                verdict = codec.verify_boxes(sram)
+                box12 = verdict["boxes"][12]
+                if not box12["valid"]:
+                    raise RuntimeError(f"{inst}'s Box 12 checksum does not match (stored "
+                                       f"{box12['stored']:02X}, calculated "
+                                       f"{box12['calculated']:02X})")
+                memorial = codec.decode_box(
+                    sram[box12["offset"]:box12["offset"] + codec.BOX_SIZE])
+                if [(codec.key(mon), mon["hp"]) for mon in memorial] != [(key, 0)]:
+                    raise RuntimeError(f"{inst}'s Box 12 holds "
+                                       f"{[(codec.key(mon), mon['hp']) for mon in memorial]}, "
+                                       f"expected {key} at hp 0")
+                self._pydec_note(f"{inst} saved Box 12 holds the rejected {key} at HP 0")
+            else:
+                if not any(codec.key(mon) == key for mon in current_box):
+                    raise RuntimeError(f"{inst}'s current box is {in_box}, expected the "
+                                       f"quarantined {key}")
+                self._pydec_note(f"{inst} saved current box holds the quarantined pending {key}")
+        for inst in ("a", "b"):
+            marker(results[inst], r"SAVE_WITNESS type_clause_new", f"{inst} save witness")
+
+    def assert_species_clause_new_saved(self, results):
+        """D-4: A's pending capture, B's reroll (or its absence), and the link that follows.
+
+        Shared half: A's verdict has capture=1 and no force_faint; B echoes the species number
+        the runner wrote (A's own numbering, `_species_release`) and logs one ENCOUNTER line per
+        battle; exactly one PATH line decides the branch; the pair is ALIVE on route_1 with both
+        keys; both halves saved starter + own catch with no copy left in the current box.
+
+        Observed half (`PATH reroll_observed`): every REROLL_SEEN names A's species, its prompt
+        is the emoji-free "Dupes clause: <NAME> -- reroll!" the server queues
+        (server/state.py:1726-1738), and events.json carries the matching `reroll` row whose
+        text carries the 🔁 prefix (server/server.py:1833-1834). `dead_zone` must not appear at
+        all: B's RUN from a notified duplicate is exempted by `dupe_notified_areas`
+        (state.py:1866-1872) and A simply caught.
+
+        Unobserved half: the same checks with the reroll asserted ABSENT, so an unobserved PASS
+        is still a complete account of what happened. The runner re-runs the whole scenario in
+        that case (`run_scenario_with_rng_retry`) and says so in its own line.
+        """
+        for process in self.emus:
+            process.wait(timeout=30)
+        a_text, b_text = results["a"], results["b"]
+        release = getattr(self, "_species_release", None)
+        if not release:
+            raise RuntimeError("the live release leg never ran; B's receipt cannot be read "
+                               "against a species the runner never confirmed")
+
+        def clause_line(inst, player):
+            rows = re.findall(r"^SPECIES_CLAUSE (\{.*\})$", results[inst], re.M)
+            if len(rows) != 1:
+                raise RuntimeError(f"{inst} logged {len(rows)} SPECIES_CLAUSE line(s), "
+                                   f"expected exactly one")
+            try:
+                row = json.loads(rows[0])
+            except ValueError as exc:
+                raise RuntimeError(f"{inst}'s SPECIES_CLAUSE line is not JSON: {rows[0]!r}") from exc
+            if row.get("player") != player:
+                raise RuntimeError(f"{inst}'s SPECIES_CLAUSE names player {row.get('player')!r}")
+            return row
+
+        aj = clause_line("a", "a")
+        bj = clause_line("b", "b")
+        pending = marker(a_text, r"PENDING_CAPTURE (\S+) species=(\d+) level=\d+",
+                         "A pending capture")
+        if pending.group(1) != release["key"] or int(pending.group(2)) != release["species"]:
+            raise RuntimeError(f"A's PENDING_CAPTURE is {pending.group(1)} species="
+                               f"{pending.group(2)}, but the runner released B with "
+                               f"{release}")
+        if aj.get("capture") != 1 or aj.get("force_faint"):
+            raise RuntimeError(f"A's verdict is capture={aj.get('capture')} "
+                               f"force_faint={aj.get('force_faint')}; the first catcher keeps "
+                               f"its capture and is never force-fainted")
+        marker(b_text, re.escape(f"A_PENDING species={release['species']}"), "B's echo of the "
+               "runner's mark")
+        if bj.get("dupe_species") != release["species"]:
+            raise RuntimeError(f"B's verdict says dupe_species={bj.get('dupe_species')}, the "
+                               f"runner wrote {release['species']}")
+
+        encounters = [(int(i), int(s), d == "true") for i, s, d
+                      in re.findall(r"^ENCOUNTER (\d+) species=(\d+) dupe_of_a=(\w+)$",
+                                    b_text, re.M)]
+        if not encounters:
+            raise RuntimeError("B logged no ENCOUNTER line; the reroll decision has no receipt")
+        paths = re.findall(r"^PATH (reroll_\w+)$", b_text, re.M)
+        if len(paths) != 1:
+            raise RuntimeError(f"B logged {len(paths)} PATH line(s), expected exactly one")
+        path = paths[0]
+        if path not in ("reroll_observed", "reroll_unobserved"):
+            raise RuntimeError(f"B's PATH is {path!r}")
+        reroll_seen = re.findall(r"^REROLL_SEEN species=(\d+) prompt=(.*)$", b_text, re.M)
+        events = self._reconnect_events()  # newest-first: server.py:1508 appendleft
+        reroll_rows = [row for row in events if row.get("type") == "reroll"]
+        if [row for row in events if row.get("type") == "dead_zone"]:
+            raise RuntimeError("events.json carries a dead_zone row; the notified duplicate's "
+                               "RUN is exempt (state.py:1866-1872) and A caught")
+        if path == "reroll_observed":
+            if not reroll_seen:
+                raise RuntimeError("PATH says reroll_observed but no REROLL_SEEN line exists")
+            for species_text, prompt in reroll_seen:
+                if int(species_text) != release["species"]:
+                    raise RuntimeError(f"the reroll ran on species {species_text}, not A's "
+                                       f"{release['species']}")
+                if not re.fullmatch(r"Dupes clause: .+ -- reroll!", prompt):
+                    raise RuntimeError(f"the reroll prompt is {prompt!r}, not the server's "
+                                       f"emoji-free 'Dupes clause: <NAME> -- reroll!'")
+            if not reroll_rows:
+                raise RuntimeError("PATH says reroll_observed but events.json has no reroll row")
+            if not any("🔁" in (row.get("text") or "") for row in reroll_rows):
+                raise RuntimeError(f"the reroll row carries no 🔁 prefix: {reroll_rows}")
+            self._pydec_note(f"D-4 reroll observed: {len(reroll_seen)} reroll(s) on species "
+                             f"{release['species']}, events.json row present")
+        else:
+            if reroll_seen or reroll_rows:
+                raise RuntimeError(f"PATH says {path} but the receipt has {len(reroll_seen)} "
+                                   f"REROLL_SEEN line(s) and events.json {len(reroll_rows)} "
+                                   f"reroll row(s)")
+            self._pydec_note(f"D-4 reroll not observed: B met the other Route 1 species on "
+                             f"{len(encounters)} battle(s); D-4's branch stays partial")
+
+        status = self._status() or {}
+        live = [entry for entry in (status.get("links") or []) if entry.get("area_id") == "route_1"]
+        if (len(live) != 1 or live[0].get("status") != "alive"
+                or live[0].get("a_key") != aj.get("key") or live[0].get("b_key") != bj.get("key")):
+            raise RuntimeError(f"route_1's link is {live}, expected an alive pair "
+                               f"{aj.get('key')} <-> {bj.get('key')}")
+        durable = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
+        if (len(durable) != 1 or durable[0].get("status") != "alive"
+                or durable[0].get("a", {}).get("key") != aj.get("key")
+                or durable[0].get("b", {}).get("key") != bj.get("key")):
+            raise RuntimeError(f"the durable route_1 pair is {durable}")
+        for inst in ("a", "b"):
+            marker(results[inst], re.escape("SAVE_WITNESS species_clause_new_" + inst),
+                   f"{inst} save witness")
+        for inst, key in (("a", aj.get("key")), ("b", bj.get("key"))):
+            _sram, party, current_box, codec = self._saved_gen1_party(inst)
+            keys = [codec.key(mon) for mon in party]
+            if keys != [self._boot_keys[inst], key]:
+                raise RuntimeError(f"{inst}'s saved party is {keys}, expected starter + {key}")
+            if any(codec.key(mon) == key for mon in current_box):
+                raise RuntimeError(f"{inst}'s current box still holds {key}; the un-quarantine "
+                                   f"party_mon should have retrieved it")
+            self._pydec_note(f"{inst} saved starter + linked {key}, current box clear")
+
+    def assert_poison_new_saved(self, results):
+        """S-4's poison half: the one blackout that never goes through a battle.
+
+        B's receipt is the game-side story: the forest hunt's PSN status byte (bit 3 of
+        wPartyMon1Status, constants/battle_constants.asm:64), the poison_faint signal site
+        (wWhichPokemon = slot 0), one faint and one whiteout on the wire, the game's own
+        blackout flag ($FF in wOutOfBattleBlackout, poison.asm:107-114), the BCD-halved money
+        and the HealParty that ends ResetStatusAndHalveMoneyOnBlackout. A idles on the town
+        fixture and only saves.
+
+        WHAT THE SERVER MUST NOT DO. This scenario forms no link at all, so `_handle_whiteout`
+        (server/state.py:1982-2062) walks an EMPTY link table: nothing is retired, so no
+        memorial is written (`_queue_memorialize` is called only inside that loop), no
+        `game_over` is queued (that needs `retired and not player_picks`, :2044-2057) and no
+        rebuild is planned (:2359-2360 over no links). events.json therefore carries B's
+        `faint` and `whiteout` rows, the whiteout newer, and no `memorialize` row; neither
+        receipt carries `GAME_OVER RX game_over`. `no_catch` rows are deliberately NOT asserted
+        absent: the forest walk RUNs from incidental Route 1 battles, which is a real dead zone
+        for a route this scenario does not care about.
+        """
+        for process in self.emus:
+            process.wait(timeout=30)
+        a_text, b_text = results["a"], results["b"]
+        marker(a_text, r"(?m)^POISON_IDLE a$", "A idle receipt")
+        marker(a_text, r"SAVE_WITNESS poison_new_a", "A save witness")
+        baseline = marker(b_text, r"POISON_BASELINE key=(\S+) faint=(\d+) whiteout=(\d+) "
+                                  r"no_catch=(\d+) signals=(\d+)", "B baseline")
+        starter = baseline.group(1)
+        psn = marker(b_text, r"POISON_PSN encounters=(\d+) steps=(\d+) status=([0-9A-F]{2})",
+                     "B PSN receipt")
+        if int(psn.group(1)) < 1:
+            raise RuntimeError(f"POISON_PSN reports {psn.group(1)} encounter(s); a wild foe "
+                               f"inflicted the poison, so the hunt met at least one")
+        if int(psn.group(3), 16) & 0x08 == 0:
+            raise RuntimeError(f"wPartyMon1Status read ${psn.group(3)}, which carries no PSN "
+                               f"bit ($08)")
+        money_before = marker(b_text, r"(?m)^MONEY_BEFORE (\d+)$", "B money before")
+        marker(b_text, r"POISON_FAINT_SITE frame=\d+ slot=0", "B poison faint site")
+        marker(b_text, re.escape("TX faint " + starter), "B faint TX")
+        marker(b_text, r"(?m)^TX whiteout x1$", "B whiteout TX")
+        marker(b_text, r"BLACKOUT_FLAG frame=\d+ value=FF", "B blackout flag")
+        site = marker(b_text, r"BLACKOUT_SITE map=(\d+) x=(\d+) y=(\d+)", "B blackout site")
+        if site.groups() != ("0", "5", "6"):
+            raise RuntimeError(f"B blacked out to map={site.group(1)} "
+                               f"({site.group(2)},{site.group(3)}), not Pallet Town (0, 5, 6)")
+        money_after = marker(b_text, r"(?m)^MONEY_AFTER (\d+)$", "B money after")
+        expected = int(money_before.group(1)) // 2
+        if int(money_after.group(1)) != expected:
+            raise RuntimeError(f"money went {money_before.group(1)} -> {money_after.group(1)}; "
+                               f"the blackout halves it to {expected}")
+        marker(b_text, r"MONEY_HALVED before=\d+ after=\d+", "B money-halved receipt")
+        healed = marker(b_text, r"PARTY_HEALED key=(\S+) hp=(\d+)", "B healed party")
+        if healed.group(1) != starter or int(healed.group(2)) <= 0:
+            raise RuntimeError(f"PARTY_HEALED named {healed.group(1)} at hp={healed.group(2)}; "
+                               f"the blackout ends in HealParty on {starter}")
+        marker(b_text, r"SIGNAL_ORDER poison_faint->blackout ok", "B signal order")
+        marker(b_text, r"SAVE_WITNESS poison_new_b", "B save witness")
+
+        rows = self._reconnect_events()  # newest-first: server.py:1508 appendleft
+        whiteout_rows = [i for i, row in enumerate(rows) if row.get("type") == "whiteout"]
+        faint_rows = [i for i, row in enumerate(rows) if row.get("type") == "faint"]
+        if len(whiteout_rows) != 1 or len(faint_rows) != 1:
+            raise RuntimeError(f"events.json carries {len(faint_rows)} faint and "
+                               f"{len(whiteout_rows)} whiteout row(s), expected one of each")
+        if rows[whiteout_rows[0]].get("player") != "b" or rows[faint_rows[0]].get("player") != "b":
+            raise RuntimeError(f"the faint/whiteout rows are not B's: "
+                               f"{rows[faint_rows[0]].get('player')} / "
+                               f"{rows[whiteout_rows[0]].get('player')}")
+        if whiteout_rows[0] > faint_rows[0]:
+            raise RuntimeError("the whiteout row is older than the faint row; the whiteout has "
+                               "to follow the poison faint")
+        memorial_rows = [row for row in rows if row.get("type") == "memorialize"]
+        if memorial_rows:
+            raise RuntimeError(f"events.json carries {len(memorial_rows)} memorialize row(s): "
+                               f"{memorial_rows}; a whiteout over an empty link table retires "
+                               f"nothing")
+        if re.search(r"GAME_OVER RX game_over", a_text + b_text):
+            raise RuntimeError("a client was told the run is over; with no link there was "
+                               "nothing to rebuild and nothing to end")
+        self._pydec_note(f"S-4 poison: PSN ${psn.group(3)} after {psn.group(1)} encounters, one "
+                         f"faint then whiteout on the wire, no memorial; the empty link table "
+                         f"left the server idle")
+
+        sram, party, _box, codec = self._saved_gen1_party("b")
+        if len(party) != 1:
+            raise RuntimeError(f"B's saved party holds {len(party)} mon(s), expected the lone "
+                               f"starter")
+        mon = party[0]
+        if codec.key(mon) != starter:
+            raise RuntimeError(f"B's saved party holds {codec.key(mon)}, not the poisoned "
+                               f"starter {starter}")
+        if mon["hp"] != mon["max_hp"] or mon["hp"] <= 0:
+            raise RuntimeError(f"B's saved starter is at {mon['hp']}/{mon['max_hp']}; the "
+                               f"blackout's HealParty restores it")
+        if mon["status"] != 0:
+            raise RuntimeError(f"B's saved starter still carries status ${mon['status']:02X}; "
+                               f"the PSN bit had to be cleared by the same heal")
+        money_saved = saved_money(sram)
+        if money_saved != int(money_after.group(1)):
+            raise RuntimeError(f"B's saved money is {money_saved}; the blackout left "
+                               f"{money_after.group(1)} in RAM")
+        self._pydec_note(f"B saved the starter at {mon['hp']}/{mon['max_hp']} status 0 and "
+                         f"money {money_saved} (the receipt's MONEY_AFTER)")
+        self._saved_gen1_party("a")  # A's save has to qualify too
+
     def assert_trade_new(self, results):
         """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
         from pathlib import Path
@@ -2523,6 +3015,13 @@ class DuoRun:
                                    "explode_new", "pc_ops_new"):
                 self.go()
                 self.assert_link_new()
+            elif self.scenario in ("type_clause_new", "poison_new"):
+                # Both halves hunt (or idle) on their own; every verdict is read off the wire
+                # and the saved states, so the runner's only job is to release them together.
+                self.go()
+            elif self.scenario == "species_clause_new":
+                self.go()
+                self.assert_species_clause_release()
             elif self.scenario == "whiteout_new":
                 # The extra gate is this scenario's own: both halves must be BOXED as far as
                 # the server is concerned before either may leave the PC, because the blackout
@@ -2660,7 +3159,8 @@ class DuoRun:
         if getattr(self, "_pydec_path", None):
             os.makedirs(os.path.dirname(self._pydec_path), exist_ok=True)
             with open(self._pydec_path, "w", encoding="utf-8") as handle:
-                handle.write(f"attempt {self.attempt} of {1 if self.cfg.get('cold_boot') else 2}\n")
+                handle.write(f"attempt {self.attempt} of "
+                             f"{scenario_attempt_limit(self.scenario, getattr(self, 'game', ''))}\n")
         try:
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
@@ -2712,8 +3212,18 @@ class DuoRun:
 
 
 def run_scenario_with_rng_retry(name, args):
-    """A new DuoRun for each attempt means a new server/data dir and reseeded battery saves."""
-    limit = 2 if args.game == "gen1_new" and name != "ball_gate_new" else 1
+    """A new DuoRun for each attempt means a new server/data dir and reseeded battery saves.
+
+    Two retry reasons share one attempt budget. The ball RNG is the original one
+    (`retryable_gen1_rng`, attempt 1 only). The second is species_clause_new's own: D-4's
+    reroll branch is a coin flip on Route 1's 6-Pidgey/4-Rattata table, so a run that PASSED
+    without observing it is not D-4 evidence — the whole scenario is re-run (fresh server,
+    fresh data dir, reseeded battery saves, jittered idle count) up to the limit, and if it is
+    still unobserved the PASS stands with a line saying so. A FAILED attempt is never
+    re-run for this reason: retrying a real failure would only multiply it.
+    """
+    limit = scenario_attempt_limit(name, args.game)
+    reroll_retry = name == "species_clause_new" and args.game == "gen1_new"
     for attempt in range(1, limit + 1):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
@@ -2729,10 +3239,26 @@ def run_scenario_with_rng_retry(name, args):
         pydec = os.path.join(BUILD, f"e2e_{name}_pydec_result.txt")
         if os.path.exists(pydec):
             shutil.copyfile(pydec, os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
+        if reroll_retry and ok:
+            state = species_reroll_state(receipts)
+            if state == "observed":
+                print(f"[duo] species_clause_new: reroll branch observed on attempt {attempt}")
+                return ok, attempt
+            if attempt < limit:
+                print("[duo] species_clause_new: reroll branch not observed on attempt "
+                      f"{attempt}; re-running the whole scenario with fresh state")
+                continue
+            line = (f"[duo] species_clause_new: reroll branch NOT observed after {limit} "
+                    f"attempts (D-4 stays partial)")
+            print(line)
+            if os.path.exists(pydec):
+                with open(pydec, "a", encoding="utf-8") as handle:
+                    handle.write(line + "\n")
+            return ok, attempt
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt):
             return ok, attempt
-        print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt 2 of 2 "
-              "with a fresh server, run directory and SaveRAM seeds")
+        print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "
+              f"{attempt + 1} of {limit} with a fresh server, run directory and SaveRAM seeds")
     return False, limit
 
 
@@ -2786,13 +3312,13 @@ def main():
                      f"in SCENARIOS if it should.")
         names = [args.scenario]
     results = {}
-    limit = 2 if args.game == "gen1_new" else 1
     for name in names:
         print(f"\n========== scenario: {name} ==========")
         results[name] = run_scenario_with_rng_retry(name, args)
     print("\n========== summary ==========")
     for name, (ok, attempt) in results.items():
-        print(f"  {name}: {'PASS' if ok else 'FAIL'} (attempt {attempt} of {limit})")
+        print(f"  {name}: {'PASS' if ok else 'FAIL'} "
+              f"(attempt {attempt} of {scenario_attempt_limit(name, args.game)})")
     sys.exit(0 if all(ok for ok, _ in results.values()) else 1)
 
 

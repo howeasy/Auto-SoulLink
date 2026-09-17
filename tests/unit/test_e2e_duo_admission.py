@@ -199,8 +199,10 @@ def test_python_oracle_receipt_persists_facts_and_terminal_result(runner, tmp_pa
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False})()
     assert runner.run() is True
+    # The header asks `scenario_attempt_limit`, which is keyed on the game; this stub carries
+    # no `game` (the real gen1_new bound of 2 is pinned by its own test), so it reads "of 1".
     assert Path(runner._pydec_path).read_text(encoding="utf-8").splitlines() == [
-        "attempt 1 of 2", "public admission fact valid", "PYDEC: PASS asserted scenario facts"]
+        "attempt 1 of 1", "public admission fact valid", "PYDEC: PASS asserted scenario facts"]
 
 
 def test_python_oracle_receipt_ends_fail_on_an_assertion_error(runner, tmp_path):
@@ -608,6 +610,17 @@ def test_ball_gate_driver_failure_never_gets_rng_retry(tmp_path, monkeypatch):
         ("RESULT: PASS (caught)", duo.RNG_OUT_OF_BALLS, 2, False),
         ("RESULT: FAIL (linked capture was not returned)",
          "RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", 2, False),
+        # poison_new's two forest legs: the poisoning is a race between the wild table and the
+        # starter's HP, so both are the game's RNG. Other poison leg failures are NOT.
+        ("RESULT: PASS (caught)",
+         "RESULT: FAIL (RNG: the forest hunt spent its encounter budget without a poisoning)",
+         1, True),
+        ("RESULT: PASS (caught)",
+         "RESULT: FAIL (RNG: a wild foe knocked the starter out before the poisoning)", 1, True),
+        ("RESULT: PASS (caught)", "RESULT: FAIL (the poison shuttle ended poison-fainted)",
+         1, False),
+        ("RESULT: PASS (caught)", "RESULT: FAIL (the walk to Viridian Forest ended unknown-map)",
+         1, False),
     ],
 )
 def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expected):
@@ -623,9 +636,26 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
     ("RESULT: FAIL (force_faint never arrived)", "FINAL"),
     ("RESULT: FAIL (B could not hold its linked mon active: out-of-balls)", "FINAL"),
     ("RESULT: FAIL (link_new prerequisite failed: hunt ended stuck)", "FINAL"),
+    ("RESULT: FAIL (RNG: the forest hunt spent its encounter budget without a poisoning)",
+     "CAUSE_RNG"),
+    ("RESULT: FAIL (RNG: a wild foe knocked the starter out before the poisoning)", "CAUSE_RNG"),
+    # the same legs' non-RNG terminals stay FINAL
+    ("RESULT: FAIL (the forest hunt ended hunt-stuck)", "FINAL"),
+    ("RESULT: FAIL (the walk to Viridian Forest ended unknown-map)", "FINAL"),
+    ("RESULT: FAIL (the poison shuttle ended unknown-map)", "FINAL"),
 ])
 def test_gen1_result_reason_table_is_exact(line, classification):
     assert duo.classify_gen1_result(line) == classification
+
+
+def test_the_poison_rng_phrases_are_the_bodies_own_return_strings():
+    """The table has to match the body VERBATIM: a reworded Lua return would silently turn a
+    real failure into a whole-run retry (or the reverse), and nothing else would notice."""
+    body = (REPO / "lua" / "tests" / "duo" / "duo_gen1_main.lua").read_text(encoding="utf-8")
+    for phrase in ("RNG: the forest hunt spent its encounter budget without a poisoning",
+                   "RNG: a wild foe knocked the starter out before the poisoning"):
+        assert duo.GEN1_RNG_REASON_CLASS[phrase] == "CAUSE_RNG"
+        assert f'return false, "{phrase}"' in body, phrase
 
 
 @pytest.mark.parametrize(("outcomes", "expected_attempts", "passed"), [
