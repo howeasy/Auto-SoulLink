@@ -206,7 +206,8 @@ def test_the_wrapper_deadline_covers_every_attempt():
         assert mod.deadline_for(name) == (SCENARIOS[name]["timeout"]
                                           * scenario_attempt_limit(name, "gen1_new")) + 300, name
     assert mod.deadline_for("species_clause_new") == (
-        3 * SCENARIOS["species_clause_new"]["timeout"] + 300)
+        scenario_attempt_limit("species_clause_new", "gen1_new")
+        * SCENARIOS["species_clause_new"]["timeout"] + 300)
 
 
 def test_the_wrapper_resolves_fixtures_per_instance_not_as_a_cross_product():

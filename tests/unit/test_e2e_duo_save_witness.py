@@ -89,9 +89,10 @@ def test_matching_witness_emits_the_exact_line(tmp_path, monkeypatch):
 
 def test_one_byte_different_fails_and_names_the_address(tmp_path, monkeypatch):
     run, results, notes, _build = _stub(tmp_path, monkeypatch)
-    # 0x3523 is sMainDataCheckSum: written ~120 frames AFTER the hook (save.asm:170-172), which
-    # is why the message names the address rather than just "different".
-    address = duo.SAVE_WITNESS_POST_HOOK[0]
+    # Any byte will do; the message names the SRAM address rather than just "different", which
+    # is what a reader can look up (the live lane confirmed the hook-time dump is byte-identical
+    # to the flushed slice, so there is no expected-difference byte to exclude).
+    address = SITE + 0x100
     blob = bytearray(_image()[SITE:duo.SAVE_WITNESS_END])
     blob[address - SITE] ^= 0xFF
     (Path(duo.BUILD) / "e2e_link_new_a_1_witness.bin").write_bytes(bytes(blob))
@@ -99,7 +100,7 @@ def test_one_byte_different_fails_and_names_the_address(tmp_path, monkeypatch):
         run.check_save_witness(results)
     message = str(excinfo.value)
     assert "a: the save witness does not match the flushed SaveRAM" in message
-    assert "0x3523" in message and "sMainDataCheckSum" in message, message
+    assert hex(address) in message, message
     assert notes[-1].endswith("match=false saves=2"), notes[-1]
 
 
@@ -118,11 +119,30 @@ def test_missing_witness_with_a_save_marker_fails(tmp_path, monkeypatch):
 
 
 def test_missing_witness_quotes_a_failed_dump(tmp_path, monkeypatch):
-    run, results, _notes, build = _stub(tmp_path, monkeypatch,
-                                        a_extra="\nSAVE_WITNESS_DUMP_FAIL cannot open "
-                                                "patch/build/x_witness.bin")
+    run, results, _notes, build = _stub(tmp_path, monkeypatch)
+    # A save that never produced a dump: the plain marker is there, the FAIL is the only dump
+    # outcome, and the file is absent.
+    results["a"] = "\n".join(
+        line for line in results["a"].splitlines() if not line.startswith("SAVE_WITNESS_DUMP "))
+    results["a"] += "\nSAVE_WITNESS_DUMP_FAIL cannot open patch/build/x_witness.bin"
     (build / "e2e_link_new_a_1_witness.bin").unlink()
     with pytest.raises(RuntimeError, match="SAVE_WITNESS_DUMP_FAIL: cannot open"):
+        run.check_save_witness(results)
+
+
+def test_a_failed_dump_after_a_successful_one_is_not_masked(tmp_path, monkeypatch):
+    """The file on disk is then the EARLIER save's, which can be byte-identical to what the
+    final save would have written — so the outcomes are read in order."""
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    results["a"] += "\nSAVE_WITNESS_DUMP_FAIL cannot open patch/build/x_witness.bin"
+    with pytest.raises(RuntimeError, match="the last dump attempt was"):
+        run.check_save_witness(results)
+
+
+def test_a_gapped_dump_ordinal_is_rejected(tmp_path, monkeypatch):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    results["a"] = results["a"].replace("saves=2 frame=900", "saves=3 frame=900")
+    with pytest.raises(RuntimeError, match=r"ordinals are \[1, 3\]"):
         run.check_save_witness(results)
 
 

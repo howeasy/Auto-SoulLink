@@ -148,7 +148,8 @@ def test_type_clause_oracle_reads_both_directions(tmp_path, monkeypatch, rejecte
      "did not name Normal"),
     ('"memorialize": true', '"memorialize": false', "lacks memorialize/sound26"),
     ('"sound26": true', '"sound26": false', "lacks memorialize/sound26"),
-    ('"unresolve_area": "route_1"', '"unresolve_area": ""', "never sent unresolve_area"),
+    ('"unresolve_area": "route_1"', '"unresolve_area": ""', "not 'route_1'"),
+    ('"unresolve_area": "route_1"', '"unresolve_area": "?"', "not 'route_1'"),
     ("box12=true hp=0", "box12=false hp=40", "rejected Box 12 receipt"),
     ("force_faint=1 memorialize=1", "force_faint=0 memorialize=0", "had to be force-fainted"),
 ])
@@ -462,9 +463,8 @@ def test_release_gate_writes_a_pending_into_bs_go_file(tmp_path, monkeypatch):
 def test_release_gate_refuses_a_server_that_has_no_pending(tmp_path, monkeypatch):
     run, _key_a = _release_stub(tmp_path, monkeypatch)
     run._status = lambda: {"pending_captures": {}}
-    real = duo.wait_for
-    monkeypatch.setattr(duo, "wait_for",
-                        lambda desc, pred, timeout, interval=2.0: real(desc, pred, 0.2, 0.01))
+    # The gate waits through DuoRun.wait_for now, so the budget is the scenario's own.
+    run.cfg["timeout"] = 0.2
     with pytest.raises(TimeoutError, match="SERVER to hold A's pending capture"):
         run.assert_species_clause_release()
 
@@ -478,9 +478,7 @@ def test_release_gate_refuses_a_server_numbering_mismatch(tmp_path, monkeypatch)
 def test_release_gate_waits_for_as_marker(tmp_path, monkeypatch):
     run, _key_a = _release_stub(tmp_path, monkeypatch)
     monkeypatch.setattr(duo, "read_result", lambda scenario, inst: "CAUGHT AAAA:1111:01\n")
-    real = duo.wait_for
-    monkeypatch.setattr(duo, "wait_for",
-                        lambda desc, pred, timeout, interval=2.0: real(desc, pred, 0.2, 0.01))
+    run.cfg["timeout"] = 0.2  # the gate waits through DuoRun.wait_for now
     with pytest.raises(TimeoutError, match="PENDING_CAPTURE marker"):
         run.assert_species_clause_release()
 
@@ -522,7 +520,7 @@ def _retry_driver(monkeypatch, tmp_path, outcomes, name="species_clause_new"):
     monkeypatch.setattr(duo, "DuoRun", FakeRun)
     monkeypatch.setattr(duo, "read_result", fake_result)
     (tmp_path / "e2e_species_clause_new_pydec_result.txt").write_text(
-        "attempt 1 of 3\n", encoding="utf-8")
+        f"attempt 1 of {duo.scenario_attempt_limit(name, 'gen1_new')}\n", encoding="utf-8")
     args = type("Args", (), {"game": "gen1_new", "idle_jitter": 0})()
     return built, args
 
@@ -549,16 +547,16 @@ def test_species_retry_reruns_a_pass_until_the_branch_shows(capsys, tmp_path, mo
     assert "NOT observed" not in out
 
 
-def test_species_retry_gives_up_after_three_and_records_it(capsys, tmp_path, monkeypatch):
-    built, args = _retry_driver(monkeypatch, tmp_path,
-                                ["reroll_unobserved"] * 3)
-    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (True, 3)
-    assert built == [1, 2, 3]
+def test_species_retry_gives_up_after_the_whole_budget_and_records_it(capsys, tmp_path,
+                                                                     monkeypatch):
+    built, args = _retry_driver(monkeypatch, tmp_path, ["reroll_unobserved"] * 8)
+    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (True, 8)
+    assert built == list(range(1, 9))
     out = capsys.readouterr().out
-    assert ("[duo] species_clause_new: reroll branch NOT observed after 3 attempts "
+    assert ("[duo] species_clause_new: reroll branch NOT observed after 8 attempts "
             "(D-4 stays partial)") in out
     pydec = (tmp_path / "e2e_species_clause_new_pydec_result.txt").read_text(encoding="utf-8")
-    assert "reroll branch NOT observed after 3 attempts (D-4 stays partial)" in pydec
+    assert "reroll branch NOT observed after 8 attempts (D-4 stays partial)" in pydec
 
 
 def test_the_reroll_retry_is_species_clause_only(capsys, tmp_path, monkeypatch):
@@ -588,7 +586,7 @@ def test_species_retry_keeps_the_ball_rng_retry_on_top(capsys, tmp_path, monkeyp
 
 
 def test_scenario_attempt_limit_is_the_single_source(capsys, tmp_path, monkeypatch):
-    assert duo.scenario_attempt_limit("species_clause_new", "gen1_new") == 3
+    assert duo.scenario_attempt_limit("species_clause_new", "gen1_new") == 8
     assert duo.scenario_attempt_limit("link_new", "gen1_new") == 2
     assert duo.scenario_attempt_limit("poison_new", "gen1_new") == 2
     assert duo.scenario_attempt_limit("ball_gate_new", "gen1_new") == 1
@@ -638,9 +636,7 @@ def test_the_release_gate_still_times_out_when_a_never_finishes(tmp_path, monkey
     """No marker and no terminal RESULT: the old TimeoutError stands (a hung hunt is not RNG)."""
     run, _key_a = _release_stub(tmp_path, monkeypatch)
     monkeypatch.setattr(duo, "read_result", lambda scenario, inst: "")
-    real = duo.wait_for
-    monkeypatch.setattr(duo, "wait_for",
-                        lambda desc, pred, timeout, interval=2.0: real(desc, pred, 0.2, 0.01))
+    run.cfg["timeout"] = 0.2
     with pytest.raises(TimeoutError, match="PENDING_CAPTURE marker"):
         run.assert_species_clause_release()
 
@@ -648,9 +644,54 @@ def test_the_release_gate_still_times_out_when_a_never_finishes(tmp_path, monkey
 def test_the_give_up_annotation_is_archived_with_its_attempt(capsys, tmp_path, monkeypatch):
     """r2 finding 5: the archive used to be copied BEFORE the line was appended, so the
     third-attempt PYDEC copy was missing the partial-coverage note."""
-    built, args = _retry_driver(monkeypatch, tmp_path, ["reroll_unobserved"] * 3)
-    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (True, 3)
-    archived = (tmp_path / "e2e_species_clause_new_pydec_attempt3_result.txt").read_text(
+    built, args = _retry_driver(monkeypatch, tmp_path, ["reroll_unobserved"] * 8)
+    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (True, 8)
+    archived = (tmp_path / "e2e_species_clause_new_pydec_attempt8_result.txt").read_text(
         encoding="utf-8")
-    assert "reroll branch NOT observed after 3 attempts (D-4 stays partial)" in archived
-    assert built == [1, 2, 3]
+    assert "reroll branch NOT observed after 8 attempts (D-4 stays partial)" in archived
+    assert built == list(range(1, 9))
+
+
+# ── H-1 (i)/(j): the ordered reroll sequence and the species budget phrase ──
+
+def test_species_clause_oracle_refuses_a_dupe_encounter_after_the_catch(tmp_path, monkeypatch):
+    """The observed branch is an ORDER: every dupe escape comes before the non-dupe catch."""
+    run, results, _ka, _kb = _species_stub(tmp_path, monkeypatch)
+    results["b"] = results["b"].replace(
+        "ENCOUNTER 2 species=19 dupe_of_a=false",
+        "ENCOUNTER 2 species=19 dupe_of_a=false\nENCOUNTER 3 species=16 dupe_of_a=true")
+    with pytest.raises(RuntimeError, match="not the dupe escape"):
+        run.assert_species_clause_new_saved(results)
+
+
+def test_species_clause_oracle_refuses_a_reroll_count_that_disagrees(tmp_path, monkeypatch):
+    run, results, _ka, _kb = _species_stub(tmp_path, monkeypatch)
+    results["b"] = results["b"].replace('"rerolls": 1', '"rerolls": 2')
+    with pytest.raises(RuntimeError, match="says 2 reroll"):
+        run.assert_species_clause_new_saved(results)
+
+
+def test_species_clause_oracle_refuses_a_reroll_newer_than_the_link_row(tmp_path, monkeypatch):
+    """events.json is newest-first: a reroll row above the link row would put the prompt after
+    the catch that ended the rerolling."""
+    run, results, _ka, _kb = _species_stub(tmp_path, monkeypatch)
+    rows = json.loads((tmp_path / "events.json").read_text(encoding="utf-8"))
+    rows.append({"ts": "0", "player": "b", "type": "linked", "text": "✓ Linked"})  # older
+    rows.insert(0, {"ts": "4", "player": "b", "type": "reroll", "text": "🔁 again"})  # newest
+    (tmp_path / "events.json").write_text(json.dumps(rows), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="NEWER than the link row"):
+        run.assert_species_clause_new_saved(results)
+
+
+def test_the_species_budget_phrase_is_retryable_on_later_attempts():
+    """The reroll observation and the hunt's RNG budget are the same attempts, so this phrase
+    keeps its retry inside the limit — unlike the ball miss, which is attempt-1 only."""
+    miss = f"RESULT: FAIL ({duo.SPECIES_BUDGET_MISS})"
+    assert duo.classify_gen1_result(miss) == "CAUSE_RNG"
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 3, limit=8)
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 7, limit=8)
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 8,
+                                      limit=8)
+    # a second ball miss still does not
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": duo.RNG_OUT_OF_BALLS},
+                                      2, limit=8)

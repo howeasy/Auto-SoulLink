@@ -294,3 +294,14 @@ def test_poison_oracle_refuses_a_link_table_that_is_not_empty(tmp_path, monkeypa
          "b": {"key": "BBBB:2222:02"}}]}), encoding="utf-8")
     with pytest.raises(RuntimeError, match="links.json carries 1 link"):
         run.assert_poison_new_saved(results)
+
+
+@pytest.mark.parametrize("command", ["rebuild_start", "rebuild_done", "party_mon"])
+def test_poison_oracle_refuses_an_orphan_rebuild_command(tmp_path, monkeypatch, command):
+    """H-1c: with no link the server had nothing to rebuild or retrieve, and none of these
+    commands produces an events.json row (server.py:1945-1954 logs only on a link transition),
+    so the receipts are the only place they can show."""
+    run, results, _starter = _poison_stub(tmp_path, monkeypatch)
+    results["b"] += f"\nRX {command} key={_starter}"
+    with pytest.raises(RuntimeError, match=f"received a {command} command"):
+        run.assert_poison_new_saved(results)

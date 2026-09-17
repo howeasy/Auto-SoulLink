@@ -171,12 +171,11 @@ def _whiteout_stub(tmp_path, monkeypatch, box1_hint=False):
     return run, results
 
 
-def _fast_waits(monkeypatch):
+def _fast_waits(run):
     """The gate's own budgets are minutes (the Lua gives the go-file 900 s); the pin only needs
-    the failure path, so the same `wait_for` runs with a short deadline."""
-    real = duo.wait_for
-    monkeypatch.setattr(duo, "wait_for",
-                        lambda desc, pred, timeout, interval=2.0: real(desc, pred, 0.2, 0.01))
+    the failure path, so the scenario timeout — which both of the gate's waits read — is what
+    gets shrunk. The module-level `wait_for` is no longer on this path: DuoRun.wait_for is."""
+    run.cfg["timeout"] = 0.2
 
 
 # ── the oracle ──────────────────────────────────────────────────────────────
@@ -338,7 +337,7 @@ def test_both_boxed_gate_names_the_half_the_server_still_lists(tmp_path, monkeyp
     so a server that still lists A's key must hold both halves at the PC, and say which one."""
     run, results = _whiteout_stub(tmp_path, monkeypatch)
     monkeypatch.setattr(duo, "read_result", lambda scenario, inst: results[inst])
-    _fast_waits(monkeypatch)
+    _fast_waits(run)
     run._raw_state = lambda: {"_live": {"party_keys": {"a": [run._link_keys["a"]], "b": []}}}
     with pytest.raises(RuntimeError, match="a: party_keys still lists"):
         run.assert_whiteout_both_boxed()
@@ -348,7 +347,7 @@ def test_both_boxed_gate_names_the_half_the_server_still_lists(tmp_path, monkeyp
 def test_both_boxed_gate_names_a_missing_field(tmp_path, monkeypatch):
     run, results = _whiteout_stub(tmp_path, monkeypatch)
     monkeypatch.setattr(duo, "read_result", lambda scenario, inst: results[inst])
-    _fast_waits(monkeypatch)
+    _fast_waits(run)
     run._raw_state = lambda: {"_live": {"party_keys": {"b": []}}}
     with pytest.raises(RuntimeError, match="a: party_keys: the server published no such field"):
         run.assert_whiteout_both_boxed()
@@ -358,6 +357,6 @@ def test_both_boxed_gate_waits_for_the_deposit_marker(tmp_path, monkeypatch):
     run, results = _whiteout_stub(tmp_path, monkeypatch)
     results["b"] = results["b"].replace("DEPOSITED_FOR_REBUILD", "PC_BOX_AFTER party=1")
     monkeypatch.setattr(duo, "read_result", lambda scenario, inst: results[inst])
-    _fast_waits(monkeypatch)
+    _fast_waits(run)
     with pytest.raises(RuntimeError, match="the deposit never landed — b: no DEPOSITED_FOR_REBUILD"):
         run.assert_whiteout_both_boxed()

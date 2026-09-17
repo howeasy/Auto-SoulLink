@@ -401,6 +401,25 @@ def test_the_stub_carries_the_attempt_scaled_jitter(runner, tmp_path, monkeypatc
         assert f"attempt = {attempt}," in stub
 
 
+def test_the_stub_carries_the_scenario_timeout(runner, tmp_path, monkeypatch):
+    """The bodies that wait on a partner with a bounded loop read it (poison_new's A half:
+    `D.timeout_secs or 2400`), so the harness has to write it into every stub."""
+    monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_a, **_k: None)
+    monkeypatch.setattr(duo.subprocess, "Popen", lambda *_a, **_k: type("P", (), {"pid": 42})())
+    runner.cfg = duo.SCENARIOS["poison_new"]
+    runner.gcfg = dict(duo.GAMES["gen1_new"])
+    runner.battery_boot = True
+    runner.tcp_port = 1234
+    runner.go_files = {inst: str(tmp_path / f"{inst}.go") for inst in ("a", "b")}
+    runner.emus, runner.emu_by_inst = [], {}
+    runner.args = type("Args", (), {"idle_jitter": 0})()
+    runner.attempt = 1
+    Path(duo.BUILD).mkdir(parents=True, exist_ok=True)
+    runner.launch_instance("a", seed=False)
+    stub = (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+    assert f"timeout_secs = {runner.cfg['timeout']}," in stub
+
+
 def test_reconnect_cannot_pass_on_two_client_passes_when_wrong_save_leg_was_not_run(runner):
     runner.scenario = "reconnect_new"
     runner.game = "gen1_new"
@@ -641,6 +660,10 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
     ("RESULT: FAIL (RNG: a wild foe knocked the starter out before the poisoning)", "CAUSE_RNG"),
     # the same legs' non-RNG terminals stay FINAL
     ("RESULT: FAIL (the forest hunt ended hunt-stuck)", "FINAL"),
+    # The route module's new terminal: an unexpected battle is a driver fault, not the game's
+    # RNG, so it must NOT earn a retry (the reason carries a parenthetical, hence FINAL).
+    ("RESULT: FAIL (the forest hunt ended unexpected-battle (wIsInBattle=1 party_hp=12))",
+     "FINAL"),
     ("RESULT: FAIL (the walk to Viridian Forest ended unknown-map)", "FINAL"),
     ("RESULT: FAIL (the poison shuttle ended unknown-map)", "FINAL"),
 ])
@@ -1099,7 +1122,8 @@ def _reset_stub(tmp_path, monkeypatch):
     links = b'{"links": [], "player_identity": {}}'
     (tmp_path / "run" / "links.json").write_bytes(links)
     run._reset_baseline = {"status": {}, "links": [], "links_bytes": links, "events": [],
-                           "a_hellos": 1}
+                           "a_hellos": 1,
+                           "links_baseline_path": str(tmp_path / "run" / "links_baseline.json")}
     run._reconnect_events = lambda: [
         {"player": "a", "type": "hello", "text": "Connected (Red, 1 mons)"},
         {"player": "b", "type": "hello", "text": "Connected (Blue, 1 mons)"},
@@ -1144,6 +1168,43 @@ def test_soft_reset_oracle_refuses_a_changed_link_document(tmp_path, monkeypatch
     run = _reset_stub(tmp_path, monkeypatch)
     (tmp_path / "run" / "links.json").write_bytes(b'{"links": [{"area_id": "route_1"}]}')
     with pytest.raises(RuntimeError, match="links.json changed"):
+        run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+def test_soft_reset_oracle_accepts_a_reordered_but_equal_document(tmp_path, monkeypatch):
+    """The lane's actual diff: A's re-hello re-inserted its per-player entries, so the same
+    state was written with `player_identity` before `links`. Canonical equality is the claim."""
+    run = _reset_stub(tmp_path, monkeypatch)
+    notes = []
+    run._pydec_note = notes.append
+    run._reset_baseline = dict(
+        run._reset_baseline,
+        links_bytes=b'{"links": [], "player_identity": {"a": {"ot_id": "1234"}, '
+                    b'"b": {"ot_id": "5678"}}}')
+    (tmp_path / "run" / "links.json").write_bytes(
+        b'{"player_identity": {"b": {"ot_id": "5678"}, "a": {"ot_id": "1234"}}, "links": []}')
+    run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+    assert any("only in ORDER" in note and "player_identity (a|b -> b|a)" in note
+               for note in notes), notes
+
+
+def test_soft_reset_oracle_accepts_a_reordered_set_derived_list(tmp_path, monkeypatch):
+    """`retry_areas`/`bonus_keys`/`pending_memorials` are `list(set)` (server/state.py:3077-3082):
+    equal contents can serialize in either order, and only a value difference may fail."""
+    run = _reset_stub(tmp_path, monkeypatch)
+    run._reset_baseline = dict(run._reset_baseline,
+                               links_bytes=b'{"links": [], "retry_areas": {"a": ["route_1", "route_2"]}}')
+    (tmp_path / "run" / "links.json").write_bytes(
+        b'{"links": [], "retry_areas": {"a": ["route_2", "route_1"]}}')
+    run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+def test_soft_reset_oracle_names_the_changed_path_and_both_values(tmp_path, monkeypatch):
+    run = _reset_stub(tmp_path, monkeypatch)
+    run._reset_baseline = dict(run._reset_baseline,
+                               links_bytes=b'{"links": [], "run_over": false}')
+    (tmp_path / "run" / "links.json").write_bytes(b'{"links": [], "run_over": true}')
+    with pytest.raises(RuntimeError, match=r"at \$\.run_over: False -> True"):
         run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
 
 
@@ -1289,8 +1350,8 @@ def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_dele
     run._links_json = lambda: [{"area_id": "route_1", "status": "memorial", "cause": "battle",
                                 "a": {"key": key_a}, "b": {"key": key_b}}]
     (tmp_path / "slink.log").write_text(
-        f"[a] faint \u2192 force_faint b:{key_b}\n"
-        f"[b] faint \u2192 force_faint a:{key_a}\n"
+        f"[a] faint \u2192 force_explode b:{key_b}\n"
+        f"[b] faint \u2192 force_explode a:{key_a}\n"
         f"pair in route_1 fully memorialized\n", encoding="utf-8")
 
     b_text = "\n".join([
@@ -1392,7 +1453,7 @@ def _empty_box1(image):
 
 
 def _pc_stub(tmp_path, monkeypatch, box1_stored=None, box_index=0, initialised=False,
-             memorial=False):
+             memorial=False, active_box_holds=None):
     """The pc_ops/changebox stub: real fixture bytes for both cartridges, the box state the
     scenario leaves behind, and the server surfaces the oracle reads."""
     a_sram, _a_rom = _fixture_save("red")
@@ -1429,8 +1490,11 @@ def _pc_stub(tmp_path, monkeypatch, box1_stored=None, box_index=0, initialised=F
                                 "a": {"key": _PC_LINK_A}, "b": {"key": link_b}}]
 
     def saved(inst, **_kwargs):
+        # The ACTIVE box (sCurBoxData), which is what an ordinary save carries under the main
+        # checksum — `active_box_holds` is the negative case (the release did not happen).
+        active = ([_fake_mon(active_box_holds)] if inst == "a" and active_box_holds else [])
         if inst == "a":
-            return bytes(a_image), a_party, [], codec
+            return bytes(a_image), a_party, active, codec
         return bytes(b_image), b_party, [], codec
 
     monkeypatch.setattr(run, "_saved_gen1_party", saved)
@@ -1489,16 +1553,18 @@ def test_pc_ops_oracle_refuses_a_third_partner_command(tmp_path, monkeypatch):
             {"a": receipts["a"], "b": receipts["b"] + "\nPC_PARTNER_RX 3 box_mon " + _PC_LINK_B})
 
 
-def test_pc_ops_oracle_refuses_a_saved_box_that_still_holds_the_key(tmp_path, monkeypatch):
-    run, receipts = _pc_stub(tmp_path, monkeypatch)
-    monkeypatch.setattr(codec, "decode_box", lambda _blob: [_fake_mon(run._link_keys["a"])])
+def test_pc_ops_oracle_refuses_an_active_box_that_still_holds_the_key(tmp_path, monkeypatch):
+    """The saved ACTIVE box (sCurBoxData) still holding the released key: the release never
+    reached the cartridge, whatever the receipt's own markers said."""
+    run, receipts = _pc_stub(tmp_path, monkeypatch, active_box_holds=_PC_LINK_A)
     with pytest.raises(RuntimeError, match="still holds the released key"):
         run.assert_pc_ops_new_saved(receipts)
 
 
-def test_pc_ops_oracle_refuses_a_box_checksum_that_does_not_match(tmp_path, monkeypatch):
-    run, receipts = _pc_stub(tmp_path, monkeypatch, box1_stored=0x01)
-    with pytest.raises(RuntimeError, match="Box 1 checksum does not match"):
+def test_pc_ops_oracle_refuses_an_active_box_holding_anything(tmp_path, monkeypatch):
+    """Anything left in the active box means the withdraw/release pair did not finish."""
+    run, receipts = _pc_stub(tmp_path, monkeypatch, active_box_holds="EEEE:5555:05")
+    with pytest.raises(RuntimeError, match="the release left it empty"):
         run.assert_pc_ops_new_saved(receipts)
 
 

@@ -278,6 +278,9 @@ GEN1_RNG_REASON_CLASS = {
     # poison_new's two forest legs (duo_gen1_main.lua:2352,2385): the poisoning is a race
     # between the wild table and the starter's HP, so both outcomes are the game's RNG and a
     # whole-run retry is the right response. Any other poison leg failure is FINAL.
+    # `the forest hunt ended unexpected-battle (...)` (the route module's new terminal) matches
+    # no key here ON PURPOSE: an unexpected battle is a driver fault, not the game's RNG, so it
+    # classifies FINAL and the run is not retried.
     "RNG: the forest hunt spent its encounter budget without a poisoning": "CAUSE_RNG",
     "RNG: a wild foe knocked the starter out before the poisoning": "CAUSE_RNG",
     "linked capture was not returned": "CONSEQUENCE",  # linked_faint_* without pair
@@ -286,6 +289,10 @@ GEN1_RNG_REASON_CLASS = {
     # A_PENDING mark and B reported this (duo_gen1_main.lua:776). CONSEQUENCE, not CAUSE_RNG:
     # it only earns a retry when the pair also carries A's out-of-balls phrase.
     "runner never released B (A_PENDING)": "CONSEQUENCE",
+    # species_clause_new's own budget phrase: B's battle cap (8) exhausted by duplicates. The
+    # reroll observation and the hunt's RNG budget are the same attempts, so this one is
+    # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
+    "RNG: the species hunt met only duplicates within its battle budget": "CAUSE_RNG",
     "B could not hold its linked mon active: out-of-balls": "FINAL",  # switch-turn death, not catch RNG
 }
 
@@ -311,12 +318,29 @@ def _has_exact_rng_miss(text):
     return classify_gen1_result(text) == "CAUSE_RNG"
 
 
-def retryable_gen1_rng(game, results, attempt):
-    """Only a game's missed sole ball may restart one whole gen1_new run."""
-    if game != "gen1_new" or attempt != 1:
+SPECIES_BUDGET_MISS = "RNG: the species hunt met only duplicates within its battle budget"
+
+
+def retryable_gen1_rng(game, results, attempt, limit=2):
+    """May these receipts restart one whole gen1_new run?
+
+    Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
+    on the other. Later attempts are only for the species hunt's own budget phrase — its
+    reroll observation and its RNG budget are the same attempts, so a duplicate-flooded hunt
+    gets another whole run within `limit` (addendum (j)); a second ball miss does not.
+    """
+    if game != "gen1_new" or attempt >= limit:
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
-    return "CAUSE_RNG" in classes and all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes)
+    if "CAUSE_RNG" not in classes:
+        return False
+    if not all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes):
+        return False
+    if attempt == 1:
+        return True
+    causes = [text for text in results.values()
+              if classify_gen1_result(text) == "CAUSE_RNG"]
+    return bool(causes) and all(SPECIES_BUDGET_MISS in (text or "") for text in causes)
 
 
 def scenario_attempt_limit(name, game):
@@ -328,13 +352,13 @@ def scenario_attempt_limit(name, game):
     """
     if game != "gen1_new" or name == "ball_gate_new":
         return 1
-    return 3 if name == "species_clause_new" else 2
+    return 8 if name == "species_clause_new" else 2
 
 
 def species_reroll_state(receipts):
     """Did B's half of species_clause_new see the dupes reroll? 'observed' | 'unobserved' | 'unknown'.
 
-    B's own `PATH` line (duo_gen1_main.lua:779) is the source: `reroll_observed` means at
+    B's own `PATH` line (duo_gen1_main.lua:882) is the source: `reroll_observed` means at
     least one Route 1 encounter was A's family and the reroll prompt arrived, `unobserved`
     means B caught the other species first and the branch never ran — a PASS either way.
     """
@@ -592,19 +616,16 @@ SAVE_WITNESS_END = 0x8000
 SAVE_WITNESS_BYTES = SAVE_WITNESS_END - SAVE_WITNESS_START  # 0x7B68 = 31592
 SAVE_WITNESS_DUMP_RE = re.compile(
     r"SAVE_WITNESS_DUMP path=(\S+) bytes=(\d+) saves=(\d+) frame=(\d+)")
-# What the save routine writes AFTER the hook, and therefore cannot be in the dump: `SaveSAV`
-# recomputes the main checksum ~120 frames later (save.asm:170-172, after DelayFrames) and
-# stores it at sMainDataCheckSum — inside this slice. Named here so a mismatch message can say
-# whether the difference is that byte or something real.
-SAVE_WITNESS_POST_HOOK = (0x3523,)
+# A failed or skipped dump is a trailing marker: the file on disk is then an EARLIER save's,
+# which is why the check reads the dump outcomes in order (see check_save_witness).
+SAVE_WITNESS_TROUBLE_RE = re.compile(r"SAVE_WITNESS_DUMP(?:_FAIL|_SKIPPED)\b")
 
 
 def save_witness_diff(site, flushed, limit=4):
     """The SRAM addresses where the hook-time dump and the flushed file disagree.
 
     A mismatch message that said only "different" would send the next reader hunting for a
-    defect; the addresses are in SRAM terms, so a difference confined to
-    `SAVE_WITNESS_POST_HOOK` reads as the timing fact it is.
+    defect; the addresses are in SRAM terms, which is what a reader can look up.
     """
     out = []
     for index, (a, b) in enumerate(zip(site, flushed, strict=True)):
@@ -613,6 +634,98 @@ def save_witness_diff(site, flushed, limit=4):
             if len(out) >= limit:
                 break
     return out
+
+
+def rel_to_repo(path):
+    """`os.path.relpath(path, REPO)`, or the path itself when they are on different drives.
+
+    The harness's data dirs are temp dirs on C: and the repo need not be on C: — a bare
+    `os.path.relpath` raises there, turning a diagnostic message into the crash it was
+    reporting.
+    """
+    try:
+        return os.path.relpath(path, REPO)
+    except ValueError:
+        return str(path)
+
+
+class ClientFinishedEarly(Exception):
+    """A wait whose predicate is still false while a cartridge has already ended.
+
+    The whiteout_new hang (2026-09-17): both receipts carried
+    `RESULT: FAIL (the deposit did not send party_to_box for the linked key)` and the runner
+    sat in the BOTH_BOXED gate's 1800 s budget anyway — no orchestrate-time wait looked at the
+    receipts at all. `DuoRun.wait_for` raises this instead, `run()` records it and returns False,
+    and `run_scenario_with_rng_retry` still classifies the receipts (a mid-wait ball miss has to
+    keep its retry).
+    """
+
+    def __init__(self, finished: dict, awaited: str):
+        self.finished = dict(finished)
+        self.awaited = awaited
+        detail = "; ".join(f"{inst}: {reason or 'no RESULT'}"
+                           for inst, reason in sorted(self.finished.items()))
+        super().__init__(f"a client RESULT landed before {awaited!r} ({detail})")
+
+
+# links.json's per-player maps are dicts (insertion-ordered) and three of them are set-derived
+# lists (`list(keys)`/`list(areas)`, server/state.py:3077-3082) — Python's set iteration order
+# is not canonical, so two saves of the SAME state can differ in order alone. That is why the
+# soft-reset comparison is canonical, and why exactly those three paths are sorted before
+# comparing: a value difference still fails, an order difference does not. Nothing is excluded
+# silently — the note names every path whose order differed.
+_LINKS_SET_PATHS = ("retry_areas", "bonus_keys", "pending_memorials")
+
+
+def canonical_json(document) -> str:
+    """`document` with key order and set-derived list order normalized."""
+    normalized = json.loads(json.dumps(document))
+    for name in _LINKS_SET_PATHS:
+        node = normalized.get(name)
+        if isinstance(node, dict):
+            for player, values in node.items():
+                if isinstance(values, list):
+                    node[player] = sorted(values)
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
+
+
+def first_json_difference(left, right, path="$"):
+    """The first differing path and both values, or None when the documents are equal."""
+    if isinstance(left, dict) and isinstance(right, dict):
+        for key in sorted(set(left) | set(right)):
+            if key not in left or key not in right:
+                return (f"{path}.{key}", left.get(key, "<missing>"), right.get(key, "<missing>"))
+            found = first_json_difference(left[key], right[key], f"{path}.{key}")
+            if found:
+                return found
+        return None
+    if isinstance(left, list) and isinstance(right, list):
+        if len(left) != len(right):
+            return f"{path} (length)", len(left), len(right)
+        for index, (a, b) in enumerate(zip(left, right, strict=True)):
+            found = first_json_difference(a, b, f"{path}[{index}]")
+            if found:
+                return found
+        return None
+    if left != right:
+        return path, left, right
+    return None
+
+
+def reordered_json_keys(left, right):
+    """Top-level keys whose insertion order differs between two canonically equal documents."""
+    out = []
+    for key in sorted(set(left) | set(right)):
+        a, b = left.get(key), right.get(key)
+        if isinstance(a, dict) and isinstance(b, dict) and list(a) != list(b):
+            out.append(f"{key} ({'|'.join(list(a))} -> {'|'.join(list(b))})")
+    return out
+
+
+def terminal_result(text):
+    """The last `RESULT:` line of a receipt, or '' — the client's own terminal marker."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.startswith("RESULT:")]
+    return lines[-1] if lines else ""
 
 
 def wait_for(desc, pred, timeout, interval=2.0):
@@ -800,6 +913,36 @@ class DuoRun:
         self._same_save_artifact = None
 
     # ── lifecycle ────────────────────────────────────────────────────────────
+    def wait_for(self, desc, pred, timeout, interval=2.0):
+        """`wait_for`, with the cartridges' terminal RESULT lines as a second exit.
+
+        Every orchestrate-time wait goes through this (the module-level `wait_for` stays for
+        the places whose whole job is to collect a RESULT, and for callers outside a run). The
+        rule is deliberately NOT "any RESULT ends the wait": one half finishing first is normal
+        — A saves and exits while the runner is still waiting on B's markers (deadzone_new,
+        pc_ops_new, whiteout_new) — so a wait ends early only when nothing can satisfy it any
+        more:
+
+          * both receipts carry a RESULT (nothing is left running), or
+          * a receipt carries a FAIL, i.e. the run is already lost and the remaining wait can
+            only burn its budget.
+
+        The predicate is checked FIRST, so waits whose predicate IS the RESULT (wait_results,
+        the reconnect B-done wait) still return normally.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            value = pred()
+            if value:
+                return value
+            finished = {inst: terminal_result(read_result(self.scenario, inst))
+                        for inst in ("a", "b")}
+            failed = any(reason.startswith("RESULT: FAIL") for reason in finished.values())
+            if failed or all(finished.values()):
+                raise ClientFinishedEarly(finished, desc)
+            time.sleep(interval)
+        raise TimeoutError(f"timed out after {timeout}s waiting for {desc}")
+
     def start_server(self):
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
@@ -812,7 +955,7 @@ class DuoRun:
             # a `with` would close it out from under the still-running server.
             stdout=open(os.path.join(self.data_dir, "server.log"), "w"),  # noqa: SIM115
             stderr=subprocess.STDOUT)
-        wait_for("server HTTP up", lambda: self._status() is not None, 30)
+        self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
 
     def _saveram_dir(self, inst: str) -> str:
@@ -995,6 +1138,9 @@ class DuoRun:
             "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
             "go_file": self.go_files[inst].replace("\\", "/"),
             "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
+            # The scenario's own wall budget, for the bodies that wait on a partner with a
+            # bounded loop (poison_new's A half: `D.timeout_secs or 2400`).
+            "timeout_secs": self.cfg["timeout"],
         }
         if self.gcfg["uses_savestate"]:
             ss = self.cfg["savestate"]
@@ -1067,7 +1213,7 @@ class DuoRun:
             ka = extract_keys(read_result(self.scenario, "a"))
             kb = extract_keys(read_result(self.scenario, "b"))
             return (ka, kb) if ka and kb else None
-        ka, kb = wait_for("MYKEY lines from both instances", both, 120)
+        ka, kb = self.wait_for("MYKEY lines from both instances", both, 120)
         if set(ka.values()) & set(kb.values()):
             raise RuntimeError(f"key collision between instances: {ka} vs {kb}")
         print(f"[duo] keys: a={ka.get(0)} b={kb.get(0)}")
@@ -1081,7 +1227,7 @@ class DuoRun:
             players = st.get("players", {})
             return (players.get("a", {}).get("connected")
                     and players.get("b", {}).get("connected")) or None
-        wait_for("both players hello'd", both, 120)
+        self.wait_for("both players hello'd", both, 120)
         print("[duo] both players connected")
 
     def inject_link(self, a_key, b_key, area_id="duo"):
@@ -1092,7 +1238,7 @@ class DuoRun:
                 return r if r.get("ok") else None
             except Exception:
                 return None
-        wait_for("inject_link", linked, 60)
+        self.wait_for("inject_link", linked, 60)
         print(f"[duo] linked {a_key} <-> {b_key}")
 
     def assert_real_link_formed(self):
@@ -1114,7 +1260,7 @@ class DuoRun:
             a, b = caught("a"), caught("b")
             return (a, b) if a and b else None
 
-        a_key, b_key = wait_for("both instances to catch a wild mon", both_caught,
+        a_key, b_key = self.wait_for("both instances to catch a wild mon", both_caught,
                                 self.cfg["timeout"])
         print(f"[duo] real captures: a={a_key} b={b_key}")
 
@@ -1126,7 +1272,7 @@ class DuoRun:
                     return link
             return None
 
-        link = wait_for("the SERVER to pair the two real captures", linked, 180)
+        link = self.wait_for("the SERVER to pair the two real captures", linked, 180)
         area = link.get("area_id")
         print(f"[duo] ENCOUNTER LINK FORMED FROM REAL PLAY: "
               f"{a_key} <-> {b_key} in area={area}")
@@ -1214,7 +1360,7 @@ class DuoRun:
         caught INSIDE a dead zone" a fact instead of a race.
         """
         self._go_one("a")
-        area = wait_for("A's failed encounter to lock an area",
+        area = self.wait_for("A's failed encounter to lock an area",
                         self._dead_zone_area, self.cfg["timeout"])
         print(f"[duo] DEAD ZONE FROM REAL PLAY: {area}")
         a_area = self._area("a")
@@ -1222,16 +1368,16 @@ class DuoRun:
             raise RuntimeError(f"A played on {a_area} but {area} is what got locked")
 
         self._go_one("b")
-        wait_for("B to report its area", lambda: self._area("b"), 900)
+        self.wait_for("B to report its area", lambda: self._area("b"), 900)
         self._shared_area()      # raises with a readable message if the fixtures disagree
 
         # Wait on the RETIREMENT, not on B naming the mon. A ball leaving the bag plus the
         # memorial growing is the rule under test; whether B could still read the mon it
         # threw at is a race it does not need to win (see _caught).
-        wait_for("B to throw a ball inside the dead zone",
+        self.wait_for("B to throw a ball inside the dead zone",
                  lambda: "THREW " in (read_result(self.scenario, "b") or ""),
                  self.cfg["timeout"])
-        wait_for("B's client to retire the refused capture",
+        self.wait_for("B's client to retire the refused capture",
                  lambda: "REFUSED " in (read_result(self.scenario, "b") or ""), 900)
         b_key = self._caught("b")
         print(f"[duo] B threw in the dead area and the client retired "
@@ -1263,10 +1409,10 @@ class DuoRun:
         advance which it will be, so the verdicts are cross-checked here.
         """
         self.go()
-        wait_for("both instances to report their area",
+        self.wait_for("both instances to report their area",
                  lambda: self._area("a") and self._area("b"), 900)
         area = self._shared_area()
-        keys = wait_for("both instances to catch the forced species",
+        keys = self.wait_for("both instances to catch the forced species",
                         lambda: (self._caught("a"), self._caught("b"))
                         if self._caught("a") and self._caught("b") else None,
                         self.cfg["timeout"])
@@ -1281,7 +1427,7 @@ class DuoRun:
                         out[inst] = tag
             return out if len(out) == 2 else None
 
-        v = wait_for("both instances to report a verdict", verdicts, 900)
+        v = self.wait_for("both instances to report a verdict", verdicts, 900)
         if sorted(v.values()) != ["KEPT", "REJECTED"]:
             raise RuntimeError(f"expected exactly one rejection, got {v} — with both sides "
                                f"holding the same species the clause must fire exactly once")
@@ -1340,7 +1486,7 @@ class DuoRun:
                 return None
             return ball_gate_fact(receipt, label)
 
-        return wait_for(f"{inst} {label}", fact, timeout)
+        return self.wait_for(f"{inst} {label}", fact, timeout)
 
     def assert_ball_gate_new(self):
         """Stage the lab rivals separately; take every verdict from the server and receipts."""
@@ -1361,7 +1507,7 @@ class DuoRun:
             links = self._links_json()
             return links if len(links) == 1 else None
 
-        links = wait_for("starter gift pair", starter_link, 60)
+        links = self.wait_for("starter gift pair", starter_link, 60)
         problems = ball_gate_starters_problems(self._status() or {}, links,
                                                self._reconnect_events(), pre)
         if problems:
@@ -1390,7 +1536,7 @@ class DuoRun:
         if problems:
             raise RuntimeError("; ".join(problems))
         flips = {inst: self._wait_ball_fact(inst, "BALL_FLIP", 360) for inst in ("a", "b")}
-        wait_for("both server ball gates active", lambda: all(
+        self.wait_for("both server ball gates active", lambda: all(
             ((self._status() or {}).get("players") or {}).get(inst, {}).get("nuzlocke_active")
             for inst in ("a", "b")), 60)
         problems = ball_gate_flip_problems(self._status() or {}, flips)
@@ -1463,7 +1609,7 @@ class DuoRun:
         self.go()
         self.assert_link_new()
         for inst in ("a", "b"):
-            wait_for(f"{inst} link_new SAVE and reconnect hold",
+            self.wait_for(f"{inst} link_new SAVE and reconnect hold",
                      lambda i=inst: "RECONNECT_READY " + i in (read_result(self.scenario, i) or ""), 300)
         _sram, party, _current, codec = self._saved_gen1_party("a")
         if [codec.key(mon) for mon in party] != [self._boot_keys["a"], self._link_keys["a"]]:
@@ -1474,7 +1620,7 @@ class DuoRun:
         shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
 
         self.terminate_instance("a")
-        wait_for("A disconnected while B stays online", lambda: (
+        self.wait_for("A disconnected while B stays online", lambda: (
             (s := self._status()) and not s["players"]["a"]["connected"]
             and s["players"]["b"]["connected"]), 45)
         if self._reconnect_document().get("links") != baseline["links"].get("links"):
@@ -1482,14 +1628,14 @@ class DuoRun:
         self._pydec_note("C-2 A EmuHawk terminated; server/B live, link unchanged while A disconnected")
         self.launch_instance("a", phase="same_save", seed=False, expected_key=self._link_keys["a"])
         same_path = self._phase_result_path("a", "same_save")
-        wait_for("same-save A hello", lambda: "RECONNECT_HELLO same_save count=1" in (
+        self.wait_for("same-save A hello", lambda: "RECONNECT_HELLO same_save count=1" in (
             Path(same_path).read_text(encoding="utf-8") if os.path.exists(same_path) else ""), 180)
-        wait_for("server accepts A's same-save party", lambda: (
+        self.wait_for("server accepts A's same-save party", lambda: (
             (s := self._status()) and (a := s["players"]["a"]).get("connected")
             and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])), 60)
         old_a_hellos = sum(row.get("type") == "hello" and row.get("player") == "a"
                            for row in baseline["events"])
-        wait_for("durable accepted reconnect hello", lambda: sum(
+        self.wait_for("durable accepted reconnect hello", lambda: sum(
             row.get("type") == "hello" and row.get("player") == "a"
             for row in self._reconnect_events()) == old_a_hellos + 1, 30)
         same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
@@ -1505,7 +1651,7 @@ class DuoRun:
         self._pydec_note(f"C-2 same OT accepted; alive link {self._link_keys['a']} / "
                          f"{self._link_keys['b']}; party re-synced, zero duplicate gameplay events")
         self._append_reconnect_marker("a", "A_DONE_SAME")
-        wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in (
+        self.wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in (
             Path(same_path).read_text(encoding="utf-8") if os.path.exists(same_path) else ""), 60)
         final_same_receipt = Path(same_path).read_text(encoding="utf-8")
         if "RX force_faint" in final_same_receipt or "RX box_mon" in final_same_receipt:
@@ -1517,7 +1663,7 @@ class DuoRun:
         self._same_save_artifact = os.path.join(BUILD, "e2e_reconnect_new_a_same.SaveRAM")
         shutil.copyfile(correct_save, self._same_save_artifact)
         self.terminate_instance("a")
-        wait_for("same-save A socket closed before the wrong-save relaunch", lambda: (
+        self.wait_for("same-save A socket closed before the wrong-save relaunch", lambda: (
             (s := self._status()) and not s["players"]["a"]["connected"]), 45)
 
         wrong = getattr(self.args, "wrong_save", None)
@@ -1531,7 +1677,7 @@ class DuoRun:
             shutil.copyfile(wrong, correct_save)
             self.launch_instance("a", phase="wrong_save", seed=False)
             wrong_path = self._phase_result_path("a", "wrong_save")
-            wait_for("A wrong-save HUD", lambda: "WRONG_SAVE_HUD [x] WRONG SAVE: slot A" in (
+            self.wait_for("A wrong-save HUD", lambda: "WRONG_SAVE_HUD [x] WRONG SAVE: slot A" in (
                 Path(wrong_path).read_text(encoding="utf-8") if os.path.exists(wrong_path) else ""), 180)
             after_wrong = self._status() or {}
             problems = reconnect_wrong_problems(before_wrong_bytes, Path(self.data_dir, "links.json").read_bytes(),
@@ -1540,14 +1686,14 @@ class DuoRun:
                 raise RuntimeError("C-1 wrong-save refusal failed: " + "; ".join(problems))
             self._pydec_note(f"C-1 wrong OT {other_ot} rejected; links.json byte-identical, no gameplay events")
             self._append_reconnect_marker("a", "A_DONE_WRONG")
-            wait_for("wrong-save A phase PASS", lambda: "RESULT: PASS" in (
+            self.wait_for("wrong-save A phase PASS", lambda: "RESULT: PASS" in (
                 Path(wrong_path).read_text(encoding="utf-8") if os.path.exists(wrong_path) else ""), 60)
             self.emu_by_inst["a"].wait(timeout=30)
             self._live_complete["reconnect_new"] = True
             final_a = wrong_path
         shutil.copyfile(final_a, self._result_path("a"))
         self._append_reconnect_marker("b", "B_DONE")
-        wait_for("B stayed online through reconnect legs", lambda: "RESULT: PASS" in (
+        self.wait_for("B stayed online through reconnect legs", lambda: "RESULT: PASS" in (
             read_result(self.scenario, "b") or ""), 120)
         return self._live_complete.get("reconnect_new", False)
 
@@ -1669,11 +1815,25 @@ class DuoRun:
             raise RuntimeError("a REJECTED hello appeared during a same-save reset")
         if _event_counts(baseline["events"]) != _event_counts(rows):
             raise RuntimeError("gameplay event counts changed across the soft reset")
-        if self._links_bytes() != baseline["links_bytes"]:
-            raise RuntimeError("links.json changed across the soft reset")
+        current_bytes = self._links_bytes()
+        if current_bytes != baseline["links_bytes"]:
+            # Byte identity was the old claim, and it is too strong: a re-hello re-inserts
+            # per-player entries (dict order) and the set-derived lists are `list(set)`, so the
+            # same state can be written in a different order (see _LINKS_SET_PATHS). Canonical
+            # equality is the state claim; anything else fails with the first differing path.
+            original = json.loads((baseline["links_bytes"] or b"{}").decode("utf-8"))
+            current = json.loads((current_bytes or b"{}").decode("utf-8"))
+            if canonical_json(original) != canonical_json(current):
+                path, was, now = first_json_difference(original, current)
+                raise RuntimeError(f"links.json changed across the soft reset at {path}: "
+                                   f"{was!r} -> {now!r}")
+            self._pydec_note(f"links.json differs from the baseline only in ORDER "
+                             f"({'; '.join(reordered_json_keys(original, current)) or 'nested maps'}); "
+                             f"the state is identical, baseline kept at "
+                             f"{rel_to_repo(baseline['links_baseline_path'])}")
         self._pydec_note(f"server: A hellos {len(a_hellos)} = baseline {baseline['a_hellos']}+1, "
                          f"B {len(b_hellos)}, 0 REJECTED, gameplay counts unchanged, "
-                         f"links.json byte-identical")
+                         f"links.json canonically identical to the baseline")
 
         for inst, title in (("a", "red"), ("b", "blue")):
             fixture = Path(self._fixture_save_path(inst)).read_bytes()
@@ -1700,7 +1860,7 @@ class DuoRun:
             if any(_has_exact_rng_miss(read_result(self.scenario, inst)) for inst in ("a", "b")):
                 raise GameRngMiss("a cartridge missed its sole ball before the pair formed")
             return None
-        a_key, b_key = wait_for("both instances to catch a wild mon", both_caught,
+        a_key, b_key = self.wait_for("both instances to catch a wild mon", both_caught,
                                 self.cfg["timeout"])
         print(f"[duo] real captures: a={a_key} b={b_key}")
 
@@ -1709,7 +1869,7 @@ class DuoRun:
                 if {link.get("a_key"), link.get("b_key")} == {a_key, b_key}:
                     return link
             return None
-        link = wait_for("the SERVER to pair the two real captures", linked, 180)
+        link = self.wait_for("the SERVER to pair the two real captures", linked, 180)
         st = self._status() or {}
         links = st.get("links") or []
         area_state = (st.get("area_states") or {}).get("route_1")
@@ -1888,7 +2048,12 @@ class DuoRun:
             raise RuntimeError(f"linked faint did not become a battle-caused memorial: {link}")
         with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
             log_text = handle.read()
-        dead_transition = log_text.find(f"[a] faint → force_faint b:{self._link_keys['b']}")
+        # The server logs the command it actually chose: force_explode under Explode Mode,
+        # force_faint otherwise (server/state.py:2677-2685). Selecting it once keeps the
+        # server-log and client checks from disagreeing about the same run.
+        expected_cmd = "force_explode" if explode else "force_faint"
+        dead_transition = log_text.find(
+            f"[a] faint → {expected_cmd} b:{self._link_keys['b']}")
         memorial_transition = log_text.find("pair in route_1 fully memorialized")
         if dead_transition < 0 or memorial_transition <= dead_transition:
             raise RuntimeError("server lacked ordered DEAD propagation then full memorial receipt")
@@ -1928,11 +2093,11 @@ class DuoRun:
         if f'"event":"faint","key":"{self._link_keys["a"]}"' not in a_text:
             raise RuntimeError("A's engine battle_faint did not emit its linked key")
         # `explode=True` is Explode Mode's half: the server sends force_explode instead of
-        # force_faint (server/state.py:2678-2680 picks the name) and the client's coercion
-        # marker is LOOP_HEAD_EXPLODE, not LOOP_HEAD_WRITE (duo_gen1_main.lua:1520 vs :1524).
-        # Without the swap this delegate demands the two markers the scenario asserts ABSENT,
-        # so explode_new could never pass on a live receipt.
-        expected_cmd = "force_explode" if explode else "force_faint"
+        # force_faint (server/state.py:2678-2680 picks the name, and :2677-2685 logs it) and
+        # the client's coercion marker is LOOP_HEAD_EXPLODE, not LOOP_HEAD_WRITE
+        # (duo_gen1_main.lua:1520 vs :1524). Without the swap this delegate demands the two
+        # markers the scenario asserts ABSENT, so explode_new could never pass on a live
+        # receipt. `expected_cmd` is also what the server LOG is checked for above.
         if f"RX {expected_cmd} key={self._link_keys['b']}" not in b_text:
             raise RuntimeError(f"B never received the server {expected_cmd} for its linked key")
         if "GAME_OVER RX game_over" not in b_text:
@@ -2028,10 +2193,13 @@ class DuoRun:
         this scenario pins, not a defect of the run, and the status/links assertions below say so
         explicitly rather than treating it as a failure.
 
-        The box checksum claim is scoped to the box this run wrote: pc_ops_new never changes
-        boxes, so the untouched banks stay at $FF and only Box 1's own checksum and its bank's
-        whole-bank checksum are meaningful. The all-twelve form belongs to the scenarios that
-        run a ChangeBox (deadzone/changebox), where the game initialises every box.
+        The saved box claim is the ACTIVE box (sCurBoxData), not the numbered banks: pc_ops_new
+        never changes boxes, so the numbered banks were never written by this route and their
+        checksums say nothing about it. An ordinary SAVE copies the active box into sCurBoxData
+        under the MAIN checksum (pret engine/menus/save.asm:246-260, :365-387; gen1_codec.py
+        :669-678), which `_saved_gen1_party` already validated through `qualify()`. The claim
+        here is therefore the decoded active box: it parses (count and terminator) and no longer
+        holds the released key.
         """
         for process in self.emus:
             process.wait(timeout=30)  # client.exit flushes CartRAM
@@ -2096,27 +2264,22 @@ class DuoRun:
         self._pydec_note("S-6 markers: Box 1 empty->deposit->withdraw->deposit->release; "
                          "2/1 storage sends, one RELEASE_SEEN after the third send, no wire event")
 
-        a_sram, a_party, _a_box, codec = self._saved_gen1_party("a")
+        a_sram, a_party, a_box, codec = self._saved_gen1_party("a")
         a_keys = [codec.key(mon) for mon in a_party]
         if a_keys != [self._boot_keys["a"]]:
             raise RuntimeError(f"A's saved party is {a_keys}, expected the starter alone after "
                                f"the release")
-        verdict = codec.verify_boxes(a_sram)
-        box1 = verdict["boxes"][1]
-        if not box1["valid"]:
-            raise RuntimeError(f"A's saved Box 1 checksum does not match (stored "
-                               f"{box1['stored']:02X}, calculated {box1['calculated']:02X})")
-        boxed = codec.decode_box(a_sram[box1["offset"]:box1["offset"] + codec.BOX_SIZE])
-        if any(codec.key(mon) == key for mon in boxed):
-            raise RuntimeError(f"A's saved Box 1 still holds the released key {key}")
-        if not verdict["banks"][2]["valid"]:
-            raise RuntimeError("A's saved Box 1-6 bank checksum does not match")
+        boxed = [codec.key(mon) for mon in a_box]  # decoded sCurBoxData, main-checksum covered
+        if key in boxed:
+            raise RuntimeError(f"A's saved active box still holds the released key {key}")
+        if boxed:
+            raise RuntimeError(f"A's saved active box holds {boxed}; the release left it empty")
         b_sram, b_party, _b_box, _codec = self._saved_gen1_party("b")
         b_keys = [codec.key(mon) for mon in b_party]
         if b_keys != [self._boot_keys["b"], partner_key]:
             raise RuntimeError(f"B's saved party is {b_keys}, expected starter + {partner_key}")
-        self._pydec_note(f"{key} released: A's saved party is the starter alone, Box 1 checksum "
-                         f"valid and empty; B still holds {partner_key}")
+        self._pydec_note(f"{key} released: A's saved party is the starter alone and its active "
+                         f"box (sCurBoxData) decodes empty; B still holds {partner_key}")
 
         # The documented gap, asserted as such: the release never reached the server, so the
         # pair is still ALIVE with A's key on the status surface and in links.json. This is the
@@ -2210,7 +2373,7 @@ class DuoRun:
             return True if not missing else None
 
         try:
-            wait_for("both halves to deposit their linked catch for the rebuild", deposited,
+            self.wait_for("both halves to deposit their linked catch for the rebuild", deposited,
                      self.cfg["timeout"])
         except TimeoutError as exc:
             raise RuntimeError("the deposit never landed — "
@@ -2231,7 +2394,10 @@ class DuoRun:
             return True if not problems else None
 
         try:
-            wait_for("the SERVER to see both linked keys boxed", server_agrees, 300)
+            # The sub-budget stays 300 s, but never longer than the scenario's own: the pins
+            # shrink the scenario timeout, and the gate must shrink with it.
+            self.wait_for("the SERVER to see both linked keys boxed", server_agrees,
+                          min(300, self.cfg["timeout"]))
         except TimeoutError as exc:
             raise RuntimeError(
                 "the server never saw both halves boxed — "
@@ -2379,7 +2545,7 @@ class DuoRun:
                 raise GameRngMiss("A's hunt spent the fixture's only ball before the release")
             return None
 
-        match = wait_for("A's PENDING_CAPTURE marker", a_pending, self.cfg["timeout"])
+        match = self.wait_for("A's PENDING_CAPTURE marker", a_pending, self.cfg["timeout"])
         key, species = match.group(1), int(match.group(2))
 
         def server_pending():
@@ -2387,7 +2553,7 @@ class DuoRun:
             entry = (pending.get("route_1") or {}).get("a")
             return entry if entry and entry.get("key") == key else None
 
-        entry = wait_for("the SERVER to hold A's pending capture on route_1", server_pending,
+        entry = self.wait_for("the SERVER to hold A's pending capture on route_1", server_pending,
                          self.cfg["timeout"])
         if int(entry.get("species") or 0) != species:
             raise RuntimeError(f"the server holds species {entry.get('species')} for {key}, "
@@ -2410,7 +2576,7 @@ class DuoRun:
         pending (duo_gen1_main.lua:657-659 says the same).
 
         The card expected the rejected half's JSON to carry `force_faint`; the body's rejected
-        form carries prompt/memorialize/sound26/unresolve_area (duo_gen1_main.lua:592-596) and
+        form carries prompt/memorialize/sound26/unresolve_area (duo_gen1_main.lua:678-682) and
         force_faint is a COMMAND, so it is asserted from the half's own SEEN counter and from
         the Box 12 read instead.
 
@@ -2448,8 +2614,10 @@ class DuoRun:
             raise RuntimeError(f"the type-clause prompt did not name Normal: {prompt!r}")
         if rj.get("memorialize") is not True or rj.get("sound26") is not True:
             raise RuntimeError(f"{rejected}'s verdict lacks memorialize/sound26: {rj}")
-        if not rj.get("unresolve_area"):
-            raise RuntimeError(f"{rejected} was never sent unresolve_area: {rj}")
+        if rj.get("unresolve_area") != "route_1":
+            raise RuntimeError(f"{rejected}'s unresolve_area is "
+                               f"{rj.get('unresolve_area')!r}, not 'route_1' — the area the "
+                               f"capture was rejected in, and the one the client re-resolves")
         marker(results[rejected],
                re.escape(f"MEMORIAL {rj['key']} box12=true hp=0"), "rejected Box 12 receipt")
 
@@ -2613,6 +2781,23 @@ class DuoRun:
                 raise RuntimeError("PATH says reroll_observed but events.json has no reroll row")
             if not any("🔁" in (row.get("text") or "") for row in reroll_rows):
                 raise RuntimeError(f"the reroll row carries no 🔁 prefix: {reroll_rows}")
+            # ORDER: every dupe encounter (and every reroll) comes before the non-dupe catch.
+            # The count is the same thing seen from two sides — B's own reroll counter and the
+            # prompts it received — so a mismatch means one side of the story is wrong.
+            dupe_at = [i for i, (_n, _s, dupe) in enumerate(encounters) if dupe]
+            plain_at = [i for i, (_n, _s, dupe) in enumerate(encounters) if not dupe]
+            if not dupe_at or not plain_at or max(dupe_at) > min(plain_at):
+                raise RuntimeError(f"the encounter order is {[d for _n, _s, d in encounters]}, "
+                                   f"not the dupe escape(s) followed by the catch")
+            if bj.get("rerolls") != len(reroll_seen):
+                raise RuntimeError(f"B's verdict says {bj.get('rerolls')} reroll(s) but its "
+                                   f"receipt carries {len(reroll_seen)} REROLL_SEEN line(s)")
+            linked_at = [index for index, row in enumerate(events) if row.get("type") == "linked"]
+            reroll_at = [index for index, row in enumerate(events) if row.get("type") == "reroll"]
+            if linked_at and min(reroll_at) < max(linked_at):
+                raise RuntimeError(f"events.json puts a reroll row NEWER than the link row "
+                                   f"(newest-first: reroll at {min(reroll_at)}, linked at "
+                                   f"{max(linked_at)}); the catch has to follow the rerolls")
             self._pydec_note(f"D-4 reroll observed: {len(reroll_seen)} reroll(s) on species "
                              f"{release['species']}, events.json row present")
         else:
@@ -2731,9 +2916,11 @@ class DuoRun:
         # server never linked leaves no row at all. The receipts and the link table are where
         # that shows.
         for inst, text in (("a", a_text), ("b", b_text)):
-            if re.search(r"(?m)^RX memorialize\b", text):
-                raise RuntimeError(f"{inst} received a memorialize command; no pair was ever "
-                                   f"linked, so nothing was there to bury")
+            for command in ("memorialize", "rebuild_start", "rebuild_done", "party_mon"):
+                if re.search(rf"(?m)^RX {command}\b", text):
+                    raise RuntimeError(f"{inst} received a {command} command; no pair was ever "
+                                       f"linked, so the server had nothing to bury, rebuild or "
+                                       f"retrieve")
         durable = self._links_json()
         if durable:
             raise RuntimeError(f"links.json carries {len(durable)} link(s) "
@@ -2873,7 +3060,7 @@ class DuoRun:
             a, b = players.get("a") or {}, players.get("b") or {}
             return status if a.get("admission") == "admitted" and b.get("admission") == "rejected" else None
 
-        status = wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
+        status = self.wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
         a, b = status["players"]["a"], status["players"]["b"]
         if a.get("admission_reason") != "cartridge matches the contract":
             raise RuntimeError(f"A admission reason differs: {a.get('admission_reason')!r}")
@@ -2895,7 +3082,7 @@ class DuoRun:
                 return a_text, b_text
             return None
 
-        a_text, b_text = wait_for("live town save and hello receipts", receipts, 120)
+        a_text, b_text = self.wait_for("live town save and hello receipts", receipts, 120)
         for player, text in (("a", a_text), ("b", b_text)):
             party_line = next((line for line in text.splitlines() if line.startswith("ADMIT_PARTY ")), "")
             if not party_line or int(party_line.split()[1]) < 1:
@@ -2910,7 +3097,7 @@ class DuoRun:
             hellos = [row for row in rows if row.get("type") == "hello"]
             return hellos if len(hellos) >= 2 else None
 
-        hellos = wait_for("durable admitted/rejected hello events", durable_events, 30)
+        hellos = self.wait_for("durable admitted/rejected hello events", durable_events, 30)
         a_events = [row for row in hellos if row.get("player") == "a"]
         b_events = [row for row in hellos if row.get("player") == "b"]
         if (len(a_events) != 1 or not a_events[0].get("text", "").startswith("Connected (Red, ")
@@ -2987,11 +3174,11 @@ class DuoRun:
         (FAINTED, written by the client's force_faint) before memorialize moves it out.
         """
         self._go_one("a")
-        area = wait_for("A's failed encounter to lock an area", self._dead_zone_area,
+        area = self.wait_for("A's failed encounter to lock an area", self._dead_zone_area,
                         self.cfg["timeout"])
         if area != "route_1":
             raise RuntimeError(f"A locked {area!r}, expected route_1")
-        wait_for("A to report its no_catch",
+        self.wait_for("A to report its no_catch",
                  lambda: "NO_CATCH" in (read_result(self.scenario, "a") or ""), 60)
         print(f"[duo] DEAD ZONE FROM REAL PLAY (new client): {area}")
 
@@ -3002,9 +3189,9 @@ class DuoRun:
                 raise GameRngMiss("B missed its sole ball inside the dead zone")
             return key
 
-        b_key = wait_for("B to catch inside the dead zone", b_caught, self.cfg["timeout"])
+        b_key = self.wait_for("B to catch inside the dead zone", b_caught, self.cfg["timeout"])
         self._deadzone_b_key = b_key
-        wait_for("B's client to force-faint the refused capture",
+        self.wait_for("B's client to force-faint the refused capture",
                  lambda: "FAINTED " in (read_result(self.scenario, "b") or ""), 300)
         retired = "RETIRED " in (read_result(self.scenario, "b") or "")
         print(f"[duo] B caught {b_key} in the dead zone; force-fainted"
@@ -3054,7 +3241,7 @@ class DuoRun:
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None
-        return wait_for("both RESULT lines", both, self.cfg["timeout"])
+        return self.wait_for("both RESULT lines", both, self.cfg["timeout"])
 
     def _result_path(self, inst):
         return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_result.txt")
@@ -3133,10 +3320,16 @@ class DuoRun:
                 # either client acts: the end state is compared against it, which is what stops
                 # a duplicated or rewritten log from passing as "the same save reconnected".
                 events = self._reconnect_events()
+                baseline_bytes = self._links_bytes()
+                baseline_path = os.path.join(self.data_dir, "links_baseline.json")
+                if baseline_bytes is not None:
+                    with open(baseline_path, "wb") as handle:
+                        handle.write(baseline_bytes)
                 self._reset_baseline = {
                     "status": self._status() or {},
                     "links": self._links_json(),
-                    "links_bytes": self._links_bytes(),
+                    "links_bytes": baseline_bytes,
+                    "links_baseline_path": baseline_path,
                     "events": events,
                     "a_hellos": sum(row.get("type") == "hello" and row.get("player") == "a"
                                     for row in events),
@@ -3176,7 +3369,7 @@ class DuoRun:
             self.inject_link(ka[0], kb[0])
             # B must be inside a LIVE battle before A's faint fires the force_explode (a
             # frozen battle savestate can't execute the coerced turn — foe never commits).
-            wait_for("B inside a live battle",
+            self.wait_for("B inside a live battle",
                      lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
             self.go()
         elif self.scenario == "boxsync" and self.battery_boot:
@@ -3193,7 +3386,7 @@ class DuoRun:
             self.queue_command("a", {"cmd": "box_mon", "key": ka[1]})
             self.queue_command("b", {"cmd": "box_mon", "key": kb[1]})
             for inst, key in (("a", ka[1]), ("b", kb[1])):
-                wait_for(f"{inst} deposit done",
+                self.wait_for(f"{inst} deposit done",
                          lambda i=inst: "DEPOSIT_DONE" in (read_result(self.scenario, i) or ""),
                          180)
                 self.queue_command(inst, {"cmd": "party_mon", "key": key})
@@ -3205,7 +3398,7 @@ class DuoRun:
                 ba = extract_marks(read_result(self.scenario, "a"), "MYBLOB")
                 bb = extract_marks(read_result(self.scenario, "b"), "MYBLOB")
                 return (ba[0], bb[0]) if ba and bb else None
-            blob_a, blob_b = wait_for("MYBLOB from both", blobs, 120)
+            blob_a, blob_b = self.wait_for("MYBLOB from both", blobs, 120)
             self.queue_command("a", {"cmd": "apply_trade", "slot": 0, "blob_hex": blob_b,
                                      "token": "duo"})
             self.queue_command("b", {"cmd": "apply_trade", "slot": 0, "blob_hex": blob_a,
@@ -3283,20 +3476,36 @@ class DuoRun:
             if skipped and not dumps:
                 raise RuntimeError(f"{inst}: the cartridge saved but the dump gate rejected the "
                                    f"fire (why={skipped[-1]}); no witness was written")
+            # A failed or skipped dump leaves the PREVIOUS save's file on disk, and a repeated
+            # save can make that file byte-identical to what this attempt's last save would have
+            # written — so the outcomes are read IN ORDER: the last attempted dump has to be the
+            # successful one, and the successful dumps' own ordinals have to run 1..n unbroken.
+            lines = (receipt or "").splitlines()
+            dump_at = [i for i, line in enumerate(lines) if line.startswith("SAVE_WITNESS_DUMP ")]
+            trouble_at = [i for i, line in enumerate(lines) if line.startswith(
+                ("SAVE_WITNESS_DUMP_FAIL", "SAVE_WITNESS_DUMP_SKIPPED"))]
+            if dump_at and trouble_at and trouble_at[-1] > dump_at[-1]:
+                raise RuntimeError(f"{inst}: the last dump attempt was {lines[trouble_at[-1]]!r}, "
+                                   f"after the last successful dump — the file on disk is an "
+                                   f"earlier save, not this attempt's final one")
+            ordinals = [int(row[2]) for row in dumps]
+            if ordinals != list(range(1, len(ordinals) + 1)):
+                raise RuntimeError(f"{inst}: the dump ordinals are {ordinals}, not 1.."
+                                   f"{len(ordinals)}; a dump line is missing or reordered")
             path = self._witness_path(inst)
             if dumps:
                 logged = os.path.normpath(os.path.join(REPO, dumps[-1][0]))
                 if logged != os.path.normpath(path):
                     raise RuntimeError(
                         f"{inst}: the save witness landed at {dumps[-1][0]!r} (the receipt's "
-                        f"last dump), not {os.path.relpath(path, REPO)!r} — the body and this "
+                        f"last dump), not {rel_to_repo(path)!r} — the body and this "
                         f"check disagree about the name")
             if not os.path.exists(path):
                 failed = re.findall(r"SAVE_WITNESS_DUMP_FAIL (.*)", receipt)
                 detail = (f" (the body logged SAVE_WITNESS_DUMP_FAIL: {failed[-1]})"
                           if failed else "")
                 raise RuntimeError(f"{inst}: the save witness is missing at "
-                                   f"{os.path.relpath(path, REPO)}{detail}")
+                                   f"{rel_to_repo(path)}{detail}")
             with open(path, "rb") as handle:
                 blob = handle.read()
             if len(blob) != SAVE_WITNESS_BYTES:
@@ -3312,13 +3521,10 @@ class DuoRun:
                              f"saves={saves}")
             if not match:
                 diff = save_witness_diff(blob, flushed)
-                post = [hex(address) for address in diff if address in SAVE_WITNESS_POST_HOOK]
                 raise RuntimeError(
                     f"{inst}: the save witness does not match the flushed SaveRAM — site "
                     f"{site_hash} vs file {file_hash}; first differing SRAM address(es) "
-                    f"{[hex(a) for a in diff]}" +
-                    (" (sMainDataCheckSum, written after the hook: see SAVE_WITNESS_POST_HOOK)"
-                     if post else ""))
+                    f"{[hex(a) for a in diff]}")
 
     def _run_oracle(self, results):
         """The scenario's post-result oracle, from the SCENARIOS registry.
@@ -3363,7 +3569,8 @@ class DuoRun:
                 self.orchestrate()
             except GameRngMiss:
                 ra, rb = self.wait_results()
-                if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, 1):
+                if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
+                                          scenario_attempt_limit(self.scenario, self.game)):
                     raise  # an unrelated failed half is never a game-RNG retry
             else:
                 ra, rb = self.wait_results()
@@ -3395,6 +3602,15 @@ class DuoRun:
                     print("\n".join(text.splitlines()[-25:]))
             if self.args.keep_alive:
                 input("[duo] --keep-alive: press Enter to tear down…")
+        except ClientFinishedEarly as exc:
+            # Not an error of the run: the cartridges ended while a wait was still pending, so
+            # the receipts on disk are the verdict. Recorded, torn down, and returned as False
+            # so run_scenario_with_rng_retry still classifies them (a mid-wait ball miss keeps
+            # its retry; anything else fails as the receipts say).
+            if getattr(self, "_pydec_path", None):
+                self._pydec_note(f"PYDEC: FAIL client RESULT before {exc.awaited}")
+            print(f"[duo] {self.scenario}: {exc}")
+            return False
         except Exception as exc:
             if getattr(self, "_pydec_path", None):
                 self._pydec_note(f"PYDEC: FAIL {exc}")
@@ -3461,7 +3677,7 @@ def run_scenario_with_rng_retry(name, args):
             _archive_attempt(name, attempt, receipts)  # AFTER the annotation, so it is archived
             return ok, attempt
         _archive_attempt(name, attempt, receipts)
-        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt):
+        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "
               f"{attempt + 1} of {limit} with a fresh server, run directory and SaveRAM seeds")
