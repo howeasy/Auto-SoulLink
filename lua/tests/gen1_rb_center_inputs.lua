@@ -17,13 +17,21 @@ M.STAGES = {
 }
 
 -- Tile IDs from pret/charmap.asm:63,92-117,126-151,168-170.
+-- Digits, '/' and '-' are here for the SLINK panel probe (test_gen1_menu_row_gate.lua):
+-- the panel's rows are "PAIRS 3/5", "BADGES 2/8", "-VIRIDIAN FOREST". They are NOT near the
+-- letters -- digits are the $F6-$FF block -- and decoding only letters made every number
+-- read as a dot, which once had a gate reporting staged rows as absent when they were there.
+-- Same table as lua/gen1/panel.lua's _tile_for, which is what writes these tiles.
 local function glyph(char)
     local n = char:byte()
     if n >= 65 and n <= 90 then return 0x80 + n - 65 end
     if n >= 97 and n <= 122 then return 0xA0 + n - 97 end
+    if n >= 48 and n <= 57 then return 0xF6 + n - 48 end
     if char == " " then return 0x7F end
     if char == "." then return 0xE8 end
     if char == "?" then return 0xE6 end
+    if char == "/" then return 0xF3 end
+    if char == "-" then return 0xE3 end
     error("unsupported tile probe glyph " .. char, 0)
 end
 
@@ -48,9 +56,12 @@ function M.row(read, tile_base, offset, count)
         local b = read(tile_base + offset + i)
         if b >= 0x80 and b <= 0x99 then out[#out + 1] = string.char(65 + b - 0x80)
         elseif b >= 0xA0 and b <= 0xB9 then out[#out + 1] = string.char(97 + b - 0xA0)
+        elseif b >= 0xF6 and b <= 0xFF then out[#out + 1] = string.char(48 + b - 0xF6)
         elseif b == 0x7F then out[#out + 1] = " "
         elseif b == 0xE8 then out[#out + 1] = "."
         elseif b == 0xE6 then out[#out + 1] = "?"
+        elseif b == 0xF3 then out[#out + 1] = "/"
+        elseif b == 0xE3 then out[#out + 1] = "-"
         else out[#out + 1] = "·" end
     end
     return table.concat(out)

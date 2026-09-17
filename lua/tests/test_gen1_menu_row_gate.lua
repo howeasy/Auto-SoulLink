@@ -1,378 +1,289 @@
 --[[
-  lua/tests/test_gen1_menu_row_gate.lua — the SLINK row in the START menu, and nothing else.
+  lua/tests/test_gen1_menu_row_gate.lua — the SLINK row in the START menu and the panel
+  behind it, driven by the REWRITTEN client (lua/gen1/*), not by memory_gb.lua.
 
-  The companion patch appends a row to the START menu and opens a full-screen panel from it.
-  The row landed inert first, on purpose, and this gate grew with it -- so it still checks
-  everything about the ROW (drawn, inside a resized box, reachable, no existing index moved)
-  and now also everything about the PANEL (opens, tells the client it may paint, times out
-  rather than hanging when no client is attached, and gives the screen back).
+  WHAT CHANGED FROM THE OLD GATE. It used to stand in for the client: it called
+  M.panelStage() itself, so the painter it proved was the gate's own call into a helper,
+  and the handshake it proved had no client in it. Here the gate is only the SERVER: rows
+  arrive as a real `link_panel` reply on t.replies, lua/gen1/client.lua hands them to
+  lua/gen1/panel.lua, and panel:service() decides — from the mailbox alone — whether it is
+  allowed to paint. Every frame therefore drives t.client:frame_end(); nothing else would
+  make the real handler run.
 
-  WHAT HAS TO BE TRUE, and each of these is a way the change could go wrong rather than a
-  restatement of the change:
+  WHAT HAS TO BE TRUE, each of them a way the change could go wrong:
 
-    * the row is DRAWN -- the redirect at DrawStartMenu's tail runs and PlaceString reaches
-      the tile map
-    * EXIT is still drawn, in its original place. The stub prints both; a stub that printed
-      only SLINK would look correct in a screenshot of the last row.
-    * the box GREW. Without the two height patches the new row is drawn outside the border.
-    * the cursor can REACH it. home/start_menu.asm wraps with its own hardcoded counts,
-      separate from wMaxMenuItem, so a row can be visible and unselectable.
-    * selecting it is HARMLESS and closes the menu.
-    * EXIT still closes the menu, i.e. its index did not move.
-    * the game still runs afterwards.
+    * the row is DRAWN, EXIT is still drawn in its original place, and SLINK is exactly two
+      tile rows below it (appending is what keeps every existing menu index where it was);
+    * the box GREW — without the two height patches the new row lands outside the border;
+    * the cursor can REACH it (home/start_menu.asm wraps on hardcoded counts that are
+      SEPARATE from wMaxMenuItem, so a row can be visible and unselectable);
+    * with NOTHING held, the panel falls back to "NO CLIENT" and leaves +9 at AWAIT — the
+      patch's timeout does not clear it (slink.asm:319-335), and a client that treated that
+      stale AWAIT as an invitation would paint over a revealed screen;
+    * a reply that arrives AFTER the client's own 60-frame deadline paints nothing;
+    * that same reply, HELD, paints on the next open, within that open's deadline;
+    * A turns the page, B closes and resets the page byte;
+    * EXIT still closes the menu and the player still walks.
 
       python tools/run_gb_gate.py lua/tests/test_gen1_menu_row_gate.lua --rom red_patched --target town
 --]]
 
-local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen1_gatelib.lua")
+local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen1_gate.lua")
 local t = G.start("test_gen1_menu_row_gate")
-local M = t.M
 local fmt = string.format
+local json, ram = t.parts.json, t.parts.profile.ram
+-- Mailbox addresses come from the module under test rather than a second copy of $DEE2+n:
+-- a gate with its own constants can only ever agree with itself.
+local Panel = dofile(t.ROOT .. "/lua/gen1/panel.lua")
+local Center = dofile(t.ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
 
-local TILEMAP = 0xC3A0            -- wTileMap; NOT shifted in Yellow, and R/B share it
-local SCREEN_W = 20
-local CUR_MENU = 0xCC26           -- wCurrentMenuItem
-local MAX_MENU = 0xCC28           -- wMaxMenuItem
-local WATCHED  = 0xCC29           -- wMenuWatchedKeys
+local COLS, SCREEN_ROWS = Panel.COLS, Panel.ROWS
+local TILEMAP = assert(ram.wTileMap, "wTileMap missing from profile")
 
--- Gen 1 charset: 'A' is $80, so a letter is $80 + (c - 'A'). Verified against the ROM's
--- own "POKéDEX@" which reads 8F 8E 8A BA 83 84 97 50.
-local function decode(byte)
-    if byte >= 0x80 and byte <= 0x99 then return string.char(byte - 0x80 + 65) end  -- A-Z
-    if byte >= 0xA0 and byte <= 0xB9 then return string.char(byte - 0xA0 + 97) end  -- a-z
-    -- Digits are the $F6-$FF block, NOT anywhere near the letters. Decoding only letters
-    -- made every number on the panel read as dots, and this gate then reported that the
-    -- staged rows had not appeared when they plainly had.
-    if byte >= 0xF6 and byte <= 0xFF then return string.char(byte - 0xF6 + 48) end  -- 0-9
-    if byte == 0xF3 then return "/" end
-    if byte == 0xE3 then return "-" end
-    if byte == 0x7F then return " " end
-    return "."
+local function read(addr) return memory.read_u8(addr, "System Bus") end
+local function at(symbol) return read(assert(ram[symbol], symbol .. " missing from profile")) end
+local function state() return read(Panel.STATE) end
+
+-- Every step runs the real client for that frame. panel:service() is the FIRST thing
+-- frame_end does, which is the only reason a paint can land while the player sits in a menu
+-- with the overworld write checkpoint long behind them.
+local function step(buttons)
+    t.step(buttons or {})   -- {} releases the previously held button
+    t.client:frame_end()
 end
-
-local function row_text(row)
-    local out = {}
-    for col = 0, SCREEN_W - 1 do
-        out[#out + 1] = decode(M.read_u8(TILEMAP + row * SCREEN_W + col))
+local function idle(n) for _ = 1, n do step({}) end end
+local function press(button, frames)
+    for _ = 1, frames or 6 do step({ [button] = true }) end
+    idle(6)
+end
+local function wait(predicate, frames)
+    for _ = 1, frames do
+        if predicate() then return true end
+        step({})
     end
-    return table.concat(out)
+    return predicate() and true or false
+end
+--- Press until it TAKES. SlinkWaitForButton settles 20 frames before it looks at the joypad
+--- (slink.asm:305-317) and HandleMenuInput polls on its own cadence, so a single pulse lands
+--- inside a window that discards it. Three separate checks in the old gate were caught by
+--- this; the loop is the fix, not a retry-until-green.
+local function press_until(button, predicate, tries, settle)
+    for _ = 1, tries or 12 do
+        if predicate() then return true end
+        press(button, 6)
+        if wait(predicate, settle or 40) then return true end
+    end
+    return predicate() and true or false
 end
 
-local function screen_rows()
-    local rows = {}
-    for r = 0, 17 do rows[r] = row_text(r) end
-    return rows
-end
-
-local function find_row(rows, needle)
-    for r = 0, 17 do
-        if rows[r]:find(needle, 1, true) then return r end
+local function row_text(r) return Center.row(read, TILEMAP, r * COLS, COLS) end
+local function find_row(needle)
+    for r = 0, SCREEN_ROWS - 1 do
+        if row_text(r):find(needle, 1, true) then return r end
     end
     return nil
 end
-
-local function open_menu()
-    for _ = 1, 40 do t.step(nil) end
-    t.hold("Start", 8)
-    for _ = 1, 40 do t.step(nil) end
-    return M.read_u8(WATCHED) == 0xCB     -- the START menu's watched-key mask
+local function on_screen(text) return Center.has_tiles(read, TILEMAP, text) end
+local function dump(tag, first, last)
+    for r = first, last do t.log(fmt("[%s] row %2d |%s|", tag, r, row_text(r))) end
+end
+local function reply(command)
+    t.replies[#t.replies + 1] = assert(json.encode({ commands = { command } }))
 end
 
---- Is the menu GONE? Read the screen, not wMenuWatchedKeys.
----
---- wMenuWatchedKeys is set when the menu opens and simply left behind when it closes --
---- nothing clears it -- so "watched ~= 0xCB" reports every closed menu as still open. The
---- tile map is the honest signal: CloseStartMenu ends in CloseTextDisplay, which restores
---- the map underneath, so the menu's own text stops being on screen.
---- Make sure the START menu is up, WITHOUT toggling it if it already is.
----
---- Closing the panel returns to RedisplayStartMenu, so the menu is already open at that
---- point and pressing START would close it. The first version of the staging test did
---- exactly that and then reported that the patch never asked the client to paint.
-local function ensure_menu_open()
-    for _ = 1, 6 do
-        if find_row(screen_rows(), "EXIT") then return true end
-        t.hold("Start", 8)
-        for _ = 1, 40 do t.step(nil) end
+-- A TWO-PAGE payload so the page turn has somewhere to go, and one row of each shape the
+-- server actually emits (_build_link_panel): a count with a slash, a dead-zone row with a
+-- leading dash. Both were invisible to a letters-only tile decoder.
+local PAGED = { "SLINK TEST", "", "PAIRS 3/5", "BADGES 2/8", "DEAD ZONES 1",
+                "", "-VIRIDIAN FOREST" }
+for i = #PAGED + 1, 26 do PAGED[i] = fmt("ROW %d", i) end
+local LAST_ON_PAGE1, FIRST_ON_PAGE2 = "ROW 18", "ROW 19"
+
+local slink_row, exit_row, slink_index
+
+local ok, err = xpcall(function()
+    -- The loopback server is "connected" for the whole run: client.lua clears the held rows
+    -- on a dropped link (rows outlive neither the link nor the save), so a gate that left
+    -- t.online false would watch every reply evaporate a frame after it arrived.
+    t.online = true
+    t.client:frame_end()
+
+    -- ── the menu is up at all ────────────────────────────────────────────────────────
+    -- Read the SCREEN, not wMenuWatchedKeys: nothing clears that byte when a menu closes,
+    -- so it reports every closed menu as open. It is also absent from profile.ram, and the
+    -- rewrite's rule is that addresses come from the profile.
+    local function menu_open() return find_row("EXIT") ~= nil end
+    local function menu_closed() return find_row("EXIT") == nil and find_row("SLINK") == nil end
+    idle(30)
+    t.check("the START menu opened", press_until("Start", menu_open, 6, 40),
+            "no EXIT row on screen — every check below is meaningless if the menu is not up")
+    dump("menu", 0, SCREEN_ROWS - 1)
+
+    -- ── drawn, and not at EXIT's expense ─────────────────────────────────────────────
+    slink_row, exit_row = find_row("SLINK"), find_row("EXIT")
+    t.check("the SLINK row is drawn", slink_row ~= nil,
+            "the DrawStartMenu tail redirect did not reach PlaceString")
+    t.check("EXIT is still drawn", exit_row ~= nil,
+            "the stub prints BOTH; only printing SLINK would still look right on the last row")
+    if slink_row and exit_row then
+        t.check("SLINK is two tile rows below EXIT", slink_row - exit_row == 2,
+                fmt("SLINK on row %d, EXIT on row %d (%d apart, expected 2)",
+                    slink_row, exit_row, slink_row - exit_row))
     end
-    return find_row(screen_rows(), "EXIT") ~= nil
-end
 
-local function menu_is_closed()
-    local rows = screen_rows()
-    return find_row(rows, "EXIT") == nil and find_row(rows, "SLINK") == nil
-end
-
--- ── the menu is open at all ──────────────────────────────────────────────────
-t.check("the START menu opened", open_menu(),
-        fmt("wMenuWatchedKeys = 0x%02X, expected 0xCB — every check below is "
-            .. "meaningless if the menu is not up", M.read_u8(WATCHED)))
-
-local rows = screen_rows()
-for r = 0, 17 do t.log(fmt("[menu] row %2d |%s|", r, rows[r])) end
-
--- ── drawn, and not at EXIT's expense ─────────────────────────────────────────
-local slink_row = find_row(rows, "SLINK")
-local exit_row = find_row(rows, "EXIT")
-t.check("the SLINK row is drawn", slink_row ~= nil,
-        "the DrawStartMenu tail redirect did not reach PlaceString")
-t.check("EXIT is still drawn", exit_row ~= nil,
-        "the stub prints BOTH; only printing SLINK would still look right on the last row")
-if slink_row and exit_row then
-    t.check("SLINK is below EXIT", slink_row > exit_row,
-            fmt("SLINK on row %d, EXIT on row %d — appending is what keeps every existing "
-                .. "menu index where it was", slink_row, exit_row))
-    t.check("they are one menu row apart", slink_row - exit_row == 2,
-            fmt("%d tile rows apart, expected 2", slink_row - exit_row))
-end
-
--- ── the box grew to contain it ───────────────────────────────────────────────
--- The border column sits just left of the menu text. If the box were not resized the new
--- row would be drawn past the bottom edge with no border beside it.
-if slink_row then
-    local border = M.read_u8(TILEMAP + slink_row * SCREEN_W + 10)
-    t.check("the menu box border runs beside the SLINK row", border ~= 0x7F and border ~= 0,
-            fmt("tile at (10,%d) is 0x%02X — the box was not made taller", slink_row, border))
-end
-
--- The menu has one more item once the player owns the Pokedex, and DrawStartMenu patches
--- BOTH counts. Which one applies is derived from the drawn menu rather than assumed: an
--- early-game fixture has no Pokedex, and hardcoding the with-Pokedex index made this gate
--- fail against a perfectly good patch.
-local has_dex = find_row(rows, "DEX") ~= nil
-local want_items = has_dex and 8 or 7
-local slink_index = want_items - 1
-t.log(fmt("[menu] Pokedex present=%s -> %d items, SLINK is index %d",
-          tostring(has_dex), want_items, slink_index))
-t.check("wMaxMenuItem counts the extra row", M.read_u8(MAX_MENU) == want_items,
-        fmt("got %d, expected %d", M.read_u8(MAX_MENU), want_items))
-
--- ── the cursor can reach it ──────────────────────────────────────────────────
--- home/start_menu.asm wraps with hardcoded counts that are SEPARATE from wMaxMenuItem, so
--- without those two patches the row is visible and unselectable.
-local reached = false
-for _ = 1, 12 do
-    t.hold("Down", 6)
-    for _ = 1, 10 do t.step(nil) end
-    if M.read_u8(CUR_MENU) == slink_index then reached = true break end
-end
-t.check("the cursor can be moved onto the SLINK row", reached,
-        fmt("wCurrentMenuItem never reached %d (stopped at %d) — the home-bank wrap "
-            .. "constants are separate from wMaxMenuItem and gate reachability",
-            slink_index, M.read_u8(CUR_MENU)))
-
--- ── selecting it opens the panel, and the panel gives the screen back ────────
--- The panel takes the whole screen using StartMenu_TrainerInfo's own sequence, so what is
--- under test is both halves: that it appears at all, and that everything it borrowed comes
--- back. A panel that draws correctly and then leaves the map screen wrecked is worse than
--- no panel.
-local PANEL_STATE = 0xDEE2 + 9
-if reached then
-    t.hold("A", 8)
-    -- Give it long enough to clear the screen, miss the stage timeout (~90 frames) and
-    -- settle on the fallback.
-    local saw_panel = false
-    for _ = 1, 240 do
-        t.step(nil)
-        if find_row(screen_rows(), "SOUL LINK") then saw_panel = true break end
+    -- ── the box grew to contain it ───────────────────────────────────────────────────
+    -- The border column sits just left of the menu text; without the two height patches the
+    -- row is drawn past the bottom edge with no border beside it.
+    if slink_row then
+        local border = read(TILEMAP + slink_row * COLS + 10)
+        t.check("the menu box border runs beside the SLINK row", border ~= 0x7F and border ~= 0,
+                fmt("tile at (10,%d) is 0x%02X — the box was not made taller", slink_row, border))
     end
-    t.check("selecting SLINK opens the panel", saw_panel,
-            "no SOUL LINK title appeared — the dispatch trampoline did not reach bank $3F")
 
-    t.check("the panel announces itself to the client", M.read_u8(PANEL_STATE) ~= 0,
-            fmt("panel state is %d — the client is never told it may paint",
-                M.read_u8(PANEL_STATE)))
+    -- The menu gains a row once the player owns the Pokedex and DrawStartMenu patches BOTH
+    -- counts, so which one applies is DERIVED from the drawn menu rather than assumed: an
+    -- early-game fixture has no Pokedex, and hardcoding the with-Pokedex count once made this
+    -- gate fail against a perfectly good patch.
+    local has_dex = find_row("DEX") ~= nil
+    local want_items = has_dex and 8 or 7
+    slink_index = want_items - 1
+    t.log(fmt("[menu] Pokedex present=%s -> %d items, SLINK is index %d",
+              tostring(has_dex), want_items, slink_index))
+    t.check("wMaxMenuItem counts the extra row", at("wMaxMenuItem") == want_items,
+            fmt("got %d, expected %d", at("wMaxMenuItem"), want_items))
 
-    -- No client is attached in this gate, so the stage wait must TIME OUT rather than hang.
-    local fell_back = false
-    for _ = 1, 300 do
-        t.step(nil)
-        if find_row(screen_rows(), "NO CLIENT") then fell_back = true break end
+    -- ── the cursor can reach it ──────────────────────────────────────────────────────
+    local function cursor_on(index)
+        return press_until("Down", function() return at("wCurrentMenuItem") == index end, 12, 10)
     end
-    t.check("with no client attached it falls back instead of hanging", fell_back,
-            "the stage wait never timed out")
+    t.check("the cursor can be moved onto the SLINK row", cursor_on(slink_index),
+            fmt("wCurrentMenuItem stopped at %d, wanted %d — the home-bank wrap constants are "
+                .. "separate from wMaxMenuItem and gate reachability",
+                at("wCurrentMenuItem"), slink_index))
 
-    -- Close it. PRESS UNTIL IT CLOSES rather than pressing once and hoping: the panel
-    -- spends up to 90 frames waiting for a client and another 20 settling before it will
-    -- look at the joypad, and a single early press lands in that window and is discarded.
-    -- The first version of this check pressed A about two frames after the panel opened
-    -- and then blamed the patch for not closing.
-    local closed = false
-    for _ = 1, 12 do
-        t.hold("A", 6)
-        for _ = 1, 40 do t.step(nil) end
-        if find_row(screen_rows(), "SOUL LINK") == nil then closed = true break end
+    --- Open the panel from the menu. "Open" is the mailbox leaving CLOSED, or the fallback
+    --- title reaching the tile map — whichever the patch gets to first.
+    local function open_panel()
+        t.check("the menu is up for the panel", press_until("Start", menu_open, 6, 40),
+                "the START menu is not showing")
+        cursor_on(slink_index)
+        return press_until("A", function()
+            return state() ~= Panel.CLOSED or on_screen("SOUL LINK")
+        end, 12, 40)
     end
-    t.check("a button press closes the panel", closed,
+
+    -- ── OPEN 1: nothing held, so the fallback has to hold the screen ─────────────────
+    t.check("selecting SLINK opens the panel", open_panel(),
+            "no SOUL LINK title and no mailbox transition — the dispatch trampoline did not "
+            .. "reach bank $3F")
+    t.check("the panel announces itself to the client", wait(function() return state() == Panel.AWAIT end, 120),
+            fmt("panel state is %d — the client is never told it may paint", state()))
+    local await_seen = t.frame
+    t.check("with no client rows it falls back instead of hanging",
+            wait(function() return on_screen("NO CLIENT") end, 300),
+            "the stage wait never timed out onto the fallback")
+    -- The patch's timeout leaves the state alone (slink.asm:334-335). That is the whole
+    -- reason panel.lua measures its own deadline from the transition IT observed.
+    idle(math.max(0, 120 - (t.frame - await_seen)))
+    t.check("+9 is still AWAIT after the patch's 90-frame stage timeout", state() == Panel.AWAIT,
+            fmt("state=%d after %d frames of AWAIT", state(), t.frame - await_seen))
+    t.check("nothing was staged with no rows held", read(Panel.PAGES) == 0,
+            fmt("+11 = %d with no payload", read(Panel.PAGES)))
+
+    -- ── a reply that misses the deadline paints NOTHING ──────────────────────────────
+    -- This is the assertion the patch cannot make for itself: it has no clock the client can
+    -- read, so "is this AWAIT still fresh" is answered only in panel.lua. The reply below is
+    -- well past DEADLINE frames old by the time service() sees it.
+    reply({ cmd = "link_panel", rows = PAGED })
+    idle(120)
+    t.check("a reply after the deadline is not painted", not on_screen("PAIRS 3/5"),
+            fmt("a %d-frame-old AWAIT was painted over a revealed fallback",
+                t.frame - await_seen))
+    t.check("the revealed fallback survived the late reply", on_screen("NO CLIENT"),
+            "NO CLIENT was overwritten")
+    t.check("the late reply never reached STAGED", state() == Panel.AWAIT,
+            fmt("state=%d", state()))
+
+    -- ── close, and the held rows come back on the NEXT open ──────────────────────────
+    t.check("a button press closes the fallback panel",
+            press_until("B", function() return not on_screen("SOUL LINK") end, 12, 40),
             "still on screen after 12 presses")
-    t.check("the panel hands the screen back", find_row(screen_rows(), "SOUL LINK") == nil,
-            "the panel is still on screen after a button press")
-    t.check("the panel clears its state on the way out",
-            M.read_u8(PANEL_STATE) == 0,
-            fmt("panel state left at %d — a client would keep painting over the map",
-                M.read_u8(PANEL_STATE)))
-end
+    t.check("the panel clears its state on the way out", state() == Panel.CLOSED,
+            fmt("panel state left at %d — a client would keep painting over the map", state()))
 
--- ── the client can paint it ──────────────────────────────────────────────────
--- The handshake is the whole feature: the patch blanks the screen and says AWAIT, the
--- client paints the tile map, the patch reveals it. This gate stands in for the client,
--- calling the SAME M.panelStage the real one does -- so what is under test is the painter
--- and the handshake, not a re-implementation of them.
-t.check("the menu is up for the staging test", ensure_menu_open(),
-        "the START menu is not showing")
-do
-    for _ = 1, 12 do
-        if M.read_u8(CUR_MENU) == slink_index then break end
-        t.hold("Down", 6)
-        for _ = 1, 10 do t.step(nil) end
-    end
-    t.hold("A", 6)
+    -- ── OPEN 2: the held rows stage INSIDE the deadline ──────────────────────────────
+    t.check("the panel opens again", open_panel(), "the second open never reached the panel")
+    local staged = wait(function() return on_screen("PAIRS 3/5") end, 300)
+    t.check("rows held from the late reply stage on the next open", staged,
+            fmt("state=%d +11=%d — held rows were dropped instead of kept",
+                state(), read(Panel.PAGES)))
+    t.check("staging sets the handshake to STAGED", state() == Panel.STAGED,
+            fmt("state is %d after the client painted", state()))
+    t.check("the client tells the patch how many pages there are", read(Panel.PAGES) == 2,
+            fmt("published %d pages for 26 rows", read(Panel.PAGES)))
+    t.check("the fallback was painted over", not on_screen("NO CLIENT"),
+            "NO CLIENT is still visible under the staged page")
+    t.check("a later row landed too", on_screen("VIRIDIAN FOREST"),
+            "only the first rows were painted")
+    t.check("the whole first page is on screen", on_screen(LAST_ON_PAGE1),
+            "row 18 did not land — the page is short")
+    t.check("page 2 is NOT on screen yet", not on_screen(FIRST_ON_PAGE2),
+            "a row from the next page leaked onto the first")
+    dump("page 1", 0, 8)
 
-    -- Wait for the patch to hand the screen over, then paint through the real helper.
-    local awaited = false
-    for _ = 1, 120 do
-        t.step(nil)
-        if M.panelIsAwaitingStage() then awaited = true break end
-    end
-    t.check("the patch asks the client to paint", awaited,
-            "panel state never reached AWAIT")
-
-    -- A TWO-PAGE PAYLOAD, so the page turn has somewhere to go. Rows past the first
-    -- eighteen used to be dropped on the floor by panelStage; they are page 2 now.
-    local PAGED = {"SLINK TEST", "", "PAIRS 3/5", "BADGES 2/8", "DEAD ZONES 1",
-                   "", "-VIRIDIAN FOREST"}
-    for i = #PAGED + 1, 26 do PAGED[i] = fmt("ROW %d", i) end
-    local LAST_ON_PAGE1 = fmt("ROW %d", 18)
-    local FIRST_ON_PAGE2 = fmt("ROW %d", 19)
-
-    if awaited then
-        M.panelStage(PAGED)
-        t.check("staging sets the handshake to STAGED",
-                M.read_u8(PANEL_STATE) == 2,
-                fmt("state is %d after panelStage", M.read_u8(PANEL_STATE)))
-        t.check("the client tells the patch how many pages there are",
-                M.read_u8(M.PANEL_PAGES) == 2,
-                fmt("published %d pages for 26 rows", M.read_u8(M.PANEL_PAGES)))
-
-        -- The patch reveals whatever is in the tile map once staging completes.
-        local shown = false
-        for _ = 1, 200 do
-            t.step(nil)
-            if find_row(screen_rows(), "PAIRS 3/5") then shown = true break end
-        end
-        t.check("what the client painted is what the panel shows", shown,
-                "the staged rows never appeared")
-        t.check("the fallback was painted over", find_row(screen_rows(), "NO CLIENT") == nil,
-                "NO CLIENT is still visible under the staged page")
-        t.check("a later row landed too", find_row(screen_rows(), "VIRIDIAN FOREST") ~= nil,
-                "only the first rows were painted")
-        t.check("the whole first page is on screen",
-                find_row(screen_rows(), LAST_ON_PAGE1) ~= nil,
-                "row 18 did not land — the page is short")
-        t.check("page 2 is NOT on screen yet",
-                find_row(screen_rows(), FIRST_ON_PAGE2) == nil,
-                "a row from the next page leaked onto the first")
-
-        for r = 0, 8 do t.log(fmt("[page 1] %2d |%s|", r, row_text(r))) end
-
-        -- ── A TURNS THE PAGE ────────────────────────────────────────────────────────
-        -- The patch whites the screen out, bumps its page byte and asks us to paint
-        -- again -- the same handshake as the first page, which is what makes a torn
-        -- page impossible on a turn as well as on an open.
-        -- PRESS UNTIL IT TAKES. SlinkWaitForButton settles for 20 frames before it looks
-        -- at the joypad, and the gate reaches this point ~1 frame after staging, so a
-        -- single press lands inside the settle and is discarded. This is the third time
-        -- that window has caught a test in this file; the close loop below already does
-        -- the same thing.
-        local re_awaited = false
-        for _ = 1, 12 do
-            t.hold("A", 6)
-            for _ = 1, 30 do
-                t.step(nil)
-                if M.panelIsAwaitingStage() then re_awaited = true break end
-            end
-            if re_awaited then break end
-        end
-        t.check("A asks for another page", re_awaited,
-                "the panel never came back to AWAIT after A")
-        t.check("the patch asked for page 2", M.read_u8(M.PANEL_PAGE) == 1,
-                fmt("page byte is %d", M.read_u8(M.PANEL_PAGE)))
-
-        if re_awaited then
-            M.panelStage(PAGED)
-            local turned = false
-            for _ = 1, 200 do
-                t.step(nil)
-                if find_row(screen_rows(), FIRST_ON_PAGE2) then turned = true break end
-            end
-            t.check("the second page is on screen", turned,
-                    "row 19 never appeared after the page turn")
-            t.check("the first page is gone", find_row(screen_rows(), "PAIRS 3/5") == nil,
-                    "page 1 is still showing underneath page 2")
-            for r = 0, 8 do t.log(fmt("[page 2] %2d |%s|", r, row_text(r))) end
-        end
-
-        -- ── B CLOSES ────────────────────────────────────────────────────────────────
-        -- On the LAST page A closes too, but B must close from anywhere; that
-        -- distinction is the whole reason this panel does not use
-        -- WaitForTextScrollButtonPress, which cannot tell the two apart.
-        local closed_by_b = false
-        for _ = 1, 12 do
-            t.hold("B", 6)
-            for _ = 1, 30 do
-                t.step(nil)
-                if find_row(screen_rows(), "ROW") == nil
-                   and find_row(screen_rows(), "PAIRS") == nil then closed_by_b = true break end
-            end
-            if closed_by_b then break end
-        end
-        t.check("B closes the panel from a page", closed_by_b,
-                "B did not close the panel")
-        t.check("closing resets the page for next time",
-                M.read_u8(M.PANEL_PAGE) == 0,
-                fmt("page byte left at %d", M.read_u8(M.PANEL_PAGE)))
+    -- ── A turns the page ─────────────────────────────────────────────────────────────
+    -- The turn is the SAME handshake as the open (slink.asm:248-271 keeps STAGED, bumps +10,
+    -- whites out and jumps back to .page, which rewrites AWAIT) — so a torn page is
+    -- impossible on a turn for the same reason it is on an open, and panel.lua has to read
+    -- STAGED->AWAIT as a fresh invitation rather than a persisting one.
+    -- Watch +10, not +9. AWAIT on a turn can be a ONE-FRAME state: the patch writes it and
+    -- our own service() answers with STAGED inside the same frame_end, so a poll that samples
+    -- +9 between steps can legitimately never see it. +10 is written once and only cleared at
+    -- dismissal, and the page-2 content below is what proves the AWAIT actually happened.
+    local re_awaited = press_until("A", function() return read(Panel.PAGE) == 1 end, 12, 30)
+    t.check("A asks for another page", re_awaited,
+            fmt("page byte is %d, state=%d — the panel never turned", read(Panel.PAGE), state()))
+    if re_awaited then
+        t.check("the second page is on screen", wait(function() return on_screen(FIRST_ON_PAGE2) end, 300),
+                fmt("row 19 never appeared after the page turn (state=%d)", state()))
+        t.check("the first page is gone", not on_screen("PAIRS 3/5"),
+                "page 1 is still showing underneath page 2")
+        dump("page 2", 0, 8)
     end
 
-    -- Close it again so the checks below start from a menu, not a panel.
-    for _ = 1, 12 do
-        t.hold("A", 6)
-        for _ = 1, 40 do t.step(nil) end
-        if find_row(screen_rows(), "PAIRS") == nil then break end
+    -- ── B closes from a page ─────────────────────────────────────────────────────────
+    -- On the LAST page A closes too; B must close from ANYWHERE, which is the whole reason
+    -- the panel does not use WaitForTextScrollButtonPress (it cannot tell the two apart).
+    t.check("B closes the panel from a page",
+            press_until("B", function()
+                return not on_screen("PAIRS 3/5") and not on_screen(FIRST_ON_PAGE2)
+            end, 12, 40),
+            "B did not close the panel")
+    t.check("closing resets the page for next time", read(Panel.PAGE) == 0,
+            fmt("page byte left at %d", read(Panel.PAGE)))
+    t.check("closing resets the handshake", state() == Panel.CLOSED,
+            fmt("panel state left at %d", state()))
+
+    -- ── EXIT still works, i.e. its index did not move ────────────────────────────────
+    t.check("the menu is up again", press_until("Start", menu_open, 6, 40),
+            "the START menu is not showing")
+    t.check("the cursor reaches EXIT's index", cursor_on(slink_index - 1),
+            fmt("wanted %d, stalled at %d", slink_index - 1, at("wCurrentMenuItem")))
+    press("A", 8)
+    idle(60)
+    t.check("EXIT still closes the menu", menu_closed(),
+            "EXIT's index moved — appending was supposed to leave every existing index alone")
+
+    -- ── the game survives ────────────────────────────────────────────────────────────
+    local x0, y0 = at("wXCoord"), at("wYCoord")
+    local function moved() return at("wXCoord") ~= x0 or at("wYCoord") ~= y0 end
+    for i = 1, 8 do
+        if moved() then break end
+        press(({ "Right", "Left" })[(i % 2) + 1], 24)
     end
-end
+    t.check("the player still walks after all that", moved(),
+            fmt("stuck at (%d,%d) — a broken menu can leave the overworld loop wedged", x0, y0))
+end, debug.traceback)
 
--- ── EXIT still works, i.e. its index did not move ────────────────────────────
-t.check("the menu is up again", ensure_menu_open(),
-        "the START menu is not showing")
-local rows2 = screen_rows()
-local exit2 = find_row(rows2, "EXIT")
-if exit2 then
-    -- Walk to EXIT's index and select it.
-    for _ = 1, 12 do
-        if M.read_u8(CUR_MENU) == slink_index - 1 then break end
-        t.hold("Down", 6)
-        for _ = 1, 10 do t.step(nil) end
-    end
-    t.check("the cursor reaches EXIT's index", M.read_u8(CUR_MENU) == slink_index - 1,
-            fmt("wanted %d, stalled at %d", slink_index - 1, M.read_u8(CUR_MENU)))
-    t.hold("A", 8)
-    for _ = 1, 60 do t.step(nil) end
-    t.check("EXIT still closes the menu", menu_is_closed(),
-            "EXIT's index moved — appending was supposed to leave every existing "
-            .. "index untouched")
-end
-
--- ── the game survives ────────────────────────────────────────────────────────
-local X, Y = M.MAP_ID_ADDR + 4, M.MAP_ID_ADDR + 3
-local x0, y0 = M.read_u8(X), M.read_u8(Y)
-local moved = false
-for i = 1, 8 do
-    t.hold(({"Right", "Left"})[(i % 2) + 1], 24, function()
-        return M.read_u8(X) ~= x0 or M.read_u8(Y) ~= y0
-    end)
-    if M.read_u8(X) ~= x0 or M.read_u8(Y) ~= y0 then moved = true break end
-end
-t.check("the player still walks after all that", moved,
-        fmt("stuck at (%d,%d) — a broken menu can leave the overworld loop wedged", x0, y0))
-
+if not ok then t.check("menu row / panel gate sequence", false, tostring(err)) end
 t.finish(fmt("SLINK row at %s, EXIT at %s", tostring(slink_row), tostring(exit_row)))

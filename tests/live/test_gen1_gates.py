@@ -96,9 +96,14 @@ def test_gen1_gate(gate, rom, emuhawk):
 def test_gen1_companion_patch(rom, emuhawk):
     """The companion-patch spike: is the injected code reached, every frame, everywhere?
 
-    Asserts the 'SLNK' beacon, a frame counter that advances in the overworld AND in battle
-    AND with a menu open (VBlank is an interrupt, which is why that hook site was chosen),
-    that the displaced TrackPlayTime still runs, and that the game still plays.
+    Asserts the 'SLNK' beacon, a frame counter that advances in the overworld AND with a menu
+    open (VBlank is an interrupt, which is why that hook site was chosen), that the displaced
+    TrackPlayTime still runs, that the capability bits and the ABI byte say what this build
+    really ships, and that the game still plays.
+
+    The in-battle half of the VBlank claim is NOT here: proving it used to mean writing
+    wIsInBattle, and a faked battle is not a battle. It is the A3 scenario's
+    PANEL_COUNTER_IN_BATTLE marker, taken inside a real wild encounter, instead.
     """
     from run_gb_gate import PATCHED
     base_key, rom_rel, _ = PATCHED[rom]
@@ -116,13 +121,15 @@ def test_gen1_companion_patch(rom, emuhawk):
 
 @pytest.mark.parametrize("rom", PATCH_ROMS)
 def test_gen1_menu_row(rom, emuhawk):
-    """The SLINK row the companion patch appends to the START menu.
+    """The SLINK row the companion patch appends to the START menu, and the panel behind it.
 
     Separate from the companion-patch gate because it tests a different thing: that gate
     covers the VBlank hook and its mailbox, this one covers a structural edit to a menu the
-    player uses constantly. The row is INERT in this increment -- selecting it falls through
-    to CloseStartMenu exactly as EXIT does -- so what is under test is that it draws inside
-    a resized box, that the cursor can reach it, and that no existing menu index moved.
+    player uses constantly plus the full open/stage/page/close handshake.
+
+    The gate drives the REWRITTEN client (lua/gen1/panel.lua through lua/gen1/client.lua):
+    rows arrive as a real `link_panel` reply and the client decides whether it may paint, so
+    what is under test is the shipped module and not a stand-in for it.
     """
     from run_gb_gate import PATCHED
     base_key, rom_rel, _ = PATCHED[rom]

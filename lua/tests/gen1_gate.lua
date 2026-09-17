@@ -69,8 +69,13 @@ function Lib.start(gate_name, opts)
         send = function(line) sent[#sent + 1] = line end,
         receive = function() return table.remove(replies, 1) end,
     }
+    -- The overlay is stubbed out (a gate has no one to show it to), but `sanitize` is the REAL
+    -- one: entry.lua folds every panel row through deps.hud.sanitize before it becomes tiles,
+    -- and its fallback when the field is missing is the identity. A gate carrying the identity
+    -- would paint bytes the cartridge has no glyph for and still call itself green.
     t.hud = { show = function() end, prompt = function() end, set_game_over = function() end,
-              set_rebuilding = function() end, clear_rebuilding = function() end }
+              set_rebuilding = function() end, clear_rebuilding = function() end,
+              sanitize = dofile(ROOT .. "/lua/hud.lua").sanitize }
     t.client, t.parts = Entry.build({ root = ROOT, io = t.deps, net = t.net, hud = t.hud, title = title,
                                       player = "a", rom_sha1 = gameinfo.getromhash():lower(),
                                       log = function(s) console.log(s) end })
