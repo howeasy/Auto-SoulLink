@@ -30,9 +30,12 @@
 --   Oak's Lab is 23 scripts, 0-22 (NOOP = 22)            scripts/OaksLab.asm:12-35
 --   the single Eevee ball object sits at x=7, y=3        data/maps/objects/OaksLab.asm:22
 --   pressing A on it sets script 8 (no yes/no menu)      scripts/OaksLab.asm:781-806
---   script 9 shows the rival's text with wJoyIgnore $FC  scripts/OaksLab.asm:229-235
---   script 11's text does AddPartyMon (Pikachu L5) and
---     then 12                                            scripts/OaksLab.asm:1017-1043,285-297
+--   script 9 (OaksLabRivalTakesPokeballScript) shows
+--     FIVE text boxes back to back (Text1-5) with
+--     wJoyIgnore $FC                                     scripts/OaksLab.asm:218-243,982-994
+--   script 11's text shows TWO boxes (OakGivesText,
+--     ReceivedText) before it calls AddPartyMon
+--     (Pikachu L5), then advances to 12                  scripts/OaksLab.asm:291-297,1017-1036
 --   Yellow DOES ask for a nickname here, exactly as R/B:
 --     wMonDataLocation is 0                              scripts/OaksLab.asm:1029-1036
 --     so _AddPartyMon reaches AskName                    engine/pokemon/add_mon.asm:43-52
@@ -177,9 +180,10 @@ function M.new(expected)
             -- (TOGGLE_STARTER_BALL_1 HideObject, OaksLab.asm:218-224), so from 9 onward an A can no
             -- longer reach that text at all -- what it CAN reach is a forced-movement frame, which
             -- is why npc_moving / wSimulatedJoypadStatesIndex still have to be clear.
-            -- TWO text boxes live in this window, not one: script 9's "I'll take this one!" and
-            -- script 11's "received PIKACHU!" (OaksLab.asm:291-297), and AddPartyMon fires inside
-            -- the latter -- so party_count is still 0 while it waits. Script 11 is also where the
+            -- SEVEN text boxes live in this window, not two: script 9's FIVE boxes (Text1-5,
+            -- OaksLab.asm:982-994) and script 11's TWO boxes (OakGivesText, ReceivedText,
+            -- OaksLab.asm:1025-1028) before AddPartyMon fires (OaksLab.asm:1036) -- so
+            -- party_count is still 0 while it waits. Script 11 is also where the
             -- mask reads 0 rather than $FC: script 10's RLE walk to Oak (OaksLab.asm:262-289) ends
             -- in .doneSimulating, which zeroes wJoyIgnore (home/overworld.asm:1623-1629).
             if self.ball_fired or (type(script)=="number" and script>=8) then
@@ -242,8 +246,9 @@ function M.new(expected)
             -- holding the pad when the prompt opens. The B pulse above therefore does two jobs:
             -- it answers the TWO_OPTION_MENU with NO (B = second option, text_box.asm:283-286,
             -- :300-303, keeping the species name GetMonName left in wNameBuffer,
-            -- naming_screen.asm:21-23,:44-49) and it advances script 11's remaining
-            -- "OAK: ... received PIKACHU!" boxes; script 12 is the receipt that DisplayTextID
+            -- naming_screen.asm:21-23,:44-49) and it lets script 11's text_asm finish -- both of
+            -- its boxes (OakGivesText, ReceivedText) already printed before AddPartyMon was
+            -- called (OaksLab.asm:1025-1036); script 12 is the receipt that DisplayTextID
             -- returned (OaksLab.asm:285-297). Deleting it strands the fixture on the name screen.
             self.nickname_declined=true
         end
