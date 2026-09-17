@@ -667,14 +667,17 @@ fork). The first time a player ever picks "CHANGE BOX", the game marks **every**
 empty as a one-time init — including box 12, the memorial. A run that buried a pair before the
 player first opened the box menu would lose it silently.
 
-`M.protectSramBoxes()` runs that init itself and sets the bit, so the game's wipe never fires.
-Safe by construction: bit 7 clear means `ChangeBox` has never run, which is the only path that
-writes a real mon to an SRAM box, so there is nothing of the player's to destroy. It is
-idempotent — a second memorial must not re-run the wipe, or it erases the first.
+**Historical (pre-rewrite Gen 1 client, deleted in `21ff0d7`):** that client's `M.protectSramBoxes()`
+ran the init itself and set the bit, so the game's wipe never fired; it also recomputed the
+box-bank checksums with `M.refreshSramBoxChecksums` (a red herring in the decomp — nothing ever
+reads them — but kept for self-consistency). Neither helper exists any more; `lua/memory_gb.lua`
+was trimmed to what the Gen 2 client still calls (`9969845`).
 
-The box-bank checksums are a red herring: every reference in the decomp is a write or a range
-length, and nothing ever reads them. SLink recomputes them anyway (`M.refreshSramBoxChecksums`)
-so SRAM stays self-consistent, but correctness does not depend on it. All of this is
+**The rewritten Gen 1 client takes the opposite approach.** `lua/gen1/boxes.lua` never forces the
+init: it refuses to write an SRAM box until the game's own `ChangeBox` has initialised it
+("saved boxes not initialized"), so there is no window in which SLink's own pre-init could race
+the game's wipe. This is a documented limit, not a regression — see
+`docs/gen1_gen2_runtime_checks.md`'s "Gen 1 — documented limits" section. All of this is
 profile-keyed on `sram_box_layout`, which only Gen 1 declares — Gen 2's box banks differ.
 
 ---
@@ -794,8 +797,7 @@ These are what is *actually* open. The addresses and the memorial box are no lon
   exactly like one that passes, so the gates are Crystal-only and say so. AP Crystal is worse
   off for a different reason: the fork has no public repo, only five of its addresses are
   provable, and its profile stays flagged unverified.
-- **`sram_box_layout` is deliberately absent for Gen 2**, so `protectSramBoxes()` no-ops there.
-  That is correct, not a gap: Gen 2's box banks sit outside the save checksum
+- **`sram_box_layout` is deliberately absent for Gen 2.** That is correct, not a gap: Gen 2's box banks sit outside the save checksum
   (`SaveChecksum` / `VerifyChecksum` cover `sGameData..sGameDataEnd` only), and
   `ChangeBoxSaveGame` does `SaveBox`/`LoadBox` with no `EmptyAllSRAMBoxes` equivalent — there is
   no one-time wipe to defend the memorial against. `test_gen2_writes_gate.lua` proves the burial

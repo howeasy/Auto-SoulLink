@@ -43,7 +43,7 @@ def _rom(title):
 
 
 def _payload_from_rom(rom: bytes, variant: str) -> dict:
-    """Exactly what lua/games/gen1_rby.lua sends: raw hex, no interpretation."""
+    """Exactly what the rewritten client (lua/gen1/client.lua) sends: raw hex, no interpretation."""
     wild, fish = scan_wild(rom), scan_fishing(rom)
 
     def rec(r):

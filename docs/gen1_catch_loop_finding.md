@@ -1,5 +1,12 @@
 # Gen 1 catch loop — solved
 
+**Note (P8-6b):** `lua/tests/probe_gen1_catchloop.lua` and `lua/tests/probe_gen1_wildtable.lua`,
+referenced below, were one-off discovery probes deleted once their findings landed here
+(`9aa7989`, per `lua/tests/README.md`'s "one-off discovery probes are DELETED once their
+findings land" convention). The finding this file documents still stands; the runnable
+equivalent today is the rewritten client's `gen1_new` duo scenarios
+(`tools/e2e_duo.py --game gen1_new`), which exercise the same catch loop end to end.
+
 Status: **root-caused and fixed.** Four separate bugs, each hiding the next. All four
 were found by instrumentation, not by hypothesis — the probe that found them is committed
 at `lua/tests/probe_gen1_catchloop.lua` so the next person does not have to rebuild it.

@@ -33,7 +33,8 @@ Twelve lanes: `unit`, `rom-layout`, `lua-parse`, `profile-addresses`, `profile-g
   cases (3 titles × town/battle) that boot a committed battery save in EmuHawk and run
   `lua/tests/test_gen1_inspect_gate.lua` on the real cartridge, then decode the raw party bytes
   the gate dumped with the Python codec — Lua on hardware and Python on the same bytes must
-  agree field for field — plus two scripted New Game runs (Red and Blue) driven by
+  agree field for field — plus three scripted New Game runs (Red, Blue and Yellow, parametrized
+  in `test_new_game_lab_route_emits_the_engine_sequence`) driven by
   `lua/tests/test_gen1_scripted_gate.lua` with ordinary buttons.
 * **`fixtures`** runs `python tools/gen1_fixtures.py --qualify`, which re-checks every committed
   battery save against the codec without an emulator.
@@ -60,51 +61,64 @@ tolerance; Yellow needs its own scripted route or an owner-made save.
 
 ## Gen 1 — proven live
 
-Exactly the rows of `docs/gen1_requirements.md` whose PHYSICAL column is ✓:
+Every row of `docs/gen1_requirements.md` whose PHYSICAL column is ✓, as of this pass:
 
 | id | what a cartridge proved |
 |---|---|
 | F-2 | every pinned hook site's expected bytes are present in the running ROM (inspect gate, 3 titles) |
-| F-6 | the four R/B fixtures are real game states — scripted play, then `--qualify` |
+| F-6 | all seven R/B/Yellow fixtures are real game states — scripted play, then `--qualify` (Yellow's rebuilt from scripted play, `1a205c3`/`2492554`; the old LEGACY set is empty) |
 | R-1 | Lua on hardware decodes the live party identically to the Python codec (inspect gate, 6/6) |
-| S-1 | scripted NEW GAME → starter → rival on Red and Blue: the engine-signal sequence matches pret's script order; the starter is L5 with exp 135 |
+| R-2 | every duo run's PYDEC qualify step recomputes each saved mon's stats from DVs/stat-exp/base stats and requires equality before decoding anything — the known-positive control runs on real cartridge bytes on every scenario (Red/Blue; Yellow duo stays on the limits list) |
+| S-1 | scripted NEW GAME → starter → rival on Red, Blue and Yellow: the engine-signal sequence matches pret's script order; the starter is L5 (Red/Blue exp 135, Yellow's Pikachu exp 125) — Yellow closed on the retained receipt (`cdaa596`) |
+| S-2 | Route 1 wild encounter → capture/`no_catch`, and ball consumption observed from the bag: `link_new`/`ball_gate_new`/`deadzone_new` (`1259f9c`, `b1cee87`, `3040f8b`) |
+| S-7 | save witness: raw `CartRAM` dump hashed and compared to the flushed `.SaveRAM` slice, site hash == file hash on both halves (`whiteout_new`, `5b30e20`); CONTINUE identity closed by `reconnect_new`'s same-save leg (`e844db2`) |
+| W-1 | benched `force_faint` zeroes party HP/status at the checkpoint, confirmed on the saved cartridge (`linked_faint_bench_new`, `690f387`) |
+| W-2 | active-battler faint at the `MainInBattleLoop` head, zeroing a *living* battler (`hp_before` witness), confirmed by the engine's own faint site (`linked_faint_active_new`, `764bab7`) |
+| W-5 | box/memorial SRAM write + checksums survive a save reload; the game itself reloads what was written (`reconnect_new` off the same flushed save, `e844db2`; box-change closed live by `changebox_new`, `d065ab5`). Still MODEL: the full-Box-12 refusal (20 memorials, undriveable on this route) |
 | W-7 | `gen1_write_safety.check()` reaches the verified overworld checkpoint, idle, on all three titles |
+| C-1 | hello identity / wrong-save rejection: a second-OT relaunch is refused with `links.json` byte-identical (`reconnect_new`, `e844db2`) |
+| C-2 | reconnect mid-run: EmuHawk killed and relaunched off the same save re-hellos with the link intact and zero duplicate gameplay events (`reconnect_new`, `e844db2`) |
+| C-5 | randomized cartridge admission: a matching randomized Red is admitted, a mismatched clean Blue is rejected with no state adopted, both verdicts confirmed against the flushed saves (`admit_randomized_new`, `48a51d7`) |
+| D-1 | encounter linking by area from real play: both cartridges walk Route 1, catch real wild mons, the server pairs them by area (`link_new`, `1259f9c`) |
+| D-2 | the ball gate: no faint propagates and no encounter resolves before `pokeballs_obtained`; the starter gift pair links anyway and both real Rival-1 losses propagate nothing (`ball_gate_new`, `b1cee87`) |
+| D-3 | dead zone formation and both partner-capture-retirement orderings (`deadzone_new` `3040f8b`, `changebox_new` `d065ab5`) |
+| D-4 | species (dupes) clause reroll, reroll branch OBSERVED and the link completed after it (`species_clause_new`, `030b545`) |
+| D-6 | linked faint force-faints the partner in both write windows (bench `690f387`, active `764bab7`) |
+| D-7 | whiteout: both halves rebuild via `rebuild_start`/`rebuild_done`, exactly one `whiteout` event on the wire (`whiteout_new`, `5b30e20`) |
+| D-8 | memorial into Box 12 on both sides, confirmed by the flushed SaveRAM (`deadzone_new`, `3040f8b`) |
+| D-9 | PC sync both directions — deposit then withdraw, saved party/box confirmed (`link_new`, `1259f9c`) |
+| D-14 | session reconnect mid-duo: identity lock + reconnect reconciliation (`reconnect_new`, `e844db2`) |
+| T-1 | the receptionist menu itself is now driven live on Red and Blue (`2bab8bc`), plus the rewritten client's menu-row and companion-patch gates on clean and randomized+injected cartridges (`8f7ef74`). Still on the limits list: physical coverage is one Center, not all 12 + Indigo |
+| T-2 | ineligible/eligible trade offer refused/accepted in-game (receptionist gate, `2bab8bc`) |
+| T-3 | partner YES/NO/decline prompt, screen restored (`trade_new`, `trade_decline_new` `67185fd`) |
+| T-4 | apply: both sides decode swapped mons in the last party slot, links.json halves swapped (`trade_new`, `3040f8b`); decline closes the no-op side (`67185fd`). Trade evolution and the save reload stay MODEL |
+
+Partial (PHYSICAL column ◐ — some live evidence, not a closed row): **D-5** type-clause half is live (`854cd35`), gender is inert-by-data and MODEL-only since Gen 1 has no gender; **D-12** game-over fires live on both faint scenarios, but the HUD text is an overlay the client itself can't read back, so the row can't close further; **C-4** the client kept operating and every run reached PASS across an observed "writes PAUSED: party unreadable" window, but fault injection itself is MODEL by construction; **S-4** whiteout's single-event guarantee is live (`5b30e20`), poison faint and blackout/HealParty ordering are not — `poison_new` PASSED live 2026-09-17 with receipts committed (`7f23199`: poison faint in Viridian Forest, blackout to Pallet, memorial saved); the ledger cell update follows; **F-3** most of the 17 pinned sites now have a receipt (see the ledger's per-mechanism map), poison faint, blackout and PC deposit/withdraw markers now have receipts (`7f23199`); the soft reset markers are still pending.
 
 ## Gen 1 — not yet proven live
 
-Everything else in the ledger. Rows whose PHYSICAL column is `·`:
+Rows whose PHYSICAL column is still `·`:
 
 | id | still open |
 |---|---|
-| F-3 | the differential gate over all 17 pinned sites |
-| R-2 | stats leg ✓ MODEL (blocked level leg: see the Yellow fixtures above) |
 | R-3 | trainer class/name, badges, PP-Ups, active box index |
 | R-4 | title screen never validates; soft reset revokes writes |
-| S-2 | wild encounter, capture, `no_catch`, ball detection |
 | S-3 | party-full capture via `SendNewMonToBox` |
-| S-4 | poison faint and blackout ordering |
 | S-5 | evolution and NPC-trade `key_change` |
 | S-6 | PC deposit / withdraw / release / `ChangeBox` |
-| S-7 | save witness and CONTINUE |
 | S-8 | `area_enter`, statics, gifts, fishing map ids |
-| W-1 | benched `force_faint` at the checkpoint |
-| W-2 | active-battler faint at the loop head |
-| W-3 | `force_explode` across all four move slots |
+| W-3 | `force_explode` across all four move slots (`explode_new` has not landed a PASS receipt) |
 | W-4 | `replace_rival_team` validation and atomicity |
-| W-5 | box / memorial writes that survive a save reload |
 | W-6 | gate revocation and every NACK path |
-| C-1 | hello identity / wrong-save rejection |
-| C-2 | reconnect mid-run |
 | C-3 | dashboard rendering for Gen 1 |
-| D-1 … D-14 | the whole duo lane: linking, the ball gate, the dead zone, the clauses, faint propagation, whiteout, memorial, PC sync, trade/evolution key migration, rival swap, game over, key non-uniqueness, reconnect |
-| T-1 | ◐ panel gates pass on the trade-carrying build; **the receptionist menu has not been driven live** |
-| T-2 … T-4 | offer eligibility, partner prompt, apply/evolution |
+| D-10, D-11, D-13 | trade/evolution key migration (SOURCE+MODEL only), rival-team-swap-only-if-A13-skipped, key non-uniqueness (MODEL: 1/65536 per pair) — all on the recorded-limits list |
+| pc_ops_new, soft_reset_new, explode_new | driven live but have not landed a committed PASS receipt as of this pass |
 
 Rows the ledger marks `—` (F-1 addresses, F-4 ROM tables, F-5 families and dex order, C-0
-protocol conformance, C-4 unwedgeable client, T-5 crash mid-trade) take no cartridge proof by
-design. For the first five that is because SOURCE or MODEL evidence is what they call for; T-5
-is different — its MODEL row is not written yet either, so the crash-mid-trade watchdog is open
-work even though no physical proof is owed.
+protocol conformance, T-5 crash mid-trade) take no cartridge proof by design: SOURCE or MODEL
+evidence is what they call for, and T-5's watchdog is proven only by unit tests — killing a
+cartridge mid-apply is what the watchdog exists to survive, and no oracle outside the server can
+witness the abandoned half.
 
 ## Gen 1 — the three write windows
 
@@ -177,8 +191,10 @@ exists at all.
 
 Three scenarios pass, both sides: `faint`, `boxsync`, `memorialize` — the last burying the
 pair in Box 14 (`MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`), which sits outside Gen 2's
-save checksum, so unlike Gen 1 there is no `EmptyAllSRAMBoxes` to defend against and
-`M.protectSramBoxes()` correctly no-ops.
+save checksum, so unlike Gen 1 there is no `EmptyAllSRAMBoxes` to defend against. (The
+pre-rewrite Gen 1 client's `M.protectSramBoxes()` correctly no-op'd for Gen 2 on this same
+reasoning; that helper no longer exists at all — `memory_gb.lua` was trimmed to Gen 2 only in
+`9969845`, and Gen 2 never needed it in the first place.)
 
 `playthrough`, `deadzone` and `dupes` do **not** run on Gen 2, and that is a decision, not an
 omission — see "Still open" below.

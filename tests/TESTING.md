@@ -829,14 +829,21 @@ by what is actually shared:
 
 | Files | Used by | Scenarios |
 |---|---|---|
-| `duo_gb_main.lua`, `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 1 **and** Gen 2 | `faint`, `boxsync`, `memorialize` |
-| `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua` | Gen 1 only | the rest |
+| `duo_gb_main.lua`, `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 2 only | `faint`, `boxsync`, `memorialize` |
+| `duo_gen1_main.lua`, `scenarios.<name>()` (no prefix lookup) | Gen 1 (rewritten client) | 18 `gen1_new` scenarios — `link_new`, `deadzone_new`, `linked_faint_bench_new`, `linked_faint_active_new`, `reconnect_new`, `ball_gate_new`, `trade_new`, `soft_reset_new`, `trade_decline_new`, `explode_new`, `pc_ops_new`, `changebox_new`, `whiteout_new`, `type_clause_new`, `species_clause_new`, `poison_new`, `rival_swap_new`, `admit_randomized_new` |
 
-**Gen 1** runs all nine, across two cartridge pairings — Red/Blue and Yellow/Red. Yellow is not
-a formality: pairing it with Red rather than a second Yellow means a −1 shift bug shows up as an
-asymmetry between the halves instead of cancelling out. Unlike Gen 3, none of this needs a
-patched ROM — Gen 1's enemy party is plaintext, so the rival swap and Explode Mode run on stock
-cartridges.
+The old `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua` prefix
+files and the `gen1`/`gen1_yellow` duo titles they drove no longer exist — deleted in the
+harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion
+(`21ff0d7`); `duo_gb_main.lua` now serves Gen 2 only.
+
+**Gen 1** runs all eighteen `gen1_new` scenarios, Red as player A against Blue as player B —
+there is no Yellow pairing in this harness (Yellow's −1 WRAM shift is instead exercised by the
+non-duo `tests/live/test_gen1_new_gates.py`, which runs on all three cartridges individually).
+Unlike Gen 3, none of this needs a patched ROM for the rules themselves — Gen 1's enemy party is
+plaintext, so the rival swap and Explode Mode run on stock cartridges (the duo harness still
+boots the companion-patched builds by default; `trade_new`/`trade_decline_new` use the
+trade-carrying build for the SLINK TRADE receptionist).
 
 **Gen 2** runs three, and the choice is deliberate rather than "what happened to work":
 

@@ -882,7 +882,7 @@ pytest tests/unit/ -v          # 1595 passed, 5 skipped; no emulator needed
 pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. tick reconciliation)
 pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
-pytest tests/unit/test_gen1_adapter.py -v      # Gen 1 adapter tests
+pytest tests/unit/test_gen1_adapter_contract.py -v  # 9 Gen 1 adapter-contract tests (the rewrite's Gen 1 coverage is spread across tests/unit/test_gen1_*.py, ~40 files)
 pytest tests/unit/test_gen2_adapter.py -v      # 179 Gen 2 adapter tests
 pytest tests/unit/test_gen5_adapter.py -v      # 140 Gen 5 adapter tests
 pytest tests/unit/test_stat_stages.py -v       # 46 stat stage tests
@@ -936,7 +936,8 @@ SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # 3 duo scenarios, two Cr
 ```
 
 > `--scenario all` is **`gen1_new` / Gen 3 only** (the old `gen1`/`gen1_yellow` game ids were
-> retired with their client and scenario drivers, commit `9aa7989`). It expands to every entry
+> retired with their scenario drivers in the harness deletion sweep, `2395145`/`832d499`; the
+> legacy client itself was deleted separately, `21ff0d7`). It expands to every entry
 > in the runner's `SCENARIOS` dict that names the given game via `scenarios_for()` — `--game
 > gen2 --scenario all` would otherwise launch Gen 3/Gen 1-only scenarios and fail for reasons
 > unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2 --scenario faint`
@@ -946,7 +947,7 @@ SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # 3 duo scenarios, two Cr
 
 The Gen 2 gates (`test_gen2_memory_gate.lua`, `test_gen2_writes_gate.lua`) run on **Crystal only** — see the Supported Games caveat above for why a silently-skipping Gold/Silver entry would be worse than none. Its three duo scenarios (`faint`, `boxsync`, `memorialize`) run **two instances of the same Crystal dump**. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
 
-Gen 2's duo scenarios go through the shared driver: `lua/tests/duo/duo_gb_main.lua` resolves each name as `scenario_gen2_<name>` and then falls back to `scenario_gb_<name>`, so `faint` / `boxsync` / `memorialize` come from files (`scenario_gb_*.lua`) any GB generation could share. **The rewritten Gen 1 client does not go through this file at all.** Its `gen1_new` duo scenarios run under a dedicated driver, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` client they drove were deleted with the legacy client (commit `9aa7989`).
+Gen 2's duo scenarios go through the shared driver: `lua/tests/duo/duo_gb_main.lua` resolves each name as `scenario_gen2_<name>` and then falls back to `scenario_gb_<name>`, so `faint` / `boxsync` / `memorialize` come from files (`scenario_gb_*.lua`) any GB generation could share. **The rewritten Gen 1 client does not go through this file at all.** Its `gen1_new` duo scenarios run under a dedicated driver, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` duo titles they drove were removed in the harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion (`21ff0d7`).
 
 Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crystal_town.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates) or `python tools/gen2_playthrough.py`. Gen 2 has an **indoor `town` target only** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
 
@@ -963,7 +964,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crysta
 | `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
 | `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
 | `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
-| `lua/memory_gb.lua` | GB/GBC RAM helpers — **shared by Gen 1 and Gen 2**, so every offset is profile-keyed, never a per-game constant. Party/box read+write, PP-Up masking, `isInOverworld`, enemy-party write, force-faint, force-explode |
+| `lua/memory_gb.lua` | GB/GBC RAM helpers — **Gen 2 only** since the rewrite (`9969845` trimmed the module to what the Gen 2 client still calls; the rewritten Gen 1 client uses `lua/gen1/{reads,writes,boxes}.lua` instead, not this file). Party/box read+write, PP-Up masking, `isInOverworld`, force-faint; offsets remain profile-keyed. |
 | `lua/clients/gen3_frlge_client.lua` | Gen 3 production client — FRLG/Emerald/Radical Red. Localized BizHawk memory functions, display data cache, battle/overworld state cached once per frame. |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
@@ -983,7 +984,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crysta
 | `server/adapters/gen4_hgsspt.py` | Gen 4 adapter — PID:OTID keys, HGSS gift areas, Gen 1-4 species |
 | `server/adapters/gen5_bw.py` | Gen 5 adapter — PID:OTID keys, BW/BW2 gift areas, Gen 1-5 species |
 | `server/adapters/base.py` | Adapter ABC — GameRulesAdapter + GamePresentationAdapter interfaces |
-| `data/games/gen1_rby/` | Gen 1 game data — area/location mappings |
+| `data/games/gen1_rby/` | Gen 1 game data — generated JSON tables the rewritten client's `entry.lua` opens directly (`profile.json`, `engine_signals.json`, `area_map.json`, `write_checkpoint.json`, `wild_encounter_sites.json`, plus `evolutions.json`, `trainers.json`, `species_index.json`, `static_encounters.json`, `continue_sites.json`, `moves.json`, `floor_labels.json`); the old `gen1_rby_areas.lua`/`gen1_rby_locations.lua` mapping files were deleted with the legacy client (`21ff0d7`) |
 | `data/games/gen3_frlge/` | Gen 3 game data — area maps, RR items/sprites/types/species/trainers |
 | `data/games/gen3_frlge/rr_priority_trainers.json` | Generated RR priority/key-trainer roster (areas → trainers, parties, level caps) feeding the Upcoming Key Trainers panel + calc Prep tab |
 | `data/games/gen4_hgsspt/` | Gen 4 game data — HGSS area map |

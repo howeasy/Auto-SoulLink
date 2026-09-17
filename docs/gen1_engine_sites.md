@@ -415,7 +415,8 @@ bullet names the receipt or commit that showed the fact; client consequences poi
   `tests/fixtures/gen1/receipts/e2e_link_new_a_result.txt` as refreshed by `a478ae7`:
   `PARTY_UNREADABLE @6460 … species list and struct disagree` → `PARTY_READABLE @6980`). Client:
   the writes gate pauses and keeps its queue; a `force_faint` arriving in the window is deferred
-  (`lua/gen1/client.lua:189-196`, `:223-229`; fixes `1a5941f`, `cb2fe26`).
+  (`lua/gen1/client.lua:270-277` writes-pause, `:313-331` deferred `force_faint`/`force_explode`;
+  fixes `1a5941f`, `cb2fe26`).
 - **Boot and reset are not "in the game".** `home/init.asm` zero-fills the whole WRAM0 segment
   (`:33-41`: `ld hl, STARTOF(WRAM0)` / `ld bc, SIZEOF(WRAM0)` / clear loop) — the `$C000-$DFFF` GB
   block that holds every symbol in our generated profile (`$C100-$DEE2`). `wPartyCount` and
@@ -475,7 +476,7 @@ This addendum distinguishes a committed receipt, a failed/uncommitted observatio
 | Poison faint | `<pending: poison_new>`; expected `POISON_FAINT_SITE frame=%d slot=%d` (`lua/tests/duo/duo_gen1_main.lua:2471`, oracle `tools/e2e_duo.py:2687`). Supplied uncommitted `poison_run/e2e_poison_new_b_result.txt:62-63` ends hunt-stuck before the marker. |
 | Poison blackout / lost-battle blackout | `<pending: poison_new>` / `<pending: whiteout_new>`; expected `BLACKOUT_FLAG frame=%d value=FF` and `BLACKOUT_SITE map=%d x=%d y=%d` (`lua/tests/duo/duo_gen1_main.lua:2604-2609`; whiteout destination `:2387-2391`). Supplied poison/whiteout runs did not reach these markers. BLACKOUT_SITE reads post-warp coordinates, not a hook PC; destination alone does not prove pre-HealParty snapshot ordering. |
 | PC deposit/withdraw | `<pending: pc_ops_new after client fix>`; uncommitted `pc_ops_run/e2e_pc_ops_new_a_result.txt:88,91,100,104` contains TX `party_to_box`, `PC_OP deposit done`, TX `box_to_party`, `PC_OP withdraw done`. But `:102,114` has a spurious `RELEASE_SEEN` during withdrawal and FAIL. Require accepted A/B/PYDEC receipts after the client fix before promotion. |
-| PC release | `<pending: pc_release_new>` (scenario placeholder); no genuine release receipt supplied. The false withdrawal marker is not release proof. `[SLink-gen1] RELEASE_SEEN key=%s box=%d` is logged at `lua/gen1/client.lua:645`; release propagation remains a recorded shared-protocol limit. |
+| PC release | `<pending: pc_release_new>` (scenario placeholder); no genuine release receipt supplied. The false withdrawal marker is not release proof. `[SLink-gen1] RELEASE_SEEN key=%s box=%d` is logged at `lua/gen1/client.lua:759`; release propagation remains a recorded shared-protocol limit. |
 | Soft reset | `<pending: soft_reset_new>`; uncommitted `soft_reset_run/e2e_soft_reset_new_a_result.txt:21,23` has `RESET_SEEN frame=55 abs=2528` / `HELLO_CLEARED frame=2579 delta=51`, but its PYDEC receipt `:3` fails `links.json changed across the soft reset`. Do not promote the scenario from client PASS alone. |
 
 ### Citation errata (pinned pret, not moving upstream)

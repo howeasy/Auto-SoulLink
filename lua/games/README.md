@@ -18,7 +18,8 @@ lua/
 ├── hud.lua                ← Shared HUD overlay module
 ├── connector.lua          ← Shared TCP connector
 ├── socket.lua             ← LuaSocket loader
-├── memory_gb.lua          ← GB/GBC memory helpers (Gen 1 & Gen 2)
+├── memory_gb.lua          ← GB/GBC memory helpers (Gen 2 only — the rewritten Gen 1 client
+│                             uses lua/gen1/{reads,writes,boxes}.lua instead)
 ├── memory_gba.lua         ← GBA memory helpers (Gen 3)
 ├── memory_nds.lua         ← NDS memory helpers (Gen 4 & Gen 5)
 ├── games/                 ← Game modules (this directory)

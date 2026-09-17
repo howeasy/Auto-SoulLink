@@ -76,19 +76,22 @@ Archipelago variants have never been launched. See
   pret/pokered defines `PP_UP_MASK %11000000` / `PP_MASK %00111111`, so the low 6 bits are
   current PP and the top 2 are the PP-Up count — same encoding as Gen 2 (`pp_encoding = "ppup_packed"`).
 - Badges: 8 badges tracked via bitfield at wObtainedBadges.
-- Memorial box: Box 12 (via `M.depositMemorialMon`; falls back to `depositPartyMon` if Box 12
-  is full). **The deposit claims the SRAM box banks first.** `ChangeBox` empties every SRAM box
-  the first time the player opens the box menu (`bit BIT_HAS_CHANGED_BOXES` / `call z,
-  EmptyAllSRAMBoxes`, save.asm:366), which would erase the memorial; `M.protectSramBoxes()`
-  performs that one-time init itself and sets the bit so the game's wipe never runs. Box-bank
-  checksums are recomputed for consistency, but vanilla never reads them.
+- Memorial box: Box 12 (`lua/gen1/boxes.lua`). **`ChangeBox` empties every SRAM box the first
+  time the player opens the box menu** (`bit BIT_HAS_CHANGED_BOXES` / `call z,
+  EmptyAllSRAMBoxes`, save.asm:366), which would erase the memorial if SLink wrote into an
+  uninitialised bank. The rewritten client does not pre-run that init itself (the pre-rewrite
+  client's `M.protectSramBoxes()` did; it and `memory_gb.lua`'s Gen 1 helpers were removed in
+  `9969845`) — instead `lua/gen1/boxes.lua` refuses to write an SRAM box until the game's own
+  `ChangeBox` has initialised it, logging "saved boxes not initialized" rather than writing.
+  Box-bank checksums are recomputed for consistency, but vanilla never reads them.
 - Sound: **requires the companion patch.** Gen 1 has no RAM-writable sound trigger —
   `wNewSoundID` is `PlaySound`'s internal scratch, not a polled mailbox — so unpatched Red/Blue,
   Yellow and AP builds are silent and `playSfx` is a no-op. Ids are bank-relative; the defaults
   use only the 64 SFX that resolve identically in all three audio banks.
 - **Rival Team Swap and Explode Mode need no ROM patch.** Gen 3 required the companion
   patch for the swap because `gEnemyParty` is encrypted and checksummed; Gen 1's enemy party
-  is plaintext at a fixed address, so `M.writeEnemyParty` is a byte copy over
+  is plaintext at a fixed address, so the rewritten client's `self:replace_rival_team`
+  (`lua/gen1/client.lua:404`) is a byte copy over
   `wEnemyPartyCount` (`0xD89C`) → species list → `wEnemyMons` → `wEnemyMonOT` → `wEnemyMonNicks`,
   a contiguous 0x194-byte block. Rivals are identified by CLASS: RIVAL1/2/3 = `$19`/`$2A`/`$2B`
   + `OPP_ID_OFFSET(200)` = **225 / 242 / 243**, read from `wCurOpponent`.
