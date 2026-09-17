@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-17T16:19:23+00:00",
+  "updated_at_utc": "2026-09-17T16:24:18+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "2411a7b",
   "live_lane": null,
@@ -27,14 +27,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "files": [
         "docs/gen1_resume.md",
         "docs/gen1_reference checkpoint (this file)",
-        "LEASED subagent A3-lua: lua/tests/duo/duo_gen1_main.lua",
-        "LEASED subagent A11-gates: lua/tests/test_gen1_menu_row_gate.lua, lua/tests/test_gen1_patch_gate.lua, lua/tests/gen1_rb_center_inputs.lua (glyph table), lua/tests/gen1_gate.lua (:72 stub HUD), tests/live/test_gen1_gates.py",
+        "LEASED subagent A3-lua: lua/tests/duo/duo_gen1_main.lua (+ the admit_randomized_new game_save spec)",
         "LEASED subagent CLIENT-TESTS: tests/unit/test_gen1_client.py",
-        "LEASED OMP A0-H2 (cx-49d2fd6b): tools/e2e_duo.py, tests/unit/test_e2e_duo_scenario_selection.py, tests/unit/test_e2e_duo_admission.py, tests/e2e/test_duo_gen1_new.py"
+        "LEASED subagent SERVER-SEQ: server/server.py + its seq unit test file",
+        "LEASED OMP A2-py (next card): tools/e2e_duo.py, tests/unit/test_e2e_duo_admission.py, tests/unit/test_e2e_duo_scenario_selection.py, tests/e2e/test_duo_gen1_new.py, server/server.py _live dict ONLY after SERVER-SEQ lands (sequenced)"
       ],
-      "next_action": "HEAD 50f265a. Since last checkpoint: a0349b8 Yellow lab driver (A10 half), d6bdc34 A1 tooling (OMP; current-box premise corrected), 9bca8af red_town_ot2.SaveRAM (OT 0x8C4C at --title-idle 360; 120 left it at 0x4190), 50f265a A2 bodies soft_reset_new + trade_decline_new (Python side pending, 7 findings recorded in the report). LIVE: reconnect_new -- C-2 same-save leg PASSED for the first time (link/OT/events unchanged across the relaunch); C-1 wrong-save leg FAILED: server.py restart detector (seq <= 1 and last > 10) dropped the wrong-save hello as a duplicate because the short same-save session ended below seq 10, then its ticks were reconciled as slot A (ghost-party discards). FIX CARD next free subagent slot: per-connection _last_seq reset on disconnect/new connection + hello-first gate on non-hello events, unit-pinned; then rerun reconnect_new with --wrong-save. Run dir kept: %TEMP%/slink_duo_reconnect_new_4k1oulb9. LANE: free.",
+      "next_action": "HEAD = the receipts commit after 107cc99. Landed: 3c82cf0 A11 gate port, 107cc99 A0-H2 registry/provenance/bag baseline (OMP), gate receipts: patch gate PASS Red+Blue, menu-row gate PASS Red/Blue/randomized Red -- T-1 prerequisites PHYSICAL on the NEW client. reconnect_new C-2 PASS live; C-1 blocked on SERVER-SEQ (subagent in flight). In flight: A3 explode body, CLIENT-TESTS (red-first), SERVER-SEQ. Next lane runs in order: reconnect_new (after SERVER-SEQ), admit_randomized_new (after the Lua game_save lands), link_new (bag baseline receipt), soft_reset_new + trade_decline_new (after OMP A2-py), explode_new. LANE: free.",
       "reuse_decision": "shared infra (state.py/server.py/connector/hud/adapters/base.py) reused unchanged; Gen 1 facts regenerated from pret; RC runtime not adopted; harness mechanisms (post-result oracle registry, fail-closed runner) recorded for docs/shared_runtime.md",
-      "source_head": "50f265a",
+      "source_head": "107cc99",
       "independent_review": "OMP Gen1 Peer 2 reviews every coordinator Lua/client diff before a lane run; subagent cuts are coordinator-reviewed and OMP adversarial-reviewed before the tag; no worker reviews its own cut"
     },
     {
