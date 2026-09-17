@@ -1,4 +1,4 @@
-# Gen 1 master release — resume note (2026-09-17 ~19:00Z, harness restart for the Magi repair)
+# Gen 1 master release — resume note (2026-09-17 ~22:30Z, owner break)
 
 Read this first after a context reset or harness restart. The ledger `docs/gen1_requirements.md`
 is the authority on evidence; this note is the working state around it. Plan (owner-approved,
@@ -8,89 +8,94 @@ standing worker contract every card brief points at is `docs/agents/worker_card.
 ## Where things are
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch
-  `claude/gen1-master-release-plan-6b4279` = master `d2c30fb` + ~118 commits. HEAD `1a205c3` at
-  the time of writing (see the commit list below). Untracked `tools/e2e_duo_head.py` is a frozen
-  copy of the harness for lane runs while OMP leases `tools/e2e_duo.py`; delete it when OMP is
-  done with that file.
+  `claude/gen1-master-release-plan-6b4279` = master `d2c30fb` + ~135 commits. HEAD `471529b` at
+  the time of writing. Untracked `tools/e2e_duo_head.py` = frozen copy of the harness for lane
+  runs while OMP leases `tools/e2e_duo.py` (refresh with `git show HEAD:tools/e2e_duo.py >
+  tools/e2e_duo_head.py` before each run; delete when OMP is done).
+- Uncommitted on the lane tree: `tools/e2e_duo.py` = OMP's card H-1 in progress (see Workers).
 - Workers: Codex capped until 2026-09-19 07:34. OMP live `Gen1 Peer 2` (pid 25980, cwd repo
-  root, purpose "Implement A6-py duo scenarios"; name it explicitly) takes harness/oracle cards
-  with literal specs, never commits; a second live OMP session on Union Alpha (`01a0b05f-…`,
-  purpose "ping") takes fact-checks; headless `openrouter/stealth/union-alpha` takes reviews
-  (the owner repaired the Magi bridge so headless calls no longer block; until confirmed, route
-  them through a background Sonnet relay subagent — see memory `feedback_no_blocking_peer_calls`).
-  Opus subagents take Lua bodies/drivers/independent reviews, Sonnet takes docs/ledger/relays;
-  the coordinator only orchestrates. Rules: no duo lane run while `lua/gen1/` or
-  `lua/tests/duo/duo_gen1_main.lua` is leased on the lane tree (Lua workers now edit a SCRATCH
-  COPY of HEAD under the session scratchpad and deliver `git diff --no-index` patches the
-  coordinator applies with `git apply -p1`); one emulator lane, lent to a subagent only with a
-  bounded run count; every peer reply gets a recorded `outcome` before the next request
-  (the bridge refuses new requests otherwise: RECONCILE_FIRST); the coordinator cannot `reply`
-  to its own DELEGATE task — send corrections as `kind: note` to the peer.
+  root; name it explicitly). Live Union Alpha session: address it by its FULL id
+  `01a0b05f-22eb-7702-8c70-e000a2dca0d8` (its display name and pid do not route). Headless
+  `openrouter/stealth/union-alpha` no longer blocks (owner repaired the bridge; a request returns
+  `running` at once and the reply arrives as a cross-session message). Peer replies that miss the
+  session land in the bridge mailbox: read with
+  `node "E:/Howard/ClaudEx/bin/magi.mjs" exchange <task_id>`; every reply needs a recorded
+  `outcome` before the next request (RECONCILE_FIRST). Corrections to a running DELEGATE go as
+  `kind: note` (a `reply` from the orchestrator is a ROLE_VIOLATION).
+- Lua/driver/client/server workers edit a SCRATCH COPY of HEAD (`git archive HEAD | tar -x` into
+  the session scratchpad) and deliver `git diff --no-index --src-prefix= --dst-prefix=` patches;
+  the coordinator applies them (`git apply -p1`, or `-p0` when the patch paths are repo-relative;
+  a NEW file needs a proper `/dev/null` new-file diff or a plain copy). Shared-module patches
+  (`server/`) go through the `slink-adapter-guard` agent before commit. One emulator lane; a
+  subagent may hold it with a bounded run count. No duo run on a tree that differs from HEAD.
+- Owner rulings today: HUD/GUI text drawn with `gui.drawText` must be cleared explicitly
+  (`gui.clearGraphics`/`gui.cleartext`) — fixed in 9826465; the shared runtime defines the
+  standard and Gen 3 conforms to it later (no Gen 3 accommodations in shared code).
 - Checkpoint (hook contract): `gen1-rby-code-sweep-8d06e2/docs/gen1_reference/RC_MASTER_GUIDE.md`
   worker `master-release-lane` + `WORKTREE_REGISTER.md`; refreshed by
   `gen1-rby-code-sweep-8d06e2/docs/gen1_reference/refresh_master_lane_checkpoint.py`
   (args: state, files-json, next_action, live_lane, head, register-note).
 
-## Committed this session (all reviewed or fact-checked independently)
+## Live results today (receipts under `tests/fixtures/gen1/receipts/`, committed)
 
-| Commit | What | Review |
-|---|---|---|
-| 90ca378 | `whiteout_new` Python (registry, BOTH_BOXED gate on `/api/debug/raw_state` `_live.party_keys`, oracle) | headless union-alpha: no blocking defect; two low fixes on the OMP S-7-py card |
-| b2f29f8 | three duo bodies: F-1 active-faint fix (free move-menu cancel to the loop head), A4 `type_clause_new`/`species_clause_new`, A7 `poison_new` | F-1: Opus review says FIX FIRST (below); A4/A7 regions: union-alpha review in flight |
-| f79ebaa | ledger cells T-1/C-1/C-2/D-1 (fact-checked, narrowed) | union-alpha fact-check + coordinator git check |
-| 27aaf23 | A4/A7 Python (registry, `A_PENDING` release gate, retry-on-PASS for the reroll branch, `saved_money`, per-instance `target`) | union-alpha review: 5 findings → OMP card r2 (queued) |
-| d27387a | S-7 save-witness Lua dump inside the `SaveMenu.save+3` bus callback | Union Alpha fact-check: gate the dump on a VALIDATED fire (fix-up in flight) |
-| 1a205c3 | Yellow lab driver first contact fixed (wJoyIgnore mask; script 11), `yellow_town` rebuilt clean and dropped from LEGACY | falsifier 43 screens; qualify sweep |
-
-## Root causes found this session
-
-- `linked_faint_active_new` run at 27a324b: the driver's real move commit (pad fix e95cefa) let
-  the wild KO the 5/15-HP linked mon inside the turn; the client demoted the queued loop-head
-  write to the checkpoint and dropped it (`client.lua:754-756`, silent, no NACK — product
-  finding for the ledger limits list). The old PASS receipt came from a driver that pressed
-  nothing. Fix b2f29f8 + the pending `hp_before` guard.
-- Yellow lab route: two Yellow script states run with `wJoyIgnore = 0`; the R/B-derived
-  `== $FC` test never matched (1a205c3). `yellow_battle` still LEGACY: the shared parcel driver's
-  unbounded `unexpected-menu` guard (`gen1_rb_parcel_inputs.lua:114-117`) deadlocks after the
-  Viridian Mart handover on Yellow (card Y-2).
-- Harness: `assert_explode_saved` delegates to `assert_linked_faint_saved(active=True)` which
-  requires `RX force_faint`/`LOOP_HEAD_WRITE`, then asserts them absent → `explode_new` cannot
-  pass its oracle (finding 6 on OMP card r2).
-
-## In flight at the restart (re-dispatch what did not report; OMP cards survive)
-
-| Worker | Card | Lease | Deliverable |
+| Scenario | Result | Rows | Commit |
 |---|---|---|---|
-| Opus (lane tree) | S-7 dump gate on validated fire + F-1 `hp_before` guard + comment fixes | `lua/tests/duo/duo_gen1_main.lua` | edited file in the tree; commit after lua_syntax_check |
-| Opus (emulator) | Y-2 parcel-driver deadlock, rebuild `yellow_battle`, one Red non-writing smoke | `lua/tests/gen1_rb_parcel_inputs.lua`, `gen1_rb_mart_signature.lua`, its test, `yellow_battle.SaveRAM` | logs `scratchpad/y2_run<k>.log`; then drop `yellow_battle` from the LEGACY sets (`tools/gen1_fixtures.py:56-62`, `tests/unit/test_gen1_stat_control.py:37`, `tests/unit/test_gen1_fixture_qualify.py:28-30`) |
-| Sonnet relay | union-alpha adversarial review of b2f29f8 regions A4/A7 | read-only | findings → fix-up card |
-| OMP Gen1 Peer 2 | S-7-py (cx-e352942a): witness sha256 vs `saveram[0x498:0x8000]`, `SAVE_WITNESS_SHA256` PYDEC line, stale-file cleanup, + two A5 review fixes | `tools/e2e_duo.py`, `tests/unit/test_e2e_duo_whiteout.py`, new `test_e2e_duo_save_witness.py` | then r2 (cx-3e16820d): six findings on 27aaf23 |
+| `linked_faint_active_new` | PASS (attempt 2; `LOOP_HEAD_WRITE … hp_before=5`; first S-7 witness dumps, byte-identical to the flushed saves) | W-2, S-7 partial | 764bab7 |
+| `type_clause_new` | PASS first run | D-5 type half | 854cd35 |
+| `changebox_new` | PASS first run | W-5 box change, D-3 | d065ab5 |
+| `trade_decline_new` | PASS after the rendezvous fix | T-3/T-4 decline half | 67185fd |
+| `species_clause_new` | attempt 1 PASS (reroll not met); attempt 2 reroll OBSERVED then the second RUN stuck | D-4 partial | 44c92e5 |
+| Yellow lab gate | 1 passed | S-1 Yellow half | b908bfd (log receipt) |
+| `soft_reset_new` | clients PASS, oracle byte-compared links.json that re-ordered after the re-hello | — (H-1b) | evidence `scratchpad/soft_reset_run/` |
+| `whiteout_new` | run 1 no party_to_box (client latch, FIXED 43de809); run 2 Growl loop stalled (FIXED 07c15ee); run 3 wild battle on the walk back (OPEN, WO-2) | — | evidence `scratchpad/whiteout_run{2,3}/` |
+| `pc_ops_new` | deposit OK, WITHDRAW misread as RELEASE_SEEN (client r2/r3 in flight) | — | evidence `scratchpad/pc_ops_run/` |
+| `poison_new` | walk to the forest OK; RUN stuck (driver FIXED 471529b, rerun pending) | — | evidence `scratchpad/poison_run/` |
+| `explode_new` | attempt 2: Explode Mode chain on B complete (LOOP_HEAD_EXPLODE, self-KO) then post-faint stall (EX-1 in flight) | — | evidence `scratchpad/explode_run/` |
 
-Session scratchpad (patches, logs, scratch copies):
-`C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/`
-(`f1_faint.patch`, `a4_clauses.patch`, `a7_poison.patch` are applied; `faint_run/` holds the
-failed run's receipts; `lane_faint_active.log`, `yellow_*.log`, `y1_*.log`, `y2_*.log`).
+## Fixes committed today (each reviewed or fact-checked independently)
 
-## Lane queue (in order, after the fix-ups above are committed and the tree is unleased)
+90ca378 whiteout Python · b2f29f8 three bodies (F-1 free-cancel faint, A4, A7) · f79ebaa/99bb312/
+77f1c8c/8132547/b908bfd ledger cells · 27aaf23 clause/poison Python · d27387a + 6223571 S-7 witness
+dump + validated-fire gate + hp_before witness · 1a205c3 Yellow lab driver + yellow_town ·
+2492554 parcel stray-box fix + yellow_battle (LEGACY empty) · 43de809 client echo-guard aged
+(superseded by r2/r3 in flight) · 0dcf5c7 clause/poison Lua fix-ups · 052cf62 A13 rival body +
+Route 22 driver · 629e75d trade rendezvous · 9826465 HUD surface clear · 1093ee7 S-7 runner check
++ r2 harness fix-ups (explode delegate keyword, species release gate → GameRngMiss, wrapper
+deadline/fixtures) · 07c15ee Growl-loop B taps · 99099ad Yellow driver review fix-ups · 471529b
+battle-driver RUN re-press.
 
-1. `linked_faint_active_new` via `tools/e2e_duo_head.py` (refresh the copy from HEAD first if
-   OMP still holds `tools/e2e_duo.py`) — first exercise of the S-7 witness; replace the committed
-   receipt `tests/fixtures/gen1/receipts/linked_faint_active_new_b_result.txt` (pre-pad-fix) on PASS.
-2. `whiteout_new` (first run), then `type_clause_new` (deterministic), `poison_new`
-   (RNG-retryable), `species_clause_new` (up to 3 attempts; NOT-observed line = D-4 stays ◐).
-3. `soft_reset_new`, `trade_decline_new`, `explode_new` (after r2's oracle fix), `pc_ops_new`,
-   `changebox_new`; diagnose every failure from its kept run dir (`--keep-data`) before a rerun.
-4. Yellow lab gate once `yellow_battle` is rebuilt:
-   `SLINK_LIVE=1 pytest tests/live/test_gen1_new_gates.py -k "new_game_lab_route and yellow"`.
-5. A9 dashboard snapshots during a link_new-family run; A13 optional; then A12 full `duo-pairs`
-   pass, ledger pass (incl. the client.lua:754 silent-downgrade limit and the S-7 row wording:
-   sha256 of the raw 0x7B68 witness bytes, lower-case hex), Track B, tag `v0.3.0`.
+## In flight / ready to integrate (check the scratchpad first)
+
+Scratchpad: `C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/`
+
+| Card | State | Where |
+|---|---|---|
+| SV-1 r2 server in-flight sync commands (`_arm_inflight` at the drain, `_expire_inflight` in the reconciler, 6 passes) | patch ready, adapter-guard re-review running | `sv1_party_mon_r2.patch` (apply `-p1`); round-1 guard said fix-first on the ageing unit only |
+| PC-1 r3 client: no per-key echo mark; withdraw/release by snapshot membership; nil snapshot → `STORAGE_CLASSIFICATION_UNAVAILABLE`; corrected trade test | Opus working (agent a66d735…) | will be `pc1_client_r3.patch`; r2 review (cx-4303e4ae) accepted with 4 fix-ups |
+| EX-1 explode post-faint stall (B_ACTIVE_COMMIT timeout after the self-KO; likely a blocking text with no button) | Opus working | `wt-ex1/`, `explode_run/` |
+| H-1 harness: waits end on client RESULT (`ClientFinishedEarly`), soft-reset canonical compare + `links_baseline.json`, type-clause `unresolve_area == route_1`, poison links-empty + no RX rebuild/memorialize, `SLINK_DUO.timeout_secs`, `unexpected-battle` FINAL pin | OMP working on `tools/e2e_duo.py` (cx-1ec77dde) | reply may be in the mailbox |
+| A13-py rival_swap_new registry/oracle | OMP queued (cx-095053d0) | after H-1 |
+| WO-2 whiteout walk back hits grass at Route 1 (12,24) | NOT dispatched | `walk_back_to_route1` needs incidental-battle RUN handling (reuse the forest walk's escape path) |
+| SV-2 server trade watchdog abandons a confirming trade silently (`state.py:491-507`) | NOT dispatched | product defect from T-1 |
+| Client comment fix `client.lua:335-336` (core.asm:6689-6690) | NOT dispatched | from A13 |
+
+## Lane queue after the break (in order)
+
+1. Integrate SV-1 r2 (guard verdict), PC-1 r3 (+ headless review), EX-1, H-1 (+ A13-py); commit
+   each; refresh `tools/e2e_duo_head.py`.
+2. Reruns: `poison_new` (driver fix in), `species_clause_new` (3 attempts), `pc_ops_new` (after
+   PC-1 r3), `whiteout_new` (after WO-2), `explode_new` (after EX-1), `soft_reset_new` (after
+   H-1b); then `rival_swap_new` first run (after A13-py; A on the battle fixture).
+3. A9 dashboard snapshots during a link_new-family run; A12 full `duo-pairs` pass; ledger pass
+   (S-6 PC ops, D-4 completion, S-7 runner line, limits list: silent force-faint demotion, symmetric
+   duplicate-key ceiling, trade watchdog); Track B; owner tag `v0.3.0`.
 
 ## Commands
 
 ```bash
-python -m pytest tests/unit -q -p no:cacheprovider          # 3056 passed at 27aaf23
+python -m pytest tests/unit -q -p no:cacheprovider          # 3084 passed at 1093ee7 (OMP)
 ruff check . && python tools/lua_syntax_check.py
-python tools/e2e_duo.py --game gen1_new --scenario <name> --keep-data
-python tools/gen1_fixtures.py --qualify
+python tools/e2e_duo_head.py --game gen1_new --scenario <name> --keep-data
+python tools/gen1_fixtures.py --qualify                     # all seven fixtures OK
+node "E:/Howard/ClaudEx/bin/magi.mjs" exchange <task_id>    # read a peer reply from the mailbox
 ```
