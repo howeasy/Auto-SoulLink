@@ -444,8 +444,12 @@ local function walk_to_center(linked_hp)
     if not arrived or rd(ram.wCurMap) ~= Center.MAP.center or rd(ram.wXCoord) ~= 11 or rd(ram.wYCoord) ~= 3 then
         return false, fmt("Center walk stopped map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord))
     end
-    log(fmt("CENTER_RECEPTIONIST map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
+    -- The mark is the PARTNER's permission to offer the trade (:1000 below), so it has to mean
+    -- "at the receptionist AND overworld-safe", not "arrived". Logged before this wait (629e75d),
+    -- it let A's native trade prompt land while B was still inside a no-button wait_until here --
+    -- the prompt then freezes B's overworld and overworld_ok() never comes true.
     if not wait_until(overworld_ok, 30, "Center overworld checkpoint") then return false, "Center not overworld-safe" end
+    log(fmt("CENTER_RECEPTIONIST map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
     return true
 end
 
@@ -1007,8 +1011,9 @@ local function trade_scenario(decline)
         -- (server/state.py:491-507) freed the slot silently and a waited out its decline notice.
         -- trade_new only passed because b reached the Center ~1300 frames FIRST that run; the two
         -- halves share this code, so the mark fixes the accept path too.
-        -- Same rendezvous the whiteout rebuild lane already uses (the AT_CENTER wait at :2259-2261,
-        -- 600s); walk_to_center():447 logs CENTER_RECEPTIONIST, so no extra mark is needed.
+        -- Same rendezvous the whiteout rebuild lane already uses (the AT_CENTER wait at :2280-2282,
+        -- 600s); walk_to_center() logs CENTER_RECEPTIONIST once the partner is at the receptionist
+        -- AND back at its overworld checkpoint (:447-452), so no extra mark is needed.
         if not wait_until(function() return partner_has("CENTER_RECEPTIONIST") end, 600,
                           "partner to reach the receptionist") then
             return false, "partner never reached the Center receptionist"
@@ -2166,10 +2171,12 @@ end
 -- walking south down the module's own {3,4} column lands on one; Viridian's Center door is
 -- (23,25) (ViridianCity.asm:14) and Route 1 connects north to Viridian
 -- (data/maps/headers/Route1.asm:2). The walk STOPS at the module's own first Route 1 waypoint
--- {10,31}: that is one row north of the grass (gen1_rb_hunt_inputs.lua:15-18 -- grass is
--- x 10-11, y 32-35), so the whole way back is grass-free and no wild battle can interrupt it.
--- The hunt owns every encounter from there, exactly as in link_new.
+-- {10,31}, before the hunt's southern grass patch, but the reverse route still crosses grass.
+-- RUN from incidental battles using the forest walk's delegation pattern
+-- (gen1_rb_forest_inputs.lua:242-258); the hunt owns encounters after arrival.
 local function walk_back_to_route1()
+    local escape = dofile(ROOT .. "/lua/tests/gen1_rb_route1_inputs.lua").new({ player = D.player })
+    local incidental_battles = 0
     local legs = {
         { map = Center.MAP.center,   points = back_waypoints("center_receptionist"), into = Center.MAP.viridian },
         -- skip_first: the forward stage's LAST waypoint is the Center's door tile (23,25)
@@ -2181,10 +2188,24 @@ local function walk_back_to_route1()
     }
     for leg_index, leg in ipairs(legs) do
         local index, still, side, detour, last, arrived = leg.skip_first and 2 or 1, 0, 1, nil, "", false
-        for _ = 1, 30000 do
+        local deadline = frame + 30000
+        while frame < deadline do
             local map, x, y = rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)
             if rd(ram.wIsInBattle) ~= 0 then
-                return false, fmt("a battle interrupted the grass-free walk back at map=%d (%d,%d)", map, x, y)
+                incidental_battles = incidental_battles + 1
+                log(fmt("INCIDENTAL_BATTLE %d map=%d (%d,%d)", incidental_battles, map, x, y))
+                local point = play.point()
+                while point.battle ~= 0 do
+                    if frame >= deadline then
+                        return false, "an incidental battle stalled during the walk back"
+                    end
+                    yield_frame(escape.step(nil, nil, point, frame))
+                    point = play.point()
+                end
+                -- Validate observed escape and live starter; discard the module's walking buttons.
+                escape.step(nil, nil, point, frame)
+                still, last = 0, ""
+                map, x, y = point.map, point.x, point.y
             end
             if leg.into and map == leg.into then arrived = true;break end
             if map ~= leg.map then
@@ -2387,11 +2408,16 @@ function scenarios.whiteout_new()
         return { ok = false, why = "timeout" }
     end
     -- Every exit says which one it was: the silent `break`s are what made the receipt above
-    -- unreadable. GROWL (0 power, 40 PP = the 40-turn budget) is the right move here and Tackle
-    -- would be wrong: the starter must NOT KO the foe, and the -1 Attack per turn cannot slow
-    -- the foe below MIN_NEUTRAL_DAMAGE = 2 (constants/battle_constants.asm:47, added back in
-    -- CalculateDamage engine/battle/core.asm:4452-4459), 3 after STAB. A 14-19 HP L5 starter
-    -- therefore falls in <= 10 turns to Route 1's GUST/TACKLE (data/wild/maps/Route1.asm).
+    -- unreadable. GROWL (0 power, 40 PP = the 40-attempt budget) is the right move here and
+    -- Tackle would be wrong: the starter must NOT KO the foe, and the -1 Attack per turn cannot
+    -- slow the foe below MIN_NEUTRAL_DAMAGE = 2 (constants/battle_constants.asm:47, added back in
+    -- CalculateDamage engine/battle/core.asm:4452-4459), 3 after STAB. That bounds DAMAGING HITS
+    -- -- <= 10 of them for a 14-19 HP L5 starter -- and NOT turns: Route 1's foes
+    -- (data/wild/maps/Route1.asm) also spend turns that do nothing. A wild Rattata picks
+    -- uniformly among its level-1 learnset TACKLE/TAIL_WHIP (data/pokemon/base_stats/rattata.asm:
+    -- 13; the wild branch of the enemy move choice is a flat 25% per slot, core.asm:2969-2996),
+    -- so about half its turns are a stat drop, and any move can still miss the 255/256 accuracy
+    -- roll (core.asm:5321-5327). 40 is an ATTEMPT budget; how many turns it buys is not fixed.
     local exit_turn, exit_why = 0, "budget"
     for turn = 1, 40 do
         exit_turn = turn
@@ -2405,8 +2431,18 @@ function scenarios.whiteout_new()
         log(fmt("GROWL turn %d -> %s hp=%d", turn, tostring(move.why),
                 rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1)))
         if move.why == "battle_over" then exit_why = "battle_over" break end
+        -- ok is `player_move` fired (gen1_battle_driver.lua:210). Anything else -- the move menu
+        -- still open, "battle_menu_again", a timeout -- is a WASTED attempt, not a turn: the
+        -- next iteration would ask wait_menu for a battle menu that the open move menu can never
+        -- produce, and report it as the stall instead of the failed commit.
+        if not move.ok then exit_why = "commit:" .. tostring(move.why) break end
     end
     log(fmt("GROWL_LOOP_EXIT turn=%d why=%s", exit_turn, exit_why))
+    -- commit_move returns at ExecutePlayerMove, BEFORE the last attempt's _FellText prompt. On a
+    -- budget exit nothing has drained it, and the no-button wait_until(starter_ko, 120) below
+    -- cannot: WaitForTextScrollButtonPress blocks on A/B (home/joypad2.asm:55-81), so the foe
+    -- never gets its KO turn. Drain the final attempt the way every earlier turn was drained.
+    if exit_why == "budget" then wait_menu_tapping_b(1800) end
     driver.close()
     if not wait_until(starter_ko, 120, "the starter's engine faint site") then
         return false, "the wild foe never KO'd the starter"
