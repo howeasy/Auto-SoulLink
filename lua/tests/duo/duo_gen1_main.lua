@@ -2323,17 +2323,46 @@ function scenarios.whiteout_new()
             or ((seen.faint or 0) > faint_before and sent_events.faint
                 and sent_events.faint.key == starter_key) or nil
     end
+    -- GROWL's stat-drop line ends in `prompt` (_FellText, pret data/text/text_3.asm:122-124,
+    -- printed by StatModifierDownEffect engine/battle/effects.asm:691-741), and PromptText ->
+    -- ManualTextScroll -> WaitForTextScrollButtonPress (home/text.asm:209-217, home/joypad2.asm:
+    -- 55-81) blocks on A/B forever outside a link battle. driver.wait_menu only IDLES, so after
+    -- turn 1 the engine sat on that down-arrow and the next DisplayBattleMenu never came
+    -- (receipt: e2e_whiteout_new_a "GROWL turn 1 -> player_move hp=14" then nothing). Tap B
+    -- between short waits, exactly as the hunt plan's own wrapper does for the same reason
+    -- (lua/tests/gen1_rb_hunt_inputs.lua:100-112). B is not in the battle menu's watched keys
+    -- (RIGHT|A / LEFT|A), so a stray tap there is ignored, not a menu action.
+    local function wait_menu_tapping_b(budget)
+        local used = 0
+        while used < budget do
+            local r = driver.wait_menu(240)
+            used = used + r.frames
+            if r.ok or r.why == "battle_over" then return r end
+            for _ = 1, 32 do yield_frame(pulse_at_frame("B")); used = used + 1 end
+        end
+        return { ok = false, why = "timeout" }
+    end
+    -- Every exit says which one it was: the silent `break`s are what made the receipt above
+    -- unreadable. GROWL (0 power, 40 PP = the 40-turn budget) is the right move here and Tackle
+    -- would be wrong: the starter must NOT KO the foe, and the -1 Attack per turn cannot slow
+    -- the foe below MIN_NEUTRAL_DAMAGE = 2 (constants/battle_constants.asm:47, added back in
+    -- CalculateDamage engine/battle/core.asm:4452-4459), 3 after STAB. A 14-19 HP L5 starter
+    -- therefore falls in <= 10 turns to Route 1's GUST/TACKLE (data/wild/maps/Route1.asm).
+    local exit_turn, exit_why = 0, "budget"
     for turn = 1, 40 do
-        if starter_ko() then break end
-        local menu = driver.wait_menu(1800)
-        if not menu.ok then break end
-        if starter_ko() then break end
-        if not driver.choose("FIGHT").ok then break end
+        exit_turn = turn
+        if starter_ko() then exit_why = "ko" break end
+        local menu = wait_menu_tapping_b(1800)
+        if not menu.ok then exit_why = "menu:" .. tostring(menu.why) break end
+        if starter_ko() then exit_why = "ko" break end
+        local chosen = driver.choose("FIGHT")
+        if not chosen.ok then exit_why = "choose:" .. tostring(chosen.why) break end
         local move = driver.commit_move(2, 900)
         log(fmt("GROWL turn %d -> %s hp=%d", turn, tostring(move.why),
                 rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1)))
-        if move.why == "battle_over" then break end
+        if move.why == "battle_over" then exit_why = "battle_over" break end
     end
+    log(fmt("GROWL_LOOP_EXIT turn=%d why=%s", exit_turn, exit_why))
     driver.close()
     if not wait_until(starter_ko, 120, "the starter's engine faint site") then
         return false, "the wild foe never KO'd the starter"
