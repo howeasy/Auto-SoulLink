@@ -45,9 +45,10 @@
 | Rule | Cite |
 |---|---|
 | `seq` is a per-client monotonically increasing `int` starting at 1 for the process lifetime; it does **not** reset on TCP reconnect (only on script reload) | `gen3_frlge_client.lua:1044`, `gen3_frlge_client.lua:1052` |
-| Server keeps `_last_seq[player]`. An event with `seq <= last` is dropped as a duplicate **unless** `seq <= 1 and last > 10`, which is read as a client restart and resets the counter. | `server.py:2512-2525` |
-| ⚠ TRAP: a client that restarts after sending ≤ 10 events (last ≤ 10) will have its first `last` events **silently dropped** (including `hello`) until its new `seq` exceeds the old `last`. A conformance harness must start each fresh session's `seq` at 1 and never reuse a server instance across "restarts" without accounting for this. | `server.py:2516-2523` |
-| Omitting `seq` (`-1` default) disables the guard for that message | `server.py:2513-2514` |
+| The duplicate-event counter is **per connection**, not per player: `last_seq` is a local of `handle_client`, so it is born with the socket and dies with it. An event with `seq <= last_seq` is dropped as a duplicate of one seen on *this* connection; a new connection starts from `-1` by construction, so a client that restarts and counts from 1 again is never mistaken for a duplicate. | `server/server.py:1095-1101` (the per-connection locals), `:1243-1254` (the guard) |
+| A connection is **ignored until it says hello**: any non-`hello` event on a connection whose hello has not been accepted is answered `noop`, with one WARNING per connection. The per-slot identity gate in `_dispatch` is the second line. | `server/server.py:1230-1241`, `:1255-1256` |
+| ⚠ RETIRED 2026-09-17 (`0629736`) — kept so the history reads straight: the server used to keep `_last_seq[player]` and treat `seq <= 1 and last > 10` as a client restart, which trapped a client that restarted after sending ≤ 10 events (its first events, `hello` included, were silently dropped) and forced a conformance harness to never reuse a server instance across "restarts". `reconnect_new`'s wrong-save leg hit exactly that trap live. The heuristic is deleted and the constraint no longer exists — a harness may reuse a server across restarts freely. | `0629736`; `server/server.py:1098-1101` |
+| Omitting `seq` (`-1` default) disables the guard for that message | `server/server.py:1248-1249` |
 
 ### 1.2 Client-side response parsing (reference behaviour)
 
@@ -567,7 +568,7 @@ Assertions for `tests/unit/test_protocol_conformance.py`: a lupa-driven fake ser
 | A7 | `party_mon.stats.pp1..pp4` | echoed verbatim from `stats_cache` | client sends them (`gen3:1624-1628`) but its parser drops them (`gen3:264-275`) | optional; a client may restore PP from them |
 | A8 | `peer_interact` | handled `state.py:421-428` | not sent (replaced by `trade_request`) | legacy; not required |
 | A9 | `ghost_pos.x/y` units | comment says tile coords `state.py:399` | comment says world pixels `gen3:2153`; parser comment says tiles `gen3:285` | opaque ints relayed unchanged; patch-defined |
-| A10 | `seq` restart heuristic | restart recognised only if `seq<=1 and last>10` `server.py:2517` | client restarts at 1 regardless | a harness must not reuse a server across restarts with ≤10 prior events, or must send ≥ `last` events first |
+| A10 | ~~`seq` restart heuristic~~ **RETIRED 2026-09-17 (`0629736`)** | the heuristic (`restart recognised only if seq<=1 and last>10`) is deleted; the counter is a per-connection local and a connection is ignored until it says hello — `server/server.py:1095-1101`, `:1230-1241`, `:1243-1254` | client restarts at 1 regardless — which is now simply correct | **no divergence left.** The old resolution ("a harness must not reuse a server across restarts with ≤10 prior events, or must send ≥ `last` events first") described a constraint that no longer exists; a harness may reuse a server across restarts freely. Row kept, not deleted, so the history reads straight |
 | A11 | Trade text | `"OAK: ..."`, `POKeMON` `state.py:521,554,642` | rendered verbatim | cosmetic; not generation-neutral |
 | A12 | `link_panel` Badges row | wide layout: `status` count `server.py:2629`; compact: bitmask popcount `:2652` | Gen 3 sends `status` | generation-dependent |
 | A13 | Badge field semantics | `hello/tick.badges` bitmask (SLinkServer) vs `status.badges` count (SoulLinkState) | both sent correctly | do not confuse them |

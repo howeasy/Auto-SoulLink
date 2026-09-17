@@ -507,7 +507,7 @@ SLINK_PLAYER = "a"           -- "a" or "b"
 ```
 A `noop` command means no action needed. The Lua client executes each command immediately in `dispatch_commands()`.
 
-**Duplicate-event guard:** each client sends a monotonic `seq`. The server drops `seq ≤ last_seen_seq` (except when seq resets to 0/1 after a restart).
+**Duplicate-event guard:** each client sends a monotonic `seq`. The server drops `seq ≤ last_seen_seq` **on the same TCP connection** — `last_seq` is a local of `handle_client` (`server/server.py:1095-1101`, guard at `:1243-1254`), so it is born and dies with the socket and a reconnecting client counting from 1 again is never read as a duplicate. A connection is also ignored until it says `hello`: any other event on a connection with no accepted hello is answered `noop` (`:1230-1241`). The old "except when seq resets to 0/1 after a restart" rule was a `seq <= 1 and last > 10` heuristic; it was **retired 2026-09-17 (`0629736`)** after it dropped a real reconnect's hello, and the harness constraint it implied (never reuse a server across client restarts) no longer exists.
 
 **Nuzlocke gate (Lua-side):** `nuzlocke_active` is only set to `true` once `M.hasPokeballs()` returns true (reads the actual bag pocket from RAM). Until then, `no_catch` events and `resolved_areas` bookkeeping are suppressed in Lua. The server has no corresponding gate — it trusts Lua not to send `no_catch` prematurely.
 
