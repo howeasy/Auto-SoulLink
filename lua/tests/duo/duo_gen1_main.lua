@@ -2715,9 +2715,15 @@ function scenarios.poison_new()
     -- One loop for all three forest drivers: they share the route-module protocol
     -- (gen1_rb_forest_inputs.lua:4-12), so only the terminal set differs. The caller owns the
     -- frame, exactly as hunt() drives the Route 1 module (:305-319).
-    local function drive(route, tag, terminals)
+    --
+    -- `budget` is this leg's wedge backstop, in frames. It is only a BACKSTOP: each leg already
+    -- carries the route module's own bounds (MAX_ENCOUNTERS / MAX_GRASS_STEPS / STALL_BOUND,
+    -- gen1_rb_forest_inputs.lua:161-164) and only those bounds return a classified reason. A
+    -- backstop sized BELOW the module's own bound does not protect the leg, it hides it -- see
+    -- the hunt call below for what that cost.
+    local function drive(route, tag, terminals, budget)
         local last = nil
-        for _ = 1, (D.hunt_frames or 90000) do
+        for _ = 1, (budget or D.hunt_frames or 90000) do
             local point = play.point()
             -- A wild foe that KOs the lone starter is the game's RNG. Name it HERE, before the
             -- route modules' own `party_hp > 0` assertions (gen1_rb_route1_inputs.lua:42-43)
@@ -2767,8 +2773,23 @@ function scenarios.poison_new()
     })
     local forest_hunt = Forest.hunt({ player = D.player }, { driver = driver, step = yield_buttons,
                                                             rd = rd, symbols = symbols, log = log })
+    -- The hunt's own RNG bound is MAX_ENCOUNTERS = 60 encounters (gen1_rb_forest_inputs.lua:161,
+    -- 3x the ~20-encounter mean for a slot-8 Weedle), and ONE encounter costs ~1500 frames of
+    -- pacing + intro + RUN: median 1482, mean 1560, max 2963 over the 54 encounters of the
+    -- 2026-09-17 poison_new receipt (encounters 1..54 spanning frames 4723..88946). 60
+    -- encounters therefore need ~94000 frames and the 90000-frame default backstop ALWAYS trips
+    -- first, returning "hunt-timeout" -- a reason GEN1_RNG_REASON_CLASS (tools/e2e_duo.py:256-
+    -- 286) does not carry, i.e. FINAL, no retry -- where the module would have said
+    -- "hunt-exhausted" and earned the bounded retry this leg is designed around ("RNG: the
+    -- forest hunt spent its encounter budget without a poisoning"). That receipt is exactly
+    -- that run: RESULT: FAIL (the forest hunt ended hunt-timeout) at 54 encounters, the Weedle
+    -- finally met on encounter 54. Size the backstop off the module's own bound so the two
+    -- cannot drift apart again: 3000 frames per encounter is the worst single encounter
+    -- observed, and the leg still costs far less than the scenario's 2400 s budget (that same
+    -- receipt played ~94000 frames in ~200 s of wall clock).
     local hunted = drive(forest_hunt, "hunt", { poisoned = true, ["hunt-exhausted"] = true,
-                                                ["starter-koed"] = true, ["hunt-stuck"] = true })
+                                                ["starter-koed"] = true, ["hunt-stuck"] = true },
+                         math.max(D.hunt_frames or 0, Forest.MAX_ENCOUNTERS * 3000))
     driver.close()
     if hunted == "hunt-exhausted" then
         return false, "RNG: the forest hunt spent its encounter budget without a poisoning"
