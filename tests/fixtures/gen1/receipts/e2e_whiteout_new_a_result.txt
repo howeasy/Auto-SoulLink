@@ -1,8 +1,8 @@
 duo instance a scenario=whiteout_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:49183 (non-blocking)…
-client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:49183
-[client] [SLink] TCP connected to 127.0.0.1:49183
+[client] [SLink] TCP connecting to 127.0.0.1:64976 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:64976
+[client] [SLink] TCP connected to 127.0.0.1:64976
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -16,152 +16,153 @@ booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
-phase pace-grass @2058 (10,35) battle=0 party=1
+phase pace-grass @915 (10,35) battle=0 party=1
 [hunt] encounter 1 at (10,34) mode=catch balls=1
-phase wild-intro @2112 (10,34) battle=1 party=1
+phase wild-intro @1002 (10,34) battle=1 party=1
 [hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
-phase wild-fight @2877 (10,34) battle=1 party=1
+phase wild-fight @1767 (10,34) battle=1 party=1
 [hunt] turn 2 foe hp 11/15 odds 0.63 dmax 5 -> fight
-heartbeat f=3600 party=1 connected=true
 [hunt] turn 3 foe hp 7/15 odds 1.00 dmax 5 -> throw
-phase wild-throw @3939 (10,34) battle=1 party=1
+phase wild-throw @2818 (10,34) battle=1 party=1
 [hunt] threw ball index 0 -> timeout
-PARTY_COUNT 1 -> 2 @5940
-PARTY_UNREADABLE @5940 species list and struct disagree (count=2 species=99 24 FF 00 00 00 00)
+heartbeat f=3600 party=1 connected=true
+PARTY_COUNT 1 -> 2 @4819
+PARTY_UNREADABLE @4820 species list and struct disagree (count=2 species=99 A5 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-PARTY_READABLE @6460  (count=2 species=99 24 FF 00 00 00 00)
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":7,"in_box":false,"key":"85F5:4190:24","level":3,"maxHP":15,"nickname":"PIDGEY","player":"a","seq":173,"species_id":36,"stats":{"level":3,"maxHP":15}}
-TX {"event":"safe","player":"a","seq":174}
-RX box_mon key=85F5:4190:24
-[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @6477 (10,34) battle=0 party=2
-[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @6478 (10,34) battle=0 party=2
-HUNT caught after 4421 frames, 1 encounter(s)
-MYKEY 0 06C3:4190:99
-PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=13
-MYKEY 1 85F5:4190:24
-PARTY slot=1 key=85F5:4190:24 species=36 level=3 hp=7
-CAUGHT 85F5:4190:24
 [client] [SLink-gen1] writes re-enabled after a live validation
-TX {"event":"stats_cache","key":"85F5:4190:24","player":"a","seq":177,"stats":{"level":3,"maxHP":15}}
-PARTY_COUNT 2 -> 1 @6509
-heartbeat f=7200 party=1 connected=true
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":7,"in_box":false,"key":"4721:4190:A5","level":3,"maxHP":15,"nickname":"RATTATA","player":"a","seq":136,"species_id":165,"stats":{"level":3,"maxHP":15}}
+PARTY_READABLE @5340  (count=2 species=99 A5 FF 00 00 00 00)
+TX {"event":"safe","player":"a","seq":137}
+RX hud_show text=>> Got PIDGEY
 RX play_sound
-RX msgbox text=PIDGEY and PIDGEY linked!
-RX party_mon key=85F5:4190:24
-TX {"event":"sync_retrieve_done","key":"85F5:4190:24","player":"a","seq":239}
-PARTY_COUNT 1 -> 2 @8341
+RX msgbox text=RATTATA and PIDGEY linked!
+RX party_mon key=4721:4190:A5
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @5356 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @5357 (10,34) battle=0 party=2
+HUNT caught after 4443 frames, 1 encounter(s)
 MYKEY 0 06C3:4190:99
-PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=13
-MYKEY 1 85F5:4190:24
-PARTY slot=1 key=85F5:4190:24 species=36 level=3 hp=7
-SEEN capture=1 box_mon=1 stats_cache=1 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=16
+MYKEY 1 4721:4190:A5
+PARTY slot=1 key=4721:4190:A5 species=165 level=3 hp=7
+CAUGHT 4721:4190:A5
+TX {"event":"sync_retrieve_done","key":"4721:4190:A5","player":"a","seq":139}
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=16
+MYKEY 1 4721:4190:A5
+PARTY slot=1 key=4721:4190:A5 species=165 level=3 hp=7
+SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
 SAVE_PHASE link_new save-open-start-menu
 SAVE_PHASE link_new save-close-foreign-menu
 SAVE_PHASE link_new save-select-save
 SAVE_PHASE link_new save-choose-save
 SAVE_PHASE link_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_new_a_1_witness.bin bytes=31592 saves=1 frame=8720
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_new_a_1_witness.bin bytes=31592 saves=1 frame=5776
 SAVE_PHASE link_new save-await-close
 SAVE_PHASE link_new save-witnessed
-SAVE_WITNESS link_new frames=531
+SAVE_WITNESS link_new frames=539
 MYKEY 0 06C3:4190:99
-PRE_WHITEOUT slot=0 key=06C3:4190:99 species=153 level=5 hp=13
-MYKEY 1 85F5:4190:24
-PRE_WHITEOUT slot=1 key=85F5:4190:24 species=36 level=3 hp=7
-ROUTE route_one_north -> map 1 at (21,35) frame 9907
-TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":292}
-ROUTE viridian_center -> map 41 at (23,25) frame 10180
+PRE_WHITEOUT slot=0 key=06C3:4190:99 species=153 level=5 hp=16
+MYKEY 1 4721:4190:A5
+PRE_WHITEOUT slot=1 key=4721:4190:A5 species=165 level=3 hp=7
+TX {"event":"safe","player":"a","seq":197}
+heartbeat f=7200 party=2 connected=true
+TX {"event":"safe","player":"a","seq":243}
+ROUTE route_one_north -> map 1 at (21,35) frame 8668
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":251}
+ROUTE viridian_center -> map 41 at (23,25) frame 8941
 CENTER_RECEPTIONIST map=41 (11,3)
 AT_CENTER a
-heartbeat f=10800 party=2 connected=true
-PC_PHASE deposit-for-rebuild pc-walk @11551 (11,3) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-face @11603 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-activate @11605 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-main-open @11718 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-menu-deposit @11926 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-walk @9215 (11,3) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-face @9266 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-activate @9268 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-main-open @9383 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-menu-deposit @9590 (13,4) party=2 box=1 count=0 init=false
 PC_OP deposit start
-PC op 1 deposit(2) start frame=11937
-PC_PHASE deposit-for-rebuild pc-enter-deposit @11937 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-text @11953 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-list-move @11963 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-list-pick @11969 (13,4) party=2 box=1 count=0 init=false
-PC_PHASE deposit-for-rebuild pc-sub-confirm @11985 (13,4) party=2 box=1 count=0 init=false
-TX {"event":"party_to_box","key":"85F5:4190:24","player":"a","seq":363,"stats":{"level":3,"maxHP":15}}
-PARTY_COUNT 2 -> 1 @12000
-PC_PHASE deposit-for-rebuild pc-text @12017 (13,4) party=1 box=1 count=1 init=false
-RX box_mon key=85F5:4190:24
+PC op 1 deposit(2) start frame=9601
+PC_PHASE deposit-for-rebuild pc-enter-deposit @9601 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-text @9617 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-list-move @9627 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-list-pick @9633 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-sub-confirm @9649 (13,4) party=2 box=1 count=0 init=false
+TX {"event":"party_to_box","key":"4721:4190:A5","player":"a","seq":286,"stats":{"level":3,"maxHP":15}}
+PARTY_COUNT 2 -> 1 @9664
+RX box_mon key=4721:4190:A5
+PC_PHASE deposit-for-rebuild pc-text @9688 (13,4) party=1 box=1 count=1 init=false
 PC_OP deposit done
-PC op 1 deposit(2) done frame=12098 party=1 box_count=1 box=1
-PC_PHASE deposit-for-rebuild pc-see-ya @12098 (13,4) party=1 box=1 count=1 init=false
-PC_PHASE deposit-for-rebuild pc-logging-off @12129 (13,4) party=1 box=1 count=1 init=false
-PC_PHASE deposit-for-rebuild pc-log-off @12133 (13,4) party=1 box=1 count=1 init=false
-PC_PHASE deposit-for-rebuild pc-logging-off @12176 (13,4) party=1 box=1 count=1 init=false
-PC pc-done frame=12231 op=2
-PC_PHASE deposit-for-rebuild pc-done @12231 (13,4) party=1 box=1 count=1 init=false
-DEPOSITED_FOR_REBUILD 85F5:4190:24
+PC op 1 deposit(2) done frame=9778 party=1 box_count=1 box=1
+PC_PHASE deposit-for-rebuild pc-see-ya @9778 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-for-rebuild pc-logging-off @9809 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-for-rebuild pc-log-off @9814 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-for-rebuild pc-logging-off @9856 (13,4) party=1 box=1 count=1 init=false
+PC pc-done frame=9910 op=2
+PC_PHASE deposit-for-rebuild pc-done @9910 (13,4) party=1 box=1 count=1 init=false
+DEPOSITED_FOR_REBUILD 4721:4190:A5
 PC_BOX_AFTER party=1 box=1 count=1
 BOTH_BOXED status=true
-TX {"area_id":"route_1","event":"area_enter","loc_name":"Route 1","player":"a","seq":438}
-heartbeat f=14400 party=1 connected=true
-INCIDENTAL_BATTLE 1 map=12 (14,9)
-TX {"event":"safe","player":"a","seq":470}
+heartbeat f=10800 party=1 connected=true
+TX {"area_id":"route_1","event":"area_enter","loc_name":"Route 1","player":"a","seq":338}
+INCIDENTAL_BATTLE 1 map=12 (8,28)
+TX {"event":"safe","player":"a","seq":389}
 BACK_AT_ROUTE1 map=12 (10,31)
 MONEY_BEFORE 2800
-phase pace-grass @15831 (10,31) battle=0 party=1
+phase pace-grass @12839 (10,31) battle=0 party=1
 [hunt] encounter 1 at (10,34) mode=switch-hold balls=0
-phase wild-intro @15985 (10,34) battle=1 party=1
+phase wild-intro @13061 (10,34) battle=1 party=1
 [hunt] linked lead active without a switch turn
 [hunt] battle outcome linked-active-menu receipts 
-phase linked-active-menu @16746 (10,34) battle=1 party=1
-HUNT linked-active-menu after 916 frames, 1 encounter(s)
+phase linked-active-menu @13822 (10,34) battle=1 party=1
+HUNT linked-active-menu after 984 frames, 1 encounter(s)
 GROWL_SLOT move=2D pp=40
 GROWL turn 1 -> player_move hp=13
-GROWL turn 2 -> player_move hp=10
-GROWL turn 3 -> player_move hp=8
+heartbeat f=14400 party=1 connected=true
+GROWL turn 2 -> player_move hp=13
+GROWL turn 3 -> player_move hp=13
+GROWL turn 4 -> player_move hp=5
 heartbeat f=18000 party=1 connected=true
-GROWL turn 4 -> player_move hp=6
-GROWL turn 5 -> player_move hp=6
-GROWL turn 6 -> player_move hp=1
-BATTLE_FAINT_SITE 06C3:4190:99 slot=0 battle_hp=0
-TX {"area_id":"route_1","event":"faint","key":"06C3:4190:99","player":"a","seq":649}
-TX {"event":"whiteout","player":"a","seq":650}
-RX party_mon key=85F5:4190:24
-RX rebuild_start text=REBUILDING: PIDGEY
+GROWL turn 5 -> player_move hp=5
+GROWL turn 6 -> player_move hp=5
+GROWL turn 7 -> player_move hp=5
+GROWL turn 8 -> player_move hp=2
+BATTLE_FAINT_SITE 06C3:4190:99 @21142 slot=0 battle_hp=0
+TX {"area_id":"route_1","event":"faint","key":"06C3:4190:99","player":"a","seq":671}
+TX {"event":"whiteout","player":"a","seq":672}
+RX party_mon key=4721:4190:A5
+RX rebuild_start text=REBUILDING: RATTATA
+heartbeat f=21600 party=1 connected=true
 SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
 SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
 SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
 SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
 SAVE_WITNESS_DUMP_SKIPPED why=pending-1-to-1
-TX {"event":"safe","player":"a","seq":684}
-GROWL_LOOP_EXIT turn=7 why=menu:battle_over
-STARTER_KO frame=21500 key=06C3:4190:99
+TX {"event":"safe","player":"a","seq":703}
+GROWL_LOOP_EXIT turn=9 why=menu:battle_over
+STARTER_KO frame=22044 key=06C3:4190:99
 TX whiteout x1
-TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"a","seq":685}
-TX {"event":"sync_retrieve_done","key":"85F5:4190:24","player":"a","seq":687}
-PARTY_COUNT 1 -> 2 @21533
+TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"a","seq":704}
+TX {"event":"sync_retrieve_done","key":"4721:4190:A5","player":"a","seq":706}
+PARTY_COUNT 1 -> 2 @22077
 BLACKED_OUT_TEXT unavailable: the text advanced before the probe
 BLACKOUT_SITE map=0 x=5 y=6
 MONEY_AFTER 1400
 MONEY_HALVED before=2800 after=1400
-REBUILD_PARTY_MON 85F5:4190:24
-SYNC_RETRIEVE_DONE 85F5:4190:24
+REBUILD_PARTY_MON 4721:4190:A5
+SYNC_RETRIEVE_DONE 4721:4190:A5
 RX rebuild_done
-heartbeat f=21600 party=2 connected=true
 REBUILT party=2 box_count=0
 MYKEY 0 06C3:4190:99
 POST_REBUILD slot=0 key=06C3:4190:99 species=153 level=5 hp=19
-MYKEY 1 85F5:4190:24
-POST_REBUILD slot=1 key=85F5:4190:24 species=36 level=3 hp=7
+MYKEY 1 4721:4190:A5
+POST_REBUILD slot=1 key=4721:4190:A5 species=165 level=3 hp=7
 REBUILD_DONE rebuild_start=1 rebuild_done=1
 SAVE_PHASE whiteout_new_a save-open-start-menu
 SAVE_PHASE whiteout_new_a save-close-foreign-menu
 SAVE_PHASE whiteout_new_a save-select-save
 SAVE_PHASE whiteout_new_a save-choose-save
 SAVE_PHASE whiteout_new_a save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_new_a_1_witness.bin bytes=31592 saves=2 frame=21919
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_new_a_1_witness.bin bytes=31592 saves=2 frame=22463
 SAVE_PHASE whiteout_new_a save-await-close
 SAVE_PHASE whiteout_new_a save-witnessed
 SAVE_WITNESS whiteout_new_a frames=538
-RESULT: PASS (whited out with an empty party and was rebuilt from the PC: 85F5:4190:24)
+RESULT: PASS (whited out with an empty party and was rebuilt from the PC: 4721:4190:A5)

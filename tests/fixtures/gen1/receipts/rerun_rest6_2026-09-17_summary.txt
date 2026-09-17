@@ -1,0 +1,19 @@
+rerun_rest6 start 22:55:33 HEAD e803b91
+link_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  link_new: PASS (attempt 1 of 2)
+deadzone_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  deadzone_new: PASS (attempt 1 of 2)
+linked_faint_bench_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  linked_faint_bench_new: PASS (attempt 1 of 2)
+type_clause_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  type_clause_new: PASS (attempt 1 of 2)
+whiteout_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  whiteout_new: PASS (attempt 1 of 2)
+species_clause_new rc=1
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+  species_clause_new: FAIL (attempt 1 of 8)

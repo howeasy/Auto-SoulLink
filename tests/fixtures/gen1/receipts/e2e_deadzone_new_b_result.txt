@@ -1,69 +1,70 @@
 duo instance b scenario=deadzone_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:64083 (non-blocking)…
-client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:64083
-[client] [SLink] TCP connected to 127.0.0.1:64083
+[client] [SLink] TCP connecting to 127.0.0.1:63647 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:63647
+[client] [SLink] TCP connected to 127.0.0.1:63647
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
 PARTY_COUNT 0 -> 1 @649
 PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
 [client] [SLink-gen1] writes ENABLED
-TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"party":[{"active":false,"blob_hex":"B00013000014142D0A2D0000AFB9000087000000000000
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"B00013000014142D0A
 RX resolved_areas
 RX config
 booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
-heartbeat f=3600 party=1 connected=true
+JITTER requested=0 applied=0 attempt=1
 RX play_sound
 RX msgbox text=Route 1 is a dead zone!
-phase pace-grass @6491 (10,35) battle=0 party=1
-[hunt] encounter 1 at (10,34) mode=catch balls=1
-phase wild-intro @6510 (10,34) battle=1 party=1
-heartbeat f=7200 party=1 connected=true
-[hunt] turn 1 foe hp 17/17 odds 0.36 dmax nil -> fight
-phase wild-fight @7276 (10,34) battle=1 party=1
-[hunt] turn 2 foe hp 12/17 odds 0.47 dmax 6 -> fight
-[hunt] turn 3 foe hp 7/17 odds 1.00 dmax 6 -> throw
-phase wild-throw @8452 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+phase pace-grass @4274 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,33) mode=catch balls=1
+phase wild-intro @4447 (10,33) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @5213 (10,33) battle=1 party=1
+[hunt] turn 2 foe hp 10/15 odds 0.63 dmax 6 -> fight
+[hunt] turn 3 foe hp 5/15 odds 1.00 dmax 6 -> throw
+phase wild-throw @6389 (10,33) battle=1 party=1
 [hunt] threw ball index 0 -> timeout
-PARTY_COUNT 1 -> 2 @10453
-PARTY_UNREADABLE @10460 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+heartbeat f=7200 party=1 connected=true
+PARTY_COUNT 1 -> 2 @8390
+PARTY_UNREADABLE @8390 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-heartbeat f=10800 party=2 connected=true
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":7,"in_box":false,"key":"431F:AFB9:24","level":4,"maxHP":17,"nickname":"PIDGEY","player":"b","seq":323,"species_id":36,"stats":{"level":4,"maxHP":17}}
-TX {"event":"safe","player":"b","seq":324}
-RX force_faint key=431F:AFB9:24
-RX memorialize key=431F:AFB9:24
+PARTY_READABLE @8910  (count=2 species=B0 24 FF 00 00 00 00)
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":5,"in_box":false,"key":"8EFF:AFB9:24","level":3,"maxHP":15,"nickname":"PIDGEY","player":"b","seq":254,"species_id":36,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"b","seq":255}
+RX force_faint key=8EFF:AFB9:24
+RX memorialize key=8EFF:AFB9:24
 RX play_sound
 RX hud_show text=[x] DZ: PIDGEY
-[client] [SLink-gen1] writes re-enabled after a live validation
-PARTY_READABLE @10980  (count=2 species=B0 24 FF 00 00 00 00)
 [hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @10990 (10,34) battle=0 party=2
+phase wild-battle_over @8927 (10,33) battle=0 party=2
 [hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @10991 (10,34) battle=0 party=2
-HUNT caught after 4501 frames, 1 encounter(s)
+phase caught @8928 (10,33) battle=0 party=2
+HUNT caught after 4655 frames, 1 encounter(s)
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=8
-MYKEY 1 431F:AFB9:24
-PARTY slot=1 key=431F:AFB9:24 species=36 level=4 hp=7
-CAUGHT 431F:AFB9:24
-FAINTED 431F:AFB9:24 hp=0 in party slot 1
-TX {"box":11,"event":"memorialize_done","key":"431F:AFB9:24","player":"b","seq":327}
-PARTY_COUNT 2 -> 1 @11023
-RETIRED 431F:AFB9:24 left the party
-MEMORIAL 431F:AFB9:24 in box 12: true
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
+MYKEY 1 8EFF:AFB9:24
+PARTY slot=1 key=8EFF:AFB9:24 species=36 level=3 hp=5
+CAUGHT 8EFF:AFB9:24
+[client] [SLink-gen1] writes re-enabled after a live validation
+FAINTED 8EFF:AFB9:24 hp=0 in party slot 1
+TX {"box":11,"event":"memorialize_done","key":"8EFF:AFB9:24","player":"b","seq":257}
+PARTY_COUNT 2 -> 1 @8960
+RETIRED 8EFF:AFB9:24 left the party
+MEMORIAL 8EFF:AFB9:24 in box 12: true
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=8
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
 SEEN capture=1 force_faint=1 memorialize=1 memorialize_done=1 memorialize_failed=0
 SAVE_PHASE deadzone_new_b save-open-start-menu
 SAVE_PHASE deadzone_new_b save-close-foreign-menu
 SAVE_PHASE deadzone_new_b save-select-save
 SAVE_PHASE deadzone_new_b save-choose-save
 SAVE_PHASE deadzone_new_b save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_new_b_1_witness.bin bytes=31592 saves=1 frame=9216
 SAVE_PHASE deadzone_new_b save-await-close
 SAVE_PHASE deadzone_new_b save-witnessed
-SAVE_WITNESS deadzone_new_b frames=531
-RESULT: PASS (dead-zone catch 431F:AFB9:24 retired)
+SAVE_WITNESS deadzone_new_b frames=530
+RESULT: PASS (dead-zone catch 8EFF:AFB9:24 retired)
