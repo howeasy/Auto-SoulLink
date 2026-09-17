@@ -1,10 +1,13 @@
 -- Test-only Red/Blue first lab checkpoint. Read-only WRAM point and ordinary
 -- buttons; the caller owns emu.frameadvance and the paired admission handshake.
+-- The shared input shapes (idle/tap): this file's own directory locates the module, the way
+-- the sibling drivers do.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, tap = C.idle, C.tap
 local M={}
-local function idle()return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false}end
-local function press(button,frame)
-    local buttons=idle();buttons[button]=frame%16<2;return buttons
-end
+-- `press` is the module's `tap` under this file's name; the call sites keep theirs.
+local press = tap
 local function walk(point,x,y)
     local buttons=idle()
     if point.x<x then buttons.Right=true

@@ -99,8 +99,9 @@ LANES = [
     Lane("statics-generated", [_PY, "tools/gen_gen1_statics.py", "--check"],
          why="static_encounters.json is exactly what pret's scripts/objects say"),
     Lane("fixtures", [_PY, "tools/gen1_fixtures.py", "--qualify"],
-         why="every committed battery save is a real game state the codec qualifies "
-             "(Yellow legacy pinned by name)"),
+         # The "(Yellow legacy pinned by name)" clause went when the last LEGACY entry did
+         # (tools/gen1_fixtures.py:58 is now empty); the pin below keeps the two in step.
+         why="every committed battery save is a real game state the codec qualifies"),
     Lane("patch-build", [_PY, "patch/gen1/tools/build.py", "--verify-only"],
          why="the clean dumps still hold what the manifest expects to displace"),
     Lane("live-gates",

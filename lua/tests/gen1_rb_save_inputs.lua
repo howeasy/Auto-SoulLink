@@ -15,9 +15,12 @@
 --               cartridge (live r1): it is neither a fresh-cartridge nor a completion oracle here.
 --   Menu closed any text/menu sets wFontLoaded bit 0; CloseTextDisplay (home/text_script.asm:105-131)
 --               clears it and redraws the map, so YES confirmed + menus closed ends the driver.
+-- The shared input shapes (idle/tap): this file's own directory locates the module, the way
+-- the sibling drivers do.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local C = dofile(here() .. "gen1_inputs_common.lua")
+local idle, tap = C.idle, C.tap
 local M={}
-local function idle()return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false}end
-local function tap(button,frame)local b=idle();b[button]=frame%16<2;return b end
 function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,

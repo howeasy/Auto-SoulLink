@@ -264,7 +264,6 @@ function M.initProfile(game_module, variant)
     M.TILE_MAP_ADDR           = prof.TILE_MAP_ADDR
     M.GRASS_TILE_ADDR         = prof.GRASS_TILE_ADDR
     M.GRASS_RATE_ADDR         = prof.GRASS_RATE_ADDR
-    M.STATUS_FLAGS_4_ADDR     = prof.STATUS_FLAGS_4_ADDR
     M.MOVEMENT_FLAGS_ADDR     = prof.MOVEMENT_FLAGS_ADDR
     M.SFX_DISPATCH_ADDR       = prof.SFX_DISPATCH_ADDR
     M.SFX_IDS                 = prof.sfx_ids or {}

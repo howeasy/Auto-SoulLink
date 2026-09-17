@@ -44,6 +44,16 @@ def test_the_generated_artifact_lanes_serve_what_they_claim():
             f"{name} claims {gate.REQUIREMENTS[name]}, not {ids}")
 
 
+def test_the_fixtures_lane_reason_matches_the_legacy_set():
+    """The lane's reason used to promise a Yellow legacy exception. LEGACY is empty now, so a
+    reason that still claimed one would be the metadata lying about its own tool — and if an
+    entry ever comes back, the reason has to say so again."""
+    import gen1_fixtures
+
+    why = next(lane.why for lane in gate.LANES if lane.name == "fixtures")
+    assert ("legacy" in why.lower()) == bool(gen1_fixtures.LEGACY), why
+
+
 def test_slow_lanes_are_exactly_the_emulator_lanes():
     """--quick's promise is that it stops before anything that needs an emulator."""
     assert {"live-gates", "live-new-gates", "live-trade-gates", "duo-pairs"} == gate._SLOW
