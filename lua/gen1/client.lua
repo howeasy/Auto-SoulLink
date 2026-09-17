@@ -19,11 +19,7 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
                  -- A13: how long after a battle opened a `replace_rival_team` reply may still
                  -- be believed. The engine reads the party at EnemySendOutFirstMon, a second or
                  -- two in; wEnemyMonPartyPos is the exact edge, this is the belt.
-                 RIVAL_SWAP_FRAMES = 120,
-                 -- PC-1: how long a server-ordered write suppresses a storage event for that
-                 -- key. Same window as the MoveMon/RemovePokemon pair below: an engine echo of
-                 -- a write lands in that write's own frame or the next one.
-                 SYNC_ECHO_FRAMES = 2 }
+                 RIVAL_SWAP_FRAMES = 120 }
 
 local BALL_ITEMS = { [1] = true, [2] = true, [3] = true, [4] = true } -- MASTER..POKE (item_constants.asm:10-13)
 -- Pokemon Tower 1F-7F ($8E-$94, map_constants.asm:228-234). A wild battle on these maps
@@ -70,7 +66,7 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
-        deferred = {}, pending_battle_writes = {}, sync_written = {},
+        deferred = {}, pending_battle_writes = {},
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
         trade = p.trade, trade_enabled = false, trade_state = nil,
@@ -89,22 +85,6 @@ function Client.new(p)
         return true
     end
     self.send = send
-
-    -- Echo guard. A server-ordered write can be followed by an engine signal naming the same key
-    -- (the native trade runs _RemovePokemon itself, engine/link/cable_club.asm:799), and that
-    -- storage event must not go back out as if the player had made the move. The echo lands in
-    -- the write's own frame or the next one -- and for a box command it never lands at all,
-    -- because boxes.lua moves the bytes with io.write_bytes instead of calling _MoveMon. A mark
-    -- with no expiry therefore sat set until the NEXT real move of that key consumed it: the
-    -- quarantine round trip (box_mon at frame 6885, party_mon at 7261) swallowed the player's own
-    -- Bill's PC deposit 3475 frames later (whiteout_new receipt, 2026-09-17). Age the mark.
-    -- ponytail: a frame window, not a handshake. Ceiling: an engine echo more than
-    -- SYNC_ECHO_FRAMES after its write reads as a player move; widen it if a receipt shows one.
-    local function mark_sync_written(key) if key then self.sync_written[key] = self.frame end end
-    local function sync_echo(key)
-        local f = key and self.sync_written[key]
-        return f ~= nil and (self.frame - f) <= Client.SYNC_ECHO_FRAMES
-    end
 
     -- ── reads → wire shapes ──────────────────────────────────────────────────────────
     local function mon_key(m) return reads.key(m) end
@@ -432,11 +412,10 @@ function Client.new(p)
                 local slot, _, _, why = find_party_slot(cmd.key)
                 if slot then
                     writes:faint_party_slot(slot)
-                    mark_sync_written(cmd.key)
                 else
                     -- the mon left the party before the checkpoint (PC deposit), or a duplicate
-                    -- arrived and the key no longer names one mon: no byte moves, and no
-                    -- echo-suppression either. The protocol has no force_faint NACK.
+                    -- arrived and the key no longer names one mon: no byte moves. The protocol
+                    -- has no force_faint NACK.
                     log("[SLink-gen1] " .. cmd.cmd .. " dropped at the checkpoint: "
                         .. (why or "key not in party") .. " " .. tostring(cmd.key))
                 end
@@ -447,7 +426,7 @@ function Client.new(p)
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:deposit(cmd.key) end
                 if not done then send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
-                else mark_sync_written(cmd.key); self:rescan_boxes() end
+                else self:rescan_boxes() end
             elseif cmd.cmd == "party_mon" then
                 -- the withdrawn mon's stats are rebuilt from the cartridge's own base stats
                 local species
@@ -455,12 +434,12 @@ function Client.new(p)
                 local base = species and self.rom and self.rom.base_stats_for(species) or nil
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
-                if done then send("sync_retrieve_done", { key = cmd.key }); mark_sync_written(cmd.key); self:rescan_boxes()
+                if done then send("sync_retrieve_done", { key = cmd.key }); self:rescan_boxes()
                 else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:memorialize(cmd.key) end
-                if done then send("memorialize_done", { key = cmd.key, box = 11 }); mark_sync_written(cmd.key); self:rescan_boxes()
+                if done then send("memorialize_done", { key = cmd.key, box = 11 }); self:rescan_boxes()
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
@@ -480,6 +459,11 @@ function Client.new(p)
     local function key_at(party, slot)
         for _, m in ipairs(party) do if m.slot == slot then return mon_key(m), m end end
     end
+    local function holds_key(list, key)
+        if not list or not key then return false end
+        for _, m in ipairs(list) do if mon_key(m) == key then return true end end
+        return false
+    end
 
     local function party_from_snapshot(bytes)
         -- decode the 404-byte snapshot a battle hook captured (party is stale for the active
@@ -487,7 +471,9 @@ function Client.new(p)
         -- bytes[k + 1] is offset k from wPartyCount: count @0, species list @1..7, structs @8,
         -- OT names @8 + 6*44, nicknames after those (ram/wram.asm party block)
         local count = bytes[1]
-        if count > d.party_capacity then return nil end
+        -- nil/garbage must come back as "undecoded", not as an error: the pcall around on_signal
+        -- (frame_end) would swallow the whole signal and nothing would classify it at all
+        if type(count) ~= "number" or count > d.party_capacity then return nil end
         local out = {}
         local structs = 1 + (d.party_capacity + 1)
         for slot = 0, count - 1 do
@@ -601,6 +587,11 @@ function Client.new(p)
                                         demo = (self.battle and self.battle.demo) or false }
             end
         elseif k == "move_mon" then
+            -- Every MoveMon is the PLAYER's: boxes.lua moves the client's own box bytes with
+            -- io.write_bytes (:345-346,:455-456) and never calls _MoveMon, so a server-ordered
+            -- box_mon/party_mon produces no signal to echo and needs no per-key suppression.
+            -- A per-key mark that outlived its write instead swallowed the player's own Bill's
+            -- PC deposit of a quarantined key (PC-1, whiteout_new receipt 2026-09-17).
             -- both sides come from the point's snapshot: _MoveMon has already copied the mon and
             -- _RemovePokemon shifts the rest down, so a live read here names the wrong slot (or
             -- none at all, when the last slot moved)
@@ -608,51 +599,75 @@ function Client.new(p)
                 local party = party_from_snapshot(pt.party or {})
                 local key, mon
                 if party then key, mon = key_at(party, pt.which) end
-                if key and not sync_echo(key) then
+                if key then
                     send("party_to_box", { key = key, stats = { level = mon.level, maxHP = mon.max_hp } })
                 end
-                self.sync_written[key or ""] = nil
             elseif pt.move_type == MOVE_BOX_TO_PARTY or pt.move_type == MOVE_DAYCARE_TO_PARTY then
                 local box = reads.box_from_snapshot(pt.box or {})
                 local key = box and key_at(box, pt.which)
-                if key and not sync_echo(key) then send("box_to_party", { key = key, area_id = area_id }) end
-                self.sync_written[key or ""] = nil
+                if key then send("box_to_party", { key = key, area_id = area_id }) end
             end
             self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "remove_pokemon" then
             -- the native SLINK apply removes the offered mon through _RemovePokemon and appends
             -- the received one; trade_done accounts for both (receipt: a spurious party_to_box
             -- for the INCOMING key went out mid-apply and the server ordered a box_mon back)
+            -- The removal happens EARLY in the apply (patch/gen1/src/native_trade.asm:157-158,
+            -- vanilla cable_club.asm:799-800) and the DONE that ends the trade is published a
+            -- hundred-odd frames later (:179-180 DelayFrames 100, :204 save, then
+            -- trade_service.asm:106-113): only the APPLY state spans that gap, which is why this
+            -- is a state test and not an age window.
             local trading = self.trade_state and self.trade_state.kind == "apply"
-            -- _MoveMon (engine/pokemon/add_mon.asm:341+, two CopyData runs) and the RemovePokemon
-            -- that finishes a deposit (engine/pokemon/bills_pc.asm:232-235) have no DelayFrame
-            -- between them, so the pair CAN straddle a frame boundary: age the mark instead of
-            -- clearing it at frame_end, or the second half looks standalone.
-            -- ponytail: a 2-frame age window, not a state machine. Ceiling: a release inside two
-            -- frames of an unrelated MoveMon reads as that move's second half; pair the two
-            -- signals by wWhichPokemon/box if a receipt ever shows that happening.
+            -- What separates a removal that finishes a MoveMon from a standalone one is WHERE
+            -- THE MON IS, not how many frames ago the MoveMon fired: _MoveMon runs to completion
+            -- before RemovePokemon is called, and both collections are in this point's snapshot.
+            -- The frame distance is not usable — pc_ops_new (2026-09-17) drained the withdraw's
+            -- two hooks in different frame_end batches and the 2-frame age window called Bill's
+            -- WITHDRAW a release.
+            local party = party_from_snapshot(pt.party or {})
+            local box = reads.box_from_snapshot(pt.box or {})
             local moved = self.moved_this_frame and (self.frame - self.moved_this_frame) <= 2
-            local standalone = not moved and not trading
-            if pt.from_box then
+            local key
+            if pt.from_box then key = box and key_at(box, pt.which)
+            else key = party and key_at(party, pt.which) end
+            if not party or not box then
+                -- Both collections must DECODE before an absence can mean anything: a nil party
+                -- would make Bill's WITHDRAW look like a release, a nil box would make a deposit
+                -- look standalone. The signal is consumed here either way -- a later snapshot is
+                -- a different instant and must never be used to re-classify this removal.
+                log(string.format("[SLink-gen1] STORAGE_CLASSIFICATION_UNAVAILABLE key=%s why=%s",
+                                  key or "?", (not party) and "party-undecoded" or "box-undecoded"))
+            elseif pt.from_box then
                 -- Bill's WITHDRAW ends in RemovePokemon(from_box) too, right after its
-                -- BOX_TO_PARTY MoveMon, so `from_box` alone is not the discriminator; the
-                -- standalone box removal is the RELEASE. The shared protocol has no release
-                -- event and a party_to_box for a mon that was never in the party would be a
-                -- lie, so this is a marker for the receipts, not a wire event.
-                local box = standalone and reads.box_from_snapshot(pt.box or {})
-                local key = box and key_at(box, pt.which)
-                if key then
+                -- BOX_TO_PARTY MoveMon (bills_pc.asm:282-287), so `from_box` alone is not the
+                -- discriminator. At this hook (site offset 0, home/move_mon.asm:20-21 jpfar
+                -- _RemovePokemon -- nothing has been shifted yet) the key is still in the BOX
+                -- either way; what tells them apart is that the WITHDRAW's MoveMon has already
+                -- installed it in the PARTY and a RELEASE (bills_pc.asm:310-312) has not. The
+                -- shared protocol has no release event and a party_to_box for a mon that was
+                -- never in the party would be a lie, so this is a marker for the receipts.
+                if key and not holds_key(party, key) and not trading then
                     log(string.format("[SLink-gen1] RELEASE_SEEN key=%s box=%d", key, (pt.box_num or 0) % 128))
                 end
-            elseif standalone then
+            else
                 -- from the SNAPSHOT, like the sibling branches: _RemovePokemon has already shifted
                 -- the rest of the party down by drain time, so a live read names the mon that
                 -- moved INTO the slot (engine/events/in_game_trades.asm:145,
                 -- engine/link/cable_club.asm:799 are the two standalone callers).
-                local party = party_from_snapshot(pt.party or {})
-                local key = party and key_at(party, pt.which)
-                if key and not sync_echo(key) then send("party_to_box", { key = key }) end -- release
+                -- A DEPOSIT's MoveMon (bills_pc.asm:230-235) has already appended the mon to the
+                -- box, so its key is in the box snapshot and `move_mon` has reported it already.
+                -- PARTY_TO_DAYCARE (scripts/Daycare.asm:51-56) leaves it in neither collection,
+                -- which is what the MoveMon pairing still covers.
+                if key and not holds_key(box, key) and not moved and not trading then
+                    send("party_to_box", { key = key }) -- release
+                end
             end
+            -- ponytail: key membership, not a handshake. The key is DVs:OT:species only
+            -- (reads.lua:185-188 -- nickname and level are not in it), so a 1/65536 identity
+            -- collision misreads BOTH directions: releasing a boxed mon whose key also names a
+            -- party mon logs nothing, and a standalone party removal (in_game_trades.asm:143-148,
+            -- cable_club.asm:799-800) of a key that an unrelated boxed mon shares is swallowed as
+            -- a completed deposit. Pair the two signals by wWhichPokemon if a receipt shows one.
             -- a live npc_trade/evolution still owes a key_change; RemovePokemon runs INSIDE the
             -- NPC trade (in_game_trades.asm:145), so a rescan here would swallow it
             local pk = self.pending_change and self.pending_change.kind
@@ -766,7 +781,6 @@ function Client.new(p)
                     writes:arm("battle_loop_head")
                     if w.cmd == "force_explode" then writes:explode_active_battler(slot) else writes:faint_active_battler(slot) end
                     writes:disarm()
-                    mark_sync_written(w.key)
                 else
                     keep[#keep + 1] = w
                 end
@@ -972,7 +986,6 @@ function Client.new(p)
                         local key = mon_key(received)
                         self.known_keys[st.old_key] = nil
                         self.known_keys[key] = true
-                        mark_sync_written(key)
                         send("trade_done", { token = st.token, slot = received.slot, new_key = key, new_species = received.species })
                     else
                         send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })

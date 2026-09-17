@@ -621,7 +621,6 @@ def test_deferred_force_faint_whose_mon_left_the_party_writes_nothing_and_says_s
     world.overworld_safe()
     world.step()
     assert [w for w in world.writes if w[2] == "System Bus"] == []
-    assert not world.client.sync_written[key]
     assert any("dropped at the checkpoint" in line for line in world.logs)
 
 
@@ -1025,6 +1024,35 @@ def _box_mon(rng, species, level=5):
     return m
 
 
+def _boxed(mon):
+    """The box record `MoveMon` PARTY_TO_BOX writes: the party struct's first 33 bytes with the
+    party level folded into byte 4 (add_mon.asm:409-427). Same DVs:OT:species, so the same key.
+    """
+    b = bytearray(codec.encode_party_mon(mon)[:33])
+    b[3] = mon["level"]
+    return codec.decode_party_mon(bytes(b), box=True)
+
+
+def _fire_trade_service(w):
+    """The cartridge reaching `SlinkTradeService`: the client pins that hook against the patched
+    ROM itself (client.lua:1025-1036), so it is not a site `World.fire` can look up.
+    """
+    svc = w.client.trade.service_address()
+    w.bus[w.ram["hLoadedROMBank"]] = int(svc["bank"])
+    w.regs["PC"] = int(svc["addr"])
+    w.hooks["SLink-gen1-trade_service"][0]()
+
+
+def _withdrawn(rng, boxed, nick="BOXED"):
+    """The party record Bill's WITHDRAW leaves behind: `MoveMon` BOX_TO_PARTY (bills_pc.asm:284)
+    puts the mon in the PARTY before `RemovePokemon` clears the box slot (:285-287), so the same
+    identity (DVs:OT:species, gen1_codec.key) is in the party when the removal fires.
+    """
+    m = _mon(rng, boxed["species"], level=boxed["level"], nick=nick)
+    m["dvs"], m["ot_id"] = boxed["dvs"], boxed["ot_id"]
+    return m
+
+
 def _seed_active_box(world, mons, ot="RED", nick="BOXED"):
     """The open box's WRAM mirror (ram/wram.asm:2226-2248), the way seed_party does the party."""
     r, cap, stride = world.ram, world.d["box_capacity"], world.d["box_struct_size"]
@@ -1039,6 +1067,16 @@ def _seed_active_box(world, mons, ot="RED", nick="BOXED"):
         world.bus[r["wBoxMonOT"] + i * n:r["wBoxMonOT"] + i * n + n] = codec.encode_name(ot)
         world.bus[r["wBoxMonNicks"] + i * n:r["wBoxMonNicks"] + i * n + n] = codec.encode_name(nick)
     world.bus[r["wBoxSpecies"] + len(mons)] = 0xFF
+
+
+def _active_box_keys(world):
+    """The open box's WRAM mirror read back (the inverse of _seed_active_box)."""
+    r, stride = world.ram, world.d["box_struct_size"]
+    out = []
+    for i in range(world.bus[r["wBoxCount"]]):
+        base = r["wBoxMons"] + i * stride
+        out.append(codec.key(codec.decode_party_mon(bytes(world.bus[base:base + stride]), box=True)))
+    return out
 
 
 def _rival_blob(rng, species, level=9):
@@ -1110,19 +1148,20 @@ def test_party_to_box_keys_from_the_move_mon_snapshot_not_from_a_read_after_the_
 
 
 def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(world):
-    """A6(2): Bill's WITHDRAW also ends in wRemoveMonFromBox = 1 + RemovePokemon
-    (bills_pc.asm:282-287, right after its BOX_TO_PARTY MoveMon), so `from_box` alone is NOT the
-    discriminator; the RELEASE is the standalone one (bills_pc.asm:293-312). The rule is
-    `release = pt.from_box and not self.moved_this_frame and not trading` (moved_this_frame is
-    assigned at client.lua:550 by the same frame's move_mon and cleared at :918). The shared
-    protocol has no release event (tests/unit/protocol_schema.py) and `_handle_party_to_box`
-    (state.py:2066-2112) never retires a pair, so a `party_to_box` for a key that was never in the
-    party would be a lie: the client LOGS `RELEASE_SEEN key=<key> box=<index>` from the box
-    snapshot taken in the remove_pokemon point and sends nothing. Today client.lua:530 tests only
-    `not pt.from_box`, so a box release is entirely invisible.
+    """A6(2)/PC-1b: Bill's WITHDRAW also ends in wRemoveMonFromBox = 1 + RemovePokemon
+    (bills_pc.asm:285-287, right after its BOX_TO_PARTY MoveMon at :284), so `from_box` alone is
+    NOT the discriminator; the RELEASE is bills_pc.asm:310-312, which has no MoveMon at all. What
+    separates them is an engine fact rather than a frame count: at this hook nothing has been
+    removed yet (site offset 0 on `RemovePokemon`, home/move_mon.asm:20-21), so the key is in the
+    BOX either way -- but the withdraw's MoveMon has already installed it in the PARTY and the
+    release has not. The shared protocol has no
+    release event (tests/unit/protocol_schema.py) and `_handle_party_to_box` (state.py:2066-2112)
+    never retires a pair, so a `party_to_box` for a key that was never in the party would be a
+    lie: the client LOGS `RELEASE_SEEN key=<key> box=<index>` and sends nothing.
     """
     r = world.ram
-    boxed = _box_mon(random.Random(31), 0xB0, level=6)   # a Charmander in the open box
+    rng = random.Random(31)
+    boxed = _box_mon(rng, 0xB0, level=6)                 # a Charmander in the open box
     _seed_active_box(world, [boxed])
     world.connect()
 
@@ -1130,6 +1169,8 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
     world.bus[r["wMoveMonType"]] = 0                     # BOX_TO_PARTY
     world.bus[r["wWhichPokemon"]] = 0
     world.fire("move_mon")
+    world.seed_party(list(world.party()) + [_withdrawn(rng, boxed)])  # MoveMon ran before this
+    _seed_active_box(world, [boxed])                     # the box slot is cleared only afterwards
     world.bus[r["wRemoveMonFromBox"]] = 1
     world.fire("remove_pokemon")
     world.step()
@@ -1137,22 +1178,20 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
     assert world.events("party_to_box") == [], "a withdraw is not a deposit"
     assert [ln for ln in world.logs if "RELEASE_SEEN" in ln] == [], "a withdraw is not a release"
 
-    # (b) RELEASE: the standalone box removal, no MoveMon in the frame. The box mirror is left as
-    # it was on purpose -- it is the fixture the remove_pokemon point snapshots.
-    world.step(3)   # past the 2-frame MoveMon age window; a real release is menus away from (a)
-    n = len(world.sent)
+    # (b) RELEASE: a standalone box removal, no MoveMon and no party slot holding that key
+    released = _box_mon(rng, 0x15, level=8)
+    _seed_active_box(world, [released])
+    world.step(3)
+    n, nlog = len(world.sent), len(world.logs)
     world.bus[r["wRemoveMonFromBox"]] = 1
     world.bus[r["wWhichPokemon"]] = 0
     world.fire("remove_pokemon")
     world.step()
-    marks = [ln for ln in world.logs if "RELEASE_SEEN" in ln]
+    marks = [ln for ln in world.logs[nlog:] if "RELEASE_SEEN" in ln]
     assert len(marks) == 1, marks
-    assert f"RELEASE_SEEN key={codec.key(boxed)} box=0" in marks[0], marks[0]
-    assert [m for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [], \
-        "no wire event: the pair keeps a phantom boxed half (shared-protocol gap, limits list)"
+    assert f"RELEASE_SEEN key={codec.key(released)} box=0" in marks[0], marks[0]
+    assert [m for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [],         "no wire event: the pair keeps a phantom boxed half (shared-protocol gap, limits list)"
     world.assert_all_conform()
-
-
 def test_an_ambiguous_key_writes_nothing_on_either_lookup_path(world):
     """A8/D-13: the client has TWO key lookups -- `find_party_slot` takes the FIRST match
     (client.lua:216-221, used by force_faint/faint_party_slot and the box paths) and
@@ -1460,11 +1499,12 @@ def test_a_standalone_party_removal_keys_from_the_hooks_snapshot(world):
     world.assert_all_conform()
 
 
-def test_a_deposit_whose_two_hooks_straddle_a_frame_sends_one_party_to_box(world):
+def test_a_deposit_whose_two_hooks_drain_far_apart_sends_one_party_to_box(world):
     """`_MoveMon` (engine/pokemon/add_mon.asm:341+) runs two CopyData passes and
-    `bills_pc.asm:232-235` calls RemovePokemon straight after it with no DelayFrame between, so
-    the pair can land on two sides of a frame boundary. `moved_this_frame` was cleared every
-    frame_end, so the second half looked standalone and the deposit reported party_to_box twice.
+    `bills_pc.asm:232-235` calls RemovePokemon straight after it, but the two hooks can still
+    drain in different frame_end batches (pc_ops_new, 2026-09-17), so the pairing cannot be a
+    frame count: the DEPOSIT's MoveMon has already appended the mon to the BOX, and that is what
+    says the party removal behind it is not a standalone one.
     """
     rng = random.Random(7)
     world.seed_party([_mon(rng, 0x99, nick="A"), _mon(rng, 0xB1, nick="B"), _mon(rng, 0xB0, nick="C")])
@@ -1477,38 +1517,45 @@ def test_a_deposit_whose_two_hooks_straddle_a_frame_sends_one_party_to_box(world
     world.bus[r["wWhichPokemon"]] = 0
     n = len(world.sent)
     world.fire("move_mon")
-    world.step()                            # the frame boundary falls between the two hooks
+    _seed_active_box(world, [_boxed(before[0])])   # MoveMon appended it to the box first
+    world.step(4)                           # four frames between the hooks: past any age window
     world.bus[r["wRemoveMonFromBox"]] = 0
-    world.fire("remove_pokemon")
+    world.fire("remove_pokemon")            # the party still holds it at this hook
     world.seed_party(before[1:])
     world.step()
     ptb = [m["key"] for m in world.sent[n:] if m["event"] == "party_to_box"]
-    assert ptb == [key_a], ptb
+    assert ptb == [key_a], (ptb, "B was", codec.key(before[1]))
     world.assert_all_conform()
-
-
-def test_a_withdraw_whose_two_hooks_straddle_a_frame_is_not_a_release(world):
-    """The mirror of the deposit: a BOX_TO_PARTY MoveMon followed by RemovePokemon(from_box) is
-    Bill's WITHDRAW, and a frame boundary between the two used to log a false RELEASE_SEEN.
+def test_a_withdraw_is_not_a_release_however_far_apart_its_two_hooks_drain(world):
+    """PC-1b (pc_ops_new, 2026-09-17): the withdraw's `move_mon` and `remove_pokemon` drained in
+    DIFFERENT frame_end batches -- the receipt has the duo body's own `PARTY_COUNT 1 -> 2 @9088`
+    line between `TX box_to_party` and `RELEASE_SEEN`, and both client lines are written inside
+    one frame_end, so they cannot be split unless the two signals landed in different frames. The
+    2-frame `moved_this_frame` window therefore expired and Bill's WITHDRAW was logged as a
+    release (`RESULT: FAIL (a RELEASE_SEEN fired during the WITHDRAW)`). The discriminator may not
+    be a frame count: the withdrawn key is in the party snapshot, a released key is in neither.
     """
     rng = random.Random(7)
     world.seed_party([_mon(rng, 0x99, nick="A"), _mon(rng, 0xB1, nick="B")])
     world.connect()
     world.step(60)
-    _seed_active_box(world, [_box_mon(rng, 0x15), _box_mon(rng, 0x1D)])
     r = world.ram
+    boxed = _box_mon(rng, 0x15)
+    _seed_active_box(world, [boxed, _box_mon(rng, 0x1D)])
     world.bus[r["wMoveMonType"]] = 0        # BOX_TO_PARTY
     world.bus[r["wWhichPokemon"]] = 0
     nlog = len(world.logs)
     world.fire("move_mon")
-    world.step()                            # the frame boundary falls between the two hooks
-    world.bus[r["wRemoveMonFromBox"]] = 1
+    world.seed_party(list(world.party()) + [_withdrawn(rng, boxed)])  # bills_pc.asm:284 ran first
+    _seed_active_box(world, [boxed, _box_mon(random.Random(1), 0x1D)])
+    world.step(4)                           # the two hooks drain four frames apart, well past any
+    world.bus[r["wRemoveMonFromBox"]] = 1   # age window the old rule could have used
     world.fire("remove_pokemon")
     world.step()
-    assert [line for line in world.logs[nlog:] if "RELEASE_SEEN" in line] == []
+    assert [line for line in world.logs[nlog:] if "RELEASE_SEEN" in line] == [],         "a withdraw is a withdraw however many frames separate its two hooks"
+    assert [m["key"] for m in world.sent if m["event"] == "box_to_party"] == [codec.key(boxed)]
+    assert [m for m in world.sent if m["event"] == "party_to_box"] == []
     world.assert_all_conform()
-
-
 def test_a_removal_inside_an_npc_trade_keeps_the_pending_key_change(world):
     """`in_game_trades.asm:145` calls RemovePokemon between the `npc_trade` signal and the
     AddPartyMon that completes the trade. client.lua:593 overwrote the live `npc_trade`
@@ -1533,35 +1580,134 @@ def test_a_removal_inside_an_npc_trade_keeps_the_pending_key_change(world):
     world.assert_all_conform()
 
 
-def test_a_server_box_write_does_not_swallow_the_players_own_later_deposit(world):
-    """PC-1 (whiteout_new, 2026-09-17): the server's quarantine round trip (`RX box_mon`, then
-    `RX party_mon` to withdraw) marks `sync_written[key]` (client.lua:430,438) as an echo guard,
-    but `boxes.lua` moves the bytes itself (`io.write_bytes`, boxes.lua:520-521) -- the engine's
-    _MoveMon never runs, so no `move_mon` signal ever arrives to consume the mark. It stayed set
-    for 3475 frames and ate the player's OWN Bill's-PC deposit of that key: the receipt shows
-    `PC op 1 deposit(2) done frame=10834 party=1 box_count=1` and no `TX party_to_box` anywhere.
-    An echo guard must age out; it may not outlive the write it guards.
+def test_a_server_box_round_trip_never_suppresses_the_players_own_deposit(world):
+    """PC-1 (whiteout_new, 2026-09-17): the quarantine round trip -- `RX box_mon` to quarantine the
+    capture, then `RX party_mon` to give it back -- marked the key as "written by us", and that
+    mark (latched, and equally an aged one) suppressed the `party_to_box` of the player's OWN
+    Bill's PC deposit of that key: the receipt shows `PC op 1 deposit(2) done frame=10834 party=1
+    box_count=1` with no `TX party_to_box` anywhere. No server-ordered write can produce a storage
+    signal to echo -- boxes.lua moves the bytes itself (io.write_bytes, boxes.lua:345-346,
+    :455-456) and never calls _MoveMon -- so there is nothing to suppress and no mark at all.
+    Deposit on the very next frame after the withdraw: any per-key suppression fails this.
     """
     world.connect()
-    world.step(60)                              # writes ENABLED
+    world.step(60)                                    # writes ENABLED
     before = list(world.party())
-    key = codec.key(before[0])
+    key, stats = codec.key(before[0]), {"level": before[0]["level"], "maxHP": before[0]["max_hp"]}
     world.overworld_safe()
     world.reply({"cmd": "box_mon", "key": key})
-    world.step(2)                               # the deferred box_mon deposits it in the open box
+    world.step(2)
     assert world.events("box_mon_failed") == [], world.events("box_mon_failed")
-    world.seed_party(before)                    # the round trip withdrew it again (RX party_mon)
-    world.step(300)                             # the receipt then walked to the Pokemon Center
+    assert key not in [codec.key(m) for m in world.party()], "the deposit must empty the party slot"
+    assert key in _active_box_keys(world), "... and the mon must be IN the open box"
 
-    r = world.ram
-    n = len(world.sent)
-    world.bus[r["wMoveMonType"]] = 1            # PARTY_TO_BOX (menu_constants.asm:60-63)
-    world.bus[r["wWhichPokemon"]] = 0
+    world.reply({"cmd": "party_mon", "key": key, "stats": stats})
+    world.overworld_safe()
+    world.step(2)
+    assert world.events("sync_retrieve_failed") == [], world.events("sync_retrieve_failed")
+    assert [e["key"] for e in world.events("sync_retrieve_done")] == [key]
+    party = world.party()
+    slots = [i for i, m in enumerate(party) if codec.key(m) == key]
+    assert slots and key not in _active_box_keys(world), "the withdraw must move it back"
+
+    r, n = world.ram, len(world.sent)
+    world.bus[r["wMoveMonType"]] = 1                  # PARTY_TO_BOX (menu_constants.asm:60-63)
+    world.bus[r["wWhichPokemon"]] = slots[0]
     world.fire("move_mon")
     world.bus[r["wRemoveMonFromBox"]] = 0
-    world.fire("remove_pokemon")                # bills_pc.asm:232-235, straight after _MoveMon
-    world.seed_party(before[1:])
+    world.fire("remove_pokemon")                      # bills_pc.asm:230-235
+    world.seed_party([m for m in party if codec.key(m) != key])
     world.step()
     ptb = [m["key"] for m in world.sent[n:] if m["event"] == "party_to_box"]
-    assert ptb == [key], f"the player's deposit must send party_to_box for {key}; got {ptb}"
+    assert ptb == [key], f"the player's deposit must send exactly one party_to_box for {key}; got {ptb}"
+    world.assert_all_conform()
+
+
+def test_a_trade_removal_is_suppressed_by_the_apply_state_across_the_whole_movie(world):
+    """MODEL test: the lease is driven the way the cartridge drives it, because the one removal a
+    client write really does cause is the trade's. `SlinkTradeService` picks the request up and
+    restores the borrowed tile union before any native code runs (trade_service.asm:90-95, the
+    pickup hook at trade_overlay.lua:190-196), then the apply removes the OUTGOING mon and only
+    afterwards appends the received one (native_trade.asm:156-168; vanilla cable_club.asm:799-817).
+    DONE is published a hundred-odd frames later (native_trade.asm:179-180,:204 ->
+    trade_service.asm:106-113). Nothing keyed or aged spans that gap; the APPLY state does.
+    Afterwards a genuine PC move of the RECEIVED mon must still report -- no mark is left on it.
+    """
+    w = _patched_world()
+    rng = random.Random(21)
+    outgoing = w.party()[0]
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    base = w.ram["wSerialPartyMonsPatchList"]
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(),
+             "old_key": codec.key(outgoing), "token": "t21", "partner_name": "BLUE"})
+    w.step()
+    armed = bytes(w.bus[base:base + 16])
+    assert armed[5] == 5, "apply armed"
+
+    _fire_trade_service(w)                       # the cartridge takes the request
+    assert str(w.client.trade.phase) == "picked_up", "the pickup hook must run before the restore"
+    backup = w.ram["wEnemyMons"] + w.d["battle_struct_size"]
+    w.bus[base:base + 16] = bytes(w.bus[backup:backup + 16])   # service.asm:90-95 gives it back
+    n = len(w.sent)
+
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0        # native_trade.asm:156-158: OURS goes first,
+    w.bus[w.ram["wWhichPokemon"]] = 0            # with the party still holding it
+    w.fire("remove_pokemon")
+    w.seed_party([incoming])                     # :159-168 appends theirs afterwards
+    w.step()
+    w.step(120)                                  # DelayFrames 100, the trade movie and the save
+    assert [m["event"] for m in w.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [],         "the APPLY state owns the trade's removal"
+    assert w.events("trade_done") == [], "DONE is published only at the end of the movie"
+
+    done = bytearray(armed)                      # the retained stack copy goes back over the union
+    done[5], done[8], done[7] = 7, 0, done[6]    # cmd DONE, result 0, ack generation LAST
+    w.bus[base:base + 16] = bytes(done)
+    w.step()
+    assert len(w.events("trade_done")) == 1, w.events("trade_done")
+    assert w.events("trade_done")[-1]["new_key"] == codec.key(incoming)
+    assert [m["event"] for m in w.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [],         "only trade_done comes out of an apply"
+
+    # the received mon is now an ordinary party mon: depositing it reports like any other
+    other = _mon(rng, 0x99, nick="BULBA")
+    w.seed_party([incoming, other])
+    w.step()
+    r, n = w.ram, len(w.sent)
+    w.bus[r["wMoveMonType"]] = 1
+    w.bus[r["wWhichPokemon"]] = 0
+    w.fire("move_mon")
+    w.bus[r["wRemoveMonFromBox"]] = 0
+    w.fire("remove_pokemon")
+    w.seed_party([other])
+    w.step()
+    ptb = [m["key"] for m in w.sent[n:] if m["event"] == "party_to_box"]
+    assert ptb == [codec.key(incoming)], f"one party_to_box for the traded-in mon; got {ptb}"
+    w.assert_all_conform()
+
+
+def test_an_undecodable_snapshot_classifies_nothing_and_says_which_half_was_missing(world):
+    """A removal is classified by what the snapshot HOLDS, so an absence only means something when
+    both collections decoded. A party that does not decode (client.lua:473-476 returns nil for a
+    count that is not a byte or is over capacity -- and returns, rather than throwing, because the
+    pcall in frame_end would otherwise swallow the whole signal) would make Bill's WITHDRAW look
+    like a release. The client says so once and emits nothing; the signal is consumed, never
+    re-classified from a later snapshot.
+    """
+    r = world.ram
+    boxed = _box_mon(random.Random(41), 0xB0, level=6)
+    _seed_active_box(world, [boxed])
+    world.connect()
+    world.step(60)
+    nlog, n = len(world.logs), len(world.sent)
+    world.bus[r["wPartyCount"]] = 0xFF           # party snapshot: undecodable, box still valid
+    world.bus[r["wRemoveMonFromBox"]] = 1
+    world.bus[r["wWhichPokemon"]] = 0
+    world.fire("remove_pokemon")
+    world.step()
+    lines = world.logs[nlog:]
+    assert [ln for ln in lines if "RELEASE_SEEN" in ln] == [], "an undecoded party is not evidence"
+    assert [f"[SLink-gen1] STORAGE_CLASSIFICATION_UNAVAILABLE key={codec.key(boxed)} why=party-undecoded"] ==         [ln for ln in lines if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln], lines
+    assert [m for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == []
+    world.step(3)                                # and it is not retried from a later snapshot
+    assert [ln for ln in world.logs[nlog:] if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln] ==         [ln for ln in lines if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln]
     world.assert_all_conform()
