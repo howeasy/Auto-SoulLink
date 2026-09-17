@@ -293,7 +293,6 @@ class SLinkServer:
         self._run_name = run_name
         self._tcp_port = tcp_port
         self._manager_port = manager_port
-        self._last_seq: dict[str, int] = {}
         self.state = SoulLinkState.load(data_dir=data_dir,
                                         species_lock=species_lock,
                                         gender_lock=gender_lock,
@@ -1124,6 +1123,11 @@ class SLinkServer:
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
         player_id_for_conn: str | None = None
+        # Per-CONNECTION session state. The seq counter used to be per-slot
+        # (`self._last_seq`), which outlived the socket it described — see the guards below.
+        last_seq = -1
+        hello_seen = False
+        no_hello_warned = False
         try:
             while True:
                 try:
@@ -1250,20 +1254,33 @@ class SLinkServer:
                     elif rom_type and rom_type != self.state.rom_type:
                         log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
                                     f"run already locked to {self.state.rom_type!r}")
-                # Duplicate-event guard.  Detect client restarts by seq resetting to 0/1.
+                # Hello-first. A connection has proved nothing until it has said hello, so
+                # nothing else on it is listened to. Without this a cartridge whose hello was
+                # lost still had its ticks reconciled into whichever slot it named, and a
+                # wrong save's party discarded the run's linked keys (reconnect_new,
+                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
+                if msg.get("event") != "hello" and not hello_seen:
+                    if not no_hello_warned:
+                        no_hello_warned = True
+                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
+                                    f"{peer} — dropping this connection's events until it says hello")
+                    await self._respond(writer, [{"cmd": "noop"}])
+                    continue
+
+                # Duplicate-event guard, per CONNECTION: a seq counter belongs to a socket,
+                # and every client sends hello on (re)connect and counts up from there. So a
+                # seq is only ever a duplicate of one seen on THIS connection — comparing
+                # across connections dropped the first message of the next one.
                 seq = msg.get("seq", -1)
                 if seq != -1:
-                    last = self._last_seq.get(player_id, -1)
-                    if seq <= last:
-                        if seq <= 1 and last > 10:
-                            log.info(f"[{player_id}] client restart (seq {last}→{seq}), resetting")
-                            self._last_seq[player_id] = -1
-                        else:
-                            log.debug(f"[{player_id}] duplicate seq {seq}, skipping")
-                            await self._respond(writer, [{"cmd": "noop"}])
-                            continue
-                    self._last_seq[player_id] = seq
-                    log.debug(f"[TCP] player={player_id}  seq={seq}  last={last}  outcome=accepted  event={msg.get('event','?')}")
+                    if seq <= last_seq:
+                        log.debug(f"[{player_id}] duplicate seq {seq}, skipping")
+                        await self._respond(writer, [{"cmd": "noop"}])
+                        continue
+                    log.debug(f"[TCP] player={player_id}  seq={seq}  last={last_seq}  outcome=accepted  event={msg.get('event','?')}")
+                    last_seq = seq
+                if msg.get("event") == "hello":
+                    hello_seen = True
 
                 commands = self._dispatch(player_id, msg)
                 await self._respond(writer, commands)
@@ -4186,7 +4203,6 @@ class SLinkServer:
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
         self.adapter = self.state.adapter
-        self._last_seq.clear()
         self.connected_players.clear()
         # Clear derived display caches so SSE doesn't broadcast stale data.
         self.player_area = {"a": "", "b": ""}
