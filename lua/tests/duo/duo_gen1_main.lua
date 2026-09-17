@@ -361,6 +361,20 @@ function scenarios.ball_gate_new()
     end
     log("BALL_FLIP " .. json.encode({player=D.player, signal_count=seen.bag_received,
         ball_count=play.point().ball_count, has_pokeballs=gclient.has_pokeballs}))
+    -- gen1_rb_parcel_inputs.lua ends INSIDE the Mart purchase UI (first-ball-readback), so the
+    -- SAVE checkpoint cannot hold yet; close it the way gen1_rb_route1_inputs.lua:62-66 does,
+    -- B taps on the 16-frame cadence until the CPU checkpoint holds (first live run 2026-09-17
+    -- timed out here on both cartridges).
+    local closing = 0
+    if not wait_until(function()
+        if overworld_ok() then return true end
+        closing = closing + 1
+        if closing % 16 == 0 then yield_frame({B=true}); yield_frame({B=true}) end
+        return nil
+    end, 40, "close the Mart menu after the first ball") then
+        return false, "Mart menu did not close after the first ball"
+    end
+    log("MART_CLOSED after " .. closing .. " frames")
     if not wait_until(function() return file_contains(D.go_file, "ALLOW_SAVE") end,
                       900, "ALLOW_SAVE") then return false, "runner never released normal SAVE" end
     local saved, why = game_save("ball_gate_new")

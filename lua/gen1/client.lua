@@ -461,6 +461,11 @@ function Client.new(p)
                 -- to leave the area unresolved rather than to dead-zone it on a guess.
                 if TOWER_MAPS[b.map] and reads.has_item(SILPH_SCOPE) ~= true then
                     log("[SLink-gen1] tower ghost battle without the Silph Scope: no_catch suppressed")
+                elseif not self.has_pokeballs then
+                    -- D-2: nothing resolves before the first Poke Ball. The server has no ball
+                    -- gate by design (test_state.py: the client is responsible), and the parcel
+                    -- walk crosses Route 1 grass with an empty bag (ball_gate_new, 2026-09-17).
+                    log("[SLink-gen1] no Poke Balls yet: no_catch withheld, " .. b.area_id .. " stays open")
                 else
                     send("no_catch", { area_id = b.area_id, species_id = b.species, level = b.level })
                     self.resolved_areas[b.area_id] = true

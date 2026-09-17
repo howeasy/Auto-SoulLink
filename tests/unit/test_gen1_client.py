@@ -132,6 +132,12 @@ class World:
         self.bus[r["wBoxSpecies"]] = 0xFF
         self.bus[r["wCurrentBoxNum"]] = 0  # boxes never initialised: SRAM boxes are garbage
 
+    def give_poke_ball(self, quantity=1):
+        r = self.ram
+        self.bus[r["wNumBagItems"]] = 1
+        self.bus[r["wBagItems"]], self.bus[r["wBagItems"] + 1] = 0x04, quantity  # POKE_BALL
+        self.bus[r["wBagItems"] + 2] = 0xFF
+
     def party(self):
         r = self.ram
         return codec.decode_party(bytes(self.bus[r["wPartyCount"]:r["wPartyCount"] + 404]))
@@ -215,6 +221,7 @@ def world():
     rng = random.Random(1)
     w.seed_party([_mon(rng, 0x99, nick="BULBA"), _mon(rng, 0xB1, nick="PIDGEY")])  # Bulbasaur, Pidgey
     w.set_map(0x0C)  # Route 1
+    w.give_poke_ball()  # the battle fixture stands on Route 1 with ONE ball; the gate is open
     return w
 
 
@@ -860,3 +867,38 @@ def test_gift_capture_waits_for_the_whole_struct_not_a_half_written_one(world):
     caps = world.events("capture")[before:]
     assert [c["key"] for c in caps] == [codec.key(full)]
     assert caps[0]["level"] == 5 and caps[0]["gift"] is True
+
+
+def test_no_catch_is_withheld_until_the_first_poke_ball():
+    """D-2: no encounter resolves before the ball gate. ball_gate_new live receipt 2026-09-17:
+    the parcel walk met a Route 1 wild with an EMPTY bag, RUN sent no_catch, and the server
+    (which has no ball gate by design, test_state.py::test_server_processes_no_catch_regardless_
+    of_pokeballs) dead-zoned Route 1 for both players before either owned a ball."""
+    world = World("red")
+    rng = random.Random(1)
+    world.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    world.set_map(0x0C)  # Route 1, empty bag
+    world.connect()
+    assert world.events("hello")[0]["has_pokeballs"] is False
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.fire("wild_begin")
+    world.step()
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert world.events("no_catch") == [], "a RUN with no balls is not a failed encounter"
+    # the first ball arrives; the SAME area is still open and the next RUN does count
+    world.give_poke_ball()
+    # the pinned site's filter (signals.lua:31-39): HL == wNumBagItems, carry set, wCurItem a ball
+    world.regs["H"], world.regs["L"] = world.ram["wNumBagItems"] // 256, world.ram["wNumBagItems"] % 256
+    world.regs["F"] = 0x10
+    world.bus[world.ram["wCurItem"]] = 0x04
+    world.fire("bag_received")
+    world.step(2)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.fire("wild_begin")
+    world.step()
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert [e["area_id"] for e in world.events("no_catch")] == ["route_1"]
