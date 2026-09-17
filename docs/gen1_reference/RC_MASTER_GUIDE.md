@@ -13,10 +13,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-17T15:50:04+00:00",
+  "updated_at_utc": "2026-09-17T15:59:42+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "2411a7b",
-  "live_lane": "ball_gate_new run 3 (coordinator, EmuHawk x2)",
+  "live_lane": null,
   "next_action": "PAUSED BY OWNER 2026-09-14 (second pause; workers NOT stopped by owner instruction). All workers have reported; no worker is running. Unreviewed candidates on the branch: R5b-3b d603734, R5b-1 round 3 acbd5ae, R5b-2 round 3 2411a7b, HX-2b 184db47, HS-3 10ebb74; C3 9ab1fab REJECTED (revert proposed in the quick-path plan). C3 9ab1fab REJECTED (cx-c70b849c; F1-F7 recorded) — round 2 is the first dispatch on resume. On resume: integrate their reports as candidates -> Codex review against docs/gen1_reference/reviews/R5b-joint-protocol.md -> fix-up rounds; then HX-2c-A1 (phase-aware attribution), HS-4 (lifecycle notices), N3-1 (pretrade checkpoint + COMMIT prerequisite), N3-2 (recover-before-trade); then a clean-tree full unit run (F1) and TK-5 ruff sweep before the human session. No new dispatch until the owner resumes.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
@@ -25,20 +25,16 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "owner": "Claude Fable 5.1 coordinator (session e136b7e5) in worktree gen1-master-release-plan-6b4279 (branch claude/gen1-master-release-plan-6b4279); owner-approved plan v3.9 2026-09-17",
       "state": "active",
       "files": [
-        "lua/tests/duo/duo_gen1_main.lua",
-        "lua/gen1/client.lua",
-        "lua/gen1/entry.lua",
-        "lua/gen1/writes.lua",
-        "lua/hud.lua",
-        "server/server.py",
-        "tests/unit/protocol_schema.py",
-        "tests/unit/test_gen1_writes.py",
         "docs/gen1_resume.md",
-        "docs/gen1_reference checkpoint (this file)"
+        "docs/gen1_reference checkpoint (this file)",
+        "LEASED subagent A11-wiring: lua/gen1/client.lua, lua/gen1/entry.lua, lua/gen1/writes.lua, lua/hud.lua, server/server.py, tests/unit/protocol_schema.py, tests/unit/test_gen1_writes.py, tests/unit/test_gen1_client.py",
+        "LEASED subagent A7-driver: NEW lua/tests/gen1_rb_forest_inputs.lua",
+        "LEASED subagent A10-driver: NEW lua/tests/gen1_y_ball_gate_inputs.lua",
+        "LEASED OMP A1 (cx-14f0b481): lua/tests/gen1_scripted_play.lua, lua/tests/test_gen1_scripted_gate.lua, tools/gen1_fixtures.py, tests/unit/test_gen1_fixture_qualify.py, tests/e2e/test_duo_gen1_new.py"
       ],
-      "next_action": "RESUMED 2026-09-17 under plan v3.9 (Codex out; OMP Gen1 Peer 2 + Claude subagents). A0 rebase onto master d2c30fb LANDED (tag pre-rebase-gen1-release-c9bf880; 2861 unit, ruff clean). Landed since: b9f3a82 decode_bag, 354efa7 panel.lua module (A11 half), 850f9f5 client fix (gift key read mid-AddPartyMon -- first ball_gate_new live finding), 9e4a686 A0-H1 harness (OMP). LIVE LANE: ball_gate_new run 3 (Mart-close fix in the duo body). OMP card A1 (cx-14f0b481: gen1_scripted_play.lua, test_gen1_scripted_gate.lua, gen1_fixtures.py, test_gen1_fixture_qualify.py, test_duo_gen1_new.py) in flight. Subagents: NEW lua/tests/gen1_rb_pc_inputs.lua (A6 driver), NEW lua/tests/gen1_rb_forest_inputs.lua (A7 driver). Coordinator next: A11 wiring card, then reconnect_new run once A1 lands, then A0-H2 (post-result oracle registry) to OMP.",
+      "next_action": "HEAD 5ef2c3c. ball_gate_new PASSES live (b1cee87): D-2 + S-7 New Game identity PHYSICAL; three client findings fixed with red replays (850f9f5 gift key read mid-AddPartyMon; f0ce91a no_catch withheld before the first ball + Mart close before SAVE). Landed today: b9f3a82 decode_bag, 354efa7 panel.lua (A11 module), 9e4a686 A0-H1 harness (OMP, newest-first events correction accepted), a8a1010 gen1_rb_pc_inputs.lua (A6 driver), 5ef2c3c docs/agents/worker_card.md (standing worker contract; briefs point at it). Owner 2026-09-17: coordinator orchestrates only -- Lua bodies and wiring go to Opus subagents with OMP review. Codex at usage cap until 2026-09-19 07:34 (headless refused). LANE: free; next scenario reconnect_new waits on A1 (red_town_ot2 fixture build). Queue after A1: OMP A0-H2 (post-result oracle registry + provenance + bag baseline in assert_link_new_saved) then A0 ledger flips (D-2/S-7 receipts, three approved amendments) + resume-note refresh; subagent A2 soft_reset_new/trade_decline_new bodies once A11 wiring lands.",
       "reuse_decision": "shared infra (state.py/server.py/connector/hud/adapters/base.py) reused unchanged; Gen 1 facts regenerated from pret; RC runtime not adopted; harness mechanisms (post-result oracle registry, fail-closed runner) recorded for docs/shared_runtime.md",
-      "source_head": "9e4a686",
+      "source_head": "5ef2c3c",
       "independent_review": "OMP Gen1 Peer 2 reviews every coordinator Lua/client diff before a lane run; subagent cuts are coordinator-reviewed and OMP adversarial-reviewed before the tag; no worker reviews its own cut"
     },
     {
