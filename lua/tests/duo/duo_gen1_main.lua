@@ -463,7 +463,16 @@ end
 -- T-3/T-4: reuse the real Route 1 capture/link, walk to the *native* receptionist, then
 -- let the two cartridges perform one prompt and one apply. The Python runner checks SRAM
 -- and the server's durable link after both instances have exited.
-function scenarios.trade_new()
+--
+-- `decline` flips ONLY the partner's answer at the native confirm (T-3/T-4's NO/B subclause):
+-- everything up to and including the offer is the same code, so the NO path cannot drift from
+-- the YES path. patch/gen1/src/trade_prompt.asm:82-86 reads wCurrentMenuItem after YesNoChoice
+-- (0 -> d=0 accept, else d=1 decline) and pret engine/menus/text_box.asm:310-312 sets
+-- wCurrentMenuItem = 1 for a B press as well, so the NO row and the B-cancel exit are the same
+-- engine answer; the row is driven here because it is observable in WRAM before the A press.
+-- client.lua:817 maps that d=1 to `menu_result choice=0`, and server/state.py:662-673 clears
+-- pending_trade and msgboxes BOTH sides without ever queueing apply_trade.
+local function trade_scenario(decline)
     if not gclient.trade_enabled then return false, "SLINK TRADE patch was not detected" end
     local linked, why = scenarios.link_new()
     if not linked then return false, link_prerequisite_failure(why) end
@@ -516,6 +525,7 @@ function scenarios.trade_new()
     end
 
     local first_done = seen.trade_done or 0
+    local first_msgbox = seen.msgbox or 0
 
     if D.player == "a" then
         local first_query, first_offer = seen.trade_query or 0, seen.trade_offer or 0
@@ -583,13 +593,52 @@ function scenarios.trade_new()
                           "initiator to clear the offer notice") then return false, "initiator still in offer text" end
         if rd(ram.wCurrentMenuItem) ~= 0 then return false, "native prompt did not default to YES" end
         local first_result = seen.menu_result or 0
+        if decline then
+            -- HandleMenuInput over the TWO_OPTION_MENU (wMaxMenuItem = 1): Down moves the cursor
+            -- to the NO row and stops there. Press only until it lands, never past it.
+            for _ = 1, 120 do
+                if rd(ram.wCurrentMenuItem) == 1 then break end
+                yield_frame(frame % 16 < 2 and {Down=true} or {})
+            end
+            if rd(ram.wCurrentMenuItem) ~= 1 then return false, "native prompt cursor never reached NO" end
+        end
         for _ = 1, 240 do
             if (seen.menu_result or 0) > first_result then break end
             yield_frame(frame % 16 < 2 and {A=true} or {})
         end
+        local want = decline and 0 or 1
         if (seen.menu_result or 0) ~= first_result + 1 or not sent_events.menu_result or
-           sent_events.menu_result.choice ~= 1 then return false, "partner YES did not send menu_result choice=1" end
-        log("PARTNER_ACCEPTED")
+           sent_events.menu_result.choice ~= want then
+            return false, fmt("partner %s did not send menu_result choice=%d", decline and "NO" or "YES", want)
+        end
+        log(decline and "TRADE_DECLINED" or "PARTNER_ACCEPTED")
+    end
+
+    if decline then
+        -- server/state.py:667-673: the NO clears pending_trade and queues one msgbox per side
+        -- ("Your partner declined the trade." / "Trade declined."). No apply_trade is ever built,
+        -- so neither cartridge stages a blob and neither party changes.
+        if not wait_until(function() return (seen.msgbox or 0) > first_msgbox end, 300,
+                          "decline notice") then return false, "no decline notice from the server" end
+        if (seen.apply_trade or 0) > 0 or (seen.trade_done or 0) > first_done then
+            return false, "a declined trade still applied"
+        end
+        if not wait_until(overworld_ok, 60, "overworld after the decline") then
+            return false, "did not return to the overworld after the decline"
+        end
+        log("DECLINE_OVERWORLD")
+        log_party("POST_DECLINE")
+        if not wait_until(function() return partner_has("DECLINE_OVERWORLD") end, 300,
+                          "partner to clear the declined trade") then
+            return false, "partner never cleared the declined trade"
+        end
+        frames(120) -- let both menu_result/msgbox frames settle before client.exit()
+        if (seen.apply_trade or 0) > 0 or (seen.trade_done or 0) > first_done then
+            return false, "apply_trade arrived after the decline settled"
+        end
+        local saved_no, why_no = game_save("trade_decline_new")
+        if not saved_no then return false, why_no end
+        return true, "native trade declined; nothing applied"
     end
 
     local done = wait_until(function() return (seen.trade_done or 0) > first_done end, 300, "native apply trade_done")
@@ -608,6 +657,9 @@ function scenarios.trade_new()
     if not saved then return false, why end
     return true, "native trade applied once"
 end
+
+function scenarios.trade_new() return trade_scenario(false) end
+function scenarios.trade_decline_new() return trade_scenario(true) end
 
 local function partner_has_mark(mark)
     local file = io.open(D.partner_result, "r")
@@ -1071,6 +1123,164 @@ function scenarios.deadzone_new()
     local saved, why = game_save("deadzone_new_b")
     if not saved then return false, why end
     return true, "dead-zone catch " .. key .. (retired and " retired" or " fainted only")
+end
+
+-- W-6: the A+B+SELECT+START soft reset on a LIVE, already-helloed cartridge.
+--
+-- Engine timing, all from pret/pokered:
+--   engine/joypad.asm:5-7   `cp PAD_BUTTONS` -> TrySoftReset only when hJoyInput is EXACTLY the
+--                           four buttons, which is why the chord carries no d-pad.
+--   engine/joypad.asm:50-61 one DelayFrame + one `dec hSoftReset` per poll, from 16
+--                           (home/init.asm:81-82) -> 16 held frames before SoftReset runs.
+--   home/init.asm:1-6       SoftReset whites out and DelayFrames 32, then falls into Init,
+--                           which zero-fills $C000-$DFFF.
+-- 16 + 32 = the WRAM clear lands ~48 frames after the chord starts; the chord is held 24 frames
+-- (8 spare polls) and the clear is then awaited for up to 120 more. hSoftReset is only ever
+-- re-seeded by Init (engine/joypad.asm:12-40 never restores it), so the 16 polls must be
+-- CONSECUTIVE-from-boot only in the sense that nothing else in this run presses all four.
+--
+-- Client timing (lua/gen1/client.lua:18,168-205): validate() runs on `frame % 60 == 0`, and a
+-- cleared WRAM is "pre-game (title/new game)" because wPlayerID is 0 with an empty party.
+--   * the FIRST invalid validation clears hello_sent (:192-193) -> within 60 frames of the clear;
+--   * the FIFTH (MAX_INVALID) pauses writes (:196-205) -> 4 further 60-frame validations, so the
+--     pause lands 241..300 frames after the clear, NOT ">= 300": the first invalid validation can
+--     fall on the very next frame boundary. The assertion below carries one validation of margin
+--     either way and the exact delta is logged.
+-- Then CONTINUE reloads the save (MainMenu -> TryLoadSaveFile), validate() goes live again and
+-- logs "writes re-enabled after a live validation" (:183-186), and frame_end re-hellos from the
+-- overworld checkpoint with the SAME wPlayerID (:908-911).
+--
+-- SCOPE: the claims here cover the IDLE, SAME-SAVE reset only. Retained deferred/known_keys/trade
+-- state surviving a reset is by design, and a NEW GAME after a reset is C-1's REJECTED hello --
+-- neither is claimed from this run.
+function scenarios.soft_reset_new()
+    if not wait_go() then return false, "no go-file" end
+    if not wait_until(function() return sent_events.hello end, 120, "checkpoint hello") then
+        return false, "no hello before the reset"
+    end
+    if D.player == "b" then
+        -- The idle partner: it only has to stay live and helloed across A's whole reset, so the
+        -- server's "A reconnected, nothing else changed" verdict has a witness on the wire.
+        if not wait_until(function() return partner_has_mark("REHELLO ot=") end, 600,
+                          "A to re-hello after its reset") then
+            return false, "A never re-helloed after its soft reset"
+        end
+        log(fmt("IDLE_PARTNER hellos=%d frame=%d", seen.hello or 0, frame))
+        if (seen.hello or 0) ~= 1 then return false, "the idle partner helloed more than once" end
+        local saved_b, why_b = game_save("soft_reset_new_b")
+        if not saved_b then return false, why_b end
+        return true, "idled at the checkpoint across the partner reset"
+    end
+
+    if not overworld_ok() then return false, "A is not at the overworld checkpoint" end
+    if not gclient.hello_sent then return false, "A helloed but the client does not hold hello_sent" end
+    local ot0 = sent_events.hello.ot_id
+    local hellos_before = seen.hello or 0
+    log(fmt("HELLO_AT_CHECKPOINT ot=%04X hellos=%d map=%d", ot0, hellos_before, rd(ram.wCurMap)))
+
+    -- boxes.lua's cart writes go through entry.lua:59-65, which bypasses writes.log entirely and
+    -- logs nothing, so the only way to count them is to watch the injected door itself. This is a
+    -- late-bound table field (boxes.lua:232,260-262 call io.write_cart_bytes), so wrapping the
+    -- table the client was built with intercepts every one of them.
+    local cart_writes = 0
+    local _write_cart_bytes = parts.box_io.write_cart_bytes
+    parts.box_io.write_cart_bytes = function(off, bytes)
+        cart_writes = cart_writes + 1
+        log(fmt("BOX_WRITE off=%d n=%d frame=%d", off, #bytes, frame))
+        return _write_cart_bytes(off, bytes)
+    end
+
+    local chord_start = frame
+    for _ = 1, 24 do yield_frame({A=true, B=true, Select=true, Start=true}) end
+    yield_frame({})
+    local reset_frame
+    for _ = 1, 120 do
+        -- wCurMap 0 is Pallet Town, but the battle fixture stands on Route 1 ($0C) and wPlayerID
+        -- is never 0 in a loaded save: together they are the zero-fill, not a map transition.
+        if reads.read_player_id() == 0 and rd(ram.wCurMap) == 0 then reset_frame = frame break end
+        yield_frame({})
+    end
+    if not reset_frame then
+        return false, fmt("soft reset chord did not clear WRAM (ot=%d map=%d)",
+                          reads.read_player_id(), rd(ram.wCurMap))
+    end
+    log(fmt("RESET_SEEN frame=%d abs=%d", reset_frame - chord_start, reset_frame))
+    local writes_before = #parts.writes.log
+    local cart_before = cart_writes
+
+    -- No inputs at all: the intro and the title screen hold the cleared WRAM long enough for the
+    -- client to walk the whole hello-withhold -> writes-pause path before anything reloads a save.
+    local cleared, paused
+    for _ = 1, 420 do
+        if not cleared and not gclient.hello_sent then
+            cleared = frame
+            log(fmt("HELLO_CLEARED frame=%d delta=%d", frame, frame - reset_frame))
+        end
+        if not paused and gclient.gate_revoked and not gclient.writes_enabled then
+            paused = frame
+            log(fmt("WRITES_PAUSED frame=%d delta=%d", frame, frame - reset_frame))
+        end
+        yield_frame({})
+    end
+    if not cleared then return false, "the client kept hello_sent across a cleared WRAM" end
+    if cleared - reset_frame > 120 then
+        return false, fmt("hello_sent cleared %d frames after the reset (two validations max)",
+                          cleared - reset_frame)
+    end
+    if not paused then return false, "writes were never paused by the cleared WRAM" end
+    local pause_delta = paused - reset_frame
+    if pause_delta < 240 or pause_delta > 360 then
+        return false, fmt("writes paused %d frames after the reset, outside 240..360", pause_delta)
+    end
+
+    -- CONTINUE: the same boot inputs the battery-save boot above uses (an A tap on the 16-frame
+    -- cadence until the party is plausible and the write checkpoint has held for 30 frames).
+    -- MainMenu defaults to CONTINUE whenever the SRAM holds a save, so the taps never branch.
+    local resumed, settled_again, rebooted = nil, 0, false
+    for _ = 1, 9000 do
+        if not resumed and gclient.writes_enabled and not gclient.gate_revoked then
+            resumed = frame
+            log(fmt("WRITES_RESUMED frame=%d delta=%d", frame, frame - reset_frame))
+        end
+        local count = memory.read_u8(ram.wPartyCount, "System Bus")
+        local live = count >= 1 and count <= 6 and overworld_ok()
+        settled_again = live and settled_again + 1 or 0
+        if settled_again >= 30 then rebooted = true break end
+        yield_frame((not live) and pulse_at_frame("A") or {})
+    end
+    if not rebooted then return false, "CONTINUE never came back to the overworld checkpoint" end
+    log(fmt("CONTINUED frame=%d map=%d party=%d", frame, rd(ram.wCurMap),
+            memory.read_u8(ram.wPartyCount, "System Bus")))
+    if not resumed then
+        if not wait_until(function()
+            return gclient.writes_enabled and not gclient.gate_revoked
+        end, 60, "writes re-enabled") then return false, "writes stayed paused after CONTINUE" end
+        resumed = frame
+        log(fmt("WRITES_RESUMED frame=%d delta=%d", frame, frame - reset_frame))
+    end
+
+    if not wait_until(function() return (seen.hello or 0) > hellos_before end, 120, "re-hello") then
+        return false, "the reloaded save never re-helloed"
+    end
+    local again = sent_events.hello
+    log(fmt("REHELLO ot=%04X hellos=%d frame=%d", again.ot_id, seen.hello or 0, frame))
+    if again.ot_id ~= ot0 then
+        return false, fmt("re-hello OT %04X is not the pre-reset OT %04X", again.ot_id, ot0)
+    end
+    if (seen.hello or 0) ~= hellos_before + 1 then
+        return false, fmt("the reset produced %d hellos, not one", (seen.hello or 0) - hellos_before)
+    end
+
+    local wrote = #parts.writes.log - writes_before
+    log(fmt("NO_WRITES_IN_WINDOW writes=%d cart_writes=%d", wrote, cart_writes - cart_before))
+    if wrote ~= 0 or cart_writes ~= cart_before then
+        return false, fmt("%d WRAM write(s) and %d cart write(s) landed on the cleared WRAM",
+                          wrote, cart_writes - cart_before)
+    end
+    log_party("POST_RESET")
+    local saved_a, why_a = game_save("soft_reset_new_a")
+    if not saved_a then return false, why_a end
+    return true, "same-save soft reset: one re-hello, no writes in the cleared window"
 end
 
 local scen = scenarios[D.scenario]
