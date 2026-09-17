@@ -175,3 +175,20 @@ Queue after those: reruns poison/pc_ops/soft_reset at the H-2 harness; explode a
 H-3(o); P8-2 step 3 (old duo scenarios + wrapper, OMP lease) then step 5 (old client/game deletion) then
 memory_gb trim; HUD pixel proof with ScreenshotCaptureOsd; ledger R-2 control cite (test_gen1_stat_rebuild.lua
 deleted) and the pc_ops/poison/soft_reset cells once receipts commit; driver_dedup.patch; citations.patch.
+
+### Implementation mode (owner 2026-09-17 ~20:40Z: "stop worrying so much about tests and get implementing")
+Standing gates only from here (unit suite, lua_syntax_check, ruff, lane runs); no review rounds or per-patch falsifiers.
+Committed: eef6a1c P8-0 native_trade_ui · 1d710ac ledger R-2 cite · 042a79e client citation comments · 832d499 EX-4
+nurse heal before explode (+ H-4 deletions in its index) · 2395145 H-3/H-4 harness + old duo titles · 03fc7dc P8-6a docs ·
+8245e1c P8-2b legacy unit migration · b3481dd P8-4a tooling cutover · 21ff0d7 P8-4b old client/game deleted ·
+9969845 P8-5 memory_gb trimmed to Gen 2. Track B P8-0..P8-5 are implemented; P8-6 first pass done; P8-7 pending.
+Feature retirement to note for the owner: the Lua-side Archipelago WRAM-relocation profile (red_ap/blue_ap Lua
+addresses, detect_archipelago) left with the old client and the AP gate; server-side red_ap/blue_ap routing stays.
+Package: `make_release.py` ZIP carries the new client closure; dispatch test 8/8 from the extracted tree (PKG-1).
+Lane: LANE-REG1 sweep passed link/deadzone/ball_gate/type_clause; the other six were skipped while lua/ was dirty
+(OMP edits in place) — rerun with a narrowed precondition (only files the new client loads must be clean).
+In flight: OMP D-1 (setNoBattles removal, stale comments, driver dedup across gen1_rb_*_inputs.lua), LANE-BOOT2
+(extracted-ZIP boot + HUD OSD capture). Queue: reruns poison/pc_ops/soft_reset/explode(4 attempts, healed)/
+rival(new oracle)/changebox/linked_faint_active/trade/trade_decline/reconnect/admit after D-1; Yellow S-1 gate -s;
+verify_gen1_release.py full pass; Gen 3 gen3_rr trade + faint duo; ledger cells for new receipts; P8-6b final docs;
+P8-7 (rebase plan docs/gen1_rebase_plan.md, FF master, owner tag) needs owner authority.
