@@ -32,9 +32,19 @@ local function finish(pass, msg)
     client.exit()
     error("slink-duo-finished", 0) -- client.exit() is async
 end
+-- A6 storage receipts, declared before the tees that fill them. `storage_tx` is every
+-- party_to_box/box_to_party the client SENDS, in order; `storage_rx` every box_mon/party_mon it
+-- RECEIVES; `release_seen` every RELEASE_SEEN the client LOGS (lua/gen1/client.lua:571-592: a
+-- standalone from_box RemovePokemon has no wire event, so the log line is the only receipt), each
+-- stamped with how many storage sends preceded it — that stamp is what proves no release fired
+-- during the WITHDRAW.
+local storage_tx, storage_rx, release_seen = {}, {}, {}
+
 -- Tee the client's own log lines into the result file.
 console.log = function(s)
     _console_log(s)
+    local released = tostring(s):match("RELEASE_SEEN key=(%S+)")
+    if released then release_seen[#release_seen + 1] = { key = released, after = #storage_tx } end
     if logf then logf:write("[client] " .. tostring(s) .. "\n"); logf:flush() end
 end
 
@@ -47,6 +57,12 @@ local Hunt = dofile(ROOT .. "/lua/tests/gen1_rb_hunt_inputs.lua")
 local Center = dofile(ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
 local Driver = dofile(ROOT .. "/lua/tests/gen1_battle_driver.lua")
 local Play = dofile(ROOT .. "/lua/tests/gen1_scripted_play.lua")
+-- A6 (S-6, W-5): Bill's PC by play. The module's own header carries the pret citation for
+-- every screen it drives (PC hidden event, menu geometry, deposit/withdraw/release/change box,
+-- wCurrentBoxNum) -- read it there, nothing is restated here. It takes an ops list rather than
+-- a fixed terminal, so it is NOT in gen1_scripted_play's MODULES table: this body loads it the
+-- way it loads gen1_rb_center_inputs.lua above and drives it like the hunt route.
+local PC = dofile(ROOT .. "/lua/tests/gen1_rb_pc_inputs.lua")
 -- The MODULE, not the built instance: only the module carries the mailbox constants
 -- (lua/gen1/panel.lua:14,33) that explode_new's in-battle VBlank probe reads.
 local Panel = dofile(ROOT .. "/lua/gen1/panel.lua")
@@ -74,6 +90,9 @@ C.send = function(line)
        or name == "faint" then
         sent_events[name] = msg
     end
+    if name == "party_to_box" or name == "box_to_party" then
+        storage_tx[#storage_tx + 1] = { event = name, key = msg and msg.key }
+    end
     if name ~= "tick" then log("TX " .. (line:sub(1, 220))) end
     if name == "faint" and D.player == "b" and
        (D.scenario == "linked_faint_active_new" or D.scenario == "explode_new") then
@@ -91,6 +110,9 @@ gclient.handle_command = function(self, cmd)
     if c == "trade_mask" or c == "show_menu" or c == "apply_trade" or c == "force_faint"
        or c == "force_explode" then
         received_commands[c] = cmd
+    end
+    if c == "box_mon" or c == "party_mon" then
+        storage_rx[#storage_rx + 1] = { cmd = c, key = cmd.key }
     end
     if c ~= "noop" then
         log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
@@ -320,6 +342,65 @@ local function game_save(tag)
     return true
 end
 
+-- The ordinary-button walk from Route 1's grass to the Viridian Center, shared by the trade
+-- lane (which stops at the receptionist) and the A6 PC lane (which walks on to the PC from
+-- there). `linked_hp` is the route's optional in-battle liveness probe for a linked party mon;
+-- without it the route checks the starter, which is what the PC lane wants when the linked half
+-- is already a memorial. Returns true, or false + reason.
+local function walk_to_center(linked_hp)
+    local function require_route(label, ok, detail)
+        if not ok then error(label .. ": " .. tostring(detail), 0) end
+    end
+    local route = Center.new({
+        read = rd, ram = ram, row = function(off, n) return Center.row(rd, ram.wTileMap, off, n) end,
+        frame = function() return frame end,
+        log = log, invariant = require_route, check = require_route, start = "route1",
+        menu_addr = {wTopMenuItemX=symbols.wTopMenuItemX, wTopMenuItemY=symbols.wTopMenuItemY},
+        linked_hp = linked_hp,
+    })
+    local arrived = false
+    for _ = 1, 20000 do
+        local buttons, done = route.step()
+        if done then arrived = true;break end
+        yield_frame(buttons)
+    end
+    if not arrived or rd(ram.wCurMap) ~= Center.MAP.center or rd(ram.wXCoord) ~= 11 or rd(ram.wYCoord) ~= 3 then
+        return false, fmt("Center walk stopped map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord))
+    end
+    log(fmt("CENTER_RECEPTIONIST map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
+    if not wait_until(overworld_ok, 30, "Center overworld checkpoint") then return false, "Center not overworld-safe" end
+    return true
+end
+
+-- Drive one Bill's PC ops list to a terminal phase. Every press comes out of the driver — this
+-- loop only hands it a read-only point and gives the frame back, exactly like the hunt loop.
+-- Returns the terminal phase and the LAST extended point (box number / count / initialised flag
+-- read back in the overworld, after the PC has written the active box home).
+local function pc_drive(ops, tag)
+    local driver = PC.new({ player = D.player }, {
+        rd = rd, symbols = symbols, center = Center, ops = ops,
+        log = function(line)
+            local op, what = line:match("^PC op %d+ (%a+)%(%d+%) (%a+)")
+            if what then log(fmt("PC_OP %s %s", op, what)) end
+            log(line)
+        end,
+    })
+    local last_phase, point = nil, nil
+    for _ = 1, (D.pc_frames or 60000) do
+        point = PC.extend_point(play.point(), rd, symbols)
+        local buttons, phase = driver.step(nil, nil, point, emu.framecount())
+        if phase ~= last_phase then
+            last_phase = phase
+            log(fmt("PC_PHASE %s %s @%d (%d,%d) party=%d box=%d count=%d init=%s", tag, phase,
+                    emu.framecount(), point.x, point.y, point.party_count,
+                    point.box_number, point.box_count, tostring(point.box_initialised)))
+        end
+        if PC.TERMINALS[phase] then return phase, point end
+        yield_frame(buttons)
+    end
+    return "pc-timeout", point
+end
+
 -- ── Scenarios ────────────────────────────────────────────────────────────────────────
 local scenarios = {}
 
@@ -499,27 +580,11 @@ local function trade_scenario(decline)
 
     local function tile_row(offset, length) return Center.row(rd, ram.wTileMap, offset, length) end
     local function tiles(text, offset) return Center.has_tiles(rd, ram.wTileMap, text, offset) end
-    local function require_route(label, ok, detail)
-        if not ok then error(label .. ": " .. tostring(detail), 0) end
-    end
     local linked_hp_addr = ram.wPartyMons + linked_slot * parts.profile.derived.party_struct_size + 1
-    local route = Center.new({
-        read = rd, ram = ram, row = tile_row, frame = function() return frame end,
-        log = log, invariant = require_route, check = require_route, start = "route1",
-        menu_addr = {wTopMenuItemX=symbols.wTopMenuItemX, wTopMenuItemY=symbols.wTopMenuItemY},
-        linked_hp = function() return rd(linked_hp_addr) * 256 + rd(linked_hp_addr + 1) end,
-    })
-    local arrived = false
-    for _ = 1, 20000 do
-        local buttons, done = route.step()
-        if done then arrived = true;break end
-        yield_frame(buttons)
-    end
-    if not arrived or rd(ram.wCurMap) ~= Center.MAP.center or rd(ram.wXCoord) ~= 11 or rd(ram.wYCoord) ~= 3 then
-        return false, fmt("Center walk stopped map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord))
-    end
-    log(fmt("CENTER_RECEPTIONIST map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
-    if not wait_until(overworld_ok, 30, "Center overworld checkpoint") then return false, "Center not overworld-safe" end
+    local walked, walk_why = walk_to_center(function()
+        return rd(linked_hp_addr) * 256 + rd(linked_hp_addr + 1)
+    end)
+    if not walked then return false, walk_why end
 
     local function tap(key)
         yield_frame({[key]=true});yield_frame({[key]=true});yield_frame({});yield_frame({})
@@ -1406,6 +1471,142 @@ function scenarios.soft_reset_new()
     local saved_a, why_a = game_save("soft_reset_new_a")
     if not saved_a then return false, why_a end
     return true, "same-save soft reset: one re-hello, no writes in the cleared window"
+end
+
+-- S-6 / W-5 (Bill's PC listing), A6 scenario 1: the link_new body, then A walks to the Viridian
+-- Center and drives DEPOSIT -> WITHDRAW -> DEPOSIT -> RELEASE through the native menus. Every
+-- press comes from gen1_rb_pc_inputs.lua, whose header holds the pret citation for each screen.
+--
+-- The RELEASE half depends on the client contract in lua/gen1/client.lua:552-592: move_mon keys
+-- from the SIGNAL-TIME snapshot (signals.lua:141-166), and a standalone from_box RemovePokemon
+-- (not preceded by a move_mon in the same frame, so not Bill's WITHDRAW) logs RELEASE_SEEN and
+-- sends NOTHING. Releasing a boxed linked mon is therefore invisible to the server -- the pair
+-- stays ALIVE with a phantom boxed half. That is the documented shared-protocol gap this
+-- scenario pins, not a defect of this run.
+--
+-- A re-enters the PC for the second DEPOSIT only after B has finished, so the second deposit's
+-- partner sync (state.py:2091-2109 would queue another box_mon once B's sync_retrieve_done has
+-- put the key back in party_keys) cannot land on a live B: B's receipt is exactly box_mon then
+-- party_mon, in that order, and nothing after.
+function scenarios.pc_ops_new()
+    local linked, why = scenarios.link_new()
+    if not linked then return false, link_prerequisite_failure(why) end
+    if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned to party" end
+    local linked_key = new_key()
+    if not linked_key then return false, "no linked key after the shared link_new body" end
+    -- link_new's own quarantine box_mon/party_mon already sit in these logs; index past them.
+    local tx0, rx0 = #storage_tx, #storage_rx
+
+    if D.player == "b" then
+        local synced = wait_until(function()
+            return #storage_rx >= rx0 + 2 and storage_rx[rx0 + 2].cmd == "party_mon" or nil
+        end, 420, "box_mon then party_mon for B's linked key")
+        for i = rx0 + 1, #storage_rx do
+            log(fmt("PC_PARTNER_RX %d %s %s", i - rx0, storage_rx[i].cmd, tostring(storage_rx[i].key)))
+        end
+        if not synced then
+            return false, fmt("partner sync never arrived (%d command(s) after the link)", #storage_rx - rx0)
+        end
+        if storage_rx[rx0 + 1].cmd ~= "box_mon" or storage_rx[rx0 + 1].key ~= linked_key
+           or storage_rx[rx0 + 2].key ~= linked_key then
+            return false, "partner sync was not box_mon then party_mon for B's own linked key"
+        end
+        -- The PHYSICAL observation, not the bookkeeping: the mon is actually back in the party.
+        if not wait_until(function()
+            for _, m in ipairs(party_keys()) do if m.key == linked_key then return true end end
+            return nil
+        end, 120, "B's linked mon back in the party") then
+            return false, "party_mon arrived but the mon never re-entered B's party"
+        end
+        log_party("PC_PARTNER")
+        local saved_b, why_b = game_save("pc_ops_new_b")
+        if not saved_b then return false, why_b end
+        return true, "idled while the partner deposited and withdrew " .. linked_key
+    end
+
+    local linked_slot
+    for _, m in ipairs(party_keys()) do if m.key == linked_key then linked_slot = m.slot end end
+    if not linked_slot or #party_keys() ~= 2 then return false, "linked mon missing from a two-mon party" end
+    log_party("PRE_PC")
+    local linked_hp_addr = ram.wPartyMons + linked_slot * parts.profile.derived.party_struct_size + 1
+    local walked, walk_why = walk_to_center(function()
+        return rd(linked_hp_addr) * 256 + rd(linked_hp_addr + 1)
+    end)
+    if not walked then return false, walk_why end
+    local before = PC.extend_point(play.point(), rd, symbols)
+    log(fmt("PC_BOX_BEFORE box=%d count=%d init=%s", before.box_number, before.box_count,
+            tostring(before.box_initialised)))
+    if before.box_count ~= 0 then
+        return false, fmt("Box %d already held %d mon(s) before the deposit", before.box_number, before.box_count)
+    end
+
+    local phase, mid = pc_drive({{"deposit", linked_slot + 1}, {"withdraw", 1}}, "deposit-withdraw")
+    if phase ~= "pc-done" then return false, "PC deposit/withdraw ended " .. phase end
+    if #storage_tx ~= tx0 + 2 or storage_tx[tx0 + 1].event ~= "party_to_box"
+       or storage_tx[tx0 + 2].event ~= "box_to_party" then
+        return false, fmt("deposit/withdraw sent %d storage event(s), not party_to_box then box_to_party",
+                          #storage_tx - tx0)
+    end
+    if storage_tx[tx0 + 1].key ~= linked_key or storage_tx[tx0 + 2].key ~= linked_key then
+        return false, "deposit/withdraw carried a key that is not the linked one"
+    end
+    log("PC_DEPOSIT_KEY " .. linked_key)
+    log("PC_WITHDRAW_KEY " .. linked_key)
+    if #release_seen ~= 0 then return false, "a RELEASE_SEEN fired during the WITHDRAW" end
+    log(fmt("PC_MID party=%d box=%d count=%d", mid.party_count, mid.box_number, mid.box_count))
+
+    if not wait_partner_done(420) then return false, "the idle partner never finished" end
+    phase = pc_drive({{"deposit", linked_slot + 1}, {"release_box", 1}}, "deposit-release")
+    if phase ~= "pc-done" then return false, "PC deposit/release ended " .. phase end
+    if #storage_tx ~= tx0 + 3 or storage_tx[tx0 + 3].event ~= "party_to_box"
+       or storage_tx[tx0 + 3].key ~= linked_key then
+        return false, fmt("the second deposit sent %d storage event(s), not one party_to_box",
+                          #storage_tx - tx0 - 2)
+    end
+    if #release_seen ~= 1 then return false, fmt("%d RELEASE_SEEN line(s) in the receipt, not 1", #release_seen) end
+    if release_seen[1].key ~= linked_key then return false, "RELEASE_SEEN named a key that is not the linked one" end
+    if release_seen[1].after ~= tx0 + 3 then
+        return false, fmt("RELEASE_SEEN landed after %d storage event(s), not %d (the WITHDRAW window)",
+                          release_seen[1].after - tx0, 3)
+    end
+    log("PC_RELEASE_SEEN " .. linked_key)
+
+    local final = PC.extend_point(play.point(), rd, symbols)
+    log(fmt("PC_FINAL party=%d box=%d count=%d init=%s", final.party_count, final.box_number,
+            final.box_count, tostring(final.box_initialised)))
+    if final.party_count ~= 1 then return false, fmt("A's party holds %d mon(s), not the starter alone", final.party_count) end
+    if final.box_count ~= 0 then return false, fmt("Box %d still holds %d mon(s) after the release", final.box_number, final.box_count) end
+    log_party("POST_PC")
+    local saved, why_a = game_save("pc_ops_new_a")
+    if not saved then return false, why_a end
+    return true, "deposited, withdrew, deposited and released " .. linked_key
+end
+
+-- A6 scenario 2: the deadzone_new body (B's dead-zone catch is force-fainted into the Box 12
+-- memorial), then B walks to the Center PC and CHANGEs BOX into 12 and back to 1. A's half IS
+-- deadzone_new. The two box changes run as separate ops lists so the box state can be read
+-- between them from the overworld, after the PC has written the active box home.
+function scenarios.changebox_new()
+    local ok, why = scenarios.deadzone_new()
+    if not ok then return false, why end
+    if D.player == "a" then return true, why end
+    local walked, walk_why = walk_to_center()
+    if not walked then return false, walk_why end
+    local phase, at12 = pc_drive({{"changebox", 12}}, "changebox-12")
+    if phase ~= "pc-done" then return false, "CHANGE BOX to 12 ended " .. phase end
+    log(fmt("CHANGEBOX_TO %d initialised=%s count=%d", at12.box_number,
+            tostring(at12.box_initialised), at12.box_count))
+    if at12.box_number ~= 12 or not at12.box_initialised then
+        return false, fmt("CHANGE BOX left box=%d initialised=%s", at12.box_number, tostring(at12.box_initialised))
+    end
+    if at12.box_count < 1 then return false, "Box 12 no longer lists the memorial after the box change" end
+    local back, at1 = pc_drive({{"changebox", 1}}, "changebox-1")
+    if back ~= "pc-done" then return false, "CHANGE BOX back to 1 ended " .. back end
+    log(fmt("CHANGEBOX_BACK %d", at1.box_number))
+    if at1.box_number ~= 1 then return false, fmt("the current box is %d, not 1", at1.box_number) end
+    local saved, why_b = game_save("changebox_new_b")
+    if not saved then return false, why_b end
+    return true, "changed to Box 12 with the memorial listed and back to Box 1"
 end
 
 local scen = scenarios[D.scenario]
