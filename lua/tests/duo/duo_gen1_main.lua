@@ -1609,6 +1609,341 @@ function scenarios.changebox_new()
     return true, "changed to Box 12 with the memorial listed and back to Box 1"
 end
 
+-- ── D-7 / S-4 (blackout half): the whiteout REBUILD ──────────────────────────────────
+-- A single-pair whiteout with the pair IN THE PARTY is the already-proven game-over path, so
+-- this lane proves the other branch: both halves box their linked catch first, A then loses its
+-- starter (its only party mon) to a wild Route 1 foe, and the server rebuilds the pair out of
+-- the two PCs. No game over, no memorial, the link unchanged.
+--
+-- WHY THE PAIR SURVIVES. server/state.py:1982-2054 `_handle_whiteout` retires only links whose
+-- half is still in `party_keys` (:2024-2026) -- both halves are boxed by then -- and plans the
+-- rebuild from ALIVE pairs with BOTH halves boxed (`_alive_pc_mons` :2336-2363, `_plan_rebuild`
+-- :2365-2392). One `party_mon` is queued to each half and `rebuild_start` to A
+-- (`_queue_rebuild_commands` :2394-2445); `rebuild_done` goes to A alone, once A's
+-- `sync_retrieve_done` lands (state.py:299-307, `_maybe_finish_rebuild` :2448-2462). B's
+-- receipt therefore holds no rebuild_done, only its own party_mon + sync_retrieve_done.
+--
+-- WHY BOTH HALVES DEPOSIT BY HAND, AND WHY THE RUNNER GATES THE NEXT STEP. A deposit is mirrored
+-- to the partner as `box_mon` the moment the server sees `party_to_box`, and the partner's key
+-- leaves `party_keys` THERE, before that cartridge has moved anything
+-- (state.py:2066-2107). Bookkeeping is therefore not evidence: each half waits for the PHYSICAL
+-- reads (party = starter only, the catch listed in the active box) and the runner then polls
+-- /api/status (server/server.py:2209 publishes `players.<pid>.party_keys`) and appends
+-- BOTH_BOXED to the go-file. A mirrored `box_mon` that lands on an already-deposited mon is a
+-- no-op, not a failure: lua/gen1/boxes.lua:296-318 returns true when the key is already in the
+-- current box and no longer in the party, so the two hand-driven deposits cannot race each
+-- other into `box_mon_failed` (which would put the key back into party_keys, state.py:336-349,
+-- and starve the rebuild).
+--
+-- THE FATAL BATTLE. lua/tests/gen1_rb_hunt_inputs.lua has no "lose with the mon that is already
+-- out" mode (:69-70): `sacrifice` opens with `D.switch_to` (:141), which a one-mon party cannot
+-- do (gen1_battle_driver.lua:212-256 refuses -- "AlreadyOut"). So this body reuses `switch-hold`
+-- with `start_active` (:132-136), which parks at the first wild battle menu WITHOUT spending a
+-- turn, keeps the driver alive (`options.keep_driver`, :316-318 above) and plays GROWL itself.
+-- GROWL is move id $2D (pret constants/move_constants.asm:53), slot 2 of both starters' level-1
+-- learnsets (data/pokemon/base_stats/bulbasaur.asm:13, charmander.asm:13) and PP 40 with power 0
+-- (data/moves/moves.asm:58) -- it cannot end the battle, so the wild foe does all the work.
+--
+-- THE WIRE. `emit_faint` (lua/gen1/client.lua:491-504) sends `faint` for the starter -- an
+-- orphan key the server only discards (state.py:1694-1701) -- and then `whiteout` ONCE, because
+-- nothing else in the snapshot is alive. `whiteout_sent` is re-armed per battle (:517) and the
+-- blackout site would send it only if that first one had not (:565). Neither the `whiteout`
+-- cause on a link nor the ordering of `TX whiteout` against the blackout site is asserted here.
+--
+-- THE BLACKOUT. `ResetStatusAndHalveMoneyOnBlackout` (pret engine/events/black_out.asm:19-37)
+-- halves the three BCD bytes of wPlayerMoney with DivideBCDPredef3, i.e. floor(before/2); the
+-- battle fixture holds 2800 after its single 200 Poké Ball, so 1400. Ticks carry no money
+-- (tests/unit/protocol_schema.py:25-29), so the driver decodes wPlayerMoney itself -- the
+-- point's `money` field is exactly that decode over the pret symbol
+-- (lua/tests/gen1_rb_point_fields.lua:11-18, gen1_scripted_play.lua:101), never
+-- reads.read_money. The destination is wLastBlackoutMap (engine/overworld/special_warps.asm:
+-- 79-80,113-131), which is 0 = PALLET_TOWN on these fixtures: `SetLastBlackoutMap` is called
+-- only from the Center's HEALING script (engine/events/pokecenter.asm:17) and this lane uses
+-- the Center's PC, never the nurse. FlyWarpDataPtr's Pallet entry is
+-- `fly_warp PALLET_TOWN, 5, 6` (data/maps/special_warps.asm:65,79); the macro (:20-24) hands
+-- x,y to `event_displacement`, which emits y then x (macros/coords.asm:75-79) into
+-- wYCoord/wXCoord (ram/wram.asm:1788-1789) -- so x=5, y=6.
+
+-- gen1_rb_center_inputs.lua only ever walks FORWARD: `stage_index` is advanced at :145-148 and
+-- never decremented. A5 is the only lane that needs the way back, so its OWN waypoint table is
+-- replayed in reverse here -- read, not copied, and the module itself is untouched.
+local function back_waypoints(stage_name)
+    for _, stage in ipairs(Center.STAGES) do
+        if stage.name == stage_name then
+            local out = {}
+            for i = #stage.waypoints, 1, -1 do
+                -- {11,-1} is the module's "keep stepping off the north edge" marker (:154), not a tile
+                if stage.waypoints[i][2] >= 0 then out[#out + 1] = stage.waypoints[i] end
+            end
+            return out
+        end
+    end
+    error("no center route stage " .. tostring(stage_name), 0)
+end
+
+-- Center PC -> Viridian -> Route 1, the reverse of walk_to_center. Exits, from pret:
+-- the Center's warp tiles are (3,7)/(4,7) (data/maps/objects/ViridianPokecenter.asm:11-12), so
+-- walking south down the module's own {3,4} column lands on one; Viridian's Center door is
+-- (23,25) (ViridianCity.asm:14) and Route 1 connects north to Viridian
+-- (data/maps/headers/Route1.asm:2). The walk STOPS at the module's own first Route 1 waypoint
+-- {10,31}: that is one row north of the grass (gen1_rb_hunt_inputs.lua:15-18 -- grass is
+-- x 10-11, y 32-35), so the whole way back is grass-free and no wild battle can interrupt it.
+-- The hunt owns every encounter from there, exactly as in link_new.
+local function walk_back_to_route1()
+    local legs = {
+        { map = Center.MAP.center,   points = back_waypoints("center_receptionist"), into = Center.MAP.viridian },
+        -- skip_first: the forward stage's LAST waypoint is the Center's door tile (23,25)
+        -- (data/maps/objects/ViridianCity.asm:14), which is exactly where stepping warps back
+        -- inside. Coming out, the leg starts one tile south of it and must never target it.
+        { map = Center.MAP.viridian, points = back_waypoints("viridian_center"),     into = Center.MAP.route1,
+          skip_first = true },
+        { map = Center.MAP.route1,   points = back_waypoints("route_one_north") },
+    }
+    for leg_index, leg in ipairs(legs) do
+        local index, still, side, detour, last, arrived = leg.skip_first and 2 or 1, 0, 1, nil, "", false
+        for _ = 1, 30000 do
+            local map, x, y = rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)
+            if rd(ram.wIsInBattle) ~= 0 then
+                return false, fmt("a battle interrupted the grass-free walk back at map=%d (%d,%d)", map, x, y)
+            end
+            if leg.into and map == leg.into then arrived = true;break end
+            if map ~= leg.map then
+                return false, fmt("the walk back left the planned map chain: map=%d (%d,%d) leg=%d", map, x, y, leg_index)
+            end
+            if detour and x == detour[1] and y == detour[2] then detour, still = nil, 0 end
+            if not detour and index <= #leg.points and x == leg.points[index][1] and y == leg.points[index][2] then
+                index, still = index + 1, 0
+            end
+            if index > #leg.points and not leg.into then arrived = true;break end
+            -- past the last waypoint of a leg that still has to change maps: keep going south,
+            -- the mirror of the module's `y - 1` off-map step.
+            local target = detour or leg.points[index] or {x, y + 1}
+            local here = fmt("%d:%d:%d:%d", map, x, y, index)
+            still = (here == last) and still + 1 or 0
+            last = here
+            if still >= 240 then
+                -- ponytail: one-column side-step, the same escape the forward module makes
+                -- (gen1_rb_center_inputs.lua:170-186) for Route 1's Youngster, who paces
+                -- LEFT_RIGHT across this path (data/maps/objects/Route1.asm). Ceiling: it clears
+                -- a one-tile block; port the module's two-sided detour if a wider one appears.
+                side, detour, still = -side, {x + side, y}, 0
+                log(fmt("BACK_DETOUR side=%d from (%d,%d) frame %d", side, x, y, frame))
+            end
+            local buttons
+            if rd(ram.wJoyIgnore) ~= 0 then buttons = pulse_at_frame("B") -- B never talks to an NPC
+            elseif x < target[1] then buttons = {Right=true}
+            elseif x > target[1] then buttons = {Left=true}
+            elseif y < target[2] then buttons = {Down=true}
+            elseif y > target[2] then buttons = {Up=true} end
+            yield_frame(buttons)
+        end
+        if not arrived then
+            return false, fmt("the walk back stalled on leg %d at map=%d (%d,%d) waypoint %d",
+                              leg_index, rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord), index)
+        end
+    end
+    log(fmt("BACK_AT_ROUTE1 map=%d (%d,%d)", rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord)))
+    return true
+end
+
+-- The half of the scenario both cartridges share: the server's rebuild arrives as ONE party_mon,
+-- the client withdraws it on its own sync path (client.lua:431-439) and answers
+-- sync_retrieve_done. Every counter is read against a baseline taken at BOTH_BOXED, so
+-- link_new's own un-quarantine party_mon -- and any box_mon the partner's deposit mirrored --
+-- is behind us and cannot be counted as the rebuild's.
+local function await_rebuild(linked_key, base, secs)
+    local rx_before, done_before = base.rx, base.sync_retrieve_done
+    if not wait_until(function()
+        for i = rx_before + 1, #storage_rx do
+            if storage_rx[i].cmd == "party_mon" and storage_rx[i].key == linked_key then return true end
+        end
+        return nil
+    end, secs, "the rebuild's party_mon") then
+        return false, "no rebuild party_mon arrived from the server"
+    end
+    log("REBUILD_PARTY_MON " .. linked_key)
+    if not wait_until(function() return (seen.sync_retrieve_done or 0) > done_before end, 120,
+                      "sync_retrieve_done for the rebuilt mon") then
+        return false, "the client never confirmed the rebuild withdraw"
+    end
+    log("SYNC_RETRIEVE_DONE " .. linked_key)
+    frames(120) -- let a second command, if the server ever queued one, arrive before counting
+    local party_mons = 0
+    for i = rx_before + 1, #storage_rx do
+        if storage_rx[i].cmd == "party_mon" then party_mons = party_mons + 1 end
+    end
+    if party_mons ~= 1 then return false, fmt("%d rebuild party_mon command(s), not 1", party_mons) end
+    if (seen.sync_retrieve_done or 0) ~= done_before + 1 then
+        return false, fmt("%d sync_retrieve_done event(s) for one rebuild, not 1",
+                          (seen.sync_retrieve_done or 0) - done_before)
+    end
+    for _, name in ipairs({"sync_retrieve_failed", "force_faint", "memorialize", "game_over"}) do
+        if (seen[name] or 0) ~= base[name] then
+            return false, fmt("the rebuild was not clean: %d %s since the deposit", (seen[name] or 0) - base[name], name)
+        end
+    end
+    local rebuilt = wait_until(function()
+        local pt = PC.extend_point(play.point(), rd, symbols)
+        if pt.party_count ~= 2 or pt.box_count ~= 0 then return nil end
+        for _, m in ipairs(party_keys()) do if m.key == linked_key then return pt end end
+        return nil
+    end, 120, "the restored two-mon party over an empty box")
+    if not rebuilt then
+        local pt = PC.extend_point(play.point(), rd, symbols)
+        return false, fmt("after the rebuild the party holds %d mon(s) and Box %d holds %d",
+                          pt.party_count, pt.box_number, pt.box_count)
+    end
+    log(fmt("REBUILT party=%d box_count=%d", rebuilt.party_count, rebuilt.box_count))
+    log_party("POST_REBUILD")
+    return true
+end
+
+function scenarios.whiteout_new()
+    local linked, why = scenarios.link_new()
+    if not linked then return false, link_prerequisite_failure(why) end
+    if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned to party" end
+    local linked_key = new_key()
+    if not linked_key then return false, "no linked key after the shared link_new body" end
+    local starter_key, linked_slot
+    for _, m in ipairs(party_keys()) do
+        if boot_keys[m.key] then starter_key = m.key elseif m.key == linked_key then linked_slot = m.slot end
+    end
+    if not starter_key or not linked_slot or #party_keys() ~= 2 then
+        return false, "expected a two-mon party of the boot starter plus the linked catch"
+    end
+    log_party("PRE_WHITEOUT")
+
+    local linked_hp_addr = ram.wPartyMons + linked_slot * parts.profile.derived.party_struct_size + 1
+    local walked, walk_why = walk_to_center(function()
+        return rd(linked_hp_addr) * 256 + rd(linked_hp_addr + 1)
+    end)
+    if not walked then return false, walk_why end
+    -- Both halves deposit; starting them together keeps each cartridge inside the PC menus
+    -- (where the client's writes are disarmed) while the partner's mirrored box_mon arrives.
+    log("AT_CENTER " .. D.player)
+    if not wait_until(function() return partner_has_mark("AT_CENTER") end, 600,
+                      "the partner at the Center") then return false, "the partner never reached the Center" end
+    local tx0 = #storage_tx
+    local phase = pc_drive({{"deposit", linked_slot + 1}}, "deposit-for-rebuild")
+    if phase ~= "pc-done" then return false, "the PC deposit ended " .. phase end
+    if #storage_tx < tx0 + 1 or storage_tx[tx0 + 1].event ~= "party_to_box"
+       or storage_tx[tx0 + 1].key ~= linked_key then
+        return false, "the deposit did not send party_to_box for the linked key"
+    end
+    local boxed = wait_until(function()
+        local pt = PC.extend_point(play.point(), rd, symbols)
+        if pt.party_count ~= 1 or pt.box_count < 1 then return nil end
+        for _, m in ipairs(reads.read_active_box() or {}) do
+            if reads.key(m) == linked_key then return pt end
+        end
+        return nil
+    end, 180, "the catch physically in the active box over a starter-only party")
+    if not boxed then
+        local pt = PC.extend_point(play.point(), rd, symbols)
+        return false, fmt("the deposit was not physically observable: party=%d box %d count=%d",
+                          pt.party_count, pt.box_number, pt.box_count)
+    end
+    log("DEPOSITED_FOR_REBUILD " .. linked_key) -- extract_marks splits on the first space
+    log(fmt("PC_BOX_AFTER party=%d box=%d count=%d", boxed.party_count, boxed.box_number, boxed.box_count))
+    -- The server's half of the same fact, which only the runner can read (/api/status).
+    if not wait_until(function() return file_contains(D.go_file, "BOTH_BOXED") end, 900,
+                      "BOTH_BOXED from the runner") then
+        return false, "the runner never confirmed both keys boxed on the server"
+    end
+    log("BOTH_BOXED status=true")
+    local base = { rx = #storage_rx }
+    for _, name in ipairs({"sync_retrieve_done", "sync_retrieve_failed", "force_faint",
+                           "memorialize", "game_over"}) do base[name] = seen[name] or 0 end
+
+    if D.player == "b" then
+        -- B idles at its checkpoint for A's whole walk back, hunt and blackout; the rebuild
+        -- reaches it on the client's own sync path, not through a second PC drive.
+        local ok_b, why_b = await_rebuild(linked_key, base, 900)
+        if not ok_b then return false, why_b end
+        local saved_b, save_why_b = game_save("whiteout_new_b")
+        if not saved_b then return false, save_why_b end
+        return true, "mirrored the partner's whiteout rebuild and saved " .. linked_key
+    end
+
+    local back, back_why = walk_back_to_route1()
+    if not back then return false, back_why end
+    local money_before = play.point().money
+    log(fmt("MONEY_BEFORE %d", money_before))
+
+    -- Baselines, so a faint from link_new's own catch battle could never be read as this KO.
+    local ko_before, faint_before = battle_site_keys[starter_key] or 0, seen.faint or 0
+    local hunted, driver = hunt("switch-hold", {start_active = true, keep_driver = true})
+    if hunted ~= "linked-active-menu" then
+        return false, "A never reached a wild battle menu with its starter out: " .. tostring(hunted)
+    end
+    local move2, pp2 = rd(ram.wBattleMonMoves + 1), rd(ram.wBattleMonPP + 1) % 64
+    if move2 ~= 0x2D then
+        driver.close()
+        return false, fmt("the starter's move slot 2 is $%02X, not GROWL ($2D)", move2)
+    end
+    log(fmt("GROWL_SLOT move=%02X pp=%d", move2, pp2))
+    local function starter_ko()
+        return (battle_site_keys[starter_key] or 0) > ko_before
+            or ((seen.faint or 0) > faint_before and sent_events.faint
+                and sent_events.faint.key == starter_key) or nil
+    end
+    for turn = 1, 40 do
+        if starter_ko() then break end
+        local menu = driver.wait_menu(1800)
+        if not menu.ok then break end
+        if starter_ko() then break end
+        if not driver.choose("FIGHT").ok then break end
+        local move = driver.commit_move(2, 900)
+        log(fmt("GROWL turn %d -> %s hp=%d", turn, tostring(move.why),
+                rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1)))
+        if move.why == "battle_over" then break end
+    end
+    driver.close()
+    if not wait_until(starter_ko, 120, "the starter's engine faint site") then
+        return false, "the wild foe never KO'd the starter"
+    end
+    log(fmt("STARTER_KO frame=%d key=%s", frame, starter_key))
+    if not wait_until(function() return (seen.whiteout or 0) >= 1 end, 120, "TX whiteout") then
+        return false, "the client never sent whiteout"
+    end
+    log(fmt("TX whiteout x%d", seen.whiteout))
+
+    local blacked_out, arrived = nil, false
+    for _ = 1, 9000 do
+        if not blacked_out and tile_text("blacked out") then blacked_out = frame end
+        if rd(ram.wCurMap) == 0 and overworld_ok() then arrived = true;break end
+        yield_frame(pulse_at_frame("B")) -- B advances text and never talks to an NPC
+    end
+    if not arrived then
+        return false, fmt("A never reached the Pallet Town blackout checkpoint (map=%d)", rd(ram.wCurMap))
+    end
+    log(blacked_out and fmt("BLACKED_OUT_TEXT frame=%d", blacked_out)
+        or "BLACKED_OUT_TEXT unavailable: the text advanced before the probe")
+    local site = reads.read_map()
+    log(fmt("BLACKOUT_SITE map=%d x=%d y=%d", site.map, site.x, site.y))
+    if site.map ~= 0 or site.x ~= 5 or site.y ~= 6 then
+        return false, fmt("the blackout warp was map=%d (%d,%d), not Pallet Town (5,6)", site.map, site.x, site.y)
+    end
+    local money_after = play.point().money
+    log(fmt("MONEY_AFTER %d", money_after))
+    if money_after ~= math.floor(money_before / 2) then
+        return false, fmt("money went %d -> %d, not the BCD halving to %d",
+                          money_before, money_after, math.floor(money_before / 2))
+    end
+    log(fmt("MONEY_HALVED before=%d after=%d", money_before, money_after))
+    if (seen.whiteout or 0) ~= 1 then return false, fmt("%d whiteout events, not 1", seen.whiteout or 0) end
+
+    local ok_a, why_a = await_rebuild(linked_key, base, 300)
+    if not ok_a then return false, why_a end
+    if not wait_until(function() return (seen.rebuild_done or 0) >= 1 end, 120, "rebuild_done") then
+        return false, "the server never closed the rebuild"
+    end
+    log(fmt("REBUILD_DONE rebuild_start=%d rebuild_done=%d", seen.rebuild_start or 0, seen.rebuild_done or 0))
+    local saved, save_why = game_save("whiteout_new_a")
+    if not saved then return false, save_why end
+    return true, "whited out with an empty party and was rebuilt from the PC: " .. linked_key
+end
+
 local scen = scenarios[D.scenario]
 if not scen then finish(false, "no gen1_new scenario " .. tostring(D.scenario)) end
 local co = coroutine.create(function()
