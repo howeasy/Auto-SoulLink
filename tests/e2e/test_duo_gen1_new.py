@@ -106,10 +106,18 @@ def test_gen1_new_duo(scenario):
         # runner refuses it and the scenario fails, which is what a missing leg must do.
         cmd.extend(("--wrong-save", os.environ.get("SLINK_WRONG_SAVE") or os.path.join(
             REPO, "tests", "fixtures", "gen1", "red_town_ot2.SaveRAM")))
-    proc = subprocess.run(
-        cmd,
-        cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
-        # Always outlive every attempt the runner may take, plus boot and teardown.
-        timeout=deadline_for(scenario))
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            # Always outlive every attempt the runner may take, plus boot and teardown.
+            timeout=deadline_for(scenario))
+    except subprocess.TimeoutExpired as exc:
+        # text=True makes exc.stdout a str (None when nothing was captured), not the bytes a
+        # bare subprocess.run would leave; the assert below cannot name the scenario on a kill.
+        pytest.fail(f"{GAME} duo {scenario} exceeded the wrapper deadline of "
+                    f"{deadline_for(scenario)} s (every attempt's budget plus 300 s teardown); "
+                    f"the runner's own _run_deadline should have ended it first -- partial "
+                    f"stdout:\n{(exc.stdout or '')[-4000:]}")
     assert proc.returncode == 0, (
         f"{GAME} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
