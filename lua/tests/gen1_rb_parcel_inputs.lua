@@ -14,6 +14,13 @@ local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,
 local function tap(key, frame)
     local b=idle(); b[key]=frame%16<2; return b
 end
+-- Stall guard, same shape as the sibling route drivers (gen1_y_ball_gate_inputs.lua:74-77):
+-- the first frame in a window is latched under `key`, and the window has a bound. The gate
+-- harness prints the whole point on a failed route, so the message carries no dump of its own.
+local function bounded(self, key, frame, limit, message)
+    self[key]=self[key] or frame
+    assert(frame-self[key]<limit, message)
+end
 local function move(point, target)
     local b=idle()
     if point.x<target[1] then b.Right=true
@@ -113,7 +120,17 @@ function M.new(expected)
         end
         if point.menu_kind~="none" then
             if point.map~=0x2A or not point.oak_got_parcel then
-                return idle(),"unexpected-menu"
+                -- Before the delivery no Mart can be open: the clerk's DisplayPokemartDialogue
+                -- lives in ViridianMart_TextPointers2, installed only once EVENT_OAK_GOT_PARCEL
+                -- is set (pokeyellow scripts/ViridianMart.asm:9-21, pokered :8-20). So a live
+                -- display here is a plain text box -- the clerk's "say hi to OAK" line
+                -- (pokeyellow scripts/ViridianMart.asm:77-78,92-94), re-opened by this driver's
+                -- own A tap on the frame ViridianMartOaksParcelScript finished and wrote
+                -- mart_script 2 (:49-62). B closes it and, unlike A, opens nothing new:
+                -- WaitForTextScrollButtonPress takes A or B (pokeyellow home/joypad2.asm:80-82).
+                bounded(self,"stray_box_frame",frame,600,
+                    "Mart display never cleared before the parcel exit")
+                return tap("B",frame),"close-stray-mart-box"
             end
             if point.menu_kind=="unknown" then return idle(),"mart-unknown-wait" end
             if point.menu_kind=="mart-choice" and point.menu_index==0 then

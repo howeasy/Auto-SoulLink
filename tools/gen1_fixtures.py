@@ -53,15 +53,9 @@ FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen1")
 # mon has a level byte and exp 0, which no game state produces (AddPartyMon derives exp from
 # the level, engine/pokemon/add_mon.asm:202-207). Named individually so a regenerated fixture
 # cannot hide behind a blanket tolerance -- anything not listed here must qualify clean.
-#
-# TODO(release): yellow_battle is the only fixture left here -- blocked on the parcel
-#   driver's Yellow deadlock (card Y-2). Once that lands, rebuild it
-#   (`python tools/gen1_fixtures.py yellow battle`), delete the yellow_battle entry from
-#   LEGACY below AND tests/unit/test_gen1_stat_control.py's LEGACY_FIXTURES, then flip
-#   yellow_battle's row in tests/unit/test_gen1_fixture_qualify.py from the LEGACY
-#   expectation to the clean one. Kept until then so an un-rebuilt fixture cannot read as a
-#   regression.
-LEGACY = {"yellow_battle"}
+# Empty: all seven committed fixtures came out of scripted play. Kept as the mechanism for
+# any future fixture that lands byte-written ahead of a real rebuild.
+LEGACY = set()
 _LEGACY_PROBLEM = re.compile(r"^slot \d+: exp 0 is not level \d+ on curve \d+$")
 
 

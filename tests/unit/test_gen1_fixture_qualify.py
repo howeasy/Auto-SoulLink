@@ -2,10 +2,10 @@
 
 tests/fixtures/gen1/*.SaveRAM are what the physical Gen 1 lanes boot from, so a fixture that
 is not a real, consistent save silently weakens every test downstream of it. `qualify()` is
-the check, and this file pins the state it currently finds: the four R/B fixtures plus
-yellow_town were regenerated from scripted play (Bulbasaur/Charmander/Pikachu, level 5) and
-must stay clean; yellow_battle still holds the old harness' bytes (level byte written
-directly, exp 0) and is allowed as LEGACY only because the tool names it individually.
+the check, and this file pins the state it currently finds: all seven fixtures (the four R/B
+saves, yellow_town, yellow_battle and red_town_ot2) were regenerated from scripted play
+(Bulbasaur/Charmander/Pikachu, level 5) and must stay clean. LEGACY is empty -- kept as the
+mechanism for any future fixture that lands byte-written ahead of a real rebuild.
 
 The blank-save case is here because it is the shape a truncated or uninitialised fixture
 takes, and it used to raise out of `decode_party` rather than be reported.
@@ -25,8 +25,9 @@ import gen1_fixtures as fixtures  # noqa: E402  (tools/ is not a package; the to
 codec = fixtures.codec  # the tool imports the codec; the tests reconstruct save states with it
 
 _FIXTURES = os.path.join(_REPO, "tests", "fixtures", "gen1")
-_CLEAN = ("red_town", "blue_town", "red_battle", "blue_battle", "red_town_ot2", "yellow_town")
-_LEGACY = ("yellow_battle",)
+_CLEAN = ("red_town", "blue_town", "red_battle", "blue_battle", "red_town_ot2", "yellow_town",
+          "yellow_battle")
+_LEGACY = ()
 _ALL = _CLEAN + _LEGACY
 
 # The has-changed-boxes bit lives at sMainData + (wCurrentBoxNum - wMainDataStart)
@@ -59,18 +60,8 @@ def test_regenerated_fixtures_qualify_clean(name):
         f"{name} no longer qualifies — it was regenerated from real play and must stay clean")
 
 
-@pytest.mark.parametrize("name", _LEGACY)
-def test_yellow_battle_is_legacy_and_nothing_else(name):
-    sram, rom = _load(name)
-    problems = fixtures.qualify(sram, rom)
-    assert len(problems) == 1, f"{name}: expected only the exp artefact, got {problems}"
-    assert "exp 0" in problems[0], problems[0]
-    assert name in fixtures.LEGACY, f"{name} is not named LEGACY in the tool"
-    assert fixtures.is_legacy_artefact(problems), "the artefact detector does not see it"
-
-
-def test_the_legacy_set_names_exactly_yellow_battle():
-    assert {"yellow_battle"} == fixtures.LEGACY
+def test_the_legacy_set_is_empty():
+    assert not fixtures.LEGACY
 
 
 def test_a_blank_saveram_is_reported_not_raised():
@@ -82,7 +73,7 @@ def test_a_blank_saveram_is_reported_not_raised():
 
 
 def test_the_sweep_prints_one_line_per_fixture_and_exits_zero(capsys):
-    """The subcommand itself: 5 OK, 1 LEGACY, exit 0 on the committed set."""
+    """The subcommand itself: 7 OK, 0 LEGACY, exit 0 on the committed set."""
     for name in _ALL:
         if not os.path.exists(os.path.join(_FIXTURES, f"{name}.SaveRAM")):
             pytest.skip(f"{name}.SaveRAM not present")
