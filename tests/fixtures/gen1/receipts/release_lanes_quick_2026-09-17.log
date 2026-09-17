@@ -1,0 +1,20 @@
+Gen 1 release gate — 8 lanes
+
+[ .. ] unit
+[PASS] unit               3020 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (73s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+
+Fast lanes passed. The emulator lanes were NOT run, so this is not a release verdict — re-run without --quick.
