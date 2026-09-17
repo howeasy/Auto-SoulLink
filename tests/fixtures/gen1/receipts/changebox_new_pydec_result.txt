@@ -1,0 +1,9 @@
+attempt 1 of 2
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+B saved party/current box excludes AD68:AFB9:24
+B initialized box banks and all 12 counts/terminators/checksums valid
+B Box 12 holds AD68:AFB9:24 at HP 0
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+W-5 box change: Box 12 listed 1 memorial(s), back to Box 1; saved flag set, index 0, AD68:AFB9:24 still HP 0 in Box 12; no storage event on the wire
+PYDEC: PASS asserted scenario facts

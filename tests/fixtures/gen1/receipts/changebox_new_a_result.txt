@@ -1,0 +1,49 @@
+duo instance a scenario=changebox_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:64233 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:64233
+[client] [SLink] TCP connected to 127.0.0.1:64233
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @641
+PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"990013000016032D21
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @2397 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,35) mode=run balls=1
+phase wild-intro @2535 (10,35) battle=1 party=1
+phase wild-run @3300 (10,35) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+TX {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":114,"species_id":36}
+TX {"event":"safe","player":"a","seq":115}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+[hunt] battle outcome battle_over receipts run:timeout
+phase wild-battle_over @4196 (10,35) battle=0 party=1
+[hunt] after battle: outcome=battle_over result=2 party=1 balls=1 -> escaped
+phase escaped @4197 (10,35) battle=0 party=1
+HUNT escaped after 1801 frames, 1 encounter(s)
+NO_CATCH sent
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+heartbeat f=7200 party=1 connected=true
+heartbeat f=10800 party=1 connected=true
+heartbeat f=14400 party=1 connected=true
+heartbeat f=18000 party=1 connected=true
+SAVE_PHASE deadzone_new_a save-open-start-menu
+SAVE_PHASE deadzone_new_a save-close-foreign-menu
+SAVE_PHASE deadzone_new_a save-select-save
+SAVE_PHASE deadzone_new_a save-choose-save
+SAVE_PHASE deadzone_new_a save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_changebox_new_a_1_witness.bin bytes=31592 saves=1 frame=20432
+SAVE_PHASE deadzone_new_a save-await-close
+SAVE_PHASE deadzone_new_a save-witnessed
+SAVE_WITNESS deadzone_new_a frames=532
+RESULT: PASS (ran from the first encounter)
