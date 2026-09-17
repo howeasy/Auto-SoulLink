@@ -67,7 +67,7 @@ function Client.new(p)
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
         deferred = {}, pending_battle_writes = {}, sync_written = {},
-        pending_change = nil, battle = nil, has_pokeballs = false,
+        pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
         trade = p.trade, trade_enabled = false, trade_state = nil,
     }
@@ -336,10 +336,24 @@ function Client.new(p)
         end
         -- A13: the enemy party may only be rewritten between InitBattleCommon staging it
         -- (engine/battle/core.asm:6688-6689 sets wEnemyMonPartyPos = $FF) and EnemySendOutFirstMon
-        -- clearing it before LoadEnemyMonData (:1292+, :1358). Past either edge the engine has
-        -- already read the bytes we would replace, so the reply is stale, not applicable.
+        -- clearing it before LoadEnemyMonData (:1292+, :1358). Past the CLOSING edge the engine
+        -- has already read the bytes we would replace, so the reply is stale. The OPENING edge is
+        -- not the `battle_begin` hook (:6665, capture_offset 0): `callfar ReadTrainer` (:6679) and
+        -- the multi-frame `DoBattleTransitionAndInitBattleVariables` (:6680) run first, so a reply
+        -- one frame in still reads the PREVIOUS battle's value. That reply is early, not late:
+        -- hold it and let rival_window_tick apply it at the frame the byte flips, still bounded by
+        -- RIVAL_SWAP_FRAMES from battle_begin.
         local fresh = self.battle and (self.frame - self.battle.frame) <= Client.RIVAL_SWAP_FRAMES
-        if not fresh or io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") ~= 0xFF then
+        local staged = io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") == 0xFF
+        if fresh and not staged and not self.battle.pos_staged then
+            if self.pending_rival then -- one hold at a time; the displaced reply gets its answer
+                send("rival_team_replaced", { trainer_id = self.pending_rival.trainer_id,
+                                              species_ids = arr({}), error = "late_reply" })
+            end
+            self.pending_rival = cmd
+            return
+        end
+        if not fresh or not staged then
             send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
             return
         end
@@ -367,6 +381,23 @@ function Client.new(p)
         writes:disarm()
         if ok then send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = ids })
         else send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = tostring(why) }) end
+    end
+
+    -- A13: watch wEnemyMonPartyPos for the frame InitBattleCommon stages the party ($FF), both to
+    -- remember that this battle's window HAS opened (so a reply after EnemySendOutFirstMon cleared
+    -- the byte again is late, not early) and to release a reply that beat the staging.
+    function self:rival_window_tick()
+        local b = self.battle
+        local live = b and (self.frame - b.frame) <= Client.RIVAL_SWAP_FRAMES
+        if live and io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") == 0xFF then
+            b.pos_staged = true
+            local cmd = self.pending_rival
+            if cmd then self.pending_rival = nil; self:replace_rival_team(cmd) end
+        elseif self.pending_rival and not live then
+            local cmd = self.pending_rival
+            self.pending_rival = nil
+            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
+        end
     end
 
     -- Deferred queue: one command per frame, only at the verified overworld checkpoint.
@@ -573,7 +604,15 @@ function Client.new(p)
             -- the received one; trade_done accounts for both (receipt: a spurious party_to_box
             -- for the INCOMING key went out mid-apply and the server ordered a box_mon back)
             local trading = self.trade_state and self.trade_state.kind == "apply"
-            local standalone = not self.moved_this_frame and not trading
+            -- _MoveMon (engine/pokemon/add_mon.asm:341+, two CopyData runs) and the RemovePokemon
+            -- that finishes a deposit (engine/pokemon/bills_pc.asm:232-235) have no DelayFrame
+            -- between them, so the pair CAN straddle a frame boundary: age the mark instead of
+            -- clearing it at frame_end, or the second half looks standalone.
+            -- ponytail: a 2-frame age window, not a state machine. Ceiling: a release inside two
+            -- frames of an unrelated MoveMon reads as that move's second half; pair the two
+            -- signals by wWhichPokemon/box if a receipt ever shows that happening.
+            local moved = self.moved_this_frame and (self.frame - self.moved_this_frame) <= 2
+            local standalone = not moved and not trading
             if pt.from_box then
                 -- Bill's WITHDRAW ends in RemovePokemon(from_box) too, right after its
                 -- BOX_TO_PARTY MoveMon, so `from_box` alone is not the discriminator; the
@@ -586,11 +625,20 @@ function Client.new(p)
                     log(string.format("[SLink-gen1] RELEASE_SEEN key=%s box=%d", key, (pt.box_num or 0) % 128))
                 end
             elseif standalone then
-                local party = current_party()
+                -- from the SNAPSHOT, like the sibling branches: _RemovePokemon has already shifted
+                -- the rest of the party down by drain time, so a live read names the mon that
+                -- moved INTO the slot (engine/events/in_game_trades.asm:145,
+                -- engine/link/cable_club.asm:799 are the two standalone callers).
+                local party = party_from_snapshot(pt.party or {})
                 local key = party and key_at(party, pt.which)
                 if key and not self.sync_written[key] then send("party_to_box", { key = key }) end -- release
             end
-            self.pending_change = { kind = "rescan", frame = sig.frame }
+            -- a live npc_trade/evolution still owes a key_change; RemovePokemon runs INSIDE the
+            -- NPC trade (in_game_trades.asm:145), so a rescan here would swallow it
+            local pk = self.pending_change and self.pending_change.kind
+            if pk ~= "npc_trade" and pk ~= "evolution" then
+                self.pending_change = { kind = "rescan", frame = sig.frame }
+            end
         elseif k == "evolve" then
             local party = party_from_snapshot(pt.party or {})
             local key, mon
@@ -985,7 +1033,7 @@ function Client.new(p)
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
         end
-        self.moved_this_frame = nil
+        self:rival_window_tick()
         self:settle_pending_change()
         if connected and self.frame % Client.TICK_INTERVAL == 0 then self:send_tick("tick") end
         if self.pending_safe and connected then

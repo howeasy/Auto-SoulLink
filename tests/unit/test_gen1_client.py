@@ -1139,6 +1139,7 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
 
     # (b) RELEASE: the standalone box removal, no MoveMon in the frame. The box mirror is left as
     # it was on purpose -- it is the fixture the remove_pokemon point snapshots.
+    world.step(3)   # past the 2-frame MoveMon age window; a real release is menus away from (a)
     n = len(world.sent)
     world.bus[r["wRemoveMonFromBox"]] = 1
     world.bus[r["wWhichPokemon"]] = 0
@@ -1296,12 +1297,11 @@ def test_a_demonstration_battle_type_emits_neither_capture_nor_no_catch(world):
 
 def test_replace_rival_team_nacks_a_late_reply_and_writes_nothing(world):
     """A13: the swap is only safe between InitBattleCommon setting wEnemyMonPartyPos = $FF
-    (engine/battle/core.asm:6686) and EnemySendOutFirstMon clearing it (:1292+) before
-    LoadEnemyMonData (:1358); ReadTrainer itself runs in the hook's own frame (:6679), so every
-    reply lands after it. Refuse with `error = "late_reply"` unless wEnemyMonPartyPos == $FF AND
-    at most 120 frames have passed since the `battle_begin` point recorded the frame. Today
-    client.lua:309-337 checks only in_battle and the trainer id, so a reply that arrives after the
-    send-out rewrites a party the engine has already read.
+    (engine/battle/core.asm:6688-6689) and EnemySendOutFirstMon clearing it (:1292+) before
+    LoadEnemyMonData (:1358). Refuse with `error = "late_reply"` once the byte has been staged and
+    cleared again, or once 120 frames have passed since the `battle_begin` point recorded the
+    frame. Today client.lua:309-337 checks only in_battle and the trainer id, so a reply that
+    arrives after the send-out rewrites a party the engine has already read.
     """
     r = world.ram
     pos = r["wEnemyMonPartyPos"]
@@ -1309,8 +1309,10 @@ def test_replace_rival_team_nacks_a_late_reply_and_writes_nothing(world):
     world.connect()
     world.step(60)
     world.in_battle(opponent=0xE1, species=0xB0, level=9)   # RIVAL1 = class 225
-    world.bus[pos] = 0xFF
+    world.bus[pos] = 0x00                                   # the transition has not staged it yet
     world.fire("battle_begin")
+    world.step()
+    world.bus[pos] = 0xFF                                   # InitBattleCommon reaches :6688
     world.step()
 
     # (1) the first mon is already out: wEnemyMonPartyPos is no longer $FF
@@ -1379,4 +1381,153 @@ def test_a_bad_byte_in_the_third_blob_leaves_the_enemy_party_untouched(world):
     assert ev["species_ids"] == [0x99, 0xB0, 0xB1] and ev.get("error") is None, ev
     assert world.writes[n:] != []
     assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+    world.assert_all_conform()
+
+
+def test_a_rival_reply_that_beats_the_engines_ff_is_held_until_the_flip(world):
+    """A13 window, corrected. The `battle_begin` hook sits at InitBattleCommon
+    (engine/battle/core.asm:6665, capture_offset 0), but `ld a, $ff / ld [wEnemyMonPartyPos], a`
+    is at :6688-6689 -- AFTER `callfar ReadTrainer` (:6679) and AFTER the multi-frame
+    `DoBattleTransitionAndInitBattleVariables` (:6680). A reply one frame after the hook therefore
+    still reads the PREVIOUS battle's value (0x00 on a fresh boot) and was NACKed `late_reply`,
+    which made the window unsatisfiable behind a long transition. HOLD such a reply and apply it
+    at the frame the byte reads $FF.
+    """
+    r = world.ram
+    pos = r["wEnemyMonPartyPos"]
+    blobs = [_rival_blob(random.Random(41), 0x99)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)   # RIVAL1 = class 225
+    world.bus[pos] = 0x00                                    # the transition is still running
+    world.fire("battle_begin")
+    world.step()
+
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step(10)
+    assert world.events("rival_team_replaced") == [], "the reply is held, not answered"
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes(44)
+
+    world.bus[pos] = 0xFF                                    # InitBattleCommon reaches :6688
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") is None and ev["species_ids"] == [0x99], ev
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+    world.assert_all_conform()
+
+
+def test_a_held_rival_reply_whose_ff_never_comes_is_a_late_reply(world):
+    """The belt on the same window: a held reply is bounded by RIVAL_SWAP_FRAMES measured from
+    `battle_begin`, so a transition that never stages the party answers `late_reply` and writes
+    nothing.
+    """
+    r = world.ram
+    blobs = [_rival_blob(random.Random(41), 0x99)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)
+    world.bus[r["wEnemyMonPartyPos"]] = 0x00
+    world.fire("battle_begin")
+    world.step()
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step(130)
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes(44)
+    world.assert_all_conform()
+
+
+def test_a_standalone_party_removal_keys_from_the_hooks_snapshot(world):
+    """Both standalone `RemovePokemon(party)` callers -- the NPC in-game trade
+    (engine/events/in_game_trades.asm:145) and the cable-club trade (engine/link/cable_club.asm:799)
+    -- shift the rest of the party down inside _RemovePokemon, before the signal is drained.
+    client.lua:589 read a LIVE party, so the release named the mon that shifted INTO the slot.
+    """
+    rng = random.Random(7)
+    world.seed_party([_mon(rng, 0x99, nick="A"), _mon(rng, 0xB1, nick="B"), _mon(rng, 0xB0, nick="C")])
+    world.connect()
+    world.step(60)
+    before = list(world.party())
+    key_a, key_b = codec.key(before[0]), codec.key(before[1])
+    world.bus[world.ram["wWhichPokemon"]] = 0
+    world.bus[world.ram["wRemoveMonFromBox"]] = 0
+    n = len(world.sent)
+    world.fire("remove_pokemon")        # the point snapshots A,B,C
+    world.seed_party(before[1:])        # _RemovePokemon shifted B,C down by drain time
+    world.step()
+    ptb = [m["key"] for m in world.sent[n:] if m["event"] == "party_to_box"]
+    assert ptb == [key_a], (ptb, "B was", key_b)
+    world.assert_all_conform()
+
+
+def test_a_deposit_whose_two_hooks_straddle_a_frame_sends_one_party_to_box(world):
+    """`_MoveMon` (engine/pokemon/add_mon.asm:341+) runs two CopyData passes and
+    `bills_pc.asm:232-235` calls RemovePokemon straight after it with no DelayFrame between, so
+    the pair can land on two sides of a frame boundary. `moved_this_frame` was cleared every
+    frame_end, so the second half looked standalone and the deposit reported party_to_box twice.
+    """
+    rng = random.Random(7)
+    world.seed_party([_mon(rng, 0x99, nick="A"), _mon(rng, 0xB1, nick="B"), _mon(rng, 0xB0, nick="C")])
+    world.connect()
+    world.step(60)
+    before = list(world.party())
+    key_a = codec.key(before[0])
+    r = world.ram
+    world.bus[r["wMoveMonType"]] = 1        # PARTY_TO_BOX
+    world.bus[r["wWhichPokemon"]] = 0
+    n = len(world.sent)
+    world.fire("move_mon")
+    world.step()                            # the frame boundary falls between the two hooks
+    world.bus[r["wRemoveMonFromBox"]] = 0
+    world.fire("remove_pokemon")
+    world.seed_party(before[1:])
+    world.step()
+    ptb = [m["key"] for m in world.sent[n:] if m["event"] == "party_to_box"]
+    assert ptb == [key_a], ptb
+    world.assert_all_conform()
+
+
+def test_a_withdraw_whose_two_hooks_straddle_a_frame_is_not_a_release(world):
+    """The mirror of the deposit: a BOX_TO_PARTY MoveMon followed by RemovePokemon(from_box) is
+    Bill's WITHDRAW, and a frame boundary between the two used to log a false RELEASE_SEEN.
+    """
+    rng = random.Random(7)
+    world.seed_party([_mon(rng, 0x99, nick="A"), _mon(rng, 0xB1, nick="B")])
+    world.connect()
+    world.step(60)
+    _seed_active_box(world, [_box_mon(rng, 0x15), _box_mon(rng, 0x1D)])
+    r = world.ram
+    world.bus[r["wMoveMonType"]] = 0        # BOX_TO_PARTY
+    world.bus[r["wWhichPokemon"]] = 0
+    nlog = len(world.logs)
+    world.fire("move_mon")
+    world.step()                            # the frame boundary falls between the two hooks
+    world.bus[r["wRemoveMonFromBox"]] = 1
+    world.fire("remove_pokemon")
+    world.step()
+    assert [line for line in world.logs[nlog:] if "RELEASE_SEEN" in line] == []
+    world.assert_all_conform()
+
+
+def test_a_removal_inside_an_npc_trade_keeps_the_pending_key_change(world):
+    """`in_game_trades.asm:145` calls RemovePokemon between the `npc_trade` signal and the
+    AddPartyMon that completes the trade. client.lua:593 overwrote the live `npc_trade`
+    pending_change with a `rescan`, so the trade's key_change was never sent.
+    """
+    world.connect()
+    world.step(60)
+    old = codec.key(world.party()[1])
+    world.bus[world.ram["wWhichPokemon"]] = 1
+    world.fire("npc_trade")
+    world.bus[world.ram["wRemoveMonFromBox"]] = 0
+    world.fire("remove_pokemon")
+    world.step()
+    rng = random.Random(4)
+    party = world.party()
+    party[1] = _mon(rng, 0x2D, level=10, nick="JYNX")
+    world.seed_party(party)
+    world.step()
+    kc = world.events("key_change")
+    assert len(kc) == 1 and kc[0]["old_key"] == old and kc[0]["reason"] == "npc_trade", kc
+    assert kc[0]["new_key"] == codec.key(world.party()[1])
     world.assert_all_conform()

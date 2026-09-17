@@ -64,7 +64,7 @@ function Entry.build(deps)
             for i = 1, #bytes do bio.write_u8(off + i - 1, bytes[i], "CartRAM") end
             -- this door bypasses writes:write_bytes, so the receipt has to be logged here or a
             -- box move leaves no trace at all in writes.log (A2 scenario finding)
-            writes.log[#writes.log + 1] = { off = off, n = #bytes, why = writes.armed,
+            writes.log[#writes.log + 1] = { addr = off, n = #bytes, why = writes.armed,
                                             cart = true, frame = bio.framecount() }
         end,
     }

@@ -283,5 +283,5 @@ def test_every_write_receipt_carries_the_frame_and_the_cart_door_leaves_one():
     parts.box_io.write_cart_bytes(0x100, L.table(7, 8))
     wram, cart = writes.log[1], writes.log[2]
     assert (wram.addr, wram.n, wram.why, wram.frame) == (PROFILE["red"]["ram"]["wPartyMons"], 3, "overworld", 41)
-    assert (cart.off, cart.n, cart.why, cart.cart, cart.frame) == (0x100, 2, "overworld", True, 42)
+    assert (cart.addr, cart.n, cart.why, cart.cart, cart.frame) == (0x100, 2, "overworld", True, 42)
     assert [w for w in cart_writes if w[2] == "CartRAM"] == [(0x100, 7, "CartRAM"), (0x101, 8, "CartRAM")]
