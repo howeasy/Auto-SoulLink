@@ -1236,8 +1236,11 @@ def _explode_stub(tmp_path, monkeypatch, calls=None):
     run._reconnect_events = lambda: [
         {"player": "b", "type": "force_explode", "text": "⚡ RATTATA exploded!"}]
 
-    def shared(results, *, active, saved_state=None):
-        (calls if calls is not None else []).append((active, saved_state))
+    def shared(results, **kwargs):
+        # **kwargs, not the exact signature: the delegate gained `explode=` (Explode Mode's
+        # markers replace the faint pair's), and a recorder that pinned the old signature
+        # turned every explode pin red for a keyword it was not even asserting on.
+        (calls if calls is not None else []).append(kwargs)
 
     monkeypatch.setattr(run, "assert_linked_faint_saved", shared)
     run._pydec_note = lambda fact: None
@@ -1249,9 +1252,75 @@ def test_explode_oracle_reads_the_markers_and_delegates_the_shared_half(tmp_path
     run = _explode_stub(tmp_path, monkeypatch, calls)
     run.assert_explode_saved({"a": _EXPLODE_A, "b": _EXPLODE_B})
     assert len(calls) == 1, calls
-    assert calls[0][0] is True, "the shared half must run in the ACTIVE window"
-    assert calls[0][1] == run._patched_saved_state, (
+    assert calls[0]["active"] is True, "the shared half must run in the ACTIVE window"
+    assert calls[0]["explode"] is True, (
+        "the delegate has to be told this is Explode Mode's half, or it demands the markers "
+        "the scenario asserts absent")
+    assert calls[0]["saved_state"] == run._patched_saved_state, (
         "the shared half must read the patched saves, not the clean-title defaults")
+
+
+def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_delegate(
+        tmp_path, monkeypatch):
+    """No monkeypatched delegate: the explode receipt has to satisfy the shared faint half's
+    own checks, which is exactly what the stub above cannot see. Both halves' flushes hold a
+    living starter with the linked key in Box 12 at HP 0, links.json is a battle-caused
+    memorial, and B's receipt carries force_explode + LOOP_HEAD_EXPLODE instead of the faint
+    pair's two markers."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.emus = []
+    run.data_dir = str(tmp_path)
+    run._pydec_note = lambda fact: None
+    run._reconnect_events = lambda: []
+
+    a_sram, a_rom = _fixture_save("red")
+    b_sram, b_rom = _fixture_save("blue")
+    a_image, b_image = bytearray(a_sram), bytearray(b_sram)
+    key_a = _put_fainted_in_box12(a_image, a_rom)
+    key_b = _put_fainted_in_box12(b_image, b_rom)
+    start = codec.SRAM_LAYOUT["sPartyData"]
+    a_party = codec.decode_party(bytes(a_image)[start:start + codec.PARTY_LAYOUT["size"]])
+    b_party = codec.decode_party(bytes(b_image)[start:start + codec.PARTY_LAYOUT["size"]])
+    run._link_keys = {"a": key_a, "b": key_b}
+    run._boot_keys = {"a": codec.key(a_party[0]), "b": codec.key(b_party[0])}
+    run._patched_saved_state = lambda inst: (
+        bytes(a_image if inst == "a" else b_image),
+        a_party if inst == "a" else b_party, [], codec)
+    run._links_json = lambda: [{"area_id": "route_1", "status": "memorial", "cause": "battle",
+                                "a": {"key": key_a}, "b": {"key": key_b}}]
+    (tmp_path / "slink.log").write_text(
+        f"[a] faint \u2192 force_faint b:{key_b}\n"
+        f"[b] faint \u2192 force_faint a:{key_a}\n"
+        f"pair in route_1 fully memorialized\n", encoding="utf-8")
+
+    b_text = "\n".join([
+        "READY_ACTIVE linked_slot=0",
+        "PANEL_COUNTER_IN_BATTLE a=1200 b=1201",
+        f"RX force_explode key={key_b}",
+        f"RX memorialize key={key_b}",
+        '"event":"memorialize_done"',
+        "EXPLODE_CMDS force_explode=1 force_faint=0",
+        "MOVE_MENU_BEFORE Tackle | Tail Whip | - | -",
+        "LOOP_HEAD_EXPLODE moves=99999999 pp=01010101",
+        "MOVE_MENU_AFTER EXPLOSION | EXPLOSION | EXPLOSION | EXPLOSION",
+        f"MOVE_MENU_EXPLOSION rows=4 key={key_b} moves=99999999 pp=01010101",
+        "B_ACTIVE_COMMIT player_move selected=99 pp_before=01",
+        f"BATTLE_FAINT_SITE {key_b} slot=0 battle_hp=0",
+        "TILEMAP_FAINTED offset=1",
+        f'"event":"faint","key":"{key_b}"',
+        "BATTLE_RESULT b outcome=1 fainted=1",
+        "GAME_OVER RX game_over",
+        "SAVE_WITNESS explode_new frames=2100",
+    ])
+    a_text = "\n".join([
+        "A_ENGINE_FAINT " + key_a,
+        f"BATTLE_FAINT_SITE {key_a} slot=0 battle_hp=0",
+        f'"event":"faint","key":"{key_a}"',
+        f"RX memorialize key={key_a}",
+        '"event":"memorialize_done"',
+        "SAVE_WITNESS explode_new frames=2000",
+    ])
+    run.assert_explode_saved({"a": a_text, "b": b_text})
 
 
 @pytest.mark.parametrize(("old", "new", "message"), [

@@ -77,12 +77,45 @@ def _whiteout_receipts(key_a, boot_a, key_b):
     return a_text, b_text
 
 
-def _whiteout_stub(tmp_path, monkeypatch):
+def _boxed_mon(image, key):
+    """A 33-byte box mon whose `codec.key()` IS `key`, from the fixture's own slot-0 struct.
+
+    Field offsets inside a box struct are the party struct's for everything before the stats
+    section (gen1_codec._FIELDS: species@0, ot_id@12, DVs@27-28), so the template only needs
+    those three overwritten; nothing here recomputes stats, and nothing in this oracle reads
+    them.
+    """
+    dump, ot, species = key.split(":")
+    template = image[codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["mons"]:
+                     codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["mons"]
+                     + codec.BOX_MON_SIZE]
+    blob = bytearray(template)
+    blob[codec.BOX_LAYOUT["species"]] = int(species, 16)
+    blob[12:14] = int(ot, 16).to_bytes(2, "big")
+    blob[27:29] = int(dump, 16).to_bytes(2, "big")
+    return bytes(blob)
+
+
+def _put_boxed_mon(image, key):
+    """Write `key` into Box 1 AND its sCurBoxData mirror, as a box close leaves them."""
+    layout = codec.BOX_LAYOUT
+    start = codec.verify_boxes(image)["boxes"][1]["offset"]
+    image[start] = 1
+    image[start + layout["species"]] = int(key.split(":")[2], 16)
+    image[start + layout["species"] + 1] = codec.SPECIES_END
+    image[start + layout["mons"]:start + layout["mons"] + codec.BOX_MON_SIZE] = _boxed_mon(image, key)
+    mirror = codec.SRAM_LAYOUT["sCurBoxData"]
+    image[mirror:mirror + codec.BOX_SIZE] = image[start:start + codec.BOX_SIZE]
+
+
+def _whiteout_stub(tmp_path, monkeypatch, box1_hint=False):
     """A DuoRun carrying the scenario's real fixture bytes and the server surfaces it reads.
 
     Both cartridges end the scenario with the starter plus the rebuilt half in the party and an
     empty active box, which is exactly the state `_add_caught_to_party` over the battle fixture
     produces (the fixture's Box 1 was never touched, so its `sCurBoxData` mirror is empty).
+    `box1_hint` is the negative case: A's linked key is left sitting in the current box, in the
+    SRAM image AND its mirror, so the oracle has to find it through its own decode.
     """
     a_sram, a_rom = adm._fixture_save("red")
     b_sram, b_rom = adm._fixture_save("blue")
@@ -91,6 +124,8 @@ def _whiteout_stub(tmp_path, monkeypatch):
     key_a = adm._add_caught_to_party(a_image, a_rom)
     b_image = bytearray(b_sram)
     key_b = adm._add_caught_to_party(b_image, b_rom)
+    if box1_hint:
+        _put_boxed_mon(a_image, key_a)
     a_party = codec.decode_party(bytes(a_image)[start:start + codec.PARTY_LAYOUT["size"]])
     b_party = codec.decode_party(bytes(b_image)[start:start + codec.PARTY_LAYOUT["size"]])
 
@@ -115,10 +150,12 @@ def _whiteout_stub(tmp_path, monkeypatch):
          "text": "WHITED OUT! All party mons fainted", "area_id": "", "key": ""}]),
         encoding="utf-8")
 
+    mirror = codec.SRAM_LAYOUT["sCurBoxData"]
+
     def saved(inst, **_kwargs):
-        if inst == "a":
-            return bytes(a_image), a_party, [], codec
-        return bytes(b_image), b_party, [], codec
+        image = bytes(a_image if inst == "a" else b_image)
+        party = a_party if inst == "a" else b_party
+        return (image, party, codec.decode_box(image[mirror:mirror + codec.BOX_SIZE]), codec)
 
     monkeypatch.setattr(run, "_saved_gen1_party", saved)
     results = dict(zip(("a", "b"), _whiteout_receipts(key_a, run._boot_keys["a"], key_b),
@@ -249,14 +286,9 @@ def test_whiteout_oracle_refuses_two_whiteout_rows(tmp_path, monkeypatch):
 
 
 def test_whiteout_oracle_refuses_a_saved_box_that_still_holds_the_key(tmp_path, monkeypatch):
-    run, results = _whiteout_stub(tmp_path, monkeypatch)
-    real = run._saved_gen1_party
-
-    def stale_box(inst, **kwargs):
-        sram, party, _box, codec_module = real(inst, **kwargs)
-        return sram, party, [adm._fake_mon(run._link_keys[inst])], codec_module
-
-    monkeypatch.setattr(run, "_saved_gen1_party", stale_box)
+    """A's linked key sitting in the current box, in the SRAM image and its sCurBoxData mirror:
+    the oracle's own `decode_box` has to find it, not a stubbed box list."""
+    run, results = _whiteout_stub(tmp_path, monkeypatch, box1_hint=True)
     with pytest.raises(RuntimeError, match="saved current box still holds"):
         run.assert_whiteout_new_saved(results)
 

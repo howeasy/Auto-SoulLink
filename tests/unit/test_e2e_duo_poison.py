@@ -275,3 +275,22 @@ def test_seed_instance_save_uses_the_per_instance_target(tmp_path, monkeypatch):
         ("red", "town"), ("blue", "battle")]
     assert [dest for _t, _g, dest in seeded] == [str(tmp_path / "saves_a"),
                                                 str(tmp_path / "saves_b")]
+
+
+def test_poison_oracle_refuses_an_orphan_memorialize_command(tmp_path, monkeypatch):
+    """r2 finding 4: an orphan `memorialize` command leaves no events.json row — server.py:1945-1954
+    logs the row only when a link's status transitions to memorial — so the receipt and the link
+    table are where it shows."""
+    run, results, _starter = _poison_stub(tmp_path, monkeypatch)
+    results["b"] += f"\nRX memorialize key={_starter}"
+    with pytest.raises(RuntimeError, match="received a memorialize command"):
+        run.assert_poison_new_saved(results)
+
+
+def test_poison_oracle_refuses_a_link_table_that_is_not_empty(tmp_path, monkeypatch):
+    run, results, _starter = _poison_stub(tmp_path, monkeypatch)
+    (tmp_path / "links.json").write_text(json.dumps({"links": [
+        {"area_id": "route_1", "status": "alive", "a": {"key": "AAAA:1111:01"},
+         "b": {"key": "BBBB:2222:02"}}]}), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="links.json carries 1 link"):
+        run.assert_poison_new_saved(results)

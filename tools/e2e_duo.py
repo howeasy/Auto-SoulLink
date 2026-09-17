@@ -20,6 +20,7 @@ containing the "Google Drive" space break BizHawk's CLI parser); absolute paths 
 INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
+import glob
 import importlib
 import json
 import os
@@ -281,6 +282,10 @@ GEN1_RNG_REASON_CLASS = {
     "RNG: a wild foe knocked the starter out before the poisoning": "CAUSE_RNG",
     "linked capture was not returned": "CONSEQUENCE",  # linked_faint_* without pair
     "linked capture was not returned to party": "CONSEQUENCE",  # trade_new without pair
+    # species_clause_new: A's hunt spent the fixture's only ball, so the runner never wrote the
+    # A_PENDING mark and B reported this (duo_gen1_main.lua:776). CONSEQUENCE, not CAUSE_RNG:
+    # it only earns a retry when the pair also carries A's out-of-balls phrase.
+    "runner never released B (A_PENDING)": "CONSEQUENCE",
     "B could not hold its linked mon active: out-of-balls": "FINAL",  # switch-turn death, not catch RNG
 }
 
@@ -573,6 +578,41 @@ def seen_counters(text, label):
     if not match:
         raise RuntimeError(f"{label}: no SEEN line in the receipt")
     return {name: int(value) for name, value in re.findall(r"(\w+)=(\d+)", match.group(1))}
+
+
+# S-7's save witness. The duo body dumps CartRAM[0x498:0x8000] from inside the
+# SaveMenu.save hook — data/games/gen1_rby/engine_signals.json:129-135, capture_offset 3, i.e.
+# the instruction after `call SaveGameData` returns (pret engine/menus/save.asm:165-166, with
+# SaveGameData at :290-295) — into patch/build/e2e_<scenario>_<inst>_<attempt>_witness.bin,
+# overwriting on every save, and logs one SAVE_WITNESS_DUMP line per dump
+# (lua/tests/duo/duo_gen1_main.lua:77-129). The slice starts past the three sprite buffers
+# (3 * 0x188) and is the one docs/gen1_requirements.md pins for S-7.
+SAVE_WITNESS_START = 0x498
+SAVE_WITNESS_END = 0x8000
+SAVE_WITNESS_BYTES = SAVE_WITNESS_END - SAVE_WITNESS_START  # 0x7B68 = 31592
+SAVE_WITNESS_DUMP_RE = re.compile(
+    r"SAVE_WITNESS_DUMP path=(\S+) bytes=(\d+) saves=(\d+) frame=(\d+)")
+# What the save routine writes AFTER the hook, and therefore cannot be in the dump: `SaveSAV`
+# recomputes the main checksum ~120 frames later (save.asm:170-172, after DelayFrames) and
+# stores it at sMainDataCheckSum — inside this slice. Named here so a mismatch message can say
+# whether the difference is that byte or something real.
+SAVE_WITNESS_POST_HOOK = (0x3523,)
+
+
+def save_witness_diff(site, flushed, limit=4):
+    """The SRAM addresses where the hook-time dump and the flushed file disagree.
+
+    A mismatch message that said only "different" would send the next reader hunting for a
+    defect; the addresses are in SRAM terms, so a difference confined to
+    `SAVE_WITNESS_POST_HOOK` reads as the timing fact it is.
+    """
+    out = []
+    for index, (a, b) in enumerate(zip(site, flushed, strict=True)):
+        if a != b:
+            out.append(SAVE_WITNESS_START + index)
+            if len(out) >= limit:
+                break
+    return out
 
 
 def wait_for(desc, pred, timeout, interval=2.0):
@@ -1001,13 +1041,25 @@ class DuoRun:
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
-        for inst in ("a", "b"):
-            for f in (self._result_path(inst), self.go_files[inst]):
-                if os.path.exists(f):
-                    os.remove(f)
+        self._clear_attempt_artifacts()
         for inst in ("a", "b"):
             self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
         print("[duo] two EmuHawk instances launched")
+
+    def _clear_attempt_artifacts(self):
+        """Drop every result, go-file and witness this attempt has to produce for itself.
+
+        Freshness is identity for the witness: the name carries the attempt, but a rerun of the
+        same scenario (or a crashed attempt re-entered) would otherwise leave its dump where
+        this attempt's check reads it, and an old save would pass as this one. Every
+        `e2e_<scenario>_<inst>_*_witness.bin` goes, not just this attempt's number.
+        """
+        for inst in ("a", "b"):
+            stale = [self._result_path(inst), self.go_files[inst],
+                     *glob.glob(os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_*_witness.bin"))]
+            for f in stale:
+                if os.path.exists(f):
+                    os.remove(f)
 
     def wait_keys(self):
         """Both wrappers log MYKEY lines right after savestate+mutation."""
@@ -1817,7 +1869,7 @@ class DuoRun:
         save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
         return self._saved_gen1_party(inst, rom=self.cfg["rom"][inst], save_name=save_name)
 
-    def assert_linked_faint_saved(self, results, *, active, saved_state=None):
+    def assert_linked_faint_saved(self, results, *, active, saved_state=None, explode=False):
         """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts.
 
         `saved_state(inst)` defaults to the clean-title read; explode_new passes the patched
@@ -1875,12 +1927,22 @@ class DuoRun:
             raise RuntimeError("A's linked faint lacked the engine battle_faint site witness")
         if f'"event":"faint","key":"{self._link_keys["a"]}"' not in a_text:
             raise RuntimeError("A's engine battle_faint did not emit its linked key")
-        if f"RX force_faint key={self._link_keys['b']}" not in b_text:
-            raise RuntimeError("B never received the server force_faint for its linked key")
+        # `explode=True` is Explode Mode's half: the server sends force_explode instead of
+        # force_faint (server/state.py:2678-2680 picks the name) and the client's coercion
+        # marker is LOOP_HEAD_EXPLODE, not LOOP_HEAD_WRITE (duo_gen1_main.lua:1520 vs :1524).
+        # Without the swap this delegate demands the two markers the scenario asserts ABSENT,
+        # so explode_new could never pass on a live receipt.
+        expected_cmd = "force_explode" if explode else "force_faint"
+        if f"RX {expected_cmd} key={self._link_keys['b']}" not in b_text:
+            raise RuntimeError(f"B never received the server {expected_cmd} for its linked key")
         if "GAME_OVER RX game_over" not in b_text:
             raise RuntimeError("B never received the last-link game_over command")
         if active:
-            first = b_text.find("LOOP_HEAD_WRITE key=" + self._link_keys["b"])
+            # LOOP_HEAD_WRITE's line now carries a trailing ` hp_before=<n>`; the substring find
+            # is deliberately unanchored so that field can grow.
+            head = ("LOOP_HEAD_EXPLODE " if explode
+                    else "LOOP_HEAD_WRITE key=" + self._link_keys["b"])
+            first = b_text.find(head)
             second = b_text.find("BATTLE_FAINT_SITE " + self._link_keys["b"])
             tile_witness = ("TILEMAP_FAINTED offset=" in b_text or
                             "TILEMAP_FAINTED unavailable: native faint text advanced before probe" in b_text)
@@ -1906,7 +1968,7 @@ class DuoRun:
         showed the catch's own moves BEFORE the write and four EXPLOSIONs after it, and the
         commit was the coerced turn rather than a queued one.
         """
-        self.assert_linked_faint_saved(results, active=True,
+        self.assert_linked_faint_saved(results, active=True, explode=True,
                                        saved_state=self._patched_saved_state)
         a_text, b_text = results["a"], results["b"]
 
@@ -2189,8 +2251,9 @@ class DuoRun:
         :2359-2360, `_plan_rebuild` :2365-2392). One `party_mon` is queued to each half and
         `rebuild_start` to A alone (`_queue_rebuild_commands` :2418-2443); `rebuild_done`
         follows once A's own `sync_retrieve_done` lands (:2448-2462). Both are COMMANDS, so
-        they are evidenced by the RX lines the driver tees, never by events.json, which is the
-        server's ring buffer of INBOUND events (`_log_event`, server/server.py:1505-1516).
+        they are evidenced by the RX lines the driver tees, never by events.json, which records
+        selected inbound events and derived effects (`_log_event`, server/server.py:1896-1923);
+        outbound rebuild commands are not recorded.
         `game_over` is a command too; the "no game over" claim is asserted as its durable
         cause: the pair is still ALIVE, `run_over` is false, and neither client was told.
 
@@ -2299,8 +2362,22 @@ class DuoRun:
         hold B's own echo to it.
         """
         def a_pending():
-            return re.search(r"PENDING_CAPTURE (\S+) species=(\d+) level=(\d+)",
-                             read_result(self.scenario, "a") or "")
+            match = re.search(r"PENDING_CAPTURE (\S+) species=(\d+) level=(\d+)",
+                              read_result(self.scenario, "a") or "")
+            if match:
+                return match
+            # A's hunt can end before the marker exists: `hunt("catch")` returns
+            # "hunt ended out-of-balls" (duo_gen1_main.lua:727-733), the runner then never
+            # writes A_PENDING, and B fails with "runner never released B (A_PENDING)" (:776).
+            # Raising TimeoutError here would escape DuoRun.run() — it is not GameRngMiss, so
+            # the bounded retry never classifies the receipts and the whole scenario aborts.
+            # GameRngMiss is the harness's own RNG channel: run() catches it and hands the two
+            # receipts to retryable_gen1_rng, which needs A's CAUSE_RNG plus this half's
+            # CONSEQUENCE.
+            text = read_result(self.scenario, "a") or ""
+            if "RESULT:" in text and _has_exact_rng_miss(text):
+                raise GameRngMiss("A's hunt spent the fixture's only ball before the release")
+            return None
 
         match = wait_for("A's PENDING_CAPTURE marker", a_pending, self.cfg["timeout"])
         key, species = match.group(1), int(match.group(2))
@@ -2649,6 +2726,19 @@ class DuoRun:
         if re.search(r"GAME_OVER RX game_over", a_text + b_text):
             raise RuntimeError("a client was told the run is over; with no link there was "
                                "nothing to rebuild and nothing to end")
+        # The ROW above cannot see an orphan command: server.py:1945-1954 logs `memorialize`
+        # only when a link's status transitions to memorial, so a command aimed at a mon the
+        # server never linked leaves no row at all. The receipts and the link table are where
+        # that shows.
+        for inst, text in (("a", a_text), ("b", b_text)):
+            if re.search(r"(?m)^RX memorialize\b", text):
+                raise RuntimeError(f"{inst} received a memorialize command; no pair was ever "
+                                   f"linked, so nothing was there to bury")
+        durable = self._links_json()
+        if durable:
+            raise RuntimeError(f"links.json carries {len(durable)} link(s) "
+                               f"{[entry.get('area_id') for entry in durable]}; this scenario "
+                               f"forms none")
         self._pydec_note(f"S-4 poison: PSN ${psn.group(3)} after {psn.group(1)} encounters, one "
                          f"faint then whiteout on the wire, no memorial; the empty link table "
                          f"left the server idle")
@@ -3132,6 +3222,104 @@ class DuoRun:
         else:
             raise ValueError(self.scenario)
 
+    def _witness_path(self, inst):
+        """This attempt's dump, from the name the body writes (duo_gen1_main.lua:81-84)."""
+        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_{self.attempt}_witness.bin")
+
+    def _witness_flush(self, inst):
+        """The flushed SaveRAM the scenario's OWN oracle reads.
+
+        The scenario's resolver, not a hardcoded name: a randomized cartridge (admit_randomized_new)
+        saves under BizHawk's filename-derived name while the gamedb name still holds the fixture
+        it was seeded from, and a trade-carrying ROM saves under its patched name. Comparing a
+        witness against a fixture would fail for a reason that is not the cartridge's.
+        """
+        if self.cfg.get("patched_saves"):
+            return self._patched_saved_state(inst)[0]
+        return self._saved_gen1_party(inst, save_name=getattr(self, "_admit_extra_saves",
+                                                              {}).get(inst))[0]
+
+    def check_save_witness(self, results):
+        """S-7: the cartridge's save bytes hashed where the hook fired and where the file landed.
+
+        One PYDEC line per instance, exactly:
+
+            SAVE_WITNESS_SHA256 inst=<a|b> site=<hex> file=<hex> match=<true|false> saves=<n>
+
+        `site` is the sha256 of the hook-time dump, `file` the sha256 of the same
+        [0x498:0x8000] slice of the flushed SaveRAM, and `saves` the number of
+        SAVE_WITNESS_DUMP lines the receipt carries. A missing, short or mismatching witness
+        FAILS the scenario, naming the instance and which of the three it was; the check is
+        never weakened for a mismatch.
+
+        The skip is for a half that never saves: a receipt with no save marker at all gets
+        `saves=0 skipped` — reconnect_new's relaunch phases save nothing, and inventing a dump
+        for them would be a guess. A half that saved but whose dump failed is NOT skipped: the
+        body logs SAVE_WITNESS_DUMP_FAIL, the receipt still carries the plain SAVE_WITNESS
+        marker, and a missing file then fails with that error quoted.
+
+        WHERE IT RUNS. From `_run_oracle`, before the scenario's own oracle: the one point every
+        gen1_new scenario passes through on a double PASS, and the emulators are exited here
+        first — the same flush boundary each oracle's own prologue waits on.
+        """
+        import hashlib
+
+        # `emus` is set by __init__ for every real run; the getattr is for the hand-built stubs
+        # the pins use, which model a receipt without modelling the emulator processes.
+        for process in getattr(self, "emus", []):
+            process.wait(timeout=30)  # the flush boundary; see _saved_gen1_party
+        for inst in ("a", "b"):
+            receipt = (results or {}).get(inst) or ""
+            dumps = SAVE_WITNESS_DUMP_RE.findall(receipt)
+            if not re.search(r"(?m)^SAVE_WITNESS[_ ]", receipt):
+                self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site=- file=- match=- "
+                                 f"saves=0 skipped")
+                continue
+            # The body's dump is gated on the signal having VALIDATED (duo_gen1_main.lua:123-147):
+            # a fire that was rejected logs SAVE_WITNESS_DUMP_SKIPPED and writes no file. A
+            # scenario that saved but whose dump gate said no is a defect, not a skip — the
+            # Lua's own reason is quoted so the failure names what the client saw.
+            skipped = re.findall(r"SAVE_WITNESS_DUMP_SKIPPED why=(\S+)", receipt)
+            if skipped and not dumps:
+                raise RuntimeError(f"{inst}: the cartridge saved but the dump gate rejected the "
+                                   f"fire (why={skipped[-1]}); no witness was written")
+            path = self._witness_path(inst)
+            if dumps:
+                logged = os.path.normpath(os.path.join(REPO, dumps[-1][0]))
+                if logged != os.path.normpath(path):
+                    raise RuntimeError(
+                        f"{inst}: the save witness landed at {dumps[-1][0]!r} (the receipt's "
+                        f"last dump), not {os.path.relpath(path, REPO)!r} — the body and this "
+                        f"check disagree about the name")
+            if not os.path.exists(path):
+                failed = re.findall(r"SAVE_WITNESS_DUMP_FAIL (.*)", receipt)
+                detail = (f" (the body logged SAVE_WITNESS_DUMP_FAIL: {failed[-1]})"
+                          if failed else "")
+                raise RuntimeError(f"{inst}: the save witness is missing at "
+                                   f"{os.path.relpath(path, REPO)}{detail}")
+            with open(path, "rb") as handle:
+                blob = handle.read()
+            if len(blob) != SAVE_WITNESS_BYTES:
+                raise RuntimeError(f"{inst}: the save witness is short — {len(blob)} bytes, "
+                                   f"expected {SAVE_WITNESS_BYTES} (0x7B68)")
+            flushed = self._witness_flush(inst)[SAVE_WITNESS_START:SAVE_WITNESS_END]
+            site_hash = hashlib.sha256(blob).hexdigest()
+            file_hash = hashlib.sha256(flushed).hexdigest()
+            match = site_hash == file_hash
+            saves = len(dumps)
+            self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site={site_hash} "
+                             f"file={file_hash} match={'true' if match else 'false'} "
+                             f"saves={saves}")
+            if not match:
+                diff = save_witness_diff(blob, flushed)
+                post = [hex(address) for address in diff if address in SAVE_WITNESS_POST_HOOK]
+                raise RuntimeError(
+                    f"{inst}: the save witness does not match the flushed SaveRAM — site "
+                    f"{site_hash} vs file {file_hash}; first differing SRAM address(es) "
+                    f"{[hex(a) for a in diff]}" +
+                    (" (sMainDataCheckSum, written after the hook: see SAVE_WITNESS_POST_HOOK)"
+                     if post else ""))
+
     def _run_oracle(self, results):
         """The scenario's post-result oracle, from the SCENARIOS registry.
 
@@ -3146,6 +3334,11 @@ class DuoRun:
                 raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
                                    f"a Gen 1 verdict needs a saved-state readback")
             return
+        if getattr(self, "game", "") == "gen1_new":
+            # S-7 runs for EVERY gen1_new scenario, before its own oracle: the save witness is
+            # the physical half of the verdict and each scenario's oracle prologue waits on the
+            # same flush boundary this check needs.
+            self.check_save_witness(results)
         getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
 
     def _live_ok(self) -> bool:
@@ -3211,6 +3404,23 @@ class DuoRun:
         return passed
 
 
+def _archive_attempt(name, attempt, receipts):
+    """Keep one attempt's receipts and PYDEC copy; the next run deletes the live ones.
+
+    Called on EVERY exit path, and on the give-up path only after the D-4 annotation is written,
+    so the archived third attempt carries the line the summary prints.
+    """
+    for inst in ("a", "b"):
+        if receipts[inst] is not None:
+            with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
+                      "w", encoding="utf-8") as handle:
+                handle.write(receipts[inst])
+    pydec = os.path.join(BUILD, f"e2e_{name}_pydec_result.txt")
+    if os.path.exists(pydec):
+        shutil.copyfile(pydec,
+                        os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
+
+
 def run_scenario_with_rng_retry(name, args):
     """A new DuoRun for each attempt means a new server/data dir and reseeded battery saves.
 
@@ -3230,31 +3440,27 @@ def run_scenario_with_rng_retry(name, args):
               f"attempt={attempt}")
         ok = DuoRun(name, args, attempt=attempt).run()
         receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
-        # The next run deletes the normal result files; keep each attempt's receipts.
-        for inst in ("a", "b"):
-            if receipts[inst] is not None:
-                    with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
-                          "w", encoding="utf-8") as handle:
-                        handle.write(receipts[inst])
-        pydec = os.path.join(BUILD, f"e2e_{name}_pydec_result.txt")
-        if os.path.exists(pydec):
-            shutil.copyfile(pydec, os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
         if reroll_retry and ok:
             state = species_reroll_state(receipts)
             if state == "observed":
+                _archive_attempt(name, attempt, receipts)
                 print(f"[duo] species_clause_new: reroll branch observed on attempt {attempt}")
                 return ok, attempt
             if attempt < limit:
+                _archive_attempt(name, attempt, receipts)
                 print("[duo] species_clause_new: reroll branch not observed on attempt "
                       f"{attempt}; re-running the whole scenario with fresh state")
                 continue
             line = (f"[duo] species_clause_new: reroll branch NOT observed after {limit} "
                     f"attempts (D-4 stays partial)")
             print(line)
+            pydec = os.path.join(BUILD, f"e2e_{name}_pydec_result.txt")
             if os.path.exists(pydec):
                 with open(pydec, "a", encoding="utf-8") as handle:
                     handle.write(line + "\n")
+            _archive_attempt(name, attempt, receipts)  # AFTER the annotation, so it is archived
             return ok, attempt
+        _archive_attempt(name, attempt, receipts)
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "

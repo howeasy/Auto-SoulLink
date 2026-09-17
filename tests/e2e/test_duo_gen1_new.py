@@ -20,7 +20,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
 import gen1_playthrough as play  # noqa: E402
-from e2e_duo import SCENARIOS as RUNNER_SCENARIOS  # noqa: E402
+from e2e_duo import (  # noqa: E402
+    GAMES as RUNNER_GAMES,
+    SCENARIOS as RUNNER_SCENARIOS,
+    scenario_attempt_limit,
+)
 
 pytestmark = [
     pytest.mark.e2e,
@@ -31,6 +35,37 @@ pytestmark = [
 
 GAME = "gen1_new"
 ROMS = ("red", "blue")
+def deadline_for(scenario):
+    """How long one scenario may take: every attempt it may run, plus boot and teardown.
+
+    species_clause_new runs up to three whole attempts (scenario_attempt_limit), so a deadline
+    of one timeout would kill the subprocess in the middle of the third — the run would look
+    like a crash rather than a scenario that took its budget.
+    """
+    return (RUNNER_SCENARIOS[scenario]["timeout"]
+            * scenario_attempt_limit(scenario, GAME)) + 300
+
+
+def required_fixtures(scenario):
+    """The (title, target) fixture pairs this scenario boots, one per instance.
+
+    `target` may be per instance (poison_new: A town, B battle), and each instance boots its own
+    ROM (A red, B blue), so the pairs are per (instance, ROM) — checking the cross product would
+    demand red_battle and blue_town for a scenario that never reads them.
+    """
+    targets = RUNNER_SCENARIOS[scenario].get("target", "town")
+    fixtures = RUNNER_GAMES[GAME]["fixture"]
+    if isinstance(targets, dict):
+        return [(fixtures[inst], targets[inst]) for inst in ("a", "b")]
+    return [(fixtures[inst], targets) for inst in ("a", "b")]
+
+
+def missing_fixtures(scenario, exists=os.path.exists):
+    """The pairs whose committed SaveRAM is absent; empty means the scenario can run."""
+    return [(title, target) for title, target in required_fixtures(scenario)
+            if not exists(os.path.join(play.FIXTURES, f"{title}_{target}.SaveRAM"))]
+
+
 SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
              "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
              "admit_randomized_new", "soft_reset_new", "trade_decline_new", "explode_new",
@@ -48,23 +83,20 @@ def test_gen1_new_duo(scenario):
     for rom_path in RUNNER_SCENARIOS[scenario].get("rom", {}).values():
         if not os.path.exists(os.path.join(REPO, rom_path)):
             pytest.skip(f"trade-carrying ROM {rom_path} not built")
-    targets = RUNNER_SCENARIOS[scenario].get("target", "town")
-    # A per-instance `target` (poison_new: A town, B battle) means one fixture per half.
-    targets = sorted(set(targets.values())) if isinstance(targets, dict) else [targets]
     for rom in ROMS:
         if not os.path.exists(os.path.join(REPO, play.ROMS[rom])):
             if admission:
                 pytest.fail(f"clean {rom} ROM missing for admission gate: {play.ROMS[rom]}")
             pytest.skip(f"{play.ROMS[rom]} not present (ROMs are gitignored)")
-        if not RUNNER_SCENARIOS[scenario].get("cold_boot"):
-            missing = [t for t in targets
-                       if not os.path.exists(os.path.join(play.FIXTURES, f"{rom}_{t}.SaveRAM"))]
-            if missing:
-                fixture = os.path.join(play.FIXTURES, f"{rom}_{missing[0]}.SaveRAM")
-                if admission:
-                    pytest.fail(f"town fixture missing for admission gate: {fixture}")
-                pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py "
-                            f"{rom} {missing[0]}`")
+    if not RUNNER_SCENARIOS[scenario].get("cold_boot"):
+        missing = missing_fixtures(scenario)
+        if missing:
+            title, target = missing[0]
+            fixture = os.path.join(play.FIXTURES, f"{title}_{target}.SaveRAM")
+            if admission:
+                pytest.fail(f"town fixture missing for admission gate: {fixture}")
+            pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py "
+                        f"{title} {target}`")
 
     cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
            "--game", GAME, "--scenario", scenario]
@@ -77,7 +109,7 @@ def test_gen1_new_duo(scenario):
     proc = subprocess.run(
         cmd,
         cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
-        # Always outlive the runner's own per-scenario timeout (plus boot and teardown).
-        timeout=RUNNER_SCENARIOS[scenario]["timeout"] + 300)
+        # Always outlive every attempt the runner may take, plus boot and teardown.
+        timeout=deadline_for(scenario))
     assert proc.returncode == 0, (
         f"{GAME} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")

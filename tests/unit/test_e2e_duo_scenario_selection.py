@@ -18,7 +18,14 @@ import pytest
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-from e2e_duo import GAMES, SCENARIOS, DuoRun, scenario_applies, scenarios_for  # noqa: E402
+from e2e_duo import (  # noqa: E402
+    GAMES,
+    SCENARIOS,
+    DuoRun,
+    scenario_applies,
+    scenario_attempt_limit,
+    scenarios_for,
+)
 
 GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
@@ -188,3 +195,32 @@ def test_whiteout_new_carries_the_gen1_new_shape_and_both_of_its_gates():
     assert entry["oracle"] == "assert_whiteout_new_saved"
     assert callable(getattr(DuoRun, "assert_whiteout_new_saved", None))
     assert callable(getattr(DuoRun, "assert_whiteout_both_boxed", None))
+
+
+def test_the_wrapper_deadline_covers_every_attempt():
+    """r2 finding 2: species_clause_new may run three whole attempts, so a deadline of one
+    timeout would kill the third mid-run — the run would read as a crash, not a long scenario."""
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen1_new")
+    for name in scenarios_for("gen1_new"):
+        assert mod.deadline_for(name) == (SCENARIOS[name]["timeout"]
+                                          * scenario_attempt_limit(name, "gen1_new")) + 300, name
+    assert mod.deadline_for("species_clause_new") == (
+        3 * SCENARIOS["species_clause_new"]["timeout"] + 300)
+
+
+def test_the_wrapper_resolves_fixtures_per_instance_not_as_a_cross_product():
+    """r2 finding 3: poison_new boots Red/town and Blue/battle. Checking the cross product
+    demanded red_battle and blue_town as well — fixtures the scenario never reads."""
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen1_new")
+    assert mod.required_fixtures("poison_new") == [("red", "town"), ("blue", "battle")]
+    assert mod.required_fixtures("link_new") == [("red", "battle"), ("blue", "battle")]
+
+    present = {"red_town.SaveRAM", "blue_battle.SaveRAM"}
+    exists = lambda path: os.path.basename(path) in present  # noqa: E731
+    assert mod.missing_fixtures("poison_new", exists=exists) == []
+    present.discard("red_town.SaveRAM")
+    assert mod.missing_fixtures("poison_new", exists=exists) == [("red", "town")]
+    present.discard("blue_battle.SaveRAM")
+    assert len(mod.missing_fixtures("poison_new", exists=exists)) == 2

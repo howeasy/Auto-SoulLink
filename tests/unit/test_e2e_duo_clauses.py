@@ -610,3 +610,47 @@ def test_type_clause_oracle_refuses_a_missing_quarantined_catch(tmp_path, monkey
     monkeypatch.setattr(run, "_saved_gen1_party", empty_box)
     with pytest.raises(RuntimeError, match="expected the quarantined"):
         run.assert_type_clause_new_saved(results)
+
+
+# ── r2 finding 1: the release gate and A's ball miss ────────────────────────
+
+def test_release_gate_raises_gamergmiss_on_as_ball_miss(tmp_path, monkeypatch):
+    """A's hunt can end out-of-balls before PENDING_CAPTURE exists; a TimeoutError there would
+    escape DuoRun.run() (it is not GameRngMiss) and the bounded retry would never classify the
+    receipts. The gate raises the harness's own RNG channel instead."""
+    run, _key_a = _release_stub(tmp_path, monkeypatch)
+    monkeypatch.setattr(duo, "read_result",
+                        lambda scenario, inst: (duo.RNG_OUT_OF_BALLS if inst == "a" else ""))
+    with pytest.raises(duo.GameRngMiss):
+        run.assert_species_clause_release()
+
+
+def test_the_unreleased_pair_is_retryable_only_with_as_ball_miss():
+    """The real classifier over the real pair of phrases: B's unreleased message is
+    CONSEQUENCE, which earns a retry only alongside A's CAUSE_RNG."""
+    consequence = "RESULT: FAIL (runner never released B (A_PENDING))"
+    assert duo.retryable_gen1_rng("gen1_new", {"a": duo.RNG_OUT_OF_BALLS, "b": consequence}, 1)
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (caught)", "b": consequence}, 1)
+    assert duo.classify_gen1_result(consequence) == "CONSEQUENCE"
+
+
+def test_the_release_gate_still_times_out_when_a_never_finishes(tmp_path, monkeypatch):
+    """No marker and no terminal RESULT: the old TimeoutError stands (a hung hunt is not RNG)."""
+    run, _key_a = _release_stub(tmp_path, monkeypatch)
+    monkeypatch.setattr(duo, "read_result", lambda scenario, inst: "")
+    real = duo.wait_for
+    monkeypatch.setattr(duo, "wait_for",
+                        lambda desc, pred, timeout, interval=2.0: real(desc, pred, 0.2, 0.01))
+    with pytest.raises(TimeoutError, match="PENDING_CAPTURE marker"):
+        run.assert_species_clause_release()
+
+
+def test_the_give_up_annotation_is_archived_with_its_attempt(capsys, tmp_path, monkeypatch):
+    """r2 finding 5: the archive used to be copied BEFORE the line was appended, so the
+    third-attempt PYDEC copy was missing the partial-coverage note."""
+    built, args = _retry_driver(monkeypatch, tmp_path, ["reroll_unobserved"] * 3)
+    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (True, 3)
+    archived = (tmp_path / "e2e_species_clause_new_pydec_attempt3_result.txt").read_text(
+        encoding="utf-8")
+    assert "reroll branch NOT observed after 3 attempts (D-4 stays partial)" in archived
+    assert built == [1, 2, 3]
