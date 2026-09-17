@@ -257,3 +257,22 @@ NEXT: integrate DIAG-SR2 + H-7, refresh frozen copy, rerun soft_reset_new + spec
 `verify_gen1_release.py --lane duo-pairs` (or the full runner) for the P8-7 verdict; ledger cells for rival (W-4/D-11 rival
 half), soft_reset, species; release_notes/runtime_checks final touch; then the owner's rebase/FF/tag decision (RB-1 dry run
 conflict-free at <scratchpad>/rb1 f3ad072 -- re-run the dry run on the final HEAD before asking).
+Phase R2, later (~23:25Z): DIAG-SR2 (26d08f4) found the real cause of every soft_reset baseline problem: mon_stats arrive IN the
+hello (server._cache_mon_info from msg.party) but the hello handler's only _save() runs 14 lines earlier and ticks never save, so
+hello N persists hello N-1's stats; the 2c17161 'pre-reset' baseline was taken 50 ms AFTER the reset (vacuous) and the chord gate
+could never release. Fix: baseline snapshotted after the durable-hello wait and before go(); mon_stats reconciled (deferred flush
+of the second key accepted and named). H-7 (same commit): retryable_gen1_rng admits a half with no RESULT, so a one-sided
+RNG-class FAIL retries. rerun_sr2 aa69f5e: soft_reset PASS (CHORD_GATE @958 before RESET_SEEN), species PASS attempt 2/8 (retry
+live). ALL 18 gen1_new scenarios have PASS receipts at the final Lua tree. Ledger: W-4/D-11 ✓ (f39c34a), audit trail 33f1945;
+runtime_checks 3621363. duo-pairs lane run 1 (b8a22fa): 17/18 PASS, rival refused by the qualifier 'stored spd=11 but recomputed
+12' -> H-8 (Opus): stat exp accrues per defeated foe but CalcStats runs only on level CHANGE / AddPartyMon / withdrawal /
+evolution / vitamins, so the check is now the band [recompute(stat exp 0), recompute(current)] with the tolerated value named in
+the PYDEC line (tools/gen1_fixtures.py qualify(notes=...), pinned). duo-pairs run 2 launched at the H-8 HEAD.
+RB-2 (Sonnet): rebase of aa69f5e onto master cb9cf5c conflict-free, 209 commits; clone <scratchpad>/rb2 tip f3b8c0c; ruff 0 new,
+lua 181 OK, unit 3010 passed / 27 env skips (UPR jar + pokecrystal clones absent machine-wide). Branch moved since (docs/
+receipts/H-8), so redo the dry run at the final HEAD before the owner's FF: `git -C "E:/Google Drive/SLink" ... merge --ff-only
+<rebased sha>` after pushing -- OWNER AUTHORITY REQUIRED.
+QUEUE (not release-blocking): latent server bug -- hello handler saves before _cache_mon_info writes mon_stats (server.py:1629
+vs 1641); a restart between hellos loses the last hello's box-level cache; fix shape in the 26d08f4 commit body; needs
+slink-adapter-guard. Hunt/forest drivers share the stale menu_base exposure fixed for rival (D.new_battle available). Manifest
+closure test traverses from lua/gen1/run.lua, not the launchers, and ignores .dll rows (UA-2).
