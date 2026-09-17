@@ -4,8 +4,15 @@
 --   M.new(expected [, opts])   Route 1 (10,35) -> Viridian City -> the WEST edge -> Route 22
 --                              -> the rival trigger tile, then FIGHTs Rival1 to the end.
 --                              terminals "rival-won" | "rival-lost" | "rival-drawn"
---                                        | "rival-never-triggered" | "starter-koed"
---                                        | "unknown-map"
+--                                        | "rival-never-triggered" | "active-koed"
+--                                        | "rival-fight-stuck" | "unknown-map"
+--
+-- The rival battle is played THROUGH lua/tests/gen1_battle_driver.lua (opts.driver, bridged with
+-- a coroutine exactly as gen1_rb_hunt_inputs.lua:56-63 does it). This file owns no battle-menu
+-- state machine of its own: the move cursor in particular is 1-BASED
+-- (wCurrentMenuItem = wPlayerMoveListIndex + 1, pret engine/battle/core.asm:2544-2547, :2575-2578;
+-- index 0 wraps to the LAST move, :2692-2700; the conversion back to 0-based happens only after
+-- the selection, :2624-2636), and D.commit_move is the one implementation that knows that.
 --
 -- Same shape as the sibling route modules (gen1_rb_route1_inputs / gen1_rb_forest_inputs /
 -- gen1_rb_center_inputs): step(handshake, status, point, frame) -> buttons, phase; the caller
@@ -13,8 +20,10 @@
 --
 -- Logged markers (phase transitions and events only — no per-frame logging):
 --   INCIDENTAL_BATTLE n map=M (x,y)     a wild battle on the walk; RUN from, not fatal
+--   WALK_KO slot=N                      the ACTIVE battler fainted on the walk (terminal)
 --   RIVAL_TRIGGER map=M x=X y=Y         the frame wJoyIgnore latched on a trigger tile
---   RIVAL_SWITCH slot=N                 the in-battle party menu picked a replacement
+--   RIVAL_SWITCH slot=N                 the replacement the ENGINE accepted after a KO
+--   RIVAL_FIGHT end=<why>               how the battle plan left the rival battle
 --   RIVAL_OVER result=R                 wBattleResult the frame the battle closed
 --
 -- ─────────────────────────────────────────────────────────────────────────────────────────
@@ -99,6 +108,10 @@ M.STALL_NUDGE = 48             -- frames on one tile before sidestepping a wande
 M.DETOUR_FRAMES = 32
 M.BATTLE_BOUND = 60000         -- a rival battle that never closes is a driver fault
 M.TRIGGER_GRACE = 600          -- frames parked on (29,4) before "the rival never triggered"
+-- PartyMenuInit geometry (home/pokemon.asm:210-216) and PARTYMON_STRUCT_LENGTH = $2c
+-- (constants/pokemon_data_constants.asm:56); current HP is bytes +1/+2, so wPartyMon1HP is base.
+M.PARTY_MENU = { y = 1, x = 0, watched = 0x03 }  -- watched = PAD_A | PAD_B
+M.PARTY_STRUCT = 44
 
 -- This file is dofile'd by absolute path, so its own directory locates its siblings.
 local function here()
@@ -141,9 +154,17 @@ local function on_trigger_tile(point)
     return false
 end
 
+-- opts.driver   gen1_battle_driver built by the caller over a step that yields the buttons
+--               (the same wiring gen1_rb_hunt_inputs.lua:56-63 / duo_gen1_main.lua:357-377 use)
+-- opts.step     that same yielding step, for the taps between driver calls
+-- opts.rd       read_u8 on the System Bus;  opts.symbols  the title's pret .sym table
+-- opts.log      optional line sink
 function M.new(expected, opts)
     assert(expected and (expected.player=="a" or expected.player=="b"), "R/B Route 22 identity required")
     opts = opts or {}
+    assert(opts.driver and opts.step and opts.rd and opts.symbols,
+           "Route 22 needs driver/step/rd/symbols: the rival fight runs on gen1_battle_driver")
+    local D, step, rd, S = opts.driver, opts.step, opts.rd, opts.symbols
     local log = opts.log or function() end
     paths.route1_north = paths.route1_north
         or assert(dofile(here() .. "gen1_rb_forest_inputs.lua").PATHS.route1_north,
@@ -151,8 +172,116 @@ function M.new(expected, opts)
     local r1 = dofile(here() .. "gen1_rb_route1_inputs.lua").new(expected)
     local self = { last_frame=-1, segments={}, wild_active=false, incidental_battles=0,
                    tile=nil, tile_frame=0, detour=nil, detour_along=nil, detour_until=nil,
-                   flip=false, triggered=nil, rival_seen=false, rival_frame=nil, switch_tried={},
-                   arrival_frame=nil, over_logged=false }
+                   flip=false, triggered=nil, rival_seen=false, rival_frame=nil,
+                   arrival_frame=nil, over_logged=false, battle_co=nil, koed_slot=nil }
+
+    -- `assert` returns ALL its arguments, so the address is bound first and never passed
+    -- straight into rd() (which would hand it the message as a second argument).
+    local HP1 = assert(S.wPartyMon1HP, "no symbol wPartyMon1HP")
+    local COUNT = assert(S.wPartyCount, "no symbol wPartyCount")
+    local ACTIVE = assert(S.wPlayerMonNumber, "no symbol wPlayerMonNumber")
+    local CURSOR = assert(S.wCurrentMenuItem, "no symbol wCurrentMenuItem")
+    local function slot_hp(slot)
+        local at = HP1 + slot * M.PARTY_STRUCT
+        return rd(at)*256 + rd(at+1)
+    end
+    local function party_menu_up()
+        local st = D.state()
+        return st.y==M.PARTY_MENU.y and st.x==M.PARTY_MENU.x and st.watched==M.PARTY_MENU.watched
+    end
+    local function idle_frames(n) for _=1,n do step(nil) end end
+    local function mash(btn, frames) for i=1,frames do step({[btn]=i%16<2}) end end
+    -- the un-mergeable press shape gen1_battle_driver.lua:87-88 uses: released, held, released
+    local function press(btn) idle_frames(2); for _=1,3 do step({[btn]=true}) end; idle_frames(3) end
+
+    -- The party menu is only FORCED when the active battler is down; the menu's geometry alone
+    -- does not say that, because nothing on the acceptance path clears it (see below). This is
+    -- the predicate that decides whether a replacement is owed, and it is engine truth.
+    local function needs_replacement()
+        return party_menu_up() and slot_hp(rd(ACTIVE)) == 0
+    end
+
+    -- Forced replacement after a KO: HandlePlayerMonFainted -> ChooseNextMon -> DisplayPartyMenu
+    -- (core.asm:1086-1089). Three rules, all the engine's:
+    --   * only offer a slot whose party HP is non-zero. A on a fainted slot returns through
+    --     HasMonFainted/GoBackToPartyMenu (:1096-1097) and the menu reopens on the SAME index --
+    --     which is why the old "mark this slot tried the frame we emit A" bookkeeping blacklisted
+    --     USABLE mons: the tap held A for two frames and the second frame took the tried branch
+    --     for a press the menu had not been polled for yet.
+    --   * accept only the engine's own receipt that a slot was taken: wPlayerMonNumber moving
+    --     from the fainted slot to the chosen live one, `ld a,[wWhichPokemon] /
+    --     ld [wPlayerMonNumber], a` (:1108-1109), with the fainted slot still at 0 HP. Never an
+    --     emitted button.
+    --   * the menu GEOMETRY is not part of that receipt. HandlePartyMenuInput returns through
+    --     `call BankswitchBack / and a / ret` (home/pokemon.asm:264-275) without resetting
+    --     wTopMenuItemY/X or wMenuWatchedKeys, and the commit at :1108-1109 is followed by
+    --     LoadBattleMonFromParty, the palette/HUD loads (:1118-1123) and the whole of SendOutMon
+    --     (:1124, :1723-1766: PrintSendOutMonMessage, LoadMonBackPic, POOF_ANIM,
+    --     AnimateSendingOutMon, PlayCry). Waiting for the fields to go stale-clear declared
+    --     `no-replacement` on a slow send-out the engine had already accepted, or pressed A into
+    --     it a second time. party_menu_up() is kept only for deciding whether to PRESS.
+    local function choose_replacement()
+        local count = rd(COUNT)
+        local down = rd(ACTIVE) -- the slot that just fainted; the receipt is a move away from it
+        for slot = 0, math.min(count, 6) - 1 do
+            if slot ~= down and slot_hp(slot) > 0 then
+                for _ = 1, 8 do
+                    local cur = rd(CURSOR)
+                    if cur == slot then break end
+                    press(cur < slot and "Down" or "Up")
+                    local moved = false
+                    for _ = 1, 12 do
+                        if rd(CURSOR) ~= cur then moved = true break end
+                        step(nil)
+                    end
+                    if not moved then break end
+                end
+                if party_menu_up() and rd(CURSOR) == slot then
+                    for _ = 1, 3 do
+                        press("A")
+                        -- the commit is a handful of frames behind the accepted press
+                        -- (HandlePartyMenuInput -> .monChosen -> ClearSprites -> :1108)
+                        for _ = 1, 90 do
+                            if rd(ACTIVE)==slot and slot_hp(down)==0 then
+                                log(string.format("RIVAL_SWITCH slot=%d", slot))
+                                return true
+                            end
+                            step(nil)
+                        end
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+    -- The rival fight, start to finish, inside a coroutine the caller resumes once per frame:
+    -- FIGHT + move slot 1 every turn, a replacement on every KO. Every menu press goes through
+    -- the battle driver, which pins the geometry and the 1-based move cursor to core.asm.
+    local function battle_plan()
+        for _ = 1, 400 do
+            if D.state().in_battle==0 then return "battle-over" end
+            if needs_replacement() then
+                if not choose_replacement() then return "no-replacement" end
+                -- the menu-entry evidence is the NEXT loop's D.wait_menu: needs_replacement() is
+                -- false the moment the engine commits, so the send-out plays out down there
+            else
+                local m = D.wait_menu(120)
+                if m.why=="battle_over" then return "battle-over" end
+                if m.ok then
+                    local c = D.choose("FIGHT")
+                    if c.why=="battle_over" then return "battle-over" end
+                    if c.ok then
+                        local t = D.commit_move(1, 900)
+                        if t.why=="battle_over" then return "battle-over" end
+                    end
+                elseif not needs_replacement() then
+                    mash("B", 32) -- a PrintText box between menus; B is watched by neither
+                end
+            end
+        end
+        return "battle-stuck"
+    end
 
     -- Same follow/detour routine as gen1_rb_forest_inputs.lua:203-238; a step blocked by a
     -- wanderer leaves the tile unchanged, so after STALL_NUDGE frames on one tile the route
@@ -187,36 +316,6 @@ function M.new(expected, opts)
         return move(point, targets[index]), name
     end
 
-    -- The rival fight: FIGHT, move slot 1, every turn.  The replacement team is the partner's
-    -- own party, so neither the outcome nor the number of turns is knowable in advance — the
-    -- caller reads wBattleResult off the terminal phase.
-    local function fight(point, frame)
-        local main_menu = point.menu_y==14 and point.menu_max==1
-        local move_menu = point.menu_y==12 and point.menu_x==5
-        local party_menu = point.menu_y==1 and point.menu_x==0   -- PartyMenuInit, see the header
-        if main_menu then
-            if point.menu_x~=9 then return tap("Left", frame), "rival-select-fight" end
-            return tap("A", frame), "rival-open-fight"
-        end
-        if move_menu then
-            if point.menu_index~=0 then return tap("Up", frame), "rival-select-move" end
-            return tap("A", frame), "rival-use-move"
-        end
-        if party_menu then
-            -- A KO opened "choose a POKéMON".  A on a fainted slot is refused with a text box
-            -- and the menu reopens on the SAME index (wPartyAndBillsPCSavedMenuItem), so an
-            -- index that has already been offered an A is stepped past instead of retried.
-            if self.switch_tried[point.menu_index] then return tap("Down", frame), "rival-switch-next" end
-            local buttons = tap("A", frame)
-            if buttons.A then
-                self.switch_tried[point.menu_index] = true
-                log(string.format("RIVAL_SWITCH slot=%d", point.menu_index))
-            end
-            return buttons, "rival-switch"
-        end
-        return tap("A", frame), "rival-dialogue"
-    end
-
     function self.step(handshake, status, point, frame)
         assert(type(frame)=="number" and frame>self.last_frame, "Route 22 route frame did not advance")
         self.last_frame = frame
@@ -229,7 +328,18 @@ function M.new(expected, opts)
                     "trainer battle on Route 22 was opponent "..point.opponent..", not Rival1")
                 if not self.rival_seen then self.rival_seen, self.rival_frame = true, frame end
                 assert(frame - self.rival_frame <= M.BATTLE_BOUND, "the rival battle never closed")
-                return fight(point, frame)
+                self.battle_co = self.battle_co or coroutine.create(battle_plan)
+                if coroutine.status(self.battle_co) ~= "dead" then
+                    local ok, res = coroutine.resume(self.battle_co)
+                    assert(ok, "rival battle plan error: "..tostring(res))
+                    if coroutine.status(self.battle_co) ~= "dead" then return res or idle(), "rival-fight" end
+                    self.fight_why = res
+                    log("RIVAL_FIGHT end="..tostring(res))
+                end
+                if self.fight_why=="battle-stuck" or self.fight_why=="no-replacement" then
+                    return idle(), "rival-fight-stuck"
+                end
+                return tap("B", frame), "rival-closing"
             end
             if not self.over_logged then
                 self.over_logged = true
@@ -242,8 +352,21 @@ function M.new(expected, opts)
         -- Incidental wild battle: hand the frame to the proven RUN handling in
         -- gen1_rb_route1_inputs.lua:41-61 (map-agnostic; its own post-battle assertion runs on
         -- the first non-battle frame, so it is called once more to let that fire).
+        -- The KO that ends this leg is the ACTIVE battler's, not slot 0's: point.party_hp is
+        -- wPartyMon1HP alone (gen1_scripted_play.lua:88,98) while the engine can have any slot
+        -- out (wPlayerMonNumber, written at core.asm:1108-1109). Name the SLOT and leave the
+        -- naming to the caller, which owns the keys -- and note that a faint here propagates to
+        -- the partner (the client sends `faint`, the server answers force_faint), so their party
+        -- may change as a consequence of this one.
         if point.battle~=0 or self.wild_active then
-            if point.battle~=0 and point.party_hp==0 then return idle(), "starter-koed" end
+            if point.battle~=0 then
+                local active = rd(ACTIVE)
+                if active < rd(COUNT) and slot_hp(active)==0 then
+                    self.koed_slot = active
+                    log(string.format("WALK_KO slot=%d", active))
+                    return idle(), "active-koed"
+                end
+            end
             local buttons, phase = r1.step(handshake, status, point, frame)
             if point.battle~=0 then
                 if not self.wild_active then

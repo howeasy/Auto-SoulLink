@@ -16,10 +16,73 @@
 -- SendNewMonToBox, MoveMon, RemovePokemon, TryEvolvingMon, InGameTrade_DoTrade).
 -- Every write happens at the overworld checkpoint or inside the MainInBattleLoop hook.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
-                 -- A13: how long after a battle opened a `replace_rival_team` reply may still
-                 -- be believed. The engine reads the party at EnemySendOutFirstMon, a second or
-                 -- two in; wEnemyMonPartyPos is the exact edge, this is the belt.
-                 RIVAL_SWAP_FRAMES = 120 }
+                 -- A13: the two halves of the `replace_rival_team` window. ONE window measured
+                 -- from `battle_begin` cannot work, because the transition alone outlasts any
+                 -- figure small enough to be a write window (this was RIVAL_SWAP_FRAMES = 120,
+                 -- unsatisfiable behind either spiral). Both numbers below are LOWER BOUNDS built
+                 -- from the engine's EXPLICIT delays plus margin -- they deliberately leave out
+                 -- the CopyVideoData waits, which cost "c/8 frames" each (home/copy2.asm:62-65,
+                 -- :96): LoadBattleTransitionTile (battle_transitions.asm:161-164, c=1) and
+                 -- _LoadTrainerPic (core.asm:6681 -> home/pics.asm:193-196, c=PIC_SIZE=49, ~7
+                 -- frames). The real deltas are measured per battle and logged as
+                 -- `RIVAL_WINDOW init_frames=N staged_frames=M`.
+                 --
+                 -- (a) battle_begin (InitBattleCommon offset 0, engine_signals.json:43-49) -> the
+                 -- staging at engine/battle/core.asm:6689-6690. In between sits
+                 -- DoBattleTransitionAndInitBattleVariables (:6680):
+                 --   outward spiral  120 DelayFrames        battle_transitions.asm:194-205
+                 --   inward spiral   51 x TransferDelay3    :213-260 with :616-622 (Delay3)
+                 --                   = 153 frames
+                 --   prefix          Delay3 + DelayFrame + Delay3 (:4,:9,:49) + core.asm:6164
+                 --                   = 8 frames
+                 -- so >= 128 and >= 161; 240 is the worse of the two with ~50% margin.
+                 RIVAL_INIT_FRAMES = 240,
+                 -- (b) staging -> the FIRST consumer of the enemy party. This is NOT a lower
+                 -- bound like (a): it is the maximum AGE of a $FF observation that may still be
+                 -- written through, and it is what makes the byte sufficient rather than merely
+                 -- necessary.
+                 --
+                 -- Why the byte alone is not enough. wEnemyMonPartyPos is not cleared on entry to
+                 -- EnemySendOutFirstMon: :1326 reads it to pick the slot, :1337-1341 reads that
+                 -- mon's HP, :1343-1348 its level and :1349-1357 its species, and only
+                 -- LoadEnemyMonData stores the new position at :6055 -- after CalcStats (:6027)
+                 -- and the HP copy (:6046-6053). That span contains NO engine-initiated wait (its
+                 -- only calls are AddNTimes, GetMonHeader and CalcStats; BattleRandom is the
+                 -- wild-only branch), but a BizHawk frame boundary is a PPU event, not a code
+                 -- event, so a frame-end callback CAN land inside it and still read $FF.
+                 --
+                 -- And the send-out is not even the first party read. In order from the staging:
+                 --   1. DrawAllPokeballs   common_text.asm:21-29 (`ld c,20 / DelayFrames`, THEN
+                 --      `callfar DrawAllPokeballs`) -> draw_hud_pokeball_gfx.asm:1-7 ->
+                 --      SetupEnemyPartyPokeballs :33-45 reads wEnemyMons + wEnemyPartyCount, and
+                 --      PickPokeball :69-95 reads each mon's HP and status.  <-- FIRST CONSUMER
+                 --   2. StartBattle core.asm:139-148 scans wEnemyMon1HP for the first alive mon
+                 --      before it calls EnemySendOutFirstMon (:154).
+                 --   3. EnemySendOutFirstMon :1326+ as above.
+                 -- Explicit floor from the staging to (1), all inside _InitBattleCommon (:6735)
+                 -- -> SlidePlayerAndEnemySilhouettesOnScreen (:9-100, which `jpfar`s into
+                 -- PrintBeginningBattleText at :100):
+                 --   Delay3 / DelayFrame / Delay3   :58, :65, :96          =  7 frames
+                 --   silhouette slide  :70-84, 72 ITERATIONS (c = $90, dec c twice), each
+                 --     blocking on rLY at $40 then $60 within one frame, so >= 71 guaranteed
+                 --     inter-iteration frame crossings plus a partial first and last
+                 --                                                        >= 71 frames
+                 --   TrainerWantsToFight DelayFrames  common_text.asm:22-23 = 20 frames
+                 --                                                        -------------
+                 --                                                        >= 98 frames
+                 -- 60 is that with a wide margin. A $FF seen by the client can itself be one
+                 -- frame stale (the store happens inside a frame; the callback for that frame may
+                 -- already have run), so the last permitted write lands at most 61 frames after
+                 -- the store -- still far under 98.
+                 --
+                 -- The `RIVAL_WINDOW staged_frames=M` line below measures staging -> the
+                 -- POSITION BYTE CHANGING, which is (3), downstream of (1) and (2). It must NEVER
+                 -- be used to raise this cutoff; only a measured staging -> DrawAllPokeballs
+                 -- interval could. COST of the cutoff: a reply arriving more than 60 frames after
+                 -- the staging is refused `late_reply` even though the byte still reads $FF. In
+                 -- the live flow the reply is parked through the transition and applied ON the
+                 -- staging frame, so this only refuses a server answering about a second late.
+                 RIVAL_STAGED_FRAMES = 60 }
 
 local BALL_ITEMS = { [1] = true, [2] = true, [3] = true, [4] = true } -- MASTER..POKE (item_constants.asm:10-13)
 -- Pokemon Tower 1F-7F ($8E-$94, map_constants.asm:228-234). A wild battle on these maps
@@ -328,24 +391,53 @@ function Client.new(p)
         end
     end
 
+    -- A13: is `b` the battle `cmd` names, and is it still inside the window? Before the party is
+    -- staged that is RIVAL_INIT_FRAMES from `battle_begin`; after it, RIVAL_STAGED_FRAMES from
+    -- the staging. Measuring the whole thing from `battle_begin` is what made the window
+    -- unsatisfiable: the staging itself can be 161 frames in.
+    local function rival_window_live(b, trainer_id)
+        if not b or b.cur_opponent ~= trainer_id then return false end
+        if b.pos_staged then return (self.frame - b.pos_staged) <= Client.RIVAL_STAGED_FRAMES end
+        return (self.frame - b.frame) <= Client.RIVAL_INIT_FRAMES
+    end
+
     function self:replace_rival_team(cmd)
         local battle = reads.read_battle()
-        if battle.in_battle == 0 or battle.cur_opponent ~= cmd.trainer_id then
+        local b = self.battle
+        local live = rival_window_live(b, cmd.trainer_id)
+        -- wIsInBattle is NOT the gate. `battle_begin` is hooked at InitBattleCommon offset 0
+        -- (engine_signals.json:43-49) and `trainer_battle_start` goes out from that hook, so the
+        -- server answers in the same round trip -- while pret is still inside
+        -- DoBattleTransitionAndInitBattleVariables (core.asm:6680). `ld a, $2 / ld [wIsInBattle]`
+        -- is at :6691-6692, one instruction AFTER the staging at :6689-6690, so an early reply
+        -- legitimately reads 0. Refuse `not_in_battle` only when no initializing battle for this
+        -- trainer is live either.
+        if not live and (battle.in_battle == 0 or battle.cur_opponent ~= cmd.trainer_id) then
             send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "not_in_battle" })
             return
         end
-        -- A13: the enemy party may only be rewritten between InitBattleCommon staging it
-        -- (engine/battle/core.asm:6688-6689 sets wEnemyMonPartyPos = $FF) and EnemySendOutFirstMon
-        -- clearing it before LoadEnemyMonData (:1292+, :1358). Past the CLOSING edge the engine
-        -- has already read the bytes we would replace, so the reply is stale. The OPENING edge is
-        -- not the `battle_begin` hook (:6665, capture_offset 0): `callfar ReadTrainer` (:6679) and
-        -- the multi-frame `DoBattleTransitionAndInitBattleVariables` (:6680) run first, so a reply
-        -- one frame in still reads the PREVIOUS battle's value. That reply is early, not late:
-        -- hold it and let rival_window_tick apply it at the frame the byte flips, still bounded by
-        -- RIVAL_SWAP_FRAMES from battle_begin.
-        local fresh = self.battle and (self.frame - self.battle.frame) <= Client.RIVAL_SWAP_FRAMES
-        local staged = io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") == 0xFF
-        if fresh and not staged and not self.battle.pos_staged then
+        if not live then -- the right battle, but past its window
+            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
+            return
+        end
+        -- One replacement per battle. A duplicate reply (a server retry, or the same command
+        -- delivered twice) would otherwise write the party a second time, and the second write
+        -- races the engine for no gain: ack it and move no byte.
+        if b.rival_applied then
+            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "already_applied" })
+            return
+        end
+        -- The enemy party may only be rewritten between InitBattleCommon staging it
+        -- (core.asm:6689-6690 sets wEnemyMonPartyPos = $FF) and EnemySendOutFirstMon clearing it
+        -- before LoadEnemyMonData (:1292,:1326). $FF means nobody has been sent out: write now.
+        -- Not $FF and never staged means the transition is still running: park the reply and let
+        -- rival_window_tick apply it at the frame the byte flips. Not $FF after it HAS been $FF
+        -- means the engine already read the bytes we would replace.
+        if io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") ~= 0xFF then
+            if b.pos_staged then
+                send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
+                return
+            end
             if self.pending_rival then -- one hold at a time; the displaced reply gets its answer
                 send("rival_team_replaced", { trainer_id = self.pending_rival.trainer_id,
                                               species_ids = arr({}), error = "late_reply" })
@@ -353,10 +445,7 @@ function Client.new(p)
             self.pending_rival = cmd
             return
         end
-        if not fresh or not staged then
-            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
-            return
-        end
+        b.pos_staged = b.pos_staged or self.frame
         local mons, ids = {}, arr({})
         for i, hex in ipairs(cmd.blobs_hex or {}) do
             -- `#hex` on a server-supplied non-string raises outside the pcall below, and an
@@ -379,24 +468,44 @@ function Client.new(p)
             writes:disarm()
         end)
         writes:disarm()
-        if ok then send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = ids })
+        if ok then
+            b.rival_applied = true
+            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = ids })
         else send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = tostring(why) }) end
     end
 
     -- A13: watch wEnemyMonPartyPos for the frame InitBattleCommon stages the party ($FF), both to
     -- remember that this battle's window HAS opened (so a reply after EnemySendOutFirstMon cleared
-    -- the byte again is late, not early) and to release a reply that beat the staging.
+    -- the byte again is late, not early) and to release a reply that beat the staging. A parked
+    -- reply is answered `late_reply` the frame the window closes -- by the send-out, or by the
+    -- belt -- rather than sitting unanswered.
+    local function answer_pending_late()
+        local cmd = self.pending_rival
+        if not cmd then return end
+        self.pending_rival = nil
+        send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
+    end
+
     function self:rival_window_tick()
         local b = self.battle
-        local live = b and (self.frame - b.frame) <= Client.RIVAL_SWAP_FRAMES
-        if live and io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") == 0xFF then
-            b.pos_staged = true
+        if not b then return answer_pending_late() end
+        local pos = io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus")
+        if pos == 0xFF and not b.pos_staged and (self.frame - b.frame) <= Client.RIVAL_INIT_FRAMES then
+            b.pos_staged = self.frame
+            log("[SLink-gen1] RIVAL_WINDOW init_frames=" .. (b.pos_staged - b.frame))
             local cmd = self.pending_rival
             if cmd then self.pending_rival = nil; self:replace_rival_team(cmd) end
-        elseif self.pending_rival and not live then
-            local cmd = self.pending_rival
-            self.pending_rival = nil
-            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
+        elseif b.pos_staged and pos ~= 0xFF and not b.sendout_frame then
+            -- The measurement the constants above are only lower bounds for. Logged once per
+            -- battle, whatever the swap did, so the lane run records the real numbers.
+            b.sendout_frame = self.frame
+            log("[SLink-gen1] RIVAL_WINDOW init_frames=" .. (b.pos_staged - b.frame)
+                .. " staged_frames=" .. (b.sendout_frame - b.pos_staged))
+        end
+        -- a parked reply is answered the frame the window shuts: by the send-out, or by the belt
+        if self.pending_rival and (not rival_window_live(b, b.cur_opponent)
+                                   or (b.pos_staged and pos ~= 0xFF)) then
+            answer_pending_late()
         end
     end
 

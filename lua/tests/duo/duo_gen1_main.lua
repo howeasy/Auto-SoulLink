@@ -2765,13 +2765,24 @@ end
 -- adapter's rival set (server/adapters/gen1_rby.py:318-320), so with --rival-team-swap on,
 -- _handle_trainer_battle_start queues `replace_rival_team` (server/state.py:2882-2915) and the
 -- queue drains at the END of handling that same event (state.py:379-388) -- one round trip.
--- The client may still hold the reply: the enemy party may only be rewritten between
--- InitBattleCommon staging wEnemyMonPartyPos = $FF (pret engine/battle/core.asm:6689-6690,
--- AFTER DoBattleTransitionAndInitBattleVariables at :6680) and LoadEnemyMonData replacing it
--- with the sent-out index (:6055), so an early reply is parked in `pending_rival` and released
--- by rival_window_tick (lua/gen1/client.lua:331-402), still bounded by RIVAL_SWAP_FRAMES = 120
--- from battle_begin (:19-22). With the server answering in one round trip, `error=late_reply`
--- on the wire is a FAIL here, never RNG.
+-- The client may still hold the reply, and the window it holds it for has TWO deadlines
+-- (lua/gen1/client.lua:19-90, where both are derived from pret):
+--   RIVAL_INIT_FRAMES   battle_begin -> InitBattleCommon staging wEnemyMonPartyPos = $FF
+--     (core.asm:6689-6690, AFTER the multi-frame DoBattleTransitionAndInitBattleVariables at
+--     :6680). A reply that beats the staging -- which is the normal case, because the server
+--     answers in the same round trip -- is parked in `pending_rival` and released by
+--     rival_window_tick on the frame the byte flips.
+--   RIVAL_STAGED_FRAMES the maximum AGE of a $FF observation that may still be written. The
+--     byte is not the closing edge on its own: the first thing to READ the party we would
+--     overwrite is DrawAllPokeballs (common_text.asm:21-29 -> draw_hud_pokeball_gfx.asm:33-45,
+--     :69-95), then StartBattle's alive scan (core.asm:139-148), then EnemySendOutFirstMon
+--     (:1326+, which only stores the new position at :6055). The cutoff sits well below the
+--     engine's own floor to the first of those.
+-- The client logs the measured deltas once per battle as
+-- `RIVAL_WINDOW init_frames=N staged_frames=M`; M is staging -> the position byte changing, so
+-- it is downstream of those reads and is a diagnostic, never a licence to widen the window.
+-- With the server answering in one round trip, `error=late_reply` on the wire is a FAIL here,
+-- never RNG.
 function scenarios.rival_swap_new()
     local linked, why = scenarios.link_new()
     if not linked then return false, link_prerequisite_failure(why) end
@@ -2790,6 +2801,15 @@ function scenarios.rival_swap_new()
     local Route22 = dofile(ROOT .. "/lua/tests/gen1_rb_route22_inputs.lua")
     local derived = parts.profile.derived
     log_party("PRE_RIVAL")
+    -- Whose mon it is decides what a KO on the walk means, and the keys only exist HERE: the
+    -- route module reports the SLOT. boot_keys (:305-306) is the pre-link party, so the starter
+    -- is the key that was already there and the linked mon is the one link_new brought in.
+    local starter_key
+    for _, m in ipairs(party_keys()) do
+        if boot_keys[m.key] and not starter_key then starter_key = m.key end
+    end
+    local linked_key = new_key()
+    log(fmt("RIVAL_KEYS starter=%s linked=%s", tostring(starter_key), tostring(linked_key)))
 
     -- The trigger's two preconditions, both set by OaksLabRivalLeavesWithPokedexScript when
     -- Oak hands the Pokedex over (pret scripts/OaksLab.asm:634,636) and both read by
@@ -2917,10 +2937,22 @@ function scenarios.rival_swap_new()
         end
     end
 
-    local route = Route22.new({ player = D.player }, { log = log })
+    -- The same battle driver the Route 1 hunt (:357-373) and the forest hunt (:2528-2535) build;
+    -- the whole .sym map is a valid `addresses` bundle because the driver looks names up and
+    -- never iterates it (gen1_battle_driver.lua:63-80), while `sites` IS iterated (:72).
+    local driver = Driver.new({
+        step = yield_buttons, u8 = rd, addresses = symbols,
+        sites = { display_battle_menu = rom.DisplayBattleMenu.addr,
+                  move_selection_menu = rom.MoveSelectionMenu.addr,
+                  select_enemy_move = rom.SelectEnemyMove.addr,
+                  execute_player_move = rom.ExecutePlayerMove.addr,
+                  execute_enemy_move = rom.ExecuteEnemyMove.addr },
+    })
+    local route = Route22.new({ player = D.player }, { log = log, driver = driver,
+                                                       step = yield_buttons, rd = rd, symbols = symbols })
     local terminal = { ["rival-won"] = true, ["rival-lost"] = true, ["rival-drawn"] = true,
-                       ["rival-never-triggered"] = true, ["starter-koed"] = true,
-                       ["unknown-map"] = true }
+                       ["rival-never-triggered"] = true, ["active-koed"] = true,
+                       ["rival-fight-stuck"] = true, ["unknown-map"] = true }
     local last, phase = nil, nil
     for _ = 1, (D.hunt_frames or 90000) do
         local point = play.point()
@@ -2936,9 +2968,27 @@ function scenarios.rival_swap_new()
         if terminal[phase] then break end
         yield_frame(buttons)
     end
+    driver.close()
     if not terminal[phase] then return false, "the Route 22 leg made no bounded progress (" .. tostring(phase) .. ")" end
-    if phase == "starter-koed" then
-        return false, "RNG: a wild foe knocked the lead out on the way to Route 22"
+    if phase == "active-koed" then
+        -- The route saw the ACTIVE battler faint, whichever slot was out; name it from the keys.
+        -- The starter and the linked mon are separate outcomes and neither is retryable RNG for
+        -- the pair: the client has already sent `faint`, so the partner's party changed too
+        -- (force_faint) and a rerun would start from a different pair state.
+        -- by SLOT, not "the first zero-HP mon": the route named the slot that was ACTIVE, and
+        -- a party can hold more than one fainted mon by the time the leg gives up.
+        local koed
+        for _, m in ipairs(party_keys()) do if m.slot == route.koed_slot then koed = m end end
+        local key = koed and koed.key or "?"
+        local who = (key == starter_key and "the starter")
+                    or (key == linked_key and "the linked mon")
+                    or "a party mon"
+        log(fmt("RIVAL_WALK_KO slot=%s key=%s who=%s", tostring(route.koed_slot), key, who))
+        return false, fmt("%s (slot %s, key %s) was knocked out on the way to Route 22",
+                          who, tostring(route.koed_slot), key)
+    end
+    if phase == "rival-fight-stuck" then
+        return false, fmt("the rival battle plan stalled (%s)", tostring(route.fight_why))
     end
     if phase == "rival-never-triggered" then
         return false, "A stood on the Route 22 trigger tile and no rival battle started"

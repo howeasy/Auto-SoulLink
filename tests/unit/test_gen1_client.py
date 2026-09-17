@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import pathlib
 import random
+import re
 
 import lupa
 import pytest
@@ -22,6 +23,23 @@ SITES = json.loads((DATA / "engine_signals.json").read_text(encoding="utf-8"))["
 WS = json.loads((DATA / "write_checkpoint.json").read_text(encoding="utf-8"))
 DUMPS = {"red": "gen1_red.gb", "blue": "gen1_blue.gb", "yellow": "gen1_yellow.gbc"}
 ENTRY = (REPO / "lua" / "gen1" / "entry.lua").as_posix()
+CLIENT_LUA = (REPO / "lua" / "gen1" / "client.lua").read_text(encoding="utf-8")
+
+
+def _client_const(name):
+    """The rival-swap window bounds, read from the client so the budgets below cannot drift.
+
+    Their VALUES are lower bounds derived from the engine's explicit delays and are expected to
+    be retuned against the `RIVAL_WINDOW init_frames=N staged_frames=M` measurement; only the
+    NAMES are pinned here.
+    """
+    m = re.search(rf"\b{name}\s*=\s*(\d+)", CLIENT_LUA)
+    assert m, f"lua/gen1/client.lua carries no {name}"
+    return int(m.group(1))
+
+
+RIVAL_INIT_FRAMES = _client_const("RIVAL_INIT_FRAMES")
+RIVAL_STAGED_FRAMES = _client_const("RIVAL_STAGED_FRAMES")
 
 
 def _rom(title):
@@ -1336,11 +1354,10 @@ def test_a_demonstration_battle_type_emits_neither_capture_nor_no_catch(world):
 
 def test_replace_rival_team_nacks_a_late_reply_and_writes_nothing(world):
     """A13: the swap is only safe between InitBattleCommon setting wEnemyMonPartyPos = $FF
-    (engine/battle/core.asm:6688-6689) and EnemySendOutFirstMon clearing it (:1292+) before
+    (engine/battle/core.asm:6689-6690) and EnemySendOutFirstMon clearing it (:1292,:1326) before
     LoadEnemyMonData (:1358). Refuse with `error = "late_reply"` once the byte has been staged and
-    cleared again, or once 120 frames have passed since the `battle_begin` point recorded the
-    frame. Today client.lua:309-337 checks only in_battle and the trainer id, so a reply that
-    arrives after the send-out rewrites a party the engine has already read.
+    cleared again, or once RIVAL_INIT_FRAMES have passed since the `battle_begin` point recorded
+    the frame without the party ever being staged.
     """
     r = world.ram
     pos = r["wEnemyMonPartyPos"]
@@ -1363,18 +1380,20 @@ def test_replace_rival_team_nacks_a_late_reply_and_writes_nothing(world):
     assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
     assert world.writes[n:] == [], "a reply after the send-out must not write a byte"
 
-    # (2) still $FF, but far past the 120-frame window
-    world.bus[pos] = 0xFF
-    world.step(200)
+    # (2) a battle whose transition never staged the party at all: the init timeout refuses
+    world.bus[pos] = 0x00
+    world.fire("battle_begin")
+    world.step(RIVAL_INIT_FRAMES + 20)
     n = len(world.writes)
     world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
     world.step()
     ev = world.events("rival_team_replaced")[-1]
     assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
-    assert world.writes[n:] == [], "a reply 200 frames after battle_begin must not write a byte"
+    assert world.writes[n:] == [], "a reply past the init timeout must not write a byte"
 
     # control: a fresh battle_begin re-opens the window and the very same reply lands
     world.fire("battle_begin")
+    world.bus[pos] = 0xFF
     world.step()
     world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
     world.step()
@@ -1456,7 +1475,7 @@ def test_a_rival_reply_that_beats_the_engines_ff_is_held_until_the_flip(world):
 
 
 def test_a_held_rival_reply_whose_ff_never_comes_is_a_late_reply(world):
-    """The belt on the same window: a held reply is bounded by RIVAL_SWAP_FRAMES measured from
+    """The belt on the same window: a held reply is bounded by RIVAL_INIT_FRAMES measured from
     `battle_begin`, so a transition that never stages the party answers `late_reply` and writes
     nothing.
     """
@@ -1469,10 +1488,188 @@ def test_a_held_rival_reply_whose_ff_never_comes_is_a_late_reply(world):
     world.fire("battle_begin")
     world.step()
     world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
-    world.step(130)
+    world.step(RIVAL_INIT_FRAMES + 20)
     ev = world.events("rival_team_replaced")[-1]
     assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
     assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes(44)
+    world.assert_all_conform()
+
+
+def test_a_rival_reply_that_beats_wisinbattle_is_parked_not_refused(world):
+    """A13-r2 finding 1 (PRODUCTION). `battle_begin` is hooked at InitBattleCommon offset 0
+    (data/games/gen1_rby/engine_signals.json:43-49) and `trainer_battle_start` is sent from that
+    hook (client.lua:524), so the server's `replace_rival_team` comes back while pret is still
+    inside `DoBattleTransitionAndInitBattleVariables` (engine/battle/core.asm:6680).
+    `ld a, $2 / ld [wIsInBattle], a` is at :6691-6692 -- one instruction AFTER the staging at
+    :6689-6690 -- so that reply legitimately reads wIsInBattle == 0. The `not_in_battle` guard
+    ran BEFORE the parking branch and refused it; it must be parked instead, and a reply with no
+    initializing battle behind it must still be refused.
+    """
+    r = world.ram
+    pos = r["wEnemyMonPartyPos"]
+    blobs = [_rival_blob(random.Random(41), 0x99)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)   # RIVAL1 = class 225
+    world.bus[r["wIsInBattle"]] = 0                          # core.asm:6691 has NOT run yet
+    world.bus[pos] = 0x00                                    # neither has :6689
+    world.fire("battle_begin")
+    world.step()
+
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step(10)
+    assert world.events("rival_team_replaced") == [], "the reply is parked, not refused"
+    assert world.writes[n:] == [], "nothing may be written before the party is staged"
+
+    world.bus[pos] = 0xFF                                    # InitBattleCommon reaches :6689
+    world.bus[r["wIsInBattle"]] = 2                          # ... and :6691
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") is None and ev["species_ids"] == [0x99], ev
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+
+    # the other half of the same guard: no battle in sight, so `not_in_battle` still stands
+    world.bus[r["wIsInBattle"]] = 0
+    world.bus[r["wCurOpponent"]] = 0
+    world.step(RIVAL_INIT_FRAMES + RIVAL_STAGED_FRAMES + 10)
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "not_in_battle" and ev["species_ids"] == [], ev
+    assert world.writes[n:] == [], "a reply with no battle behind it must not write a byte"
+    world.assert_all_conform()
+
+
+def test_a_rival_reply_outlives_the_longest_battle_transition(world):
+    """A13-r2 finding 2 (PRODUCTION). The old single 120-frame window was measured from
+    `battle_begin` but pret's transition alone outlasts it: the outward spiral is 120
+    `DelayFrame`s (battle_transitions.asm:194-205) and the inward spiral 51 x
+    `BattleTransition_TransferDelay3` = 153 (:213-260, :616-622), both behind an 8-frame prefix
+    (:4,:9,:49 plus core.asm:6164) -- 128 and 161 frames before `ld [wEnemyMonPartyPos], a`
+    (:6689-6690) even runs. A reply parked across that transition was answered `late_reply` and
+    the swap could never land; past the send-out it must still be refused.
+    """
+    r = world.ram
+    pos = r["wEnemyMonPartyPos"]
+    blobs = [_rival_blob(random.Random(41), 0x99)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)
+    world.bus[pos] = 0x00
+    world.fire("battle_begin")
+    world.step()
+
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step(170)                       # past BOTH spirals (128 and 161), inside the init bound
+    assert 161 < 170 < RIVAL_INIT_FRAMES, "the park has to outlast the inward spiral"
+    assert world.events("rival_team_replaced") == [], "the reply is still parked at frame 170"
+    world.bus[pos] = 0xFF                                    # the transition finally stages it
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") is None and ev["species_ids"] == [0x99], ev
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+
+    # A13-r3: EXACTLY ONCE per battle. The identical reply again (a server retry, or one command
+    # delivered twice) is acked and moves no byte -- a second write would race the engine for a
+    # party that is already the partner's.
+    world.bus[r["wEnemyMons"]] = 0xAA     # scribble: a second write would put the species back
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "already_applied" and ev["species_ids"] == [], ev
+    assert world.writes[n:] == [], "the swap is applied exactly once per battle"
+    assert world.bus[r["wEnemyMons"]] == 0xAA, "the second reply rewrote the enemy party"
+
+    # past the send-out, in a battle that has NOT been swapped: still `late_reply`
+    world.bus[pos] = 0x00
+    world.fire("battle_begin")
+    world.step()
+    world.bus[pos] = 0xFF                                    # staged...
+    world.step()
+    world.bus[pos] = 0                                       # ...then EnemySendOutFirstMon (:1326)
+    world.step()
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
+    assert world.writes[n:] == [], "a reply after the send-out must not write a byte"
+    world.assert_all_conform()
+
+
+def test_the_staged_write_window_expires_at_its_bound(world):
+    """A13-r3/r4. `wEnemyMonPartyPos == $FF` is necessary but NOT sufficient. EnemySendOutFirstMon
+    does not clear it on entry -- :1326 reads it to pick the slot, :1337-1341 reads that mon's HP,
+    :1343-1348 its level and :1349-1357 its species, and only `LoadEnemyMonData` stores the new
+    position at :6055 -- and nothing in that span waits for a frame, yet a BizHawk frame boundary
+    is a PPU event rather than a code event, so a frame-end callback can land inside it and still
+    read $FF. The send-out is not even the first party read: `DrawAllPokeballs`
+    (common_text.asm:21-29 -> draw_hud_pokeball_gfx.asm:33-45, :69-95 reads every enemy mon's HP
+    and status) comes first, then StartBattle's alive scan (core.asm:139-148).
+
+    RIVAL_STAGED_FRAMES is therefore a maximum OBSERVATION AGE, not a lower bound: it shuts the
+    window long before the engine can reach `DrawAllPokeballs`.
+    """
+    # The bound only does its job if it sits under the engine's own countable floor from the
+    # staging to that first consumer. The silhouette slide alone (core.asm:70-84) is 72
+    # iterations = at least 71 guaranteed inter-iteration frame crossings, before the 20-frame
+    # DelayFrames that precedes DrawAllPokeballs (common_text.asm:22-27). A $FF the client sees
+    # may itself be one frame stale, so the last permitted write lands at most
+    # RIVAL_STAGED_FRAMES + 1 frames after the engine's store.
+    assert RIVAL_STAGED_FRAMES + 1 < 71, (
+        "RIVAL_STAGED_FRAMES must shut the window before DrawAllPokeballs can read the party")
+    r = world.ram
+    pos = r["wEnemyMonPartyPos"]
+    blobs = [_rival_blob(random.Random(41), 0x99)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)
+
+    # the LAST frame of the window is still accepted. The reply queued after step(k) is drained
+    # on the NEXT frame_end, i.e. k+1 frames after the staging frame.
+    world.bus[pos] = 0x00
+    world.fire("battle_begin")
+    world.step()
+    world.bus[pos] = 0xFF
+    world.step()                                             # staged on this frame
+    world.step(RIVAL_STAGED_FRAMES - 1)
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") is None and ev["species_ids"] == [0x99], ev
+    assert world.writes[n:] != [], "the last frame of the staged window still writes"
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+
+    # one frame later, in an identical fresh battle, it is refused and nothing moves
+    world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44] = bytes(44)
+    world.bus[pos] = 0x00
+    world.fire("battle_begin")
+    world.step()
+    world.bus[pos] = 0xFF
+    world.step()
+    world.step(RIVAL_STAGED_FRAMES)
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
+    assert world.writes[n:] == [], "one frame past the staged window must not write a byte"
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes(44)
+
+    # A13-r3: the constants are lower bounds, so the lane has to record the REAL deltas. The
+    # staging line goes out on the frame the byte flips to $FF; the full line when the engine
+    # sends out. Both battles above staged two frames after their `battle_begin` signal.
+    staged_lines = [ln for ln in world.logs if "RIVAL_WINDOW" in ln]
+    assert staged_lines and all("init_frames=2" in ln for ln in staged_lines), staged_lines
+    world.bus[pos] = 3                                       # EnemySendOutFirstMon picked slot 3
+    world.step()
+    full = [ln for ln in world.logs if "staged_frames=" in ln]
+    assert len(full) == 1 and "init_frames=2" in full[0], world.logs
+    assert f"staged_frames={RIVAL_STAGED_FRAMES + 2}" in full[0], full
     world.assert_all_conform()
 
 
