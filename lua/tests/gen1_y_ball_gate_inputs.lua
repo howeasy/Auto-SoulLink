@@ -8,7 +8,16 @@
 -- Verified against pret/pokeyellow 0a08515 (E:/Google Drive/SLink/.cache/pret/pokeyellow):
 --   Pallet intercept is wYCoord == 0, not R/B's 1        scripts/PalletTown.asm:27-28
 --   Pallet scripts 0-9 (4 = PIKACHU_BATTLE, 5 = AFTER)   scripts/PalletTown.asm:11-22
---   wJoyIgnore $FC = A/B allowed, $FF = all masked       scripts/PalletTown.asm:38-39,55-56
+--   wJoyIgnore is a mask of IGNORED buttons; 0 ignores
+--     nothing, so the gate is "is PAD_A (bit 0) set?"    engine/joypad.asm:62-74;
+--                                                        constants/hardware.inc:95,105
+--   $FC = PAD_SELECT|PAD_START|PAD_CTRL_PAD (A/B pass),
+--     $FF = PAD_BUTTONS|PAD_CTRL_PAD (all masked)        constants/hardware.inc:96-97;
+--                                                        scripts/PalletTown.asm:38-39,55-56
+--   the map reload after ANY battle zeroes wJoyIgnore    home/overworld.asm:40-41
+--   the end of a simulated-joypad walk zeroes it too     home/overworld.asm:1623-1629
+--   so Pallet script 5's two text boxes run at 0 and it
+--     only writes $FC once both are done                 scripts/PalletTown.asm:155-169
 --   demo battle: wBattleType = BATTLE_TYPE_PIKACHU (4),
 --     wCurOpponent = STARTER_PIKACHU ($54), level 5      scripts/PalletTown.asm:143-148
 --     BATTLE_TYPE_PIKACHU = 4                            constants/battle_constants.asm:46
@@ -21,7 +30,8 @@
 --   the single Eevee ball object sits at x=7, y=3        data/maps/objects/OaksLab.asm:22
 --   pressing A on it sets script 8 (no yes/no menu)      scripts/OaksLab.asm:781-806
 --   script 9 shows the rival's text with wJoyIgnore $FC  scripts/OaksLab.asm:229-235
---   script 11 AddPartyMon -> nickname prompt, then 12    scripts/OaksLab.asm:1017-1043,285-297
+--   script 11's text does AddPartyMon (Pikachu L5) with
+--     NO nickname screen -- unlike R/B -- and then 12    scripts/OaksLab.asm:1017-1043,285-297
 --   script 12 fires at wYCoord == 6 (as R/B's 10)        scripts/OaksLab.asm:299-303
 --   lab rival is OPP_RIVAL1 = 200 + $19 = 225 with a
 --     lone Eevee L5 (Tackle / Tail Whip)                 constants/trainer_constants.asm:1,42;
@@ -31,7 +41,7 @@
 --   script 18 hands off to 22 (NOOP) -- the terminal     scripts/OaksLab.asm:490-495
 --   EVENT_BATTLED_RIVAL_IN_OAKS_LAB = 35 as in R/B       constants/event_constants.asm:19
 --   Pikachu's moves are THUNDERSHOCK, GROWL: Growl is
---     slot 2 / id $2d, exactly as R/B's starters         data/pokemon/base_stats/pikachu.asm:12;
+--     slot 2 / id $2d, exactly as R/B's starters         data/pokemon/base_stats/pikachu.asm:13;
 --                                                        constants/move_constants.asm:53
 -- Inherited from the R/B module (the plan records the .blk layouts of the bedroom, the house,
 -- Pallet and the lab as byte-identical): the house/bedroom walk, the lab row-4 approach, and
@@ -116,7 +126,12 @@ function M.new(expected)
             self.demo_frame=nil
             local script=point.pallet_script
             if script==1 or script==3 or script==5 then
-                if point.joy_ignore==0xFC then return press("A",frame),"pallet-oak-dialogue" end
+                -- Scripts 1/3 set $FC before their DisplayTextID, but script 5 runs on whatever the
+                -- post-demonstration map reload left -- EnterMap zeroes wJoyIgnore, and script 5
+                -- writes $FC only after both of its text boxes are done. Testing for $FC exactly
+                -- therefore parked the route at script 5 with joy_ignore 0 forever, so the gate is
+                -- the real question the engine asks: is PAD_A (bit 0) in the ignore mask?
+                if point.joy_ignore%2==0 then return press("A",frame),"pallet-oak-dialogue" end
                 return idle(),"pallet-script-wait" -- 0xFF masks all buttons during NPC movement.
             end
             if script~=0 then
@@ -140,12 +155,22 @@ function M.new(expected)
         if point.party_count==0 then
             -- Eevee-ball guard: OaksLabEeveePokeBallText re-arms script 8 every time it is read
             -- (OaksLab.asm:781-806), and scripts 8 and 10 leave the player in control for a frame
-            -- while still facing the ball tile. After the ball is fired the only A this driver
-            -- presses in the pre-starter window is script 9's dialogue, with the ball hidden.
+            -- while still facing the ball tile. Script 9 hides the ball object the moment it runs
+            -- (TOGGLE_STARTER_BALL_1 HideObject, OaksLab.asm:218-224), so from 9 onward an A can no
+            -- longer reach that text at all -- what it CAN reach is a forced-movement frame, which
+            -- is why npc_moving / wSimulatedJoypadStatesIndex still have to be clear.
+            -- TWO text boxes live in this window, not one: script 9's "I'll take this one!" and
+            -- script 11's "received PIKACHU!" (OaksLab.asm:291-297), and AddPartyMon fires inside
+            -- the latter -- so party_count is still 0 while it waits. Script 11 is also where the
+            -- mask reads 0 rather than $FC: script 10's RLE walk to Oak (OaksLab.asm:262-289) ends
+            -- in .doneSimulating, which zeroes wJoyIgnore (home/overworld.asm:1623-1629).
             if self.ball_fired or (type(script)=="number" and script>=8) then
                 self.ball_fired=true
-                if script==9 and point.joy_ignore==0xFC and not point.npc_moving then
-                    return press("A",frame),"rival-takes-eevee-ball"
+                if (script==9 or script==11) and point.joy_ignore%2==0
+                    and not point.npc_moving and point.simulated_joypad_index==0 then
+                    self.fired_frame=nil -- an accepted press is progress; re-latch the stall window
+                    return press("A",frame),
+                        script==9 and "rival-takes-eevee-ball" or "receive-pikachu-dialogue"
                 end
                 bounded(self,"fired_frame",frame,3600,"Eevee-ball window made no bounded progress",point)
                 return idle(),"eevee-ball-window"
@@ -183,7 +208,10 @@ function M.new(expected)
             if type(script)~="number" or script<12 then
                 return press("B",frame),"decline-nickname"
             end
-            self.nickname_declined=true -- script 12 follows AddPartyMon/AskName completion.
+            -- Yellow never asks for a nickname here, so the B pulse above is only ever advancing
+            -- script 11's remaining "OAK: ... received PIKACHU!" boxes; script 12 is the receipt
+            -- that DisplayTextID returned (OaksLab.asm:285-297). The R/B name kept for the twin.
+            self.nickname_declined=true
         end
         if point.battle~=0 then
             assert(point.opponent==225,"first party battle was not lab Rival1"..describe(point))

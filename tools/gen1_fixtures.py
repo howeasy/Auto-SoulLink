@@ -11,7 +11,8 @@ game's main checksum, one decodable party mon whose exp matches its level on its
     python tools/gen1_fixtures.py blue town --player b
     python tools/gen1_fixtures.py red battle        # lab -> parcel -> Route 1 (10,35) -> save, a ball in the bag
 
-Red/Blue only: the route modules are the R/B lab route. One emulator lane; nothing else running.
+Each title resolves its own lab driver (lua/tests/gen1_scripted_play.lua): Red/Blue and Yellow
+each walk their own route to Oak's Lab. One emulator lane; nothing else running.
 
     python tools/gen1_fixtures.py --qualify      # re-check the committed fixtures, no emulator
 
@@ -53,13 +54,14 @@ FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen1")
 # the level, engine/pokemon/add_mon.asm:202-207). Named individually so a regenerated fixture
 # cannot hide behind a blanket tolerance -- anything not listed here must qualify clean.
 #
-# TODO(release): once the lane has rebuilt Yellow from scripted play
-#   (`python tools/gen1_fixtures.py yellow town` and `... yellow battle`), delete the two
-#   yellow entries from LEGACY below AND the yellow pair in
-#   tests/unit/test_gen1_stat_control.py's LEGACY_FIXTURES, then flip the two Yellow rows of
-#   tests/unit/test_gen1_fixture_qualify.py from the LEGACY expectation to the clean one.
-#   Kept until then so an un-rebuilt fixture cannot read as a regression.
-LEGACY = {"yellow_town", "yellow_battle"}
+# TODO(release): yellow_battle is the only fixture left here -- blocked on the parcel
+#   driver's Yellow deadlock (card Y-2). Once that lands, rebuild it
+#   (`python tools/gen1_fixtures.py yellow battle`), delete the yellow_battle entry from
+#   LEGACY below AND tests/unit/test_gen1_stat_control.py's LEGACY_FIXTURES, then flip
+#   yellow_battle's row in tests/unit/test_gen1_fixture_qualify.py from the LEGACY
+#   expectation to the clean one. Kept until then so an un-rebuilt fixture cannot read as a
+#   regression.
+LEGACY = {"yellow_battle"}
 _LEGACY_PROBLEM = re.compile(r"^slot \d+: exp 0 is not level \d+ on curve \d+$")
 
 

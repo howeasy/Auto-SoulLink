@@ -33,8 +33,9 @@ _FIXTURES = os.path.join(_REPO, "tests", "fixtures", "gen1")
 _SAVES = ("red_town", "blue_town", "yellow_town", "red_battle", "blue_battle", "yellow_battle")
 _ROM_FILES = {"red": "gen1_red.gb", "blue": "gen1_blue.gb", "yellow": "gen1_yellow.gbc"}
 STATS = ("max_hp", "atk", "def", "spd", "spc")
-# Not yet regenerated from scripted play (F-6): the Yellow saves are still the old tool's bytes.
-LEGACY_FIXTURES = {"yellow_town", "yellow_battle"}
+# Not yet regenerated from scripted play (F-6): yellow_battle is still the old tool's bytes
+# (yellow_town qualified clean once its lab driver landed).
+LEGACY_FIXTURES = {"yellow_battle"}
 _base_stats_cache: dict[str, dict] = {}
 
 

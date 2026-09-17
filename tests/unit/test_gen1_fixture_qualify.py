@@ -2,10 +2,10 @@
 
 tests/fixtures/gen1/*.SaveRAM are what the physical Gen 1 lanes boot from, so a fixture that
 is not a real, consistent save silently weakens every test downstream of it. `qualify()` is
-the check, and this file pins the state it currently finds: the four R/B fixtures were
-regenerated from scripted play today (Bulbasaur/Charmander, level 5, exp 135) and must stay
-clean; Yellow's two still hold the old harness' bytes (level byte written directly, exp 0)
-and are allowed as LEGACY only because the tool names them individually.
+the check, and this file pins the state it currently finds: the four R/B fixtures plus
+yellow_town were regenerated from scripted play (Bulbasaur/Charmander/Pikachu, level 5) and
+must stay clean; yellow_battle still holds the old harness' bytes (level byte written
+directly, exp 0) and is allowed as LEGACY only because the tool names it individually.
 
 The blank-save case is here because it is the shape a truncated or uninitialised fixture
 takes, and it used to raise out of `decode_party` rather than be reported.
@@ -25,9 +25,9 @@ import gen1_fixtures as fixtures  # noqa: E402  (tools/ is not a package; the to
 codec = fixtures.codec  # the tool imports the codec; the tests reconstruct save states with it
 
 _FIXTURES = os.path.join(_REPO, "tests", "fixtures", "gen1")
-_RB = ("red_town", "blue_town", "red_battle", "blue_battle", "red_town_ot2")
-_YELLOW = ("yellow_town", "yellow_battle")
-_ALL = _RB + _YELLOW
+_CLEAN = ("red_town", "blue_town", "red_battle", "blue_battle", "red_town_ot2", "yellow_town")
+_LEGACY = ("yellow_battle",)
+_ALL = _CLEAN + _LEGACY
 
 # The has-changed-boxes bit lives at sMainData + (wCurrentBoxNum - wMainDataStart)
 # (gen1_codec.py:74-75), inside the main-data checksum's range.
@@ -51,16 +51,16 @@ def _load(name: str) -> tuple[bytes, bytes]:
         return sram, f.read()
 
 
-@pytest.mark.parametrize("name", _RB)
+@pytest.mark.parametrize("name", _CLEAN)
 def test_regenerated_fixtures_qualify_clean(name):
-    """These four came out of scripted play; any problem here is a regression, not debris."""
+    """These came out of scripted play; any problem here is a regression, not debris."""
     sram, rom = _load(name)
     assert fixtures.qualify(sram, rom) == [], (
         f"{name} no longer qualifies — it was regenerated from real play and must stay clean")
 
 
-@pytest.mark.parametrize("name", _YELLOW)
-def test_yellow_fixtures_are_legacy_and_nothing_else(name):
+@pytest.mark.parametrize("name", _LEGACY)
+def test_yellow_battle_is_legacy_and_nothing_else(name):
     sram, rom = _load(name)
     problems = fixtures.qualify(sram, rom)
     assert len(problems) == 1, f"{name}: expected only the exp artefact, got {problems}"
@@ -69,8 +69,8 @@ def test_yellow_fixtures_are_legacy_and_nothing_else(name):
     assert fixtures.is_legacy_artefact(problems), "the artefact detector does not see it"
 
 
-def test_the_legacy_set_names_exactly_the_two_yellow_fixtures():
-    assert {"yellow_town", "yellow_battle"} == fixtures.LEGACY
+def test_the_legacy_set_names_exactly_yellow_battle():
+    assert {"yellow_battle"} == fixtures.LEGACY
 
 
 def test_a_blank_saveram_is_reported_not_raised():
@@ -82,7 +82,7 @@ def test_a_blank_saveram_is_reported_not_raised():
 
 
 def test_the_sweep_prints_one_line_per_fixture_and_exits_zero(capsys):
-    """The subcommand itself: 4 OK, 2 LEGACY, exit 0 on the committed set."""
+    """The subcommand itself: 5 OK, 1 LEGACY, exit 0 on the committed set."""
     for name in _ALL:
         if not os.path.exists(os.path.join(_FIXTURES, f"{name}.SaveRAM")):
             pytest.skip(f"{name}.SaveRAM not present")
@@ -94,8 +94,8 @@ def test_the_sweep_prints_one_line_per_fixture_and_exits_zero(capsys):
     lines = capsys.readouterr().out.strip().splitlines()
     assert code == 0, f"the sweep refused a committed fixture: {lines}"
     assert len(lines) == len(_ALL), lines
-    assert sum(": OK " in line for line in lines) == len(_RB), lines
-    assert sum(": LEGACY " in line for line in lines) == len(_YELLOW), lines
+    assert sum(": OK " in line for line in lines) == len(_CLEAN), lines
+    assert sum(": LEGACY " in line for line in lines) == len(_LEGACY), lines
     for line in lines:
         assert line.startswith(_ALL), f"unexpected line: {line!r}"
 
