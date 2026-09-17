@@ -1065,7 +1065,7 @@ class RunManager:
         return {
             "runs": [self._augment_for_template(r) for r in runs],
             "run": None,
-            "page": page,
+            "page": page, "standalone": False,
             "pinned_run_id": self._stream_pin_id,
             "manager_port": self.manager_port,
             "host": (request.host or "127.0.0.1").split(":")[0] or "127.0.0.1",
@@ -1079,10 +1079,11 @@ class RunManager:
         rail_ctx = self._rail_ctx(request, self._get(), page="broadcast")
         env = aiohttp_jinja2.get_env(request.app)
         ctx["sidebar_html"] = env.get_template("_rail.html").render(rail_ctx)
-        ctx["sidebar_css"] = "board"
         ctx["body_class"] = "board mgr"
         ctx["mgr"] = True
         ctx["active_run_name"] = (self._active_stream_run() or {}).get("name", "")
+        ctx["tabs"] = [("Overlays", "/broadcast", True), ("Twitch", "/broadcast/twitch", False),
+                       ("OBS", "/broadcast/obs", False)]
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
     async def handle_randomizer_page(self, request: web.Request) -> web.Response:
@@ -1114,14 +1115,21 @@ class RunManager:
 
     def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
         ctx = self._rail_ctx(request, runs, page="run")
+        base = f"/runs/{run['run_id']}"
+        running = run.get("status") == "running"
         ctx.update({
             "page_title": f"{label} — {run.get('name', '')}",
             "theme": resolve_theme(request),
             "is_stream": False, "hide_chrome": False,
             "body_class": "board mgr" + (" dark-theme calc-host" if panel == "calc" else ""),
             "run": self._augment_for_template(run),
-            "panel": panel, "panel_label": label,
-            "api_base": f"/runs/{run['run_id']}",
+            "panel": panel, "panel_label": label, "base": base, "api_base": base,
+            "title": run.get("name", ""), "meta": label,
+            "tabs": [("Board", base, False), ("Calc", f"{base}/calc/normal.html", panel == "calc"),
+                     ("Debug", f"{base}/debug", panel == "debug")],
+            "available": running,
+            "unavailable_html": (f"This run is not running; {label.lower()} needs its server. "
+                                 f"<a href=\"{base}\">Start it from the board</a>."),
         })
         return ctx
 
@@ -1131,7 +1139,7 @@ class RunManager:
         handle_run_api, SSE included."""
         runs, run = self._run_or_404(request)
         ctx = self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
-        return aiohttp_jinja2.render_template("run_panel.html", request, ctx)
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_run_calc(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/calc/{path} — the damage calculator for one run, in the
@@ -1149,7 +1157,7 @@ class RunManager:
             "calc_mode_label": calc_files.mode_label(path),
             "status_href": f"/runs/{run['run_id']}",
         })
-        resp = aiohttp_jinja2.render_template("run_panel.html", request, ctx)
+        resp = aiohttp_jinja2.render_template("panel_page.html", request, ctx)
         resp.headers["Cache-Control"] = "no-cache"
         return resp
 
@@ -1203,15 +1211,21 @@ class RunManager:
         runs = self._get()
         ctx = self._rail_ctx(request, runs, page="broadcast")
         active = self._active_stream_run()
+        label = {"twitch": "Twitch bot", "obs": "OBS triggers"}[tab]
         ctx.update({
             "page_title": "Broadcast — Soul Link",
             "theme": resolve_theme(request),
             "is_stream": False, "hide_chrome": False,
             "body_class": "board mgr",
-            "tab": tab, "tab_label": {"twitch": "Twitch bot", "obs": "OBS triggers"}[tab],
-            "active": self._augment_for_template(active) if active else None,
+            "tab": tab, "panel": tab, "panel_label": label, "api_base": "",
+            "title": "Broadcast", "meta": label + (f" · {active['name']}" if active else ""),
+            "tabs": [("Overlays", "/broadcast", False), ("Twitch", "/broadcast/twitch", tab == "twitch"),
+                     ("OBS", "/broadcast/obs", tab == "obs")],
+            "available": active is not None,
+            "unavailable_html": ("No running run to broadcast. <a href=\"/\">Start one</a> — "
+                                 "the pinned run's bot and triggers appear here."),
         })
-        return aiohttp_jinja2.render_template("broadcast.html", request, ctx)
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_proxy_api(self, request: web.Request) -> web.Response:
         """/api/bot/* and /api/obs/* (GET or POST) — relayed verbatim to the active run,
@@ -1412,7 +1426,7 @@ async def main(host: str, port: int):
         env = aiohttp_jinja2.get_env(request.app)
         rail = env.get_template("_rail.html").render(
             manager._rail_ctx(request, manager._get(), page="tools"))
-        return {"sidebar_html": rail, "sidebar_css": "board", "body_class": "board mgr",
+        return {"sidebar_html": rail, "body_class": "board mgr",
                 "mgr": True, "is_stream": False, "hide_chrome": False}
     setup_patcher_routes(app, _patcher_chrome)
 

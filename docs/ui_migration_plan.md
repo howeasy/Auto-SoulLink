@@ -29,7 +29,11 @@ patcher wears the rail (`setup_patcher_routes(app, chrome)`); and **a run the Ma
 spawned redirects every page it used to render to the Manager** (`SLinkServer._to_manager`:
 `/`, `/memorial`, `/debug`, `/twitch`, `/obs`, `/calc/*.html`, `/patcher`, `/stream` →
 `/broadcast`), keeping overlays, the API, the calc's files and the `_smoke=1` harness. The
-run server's own pages remain only for standalone `python -m server.server`. Not a drawer
+run server's own pages remain only for standalone `python -m server.server` — and since
+2026-09-17 those wear the same shell too: `_rail.html` has a `standalone` mode (one run,
+its own pages), `panel_page.html` is the one-panel page for both apps, `dashboard.html` is
+the `.mk` shell around the board, and `chrome.py`, `dashboard.css`, `sidebar.css`, the
+sidebar-collapse code and the six old wrappers are deleted. One chrome in the tree. Not a drawer
 in the end: the debug JS is 700 lines of page-scoped script that expects a load, so it is
 a page with Board · Calc · Debug tabs, which the owner accepted. Deliberately not done: the
 Manager owning `obs_config.json`.

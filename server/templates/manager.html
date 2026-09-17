@@ -34,6 +34,7 @@
 
 <div class="mk" x-data="manager()">
 
+  {% set base = '/runs/' ~ run.run_id if run else '' %}
   {% include "_rail.html" %}
 
   {# ══ Main ═══════════════════════════════════════════════════════════════ #}

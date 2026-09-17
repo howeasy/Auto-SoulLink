@@ -183,7 +183,7 @@
 /* ── Figures ──────────────────────────────────────────────────────────
  * Anything that is a number wears this. A page font is a voice; digits are data, and
  * they line up only when every one is the same width. */
-.num, .enc-lv, .tomb-mon .level, .dash-sidebar-port, .phase-stats,
+.num, .enc-lv, .tomb-mon .level, .phase-stats,
 .mk-hp-num, .mk-ev-ts, .mk-badges, .mk-bond-state, .mk-meta, .mk-tag, .mk-sub,
 .mgr-rail-family-count, .mgr-live-mon-lv {
   font-family: var(--font-num);

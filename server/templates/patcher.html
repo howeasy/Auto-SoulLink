@@ -11,20 +11,13 @@
 {% endblock %}
 
 {% block content %}
-  {% if mgr %}
-    <div class="mk">
-      {{ sidebar_html | safe }}
-      <main class="mk-main mk-body-root">
-        <header class="mk-runhdr"><h1 class="mk-runname">Companion ROM patcher</h1></header>
-        <div class="mk-page">{% include "_patcher_panel.html" %}</div>
-      </main>
-    </div>
-  {% else %}
+  <div class="mk">
     {{ sidebar_html | safe }}
-    <main class="dash-main">
-      {% include "_patcher_panel.html" %}
+    <main class="mk-main mk-body-root">
+      <header class="mk-runhdr"><h1 class="mk-runname">Companion ROM patcher</h1></header>
+      <div class="mk-page">{% include "_patcher_panel.html" %}</div>
     </main>
-  {% endif %}
+  </div>
 {% endblock %}
 
 {% block scripts %}

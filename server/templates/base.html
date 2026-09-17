@@ -6,15 +6,10 @@
   <title>{% block title %}{{ page_title }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/slink.css">
   <link rel="stylesheet" href="/static/themes/{{ theme }}.css" id="slink-theme">
-  {# Pages that include the dashboard sidebar pull in their sidebar CSS + .js
-     so the rail / collapse toggle / theme picker all wire up. Defaults to
-     `dashboard.css` (which @imports sidebar.css, the rail itself) for the
-     templated pages (status, memorial, stream). The calc page passes
-     `sidebar_css: "sidebar"` to get the rail alone — dashboard.css's
-     Pixelify body font + the high-res font-size scaling clobber calc's
-     em-based Bootstrap layout. The Manager passes "board". #}
+  {# Pages that carry the rail (`sidebar_html`, rendered from _rail.html) pull in the
+     board's stylesheet and dashboard.js, which moves the theme picker into the rail. #}
   {% if sidebar_html %}
-    <link rel="stylesheet" href="/static/{{ sidebar_css|default('dashboard') }}.css">
+    <link rel="stylesheet" href="/static/board.css">
     <script src="/static/dashboard.js" defer></script>
   {% endif %}
   <script src="/static/vendor/alpine.min.js" defer></script>
@@ -26,7 +21,6 @@
      sidebar renders at its final width on first paint. Without this, the
      sidebar would flash full-width while dashboard.js (defer) waits for
      parse to complete. #}
-  <script>try{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}catch(_){}</script>
   {# Shared inline-SVG sprite — defines every <symbol id="i-..."/> the rest
      of the page references via <use href="#i-..."/>. Loaded once per page
      so dashboard / manager / memorial / overlay templates all have the

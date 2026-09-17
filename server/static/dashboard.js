@@ -297,7 +297,7 @@ if (window._slinkDashInit) {
   }
 
   function relocate() {
-    var slot = document.querySelector('.dash-sidebar-theme, .mgr-rail-theme');
+    var slot = document.querySelector('.mgr-rail-theme');
     if (!slot) return;
     var switcher = document.querySelector('.theme-switcher');
     if (!switcher) {
@@ -315,52 +315,6 @@ if (window._slinkDashInit) {
   // whatever the localStorage value says (changed by another tab).
   window.addEventListener('storage', function(ev) {
     if (ev.key === 'slink-theme' && ev.newValue) applyTheme(ev.newValue);
-  });
-})();
-
-
-// ── Sidebar collapse toggle ────────────────────────────────────────────────
-// Persists between SSE swaps + page navigations. The body class is the
-// source of truth; toggleSidebar flips it and writes localStorage. On load
-// we read localStorage and re-apply so the choice survives hard refresh.
-(function() {
-  var KEY = 'slink-sidebar-collapsed';
-  function apply(collapsed) {
-    document.body.classList.toggle('dash-collapsed', collapsed);
-  }
-  function read() {
-    try { return window.localStorage.getItem(KEY) === '1'; }
-    catch (_) { return false; }
-  }
-  function write(v) {
-    try { window.localStorage.setItem(KEY, v ? '1' : '0'); }
-    catch (_) {}
-  }
-  function toggle() {
-    var next = !document.body.classList.contains('dash-collapsed');
-    apply(next);
-    write(next);
-  }
-  // The logo doubles as the expand-toggle when the sidebar is collapsed
-  // (the hamburger button is hidden in that state so the logo can centre).
-  document.addEventListener('click', function(ev) {
-    var logo = ev.target.closest && ev.target.closest('.dash-sidebar .slink-logo');
-    if (logo && document.body.classList.contains('dash-collapsed')) {
-      ev.preventDefault();
-      toggle();
-    }
-  });
-  // Re-apply after each HTMX morph in case the body class got reset.
-  document.body.addEventListener('htmx:afterSettle', function() {
-    apply(read());
-  });
-  // Sync across tabs.
-  window.addEventListener('storage', function(ev) {
-    if (ev.key === KEY) apply(ev.newValue === '1');
-  });
-  apply(read());
-  window.SLinkDash = Object.assign(window.SLinkDash || {}, {
-    toggleSidebar: toggle,
   });
 })();
 

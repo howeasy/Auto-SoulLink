@@ -1,15 +1,16 @@
 {% extends "base.html" %}
 {#
-  The run server's page: the dashboard shell (sidebar, title, phase banner) around the
-  pair board in _board.html. `#content` polls itself every 2 s and swaps by idiomorph,
-  which keeps <details open> and <img> identity across swaps. Polling, not SSE: Chrome
-  caps HTTP/1.1 at six connections per origin and SSE would hold one per tab.
+  The run server's own board page (standalone `python -m server.server`; a run the Manager
+  started redirects here to the Manager instead). Same shell as the Manager's run page:
+  the rail, a run header, the pair board in _board.html. `#content` polls itself every
+  2 s and swaps by idiomorph, which keeps <details open> and <img> identity across swaps.
+  Polling, not SSE: Chrome caps HTTP/1.1 at six connections per origin and SSE would hold
+  one per tab.
 #}
 
 {% block title %}{{ page_title }}{% endblock %}
 
 {% block head_extra %}
-  <link rel="stylesheet" href="/static/board.css">
   {# Load order: dashboard.js installs an Idiomorph veto for <details data-details-key>,
      so idiomorph must define its global first. Defer scripts run in document order. #}
   <script src="/static/vendor/htmx.min.js" defer></script>
@@ -19,12 +20,20 @@
 {% endblock %}
 
 {% block content %}
+<div class="mk">
   {{ sidebar_html | safe }}
-  <main class="dash-main mk-body-root">
-    <header class="dash-page-hdr">
-      <h1 class="dash-page-title">{{ concise_title }}</h1>
+  <main class="mk-main mk-body-root">
+    <header class="mk-runhdr">
+      <h1 class="mk-runname">{{ run_name or concise_title }}</h1>
+      <span class="mk-meta">tcp <b class="num">{{ tcp_port }}</b>{% if game_label %} · {{ game_label }}{% endif %}</span>
+      <span class="mk-hdr-spacer"></span>
+      <nav class="mk-tabs" aria-label="Run">
+        <a class="mk-tab active" href="/">Board</a>
+        <a class="mk-tab" href="/calc/normal.html">Calc</a>
+        <a class="mk-tab" href="/debug">Debug</a>
+      </nav>
     </header>
-
     {% include "_board.html" %}
   </main>
+</div>
 {% endblock %}

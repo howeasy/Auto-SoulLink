@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{#
+  A page that is one panel in the shell: the rail, a header (title · meta, a tab strip),
+  the panel partial. Used for the debug tools, the calc, the Twitch bot and the OBS
+  triggers — on the Manager (under /runs/{id}/… and /broadcast/…) and on a standalone run
+  server alike. The panel's own JS reaches the run through `api_base` ('' on the run
+  server, '/runs/{id}' on the Manager, whose per-run relay carries it).
+
+  Context: title, meta, tabs = [(label, href, active)], panel, panel_label, api_base,
+  available (false → the empty state instead of a panel whose JS would fail),
+  unavailable_html.
+#}
+{% block title %}{{ panel_label }} — {{ title }} — Soul Link{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/board.css">
+  <script src="/static/dashboard.js" defer></script>
+  <script>window.SLINK_API_BASE = {{ api_base | tojson }};</script>
+{% endblock %}
+
+{% block content %}
+<div class="mk">
+  {% include "_rail.html" %}
+  <main class="mk-main mk-body-root">
+    <header class="mk-runhdr">
+      <h1 class="mk-runname">{{ title }}</h1>
+      <span class="mk-meta">· {{ meta }}</span>
+      <span class="mk-hdr-spacer"></span>
+      <nav class="mk-tabs" aria-label="{{ title }}">
+        {% for label, href, on in tabs %}<a class="mk-tab{% if on %} active{% endif %}" href="{{ href }}">{{ label }}</a>{% endfor %}
+      </nav>
+    </header>
+    <div class="mk-page">
+      {% if available is sameas false %}
+        <div class="mk-empty">{{ unavailable_html | safe }}</div>
+      {% else %}
+        {% include "_" ~ panel ~ "_panel.html" %}
+      {% endif %}
+    </div>
+  </main>
+</div>
+{% endblock %}

@@ -98,7 +98,7 @@ def setup_patcher_routes(
     """Register the patcher routes on ``app``.
 
     ``chrome`` is a callable ``(request) -> dict`` giving the page its shell: at least
-    ``sidebar_html``; the Manager also passes ``mgr=True``, ``sidebar_css="board"`` and
+    ``sidebar_html``; both apps also pass ``mgr=True`` and
     ``body_class`` so the page wears the board chrome, the per-run server passes its own
     rail so the brand subtitle + Manager link are populated.
     """

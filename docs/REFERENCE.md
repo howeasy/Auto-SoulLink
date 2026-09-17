@@ -989,8 +989,9 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crysta
 | `server/ui_capabilities.py` | `players.{pid}.capabilities` — what a cartridge can do, read from its adapter; also what `tools/gen_ui_capabilities.py` writes |
 | `server/status_payload.py` | The empty status payload the Manager serves with no run; pinned to `_build_status_dict` by test |
 | `server/templates/_board.html` | The board fragment (`#content`), included by `dashboard.html` (run server) and `manager.html` (Manager) |
-| `server/templates/pages/` | The debug, Twitch and OBS pages: raw HTML with a `{sidebar}` placeholder, substituted by `str.replace` |
-| `server/static/board.css` | The board and the Manager shell (rail, forms), on top of `slink.css` tokens; `--font-num` for figures lives in `slink.css` |
+| `server/templates/_rail.html`, `panel_page.html` | The one rail (Manager mode and `standalone` run-server mode) and the one-panel page shell; the debug, Twitch, OBS, calc and patcher bodies are `_*_panel.html` partials rendered by both apps |
+| `server/calc_files.py` | The damage calculator's files — `calc/src/` over `calc/dist/` — for the run server's `/calc/*` and the Manager's `/runs/{id}/calc/*` |
+| `server/static/board.css` | The one shell (rail, header, forms, the rem type scale on `body.mgr`) and the board, on top of `slink.css` tokens; `--font-num` for figures lives in `slink.css` |
 | `server/patcher.py` | Companion-ROM patcher routes — `/patcher` page + `/companion/SLink-RR.ups` download, mounted on both the per-run server (8080) and the Manager (8090) |
 | `patch/` | RR companion ROM patch — C sources (`src/handlers.c` mailbox opcodes), build pipeline (`tools/build.py`), built UPS in `dist/`; see `patch/README.md` |
 | `server/obs_controller.py` | OBS Controller — per-player `simpleobsws` connections, coalescing queue workers, priority-based `submit_fired()` resolver, config I/O at `data/obs_config.json` |

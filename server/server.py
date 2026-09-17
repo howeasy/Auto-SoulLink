@@ -978,17 +978,44 @@ class SLinkServer:
             parts.append(html.escape(self._run_name))
         return " — ".join(parts)
 
-    def _build_sidebar_html(self, active: str) -> str:
-        """Build the dashboard sidebar HTML. Delegates to server.chrome so
-        the sidebar can also be rendered by Jinja-templated pages (memorial,
-        stream gallery, calc) and the manager. The per-run server enriches
-        the call with its TCP port + manager port."""
-        from server.chrome import build_sidebar_html
-        return build_sidebar_html(
-            active,
-            tcp_port=self._tcp_port,
-            manager_port=self._manager_port,
-        )
+    def _rail_ctx(self, *, page: str = "run", panel: str = "", tab: str = "") -> dict:
+        """What _rail.html needs from a standalone run server: this one run, its own pages."""
+        return {
+            "standalone": True, "base": "", "tcp_port": self._tcp_port,
+            "runs": [self._run_entry()], "run": self._run_entry(),
+            "page": page, "panel": panel, "tab": tab, "pinned_run_id": None,
+        }
+
+    def _rom_label(self) -> str:
+        from server.adapters import variant_label
+        return variant_label(self.state.rom_type) if self.state.rom_type else ""
+
+    def _run_entry(self) -> dict:
+        return {"run_id": self._run_id or "run", "name": self._run_name or self._run_id or "SLink",
+                "status": "running", "game_label": self._rom_label()}
+
+    def _build_sidebar_html(self, request, active: str, **rail) -> str:
+        """The rail, rendered to a string for the pages that carry it as `sidebar_html`."""
+        env = aiohttp_jinja2.get_env(request.app)
+        return env.get_template("_rail.html").render(self._rail_ctx(page=active, **rail))
+
+    def _panel_ctx(self, request, *, panel: str, label: str, title: str | None = None,
+                   meta: str | None = None, tabs=None) -> dict:
+        """panel_page.html on a standalone run server."""
+        run = self._run_entry()
+        tabs = tabs or [("Board", "/", False), ("Calc", "/calc/normal.html", panel == "calc"),
+                        ("Debug", "/debug", panel == "debug")]
+        ctx = self._rail_ctx(page="run" if panel in ("calc", "debug") else "broadcast",
+                             panel=panel if panel in ("calc", "debug") else "",
+                             tab=panel if panel in ("twitch", "obs") else "")
+        ctx.update({
+            "page_title": self._page_title(), "theme": resolve_theme(request),
+            "is_stream": False, "hide_chrome": False,
+            "body_class": "board mgr" + (" dark-theme calc-host" if panel == "calc" else ""),
+            "title": title or run["name"], "meta": meta or label, "tabs": tabs,
+            "panel": panel, "panel_label": label, "api_base": "",
+        })
+        return ctx
 
     def _notify_sse(self):
         """Push an update notification to all connected SSE clients.
@@ -2337,8 +2364,10 @@ class SLinkServer:
             "theme":        resolve_theme(request),
             "is_stream":    False,
             "hide_chrome":  False,
-            "body_class":   "board",
-            "sidebar_html": self._build_sidebar_html("status"),
+            "body_class":   "board mgr",
+            "sidebar_html": self._build_sidebar_html(request, "run"),
+            "tcp_port":     self._tcp_port,
+            "game_label":   self._rom_label(),
         })
         return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 
@@ -2358,19 +2387,13 @@ class SLinkServer:
         if not path.endswith('.html'):
             return calc_files.file_response(abs_path)
         self._to_manager(request, "/runs/{id}/calc/" + path)
-        ctx = {
-            "page_title":      "Pokémon Radical Red Damage Calculator",
-            "theme":           resolve_theme(request),
-            "body_class":      "dark-theme",
-            "sidebar_html":    self._build_sidebar_html("calc"),
-            "sidebar_css":     "sidebar",
+        ctx = self._panel_ctx(request, panel="calc", label="Calc")
+        ctx.update({
             "calc_body_html":  calc_files.page_body(abs_path),
             "calc_mode_label": calc_files.mode_label(path),
             "status_href":     "/",
-            "is_stream":       False,
-            "hide_chrome":     False,
-        }
-        resp = aiohttp_jinja2.render_template("calc.html", request, ctx)
+        })
+        resp = aiohttp_jinja2.render_template("panel_page.html", request, ctx)
         # The rendered theme depends on the `slink-theme` cookie; revalidate so a theme
         # change on another page is not masked by a heuristic-cached copy.
         resp.headers["Cache-Control"] = "no-cache"
@@ -2483,22 +2506,28 @@ class SLinkServer:
         for entry in killfeed:
             entry["killed_at_display"] = _format_killed_at(entry.get("killed_at"))
 
-        return aiohttp_jinja2.render_template(
-            "memorial.html", request,
-            {
-                "page_title": self._page_title(),
-                "theme": resolve_theme(request),
-                "killfeed": killfeed,
-                "sidebar_html": self._build_sidebar_html("memorial"),
-            },
-        )
+        ctx = self._rail_ctx(page="run")
+        ctx.update({
+            "page_title": self._page_title(),
+            "theme": resolve_theme(request),
+            "body_class": "board mgr",
+            "killfeed": killfeed,
+            "run_name": self._run_name or "",
+            "sidebar_html": self._build_sidebar_html(request, "run"),
+        })
+        return aiohttp_jinja2.render_template("memorial.html", request, ctx)
 
     # ── Stream overlay handlers ──────────────────────────────────────────────
 
     async def handle_stream_index(self, request):
         self._to_manager(request, "/broadcast")
         ctx = _build_stream_index_context(request)
-        ctx["sidebar_html"] = self._build_sidebar_html("stream")
+        ctx.update({
+            "sidebar_html": self._build_sidebar_html(request, "broadcast"),
+            "body_class": "board mgr", "mgr": True,
+            "active_run_name": self._run_name or "",
+            "tabs": [("Overlays", "/stream", True), ("Twitch", "/twitch", False), ("OBS", "/obs", False)],
+        })
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
     # ── Templated party overlay ────────────────────────────────
@@ -3244,11 +3273,15 @@ class SLinkServer:
         /runs/{id}/debug, and a Manager-spawned run sends the browser there."""
         self._to_manager(request, {"twitch": "/broadcast/twitch", "obs": "/broadcast/obs",
                                    "debug": "/runs/{id}/debug"}[name])
-        return aiohttp_jinja2.render_template(
-            f"{name}.html", request,
-            {"page_title": self._page_title(), "theme": resolve_theme(request),
-             "sidebar_html": self._build_sidebar_html(name),
-             "is_stream": False, "hide_chrome": False})
+        if name == "debug":
+            ctx = self._panel_ctx(request, panel="debug", label="Debug")
+        else:
+            ctx = self._panel_ctx(
+                request, panel=name, label={"twitch": "Twitch bot", "obs": "OBS triggers"}[name],
+                title="Broadcast",
+                tabs=[("Overlays", "/stream", False), ("Twitch", "/twitch", name == "twitch"),
+                      ("OBS", "/obs", name == "obs")])
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     # ── OBS integration page & API ────────────────────────────────────────────
 
@@ -4632,7 +4665,8 @@ def build_app(srv):
     from server.patcher import setup_patcher_routes
     def _patcher_chrome(request):
         srv._to_manager(request, "/patcher")
-        return {"sidebar_html": srv._build_sidebar_html("patcher")}
+        return {"sidebar_html": srv._build_sidebar_html(request, "tools"), "body_class": "board mgr",
+                "mgr": True, "is_stream": False, "hide_chrome": False}
     setup_patcher_routes(app, _patcher_chrome)
     return app
 

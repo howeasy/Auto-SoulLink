@@ -300,11 +300,11 @@ server/
   obs_controller.py      # OBS WebSocket scene trigger integration
   twitch_bot.py          # Twitch chat bot (twitchio 3.x)
   pokemon_data.py        # Species, abilities, types, evos
-  templates/             # Jinja2 templates (base, dashboard, manager, memorial, calc, stream/*)
+  templates/             # Jinja2 templates: the shell (_rail, panel_page, dashboard, manager), the panels (_*_panel), stream/*
   static/                # CSS, JS, fonts, vendor bundles (htmx, alpine, idiomorph)
     themes/              # default + 6 Funtastic palettes + light/transparent stubs
   templating.py          # aiohttp-jinja2 setup, theme cookie resolver, no-cache middleware
-  chrome.py              # Shared sidebar/nav structure for every page
+  calc_files.py          # The damage calculator's files (dist/src resolution), shared by both apps
   overlay_catalog.py     # Stream overlay registry (URLs, layouts, query params)
   patcher.py             # /patcher page + /companion/SLink-RR.ups routes (both ports)
 patch/                   # Companion ROM patch (C sources, mailbox handlers, build.py, dist .ups)

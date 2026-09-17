@@ -1,6 +1,6 @@
 /* board.css — the pair board (the run page).
  *
- * Loaded AFTER /static/slink.css and /static/dashboard.css; redefines none of their tokens.
+ * Loaded AFTER /static/slink.css; redefines none of its tokens.
  * The page is zones — Now, then one per section of the board, then the log — each a real
  * heading with a rule and space between them. Every zone sits on the same three-track
  * grid: A's column, the spine, B's column — so a player's side reads straight down the
@@ -43,8 +43,6 @@ body.board { --font-ui: 'Jersey 20', 'Pixelify Sans', monospace; -webkit-font-sm
 body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; }
 
 /* The board lives inside the dashboard shell (sidebar + main) rather than owning the page. */
-.dash-main.mk-body-root { font-family: var(--font-ui); }
-.dash-main .mk-page { padding: var(--space-4) 0 var(--space-6); }
 
 #content > .phase-banner { margin-bottom: var(--space-4); }
 .phase-banner.phase-stopped .phase-dot { background: var(--c-dim); box-shadow: none; }
@@ -144,7 +142,8 @@ body.calc-host .mk-page { padding-top: var(--space-3); }
 .mk-pill.stopped  { color: var(--c-dim); }
 .mk-pill.archived { color: var(--c-dim); opacity: .7; }
 .mk-hdr-spacer { flex: 1 1 auto; }
-/* the Twitch / OBS panels under /broadcast: the Manager's header already names them */
+/* the memorial page's own title, and the Twitch / OBS panels: the header already names them */
+body.mgr #memorial-main > h1, body.mgr #memorial-main > .subtitle { display: none; }
 body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-rail-item.sub { padding-left: calc(var(--space-3) + 14px); font-size: var(--fs-md); }
 .mk-rail-item.sub svg { width: 14px; height: 14px; }

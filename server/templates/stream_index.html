@@ -3,7 +3,6 @@
 {% block title %}Soul Link Overlays{% endblock %}
 
 {% block head_extra %}
-  {% if not mgr %}<link rel="stylesheet" href="/static/dashboard.css">{% endif %}
   <script src="/static/dashboard.js" defer></script>
   <style>
     /* Master-detail overlay launcher — entirely token-driven so
@@ -370,19 +369,17 @@
   window.SLINK_ALL_FILTERS = {{ all_filters_json | safe }};
 </script>
 
-{% if mgr %}<div class="mk">{% endif %}
+<div class="mk">
 {{ sidebar_html | safe }}
-{% if mgr %}<main class="mk-main mk-body-root">
+<main class="mk-main mk-body-root">
   <header class="mk-runhdr">
     <h1 class="mk-runname">Broadcast</h1>
     <span class="mk-meta">· Overlays{% if active_run_name %} · {{ active_run_name }}{% endif %}</span>
     <span class="mk-hdr-spacer"></span>
     <nav class="mk-tabs" aria-label="Broadcast">
-      <a class="mk-tab active" href="/broadcast">Overlays</a>
-      <a class="mk-tab" href="/broadcast/twitch">Twitch</a>
-      <a class="mk-tab" href="/broadcast/obs">OBS</a>
+      {% for label, href, on in tabs %}<a class="mk-tab{% if on %} active{% endif %}" href="{{ href }}">{{ label }}</a>{% endfor %}
     </nav>
-  </header>{% endif %}
+  </header>
 <div class="launcher"
      x-data="overlayLauncher()"
      x-init="setup(window.SLINK_OVERLAY_CATALOG)">
@@ -551,7 +548,7 @@
     </div>
   </main>
 </div>
-{% if mgr %}</main></div>{% endif %}
+</main></div>
 
 <script>
 function overlayLauncher() {

@@ -4,14 +4,11 @@
 {% block title %}Memorial Wall — {{ page_title }}{% endblock %}
 
 {% block head_extra %}
-  <link rel="stylesheet" href="/static/dashboard.css">
-  <script src="/static/dashboard.js" defer></script>
   <style>
     /* Memorial-specific layout. Every paint uses tokens from slink.css so the
        Funtastic theme overrides flow through. */
     * { box-sizing: border-box; }
     body { min-height: 100vh; }
-    .dash-main { padding: 2em 2.5em; }
     h1 { text-align: center; color: var(--c-dim); font-weight: 300; font-size: 1.8em;
          letter-spacing: 0.15em; margin-bottom: 0.2em; }
     h1 span { color: var(--c-dead); }
@@ -51,11 +48,19 @@
 {% endblock %}
 
 {% block content %}
+<div class="mk">
   {{ sidebar_html | safe }}
+  <main class="mk-main mk-body-root">
+    <header class="mk-runhdr">
+      <h1 class="mk-runname">{{ run_name or concise_title or 'Memorial' }}</h1>
+      <span class="mk-meta">· Memorial</span>
+      <span class="mk-hdr-spacer"></span>
+      <a class="mk-btn" href="/">Back to the board</a>
+    </header>
   {# The only page in the app that never refreshed: a pair dying mid-run left the wall stale
      until someone reloaded. Same 2s idiomorph poll the dashboard uses, scoped to this main so
      the sidebar and its <details> state are untouched. #}
-  <main class="dash-main" id="memorial-main"
+  <section class="mk-page" id="memorial-main"
         hx-ext="morph"
         hx-get="/memorial"
         hx-trigger="every 2s"
@@ -76,7 +81,9 @@
     {% else %}
       <p class="empty-msg">No fallen pairs yet. May your links endure.</p>
     {% endif %}
+  </section>
   </main>
+</div>
 {% endblock %}
 
 {% block scripts %}
