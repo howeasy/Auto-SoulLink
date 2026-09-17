@@ -221,3 +221,39 @@ _board.html overlaps touch different hunks); scratch clone <scratchpad>/rb1 at f
 test_gen1_trade_patch.py:80). No worker is running; OMP Gen1 Peer 2 idle. Tree clean except the untracked frozen copy.
 Resume with the 'Wrap-up 2' order above: rerun sweep (12 Gen 1 scenarios) at f054b79, gen3_rr trade+faint, release
 runner without --quick, ledger cells, P8-6b docs, then the owner's rebase/FF/tag decision.
+
+## Phase R2 (resumed 2026-09-17 ~22:26Z after compaction) -- implementation mode; owner: 3 Claude subagents max, OMP live "Gen1 Peer 2" (id 01a0aff5-7a52-71c8-98a4-432e5727f0c6), union-alpha headless freely (validated, never trusted)
+Headless omp_peer now returns at once (no relay needed). Sequence of this stretch, all committed on the branch:
+- Rerun sweep at 3475c6f (reg_sweep3, 7f23199): 8 PASS first attempt + gen3_rr trade/faint PASS (RR ROM present). Oracle-only
+  failures on PASS receipts -> H-6 (2c17161, Opus): explode move-menu regexes vs the real `@frame` padded format; soft_reset hello
+  baseline back before the go-file + 0.25 s stats poll; wait_for gives the predicate the last word when both halves finished
+  without a FAIL. rerun_h6 (2cd3d1f): soft_reset, explode, reconnect(--wrong-save red_town_ot2) PASS.
+- rival_swap_new first live run: swap applied within 181 frames, then the fight stalled 51200 frames = 400 x 128 pressing Left
+  into the trainer intro text box: the battle driver's DisplayBattleMenu baseline and RUN-column cursor RAM survived the walk's
+  incidental wild battle (DIAG-RIVAL, Opus). Fix 8e345ac: D.new_battle() re-seeds menu_base; battle_plan calls it; failed
+  D.choose('FIGHT') B-mashes. rival PASS e803b91 (ENEMY_SENDOUT species=176). battle-stuck stays non-retryable (deterministic).
+- SR-CHORD (03db464, OMP): two-step release for soft_reset_new (`<go>.chord` after the stats baseline). DEADLOCKED on the lane:
+  A waits at the gate, the runner waits for both keys' mon_stats which never arrive pre-reset -> DIAG-SR2 (Opus, in flight):
+  establish what carries mon_stats (server._cache_mon_info callers) and pick (a) different pre-chord quiescence signal,
+  (b) later release point, or (c) revert the gate. 3600-frame Lua deadline is also a few seconds at unthrottled speed.
+- H-7 (same Opus card, in flight): species_clause_new A 'hunt ended out-of-balls' (RNG class) with B still running ended the
+  attempt as ClientFinishedEarly -> RuntimeError -> no retry (budget 8 wasted). Fix at the shared seam: one-sided retryable FAIL
+  -> retryable attempt end (kill the other half), non-retryable abort unchanged; pin.
+- rerun_rest6 (b9f5bee): link, deadzone, linked_faint_bench, type_clause, whiteout PASS at the final Lua tree. 16 of 18
+  gen1_new scenarios now have receipts at that tree; open: soft_reset (chord gate), species (H-7 then rerun).
+- Release runner at HEAD: 8 fast lanes PASS (unit 3020, 293523f) and live-gates 5 / live-new-gates 9 / live-trade-gates 2 PASS
+  (a04b14a). duo-pairs (P8-7 full) waits for soft_reset + species. verify_gen1_release.py:26 text corrected (Red A vs Blue B only,
+  ac7594c); wrapper TimeoutExpired now a named pytest.fail (5879972, R-6).
+- Docs: P8-6b final pass 68e91ce (Sonnet; UA-1 union-alpha stale-reference audit cx-7f3c1b45 validated by git grep, 11 stale
+  sentences reworded); UA-2 package closure audit cx-dec65cf8 validated (manifest test 4 passed, 17 closure files tracked;
+  only qualification: LuaSocket binary is Windows x64 Lua 5.4 only, now in release_notes). Ledger L-11 8228a57 (S-6/W-6/W-3 ✓,
+  D-11 ◐ explosion half, S-4 ◐ with poison live). R-3 d23482d (board snapshot ruff + S-7 prose).
+- Frozen harness copy: refresh with `git show HEAD:tools/e2e_duo.py > tools/e2e_duo_head.py` after every e2e_duo.py commit
+  (CRLF differs from the working copy; compare with tr -d '\r'). Lane precondition is narrowed to client-loaded files, so in-place
+  Python/docs edits by workers do not skip runs; Lua edits go through scratch copies + patches (-p2 with a/wt-*-base prefixes).
+- Lane invocation notes: reconnect_new needs `--wrong-save tests/fixtures/gen1/red_town_ot2.SaveRAM` when run directly (the
+  duo-pairs wrapper adds it); scenarios run ~30-90 s each unthrottled, so a `[duo]` line grep on the log is the receipt.
+NEXT: integrate DIAG-SR2 + H-7, refresh frozen copy, rerun soft_reset_new + species_clause_new, commit receipts; then
+`verify_gen1_release.py --lane duo-pairs` (or the full runner) for the P8-7 verdict; ledger cells for rival (W-4/D-11 rival
+half), soft_reset, species; release_notes/runtime_checks final touch; then the owner's rebase/FF/tag decision (RB-1 dry run
+conflict-free at <scratchpad>/rb1 f3ad072 -- re-run the dry run on the final HEAD before asking).
