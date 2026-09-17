@@ -37,7 +37,9 @@
                wPlayerSelectedMove wActionResultOrTookBattleTurn hLoadedROMBank (required)
                wTopMenuItemY wListScrollOffset wPlayerMonNumber wWhichPokemon wPartyCount
                wBattleMonMoves wBattleMonPP wBattleMonHP wEnemyMonHP wEnemySelectedMove
-               wCurItem wNumRunAttempts hJoyPressed hJoy5 (optional, enrich the evidence)
+               wCurItem hJoyPressed hJoy5 (optional, enrich the evidence)
+               wNumRunAttempts (optional, but it is D.run's receipt that the press was taken;
+                                without it D.run re-presses on its own cadence instead)
     optional:  hook=function(pc, fn) -> id (default event.on_bus_exec, "System Bus"),
                unhook=function(id), framecount=function() (default emu.framecount),
                press={pre=2, hold=3, post=3}
@@ -52,6 +54,7 @@ M.PARTY_MENU={x=0,y=1}
 M.SWITCH_BOX={x=0x0c,y=0x0c,max=2}
 M.BAG={x=5,y=4,watched=PAD.A+PAD.B+PAD.SELECT}
 M.TARGET={FIGHT={"left",0},ITEM={"left",1},PKMN={"right",0},RUN={"right",1}}
+M.RUN_REPRESS=120 -- frames D.run waits for a sign the RUN press was taken before pressing again
 
 function M.new(o)
     local step,u8,A=assert(o.step),assert(o.u8),assert(o.addresses)
@@ -95,12 +98,14 @@ function M.new(o)
         return (st.x==M.BATTLE_MENU.left_x and st.watched==M.BATTLE_MENU.left_watched)
             or (st.x==M.BATTLE_MENU.right_x and st.watched==M.BATTLE_MENU.right_watched)
     end
-    -- until(pred, max): tick idle frames until pred(state) returns a truthy reason; returns reason|nil, frames used
-    local function until_(pred,max)
+    -- until(pred, max [, tap]): tick frames until pred(state) returns a truthy reason; returns
+    -- reason|nil, frames used. With `tap`, that button is re-pulsed on the 16-frame cadence
+    -- instead of idling, for waits that sit behind a PrintText box (see D.run).
+    local function until_(pred,max,tap)
         for i=0,max do
             local st=D.state();local why=pred(st)
             if why then return why,i,st end
-            if i<max then tick(nil)end
+            if i<max then tick(tap and i%16<2 and {[tap]=true} or nil)end
         end
         return nil,max,D.state()
     end
@@ -294,15 +299,38 @@ function M.new(o)
     end
 
     -- RUN: escaped (wIsInBattle 0) or the menu comes back (can't escape / trainer battle).
+    -- Two measured ways a single blind A press dies here, both unrecoverable from outside: the
+    -- battle menu is still on screen, so DisplayBattleMenu never executes again and a caller's
+    -- B-mash fallback hits a key the menu does not watch (watched = RIGHT|A / LEFT|A).
+    --   * The A is not always taken. D.choose only ever proves a press indirectly, by watching the
+    --     CURSOR move; when the cursor is already on RUN it moves nothing and the lone A is never
+    --     verified (commit_move re-presses through the same miss, :178-199). "Already on RUN" is
+    --     exactly what a previous RUN leaves behind: .AButtonPressed saves the id in
+    --     wBattleAndStartSavedMenuItem (core.asm:2131-2136) and the next menu re-seeds the cursor
+    --     from it (:2056-2062). So press RUN again while the engine shows no sign of having taken
+    --     it -- TryRunningFromBattle increments wNumRunAttempts before any RNG (:1508-1510), which
+    --     is the receipt that it did.
+    --   * "Got away safely!" (:1608-1612) and "Can't escape!" (:1573-1580) are PrintText boxes that
+    --     wait for a button, so an input-free wait burns the whole budget on a run that has in fact
+    --     escaped. B advances them and, being unwatched, cannot disturb the menu.
     function D.run(max_frames)
-        local t={stages={},ok=false,attempts_before=rd("wNumRunAttempts")}
+        max_frames=max_frames or 600
+        local t={stages={},ok=false,attempts_before=rd("wNumRunAttempts"),presses=1,frames=0}
         local base={dbm=count("display_battle_menu")}
         t.choose=D.choose("RUN");if not t.choose.ok then t.why="RUN not chosen";return t end
-        local why,used,st=until_(function(s)
-            if s.in_battle==0 then return "escaped"end
-            if count("display_battle_menu")>base.dbm and battle_menu_consistent(s)then return "battle_menu_again"end
-        end,max_frames or 600)
-        t.frames=used;t.why=why or "timeout";t.ok=why=="escaped";t.state=st;t.attempts_after=rd("wNumRunAttempts")
+        local function taken()return t.attempts_before and rd("wNumRunAttempts")~=t.attempts_before end
+        local why,used,st
+        while t.frames<max_frames do
+            local left=max_frames-t.frames
+            why,used,st=until_(function(s)
+                if s.in_battle==0 then return "escaped"end
+                if count("display_battle_menu")>base.dbm and battle_menu_consistent(s)then return "battle_menu_again"end
+            end,taken() and left or math.min(M.RUN_REPRESS,left),"B")
+            t.frames=t.frames+used
+            if why or t.frames>=max_frames then break end
+            t.presses=t.presses+1;t.stages["repress"..t.presses]=press("A");t.frames=t.frames+PRE+HOLD+POST
+        end
+        t.why=why or "timeout";t.ok=why=="escaped";t.state=st;t.attempts_after=rd("wNumRunAttempts")
         return t
     end
 
