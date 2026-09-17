@@ -337,7 +337,11 @@ function M.hunt(expected, opts)
         end
         self.stage = "run"
         local why = run_away()
-        return poisoned() and "poisoned" or why
+        -- poisoned() reads the party struct, not battle state (see the header): a PSN status
+        -- can be true while the battle is still live, so it must not mask a failed final RUN.
+        -- Only claim "poisoned" once the battle has actually ended (wIsInBattle 0); otherwise
+        -- the RUN failure terminal (why, classified below as hunt-stuck on stuck/timeout) wins.
+        return (u8("wIsInBattle") == 0 and poisoned()) and "poisoned" or why
     end
     function self.step(handshake, status, point, frame)
         assert(type(frame)=="number" and frame>self.last_frame, "forest hunt frame did not advance")
