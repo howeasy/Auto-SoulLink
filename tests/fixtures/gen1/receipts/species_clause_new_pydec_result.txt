@@ -1,7 +1,11 @@
-attempt 1 of 3
-D-4 reroll not observed: B met the other Route 1 species on 1 battle(s); D-4's branch stays partial
+attempt 1 of 8
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
-a saved starter + linked 6AE5:4190:A5, current box clear
+SAVE_WITNESS_SHA256 inst=a site=a52c40fc130f4cb1aa8762e6d6b360bb4bbceecd6e3e3e05248234d4a529f794 file=a52c40fc130f4cb1aa8762e6d6b360bb4bbceecd6e3e3e05248234d4a529f794 match=true saves=1
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-b saved starter + linked DE31:AFB9:24, current box clear
+SAVE_WITNESS_SHA256 inst=b site=e90925a21b1125e7c78605ca40e27b30f57adb91ec059475b19cc4818a489fc4 file=e90925a21b1125e7c78605ca40e27b30f57adb91ec059475b19cc4818a489fc4 match=true saves=1
+D-4 reroll observed: 1 reroll(s) on species 36, events.json row present
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved starter + linked 0AF9:4190:24, current box clear
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved starter + linked 0E55:AFB9:A5, current box clear
 PYDEC: PASS asserted scenario facts

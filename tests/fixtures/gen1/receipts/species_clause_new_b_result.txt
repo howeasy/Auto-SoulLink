@@ -1,8 +1,8 @@
 duo instance b scenario=species_clause_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:64014 (non-blocking)…
-client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:64014
-[client] [SLink] TCP connected to 127.0.0.1:64014
+[client] [SLink] TCP connecting to 127.0.0.1:51101 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:51101
+[client] [SLink] TCP connected to 127.0.0.1:51101
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -18,47 +18,63 @@ PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
 heartbeat f=3600 party=1 connected=true
 heartbeat f=7200 party=1 connected=true
+RX hud_show text=>> Got PIDGEY
 heartbeat f=10800 party=1 connected=true
-RX hud_show text=>> Got RATTATA
-A_PENDING species=165
-ENCOUNTER 1 species=36 dupe_of_a=false
+A_PENDING species=36
+ENCOUNTER 1 species=36 dupe_of_a=true
+[hunt] encounter 1 at (10,34) mode=run balls=1
+phase wild-intro @12288 (10,34) battle=1 party=1
+RX gui_prompt text=Dupes clause: Pidgey -- reroll!
+RX unresolve_area
+phase wild-run @13054 (10,34) battle=1 party=1
+TX {"area_id":"route_1","event":"no_catch","level":3,"player":"b","seq":413,"species_id":36}
+TX {"event":"safe","player":"b","seq":414}
+[hunt] battle outcome ran receipts run:escaped
+phase wild-ran @13160 (10,34) battle=0 party=1
+[hunt] after battle: outcome=ran result=2 party=1 balls=1 -> escaped
+phase escaped @13161 (10,34) battle=0 party=1
+HUNT escaped after 874 frames, 1 encounter(s)
+REROLL_SEEN species=36 prompt=Dupes clause: Pidgey -- reroll!
+REROLL_RAN no_catch=1 unresolve_area=route_1
+RX unresolve_area
+ENCOUNTER 2 species=165 dupe_of_a=false
 [hunt] encounter 1 at (10,35) mode=catch balls=1
-phase wild-intro @13777 (10,35) battle=1 party=1
+phase wild-intro @13331 (10,35) battle=1 party=1
+[hunt] turn 1 foe hp 14/14 odds 0.39 dmax nil -> fight
+phase wild-fight @14093 (10,35) battle=1 party=1
 heartbeat f=14400 party=1 connected=true
-[hunt] turn 1 foe hp 16/16 odds 0.34 dmax nil -> fight
-phase wild-fight @14543 (10,35) battle=1 party=1
-[hunt] turn 2 foe hp 11/16 odds 0.67 dmax 6 -> fight
-[hunt] turn 3 foe hp 6/16 odds 1.00 dmax 6 -> throw
-phase wild-throw @15719 (10,35) battle=1 party=1
+[hunt] turn 2 foe hp 9/14 odds 0.58 dmax 6 -> fight
+[hunt] turn 3 foe hp 3/14 odds 1.00 dmax 8 -> throw
+phase wild-throw @15732 (10,35) battle=1 party=1
 [hunt] threw ball index 0 -> timeout
-PARTY_COUNT 1 -> 2 @17720
-PARTY_UNREADABLE @17720 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+PARTY_COUNT 1 -> 2 @17733
+PARTY_UNREADABLE @17740 species list and struct disagree (count=2 species=B0 A5 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
 heartbeat f=18000 party=2 connected=true
-PARTY_READABLE @18240  (count=2 species=B0 24 FF 00 00 00 00)
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":6,"in_box":false,"key":"DE31:AFB9:24","level":3,"maxHP":16,"nickname":"PIDGEY","player":"b","seq":565,"species_id":36,"stats":{"level":3,"maxHP":16}}
-TX {"event":"safe","player":"b","seq":566}
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":3,"in_box":false,"key":"0E55:AFB9:A5","level":3,"maxHP":14,"nickname":"RATTATA","player":"b","seq":568,"species_id":165,"stats":{"level":3,"maxHP":14}}
+TX {"event":"safe","player":"b","seq":569}
 RX play_sound
-RX msgbox text=RATTATA and PIDGEY linked!
-RX party_mon key=DE31:AFB9:24
+RX msgbox text=PIDGEY and RATTATA linked!
+RX party_mon key=0E55:AFB9:A5
+PARTY_READABLE @18260  (count=2 species=B0 A5 FF 00 00 00 00)
 [hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @18257 (10,35) battle=0 party=2
+phase wild-battle_over @18270 (10,35) battle=0 party=2
 [hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @18258 (10,35) battle=0 party=2
-HUNT caught after 4482 frames, 1 encounter(s)
+phase caught @18271 (10,35) battle=0 party=2
+HUNT caught after 4941 frames, 1 encounter(s)
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
-MYKEY 1 DE31:AFB9:24
-PARTY slot=1 key=DE31:AFB9:24 species=36 level=3 hp=6
-CAUGHT DE31:AFB9:24
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=16
+MYKEY 1 0E55:AFB9:A5
+PARTY slot=1 key=0E55:AFB9:A5 species=165 level=3 hp=3
+CAUGHT 0E55:AFB9:A5
 [client] [SLink-gen1] writes re-enabled after a live validation
-TX {"event":"sync_retrieve_done","key":"DE31:AFB9:24","player":"b","seq":569}
+TX {"event":"sync_retrieve_done","key":"0E55:AFB9:A5","player":"b","seq":572}
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
-MYKEY 1 DE31:AFB9:24
-PARTY slot=1 key=DE31:AFB9:24 species=36 level=3 hp=6
-PATH reroll_unobserved
-SPECIES_CLAUSE {"capture":1,"dupe_species":165,"force_faint":0,"key":"DE31:AFB9:24","no_catch":0,"party_mon":1,"path":"reroll_unobserved","player":"b","rerolls":0,"sync_retrieve_done":1}
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=16
+MYKEY 1 0E55:AFB9:A5
+PARTY slot=1 key=0E55:AFB9:A5 species=165 level=3 hp=3
+PATH reroll_observed
+SPECIES_CLAUSE {"capture":1,"dupe_species":36,"force_faint":0,"key":"0E55:AFB9:A5","no_catch":1,"party_mon":1,"path":"reroll_observed","player":"b","rerolls":1,"sync_retrieve_done":1}
 SAVE_PHASE species_clause_new_b save-open-start-menu
 SAVE_PHASE species_clause_new_b save-close-foreign-menu
 SAVE_PHASE species_clause_new_b save-select-save
@@ -67,5 +83,5 @@ SAVE_PHASE species_clause_new_b save-confirm
 SAVE_WITNESS_DUMP path=patch/build/e2e_species_clause_new_b_1_witness.bin bytes=31592 saves=1 frame=18688
 SAVE_PHASE species_clause_new_b save-await-close
 SAVE_PHASE species_clause_new_b save-witnessed
-SAVE_WITNESS species_clause_new_b frames=544
-RESULT: PASS (reroll_unobserved: B linked DE31:AFB9:24 after 0 reroll(s))
+SAVE_WITNESS species_clause_new_b frames=540
+RESULT: PASS (reroll_observed: B linked 0E55:AFB9:A5 after 1 reroll(s))
