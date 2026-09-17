@@ -1,2 +1,103 @@
-.                                                                        [100%]
-1 passed, 8 deselected in 34.21s
+[gate] test_gen1_scripted_gate on yellow_cold/town …
+
+[gate] PASS  (E:\Google Drive\SLink\.claude\worktrees\gen1-master-release-plan-6b4279\patch\build\test_gen1_scripted_gate_result.txt)
+[test_gen1_scripted_gate] title=yellow rom=cc7d0326
+  [ok] signals arm on the cold cartridge
+TITLE_IDLE requested=0 applied=0
+[scripted] bedroom reached after 3607 frames
+  [ok] NEW GAME reached the bedroom  — 3607
+  phase lab: bedroom-row @3607
+  phase lab: bedroom-column @3625
+  phase lab: bedroom-to-stairs @3710
+  phase lab: house-clear-stairs @3761
+  phase lab: house-row @3851
+  phase lab: house-to-pallet @3936
+  phase lab: pallet-row @4021
+  phase lab: pallet-clear-house @4057
+  phase lab: pallet-row @4091
+  phase lab: pallet-to-north-exit @4180
+  phase lab: pallet-await-intercept @4282
+  phase lab: pallet-script-wait @4284
+  phase lab: pallet-oak-dialogue @4286
+  phase lab: pallet-script-wait @4475
+  phase lab: pallet-oak-dialogue @4587
+  phase lab: pallet-script-wait @4811
+  phase lab: pallet-oak-dialogue @4813
+  phase lab: pallet-pikachu-demo @4814
+  phase lab: pallet-oak-dialogue @5955
+  phase lab: pallet-script-wait @5966
+  phase lab: pallet-oak-dialogue @6010
+  phase lab: pallet-script-wait @6571
+  phase lab: lab-entry-wait @6864
+  phase lab: lab-oak-speech-wait @7193
+  phase lab: lab-oak-choose-mon-speech @7195
+  phase lab: lab-text-exit @8531
+  phase lab: lab-to-eevee-ball @8550
+  phase lab: take-eevee-ball @8584
+  phase lab: eevee-ball-window @8677
+  phase lab: rival-takes-eevee-ball @8809
+  phase lab: eevee-ball-window @9779
+  phase lab: receive-pikachu-dialogue @9883
+  phase lab: decline-nickname @10495
+  phase lab: lab-clear-ball-row @10674
+  phase lab: start-lab-rival @10710
+  phase lab: rival-challenge-dialogue @10727
+  phase lab: rival-battle-transition @11025
+  phase lab: rival-dialogue @11344
+  phase lab: open-fight @11931
+  phase lab: select-growl @11938
+  phase lab: use-growl @11953
+  phase lab: await-growl-acceptance @11969
+  phase lab: rival-turn-text @12022
+  phase lab: open-fight @12502
+  phase lab: use-growl @12514
+  phase lab: await-growl-acceptance @12529
+  phase lab: rival-turn-text @12582
+  phase lab: open-fight @13063
+  phase lab: use-growl @13074
+  phase lab: await-growl-acceptance @13089
+  phase lab: rival-turn-text @13142
+  phase lab: open-fight @13556
+  phase lab: use-growl @13570
+  phase lab: await-growl-acceptance @13585
+  phase lab: rival-turn-text @13641
+  phase lab: open-fight @14061
+  phase lab: use-growl @14066
+  phase lab: await-growl-acceptance @14081
+  phase lab: rival-turn-text @14137
+  phase lab: open-fight @14549
+  phase lab: use-growl @14562
+  phase lab: await-growl-acceptance @14577
+  phase lab: rival-turn-text @14633
+  phase lab: open-fight @14998
+  phase lab: use-growl @15010
+  phase lab: await-growl-acceptance @15025
+  phase lab: rival-turn-text @15078
+  phase lab: open-fight @15377
+  phase lab: use-growl @15394
+  phase lab: await-growl-acceptance @15409
+  phase lab: rival-turn-text @15462
+  phase lab: open-fight @15830
+  phase lab: use-growl @15842
+  phase lab: await-growl-acceptance @15857
+  phase lab: rival-turn-text @15910
+  phase lab: open-fight @16165
+  phase lab: use-growl @16178
+  phase lab: await-growl-acceptance @16193
+  phase lab: rival-turn-text @16249
+  phase lab: rival-battle-transition @16850
+  phase lab: lab-exit-dialogue @16906
+  phase lab: watch-rival-exit @17265
+  phase lab: lab-exit-dialogue @17429
+  phase lab: lab-loss-complete @18289
+  [ok] route chain reached its terminals: lab  — table: 00000197797A9D90
+  [ok] party decodes after the route
+  [ok] one starter in the party  — got 1
+  [ok] starter species matches the player  — got 84
+  [ok] starter is level 5 with exp consistent (a real game state)  — L5 exp 125
+PARTY_RAW 0154FF000000000054001300001717A3542D00006ED400007D00000000000000000000A9FD1E280000050013000B0008000F000B0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000098848B8B8E965080928750000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008F888A808287945050505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+MAP {"map":40,"x":5,"y":6}
+BAG {"items":{}}
+SIGNALS battle_begin@4812 wild_begin@4813 battle_end@5954 starter_begin@10494 add_party_mon@10494 starter_end@10657 battle_begin@11130 add_party_mon@11131 battle_loop_head@11926 battle_loop_head@12496 battle_loop_head@13057 battle_loop_head@13551 battle_loop_head@14056 battle_loop_head@14544 battle_loop_head@14992 battle_loop_head@15372 battle_loop_head@15825 battle_loop_head@16160 battle_faint@16504 battle_end@16849
+SIGNAL_STATUS {"closed":false,"pending":0}
+RESULT: PASS test_gen1_scripted_gate (0 checks failed)
