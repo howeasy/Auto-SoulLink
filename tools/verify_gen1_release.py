@@ -198,10 +198,17 @@ def run_lane(lane: Lane, quiet: bool) -> tuple[bool, str]:
     if lane.is_pytest:
         counts = _count_outcomes(text)
         unexplained = _unexplained_skips(text)
+        # A `skipped` count with no SKIPPED line behind it means the reason was never printed,
+        # so no ALLOWED_SKIPS entry can have excused it: unexplained by construction.
+        reason_lines = sum(1 for line in text.splitlines() if line.startswith("SKIPPED"))
         detail = (f"{counts['passed']} passed, {counts['skipped']} skipped "
                   f"({len(unexplained)} unexplained), {counts['failed']} failed, "
                   f"{counts['xfailed']} xfailed, {counts['deselected']} deselected  "
                   f"({took:.0f}s)")
+        if counts["skipped"] > reason_lines:
+            ok = False
+            detail += (f"  {counts['skipped']} skipped but only {reason_lines} SKIPPED reason "
+                       f"lines printed")
         # Deselection counts too: a test filtered out by -k or a marker is a test that did
         # not run, and this gate cannot tell the difference between that and not existing.
         if (unexplained or counts["xfailed"] or counts["xpassed"]
@@ -264,6 +271,10 @@ def main() -> int:
     if args.quick:
         print("Fast lanes passed. The emulator lanes were NOT run, so this is not a "
               "release verdict — re-run without --quick.")
+        return 0
+    if args.lane:
+        print("LANE(S) PASSED — not a release verdict: only the named lanes ran, so nothing "
+              "here says anything about the lanes that did not.")
         return 0
     print("GATE PASSED — every lane ran and every lane passed.")
     return 0

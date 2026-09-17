@@ -56,3 +56,39 @@ def test_every_plain_lane_runs_a_script_that_exists():
             continue
         assert os.path.exists(os.path.join(_REPO, lane.argv[1])), (
             f"{lane.name} runs {lane.argv[1]}, which does not exist")
+
+
+def _stubbed_lane(monkeypatch, text: str):
+    """run_lane against a fake pytest process that printed `text` and exited 0."""
+    class Proc:
+        returncode, stdout, stderr = 0, text, ""
+
+    monkeypatch.setattr(gate.subprocess, "run", lambda *args, **kwargs: Proc())
+    lane = gate.Lane("stub", [sys.executable, "-m", "pytest", "tests/unit"])
+    return gate.run_lane(lane, quiet=True)
+
+
+def test_a_lane_only_run_is_not_a_release_verdict(monkeypatch, capsys):
+    """`--lane unit` passing says nothing about the lanes it did not run."""
+    monkeypatch.setattr(gate, "run_lane", lambda lane, quiet: (True, "1 passed, 0 failed"))
+    monkeypatch.setattr(sys, "argv", ["verify_gen1_release.py", "--lane", "unit"])
+    assert gate.main() == 0
+    out = capsys.readouterr().out
+    assert "LANE(S) PASSED — not a release verdict" in out
+    assert "GATE PASSED" not in out
+
+
+def test_a_skip_with_no_printed_reason_fails_the_lane(monkeypatch):
+    """`1 skipped` with no SKIPPED line means the reason was never printed, so nothing on this
+    list could have excused it."""
+    ok, detail = _stubbed_lane(monkeypatch, "3 passed, 1 skipped in 0.4s\n")
+    assert not ok
+    assert "1 skipped but only 0 SKIPPED reason lines printed" in detail
+
+
+def test_a_skip_with_an_allowed_reason_passes_the_lane(monkeypatch):
+    reason = gate.ALLOWED_SKIPS[0][0]
+    ok, detail = _stubbed_lane(
+        monkeypatch, f"3 passed, 1 skipped in 0.4s\nSKIPPED [1] tests/x.py:12: {reason}\n")
+    assert ok, detail
+    assert "1 skipped" in detail

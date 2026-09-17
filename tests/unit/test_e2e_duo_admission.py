@@ -24,6 +24,12 @@ from server.adapters import (  # noqa: E402
 )
 from server.upr_settings import build_categories  # noqa: E402
 
+# The driver echoes the harness's `--idle-jitter` back in each result file, and the harness
+# checks that echo (duo.jitter_problems): a jitter the harness asked for and the driver did not
+# apply is a harness finding, not a scenario verdict.
+_JITTER_1 = "JITTER requested=0 applied=0 attempt=1"
+_JITTER_2 = "JITTER requested=37 applied=37 attempt=2"
+
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
@@ -213,29 +219,88 @@ def _reconnect_snapshots():
     return before, after, events
 
 
+def _with_new_events(events, *new):
+    """`events` as the server's ring actually stores it: NEWEST FIRST.
+
+    server/server.py:1488 appends with `appendleft` and :1481 dumps
+    `list(self._recent_events)`, so events.json is newest-first and the rows a reconnect added
+    are the FRONT of the list. Ordering the fixture the other way is what made a tail slice
+    look like "the new rows".
+    """
+    return list(new) + list(events)
+
+
 def test_same_save_reconnect_keeps_identity_link_and_event_counts():
     before, after, events = _reconnect_snapshots()
-    resumed = events + [{"player": "a", "type": "hello", "text": "Connected (Red, 2 mons)"}]
+    resumed = _with_new_events(events, {"player": "a", "type": "hello",
+                                        "text": "Connected (Red, 2 mons)"})
     assert duo.reconnect_same_problems(before, after, events, resumed, "AAAA:1111:01", "1234") == []
-    duplicated = resumed + [{"player": "a", "type": "capture", "text": "duplicate"}]
-    assert any("duplicated" in p for p in duo.reconnect_same_problems(
+    duplicated = _with_new_events(resumed, {"player": "a", "type": "capture", "text": "duplicate"})
+    assert any("count changed" in p for p in duo.reconnect_same_problems(
         before, after, events, duplicated, "AAAA:1111:01", "1234"))
     mutated = {**after, "links": []}
     assert any("link changed" in p for p in duo.reconnect_same_problems(
         before, mutated, events, resumed, "AAAA:1111:01", "1234"))
 
 
+def test_a_hello_spliced_into_the_history_is_not_a_reconnect():
+    """Net +1 hello is not enough: the new hello has to be the newest row.
+
+    A log that grew by one hello spliced into the middle keeps the counts identical, which is
+    what a rewritten or replayed log produces. The rows carry distinct timestamps (server.py
+    `_log_event` stamps `ts`), so a second hello an hour old is a different row from the one
+    this reconnect just sent.
+    """
+    before, after, events = _reconnect_snapshots()
+    spliced = [events[0], {"player": "a", "type": "hello", "text": "Connected (Red, 2 mons)",
+                           "ts": "2026-09-17T11:00:07"}, *events[1:]]
+    problems = duo.reconnect_same_problems(before, after, events, spliced, "AAAA:1111:01", "1234")
+    assert any("shrank or was rewritten" in p for p in problems), problems
+
+    _b, _a, events = _reconnect_snapshots()
+    status = {"players": {"a": {"identity_error": "Identity mismatch for slot A: wrong OT"},
+                          "b": {"connected": True}}}
+    wrong_spliced = [events[0], {"player": "a", "type": "hello",
+                                 "text": "REJECTED — wrong save/slot",
+                                 "ts": "2026-09-17T11:00:09"}, *events[1:]]
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, wrong_spliced)
+
+
+def test_two_new_accepted_hellos_are_not_one_reconnect():
+    before, after, events = _reconnect_snapshots()
+    doubled = _with_new_events(events, {"player": "a", "type": "hello",
+                                        "text": "Connected (Red, 2 mons)"},
+                               {"player": "a", "type": "hello",
+                                "text": "Connected (Red, 2 mons)"})
+    problems = duo.reconnect_same_problems(before, after, events, doubled, "AAAA:1111:01", "1234")
+    assert any("exactly one accepted reconnect hello" in p for p in problems), problems
+
+
+def test_a_log_at_the_entry_cap_still_finds_the_new_hello():
+    """events.json is capped at 200 rows (server.py:79), so a reconnect at the cap drops the
+    OLDEST row: the survivors are a prefix of the old list, not the whole of it."""
+    before, after, _events = _reconnect_snapshots()
+    old = [{"player": "b", "type": "area_enter", "text": f"row {i}"} for i in range(200)]
+    after_events = _with_new_events(old[:-1], {"player": "a", "type": "hello",
+                                               "text": "Connected (Red, 2 mons)"})
+    assert len(after_events) == 200
+    assert duo.reconnect_same_problems(before, after, old, after_events,
+                                       "AAAA:1111:01", "1234") == []
+
+
 def test_wrong_save_reconnect_only_adds_a_rejected_hello():
     _before, _after, events = _reconnect_snapshots()
-    rejected = events + [{"player": "a", "type": "hello", "text": "REJECTED — wrong save/slot"}]
+    rejected = _with_new_events(events, {"player": "a", "type": "hello",
+                                         "text": "REJECTED — wrong save/slot"})
     status = {"players": {"a": {"identity_error": "Identity mismatch for slot A: wrong OT"},
                           "b": {"connected": True}}}
     assert duo.reconnect_wrong_problems(b"unchanged", b"unchanged", status, events, rejected) == []
     assert any("bytes changed" in p for p in duo.reconnect_wrong_problems(
         b"before", b"after", status, events, rejected))
-    assert any("gameplay event" in p for p in duo.reconnect_wrong_problems(
-        b"same", b"same", status, events,
-        rejected + [{"player": "a", "type": "no_catch", "text": "bad"}]))
+    assert any("a rejected save changed a capture/linked/no_catch/dead_zone count" in p
+               for p in duo.reconnect_wrong_problems(
+                   b"same", b"same", status, events,
+                   _with_new_events(rejected, {"player": "a", "type": "no_catch", "text": "bad"})))
 
 
 def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):
@@ -245,15 +310,93 @@ def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):
     assert "WRONG_SAVE_LEG NOT RUN" in Path(runner._pydec_path).read_text(encoding="utf-8")
 
 
+# ── the harness's own --idle-jitter contract (A0-H1 part 3) ──────────────────────────────
+# The harness writes `idle_jitter` into each stub's SLINK_DUO table; the driver echoes back
+# what it requested, what it applied and which attempt it was. Only the echo is checkable
+# without an emulator, and a mismatch is a harness finding — a retry that did not actually vary
+# its timing is not the different-RNG retry the plan's retry rule claims to have run.
+
+
+@pytest.mark.parametrize("text", ["RESULT: PASS\n", "", "JITTER requested=0 attempt=1\n"])
+def test_jitter_marker_missing_is_a_finding(text):
+    assert duo.jitter_problems(text, 0) == ["JITTER marker missing"]
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    (_JITTER_1.replace("applied=0", "applied=4"), 0),   # the driver did not apply its jitter
+    (_JITTER_2, 0),                                     # attempt 2's jitter on an attempt-1 run
+    (_JITTER_1, 37),                                    # a stale echo from the previous attempt
+])
+def test_jitter_that_is_not_what_the_harness_wrote_is_a_finding(text, expected):
+    assert duo.jitter_problems(text, expected) == ["JITTER applied != requested"]
+
+
+@pytest.mark.parametrize(("text", "expected"), [("RESULT: PASS\n" + _JITTER_1, 0), (_JITTER_2, 37)])
+def test_jitter_matching_the_harness_value_passes(text, expected):
+    assert duo.jitter_problems(text, expected) == []
+
+
+def test_a_gen1_new_run_without_the_jitter_echo_is_a_harness_finding(runner):
+    """No echo means the check did not run; a silent pass would be the harness lying."""
+    runner.scenario = "reconnect_new"
+    runner.game = "gen1_new"
+    runner.attempt = 1
+    runner._reconnect_complete = True
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: None
+    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.cleanup = lambda passed: None
+    runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
+    with pytest.raises(RuntimeError, match="JITTER marker missing"):
+        runner.run()
+
+
+def test_a_gen1_new_run_whose_echo_matches_is_unaffected(runner):
+    runner.scenario = "reconnect_new"
+    runner.game = "gen1_new"
+    runner.attempt = 1
+    runner._reconnect_complete = True
+    runner.start_server = lambda: None
+    runner.start_instances = lambda: None
+    runner.orchestrate = lambda: None
+    runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
+    runner.cleanup = lambda passed: None
+    runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
+    assert runner.run() is True
+
+
+def test_the_stub_carries_the_attempt_scaled_jitter(runner, tmp_path, monkeypatch):
+    """Attempt 1 writes the CLI value; attempt 2 writes it + 37, and the echo must agree."""
+    monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_a, **_k: None)
+    monkeypatch.setattr(duo.subprocess, "Popen", lambda *_a, **_k: type("P", (), {"pid": 42})())
+    runner.cfg = duo.SCENARIOS["link_new"]
+    runner.gcfg = dict(duo.GAMES["gen1_new"])
+    runner.battery_boot = True
+    runner.tcp_port = 1234
+    runner.go_files = {inst: str(tmp_path / f"{inst}.go") for inst in ("a", "b")}
+    runner.emus, runner.emu_by_inst = [], {}
+    runner.args = type("Args", (), {"idle_jitter": 11})()
+    Path(duo.BUILD).mkdir(parents=True, exist_ok=True)
+
+    for attempt, expected in ((1, 11), (2, 48)):
+        runner.attempt = attempt
+        runner.launch_instance("a", seed=False)
+        stub = (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+        assert f"idle_jitter = {expected}," in stub
+        assert f"attempt = {attempt}," in stub
+
+
 def test_reconnect_cannot_pass_on_two_client_passes_when_wrong_save_leg_was_not_run(runner):
     runner.scenario = "reconnect_new"
     runner.game = "gen1_new"
+    runner.attempt = 1
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: setattr(runner, "_reconnect_complete", False)
-    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
     runner.cleanup = lambda passed: None
-    runner.args = type("Args", (), {"keep_alive": False})()
+    runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     assert runner.run() is False
 
 
@@ -265,6 +408,7 @@ def test_a_only_relaunch_does_not_reseed_the_flushed_save(runner, tmp_path, monk
     runner.attempt = 1
     runner.go_files = {"a": str(tmp_path / "a.go"), "b": str(tmp_path / "b.go")}
     runner.emus, runner.emu_by_inst = [], {}
+    runner.args = type("Args", (), {"idle_jitter": 0})()
     Path(duo.BUILD).mkdir()
     runner._seed_instance_save = lambda _inst: pytest.fail("relaunch reseeded SaveRAM")
     monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_args, **_kw: None)
@@ -401,6 +545,7 @@ def test_cold_ball_gate_uses_a_fresh_save_directory_without_seeding(runner, tmp_
     runner.attempt = 1
     runner.go_files = {inst: str(tmp_path / f"{inst}.go") for inst in ("a", "b")}
     runner.emus, runner.emu_by_inst = [], {}
+    runner.args = type("Args", (), {"idle_jitter": 0})()
     Path(duo.BUILD).mkdir(exist_ok=True)
     runner._seed_instance_save = lambda _inst: pytest.fail("cold boot seeded a battery save")
     monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_args, **_kw: None)
@@ -428,7 +573,7 @@ def test_ball_gate_driver_failure_never_gets_rng_retry(tmp_path, monkeypatch):
 
     monkeypatch.setattr(duo, "DuoRun", FakeRun)
     monkeypatch.setattr(duo, "read_result", lambda *_args: duo.RNG_OUT_OF_BALLS)
-    args = type("Args", (), {"game": "gen1_new"})()
+    args = type("Args", (), {"game": "gen1_new", "idle_jitter": 0})()
     assert duo.run_scenario_with_rng_retry("ball_gate_new", args) == (False, 1)
     assert calls == [("ball_gate_new", 1)]
 
@@ -479,7 +624,7 @@ def test_gen1_result_reason_table_is_exact(line, classification):
       (False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS)], 2, False),
 ])
 def test_rng_retry_restarts_a_whole_run_once_with_labeled_receipts(
-    tmp_path, monkeypatch, outcomes, expected_attempts, passed,
+    tmp_path, monkeypatch, capsys, outcomes, expected_attempts, passed,
 ):
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
     built = []
@@ -496,10 +641,13 @@ def test_rng_retry_restarts_a_whole_run_once_with_labeled_receipts(
     monkeypatch.setattr(duo, "DuoRun", FakeRun)
     monkeypatch.setattr(duo, "read_result", lambda _name, inst: outcomes[active["attempt"] - 1][
         1 if inst == "a" else 2])
-    args = type("Args", (), {"game": "gen1_new"})()
+    args = type("Args", (), {"game": "gen1_new", "idle_jitter": 0})()
     assert duo.run_scenario_with_rng_retry("link_new", args) == (passed, expected_attempts)
     assert [attempt for _, attempt, _ in built] == list(range(1, expected_attempts + 1))
     assert len({id(run) for _, _, run in built}) == expected_attempts
+    assert [line for line in capsys.readouterr().out.splitlines() if "JITTER" in line] == [
+        f"[duo] JITTER requested={duo.jitter_for_attempt(0, attempt)} attempt={attempt}"
+        for attempt in range(1, expected_attempts + 1)]
     for attempt in range(1, expected_attempts + 1):
         for inst in ("a", "b"):
             assert (tmp_path / f"e2e_link_new_{inst}_attempt{attempt}_result.txt").exists()
@@ -516,9 +664,9 @@ def test_early_orchestration_rng_miss_exits_without_waiting_for_both_catches(run
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: (_ for _ in ()).throw(duo.GameRngMiss("sole ball missed"))
-    runner.wait_results = lambda: (other, duo.RNG_OUT_OF_BALLS)
+    runner.wait_results = lambda: (other + "\n" + _JITTER_1, duo.RNG_OUT_OF_BALLS + "\n" + _JITTER_1)
     runner.cleanup = lambda passed: None
-    runner.args = type("Args", (), {"keep_alive": False})()
+    runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     if raises:
         with pytest.raises(duo.GameRngMiss):
             runner.run()

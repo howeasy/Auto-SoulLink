@@ -1061,7 +1061,14 @@ end
 
 local scen = scenarios[D.scenario]
 if not scen then finish(false, "no gen1_new scenario " .. tostring(D.scenario)) end
-local co = coroutine.create(scen)
+local co = coroutine.create(function()
+    -- --idle-jitter: BizHawk is deterministic, so a retry only changes the game RNG through
+    -- timing; the harness writes idle_jitter (+37 per attempt) and checks applied == requested.
+    local requested, applied = D.idle_jitter or 0, 0
+    for _ = 1, requested do yield_frame(); applied = applied + 1 end
+    log(fmt("JITTER requested=%d applied=%d attempt=%d", requested, applied, D.attempt or 1))
+    return scen()
+end)
 local timeout = D.timeout_frames or 150000
 while true do
     local ok, pass, msg = coroutine.resume(co)

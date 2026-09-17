@@ -23,6 +23,7 @@ import argparse
 import importlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -214,11 +215,70 @@ def retryable_gen1_rng(game, results, attempt):
     return "CAUSE_RNG" in classes and all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS") for c in classes)
 
 
+JITTER_MARKER_RE = re.compile(r"JITTER requested=(\d+) applied=(\d+) attempt=(\d+)")
+JITTER_PER_ATTEMPT = 37
+
+
+def jitter_for_attempt(base, attempt):
+    """The idle-frame count for one attempt: the harness's own value, moved per attempt.
+
+    Two attempts of a scenario differ only through network-timing jitter, so a retry that asks
+    for the same idle count is the same run twice — the harness print, the value written into
+    the stubs and this file's own check must all use this one expression.
+    """
+    return base + (attempt - 1) * JITTER_PER_ATTEMPT
+
+
+def jitter_problems(text, expected_requested):
+    """The driver's echo of the harness's own `--idle-jitter` value, from its result file.
+
+    The harness writes `idle_jitter` into each stub; the driver logs what it requested, what it
+    applied and which attempt it was. A missing marker means the check could not run — a harness
+    finding, not a pass — and a count the harness did not ask for means this attempt did not
+    vary the timing the retry rule claims to have varied.
+    """
+    matches = JITTER_MARKER_RE.findall(text or "")
+    if not matches:
+        return ["JITTER marker missing"]
+    requested, applied, _attempt = (int(value) for value in matches[0])
+    if applied != requested or requested != expected_requested:
+        return ["JITTER applied != requested"]
+    return []
+
+
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
 
 def _event_counts(rows):
     return {name: sum(row.get("type") == name for row in rows) for name in RECONNECT_GAMEPLAY_EVENTS}
+
+
+def _new_events(problems, events_before, events_after):
+    """The rows `events_after` gained over `events_before`, in the file's own order.
+
+    events.json is NEWEST-FIRST: the server appends with `appendleft` (server/server.py:1488)
+    and persists `list(self._recent_events)` (:1481), so a reconnect's new rows are the FRONT of
+    the list and a tail slice is the OLDEST history instead. The ring is capped at 200 rows
+    (:79), so at the cap every new row also drops the oldest one and the surviving history is a
+    PREFIX of the previous list; it is matched here against the tail of the new one. Anything
+    else — a row spliced into the middle of the history, a shorter or reordered list — is a
+    rewrite, and reading the new hellos out of a rewritten log would be guessing.
+    """
+    if not events_before:
+        return events_after
+    kept = min(len(events_after), len(events_before))
+    while kept > 0 and events_after[len(events_after) - kept:] != events_before[:kept]:
+        kept -= 1
+    if kept == 0:
+        problems.append("events log shrank or was rewritten")
+        return []
+    return events_after[:len(events_after) - kept]
+
+
+def _new_a_hellos(problems, events_before, events_after):
+    """A's hellos among the rows this reconnect actually added, not among all of history."""
+    return [row for row in _new_events(problems, events_before, events_after)
+            if row.get("type") == "hello" and row.get("player") == "a"]
 
 
 def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id):
@@ -237,11 +297,9 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
     if str((after.get("player_identity", {}).get("a") or {}).get("ot_id")) != str(ot_id):
         problems.append("A's locked OT ID changed")
     if _event_counts(events_before) != _event_counts(events_after):
-        problems.append("a capture/link/no_catch/dead_zone event duplicated")
-    new_hellos = [row for row in events_after if row.get("type") == "hello" and row.get("player") == "a"]
-    old_hellos = [row for row in events_before if row.get("type") == "hello" and row.get("player") == "a"]
-    if len(new_hellos) != len(old_hellos) + 1 or not any(
-            row.get("text", "").startswith("Connected (Red, ") for row in new_hellos):
+        problems.append("a " + "/".join(RECONNECT_GAMEPLAY_EVENTS) + " count changed")
+    new_hellos = _new_a_hellos(problems, events_before, events_after)
+    if len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected (Red, "):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
 
@@ -257,11 +315,10 @@ def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, e
     if before_bytes != after_bytes:
         problems.append("links.json bytes changed after the rejected hello")
     if _event_counts(events_before) != _event_counts(events_after):
-        problems.append("a rejected save added a gameplay event")
-    new_hellos = [row for row in events_after if row.get("type") == "hello" and row.get("player") == "a"]
-    old_hellos = [row for row in events_before if row.get("type") == "hello" and row.get("player") == "a"]
-    if len(new_hellos) != len(old_hellos) + 1 or not any(
-            row.get("text") == "REJECTED — wrong save/slot" for row in new_hellos):
+        problems.append("a rejected save changed a " + "/".join(RECONNECT_GAMEPLAY_EVENTS)
+                        + " count")
+    new_hellos = _new_a_hellos(problems, events_before, events_after)
+    if len(new_hellos) != 1 or new_hellos[0].get("text") != "REJECTED — wrong save/slot":
         problems.append("A did not add exactly one WRONG SAVE rejection hello")
     return problems
 
@@ -646,6 +703,14 @@ class DuoRun:
             return self._result_path(inst)
         return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_{phase}_result.txt")
 
+    def expected_idle_jitter(self) -> int:
+        """The idle-frame count both stubs are told to apply, and the driver must echo back.
+
+        Each attempt varies it so that a retried scenario is not the same run twice under a
+        different label (see `jitter_for_attempt`).
+        """
+        return jitter_for_attempt(self.args.idle_jitter, self.attempt)
+
     def launch_instance(self, inst, *, phase="initial", seed=True, expected_key=""):
         """Launch one cartridge; reconnect phases keep the existing per-instance SaveRAM."""
         cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
@@ -663,6 +728,7 @@ class DuoRun:
         duo = {
             "wt": WT_FWD, "player": inst, "scenario": self.scenario,
             "phase": phase, "expected_key": expected_key, "attempt": self.attempt,
+            "idle_jitter": self.expected_idle_jitter(),
             "cold_boot": bool(self.cfg.get("cold_boot")),
             "max_attempts": 1 if self.cfg.get("cold_boot") else 2,
             "game": self.gcfg.get("game", ""),
@@ -1142,7 +1208,7 @@ class DuoRun:
         wait_for("durable accepted reconnect hello", lambda: sum(
             row.get("type") == "hello" and row.get("player") == "a"
             for row in self._reconnect_events()) == old_a_hellos + 1, 30)
-        same_after = {"links": self._reconnect_document(), "events": self._reconnect_events(),
+        same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
                       "status": self._status() or {}}
         problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
                                            same_after["events"], self._link_keys["a"],
@@ -1744,6 +1810,16 @@ class DuoRun:
             if pa and pb and self.scenario in ("linked_faint_bench_new", "linked_faint_active_new"):
                 self.assert_linked_faint_saved({"a": ra, "b": rb},
                                                active=self.scenario == "linked_faint_active_new")
+            if pa and pb and getattr(self, "game", "") == "gen1_new":
+                # Harness finding, not a scenario verdict: the harness wrote the expected count
+                # into the stub, so the driver's echo is checkable without the game. Checked
+                # only on a double PASS so a real failure keeps its own error, not this one.
+                expected_jitter = self.expected_idle_jitter()
+                jitter_findings = [f"{inst}: {problem}" for inst, text in (("a", ra), ("b", rb))
+                                   for problem in jitter_problems(text, expected_jitter)]
+                if jitter_findings:
+                    raise RuntimeError("idle-jitter contract violated — "
+                                       + "; ".join(jitter_findings))
             passed = pa and pb and (self.scenario != "reconnect_new" or self._reconnect_complete)
             if getattr(self, "_pydec_path", None):
                 reason = ("asserted scenario facts" if passed else
@@ -1772,6 +1848,8 @@ def run_scenario_with_rng_retry(name, args):
     limit = 2 if args.game == "gen1_new" and name != "ball_gate_new" else 1
     for attempt in range(1, limit + 1):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
+        print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
+              f"attempt={attempt}")
         ok = DuoRun(name, args, attempt=attempt).run()
         receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
         # The next run deletes the normal result files; keep each attempt's receipts.
@@ -1803,6 +1881,9 @@ def main():
                     help="pause before teardown for manual inspection")
     ap.add_argument("--keep-data", action="store_true",
                     help="never delete the temp server data dir")
+    ap.add_argument("--idle-jitter", type=int, default=0,
+                    help="extra idle frames before the first hunt; each RNG retry adds 37 per "
+                         "attempt")
     ap.add_argument("--wrong-save", default=None,
                     help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg")
     ap.add_argument("--server-flags", nargs="*", default=[],
