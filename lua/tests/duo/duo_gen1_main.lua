@@ -2613,6 +2613,240 @@ function scenarios.poison_new()
     return true, "poisoned in Viridian Forest, blacked out to Pallet and saved " .. starter_key
 end
 
+-- ── A13 (D-11 swap half, W-4): the rival team swap on Route 22 ───────────────────────
+--
+-- Prerequisite is link_new on BOTH halves. The swap ships the PARTNER's live party, and the
+-- server only has one to ship once B's snapshots have reached its blob cache: every hello /
+-- tick party entry carries `blob_hex` (lua/gen1/client.lua:90-100) and server/state.py:
+-- 2799-2843 ingests it, while queue_rival_team_swap refuses with "partner has no cached party
+-- blobs" when it is empty (state.py:2866-2868). B therefore idles on its checkpoint rather
+-- than closing: its tick cadence is what keeps that cache warm across A's whole walk.
+--
+-- A walks Route 1 -> Viridian -> the WEST exit -> Route 22 -> the rival trigger tile and then
+-- fights Rival1. The walk, the trigger geometry and the fight are all
+-- lua/tests/gen1_rb_route22_inputs.lua, whose header carries the pret citation for every
+-- coordinate (connection arithmetic, the ledge that forces the detour, the four unavoidable
+-- grass steps, the in-battle party-menu geometry); nothing is restated here.
+--
+-- The wire. The client's battle_begin arm sends `trainer_battle_start{trainer_id}` for any
+-- opponent id >= OPP_ID_OFFSET (lua/gen1/client.lua:511-518). 225 = OPP_RIVAL1 is in the Gen 1
+-- adapter's rival set (server/adapters/gen1_rby.py:318-320), so with --rival-team-swap on,
+-- _handle_trainer_battle_start queues `replace_rival_team` (server/state.py:2882-2915) and the
+-- queue drains at the END of handling that same event (state.py:379-388) -- one round trip.
+-- The client may still hold the reply: the enemy party may only be rewritten between
+-- InitBattleCommon staging wEnemyMonPartyPos = $FF (pret engine/battle/core.asm:6689-6690,
+-- AFTER DoBattleTransitionAndInitBattleVariables at :6680) and LoadEnemyMonData replacing it
+-- with the sent-out index (:6055), so an early reply is parked in `pending_rival` and released
+-- by rival_window_tick (lua/gen1/client.lua:331-402), still bounded by RIVAL_SWAP_FRAMES = 120
+-- from battle_begin (:19-22). With the server answering in one round trip, `error=late_reply`
+-- on the wire is a FAIL here, never RNG.
+function scenarios.rival_swap_new()
+    local linked, why = scenarios.link_new()
+    if not linked then return false, link_prerequisite_failure(why) end
+
+    if D.player ~= "a" then
+        log("RIVAL_IDLE b")
+        if not wait_until(function() return partner_has_mark("RIVAL_DONE") or partner_done() end,
+                          2400, "A's rival leg") then
+            return false, "the idle partner never saw A finish the rival leg"
+        end
+        local saved_b, why_b = game_save("rival_swap_new_b")
+        if not saved_b then return false, why_b end
+        return true, "idled through the partner's rival battle and saved"
+    end
+
+    local Route22 = dofile(ROOT .. "/lua/tests/gen1_rb_route22_inputs.lua")
+    local derived = parts.profile.derived
+    log_party("PRE_RIVAL")
+
+    -- The trigger's two preconditions, both set by OaksLabRivalLeavesWithPokedexScript when
+    -- Oak hands the Pokedex over (pret scripts/OaksLab.asm:634,636) and both read by
+    -- Route22DefaultScript before it looks at the player's coordinates (scripts/Route22.asm:
+    -- 59-60,72-73). Their ordinals are 1312 and 1319 -- wEventFlags byte 164, bits 0 and 7 --
+    -- counted out of constants/event_constants.asm the same way gen1_rb_point_fields.lua:3-4
+    -- counts EVENT_GOT_OAKS_PARCEL (57) and gen1_scripted_play.lua:113 counts EVENT_GOT_POKEDEX
+    -- (37); that counter reproduces both of those pinned values, which is its control.
+    -- Only the "battle" fixture chain runs the Pokedex handover (tools/gen1_fixtures.py:40,
+    -- "battle": "lab,parcel,route1,save" vs "town": "lab,save"), so a town-fixture A would walk
+    -- the whole route and meet nobody. Name that here instead of 20000 frames later.
+    local events = rd(assert(symbols.wEventFlags) + 164)
+    log(fmt("RIVAL_EVENTS byte164=%02X first=%d wants=%d", events, events % 2,
+            math.floor(events / 128) % 2))
+    if events % 2 ~= 1 or math.floor(events / 128) % 2 ~= 1 then
+        return false, fmt("the Route 22 rival events are not armed (wEventFlags[164]=%02X): "
+                          .. "this fixture never ran the Pokedex chain", events)
+    end
+
+    -- This leg's own receipts. The file-wide tees (:161-179, :183-203) keep a fixed set of
+    -- names and drop `blobs_hex`, so wrap the already-wrapped hooks once more here, the way
+    -- clause_watch does (:616-630), instead of widening them for every other scenario.
+    local swap = {}
+    local prev_cmd = gclient.handle_command
+    gclient.handle_command = function(self_, cmd)
+        if cmd and cmd.cmd == "replace_rival_team" and not swap.rx then
+            swap.rx = cmd
+            log(fmt("RX replace_rival_team n=%s", tostring(cmd.n or #(cmd.blobs_hex or {}))))
+        end
+        return prev_cmd(self_, cmd)
+    end
+    local prev_send = C.send
+    C.send = function(line)
+        local ok, msg = pcall(json.decode, line)
+        if ok and type(msg) == "table" then
+            if msg.event == "trainer_battle_start" and not swap.start_tx then swap.start_tx = msg end
+            if msg.event == "rival_team_replaced" and not swap.reply then
+                swap.reply, swap.reply_frame = msg, frame
+            end
+        end
+        return prev_send(line)
+    end
+    -- battle_begin fires at InitBattleCommon for WILD battles too (data/games/gen1_rby/
+    -- engine_signals.json sites.battle_begin, capture_offset 0), so the window's origin is the
+    -- one whose point names the rival -- not merely the first battle of the leg.
+    local prev_signal = gclient.on_signal
+    gclient.on_signal = function(self_, sig)
+        if sig.kind == "battle_begin" and sig.point and sig.point.cur_opponent == Route22.RIVAL1
+           and not swap.begin_frame then
+            swap.begin_frame = frame
+            log(fmt("RIVAL_BATTLE_BEGIN frame=%d opponent=%d", frame, sig.point.cur_opponent))
+        end
+        return prev_signal(self_, sig)
+    end
+
+    local function hex_bytes(hex)
+        local out = {}
+        for j = 1, #hex, 2 do out[#out + 1] = tonumber(hex:sub(j, j + 1), 16) end
+        return out
+    end
+    -- Byte-compare the three parallel enemy arrays against the blobs the command carried, in
+    -- the shape lua/gen1/writes.lua:105-133 writes them: count, species list + $FF terminator,
+    -- then struct / OT name / nickname per slot. Returns a failure string, or nil.
+    local function compare_enemy_party()
+        local blobs = {}
+        for i, hex in ipairs(swap.rx.blobs_hex or {}) do blobs[i] = hex_bytes(hex) end
+        local n = #blobs
+        if n < 1 then return "replace_rival_team carried no blobs" end
+        local count = rd(ram.wEnemyPartyCount)
+        if count ~= n then return fmt("wEnemyPartyCount is %d, not the %d blobs the command carried", count, n) end
+        for i = 1, n do
+            local got, want = rd(ram.wEnemyPartySpecies + i - 1), blobs[i][1]
+            if got ~= want then return fmt("wEnemyPartySpecies[%d] is %d, not %d", i - 1, got, want) end
+        end
+        local terminator = rd(ram.wEnemyPartySpecies + n)
+        if terminator ~= 0xFF then return fmt("the species list terminator is %02X, not FF", terminator) end
+        for i = 1, n do
+            local k, blob = i - 1, blobs[i]
+            local arrays = { { ram.wEnemyMons, derived.battle_struct_size, 0, "struct" },
+                             { ram.wEnemyMonOT, derived.name_length, derived.battle_struct_size, "OT name" },
+                             { ram.wEnemyMonNicks, derived.name_length,
+                               derived.battle_struct_size + derived.name_length, "nickname" } }
+            for _, a in ipairs(arrays) do
+                for j = 1, a[2] do
+                    local got, want = rd(a[1] + k * a[2] + j - 1), blob[a[3] + j]
+                    if got ~= want then
+                        log(fmt("ENEMY_MONS_MISMATCH slot=%d", k))
+                        return fmt("enemy %s byte %d of slot %d is %02X, not the blob's %02X",
+                                   a[4], j, k, got, want)
+                    end
+                end
+            end
+        end
+        log(fmt("ENEMY_MONS_MATCH slots=%d", n))
+        swap.lead_species = blobs[1][1]
+        return nil
+    end
+
+    -- One per-frame witness, driven from the route loop below so the reads land on the frames
+    -- the engine is actually in: the compare runs the frame the reply is seen (before any turn
+    -- can write HP back into wEnemyMons), the send-out read the frame LoadEnemyMonData replaces
+    -- the staged $FF with the party index it chose (core.asm:6053-6055).
+    local function witness()
+        if swap.failure then return end
+        if swap.reply and not swap.compared then
+            swap.compared = true
+            if swap.reply.error then
+                swap.failure = "the client refused the swap: error=" .. tostring(swap.reply.error)
+                return
+            end
+            if not swap.rx then swap.failure = "rival_team_replaced without a replace_rival_team"; return end
+            log(fmt("RIVAL_TEAM_REPLACED frame=%d within=%d", swap.reply_frame,
+                    swap.begin_frame and (swap.reply_frame - swap.begin_frame) or -1))
+            swap.failure = compare_enemy_party()
+            return
+        end
+        if swap.compared and not swap.sent_out and rd(ram.wEnemyMonPartyPos) ~= 0xFF then
+            swap.sent_out = true
+            local species = rd(ram.wEnemyMonSpecies)
+            log(fmt("ENEMY_SENDOUT species=%d expected=%d", species, swap.lead_species or -1))
+            if species ~= swap.lead_species then
+                swap.failure = fmt("the enemy sent out species %d, not the partner's slot-1 %d",
+                                   species, swap.lead_species or -1)
+            end
+        end
+    end
+
+    local route = Route22.new({ player = D.player }, { log = log })
+    local terminal = { ["rival-won"] = true, ["rival-lost"] = true, ["rival-drawn"] = true,
+                       ["rival-never-triggered"] = true, ["starter-koed"] = true,
+                       ["unknown-map"] = true }
+    local last, phase = nil, nil
+    for _ = 1, (D.hunt_frames or 90000) do
+        local point = play.point()
+        local buttons
+        buttons, phase = route.step(nil, nil, point, emu.framecount())
+        if phase ~= last then
+            last = phase
+            log(fmt("RIVAL_PHASE %s @%d map=%d (%d,%d) battle=%d opponent=%d hp=%d", phase,
+                    emu.framecount(), point.map, point.x, point.y, point.battle,
+                    point.opponent, point.party_hp))
+        end
+        witness()
+        if terminal[phase] then break end
+        yield_frame(buttons)
+    end
+    if not terminal[phase] then return false, "the Route 22 leg made no bounded progress (" .. tostring(phase) .. ")" end
+    if phase == "starter-koed" then
+        return false, "RNG: a wild foe knocked the lead out on the way to Route 22"
+    end
+    if phase == "rival-never-triggered" then
+        return false, "A stood on the Route 22 trigger tile and no rival battle started"
+    end
+    if phase == "unknown-map" then
+        return false, fmt("the walk left the planned map chain at map=%d (%d,%d)",
+                          rd(ram.wCurMap), rd(ram.wXCoord), rd(ram.wYCoord))
+    end
+
+    if not swap.start_tx then return false, "the client never sent trainer_battle_start" end
+    if swap.start_tx.trainer_id ~= Route22.RIVAL1 then
+        return false, fmt("trainer_battle_start named trainer_id %s, not Rival1's %d",
+                          tostring(swap.start_tx.trainer_id), Route22.RIVAL1)
+    end
+    if not swap.rx then return false, "the server never sent replace_rival_team for the rival battle" end
+    if not swap.reply then return false, "the client never answered with rival_team_replaced" end
+    if swap.failure then return false, swap.failure end
+    if not swap.sent_out then return false, "the enemy never left the staged $FF party position" end
+    log(fmt("RIVAL_RESULT %s", phase == "rival-won" and "win" or (phase == "rival-lost" and "loss" or "draw")))
+
+    -- The post-battle script (pret scripts/Route22.asm:148-186 on a win, the blackout on a
+    -- loss) still owns the frame: pulse B until the write-safe overworld checkpoint holds, the
+    -- way the poison leg walks out of its blackout (:2497-2508). B never talks to an NPC.
+    local settled = false
+    for _ = 1, 9000 do
+        if overworld_ok() then settled = true break end
+        yield_frame(pulse_at_frame("B"))
+    end
+    if not settled then
+        return false, fmt("no overworld checkpoint after the rival battle (map=%d)", rd(ram.wCurMap))
+    end
+    log_party("POST_RIVAL")
+    log("RIVAL_DONE")
+    local saved, why_save = game_save("rival_swap_new_a")
+    if not saved then return false, why_save end
+    return true, fmt("rival team swapped to the partner's %d mon(s) and the battle was a %s",
+                     swap.rx.n or #(swap.rx.blobs_hex or {}),
+                     phase == "rival-won" and "win" or (phase == "rival-lost" and "loss" or "draw"))
+end
+
 local scen = scenarios[D.scenario]
 if not scen then finish(false, "no gen1_new scenario " .. tostring(D.scenario)) end
 local co = coroutine.create(function()
