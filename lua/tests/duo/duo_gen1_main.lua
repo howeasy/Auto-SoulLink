@@ -119,7 +119,31 @@ deps.on_bus_exec = function(fn, addr, name, dom)
     if name == "SLink-gen1-save_witness" then
         local fire = fn
         fn = function()
+            -- GATE: "the callback ran" is NOT evidence the site validated. signals.lua's `fire`
+            -- returns nothing and swallows every rejection (lua/gen1/signals.lua:202-226: early
+            -- `return` when closed/failed, on the wrong hLoadedROMBank, or on a filter; the PC
+            -- and expected-bytes assertions are pcall'd into self.failure rather than raised).
+            -- The one observable that means "validated" is the queue: :219 appends to `pending`
+            -- only once every check has passed. So dump iff `pending` grew by exactly one
+            -- save_witness entry across this call. The signals instance is reached through
+            -- SLINK_GEN1_CLIENT (:182, the same global lua/gen1/run.lua:42 sets) because the
+            -- `gclient` local is declared below this tee (:157) and the instance itself only
+            -- exists after gclient:start() (lua/gen1/client.lua:1005).
+            local sigs = SLINK_GEN1_CLIENT and SLINK_GEN1_CLIENT.signals
+            local before = sigs and #sigs.pending or 0
             fire()
+            local why
+            if not sigs then
+                why = "no-signals-instance"
+            elseif #sigs.pending ~= before + 1 then
+                why = fmt("pending-%d-to-%d", before, #sigs.pending)
+            elseif sigs.pending[#sigs.pending].kind ~= "save_witness" then
+                why = "kind-" .. tostring(sigs.pending[#sigs.pending].kind)
+            end
+            if why then
+                log("SAVE_WITNESS_DUMP_SKIPPED why=" .. why)
+                return
+            end
             local dok, derr = pcall(dump_save_witness)
             if not dok then log("SAVE_WITNESS_DUMP_FAIL " .. tostring(derr)) end
         end
@@ -1483,16 +1507,21 @@ local function linked_faint_scenario(active, explode)
         local old = gclient.on_battle_loop_head
         gclient.on_battle_loop_head = function(self, sig)
             local pending = self.pending_battle_writes[1]
+            -- BEFORE the write: a natural KO during the 900-frame `opened` wait also arrives at
+            -- the loop head with HP 0, so the post-condition alone cannot tell the forced write
+            -- from the foe doing it. Only a mon that was still ALIVE on entry to this head and
+            -- is at 0 on exit was killed by writes.lua.
+            local hp_before = rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1)
             old(self, sig)
             if not (pending and pending.key == key and #self.pending_battle_writes == 0) then return end
             if explode then
                 -- writes.lua:89-96 fills both move blocks with EXPLOSION ($99) and PP 1 and does
                 -- NOT touch wPlayerSelectedMove -- B still has to pick FIGHT -> slot 1.
                 log(fmt("LOOP_HEAD_EXPLODE moves=%s pp=%s", hex4(ram.wBattleMonMoves), hex4(ram.wBattleMonPP)))
-            elseif rd(ram.wBattleMonHP) == 0 and rd(ram.wBattleMonHP + 1) == 0 and
+            elseif hp_before ~= 0 and rd(ram.wBattleMonHP) == 0 and rd(ram.wBattleMonHP + 1) == 0 and
                    rd(ram.wPlayerSelectedMove) == 0xFF then
                 wrote = true
-                log("LOOP_HEAD_WRITE key=" .. key .. " battle_hp=0000 selected=FF")
+                log("LOOP_HEAD_WRITE key=" .. key .. " battle_hp=0000 selected=FF hp_before=" .. hp_before)
             end
         end
         local want = explode and "force_explode" or "force_faint"
@@ -1516,7 +1545,7 @@ local function linked_faint_scenario(active, explode)
         else
             -- B is parked INSIDE DisplayBattleMenu, one loop head too late for the queued write,
             -- and the linked mon is still at its capture HP (5/15 in the run that failed).
-            -- COMMITTING a move spends the turn: core.asm:337-341 falls through to
+            -- COMMITTING a move spends the turn: core.asm:338-339 falls through to
             -- SelectEnemyMove/Execute*, the foe swings, and a capture-HP mon is a coin flip --
             -- exactly the natural KO that left W-2 with no LOOP_HEAD_WRITE (the earlier pass
             -- predates e95cefa, when the kept-alive driver's presses were silent). Take the same
@@ -1524,7 +1553,7 @@ local function linked_faint_scenario(active, explode)
             -- and core.asm:332-337 (`call MoveSelectionMenu ... jr nz, MainInBattleLoop`) jumps
             -- straight back to the loop head without reaching SelectEnemyMove, so the write lands
             -- before any enemy move can run. The signal is a synchronous on_bus_exec at
-            -- MainInBattleLoop+0 (signals.lua:76-78), i.e. before `call
+            -- MainInBattleLoop+0 (signals.lua:78-89 defines the site), i.e. before `call
             -- ReadPlayerMonCurHPAndStatus`, so the very same head takes `jp z,
             -- HandlePlayerMonFainted`. No turn is spent and no RNG decides the outcome.
             if not driver.choose("FIGHT").ok then
@@ -1539,7 +1568,10 @@ local function linked_faint_scenario(active, explode)
             if not opened then
                 driver.close();return false, "B's move menu never opened for the free cancel"
             end
-            -- stop pressing the moment the menu is gone, so no stray edge reaches the battle menu
+            -- On the success path the write lands at the loop head the B press bounces us to and
+            -- `wrote` breaks the loop, so no battle menu is ever reached and `cancelled` never
+            -- matters. The latch is purely for the FAILURE path: if the write does not land, stop
+            -- pressing the moment the MOVE menu is gone so no stray B edge reaches the battle menu.
             local cancelled = false
             for _ = 1, 900 do
                 if rd(symbols.wTopMenuItemX) ~= MOVE_MENU_X then cancelled = true end
