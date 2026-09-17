@@ -1675,7 +1675,7 @@ class DuoRun:
             raise RuntimeError("--wrong-save must name an existing second-OT Red SaveRAM")
         sram = source.read_bytes()
         rom = (Path(REPO) / self.gcfg["rom"]["a"]).read_bytes()
-        problems = qualify(sram, rom)  # gen1_fixtures.py:57-83, game's checksum/stat oracle
+        problems = qualify(sram, rom)  # gen1_fixtures.py:81-148, game's checksum/stat oracle
         if problems:
             raise RuntimeError(f"--wrong-save is not a game-loadable Red save: {problems}")
         profile = json.loads((Path(REPO) / "data/games/gen1_rby/profile.json").read_text(
@@ -2060,16 +2060,21 @@ class DuoRun:
         path = Path(name) if os.path.isabs(str(name)) else Path(self._saveram_dir(inst)) / name
         sram = path.read_bytes()
         rom_bytes = (Path(REPO) / (rom or self.gcfg["rom"][inst])).read_bytes()
-        # tools/gen1_fixtures.py:57-83 uses codec.verify_bank1 (the game's CalcCheckSum),
+        # tools/gen1_fixtures.py:81-148 uses codec.verify_bank1 (the game's CalcCheckSum),
         # decode_party, level_from_exp and recompute_stats against this exact ROM.
-        problems = qualify(sram, rom_bytes)
+        # `notes` carries the stored stats that lag their stat exp: legal (the engine only
+        # rebuilds stats where it calls CalcStats -- see the band in gen1_fixtures.qualify),
+        # but named in the PYDEC line so a tolerated value is never silent.
+        notes: list[str] = []
+        problems = qualify(sram, rom_bytes, notes)
         if problems:
             raise RuntimeError(f"{inst} saved game would not qualify: {problems}")
         start = codec.SRAM_LAYOUT["sPartyData"]  # gen1_codec.py:66-72,587-595
         party = codec.decode_party(sram[start:start + codec.PARTY_LAYOUT["size"]])
         current = codec.SRAM_LAYOUT["sCurBoxData"]  # the WRAM mirror is copied here on SAVE
         current_box = codec.decode_box(sram[current:current + codec.BOX_SIZE])
-        self._pydec_note(f"{inst} main checksum/exp/recomputed stats valid; saved party/current box decode valid")
+        self._pydec_note(f"{inst} main checksum/exp/recomputed stats valid; saved party/current "
+                         f"box decode valid" + ("; " + "; ".join(notes) if notes else ""))
         return sram, party, current_box, codec
 
     def assert_link_new_saved(self, results):
@@ -2088,7 +2093,7 @@ class DuoRun:
             if any(codec.key(mon) == self._link_keys[inst] for mon in current_box):
                 raise RuntimeError(f"{inst} saved current box still holds its withdrawn linked mon")
             # qualify() above independently invokes codec.recompute_stats on both mons
-            # (tools/gen1_fixtures.py:70-82; gen1_codec.py:738-751).
+            # (tools/gen1_fixtures.py:118-147; gen1_codec.py:738-751).
             fixture = Path(self._fixture_save_path(inst)).read_bytes()
             baseline = codec.bag_quantity(fixture, codec.POKE_BALL)  # gen1_codec.py:642-645
             final = codec.bag_quantity(sram, codec.POKE_BALL)

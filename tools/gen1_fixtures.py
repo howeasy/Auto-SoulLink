@@ -78,8 +78,12 @@ def saved_ot(sram: bytes, title: str) -> int:
     return int.from_bytes(sram[offset:offset + 2], "big")
 
 
-def qualify(sram: bytes, rom: bytes) -> list[str]:
-    """Problems with a candidate fixture (empty = a real, consistent save)."""
+def qualify(sram: bytes, rom: bytes, notes: list[str] | None = None) -> list[str]:
+    """Problems with a candidate fixture (empty = a real, consistent save).
+
+    `notes`, when given, collects the tolerated-but-not-exact observations (a stored stat
+    that lags its stat exp, see the band below) so a caller can name them in its own log.
+    """
     problems = []
     if len(sram) != 0x8000:
         return [f"SaveRAM is {len(sram)} bytes, not 32768"]
@@ -118,10 +122,29 @@ def qualify(sram: bytes, rom: bytes) -> list[str]:
         entry = stats[codec.internal_to_natdex(mon["species"])]
         if codec.level_from_exp(entry["growth_rate"], mon["exp"]) != mon["level"]:
             problems.append(f"slot {slot}: exp {mon['exp']} is not level {mon['level']} on curve {entry['growth_rate']}")
-        got = codec.recompute_stats(mon, entry)
-        for k, v in got.items():
-            if mon[k] != v:
-                problems.append(f"slot {slot}: stored {k}={mon[k]} but recomputed {v}")
+        # Stat exp accrues after EVERY defeated foe (GainExperience .gainStatExpLoop,
+        # engine/battle/experience.asm:25-51) but the stored stats are only rebuilt where the
+        # engine calls CalcStats: the level-CHANGED branch of that same routine (:159-161 ->
+        # :187), AddPartyMon and the box withdrawal (engine/pokemon/add_mon.asm:243,514),
+        # evolution (engine/pokemon/evos_moves.asm:177) and the vitamin/rare-candy path
+        # (engine/items/item_effects.asm:1331). A party mon's status screen deliberately does
+        # NOT (engine/pokemon/status_screen.asm:64-76, `.DontRecalculate`; the recompute there
+        # is for box/daycare mons and lands in wLoadedMon, not the party record). So a mon that
+        # fought on after its last recalculation legitimately stores a stat BELOW a recompute
+        # from its CURRENT stat exp. That last recalculation ran at some stat exp between 0 and
+        # now, and calc_stat is monotonic in stat exp, so the sound check is the band
+        # [recompute(0), recompute(now)] -- exact equality is an instrument error, not a
+        # defect. HP is in the band too: CalcStats writes all five stats from one loop
+        # (home/move_mon.asm:34-47), so max_hp lags exactly like the others.
+        hi = codec.recompute_stats(mon, entry)
+        lo = codec.recompute_stats({**mon, "stat_exp": dict.fromkeys(mon["stat_exp"], 0)}, entry)
+        for k, top in hi.items():
+            if not lo[k] <= mon[k] <= top:
+                problems.append(f"slot {slot}: stored {k}={mon[k]} outside [{lo[k]}, {top}] "
+                                f"(recompute at stat exp 0..current)")
+            elif mon[k] != top and notes is not None:
+                notes.append(f"slot {slot}: {k} stored {mon[k]} within [{lo[k]}, {top}] "
+                             f"(stat exp accrued since the last recalculation)")
     return problems
 
 

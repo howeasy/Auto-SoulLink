@@ -155,6 +155,54 @@ def test_an_uninitialised_box_bank_is_not_a_checksum_failure():
     assert fixtures.qualify(bytes(image), rom) == []
 
 
+# ── stored stats lag their stat exp (H-8) ────────────────────────────────────────────────
+# GainExperience adds the beaten foe's base stats into the winner's stat exp after EVERY
+# battle (engine/battle/experience.asm:25-51) but only calls CalcStats on the branch where the
+# level actually changed (:159-161 -> :187). A mon that fought on after its last level-up
+# therefore stores stats BELOW a recompute from its current stat exp, by a point or two at low
+# levels. rival_swap_new hit exactly that (slot 0 levelled 5->6 mid-battle, then beat the
+# second mon: stored atk already carried its stat-exp point, stored spd did not), so the band
+# is [recompute(stat exp 0), recompute(stat exp now)] and nothing wider.
+
+
+def _with_party_mon(sram: bytes, slot: int, edit) -> bytes:
+    """`sram` with party mon `slot` passed through `edit` and the main checksum redone."""
+    image = bytearray(sram)
+    at = codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["mons"] + slot * codec.PARTY_MON_SIZE
+    mon = codec.decode_party_mon(bytes(image[at:at + codec.PARTY_MON_SIZE]))
+    edit(mon)
+    image[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(mon)
+    image[codec.SRAM_LAYOUT["sMainDataCheckSum"]] = codec.sav_checksum(
+        image[codec.SRAM_LAYOUT["sPlayerName"]:codec.SRAM_LAYOUT["sMainDataCheckSum"]])
+    return bytes(image)
+
+
+def test_stat_exp_accrued_without_a_level_up_still_qualifies():
+    """Green: max the stat exp, touch no stored stat. The engine would not have recalculated."""
+    sram, rom = _load("red_town")
+    grown = _with_party_mon(sram, 0, lambda m: m["stat_exp"].update(
+        dict.fromkeys(m["stat_exp"], 0xFFFF)))
+
+    notes: list[str] = []
+    assert fixtures.qualify(grown, rom, notes) == [], (
+        "a mon that gained stat exp without levelling was refused; the band is too tight")
+    assert notes, "the tolerated lag was accepted silently — the PYDEC line would not name it"
+    assert all("within [" in n and "stat exp accrued" in n for n in notes), notes
+
+
+def test_a_stored_stat_outside_the_band_still_fails():
+    """Red, both ends: below recompute(0) and above recompute(current) are still refusals."""
+    sram, rom = _load("red_town")
+    below = _with_party_mon(sram, 0, lambda m: m.update(spd=m["spd"] - 1))
+    assert any("spd" in p and "outside" in p for p in fixtures.qualify(below, rom)), (
+        "a stat one point below its stat-exp-0 recompute qualified clean")
+
+    # Stat exp stays 0 here, so the band is the single stored value: one point up is above it.
+    over = _with_party_mon(sram, 0, lambda m: m.update(spd=m["spd"] + 1))
+    assert any("spd" in p and "outside" in p for p in fixtures.qualify(over, rom)), (
+        "a stat above the recompute from its own stat exp qualified clean")
+
+
 def test_the_committed_ot2_fixture_has_a_second_trainer_id():
     """A1's wrong-save leg needs a Red save whose trainer ID is not the one scripted play
     produces by default. Deliberately NOT `_load`: a missing fixture has to fail here, not skip,
