@@ -221,7 +221,8 @@ gclient.on_signal = function(self, sig)
         if mon then
             local key = reads.key(mon)
             battle_site_keys[key] = (battle_site_keys[key] or 0) + 1
-            log(fmt("BATTLE_FAINT_SITE %s slot=%d battle_hp=%d", key, slot, sig.point.battle_hp))
+            log(fmt("BATTLE_FAINT_SITE %s @%d slot=%d battle_hp=%d", key, emu.framecount(),
+                    slot, sig.point.battle_hp))
         end
     end
     return original_on_signal(self, sig)
@@ -1239,6 +1240,7 @@ local function escape_after_faint(tag, replacement_slot)
     -- The game may demand a replacement starter before RUN becomes selectable. Handle
     -- both the forced party list and the standard RUN column with ordinary joypad edges.
     replacement_slot = replacement_slot or 0
+    local wanted = nil -- last clamped slot, logged once per change
     for _ = 1, 12000 do
         if rd(ram.wIsInBattle) == 0 then
             if not wait_until(overworld_ok, 30, "post-faint overworld checkpoint") then
@@ -1251,8 +1253,23 @@ local function escape_after_faint(tag, replacement_slot)
         local cur = rd(ram.wCurrentMenuItem)
         local buttons
         if x == 0 and y == 1 then
-            buttons = pulse_at_frame(cur == replacement_slot and "A" or
-                (cur < replacement_slot and "Down" or "Up")) -- select living starter
+            -- PartyMenuInit stores wMaxMenuItem = wPartyCount - 1 next to the Y=1/X=0 this
+            -- branch matches on (pret home/pokemon.asm:201,210-214,219-226), and memorialize has
+            -- already REMOVED the linked mon by the time this list opens, so the caller's slot 1
+            -- can be past the end. HandlePartyMenuInput turns menu WRAPPING on (:242), so the
+            -- cursor cycles inside the shorter list and simply never reaches it: the Down pulses
+            -- then burn all 12000 frames (attempt-2 receipt, explode_run2). Clamp to the list the
+            -- game is actually drawing; a party of 0 is not a list at all.
+            local live = rd(symbols.wPartyCount)
+            if live == 0 then return false, "no live party slot remains for the forced replacement" end
+            local want = math.min(replacement_slot, rd(ram.wMaxMenuItem))
+            if want ~= wanted then
+                wanted = want
+                log(fmt("REPLACEMENT_SLOT %s @%d want=%d asked=%d max=%d party=%d", tag,
+                        emu.framecount(), want, replacement_slot, rd(ram.wMaxMenuItem), live))
+            end
+            buttons = pulse_at_frame(cur == want and "A" or
+                (cur < want and "Down" or "Up")) -- select living starter
         elseif x == 0x0C and y == 0x0C and rd(ram.wMaxMenuItem) == 2 then
             buttons = pulse_at_frame(cur == 0 and "A" or "Up") -- SWITCH
         elseif rd(ram.wTextBoxID) == 0x0B and tile_text("FIGHT") and y == 14 then
@@ -1432,6 +1449,118 @@ local function reorder_linked_to_lead(key)
     return false, "party/START menu did not close after reorder"
 end
 
+-- Defined at the A5 lane below; the heal round trip needs the way back from up here.
+local walk_back_to_route1
+
+-- EX-4. The hunt weakens its catch for the ball (gen1_rb_hunt_inputs.lua:167-186), so the linked
+-- mon comes out of link_new at capture HP -- 3/15 in the run that failed -- and the coerced
+-- EXPLOSION turn below is a REAL turn: SelectMenuItem falls through to `.selectEnemyMove` and
+-- speed order decides who swings first (pret engine/battle/core.asm:332-339,389-409), only ties
+-- being randomised. At 3 HP any Route 1 foe one-shots and `.enemyMovesFirst` goes
+-- `jp z, HandlePlayerMonFainted` before EXPLOSION can run. At FULL HP it cannot: the strongest
+-- grass entry is a level 5 (data/wild/maps/Route1.asm) and TACKLE/GUST (power 40) tops out near
+-- 10 damage, ~15 with a critical, against the ~15 max HP of a level 3 catch -- so healing first
+-- turns the RNG retry into a decided outcome for everything but a critical on the weakest catch.
+--
+-- Neither town fixture carries a POTION (both bags decode empty; the battle fixtures hold one
+-- POKE_BALL, id $04 -- constants/item_constants.asm:29 has POTION at $14), and the fixtures are
+-- qualified artefacts, so this is the nurse, not an item. pret engine/events/pokecenter.asm:1-46:
+-- talking to her prints the welcome text, ALWAYS calls YesNoChoicePokeCenter (:13 -- the branch
+-- at :9-12 only skips "Shall we heal"), heals through `predef HealParty` when wCurrentMenuItem
+-- is 0, i.e. the YES the cursor already sits on, then prints two more boxes. She is object 0 at
+-- (3,1) with the counter tile $18 at (3,2) (data/maps/objects/ViridianPokecenter.asm:17;
+-- maps/ViridianPokecenter.blk read against Pokecenter_Coll and the tileset header,
+-- data/tilesets/collision_tile_ids.asm:19-20 and tileset_headers.asm:18), and a counter tile
+-- extends talking range by one tile (home/overworld.asm:1115-1126), so (3,3) facing UP reaches
+-- her. The receptionist walk_to_center stops at is a DIFFERENT object: the link receptionist,
+-- (11,2), which is why this walks on from there instead of talking where it arrives.
+--
+-- Called BEFORE reorder_linked_to_lead, not after: the round trip crosses Route 1 grass and the
+-- route only RUNs from what it meets, so the lead during the walk must be the starter, not a
+-- 3/15 linked mon a failed RUN would get killed. HealParty heals the starter too, which is what
+-- makes the walk back safe. Side effect, harmless on this lane: SetLastBlackoutMap
+-- (pokecenter.asm:17) moves the blackout destination to this Center -- explode_new never whites
+-- out, its starter survives the self-KO.
+local function heal_linked_in_overworld(key)
+    local function linked_mon()
+        local party = reads.read_party()
+        if not party then return nil end -- a torn read is not proof of anything
+        for _, mon in ipairs(party) do if reads.key(mon) == key then return mon end end
+        return nil
+    end
+    local function party_full()
+        local party = reads.read_party()
+        if not party then return false end
+        for _, mon in ipairs(party) do
+            if mon.max_hp == 0 or mon.hp ~= mon.max_hp then return false end
+        end
+        return true
+    end
+    -- Indoors: no grass, no ledges, no encounters -- step x then y and give up by the clock.
+    local function center_walk(points, what)
+        for _, p in ipairs(points) do
+            local deadline = frame + 1200
+            while true do
+                local x, y = rd(ram.wXCoord), rd(ram.wYCoord)
+                if x == p[1] and y == p[2] then break end
+                if frame >= deadline then
+                    return false, fmt("%s stalled at (%d,%d) heading for (%d,%d)", what, x, y, p[1], p[2])
+                end
+                local buttons
+                if rd(ram.wJoyIgnore) ~= 0 then buttons = pulse_at_frame("B") -- B never talks
+                elseif x < p[1] then buttons = {Right=true}
+                elseif x > p[1] then buttons = {Left=true}
+                elseif y < p[2] then buttons = {Down=true}
+                else buttons = {Up=true} end
+                yield_frame(buttons)
+            end
+        end
+        return true
+    end
+
+    local mon = linked_mon()
+    if not mon then return false, "linked mon not in the party before the heal walk" end
+    if party_full() then
+        log(fmt("HEAL_LEAD key=%s @%d hp=%d/%d via=already-full", key, emu.framecount(),
+                mon.hp, mon.max_hp))
+        return true
+    end
+    local walked, why = walk_to_center()
+    if not walked then return false, "heal walk out: " .. tostring(why) end
+    -- (11,3) link receptionist -> the y=4 corridor -> (3,3), the tile below the nurse counter.
+    -- y=4 and not y=3: the cooltrainer STAYs at (4,3) and would block that row for good, while
+    -- the gentleman pacing x=10 is transient (data/maps/objects/ViridianPokecenter.asm:18-19).
+    local at_nurse, stall = center_walk({{11, 4}, {3, 4}, {3, 3}}, "walk to the nurse")
+    if not at_nurse then return false, stall end
+    for _ = 1, 8 do yield_frame({Up=true}) end -- face the counter; bumping it is free
+    -- A until HealParty has landed, then stop: a further A edge would re-open the dialogue. The
+    -- YES row is where YesNoChoicePokeCenter puts the cursor, so no A press here can answer NO.
+    local healed = false
+    for _ = 1, 3600 do
+        if party_full() then healed = true break end
+        yield_frame(pulse_at_frame("A"))
+    end
+    if not healed then
+        local now = linked_mon()
+        return false, fmt("the nurse did not heal the party (linked %s, tilemap %s)",
+                          now and fmt("%d/%d", now.hp, now.max_hp) or "unreadable",
+                          Center.row(rd, ram.wTileMap, 281, 18))
+    end
+    mon = linked_mon()
+    if not mon then return false, "linked mon left the party at the nurse" end
+    log(fmt("HEAL_LEAD key=%s @%d hp=%d/%d via=nurse", key, emu.framecount(), mon.hp, mon.max_hp))
+    for _ = 1, 600 do
+        if overworld_ok() then break end
+        yield_frame(pulse_at_frame("B"))
+    end
+    if not overworld_ok() then return false, "the nurse dialogue did not close" end
+    local stepped, back_stall = center_walk({{3, 4}}, "step off the nurse counter")
+    if not stepped then return false, back_stall end
+    local returned, back_why = walk_back_to_route1()
+    if not returned then return false, "heal walk back: " .. tostring(back_why) end
+    return true
+end
+
 -- ── Explode Mode (W-3 / D-11) ────────────────────────────────────────────────────────
 -- MoveSelectionMenu's regular menu sets wTopMenuItemX=5 / wTopMenuItemY=$0C and places the
 -- names at hlcoord 6,13 with BIT_SINGLE_SPACED_LINES set (pret engine/battle/core.asm:
@@ -1477,7 +1606,7 @@ local function explode_free_reentry(driver, key)
     local function log_rows(tag)
         local out = {}
         for i, off in ipairs(MOVE_ROWS) do out[i] = Center.row(rd, ram.wTileMap, off, 12) end
-        log(fmt("MOVE_MENU_%s %s", tag, table.concat(out, " | ")))
+        log(fmt("MOVE_MENU_%s @%d %s", tag, emu.framecount(), table.concat(out, " | ")))
     end
 
     -- 1. the catch's OWN moves (Rattata Tackle/Tail Whip, Pidgey Gust -- base_stats/rattata.asm:13,
@@ -1510,7 +1639,8 @@ local function explode_free_reentry(driver, key)
             return false, fmt("move row at tilemap offset %d is not EXPLOSION", off)
         end
     end
-    log(fmt("MOVE_MENU_EXPLOSION rows=4 key=%s moves=%s pp=%s", key, hex4(ram.wBattleMonMoves), hex4(ram.wBattleMonPP)))
+    log(fmt("MOVE_MENU_EXPLOSION @%d rows=4 key=%s moves=%s pp=%s", emu.framecount(), key,
+            hex4(ram.wBattleMonMoves), hex4(ram.wBattleMonPP)))
     return true
 end
 
@@ -1537,6 +1667,10 @@ local function linked_faint_scenario(active, explode)
         local escaped, error_text = escape_after_faint("a")
         if not escaped then return false, error_text end
     elseif active then
+        if explode then -- see heal_linked_in_overworld: the EXPLOSION turn is a real turn
+            local healed, heal_why = heal_linked_in_overworld(key)
+            if not healed then return false, heal_why end
+        end
         local reordered, reorder_why = reorder_linked_to_lead(key)
         if not reordered then return false, reorder_why end
         local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true})
@@ -1581,6 +1715,8 @@ local function linked_faint_scenario(active, explode)
             end
             local reentered, reentry_why = explode_free_reentry(driver, key)
             if not reentered then driver.close();return false, reentry_why end
+            local function battle_hp() return rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1) end
+            local hp_before = battle_hp()
             local committed = driver.commit_move(1, 900)
             -- The coerced turn is a REAL turn. SelectMenuItem's z return falls through to
             -- `.selectEnemyMove` (core.asm:332-339) and the speed order decides who swings first
@@ -1605,7 +1741,6 @@ local function linked_faint_scenario(active, explode)
             --     catch can sit at 3/15 HP going in, and a natural KO here is classified RNG so
             --     the harness retries within scenario_attempt_limit.
             local why = committed.why
-            local function battle_hp() return rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1) end
             if why ~= "player_move" then
                 local fired = driver.hits().execute_player_move.count
                 for _ = 1, 900 do
@@ -1614,8 +1749,16 @@ local function linked_faint_scenario(active, explode)
                     yield_frame(pulse_at_frame("B"))
                 end
             end
-            log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(why),
-                    committed.selected_move or 0xFF, tostring(committed.pp_before)))
+            -- gen1_battle_driver.lua:204-210 keeps the site frames it saw and the foe's choice:
+            -- `enemy_exec` non-nil with `hp` collapsing to 0 IS the foe taking the turn first,
+            -- the one failure this scenario retries on. Log them, not just the verdict.
+            local stages = committed.stages or {}
+            log(fmt("B_ACTIVE_COMMIT %s @%d selected=%02X pp_before=%s enemy_move=%02X "
+                    .. "enemy_select=%s enemy_exec=%s player_exec=%s hp=%d->%d",
+                    tostring(why), emu.framecount(), committed.selected_move or 0xFF,
+                    tostring(committed.pp_before), committed.enemy_selected_move or 0xFF,
+                    tostring(stages.select_enemy_move), tostring(stages.execute_enemy_move),
+                    tostring(stages.execute_player_move), hp_before, battle_hp()))
             if why ~= "player_move" then
                 local final_hp = battle_hp()
                 driver.close()
@@ -2183,7 +2326,7 @@ end
 -- {10,31}, before the hunt's southern grass patch, but the reverse route still crosses grass.
 -- RUN from incidental battles using the forest walk's delegation pattern
 -- (gen1_rb_forest_inputs.lua:242-258); the hunt owns encounters after arrival.
-local function walk_back_to_route1()
+function walk_back_to_route1()
     local escape = dofile(ROOT .. "/lua/tests/gen1_rb_route1_inputs.lua").new({ player = D.player })
     local incidental_battles = 0
     local legs = {
