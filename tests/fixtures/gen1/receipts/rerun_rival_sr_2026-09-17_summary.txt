@@ -1,0 +1,9 @@
+rerun start 22:51:44 HEAD 03db464
+rival_swap_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  rival_swap_new: PASS (attempt 1 of 2)
+soft_reset_new rc=1
+[duo] PYDEC: FAIL client RESULT before both boot keys' stats on the server
+[duo] soft_reset_new: a client finished before "both boot keys' stats on the server" (a: RESULT: FAIL (chord gate never released); b: no RESULT)
+RESULT: FAIL (chord gate never released)
+  soft_reset_new: FAIL (attempt 1 of 2)
