@@ -47,6 +47,9 @@ local Hunt = dofile(ROOT .. "/lua/tests/gen1_rb_hunt_inputs.lua")
 local Center = dofile(ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
 local Driver = dofile(ROOT .. "/lua/tests/gen1_battle_driver.lua")
 local Play = dofile(ROOT .. "/lua/tests/gen1_scripted_play.lua")
+-- The MODULE, not the built instance: only the module carries the mailbox constants
+-- (lua/gen1/panel.lua:14,33) that explode_new's in-battle VBlank probe reads.
+local Panel = dofile(ROOT .. "/lua/gen1/panel.lua")
 
 log("duo instance " .. D.player .. " scenario=" .. D.scenario .. " game=" .. D.game)
 log(fmt("attempt %d of %d", D.attempt or 1, D.max_attempts or 2))
@@ -72,7 +75,8 @@ C.send = function(line)
         sent_events[name] = msg
     end
     if name ~= "tick" then log("TX " .. (line:sub(1, 220))) end
-    if name == "faint" and D.player == "b" and D.scenario == "linked_faint_active_new" then
+    if name == "faint" and D.player == "b" and
+       (D.scenario == "linked_faint_active_new" or D.scenario == "explode_new") then
         log("ENGINE_BATTLE_FAINT " .. tostring(msg.key)) -- client sends only from battle_faint site in this scenario
     end
     return _send(line)
@@ -84,7 +88,8 @@ local _handle = gclient.handle_command
 gclient.handle_command = function(self, cmd)
     local c = cmd and cmd.cmd or "?"
     seen[c] = (seen[c] or 0) + 1
-    if c == "trade_mask" or c == "show_menu" or c == "apply_trade" or c == "force_faint" then
+    if c == "trade_mask" or c == "show_menu" or c == "apply_trade" or c == "force_faint"
+       or c == "force_explode" then
         received_commands[c] = cmd
     end
     if c ~= "noop" then
@@ -207,6 +212,12 @@ local function yield_frame(buttons) joypad.set(buttons or {}); coroutine.yield()
 -- Battle-plan level (inside the hunt module's coroutine): hand the buttons UP to route.step,
 -- which returns them to the scenario, which sets the pad. One frame per call either way.
 local function yield_buttons(buttons) coroutine.yield(buttons or {}) end
+-- ...but a driver kept alive PAST the hunt (options.keep_driver) is resumed by the MAIN loop,
+-- which drops the yielded value and calls step(nil) -- so yield_buttons alone presses nothing
+-- there (receipt: tests/fixtures/gen1/receipts/linked_faint_active_new_b_result.txt:81, "move
+-- menu not entered"). A driver that has to drive outside the hunt coroutine sets the pad itself;
+-- inside it the scenario simply sets the same buttons again on the same frame.
+local function yield_pad_buttons(buttons) joypad.set(buttons or {}); coroutine.yield(buttons or {}) end
 local function frames(n) for _ = 1, n do yield_frame() end end
 local function wait_until(pred, secs, what)
     local deadline = os.time() + secs
@@ -238,11 +249,12 @@ local function wait_partner_done(secs) return wait_until(partner_done, secs or 6
 -- over a step that yields, and the route module run to a terminal phase.
 local symbols = play.symbols
 local function rd(addr) return memory.read_u8(addr, "System Bus") end
+local function hex4(addr) return fmt("%02X%02X%02X%02X", rd(addr), rd(addr + 1), rd(addr + 2), rd(addr + 3)) end
 local rom = parts.profile.rom
 local function hunt(mode, options)
     options = options or {}
     local driver = Driver.new({
-        step = yield_buttons, u8 = rd,
+        step = options.driver_step or yield_buttons, u8 = rd,
         sites = { display_battle_menu = rom.DisplayBattleMenu.addr, move_selection_menu = rom.MoveSelectionMenu.addr,
                   select_enemy_move = rom.SelectEnemyMove.addr, execute_player_move = rom.ExecutePlayerMove.addr,
                   execute_enemy_move = rom.ExecuteEnemyMove.addr },
@@ -943,7 +955,89 @@ local function reorder_linked_to_lead(key)
     return false, "party/START menu did not close after reorder"
 end
 
-local function linked_faint_scenario(active)
+-- ── Explode Mode (W-3 / D-11) ────────────────────────────────────────────────────────
+-- MoveSelectionMenu's regular menu sets wTopMenuItemX=5 / wTopMenuItemY=$0C and places the
+-- names at hlcoord 6,13 with BIT_SINGLE_SPACED_LINES set (pret engine/battle/core.asm:
+-- 2476-2483,2487-2506,2534-2538) -> tilemap offsets 13*20+6 = 266, 286, 306, 326.
+local MOVE_MENU_X, MOVE_MENU_Y = 5, 0x0C
+local MOVE_ROWS = { 266, 286, 306, 326 }
+
+-- The patch rewrites a 16-bit little-endian frame counter at mailbox +5 from its VBlank hook
+-- (patch/gen1/src/slink.asm:44,128-135), so two reads on two different frames are a live
+-- proof that the hook still runs inside a battle. Only a PATCHED cartridge has the mailbox:
+-- panel:present() checks the 'SLNK' beacon and the capability bits (lua/gen1/panel.lua:85-91).
+local function panel_counter() return rd(Panel.MAILBOX + 5) + rd(Panel.MAILBOX + 6) * 256 end
+local function log_panel_counter_in_battle()
+    if not parts.panel:present() then
+        log("PANEL_COUNTER_IN_BATTLE absent (unpatched cartridge)")
+        return
+    end
+    local a = panel_counter()
+    yield_frame()
+    log(fmt("PANEL_COUNTER_IN_BATTLE a=%d b=%d", a, panel_counter()))
+end
+
+-- `force_explode` arms a pending battle write that the client can only apply from its
+-- MainInBattleLoop hook (client.lua:612-641), and B is parked at the battle menu -- one loop
+-- head too late. Cancelling the MOVE menu with B is the free re-entry: SelectMenuItem returns
+-- with nz on a B press (core.asm:2620-2642) and core.asm:332-337 (`call MoveSelectionMenu ...
+-- jr nz, MainInBattleLoop`) jumps straight back to the loop head without reaching
+-- SelectEnemyMove, so no turn is spent and the foe never swings. FormatMovesString re-derives
+-- wNumMovesMinusOne from the four move bytes (engine/battle/misc.asm:2-31), so all four
+-- EXPLOSIONs get a row, and the commit's PP gate reads `[wBattleMonPP+slot] and PP_MASK`
+-- (core.asm:2643-2650) -- writes.lua:92,95 leave PP 1, which passes.
+local function explode_free_reentry(driver, key)
+    local function move_menu(what)
+        for _ = 1, 900 do
+            if rd(symbols.wTopMenuItemX) == MOVE_MENU_X and rd(symbols.wTopMenuItemY) == MOVE_MENU_Y then
+                frames(8) -- PlaceString runs before .menuset, but leave the row a redraw margin
+                return true
+            end
+            yield_frame()
+        end
+        return false, "the move menu never opened " .. what
+    end
+    local function log_rows(tag)
+        local out = {}
+        for i, off in ipairs(MOVE_ROWS) do out[i] = Center.row(rd, ram.wTileMap, off, 12) end
+        log(fmt("MOVE_MENU_%s %s", tag, table.concat(out, " | ")))
+    end
+
+    -- 1. the catch's OWN moves (Rattata Tackle/Tail Whip, Pidgey Gust -- base_stats/rattata.asm:13,
+    --    pidgey.asm:13), read before anything of ours has touched the battle struct.
+    if not driver.choose("FIGHT").ok then return false, "B could not open the move menu before the explode write" end
+    local opened, why = move_menu("before the cancel")
+    if not opened then return false, why end
+    log_rows("BEFORE")
+    if tile_text("EXPLOSION") then return false, "the move menu showed EXPLOSION before the write landed" end
+
+    -- 2. B, until the write lands. Stop pressing the moment the menu is gone so the stray edge
+    --    cannot reach the battle menu behind it.
+    local cancelled, landed = false, false
+    for _ = 1, 900 do
+        if rd(symbols.wTopMenuItemX) ~= MOVE_MENU_X then cancelled = true end
+        if rd(ram.wBattleMonMoves) == 0x99 then landed = true break end
+        yield_frame((not cancelled) and pulse_at_frame("B") or nil)
+    end
+    if not landed then return false, "the explode write never landed at the loop head" end
+
+    -- 3. the same menu again: four EXPLOSION rows, from a turn that was never spent.
+    local menu = driver.wait_menu(900)
+    if not menu.ok then return false, "the battle menu did not return after the cancel: " .. tostring(menu.why) end
+    if not driver.choose("FIGHT").ok then return false, "B could not re-open the move menu after the explode write" end
+    opened, why = move_menu("after the cancel")
+    if not opened then return false, why end
+    log_rows("AFTER")
+    for _, off in ipairs(MOVE_ROWS) do
+        if not tile_text("EXPLOSION", off) then
+            return false, fmt("move row at tilemap offset %d is not EXPLOSION", off)
+        end
+    end
+    log(fmt("MOVE_MENU_EXPLOSION rows=4 key=%s moves=%s pp=%s", key, hex4(ram.wBattleMonMoves), hex4(ram.wBattleMonPP)))
+    return true
+end
+
+local function linked_faint_scenario(active, explode)
     local linked, why = scenarios.link_new() -- real catch, server link, withdrawal, game SAVE
     if not linked then return false, link_prerequisite_failure(why) end
     if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned" end
@@ -968,31 +1062,51 @@ local function linked_faint_scenario(active)
     elseif active then
         local reordered, reorder_why = reorder_linked_to_lead(key)
         if not reordered then return false, reorder_why end
-        local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true})
+        -- Explode Mode drives the menus for real (cancel, probe, commit), so its driver needs a
+        -- step that sets the pad outside the hunt coroutine.
+        local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true,
+                                                   driver_step = explode and yield_pad_buttons or nil})
         if phase ~= "linked-active-menu" then return false, "B could not hold its linked mon active: " .. tostring(phase) end
         if rd(ram.wPlayerMonNumber) ~= 0 or not reads.read_party() or
            reads.key(reads.read_party()[1]) ~= key then return false, "B linked lead not active at hold menu" end
         log("READY_ACTIVE linked_slot=0")
+        if explode then log_panel_counter_in_battle() end
         local old = gclient.on_battle_loop_head
         gclient.on_battle_loop_head = function(self, sig)
             local pending = self.pending_battle_writes[1]
             old(self, sig)
-            if pending and pending.key == key and #self.pending_battle_writes == 0 and
-               rd(ram.wBattleMonHP) == 0 and rd(ram.wBattleMonHP + 1) == 0 and
-               rd(ram.wPlayerSelectedMove) == 0xFF then
+            if not (pending and pending.key == key and #self.pending_battle_writes == 0) then return end
+            if explode then
+                -- writes.lua:89-96 fills both move blocks with EXPLOSION ($99) and PP 1 and does
+                -- NOT touch wPlayerSelectedMove -- B still has to pick FIGHT -> slot 1.
+                log(fmt("LOOP_HEAD_EXPLODE moves=%s pp=%s", hex4(ram.wBattleMonMoves), hex4(ram.wBattleMonPP)))
+            elseif rd(ram.wBattleMonHP) == 0 and rd(ram.wBattleMonHP + 1) == 0 and
+                   rd(ram.wPlayerSelectedMove) == 0xFF then
                 log("LOOP_HEAD_WRITE key=" .. key .. " battle_hp=0000 selected=FF")
             end
         end
+        local want = explode and "force_explode" or "force_faint"
         local forced = false
         for _ = 1, 60000 do
-            if received_commands.force_faint and received_commands.force_faint.key == key then forced = true;break end
+            if received_commands[want] and received_commands[want].key == key then forced = true;break end
             yield_frame()
         end
-        if not forced then driver.close();return false, "force_faint never arrived" end
-        local chosen = driver.choose("FIGHT")
-        if not chosen.ok then driver.close();return false, "B could not choose FIGHT after force_faint" end
+        if not forced then driver.close();return false, want .. " never arrived" end
+        if explode then
+            log(fmt("EXPLODE_CMDS force_explode=%d force_faint=%d",
+                    seen.force_explode or 0, seen.force_faint or 0))
+            if (seen.force_faint or 0) ~= 0 then
+                driver.close();return false, "Explode Mode sent force_faint as well as force_explode"
+            end
+            local reentered, reentry_why = explode_free_reentry(driver, key)
+            if not reentered then driver.close();return false, reentry_why end
+        else
+            local chosen = driver.choose("FIGHT")
+            if not chosen.ok then driver.close();return false, "B could not choose FIGHT after force_faint" end
+        end
         local committed = driver.commit_move(1, 900)
-        log("B_ACTIVE_COMMIT " .. tostring(committed.why))
+        log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(committed.why),
+                committed.selected_move or 0xFF, tostring(committed.pp_before)))
         driver.close()
         local faint_text
         for _ = 1, 1800 do
@@ -1030,13 +1144,18 @@ local function linked_faint_scenario(active)
     if not wait_until(function() return (seen.memorialize_done or 0) >= 1 end, 180,
                       "both linked memorial commands") then return false, "memorialize_done never arrived" end
     log_party("POST_LINKED_FAINT")
-    local saved, save_why = game_save(active and "linked_faint_active_new" or "linked_faint_bench_new")
+    local saved, save_why = game_save(D.scenario) -- same tag as before for the two faint scenarios
     if not saved then return false, save_why end
+    if explode then return true, "explode self-KO and memorial saved" end
     return true, "engine linked faint and memorial saved"
 end
 
 function scenarios.linked_faint_bench_new() return linked_faint_scenario(false) end
 function scenarios.linked_faint_active_new() return linked_faint_scenario(true) end
+-- W-3 / D-11: linked_faint_active_new against a server started with --explode-mode. A's half is
+-- byte-for-byte the same sacrifice hunt; only B's half changes, because state.py:2678-2680 sends
+-- `force_explode` instead of `force_faint` on exactly that path.
+function scenarios.explode_new() return linked_faint_scenario(true, true) end
 
 -- F-4: admission itself is decided by the server. Both cartridges only boot their town
 -- battery save, send the production hello, and hold the ordinary overworld for 600 frames.
@@ -1065,6 +1184,13 @@ function scenarios.admit_randomized_new()
     if maps == 0 then return false, "hello ROM content carried no wild maps" end
     log(fmt("HELLO_RECEIPT %s %d wild_maps", content.variant, maps))
     if not wait_go() then return false, "no go-file after admission verdicts" end
+    -- Both halves SAVE. The saved-state oracle reads each cartridge's flushed SaveRAM, and
+    -- rejection is a server fact, not a cartridge one: B reaches this overworld checkpoint
+    -- before its hello (lua/gen1/client.lua:866-873) and game_save gates on safety.check
+    -- (duo_gen1_main.lua:126), not on admission -- so B drives the same ordinary-button SAVE,
+    -- and its readback is what proves the server touched neither cartridge's save.
+    local saved, save_error = game_save("admit_randomized_new")
+    if not saved then return false, save_error end
     frames(600)
     local again = reads.read_party()
     local pos = reads.read_map()
