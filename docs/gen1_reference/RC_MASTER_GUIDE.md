@@ -13,28 +13,24 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-17T16:50:12+00:00",
+  "updated_at_utc": "2026-09-17T17:02:31+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "2411a7b",
-  "live_lane": "linked_faint_active_new rerun 2 (coordinator, EmuHawk x2)",
+  "live_lane": null,
   "next_action": "PAUSED BY OWNER 2026-09-14 (second pause; workers NOT stopped by owner instruction). All workers have reported; no worker is running. Unreviewed candidates on the branch: R5b-3b d603734, R5b-1 round 3 acbd5ae, R5b-2 round 3 2411a7b, HX-2b 184db47, HS-3 10ebb74; C3 9ab1fab REJECTED (revert proposed in the quick-path plan). C3 9ab1fab REJECTED (cx-c70b849c; F1-F7 recorded) — round 2 is the first dispatch on resume. On resume: integrate their reports as candidates -> Codex review against docs/gen1_reference/reviews/R5b-joint-protocol.md -> fix-up rounds; then HX-2c-A1 (phase-aware attribution), HS-4 (lifecycle notices), N3-1 (pretrade checkpoint + COMMIT prerequisite), N3-2 (recover-before-trade); then a clean-tree full unit run (F1) and TK-5 ruff sweep before the human session. No new dispatch until the owner resumes.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
     {
       "id": "master-release-lane",
       "owner": "Claude Fable 5.1 coordinator (session e136b7e5) in worktree gen1-master-release-plan-6b4279 (branch claude/gen1-master-release-plan-6b4279); owner-approved plan v3.9 2026-09-17",
-      "state": "active",
+      "state": "frozen",
       "files": [
         "docs/gen1_resume.md",
-        "docs/gen1_reference checkpoint (this file)",
-        "LEASED subagent CLIENT-FIX: lua/gen1/client.lua, lua/gen1/entry.lua, tests/unit/test_gen1_client.py, tests/unit/test_gen1_writes.py",
-        "LEASED subagent A5-lua: lua/tests/duo/duo_gen1_main.lua",
-        "LEASED subagent LEDGER-1: docs/gen1_requirements.md, docs/protocol.md, .github/copilot-instructions.md (one paragraph), docs/gen1_untested_paths_designs.json (A10 entry)",
-        "LEASED OMP A6-py (cx-927453ee): tools/e2e_duo.py, tests/unit/test_e2e_duo_admission.py, tests/unit/test_e2e_duo_scenario_selection.py, tests/e2e/test_duo_gen1_new.py"
+        "docs/gen1_reference checkpoint (this file)"
       ],
-      "next_action": "OWNER 2026-09-17 ~16:52Z: stop after all in-flight tasks and check in -- NO new dispatches. HEAD f6c1a44. Landed since 2c3bc97: 6a4154e the ONE client card (A5/A6/A8/Y-0/A13 + receipt frames), f0f5310 explode_new Python (OMP), d95ff6d pc_ops_new + changebox_new bodies, f6c1a44 Yellow scripted host (OMP). Independent review of 6a4154e found 4 VERIFIED defects (A13 window closes before pret writes $FF at core.asm:6689-6690; standalone party removal still live-read; moved_this_frame frame-scoped vs a straddled _MoveMon; rescan clobbers a pending npc_trade) -> CLIENT-FIX in flight. In flight: CLIENT-FIX, A5-lua whiteout body, LEDGER-1 pass, OMP A6-py; lane: linked_faint_active_new rerun 2 (frozen tree at 6a4154e). After these land: integrate, commit, refresh resume note, check in with the owner. Queue after check-in (not dispatched): yellow fixture builds + Yellow lab gate, lane runs soft_reset_new / trade_decline_new / explode_new / pc_ops_new / changebox_new / whiteout_new, A4 clauses + A7 poison bodies, A5/A6 Python (whiteout), docs pass, P8 track.",
+      "next_action": "STOPPED FOR OWNER CHECK-IN 2026-09-17 ~17:15Z. All in-flight work integrated; no worker running; no file leased; no EmuHawk. HEAD = the resume-note commit after 2533016 (master d2c30fb + ~111). Read docs/gen1_resume.md in the master worktree first. PHYSICAL today: D-2, S-7, C-1, C-2, D-14, C-5 saved half, S-2 bag removal, T-1 prerequisites on the new client. Built-not-run: soft_reset/trade_decline/explode/pc_ops/changebox bodies + Python; whiteout body (Python missing); Yellow host + driver (fixtures not rebuilt); forest driver. Last lane run linked_faint_active_new FAILED by game RNG (starter whited out before the link) + harness hang at teardown (killed). Next on resume: the lane queue in the resume note, A5 Python to OMP, Yellow fixture builds.",
       "reuse_decision": "shared infra (state.py/server.py/connector/hud/adapters/base.py) reused unchanged; Gen 1 facts regenerated from pret; RC runtime not adopted; harness mechanisms (post-result oracle registry, fail-closed runner) recorded for docs/shared_runtime.md",
-      "source_head": "f6c1a44",
+      "source_head": "2533016",
       "independent_review": "OMP Gen1 Peer 2 reviews every coordinator Lua/client diff before a lane run; subagent cuts are coordinator-reviewed and OMP adversarial-reviewed before the tag; no worker reviews its own cut"
     },
     {
