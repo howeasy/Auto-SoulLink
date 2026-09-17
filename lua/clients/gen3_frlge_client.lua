@@ -4455,9 +4455,6 @@ local function on_frame()
 
     -- (sync_cooldown is now updated at step 4a, before the sync flush)
 
-    -- ── HUD overlay (draw last so it appears on top) ──────────────────────────
-    hud_render()
-
     -- ── clear per-frame write guard ───────────────────────────────────────────
     sync_written_keys = {}
 
@@ -4479,6 +4476,10 @@ end
 local function on_frame_safe()
     local ok, err = pcall(on_frame)
     if not ok then console.log("[SLink-FRLGE] ERROR (handler kept alive): " .. tostring(err)) end
+    -- HUD render is protected separately so a tick error never skips clearGraphics
+    -- (the surface must be cleared every render or stale HUD text never leaves the screen).
+    local hok, herr = pcall(hud_render)
+    if not hok then console.log("[SLink-FRLGE] HUD ERROR (handler kept alive): " .. tostring(herr)) end
 end
 
 -- ── Startup ───────────────────────────────────────────────────────────────────

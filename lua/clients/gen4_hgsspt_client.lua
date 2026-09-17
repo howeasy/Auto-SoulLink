@@ -1651,9 +1651,6 @@ local function on_frame()
     end
     prev_keys = keys
 
-    -- 15. HUD overlay (drawn last — on top of everything).
-    hud_render()
-
     -- 17. Clear per-frame write guard + advance prev state.
     sync_written_keys = {}
     if party_diff_ok then
@@ -1672,6 +1669,10 @@ end
 local function on_frame_safe()
     local ok, err = pcall(on_frame)
     if not ok then console.log("[SLink] ERROR (handler kept alive): " .. tostring(err)) end
+    -- HUD render is protected separately so a tick error never skips clearGraphics
+    -- (the surface must be cleared every render or stale HUD text never leaves the screen).
+    local hok, herr = pcall(hud_render)
+    if not hok then console.log("[SLink] HUD ERROR (handler kept alive): " .. tostring(herr)) end
 end
 
 -- ── Startup ────────────────────────────────────────────────────────────────────

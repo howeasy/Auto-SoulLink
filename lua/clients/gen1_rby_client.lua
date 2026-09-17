@@ -1896,9 +1896,6 @@ local function on_frame()
 
     -- 11. F-key overrides
     check_fkeys_debounced()
-
-    -- 12. HUD render
-    hud_render()
 end
 
 -- ── Initialize TCP connection ─────────────────────────────────────────────────
@@ -1926,6 +1923,10 @@ seed_all_boxes()
 local function on_frame_safe()
     local ok, err = pcall(on_frame)
     if not ok then console.log("[SLink-RBY] ERROR (handler kept alive): " .. tostring(err)) end
+    -- HUD render is protected separately so a tick error never skips clearGraphics
+    -- (the surface must be cleared every render or stale HUD text never leaves the screen).
+    local hok, herr = pcall(hud_render)
+    if not hok then console.log("[SLink-RBY] HUD ERROR (handler kept alive): " .. tostring(herr)) end
 end
 
 -- ── Main loop ─────────────────────────────────────────────────────────────────
