@@ -213,3 +213,11 @@ DIAG-R2 outcome (~22:10Z): poison_new B 'hunt-timeout' was a real pre-existing b
 = Forest.MAX_ENCOUNTERS x 3000; the retryable HUNT_EXHAUSTED phrase is now reachable). Driver dedup, EX-4, hud.lua and
 the deletions were ruled out as causes. The A-half truncations were the H-3 dead-process misfire (OMP H-5, in the tree
 uncommitted at the pause). Ledger 66cb89a: S-1 Yellow ✓.
+PAUSED for owner check-in + compaction (~22:25Z). All in-flight work reconciled: H-5 committed as f054b79 (dead-process
+rule fixed and pinned; soft-reset baseline wait after the go-file); tools/e2e_duo_head.py == HEAD:tools/e2e_duo.py.
+RB-1: the rebase of f76b506 onto master cb9cf5c was CONFLICT-FREE (185/185; the predicted server.py/patcher.py/
+_board.html overlaps touch different hunks); scratch clone <scratchpad>/rb1 at f3ad072, resolutions file
+<scratchpad>/rb1_resolutions.patch lists the gitignored inputs a fresh clone needs (ROMs, sibling checkout for
+test_gen1_trade_patch.py:80). No worker is running; OMP Gen1 Peer 2 idle. Tree clean except the untracked frozen copy.
+Resume with the 'Wrap-up 2' order above: rerun sweep (12 Gen 1 scenarios) at f054b79, gen3_rr trade+faint, release
+runner without --quick, ledger cells, P8-6b docs, then the owner's rebase/FF/tag decision.
