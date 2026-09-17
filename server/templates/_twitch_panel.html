@@ -41,10 +41,10 @@
   
 </style>
 <div class="twitch-panel">
-  <h1>&#x1F916; Twitch Bot</h1>
+  <h1>Twitch bot</h1>
 
   <div class="panel">
-    <h2>STATUS</h2>
+    <h2>Status</h2>
     <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
     <span id="status-channel" style="margin-left:.8em;color:var(--c-dim);font-size:var(--fs-sm)"></span>
     <span id="token-badge" style="margin-left:1em;font-size:var(--fs-sm);padding:3px 10px;border-radius:3px;display:inline-block"></span>
@@ -53,7 +53,7 @@
   </div>
 
   <div class="panel">
-    <h2>CONFIGURATION</h2>
+    <h2>Settings</h2>
     <div class="sec-note">
       &#x26A0; <strong>twitchio 3.x setup — Twitch IRC is discontinued. You must use EventSub.</strong><br>
       <strong>Step 1 — Register your app</strong> at <a href="https://dev.twitch.tv/console" target="_blank" style="color:var(--c-brand)">dev.twitch.tv/console</a> → Register Your Application.<br>
@@ -64,7 +64,7 @@
       &nbsp;&nbsp;<code>set TWITCH_ACCESS_TOKEN=...</code> &nbsp; ← from twitchtokengenerator<br>
       &nbsp;&nbsp;<code>set TWITCH_REFRESH_TOKEN=...</code> &nbsp; ← from twitchtokengenerator<br>
       &nbsp;&nbsp;<code>set TWITCH_CLIENT_SECRET=...</code> &nbsp; ← from dev.twitch.tv/console → your app → New Secret<br>
-      <strong>Step 4 — Fill in Channel and Client ID below</strong>, click Save Config, then Reconnect.
+      <strong>Step 4 — Fill in Channel and Client ID below</strong>, click Save settings, then Reconnect.
     </div>
     <div class="row2">
       <div>
@@ -83,7 +83,7 @@
       </div>
     </div>
     <div class="btn-row">
-      <button class="btn" onclick="saveConfig()">Save Config</button>
+      <button class="btn" onclick="saveConfig()">Save settings</button>
       <button class="btn" onclick="reloadBot()">Reconnect</button>
       <button class="btn btn-grn" onclick="enableBot()">Enable</button>
       <button class="btn btn-red" onclick="disableBot()">Disable</button>
@@ -91,7 +91,7 @@
   </div>
 
   <div class="panel">
-    <h2>COMMAND PREVIEW</h2>
+    <h2>Try a command</h2>
     <p style="color:var(--c-dim);font-size:var(--fs-sm);margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
     <div style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:160px">
@@ -118,7 +118,7 @@
   </div>
 
   <div class="panel">
-    <h2>COMMAND REFERENCE</h2>
+    <h2>Commands</h2>
     <table>
       <thead><tr><th>Command</th><th>Arg</th><th>Description</th></tr></thead>
       <tbody>
@@ -136,7 +136,7 @@
   </div>
 
   <div class="panel">
-    <h2>RECENT ACTIVITY</h2>
+    <h2>Recent activity</h2>
     <div id="log-list"><span class="empty">No activity yet.</span></div>
   </div>
 

@@ -94,7 +94,7 @@
   .debug-panel .ml-table .btn-revive:hover{ background:color-mix(in srgb, var(--c-alive) 55%, transparent); }
 </style>
 <div class="debug-panel">
-<h1>&#128295; Debug Console</h1>
+<h1>Debug</h1>
 
 <!-- Live status banner -->
 <div class="live-bar">
@@ -111,7 +111,7 @@
 
   <!-- Inject Event -->
   <div class="panel">
-    <h2><span class="h2-left">&#9889; Inject Event</span></h2>
+    <h2><span class="h2-left">Inject an event</span></h2>
     <div class="row">
       <div><label>Player</label><select id="ev-player"><option value="a">A</option><option value="b">B</option></select></div>
       <div><label>Event</label><select id="ev-type">
@@ -138,13 +138,13 @@
     <div class="row">
       <div><label>Extra JSON fields</label><input id="ev-extra" placeholder='{"level":12,"species_id":25}'></div>
     </div>
-    <button class="btn btn-orange" onclick="injectEvent()">Send Event</button>
+    <button class="btn btn-orange" onclick="injectEvent()">Send event</button>
     <div class="result" id="ev-result"></div>
   </div>
 
   <!-- Queue Command -->
   <div class="panel">
-    <h2><span class="h2-left">&#128228; Queue Command</span></h2>
+    <h2><span class="h2-left">Queue a command</span></h2>
     <div class="row">
       <div><label>Target Player</label><select id="cmd-player"><option value="a">A</option><option value="b">B</option></select></div>
       <div><label>Command</label><select id="cmd-type">
@@ -164,22 +164,22 @@
     <div class="row">
       <div><label>Extra JSON fields</label><input id="cmd-extra" placeholder='{"text":"Hello","r":255,"g":0,"b":0}'></div>
     </div>
-    <button class="btn btn-blue" onclick="queueCmd()">Queue Command</button>
+    <button class="btn btn-blue" onclick="queueCmd()">Queue command</button>
     <div class="result" id="cmd-result"></div>
   </div>
 
   <!-- Toggle State -->
   <div class="panel">
-    <h2><span class="h2-left">&#9881; State Toggles</span></h2>
+    <h2><span class="h2-left">State</span></h2>
     <div class="row">
       <div><label>Player</label><select id="tog-player"><option value="a">A</option><option value="b">B</option></select></div>
     </div>
     <div class="row">
-      <button class="btn btn-green" onclick="toggleBalls(true)">Set Pokeballs &#10003;</button>
-      <button class="btn btn-red" onclick="toggleBalls(false)">Clear Pokeballs &#10007;</button>
+      <button class="btn btn-green" onclick="toggleBalls(true)">Give Pokéballs</button>
+      <button class="btn btn-red" onclick="toggleBalls(false)">Take Pokéballs</button>
     </div>
     <div class="result" id="tog-result"></div>
-    <h2 style="margin-top:1em"><span class="h2-left">&#128506; Area State</span></h2>
+    <h2 style="margin-top:1em"><span class="h2-left">Area state</span></h2>
     <div class="row">
       <div><label>Area ID</label><input id="area-id" placeholder="route_1" list="dl-areas"></div>
       <div><label>New State</label><select id="area-state">
@@ -191,44 +191,44 @@
         <option value="dead_zone">dead_zone</option>
       </select></div>
     </div>
-    <button class="btn btn-orange" onclick="setAreaState()">Set Area State</button>
+    <button class="btn btn-orange" onclick="setAreaState()">Set area state</button>
     <div class="result" id="area-result"></div>
   </div>
 
   <!-- Live State Info -->
   <div class="panel">
-    <h2><span class="h2-left">&#128270; Live State</span>
-      <button class="btn btn-blue btn-sm" onclick="loadLiveState()">&#8635; Refresh</button></h2>
+    <h2><span class="h2-left">Live state</span>
+      <button class="btn btn-blue btn-sm" onclick="loadLiveState()">Refresh</button></h2>
     <div id="live-state-content" style="font-size:var(--fs-sm);color:var(--muted)">Loading…</div>
   </div>
 
   <!-- Danger Zone -->
   <div class="panel">
-    <h2><span class="h2-left">&#9888; Danger Zone</span></h2>
+    <h2><span class="h2-left">Reset</span></h2>
     <div class="row">
-      <button class="btn btn-red" onclick="resetRun()">&#128163; Reset Run</button>
-      <button class="btn btn-red" onclick="clearPending()">Clear All Pending</button>
+      <button class="btn btn-red" onclick="resetRun()">Reset run</button>
+      <button class="btn btn-red" onclick="clearPending()">Clear all pending</button>
     </div>
     <div class="row">
       <div><label>Clear Pending for Area</label><input id="clear-area" placeholder="route_1" list="dl-areas"></div>
       <button class="btn btn-orange" onclick="clearPendingArea()" style="flex:0 0 auto;align-self:flex-end">Clear</button>
     </div>
     <div class="result" id="danger-result"></div>
-    <h2 style="margin-top:1em"><span class="h2-left">&#128190; Rollback to Backup</span></h2>
+    <h2 style="margin-top:1em"><span class="h2-left">Roll back to a backup</span></h2>
     <div id="backup-list" style="color:var(--c-dim)">Loading backups…</div>
     <div class="result" id="rollback-result"></div>
   </div>
 
   <!-- Manual Link / Unlink -->
   <div class="panel full">
-    <h2><span class="h2-left">&#128279; Link Management</span>
-      <button class="btn btn-blue btn-sm" onclick="mlRefresh()">&#8635; Refresh</button></h2>
+    <h2><span class="h2-left">Links</span>
+      <button class="btn btn-blue btn-sm" onclick="mlRefresh()">Refresh</button></h2>
 
     <!-- Current links table -->
     <div id="ml-links-table" style="margin-bottom:1em;max-height:250px;overflow-y:auto"></div>
 
     <!-- Create new link -->
-    <h3 style="color:var(--green);font-size:var(--fs-md);margin-bottom:0.5em">Create Link</h3>
+    <h3 style="color:var(--green);font-size:var(--fs-md);margin-bottom:0.5em">Create a link</h3>
     <div class="row">
       <div><label id="ml-label-a">Player A</label>
         <select id="ml-a" onchange="mlMonChanged('a')" style="font-family:monospace;font-size:var(--fs-md)"></select></div>
@@ -242,7 +242,7 @@
         <input id="ml-area-filter" type="text" placeholder="type to filter…" oninput="mlFilterAreas()" style="font-family:monospace;font-size:var(--fs-sm)"></div>
     </div>
     <div style="display:flex;gap:0.6em;align-items:center;margin-top:0.4em">
-      <button class="btn btn-green" onclick="doManualLink()">&#128279; Link</button>
+      <button class="btn btn-green" onclick="doManualLink()">Link</button>
       <label style="display:inline;font-size:var(--fs-sm);cursor:pointer;color:var(--muted)">
         <input type="checkbox" id="ml-override" style="width:auto"> Override existing links
       </label>
@@ -253,19 +253,19 @@
 
   <!-- Memorial Box Monitor -->
   <div class="panel full">
-    <h2><span class="h2-left">&#129702; Memorial Box Monitor</span>
-      <button class="btn btn-blue btn-sm" onclick="loadMemorial()">&#8635; Refresh</button></h2>
+    <h2><span class="h2-left">Memorial box</span>
+      <button class="btn btn-blue btn-sm" onclick="loadMemorial()">Refresh</button></h2>
     <div id="memorial-content" style="font-size:var(--fs-sm);color:var(--muted)">Loading…</div>
   </div>
 
   <!-- Raw State -->
   <div class="panel full" id="raw-state">
-    <h2><span class="h2-left">&#128196; Raw State</span>
+    <h2><span class="h2-left">Raw state</span>
       <span>
         <label style="display:inline;font-size:var(--fs-xs);cursor:pointer;color:var(--muted);margin-right:0.5em">
           <input type="checkbox" id="raw-auto" checked style="width:auto"> auto
         </label>
-        <button class="btn btn-blue btn-sm" onclick="loadRaw()">&#8635; Refresh</button>
+        <button class="btn btn-blue btn-sm" onclick="loadRaw()">Refresh</button>
       </span>
     </h2>
     <pre id="raw-json">Loading…</pre>
@@ -377,11 +377,11 @@ function updateLiveBar() {
   var events = [];
   ['a','b'].forEach(function(pid) {
     var p = d.players[pid];
-    if (p && p.last_event && p.last_event !== '\\u2014') {
+    if (p && p.last_event && p.last_event !== '\u2014') {
       events.push(pid.toUpperCase() + ': ' + p.last_event);
     }
   });
-  document.getElementById('lb-last-event').textContent = events.join('  \\u2502  ') || '\\u2014';
+  document.getElementById('lb-last-event').textContent = events.join('  \u2502  ') || '\u2014';
 }
 
 // ── Datalist autofill ───────────────────────────────────────────────────
@@ -440,7 +440,7 @@ function updateDataLists() {
     seen[aid] = true;
     var pids = Object.keys(pc[aid]).map(function(p){return p.toUpperCase();}).join('+');
     var disp = _allAreas[aid] || aid;
-    ah += '<option value="' + aid + '">\\u26a0 ' + disp + ' [PENDING ' + pids + ']</option>';
+    ah += '<option value="' + aid + '">\u26a0 ' + disp + ' [PENDING ' + pids + ']</option>';
   });
   // Then all areas, grouped by state
   var active = [], rest = [];
@@ -595,7 +595,7 @@ async function loadLiveState() {
     if (rules.species_lock) ruleItems.push('<span style="color:var(--c-pend)">Species</span>');
     if (rules.gender_lock) ruleItems.push('<span style="color:var(--c-link)">Gender</span>');
     if (rules.type_lock) ruleItems.push('<span style="color:var(--c-info)">Type</span>');
-    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Lock Rules:</b> ' + (ruleItems.length ? ruleItems.join(' \\u00b7 ') : '<span style="color:var(--c-dim)">none</span>') + '</div>';
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Lock Rules:</b> ' + (ruleItems.length ? ruleItems.join(' \u00b7 ') : '<span style="color:var(--c-dim)">none</span>') + '</div>';
 
     // Player identity
     var ident = j.player_identity || {};
@@ -659,9 +659,9 @@ async function loadLiveState() {
 
     // Pokeballs obtained
     var pb = j.pokeballs_obtained || {};
-    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Pok\\u00e9balls Obtained:</b> ';
-    h += 'A: ' + (pb.a ? '<span style="color:var(--green)">\\u2713</span>' : '<span style="color:var(--red)">\\u2717</span>');
-    h += ' &nbsp; B: ' + (pb.b ? '<span style="color:var(--green)">\\u2713</span>' : '<span style="color:var(--red)">\\u2717</span>');
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Pok\u00e9balls Obtained:</b> ';
+    h += 'A: ' + (pb.a ? '<span style="color:var(--green)">\u2713</span>' : '<span style="color:var(--red)">\u2717</span>');
+    h += ' &nbsp; B: ' + (pb.b ? '<span style="color:var(--green)">\u2713</span>' : '<span style="color:var(--red)">\u2717</span>');
     h += '</div>';
 
     // Party size (physical)
@@ -706,7 +706,7 @@ async function loadMemorial() {
       if (pkeys.length > 0) hasPending = true;
     });
     if (hasPending) {
-      h += '<div style="margin-bottom:0.8em"><b style="color:var(--yellow)">\\u23f3 Pending Memorials</b> <span style="color:var(--muted);font-size:var(--fs-sm)">(awaiting Lua confirmation)</span><br>';
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--yellow)">\u23f3 Pending Memorials</b> <span style="color:var(--muted);font-size:var(--fs-sm)">(awaiting Lua confirmation)</span><br>';
       ['a','b'].forEach(function(pid) {
         var pkeys = pendingMem[pid] || [];
         if (!pkeys.length) return;
@@ -742,9 +742,9 @@ async function loadMemorial() {
           entries.forEach(function(e) {
             var statusColor = 'var(--c-dim)';
             var statusLabel = e.status;
-            if (e.status === 'dead') { statusColor = 'var(--red)'; statusLabel = '\\u2620 dead'; }
-            else if (e.status === 'pending_memorial') { statusColor = 'var(--yellow)'; statusLabel = '\\u23f3 pending'; }
-            else if (e.status === 'quarantined') { statusColor = 'var(--orange)'; statusLabel = '\\u26a0 QUARANTINED'; }
+            if (e.status === 'dead') { statusColor = 'var(--red)'; statusLabel = '\u2620 dead'; }
+            else if (e.status === 'pending_memorial') { statusColor = 'var(--yellow)'; statusLabel = '\u23f3 pending'; }
+            else if (e.status === 'quarantined') { statusColor = 'var(--orange)'; statusLabel = '\u26a0 QUARANTINED'; }
             else if (e.status === 'unknown') { statusColor = 'var(--yellow)'; statusLabel = '? unknown'; }
             h += '<tr' + (e.status === 'quarantined' ? ' style="background:color-mix(in srgb, var(--c-pend) 14%, transparent)"' : '') + '>';
             h += '<td>' + (e.slot + 1) + '</td>';
@@ -761,7 +761,7 @@ async function loadMemorial() {
 
     // 4. Memorial log (completed memorializations)
     if (memLog.length > 0) {
-      h += '<details style="margin-top:0.6em"><summary style="cursor:pointer;color:var(--text);font-weight:600">\\u1FAA6 Memorial Log (' + memLog.length + ' pairs)</summary>';
+      h += '<details style="margin-top:0.6em"><summary style="cursor:pointer;color:var(--text);font-weight:600">\u{1FAA6} Memorial Log (' + memLog.length + ' pairs)</summary>';
       h += '<table class="ml-table" style="margin-top:0.3em"><thead><tr>';
       h += '<th>Area</th><th>Player A</th><th>Player B</th><th>Cause</th>';
       h += '</tr></thead><tbody>';
@@ -810,7 +810,7 @@ function _mlPopulateMons(pid) {
   for (var i = 0; i < opts.length; i++) {
     var o = opts[i];
     var dis = o.linked ? ' disabled' : '';
-    var lbl = o.label + (o.linked ? ' \\u2714' : '');
+    var lbl = o.label + (o.linked ? ' \u2714' : '');
     h += '<option value="' + o.key + '" data-area="' + (o.pending_area||'') + '"' + dis + '>' + lbl + '</option>';
   }
   sel.innerHTML = h;
@@ -835,7 +835,7 @@ function mlFilterAreas() {
   var h = '<option value="">-- select area --</option>';
   function addGroup(label, arr, color) {
     if (!arr.length) return;
-    h += '<option disabled style="color:' + color + ';font-weight:bold">\\u2500\\u2500\\u2500 ' + label + ' \\u2500\\u2500\\u2500</option>';
+    h += '<option disabled style="color:' + color + ';font-weight:bold">\u2500\u2500\u2500 ' + label + ' \u2500\u2500\u2500</option>';
     for (var j = 0; j < arr.length; j++) {
       var aid = arr[j];
       var info = areas[aid] || {d:aid, s:'unseen', p:''};
@@ -871,7 +871,7 @@ function mlMonChanged(player) {
   if (aArea && bArea && aArea !== bArea) {
     var aDisp = (areas[aArea]||{}).d || aArea;
     var bDisp = (areas[bArea]||{}).d || bArea;
-    warnEl.innerHTML = '\\u26a0 A pending on ' + aDisp + ', B pending on ' + bDisp;
+    warnEl.innerHTML = '\u26a0 A pending on ' + aDisp + ', B pending on ' + bDisp;
   }
 }
 
@@ -889,7 +889,7 @@ async function doManualLink() {
     _mlForceLink = false;
     document.getElementById('ml-warn').innerHTML = '';
   } else if (j.requires_force) {
-    document.getElementById('ml-warn').innerHTML = '\\u26a0 ' + j.error;
+    document.getElementById('ml-warn').innerHTML = '\u26a0 ' + j.error;
     res.style.display = 'block';
     res.className = 'result err';
     res.innerHTML = '<button class="btn btn-orange" onclick="_mlForceLink=true;doManualLink()">Link anyway</button>';
@@ -909,8 +909,8 @@ function renderLinksTable() {
   var h = '<table class="ml-table"><thead><tr><th>Area</th><th>A</th><th>B</th><th>Status</th><th></th></tr></thead><tbody>';
   d.links.forEach(function(lnk, idx) {
     var stCls = lnk.status === 'alive' ? 'st-alive' : (lnk.status === 'dead' || lnk.status === 'memorial' ? 'st-dead' : 'st-memorial');
-    var aLbl = lnk.a_nickname ? lnk.a_nickname + ' (' + (lnk.a_species_name||'') + ')' : (lnk.a_key ? lnk.a_key.substring(0,8) : '\\u2014');
-    var bLbl = lnk.b_nickname ? lnk.b_nickname + ' (' + (lnk.b_species_name||'') + ')' : (lnk.b_key ? lnk.b_key.substring(0,8) : '\\u2014');
+    var aLbl = lnk.a_nickname ? lnk.a_nickname + ' (' + (lnk.a_species_name||'') + ')' : (lnk.a_key ? lnk.a_key.substring(0,8) : '\u2014');
+    var bLbl = lnk.b_nickname ? lnk.b_nickname + ' (' + (lnk.b_species_name||'') + ')' : (lnk.b_key ? lnk.b_key.substring(0,8) : '\u2014');
     h += '<tr>';
     h += '<td>' + (lnk.area_display || lnk.area_id) + '</td>';
     h += '<td>' + aLbl + '</td>';
@@ -926,7 +926,7 @@ function renderLinksTable() {
     if (lnk.status === 'dead' || lnk.status === 'memorial') {
       h += '<button class="btn btn-revive" data-action="revive" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'" title="Revive this pair">&#x2764;</button> ';
     }
-    h += '<button class="btn btn-red btn-unlink" data-action="unlink" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'">\\u2716</button>';
+    h += '<button class="btn btn-red btn-unlink" data-action="unlink" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'">\u2716</button>';
     h += '</td>';
     h += '</tr>';
   });

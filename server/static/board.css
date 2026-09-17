@@ -25,19 +25,7 @@ body.mgr { font-size: 16px; --fs-xs: .75rem; --fs-sm: .8125rem; --fs-md: .875rem
 body.mgr :is(.twitch-panel, .obs-panel, .debug-panel, .patcher-wrap) { font-family: var(--font-ui); font-size: var(--fs-md); line-height: 1.45; }
 body.mgr :is(.twitch-panel, .obs-panel, .debug-panel, .patcher-wrap) :is(input, select, textarea, button, .btn) { font-family: inherit; font-size: var(--fs-md); }
 body.mgr :is(.twitch-panel > h1, .obs-panel > h1, .debug-panel > h1, .patcher-head h1) { display: none; }   /* the run header names the page */
-body.mgr :is(.twitch-panel, .obs-panel, .debug-panel) h2 { font-family: var(--font-ui); font-size: var(--fs-base); letter-spacing: .08em; text-transform: uppercase; }
-body.mgr :is(.twitch-panel, .obs-panel, .debug-panel, .patcher-wrap) :is(pre, code, .num) { font-family: var(--font-num); font-size: var(--fs-sm); }
-/* ── Type scale ──────────────────────────────────────────────────────────
- * One scale for every Manager page, in rem, so a size never depends on how deep an
- * element sits. xs captions · sm secondary · md controls and body copy · base · lg
- * emphasis · h1 the page/run name. Figures wear --font-num at the same sizes. */
-body.mgr { font-size: 16px; --fs-xs: .75rem; --fs-sm: .8125rem; --fs-md: .875rem; --fs-base: 1rem; --fs-lg: 1.125rem; --fs-h1: 1.3rem; }
-/* The run's panels (Twitch, OBS, debug, patcher, calc) bring their own markup; they
- * share the scale and the face, and their controls never fall back to the browser's. */
-body.mgr :is(.twitch-panel, .obs-panel, .debug-panel, .patcher-wrap) { font-family: var(--font-ui); font-size: var(--fs-md); line-height: 1.45; }
-body.mgr :is(.twitch-panel, .obs-panel, .debug-panel, .patcher-wrap) :is(input, select, textarea, button, .btn) { font-family: inherit; font-size: var(--fs-md); }
-body.mgr :is(.twitch-panel, .obs-panel, .debug-panel) h1 { font-size: var(--fs-h1); }
-body.mgr :is(.twitch-panel, .obs-panel, .debug-panel) h2 { font-family: var(--font-ui); font-size: var(--fs-base); letter-spacing: .08em; text-transform: uppercase; }
+body.mgr :is(.twitch-panel, .obs-panel, .debug-panel) h2 { font-family: var(--font-ui); font-size: var(--fs-lg); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--c-txt); }
 body.mgr :is(.twitch-panel, .obs-panel, .debug-panel, .patcher-wrap) :is(pre, code, .num) { font-family: var(--font-num); font-size: var(--fs-sm); }
 body.board { --font-ui: 'Jersey 20', 'Pixelify Sans', monospace; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; }
@@ -405,7 +393,7 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 /* the randomizer's option groups: one fieldset per UPR area, chips for modes, a range per curve */
 .mk-rgroups { columns: 2 340px; column-gap: var(--space-3); }
 .mk-rgroup { display: flex; flex-direction: column; gap: var(--space-3); margin: 0 0 var(--space-3); break-inside: avoid; padding: var(--space-3); border: 1px solid var(--c-edge); border-radius: calc(var(--mk-radius) + var(--space-3)); background: var(--c-card); min-width: 0; }
-.mk-rgroup legend { padding: 0 var(--space-1); color: var(--c-dim); font-size: var(--fs-sm); letter-spacing: .08em; text-transform: uppercase; }
+.mk-rgroup legend { padding: 0 var(--space-1); color: var(--c-dim); font-size: var(--fs-sm); }
 .mk-rgroup .mk-opt { padding: var(--space-2) var(--space-3); min-height: 40px; box-sizing: border-box; }
 .mk-rlabel { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: baseline; font-size: var(--fs-md); color: var(--c-dim); }
 .mk-rlabel em { font-style: normal; }
