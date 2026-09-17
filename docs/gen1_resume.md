@@ -196,3 +196,16 @@ Lane note (2026-09-17 ~21:50Z): gen3_rr trade/faint failed at the MYKEY handshak
 (gitignored build artifact) was absent from this worktree — EmuHawk started with no core. Copied from the main
 checkout; rerun queued after the Gen 1 sweep (LANE-REG2). HUD-3 / hud.lua / memory_gb / gatelib changes were ruled
 out as causes (DIAG-G3). Package boot + HUD pixel proof committed at 05bc4f1.
+
+## Wrap-up 2 (owner 2026-09-17 ~22:05Z: "after all in-flight work is done, pause so we can check in and compact")
+Reconcile-only from here. In flight at the pause request: OMP H-5 (dead-process rule misfire in tools/e2e_duo.py that
+aborted duo runs when one half exited after writing RESULT; plus the soft-reset stats-baseline wait placement), OMP RB-1
+(rebase dry run in scratch clone <scratchpad>/rb1, paused for H-5), DIAG-R2 (Opus: poison_new B 'hunt-timeout' at
+d2b107f — real or consequence), L-10 (ledger cells: S-1 Yellow ✓ candidate cdaa596, package boot 05bc4f1, Track B audit).
+Committed since the last section: 05bc4f1 package-boot receipts, 63f7475 HUD geometry fix, d2b107f D-1 dedup,
+f76b506 R-1 fast lanes PASS, 210d295 resume, cdaa596 Yellow S-1 receipt.
+NEXT SESSION, in order: (1) commit H-5 when it lands, refresh tools/e2e_duo_head.py; (2) lane: rerun sweep of all
+Gen 1 scenarios (poison, pc_ops, soft_reset, explode, rival, changebox, linked_faint_active, trade_decline, trade,
+reconnect, admit, ball_gate) with the narrowed precondition; commit receipts; (3) gen3_rr trade + faint; (4)
+verify_gen1_release.py without --quick (P8-7 full pass); (5) ledger cells for the new receipts, P8-6b docs; (6) owner
+decision: rebase onto master (RB-1 resolutions), FF, tag.
