@@ -155,8 +155,13 @@
       </header>
 
       <div class="mk-page">
+        {# What the last action said when it failed — a start that could not bind its ports,
+           mostly. Outside #content so the 2 s morph does not wipe it. #}
+        <div class="mk-banner error" x-data="runNotice()" x-show="notice" x-cloak>
+          <b>Could not start.</b> <span x-text="notice"></span>
+          <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+        </div>
         {% include "_board.html" %}
-
       </div>
 
     {% else %}
@@ -169,6 +174,10 @@
 <script>
   function manager() { return {}; }
 
+  function runNotice() {
+    return { notice: new URLSearchParams(window.location.search).get('error') || '' };
+  }
+
   function runActions(runId) {
     return {
       busy: false, launchers: false,
@@ -178,7 +187,7 @@
         try {
           var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST' });
           var j = await res.json();
-          if (!j.ok) { alert(j.error || 'Action failed'); return; }
+          if (!j.ok) { window.location.href = '/runs/' + runId + '?error=' + encodeURIComponent(j.error || 'Action failed'); return; }
           window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
         } finally { this.busy = false; }
       },
@@ -217,6 +226,7 @@
           var j = await res.json();
           if (!j.ok) { this.error = j.error || 'Create failed'; return; }
           var runId = j.run.run_id;
+          if (j.start_error) { window.location.href = '/runs/' + runId + '?error=' + encodeURIComponent(j.start_error); return; }
           if (this.draft.randomize) {
             // The run exists either way; a refusal here lands on its randomizer page with
             // the reason, rather than losing the run.

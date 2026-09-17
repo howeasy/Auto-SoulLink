@@ -175,7 +175,18 @@
       </section>
 
       {% if not board.sections %}
-        <section class="mk-zone"><div class="mk-card mk-empty">No links yet. Load each save, then the launcher script — the first catch in a shared area starts the board.</div></section>
+        <section class="mk-zone">
+          <div class="mk-card mk-firstrun">
+            <b>Nothing on the board yet.</b>
+            <ol class="mk-steps">
+              <li>Download a launcher per player:
+                <a class="mk-btn" href="{{ launchers.a }}">Player A · .lua</a>
+                <a class="mk-btn" href="{{ launchers.b }}">Player B · .lua</a></li>
+              <li>Each player loads their save in BizHawk, <b>then</b> the launcher in the Lua console. It finds the game and connects — the card above turns green.</li>
+              <li>The first catch both of you make in the same area starts the board.</li>
+            </ol>
+          </div>
+        </section>
       {% endif %}
 
       {# ── one zone per section, same geometry as the Now cards ──────── #}

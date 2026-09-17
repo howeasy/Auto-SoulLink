@@ -18,16 +18,23 @@ def _captured_spawn_cmd(run: dict) -> list:
     async def fake_exec(*cmd, **kwargs):
         captured["cmd"] = list(cmd)
 
-        class P:
+        class P:                          # a healthy child: still running after the startup check
             pid = 4242
+            returncode = None
+
+            async def wait(self):
+                await asyncio.sleep(10)
         return P()
 
     real = asyncio.create_subprocess_exec
     asyncio.create_subprocess_exec = fake_exec
+    grace = manager.SPAWN_GRACE_S
+    manager.SPAWN_GRACE_S = 0.01
     try:
         asyncio.run(manager._spawn_run(run, "127.0.0.1"))
     finally:
         asyncio.create_subprocess_exec = real
+        manager.SPAWN_GRACE_S = grace
     return captured["cmd"]
 
 

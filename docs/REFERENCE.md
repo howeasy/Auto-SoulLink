@@ -417,7 +417,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/tools` | GET | The patcher and the randomized-pair builders |
 | `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned (else most recent running) run — the URLs pasted into OBS |
 | `/api/runs` | GET | The registry |
-| `/api/runs/new` | POST | `{name, game?, ...options}` — creates and auto-starts; `game` is a family key from `manager.GAMES` |
+| `/api/runs/new` | POST | `{name, game?, ...options}` — creates and auto-starts; `game` is a family key from `manager.GAMES`. Ports are the first pair unused by the registry **and bindable on this machine**; a server that dies on startup is reported in `start_error` (the run exists, stopped) rather than recorded as running |
 | `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
 | `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
 | `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |

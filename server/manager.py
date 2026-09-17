@@ -195,6 +195,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 MANAGER_DIR  = os.path.join(PROJECT_ROOT, "data", "runs")
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
+# How long a freshly spawned server gets to die on startup (a taken port) before it counts as up.
+SPAWN_GRACE_S = 1.5
 # Reserved port for the manager itself
 MANAGER_HTTP_PORT = 8090
 # Port ranges for spawned runs
@@ -282,15 +284,29 @@ def _find_run(runs: list[dict], run_id: str) -> dict | None:
     return None
 
 
+def _port_free(port: int) -> bool:
+    """Whether this machine will let a server bind the port right now. The registry only
+    knows this Manager's runs; a hand-started server, another Manager's data dir, or any
+    other program can hold a port the registry thinks is free."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+
+
 def _next_ports(runs: list[dict]) -> tuple[int, int]:
-    """Return the next available (tcp_port, http_port) pair."""
+    """Return the next available (tcp_port, http_port) pair: unused by this registry AND
+    bindable on this machine."""
     used_tcp  = {r["tcp_port"]  for r in runs}
     used_http = {r["http_port"] for r in runs}
     tcp = TCP_PORT_BASE
-    while tcp in used_tcp:
+    while tcp in used_tcp or not _port_free(tcp):
         tcp += 1
     http = HTTP_PORT_BASE
-    while http in used_http or http == MANAGER_HTTP_PORT:
+    while http in used_http or http == MANAGER_HTTP_PORT or not _port_free(http):
         http += 1
     return tcp, http
 
@@ -433,7 +449,22 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         if _errf != asyncio.subprocess.DEVNULL:
             _errf.close()
     log.info(f"Spawned run {run['run_id']} (PID {proc.pid}) TCP={run['tcp_port']} HTTP={run['http_port']}")
-    return proc.pid
+    # A server that cannot bind its ports exits within the first second. Catch that here,
+    # with its own words, rather than recording a "running" run whose page would then show
+    # whatever else answers on that HTTP port.
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=SPAWN_GRACE_S)
+    except TimeoutError:
+        return proc.pid
+    reason = ""
+    try:
+        with open(_spawn_log, encoding="utf-8", errors="replace") as f:
+            lines = [ln.strip() for ln in f.read().splitlines() if ln.strip()]
+        reason = next((ln for ln in reversed(lines) if ln.startswith("Cannot ")), lines[-1] if lines else "")
+    except OSError:
+        pass
+    raise RuntimeError(f"the run's server exited on startup (code {proc.returncode})"
+                       + (f": {reason}" if reason else "") + f" — see {_spawn_log}")
 
 
 def _kill_run(pid: int):
@@ -661,7 +692,8 @@ class RunManager:
         if run:
             ctx.update(board_context(status, run_name=run.get("name", ""),
                                      poll_url=f"/runs/{run['run_id']}/board",
-                                     live=run.get("status") == "running"))
+                                     live=run.get("status") == "running",
+                                     launcher_url=f"/api/runs/{run['run_id']}/launcher/{{player}}"))
         return aiohttp_jinja2.render_template("manager.html", request, ctx)
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
@@ -672,7 +704,8 @@ class RunManager:
             raise web.HTTPNotFound(text="Run not found")
         ctx = board_context(await self._run_status(request, run), run_name=run.get("name", ""),
                             poll_url=f"/runs/{run['run_id']}/board",
-                            live=run.get("status") == "running")
+                            live=run.get("status") == "running",
+                            launcher_url=f"/api/runs/{run['run_id']}/launcher/{{player}}")
         return aiohttp_jinja2.render_template("_board.html", request, ctx)
 
     async def _run_status(self, request: web.Request, run: dict) -> dict:
@@ -761,15 +794,18 @@ class RunManager:
         runs.append(run)
         _save_registry(runs)
 
-        # Auto-start
+        # Auto-start. The run exists either way; a start that fails is reported with its
+        # reason so the creator can show it, rather than landing on a "running" run.
+        start_error = ""
         try:
             pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
                                    manager_port=self.manager_port)
             run = _update_run(run_id, status="running", pid=pid) or run
         except Exception as e:
+            start_error = str(e)
             log.error(f"Failed to auto-start run {run_id}: {e}")
 
-        return web.json_response({"ok": True, "run": run})
+        return web.json_response({"ok": True, "run": run, "start_error": start_error})
 
     async def handle_start(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
@@ -1466,5 +1502,11 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=MANAGER_HTTP_PORT,
                         help=f"Manager HTTP port (default: {MANAGER_HTTP_PORT})")
+    parser.add_argument("--data-dir", default=None,
+                        help="Where runs live (default: data/runs). A fresh directory is a fresh Manager")
     args = parser.parse_args()
+    if args.data_dir:
+        MANAGER_DIR = os.path.abspath(args.data_dir)
+        REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
+        os.makedirs(MANAGER_DIR, exist_ok=True)
     asyncio.run(main(args.host, args.port))

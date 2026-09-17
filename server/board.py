@@ -201,10 +201,13 @@ def phase(status: dict) -> tuple[str, str]:
     players = status.get("players") or {}
     if all((players.get(pid) or {}).get("nuzlocke_active") for pid in PIDS):
         return "running", "Run in progress"
+    if not any((players.get(pid) or {}).get("connected") for pid in PIDS):
+        return "pre", "Waiting for players"
     return "pre", "Waiting for Pokéballs"
 
 
-def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live: bool = True) -> dict:
+def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live: bool = True,
+                  launcher_url: str = "/launcher/{player}") -> dict:
     """Everything `_board.html` needs, from the payload alone -- so the run server and the
     Manager (which has only the payload, live or persisted) render the same board.
 
@@ -225,6 +228,8 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
         "rules": [(icon, text) for key, icon, text in RULE_BADGES if rules.get(key)],
         "phase_slug": slug,
         "phase_label": label,
+        # Where each player's BizHawk launcher downloads from; the empty board points at it.
+        "launchers": {pid: launcher_url.format(player=pid) for pid in PIDS},
         "concise_title": title or "Soul Link",
         # The damage calculator is pinned to modern mechanics: Radical Red only.
         "calc_preview": any(rt.endswith("_rr") for rt in rom_types),

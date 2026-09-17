@@ -417,6 +417,9 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-range input[type=range] { grid-area: range; width: 100%; margin: 0; min-height: 28px; accent-color: var(--c-brand); }
 .mk-range output { grid-area: out; min-width: 4ch; text-align: right; font-size: var(--fs-lg); color: var(--c-dim); }
 .mk-range output.set { color: var(--c-txt); }
+.mk-banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card); font-size: var(--fs-md); text-wrap: pretty; }
+.mk-banner.error { border-color: color-mix(in srgb, var(--c-dead) 45%, var(--c-edge)); background: color-mix(in srgb, var(--c-dead) 8%, var(--c-card)); }
+.mk-banner b { color: var(--c-dead); }
 .mk-linkbtn { border: 0; padding: 0; background: none; color: var(--c-brand); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .mk-opt.described { align-items: flex-start; flex-wrap: nowrap; gap: var(--space-3); }
 .mk-opt.described input { margin-top: 3px; }
@@ -431,6 +434,10 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-preview-body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-2); }
 .mk-preview-rules { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .mk-tag.on { color: var(--c-alive); border-color: color-mix(in srgb, var(--c-alive) 45%, transparent); }
+.mk-firstrun { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-5); }
+.mk-firstrun > b { font-size: var(--fs-base); }
+.mk-firstrun .mk-steps li { line-height: 2; }
+.mk-firstrun .mk-btn { margin: 0 2px; vertical-align: middle; }
 .mk-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--fs-md); line-height: 1.4; color: var(--c-dim); }
 .mk-steps li::marker { color: var(--c-brand); font-weight: 600; }
 .mk-steps b { color: var(--c-txt); font-weight: 500; }

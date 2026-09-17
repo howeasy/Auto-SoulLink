@@ -182,7 +182,10 @@ async def test_spawn_closes_parent_stderr_after_creation(manager_dir, monkeypatc
             raise OSError("spawn failed")
         if outcome == "cancel":
             raise asyncio.CancelledError
-        return SimpleNamespace(pid=4242)
+        async def _wait():                       # a healthy child: still running after the check
+            await asyncio.sleep(10)
+        monkeypatch.setattr(manager, "SPAWN_GRACE_S", 0.01)
+        return SimpleNamespace(pid=4242, wait=_wait, returncode=None)
 
     monkeypatch.setattr(manager.asyncio, "create_subprocess_exec", create)
     run = {"run_id": "r1", "tcp_port": 1, "http_port": 2}
@@ -203,7 +206,10 @@ async def test_spawn_keeps_devnull_fallback_when_log_cannot_open(monkeypatch):
 
     async def create(*args, **kwargs):
         assert kwargs["stderr"] == asyncio.subprocess.DEVNULL
-        return SimpleNamespace(pid=4242)
+        async def _wait():                       # a healthy child: still running after the check
+            await asyncio.sleep(10)
+        monkeypatch.setattr(manager, "SPAWN_GRACE_S", 0.01)
+        return SimpleNamespace(pid=4242, wait=_wait, returncode=None)
 
     monkeypatch.setattr(manager, "open", denied, raising=False)
     monkeypatch.setattr(manager.asyncio, "create_subprocess_exec", create)
@@ -295,3 +301,36 @@ async def test_browser_attempts_update_crosses_manager_and_run_middlewares(manag
         assert (await response.json())["ok"] is False
         assert srv.state.attempts_count == 7
         assert (run_dir / "links.json").read_bytes() == saved
+
+
+# ── a run must get ports it can actually bind, and a dead spawn must not read as running ──
+def test_next_ports_skips_a_port_something_else_holds():
+    """The registry only knows this Manager's runs. A port held by anything else on the
+    machine (a hand-started server, another Manager) must be skipped, not handed out."""
+    import socket
+    with socket.socket() as held:
+        held.bind(("127.0.0.1", 0))               # whatever the OS gives; never a live run's port
+        held.listen(1)
+        port = held.getsockname()[1]
+        assert not manager._port_free(port)
+    assert manager._port_free(port)
+
+
+@pytest.mark.asyncio
+async def test_a_spawn_that_exits_on_startup_raises_with_its_reason(tmp_path, monkeypatch):
+    """server.py exits within a second when it cannot bind. Reporting that as a running run
+    would show whatever else answers on the HTTP port — another run's board."""
+    monkeypatch.setattr(manager, "MANAGER_DIR", str(tmp_path))
+    run = {"run_id": "r1", "name": "r1", "tcp_port": 1, "http_port": 2}
+    log = tmp_path / "r1" / "spawn.log"
+
+    async def fake_exec(*_cmd, **_kw):
+        log.write_text("noise\nCannot listen on TCP 127.0.0.1:1 — in use\n  Another SLink server is probably already running.\n", encoding="utf-8")
+
+        async def _wait():
+            return 1
+        return SimpleNamespace(pid=77, wait=_wait, returncode=1)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    with pytest.raises(RuntimeError, match="Cannot listen on TCP"):
+        await manager._spawn_run(run, "127.0.0.1")
