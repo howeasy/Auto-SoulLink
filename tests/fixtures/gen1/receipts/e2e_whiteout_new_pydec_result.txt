@@ -1,0 +1,11 @@
+attempt 1 of 2
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=2afce03a7b35d2fb0ac638bb7dbd2523606dda64d242e023b1f4ced9d9b7a6c6 file=2afce03a7b35d2fb0ac638bb7dbd2523606dda64d242e023b1f4ced9d9b7a6c6 match=true saves=2
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=dd8ab3efb310274973773fd22403c5436e1476d4dc69e8969d167a96344a82da file=dd8ab3efb310274973773fd22403c5436e1476d4dc69e8969d167a96344a82da match=true saves=2
+S-4/W-3 one whiteout from a, run_over false, route_1 pair still ALIVE 85F5:4190:24 <-> BCCA:AFB9:24
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved party 2 mon(s) = starter + rebuilt 85F5:4190:24, active box empty, decode valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved party 2 mon(s) = starter + rebuilt BCCA:AFB9:24, active box empty, decode valid
+PYDEC: PASS asserted scenario facts

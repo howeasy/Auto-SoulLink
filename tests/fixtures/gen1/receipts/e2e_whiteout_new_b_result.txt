@@ -1,0 +1,128 @@
+duo instance b scenario=whiteout_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:49183 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:49183
+[client] [SLink] TCP connected to 127.0.0.1:49183
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @649
+PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"B00013000014142D0A
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @1918 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @2006 (10,34) battle=1 party=1
+[hunt] turn 1 foe hp 17/17 odds 0.36 dmax nil -> fight
+phase wild-fight @2772 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+[hunt] turn 2 foe hp 13/17 odds 0.47 dmax 5 -> fight
+[hunt] turn 3 foe hp 9/17 odds 0.71 dmax 5 -> fight
+[hunt] turn 4 foe hp 5/17 odds 1.00 dmax 5 -> throw
+phase wild-throw @4808 (10,34) battle=1 party=1
+[hunt] threw ball index 0 -> timeout
+RX hud_show text=>> Got PIDGEY
+PARTY_COUNT 1 -> 2 @6809
+PARTY_UNREADABLE @6810 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+[client] [SLink-gen1] writes PAUSED: party unreadable
+heartbeat f=7200 party=2 connected=true
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":5,"in_box":false,"key":"BCCA:AFB9:24","level":4,"maxHP":17,"nickname":"PIDGEY","player":"b","seq":201,"species_id":36,"stats":{"level":4,"maxHP":17}}
+PARTY_READABLE @7330  (count=2 species=B0 24 FF 00 00 00 00)
+TX {"event":"safe","player":"b","seq":202}
+RX play_sound
+RX msgbox text=PIDGEY and PIDGEY linked!
+RX party_mon key=BCCA:AFB9:24
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @7346 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @7347 (10,34) battle=0 party=2
+HUNT caught after 5430 frames, 1 encounter(s)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=7
+MYKEY 1 BCCA:AFB9:24
+PARTY slot=1 key=BCCA:AFB9:24 species=36 level=4 hp=5
+CAUGHT BCCA:AFB9:24
+[client] [SLink-gen1] writes re-enabled after a live validation
+TX {"event":"sync_retrieve_done","key":"BCCA:AFB9:24","player":"b","seq":205}
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=7
+MYKEY 1 BCCA:AFB9:24
+PARTY slot=1 key=BCCA:AFB9:24 species=36 level=4 hp=5
+SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+SAVE_PHASE link_new save-open-start-menu
+SAVE_PHASE link_new save-close-foreign-menu
+SAVE_PHASE link_new save-select-save
+SAVE_PHASE link_new save-choose-save
+SAVE_PHASE link_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_new_b_1_witness.bin bytes=31592 saves=1 frame=7760
+SAVE_PHASE link_new save-await-close
+SAVE_PHASE link_new save-witnessed
+SAVE_WITNESS link_new frames=536
+MYKEY 0 4519:AFB9:B0
+PRE_WHITEOUT slot=0 key=4519:AFB9:B0 species=176 level=5 hp=7
+MYKEY 1 BCCA:AFB9:24
+PRE_WHITEOUT slot=1 key=BCCA:AFB9:24 species=36 level=4 hp=5
+TX {"event":"safe","player":"b","seq":276}
+ROUTE route_one_north -> map 1 at (21,35) frame 9708
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":284}
+ROUTE viridian_center -> map 41 at (23,25) frame 9981
+CENTER_RECEPTIONIST map=41 (11,3)
+AT_CENTER b
+PC_PHASE deposit-for-rebuild pc-walk @10255 (11,3) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-face @10306 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-activate @10308 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-main-open @10438 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-menu-deposit @10646 (13,4) party=2 box=1 count=0 init=false
+PC_OP deposit start
+PC op 1 deposit(2) start frame=10657
+PC_PHASE deposit-for-rebuild pc-enter-deposit @10657 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-text @10673 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-list-move @10683 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-list-pick @10689 (13,4) party=2 box=1 count=0 init=false
+PC_PHASE deposit-for-rebuild pc-sub-confirm @10705 (13,4) party=2 box=1 count=0 init=false
+RX box_mon key=BCCA:AFB9:24
+TX {"event":"party_to_box","key":"BCCA:AFB9:24","player":"b","seq":319,"stats":{"level":4,"maxHP":17}}
+PARTY_COUNT 2 -> 1 @10720
+PC_PHASE deposit-for-rebuild pc-text @10737 (13,4) party=1 box=1 count=1 init=false
+heartbeat f=10800 party=1 connected=true
+PC_OP deposit done
+PC op 1 deposit(2) done frame=10818 party=1 box_count=1 box=1
+PC_PHASE deposit-for-rebuild pc-see-ya @10818 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-for-rebuild pc-logging-off @10849 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-for-rebuild pc-log-off @10854 (13,4) party=1 box=1 count=1 init=false
+PC_PHASE deposit-for-rebuild pc-logging-off @10896 (13,4) party=1 box=1 count=1 init=false
+PC pc-done frame=10950 op=2
+PC_PHASE deposit-for-rebuild pc-done @10950 (13,4) party=1 box=1 count=1 init=false
+DEPOSITED_FOR_REBUILD BCCA:AFB9:24
+PC_BOX_AFTER party=1 box=1 count=1
+BOTH_BOXED status=true
+heartbeat f=14400 party=1 connected=true
+heartbeat f=18000 party=1 connected=true
+heartbeat f=21600 party=1 connected=true
+RX party_mon key=BCCA:AFB9:24
+RX hud_show text=>> Rebuilt 1
+TX {"event":"sync_retrieve_done","key":"BCCA:AFB9:24","player":"b","seq":686}
+PARTY_COUNT 1 -> 2 @21691
+REBUILD_PARTY_MON BCCA:AFB9:24
+SYNC_RETRIEVE_DONE BCCA:AFB9:24
+REBUILT party=2 box_count=0
+MYKEY 0 4519:AFB9:B0
+POST_REBUILD slot=0 key=4519:AFB9:B0 species=176 level=5 hp=7
+MYKEY 1 BCCA:AFB9:24
+POST_REBUILD slot=1 key=BCCA:AFB9:24 species=36 level=4 hp=5
+SAVE_PHASE whiteout_new_b save-open-start-menu
+SAVE_PHASE whiteout_new_b save-close-foreign-menu
+SAVE_PHASE whiteout_new_b save-select-save
+SAVE_PHASE whiteout_new_b save-choose-save
+SAVE_PHASE whiteout_new_b save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_new_b_1_witness.bin bytes=31592 saves=2 frame=22080
+SAVE_PHASE whiteout_new_b save-await-close
+SAVE_PHASE whiteout_new_b save-witnessed
+SAVE_WITNESS whiteout_new_b frames=533
+RESULT: PASS (mirrored the partner's whiteout rebuild and saved BCCA:AFB9:24)
