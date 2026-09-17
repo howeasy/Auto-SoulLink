@@ -82,6 +82,23 @@ def test_a_satisfied_predicate_wins_over_a_result(tmp_path, monkeypatch):
     assert run.wait_for("both RESULT lines", lambda: "RESULT: PASS" in run._receipts["a"], 1)
 
 
+def test_a_result_that_lands_during_the_poll_satisfies_the_wait(tmp_path, monkeypatch):
+    """H-6, reconnect_new: every leg passed, both halves wrote `RESULT: PASS`, and the run
+    aborted on the post-hoc "B stayed online" wait QUOTING B's PASS — B had written it in the
+    microseconds between that iteration's `pred()` and the receipt read. A predicate that is
+    true when the abort would fire wins, because the receipts are final at that point."""
+    run = _run({"a": PASS_LINE})
+    _patch_results(monkeypatch, run)
+
+    def pred():
+        if "b" not in run._receipts:      # B finishes between the first check and the abort
+            run._receipts["b"] = PASS_LINE
+            return None
+        return "RESULT: PASS" in run._receipts["b"]
+
+    assert run.wait_for("B stayed online through reconnect legs", pred, 5)
+
+
 def test_the_whiteout_gate_ends_on_the_lane_shape(tmp_path, monkeypatch):
     """The exact hang: the deposit never lands and both receipts carry the FAIL the lane
     produced at 14:43:45. The gate must stop within one poll, not at its 1800 s budget."""

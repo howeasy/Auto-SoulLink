@@ -938,8 +938,9 @@ class DuoRun:
           * a receipt carries a FAIL, i.e. the run is already lost and the remaining wait can
             only burn its budget.
 
-        The predicate is checked FIRST, so waits whose predicate IS the RESULT (wait_results,
-        the reconnect B-done wait) still return normally.
+        The predicate is checked FIRST, and — unless a receipt FAILed — once more at the moment
+        the abort would fire, so waits whose predicate IS the RESULT (wait_results, the
+        reconnect B-done wait) still return normally however late the client writes it.
         """
         deadline = min(time.time() + timeout, getattr(self, "_run_deadline", float("inf")))
         while time.time() < deadline:
@@ -958,6 +959,18 @@ class DuoRun:
                           and not finished[inst])
             failed = any(reason.startswith("RESULT: FAIL") for reason in finished.values())
             if failed or dead or all(finished.values()):
+                # LAST WORD TO THE PREDICATE. A wait reached after the clients have legitimately
+                # finished is not an early finish: reconnect_new's "B stayed online through
+                # reconnect legs" is a post-hoc check of a durable receipt, and at unthrottled
+                # speed B wrote its PASS in the microseconds between this iteration's `pred()`
+                # and the `finished` read above — the run aborted quoting the very PASS it was
+                # waiting for (H-6). Everything these predicates read (receipts, server state)
+                # is final once the clients are done, so one more call decides it. A FAIL keeps
+                # its immediate abort: the run is lost and the budget is better spent elsewhere.
+                if not failed:
+                    value = pred()
+                    if value:
+                        return value
                 raise ClientFinishedEarly(finished, desc, exited=dead)
             time.sleep(interval)
         if time.time() >= getattr(self, "_run_deadline", float("inf")):
@@ -1254,11 +1267,13 @@ class DuoRun:
         """Bounded wait for both boot keys' stats, whose failure NAMES the missing key.
 
         Bounded by the smaller of 120 s and the scenario's own timeout, so the pins can shrink
-        it. Called after the go-file (see the soft-reset branch).
+        it. Called after the go-file (see the soft-reset branch), which is why it polls at
+        0.25 s rather than the default 2 s: the window between the release and A's reset
+        re-hello is ~1.8 s at unthrottled speed, and a 2 s poll cannot land inside it (H-6).
         """
         try:
             self.wait_for("both boot keys' stats on the server", self._boot_stats_present,
-                          min(120, self.cfg["timeout"]))
+                          min(120, self.cfg["timeout"]), interval=0.25)
         except TimeoutError as exc:
             missing = [self._boot_keys[inst] for inst in ("a", "b")
                        if self._boot_keys.get(inst) not in self._mon_stats_keys()]
@@ -1892,10 +1907,13 @@ class DuoRun:
         rows = self._reconnect_events()
         a_hellos = [row for row in rows if row.get("type") == "hello" and row.get("player") == "a"]
         b_hellos = [row for row in rows if row.get("type") == "hello" and row.get("player") == "b"]
-        # The baseline is taken after `wait_connected`, and a client's ticks are gated on its
-        # hello (lua/gen1/client.lua:908-912,920), so both players had exactly one hello row
-        # when it was taken. If that ever stops being true this fails loudly instead of quietly
-        # checking "one more than whatever the baseline happened to be".
+        # The hello baseline is taken after `wait_connected` and BEFORE the go-file, and a
+        # client's ticks are gated on its hello (lua/gen1/client.lua:908-912,920), so both
+        # players had exactly one hello row when it was taken. Taking it after the release
+        # instead is what broke tonight: A's chord follows its checkpoint hello by ~55 frames
+        # and the re-hello lands ~1.8 s later, so the snapshot caught 2 A hellos and this check
+        # fired (H-6). It stays a hard failure rather than "one more than whatever the baseline
+        # happened to be" — a baseline that is not pre-reset makes the whole comparison vacuous.
         if baseline["a_hellos"] != 1:
             raise RuntimeError(f"the pre-reset baseline saw {baseline['a_hellos']} A hellos, not "
                                f"the one the checkpoint hello produces")
@@ -2245,7 +2263,12 @@ class DuoRun:
         if cmds.group(1) != "1" or cmds.group(2) != "0":
             raise RuntimeError(f"Explode Mode sent force_explode={cmds.group(1)} "
                                f"force_faint={cmds.group(2)}, expected 1 / 0")
-        before = marker(b_text, r"MOVE_MENU_BEFORE (.*)", "B pre-write move menu")
+        # THE RECEIPT'S OWN FORMAT, not a tidied one: duo_gen1_main.lua:1609 logs
+        # `MOVE_MENU_<tag> @<framecount> <row> | <row> | <row> | <row>` with every row padded to
+        # 12 columns by Center.row (:1607), so the real line reads
+        # `MOVE_MENU_AFTER @16759 EXPLOSION    | EXPLOSION    | ...`. The old patterns wanted a
+        # tagless marker with single spaces and could never match a cartridge receipt (H-6).
+        before = marker(b_text, r"MOVE_MENU_BEFORE @\d+ (.*)", "B pre-write move menu")
         if "EXPLOSION" in before.group(1):
             raise RuntimeError(f"the move menu already showed EXPLOSION before the write landed: "
                                f"{before.group(1)!r}")
@@ -2253,9 +2276,9 @@ class DuoRun:
         if loop.group(1) != "99999999" or loop.group(2) != "01010101":
             raise RuntimeError(f"B's battle struct after the write reads moves={loop.group(1)} "
                                f"pp={loop.group(2)}, expected 99999999 / 01010101")
-        marker(b_text, r"MOVE_MENU_AFTER EXPLOSION \| EXPLOSION \| EXPLOSION \| EXPLOSION",
-               "B post-write move menu")
-        marker(b_text, r"MOVE_MENU_EXPLOSION rows=4", "B four EXPLOSION rows")
+        marker(b_text, r"MOVE_MENU_AFTER @\d+ EXPLOSION\s+\| EXPLOSION\s+\| EXPLOSION\s+\| "
+                       r"EXPLOSION", "B post-write move menu")
+        marker(b_text, r"MOVE_MENU_EXPLOSION @\d+ rows=4", "B four EXPLOSION rows")
         marker(b_text, r"B_ACTIVE_COMMIT player_move", "B commit")
         marker(b_text, r"BATTLE_FAINT_SITE .* battle_hp=0", "B battle faint site")
         marker(b_text, r"BATTLE_RESULT b", "B battle result")
@@ -3554,20 +3577,36 @@ class DuoRun:
                 # The reset's evidence is that NOTHING changed, so the baseline is taken before
                 # either client acts: the end state is compared against it, which is what stops
                 # a duplicated or rewritten log from passing as "the same save reconnected".
-                # QUIESCENCE, AND WHERE IT ACTUALLY IS: the stats ride the clients' first
-                # party tick, which is only sent once they are RELEASED — waiting before the
-                # go-file timed out at 120 s with the clients merely connected (the lane's
-                # `timed out ... waiting for both boot keys' stats`). So: release, then wait,
-                # still before the reset — A's body waits for the go-file, helloes at the
-                # checkpoint and only then takes the chord. A baseline taken mid-arrival holds
-                # whichever half landed first and the comparison then reports the other's
-                # arrival as a change (the lane saw `$.mon_stats.<key>: '<missing>' -> {...}`).
-                # mon_stats is NOT excluded from the compare: a stat change across a reset
-                # would be a real finding.
+                # TWO SNAPSHOTS, BECAUSE THE TWO HALVES ARE QUIESCENT AT DIFFERENT MOMENTS.
+                #  * The hello/event rows are quiescent BEFORE the release: `wait_connected`
+                #    above is gated on both hellos being on the server (run 26shiqin's
+                #    server.log: `[b] hello` 18:27:50.324, `[a] hello` 18:27:50.350, status 200
+                #    at 18:27:50.474, go-file after that), and nothing else may happen until
+                #    the go-file lands. AFTER the release they are NOT: A's body helloes at the
+                #    checkpoint and takes the chord ~55 frames later, and at unthrottled speed
+                #    its re-hello is only ~1.8 s behind the first one (18:27:52.160), so a
+                #    post-release snapshot races it — tonight it lost and the baseline held 2 A
+                #    hellos (H-6).
+                #  * mon_stats rides the clients' first party tick, which is only sent once
+                #    they are RELEASED — snapshotting before the go-file timed out at 120 s
+                #    with the clients merely connected (H-5). A baseline taken mid-arrival
+                #    holds whichever half landed first and the comparison then reports the
+                #    other's arrival as a change (`$.mon_stats.<key>: '<missing>' -> {...}`),
+                #    so the links.json bytes wait for both keys. mon_stats is NOT excluded from
+                #    the compare: a stat change across a reset would be a real finding.
+                # Waited for, not read blind: `connected` flips on a player's first message
+                # (server/server.py:1146-1149) and the hello's event row is persisted a few
+                # lines later in the handler (:1604, _log_event -> _save_events :1516), so
+                # wait_connected returning is not yet proof the rows are on disk.
+                def helloed():
+                    rows = self._reconnect_events()
+                    counts = {inst: sum(row.get("type") == "hello" and row.get("player") == inst
+                                        for row in rows) for inst in ("a", "b")}
+                    return rows if counts == {"a": 1, "b": 1} else None
+                events = self.wait_for("one durable hello row per player", helloed, 30)
                 self.go()
                 self._wait_for_boot_stats()
                 self._pydec_note(f"baseline mon_stats keys: {self._mon_stats_keys()}")
-                events = self._reconnect_events()
                 baseline_bytes = self._links_bytes()
                 baseline_path = os.path.join(self.data_dir, "links_baseline.json")
                 if baseline_bytes is not None:
