@@ -505,34 +505,6 @@ end
 ---
 --- The stored copy of the CURRENT box is stale by design (the live one is in WRAM), so
 --- callers scan the active box as well -- which they already did.
-function M.storedBoxKeys()
-    local sb = M.profile and M.profile.stored_boxes
-    if not (sb and sb.count and sb.stride and sb.banks and sb.per_bank) then return nil end
-    local keys = {}
-    for b = 0, sb.count - 1 do
-        local bank = sb.banks[math.floor(b / sb.per_bank) + 1]
-        if bank then
-            local box_off = bank + (b % sb.per_bank) * sb.stride
-            local n = mem_r8(box_off, SRAM_DOMAIN)
-            if n <= M.BOX_MAX_MONS then
-                local structs = box_off + 1 + (M.BOX_MAX_MONS + 1)
-                for i = 0, n - 1 do
-                    local base = structs + i * M.BOX_STRUCT_SIZE
-                    local sp = mem_r8(base + M.SPECIES_OFFSET, SRAM_DOMAIN)
-                    if sp ~= 0 and sp ~= 0xFF then
-                        keys[string.format("%02X%02X:%04X:%02X",
-                            mem_r8(base + M.DV_OFFSET_1, SRAM_DOMAIN),
-                            mem_r8(base + M.DV_OFFSET_2, SRAM_DOMAIN),
-                            mem_r8(base + M.OTID_OFFSET, SRAM_DOMAIN) * 256
-                                + mem_r8(base + M.OTID_OFFSET + 1, SRAM_DOMAIN),
-                            sp)] = true
-                    end
-                end
-            end
-        end
-    end
-    return keys
-end
 
 -- ═══ Enemy Party Reading ═══
 
@@ -631,15 +603,6 @@ end
 
 --- Is a given item id in the bag at all? Quantity is not consulted -- key items like the
 --- Silph Scope are held as a single entry and some carry a quantity of 0.
-function M.hasBagItem(item_id)
-    if not (item_id and M.BAG_COUNT_ADDR and M.BAG_ITEMS_ADDR) then return false end
-    local count = M.read_u8(M.BAG_COUNT_ADDR)
-    if count > M.BAG_MAX_ITEMS then return false end     -- garbage protection
-    for i = 0, count - 1 do
-        if M.read_u8(M.BAG_ITEMS_ADDR + i * 2) == item_id then return true end
-    end
-    return false
-end
 
 -- ═══ Battle State ═══
 
@@ -685,12 +648,6 @@ end
 -- ═══ Rival Team Swap ═══
 -- wCurOpponent = trainer class + OPP_ID_OFFSET(200); this is the id the adapter's
 -- rival_trainer_ids() is keyed by. nil in a wild battle or on a profile without the address.
-function M.readTrainerOpponentId()
-    if not M.CUR_OPPONENT_ADDR then return nil end
-    local v = M.read_u8(M.CUR_OPPONENT_ADDR)
-    if v == 0 then return nil end
-    return v
-end
 
 -- Overwrite the enemy trainer's whole team with `blobs` (each a 66-byte array from
 -- readPartyBlob: 44-byte struct + 11-byte OT + 11-byte nickname).
@@ -701,44 +658,6 @@ end
 -- and level (+0x21). Stats and DVs are NOT taken from here — LoadEnemyMonData recomputes
 -- them from the species header with fixed trainer DVs — so the swapped team fights at the
 -- partner's levels with the partner's moves and HP, but with trainer-standard DVs.
-function M.writeEnemyParty(blobs)
-    if not (M.ENEMY_COUNT_ADDR and M.ENEMY_BASE_ADDR and M.ENEMY_SPECIES_LIST_ADDR
-            and M.ENEMY_OT_NAMES_ADDR and M.ENEMY_NICKS_ADDR) then
-        return false, "profile lacks enemy party addresses"
-    end
-    local n = #blobs
-    if n < 1 then return false, "no blobs" end
-    if n > 6 then n = 6 end
-    local struct = M.PARTY_STRUCT_SIZE
-
-    -- VALIDATE EVERY BLOB BEFORE WRITING ANY OF THEM.
-    -- The length check used to sit inside the write loop, so a payload whose third blob was
-    -- short returned false with blobs 1 and 2 already copied into wEnemyMons -- and with
-    -- neither the 0xFF terminator nor wEnemyPartyCount updated, because both are written
-    -- after the loop. The caller reported an error and the cartridge was left mid-battle
-    -- with a spliced enemy party: the engine sends out mon 3 from the stale list carrying
-    -- mon 1's struct. The payload is server-supplied, so a truncated line is enough.
-    for i = 1, n do
-        if #blobs[i] < struct + 22 then
-            return false, string.format("blob %d too short (%d < %d) — nothing written",
-                                        i, #blobs[i], struct + 22)
-        end
-    end
-
-    for i = 1, n do
-        local b = blobs[i]
-        local dst = M.ENEMY_BASE_ADDR + (i - 1) * struct
-        for j = 0, struct - 1 do M.write_u8(dst + j, b[j + 1]) end
-        for j = 0, 10 do M.write_u8(M.ENEMY_OT_NAMES_ADDR + (i - 1) * 11 + j, b[struct + 1 + j]) end
-        for j = 0, 10 do M.write_u8(M.ENEMY_NICKS_ADDR + (i - 1) * 11 + j, b[struct + 12 + j]) end
-        -- The species LIST is what the engine iterates to pick the next mon; the copy
-        -- inside each struct is not enough on its own.
-        M.write_u8(M.ENEMY_SPECIES_LIST_ADDR + (i - 1), b[1])
-    end
-    M.write_u8(M.ENEMY_SPECIES_LIST_ADDR + n, 0xFF)   -- terminator
-    M.write_u8(M.ENEMY_COUNT_ADDR, n)
-    return true, n
-end
 
 -- ═══ Explode Mode ═══
 -- Coerce the active battler into Explosion (move 153). Gen 1 takes the player's choice from
@@ -750,41 +669,6 @@ M.MOVE_EXPLOSION = 153
 -- Which party slot is currently on the field (wPlayerMonNumber), or nil if the profile
 -- doesn't declare it. Explode Mode only applies to this mon — a benched partner has to
 -- fall back to a plain faint.
-function M.getActivePartySlot()
-    if not M.PLAYER_MON_NUMBER_ADDR then return nil end
-    return M.read_u8(M.PLAYER_MON_NUMBER_ADDR)
-end
-
-function M.forceExplode(slot)
-    if not (M.BATTLE_MON_MOVES_ADDR and M.PLAYER_SELECTED_MOVE_ADDR) then
-        return false, "profile lacks explode addresses"
-    end
-    if not M.isInBattle() then return false, "not in battle" end
-    local mv = M.MOVE_EXPLOSION
-    -- ALL FOUR SLOTS, not just the first. wPlayerSelectedMove is set here, but the
-    -- engine RE-DERIVES it from the move the player confirms:
-    --     add hl, bc            ; hl = wBattleMonMoves + wCurrentMenuItem
-    --     ld a, [hl] / ld [wPlayerSelectedMove], a
-    -- (engine/battle/core.asm:2664-2668). Writing only slot 0 therefore left every
-    -- other slot holding its real move, so the player escaped the coercion simply by
-    -- picking the second, third or fourth one. Filling all four means any choice
-    -- explodes. The mon is being deliberately killed, so losing its moveset is moot.
-    for i = 0, 3 do
-        M.write_u8(M.BATTLE_MON_MOVES_ADDR + i, mv)
-        if M.BATTLE_MON_PP_ADDR then M.write_u8(M.BATTLE_MON_PP_ADDR + i, 5) end
-    end
-    -- Mirror into the party struct so a switch-out/in does not restore the old moves.
-    if slot and M.PARTY_BASE_ADDR and M.MOVES_OFFSET then
-        local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
-        for i = 0, 3 do
-            M.write_u8(base + M.MOVES_OFFSET + i, mv)
-            if M.PP_OFFSET then M.write_u8(base + M.PP_OFFSET + i, 5) end
-        end
-    end
-    if M.PLAYER_MOVE_LIST_INDEX_ADDR then M.write_u8(M.PLAYER_MOVE_LIST_INDEX_ADDR, 0) end
-    M.write_u8(M.PLAYER_SELECTED_MOVE_ADDR, mv)
-    return true
-end
 
 -- A whole party mon as raw bytes, for handing the partner's team to the server.
 --
@@ -793,18 +677,6 @@ end
 -- That composite is what the server caches and what a rival-team swap writes back, which
 -- is why Gen 1's blob is 66 bytes where Gen 3's is a flat 100.
 -- Returns nil if the slot is empty or the profile lacks the name arrays.
-function M.readPartyBlob(slot)
-    if not (M.PARTY_OT_NAMES_ADDR and M.PARTY_NICKS_ADDR) then return nil end
-    local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
-    if M.read_u8(base + M.SPECIES_OFFSET) == 0 then return nil end
-    local out = {}
-    local n = 0
-    for i = 0, M.PARTY_STRUCT_SIZE - 1 do n = n + 1; out[n] = M.read_u8(base + i) end
-    for i = 0, 10 do n = n + 1; out[n] = M.read_u8(M.PARTY_OT_NAMES_ADDR + slot * 11 + i) end
-    for i = 0, 10 do n = n + 1; out[n] = M.read_u8(M.PARTY_NICKS_ADDR + slot * 11 + i) end
-    return out
-end
-
 function M.bytesToHex(bytes)
     local parts = {}
     for i = 1, #bytes do parts[i] = string.format("%02X", bytes[i]) end
@@ -875,13 +747,6 @@ end
 
 -- ═══ Map ═══
 
-function M.getCurrentMap()
-    if M.USES_MAP_GROUP then
-        -- Gen 2: return composite mapGroup * 256 + mapNumber
-        return M.read_u8(M.MAP_GROUP_ADDR) * 256 + M.read_u8(M.MAP_NUMBER_ADDR)
-    end
-    return M.read_u8(M.MAP_ID_ADDR)
-end
 
 --- Read 2-byte map address as separate group and number (Gen 2 only).
 -- Returns mapGroup, mapNumber. For Gen 1, returns 0, mapId.
@@ -970,14 +835,6 @@ function M.forceFaint(slot)
     local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
     M.write_u16_be(base + M.HP_OFFSET, 0)
 
-    -- Only the active battler has a battle struct, and only in battle. Gen 2
-    -- leaves BATTLE_MON_HP_ADDR unset, so this is a no-op there.
-    if not M.BATTLE_MON_HP_ADDR then return false end
-    if not (M.isInBattle and M.isInBattle()) then return false end
-    local active = M.getActivePartySlot and M.getActivePartySlot()
-    if active ~= slot then return false end
-    M.write_u16_be(M.BATTLE_MON_HP_ADDR, 0)
-    return true
 end
 
 -- ═══ ROM Validation ═══
@@ -1006,24 +863,6 @@ function M.validateROM()
                 return false, "Player ID is 0 (pre-game)"
             end
         end
-    else
-        -- Gen 1: single-byte map ID
-        local mapId = M.getCurrentMap()
-        if mapId > 0xF7 and mapId ~= 0xFF then
-            return false, "Map ID out of range: " .. mapId
-        end
-        -- This branch used to be the map check ALONE, which is barely a gate: party
-        -- count 0 passes, and map 0 passes too — map 0 is Pallet Town, the fixture's own
-        -- map. So uninitialised WRAM at the title screen validated as a live game.
-        -- Gen 2's branch has always carried this second test; Gen 1's profile has had
-        -- PLAYER_ID_ADDR all along and simply never used it. wPlayerID is assigned when
-        -- the save is created, so 0 is a reliable "no game loaded yet".
-        if M.PLAYER_ID_ADDR then
-            local pid = M.read_u16_be(M.PLAYER_ID_ADDR)
-            if pid == 0 then
-                return false, "Player ID is 0 (pre-game)"
-            end
-        end
     end
     if partyCount > 0 and M.PARTY_SPECIES_ADDR then
         local firstSpecies = M.read_u8(M.PARTY_SPECIES_ADDR)
@@ -1036,13 +875,6 @@ end
 
 -- ═══ Invariant Key (DVs + OTID, for evolution matching) ═══
 
-function M.invariantKey(base)
-    -- Returns DVs:OTID portion for evolution matching (species changes on evolve)
-    local dv1 = M.read_u8(base + M.DV_OFFSET_1)
-    local dv2 = M.read_u8(base + M.DV_OFFSET_2)
-    local otid = M.read_u16_be(base + M.OTID_OFFSET)
-    return string.format("%02X%02X:%04X", dv1, dv2, otid)
-end
 
 -- ═══ Box Scanning ═══
 
@@ -1271,11 +1103,9 @@ function M.retrieveBoxMon(key, stats)
         cached = nil
     end
     -- NO CACHE? REBUILD IT FROM THE CARTRIDGE BEFORE GIVING UP.
-    -- Everything Gen 1's stat formula needs is already in the box struct -- the DV word and
+    -- Everything the game's stat formula needs is already in the box struct -- the DV word and
     -- the five stat-exp words -- and the base-stat table is readable from ROM, so the "real
-    -- work" the refusal below used to defer is done. The result is exact, not an
-    -- approximation: lua/tests/test_gen1_stat_rebuild.lua recomputes every party mon on a
-    -- live cartridge and requires the GAME's own stored stats to match, on all three titles.
+    -- work" the refusal below used to defer is done, and the result is exact.
     --
     -- Asked of the game module rather than branched on: a generation that does not offer
     -- the function simply keeps the old refusal. The offsets come from the module too,
@@ -1323,11 +1153,11 @@ function M.retrieveBoxMon(key, stats)
         -- the client and then withdraws gets a mon that cannot fight — silent, permanent save
         -- corruption, and the mon is out of the box so there is nothing to undo it from.
         --
-        -- Rebuilding them properly means RBY's stat formula plus the base-stat table, which
-        -- is readable from ROM but is real work; until that exists, returning false is
-        -- correct. The caller (gen1_rby_client.lua) already reports sync_retrieve_failed on
-        -- false, so the server learns the withdraw did not happen and the pair stays
-        -- consistent instead of quietly diverging.
+        -- Rebuilding them properly means the game's stat formula plus the base-stat table,
+        -- which is readable from ROM but is real work; until that exists, returning false is
+        -- correct. The caller already reports sync_retrieve_failed on false, so the server
+        -- learns the withdraw did not happen and the pair stays consistent instead of
+        -- quietly diverging.
         --
         -- This path had NEVER executed on a cartridge, which is why it survived this long.
         memzero(party_dst, M.PARTY_STRUCT_SIZE)   -- leave no half-written mon behind
@@ -1399,26 +1229,6 @@ end
 
 local function _read_stat_stages(base_addr)
     if not base_addr or M.STAT_STAGES_COUNT == 0 then return nil end
-    if M.STAT_STAGES_LAYOUT == "gen1" then
-        -- 6 raw bytes: atk, def, spd, spc, acc, eva
-        local atk = M.read_u8(base_addr + 0)
-        local def = M.read_u8(base_addr + 1)
-        local spd = M.read_u8(base_addr + 2)
-        local spc = M.read_u8(base_addr + 3)
-        local acc = M.read_u8(base_addr + 4)
-        local eva = M.read_u8(base_addr + 5)
-        -- Sanity: refuse to emit if any value is outside 1..13 (uninitialised RAM
-        -- or wrong address). Returning nil prevents the renderer from showing
-        -- garbage badges.
-        for _, v in ipairs({atk, def, spd, spc, acc, eva}) do
-            if v < 1 or v > 13 then return nil end
-        end
-        -- Convert 1..13 (neutral 7) → 0..12 (neutral 6). Special goes in the SpA slot and
-        -- the SpD slot is left NEUTRAL: mirroring it into both rendered one Special drop as
-        -- two chips, implying a stat this cartridge does not have. The adapter names the
-        -- fourth slot "SPC" and blanks the fifth (GameAdapter.stat_stage_labels).
-        return {atk - 1, def - 1, spd - 1, spc - 1, 6, acc - 1, eva - 1}
-    end
     -- Gen 2 layout: 7 raw bytes
     local stages = {}
     for i = 0, 6 do
@@ -1491,11 +1301,6 @@ end
 -- hlcoord x,y is wTileMap + y*20 + x, so the probe tile is wTileMap + 189.
 
 --- True when the player is standing on a tile that can roll a wild encounter.
-function M.isInGrass()
-    if not (M.TILE_MAP_ADDR and M.GRASS_TILE_ADDR) then return nil end
-    local tile = M.read_u8(M.TILE_MAP_ADDR + 189)
-    return tile == M.read_u8(M.GRASS_TILE_ADDR)
-end
 
 --- True when this map has wild Pokémon at all (wGrassRate == 0 means none).
 --
@@ -1512,139 +1317,10 @@ end
 --
 -- What actually zeroes it is standing on a map whose wild data is NothingWildMons — Pallet
 -- Town and Viridian City among them (data/wild/grass_water.asm:3-4), both of which Route 1
--- connects to with no warp, and both of which HAVE grass tiles. So isInGrass() stays true
--- while the rate is zero, which reads as "walking in grass forever with nothing happening".
+-- connects to with no warp, and both of which HAVE grass tiles. So a "is this grass?"
+-- predicate stays true while the rate is zero, which reads as "walking in grass forever
+-- with nothing happening".
 -- If you see that, check the map id before blaming the game.
--- ── The native in-game panel ─────────────────────────────────────────────────────────────
--- The companion patch owns the SCREEN: it takes over from the START menu, blanks the
--- display, draws a fallback, and then sets a handshake byte meaning "the tile map is yours,
--- paint now". We paint, set it to STAGED, and the patch reveals what we painted. Because
--- the screen is white for the whole of that window, a half-painted page can never be seen.
---
--- WHY THE CLIENT DRAWS AND NOT THE PATCH. Red and Blue have thirty bytes of free WRAM
--- between wBoxDataEnd and the stack; the panel's content is a few hundred. There is nowhere
--- to put it in the ROM's own memory, so the text is written straight into wTileMap and the
--- patch never has to store it.
-M.PANEL_MAILBOX = 0xDEE2
-M.PANEL_CAPS    = M.PANEL_MAILBOX + 8
-M.PANEL_STATE   = M.PANEL_MAILBOX + 9
--- +10 is the patch's: which page it wants. +11 is ours: how many there are, which only we
--- can know because only we have seen how much text the server sent. The patch reads it to
--- decide whether A turns a page or closes, so a one-page panel does not flicker.
-M.PANEL_PAGE    = M.PANEL_MAILBOX + 10
-M.PANEL_PAGES   = M.PANEL_MAILBOX + 11
-M.PANEL_CAP_BIT = 0x02
-
-M.PANEL_CLOSED, M.PANEL_AWAIT, M.PANEL_STAGED = 0, 1, 2
-
-M.TILEMAP = 0xC3A0
-M.PANEL_COLS, M.PANEL_ROWS = 20, 18
-
---- ASCII -> Gen 1 tile ids.
----
---- Gen 1 has its own encoding and nothing else in the client needs it: the HUD overlay
---- draws with BizHawk's own font and never touches the ROM's charset. Unmapped characters
---- become spaces rather than guesses -- a wrong tile is a glyph the player cannot read and
---- would have to interpret, and there is no punctuation here worth that risk.
---- Ranges verified against the ROM: "POK<e>DEX@" is 8F 8E 8A BA 83 84 97 50, so 'A' is $80;
---- $7F is the space the menu rows are padded with; digits are the $F6-$FF block.
----
---- The whitelist and the PAYLOAD GENERATOR have to agree. '-' was missing here while
---- server.py emitted dead-zone rows as "-" .. area_name, so every one of them silently
---- lost its leading dash and rendered as an indented name.
-local function _tile_for(ch)
-    local b = string.byte(ch)
-    if b >= 65 and b <= 90  then return 0x80 + (b - 65) end   -- A-Z
-    if b >= 97 and b <= 122 then return 0xA0 + (b - 97) end   -- a-z
-    if b >= 48 and b <= 57  then return 0xF6 + (b - 48) end   -- 0-9
-    if b == 47 then return 0xF3 end                           -- '/'
-    if b == 45 then return 0xE3 end                           -- '-' (charmap.asm:163)
-    return 0x7F                                               -- space, and anything unknown
-end
-
---- Paint one row of the tile map, padded to the full width so no stale tile survives.
-function M.panelWriteRow(row, text)
-    if row < 0 or row >= M.PANEL_ROWS then return end
-    local base = M.TILEMAP + row * M.PANEL_COLS
-    for col = 0, M.PANEL_COLS - 1 do
-        local ch = text:sub(col + 1, col + 1)
-        M.write_u8(base + col, ch == "" and 0x7F or _tile_for(ch))
-    end
-end
-
---- True when the ROM patch is waiting for us to paint.
-function M.panelIsAwaitingStage()
-    return M.read_u8(M.PANEL_STATE) == M.PANEL_AWAIT
-end
-
---- Does THIS cartridge have the panel? Asked of the capability bits rather than inferred
---- from the ABI number, because a build may ship one feature without the other.
-function M.panelSupported()
-    local caps = M.read_u8(M.PANEL_CAPS)
-    return caps ~= 0 and caps ~= 0xFF and (caps & M.PANEL_CAP_BIT) ~= 0
-end
-
-function M.panelAbi()
-    return M.read_u8(M.PANEL_MAILBOX + 4)
-end
-
---- Paint `rows` and hand the screen back to the patch.
---- Rows past the bottom are dropped rather than wrapped: the patch reveals whatever is in
---- the tile map, so silently spilling would corrupt the page rather than truncate it.
---- How many screens `rows` needs. Always at least one, so an empty panel still opens.
-function M.panelPageCount(rows)
-    local n = rows and #rows or 0
-    if n <= 0 then return 1 end
-    return math.ceil(n / M.PANEL_ROWS)
-end
-
---- Paint the page the patch asked for, and hand the screen back.
----
---- Rows past the bottom of a page are not dropped any more, they are the NEXT page: the
---- patch owns a page number at +10 and we paint the slice it names. Every row is written
---- even when the slice is short, because panelWriteRow pads to the full width -- so nothing
---- of the previous page can survive into this one.
-function M.panelStage(rows)
-    local pages = M.panelPageCount(rows)
-    M.write_u8(M.PANEL_PAGES, math.min(pages, 255))
-
-    local page = M.read_u8(M.PANEL_PAGE)
-    if page >= pages then page = pages - 1 end      -- defensive: never index past the end
-    local first = page * M.PANEL_ROWS
-
-    for i = 0, M.PANEL_ROWS - 1 do
-        M.panelWriteRow(i, (rows and rows[first + i + 1]) or "")
-    end
-    M.write_u8(M.PANEL_STATE, M.PANEL_STAGED)
-end
-
-function M.hasWildEncounters()
-    if not M.GRASS_RATE_ADDR then return nil end
-    return M.read_u8(M.GRASS_RATE_ADDR) ~= 0
-end
-
---- Suppress or re-enable EVERY battle, using the engine's own switch.
----
---- NewBattle (home/overworld.asm:362-373) reads wStatusFlags4 and returns "no battle" when
---- BIT_NO_BATTLES is set, before it can reach InitBattle. That gate covers wild encounters
---- AND trainers, and pokered uses it for exactly this purpose in its own scripts -- Mt. Moon
---- B2F sets it around the fossil choice and Pokemon Tower 5F around the Rocket fight
---- (scripts/MtMoonB2F.asm:14, scripts/PokemonTower5F.asm:32).
----
---- Nothing an ordinary walk does clears it. The only engine clears are ChooseFlyDestination
---- (home/reload_tiles.asm:32-34), the Fly submenu (engine/menus/start_sub_menus.asm:222),
---- one item effect (engine/items/item_effects.asm:1512) and those two scripts -- so a
---- suppression window opened here stays open until it is closed here.
----
---- WHY A TEST WANTS THIS: a fixture parked in tall grass starts an encounter during the
---- boot walk that proves the game is live, which commits a species before the scenario can
---- choose one, and no way of ending that battle leaves the area usable (running and KOing
---- both dead-zone it, catching consumes its only slot). Suppressing battles across the boot
---- makes the grass fixture behave like a town fixture for as long as the window is open.
----
---- Returns false when the profile has no verified address (AP), so callers can say so
---- rather than silently walking into the encounter they meant to prevent.
-local BIT_NO_BATTLES = 4            -- constants/ram_constants.asm:98
 function M.setNoBattles(on)
     if not M.STATUS_FLAGS_4_ADDR then return false end
     local v = M.read_u8(M.STATUS_FLAGS_4_ADDR)
@@ -1660,54 +1336,14 @@ end
 --- True while the player is mid-ledge-hop, exiting a door, or fishing.
 -- TryDoWildEncounter returns early on this, and it is also how we notice a ledge was jumped
 -- (the drift that no amount of walking can undo).
-function M.isMoveLocked()
-    if not M.MOVEMENT_FLAGS_ADDR then return nil end
-    return M.read_u8(M.MOVEMENT_FLAGS_ADDR) ~= 0
-end
 
--- ═══ Sound effects (Phase 7) ═════════════════════════════════════════════
+-- ══ Sound effects (Phase 7) ═════════════════════════════════════════════
 -- Trigger an in-game sound effect by writing its ROM SFX ID to the music/SFX
 -- dispatch register. Profile-gated: if SFX_DISPATCH_ADDR is nil, this is a
--- no-op (safe default). Use `lua/tests/test_gen{1,2}_sfx.lua` to validate
--- the dispatch address + SFX IDs before enabling in production profiles.
+-- no-op (safe default). Gen 2's client calls this (gen2_crystal_client.lua:674,760,797).
 --
 -- M.playSfx("capture") looks up profile.sfx_ids.capture and writes it to
 -- the dispatch register. Unknown event names are no-ops.
-
---- Detect the Gen 1 companion patch and, if present, enable SFX through its mailbox.
---
--- Gen 1 has no RAM-writable sound trigger — `wNewSoundID` is PlaySound's internal scratch,
--- not a polled mailbox — so an unpatched cartridge simply cannot play a sound from Lua and
--- SFX_DISPATCH_ADDR stays nil. ABI 2's patched build added a VBlank hook that consumed a
--- sound id from mailbox+7; ABI 3 drains that byte without playing it, because the hook's
--- PlaySound call was not safe. Whether a dispatch register exists is therefore a question
--- for the capability bits, not the ABI number.
---
--- Profile-keyed on `companion_patch_mailbox`, so Gen 2 never runs this. Called once at
--- startup; returns the detected ABI version, or nil when unpatched.
-function M.detectCompanionPatch()
-    local mb = M.profile and M.profile.companion_patch_mailbox
-    if not mb then return nil end
-    local tag = string.char(M.read_u8(mb), M.read_u8(mb + 1),
-                            M.read_u8(mb + 2), M.read_u8(mb + 3))
-    if tag ~= "SLNK" then return nil end
-    local abi = M.read_u8(mb + 4)
-    -- ASK THE CAPABILITY BITS, NOT THE ABI NUMBER.
-    -- "ABI >= 2 therefore SFX" was true of every build that existed when it was written and
-    -- is false now: ABI 3 ships panel-only, because the VBlank PlaySound path it inherited
-    -- re-enters a non-reentrant audio routine (the long note in patch/gen1/src/slink.asm).
-    -- The bits exist precisely so a feature can be dropped without an ABI bump, and a client
-    -- that infers features from a version number cannot see that happen.
-    --
-    -- Cleared FIRST: redetection after a reset or a ROM reload must not leave a dispatch
-    -- address pointing into a layout that is no longer there.
-    M.SFX_DISPATCH_ADDR = nil
-    local caps = M.read_u8(mb + 8)
-    if abi >= 2 and caps ~= 0 and caps ~= 0xFF and (caps & 0x01) ~= 0 then
-        M.SFX_DISPATCH_ADDR = mb + 7
-    end
-    return abi
-end
 
 function M.playSfx(event_name)
     if not M.SFX_DISPATCH_ADDR then return false end
@@ -1718,11 +1354,6 @@ function M.playSfx(event_name)
 end
 
 -- Direct write (for diagnostic scripts that want to test arbitrary SFX IDs).
-function M.playSfxRaw(sfx_id)
-    if not M.SFX_DISPATCH_ADDR then return false end
-    M.write_u8(M.SFX_DISPATCH_ADDR, sfx_id)
-    return true
-end
 
 -- Maps Gen 3 (FRLG/RR) m4a SE_* sound IDs to semantic event names. The server
 -- emits play_sound commands with these numeric IDs for cross-gen events
@@ -1767,36 +1398,6 @@ end
 -- Gen 2: Box 14 (SRAM bank 3, CartRAM offset 0x79E0)
 -- If no dedicated memorial box is available, falls back to depositPartyMon.
 -- Returns true on success, false + error string on failure.
--- ═══ Gen 1 SRAM box-bank integrity ═══
--- Profile-keyed via `sram_box_layout`, which only the Gen 1 profiles declare — Gen 2's box
--- banks have a different layout and no equivalent one-time wipe, so none of this runs there.
---
--- THE POINT OF THIS, and it is not the checksums. pokered's `ChangeBox` opens with
---     bit BIT_HAS_CHANGED_BOXES, [hl]   ; hl = wCurrentBoxNum, bit 7
---     call z, EmptyAllSRAMBoxes         ; if so, empty ALL boxes in SRAM
--- (engine/menus/save.asm:366, identical in pokeyellow:351 and Alchav's AP fork:354). So the
--- first time the player ever picks "CHANGE BOX", the game marks every SRAM box empty as a
--- one-time init — **including box 12, where we put the memorial**. A run that memorialised
--- before the player first touched the box menu would silently lose every buried mon.
---
--- The fix is to do that init ourselves, once, and then set the bit so the game never does.
--- It is safe: bit 7 clear means the game has never run ChangeBox, which is the only path that
--- writes a real mon to an SRAM box — so there is nothing of the player's to destroy.
-local function sram_box_geometry()
-    local L = M.profile and M.profile.sram_box_layout
-    if not L then return nil end
-    -- Defaults match pret/pokered: 12 boxes, 6 per bank, 1122-byte box, banks 2 and 3.
-    return {
-        box_len   = L.box_len or 1122,
-        per_bank  = L.boxes_per_bank or 6,
-        banks     = L.banks or {2, 3},
-        -- CartRAM offset of each bank's checksum block = bank*0x2000 + (0xBA4C - 0xA000).
-        ck_offset = L.checksum_offset or 0x1A4C,
-        flag_addr = L.changed_boxes_addr,   -- wCurrentBoxNum
-        flag_bit  = L.changed_boxes_bit or 0x80,
-    }
-end
-
 --- Complement of the 8-bit sum, i.e. pokered's `CalcCheckSum` (save.asm:297).
 local function sram_sum(off, len)
     local d = 0
@@ -1809,59 +1410,13 @@ end
 --- Recompute one bank's all-boxes checksum and its 6 per-box checksums.
 -- One pass: the all-boxes range is exactly the per-box ranges concatenated, so the total is
 -- the sum of the parts and we never read a byte twice.
-local function recompute_bank_checksums(g, bank)
-    local base = bank * SRAM_BANK_SIZE
-    local total, per = 0, {}
-    for i = 0, g.per_bank - 1 do
-        local s = sram_sum(base + i * g.box_len, g.box_len)
-        per[i] = (255 - s) % 256
-        total = (total + s) % 256
-    end
-    local ck = base + g.ck_offset
-    mem_w8(ck, (255 - total) % 256, SRAM_DOMAIN)
-    for i = 0, g.per_bank - 1 do
-        mem_w8(ck + 1 + i, per[i], SRAM_DOMAIN)
-    end
-end
-
 --- Run the game's one-time SRAM box init ourselves, if it has not happened yet.
 -- Returns true when it actually did the init (so the caller knows both banks changed).
-function M.protectSramBoxes()
-    local g = sram_box_geometry()
-    if not g or not g.flag_addr then return false end
-
-    local flag = M.read_u8(g.flag_addr)
-    if flag % (g.flag_bit * 2) >= g.flag_bit then
-        return false                          -- already initialised, by us or by the game
-    end
-
-    -- EmptySRAMBox: count = 0, then the 0xFF species terminator (save.asm:572).
-    for _, bank in ipairs(g.banks) do
-        for i = 0, g.per_bank - 1 do
-            local box = bank * SRAM_BANK_SIZE + i * g.box_len
-            mem_w8(box, 0, SRAM_DOMAIN)
-            mem_w8(box + 1, 0xFF, SRAM_DOMAIN)
-        end
-    end
-    M.write_u8(g.flag_addr, flag + g.flag_bit)
-    return true
-end
-
 --- Refresh the checksums for whichever banks we touched.
 -- ponytail: vanilla pokered never READS these — every reference is a write (verified by
 -- grepping the whole decomp), and ChangeBox recomputes them from SRAM anyway. We write them
 -- so SRAM stays self-consistent for forks that might check. If this ever costs a visible
 -- frame hitch, drop it; correctness does not depend on it.
-function M.refreshSramBoxChecksums(all_banks)
-    local g = sram_box_geometry()
-    if not g then return end
-    if all_banks then
-        for _, bank in ipairs(g.banks) do recompute_bank_checksums(g, bank) end
-    else
-        recompute_bank_checksums(g, g.banks[#g.banks])   -- memorial box lives in the last bank
-    end
-end
-
 function M.depositMemorialMon(slot)
     local mem_off = M.profile and M.profile.memorial_box_cartram_offset
     if not mem_off then
@@ -1878,7 +1433,6 @@ function M.depositMemorialMon(slot)
     -- Before anything is written: claim the SRAM box banks so the game's first-ChangeBox
     -- wipe can never run and erase the memorial. Must precede the count read below, since
     -- the init resets that count to 0.
-    local did_init = M.protectSramBoxes()
 
     local pcount = M.getPartyCount()
     if pcount <= 1 then
@@ -1952,7 +1506,6 @@ function M.depositMemorialMon(slot)
     M.write_u8(M.PARTY_SPECIES_ADDR + new_pcount, 0xFF)
     M.write_u8(M.PARTY_COUNT_ADDR, new_pcount)
 
-    M.refreshSramBoxChecksums(did_init)
     return true
 end
 
