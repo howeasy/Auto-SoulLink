@@ -902,3 +902,113 @@ def test_no_catch_is_withheld_until_the_first_poke_ball():
     world.fire("battle_end")
     world.step(2)
     assert [e["area_id"] for e in world.events("no_catch")] == ["route_1"]
+
+
+# ── the in-game link panel (A11) ───────────────────────────────────────────────────────────
+# The cartridge patch owns the screen and asks; the client answers within a deadline it
+# measures from the transition IT observed. Everything below drives the mailbox exactly as
+# slink.asm does (states 0/1/2 at $DEEB, page wanted at $DEEC, page count at $DEED).
+PANEL_MAILBOX, PANEL_ABI, PANEL_CAPS = 0xDEE2, 0xDEE6, 0xDEEA
+PANEL_STATE, PANEL_PAGE, PANEL_PAGES = 0xDEEB, 0xDEEC, 0xDEED
+TILEMAP, PANEL_TILES = 0xC3A0, 360
+PANEL_ROWS = [f"ROW {i}" for i in range(26)]   # 26 rows = two pages of 18
+
+
+def _patch_panel(world, state=0, abi=3):
+    """What the companion patch's VBlank hook leaves in WRAM on a patched cartridge."""
+    world.bus[PANEL_MAILBOX:PANEL_MAILBOX + 4] = b"SLNK"
+    world.bus[PANEL_ABI] = abi
+    world.bus[PANEL_CAPS] = 0x02      # SLINK_CAP_PANEL
+    world.bus[PANEL_STATE] = state
+
+
+def _tiles(text):
+    """panel.lua's _tile_for over a row padded/truncated to 20 (memory_gb.lua:1555-1568)."""
+    out = []
+    for ch in text.ljust(20)[:20]:
+        b = ord(ch)
+        if 65 <= b <= 90:
+            out.append(0x80 + b - 65)
+        elif 97 <= b <= 122:
+            out.append(0xA0 + b - 97)
+        elif 48 <= b <= 57:
+            out.append(0xF6 + b - 48)
+        else:
+            out.append({47: 0xF3, 45: 0xE3}.get(b, 0x7F))
+    return out
+
+
+def _row(world, n):
+    return list(world.bus[TILEMAP + n * 20:TILEMAP + n * 20 + 20])
+
+
+def test_hello_reports_no_panel_on_a_plain_cartridge(world):
+    world.connect()
+    h = world.events("hello")[0]
+    assert h["panel"] is False and h["panel_abi"] == 0
+    world.assert_all_conform()
+
+
+def test_hello_reports_the_panel_and_its_abi_on_a_patched_cartridge(world):
+    _patch_panel(world)
+    world.connect()
+    h = world.events("hello")[0]
+    assert h["panel"] is True and h["panel_abi"] == 3
+    world.assert_all_conform()
+
+
+def test_the_panel_paints_a_page_on_the_open_and_the_next_on_a_page_turn(world):
+    _patch_panel(world, state=0)          # CLOSED
+    world.connect()
+    world.reply({"cmd": "link_panel", "rows": PANEL_ROWS})
+    world.step()                          # rows are held; the panel is still closed
+    assert _row(world, 0) == [0] * 20, "nothing is painted while the panel is closed"
+
+    world.bus[PANEL_STATE] = 1            # the patch opens: CLOSED -> AWAIT
+    world.step()
+    assert _row(world, 0) == _tiles("ROW 0")
+    assert _row(world, 17) == _tiles("ROW 17")
+    assert world.bus[PANEL_PAGES] == 2, "26 rows is two pages"
+    assert world.bus[PANEL_STATE] == 2, "the screen is handed back STAGED"
+
+    world.bus[PANEL_PAGE] = 1             # A: the patch bumps the page and re-enters AWAIT
+    world.bus[PANEL_STATE] = 1
+    world.step()
+    assert _row(world, 0) == _tiles("ROW 18")
+    assert _row(world, 8) == _tiles(""), "page 2 has eight rows and ten blanks"
+    assert world.bus[PANEL_STATE] == 2
+
+
+def test_a_mailbox_already_awaiting_at_first_sight_is_never_painted(world):
+    _patch_panel(world, state=1)          # the client attached mid-open: age unknown
+    world.connect()
+    world.reply({"cmd": "link_panel", "rows": PANEL_ROWS})
+    world.step(2)
+    assert _row(world, 0) == [0] * 20
+    assert world.bus[PANEL_STATE] == 1, "the patch keeps its fallback for this open"
+    # known-positive control: the same rows DO paint on the next observed open
+    world.bus[PANEL_STATE] = 0
+    world.step()
+    world.bus[PANEL_STATE] = 1
+    world.step()
+    assert _row(world, 0) == _tiles("ROW 0")
+
+
+def test_rows_arriving_past_the_deadline_are_held_for_the_next_open(world):
+    _patch_panel(world, state=0)
+    world.connect()
+    world.bus[PANEL_STATE] = 1            # observed CLOSED -> AWAIT on this frame
+    world.step()
+    world.step(60)
+    world.reply({"cmd": "link_panel", "rows": PANEL_ROWS})
+    world.step()                          # frame 61 after the transition: held, not painted
+    world.step()
+    assert _row(world, 0) == [0] * 20, "a late reply must not paint over a revealed fallback"
+    assert world.bus[PANEL_STATE] == 1
+
+    world.bus[PANEL_STATE] = 0            # B closes; the next open gets the held rows
+    world.step()
+    world.bus[PANEL_STATE] = 1
+    world.step()
+    assert _row(world, 0) == _tiles("ROW 0")
+    assert world.bus[PANEL_STATE] == 2

@@ -43,11 +43,20 @@ function W.new(profile, io)
 
     -- Open the write window for this frame. `reason` names the checkpoint that authorised it
     -- ("overworld", "battle_loop_head"); it is recorded with every write for the receipts.
-    function self:arm(reason) self.armed = assert(reason, "arm needs a reason") end
-    function self:disarm() self.armed = nil end
+    -- `allow(addr, n)` optionally NARROWS the window to a byte range (the panel paints into
+    -- wTileMap and must not reach the menu state one byte past it). The predicate answers for
+    -- the FULL interval, so a straddling write is refused whole rather than clipped.
+    function self:arm(reason, allow)
+        self.armed = assert(reason, "arm needs a reason")
+        self.allow = allow
+    end
+    function self:disarm() self.armed, self.allow = nil, nil end
 
     function self:write_bytes(addr, bytes)
         assert(self.armed, "write refused: no armed write window (W-7)")
+        assert(not self.allow or self.allow(addr, #bytes),
+               string.format("write refused: %d byte(s) at $%04X outside the %s window (W-7)",
+                             #bytes, addr, tostring(self.armed)))
         for i = 1, #bytes do
             local b = bytes[i]
             assert(type(b) == "number" and b >= 0 and b <= 255 and b % 1 == 0, "byte out of range")

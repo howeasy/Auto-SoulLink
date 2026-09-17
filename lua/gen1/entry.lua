@@ -31,7 +31,7 @@ function Entry.build(deps)
     local json = L("lua/json_codec.lua")
     local R, S, W, B, Rom = L("lua/gen1/reads.lua"), L("lua/gen1/signals.lua"), L("lua/gen1/writes.lua"),
                             L("lua/gen1/boxes.lua"), L("lua/gen1/rom.lua")
-    local T = L("lua/gen1/trade_overlay.lua")
+    local T, P = L("lua/gen1/trade_overlay.lua"), L("lua/gen1/panel.lua")
     local safety = L("lua/gen1_write_safety.lua")
     local Client = L("lua/gen1/client.lua")
 
@@ -58,22 +58,29 @@ function Entry.build(deps)
         write_bytes = function(addr, bytes) return writes:write_bytes(addr, bytes) end,
         write_cart_bytes = function(off, bytes)
             assert(writes.armed, "cart write refused: no armed write window (W-7)")
+            -- The panel window's allow predicate speaks System Bus addresses and cannot see
+            -- this door at all, so the refusal lives here: painting a menu never touches SRAM.
+            assert(writes.armed ~= "panel", "cart write refused: the panel window writes WRAM only")
             for i = 1, #bytes do bio.write_u8(off + i - 1, bytes[i], "CartRAM") end
         end,
     }
     local boxes = B.new(profile, reads, box_io)
     local rom = Rom.new(profile, bio)
     local trade = T.new(profile, reads_io, writes)
+    -- the panel reads the mailbox every frame and needs the clock for its own deadline
+    local panel_io = { read_u8 = reads_io.read_u8, framecount = function() return bio.framecount() end }
+    local panel = P.new(profile, panel_io, writes, deps.hud and deps.hud.sanitize or function(s) return s end)
 
     local client = Client.new({
         reads = reads, signals = S, writes = writes, boxes = boxes, rom = rom, safety = safety,
         net = deps.net, json = json, hud = deps.hud, io = bio,
         profile = profile, sites = sites, write_checkpoint = write_checkpoint, area_map = area_map,
-        statics = statics, trade = trade,
+        statics = statics, trade = trade, panel = panel,
         player = assert(deps.player, "deps.player required"), rom_type = Entry.ROM_TYPE[title],
         rom_sha1 = deps.rom_sha1, log = deps.log or function() end,
     })
-    return client, { profile = profile, sites = sites, reads = reads, writes = writes, boxes = boxes, rom = rom, json = json }
+    return client, { profile = profile, sites = sites, reads = reads, writes = writes, boxes = boxes,
+                     rom = rom, json = json, panel = panel, box_io = box_io }
 end
 
 -- Title from the cartridge header (ROM $0134..$0143): "POKEMON RED"/"POKEMON BLUE"/"POKEMON YELLOW".

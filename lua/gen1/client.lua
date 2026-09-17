@@ -57,7 +57,7 @@ function Client.new(p)
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
         deferred = {}, pending_battle_writes = {}, sync_written = {},
         pending_change = nil, battle = nil, has_pokeballs = false,
-        signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics,
+        signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
         trade = p.trade, trade_enabled = false, trade_state = nil,
     }
 
@@ -189,7 +189,11 @@ function Client.new(p)
             -- WRAM cleared (home/init.asm after a reset): whatever the player picks next is a
             -- new session for the server — CONTINUE re-hellos the same save (a reconnect),
             -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
-            if reads.read_player_id() == 0 then self.hello_sent = false end
+            if reads.read_player_id() == 0 then
+                self.hello_sent = false
+                -- WRAM clear: the held panel belongs to the session that just ended
+                if self.panel then self.panel:clear() end
+            end
             if self.invalid_streak >= Client.MAX_INVALID and self.writes_enabled then
                 -- pause, never drop: the queues survive (an unreadable party is a transient the
                 -- engine creates itself, e.g. AddPartyMon's AskName prompt before the struct
@@ -288,7 +292,14 @@ function Client.new(p)
                 send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
                                      new_species = mon and mon.species or 0 })
             end
-        elseif c == "link_panel" or c == "ghost_pos" then
+        elseif c == "link_panel" then
+            -- Held, not painted: the cartridge asks for the screen when the player opens the
+            -- menu, and only the panel module knows whether that ask is still fresh.
+            if self.panel then
+                local pok, perr = self.panel:hold(cmd.rows)
+                if not pok then log("[SLink-gen1] link_panel: " .. tostring(perr)) end
+            end
+        elseif c == "ghost_pos" then
             -- presentation the Gen 1 client does not render yet
         else
             log("[SLink-gen1] unknown command " .. tostring(c))
@@ -653,6 +664,9 @@ function Client.new(p)
             ball_count = ball_count(), badges = reads.read_badges(), area_id = area_id, loc_name = loc,
             pc_boxes = pc_boxes_wire(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
             in_battle = battle and battle.in_battle ~= 0 or false, rom_content = rom_content,
+            -- per CARTRIDGE, not per generation: only a patched one has the panel mailbox
+            panel = self.panel and self.panel:present() or false,
+            panel_abi = self.panel and self.panel:abi() or 0,
         })
         self.hello_sent = true
     end
@@ -875,13 +889,22 @@ function Client.new(p)
 
     function self:frame_end()
         self.frame = io.framecount()
+        -- FIRST: the patch whites the screen and polls for us, and the player doing that is
+        -- sitting in the START menu with the overworld write checkpoint long behind them.
+        if self.panel then
+            local pok, perr = self.panel:service()
+            if not pok then log("[SLink-gen1] panel: " .. tostring(perr)) end
+        end
         net.pump()
         local connected = net.connected()
         -- hello only once the player is IN the game: the main menu already holds the save
         -- (MainMenu -> TryLoadSaveFile before the CONTINUE/NEW GAME choice) and a cleared WRAM
         -- holds nothing, so "party readable" is not enough — require the overworld checkpoint
         -- or a running battle (a reconnect mid-battle must not wait for it to end)
-        if not connected then self.hello_sent = false end
+        if not connected then
+            self.hello_sent = false
+            if self.panel then self.panel:clear() end  -- rows outlive neither the link nor the save
+        end
         if connected and not self.hello_sent and game_is_live()
            and (reads.read_battle().in_battle ~= 0 or safety.check(ws_profile, io)) then
             self:send_hello()

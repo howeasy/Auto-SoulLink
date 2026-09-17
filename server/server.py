@@ -1221,6 +1221,9 @@ class SLinkServer:
                     if "panel" in msg:
                         self.connected_players[player_id]["panel"] = bool(msg.get("panel"))
                         self.connected_players[player_id]["panel_abi"] = msg.get("panel_abi", 0)
+                    # A relaunched client holds no rows, so "unchanged since last time" would
+                    # leave its panel empty until the run's contents happened to move.
+                    self._last_panel_sig[player_id] = None
                     # Resolve correct adapter from rom_type.
                     # Once rom_type is committed (set-once), the adapter is locked — ignore
                     # any later hello that carries a different rom_type (e.g. early-boot

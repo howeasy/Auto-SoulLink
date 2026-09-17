@@ -18,7 +18,7 @@ HEX_RE = re.compile(r"^(?:[0-9A-Fa-f]{2})*$")
 # event -> (required fields, optional fields); docs/protocol.md §3.2
 EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "hello": ({"rom_type": "str", "party": "list"},
-              {"game": "str", "player": "str", "ot_id": "int", "panel": "bool", "patch": "bool",
+              {"game": "str", "player": "str", "ot_id": "int", "panel": "bool", "panel_abi": "int", "patch": "bool",
                "version": "str", "client": "str", "badges": "int", "has_pokeballs": "bool",
                "trainer_name": "str", "pc_boxes": "list", "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict"}),

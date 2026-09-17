@@ -81,6 +81,10 @@ local function sanitize(s)
     return s
 end
 
+-- The same fold the in-game panel needs (lua/gen1/panel.lua): the cartridge tilemap has no
+-- glyph for a byte >= 0x80 either, and two spellings of "fold to ASCII" would drift.
+H.sanitize = sanitize
+
 -- ── Configuration (set via init) ────────────────────────────────────────────
 local cfg = {
     screen_w   = 240,   -- screen width
