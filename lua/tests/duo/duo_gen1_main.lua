@@ -987,6 +987,20 @@ local function trade_scenario(decline)
 
     if D.player == "a" then
         local first_query, first_offer = seen.trade_query or 0, seen.trade_offer or 0
+        -- The offer must not land while the partner is still walking. trade_prompt.asm's textbox
+        -- freezes the partner's overworld and is answered with the D-pad, so an early offer leaves
+        -- the Center route pressing directions into a YES/NO menu until "waypoint not blocked"
+        -- (gen1_rb_center_inputs.lua:190) kills the run -- trade_decline_new first contact: b stuck
+        -- at Route 1 (11,1) with row14="Trade RATTATA", then the server's trade watchdog
+        -- (server/state.py:491-507) freed the slot silently and a waited out its decline notice.
+        -- trade_new only passed because b reached the Center ~1300 frames FIRST that run; the two
+        -- halves share this code, so the mark fixes the accept path too.
+        -- Same rendezvous the whiteout rebuild lane already uses (the AT_CENTER wait at :2259-2261,
+        -- 600s); walk_to_center():447 logs CENTER_RECEPTIONIST, so no extra mark is needed.
+        if not wait_until(function() return partner_has("CENTER_RECEPTIONIST") end, 600,
+                          "partner to reach the receptionist") then
+            return false, "partner never reached the Center receptionist"
+        end
         tap("Up");yield_frame({}) -- receptionist object at (11,2)
         local talked = frame
         tap("A")
