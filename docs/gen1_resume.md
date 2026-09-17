@@ -209,3 +209,7 @@ Gen 1 scenarios (poison, pc_ops, soft_reset, explode, rival, changebox, linked_f
 reconnect, admit, ball_gate) with the narrowed precondition; commit receipts; (3) gen3_rr trade + faint; (4)
 verify_gen1_release.py without --quick (P8-7 full pass); (5) ledger cells for the new receipts, P8-6b docs; (6) owner
 decision: rebase onto master (RB-1 resolutions), FF, tag.
+DIAG-R2 outcome (~22:10Z): poison_new B 'hunt-timeout' was a real pre-existing budget bug, fixed in 5b17723 (leg budget
+= Forest.MAX_ENCOUNTERS x 3000; the retryable HUNT_EXHAUSTED phrase is now reachable). Driver dedup, EX-4, hud.lua and
+the deletions were ruled out as causes. The A-half truncations were the H-3 dead-process misfire (OMP H-5, in the tree
+uncommitted at the pause). Ledger 66cb89a: S-1 Yellow ✓.
