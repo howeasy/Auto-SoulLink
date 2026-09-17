@@ -1,0 +1,70 @@
+duo instance b scenario=type_clause_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:58082 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:58082
+[client] [SLink] TCP connected to 127.0.0.1:58082
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @649
+PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"B00013000014142D0A
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @2188 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,33) mode=catch balls=1
+phase wild-intro @2497 (10,33) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @3263 (10,33) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+[hunt] turn 2 foe hp 10/15 odds 0.63 dmax 6 -> fight
+[hunt] turn 3 foe hp 5/15 odds 1.00 dmax 6 -> throw
+phase wild-throw @4711 (10,33) battle=1 party=1
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @6712
+PARTY_UNREADABLE @6720 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+[client] [SLink-gen1] writes PAUSED: party unreadable
+heartbeat f=7200 party=2 connected=true
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":5,"in_box":false,"key":"05F4:AFB9:24","level":3,"maxHP":15,"nickname":"PIDGEY","player":"b","seq":198,"species_id":36,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"b","seq":199}
+RX hud_show text=>> Got RATTATA
+RX force_faint key=05F4:AFB9:24
+RX memorialize key=05F4:AFB9:24
+RX play_sound
+RX gui_prompt text=[x] Type clause: shared Normal
+RX unresolve_area
+PARTY_READABLE @7240  (count=2 species=B0 24 FF 00 00 00 00)
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @7249 (10,33) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @7250 (10,33) battle=0 party=2
+HUNT caught after 5063 frames, 1 encounter(s)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=11
+MYKEY 1 05F4:AFB9:24
+PARTY slot=1 key=05F4:AFB9:24 species=36 level=3 hp=5
+CAUGHT 05F4:AFB9:24
+CLAUSE_CAPTURE 05F4:AFB9:24 species=36 level=3
+TYPE_CLAUSE {"key":"05F4:AFB9:24","memorialize":true,"player":"b","prompt":"[x] Type clause: shared Normal","sound26":true,"species":36,"unresolve_area":"route_1","verdict":"rejected"}
+[client] [SLink-gen1] writes re-enabled after a live validation
+TX {"box":11,"event":"memorialize_done","key":"05F4:AFB9:24","player":"b","seq":201}
+PARTY_COUNT 2 -> 1 @7282
+MEMORIAL 05F4:AFB9:24 box12=true hp=0 memorialize_done=1 memorialize_failed=0
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=11
+SEEN capture=1 box_mon=0 party_mon=0 force_faint=1 memorialize=1
+SAVE_PHASE type_clause_new save-open-start-menu
+SAVE_PHASE type_clause_new save-close-foreign-menu
+SAVE_PHASE type_clause_new save-select-save
+SAVE_PHASE type_clause_new save-choose-save
+SAVE_PHASE type_clause_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_type_clause_new_b_1_witness.bin bytes=31592 saves=1 frame=7664
+SAVE_PHASE type_clause_new save-await-close
+SAVE_PHASE type_clause_new save-witnessed
+SAVE_WITNESS type_clause_new frames=536
+RESULT: PASS (type clause rejected 05F4:AFB9:24)
