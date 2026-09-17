@@ -74,6 +74,59 @@ pcall(function() client.speedmode(D.speed or 1600) end)
 local title, header = Entry.detect_title(function(a) return memory.read_u8(a, "ROM") end)
 if not title then finish(false, "not a Gen 1 cartridge (header " .. tostring(header) .. ")") end
 local deps = Entry.bizhawk_deps()
+
+-- ── S-7 (plan A12): dump the cartridge's save bytes so the SAVE is proven physically ──
+-- WHERE: the pinned save_witness site is SaveMenu.save + capture_offset 3
+-- (data/games/gen1_rby/engine_signals.json:129-135) — the instruction after `call SaveGameData`
+-- returns (pret engine/menus/save.asm:165-166, SaveGameData at :290-295, .cache/pret/pokered
+-- 405b624). At callback time the cartridge RAM therefore already holds exactly what the save
+-- wrote. Reading later from the scenario coroutine would read it frames afterwards, once the
+-- engine is free to touch SRAM again, which proves nothing about the save itself.
+-- DOMAIN: "CartRAM" — BizHawk's flat 0x8000 image of the cartridge's four 0x2000 SRAM banks
+-- (lua/memory_gb.lua:52-56; lua/gen1/entry.lua:54-64 reads the same image).
+-- SLICE: 0x498..0x7FFF = 0x7B68 bytes, the slice docs/gen1_requirements.md:72 pins for S-7.
+-- It starts past sSpriteBuffer0/1/2 (3 * SPRITEBUFFERSIZE = 3 * 7*7*8 = 3 * 0x188 = 0x498;
+-- pret ram/sram.asm:1-5, constants/gfx_constants.asm:14) — pic-decompression scratch the engine
+-- rewrites constantly and the save does not own.
+local WITNESS_FROM, WITNESS_TO = 0x498, 0x8000
+local witness_saves = 0
+local function dump_save_witness()
+    witness_saves = witness_saves + 1
+    -- repo-relative in the log line: ROOT (D.wt) contains spaces, and a `path=` value with a
+    -- space cannot be parsed off the log.
+    local rel = fmt("patch/build/e2e_%s_%s_%d_witness.bin", D.scenario, D.player, D.attempt or 1)
+    local out = {}
+    -- Per-byte read_u8 rather than memory.read_bytes_as_array: the array's index base is not
+    -- pinned for the Gambatte core here (†UNVERIFIED), while read_u8 is what every other
+    -- CartRAM read in this tree uses. The chars go into a table and are joined ONCE — no
+    -- per-byte string concatenation. 0x7B68 reads, once per SAVE, once per scenario half.
+    for off = WITNESS_FROM, WITNESS_TO - 1 do
+        out[#out + 1] = string.char(memory.read_u8(off, "CartRAM"))
+    end
+    local blob = table.concat(out)
+    local wf = assert(io.open(ROOT .. "/" .. rel, "wb"), "cannot open " .. rel)
+    wf:write(blob)   -- overwritten on every save, so the file is this attempt's FINAL save
+    wf:close()
+    log(fmt("SAVE_WITNESS_DUMP path=%s bytes=%d saves=%d frame=%d",
+            rel, #blob, witness_saves, emu.framecount()))
+end
+-- Tee the one bus hook signals.lua registers for this site (lua/gen1/signals.lua:230, named
+-- "SLink-gen1-" .. kind) so the dump runs INSIDE that callback, before the queued signal drains
+-- in frame_end. The client's own save_witness arm runs at drain time and only flushes BizHawk's
+-- SaveRAM file (lua/gen1/client.lua:651-652), so hooking here keeps lua/gen1/ untouched.
+local _on_bus_exec = deps.on_bus_exec
+deps.on_bus_exec = function(fn, addr, name, dom)
+    if name == "SLink-gen1-save_witness" then
+        local fire = fn
+        fn = function()
+            fire()
+            local dok, derr = pcall(dump_save_witness)
+            if not dok then log("SAVE_WITNESS_DUMP_FAIL " .. tostring(derr)) end
+        end
+    end
+    return _on_bus_exec(fn, addr, name, dom)
+end
+
 local rom_sha1 = gameinfo.getromhash():lower()
 H.init({ screen_w = 160, screen_h = 144 })
 C.init(SLINK_HOST, tonumber(SLINK_PORT))
