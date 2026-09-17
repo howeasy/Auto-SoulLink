@@ -695,3 +695,58 @@ def test_the_species_budget_phrase_is_retryable_on_later_attempts():
     # a second ball miss still does not
     assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": duo.RNG_OUT_OF_BALLS},
                                       2, limit=8)
+
+
+# ── H-2 (l)/(m): the FAIL summary and the explode KO phrase ─────────────────
+
+def test_an_oracle_failure_becomes_a_fail_summary_not_a_traceback(capsys, tmp_path, monkeypatch):
+    """The lane's poison run: the oracle raised, the exception escaped run_scenario_with_rng_retry
+    and no summary block was printed. The attempt is caught, archived and returned with its
+    reason so main() can print FAIL and exit non-zero."""
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    built = []
+
+    class BoomRun:
+        def __init__(self, name, args, attempt):
+            built.append(attempt)
+
+        def run(self):
+            raise RuntimeError("links.json carries 2 link(s) ['route_1', 'viridian_forest']")
+
+    monkeypatch.setattr(duo, "DuoRun", BoomRun)
+    monkeypatch.setattr(duo, "read_result", lambda _name, _inst: "RESULT: PASS (x)")
+    args = type("Args", (), {"game": "gen1_new", "idle_jitter": 0})()
+    outcome = duo.run_scenario_with_rng_retry("poison_new", args)
+    assert outcome == (False, 1, "RuntimeError: links.json carries 2 link(s) "
+                                 "['route_1', 'viridian_forest']")
+    assert built == [1], "an oracle failure is never retried"
+    lines = duo.summary_lines({"poison_new": outcome}, "gen1_new")
+    assert lines == ["  poison_new: FAIL (attempt 1 of 2) — RuntimeError: links.json carries "
+                     "2 link(s) ['route_1', 'viridian_forest']"], lines
+    assert duo.exit_code({"poison_new": outcome}) == 1
+    assert duo.exit_code({"poison_new": (True, 1)}) == 0
+
+
+def test_the_explode_ko_phrase_is_retryable_within_its_own_budget():
+    """B's explode half can lose the linked mon to the foe before the coerced turn; A reports
+    the 180 s READY_ACTIVE wait as a consequence, so the pair retries inside explode_new's two
+    attempts."""
+    miss = f"RESULT: FAIL ({duo.EXPLODE_KO_MISS})"
+    assert duo.classify_gen1_result(miss) == "CAUSE_RNG"
+    assert duo.classify_gen1_result(
+        "RESULT: FAIL (B did not park in the required faint window)") == "CONSEQUENCE"
+    assert duo.retryable_gen1_rng(
+        "gen1_new",
+        {"a": "RESULT: FAIL (B did not park in the required faint window)", "b": miss},
+        1, limit=duo.scenario_attempt_limit("explode_new", "gen1_new"))
+    assert not duo.retryable_gen1_rng(
+        "gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 2, limit=2)
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 1, limit=2)
+
+
+def test_the_explode_ko_phrase_is_cross_checked_against_the_body():
+    """The Lua card lands the string; until it does, this is skipped with the reason named."""
+    body = (REPO / "lua" / "tests" / "duo" / "duo_gen1_main.lua").read_text(encoding="utf-8")
+    if f'return false, "{duo.EXPLODE_KO_MISS}"' not in body:
+        pytest.skip("the Lua explode-KO phrase has not landed yet (Lua card EX-2)")
+    assert duo.GEN1_RNG_REASON_CLASS[duo.EXPLODE_KO_MISS] == "CAUSE_RNG"

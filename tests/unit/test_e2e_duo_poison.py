@@ -295,7 +295,7 @@ def test_poison_oracle_refuses_a_link_table_that_is_not_empty(tmp_path, monkeypa
     (tmp_path / "links.json").write_text(json.dumps({"links": [
         {"area_id": "route_1", "status": "alive", "a": {"key": "AAAA:1111:01"},
          "b": {"key": "BBBB:2222:02"}}]}), encoding="utf-8")
-    with pytest.raises(RuntimeError, match="links.json carries 1 link"):
+    with pytest.raises(RuntimeError, match="links.json carries 1 formed link"):
         run.assert_poison_new_saved(results)
 
 
@@ -308,3 +308,42 @@ def test_poison_oracle_refuses_an_orphan_rebuild_command(tmp_path, monkeypatch, 
     results["b"] += f"\nRX {command} key={_starter}"
     with pytest.raises(RuntimeError, match=f"received a {command} command"):
         run.assert_poison_new_saved(results)
+
+
+# ── H-2 (k): dead-zone records are not links ────────────────────────────────
+
+_DEAD_ZONE_ROW = {"area_id": "route_1", "a": None, "b": None, "status": "dead",
+                  "cause": "dead_zone", "encounter_a": None,
+                  "encounter_b": {"key": "", "species": 16}, "initiating_player": "b"}
+
+
+def test_poison_oracle_accepts_a_dead_zone_only_link_table(tmp_path, monkeypatch):
+    """The lane's own table: b ran from an incidental Route 1 encounter and from the
+    wrong-species first forest encounter, so two dead-zone records exist. They are area locks,
+    not links, and the PYDEC note says how many were counted."""
+    run, results, _starter = _poison_stub(tmp_path, monkeypatch)
+    notes = []
+    run._pydec_note = notes.append
+    (tmp_path / "links.json").write_text(json.dumps({"links": [
+        dict(_DEAD_ZONE_ROW), dict(_DEAD_ZONE_ROW, area_id="viridian_forest")]}),
+        encoding="utf-8")
+    run.assert_poison_new_saved(results)
+    assert any("2 dead-zone record(s)" in note for note in notes), notes
+
+
+@pytest.mark.parametrize("row", [
+    dict(_DEAD_ZONE_ROW, a={"key": "AAAA:1111:01"}),                 # a key on a side
+    dict(_DEAD_ZONE_ROW, encounter_b={"key": "BBBB:2222:02"}),      # a key in an encounter
+    {"area_id": "route_1", "a": None, "b": None, "status": "alive", "cause": ""},  # not a dead zone
+])
+def test_poison_oracle_refuses_a_formed_link(tmp_path, monkeypatch, row):
+    run, results, _starter = _poison_stub(tmp_path, monkeypatch)
+    (tmp_path / "links.json").write_text(json.dumps({"links": [row]}), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="formed link"):
+        run.assert_poison_new_saved(results)
+
+
+def test_is_formed_link_classifies_both_shapes():
+    assert not duo.is_formed_link(_DEAD_ZONE_ROW)
+    assert duo.is_formed_link(dict(_DEAD_ZONE_ROW, a={"key": "AAAA:1111:01"}))
+    assert duo.is_formed_link({"area_id": "route_1", "status": "alive", "cause": ""})

@@ -297,10 +297,17 @@ GEN1_RNG_REASON_CLASS = {
     # A_PENDING mark and B reported this (duo_gen1_main.lua:776). CONSEQUENCE, not CAUSE_RNG:
     # it only earns a retry when the pair also carries A's out-of-balls phrase.
     "runner never released B (A_PENDING)": "CONSEQUENCE",
+    # explode_new's partner half: A waits 180 s for B's READY_ACTIVE mark and reports this when
+    # B died before parking (duo_gen1_main.lua:1608-1612). CONSEQUENCE, not FINAL, or B's
+    # explode-KO phrase could never earn the pair a retry.
+    "B did not park in the required faint window": "CONSEQUENCE",
     # species_clause_new's own budget phrase: B's battle cap (8) exhausted by duplicates. The
     # reroll observation and the hunt's RNG budget are the same attempts, so this one is
     # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
     "RNG: the species hunt met only duplicates within its battle budget": "CAUSE_RNG",
+    # explode_new: battle HP hit 0 before the coerced EXPLOSION could be committed. Same shape:
+    # the game's RNG, not a driver fault, so a whole-run retry is the right response.
+    "RNG: the wild foe knocked the linked mon out before EXPLOSION": "CAUSE_RNG",
     "B could not hold its linked mon active: out-of-balls": "FINAL",  # switch-turn death, not catch RNG
 }
 
@@ -327,6 +334,13 @@ def _has_exact_rng_miss(text):
 
 
 SPECIES_BUDGET_MISS = "RNG: the species hunt met only duplicates within its battle budget"
+# Explode Mode's own RNG outcome: the linked mon was KO'd before the coerced turn could fire
+# (the Lua card lands the string; the phrase is pinned here and cross-checked against the body
+# once it exists).
+EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION"
+# The phrases a LATER attempt may still be retried for: the species reroll observation and the
+# hunt's RNG budget are the same attempts, and explode_new's budget is its own two.
+LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS)
 
 
 def retryable_gen1_rng(game, results, attempt, limit=2):
@@ -348,7 +362,8 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
         return True
     causes = [text for text in results.values()
               if classify_gen1_result(text) == "CAUSE_RNG"]
-    return bool(causes) and all(SPECIES_BUDGET_MISS in (text or "") for text in causes)
+    return bool(causes) and all(
+        any(phrase in (text or "") for phrase in LATE_ATTEMPT_RNG) for text in causes)
 
 
 def scenario_attempt_limit(name, game):
@@ -728,6 +743,22 @@ def reordered_json_keys(left, right):
         if isinstance(a, dict) and isinstance(b, dict) and list(a) != list(b):
             out.append(f"{key} ({'|'.join(list(a))} -> {'|'.join(list(b))})")
     return out
+
+
+def is_formed_link(entry) -> bool:
+    """True when a links.json row is a FORMED pair, not a dead-zone record.
+
+    Dead zones live in the same table with both halves null — `a: null, b: null`,
+    `status: "dead"`, `cause: "dead_zone"` — a no-catch area lock, not a link (the poison lane
+    produced two: an incidental Route 1 encounter and the wrong-species first forest encounter).
+    Anything carrying a key on either side, or any other status/cause pair, counts as formed.
+    """
+    if entry.get("status") != "dead" or entry.get("cause") != "dead_zone":
+        return True
+    for field in ("a", "b", "encounter_a", "encounter_b"):
+        if (entry.get(field) or {}).get("key"):
+            return True
+    return False
 
 
 def terminal_result(text):
@@ -1199,6 +1230,23 @@ class DuoRun:
         for inst in ("a", "b"):
             self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
         print("[duo] two EmuHawk instances launched")
+
+    def _mon_stats_keys(self):
+        """The persisted `mon_stats` keys, or [] when the document is absent/unreadable."""
+        try:
+            with open(os.path.join(self.data_dir, "links.json"), encoding="utf-8") as handle:
+                return sorted((json.load(handle).get("mon_stats") or {}).keys())
+        except (OSError, ValueError):
+            return []
+
+    def _boot_stats_present(self) -> bool:
+        """True when the server holds a `mon_stats` entry for BOTH boot keys.
+
+        The soft-reset baseline is only meaningful at a quiescent point: stats arrive with the
+        tick after each hello, so a baseline taken earlier misses whichever half arrived last.
+        """
+        stats = self._mon_stats_keys()
+        return all(self._boot_keys.get(inst) in stats for inst in ("a", "b"))
 
     def _clear_attempt_artifacts(self):
         """Drop every result, go-file and witness this attempt has to produce for itself.
@@ -2365,7 +2413,9 @@ class DuoRun:
                                f"({len(offsets)} sends, release at {release_at}, last at "
                                f"{offsets[-1] if offsets else -1})")
 
-        marker(a_text, r"PC_FINAL party=1 box=1 count=0 init=true", "A final state")
+        # The route never runs ChangeBox, so the box-initialised flag stays CLEAR: the marker
+        # says init=false and the saved flag is checked through the codec rather than trusted.
+        marker(a_text, r"PC_FINAL party=1 box=1 count=0 init=false", "A final state")
         marker(a_text, r"SAVE_WITNESS pc_ops_new_a", "A save witness")
         rx1 = marker(b_text, r"PC_PARTNER_RX 1 box_mon (\S+)", "B partner box_mon")
         rx2 = marker(b_text, r"PC_PARTNER_RX 2 party_mon (\S+)", "B partner party_mon")
@@ -2386,6 +2436,9 @@ class DuoRun:
         if a_keys != [self._boot_keys["a"]]:
             raise RuntimeError(f"A's saved party is {a_keys}, expected the starter alone after "
                                f"the release")
+        if a_sram[codec._CURRENT_BOX] & codec._BOX_INITIALIZED:
+            raise RuntimeError("A's saved box-initialised flag is set; pc_ops_new never runs "
+                               "ChangeBox, so the flag has to stay clear")
         boxed = [codec.key(mon) for mon in a_box]  # decoded sCurBoxData, main-checksum covered
         if key in boxed:
             raise RuntimeError(f"A's saved active box still holds the released key {key}")
@@ -3038,11 +3091,16 @@ class DuoRun:
                     raise RuntimeError(f"{inst} received a {command} command; no pair was ever "
                                        f"linked, so the server had nothing to bury, rebuild or "
                                        f"retrieve")
-        durable = self._links_json()
-        if durable:
-            raise RuntimeError(f"links.json carries {len(durable)} link(s) "
-                               f"{[entry.get('area_id') for entry in durable]}; this scenario "
+        rows = self._links_json()
+        formed = [entry for entry in rows if is_formed_link(entry)]
+        if formed:
+            raise RuntimeError(f"links.json carries {len(formed)} formed link(s) "
+                               f"{[entry.get('area_id') for entry in formed]}; this scenario "
                                f"forms none")
+        dead_zones = len(rows) - len(formed)
+        if dead_zones:
+            self._pydec_note(f"links.json carries {dead_zones} dead-zone record(s) "
+                             f"(no_catch areas) — area locks, not links")
         self._pydec_note(f"S-4 poison: PSN ${psn.group(3)} after {psn.group(1)} encounters, one "
                          f"faint then whiteout on the wire, no memorial; the empty link table "
                          f"left the server idle")
@@ -3436,6 +3494,14 @@ class DuoRun:
                 # The reset's evidence is that NOTHING changed, so the baseline is taken before
                 # either client acts: the end state is compared against it, which is what stops
                 # a duplicated or rewritten log from passing as "the same save reconnected".
+                # QUIESCENCE FIRST: a client sends its party stats on the tick after its hello,
+                # so a baseline taken mid-arrival holds whichever half landed first and the
+                # post-reset comparison then reports the other's arrival as a change (the lane
+                # saw `$.mon_stats.<key>: '<missing>' -> {...}`). mon_stats is NOT excluded from
+                # the compare — a stat change across a reset would be a real finding.
+                self.wait_for("both boot keys' stats on the server", self._boot_stats_present,
+                              120)
+                self._pydec_note(f"baseline mon_stats keys: {self._mon_stats_keys()}")
                 events = self._reconnect_events()
                 baseline_bytes = self._links_bytes()
                 baseline_path = os.path.join(self.data_dir, "links_baseline.json")
@@ -3737,6 +3803,21 @@ class DuoRun:
         return passed
 
 
+def summary_lines(results, game):
+    """One line per scenario, with a failure's reason attached when it has one."""
+    lines = []
+    for name, outcome in results.items():
+        ok, attempt = outcome[0], outcome[1]
+        reason = f" — {outcome[2]}" if len(outcome) > 2 else ""
+        lines.append(f"  {name}: {'PASS' if ok else 'FAIL'} "
+                     f"(attempt {attempt} of {scenario_attempt_limit(name, game)}){reason}")
+    return lines
+
+
+def exit_code(results) -> int:
+    return 0 if all(outcome[0] for outcome in results.values()) else 1
+
+
 def _archive_attempt(name, attempt, receipts):
     """Keep one attempt's receipts and PYDEC copy; the next run deletes the live ones.
 
@@ -3771,7 +3852,17 @@ def run_scenario_with_rng_retry(name, args):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
               f"attempt={attempt}")
-        ok = DuoRun(name, args, attempt=attempt).run()
+        try:
+            ok = DuoRun(name, args, attempt=attempt).run()
+        except Exception as exc:
+            # An oracle failure is not RNG: the scenario is lost, and the lane needs the
+            # summary block with the reason rather than a traceback (run() has already written
+            # its own PYDEC: FAIL line).
+            receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
+            _archive_attempt(name, attempt, receipts)
+            reason = f"{type(exc).__name__}: {exc}"
+            print(f"[duo] {name}: attempt {attempt} aborted — {reason}")
+            return False, attempt, reason
         receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
         if reroll_retry and ok:
             state = species_reroll_state(receipts)
@@ -3855,10 +3946,9 @@ def main():
         print(f"\n========== scenario: {name} ==========")
         results[name] = run_scenario_with_rng_retry(name, args)
     print("\n========== summary ==========")
-    for name, (ok, attempt) in results.items():
-        print(f"  {name}: {'PASS' if ok else 'FAIL'} "
-              f"(attempt {attempt} of {scenario_attempt_limit(name, args.game)})")
-    sys.exit(0 if all(ok for ok, _ in results.values()) else 1)
+    for line in summary_lines(results, args.game):
+        print(line)
+    sys.exit(exit_code(results))
 
 
 if __name__ == "__main__":

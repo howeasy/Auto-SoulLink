@@ -1425,7 +1425,7 @@ _PC_A = "\n".join([
     'TX {"event":"party_to_box","player":"a","key":"' + _PC_LINK_A + '"}',
     "[SLink-gen1] RELEASE_SEEN key=" + _PC_LINK_A + " box=0",
     "PC_RELEASE_SEEN " + _PC_LINK_A,
-    "PC_FINAL party=1 box=1 count=0 init=true",
+    "PC_FINAL party=1 box=1 count=0 init=false",
     "SAVE_WITNESS pc_ops_new_a frames=900",
 ])
 _PC_B = "\n".join([
@@ -1613,3 +1613,43 @@ def test_changebox_oracle_refuses_a_current_box_that_is_not_one(tmp_path, monkey
     run, _receipts = _changebox_stub(tmp_path, monkeypatch, initialised=True, box_index=2)
     with pytest.raises(RuntimeError, match="current box is 2"):
         run.assert_changebox_new_saved({"a": "", "b": _CHANGEBOX_B})
+
+
+def test_pc_ops_oracle_refuses_an_initialised_box_flag(tmp_path, monkeypatch):
+    """H-2 (n): this route never runs ChangeBox, so the saved box-initialised flag has to stay
+    clear; the oracle reads it through the codec rather than trusting the receipt."""
+    run, receipts = _pc_stub(tmp_path, monkeypatch, initialised=True)
+    with pytest.raises(RuntimeError, match="box-initialised flag is set"):
+        run.assert_pc_ops_new_saved(receipts)
+
+
+def test_soft_reset_baseline_waits_for_both_boot_keys_stats(tmp_path, monkeypatch):
+    """H-2 (p): the lane's baseline held only B's key, so A's stats arriving on the next tick
+    read as a change. The quiescence predicate has to see both keys before the baseline is
+    taken, and mon_stats itself is still compared."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.data_dir = str(tmp_path)
+    run._boot_keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
+    (tmp_path / "links.json").write_text(
+        json.dumps({"mon_stats": {"BBBB:2222:02": {"level": 5}}}), encoding="utf-8")
+    assert run._mon_stats_keys() == ["BBBB:2222:02"]
+    assert not run._boot_stats_present()
+    (tmp_path / "links.json").write_text(
+        json.dumps({"mon_stats": {"AAAA:1111:01": {"level": 5},
+                                  "BBBB:2222:02": {"level": 5}}}), encoding="utf-8")
+    assert run._boot_stats_present()
+    # and a document that is missing entirely is "not present", not a crash
+    (tmp_path / "links.json").unlink()
+    assert run._mon_stats_keys() == [] and not run._boot_stats_present()
+
+
+def test_soft_reset_oracle_refuses_a_stat_that_changed(tmp_path, monkeypatch):
+    """mon_stats is compared, not excluded: a stat change across the reset is a real finding."""
+    run = _reset_stub(tmp_path, monkeypatch)
+    run._reset_baseline = dict(
+        run._reset_baseline,
+        links_bytes=b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 5}}}')
+    (tmp_path / "run" / "links.json").write_bytes(
+        b'{"links": [], "mon_stats": {"AAAA:1111:01": {"level": 6}}}')
+    with pytest.raises(RuntimeError, match=r"at \$\.mon_stats\.AAAA:1111:01\.level: 5 -> 6"):
+        run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
