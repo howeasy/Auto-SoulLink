@@ -23,7 +23,7 @@ explains a failure later:
                             row, and the panel on a randomized+injected ROM
    10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
    11. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
-   12. duo-pairs          — every scenario on both pairings, through the real server
+   12. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
