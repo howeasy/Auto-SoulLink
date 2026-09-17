@@ -13,13 +13,34 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-14T11:11:39+00:00",
+  "updated_at_utc": "2026-09-17T15:50:04+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "2411a7b",
-  "live_lane": null,
+  "live_lane": "ball_gate_new run 3 (coordinator, EmuHawk x2)",
   "next_action": "PAUSED BY OWNER 2026-09-14 (second pause; workers NOT stopped by owner instruction). All workers have reported; no worker is running. Unreviewed candidates on the branch: R5b-3b d603734, R5b-1 round 3 acbd5ae, R5b-2 round 3 2411a7b, HX-2b 184db47, HS-3 10ebb74; C3 9ab1fab REJECTED (revert proposed in the quick-path plan). C3 9ab1fab REJECTED (cx-c70b849c; F1-F7 recorded) — round 2 is the first dispatch on resume. On resume: integrate their reports as candidates -> Codex review against docs/gen1_reference/reviews/R5b-joint-protocol.md -> fix-up rounds; then HX-2c-A1 (phase-aware attribution), HS-4 (lifecycle notices), N3-1 (pretrade checkpoint + COMMIT prerequisite), N3-2 (recover-before-trade); then a clean-tree full unit run (F1) and TK-5 ruff sweep before the human session. No new dispatch until the owner resumes.",
   "workers_note": "coordinator-authored two-line poller fix in tests/live/test_gen1_selected_rb_ball_gate.py:127,207 (test harness only; recorded here, no separate card)",
   "workers": [
+    {
+      "id": "master-release-lane",
+      "owner": "Claude Fable 5.1 coordinator (session e136b7e5) in worktree gen1-master-release-plan-6b4279 (branch claude/gen1-master-release-plan-6b4279); owner-approved plan v3.9 2026-09-17",
+      "state": "active",
+      "files": [
+        "lua/tests/duo/duo_gen1_main.lua",
+        "lua/gen1/client.lua",
+        "lua/gen1/entry.lua",
+        "lua/gen1/writes.lua",
+        "lua/hud.lua",
+        "server/server.py",
+        "tests/unit/protocol_schema.py",
+        "tests/unit/test_gen1_writes.py",
+        "docs/gen1_resume.md",
+        "docs/gen1_reference checkpoint (this file)"
+      ],
+      "next_action": "RESUMED 2026-09-17 under plan v3.9 (Codex out; OMP Gen1 Peer 2 + Claude subagents). A0 rebase onto master d2c30fb LANDED (tag pre-rebase-gen1-release-c9bf880; 2861 unit, ruff clean). Landed since: b9f3a82 decode_bag, 354efa7 panel.lua module (A11 half), 850f9f5 client fix (gift key read mid-AddPartyMon -- first ball_gate_new live finding), 9e4a686 A0-H1 harness (OMP). LIVE LANE: ball_gate_new run 3 (Mart-close fix in the duo body). OMP card A1 (cx-14f0b481: gen1_scripted_play.lua, test_gen1_scripted_gate.lua, gen1_fixtures.py, test_gen1_fixture_qualify.py, test_duo_gen1_new.py) in flight. Subagents: NEW lua/tests/gen1_rb_pc_inputs.lua (A6 driver), NEW lua/tests/gen1_rb_forest_inputs.lua (A7 driver). Coordinator next: A11 wiring card, then reconnect_new run once A1 lands, then A0-H2 (post-result oracle registry) to OMP.",
+      "reuse_decision": "shared infra (state.py/server.py/connector/hud/adapters/base.py) reused unchanged; Gen 1 facts regenerated from pret; RC runtime not adopted; harness mechanisms (post-result oracle registry, fail-closed runner) recorded for docs/shared_runtime.md",
+      "source_head": "9e4a686",
+      "independent_review": "OMP Gen1 Peer 2 reviews every coordinator Lua/client diff before a lane run; subagent cuts are coordinator-reviewed and OMP adversarial-reviewed before the tag; no worker reviews its own cut"
+    },
     {
       "id": "battle-input",
       "owner": "integrated by coordinator (isolated Claude worker authored rounds 1-2)",
@@ -33,7 +54,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "game-specific test driver (R/B lab route facts); 're-pulse until observed acceptance' stays local until the parcel module becomes a second consumer",
       "receipt": "docs/gen1_reference/reviews/D1-RB-implementation-successor.md",
       "independent_review_refs": [
-        "Codex headless REVIEW cx-d02ec69d round 1: REJECT (enemy-first prompt stall) \u2014 resolved",
+        "Codex headless REVIEW cx-d02ec69d round 1: REJECT (enemy-first prompt stall) — resolved",
         "Codex headless REVIEW cx-f22e3dde round 2: ACCEPT-WITH-NOTES for one R7 attempt"
       ]
     },
@@ -215,7 +236,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "game-specific R/B WRAM decoders in a small pure module; the shared scripted host only gains additive point fields",
       "receipt": "tests/unit/test_gen1_rb_point_fields.py (4 passed)",
       "independent_review_refs": [
-        "Codex headless REVIEW cx-4754b1c0: ACCEPT-WITH-NOTES (CUT B) \u2014 event bits 35/56/57, BCD, bag layout, facing, symbols verified against pokered 405b624"
+        "Codex headless REVIEW cx-4754b1c0: ACCEPT-WITH-NOTES (CUT B) — event bits 35/56/57, BCD, bag layout, facing, symbols verified against pokered 405b624"
       ]
     },
     {
@@ -576,7 +597,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "shared",
       "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, tests/integration/test_manager_gen1_resume.py, test_gen1_continue_observer.py, test_gen1_resume_client.py, test_gen1_engine_signals_client.py (105 in the re-run set)",
       "independent_review_refs": [
-        "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) \u2014 all addressed",
+        "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) — all addressed",
         "round 2 headless REVIEW pending"
       ]
     },
@@ -597,7 +618,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "shared client lifecycle; Gen 1 site data unchanged",
       "receipt": "tests/unit/test_gen1_run_resume.py, test_gen1_resume_enrollment.py, tests/integration/test_manager_gen1_resume.py, test_gen1_continue_observer.py, test_gen1_resume_client.py, test_gen1_engine_signals_client.py (105 in the re-run set)",
       "independent_review_refs": [
-        "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) \u2014 all addressed",
+        "Codex REVIEW cx-9559ab65 round 1 REJECT (7 findings) — all addressed",
         "round 2 headless REVIEW pending"
       ]
     },
@@ -615,7 +636,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "shared",
       "receipt": "tests/unit/test_gen1_run_resume.py, tests/integration/test_manager_gen1_resume.py (11 new tests)",
       "independent_review_refs": [
-        "Codex REVIEW cx-f0798287 round 2 (2 majors) \u2014 addressed; round 3 pending"
+        "Codex REVIEW cx-f0798287 round 2 (2 majors) — addressed; round 3 pending"
       ]
     },
     {
@@ -633,7 +654,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "shared",
       "receipt": "tests/integration/test_manager_gen1_resume.py (+88), tests/unit/test_gen1_run_resume.py, tests/unit/test_manager_http_hardening.py",
       "independent_review_refs": [
-        "Codex REVIEW cx-03a237b0 round 3 \u2014 addressed; round 4 pending"
+        "Codex REVIEW cx-03a237b0 round 3 — addressed; round 4 pending"
       ]
     },
     {
@@ -649,7 +670,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "shared",
       "receipt": "tests/integration/test_manager_gen1_resume.py (+7 reservation tests)",
       "independent_review_refs": [
-        "Codex REVIEW cx-69ce8923 round 4 finding A \u2014 addressed; final MODEL gate after the live check"
+        "Codex REVIEW cx-69ce8923 round 4 finding A — addressed; final MODEL gate after the live check"
       ]
     },
     {
@@ -676,7 +697,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
         "tests/unit/test_gen1_selected_rb_ball_gate.py",
         "docs/gen1_reference/reviews/D1-RB-implementation-successor.md"
       ],
-      "next_action": "None; integrated. Latent hardening noted (index==0 gate before open-fight) \u2014 apply only if a live receipt shows it.",
+      "next_action": "None; integrated. Latent hardening noted (index==0 gate before open-fight) — apply only if a live receipt shows it.",
       "reuse_decision": "game-specific test driver",
       "receipt": "tests/unit/test_gen1_selected_rb_ball_gate.py (33 passed; .cache/bi2-model.xml)",
       "independent_review_refs": [
@@ -727,7 +748,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "reuse_decision": "shared",
       "receipt": "tests/integration/test_manager_gen1_resume.py (+4; 251 manager/resume tests)",
       "independent_review_refs": [
-        "Codex REVIEW cx-aa100faf round 5 finding A \u2014 addressed"
+        "Codex REVIEW cx-aa100faf round 5 finding A — addressed"
       ]
     },
     {
@@ -843,7 +864,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "f0-run",
       "owner": "coordinator slink-63 (execution-only)",
       "state": "done",
-      "files": ["tests/live/test_gen1_native_selected_fresh.py (read-only; run once)"],
+      "files": [
+        "tests/live/test_gen1_native_selected_fresh.py (read-only; run once)"
+      ],
       "next_action": "None; PASS recorded in the F0 result row. No retune.",
       "reuse_decision": "execution only (criteria unchanged)",
       "receipt": ".cache/native-selected-fresh-q55jdxn0/summary.json sha256 ebc35bf7...c113; console .cache/f0-rb-6931fdf-r1-console.txt sha256 18dbaa14...7047 (1 passed in 47.49s)",
@@ -855,7 +878,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "fg-1",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-8d25617e)",
       "state": "done",
-      "files": ["tests/gen1_release_requirements.json", "server/gen1_native_reattach_runtime.py"],
+      "files": [
+        "tests/gen1_release_requirements.json",
+        "server/gen1_native_reattach_runtime.py"
+      ],
       "next_action": "None; census recorded in the FG-1 row.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (FG-1 row)",
@@ -867,7 +893,12 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "c1",
       "owner": "integrated by coordinator as candidates 8ea6f25 + dc7b970 (isolated Sonnet worker, two rounds)",
       "state": "done",
-      "files": ["server/gen1_whiteout.py", "server/gen1_faint_runtime.py", "tests/unit/test_gen1_whiteout.py", "docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md"],
+      "files": [
+        "server/gen1_whiteout.py",
+        "server/gen1_faint_runtime.py",
+        "tests/unit/test_gen1_whiteout.py",
+        "docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md"
+      ],
       "next_action": "Extract the per-command death-obligation block of gen1_faint_runtime.py:176-229 into a helper; settle_whiteout records collateral force_faint/force_explode as real obligations (own death_id/blocker/pending phase, warning for the missed faint signal) and keeps the JournalError only for a duplicate of the triggering key; three unit tests + report.",
       "reuse_decision": "Gen 1 specific (gen1_whiteout/gen1_faint_runtime); shared state.py _handle_whiteout already correct, untouched",
       "receipt": "commits 8ea6f25 + dc7b970; whiteout/faint/memorial suites 96 passed; round-2 diff sha256 cf1843a0…8ca5; docs/gen1_reference/reviews/C1-RB-whiteout-collateral.md (MODEL-only). OPEN test debt: the fully real two-link ACK lifecycle test (review finding 4) was not delivered — second real link needs a settled storage linked job; to be absorbed by C3 fixtures.",
@@ -880,7 +911,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "c3-claim",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-0113f490)",
       "state": "done",
-      "files": ["server/gen1_storage_runtime.py", "server/gen1_storage_policy.py"],
+      "files": [
+        "server/gen1_storage_runtime.py",
+        "server/gen1_storage_policy.py"
+      ],
       "next_action": "None; claim recorded (C3 row). C3 implementation is READY WAIT(C1 frozen integration) because both edit settle_whiteout and gen1_faint_runtime.py:230-235.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (C3 claim row)",
@@ -892,7 +926,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ui-2-spec",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-7b9a0d6c)",
       "state": "done",
-      "files": ["tests/unit/test_manager_resume_ui.py (read-only)"],
+      "files": [
+        "tests/unit/test_manager_resume_ui.py (read-only)"
+      ],
       "next_action": "None; spec recorded (UI-2 row) and handed to the OMP worker after FT-2 freezes.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (UI-2 row)",
@@ -904,7 +940,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5-claim",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-5a94fec0)",
       "state": "done",
-      "files": ["server/gen1_run_resume.py (read-only)", "server/gen1_service_continuity.py (read-only)"],
+      "files": [
+        "server/gen1_run_resume.py (read-only)",
+        "server/gen1_service_continuity.py (read-only)"
+      ],
       "next_action": "None; recorded (R5 claim row); R5a dispatched, R5b queued.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (R5 claim row)",
@@ -916,7 +955,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ft-2",
       "owner": "integrated by coordinator as candidate 661b8ff (OMP authored, task cx-6fcdf29d)",
       "state": "done",
-      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_prepared_gen1.py"],
+      "files": [
+        "server/manager.py",
+        "server/templates/manager.html",
+        "tests/unit/test_manager_prepared_gen1.py"
+      ],
       "next_action": "Optional fastest_text key on handle_create_gen1 (requires native): gen1_upr_pipeline.prepare_pair with build_preset({currentMiscTweaks: 8}), pinned seeds, PreparedCartridges as today; checkbox in manager.html create path (no Gen 1 native checkbox exists to mirror); registry key fastest_text beside native_trade; three unit tests.",
       "reuse_decision": "Manager (shared lifecycle) owns the option; UPR policy stays in gen1_upr_policy",
       "receipt": "commit 661b8ff; tests/unit/test_manager_prepared_gen1.py 17 passed + manager subset 59 passed",
@@ -928,7 +971,13 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ft-2b",
       "owner": "integrated by coordinator as candidate 8467394 (OMP authored, task cx-15e0c209)",
       "state": "done",
-      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_prepared_gen1.py", "tests/unit/test_manager_resume_ui.py", "tests/unit/test_manager_gen1_create_ui.py (one assertion)"],
+      "files": [
+        "server/manager.py",
+        "server/templates/manager.html",
+        "tests/unit/test_manager_prepared_gen1.py",
+        "tests/unit/test_manager_resume_ui.py",
+        "tests/unit/test_manager_gen1_create_ui.py (one assertion)"
+      ],
       "next_action": "Remove the Resume fastest_text control and inherit predecessor.fastest_text; refuse a changed setting before staging; to_thread PreparedCartridges; cleanup through create_runtime; move the Create error <p> outside the disclosure; tests that do not stub the refused path.",
       "reuse_decision": "Manager shared lifecycle; no game facts",
       "receipt": "commit 8467394; 74 passed across the six Manager/prepared test files; worker neutralised both fixes and saw both new tests fail",
@@ -940,7 +989,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-spec",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-f84ca8bb)",
       "state": "done",
-      "files": ["server/bizhawk_launch.py (read-only)", "tools/launch_bizhawk.py (read-only)"],
+      "files": [
+        "server/bizhawk_launch.py (read-only)",
+        "tools/launch_bizhawk.py (read-only)"
+      ],
       "next_action": "None; recorded as docs/gen1_reference/reviews/R5b-implementation-spec.md (commit 4dec149); sliced R5b-1/2/3.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/reviews/R5b-implementation-spec.md",
@@ -952,7 +1004,14 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-1",
       "owner": "integrated by coordinator as candidates 1fbdb00 + 551e7b4 + acbd5ae (isolated Sonnet worker, three rounds; round 3 unreviewed — owner paused)",
       "state": "done",
-      "files": ["server/gen1_checkpoint_runtime.py", "tests/unit/test_gen1_checkpoint_runtime.py", "server/gen1_runtime_state.py", "server/gen1_run_resume.py", "server/server.py (POST /api/checkpoint + status)", "docs/gen1_reference/reviews/R5b-1-server-capture.md"],
+      "files": [
+        "server/gen1_checkpoint_runtime.py",
+        "tests/unit/test_gen1_checkpoint_runtime.py",
+        "server/gen1_runtime_state.py",
+        "server/gen1_run_resume.py",
+        "server/server.py (POST /api/checkpoint + status)",
+        "docs/gen1_reference/reviews/R5b-1-server-capture.md"
+      ],
       "next_action": "Round 3 (A1/A2/F2/F5/F6/F3/F4); server/gen1_runtime.py edits deferred until HX-2c-A2 lands (sequenced by message). Original scope: server capture per spec §1-2: checkpoint_upload commands via the durable outbox, save_upload typed event with full-hex validation + witness digest match + no-gameplay-since-save, paired finalization (rules/identity export, fingerprints, provenance), intent → store.capture → journal confirmation, reopen reconciliation; tests §5.",
       "reuse_decision": "shared envelope + outbox/journal reused; Gen 1 witness/digest/audit semantics in gen1_* modules",
       "receipt": "commits 1fbdb00 + 551e7b4 + acbd5ae; tests/unit/test_gen1_checkpoint_runtime.py 51 passed; 312 across adjacent suites; docs/gen1_reference/reviews/R5b-1-server-capture.md. Open: the joint-protocol adversarial wire matrix (bool sequence, short cart_hex, ...) not exhaustively parametrized.",
@@ -966,7 +1025,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "n3-spec",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-fc6b3995)",
       "state": "done",
-      "files": ["server/trade_coordinator.py (read-only)", "server/gen1_native_preparation.py (read-only)", "server/gen1_full_save.py (read-only)"],
+      "files": [
+        "server/trade_coordinator.py (read-only)",
+        "server/gen1_native_preparation.py (read-only)",
+        "server/gen1_full_save.py (read-only)"
+      ],
       "next_action": "None; recorded as docs/gen1_reference/reviews/N3-implementation-spec.md; READY WAIT(R5b-1). Key fact: both 0x8000-byte pretrade images are already retained in gen1-native-preparation, so N3 capture reuses the R5b-1 finalizer with a native_pretrade witness variant.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/reviews/N3-implementation-spec.md",
@@ -978,7 +1041,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-2-spec",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-68c1908a)",
       "state": "done",
-      "files": ["lua/gen1_held_faint.lua (read-only)"],
+      "files": [
+        "lua/gen1_held_faint.lua (read-only)"
+      ],
       "next_action": "None; recorded as docs/gen1_reference/reviews/R5b-2-client-spec.md. Protocol correction (typed completion envelope with command_sequence + receipt) forwarded to R5b-1.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/reviews/R5b-2-client-spec.md",
@@ -990,7 +1055,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "net-1",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-aac6c377)",
       "state": "done",
-      "files": ["server/runtime_launcher.py (read-only)", "server/gen1_launcher.py (read-only)", "lua/connector.lua (read-only)"],
+      "files": [
+        "server/runtime_launcher.py (read-only)",
+        "server/gen1_launcher.py (read-only)",
+        "lua/connector.lua (read-only)"
+      ],
       "next_action": "None; BUILT for direct LAN — no implementation card (NET-1 row).",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (NET-1 row)",
@@ -1002,7 +1071,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hs-1",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-7c7b4808)",
       "state": "done",
-      "files": ["server/templates/manager.html (read-only)", "tools/launch_bizhawk.py (read-only)", "lua/gen1_hud_service.lua (read-only)"],
+      "files": [
+        "server/templates/manager.html (read-only)",
+        "tools/launch_bizhawk.py (read-only)",
+        "lua/gen1_hud_service.lua (read-only)"
+      ],
       "next_action": "None; census recorded (HS-1 row); cards HS-2/HS-3/HS-4 opened.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (HS-1 row)",
@@ -1014,7 +1087,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hs-3",
       "owner": "integrated by coordinator as 10ebb74 (isolated Sonnet worker authored)",
       "state": "done",
-      "files": ["tools/launch_bizhawk.py", "tests/unit/test_launch_bizhawk_dialogs.py", "docs/gen1_reference/reviews/HS-3-launcher-dialogs.md"],
+      "files": [
+        "tools/launch_bizhawk.py",
+        "tests/unit/test_launch_bizhawk_dialogs.py",
+        "docs/gen1_reference/reviews/HS-3-launcher-dialogs.md"
+      ],
       "next_action": "Tk error dialog with actionable hints for every prepare/launch refusal, 'Launch cancelled' on dialog cancel, one success line, headless fallback; four red tests.",
       "reuse_decision": "launcher tool (shared); no change to what prepare() verifies",
       "receipt": "commit 10ebb74; tests/unit/test_launch_bizhawk_dialogs.py 7 + test_bizhawk_launch.py = 28 passed; ruff clean; tool sha256 baeb224b…a7de; docs/gen1_reference/reviews/HS-3-launcher-dialogs.md",
@@ -1026,7 +1103,12 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hs-2",
       "owner": "integrated by coordinator as candidate 9d13974 (OMP authored, task cx-46ef6171)",
       "state": "done",
-      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_gen1_create_ui.py", "tests/unit/test_manager_prepared_gen1.py"],
+      "files": [
+        "server/manager.py",
+        "server/templates/manager.html",
+        "tests/unit/test_manager_gen1_create_ui.py",
+        "tests/unit/test_manager_prepared_gen1.py"
+      ],
       "next_action": "Launcher buttons link to the ZIP bundle (?bundle=1) with instructions; per-player prepared FINAL cartridge download for the remote player (GET /api/runs/{id}/cartridge/{player}, bounded, from the run's prepared/final files, with SHA1 shown); Manager prints the LAN URL/instructions at startup.",
       "reuse_decision": "Manager shared presentation/lifecycle",
       "receipt": "commit 9d13974; 69 passed (create_ui/prepared_gen1/http_hardening/checkpoint_ui/checkpoint_recovery); launcher/route smoke 201 passed; the bare .lua launcher link was dropped after grep",
@@ -1038,7 +1120,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-3b",
       "owner": "integrated by coordinator as candidate d603734 (isolated Sonnet worker authored; unreviewed — owner paused)",
       "state": "done",
-      "files": ["server/manager.py", "tests/unit/test_manager_checkpoint_recovery.py", "docs/gen1_reference/reviews/R5b-3b-recovery-fixups.md"],
+      "files": [
+        "server/manager.py",
+        "tests/unit/test_manager_checkpoint_recovery.py",
+        "docs/gen1_reference/reviews/R5b-3b-recovery-fixups.md"
+      ],
       "next_action": "R5b-3 review fix-ups F1-F8: stopped-journal recovery audit incl. open trade; manifest/source/provenance binding on recover/list/download; registry reservation before awaits; fastest-text recovery by re-generation + contract equality; refuse native_pretrade; poll termination/run capture; client-minted persistent request id; discarded revisions + 409 on expected failures.",
       "reuse_decision": "Manager shared lifecycle; reuses gen1_run_resume predicates and the pinned UPR pipeline",
       "receipt": "commit d603734; 98 passed (recovery 31); manager.py sha256 b5da3cc3…672e; docs/gen1_reference/reviews/R5b-3b-recovery-fixups.md (six deviations: recover accepts rom_a/rom_b for native predecessors since rom_contract.json holds no paths; pending-trade check proven redundant with active_trade; joint-protocol test 5 as focused tests)",
@@ -1050,7 +1136,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-3b-ui",
       "owner": "integrated by coordinator as 56ffcab (OMP authored, task cx-ab55a69d)",
       "state": "done",
-      "files": ["server/templates/manager.html", "tests/unit/test_manager_checkpoint_ui.py"],
+      "files": [
+        "server/templates/manager.html",
+        "tests/unit/test_manager_checkpoint_ui.py"
+      ],
       "next_action": "None; F6/F7 closed (handle_run_checkpoint already forwards a client-supplied 32-hex request_id).",
       "reuse_decision": "Manager presentation only",
       "receipt": "commit 56ffcab; 46 passed (checkpoint_ui 8 + create_ui + http_hardening)",
@@ -1062,7 +1151,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hs-4-spec",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-a9c9e6cd)",
       "state": "done",
-      "files": ["lua/gen1_hud_service.lua (read-only)", "server/gen1_hud_feedback.py (read-only)"],
+      "files": [
+        "lua/gen1_hud_service.lua (read-only)",
+        "server/gen1_hud_feedback.py (read-only)"
+      ],
       "next_action": "None; recorded as docs/gen1_reference/reviews/HS-4-lifecycle-notices-spec.md.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/reviews/HS-4-lifecycle-notices-spec.md",
@@ -1075,7 +1167,12 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "owner": "queued (Sonnet) after R5b-2 round 2 releases lua/gen1_client_entry.lua and the HS-4 spec lands",
       "state": "blocked",
       "blocked_reason": "lua/gen1_client_entry.lua owned by R5b-2 round 2",
-      "files": ["lua/gen1_client_entry.lua", "lua/gen1_hud_service.lua", "server/gen1_hud_feedback.py", "tests/unit/test_gen1_hud*.py"],
+      "files": [
+        "lua/gen1_client_entry.lua",
+        "lua/gen1_hud_service.lua",
+        "server/gen1_hud_feedback.py",
+        "tests/unit/test_gen1_hud*.py"
+      ],
       "next_action": "In-game lifecycle notice: 'Waiting for the first verified overworld checkpoint' / 'Connected - waiting for partner' / 'Both players ready' through the sanitize path; distinct 'partner death applied' completion toast.",
       "reuse_decision": "HUD presentation shared (hud.lua sanitize); Gen 1 lifecycle facts from the client entry/server feedback"
     },
@@ -1083,7 +1180,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-proto",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-f42accec)",
       "state": "done",
-      "files": ["server/gen1_checkpoint_runtime.py (read-only)", "lua/gen1_checkpoint_client.lua (read-only)"],
+      "files": [
+        "server/gen1_checkpoint_runtime.py (read-only)",
+        "lua/gen1_checkpoint_client.lua (read-only)"
+      ],
       "next_action": "None; recorded as docs/gen1_reference/reviews/R5b-joint-protocol.md (e9643cf), binding on R5b-1/R5b-2/R5b-3b round 3 (document wins over earlier instructions).",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/reviews/R5b-joint-protocol.md",
@@ -1095,7 +1195,20 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "c3",
       "owner": "integrated by coordinator as candidate 9ab1fab (isolated Sonnet worker authored; the C1 author)",
       "state": "done",
-      "files": ["server/gen1_rebuild_runtime.py", "tests/unit/test_gen1_rebuild_runtime.py", "server/gen1_whiteout.py", "server/gen1_storage_runtime.py", "server/gen1_storage_policy.py", "server/gen1_faint_runtime.py", "server/gen1_memorial_runtime.py", "tests/unit/test_gen1_whiteout.py", "tests/unit/test_gen1_storage_runtime.py", "docs/gen1_reference/reviews/C3-RB-rebuild.md", "server/gen1_runtime_state.py (verify hook registration only, last, sequenced with R5b-1)", "server/gen1_runtime.py (audit hook only, last, sequenced with R5b-1)"],
+      "files": [
+        "server/gen1_rebuild_runtime.py",
+        "tests/unit/test_gen1_rebuild_runtime.py",
+        "server/gen1_whiteout.py",
+        "server/gen1_storage_runtime.py",
+        "server/gen1_storage_policy.py",
+        "server/gen1_faint_runtime.py",
+        "server/gen1_memorial_runtime.py",
+        "tests/unit/test_gen1_whiteout.py",
+        "tests/unit/test_gen1_storage_runtime.py",
+        "docs/gen1_reference/reviews/C3-RB-rebuild.md",
+        "server/gen1_runtime_state.py (verify hook registration only, last, sequenced with R5b-1)",
+        "server/gen1_runtime.py (audit hook only, last, sequenced with R5b-1)"
+      ],
       "next_action": "Whiteout rebuild per the C3 spec: plan capture, rebuild storage job kind, completion -> sync_retrieve_done after both verified writes, memorial arbitration, restart reconciliation; PLUS the C1 open test (real second linked pair with settled storage job, commit/reopen, both ACKs via production path, deferred variant).",
       "reuse_decision": "reuses the shared rebuild plan (state.py) and the Gen 1 storage-job machinery; all new code Gen 1; state.py untouched",
       "receipt": "commit 9ab1fab; 129 passed across rebuild/whiteout/storage/faint/memorial/deferred suites; diff sha256 0dd0fa7a…07a0; docs/gen1_reference/reviews/C3-RB-rebuild.md. Includes the C1 open debt (real second linked pair + settled storage job, commit/reopen, both force_faints ACKed via the production path, deferred variant). Declared deviations: memorial arbitration gated on an active rebuild_pending; only the safety half of the cross-side priority heuristic; capacity/HOLD matrix not each tested; retirement_runtime schedule call site untouched.",
@@ -1107,7 +1220,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "c3-spec",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-3610046a)",
       "state": "done",
-      "files": ["server/gen1_storage_runtime.py (read-only)", "server/gen1_storage_policy.py (read-only)", "lua/gen1_storage*.lua (read-only)"],
+      "files": [
+        "server/gen1_storage_runtime.py (read-only)",
+        "server/gen1_storage_policy.py (read-only)",
+        "lua/gen1_storage*.lua (read-only)"
+      ],
       "next_action": "None; recorded as docs/gen1_reference/reviews/C3-implementation-spec.md; READY WAIT(C1 accepted). Boundary: blackout-heal timing / re-fainting a healed dead target is NOT covered.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/reviews/C3-implementation-spec.md",
@@ -1119,7 +1236,13 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5b-2",
       "owner": "integrated by coordinator as candidates 645fa94 + 2829675 + 2411a7b (isolated Sonnet worker, three rounds; round 3 unreviewed — owner paused)",
       "state": "done",
-      "files": ["lua/gen1_checkpoint_client.lua", "lua/gen1_client_entry.lua", "server/gen1_launcher.py", "tests/unit/test_gen1_checkpoint_client.py", "docs/gen1_reference/reviews/R5b-2-client.md"],
+      "files": [
+        "lua/gen1_checkpoint_client.lua",
+        "lua/gen1_client_entry.lua",
+        "server/gen1_launcher.py",
+        "tests/unit/test_gen1_checkpoint_client.py",
+        "docs/gen1_reference/reviews/R5b-2-client.md"
+      ],
       "next_action": "checkpoint_upload command service: dedicated hold + drained journal gate, one bulk CartRAM read to 65536 uppercase hex, local projection digest check, intent-persisted completion via complete_command typed envelope, ACK-only retirement; lupa red tests per spec §7.",
       "reuse_decision": "reuses command_service_router/command_executor/client_journal; Gen 1 read/digest semantics in the new module",
       "receipt": "commits 645fa94 + 2829675 + 2411a7b; tests/unit/test_gen1_checkpoint_client.py 11 production-path tests; 286 regression; lupa clean; module sha256 561fcd5d…c21c; docs/gen1_reference/reviews/R5b-2-client.md (writer loop now stays engaged while a checkpoint is pending).",
@@ -1133,7 +1256,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "n3-claim",
       "owner": "contextual Codex peer Gen1-CodexPeer (done; task cx-0afc641a)",
       "state": "done",
-      "files": ["server/gen1_native_execution.py (read-only)", "server/gen1_native_reattach_runtime.py (read-only)", "lua/gen1_native_trade_executor.lua (read-only)"],
+      "files": [
+        "server/gen1_native_execution.py (read-only)",
+        "server/gen1_native_reattach_runtime.py (read-only)",
+        "lua/gen1_native_trade_executor.lua (read-only)"
+      ],
       "next_action": "None; claim recorded (N3 row). N3 implementation READY WAIT(R5a-2 accepted, R5b seam).",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (N3 claim row)",
@@ -1145,7 +1272,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ft-2c",
       "owner": "integrated by coordinator as 60694d5 (OMP authored, task cx-dc5865ee)",
       "state": "done",
-      "files": ["tests/unit/test_manager_prepared_gen1.py"],
+      "files": [
+        "tests/unit/test_manager_prepared_gen1.py"
+      ],
       "next_action": "None; the native binding refuses any synthetic image (header title, HM table, evolution pointer), so the happy-path handler tests are labelled plumbing, the boundary is pinned by a real-create_runtime refusal test, and an unsupported rule key reaches the real 400 through the handler.",
       "reuse_decision": "test only",
       "receipt": "commit 60694d5; 24 passed (prepared_gen1 15 + resume_ui 9)",
@@ -1157,7 +1286,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hx-1",
       "owner": "OMP live pid 47172 (done; task cx-2e4c8723)",
       "state": "done",
-      "files": ["server/templates/manager.html (read-only)", "server/gen1_hud_feedback.py (read-only)"],
+      "files": [
+        "server/templates/manager.html (read-only)",
+        "server/gen1_hud_feedback.py (read-only)"
+      ],
       "next_action": "None; census recorded (HX-1 row); HX-2 spec dispatched.",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (HX-1 row)",
@@ -1169,7 +1301,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hx-2-spec",
       "owner": "OMP live pid 47172 (done; task cx-01f9df05)",
       "state": "done",
-      "files": ["server/status_payload.py (read-only)", "server/durable_runtime.py (read-only)"],
+      "files": [
+        "server/status_payload.py (read-only)",
+        "server/durable_runtime.py (read-only)"
+      ],
       "next_action": "None; spec accepted with two adjustments (runtime reach via runtime_boundary, wording owned by the Gen 1 runtime) and recorded (HX-2 row).",
       "reuse_decision": "research only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (HX-2 row)",
@@ -1181,7 +1316,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hx-2b",
       "owner": "integrated by coordinator as candidate 184db47 (OMP authored, task cx-d2b7c9a1)",
       "state": "done",
-      "files": ["server/server.py (_build_status_html player-card loop + header injection)", "tests/unit/test_dashboard_holds_ui.py"],
+      "files": [
+        "server/server.py (_build_status_html player-card loop + header injection)",
+        "tests/unit/test_dashboard_holds_ui.py"
+      ],
       "next_action": "None. NOTE: commit 184db47 also swept in five lines of the R5b-1 round-3 worker's server.py edit (status poll calls check_collect_timeout) - harmless (function exists at 551e7b4) and belongs to R5b-1's next report; no history rewrite.",
       "reuse_decision": "presentation only; reads the shared status dict",
       "receipt": "commit 184db47; tests/unit/test_dashboard_holds_ui.py 3 passed (OMP: 229 with routes smoke + http security; escaping proven)",
@@ -1193,7 +1331,10 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ft-2d",
       "owner": "integrated by coordinator as de312cf (OMP authored, task cx-c302cb5d)",
       "state": "done",
-      "files": ["server/manager.py", "tests/unit/test_manager_prepared_gen1.py"],
+      "files": [
+        "server/manager.py",
+        "tests/unit/test_manager_prepared_gen1.py"
+      ],
       "next_action": "None; missing/non-file cartridge path -> 400 before admission (also covers resume); 7 existing tests now use real temp files.",
       "reuse_decision": "Manager input validation (shared)",
       "receipt": "commit de312cf; 31 passed (prepared_gen1 17 + resume_ui 9 + create_ui 5); worker neutralised the guard and saw both new tests fail",
@@ -1206,7 +1347,12 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "owner": "candidate 1c2701b on the branch (OMP authored); REJECTED, fix-up R5b-3b active on OMP",
       "state": "frozen",
       "blocked_reason": "R5b-3b fix-ups in progress (cx-08ed0200)",
-      "files": ["server/manager.py", "server/templates/manager.html", "tests/unit/test_manager_checkpoint_recovery.py", "tests/unit/test_manager_checkpoint_ui.py"],
+      "files": [
+        "server/manager.py",
+        "server/templates/manager.html",
+        "tests/unit/test_manager_checkpoint_recovery.py",
+        "tests/unit/test_manager_checkpoint_ui.py"
+      ],
       "next_action": "Manager checkpoint request/status proxy, checkpoints list (running: proxy; stopped: confirmed_checkpoints + store validation), recover -> exact resume record from the checkpoint -> successor via the resume tail without audit_predecessor, recovered_from/recovered_by, per-player save download with hash header, UI buttons/confirm texts/poll; tests. Contracts pinned with R5b-1 (run-server /api/checkpoint routes, components['gen1-checkpoint'] shape, confirmed_checkpoints helper).",
       "reuse_decision": "Manager shared lifecycle; checkpoint semantics from R5a/R5b-1; native_pretrade witness mapping flagged for the R5b-1 tagged resume extension",
       "receipt": "commit 1c2701b; 74 passed (6 recovery tests drive a real PairedCheckpointStore capture; 5 UI structural); proxy handlers untested; native_pretrade mapping unverified against validate_required",
@@ -1218,7 +1364,16 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "hx-2",
       "owner": "candidate f4f74da (OMP) + A2 wording f565dcb (OMP, cx-f53a4a18); A1 phase-aware attribution queued for a Sonnet worker (gen1_runtime.py _blocker_actor) after R5b-1 round 3 releases the file",
       "state": "active",
-      "files": ["server/gen1_runtime.py", "server/runtime_boundary.py", "server/server.py (_build_status_dict only)", "server/status_payload.py", "server/templates/manager.html", "tests/unit/test_manager_http_hardening.py", "tests/unit/test_gen1_sessions.py", "tests/unit/test_manager_live_holds_ui.py"],
+      "files": [
+        "server/gen1_runtime.py",
+        "server/runtime_boundary.py",
+        "server/server.py (_build_status_dict only)",
+        "server/status_payload.py",
+        "server/templates/manager.html",
+        "tests/unit/test_manager_http_hardening.py",
+        "tests/unit/test_gen1_sessions.py",
+        "tests/unit/test_manager_live_holds_ui.py"
+      ],
       "next_action": "Gen1Runtime.holds() (reason + human wording + cheap player attribution) read through runtime_boundary.read_runtime_holds into status['holds']; Manager live banner + per-player 'Waiting on' row; payload/sessions/structural tests.",
       "reuse_decision": "shared status/presentation carries an opaque holds list; the Gen 1 runtime owns reasons and wording (no game_id branch in shared code)",
       "receipt": "commit f4f74da; 121 passed across http_hardening/sessions/live_holds_ui/create_ui; worker proved a committed blocker and a held reattach read reach holds()",
@@ -1230,7 +1385,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ft-3",
       "owner": "integrated by coordinator as candidates 1b38696 + c868282 + 0dd29bc (isolated Sonnet worker, three rounds)",
       "state": "done",
-      "files": ["server/gen1_prepared_cartridges.py", "tests/unit/test_gen1_prepared_cartridges.py", "docs/gen1_reference/reviews/FT3-upr-content-identity.md"],
+      "files": [
+        "server/gen1_prepared_cartridges.py",
+        "tests/unit/test_gen1_prepared_cartridges.py",
+        "docs/gen1_reference/reviews/FT3-upr-content-identity.md"
+      ],
       "next_action": "content_profile_hash over a location-free view of the generation record (exclude output path); red test first: same recipe in two directories -> equal identity, different settings/seed/bytes -> different.",
       "reuse_decision": "Gen 1 admission identity (gen1_prepared_cartridges); contract equality gate unchanged",
       "receipt": "commits 1b38696 + c868282 + 0dd29bc; tests/unit/test_gen1_prepared_cartridges.py 9 passed; prepared/admission/manager subset 66 passed; cumulative diff sha256 de913a5e…191e",
@@ -1244,7 +1403,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "ui-2",
       "owner": "integrated by coordinator as candidate 3050f0a (OMP authored, task cx-42319e7e)",
       "state": "done",
-      "files": ["server/templates/manager.html", "tests/unit/test_manager_gen1_create_ui.py", "tests/unit/test_manager_prepared_gen1.py"],
+      "files": [
+        "server/templates/manager.html",
+        "tests/unit/test_manager_gen1_create_ui.py",
+        "tests/unit/test_manager_prepared_gen1.py"
+      ],
       "next_action": "Create form: optional Gen 1 cartridge paths + fastest_text; both filled -> POST /api/runs/gen1 with the six allowed rules + native_sounds:false, native:true, start:true; XOR refusal; four structural tests + one handler test.",
       "reuse_decision": "Manager template (shared presentation); Gen 1 rule allowlist facts from gen1_run_config",
       "receipt": "commit 3050f0a; 64 passed across the five Manager test files",
@@ -1256,7 +1419,11 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "r5a",
       "owner": "integrated by coordinator as candidates ad6583a + fd870b7 + 4dec149 (isolated Sonnet worker, three rounds)",
       "state": "done",
-      "files": ["server/paired_save_checkpoints.py", "tests/unit/test_paired_save_checkpoints.py", "docs/gen1_reference/reviews/R5a-paired-checkpoints.md"],
+      "files": [
+        "server/paired_save_checkpoints.py",
+        "tests/unit/test_paired_save_checkpoints.py",
+        "docs/gen1_reference/reviews/R5a-paired-checkpoints.md"
+      ],
       "next_action": "PairedCheckpointStore: capture (both saves + rules + identity, manifest last, CURRENT pointer atomic), load with hash re-validation, history; refusals per the R5 claim.",
       "reuse_decision": "shared lifecycle module (game-neutral; save_size parameter); Gen 1 witness/Manager seam deferred to R5b",
       "receipt": "commits ad6583a + fd870b7 + 4dec149; tests/unit/test_paired_save_checkpoints.py 40 passed; module sha256 bd52a4ae…e48c; docs/gen1_reference/reviews/R5a-paired-checkpoints.md (disposition tables + operational limits)",
@@ -1270,7 +1437,9 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "id": "tk-5",
       "owner": "OMP live pid 47172 (done; task cx-259ea75b)",
       "state": "done",
-      "files": ["ruff.toml (read-only; ruff check . reported)"],
+      "files": [
+        "ruff.toml (read-only; ruff check . reported)"
+      ],
       "next_action": "None; lint drift fact recorded (TK-5 row).",
       "reuse_decision": "fact check only",
       "receipt": "docs/gen1_reference/RC_MASTER_GUIDE.md#r6-diagnosis-and-next-action (TK-5 row)",

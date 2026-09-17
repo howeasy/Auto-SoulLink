@@ -10,6 +10,8 @@ Current file claims: BI-1 integrated and released (`lua/tests/gen1_rb_ball_gate_
 
 Preserve dirty R0 report and untracked parcel Lua/unit/report (hashes verified at takeover). All 18 parked registrations remain as classified; no parked worktree was moved/deleted/reset. Root master is not the RC checkout. Native hook trust/activation is not claimed.
 
+**Master release lane (2026-09-14 UTC).** Owner-approved plan: master's Gen 1 adapter is rewritten from pret in `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279` (branch `claude/gen1-master-release-plan-6b4279`, rebased onto master `d2c30fb` (2026-09-17)), reusing verified `gen1/rc` assets and methods but not its runtime. That worktree's `docs/gen1_requirements.md` is its ledger and `docs/gen1_resume.md` its resume note (HEAD 9e4a686; resumed 2026-09-17 under plan v3.9, rebased onto master d2c30fb), rebased onto master e2fefa9, 2026-09-14). `gen1/rc` and every parked checkout stay as classified; nothing here is moved, merged or deleted by that lane.
+
 ## Preserved checkout classifications
 
 The table below retains the last full file-status audit; it does not claim that every parked tree's files were rescanned today. Today's metadata census confirmed all18 registrations and the speed-gate lock. Parked dirty evidence must not be discarded or cherry-picked without a separate reviewed claim.
