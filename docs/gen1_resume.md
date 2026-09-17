@@ -1,94 +1,96 @@
-# Gen 1 master release — resume note (2026-09-17 ~17:15Z, owner check-in)
+# Gen 1 master release — resume note (2026-09-17 ~19:00Z, harness restart for the Magi repair)
 
-Read this first after a context reset. The ledger `docs/gen1_requirements.md` is the authority on
-evidence; this note is the working state around it. Plan (owner-approved, v3.9):
-`C:\Users\howar\.claude\plans\system-reminder-you-are-operating-gleaming-pretzel.md`. The standing
-worker contract every card brief points at is `docs/agents/worker_card.md`.
+Read this first after a context reset or harness restart. The ledger `docs/gen1_requirements.md`
+is the authority on evidence; this note is the working state around it. Plan (owner-approved,
+v3.9): `C:\Users\howar\.claude\plans\system-reminder-you-are-operating-gleaming-pretzel.md`. The
+standing worker contract every card brief points at is `docs/agents/worker_card.md`.
 
 ## Where things are
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch
-  `claude/gen1-master-release-plan-6b4279` = **master `d2c30fb`** (rebased 2026-09-17, tag
-  `pre-rebase-gen1-release-c9bf880`) + ~110 commits. HEAD `2533016` at the time of writing.
-- Workers: Codex is at its usage cap until 2026-09-19 07:34 (owner contingency: OMP + Claude
-  subagents). OMP live session `Gen1 Peer 2` (pid 25980, cwd = repo root; name it explicitly) took
-  every harness/tooling/oracle card; Opus subagents took the Lua bodies, drivers, client card, and
-  independent reviews; the coordinator dispatches, reviews, integrates, commits, and holds the
-  emulator lane. Standing rule from today: **no lane run while `lua/gen1/` or `duo_gen1_main.lua`
-  is leased** (a run on a half-edited tree is void evidence).
+  `claude/gen1-master-release-plan-6b4279` = master `d2c30fb` + ~118 commits. HEAD `1a205c3` at
+  the time of writing (see the commit list below). Untracked `tools/e2e_duo_head.py` is a frozen
+  copy of the harness for lane runs while OMP leases `tools/e2e_duo.py`; delete it when OMP is
+  done with that file.
+- Workers: Codex capped until 2026-09-19 07:34. OMP live `Gen1 Peer 2` (pid 25980, cwd repo
+  root, purpose "Implement A6-py duo scenarios"; name it explicitly) takes harness/oracle cards
+  with literal specs, never commits; a second live OMP session on Union Alpha (`01a0b05f-…`,
+  purpose "ping") takes fact-checks; headless `openrouter/stealth/union-alpha` takes reviews
+  (the owner repaired the Magi bridge so headless calls no longer block; until confirmed, route
+  them through a background Sonnet relay subagent — see memory `feedback_no_blocking_peer_calls`).
+  Opus subagents take Lua bodies/drivers/independent reviews, Sonnet takes docs/ledger/relays;
+  the coordinator only orchestrates. Rules: no duo lane run while `lua/gen1/` or
+  `lua/tests/duo/duo_gen1_main.lua` is leased on the lane tree (Lua workers now edit a SCRATCH
+  COPY of HEAD under the session scratchpad and deliver `git diff --no-index` patches the
+  coordinator applies with `git apply -p1`); one emulator lane, lent to a subagent only with a
+  bounded run count; every peer reply gets a recorded `outcome` before the next request
+  (the bridge refuses new requests otherwise: RECONCILE_FIRST); the coordinator cannot `reply`
+  to its own DELEGATE task — send corrections as `kind: note` to the peer.
 - Checkpoint (hook contract): `gen1-rby-code-sweep-8d06e2/docs/gen1_reference/RC_MASTER_GUIDE.md`
   worker `master-release-lane` + `WORKTREE_REGISTER.md`; refreshed by
   `gen1-rby-code-sweep-8d06e2/docs/gen1_reference/refresh_master_lane_checkpoint.py`
-  (args: state, files-json, next_action, live_lane, head, register-note; it edits the JSON block
-  between the AGENT_CHECKPOINT markers and the register's master-release paragraph).
+  (args: state, files-json, next_action, live_lane, head, register-note).
 
-## PHYSICAL today (receipts under `tests/fixtures/gen1/receipts/`, all committed)
+## Committed this session (all reviewed or fact-checked independently)
 
-| Scenario / gate | Rows | Commit |
+| Commit | What | Review |
 |---|---|---|
-| `ball_gate_new` (cold cartridges, real server) | D-2, S-7 New Game identity | b1cee87 |
-| `reconnect_new` both legs (same save + second-OT save) | C-1, C-2, D-14, W-5 reload half | e844db2 |
-| `admit_randomized_new` (both halves SAVE, provenance oracle) | C-5 saved half | 48a51d7 |
-| `link_new` under the oracle registry | S-2 bag removal (`BAG_BALLS 1 -> 0`) | 1259f9c |
-| menu-row gate Red/Blue/randomized Red + companion-patch gate on the NEW client | T-1 prerequisites | 8f7ef74 |
+| 90ca378 | `whiteout_new` Python (registry, BOTH_BOXED gate on `/api/debug/raw_state` `_live.party_keys`, oracle) | headless union-alpha: no blocking defect; two low fixes on the OMP S-7-py card |
+| b2f29f8 | three duo bodies: F-1 active-faint fix (free move-menu cancel to the loop head), A4 `type_clause_new`/`species_clause_new`, A7 `poison_new` | F-1: Opus review says FIX FIRST (below); A4/A7 regions: union-alpha review in flight |
+| f79ebaa | ledger cells T-1/C-1/C-2/D-1 (fact-checked, narrowed) | union-alpha fact-check + coordinator git check |
+| 27aaf23 | A4/A7 Python (registry, `A_PENDING` release gate, retry-on-PASS for the reroll branch, `saved_money`, per-instance `target`) | union-alpha review: 5 findings → OMP card r2 (queued) |
+| d27387a | S-7 save-witness Lua dump inside the `SaveMenu.save+3` bus callback | Union Alpha fact-check: gate the dump on a VALIDATED fire (fix-up in flight) |
+| 1a205c3 | Yellow lab driver first contact fixed (wJoyIgnore mask; script 11), `yellow_town` rebuilt clean and dropped from LEGACY | falsifier 43 screens; qualify sweep |
 
-Client/server findings those runs produced, all fixed with red-first tests: gift key read
-mid-`_AddPartyMon` (850f9f5), `no_catch` withheld before the first ball + Mart close before SAVE
-(f0ce91a), server seq per-connection + hello-first (0629736), connector queue on disconnect
-(6aba43d), kept-alive battle driver pressed nothing (e95cefa), and the four review findings on the
-client card (6dc40d6: rival reply held until pret stages `$FF`, snapshot-keyed party removal,
-2-frame `move_mon` age window, rescan never clobbers a pending npc_trade).
+## Root causes found this session
 
-## Built and committed but NOT yet run live (each scenario's first run is its smoke test)
+- `linked_faint_active_new` run at 27a324b: the driver's real move commit (pad fix e95cefa) let
+  the wild KO the 5/15-HP linked mon inside the turn; the client demoted the queued loop-head
+  write to the checkpoint and dropped it (`client.lua:754-756`, silent, no NACK — product
+  finding for the ledger limits list). The old PASS receipt came from a driver that pressed
+  nothing. Fix b2f29f8 + the pending `hp_before` guard.
+- Yellow lab route: two Yellow script states run with `wJoyIgnore = 0`; the R/B-derived
+  `== $FC` test never matched (1a205c3). `yellow_battle` still LEGACY: the shared parcel driver's
+  unbounded `unexpected-menu` guard (`gen1_rb_parcel_inputs.lua:114-117`) deadlocks after the
+  Viridian Mart handover on Yellow (card Y-2).
+- Harness: `assert_explode_saved` delegates to `assert_linked_faint_saved(active=True)` which
+  requires `RX force_faint`/`LOOP_HEAD_WRITE`, then asserts them absent → `explode_new` cannot
+  pass its oracle (finding 6 on OMP card r2).
 
-| Item | Lua body | Python side | Commits |
+## In flight at the restart (re-dispatch what did not report; OMP cards survive)
+
+| Worker | Card | Lease | Deliverable |
 |---|---|---|---|
-| `soft_reset_new`, `trade_decline_new` (A2) | 50f265a | 65e33e3 | |
-| `explode_new` (A3, `--explode-mode`, patched ROMs) | c0eb442 | f0f5310 | |
-| `pc_ops_new`, `changebox_new` (A6; driver a8a1010) | d95ff6d | 54b30db | |
-| `whiteout_new` (A5) | 2533016 | **missing**: SCENARIOS entry, `assert_whiteout_both_boxed` gate, `assert_whiteout_new_saved` — spec verbatim in 2533016's report/commit | |
-| LINK PANEL wired into the client (A11) | 095b63f (+ module 354efa7) | gates 3c82cf0 | live PASS 8f7ef74 |
-| the ONE client card (A5/A6/A8/Y-0/A13) | 6a4154e + 6dc40d6 | tests red-first | |
-| Yellow: lab driver a0349b8, scripted host f6c1a44 | | | fixtures NOT rebuilt (LEGACY kept, TODO in `tools/gen1_fixtures.py`) |
-| Viridian Forest driver (A7) 7374bf2 | poison body not written | | plan correction: Route 1 north forces 15 grass steps |
-| harness: oracle registry + provenance + jitter + honest verdict (A0-H1/H2) | | 9e4a686, 107cc99 | |
+| Opus (lane tree) | S-7 dump gate on validated fire + F-1 `hp_before` guard + comment fixes | `lua/tests/duo/duo_gen1_main.lua` | edited file in the tree; commit after lua_syntax_check |
+| Opus (emulator) | Y-2 parcel-driver deadlock, rebuild `yellow_battle`, one Red non-writing smoke | `lua/tests/gen1_rb_parcel_inputs.lua`, `gen1_rb_mart_signature.lua`, its test, `yellow_battle.SaveRAM` | logs `scratchpad/y2_run<k>.log`; then drop `yellow_battle` from the LEGACY sets (`tools/gen1_fixtures.py:56-62`, `tests/unit/test_gen1_stat_control.py:37`, `tests/unit/test_gen1_fixture_qualify.py:28-30`) |
+| Sonnet relay | union-alpha adversarial review of b2f29f8 regions A4/A7 | read-only | findings → fix-up card |
+| OMP Gen1 Peer 2 | S-7-py (cx-e352942a): witness sha256 vs `saveram[0x498:0x8000]`, `SAVE_WITNESS_SHA256` PYDEC line, stale-file cleanup, + two A5 review fixes | `tools/e2e_duo.py`, `tests/unit/test_e2e_duo_whiteout.py`, new `test_e2e_duo_save_witness.py` | then r2 (cx-3e16820d): six findings on 27aaf23 |
 
-## Where it stopped (owner: "stop after all in-flight tasks and check in")
+Session scratchpad (patches, logs, scratch copies):
+`C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/`
+(`f1_faint.patch`, `a4_clauses.patch`, `a7_poison.patch` are applied; `faint_run/` holds the
+failed run's receipts; `lane_faint_active.log`, `yellow_*.log`, `y1_*.log`, `y2_*.log`).
 
-- Last lane run: `linked_faint_active_new` rerun on the frozen tree at 6a4154e — FAIL by the game's
-  RNG (A's starter lost its first wild battle and whited out before the link formed; not in the
-  bounded-retry set) and the harness hung at teardown (killed; no EmuHawk left). The earlier rerun
-  (pad fix, tree not frozen) is void. **`B_ACTIVE_COMMIT` now reads a real `player_move`**, so the
-  pad fix is proven; the scenario itself still needs one clean PASS on a frozen tree.
-- The ledger pass (170f12a) flipped every row above; open cells it named: T-1 MODEL still cites the
-  pre-rebase dist commit `76ba1ff`; C-1/C-2 MODEL and D-1 SOURCE unflipped though tests exist.
-- Known open items recorded in commits: an NPC trade emits both `party_to_box` and `key_change`
-  (6dc40d6); the same-second duplicate-row splice in the reconnect checker (9e4a686);
-  `docs/gen1_engine_sites.md` bag-removal wording (ledger).
+## Lane queue (in order, after the fix-ups above are committed and the tree is unleased)
 
-## Next steps, in order (none dispatched — owner check-in pending)
-
-1. Lane, on the frozen tree at HEAD: `linked_faint_active_new` (clean PASS), then
-   `soft_reset_new`, `trade_decline_new`, `explode_new`, `pc_ops_new`, `changebox_new`; diagnose
-   every failure from its kept run dir before any rerun (`--keep-data`).
-2. OMP: A5 Python (SCENARIOS + `assert_whiteout_both_boxed` + `assert_whiteout_new_saved`), then
-   `whiteout_new` on the lane.
-3. Lane: `python tools/gen1_fixtures.py yellow town` / `yellow battle`, then the Yellow lab gate
-   (`SLINK_LIVE=1 pytest tests/live/test_gen1_new_gates.py -k "new_game_lab_route and yellow"`);
-   delete the three LEGACY sites the TODO names.
-4. Subagents: A4 clauses bodies (`type_clause_new`, `species_clause_new`), A7 `poison_new` body
-   (driver landed), A13 rival swap (optional); OMP: their Python; A9 dashboard snapshots during a
-   run; the docs items (T-1 dist commit id, C-1/C-2 MODEL cells).
-5. A12 full `duo-pairs` lane pass + S-7 witness, then Track B (P8-0 adapter isolation, launcher
-   rewire, deletions, `memory_gb.lua` trim, docs regeneration incl. `docs/shared_runtime.md`,
-   release note), re-rebase, Gen 3 check, full runner, package boot, FF, owner tags `v0.3.0`.
+1. `linked_faint_active_new` via `tools/e2e_duo_head.py` (refresh the copy from HEAD first if
+   OMP still holds `tools/e2e_duo.py`) — first exercise of the S-7 witness; replace the committed
+   receipt `tests/fixtures/gen1/receipts/linked_faint_active_new_b_result.txt` (pre-pad-fix) on PASS.
+2. `whiteout_new` (first run), then `type_clause_new` (deterministic), `poison_new`
+   (RNG-retryable), `species_clause_new` (up to 3 attempts; NOT-observed line = D-4 stays ◐).
+3. `soft_reset_new`, `trade_decline_new`, `explode_new` (after r2's oracle fix), `pc_ops_new`,
+   `changebox_new`; diagnose every failure from its kept run dir (`--keep-data`) before a rerun.
+4. Yellow lab gate once `yellow_battle` is rebuilt:
+   `SLINK_LIVE=1 pytest tests/live/test_gen1_new_gates.py -k "new_game_lab_route and yellow"`.
+5. A9 dashboard snapshots during a link_new-family run; A13 optional; then A12 full `duo-pairs`
+   pass, ledger pass (incl. the client.lua:754 silent-downgrade limit and the S-7 row wording:
+   sha256 of the raw 0x7B68 witness bytes, lower-case hex), Track B, tag `v0.3.0`.
 
 ## Commands
 
 ```bash
-python -m pytest tests/unit -q -p no:cacheprovider          # 2954 passed at 54b30db
+python -m pytest tests/unit -q -p no:cacheprovider          # 3056 passed at 27aaf23
 ruff check . && python tools/lua_syntax_check.py
-python tools/verify_gen1_release.py --quick
 python tools/e2e_duo.py --game gen1_new --scenario <name> --keep-data
-python tools/e2e_duo.py --game gen1_new --scenario reconnect_new --wrong-save tests/fixtures/gen1/red_town_ot2.SaveRAM
+python tools/gen1_fixtures.py --qualify
 ```
