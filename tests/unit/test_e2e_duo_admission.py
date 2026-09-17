@@ -1643,6 +1643,23 @@ def test_soft_reset_baseline_waits_for_both_boot_keys_stats(tmp_path, monkeypatc
     assert run._mon_stats_keys() == [] and not run._boot_stats_present()
 
 
+def test_soft_reset_baseline_names_the_key_whose_stats_never_arrived(tmp_path, monkeypatch):
+    """H-5: the quiescence wait now runs AFTER the go-file (the stats ride the first party
+    tick, which needs the release), and its failure names the missing key instead of timing
+    out with no explanation."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario = "soft_reset_new"
+    run.data_dir = str(tmp_path)
+    run.cfg = dict(duo.SCENARIOS["soft_reset_new"])
+    run.cfg["timeout"] = 0.2
+    run._boot_keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
+    run._pydec_note = lambda fact: None
+    run._mon_stats_keys = lambda: ["BBBB:2222:02"]
+    monkeypatch.setattr(duo, "read_result", lambda scenario, inst: "")
+    with pytest.raises(RuntimeError, match=r"never saw stats for \['AAAA:1111:01'\]"):
+        run._wait_for_boot_stats()
+
+
 def test_soft_reset_oracle_refuses_a_stat_that_changed(tmp_path, monkeypatch):
     """mon_stats is compared, not excluded: a stat change across the reset is a real finding."""
     run = _reset_stub(tmp_path, monkeypatch)

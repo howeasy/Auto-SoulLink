@@ -157,6 +157,21 @@ def test_a_dead_process_with_no_result_ends_the_wait(tmp_path, monkeypatch):
     assert "process gone with no RESULT: a" in str(excinfo.value)
 
 
+def test_a_finished_process_that_wrote_its_result_is_not_dead(tmp_path, monkeypatch):
+    """The lane's misfire: B wrote PASS, exited normally, and the wait aborted while A was
+    still mid-scenario. A finished process is not a dead one — its RESULT counts toward the
+    both-RESULT predicate and the wait continues for the other half."""
+    class Dead:
+        def poll(self):
+            return 0
+
+    run = _run({"a": "", "b": PASS_LINE})
+    _patch_results(monkeypatch, run)
+    run.emu_by_inst = {"a": None, "b": Dead()}
+    with pytest.raises(TimeoutError, match="a marker that never lands"):
+        run.wait_for("a marker that never lands", lambda: None, 0.2)
+
+
 def test_an_expected_exit_does_not_end_the_wait(tmp_path, monkeypatch):
     """reconnect_new kills A on purpose; the waits that follow are waiting for the relaunch."""
     class Dead:

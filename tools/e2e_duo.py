@@ -948,11 +948,17 @@ class DuoRun:
                 return value
             finished = {inst: terminal_result(self._read_receipt(inst)) for inst in ("a", "b")}
             expected = getattr(self, "_expected_exit", set())
-            exited = sorted(inst for inst in ("a", "b")
-                            if inst not in expected and self._process_exited(inst))
+            # A process that exited AFTER writing its RESULT is FINISHED, not dead: its RESULT
+            # counts toward the "both RESULT lines" predicate and the wait goes on for the
+            # other half (the lane's misfire: B PASSED and exited while A was still playing,
+            # and the abort named B as "gone with no RESULT" while quoting B's RESULT in the
+            # same line). Only a process gone with NO RESULT of its own ends the wait.
+            dead = sorted(inst for inst in ("a", "b")
+                          if inst not in expected and self._process_exited(inst)
+                          and not finished[inst])
             failed = any(reason.startswith("RESULT: FAIL") for reason in finished.values())
-            if failed or exited or all(finished.values()):
-                raise ClientFinishedEarly(finished, desc, exited=exited)
+            if failed or dead or all(finished.values()):
+                raise ClientFinishedEarly(finished, desc, exited=dead)
             time.sleep(interval)
         if time.time() >= getattr(self, "_run_deadline", float("inf")):
             raise TimeoutError(f"the run's wall-clock budget expired while waiting for {desc}")
@@ -1243,6 +1249,22 @@ class DuoRun:
                 return sorted((json.load(handle).get("mon_stats") or {}).keys())
         except (OSError, ValueError):
             return []
+
+    def _wait_for_boot_stats(self):
+        """Bounded wait for both boot keys' stats, whose failure NAMES the missing key.
+
+        Bounded by the smaller of 120 s and the scenario's own timeout, so the pins can shrink
+        it. Called after the go-file (see the soft-reset branch).
+        """
+        try:
+            self.wait_for("both boot keys' stats on the server", self._boot_stats_present,
+                          min(120, self.cfg["timeout"]))
+        except TimeoutError as exc:
+            missing = [self._boot_keys[inst] for inst in ("a", "b")
+                       if self._boot_keys.get(inst) not in self._mon_stats_keys()]
+            raise RuntimeError(
+                f"the server never saw stats for {missing} after the release; a baseline now "
+                f"would compare a half-populated mon_stats") from exc
 
     def _boot_stats_present(self) -> bool:
         """True when the server holds a `mon_stats` entry for BOTH boot keys.
@@ -3532,13 +3554,18 @@ class DuoRun:
                 # The reset's evidence is that NOTHING changed, so the baseline is taken before
                 # either client acts: the end state is compared against it, which is what stops
                 # a duplicated or rewritten log from passing as "the same save reconnected".
-                # QUIESCENCE FIRST: a client sends its party stats on the tick after its hello,
-                # so a baseline taken mid-arrival holds whichever half landed first and the
-                # post-reset comparison then reports the other's arrival as a change (the lane
-                # saw `$.mon_stats.<key>: '<missing>' -> {...}`). mon_stats is NOT excluded from
-                # the compare — a stat change across a reset would be a real finding.
-                self.wait_for("both boot keys' stats on the server", self._boot_stats_present,
-                              120)
+                # QUIESCENCE, AND WHERE IT ACTUALLY IS: the stats ride the clients' first
+                # party tick, which is only sent once they are RELEASED — waiting before the
+                # go-file timed out at 120 s with the clients merely connected (the lane's
+                # `timed out ... waiting for both boot keys' stats`). So: release, then wait,
+                # still before the reset — A's body waits for the go-file, helloes at the
+                # checkpoint and only then takes the chord. A baseline taken mid-arrival holds
+                # whichever half landed first and the comparison then reports the other's
+                # arrival as a change (the lane saw `$.mon_stats.<key>: '<missing>' -> {...}`).
+                # mon_stats is NOT excluded from the compare: a stat change across a reset
+                # would be a real finding.
+                self.go()
+                self._wait_for_boot_stats()
                 self._pydec_note(f"baseline mon_stats keys: {self._mon_stats_keys()}")
                 events = self._reconnect_events()
                 baseline_bytes = self._links_bytes()
@@ -3555,7 +3582,6 @@ class DuoRun:
                     "a_hellos": sum(row.get("type") == "hello" and row.get("player") == "a"
                                     for row in events),
                 }
-                self.go()
             elif self.scenario in ("deadzone_new", "changebox_new"):
                 self.assert_dead_zone_new()
             else:
