@@ -2017,6 +2017,18 @@ function scenarios.soft_reset_new()
         return _write_cart_bytes(off, bytes)
     end
 
+    -- The runner snapshots links.json only after both boot keys' stats land, and this body's
+    -- chord would otherwise fire ~55 frames behind the release — a margin, not a guarantee
+    -- (H-6 defect 2). Wait for the sibling go-file the runner writes once the baseline exists.
+    local chord_gate = D.go_file .. ".chord"
+    local chord_gate_at
+    for _ = 1, 3600 do
+        if file_exists(chord_gate) then chord_gate_at = frame break end
+        yield_frame()
+    end
+    if not chord_gate_at then return false, "chord gate never released" end
+    log(fmt("CHORD_GATE released @%d", chord_gate_at))
+
     local chord_start = frame
     for _ = 1, 24 do yield_frame({A=true, B=true, Select=true, Start=true}) end
     yield_frame({})

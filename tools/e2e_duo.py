@@ -1308,9 +1308,10 @@ class DuoRun:
             os.remove(path)
             removed.append(os.path.basename(path))
         for inst in ("a", "b"):
-            if os.path.exists(self.go_files[inst]):
-                os.remove(self.go_files[inst])
-                removed.append(os.path.basename(self.go_files[inst]))
+            for path in (self.go_files[inst], self.go_files[inst] + ".chord"):
+                if os.path.exists(path):
+                    os.remove(path)
+                    removed.append(os.path.basename(path))
         if removed:
             print(f"[duo] cleared {len(removed)} stale artifact(s) for {self.scenario}: "
                   f"{', '.join(sorted(removed))}")
@@ -3516,8 +3517,9 @@ class DuoRun:
             except subprocess.TimeoutExpired:
                 self.server.kill()
         for gf in self.go_files.values():
-            if os.path.exists(gf):
-                os.remove(gf)
+            for path in (gf, gf + ".chord"):
+                if os.path.exists(path):
+                    os.remove(path)
         if passed and not self.args.keep_data:
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
@@ -3621,6 +3623,14 @@ class DuoRun:
                     "a_hellos": sum(row.get("type") == "hello" and row.get("player") == "a"
                                     for row in events),
                 }
+                # Two-step release: the go-file starts the checkpoint hello, the stats wait makes
+                # mon_stats quiescent, the baseline captures links.json — and only then does the
+                # .chord file let A's body take the reset chord (H-6 defect 2: the chord used to
+                # run ~55 frames behind the release, a margin rather than a guarantee).
+                chord_path = self.go_files["a"] + ".chord"
+                with open(chord_path, "w") as handle:
+                    handle.write("GO\n")
+                print("[duo] chord go-file written for a")
             elif self.scenario in ("deadzone_new", "changebox_new"):
                 self.assert_dead_zone_new()
             else:
