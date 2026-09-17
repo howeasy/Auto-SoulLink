@@ -1,0 +1,65 @@
+Gen 1 release gate — 1 lanes
+
+[ .. ] duo-pairs
+:
+                    pytest.fail(f"town fixture missing for admission gate: {fixture}")
+                pytest.skip(f"missing fixture — build with `python tools/gen1_fixtures.py "
+                            f"{title} {target}`")
+    
+        cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
+               "--game", GAME, "--scenario", scenario]
+        if scenario == "reconnect_new":
+            # C-1 needs a second-OT Red save. The lane sets no environment, so the committed fixture
+            # is the default and SLINK_WRONG_SAVE only overrides it; if the fixture is missing the
+            # runner refuses it and the scenario fails, which is what a missing leg must do.
+            cmd.extend(("--wrong-save", os.environ.get("SLINK_WRONG_SAVE") or os.path.join(
+                REPO, "tests", "fixtures", "gen1", "red_town_ot2.SaveRAM")))
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                # Always outlive every attempt the runner may take, plus boot and teardown.
+                timeout=deadline_for(scenario))
+        except subprocess.TimeoutExpired as exc:
+            # text=True makes exc.stdout a str (None when nothing was captured), not the bytes a
+            # bare subprocess.run would leave; the assert below cannot name the scenario on a kill.
+            pytest.fail(f"{GAME} duo {scenario} exceeded the wrapper deadline of "
+                        f"{deadline_for(scenario)} s (every attempt's budget plus 300 s teardown); "
+                        f"the runner's own _run_deadline should have ended it first -- partial "
+                        f"stdout:\n{(exc.stdout or '')[-4000:]}")
+>       assert proc.returncode == 0, (
+            f"{GAME} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
+E       AssertionError: gen1_new duo rival_swap_new failed:
+E         
+E         ========== scenario: rival_swap_new ==========
+E         [duo] rival_swap_new: attempt 1 of 2
+E         [duo] JITTER requested=0 attempt=1
+E         [duo] server up: tcp=53375 http=53376 data=C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_1wle8hqj
+E         [duo] cleared 7 stale artifact(s) for rival_swap_new: e2e_rival_swap_new_a_1_witness.bin, e2e_rival_swap_new_a_attempt1_result.txt, e2e_rival_swap_new_a_result.txt, e2e_rival_swap_new_b_1_witness.bin, e2e_rival_swap_new_b_attempt1_result.txt, e2e_rival_swap_new_b_result.txt, e2e_rival_swap_new_pydec_attempt1_result.txt
+E         [duo] launched a phase=initial seed=True
+E         [duo] launched b phase=initial seed=True
+E         [duo] two EmuHawk instances launched
+E         [duo] keys: a=06C3:4190:99 b=4519:AFB9:B0
+E         [duo] both players connected
+E         [duo] go-file written for a
+E         [duo] go-file written for b
+E         [duo] real captures: a=20B2:4190:A5 b=1E5E:AFB9:A5
+E         [duo] ENCOUNTER LINK FROM REAL PLAY (new client): 20B2:4190:A5 <-> 1E5E:AFB9:A5 on route_1, alive
+E         [duo] PYDEC: FAIL a saved game would not qualify: ['slot 0: stored spd=11 but recomputed 12']
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_1wle8hqj
+E         [duo] rival_swap_new: attempt 1 aborted — RuntimeError: a saved game would not qualify: ['slot 0: stored spd=11 but recomputed 12']
+E         
+E         ========== summary ==========
+E           rival_swap_new: FAIL (attempt 1 of 2) — RuntimeError: a saved game would not qualify: ['slot 0: stored spd=11 but recomputed 12']
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...empt 1 of 2) — RuntimeError: a saved game would not qualify: ['slot 0: stored spd=11 but recomputed 12']\n", stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+1 failed, 17 passed in 645.12s (0:10:45)
+
+[FAIL] duo-pairs          17 passed, 0 skipped (0 unexplained), 1 failed, 0 xfailed, 0 deselected  (646s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
