@@ -209,15 +209,17 @@ for _, m in ipairs(party_keys()) do boot_keys[m.key] = true end
 -- ── Scenario context ─────────────────────────────────────────────────────────────────
 -- Scenario level: set the pad, give the frame back to the main loop.
 local function yield_frame(buttons) joypad.set(buttons or {}); coroutine.yield() end
--- Battle-plan level (inside the hunt module's coroutine): hand the buttons UP to route.step,
--- which returns them to the scenario, which sets the pad. One frame per call either way.
-local function yield_buttons(buttons) coroutine.yield(buttons or {}) end
--- ...but a driver kept alive PAST the hunt (options.keep_driver) is resumed by the MAIN loop,
--- which drops the yielded value and calls step(nil) -- so yield_buttons alone presses nothing
--- there (receipt: tests/fixtures/gen1/receipts/linked_faint_active_new_b_result.txt:81, "move
--- menu not entered"). A driver that has to drive outside the hunt coroutine sets the pad itself;
--- inside it the scenario simply sets the same buttons again on the same frame.
-local function yield_pad_buttons(buttons) joypad.set(buttons or {}); coroutine.yield(buttons or {}) end
+-- Battle-plan level (inside the hunt module's coroutine, or from a driver kept alive PAST the
+-- hunt via options.keep_driver): set the pad directly, THEN hand the same buttons up so
+-- route.step can return them to the scenario. Nothing advances a frame between this call and
+-- the scenario's later yield_frame(buttons)/step(nil) (frameadvance happens exactly once, in the
+-- main loop's step() at the bottom of this file), so that later re-set of the identical value is
+-- a harmless no-op, not a second real press. A driver resumed by the MAIN loop after the hunt
+-- returns (keep_driver) never reaches that later yield_frame at all -- setting the pad here is
+-- the ONLY place its presses land. Before this fix they were dropped entirely: the main loop's
+-- step(nil) ignores whatever coroutine.resume(co) yields (receipt:
+-- tests/fixtures/gen1/receipts/linked_faint_active_new_b_result.txt:81, "move menu not entered").
+local function yield_buttons(buttons) joypad.set(buttons or {}); coroutine.yield(buttons or {}) end
 local function frames(n) for _ = 1, n do yield_frame() end end
 local function wait_until(pred, secs, what)
     local deadline = os.time() + secs
@@ -254,7 +256,7 @@ local rom = parts.profile.rom
 local function hunt(mode, options)
     options = options or {}
     local driver = Driver.new({
-        step = options.driver_step or yield_buttons, u8 = rd,
+        step = yield_buttons, u8 = rd,
         sites = { display_battle_menu = rom.DisplayBattleMenu.addr, move_selection_menu = rom.MoveSelectionMenu.addr,
                   select_enemy_move = rom.SelectEnemyMove.addr, execute_player_move = rom.ExecutePlayerMove.addr,
                   execute_enemy_move = rom.ExecuteEnemyMove.addr },
@@ -1062,10 +1064,7 @@ local function linked_faint_scenario(active, explode)
     elseif active then
         local reordered, reorder_why = reorder_linked_to_lead(key)
         if not reordered then return false, reorder_why end
-        -- Explode Mode drives the menus for real (cancel, probe, commit), so its driver needs a
-        -- step that sets the pad outside the hunt coroutine.
-        local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true,
-                                                   driver_step = explode and yield_pad_buttons or nil})
+        local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true})
         if phase ~= "linked-active-menu" then return false, "B could not hold its linked mon active: " .. tostring(phase) end
         if rd(ram.wPlayerMonNumber) ~= 0 or not reads.read_party() or
            reads.key(reads.read_party()[1]) ~= key then return false, "B linked lead not active at hold menu" end
