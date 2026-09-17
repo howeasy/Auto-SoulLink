@@ -42,7 +42,7 @@ class Node:
 
 
 class DOM(HTMLParser):
-    VOID = set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"])
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
     def __init__(self, source):
         super().__init__(convert_charrefs=True)
@@ -244,4 +244,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except (OSError, ValueError, TypeError, KeyError) as exc:
         print("BOARD_ERROR " + str(exc), file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from exc
