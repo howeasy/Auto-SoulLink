@@ -29,7 +29,6 @@ to pair with each other.
 """
 import json
 import os
-import re
 
 import pytest
 
@@ -133,13 +132,13 @@ def test_grant_maps_are_gift_areas(adapter):
 
 def test_client_gift_fallback_is_per_map():
     """`area = "gift"` for any unmapped map is what created the shared bucket."""
-    path = os.path.join(REPO, "lua", "clients", "gen1_rby_client.lua")
+    path = os.path.join(REPO, "lua", "gen1", "client.lua")
     with open(path, encoding="utf-8") as f:
         src = f.read()
-    assert 'area = "gift"' not in src.replace('or "gift"', ""), (
-        "gen1_rby_client.lua still assigns the bare constant \"gift\" as the area for "
-        "an unmapped grant map; distinct events on distinct maps will cross-pair")
-    assert "gift_map_%d" in src, (
+    assert 'area_id = "gift"' not in src, (
+        "lua/gen1/client.lua assigns the bare constant \"gift\" as the area for an unmapped "
+        "grant map; distinct events on distinct maps will cross-pair")
+    assert '"gift_map_" .. tostring(pc.map)' in src, (
         "expected the per-map gift area fallback (gift_map_<id>)")
 
 
@@ -150,32 +149,8 @@ def test_per_map_gift_ids_are_gift_areas(adapter):
     assert adapter.is_gift_area("gift_map_255")
 
 
-# ── the two halves of the gift set must agree ────────────────────────────
-
-def _lua_gift_areas():
-    """Parse M.GIFT_AREAS out of lua/games/gen1_rby.lua.
-
-    A parse, not an import: lupa is optional in this suite and a missing runtime would
-    turn this into a skip, which reads exactly like a pass.
-    """
-    path = os.path.join(REPO, "lua", "games", "gen1_rby.lua")
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    m = re.search(r"M\.GIFT_AREAS\s*=\s*\{(.*?)\n\}", src, re.S)
-    assert m, "M.GIFT_AREAS not found in lua/games/gen1_rby.lua"
-    return set(re.findall(r"^\s*(\w+)\s*=\s*true", m.group(1), re.M))
-
-
-
-def test_no_lua_gift_area_is_a_wild_encounter_area():
-    """The same invariant the Python set already has, applied to the half that
-    actually suppresses no_catch."""
-    with open(os.path.join(REPO, "data", "games", "gen1_rby",
-                           "encounter_tables.json"), encoding="utf-8") as f:
-        tables = json.load(f)
-    lua_gifts = _lua_gift_areas()
-    for variant, areas in tables.items():
-        overlap = lua_gifts & set(areas)
-        assert not overlap, (
-            f"{variant}: {sorted(overlap)} are wild encounter areas but the Lua gift set "
-            f"suppresses no_catch there, so they can never dead-zone")
+# P8-2b: `M.GIFT_AREAS` in lua/games/gen1_rby.lua had no counterpart in the rewritten
+# client, which suppresses no_catch on the ENGINE's answer (a battle that never started is
+# not an encounter) rather than on a hardcoded area list -- see
+# tests/unit/test_gen1_client.py::test_gift_mon_outside_battle_is_a_gift_capture_on_a_gift_area.
+# The Python half of the invariant above (no gift area is also a wild area) is unchanged.

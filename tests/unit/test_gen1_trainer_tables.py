@@ -1,6 +1,4 @@
-"""Gen 1 trainer ids must match pret, and the JSON mirror must match the live Lua.
-
-Two things went wrong here at once, and each hid the other.
+"""Gen 1 trainer ids must match pret, and the client must read the byte the table is keyed by.
 
 `ENGINEER` ($0C) was missing from the class list, so every id from OPP 212 upward was one
 too low. `BROCK` is $22 -> OPP 234, but 234 read "Misty", 235 read "Lt. Surge", and so on:
@@ -8,14 +6,9 @@ every gym leader, Elite Four member and rival displayed the NEXT trainer's name.
 ($2F -> 247) fell off the end entirely. Nothing failed — the lookup just returned a
 plausible wrong string.
 
-The second problem is why it survived: `data/games/gen1_rby/trainers.json` is documented as
-mirroring `lua/games/gen1_rby_trainers.lua`, but no Python reads it, so the two drifted
-freely and the JSON could not corroborate the Lua. The JSON is now generated from the Lua;
-this test keeps them honest.
-
 `trainer_constants.asm` is the authority: classes are a contiguous const run from NOBODY.
 
-THE THIRD PROBLEM, AND THIS FILE USED TO ENSHRINE IT. The line above used to end
+THE SECOND PROBLEM, AND THIS FILE USED TO ENSHRINE IT. The line above used to end
 "...and `wTrainerClass` stores `OPP_ID_OFFSET (200) + const`." That is false, and every
 assertion here was built on it, so the suite stayed green while the feature was dead.
 pokered stores the class into `wTrainerClass` only AFTER subtracting the offset:
@@ -24,23 +17,25 @@ pokered stores the class into `wTrainerClass` only AFTER subtracting the offset:
     jp c, InitWildBattle      / ld [wTrainerClass], a
     (engine/battle/core.asm:6673-6677; pokeyellow engine/battle/init_battle.asm:33-36)
 
-so that byte holds the RAW const `$00-$2F`. The tables below are keyed 200-247, so the
-client's lookup missed for every trainer in the game and `resolve()` returned `("", "")`
-— no opponent name or class ever reached the server, and nothing failed.
-
-`wCurOpponent` is the byte that keeps the +200 form (`home/trainers.asm:233-237` stores
-`wEngagedTrainerClass` and compares it against `OPP_ID_OFFSET` to decide trainer-vs-wild),
+so that byte holds the RAW const `$00-$2F`. The tables are keyed 200-247, so a lookup fed
+`wTrainerClass` misses for every trainer in the game and returns ("", "") with nothing
+raised. `wCurOpponent` is the byte that keeps the +200 form (`home/trainers.asm:233-237`),
 which is why `rival_trainer_ids()` was correct all along. The two readers must stay
-different, so `test_client_reads_class_from_cur_opponent` pins the READING CONVENTION
-rather than the table contents — the thing this file previously could not see.
+different, so the reading convention is pinned below rather than the table contents.
+
+P8-2b: the table moved out of `lua/games/gen1_rby_trainers.lua`. Nothing in Lua carries
+trainer names any more — `data/games/gen1_rby/trainers.json` IS the table, read by
+server/adapters/gen1_rby.py:386, so the JSON is checked against pret directly instead of
+against a Lua mirror it used to be generated from.
 """
 import json
 import os
 import re
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LUA = os.path.join(REPO, "lua", "games", "gen1_rby_trainers.lua")
 JSON_PATH = os.path.join(REPO, "data", "games", "gen1_rby", "trainers.json")
+READS = os.path.join(REPO, "lua", "gen1", "reads.lua")
+CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")
 
 OPP_ID_OFFSET = 200
 
@@ -70,27 +65,12 @@ def _read(path):
         return f.read()
 
 
-def _lua_block(name):
-    src = _read(LUA)
-    start = src.index("{", src.index(f"M.{name} = {{"))
-    depth = 0
-    for i in range(start, len(src)):
-        if src[i] == "{":
-            depth += 1
-        elif src[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return src[start:i + 1]
-    raise AssertionError(f"unterminated M.{name}")
-
-
-def _lua_classes():
-    return {int(m.group(1)): m.group(2)
-            for m in re.finditer(r'\[(\d+)\]\s*=\s*"([^"]*)"', _lua_block("CLASS_NAMES"))}
+def _classes():
+    return {int(k): v for k, v in json.loads(_read(JSON_PATH))["classes"].items()}
 
 
 def test_class_ids_match_pret_offsets():
-    classes = _lua_classes()
+    classes = _classes()
     for const, display in ANCHORS.items():
         expected_id = PRET_ORDER.index(const) + OPP_ID_OFFSET
         assert classes.get(expected_id) == display, (
@@ -101,7 +81,7 @@ def test_class_ids_match_pret_offsets():
 
 
 def test_class_table_is_contiguous_and_complete():
-    classes = _lua_classes()
+    classes = _classes()
     expected = set(range(OPP_ID_OFFSET, OPP_ID_OFFSET + len(PRET_ORDER)))
     assert set(classes) == expected, (
         f"class ids must be the contiguous run {min(expected)}..{max(expected)}; "
@@ -109,52 +89,35 @@ def test_class_table_is_contiguous_and_complete():
     )
 
 
-def test_rival_ids_are_the_three_pret_rival_classes():
-    src = _read(LUA)
-    ids = [int(x) for x in re.search(r"M\.RIVAL_CLASS_IDS\s*=\s*\{([^}]*)\}", src).group(1).split(",")]
-    expected = [PRET_ORDER.index(c) + OPP_ID_OFFSET for c in ("RIVAL1", "RIVAL2", "RIVAL3")]
-    assert ids == expected, f"rival class ids should be {expected} (RIVAL1/2/3 + 200), got {ids}"
+def test_the_adapter_resolves_a_named_trainer_through_that_table():
+    """The consumer: nothing else in Python reads trainers.json, so an id shift shows up
+    only as a wrong name on the board."""
+    from server.adapters import get_adapter
+    a = get_adapter("gen1_rby", rom_type="Red")
+    brock = PRET_ORDER.index("BROCK") + OPP_ID_OFFSET
+    assert a.trainer_info(brock)[1] == "Brock"
 
 
-def test_json_mirror_matches_lua():
-    """The JSON is generated from the Lua; nothing in Python reads it, so only this holds it true."""
-    data = json.loads(_read(JSON_PATH))
-    assert {int(k): v for k, v in data["classes"].items()} == _lua_classes(), (
-        "data/games/gen1_rby/trainers.json has drifted from lua/games/gen1_rby_trainers.lua"
-    )
+def test_the_client_reads_the_class_from_cur_opponent_not_wtrainerclass():
+    """The tables are keyed 200-247, so the class MUST come from wCurOpponent.
 
-
-CLIENT = os.path.join(REPO, "lua", "clients", "gen1_rby_client.lua")
-
-
-def test_client_reads_class_from_cur_opponent():
-    """The tables above are keyed 200-247, so the class MUST come from wCurOpponent.
-
-    Reading `wTrainerClass` instead yields the raw const `$00-$2F`, every lookup
-    misses, and `resolve()` returns ("", "") for every trainer in the game — with
-    no error anywhere. Nothing else in the suite can see that, because the tables
-    themselves are correct.
+    Reading `wTrainerClass` instead yields the raw const `$00-$2F`, every lookup misses,
+    and no opponent name or class ever reaches the server — with no error anywhere.
     """
-    src = _read(CLIENT)
-    calls = re.findall(r"TRAINERS\.resolve\((\w+)\s*,", src)
-    assert calls, "gen1_rby_client.lua never calls TRAINERS.resolve"
-    for var in calls:
-        # The variable handed to resolve() must have been read from CUR_OPPONENT_ADDR.
-        assigned = re.findall(rf"local\s+{var}\s*=\s*M\.read_u8\(M\.(\w+)\)", src)
-        assert assigned, f"could not find where {var!r} is assigned before TRAINERS.resolve"
-        for addr in assigned:
-            assert addr == "CUR_OPPONENT_ADDR", (
-                f"TRAINERS.resolve() is fed {var} read from M.{addr}. The class tables are "
-                f"keyed OPP_ID_OFFSET(200)+const, and only wCurOpponent carries that form; "
-                f"wTrainerClass holds the raw const because pokered subtracts the offset "
-                f"before storing it (engine/battle/core.asm:6673-6677)."
-            )
+    src = _read(READS)
+    m = re.search(r"local opponent = io\.read_u8\(a\.wCurOpponent\)", src)
+    assert m, "lua/gen1/reads.lua no longer reads wCurOpponent for the battle record"
+    assert re.search(r"is_trainer = opponent >= 200", src), (
+        "the trainer test must be on the +200 form that wCurOpponent carries")
+    assert re.search(r"trainer_class = opponent >= 200 and opponent - 200", src), (
+        "trainer_class must be derived from wCurOpponent by subtracting OPP_ID_OFFSET")
+    assert "wTrainerClass" not in src and "wTrainerClass" not in _read(CLIENT), (
+        "the rewritten client references wTrainerClass; it holds the raw class const and is "
+        "not what the 200-based tables are keyed by")
 
 
-def test_trainer_class_addr_is_not_used_for_name_lookup():
-    """Belt and braces: the wrong address should not appear in the client at all."""
+def test_the_wire_carries_the_two_hundred_form():
+    """The server looks the id up in trainers.json, so the client must not pre-subtract."""
     src = _read(CLIENT)
-    assert "TRAINER_CLASS_ADDR" not in src, (
-        "gen1_rby_client.lua still references TRAINER_CLASS_ADDR; it holds the raw "
-        "class const and is not what the 200-based tables are keyed by"
-    )
+    assert re.search(r'trainer_battle_start", \{ trainer_id = pt\.cur_opponent \}', src), (
+        "trainer_battle_start must send wCurOpponent, the byte the class table is keyed by")

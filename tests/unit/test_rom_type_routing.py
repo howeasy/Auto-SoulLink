@@ -32,8 +32,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 # Game modules that expose rom_type_for_variant + a PROFILES table. Gen 4/5 are NDS and
 # resolve their rom_type differently, so they are covered by their own adapter tests.
+#
+# P8-2b: Gen 1 left this list with lua/games/gen1_rby.lua. The rewritten client does not use
+# the game-module registry at all -- it has three titles and a literal ROM_TYPE map in
+# lua/gen1/entry.lua -- and the same invariant is asserted on it by
+# tests/unit/test_gen1_entry.py::test_rom_type_strings_are_the_ones_the_server_routes_on,
+# which checks every one of its rom_types through game_id_for_rom_type.
 GB_GBA_MODULES = [
-    ("lua/games/gen1_rby.lua", "gen1_rby"),
     ("lua/games/gen2_crystal.lua", "gen2_crystal"),
 ]
 

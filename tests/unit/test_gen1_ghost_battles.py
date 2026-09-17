@@ -16,8 +16,12 @@ DEAD-ZONED POKEMON TOWER for both players. There is no route through the Tower t
 meeting a ghost, so this fired on every run, on both cartridges, for an encounter the game
 never offered.
 
-The constants are identical in pokered and pokeyellow, and this file re-derives them from
-the decomps rather than trusting the Lua.
+P8-2b: the BEHAVIOUR is proved end-to-end against the rewritten client by
+tests/unit/test_gen1_client.py::test_tower_ghost_battle_without_silph_scope_is_not_a_failed_encounter
+(and the Scope control immediately after it), which drives a real battle rather than
+grepping the source. What only this file can do is re-derive the two constants from the
+decomps, so a map or item id that moves upstream fails here instead of silently widening or
+narrowing the suppression.
 """
 from __future__ import annotations
 
@@ -26,9 +30,8 @@ import re
 
 import pytest
 
-lupa = pytest.importorskip("lupa")
-
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+CLIENT = os.path.join(_REPO, "lua", "gen1", "client.lua")
 
 
 def _find_pret(name: str) -> str:
@@ -45,17 +48,30 @@ def _find_pret(name: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def game():
-    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
-    lua.execute("print = function() end")
-    path = os.path.join(_REPO, "lua", "games", "gen1_rby.lua").replace("\\", "/")
-    return lua.eval(f'dofile("{path}")')
+def client_src() -> str:
+    with open(CLIENT, encoding="utf-8") as f:
+        return f.read()
 
 
-# ── the constants, re-derived ────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def tower_maps(client_src) -> set[int]:
+    """The map ids lua/gen1/client.lua actually suppresses on, parsed from its own table."""
+    m = re.search(r"local TOWER_MAPS\s*=\s*\{(.*?)\}", client_src, re.S)
+    assert m, "lua/gen1/client.lua no longer declares TOWER_MAPS"
+    ids = {int(x, 16) for x in re.findall(r"\[0x([0-9A-Fa-f]+)\]\s*=\s*true", m.group(1))}
+    assert ids, "TOWER_MAPS parsed empty — every assertion below would be vacuous"
+    return ids
+
+
+@pytest.fixture(scope="module")
+def silph_scope(client_src) -> int:
+    m = re.search(r"local SILPH_SCOPE\s*=\s*0x([0-9A-Fa-f]+)", client_src)
+    assert m, "lua/gen1/client.lua no longer declares SILPH_SCOPE"
+    return int(m.group(1), 16)
+
 
 @pytest.mark.parametrize("decomp", ["pokered", "pokeyellow"])
-def test_the_tower_map_ids_match_the_decomp(game, decomp):
+def test_the_tower_map_ids_match_the_decomp(decomp, tower_maps):
     path = os.path.join(_find_pret(decomp), "constants", "map_constants.asm")
     if not os.path.exists(path):
         pytest.skip(f"{decomp} not cloned — run tools/build_pret_syms.py")
@@ -64,12 +80,15 @@ def test_the_tower_map_ids_match_the_decomp(game, decomp):
     first = re.search(r"map_const POKEMON_TOWER_1F,.*?; \$([0-9A-F]{2})", src)
     last = re.search(r"map_const POKEMON_TOWER_7F,.*?; \$([0-9A-F]{2})", src)
     assert first and last, "the map constants moved"
-    assert int(first.group(1), 16) == game.GHOST_MAP_FIRST
-    assert int(last.group(1), 16) == game.GHOST_MAP_LAST
+    expected = set(range(int(first.group(1), 16), int(last.group(1), 16) + 1))
+    assert tower_maps == expected, (
+        f"{decomp}: the client suppresses no_catch on {sorted(tower_maps)}, but the Tower is "
+        f"{sorted(expected)}. Too few leaves a floor dead-zoning on a ghost; too many stops a "
+        f"real route from ever dead-zoning.")
 
 
 @pytest.mark.parametrize("decomp", ["pokered", "pokeyellow"])
-def test_the_silph_scope_id_matches_the_decomp(game, decomp):
+def test_the_silph_scope_id_matches_the_decomp(decomp, silph_scope):
     path = os.path.join(_find_pret(decomp), "constants", "item_constants.asm")
     if not os.path.exists(path):
         pytest.skip(f"{decomp} not cloned — run tools/build_pret_syms.py")
@@ -77,58 +96,14 @@ def test_the_silph_scope_id_matches_the_decomp(game, decomp):
         for line in f:
             if "const SILPH_SCOPE" in line:
                 expected = int(re.search(r"\$([0-9A-Fa-f]{2})", line).group(1), 16)
-                assert expected == game.ITEM_SILPH_SCOPE
+                assert expected == silph_scope
                 return
     pytest.fail("SILPH_SCOPE not found in the decomp")
 
 
-# ── the predicate ────────────────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("map_id", [0x8E, 0x8F, 0x90, 0x91, 0x92, 0x93, 0x94])
-def test_every_tower_floor_is_uncatchable_without_the_scope(game, map_id):
-    assert game.is_uncatchable_battle(map_id, False) is True
-
-
-@pytest.mark.parametrize("map_id", [0x8E, 0x91, 0x94])
-def test_the_scope_makes_the_tower_catchable_again(game, map_id):
-    """The control that stops this becoming 'the Tower never dead-zones'. After the Scope
-    the ghosts are ordinary Gastly and Haunter and the area works like any other."""
-    assert game.is_uncatchable_battle(map_id, True) is False
-
-
-@pytest.mark.parametrize("map_id", [0x00, 0x0C, 0x8D, 0x95, 0xFF])
-def test_no_other_map_is_affected(game, map_id):
-    """Boundaries included: 0x8D is one below the Tower and 0x95 one above. An off-by-one
-    here would silently stop a real route from ever dead-zoning."""
-    assert game.is_uncatchable_battle(map_id, False) is False
-
-
-def test_a_missing_map_id_is_not_uncatchable(game):
-    """Reading the map can fail mid-transition; the safe default is to treat the battle
-    as ordinary rather than to suppress a real dead zone."""
-    assert game.is_uncatchable_battle(None, False) is False
-
-
-# ── the client actually consults it ──────────────────────────────────────────────────
-
-def test_the_client_suppresses_no_catch_for_these_battles():
-    """Asserted on the source because the emit site is deep inside on_frame. The live
-    proof is that the Tower still has its encounter table and the rule now leaves it
-    alone; what this pins is that the guard is on the no_catch path at all."""
-    path = os.path.join(_REPO, "lua", "clients", "gen1_rby_client.lua")
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    m = re.search(r"post_battle_frames == 1 and not captured_this_battle.*?no_catch",
-                  src, re.S)
-    assert m, "the no_catch emit site moved"
-    assert "battle_uncatchable" in m.group(0), (
-        "no_catch is emitted without consulting battle_uncatchable — Pokemon Tower will "
-        "dead-zone on the first ghost")
-
-
-def test_the_client_reads_the_flag_from_the_bag_and_the_map():
-    path = os.path.join(_REPO, "lua", "clients", "gen1_rby_client.lua")
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    assert "G.is_uncatchable_battle(cur_map, M.hasBagItem(G.ITEM_SILPH_SCOPE))" in src, (
-        "the flag must come from the live map and bag, not be assumed")
+def test_no_neighbouring_map_is_swept_up(tower_maps):
+    """Boundaries: one below the Tower and one above must NOT be suppressed, or a real
+    route silently stops dead-zoning."""
+    assert min(tower_maps) - 1 not in tower_maps
+    assert max(tower_maps) + 1 not in tower_maps
+    assert len(tower_maps) == 7, f"the Tower has seven floors, got {sorted(tower_maps)}"

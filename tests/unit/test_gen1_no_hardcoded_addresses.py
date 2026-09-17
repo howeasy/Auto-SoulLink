@@ -17,12 +17,11 @@ correct as addresses change, and addresses that genuinely do NOT shift (wCurrent
 yellow agree on them.
 """
 import glob
+import json
 import os
 import re
 
 import pytest
-
-lupa = pytest.importorskip("lupa")
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -67,20 +66,22 @@ def _strip_lua_comments(src: str) -> str:
 
 @pytest.fixture(scope="module")
 def shifted_addresses():
-    """Every address that differs between the red and yellow profiles, as a set of ints."""
-    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
-    lua.execute("print = function() end")
-    path = os.path.join(REPO, "lua", "games", "gen1_rby.lua").replace("\\", "/")
-    G = lua.eval(f'dofile("{path}")')
+    """Every address that differs between the red and yellow profiles, as a set of ints.
 
-    def flat(profile):
-        out = {}
-        for k, v in profile.items():
-            if isinstance(v, int) and 0xC000 <= v <= 0xDFFF:
-                out[k] = v
-        return out
+    P8-2b: derived from data/games/gen1_rby/profile.json rather than from
+    `lua/games/gen1_rby.lua`'s PROFILES table. That file is generated from the pinned pret
+    .sym files (tests/unit/test_gen1_profile.py), so the banned set is now a step further
+    from anything hand-typed, and the fixture no longer needs a Lua runtime.
+    """
+    with open(os.path.join(REPO, "data", "games", "gen1_rby", "profile.json"),
+              encoding="utf-8") as f:
+        titles = json.load(f)["titles"]
 
-    red, yellow = flat(G.PROFILES["red"]), flat(G.PROFILES["yellow"])
+    def flat(title):
+        return {k: v for k, v in titles[title]["ram"].items()
+                if isinstance(v, int) and 0xC000 <= v <= 0xDFFF}
+
+    red, yellow = flat("red"), flat("yellow")
     shifted = {}
     for k, rv in red.items():
         yv = yellow.get(k)
@@ -107,7 +108,7 @@ def test_no_yellow_shifted_literals(path, shifted_addresses):
         if name:
             line = src[: m.start()].count("\n") + 1
             offenders.append(f"  line {line}: {m.group(0)} is Red/Blue's {name}; "
-                             f"Yellow shifts it — read M.{name} from the profile instead")
+                             f"Yellow shifts it — read {name} from the profile instead")
     assert not offenders, (
         f"{os.path.basename(path)} hardcodes {len(offenders)} address(es) that Yellow "
         f"shifts, so it reads the wrong byte there:\n" + "\n".join(offenders))

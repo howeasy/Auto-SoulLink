@@ -1,4 +1,4 @@
-"""Phase 10: every memory address in the Gen 1/2 Lua profile must match the
+"""Phase 10: every memory address in the Gen 2 Lua profile must match the
 pret-authoritative .sym output in data/pret_syms.json.
 
 Skipped if data/pret_syms.json doesn't exist (contributor hasn't run
@@ -41,10 +41,13 @@ def _verifier_results():
         )
     mod = _load_verifier()
     pret_syms = json.loads(PRET_SYMS_PATH.read_text(encoding="utf-8"))
-    profile_addrs = {
-        **mod._extract_variant_addresses(mod.PROFILE_GEN1),
-        **mod._extract_variant_addresses(mod.PROFILE_GEN2),
-    }
+    # P8-2b: Gen 1 is no longer verified from a Lua profile. data/games/gen1_rby/profile.json
+    # is GENERATED from the pinned rgblink .sym files, and
+    # tests/unit/test_gen1_profile.py::test_committed_profile_matches_a_fresh_generation
+    # (plus ::test_sym_files_are_the_pinned_ones) proves the stronger property this file
+    # could only approximate: not "every mapped address equals pret" but "the whole file is
+    # what pret says". Gen 2 still ships a hand-written Lua profile and still needs this.
+    profile_addrs = mod._extract_variant_addresses(mod.PROFILE_GEN2)
     return mod.verify(profile_addrs, pret_syms)
 
 

@@ -1,18 +1,23 @@
-"""The client's ROM reader and the server's parser must agree, byte for byte.
+"""The client's ROM reader and the server's parser must agree, and the parser must refuse junk.
 
-There are two readers of the same tables: `M.readRomContent` in lua/games/gen1_rby.lua,
-which runs inside BizHawk against the cartridge being played, and
-server/adapters/gen1_rom_scan.py, which reads a ROM file. If they ever disagree the server
-renders something the player is not playing -- which is the exact failure this whole phase
-exists to prevent.
+There are two readers of the same tables: `rom_content()` in lua/gen1/rom.lua, which runs
+inside BizHawk against the cartridge being played, and server/adapters/gen1_rom_scan.py,
+which reads a ROM file. If they ever disagree the server renders something the player is not
+playing -- which is the exact failure this whole phase exists to prevent.
 
-So the Lua is executed here, under lupa, with a fake `memory` domain backed by a REAL ROM,
-and its output is compared against the Python scan of the same bytes. No emulator needed.
+The division of labour is deliberate: Lua follows pointers and ships RAW HEX; it never
+interprets a record. Every layout rule -- ten slots per method, a block present only when its
+rate is non-zero, Yellow's reversed super-rod fields -- lives in Python, so there is one
+parser rather than two that can drift.
 
-The division of labour is deliberate and is what these tests pin: Lua follows pointers and
-ships RAW HEX; it never interprets a record. Every layout rule -- ten slots per method, a
-block present only when its rate is non-zero, Yellow's reversed super-rod fields -- lives in
-Python, so there is one parser rather than two that can drift.
+P8-2b: `_lua_rom_content` was `M.readRomContent` out of lua/games/gen1_rby.lua; it is now
+lua/gen1/rom.lua, which is the reader the shipped client actually uses. The two
+"read the same tables" assertions this file used to make are strictly weaker than
+tests/unit/test_gen1_rom_tables.py::test_lua_raw_tables_match_python_scanner (same
+comparison on all three titles, plus the populated-map count and the content fingerprint),
+so they are retired rather than duplicated. What only this file covers is the payload's size
+budget and the parser's refusals, and those need a REAL payload to mutate -- a hand-written
+dict would not prove that a well-formed one is accepted.
 """
 from __future__ import annotations
 
@@ -30,7 +35,7 @@ from server.adapters.gen1_rom_scan import (
     scan_wild,
 )
 
-lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the Gen 1 game module")
+lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the Gen 1 ROM reader")
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 _ROMS = {
@@ -39,6 +44,9 @@ _ROMS = {
     "yellow": os.path.join(_REPO, "patch", "build", "gen1_yellow.gbc"),
 }
 TITLES = ("red", "blue", "yellow")
+with open(os.path.join(_REPO, "data", "games", "gen1_rby", "profile.json"),
+          encoding="utf-8") as _f:
+    _PROFILE = json.load(_f)["titles"]
 
 
 def _rom(title: str) -> bytes:
@@ -50,10 +58,9 @@ def _rom(title: str) -> bytes:
 
 
 def _lua_rom_content(title: str) -> dict:
-    """Run M.readRomContent(variant) against a real ROM, outside BizHawk."""
+    """Run lua/gen1/rom.lua's rom_content() against a real ROM, outside BizHawk."""
     rom = _rom(title)
     rt = lupa.LuaRuntime(unpack_returned_tuples=True)
-    g = rt.globals()
 
     def read_u8(addr, domain=None):
         # The reader must use the FLAT "ROM" domain. Refusing anything else here is what
@@ -62,53 +69,18 @@ def _lua_rom_content(title: str) -> dict:
         assert domain == "ROM", f"read from domain {domain!r}, expected the flat ROM domain"
         if not 0 <= addr < len(rom):
             raise IndexError(addr)
-        return rom[addr]
+        return rom[int(addr)]
 
-    g.memory = rt.table_from({
-        "getmemorydomainlist": lambda: rt.table_from(["ROM"]),
-        "read_u8": read_u8,
-    })
-    g.console = rt.table_from({"log": lambda *_a: None})
-    g.SLINK_ROOT = _REPO
-
-    with open(os.path.join(_REPO, "lua", "games", "gen1_rby.lua"), encoding="utf-8") as f:
-        module = rt.execute(f.read())
-    out = module.readRomContent(title)
-    assert out is not None, f"readRomContent returned nil for {title}"
-
-    def to_dict(tbl):
-        return {str(k): v for k, v in tbl.items()}
-
-    return {
-        "variant": out["variant"],
-        "wild": to_dict(out["wild"]),
-        "old_rod": out["old_rod"],
-        "good_rod": out["good_rod"],
-        "super_rod": to_dict(out["super_rod"]),
-    }
+    rom_lua = os.path.join(_REPO, "lua", "gen1", "rom.lua").replace("\\", "/")
+    json_lua = os.path.join(_REPO, "lua", "json_codec.lua").replace("\\", "/")
+    module = rt.eval(f'dofile("{rom_lua}")')
+    codec_lua = rt.eval(f'dofile("{json_lua}")')
+    reader = module.new(rt.table_from(_PROFILE[title], recursive=True),
+                        rt.table(read_u8=read_u8))
+    return json.loads(str(codec_lua.encode(reader.rom_content())))
 
 
-# ── the two readers agree ────────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("title", TITLES)
-def test_lua_and_python_read_the_same_wild_tables(title):
-    rom = _rom(title)
-    got = parse_client_content(_lua_rom_content(title))
-    assert got["wild"] == scan_wild(rom), (
-        f"{title}: the client's wild tables differ from the file scan")
-
-
-@pytest.mark.parametrize("title", TITLES)
-def test_lua_and_python_read_the_same_fishing_tables(title):
-    rom = _rom(title)
-    got = parse_client_content(_lua_rom_content(title))["fishing"]
-    want = scan_fishing(rom)
-    assert got["old_rod"] == want["old_rod"]
-    assert got["good_rod"] == want["good_rod"]
-    assert got["super_rod"] == want["super_rod"], (
-        f"{title}: super rod differs — Yellow stores (species, level) and R/B "
-        f"(level, species), so a swapped read stays in range and only a value check finds it")
-
-
+# ── the payload is one wire line ─────────────────────────────────────────────────────────
 @pytest.mark.parametrize("title", TITLES)
 def test_the_payload_is_a_realistic_size_for_one_line(title):
     """It travels as one newline-delimited JSON line, so its size is a design constraint."""

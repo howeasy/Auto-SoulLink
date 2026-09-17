@@ -30,8 +30,33 @@ def _read(fn):
 
 
 def test_there_are_clients_to_check():
-    """Guards against the glob silently matching nothing and the suite passing vacuously."""
-    assert len(CLIENTS) >= 5
+    """Guards against the glob silently matching nothing and the suite passing vacuously.
+
+    P8-2b: four, not five. Gen 1 left lua/clients/ for lua/gen1/, where the client is a module
+    rather than a BizHawk entry script, and its acks are covered below against that path.
+    Written as a lower bound so it holds before and after the old client's deletion.
+    """
+    assert len(CLIENTS) >= 4
+
+
+GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")
+
+
+def test_the_gen1_client_confirms_and_can_refuse_every_deferred_command():
+    """The same invariant for the rewritten client, read off the protocol rather than
+    restated: a command added to tests/unit/protocol_schema.py:ACKS with no reply here
+    fails, which is exactly the omission Gen 2 shipped."""
+    from tests.unit.protocol_schema import ACKS
+
+    with open(GEN1_CLIENT, encoding="utf-8") as f:
+        src = f.read()
+    for cmd, (done, failed) in ACKS.items():
+        for reply in (done, failed):
+            if reply is None:
+                continue
+            assert reply in src, (
+                f"lua/gen1/client.lua handles {cmd!r} but never sends {reply!r}; the server "
+                f"waits on that reply and re-queues the command on every reconnect")
 
 
 @pytest.mark.parametrize("client", CLIENTS)

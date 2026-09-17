@@ -25,6 +25,13 @@ import pytest
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CLIENTS = sorted(glob.glob(os.path.join(REPO, "lua", "clients", "*_client.lua")))
+# P8-2b: lua/gen1/client.lua is deliberately NOT in this glob. Every invariant below is a
+# property of a BizHawk ENTRY script -- it registers the frame callback, it owns the
+# deferred-write queue, it dispatches server commands -- and the rewritten Gen 1 client is a
+# module with none of those: lua/gen1/run.lua registers event.onframeend around it, and
+# lua/gen1/entry.lua wires its parts. The invariants are proved for it by construction and
+# behaviourally in tests/unit/test_gen1_client.py, which drives the real thing frame by
+# frame. The one rule that survives as a source check is the nack contract at the bottom.
 
 
 def _src(path):
@@ -39,8 +46,12 @@ def _strip_comments(src: str) -> str:
 
 
 def test_clients_exist():
-    """Self-check: a bad glob would make every test below pass vacuously."""
-    assert len(CLIENTS) >= 5, f"expected at least 5 clients, found {CLIENTS}"
+    """Self-check: a bad glob would make every test below pass vacuously.
+
+    Four, not five: Gen 1 left lua/clients/ for lua/gen1/ (see the note above). Written as a
+    lower bound so this passes both before and after the old client's deletion.
+    """
+    assert len(CLIENTS) >= 4, f"expected at least 4 clients, found {CLIENTS}"
 
 
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
@@ -183,18 +194,25 @@ def test_command_dispatcher_is_fault_contained(path):
         f"{os.path.basename(path)} dispatches server commands without pcall")
 
 
+GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")
+
+
 def test_gen1_nacks_a_failed_sync_command_before_dropping_it():
     """Silence is worse than failure: a dropped command the server still believes is
-    in flight desyncs the pair permanently. Gen 2 only logs-and-drops here."""
-    src = _strip_comments(_src(
-        [p for p in GB_CLIENTS if "gen1" in os.path.basename(p)][0]))
-    m = re.search(r"if not exec_ok then(.*?)\n        end", src, flags=re.S)
-    assert m, "gen1 client: no failure branch after the executor pcall"
-    body = m.group(1)
-    for evt in ("sync_retrieve_failed", "memorialize_failed"):
-        assert evt in body, (
-            f"the executor's error path does not emit {evt}; the server would keep the "
-            f"command in flight forever")
+    in flight desyncs the pair permanently. Gen 2 only logs-and-drops here.
+
+    P8-2b: repointed to lua/gen1/client.lua, and read off the protocol rather than restated
+    as a list -- a sync command added to protocol_schema.ACKS with no refusal reply fails.
+    """
+    from tests.unit.protocol_schema import ACKS
+
+    src = _strip_comments(_src(GEN1_CLIENT))
+    for cmd, (_done, failed) in ACKS.items():
+        if failed is None:
+            continue
+        assert failed in src, (
+            f"lua/gen1/client.lua never emits {failed!r} for the {cmd!r} command; a refusal "
+            f"the server never hears keeps the command in flight forever")
 
 
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))

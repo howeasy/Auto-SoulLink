@@ -4,16 +4,11 @@ None of these raised. Every one rendered a plausible-looking wrong value, which 
 they survived a green suite: `test_routes_smoke.py` asserts `status < 500`, and all of
 these return 200.
 """
-import os
-import re
-
 import pytest
 
 from server.adapters import gen1_codec as codec, get_adapter
 
 PIKACHU = codec.natdex_to_internal(25)  # the wire carries INTERNAL species indices
-
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture
@@ -86,34 +81,11 @@ def test_status_token_agrees_with_the_shared_icon_renderer(a):
         assert tok and tok in icon, f"0x{value:02X}: token={tok!r} icon={icon!r}"
 
 
-# ── badges + box index (client-side conventions) ─────────────────────────
-
-def _client_src():
-    """Source with Lua comments stripped.
-
-    Required, not tidiness: the fixes below are documented in comments that name
-    the OLD call, so a raw substring search matches the explanation of the bug and
-    reports the bug as still present.
-    """
-    with open(os.path.join(REPO, "lua", "clients", "gen1_rby_client.lua"),
-              encoding="utf-8") as f:
-        src = f.read()
-    src = re.sub(r"--\[\[.*?\]\]", "", src, flags=re.S)
-    return re.sub(r"--[^\n]*", "", src)
-
-
-def test_badges_are_sent_as_a_mask():
-    """A count here lit the wrong badges: 3 badges lit Boulder+Cascade, 8 lit Rainbow."""
-    src = _client_src()
-    assert "readBadgeCount" not in src, "badges must be the raw bitmask, not a popcount"
-    assert src.count("readBadgeMask()") >= 2, "expected hello and tick to send the mask"
-
-
-def test_box_snapshot_reports_the_active_box():
-    """`box = 0` labelled every boxed mon "Box 1", and made Box 12's contents report as
-    box 0 here AND box 11 from the memorial read -- so the server saw dead keys in a
-    regular box and re-queued memorialize every tick."""
-    src = _client_src()
-    assert not re.search(r"box\s*=\s*0\s*,\s*--\s*active box", src), (
-        "the active-box index is still hardcoded to 0")
-    assert "getCurrentBoxNum" in src
+# ── badges + box index ───────────────────────────────────────────────────
+# P8-2b: both were source greps against lua/clients/gen1_rby_client.lua. The rewritten
+# client reads them through lua/gen1/reads.lua, and the values are pinned against the
+# Python codec by tests/unit/test_gen1_reads.py::test_ancillary_reads_and_all_addresses_
+# follow_shifted_profile (read_badges returns the raw wObtainedBadges byte, 0xA5 in the
+# fixture -- a popcount could not produce it) and ::test_all_twelve_sram_boxes
+# (read_current_box_num returns the masked index, so Box 12's contents no longer report as
+# box 0 here and box 11 from the memorial read).
