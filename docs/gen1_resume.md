@@ -159,3 +159,19 @@ soft_reset_new, poison/pc_ops/explode reruns after H-2, rival_swap_new after A13
 Union-alpha reviews accepted so far: PO-2 (cx-38bd0176), HUD placement (cx-27d06ce5 -> HUD-3),
 explode analysis (cx-08436c96; its candidate-2 recommendation rejected on its own catch-rate math),
 P8-1 fact-check (cx-21d6ae90) and review (cx-c4e4f53c).
+
+### Phase R1, later stretch (2026-09-17 ~20:45Z)
+Committed: e19fc68 A13-py rival scenario · 030b545 species receipts (PASS attempt 1, reroll observed; D-4 ✓) ·
+0f49b06 ledger (D-7/S-7 ✓, S-4 ◐, D-4 ✓) · 9b87246 H-2 (dead-zone rows, FAIL summary + exit 1, explode KO
+row + A consequence, pc_ops init=false + codec flag, soft-reset baseline quiescence) · 7d0dc23 A13-r2/r3/r4
+client rebuild (parked early reply, RIVAL_INIT_FRAMES=240 / RIVAL_STAGED_FRAMES=60, at-most-once write,
+RIVAL_WINDOW log; route22 forced replacement on wPlayerMonNumber) · 9aa7989 P8-2a legacy gates/probes retired.
+Lane: soft_reset_new both clients PASS, oracle caught the mon_stats baseline race (H-2 p); explode_new KO
+before Explosion twice -> EX-3 (Opus) tests the in-battle switch-in free-hit hypothesis; LANE-REG1 regression
+sweep of the receipted scenarios running (link_new, deadzone_new done). In flight: OMP H-3 (harness-waits
+audit reconcile, stale receipts, --list, item o rival oracle constants), P8-2b legacy unit-consumer migration
+(Opus), P8-0 correctness review (re-dispatched cx-ce9f92b9 -> new task), EX-3.
+Queue after those: reruns poison/pc_ops/soft_reset at the H-2 harness; explode after EX-3; rival_swap_new after
+H-3(o); P8-2 step 3 (old duo scenarios + wrapper, OMP lease) then step 5 (old client/game deletion) then
+memory_gb trim; HUD pixel proof with ScreenshotCaptureOsd; ledger R-2 control cite (test_gen1_stat_rebuild.lua
+deleted) and the pc_ops/poison/soft_reset cells once receipts commit; driver_dedup.patch; citations.patch.
