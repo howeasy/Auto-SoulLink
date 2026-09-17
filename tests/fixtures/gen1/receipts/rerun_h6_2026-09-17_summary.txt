@@ -1,0 +1,10 @@
+rerun_h6 start 22:44:19 HEAD 2c17161
+soft_reset_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  soft_reset_new: PASS (attempt 1 of 2)
+explode_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  explode_new: PASS (attempt 1 of 4)
+reconnect_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  reconnect_new: PASS (attempt 1 of 2)

@@ -1,0 +1,120 @@
+duo instance b scenario=explode_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:59100 (non-blocking)…
+client built: title=blue player=b rom=9fc416a6 -> 127.0.0.1:59100
+[client] [SLink] TCP connected to 127.0.0.1:59100
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @649
+PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":true,"panel_abi":3,"party":[{"active":false,"blob_hex":"B00013000014142D0A2
+RX resolved_areas
+RX config
+RX link_panel
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @2140 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @2194 (10,34) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @2960 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+[hunt] turn 2 foe hp 8/15 odds 0.63 dmax 9 -> throw
+phase wild-throw @4092 (10,34) battle=1 party=1
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @6093
+PARTY_UNREADABLE @6100 species list and struct disagree (count=2 species=B0 A5 FF 00 00 00 00)
+[client] [SLink-gen1] writes PAUSED: party unreadable
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":8,"in_box":false,"key":"17A9:AFB9:A5","level":3,"maxHP":15,"nickname":"RATTATA","player":"b","seq":178,"species_id":165,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"b","seq":179}
+RX hud_show text=>> Got PIDGEY
+RX play_sound
+RX msgbox text=PIDGEY and RATTATA linked!
+RX party_mon key=17A9:AFB9:A5
+RX link_panel
+PARTY_READABLE @6620  (count=2 species=B0 A5 FF 00 00 00 00)
+[hunt] battle outcome battle_over receipts move1:player_move,throw:timeout
+phase wild-battle_over @6630 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @6631 (10,34) battle=0 party=2
+HUNT caught after 4492 frames, 1 encounter(s)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+MYKEY 1 17A9:AFB9:A5
+PARTY slot=1 key=17A9:AFB9:A5 species=165 level=3 hp=8
+CAUGHT 17A9:AFB9:A5
+[client] [SLink-gen1] writes re-enabled after a live validation
+TX {"event":"sync_retrieve_done","key":"17A9:AFB9:A5","player":"b","seq":182}
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+MYKEY 1 17A9:AFB9:A5
+PARTY slot=1 key=17A9:AFB9:A5 species=165 level=3 hp=8
+SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+SAVE_PHASE link_new save-open-start-menu
+SAVE_PHASE link_new save-close-foreign-menu
+SAVE_PHASE link_new save-select-save
+SAVE_PHASE link_new save-choose-save
+SAVE_PHASE link_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_explode_new_b_1_witness.bin bytes=31592 saves=1 frame=7040
+SAVE_PHASE link_new save-await-close
+heartbeat f=7200 party=2 connected=true
+SAVE_PHASE link_new save-witnessed
+SAVE_WITNESS link_new frames=532
+ROUTE route_one_north -> map 1 at (21,35) frame 8229
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":235}
+ROUTE viridian_center -> map 41 at (23,25) frame 8502
+CENTER_RECEPTIONIST map=41 (11,3)
+HEAL_LEAD key=17A9:AFB9:A5 @9437 hp=15/15 via=nurse
+TX {"area_id":"route_1","event":"area_enter","loc_name":"Route 1","player":"b","seq":318}
+heartbeat f=10800 party=2 connected=true
+BACK_DETOUR side=-1 from (14,12) frame 11196
+INCIDENTAL_BATTLE 1 map=12 (14,12)
+TX {"event":"safe","player":"b","seq":361}
+BACK_AT_ROUTE1 map=12 (10,31)
+REORDER_LEAD 17A9:AFB9:A5 slot=0 from=1 tilemap=   RATTATA   ·3     
+phase pace-grass @12894 (10,31) battle=0 party=2
+[hunt] encounter 1 at (10,35) mode=switch-hold balls=0
+phase wild-intro @13167 (10,35) battle=1 party=2
+[hunt] linked lead active without a switch turn
+[hunt] battle outcome linked-active-menu receipts 
+phase linked-active-menu @13899 (10,35) battle=1 party=2
+HUNT linked-active-menu after 1006 frames, 1 encounter(s)
+READY_ACTIVE linked_slot=0
+PANEL_COUNTER_IN_BATTLE a=13804 b=13805
+heartbeat f=14400 party=2 connected=true
+RX force_explode key=17A9:AFB9:A5
+RX play_sound
+RX memorialize key=17A9:AFB9:A5
+RX game_over
+GAME_OVER RX game_over
+RX link_panel
+EXPLODE_CMDS force_explode=1 force_faint=0
+MOVE_MENU_BEFORE @15048 TACKLE       | TAIL WHIP    | -            | -           
+LOOP_HEAD_EXPLODE moves=99999999 pp=01010101
+MOVE_MENU_AFTER @15079 EXPLOSION    | EXPLOSION    | EXPLOSION    | EXPLOSION   
+MOVE_MENU_EXPLOSION @15079 rows=4 key=17A9:AFB9:A5 moves=99999999 pp=01010101
+B_ACTIVE_COMMIT player_move @15115 selected=99 pp_before=1 enemy_move=10 enemy_select=15110 enemy_exec=nil player_exec=15110 hp=15->15
+BATTLE_FAINT_SITE 17A9:AFB9:A5 @15525 slot=0 battle_hp=0
+TX {"area_id":"route_1","event":"faint","key":"17A9:AFB9:A5","player":"b","seq":481}
+ENGINE_BATTLE_FAINT 17A9:AFB9:A5
+TILEMAP_FAINTED offset=321
+TX {"event":"safe","player":"b","seq":485}
+TX {"box":11,"event":"memorialize_done","key":"17A9:AFB9:A5","player":"b","seq":487}
+PARTY_COUNT 2 -> 1 @15651
+BATTLE_RESULT b 0
+MYKEY 0 4519:AFB9:B0
+POST_LINKED_FAINT slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+SAVE_PHASE explode_new save-open-start-menu
+SAVE_PHASE explode_new save-close-foreign-menu
+SAVE_PHASE explode_new save-select-save
+SAVE_PHASE explode_new save-choose-save
+SAVE_PHASE explode_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_explode_new_b_1_witness.bin bytes=31592 saves=2 frame=15920
+SAVE_PHASE explode_new save-await-close
+SAVE_PHASE explode_new save-witnessed
+SAVE_WITNESS explode_new frames=545
+RESULT: PASS (explode self-KO and memorial saved)

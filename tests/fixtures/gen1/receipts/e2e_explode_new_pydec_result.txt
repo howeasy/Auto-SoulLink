@@ -1,0 +1,16 @@
+attempt 1 of 4
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=8d4faf8e2fe8f99faf0e662baa7af23382ff31eeabe2297edcba43fc4692ba59 file=8d4faf8e2fe8f99faf0e662baa7af23382ff31eeabe2297edcba43fc4692ba59 match=true saves=2
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=807aafaa6e59ef8831d5f272efc61db0a007d441e7db1ecce5033029db8f2caf file=807aafaa6e59ef8831d5f272efc61db0a007d441e7db1ecce5033029db8f2caf match=true saves=2
+server DEAD propagation precedes final MEMORIAL, cause=battle
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved living starter; linked key 9150:4190:24 absent from party/current box
+a Box 12 9150:4190:24 HP0000/status00; initialized checksums/terminators valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved living starter; linked key 17A9:AFB9:A5 absent from party/current box
+b Box 12 17A9:AFB9:A5 HP0000/status00; initialized checksums/terminators valid
+D-6/W-2 server battle cause and ordered engine receipts valid
+W-3/D-11 markers: VBlank counter 13804->13805, force_explode=1 force_faint=0, menu before='TACKLE       | TAIL WHIP    | -            | -', loop head moves=99999999 pp=01010101, rows=4, player_move commit; absent RX force_faint/LOOP_HEAD_WRITE/absent-probe
+events.json force_explode rows: ['⚡ RATTATA exploded!'] (routing only)
+PYDEC: PASS asserted scenario facts
