@@ -15,4 +15,4 @@ SLINK_PLAYER = "a"            -- "a" or "b"
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local _dir = debug.getinfo(1, "S").source:match("@(.+[/\\])") or ""
-dofile(_dir .. "clients/gen1_rby_client.lua")
+dofile(_dir .. "gen1/run.lua")

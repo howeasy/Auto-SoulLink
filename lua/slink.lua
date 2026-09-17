@@ -55,14 +55,33 @@ do
     end
 end
 
+-- ── Gen 1 route ──────────────────────────────────────────────────────────────
+-- Red/Blue/Yellow run the rewritten client under lua/gen1/, which owns its own
+-- cartridge detection (entry.lua Entry.detect_title). It is checked before the
+-- game_detect registry so the Gen 1 entry is never decided in two places; Gen 2-5
+-- fall through unchanged. emu is indexed inside the pcall because a broken/absent
+-- core would otherwise error before the guard could refuse.
+do
+    local sys_ok, sys = pcall(function() return emu.getsystemid() end)
+    if sys_ok and (sys == "GB" or sys == "GBC") then
+        local Entry = dofile(_dir .. "gen1/entry.lua")
+        if Entry.detect_title(function(addr) return memory.read_u8(addr, "ROM") end) then
+            dofile(_dir .. "gen1/run.lua")
+            return
+        end
+    end
+end
+
 -- Detect which game is loaded
 package.loaded["game_detect"]       = nil
 local game_detect = require("game_detect")
 local detected    = game_detect.detect()
 
 -- Map game_id to client script path
+-- No gen1_rby row: the Gen 1 route above returns before this table is reached, so a
+-- row here could only ever mis-fire (game_detect's Gen 1 detector is strictly narrower
+-- than Entry.detect_title and runs behind the same GB/GBC guard).
 local _CLIENT_MAP = {
-    gen1_rby      = "clients/gen1_rby_client.lua",
     gen2_crystal  = "clients/gen2_crystal_client.lua",
     gen3_frlge    = "clients/gen3_frlge_client.lua",
     gen4_hgsspt   = "clients/gen4_hgsspt_client.lua",

@@ -5,7 +5,8 @@ tools/make_release.py — Build a player-facing SLink release package.
 Creates dist/SLink-player-<version>.zip containing only the files a
 non-hosting player needs to run SLink in BizHawk:
   - lua/   (clients, shared modules, area tables — no tests)
-  - data/games/<gen>/*.lua  (area/location tables loaded via _proj_root path)
+  - data/games/<gen>/  (area/location tables and the Gen 1 client's JSON data,
+    loaded via _proj_root path)
   - PLAYER_SETUP.md
 
 The server (Python), test suite, code-generation tools, and server-only
@@ -69,6 +70,9 @@ _LUA_ROOT = [
     "memory_gba.lua",
     "memory_nds.lua",
     "socket.lua",
+    "json_codec.lua",
+    # The Gen 1 client's closure: entry.lua dofiles both of these off the repo root.
+    "gen1_write_safety.lua",
     # Companion-patch modules (RR native features) — pcall-required by the Gen 3 client.
     # Required for the companion patch to work; harmless when the ROM is unpatched
     # (patch_present() stays false, so the client falls back to RAM-poke).
@@ -78,6 +82,21 @@ _LUA_ROOT = [
     "gen2_crystal_areas.lua",
     "gen2_crystal_locations.lua",
     # Gen 3/4/5 area tables live in data/games/<gen>/ (loaded via _proj_root)
+]
+
+# lua/gen1/ — the Gen 1 client. run.lua is what the launchers load; everything else is
+# pulled in by entry.lua's composition root, so the whole directory ships or none of it does.
+_LUA_GEN1 = [
+    "run.lua",
+    "entry.lua",
+    "client.lua",
+    "reads.lua",
+    "signals.lua",
+    "writes.lua",
+    "boxes.lua",
+    "rom.lua",
+    "trade_overlay.lua",
+    "panel.lua",
 ]
 
 # lua/clients/
@@ -98,12 +117,20 @@ _LUA_GAMES = [
     "gen5_bw.lua",
 ]
 
-# data/games/<gen>/ — Lua tables loaded at runtime via _proj_root path.
-# Only .lua files; JSON data is server-only and never loaded by clients.
+# data/games/<gen>/ — data files loaded at runtime via _proj_root path.
+# Mostly area/location .lua tables, but the Gen 1 client reads five JSONs directly
+# (lua/gen1/entry.lua Entry.build); the rest of data/ stays server-only.
 _DATA_GAME_LUA: dict[str, list[str]] = {
     "gen1_rby": [
         "gen1_rby_areas.lua",
         "gen1_rby_locations.lua",
+        # Read by lua/gen1/entry.lua: memory profile, engine signal sites, the write
+        # checkpoint, area names and the scripted-encounter table.
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
     ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
@@ -301,6 +328,7 @@ def build_release(
     # ── Pre-flight: verify all required files exist ───────────────────────────
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
+        + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
         + [REPO_ROOT / "lua" / "clients" / f for f in _LUA_CLIENTS]
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
         + [
@@ -357,6 +385,10 @@ def build_release(
             else:
                 zf.write(src, arc)
                 print(f"  [added]   {arc}")
+
+        for fname in _LUA_GEN1:
+            zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
+            print(f"  [added]   {prefix}lua/gen1/{fname}")
 
         for fname in _LUA_CLIENTS:
             zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")
