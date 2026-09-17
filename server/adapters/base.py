@@ -278,6 +278,22 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def native_trade_ui(self) -> bool:
+        """Whether the cartridge itself drives the trade menus.
+
+        The Gen 1 companion patch puts a receptionist in the ROM: it shows the
+        action menu and the party picker on the console, sends the server a
+        physical slot, and runs the cartridge's own trade scene.  The shared
+        trade FSM therefore skips its own `show_choices`/`choose_mon` step, hands
+        out an eligible-slot mask, and puts the slot/blob/partner name the ROM
+        needs on the confirm prompt and the apply commands.
+
+        Default False so a game without that ROM support keeps the ordinary
+        server-driven menu flow, like `supports_explode_mode`: the game-specific
+        adapter opts in and no `game_id` branch appears in shared code.
+        """
+        return False
+
 
 class GamePresentationAdapter(ABC):
     """Interface for game-specific display/UI logic.

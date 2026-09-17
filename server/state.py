@@ -551,7 +551,7 @@ class SoulLinkState:
             return                                # a trade is already in flight — ignore silently (no spam)
         self._trade_token += 1
         token = f"t{self._trade_token}"
-        native_offer = msg.get("native_offer") is True and self.adapter.game_id == "gen1_rby"
+        native_offer = msg.get("native_offer") is True and self.adapter.native_trade_ui()
         self.pending_trade = {"phase": "choosing" if native_offer else "menu",
                               "initiator": player_id, "token": token, "reprompts": 0, "age": 0}
         if native_offer:
@@ -572,7 +572,7 @@ class SoulLinkState:
     def _handle_trade_query(self, player_id: str):
         """The native receptionist needs a six-bit eligible-party mask."""
         mask = 0
-        if self.adapter.game_id == "gen1_rby" and self.pending_trade is None:
+        if self.adapter.native_trade_ui() and self.pending_trade is None:
             for slot, _key, _entry, _blob in self._eligible_trade_pairs(player_id):
                 if 0 <= slot < 6:
                     mask |= 1 << slot
@@ -581,7 +581,7 @@ class SoulLinkState:
     def _handle_trade_offer(self, player_id: str, msg: dict):
         """Reuse the linked-pair picker after the ROM has chosen a physical slot."""
         accepted = False
-        if self.adapter.game_id == "gen1_rby" and self.pending_trade is None:
+        if self.adapter.native_trade_ui() and self.pending_trade is None:
             try:
                 slot = int(msg.get("slot"))
             except (TypeError, ValueError):
@@ -661,7 +661,7 @@ class SoulLinkState:
             "r": 255, "g": 220, "b": 60, "frames": 600})
         prompt = {"cmd": "show_menu", "token": pt["token"],
                   "text": f"Trade your {p_gives} for {p_gets}?"}
-        if self.adapter.game_id == "gen1_rby":
+        if self.adapter.native_trade_ui():
             prompt.update({"slot": pt[f"{partner}_slot"],
                            "blob_hex": pt[f"{player_id}_blob_hex"]})
         self.queued_commands[partner].append(prompt)
@@ -723,7 +723,7 @@ class SoulLinkState:
         if (entry.status != LinkStatus.ALIVE
                 or pt["a_key"] not in self.party_keys["a"]
                 or pt["b_key"] not in self.party_keys["b"]
-                or (self.adapter.game_id == "gen1_rby"
+                or (self.adapter.native_trade_ui()
                     and (pt["a_key"] in self.party_keys["b"]
                          or pt["b_key"] in self.party_keys["a"]))):
             self.pending_trade = None
@@ -741,7 +741,7 @@ class SoulLinkState:
         b_command = {
             "cmd": "apply_trade", "slot": pt["b_slot"], "blob_hex": pt["a_blob_hex"],
             "old_key": pt["b_key"], "token": pt["token"]}
-        if self.adapter.game_id == "gen1_rby":
+        if self.adapter.native_trade_ui():
             a_command["partner_name"] = (self.player_identity.get("b") or {}).get("trainer_name", "")
             b_command["partner_name"] = (self.player_identity.get("a") or {}).get("trainer_name", "")
         self.queued_commands["a"].append(a_command)

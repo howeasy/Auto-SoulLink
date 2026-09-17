@@ -348,6 +348,10 @@ class Gen1Adapter(GameAdapter):
         # The companion patch's native panel exists for Red/Blue, not Yellow.
         return self._variant != "yellow"
 
+    def native_trade_ui(self) -> bool:
+        # The receptionist/trade-scene hooks ship in the Red/Blue companion patch only.
+        return self._variant in ("red", "blue")
+
     def info_panel_width(self) -> int:
         # Game Boy tilemap width; constants/map_constants.asm map geometry uses 20.
         return 20 if self.supports_info_panel() else 0

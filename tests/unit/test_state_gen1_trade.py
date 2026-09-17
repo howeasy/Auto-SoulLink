@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from server.adapters.base import GameRulesAdapter
 from server.adapters.gen1_rby import Gen1Adapter
 from server.adapters.gen3_frlge import Gen3Adapter
 from server.state import LinkEntry, LinkStatus, MonInfo, SoulLinkState
 
 
-def _linked(tmp_path, *, gen1=True):
-    adapter = Gen1Adapter() if gen1 else Gen3Adapter()
+def _linked(tmp_path, *, gen1=True, adapter=None):
+    adapter = adapter or (Gen1Adapter() if gen1 else Gen3Adapter())
     state = SoulLinkState(data_dir=str(tmp_path), adapter=adapter)
     a_key, b_key = (("ABCD:1234:99", "1234:5678:15") if gen1 else ("A:1", "B:2"))
     a_blob, b_blob = (bytes([0x99]) * 66, bytes([0x15]) * 66) if gen1 else (
@@ -138,3 +139,44 @@ def test_gen3_trade_request_menu_pick_confirm_apply_shape_is_unchanged(tmp_path)
                      "old_key": "B:2", "token": token}
     assert a_cmd == {"cmd": "apply_trade", "slot": 2, "blob_hex": b_blob.hex(),
                      "old_key": "A:1", "token": token}
+
+
+def test_native_trade_ui_is_off_by_default_and_on_for_red_blue_only():
+    assert GameRulesAdapter.native_trade_ui(None) is False   # the shared default
+    assert Gen3Adapter().native_trade_ui() is False
+    assert Gen1Adapter(rom_type="yellow").native_trade_ui() is False
+    for rom_type in ("red", "blue", "red_ap", "blue_ap"):
+        assert Gen1Adapter(rom_type=rom_type).native_trade_ui() is True
+
+
+@pytest.mark.parametrize("gen1,adapter", [
+    (False, Gen3Adapter()),                     # Gen 3: the capability default
+    (True, Gen1Adapter(rom_type="yellow")),     # Gen 1 family, no companion patch
+])
+def test_default_capability_takes_none_of_the_six_native_trade_branches(tmp_path, gen1, adapter):
+    state, entry, _a, _b = _linked(tmp_path, gen1=gen1, adapter=adapter)
+    assert adapter.native_trade_ui() is False
+    # 1. trade_request ignores native_offer and runs the server-driven action menu
+    reply = state.handle_event("a", {"event": "trade_request", "native_offer": True})
+    assert _cmd(reply, "show_choices")["options"] == ["Trade", "Say hey"]
+    assert state.pending_trade["phase"] == "menu"
+    # 2. trade_query answers an empty mask although slot 2 is an eligible linked half
+    state.pending_trade = None
+    assert _cmd(state.handle_event("a", {"event": "trade_query"}), "trade_mask")["mask"] == 0
+    # 3. a native slot offer is refused outright
+    assert _cmd(state.handle_event("a", {"event": "trade_offer", "slot": 2}),
+                "trade_offer_ack")["ok"] is False
+    assert state.pending_trade is None
+    token = _cmd(state.handle_event("a", {"event": "trade_request"}), "show_choices")["token"]
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0})
+    state.handle_event("a", {"event": "mon_chosen", "token": token, "slot": 2})
+    # 4. the confirm prompt carries no slot/blob for the ROM
+    assert set(_cmd(state.handle_event("b", {"event": "tick"}), "show_menu")) == (
+        {"cmd", "token", "text"})
+    # 5. no late cross-party collision guard: a duplicate key does not abort the apply
+    state.party_keys["a"].add(entry.b.key)
+    b_cmd = _cmd(state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1}),
+                 "apply_trade")
+    # 6. no partner_name on the apply commands
+    assert set(b_cmd) == {"cmd", "slot", "blob_hex", "old_key", "token"}
+    assert set(_cmd(state.handle_event("a", {"event": "tick"}), "apply_trade")) == set(b_cmd)
