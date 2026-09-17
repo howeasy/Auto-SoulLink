@@ -100,38 +100,37 @@ python tools/gen1_fixtures.py --qualify                     # all seven fixtures
 node "E:/Howard/ClaudEx/bin/magi.mjs" exchange <task_id>    # read a peer reply from the mailbox
 ```
 
-## Prep fan-out (owner: "no cuts; use Union Alpha agents for research and prep")
+## State at compaction (2026-09-17 ~23:55Z) — reconcile-only mode, no new dispatch
 
-Nineteen headless union-alpha tasks were dispatched at ~22:50Z against the read-only snapshot
-`scratchpad/wt-prep/` (c2605ae); each writes its deliverable under `scratchpad/prep/` (the plan copy
-is `prep/PLAN_v3.9.md`). Replies arrive as cross-session messages or in the bridge mailbox
-(`node "E:/Howard/ClaudEx/bin/magi.mjs" exchange <task_id>`); each needs an `outcome` recorded.
-Headless sessions have no shell: every patch they draft must be red/green-verified by a Claude
-subagent before it is applied.
+HEAD b94e2ad. Committed after the break note: d9225a1 server in-flight sync window · 1c3a324 client
+storage classification (no echo mark) · 580b3f8 trade-watchdog notice · a7c0a00 ledger corrections ·
+9176698 pc_drive `[%a_]+` op parser · 6c9f72c HUD drops cleartext + stronger test · e6aa7a4 explode
+B-taps + fail-fast, species cap 8 + RNG phrase · b94e2ad D.run counter mandatory + recheck.
 
-| Task | Deliverable | Purpose |
-|---|---|---|
-| cx-3d36e2d8 | `prep/WO-2_walk_back.md`, `prep/wo2.patch` | whiteout walk-back grass handling |
-| cx-0cf4747e | `prep/SV-2_trade_watchdog.md`, `prep/sv2.patch` (verification running: Sonnet) | silent trade watchdog msgbox |
-| cx-bb335811 | `prep/A12_lane_pass.md` | full lane pass checklist |
-| cx-ee671d4c | `prep/P8-0_P8-1_isolation_launcher.md`, `prep/p8-1.patch` | Track B isolation + launcher |
-| cx-74f72d15 | `prep/P8-2_P8-3_deletions_memory_gb.md`, `prep/p8-3.patch` | deletions + memory_gb trim |
-| cx-669b378a | `prep/shared_runtime.md`, `prep/protocol_md.patch` | docs regeneration |
-| cx-e1570f99 | `prep/RELEASE_NOTE_v0.3.0.md`, `prep/REBASE_PLAN.md` | release note + rebase |
-| cx-445d9e66 | `prep/P8-6_P8-7_gen3_package.md` | Gen 3 check, full runner, package boot, FF, tag |
-| cx-f8b8d68f | `prep/LEDGER_drafts.md` | remaining ledger cells + limits entries |
-| cx-7b4b1be4 | `prep/A9_dashboard.md`, `prep/gen1_board_snapshot.py` | C-3 dashboard snapshots |
-| cx-35a6daa8 | reply | adversarial review of 471529b (driver RUN) |
-| cx-f74a2ec9 | reply | adversarial review of 052cf62 (rival body + Route 22 driver) |
-| cx-a2c12d1b | `prep/UNVERIFIED_audit.md`, `prep/citations.patch` | †UNVERIFIED + stale pret citations |
-| cx-d21ffcef | reply | fact-check of today's changebox/trade_decline/species/Yellow receipts vs ledger |
-| cx-5cce3c14 | `prep/RERUN_RISK.md` | predicted next failure per pending rerun |
-| cx-9a202d53 | `prep/DRIVER_DEDUP.md`, `prep/driver_dedup.patch` | one shared tapping wait in the battle driver |
-| cx-dfc88b4f | `prep/D-4_completion.md` | link-after-reroll odds + body change |
-| cx-a7796b93 | `prep/PC_OPS_release.md` | RELEASE/second-deposit legs after the client rework |
-| cx-0bb1ef9e | `prep/HARNESS_waits_audit.md`, `prep/harness_waits.patch` | every Lua wait that can hang |
+Still running (integrate on report, then stop): Opus DUO-1 (walk-back grass delegation, receptionist
+mark after overworld_ok, drain the 40th Growl) → `duo1.patch`; Opus A13-r2 (client swap window: park
+early reply, init timeout ≥ transition + $FF closing edge; Route 22 driver cursor/switch/KO) →
+`a13r2.patch` (client change: needs a headless review before commit); Sonnet UI-1 (board stat labels
+from capabilities) → `ui1.patch`; Sonnet PO-2 (forest PSN masking) → `po2.patch`; OMP H-1 (+ addenda
+e–j) then A13-py — replies in the mailbox; headless P8-2/P8-3 deletions (cx-74f72d15).
+Apply hints: patches carry three prefix styles — `git apply -p0` (repo-relative), `-p1`
+(`wt-*-base/` prefix), `-p11` (absolute scratch paths); check with `--check` first.
 
-Also running: Opus EX-1 (explode post-faint stall) → `scratchpad/ex1.patch`; Sonnet full-suite +
-Gen 3 subset at HEAD 1c3a324; OMP H-1 then A13-py (`tools/e2e_duo.py` leased).
-Committed since the break note: d9225a1 (server in-flight sync window), 1c3a324 (client storage
-classification, no per-key echo mark).
+Queue for the next session (from the reconciled reviews; all under `scratchpad/prep/`):
+1. Land the in-flight patches above; commit H-1/A13-py from the tree once OMP reports.
+2. Reruns in order: poison_new, species_clause_new (8 attempts), pc_ops_new, whiteout_new,
+   explode_new, soft_reset_new, then rival_swap_new (after A13-r2 + A13-py). Retain the Yellow lab
+   gate's own SIGNALS/PARTY_RAW output as the S-1 receipt (`-s` or the gate log).
+3. explode_new is a coin flip while the hunt weakens catches to 1/3 HP: give it the RNG-retry
+   classification (`EXPLOSION never executed`) or stop weakening below one Route 1 hit.
+4. Docs patches to apply after `--check`: `protocol_md.patch`, `engine_sites.patch`,
+   `citations.patch` (after A13-r2), `shared_runtime.md` draft, `RELEASE_NOTE_v0.3.0.md`,
+   `REBASE_PLAN.md` (fill the git inventory: 3 master commits since d2c30fb).
+5. Track B drafts: `P8-0_P8-1_isolation_launcher.md` (six Gen 1 identity branches in state.py;
+   production launchers `lua/slink.lua:65`, `lua/slink_gen1.lua:18` still load the OLD client;
+   `tools/make_release.py` manifests), `P8-2_P8-3_deletions_memory_gb.md` (pending),
+   `P8-6_P8-7_gen3_package.md` (FF = fast-forward master; extracted-ZIP boot).
+6. Smaller queued fixes: Yellow driver comments (script 9 = five texts, 11 = two before
+   AddPartyMon); legacy clients render the HUD inside the protected handler (move after pcall);
+   `harness_waits.patch` after H-1; `driver_dedup.patch` after the reruns pass; `A9_dashboard.md`
+   + `gen1_board_snapshot.py` selftest before use; `LEDGER_drafts.md` cells as receipts land.
