@@ -44,6 +44,21 @@ from gen1_playthrough import (  # noqa: E402
     write_run_config,
 )
 
+# The fixture builders, per generation. Gen 1's is tools/gen1_fixtures.py (the new client's
+# scripted pipeline); the old gen1_playthrough driver this message used to name is gone, and
+# naming a deleted command in a recovery message is worse than naming none.
+_FIXTURE_BUILDERS = {
+    "gen1_playthrough": "python tools/gen1_fixtures.py {rom} {target}",
+    "gen2_playthrough": "python tools/gen2_playthrough.py --rom {rom} --target {target}",
+}
+
+
+def _rebuild_command(play_name: str, rom_key: str, target: str) -> str:
+    template = _FIXTURE_BUILDERS.get(
+        play_name, "python tools/" + play_name + ".py --rom {rom} --target {target}")
+    return template.format(rom=rom_key, target=target)
+
+
 # BizHawk names SaveRAM from its OWN gamedb entry, not the ROM filename — a ROM staged as
 # gen1_red.gb still reads and writes "Pokemon - Red Version (USA, Europe).SaveRAM", and our
 # Crystal dump is "(USA)" while its gamedb entry is "(USA, Europe)". To make a fixture visible
@@ -152,7 +167,7 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     if not os.path.exists(fixture):
         raise FileNotFoundError(
             f"missing fixture {os.path.relpath(fixture, REPO)} — build it with "
-            f"`python tools/{play.__name__}.py --rom {rom_key} --target {target}`")
+            f"`{_rebuild_command(play.__name__, rom_key, target)}`")
     target_dir = dest_dir or SAVERAM_DIR
     os.makedirs(target_dir, exist_ok=True)
     dst = os.path.join(target_dir, spec["saveram_names"][rom_key])

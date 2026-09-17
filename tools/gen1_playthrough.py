@@ -1,38 +1,28 @@
 #!/usr/bin/env python3
-"""gen1_playthrough.py — bootstrap the Gen 1 battery saves the live tests run from.
+"""gen1_playthrough.py — the shared launch machinery for the Gen 1 battery saves.
 
-    python tools/gen1_playthrough.py                     # all 3 ROMs x both targets
-    python tools/gen1_playthrough.py --rom red           # one ROM, both targets
-    python tools/gen1_playthrough.py --rom red --target town
-    python tools/gen1_playthrough.py --status            # report what exists, build nothing
+WHAT IS HERE: the paths and rules every Gen 1 harness shares — where the ROM dumps and the
+fixtures live, how a ROM is staged to a space-free name, how BizHawk's config is copied with
+the window/sound/RTC pins and a per-instance SaveRAM directory, and the shared constants
+(run_gb_gate.py:37-44, gen2_playthrough.py:44-50 and the e2e/live wrappers import these).
 
-Drives lua/tests/gen1_playthrough.lua from a cold boot to a save containing a party, Poke
-Balls, and a position — then promotes the resulting SaveRAM to:
+WHAT IS NOT HERE: the fixture BUILDER. The old single-instance driver
+(lua/tests/gen1_playthrough.lua) and its CLI went with the old client (deletion step 3); the
+Gen 1 fixtures are built by tools/gen1_fixtures.py from the new client's scripted pipeline:
 
-    tests/fixtures/gen1/{red,blue,yellow}_{town,battle}.SaveRAM
+    python tools/gen1_fixtures.py red town
+    python tools/gen1_fixtures.py red battle
 
-WHY THESE ARE COMMITTED: a .SaveRAM is plain SRAM content, NOT version-locked the way a
-BizHawk savestate is. mkstates.py rebuilds savestates from them after any emulator upgrade,
-so this script runs six times ever rather than on every CI run. Its flakiness therefore
-costs minutes once instead of breaking builds.
-
-TWO TARGETS PER ROM, because mkstates.py's hard-won rule applies here too:
-    town    encounter-free ground — overworld, box and memorialize scenarios. A state
-            captured in grass makes every walking scenario randomly flaky.
-    battle  tall grass — anything that needs a wild encounter.
-BizHawk only flushes SaveRAM when the ROM closes, so each target is its own run.
+WHY THOSE FIXTURES ARE COMMITTED: a .SaveRAM is plain SRAM content, NOT version-locked the
+way a BizHawk savestate is, so the builder runs rarely rather than on every CI run.
 
 Launch rules match run_gate.py / e2e_duo.py: cwd = repo root with RELATIVE EmuHawk arg
 paths, because absolute paths containing the "Google Drive" space break BizHawk's CLI
 parser. Absolute paths are fine inside Lua.
 """
-import argparse
 import json
 import os
 import shutil
-import subprocess
-import sys
-import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIZHAWK = os.environ.get("SLINK_BIZHAWK_HOME", "E:/Howard/Bizhawk")
@@ -45,7 +35,6 @@ SAVERAM_DIR = os.path.join(BIZHAWK, "Gameboy", "SaveRAM")
 _GB_PATH_SYSTEMS = {"GB_GBC_SGB", "GBL"}
 BUILD = os.path.join(REPO, "patch", "build")
 FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen1")
-RESULT = os.path.join(BUILD, "gen1_playthrough_result.txt")
 
 # rom key -> the cartridge dump at the repo root. Staged to a space-free name under
 # patch/build/ before launch (see the module docstring).
@@ -153,167 +142,3 @@ def write_run_config(src: str, dst: str, saveram_dir: str | None = None) -> None
 
     with open(dst, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
-
-
-# SRAM bank 1 holds the main save block; sPartyData is System-Bus 0xAF2C there, and its
-# first byte is the party count. Flat CartRAM offset = bank*0x2000 + (addr - 0xA000).
-_SPARTY_COUNT = 0x2000 + (0xAF2C - 0xA000)
-
-
-def _is_blank(path: str) -> bool:
-    """True unless this SaveRAM actually contains a saved game.
-
-    "Not all 0x00/0xFF" is too weak: a run whose menu drive silently failed still produced
-    a 32KB file with 138 nonzero bytes and sPartyCount = 0xFF. Check the party count the
-    game itself writes, which is the thing every downstream test depends on.
-    """
-    if not os.path.exists(path) or os.path.getsize(path) <= _SPARTY_COUNT:
-        return True
-    with open(path, "rb") as f:
-        data = f.read()
-    if all(b == 0 for b in data) or all(b == 0xFF for b in data):
-        return True
-    return not 1 <= data[_SPARTY_COUNT] <= 6
-
-
-def run_one(rom_key: str, target: str, timeout: int = 600) -> tuple[bool, str]:
-    """One cold-boot run. Returns (ok, message)."""
-    if not os.path.exists(EMUHAWK):
-        return False, f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)"
-    rom_rel = staged_rom(rom_key)
-    os.makedirs(BUILD, exist_ok=True)
-    os.makedirs(FIXTURES, exist_ok=True)
-
-    # BizHawk names SaveRAM after the game's entry in its OWN gamedb, not after the ROM
-    # file — a ROM staged as gen1_red.gb still writes
-    # "Pokemon - Red Version (USA, Europe).SaveRAM". So snapshot the directory and find
-    # whatever appears or changes during the run instead of predicting the name.
-    before = {}
-    if os.path.exists(RESULT):
-        os.remove(RESULT)
-
-    # BUILD INTO AN EMPTY SAVERAM DIRECTORY, NOT BIZHAWK'S.
-    #
-    # The build used to run against BizHawk's shared SaveRAM folder, which means it started
-    # from whatever the last thing to touch that cartridge left behind -- and the live gates
-    # bury mons in Box 12. A rebuilt fixture then shipped with a memorial box that already
-    # had a resident, and `test_gen1_writes_gate` failed on Yellow with "memorial box gained
-    # a mon — 1 -> 1": the deposit worked, the count did not change, because the box was
-    # already populated before the gate started.
-    #
-    # A per-build directory makes that impossible rather than unlikely: SRAM starts empty,
-    # so everything in the finished fixture was put there by this run. It also stops the
-    # builder writing into the user's own save folder.
-    run_saveram = os.path.join(REPO, "patch", "build", f"saveram_play_{rom_key}_{target}")
-    if os.path.isdir(run_saveram):
-        shutil.rmtree(run_saveram, ignore_errors=True)
-    os.makedirs(run_saveram, exist_ok=True)
-
-    cfg_rel = f"patch/build/play_cfg_{rom_key}_{target}.ini"
-    if os.path.exists(BIZHAWK_CONFIG):
-        write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), run_saveram)
-
-    env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"), SLINK_PLAY_TARGET=target)
-    cmd = [EMUHAWK, "--lua=lua/tests/gen1_playthrough.lua"]
-    if os.path.exists(os.path.join(REPO, cfg_rel)):
-        cmd.append(f"--config={cfg_rel}")
-    cmd.append(rom_rel)
-
-    print(f"[play] {rom_key}/{target}: launching …", file=sys.stderr)
-    proc = subprocess.Popen(cmd, cwd=REPO, env=env)
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if proc.poll() is not None:
-            break
-        time.sleep(2)
-    else:
-        proc.kill()
-        # N8: a killed EmuHawk may leave a torn SaveRAM, so never promote after a timeout.
-        return False, f"timed out after {timeout}s (SaveRAM not promoted)"
-
-    verdict = ""
-    if os.path.exists(RESULT):
-        with open(RESULT, encoding="utf-8", errors="replace") as f:
-            text = f.read()
-        # LAST verdict wins: an aborted run can emit more than one line.
-        verdict = next((ln for ln in reversed(text.splitlines())
-                        if ln.startswith("RESULT:")), "")
-    if not verdict.startswith("RESULT: PASS"):
-        return False, verdict or "script wrote no RESULT line"
-
-    # Everything in the per-build directory was written by THIS run, so any .SaveRAM in it
-    # is the artifact -- no mtime comparison needed.
-    touched = []
-    if os.path.isdir(run_saveram):
-        for name in os.listdir(run_saveram):
-            path = os.path.join(run_saveram, name)
-            if not name.endswith(".SaveRAM") or ".AutoSaveRAM" in name:
-                continue
-            if path not in before or os.path.getmtime(path) > before[path]:
-                touched.append(path)
-    if not touched:
-        return False, f"no SaveRAM written in {run_saveram}"
-    saveram = max(touched, key=os.path.getmtime)
-    if _is_blank(saveram):
-        return False, "SaveRAM is blank — the in-game SAVE did not commit"
-
-    dst = fixture_path(rom_key, target)
-    shutil.copyfile(saveram, dst)
-    return True, f"{verdict}  →  {os.path.relpath(dst, REPO)}"
-
-
-def status() -> int:
-    print(f"{'fixture':34s} {'size':>8s}  state")
-    missing = 0
-    for rom_key in ROMS:
-        for target in TARGETS:
-            p = fixture_path(rom_key, target)
-            name = os.path.relpath(p, REPO)
-            if not os.path.exists(p):
-                print(f"{name:34s} {'-':>8s}  MISSING")
-                missing += 1
-            elif _is_blank(p):
-                print(f"{name:34s} {os.path.getsize(p):8d}  BLANK (rebuild)")
-                missing += 1
-            else:
-                print(f"{name:34s} {os.path.getsize(p):8d}  ok")
-    return 1 if missing else 0
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--rom", choices=sorted(ROMS), help="only this ROM (default: all three)")
-    ap.add_argument("--target", choices=TARGETS, help="only this target (default: both)")
-    ap.add_argument("--timeout", type=int, default=600, help="per-run seconds (default 600)")
-    ap.add_argument("--status", action="store_true", help="report fixtures, build nothing")
-    ap.add_argument("--force", action="store_true", help="rebuild fixtures that already exist")
-    args = ap.parse_args()
-
-    if args.status:
-        return status()
-
-    roms = [args.rom] if args.rom else list(ROMS)
-    targets = [args.target] if args.target else list(TARGETS)
-    failures = []
-    for rom_key in roms:
-        for target in targets:
-            dst = fixture_path(rom_key, target)
-            if os.path.exists(dst) and not _is_blank(dst) and not args.force:
-                print(f"[play] {rom_key}/{target}: already present (use --force)", file=sys.stderr)
-                continue
-            ok, msg = run_one(rom_key, target, timeout=args.timeout)
-            print(f"[play] {rom_key}/{target}: {'OK ' if ok else 'FAIL'} {msg}", file=sys.stderr)
-            if not ok:
-                failures.append(f"{rom_key}/{target}: {msg}")
-
-    if failures:
-        print("\nFAILED:", file=sys.stderr)
-        for f in failures:
-            print(f"  {f}", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

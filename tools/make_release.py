@@ -42,10 +42,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ── Generators to run before packaging ────────────────────────────────────────
-# These produce the area/location .lua files that live in lua/ and data/games/
-# and are not committed to the repo.
+# These produce the area/location .lua files under lua/ and data/games/. Those files ARE
+# git-tracked (an earlier version of this comment claimed otherwise), so running the
+# generators before a release is a check that the committed tables match their sources, not
+# the step that creates them.
 GENERATORS: list[tuple[str, str]] = [
-    ("tools/gen_gen1_area_map.py", "Gen 1 RBY area tables"),
     ("tools/gen_gen2_area_map.py", "Gen 2 Crystal area tables"),
     ("tools/gen_area_map.py",      "Gen 3 FRLGE area tables"),
     ("tools/gen_gen4_area_map.py", "Gen 4 HGSS/Platinum area tables"),
@@ -101,7 +102,6 @@ _LUA_GEN1 = [
 
 # lua/clients/
 _LUA_CLIENTS = [
-    "gen1_rby_client.lua",
     "gen2_crystal_client.lua",
     "gen3_frlge_client.lua",
     "gen4_hgsspt_client.lua",
@@ -110,7 +110,6 @@ _LUA_CLIENTS = [
 
 # lua/games/
 _LUA_GAMES = [
-    "gen1_rby.lua",
     "gen2_crystal.lua",
     "gen3_frlge.lua",
     "gen4_hgsspt.lua",
@@ -118,12 +117,11 @@ _LUA_GAMES = [
 ]
 
 # data/games/<gen>/ — data files loaded at runtime via _proj_root path.
-# Mostly area/location .lua tables, but the Gen 1 client reads five JSONs directly
-# (lua/gen1/entry.lua Entry.build); the rest of data/ stays server-only.
+# Mostly area/location .lua tables; the Gen 1 NEW client reads five JSONs directly
+# (lua/gen1/entry.lua Entry.build) and nothing else here, and the rest of data/ stays
+# server-only. The old gen1_rby_{areas,locations}.lua rows went with the old client.
 _DATA_GAME_LUA: dict[str, list[str]] = {
     "gen1_rby": [
-        "gen1_rby_areas.lua",
-        "gen1_rby_locations.lua",
         # Read by lua/gen1/entry.lua: memory profile, engine signal sites, the write
         # checkpoint, area names and the scripted-encounter table.
         "profile.json",

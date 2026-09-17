@@ -96,6 +96,8 @@ def test_every_manifest_entry_names_a_file_that_exists():
     assert not missing, f"manifest names files that do not exist: {missing}"
 
 
-def test_the_old_gen1_client_is_still_shipped_until_its_references_are_gone(archive):
-    """Not dead yet: unit tests and live gates still read it (P8-4 owns the deletion)."""
-    assert "lua/clients/gen1_rby_client.lua" in archive
+def test_the_old_gen1_client_is_not_shipped(archive):
+    """The old client's files are out of the manifest (tooling half of the cutover); the files
+    themselves stay on disk until their unit consumers are migrated."""
+    assert "lua/clients/gen1_rby_client.lua" not in archive
+    assert "lua/games/gen1_rby.lua" not in archive
