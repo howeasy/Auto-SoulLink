@@ -39,6 +39,25 @@ MEMORIAL_PATH = os.path.join(DATA_DIR, "memorial.json")
 # Explode Mode kills came to be invisible in the dashboard and to OBS.
 DEATH_COMMANDS = ("force_faint", "force_explode")
 
+# The party/box sync commands whose effect the server cannot observe until the client
+# answers.  Tracked from delivery to answer in SoulLinkState.sync_inflight so the drift
+# reconciler never acts on a key whose command is still on the wire.
+SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
+# The Nth reconciler pass after delivery is the first that may re-issue a command; passes 1..N-1
+# suppress it (adapter-guard review: the count is a re-issue window, not an ack deadline).
+# The unit is deliberately the reconciler's own passes, not wall-clock and not client
+# events: the reconciler is the only reader of sync_inflight, so counting its passes
+# makes the window mean "give the client this many chances to answer before deciding
+# it drifted", identical on every client whatever its event cadence or tick rate.
+#
+# This bounds RE-ISSUE SUPPRESSION, not ack arrival.  An answer may legitimately come
+# long after the window closes — a client is free to defer a command until the game is
+# in a state where it can run it (Gen 1 executes party_mon only in the overworld) — in
+# which case the reconciler may re-issue and the client's already-in-party path absorbs
+# the duplicate.  The window ages out rather than latching so that a genuinely dropped
+# answer cannot disable drift repair for that key for the rest of the run.
+SYNC_INFLIGHT_RECONCILES = 6
+
 
 # Not StrEnum: these values are interpolated into JSON, templates and log lines,
 # where StrEnum's str()/format() differ from the (str, Enum) behaviour relied on here.
@@ -123,6 +142,14 @@ class SoulLinkState:
         self._key_index: dict[str, LinkEntry] = {}
         # commands queued for delivery to each player on their next request
         self.queued_commands: dict[str, list[dict]] = {"a": [], "b": []}
+        # SYNC_COMMANDS that have been DELIVERED but not yet answered, as
+        # {player: {(monKey, cmd): reconciler_passes_remaining}}.  queued_commands empties the
+        # instant a command ships, so without this the window between delivery and the client's
+        # answer looks like state drift and _reconcile_party_keys issues the command a second
+        # time.  Armed on delivery, cleared by any client event naming the key (every answer
+        # carries one), counted down by the reconciler itself.  In-memory only: after a restart
+        # nothing of ours is on the wire, and the hello path re-queues what is still outstanding.
+        self.sync_inflight: dict[str, dict[tuple[str, str], int]] = {"a": {}, "b": {}}
         # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
         # dashboard: a run that has silently stopped saving looks identical to one that is fine.
         self.save_failed: str = ""
@@ -243,6 +270,12 @@ class SoulLinkState:
         Cross-player commands are queued and delivered on the partner's next call.
         """
         event = msg.get("event", "unknown")
+
+        # The client has spoken about this key, so nothing we sent for it is still on the wire:
+        # every answer to a SYNC_COMMAND (sync_retrieve_done/_failed, box_mon_failed,
+        # memorialize_done/_failed, the stats_cache a deposit emits) carries the key.
+        if msg.get("key"):
+            self._ack_inflight(player_id, msg["key"])
 
         self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
 
@@ -379,6 +412,7 @@ class SoulLinkState:
 
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
+        self._arm_inflight(player_id, cmds)
         if cmds:
             _summary = ", ".join(
                 c.get("cmd", "?") + (":" + c["key"][:8] if "key" in c else "")
@@ -2226,8 +2260,36 @@ class SoulLinkState:
         bonus = self.bonus_keys.get(player_id, set())
         return sum(1 for k in self.party_keys[player_id] if k not in bonus)
 
+    def _arm_inflight(self, player_id: str, delivered: list[dict]) -> None:
+        """Mark the SYNC_COMMANDS just handed to player_id as on the wire."""
+        for c in delivered:
+            if c.get("cmd") in SYNC_COMMANDS and c.get("key"):
+                self.sync_inflight[player_id][(c["key"], c["cmd"])] = SYNC_INFLIGHT_RECONCILES
+
+    def _ack_inflight(self, player_id: str, key: str) -> None:
+        """Forget every in-flight SYNC_COMMAND for key — the client has answered."""
+        inflight = self.sync_inflight[player_id]
+        for ident in [i for i in inflight if i[0] == key]:
+            del inflight[ident]
+
+    def _expire_inflight(self, player_id: str) -> None:
+        """Spend one reconciler pass off player_id's in-flight window.
+
+        Called only from _reconcile_party_keys, and only once it is actually going to
+        reconcile — a pass the reconciler skips (rebuild, trade) is not a chance the
+        client had to answer, so it must not count against the window.
+        """
+        inflight = self.sync_inflight[player_id]
+        for ident in list(inflight):
+            inflight[ident] -= 1
+            if inflight[ident] <= 0:
+                del inflight[ident]
+
     def _has_pending_command(self, player_id: str, key: str, *cmds: str) -> bool:
-        """True if any queued command for player_id matches one of cmds and targets key."""
+        """True if a matching command for key is queued for player_id, or has been
+        delivered and is still unanswered (in flight on the client — see sync_inflight)."""
+        if any((key, c) in self.sync_inflight[player_id] for c in cmds):
+            return True
         return any(
             c.get("key") == key and c.get("cmd") in cmds
             for c in self.queued_commands[player_id]
@@ -2277,6 +2339,9 @@ class SoulLinkState:
         if self._trade_settle_ticks.get(player_id, 0) > 0:
             self._trade_settle_ticks[player_id] -= 1
             return
+
+        # This pass is a real chance for the client to have answered what we sent it.
+        self._expire_inflight(player_id)
 
         actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
         tracked_keys = self.party_keys[player_id]
@@ -2534,10 +2599,14 @@ class SoulLinkState:
             self.pending_memorials[player_id].add(new_key)
             _migrated = True
 
-        # 7. Queued commands referencing the old key
+        # 7. Queued commands referencing the old key — and the same commands already
+        #    on the wire, so the drift reconciler still sees them as in flight.
         for cmd in self.queued_commands[player_id]:
             if cmd.get("key") == old_key:
                 cmd["key"] = new_key
+        inflight = self.sync_inflight[player_id]
+        for ident in [i for i in inflight if i[0] == old_key]:
+            inflight[(new_key, ident[1])] = inflight.pop(ident)
 
         # 8. Pending bonus queue (shiny keys in partner's pending_bonus)
         for pid in ("a", "b"):
