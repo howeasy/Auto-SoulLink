@@ -5,8 +5,11 @@
 --                                Forest South Gate -> Viridian Forest, parked at (18,41).
 --                                No hunt, no capture.                terminal "forest-parked"
 --   M.hunt(expected, opts)       pace (18,41)<->(18,40) until Charmander is PSN.  terminals
---                                "poisoned" | "hunt-exhausted" | "starter-koed" | "hunt-stuck"
---                                (the last is a wedged battle driver, never the game's RNG)
+--                                "poisoned" | "hunt-exhausted" | "starter-koed" (party HP 0
+--                                only) | "hunt-stuck" | "unexpected-battle" (wIsInBattle not
+--                                0/1 with the party still standing -- a fixture/route fault)
+--                                ("hunt-stuck" is a wedged battle driver; neither it nor
+--                                "unexpected-battle" is ever the game's RNG)
 --   M.shuttle(expected [, opts]) (18,41) -> (18,43), then shuttle (18,43)<->(18,44) until the
 --                                party HP reaches 0.                terminal "poison-fainted"
 --
@@ -341,8 +344,15 @@ function M.hunt(expected, opts)
         self.last_frame = frame
         check_point(point, "forest hunt")
         if self.terminal then return idle(), self.terminal end
+        -- wIsInBattle: 0 none, 1 wild (InitWildBattle, engine/battle/core.asm:6695-6696),
+        -- 2 TRAINER (:6691-6692), $FF the whiteout marker. Only an emptied party is the RNG's
+        -- "a wild foe KOed the starter"; a battle this leg never asks for with the party still
+        -- standing is a fixture or route fault and gets its own terminal.
         if point.battle ~= 0 and point.battle ~= 1 then
-            self.terminal = "starter-koed"
+            self.terminal = point.party_hp == 0 and "starter-koed" or "unexpected-battle"
+            log(string.format("HUNT_%s battle=%d hp=%d encounters=%d",
+                self.terminal == "starter-koed" and "STARTER_KOED" or "UNEXPECTED_BATTLE",
+                point.battle, point.party_hp, self.encounters))
             return idle(), self.terminal
         end
         if point.battle == 1 and not self.battle_co then
@@ -356,19 +366,27 @@ function M.hunt(expected, opts)
             assert(ok, "forest hunt battle plan error: " .. tostring(res))
             if coroutine.status(self.battle_co) ~= "dead" then return res or idle(), "wild-"..self.stage end
             self.battle_co, self.outcome, self.tile = nil, res, nil
+            -- A wedged battle driver is NOT a KO and NOT poison: it is classified HERE, on the
+            -- frame its coroutine dies, the way gen1_rb_hunt_inputs.lua:228 does. The block
+            -- below only runs on a battle==0 frame, which a permanently stuck menu never
+            -- reaches -- and the next frame would instead see battle==1 with no battle_co,
+            -- build a SECOND plan and count a second encounter, forever. Classifying here is
+            -- also what keeps a PSN that landed during the wedged battle from claiming it.
+            if res == "stuck" or res == "timeout" then
+                self.terminal = "hunt-stuck"
+                log(string.format("HUNT_STUCK encounters=%d why=%s", self.encounters, tostring(res)))
+                return idle(), self.terminal
+            end
             return idle(), "wild-" .. tostring(res)
         end
         if point.battle ~= 0 then return idle(), "wild-ending" end
         if self.outcome then
-            local why = self.outcome
             self.outcome = nil
             if point.party_hp == 0 then self.terminal = "starter-koed"
             elseif poisoned() then
                 self.terminal = "poisoned"
                 log(string.format("HUNT_POISONED encounters=%d steps=%d", self.encounters, self.grass_steps))
-            -- A wedged battle driver is NOT a KO: give it its own terminal so the receipt
-            -- cannot be read as the game's RNG.
-            elseif why == "stuck" or why == "timeout" then self.terminal = "hunt-stuck" end
+            end
             if self.terminal then return idle(), self.terminal end
         end
         if point.font_loaded or point.joy_ignore ~= 0 then return tap("B", frame), "close-text" end

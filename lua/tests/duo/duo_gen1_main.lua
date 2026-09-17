@@ -638,6 +638,11 @@ end
 local function dupes_prompt(c)
     return (c.text and c.text:find("Dupes clause:", 1, true) == 1) or false
 end
+-- The unlock that matters is the one for the area this scenario is fought on: Route 1 is map
+-- 0x0C -> area_id "route_1" (data/games/gen1_rby/area_map.json:6). Any other unresolve_area on
+-- the wire (a partner's area, a retry suppression elsewhere) is NOT the type-clause receipt,
+-- and a command with no area_id at all is not one either.
+local function route1_unlock(c) return c.area_id == "route_1" end
 
 -- D-5: link_new's body with the server's --type-clause. Both catches share Normal, so the
 -- LATER capturer is rejected at link formation and Route 1 stays pending for it. Which half
@@ -670,18 +675,18 @@ function scenarios.type_clause_new()
         end)
         local memo = clause_got("memorialize", function(c) return c.key == key end)
         local fail_sfx = clause_got("play_sound", function(c) return c.sound == 26 end)
-        local unres = clause_got("unresolve_area")
+        local unres = clause_got("unresolve_area", route1_unlock)
         log("TYPE_CLAUSE " .. json.encode({player = D.player, verdict = "rejected", key = key,
             species = mon.species, prompt = prompt and prompt.text or "",
             memorialize = memo ~= nil, sound26 = fail_sfx ~= nil,
-            unresolve_area = unres and (unres.area_id or "?") or ""}))
+            unresolve_area = unres and unres.area_id or ""}))
         if not prompt then return false, "rejected half never got the [x] Type clause prompt" end
         if not prompt.text:find("Normal", 1, true) then
             return false, "type-clause prompt did not name Normal: " .. prompt.text
         end
         if not memo then return false, "rejected capture was never memorialized" end
         if not fail_sfx then return false, "rejected half never got play_sound 26" end
-        if not unres then return false, "rejected half never got unresolve_area" end
+        if not unres then return false, "rejected half never got unresolve_area for route_1" end
         -- The mon leaves the party and lands in Box 12 at HP 0, the same receipt
         -- deadzone_new takes: force_faint zeroes it, memorialize moves it to sBox12
         -- (lua/gen1/boxes.lua:460-517, ram/sram.asm:44-49 -> box index 11).
@@ -708,10 +713,10 @@ function scenarios.type_clause_new()
         local tp = clause_got("gui_prompt", function(c)
             return (c.text and c.text:find("Type clause", 1, true)) and true or false
         end)
-        local unres = clause_got("unresolve_area")
+        local unres = clause_got("unresolve_area", route1_unlock)
         log("TYPE_CLAUSE " .. json.encode({player = D.player, verdict = "accepted", key = key,
             species = mon.species, force_faint = ff ~= nil, type_prompt = tp and tp.text or "",
-            unresolve_area = unres and (unres.area_id or "?") or ""}))
+            unresolve_area = unres and unres.area_id or ""}))
         if ff then return false, "the accepted half was force-fainted" end
         if tp then return false, "the accepted half got the rejection prompt" end
     end
@@ -813,6 +818,13 @@ function scenarios.species_clause_new()
 
     local caught_key, rerolls = nil, 0
     for battle = 1, 4 do
+        -- The cursor is taken BEFORE the encounter exists. The server queues the dupes prompt
+        -- from the wild-battle-start tick (server/server.py:1815-1834 -> state.py:1726-1738),
+        -- and the client drains the reply queue on every tick (lua/gen1/client.lua:1038-1051),
+        -- so the prompt can land on ANY of the frames between InitWildBattle and the
+        -- enemy-data read below -- a cursor taken after them would swallow the very prompt
+        -- this loop then demands, and the post-RUN check would fail on a healthy run.
+        local _, before = clause_got("gui_prompt", dupes_prompt)
         local paced, why = pace_grass()
         if not paced then return false, why end
         -- InitWildBattle sets wIsInBattle and then calls LoadEnemyMonData with no DelayFrame
@@ -832,7 +844,6 @@ function scenarios.species_clause_new()
         -- server's prompt first would race the menu and hang the plan. The decision is the
         -- cartridge's own species byte; the server's prompt is then ACCOUNTED FOR below,
         -- where a missing one fails the scenario rather than steering it.
-        local _, before = clause_got("gui_prompt", dupes_prompt)
         if foe ~= dupe then
             local caught = hunt("catch")
             if caught ~= "caught" then return false, "hunt ended " .. caught end
@@ -2383,7 +2394,11 @@ function scenarios.poison_new()
     if not wait_go() then return false, "no go-file" end
     if D.player ~= "b" then
         log("POISON_IDLE a")
-        if not wait_partner_done(1800) then
+        -- B's walk + hunt + shuttle is the longest leg in the suite and the runner gives the
+        -- scenario 2400 s (tools/e2e_duo.py:191). A idling out FIRST turns B's still-running
+        -- (and still-legal) leg into a pair failure, so A's bound is the scenario's own budget
+        -- less a reserve for its game_save below -- never a smaller constant of its own.
+        if not wait_partner_done((D.timeout_secs or 2400) - 300) then
             return false, "the idle partner never finished the poison leg"
         end
         local saved_a, why_a = game_save("poison_new_a")
@@ -2438,6 +2453,13 @@ function scenarios.poison_new()
                 last = phase
                 log(fmt("POISON_PHASE %s %s @%d map=%d (%d,%d) battle=%d hp=%d", tag, phase,
                         emu.framecount(), point.map, point.x, point.y, point.battle, point.party_hp))
+            end
+            -- Not the game's RNG: a live party in a battle this leg never asks for (wIsInBattle
+            -- 2 is a TRAINER battle, pret engine/battle/core.asm:6691-6692) means the fixture or
+            -- the route is wrong. Carry the value out so the FINAL failure names it, and never
+            -- let it borrow the "starter-koed" RNG string above.
+            if phase == "unexpected-battle" then
+                return fmt("unexpected-battle (wIsInBattle=%d party_hp=%d)", point.battle, point.party_hp)
             end
             if terminals[phase] then return phase end
             yield_frame(buttons)
