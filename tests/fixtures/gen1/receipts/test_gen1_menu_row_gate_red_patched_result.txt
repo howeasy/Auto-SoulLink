@@ -1,0 +1,77 @@
+[test_gen1_menu_row_gate] title=red rom=5cd6ca75
+[test_gen1_menu_row_gate] booted at frame 844 (party=1, map=40)
+  [ok] the START menu opened  — no EXIT row on screen — every check below is meaningless if the menu is not up
+[menu] row  0 |····················|
+[menu] row  1 |···········        ·|
+[menu] row  2 |··········· POK·MON·|
+[menu] row  3 |···········        ·|
+[menu] row  4 |··········· ITEM   ·|
+[menu] row  5 |···········        ·|
+[menu] row  6 |··········· RED    ·|
+[menu] row  7 |···········        ·|
+[menu] row  8 |··········· SAVE   ·|
+[menu] row  9 |···········        ·|
+[menu] row 10 |··········· OPTION ·|
+[menu] row 11 |···········        ·|
+[menu] row 12 |··········· EXIT   ·|
+[menu] row 13 |···········        ·|
+[menu] row 14 |··········· SLINK  ·|
+[menu] row 15 |····················|
+[menu] row 16 |····················|
+[menu] row 17 |····················|
+  [ok] the SLINK row is drawn  — the DrawStartMenu tail redirect did not reach PlaceString
+  [ok] EXIT is still drawn  — the stub prints BOTH; only printing SLINK would still look right on the last row
+  [ok] SLINK is two tile rows below EXIT  — SLINK on row 14, EXIT on row 12 (2 apart, expected 2)
+  [ok] the menu box border runs beside the SLINK row  — tile at (10,14) is 0x7C — the box was not made taller
+[menu] Pokedex present=false -> 7 items, SLINK is index 6
+  [ok] wMaxMenuItem counts the extra row  — got 7, expected 7
+  [ok] the cursor can be moved onto the SLINK row  — wCurrentMenuItem stopped at 6, wanted 6 — the home-bank wrap constants are separate from wMaxMenuItem and gate reachability
+  [ok] the menu is up for the panel  — the START menu is not showing
+  [ok] selecting SLINK opens the panel  — no SOUL LINK title and no mailbox transition — the dispatch trampoline did not reach bank $3F
+  [ok] the panel announces itself to the client  — panel state is 1 — the client is never told it may paint
+  [ok] with no client rows it falls back instead of hanging  — the stage wait never timed out onto the fallback
+  [ok] +9 is still AWAIT after the patch's 90-frame stage timeout  — state=1 after 120 frames of AWAIT
+  [ok] nothing was staged with no rows held  — +11 = 0 with no payload
+  [ok] a reply after the deadline is not painted  — a 240-frame-old AWAIT was painted over a revealed fallback
+  [ok] the revealed fallback survived the late reply  — NO CLIENT was overwritten
+  [ok] the late reply never reached STAGED  — state=1
+  [ok] a button press closes the fallback panel  — still on screen after 12 presses
+  [ok] the panel clears its state on the way out  — panel state left at 0 — a client would keep painting over the map
+  [ok] the menu is up for the panel  — the START menu is not showing
+  [ok] the panel opens again  — the second open never reached the panel
+  [ok] rows held from the late reply stage on the next open  — state=2 +11=2 — held rows were dropped instead of kept
+  [ok] staging sets the handshake to STAGED  — state is 2 after the client painted
+  [ok] the client tells the patch how many pages there are  — published 2 pages for 26 rows
+  [ok] the fallback was painted over  — NO CLIENT is still visible under the staged page
+  [ok] a later row landed too  — only the first rows were painted
+  [ok] the whole first page is on screen  — row 18 did not land — the page is short
+  [ok] page 2 is NOT on screen yet  — a row from the next page leaked onto the first
+[page 1] row  0 |SLINK TEST          |
+[page 1] row  1 |                    |
+[page 1] row  2 |PAIRS 3/5           |
+[page 1] row  3 |BADGES 2/8          |
+[page 1] row  4 |DEAD ZONES 1        |
+[page 1] row  5 |                    |
+[page 1] row  6 |-VIRIDIAN FOREST    |
+[page 1] row  7 |ROW 8               |
+[page 1] row  8 |ROW 9               |
+  [ok] A asks for another page  — page byte is 1, state=2 — the panel never turned
+  [ok] the second page is on screen  — row 19 never appeared after the page turn (state=2)
+  [ok] the first page is gone  — page 1 is still showing underneath page 2
+[page 2] row  0 |ROW 19              |
+[page 2] row  1 |ROW 20              |
+[page 2] row  2 |ROW 21              |
+[page 2] row  3 |ROW 22              |
+[page 2] row  4 |ROW 23              |
+[page 2] row  5 |ROW 24              |
+[page 2] row  6 |ROW 25              |
+[page 2] row  7 |ROW 26              |
+[page 2] row  8 |                    |
+  [ok] B closes the panel from a page  — B did not close the panel
+  [ok] closing resets the page for next time  — page byte left at 0
+  [ok] closing resets the handshake  — panel state left at 0
+  [ok] the menu is up again  — the START menu is not showing
+  [ok] the cursor reaches EXIT's index  — wanted 5, stalled at 5
+  [ok] EXIT still closes the menu  — EXIT's index moved — appending was supposed to leave every existing index alone
+  [ok] the player still walks after all that  — stuck at (5,6) — a broken menu can leave the overworld loop wedged
+RESULT: PASS SLINK row at 14, EXIT at 12 (0 checks failed)

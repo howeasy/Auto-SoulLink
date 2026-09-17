@@ -1,0 +1,16 @@
+[test_gen1_patch_gate] title=blue rom=9fc416a6
+[test_gen1_patch_gate] booted at frame 844 (party=1, map=40)
+  [ok] 'SLNK' beacon is present at $DEE2  — got "SLNK"
+  [ok] frame counter advances  — 803 -> 863 over 60 frames
+  [ok] frame counter advances with the START menu open  — 904 -> 964
+  [ok] the displaced TrackPlayTime still runs (play clock advances)  — the hook must chain to what it replaced, not replace it
+  [ok] the player can still walk on the patched ROM  — (5,6) -> (4,6)
+  [ok] ABI version byte is 3  — got 3
+  [ok] the capability byte does NOT advertise SFX  — caps=0x02 — this build must not claim an unsafe audio path
+  [ok] the capability byte advertises the panel  — caps=0x02
+  [ok] the panel module sees the cartridge the gate does  — present=true abi=3
+  [ok] the panel handshake is closed outside the panel  — panel state is 0 in the overworld
+  [ok] the SFX request byte is still consumed by the hook  — still 0000 after 10 frames
+  [ok] a drained SFX request never starts a sound  — CHAN5-8 0/0/0/0 -> 0/0/0/0 — the hook still reaches PlaySound
+  [ok] the player can still walk after the SFX hook fired  — (4,6) -> (5,6)
+RESULT: PASS title=blue counter=1152 map=40 (0 checks failed)
