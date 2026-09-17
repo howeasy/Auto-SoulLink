@@ -240,12 +240,15 @@ def test_target_defaults_to_town_when_the_scenario_declares_none():
     assert run._target_for("b") == "town"
 
 
-def test_poison_new_is_the_scenario_that_needs_the_per_instance_form():
+def test_the_per_instance_target_is_used_only_where_it_is_needed():
+    """poison_new (A town, B battle) and rival_swap_new (both battle, spelled per instance
+    because the fixture chain is a per-instance decision) are the users; everywhere else a dict
+    target would be a deliberate act, so the set is pinned."""
     assert duo.SCENARIOS["poison_new"]["target"] == {"a": "town", "b": "battle"}
-    for name in duo.scenarios_for("gen1_new"):
-        if name == "poison_new":
-            continue
-        assert not isinstance(duo.SCENARIOS[name].get("target"), dict), name
+    assert duo.SCENARIOS["rival_swap_new"]["target"] == {"a": "battle", "b": "battle"}
+    users = {name for name in duo.scenarios_for("gen1_new")
+             if isinstance(duo.SCENARIOS[name].get("target"), dict)}
+    assert users == {"poison_new", "rival_swap_new"}
 
 
 def test_seed_instance_save_uses_the_per_instance_target(tmp_path, monkeypatch):

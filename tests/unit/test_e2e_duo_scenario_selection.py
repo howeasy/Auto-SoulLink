@@ -31,7 +31,7 @@ GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
                       "admit_randomized_new", "soft_reset_new", "trade_decline_new",
                       "explode_new", "pc_ops_new", "changebox_new", "whiteout_new",
-                      "type_clause_new", "species_clause_new", "poison_new")
+                      "type_clause_new", "species_clause_new", "poison_new", "rival_swap_new")
 
 
 @pytest.mark.parametrize("game", sorted(GAMES))
@@ -183,6 +183,20 @@ def test_the_clause_and_poison_entries_carry_their_flags_oracles_and_fixtures():
         assert entry["oracle"] == oracle
         assert callable(getattr(DuoRun, oracle, None)), name
     assert callable(getattr(DuoRun, "assert_species_clause_release", None))
+
+
+def test_rival_swap_new_carries_its_flag_and_the_battle_fixture_on_both_halves():
+    """The Route 22 rival events are only armed by the `lab,parcel,route1` chain
+    (tools/gen1_fixtures.py:40), so A has to boot the battle fixture — and B too, for its party
+    to carry a catch for the swap to mirror."""
+    entry = SCENARIOS["rival_swap_new"]
+    assert entry["flags"] == ["--rival-team-swap"]
+    assert entry["target"] == {"a": "battle", "b": "battle"}
+    assert entry["no_setup"] is True and entry["games"] == ("gen1_new",)
+    assert entry["oracle"] == "assert_rival_swap_new_saved"
+    assert callable(getattr(DuoRun, "assert_rival_swap_new_saved", None))
+    assert scenario_applies("rival_swap_new", "gen1_new")
+    assert not scenario_applies("rival_swap_new", "gen1")
 
 
 def test_whiteout_new_carries_the_gen1_new_shape_and_both_of_its_gates():

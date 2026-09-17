@@ -191,6 +191,14 @@ SCENARIOS = {
     "poison_new": {"flags": [], "timeout": 2400, "games": ("gen1_new",),
                    "target": {"a": "town", "b": "battle"}, "no_setup": True,
                    "frames": 2500000, "oracle": "assert_poison_new_saved"},
+    # W-4 / D-11 (swap half): the Route 22 rival fight with --rival-team-swap on, so the server
+    # replaces the rival's team with B's party. A MUST boot the battle fixture: only the
+    # `lab,parcel,route1` chain arms the Route 22 rival events (tools/gen1_fixtures.py:40), and a
+    # town-fixture A would walk the whole route and meet nobody. B boots battle too, so its party
+    # carries a catch for the swap to mirror.
+    "rival_swap_new": {"flags": ["--rival-team-swap"], "timeout": 1800, "games": ("gen1_new",),
+                       "target": {"a": "battle", "b": "battle"}, "no_setup": True,
+                       "frames": 2500000, "oracle": "assert_rival_swap_new_saved"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
@@ -2183,6 +2191,115 @@ class DuoRun:
                     if row.get("type") == "force_explode"]
         self._pydec_note(f"events.json force_explode rows: {exploded} (routing only)")
 
+    def assert_rival_swap_new_saved(self, results):
+        """W-4 / D-11 (swap half): the Route 22 rival fights the PARTNER's party.
+
+        A's receipt carries the whole exchange: the armed-events precondition, the rival battle
+        begin (opponent 225 = OPP_RIVAL1, the Gen 1 adapter's rival set at
+        server/adapters/gen1_rby.py:318-320), the trainer_battle_start on the wire, the
+        `replace_rival_team` command, the client's ack `within` the RIVAL_SWAP_FRAMES=120 window,
+        the byte-for-byte enemy-party comparison against the command's own blobs, the send-out
+        species and the battle's outcome. B idles and saves.
+
+        The server's half is its LOG, not events.json: `_handle_rival_team_replaced`
+        (server/state.py:2992-3015) logs the ack to the run's log and writes no ring-buffer row,
+        so `rival_team_replaced` never appears in events.json — the card's expectation. The ack's
+        species list is the readback, and the command's blob count has to equal B's party size as
+        the SERVER sees it (`/api/status`), which is the claim "the blobs were B's current party"
+        in the only form a post-hoc reader can check.
+
+        The link branch is keyed on the battle's outcome, because losing to the rival is an
+        ordinary trainer loss with a blackout: the whited-out half's linked pair is retired with
+        cause `whiteout` (server/state.py:1982-2062). A win or a draw leaves the pair alive and
+        both saved parties are starter + own catch.
+        """
+        for process in self.emus:
+            process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
+        a_text, b_text = results["a"], results["b"]
+        marker(a_text, r"RIVAL_EVENTS byte164=[0-9A-Fa-f]{2} first=1 wants=1",
+               "A rival-event precondition")
+        marker(b_text, r"RIVAL_IDLE b", "B idle receipt")
+        begin = marker(a_text, r"RIVAL_BATTLE_BEGIN frame=\d+ opponent=(\d+)", "A battle begin")
+        if begin.group(1) != "225":
+            raise RuntimeError(f"the battle_begin that opened the window named opponent "
+                               f"{begin.group(1)}, not Rival1's 225")
+        tx = re.findall(r'^TX .*"event":"trainer_battle_start".*"trainer_id":(\d+)', a_text, re.M)
+        if tx != ["225"]:
+            raise RuntimeError(f"A sent {len(tx)} trainer_battle_start line(s) for "
+                               f"{tx}; exactly one naming 225 is expected")
+        rx = marker(a_text, r"RX replace_rival_team n=(\d+)", "A swap command")
+        blobs = int(rx.group(1))
+        replaced = marker(a_text, r"RIVAL_TEAM_REPLACED frame=\d+ within=(-?\d+)", "A swap ack")
+        within = int(replaced.group(1))
+        if within < 0 or within >= 120:
+            raise RuntimeError(f"the swap landed {within} frames after battle_begin; the "
+                               f"client's own window is RIVAL_SWAP_FRAMES=120, so this is a "
+                               f"late reply, not a swap")
+        # The mismatch line is the more informative failure, so it is checked first: a receipt
+        # with a mismatch carries no MATCH line at all.
+        if "ENEMY_MONS_MISMATCH" in a_text:
+            raise RuntimeError("A logged ENEMY_MONS_MISMATCH; the enemy party did not match the "
+                               "blobs the command carried")
+        match = marker(a_text, r"ENEMY_MONS_MATCH slots=(\d+)", "A enemy-party compare")
+        if int(match.group(1)) != blobs:
+            raise RuntimeError(f"the compare covered {match.group(1)} slot(s) but the command "
+                               f"carried {blobs}")
+        sendout = marker(a_text, r"ENEMY_SENDOUT species=(\d+) expected=(\d+)", "A send-out")
+        if sendout.group(1) != sendout.group(2):
+            raise RuntimeError(f"the enemy sent out species {sendout.group(1)}, not the "
+                               f"partner's slot-1 {sendout.group(2)}")
+        outcome = marker(a_text, r"RIVAL_RESULT (win|loss|draw)", "A rival result")
+        marker(a_text, r"RIVAL_DONE", "A rival done")
+        marker(a_text, r"SAVE_WITNESS rival_swap_new_a", "A save witness")
+        marker(b_text, r"SAVE_WITNESS rival_swap_new_b", "B save witness")
+
+        with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
+            log_text = handle.read()
+        if "[a] trainer_battle_start trainer_id=225 is_rival=True" not in log_text:
+            raise RuntimeError("the server never saw A's 225 as a rival; the swap cannot have "
+                               "been triggered by the id gate")
+        ack = re.search(r"\[a\] rival_team_replaced ack trainer_id=225 species=\[([0-9,\s]*)\]",
+                        log_text)
+        if not ack:
+            raise RuntimeError("the server logged no rival_team_replaced ack for A")
+        species_readback = [value for value in ack.group(1).replace(" ", "").split(",") if value]
+        if len(species_readback) != blobs:
+            raise RuntimeError(f"the ack read back {len(species_readback)} species for {blobs} "
+                               f"blob(s): {ack.group(1)}")
+        status = self._status() or {}
+        b_keys = ((status.get("players") or {}).get("b") or {}).get("party_keys") or []
+        if len(b_keys) != blobs:
+            raise RuntimeError(f"the command carried {blobs} blob(s) but the server's view of "
+                               f"B's party holds {len(b_keys)}; the swap mirrors the partner's "
+                               f"current party")
+
+        durable = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
+        if len(durable) != 1:
+            raise RuntimeError(f"expected one durable Route 1 link, got {durable}")
+        link = durable[0]
+        if outcome.group(1) == "loss":
+            if link.get("status") not in ("dead", "memorial") or link.get("cause") != "whiteout":
+                raise RuntimeError(f"A lost to the rival, so the whited-out pair has to be "
+                                   f"retired with cause whiteout: {link}")
+            self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames (limit 120), "
+                             f"compare slots={match.group(1)}, send-out "
+                             f"{sendout.group(1)}, result=loss, pair "
+                             f"{link.get('status')}/{link.get('cause')}")
+        else:
+            if link.get("status") != "alive":
+                raise RuntimeError(f"A {outcome.group(1)}s the rival battle, so the pair has to "
+                                   f"stay alive: {link}")
+            for inst, key in (("a", link["a"]["key"]), ("b", link["b"]["key"])):
+                _sram, party, current_box, codec = self._saved_gen1_party(inst)
+                keys = [codec.key(mon) for mon in party]
+                if keys != [self._boot_keys[inst], key]:
+                    raise RuntimeError(f"{inst}'s saved party is {keys}, expected starter + {key}")
+                if any(codec.key(mon) == key for mon in current_box):
+                    raise RuntimeError(f"{inst}'s current box still holds {key}")
+            self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames (limit 120), "
+                             f"compare slots={match.group(1)}, send-out {sendout.group(1)}, "
+                             f"result={outcome.group(1)}, pair alive, both flushes starter+catch")
+
     def assert_pc_ops_new_saved(self, results):
         """S-6 (Bill's PC by play) and the documented release gap.
 
@@ -3289,7 +3406,7 @@ class DuoRun:
             elif self.scenario == "dupes":
                 self.assert_species_clause_rejection()
             elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new",
-                                   "explode_new", "pc_ops_new"):
+                                   "explode_new", "pc_ops_new", "rival_swap_new"):
                 self.go()
                 self.assert_link_new()
             elif self.scenario in ("type_clause_new", "poison_new"):
