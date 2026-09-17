@@ -459,3 +459,32 @@ bullet names the receipt or commit that showed the fact; client consequences poi
   (`:29`) → `ldh a, [hJoy5]` (`:30`) → `and a` / `jr nz, .keyPressed` (`:31-32`), so a press that
   is not present at a poll instant is lost; the driver re-pulses on the 16-frame cadence
   (observed; `3650ace`).
+
+## 8. Receipt-map addendum and citation errata (2026-09-17, c2605ae)
+
+Section 3 retains its historical RC/NEW LOOKUP labels; they are not current receipt status.
+This addendum distinguishes a committed receipt, a failed/uncommitted observation, and a source-only marker. Paths in this section are under `tests/fixtures/gen1/receipts/` unless marked pending. No pending path claims a committed PASS. The whole-table S-1 differential gate remains pending.
+
+| Site/mechanism | Receipt marker and status |
+| --- | --- |
+| Map load | Committed: `e2e_trade_new_a_result.txt:71` `TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":290}`; also `trade_decline_new_a_result.txt:78`. This proves a later map load, not every warp/Fly branch or a boot event. |
+| PC ChangeBox | Committed: `changebox_new_b_result.txt:97,118` `CHANGEBOX_TO 12 initialised=true count=1` / `CHANGEBOX_BACK 1`; `changebox_new_pydec_result.txt:8-9` confirms the saved flag/index and the HP-0 Box-12 memorial, then PYDEC PASS. ChangeBox's own save still has no witness by recorded limit. |
+| Player battle faint | Committed: `linked_faint_active_new_b_result.txt:87-95` `LOOP_HEAD_WRITE key=2913:AFB9:A5 battle_hp=0000 selected=FF hp_before=5`, `BATTLE_FAINT_SITE 2913:AFB9:A5 slot=0 battle_hp=0`, `BATTLE_RESULT b 2`; `linked_faint_active_new_pydec_result.txt:9-10` ordered-engine check and PASS. Not poison or blackout evidence. |
+| Native SLINK decline/apply | Committed: `trade_decline_new_b_result.txt:77,79` `PARTNER_YES_NO` / `TRADE_DECLINED`; `trade_decline_new_pydec_result.txt:2-8` confirms no apply and unchanged saved parties. Apply: `e2e_trade_new_a_result.txt:88,92` `TRADE_DONE slot=1 key=FAED:AFB9:24 species=36` / `POST_TRADE slot=1 key=FAED:AFB9:24 species=36 level=3 hp=8`; B `:83,87` has `7C48:4190:A5`, species 165. These are companion SLINK paths, NOT the vanilla NPC sites in section 3.f. |
+| Vanilla NPC trade | `<pending: vanilla NPC trade>`; no supplied receipt proves `InGameTrade_DoTrade`. S-5/D-10 remains SOURCE+MODEL by recorded limit; SLINK's `TRADE_DONE` is not a substitute. |
+| Poison faint | `<pending: poison_new>`; expected `POISON_FAINT_SITE frame=%d slot=%d` (`lua/tests/duo/duo_gen1_main.lua:2471`, oracle `tools/e2e_duo.py:2687`). Supplied uncommitted `poison_run/e2e_poison_new_b_result.txt:62-63` ends hunt-stuck before the marker. |
+| Poison blackout / lost-battle blackout | `<pending: poison_new>` / `<pending: whiteout_new>`; expected `BLACKOUT_FLAG frame=%d value=FF` and `BLACKOUT_SITE map=%d x=%d y=%d` (`lua/tests/duo/duo_gen1_main.lua:2604-2609`; whiteout destination `:2387-2391`). Supplied poison/whiteout runs did not reach these markers. BLACKOUT_SITE reads post-warp coordinates, not a hook PC; destination alone does not prove pre-HealParty snapshot ordering. |
+| PC deposit/withdraw | `<pending: pc_ops_new after client fix>`; uncommitted `pc_ops_run/e2e_pc_ops_new_a_result.txt:88,91,100,104` contains TX `party_to_box`, `PC_OP deposit done`, TX `box_to_party`, `PC_OP withdraw done`. But `:102,114` has a spurious `RELEASE_SEEN` during withdrawal and FAIL. Require accepted A/B/PYDEC receipts after the client fix before promotion. |
+| PC release | `<pending: pc_release_new>` (scenario placeholder); no genuine release receipt supplied. The false withdrawal marker is not release proof. `[SLink-gen1] RELEASE_SEEN key=%s box=%d` is logged at `lua/gen1/client.lua:645`; release propagation remains a recorded shared-protocol limit. |
+| Soft reset | `<pending: soft_reset_new>`; uncommitted `soft_reset_run/e2e_soft_reset_new_a_result.txt:21,23` has `RESET_SEEN frame=55 abs=2528` / `HELLO_CLEARED frame=2579 delta=51`, but its PYDEC receipt `:3` fails `links.json changed across the soft reset`. Do not promote the scenario from client PASS alone. |
+
+### Citation errata (pinned pret, not moving upstream)
+
+The pins remain pokered `405b6246372d7e5a2cb029cbb65219b13286b8c9` and pokeyellow `0a0851546ff65f65c4bb2af2b95e279e709a8653` (local `.git/refs/heads/master` in each checkout). Primary routine/site anchors were spot-checked across section 3; no fresh ROM-byte or `.sym` hash verification is claimed. The following corrections supersede the original prose without shifting its established line references.
+
+- Section 3.d: poison `.done` store/ret is R `engine/events/poison.asm:111-113`, Y `:124-126`; Y decision is `:110-121` and dispatch `home/overworld.asm:260-263`. The actual `call RemoveFaintedPlayerMon` is R `core.asm:972`, Y `:984` (969/981 are caller labels). Yellow blackout result/battle resets, money, warp flags and HealParty jump are `black_out.asm:6,8,21-39,42-45,48`; Red citations remain valid.
+- Section 3.f: NPC completion uses `callfar InGameTrade_CheckForTradeEvo` at R `engine/events/in_game_trades.asm:150`, but ordinary `call` at Y `:138`; ClearScreen at R151/Y139 is correct. These are not the companion SLINK apply routines.
+- Section 3.g: add Y `engine/pokemon/bills_pc.asm:360-362` for BillsPCChangeBox. SaveGameData inside ChangeBox is R `engine/menus/save.asm:396`, Y `:383`; next instruction R397/Y384. PC deposit/withdraw/release completion citations R236/288/313 and Y254/316/343 match.
+- Section 3.i: the complete bag-return sequence is R `engine/items/inventory.asm:86-93`, not 86-91: restore is 92, ret is 93. Section 3.k: post-save R `save.asm:167` is `hlcoord 1,13`, but Y `:159` is `ld hl, SavingText`; CONTINUE `.pressedA` is R `main_menu.asm:107`, Y `:105`.
+- Section 3.e cancelled-evolution pop/call is R `engine/pokemon/evos_moves.asm:297-298`, Y `:299-300`. Section 3.m DelayFrame is R `home/vblank.asm:92`, Y `:85`. These are citation/description corrections, not hook-address changes.
+- Evolution publication and capture-to-box remain MODEL by recorded limit. Species/type clause receipts do not fill poison/blackout/NPC/PC-release gaps; `species_clause_new_b_result.txt:60-61` explicitly records `reroll_unobserved` with zero rerolls.

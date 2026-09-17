@@ -36,7 +36,7 @@
 | Client pump cadence | once per emulated frame: `C.pump()` flushes the send queue and reads all complete lines; the client then drains `C.receive()` until nil and dispatches each reply | `connector.lua:150-154`, `gen3_frlge_client.lua:1912-1913`, `gen3_frlge_client.lua:1967-1977` |
 | Reconnect | non-blocking connect with exponential backoff: first retry after 30 frames (~0.5 s), doubling to a 1800-frame (~30 s) cap; reset to 30 on success | `connector.lua:55-57`, `connector.lua:161-187`, `connector.lua:78`, `connector.lua:103` |
 | `C.connected()` | `true` iff the socket is open **and** the non-blocking connect has completed (probed by a zero-length send). During an in-progress connect it is `false`. | `connector.lua:134-136`, `connector.lua:92-113` |
-| On disconnect (client) | socket closed; partial-send offset, partial-receive buffer and oversize flag reset; backoff reset. **The unsent `_send_queue` is NOT cleared** — lines queued while connected but not yet flushed are sent on the next socket. | `connector.lua:263-274` |
+| On disconnect (client) | socket closed; partial-send offset, partial-receive buffer and oversize flag reset; backoff reset. **The unsent `_send_queue` is cleared** so stale events cannot precede the next connection's hello. This does not claim the received `_line_queue` is cleared. | `lua/connector.lua:262-280` |
 | Events while disconnected | `send()` refuses to enqueue when `not C.connected()`: the event is **dropped** with a console log. Nothing is buffered for later. | `gen3_frlge_client.lua:1048-1051` |
 | On disconnect (server) | `connected_players[pid].connected = False`; **queued commands survive** and are delivered on the next event after reconnect | `server.py:2542-2548`, `state.py:125` |
 
@@ -139,6 +139,12 @@ Nothing else is "replayed": there is no event log replay. Pending commands queue
 
 ---
 
+### 2.6 Keyed sync-command lifetime
+
+**Shipped (`server/state.py:59`, `:152`, `:2267-2299`).** A keyed `party_mon`, `box_mon` or `memorialize` remains in flight after its reply leaves the server until a matching keyed acknowledgement resolves it or `SYNC_INFLIGHT_RECONCILES` (= 6) reconciler passes expire the window. `SoulLinkState.sync_inflight` tracks `(key, cmd) -> passes_remaining` per player (`:152`); `_arm_inflight` seeds the window at `SYNC_INFLIGHT_RECONCILES` when `handle_event` drains and clears the player's outbound queue (`:380-388` calls `:2267-2271`); `_ack_inflight` clears every in-flight entry for a key the instant any event carrying that key arrives (`:277-278`, `:2273-2277`); `_expire_inflight` spends one pass only when `_reconcile_party_keys` actually reconciles, not on a pass it skips for a rebuild or trade (`:2279-2290`, called at `:2348`). Reply delivery is not execution. While the command is queued or in flight, `_has_pending_command` (`:2292-2299`) makes reconciliation treat the target's transient party/box placement as still-pending rather than a player move — consulted at `:2356-2357`, `:2379-2380` and `:2394-2395`. Expiry permits reconciliation again; it is not a success acknowledgement or a delivery guarantee.
+
+The existing keyed responses are `sync_retrieve_done` / `sync_retrieve_failed` for retrieval, `box_mon_failed` for failed deposit, and `memorialize_done` / `memorialize_failed` for memorial handling (`server/state.py:318-386`). `stats_cache` currently updates cached stats and the party model (`:318-330`); it is sent before the Gen 1 deposit (`lua/gen1/client.lua:421-429`), not proof of successful deposit, but because it carries the target `key` it still acks that key's in-flight window through the generic `_ack_inflight` path (`server/state.py:277-278`). Do not invent a `box_mon_done` event.
+
 ## 3. Client → server events
 
 ### 3.1 Mon key
@@ -189,6 +195,24 @@ Dispatch order and the full accepted set: `state.py:249-353`. Anything else is l
 Fields the server reads from **enrichment-only** paths (server.py, not state.py): `capture.hp/level/maxHP/nickname/species_id/held_item_id|held_item/ability_id|ability` → `party_details` (`server.py:2933-2944`); `faint.key` → `party_details[key].hp=0` (`server.py:2948-2949`).
 
 ---
+
+### 3.3 Gen 1 boxed RELEASE: recorded protocol gap
+
+A Bill's PC RELEASE of a boxed linked mon is **not on the wire**. The rewritten client distinguishes a standalone boxed removal from the removal completing WITHDRAW, logs `RELEASE_SEEN key=... box=...`, and emits no event (`lua/gen1/client.lua:611-651`). A `party_to_box` for a mon that was never in the party would be false. There is no `release` event in this contract.
+
+The pair therefore stays **ALIVE with a phantom boxed half** in server state; the surviving half is not automatically retired. This is a documented shared-protocol gap, not proof of complete PC-release synchronization (`docs/gen1_requirements.md:155-157`; `tools/e2e_duo.py:150-156`). A box snapshot or local log marker is not a release acknowledgement. Preserve the distinction between DEPOSIT/WITHDRAW synchronization and this RELEASE limitation.
+
+### 3.4 `whiteout` → rebuild sequence
+
+The client can emit the final per-mon `faint` followed immediately by one `whiteout`, before `battle_end` and the engine's blackout/heal path; the blackout hook only supplies `whiteout` if it has not already been sent (`lua/gen1/client.lua:497-510`, `:571-572`). Do not require a `whiteout` death cause on links already retired by their preceding faint events.
+
+1. `_handle_whiteout` plans against surviving ALIVE links whose two halves are boxed. It excludes pending/unlinked captures (`server/state.py:2405-2430`, `_alive_pc_mons`) and caps picks by the partner's available party room (`:2434-2456`, `_plan_rebuild`).
+2. For the whited-out player, enqueue `party_mon` for each chosen key, then `rebuild_start{text,keys}`; for the partner, enqueue corresponding `party_mon` commands then the informational `hud_show` (`server/state.py:2463-2515`, `_queue_rebuild_commands`). These are per-player queues, not a globally ordered cross-socket stream.
+3. Rebuild retrievals are queued before any additional force-faint/memorial commands produced by this whiteout handler (`server/state.py:2020-2050` queues the rebuild before `:2054-2072` force-faints and memorializes). Earlier per-mon faints may already have queued memorials. Gen 1 appends a last-mon-blocked memorial to the deferred tail so a later retrieval can unblock it (`lua/gen1/client.lua:439-449`).
+4. At each cartridge's safe write checkpoint, `party_mon` yields keyed `sync_retrieve_done` or `sync_retrieve_failed` (`lua/gen1/client.lua:430-438`). The server adds confirmed keys, records rebuild completion, or drops failed keys and may re-box the partner (`server/state.py:332-366`).
+5. Once every queued key for that player's rebuild has resolved, send `rebuild_done` and clear `rebuild_pending[player]` (`server/state.py:2517-2531`, `_maybe_finish_rebuild`). This banner completion is not itself a bilateral barrier: physical proof requires both sides' retrieval acknowledgements and saved-state readback (`prep/PLAN_v3.9.md:494-505`).
+
+With no rebuildable pair, the game-over path applies; the whiteout handler handles retired party links with no picks and also invokes the shared game-over check (`server/state.py:2085-2101`). Rebuild does not resurrect DEAD/MEMORIAL links. A release-created phantom boxed half remains a separate limit, not a guaranteed rebuild candidate on the cartridge.
 
 ## 4. Snapshot shapes
 
@@ -313,6 +337,18 @@ Every command is a JSON object with `cmd`. Fields are listed exhaustively. "Obli
 | `pending_sync` | `message` | — | | | | `:855-856` | ⚠ **never emitted by the server** (dead client branch) |
 
 There is no `hud` command; the name is `hud_show`.
+
+### 5.0 Gen 1 LINK PANEL mailbox (Red/Blue companion patch)
+
+`link_panel{rows}` is a server payload, not permission to write whenever it arrives. The client holds sanitized, pre-rendered pages; the cartridge owns the screen, whites it out, draws a fallback and requests staging (`lua/gen1/panel.lua:1-10`, `:100-131`). This is separate from the native SLINK TRADE overlay ABI.
+
+The mailbox base is `$DEE2`: offsets `+0..3` are `SLNK`, `+4` ABI, `+8` capabilities (`CAP_PANEL = $02`), `+9` state (`CLOSED=0`, `AWAIT=1`, `STAGED=2`), `+10` requested zero-based page (patch → client), and `+11` page count (client → patch; zero means one to the patch). Presence requires the beacon and capability bit, not an ABI-number guess (`lua/gen1/panel.lua:13-35`, `:83-95`).
+
+Only an **observed non-AWAIT → AWAIT transition** arms a staging opportunity: CLOSED → AWAIT on open or STAGED → AWAIT on a page turn. First attachment to an already-AWAIT mailbox has unknown age and MUST NOT paint. A persistent AWAIT does not renew the deadline (`lua/gen1/panel.lua:145-164`).
+
+Each page is 18 rows × 20 tiles (360 bytes), up to eight pages. The client accepts staging at elapsed frames ≤60 from its observed transition and refuses later staging; the patch's fallback timeout is 90 frames. The narrow `panel` write window permits only the title's `wTileMap` range plus state/page-count bytes (`lua/gen1/panel.lua:65-70`, the `allow` predicate). Write all tiles, then page count, then publish STAGED **last** (`:134-141`, `self:stage()`).
+
+Rows arriving too late remain held for a future valid open/page transition, never paint over an already revealed fallback. The patch can retain AWAIT after timeout, so the client deadline is mandatory (`docs/gen1_requirements.md:160-162`). Yellow duo/trade/panel is outside this release's scope because the mailbox space is unavailable (`:157-158`); do not infer capability from generation alone.
 
 ### 5.1 Prompt token handshake
 
