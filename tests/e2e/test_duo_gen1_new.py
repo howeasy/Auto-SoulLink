@@ -61,8 +61,12 @@ def test_gen1_new_duo(scenario):
 
     cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
            "--game", GAME, "--scenario", scenario]
-    if scenario == "reconnect_new" and os.environ.get("SLINK_WRONG_SAVE"):
-        cmd.extend(("--wrong-save", os.environ["SLINK_WRONG_SAVE"]))
+    if scenario == "reconnect_new":
+        # C-1 needs a second-OT Red save. The lane sets no environment, so the committed fixture
+        # is the default and SLINK_WRONG_SAVE only overrides it; if the fixture is missing the
+        # runner refuses it and the scenario fails, which is what a missing leg must do.
+        cmd.extend(("--wrong-save", os.environ.get("SLINK_WRONG_SAVE") or os.path.join(
+            REPO, "tests", "fixtures", "gen1", "red_town_ot2.SaveRAM")))
     proc = subprocess.run(
         cmd,
         cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",

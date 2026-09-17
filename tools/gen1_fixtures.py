@@ -22,10 +22,12 @@ a stale fixture detected) without a 15-minute emulator run. Exit 1 if any fixtur
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
 import sys
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
@@ -34,7 +36,11 @@ sys.path.insert(0, os.path.join(REPO, "tools"))
 from server.adapters import gen1_codec as codec, gen1_rom_scan as scan  # noqa: E402
 
 GATE = "lua/tests/test_gen1_scripted_gate.lua"
-CHAINS = {"town": "lab,save", "battle": "lab,parcel,route1,save"}
+CHAINS = {"town": "lab,save", "battle": "lab,parcel,route1,save", "town_ot2": "lab,save"}
+# What scripted play's default title timing produces: the committed red_town/red_battle pair
+# both carry it, and the A1 wrong-save leg needs a Red save that does NOT (tools/e2e_duo.py
+# refuses a second-OT save whose id equals the original's).
+DEFAULT_OT = 0x4190
 SAVERAM_NAME = {"red": "Pokemon - Red Version (USA, Europe).SaveRAM",
                 "blue": "Pokemon - Blue Version (USA, Europe).SaveRAM"}
 DUMP = {"red": "patch/build/gen1_red.gb", "blue": "patch/build/gen1_blue.gb",
@@ -54,13 +60,45 @@ def is_legacy_artefact(problems: list[str]) -> bool:
     return bool(problems) and all(_LEGACY_PROBLEM.match(p) for p in problems)
 
 
+def saved_ot(sram: bytes, title: str) -> int:
+    """The trainer ID in a saved image, big-endian, by the rule tools/e2e_duo.py:1097 uses.
+
+    wPlayerID is a 2-byte big-endian word (data/games/gen1_rby/profile.json; pret
+    ram/wram.asm), reached at sMainData + (wPlayerID - wMainDataStart) because the save copies
+    wMainDataStart..End to sMainData (engine/menus/save.asm:63-68).
+    """
+    profile = json.loads((Path(REPO) / "data/games/gen1_rby" / "profile.json").read_text(
+        encoding="utf-8"))
+    ram = profile["titles"][title]["ram"]
+    offset = codec.SRAM_LAYOUT["sMainData"] + ram["wPlayerID"] - ram["wMainDataStart"]
+    return int.from_bytes(sram[offset:offset + 2], "big")
+
+
 def qualify(sram: bytes, rom: bytes) -> list[str]:
     """Problems with a candidate fixture (empty = a real, consistent save)."""
     problems = []
     if len(sram) != 0x8000:
         return [f"SaveRAM is {len(sram)} bytes, not 32768"]
     if not codec.verify_bank1(sram):
-        problems.append("main data checksum does not validate (the game would not offer CONTINUE)")
+        problems.append("main data checksum does not validate (sPlayerName..sTileAnimations, "
+                        "which includes the current box at sCurBoxData; the game would not offer "
+                        "CONTINUE)")
+    # The active box has no checksum byte of its own -- the main-data checksum above is what
+    # covers it (SaveCurrentBoxData recomputes sGameData..sGameDataEnd, :255-258; LoadCurrentBox
+    # Data refuses the save before reading the box, :96-105). The 12 boxes in SRAM banks 2/3 do
+    # have checksums, and the game writes them only from CopyBoxToOrFromSRAM (:400-431), which
+    # runs on a box change and sets the has-changed-boxes bit. Until that bit is set the banks
+    # are untouched SRAM ($FF) and the game never reads them, so they cannot be checked.
+    boxes = codec.verify_boxes(sram)
+    if boxes["initialized"]:
+        for bank, info in sorted(boxes["banks"].items()):
+            if not info["valid"]:
+                problems.append(f"box bank {bank} checksum does not match (stored "
+                                f"{info['stored']:02X}, calculated {info['calculated']:02X})")
+        for number, info in sorted(boxes["boxes"].items()):
+            if not info["valid"]:
+                problems.append(f"box {number} checksum does not match (stored "
+                                f"{info['stored']:02X}, calculated {info['calculated']:02X})")
     try:
         party = codec.decode_party(sram[codec.SRAM_LAYOUT["sPartyData"]:codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["size"]])
     except ValueError as exc:
@@ -127,6 +165,9 @@ def main() -> int:
                          "(no emulator, no writes)")
     ap.add_argument("--player", choices=("a", "b"), default=None, help="a = Bulbasaur, b = Charmander (default: red a, blue b)")
     ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--title-idle", type=int, default=0,
+                    help="idle frames on the title screen before New Game; the count moves the "
+                         "trainer ID (0 is what the committed fixtures were built with)")
     args = ap.parse_args()
 
     if args.qualify:
@@ -137,7 +178,8 @@ def main() -> int:
 
     import gen1_playthrough as play
     from run_gb_gate import run_gate
-    env = dict(os.environ, SLINK_SCRIPT_CHAIN=CHAINS[args.target], SLINK_SCRIPT_PLAYER=player, SLINK_SCRIPT_FLUSH="1")
+    env = dict(os.environ, SLINK_SCRIPT_CHAIN=CHAINS[args.target], SLINK_SCRIPT_PLAYER=player,
+               SLINK_SCRIPT_FLUSH="1", SLINK_SCRIPT_TITLE_IDLE=str(args.title_idle))
     os.environ.update(env)
     passed, path, text = run_gate(GATE, rom_key=f"{args.rom}_cold", target="town", timeout=args.timeout)
     print(text[-2500:])
@@ -157,9 +199,20 @@ def main() -> int:
         print("candidate fixture refused:\n  " + "\n  ".join(problems), file=sys.stderr)
         return 1
     dest = os.path.join(REPO, "tests", "fixtures", "gen1", f"{args.rom}_{args.target}.SaveRAM")
+    ot = saved_ot(sram, args.rom)
+    if args.target == "town_ot2" and ot == DEFAULT_OT:
+        # A1's wrong-save leg is only a leg if the two saves disagree on the trainer ID; a
+        # fixture carrying the default one would make the leg pass for the wrong reason.
+        if os.path.exists(dest):
+            os.remove(dest)  # a stale fixture must not outlive the build that was refused
+        print(f"refused {os.path.relpath(dest, REPO)}: the saved trainer ID is still 0x{ot:04X}, "
+              f"the same OT the default fixtures carry — the idle count did not move it. "
+              f"Try --title-idle 240 or 360.", file=sys.stderr)
+        return 1
     shutil.copyfile(src, dest)
     party = codec.decode_party(sram[codec.SRAM_LAYOUT["sPartyData"]:codec.SRAM_LAYOUT["sPartyData"] + 404])
-    print(f"wrote {os.path.relpath(dest, REPO)}: party={[(m['species'], m['level'], m['exp']) for m in party]}")
+    print(f"wrote {os.path.relpath(dest, REPO)}: OT 0x{ot:04X} "
+          f"party={[(m['species'], m['level'], m['exp']) for m in party]}")
     return 0
 
 

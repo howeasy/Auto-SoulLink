@@ -41,7 +41,8 @@ local safety = dofile(t.ROOT .. "/lua/gen1_write_safety.lua")
 local ws = json.decode(assert(io.open(t.ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[t.title]
 local function overworld_ok() return safety.check(ws, t.deps) == true end
 
-local play = P.new(t.ROOT, t.title, player, { log = t.log })
+local play = P.new(t.ROOT, t.title, player, { log = t.log,
+    title_idle = tonumber(os.getenv("SLINK_SCRIPT_TITLE_IDLE") or 0) })
 local bok, berr = pcall(function() return play.boot(step, overworld_ok) end)
 t.check("NEW GAME reached the bedroom", bok, berr)
 if not bok then t.finish("boot failed") end

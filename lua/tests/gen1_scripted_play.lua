@@ -123,6 +123,12 @@ function P.new(ROOT, title, player, opts)
         assert(type(overworld_ok) == "function", "boot needs the overworld checkpoint predicate")
         max_frames = max_frames or 20000
         local settled = 0
+        -- Idle frames on the title screen move the trainer ID. Random runs every VBlank
+        -- (home/vblank.asm:37; engine/math/random.asm:1-13 folds rDIV into hRandomAdd/Sub) and
+        -- InitPlayerData2 takes both for wPlayerID (engine/movie/oak_speech/init_player_data.asm:
+        -- 4-10), so a different idle count is a different, still deterministic, OT -- what the
+        -- A1 second-OT fixture is built with. 0 for every caller that does not ask for it.
+        for _ = 1, (opts.title_idle or 0) do step(IDLE) end
         for f = 1, max_frames do
             local ok = sym("wCurMap") == 0x26 and sym("wPartyCount") == 0 and overworld_ok()
             settled = ok and settled + 1 or 0
