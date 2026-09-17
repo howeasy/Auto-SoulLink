@@ -135,6 +135,17 @@ SCENARIOS = {
                                   "b": "patch/gen1/build/slink_blue.gb"},
                           "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                           "oracle": "assert_trade_decline_saved"},
+    # W-3 / D-11: linked_faint_active_new's A half against a server started with --explode-mode
+    # (server/server.py:4755 spells it exactly that; the help text still says "RR only" although
+    # the Gen 1 client consumes force_explode too). Runs the trade-carrying ROMs because B's
+    # in-battle VBlank probe reads the companion patch's mailbox counter, and it saves under the
+    # filename-derived patched save name.
+    "explode_new": {"flags": ["--explode-mode"], "timeout": 1800, "games": ("gen1_new",),
+                    "target": "battle", "no_setup": True, "frames": 2500000,
+                    "rom": {"a": "patch/gen1/build/slink_red.gb",
+                            "b": "patch/gen1/build/slink_blue.gb"},
+                    "patched_saves": {"a": "red_patched", "b": "blue_patched"},
+                    "oracle": "assert_explode_saved"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
@@ -1652,8 +1663,27 @@ class DuoRun:
         self._pydec_note("B initialized box banks and all 12 counts/terminators/checksums valid")
         self._pydec_note(f"B Box 12 holds {self._deadzone_b_key} at HP 0")
 
-    def assert_linked_faint_saved(self, results, *, active):
-        """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts."""
+    def _patched_saved_state(self, inst):
+        """The flushed SaveRAM of a trade-carrying cartridge (companion patch in the ROM).
+
+        Those scenarios launch `patch/gen1/build/slink_{red,blue}.gb`, whose SaveRAM name is the
+        filename-derived patched one, so the clean-title default would read the wrong file. One
+        resolver, shared by every oracle that runs those ROMs.
+        """
+        if REPO not in sys.path:
+            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from run_gb_gate import GENS
+
+        save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
+        return self._saved_gen1_party(inst, rom=self.cfg["rom"][inst], save_name=save_name)
+
+    def assert_linked_faint_saved(self, results, *, active, saved_state=None):
+        """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts.
+
+        `saved_state(inst)` defaults to the clean-title read; explode_new passes the patched
+        resolver because it runs the trade-carrying ROMs, whose SaveRAM name and ROM differ.
+        """
+        read = saved_state or self._saved_gen1_party
         for process in self.emus:
             process.wait(timeout=30)
         matches = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
@@ -1675,7 +1705,7 @@ class DuoRun:
             key = self._link_keys[inst]
             if link[inst]["key"] != key:
                 raise RuntimeError(f"{inst} persisted link key differs from captured {key}")
-            sram, party, current_box, codec = self._saved_gen1_party(inst)
+            sram, party, current_box, codec = read(inst)
             if len(party) != 1 or codec.key(party[0]) != self._boot_keys[inst] or party[0]["hp"] == 0:
                 raise RuntimeError(f"{inst} saved party is not its living starter: "
                                    f"{[(codec.key(m), m['hp']) for m in party]}")
@@ -1723,6 +1753,68 @@ class DuoRun:
                   "TILEMAP_FNT unavailable: memorialised within " not in b_text)):
             raise RuntimeError("B bench write lacked HP/status and party-menu FNT tile evidence")
         self._pydec_note(f"D-6/W-{2 if active else 1} server battle cause and ordered engine receipts valid")
+
+    def assert_explode_saved(self, results):
+        """W-3/D-11: the shared faint half plus the markers only a companion-patched cartridge
+        with `--explode-mode` can produce.
+
+        The saved-state half is `assert_linked_faint_saved(active=True)` run through the
+        patched-save resolver, because explode_new launches the trade-carrying ROMs: the pair
+        must be dead with cause battle and both Box 12s must hold the linked key at HP 0. B's
+        markers then prove the path was Explode Mode's: the in-battle VBlank counter advanced
+        (the patch's hook still runs), the server sent only `force_explode`, the move menu
+        showed the catch's own moves BEFORE the write and four EXPLOSIONs after it, and the
+        commit was the coerced turn rather than a queued one.
+        """
+        self.assert_linked_faint_saved(results, active=True,
+                                       saved_state=self._patched_saved_state)
+        a_text, b_text = results["a"], results["b"]
+
+        marker(a_text, r"A_ENGINE_FAINT", "A engine faint")
+        marker(a_text, r"BATTLE_FAINT_SITE ", "A battle faint site")
+        marker(a_text, r"SAVE_WITNESS explode_new", "A save witness")
+        marker(b_text, r"READY_ACTIVE linked_slot=0", "B active hold")
+        counters = marker(b_text, r"PANEL_COUNTER_IN_BATTLE a=(\d+) b=(\d+)", "B VBlank probe")
+        if counters.group(1) == counters.group(2):
+            raise RuntimeError(f"B's in-battle VBlank counter did not advance across a frame "
+                               f"({counters.group(1)} == {counters.group(2)}); the patch's hook "
+                               f"is not running inside the battle")
+        marker(b_text, r"RX force_explode key=", "B explode command")
+        cmds = marker(b_text, r"EXPLODE_CMDS force_explode=(\d+) force_faint=(\d+)",
+                      "B command split")
+        if cmds.group(1) != "1" or cmds.group(2) != "0":
+            raise RuntimeError(f"Explode Mode sent force_explode={cmds.group(1)} "
+                               f"force_faint={cmds.group(2)}, expected 1 / 0")
+        before = marker(b_text, r"MOVE_MENU_BEFORE (.*)", "B pre-write move menu")
+        if "EXPLOSION" in before.group(1):
+            raise RuntimeError(f"the move menu already showed EXPLOSION before the write landed: "
+                               f"{before.group(1)!r}")
+        loop = marker(b_text, r"LOOP_HEAD_EXPLODE moves=(\S+) pp=(\S+)", "B loop-head write")
+        if loop.group(1) != "99999999" or loop.group(2) != "01010101":
+            raise RuntimeError(f"B's battle struct after the write reads moves={loop.group(1)} "
+                               f"pp={loop.group(2)}, expected 99999999 / 01010101")
+        marker(b_text, r"MOVE_MENU_AFTER EXPLOSION \| EXPLOSION \| EXPLOSION \| EXPLOSION",
+               "B post-write move menu")
+        marker(b_text, r"MOVE_MENU_EXPLOSION rows=4", "B four EXPLOSION rows")
+        marker(b_text, r"B_ACTIVE_COMMIT player_move", "B commit")
+        marker(b_text, r"BATTLE_FAINT_SITE .* battle_hp=0", "B battle faint site")
+        marker(b_text, r"BATTLE_RESULT b", "B battle result")
+        marker(b_text, r"SAVE_WITNESS explode_new", "B save witness")
+        for absent in ("RX force_faint", "LOOP_HEAD_WRITE", "PANEL_COUNTER_IN_BATTLE absent"):
+            if absent in b_text:
+                raise RuntimeError(f"B's explode receipt carries {absent!r}")
+        self._pydec_note(f"W-3/D-11 markers: VBlank counter {counters.group(1)}->"
+                         f"{counters.group(2)}, force_explode={cmds.group(1)} "
+                         f"force_faint={cmds.group(2)}, menu before={before.group(1).strip()!r}, "
+                         f"loop head moves={loop.group(1)} pp={loop.group(2)}, rows=4, "
+                         f"player_move commit; absent RX force_faint/LOOP_HEAD_WRITE/absent-probe")
+
+        # Routing only: this row says the SERVER asked for an explode, not that the game ran one
+        # (state.py:2678-2680 picks the command name; server.py:1918-1922 logs the verb). The
+        # engine markers above are the execution proof, so the row is recorded, never asserted.
+        exploded = [row.get("text", "") for row in self._reconnect_events()
+                    if row.get("type") == "force_explode"]
+        self._pydec_note(f"events.json force_explode rows: {exploded} (routing only)")
 
     def assert_trade_new(self, results):
         """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
@@ -1791,10 +1883,6 @@ class DuoRun:
         both saved parties still holding [starter, linked] with the linked half on the side
         that caught it.
         """
-        if REPO not in sys.path:
-            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
-        from run_gb_gate import GENS
-
         for process in self.emus:
             process.wait(timeout=30)  # client.exit flushes CartRAM to its per-instance SaveRAM
         for inst, text in results.items():
@@ -1819,9 +1907,7 @@ class DuoRun:
         self._pydec_note(f"durable route_1 pair unchanged: a={before_a} b={before_b}")
 
         for inst in ("a", "b"):
-            save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
-            _sram, party, _box, codec = self._saved_gen1_party(
-                inst, rom=self.cfg["rom"][inst], save_name=save_name)
+            _sram, party, _box, codec = self._patched_saved_state(inst)
             keys = [codec.key(mon) for mon in party]
             want = [self._boot_keys[inst], self._link_keys[inst]]
             if keys != want:
@@ -2066,7 +2152,8 @@ class DuoRun:
                 self.assert_dead_zone_refusal()
             elif self.scenario == "dupes":
                 self.assert_species_clause_rejection()
-            elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new"):
+            elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new",
+                                   "explode_new"):
                 self.go()
                 self.assert_link_new()
             elif self.scenario in ("trade_new", "trade_decline_new"):

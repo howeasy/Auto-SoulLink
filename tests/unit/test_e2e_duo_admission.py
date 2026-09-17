@@ -1169,3 +1169,73 @@ def test_trade_decline_oracle_refuses_a_saved_party_that_moved(tmp_path, monkeyp
     run = _trade_decline_stub(tmp_path, monkeypatch, moved=True)
     with pytest.raises(RuntimeError, match="staged a blob"):
         run.assert_trade_decline_saved({"a": _TRADE_DECLINE_A, "b": _TRADE_DECLINE_B})
+
+
+# ── A3: the explode_new oracle ───────────────────────────────────────────────────────────
+# W-3/D-11 is a companion-patched cartridge running one coerced turn. The saved-state half is
+# assert_linked_faint_saved's, delegated with active=True and the patched-save resolver; the
+# markers below are the ones only Explode Mode's path produces.
+
+_EXPLODE_A = "\n".join([
+    "A_ENGINE_FAINT CCCC:3333:03",
+    "BATTLE_FAINT_SITE CCCC:3333:03 slot=0 battle_hp=0",
+    "SAVE_WITNESS explode_new frames=2000",
+])
+_EXPLODE_B = "\n".join([
+    "READY_ACTIVE linked_slot=0",
+    "PANEL_COUNTER_IN_BATTLE a=1200 b=1201",
+    "RX force_explode key=CCCC:3333:03",
+    "EXPLODE_CMDS force_explode=1 force_faint=0",
+    "MOVE_MENU_BEFORE Tackle | Tail Whip | - | -",
+    "LOOP_HEAD_EXPLODE moves=99999999 pp=01010101",
+    "MOVE_MENU_AFTER EXPLOSION | EXPLOSION | EXPLOSION | EXPLOSION",
+    "MOVE_MENU_EXPLOSION rows=4 key=CCCC:3333:03 moves=99999999 pp=01010101",
+    "B_ACTIVE_COMMIT player_move selected=99 pp_before=01",
+    "BATTLE_FAINT_SITE CCCC:3333:03 slot=0 battle_hp=0",
+    "BATTLE_RESULT b",
+    "SAVE_WITNESS explode_new frames=2100",
+])
+
+
+def _explode_stub(tmp_path, monkeypatch, calls=None):
+    """The stub state assert_explode_saved reads: the shared faint half is replaced by a
+    recorder, so these pins test the explode-specific markers and the delegation contract."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.emus = []
+    run.data_dir = str(tmp_path)
+    run._reconnect_events = lambda: [
+        {"player": "b", "type": "force_explode", "text": "⚡ RATTATA exploded!"}]
+
+    def shared(results, *, active, saved_state=None):
+        (calls if calls is not None else []).append((active, saved_state))
+
+    monkeypatch.setattr(run, "assert_linked_faint_saved", shared)
+    run._pydec_note = lambda fact: None
+    return run
+
+
+def test_explode_oracle_reads_the_markers_and_delegates_the_shared_half(tmp_path, monkeypatch):
+    calls = []
+    run = _explode_stub(tmp_path, monkeypatch, calls)
+    run.assert_explode_saved({"a": _EXPLODE_A, "b": _EXPLODE_B})
+    assert len(calls) == 1, calls
+    assert calls[0][0] is True, "the shared half must run in the ACTIVE window"
+    assert calls[0][1] == run._patched_saved_state, (
+        "the shared half must read the patched saves, not the clean-title defaults")
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    ("PANEL_COUNTER_IN_BATTLE a=1200 b=1201", "PANEL_COUNTER_IN_BATTLE a=1200 b=1200",
+     "did not advance"),
+    ("MOVE_MENU_BEFORE Tackle | Tail Whip | - | -",
+     "MOVE_MENU_BEFORE EXPLOSION | EXPLOSION | EXPLOSION | EXPLOSION", "before the write"),
+    ("LOOP_HEAD_EXPLODE moves=99999999 pp=01010101\n", "", "B loop-head write"),
+    ("BATTLE_RESULT b", "BATTLE_RESULT b\nRX force_faint key=CCCC:3333:03", "RX force_faint"),
+    ("BATTLE_RESULT b",
+     "BATTLE_RESULT b\nLOOP_HEAD_WRITE key=CCCC:3333:03 battle_hp=0000 selected=FF",
+     "LOOP_HEAD_WRITE"),
+])
+def test_explode_oracle_refuses_a_broken_marker(tmp_path, monkeypatch, old, new, message):
+    run = _explode_stub(tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match=message):
+        run.assert_explode_saved({"a": _EXPLODE_A, "b": _EXPLODE_B.replace(old, new)})

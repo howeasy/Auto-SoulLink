@@ -22,7 +22,8 @@ from e2e_duo import GAMES, SCENARIOS, DuoRun, scenario_applies, scenarios_for  #
 
 GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
-                      "admit_randomized_new", "soft_reset_new", "trade_decline_new")
+                      "admit_randomized_new", "soft_reset_new", "trade_decline_new",
+                      "explode_new")
 
 
 @pytest.mark.parametrize("game", sorted(GAMES))
