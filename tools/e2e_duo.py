@@ -158,6 +158,14 @@ SCENARIOS = {
     "changebox_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                       "target": "battle", "no_setup": True, "frames": 2500000,
                       "oracle": "assert_changebox_new_saved"},
+    # S-4's blackout half + W-3 (the auto-rebuild): both halves deposit their linked catch,
+    # A loses its starter to a wild foe and blacks out, and the server rebuilds the pair out
+    # of the two PCs. The runner gates the blackout on BOTH_BOXED (server field, not the
+    # client's word) because the rebuild only picks pairs whose halves are absent from
+    # `state.party_keys` (server/state.py:2359-2360).
+    "whiteout_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
+                     "target": "battle", "no_setup": True, "frames": 2500000,
+                     "oracle": "assert_whiteout_new_saved"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
@@ -706,6 +714,20 @@ class DuoRun:
     def _status(self):
         try:
             return api(self.http_port, "GET", "/api/status", timeout=3)
+        except Exception:
+            return None
+
+    def _raw_state(self):
+        """The server's own state dump (`/api/debug/raw_state`).
+
+        `_live.party_keys` here is `SoulLinkState.party_keys` — the field
+        `_handle_party_to_box` discards from (server/state.py:2086) — unlike the `party_keys`
+        `/api/status` publishes, which `_get_party_ordered` rebuilds from the cartridges'
+        party snapshots every tick (server/server.py:2209, :4335-4343). The BOTH_BOXED gate
+        reads this one.
+        """
+        try:
+            return api(self.http_port, "GET", "/api/debug/raw_state", timeout=3)
         except Exception:
             return None
 
@@ -1986,6 +2008,181 @@ class DuoRun:
                          f"Box 1; saved flag set, index {index}, {self._deadzone_b_key} still "
                          f"HP 0 in Box 12; no storage event on the wire")
 
+    def assert_whiteout_both_boxed(self):
+        """The runner's half of the BOTH_BOXED handshake, before either cartridge may leave
+        the PC.
+
+        The Lua polls its go-file for the literal BOTH_BOXED (duo_gen1_main.lua:1849-1853,
+        900 s budget) instead of trusting the mirrored box_mon, and this is the process that
+        has to write it. Both halves deposit by hand, and a deposit is mirrored to the partner
+        the moment the server sees `party_to_box` -- so the partner's key leaves `party_keys`
+        there, before that cartridge has moved anything (server/state.py:2066-2113). A
+        mirrored box_mon arriving at an already-deposited mon is a no-op, not a failure
+        (lua/gen1/boxes.lua:296-318). Bookkeeping is therefore not evidence; this gate is the
+        runner reading the server for itself:
+
+          1. both driver receipts carry DEPOSITED_FOR_REBUILD <their own linked key> (the
+             physical read: party = starter only, the catch listed in the active box);
+          2. the SERVER's `state.party_keys` no longer lists either key -- the field
+             `_handle_party_to_box` discards from (server/state.py:2086 own half, :2108
+             mirrored half), and exactly the co-location predicate `_alive_pc_mons` uses to
+             pick rebuild candidates (server/state.py:2359-2360). If this passes, the blackout
+             that follows has a pair to rebuild from. The `party_keys` `/api/status` publishes
+             is NOT this field: `_get_party_ordered` rebuilds it from the cartridges' own
+             party snapshots (server/server.py:2209, :4335-4343);
+          3. only then BOTH_BOXED into both go-files, through the same writer `go()` uses.
+        """
+        keys = self._link_keys
+        missing = {}
+
+        def deposited():
+            missing.clear()
+            for inst in ("a", "b"):
+                text = read_result(self.scenario, inst) or ""
+                if not re.search(re.escape("DEPOSITED_FOR_REBUILD " + keys[inst]), text):
+                    missing[inst] = f"no DEPOSITED_FOR_REBUILD {keys[inst]} yet"
+            return True if not missing else None
+
+        try:
+            wait_for("both halves to deposit their linked catch for the rebuild", deposited,
+                     self.cfg["timeout"])
+        except TimeoutError as exc:
+            raise RuntimeError("the deposit never landed — "
+                               + "; ".join(f"{inst}: {why}" for inst, why in missing.items())) from exc
+
+        problems = {}
+
+        def server_agrees():
+            live = (self._raw_state() or {}).get("_live") or {}
+            party_keys = live.get("party_keys") or {}
+            problems.clear()
+            for inst in ("a", "b"):
+                field = party_keys.get(inst)
+                if field is None:
+                    problems[inst] = "party_keys: the server published no such field"
+                elif keys[inst] in field:
+                    problems[inst] = f"party_keys still lists {keys[inst]}: {field}"
+            return True if not problems else None
+
+        try:
+            wait_for("the SERVER to see both linked keys boxed", server_agrees, 300)
+        except TimeoutError as exc:
+            raise RuntimeError(
+                "the server never saw both halves boxed — "
+                + "; ".join(f"{inst}: {why}" for inst, why in problems.items())) from exc
+        for inst in ("a", "b"):
+            self._go_one(inst, ["BOTH_BOXED"])
+        print(f"[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped "
+              f"{keys['a']} and {keys['b']}")
+
+    def assert_whiteout_new_saved(self, results):
+        """S-4 (blackout) + W-3 (auto-rebuild): one whiteout, one rebuild, no deaths.
+
+        Both halves deposit their linked catch, A loses its starter to a wild foe and blacks
+        out to Pallet Town. `_handle_whiteout` retires only links whose half is still in the
+        WHITED-OUT player's `party_keys` (server/state.py:2024-2026) — both halves are boxed —
+        and plans the rebuild from alive pairs with both halves boxed (`_alive_pc_mons`
+        :2359-2360, `_plan_rebuild` :2365-2392). One `party_mon` is queued to each half and
+        `rebuild_start` to A alone (`_queue_rebuild_commands` :2418-2443); `rebuild_done`
+        follows once A's own `sync_retrieve_done` lands (:2448-2462). Both are COMMANDS, so
+        they are evidenced by the RX lines the driver tees, never by events.json, which is the
+        server's ring buffer of INBOUND events (`_log_event`, server/server.py:1505-1516).
+        `game_over` is a command too; the "no game over" claim is asserted as its durable
+        cause: the pair is still ALIVE, `run_over` is false, and neither client was told.
+
+        The saved state is read through the same PYDEC path as `assert_pc_ops_new_saved`
+        (`_saved_gen1_party`, whose `qualify()` checks the game's own checksum and recomputed
+        stats). This scenario runs the clean fixtures, so the patched-ROM resolver
+        (`_patched_saved_state`) does not apply.
+        """
+        for process in self.emus:
+            process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
+        self._artifact(self._result_path("a"), "A result receipt")
+        self._artifact(self._result_path("b"), "B result receipt")
+        a_text, b_text = results["a"], results["b"]
+        key_a, key_b = self._link_keys["a"], self._link_keys["b"]
+
+        # The blackout, re-derived from the driver's numbers rather than its MONEY_HALVED
+        # verdict: the game halves the BCD total, so after == before // 2 or the run is wrong.
+        before = marker(a_text, r"MONEY_BEFORE (\d+)", "A money before the blackout")
+        after = marker(a_text, r"MONEY_AFTER (\d+)", "A money after the blackout")
+        expected = int(before.group(1)) // 2
+        if int(after.group(1)) != expected:
+            raise RuntimeError(f"A's money went {before.group(1)} -> {after.group(1)}; the "
+                               f"blackout halves it to {expected}")
+        marker(a_text, r"MONEY_HALVED before=\d+ after=\d+", "A money-halving receipt")
+        site = marker(a_text, r"BLACKOUT_SITE map=(\d+) x=(\d+) y=(\d+)", "A blackout site")
+        if site.groups() != ("0", "5", "6"):
+            raise RuntimeError(f"A blacked out to map={site.group(1)} "
+                               f"({site.group(2)},{site.group(3)}), not Pallet Town (0, 5, 6)")
+        ko = marker(a_text, r"STARTER_KO frame=\d+ key=(\S+)", "A starter KO")
+        if ko.group(1) != self._boot_keys["a"]:
+            raise RuntimeError(f"A's KO'd key is {ko.group(1)}, not the boot starter "
+                               f"{self._boot_keys['a']}; the linked half was supposed to be "
+                               f"boxed and out of the battle")
+        tx = re.findall(r'^TX .*"event":"whiteout"', a_text, re.M)
+        if len(tx) != 1:
+            raise RuntimeError(f"A sent {len(tx)} whiteout event(s), expected exactly one")
+        if re.search(r'"event":"whiteout"', b_text):
+            raise RuntimeError("B sent a whiteout; only the blacked-out half may")
+
+        for inst, key in (("a", key_a), ("b", key_b)):
+            text = results[inst]
+            marker(text, re.escape("DEPOSITED_FOR_REBUILD " + key), f"{inst} deposit-for-rebuild")
+            marker(text, re.escape("BOTH_BOXED status=true"), f"{inst} BOTH_BOXED ack")
+            marker(text, re.escape("REBUILD_PARTY_MON " + key), f"{inst} rebuild party_mon")
+            marker(text, re.escape("SYNC_RETRIEVE_DONE " + key), f"{inst} rebuild withdraw")
+            marker(text, r"REBUILT party=2 box_count=0", f"{inst} rebuilt party")
+            marker(text, re.escape("SAVE_WITNESS whiteout_new_" + inst), f"{inst} save witness")
+            if re.search(r"GAME_OVER RX game_over", text):
+                raise RuntimeError(f"{inst} was told the run is over; a boxed pair was there "
+                                   f"to rebuild")
+
+        starts = len(re.findall(r"^RX rebuild_start\b", a_text, re.M))
+        dones = len(re.findall(r"^RX rebuild_done\b", a_text, re.M))
+        if starts != 1 or dones != 1:
+            raise RuntimeError(f"A was told rebuild_start x{starts} and rebuild_done x{dones}, "
+                               f"expected 1 each")
+        if a_text.find("RX rebuild_start") > a_text.find("RX rebuild_done"):
+            raise RuntimeError("A's rebuild_done arrived before its rebuild_start")
+        if re.search(r"^RX rebuild_(?:start|done)\b", b_text, re.M):
+            raise RuntimeError("B received a rebuild command; rebuild_start/rebuild_done "
+                               "belong to the whited-out half alone")
+
+        events = self._reconnect_events()  # newest-first: server.py:1508 appendleft
+        whiteouts = [row for row in events if row.get("type") == "whiteout"]
+        if len(whiteouts) != 1 or whiteouts[0].get("player") != "a":
+            raise RuntimeError(f"events.json carries {len(whiteouts)} whiteout row(s) "
+                               f"{[(row.get('player'), row.get('text')) for row in whiteouts]}, "
+                               f"expected exactly one from a")
+        document = self._reconnect_document()  # the whole links.json, for run_over
+        if document.get("run_over"):
+            raise RuntimeError("links.json says the run is over; the whiteout had a boxed pair "
+                               "to rebuild")
+        live = [entry for entry in (document.get("links") or [])
+                if entry.get("area_id") == "route_1"]
+        if (len(live) != 1 or live[0].get("status") != "alive"
+                or live[0].get("a", {}).get("key") != key_a
+                or live[0].get("b", {}).get("key") != key_b):
+            raise RuntimeError(f"the route_1 pair did not survive the whiteout: {live}")
+        self._pydec_note(f"S-4/W-3 one whiteout from a, run_over false, route_1 pair still "
+                         f"ALIVE {key_a} <-> {key_b}")
+
+        for inst, key in (("a", key_a), ("b", key_b)):
+            sram, party, current_box, codec = self._saved_gen1_party(inst)
+            if not re.fullmatch(r"[0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{2}", key):
+                raise RuntimeError(f"{inst}'s linked key {key!r} is not in DDDD:OOOO:SS form")
+            keys = [codec.key(mon) for mon in party]
+            if keys != [self._boot_keys[inst], key]:
+                raise RuntimeError(f"{inst}'s saved party is {keys}, expected the starter plus "
+                                   f"the rebuilt {key}")
+            if current_box:
+                raise RuntimeError(f"{inst}'s saved current box still holds "
+                                   f"{[codec.key(mon) for mon in current_box]}; the rebuild "
+                                   f"withdrew it and box_count must be 0")
+            self._pydec_note(f"{inst} saved party {len(party)} mon(s) = starter + rebuilt {key}, "
+                             f"active box empty, decode valid")
+
     def assert_trade_new(self, results):
         """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
         from pathlib import Path
@@ -2326,6 +2523,14 @@ class DuoRun:
                                    "explode_new", "pc_ops_new"):
                 self.go()
                 self.assert_link_new()
+            elif self.scenario == "whiteout_new":
+                # The extra gate is this scenario's own: both halves must be BOXED as far as
+                # the server is concerned before either may leave the PC, because the blackout
+                # that follows rebuilds only from pairs whose halves are absent from
+                # `party_keys` (_alive_pc_mons, server/state.py:2336-2363).
+                self.go()
+                self.assert_link_new()
+                self.assert_whiteout_both_boxed()
             elif self.scenario in ("trade_new", "trade_decline_new"):
                 self.go()
                 self.assert_link_new()

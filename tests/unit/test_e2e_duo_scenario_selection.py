@@ -23,7 +23,7 @@ from e2e_duo import GAMES, SCENARIOS, DuoRun, scenario_applies, scenarios_for  #
 GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
                       "admit_randomized_new", "soft_reset_new", "trade_decline_new",
-                      "explode_new", "pc_ops_new", "changebox_new")
+                      "explode_new", "pc_ops_new", "changebox_new", "whiteout_new")
 
 
 @pytest.mark.parametrize("game", sorted(GAMES))
@@ -127,3 +127,30 @@ def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
     mod = __import__("test_duo_gen1_new")
     assert mod.GAME == "gen1_new"
     assert sorted(mod.SCENARIOS) == sorted(GEN1_NEW_SCENARIOS)
+
+
+def test_whiteout_new_is_registered_for_gen1_new_and_nothing_else():
+    """S-4/W-3's scenario opts in to `gen1_new` alone.
+
+    Both directions matter: an entry that lost its `games` key would match every title the
+    family rule does not exclude (the old default), and one written as `("gen1",)` would be
+    handed to the gen1 driver, whose scenario table has no `whiteout_new`.
+    """
+    assert scenario_applies("whiteout_new", "gen1_new")
+    assert "whiteout_new" in scenarios_for("gen1_new")
+    assert not scenario_applies("whiteout_new", "gen1")
+    assert not scenario_applies("whiteout_new", "gen1_yellow")
+    assert not scenario_applies("whiteout_new", "gen3_rr")
+    assert "whiteout_new" not in scenarios_for("gen2")
+
+
+def test_whiteout_new_carries_the_gen1_new_shape_and_both_of_its_gates():
+    """The registry entry plus the two methods the orchestration calls: the pre-blackout
+    BOTH_BOXED gate (orchestrate) and the post-result oracle (_run_oracle)."""
+    entry = SCENARIOS["whiteout_new"]
+    assert entry["games"] == ("gen1_new",)
+    assert entry["no_setup"] is True and entry["flags"] == []
+    assert entry["target"] == "battle" and entry["timeout"] == 1800
+    assert entry["oracle"] == "assert_whiteout_new_saved"
+    assert callable(getattr(DuoRun, "assert_whiteout_new_saved", None))
+    assert callable(getattr(DuoRun, "assert_whiteout_both_boxed", None))
