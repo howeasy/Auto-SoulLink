@@ -128,7 +128,9 @@ function P.new(ROOT, title, player, opts)
         -- InitPlayerData2 takes both for wPlayerID (engine/movie/oak_speech/init_player_data.asm:
         -- 4-10), so a different idle count is a different, still deterministic, OT -- what the
         -- A1 second-OT fixture is built with. 0 for every caller that does not ask for it.
-        for _ = 1, (opts.title_idle or 0) do step(IDLE) end
+        local idled = 0
+        for _ = 1, (opts.title_idle or 0) do step(IDLE); idled = idled + 1 end
+        if opts.log then opts.log(("TITLE_IDLE requested=%d applied=%d"):format(opts.title_idle or 0, idled)) end
         for f = 1, max_frames do
             local ok = sym("wCurMap") == 0x26 and sym("wPartyCount") == 0 and overworld_ok()
             settled = ok and settled + 1 or 0
