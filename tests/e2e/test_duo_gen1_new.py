@@ -33,7 +33,8 @@ GAME = "gen1_new"
 ROMS = ("red", "blue")
 SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
              "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
-             "admit_randomized_new", "soft_reset_new", "trade_decline_new", "explode_new")
+             "admit_randomized_new", "soft_reset_new", "trade_decline_new", "explode_new",
+             "pc_ops_new", "changebox_new")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

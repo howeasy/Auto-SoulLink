@@ -146,6 +146,18 @@ SCENARIOS = {
                             "b": "patch/gen1/build/slink_blue.gb"},
                     "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                     "oracle": "assert_explode_saved"},
+    # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
+    # DEPOSIT -> RELEASE through the native PC menus. The release is the documented
+    # shared-protocol gap: the client logs RELEASE_SEEN and sends nothing, so the pair stays
+    # ALIVE with a phantom boxed half.
+    "pc_ops_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
+                   "target": "battle", "no_setup": True, "frames": 2500000,
+                   "oracle": "assert_pc_ops_new_saved"},
+    # W-5's box-change half: the deadzone body, then B CHANGEs BOX to 12 (the memorial is
+    # listed) and back to 1, with the saved current-box index and the flag read afterwards.
+    "changebox_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
+                      "target": "battle", "no_setup": True, "frames": 2500000,
+                      "oracle": "assert_changebox_new_saved"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
@@ -566,10 +578,12 @@ GAMES = {
         "scenario_prefix": "gen1_",
     },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
-    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). Only link_new
-    # and deadzone_new run here; duo_gen1_main refuses every other scenario name. NOTE the
-    # family rule in scenario_applies: `("gen1",)` entries also match "gen1_new", so
-    # `--scenario all --game gen1_new` would pull the old scenarios in -- run these two by name.
+    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
+    # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the `("gen1",)`
+    # family entries and the savestate-less shared ones do not leak in, and every scenario here
+    # carries an `oracle` -- a Gen 1 verdict always reads the saved state (A0-H2). duo_gen1_main
+    # refuses any name it does not implement, so `--scenario all --game gen1_new` must select
+    # exactly this set (pinned in tests/unit/test_e2e_duo_scenario_selection.py).
     "gen1_new": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
@@ -1816,6 +1830,162 @@ class DuoRun:
                     if row.get("type") == "force_explode"]
         self._pydec_note(f"events.json force_explode rows: {exploded} (routing only)")
 
+    def assert_pc_ops_new_saved(self, results):
+        """S-6 (Bill's PC by play) and the documented release gap.
+
+        A deposits its linked half, withdraws it, deposits it again and RELEASES it from the box.
+        The first three operations are on the wire; the release is NOT — the client logs
+        `RELEASE_SEEN key=… box=…` and sends nothing (lua/gen1/client.lua:571-592) — so the
+        server keeps the pair ALIVE with a phantom boxed half. That is the shared-protocol gap
+        this scenario pins, not a defect of the run, and the status/links assertions below say so
+        explicitly rather than treating it as a failure.
+
+        The box checksum claim is scoped to the box this run wrote: pc_ops_new never changes
+        boxes, so the untouched banks stay at $FF and only Box 1's own checksum and its bank's
+        whole-bank checksum are meaningful. The all-twelve form belongs to the scenarios that
+        run a ChangeBox (deadzone/changebox), where the game initialises every box.
+        """
+        for process in self.emus:
+            process.wait(timeout=30)  # client.exit flushes CartRAM
+        a_text, b_text = results["a"], results["b"]
+        key, partner_key = self._link_keys["a"], self._link_keys["b"]
+
+        before = marker(a_text, r"PC_BOX_BEFORE box=(\d+) count=(\d+)", "A pre-deposit box")
+        if before.group(1) != "1" or before.group(2) != "0":
+            raise RuntimeError(f"A's Box {before.group(1)} held {before.group(2)} mon(s) before "
+                               f"the deposit; the scenario needs Box 1 empty")
+        counts = {name: len(re.findall(pattern, a_text)) for name, pattern in (
+            ("deposit start", r"PC_OP deposit start"), ("deposit done", r"PC_OP deposit done"),
+            ("withdraw done", r"PC_OP withdraw done"),
+            ("release_box done", r"PC_OP release_box done"))}
+        if (counts["deposit start"], counts["deposit done"]) != (2, 2):
+            raise RuntimeError(f"A ran {counts['deposit start']}/{counts['deposit done']} deposit "
+                               f"start/done ops, expected 2/2")
+        if counts["withdraw done"] != 1 or counts["release_box done"] != 1:
+            raise RuntimeError(f"A ran {counts['withdraw done']} withdraw and "
+                               f"{counts['release_box done']} release ops, expected 1 each")
+
+        tx_box = re.findall(r'^TX .*"event":"party_to_box".*' + re.escape(key), a_text, re.M)
+        tx_party = re.findall(r'^TX .*"event":"box_to_party".*' + re.escape(key), a_text, re.M)
+        if len(tx_box) != 2 or len(tx_party) != 1:
+            raise RuntimeError(f"A sent {len(tx_box)} party_to_box and {len(tx_party)} "
+                               f"box_to_party for {key}, expected 2 and 1")
+        marker(a_text, re.escape("PC_DEPOSIT_KEY " + key), "A deposit key")
+        marker(a_text, re.escape("PC_WITHDRAW_KEY " + key), "A withdraw key")
+        marker(a_text, re.escape("PC_RELEASE_SEEN " + key), "A release receipt")
+        marker(a_text, r"PC_MID party=2 box=1 count=0", "A mid state")
+
+        releases = re.findall(r"RELEASE_SEEN key=(\S+) box=(\d+)", a_text)
+        if len(releases) != 1:
+            raise RuntimeError(f"A logged {len(releases)} RELEASE_SEEN line(s), expected exactly one")
+        if releases[0][0] != key or releases[0][1] != "0":
+            raise RuntimeError(f"RELEASE_SEEN named {releases[0][0]} box={releases[0][1]}, "
+                               f"expected {key} box=0")
+        offsets = [m.start() for m in re.finditer(
+            r'^TX .*"event":"(?:party_to_box|box_to_party)"', a_text, re.M)]
+        release_at = a_text.find("RELEASE_SEEN key=")
+        # The Lua stamps each RELEASE_SEEN with the number of storage sends before it and
+        # refuses anything but "after all three" (duo_gen1_main.lua:1566-1571): deposit,
+        # withdraw, second deposit. The release itself sends nothing.
+        if len(offsets) != 3 or release_at < offsets[-1]:
+            raise RuntimeError(f"RELEASE_SEEN is not after the third storage send "
+                               f"({len(offsets)} sends, release at {release_at}, last at "
+                               f"{offsets[-1] if offsets else -1})")
+
+        marker(a_text, r"PC_FINAL party=1 box=1 count=0 init=true", "A final state")
+        marker(a_text, r"SAVE_WITNESS pc_ops_new_a", "A save witness")
+        rx1 = marker(b_text, r"PC_PARTNER_RX 1 box_mon (\S+)", "B partner box_mon")
+        rx2 = marker(b_text, r"PC_PARTNER_RX 2 party_mon (\S+)", "B partner party_mon")
+        if rx1.group(1) != partner_key or rx2.group(1) != partner_key:
+            raise RuntimeError(f"B's partner sync named {rx1.group(1)} / {rx2.group(1)}, expected "
+                               f"{partner_key} for both")
+        if b_text.find("PC_PARTNER_RX 1") > b_text.find("PC_PARTNER_RX 2"):
+            raise RuntimeError("B's partner sync arrived party_mon before box_mon")
+        if b_text.find("PC_PARTNER_RX 3") >= 0:
+            raise RuntimeError("B received a third storage command; the second deposit's sync "
+                               "was supposed to land before B finished")
+        marker(b_text, r"SAVE_WITNESS pc_ops_new_b", "B save witness")
+        self._pydec_note("S-6 markers: Box 1 empty->deposit->withdraw->deposit->release; "
+                         "2/1 storage sends, one RELEASE_SEEN after the third send, no wire event")
+
+        a_sram, a_party, _a_box, codec = self._saved_gen1_party("a")
+        a_keys = [codec.key(mon) for mon in a_party]
+        if a_keys != [self._boot_keys["a"]]:
+            raise RuntimeError(f"A's saved party is {a_keys}, expected the starter alone after "
+                               f"the release")
+        verdict = codec.verify_boxes(a_sram)
+        box1 = verdict["boxes"][1]
+        if not box1["valid"]:
+            raise RuntimeError(f"A's saved Box 1 checksum does not match (stored "
+                               f"{box1['stored']:02X}, calculated {box1['calculated']:02X})")
+        boxed = codec.decode_box(a_sram[box1["offset"]:box1["offset"] + codec.BOX_SIZE])
+        if any(codec.key(mon) == key for mon in boxed):
+            raise RuntimeError(f"A's saved Box 1 still holds the released key {key}")
+        if not verdict["banks"][2]["valid"]:
+            raise RuntimeError("A's saved Box 1-6 bank checksum does not match")
+        b_sram, b_party, _b_box, _codec = self._saved_gen1_party("b")
+        b_keys = [codec.key(mon) for mon in b_party]
+        if b_keys != [self._boot_keys["b"], partner_key]:
+            raise RuntimeError(f"B's saved party is {b_keys}, expected starter + {partner_key}")
+        self._pydec_note(f"{key} released: A's saved party is the starter alone, Box 1 checksum "
+                         f"valid and empty; B still holds {partner_key}")
+
+        # The documented gap, asserted as such: the release never reached the server, so the
+        # pair is still ALIVE with A's key on the status surface and in links.json. This is the
+        # OBSERVED limit, not a defect -- the receipt says so.
+        live = [entry for entry in (self._status() or {}).get("links", [])
+                if entry.get("area_id") == "route_1"]
+        if len(live) != 1 or live[0].get("a_key") != key:
+            raise RuntimeError(f"/api/status no longer lists A's linked key {key} after the "
+                               f"release: {live}")
+        durable = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
+        if (len(durable) != 1 or durable[0].get("status") != "alive"
+                or durable[0].get("a", {}).get("key") != key):
+            raise RuntimeError(f"the durable pair did not stay ALIVE with {key}: {durable}")
+        self._pydec_note(f"server bookkeeping UNCHANGED by the release (documented limit): "
+                         f"alive route_1 pair still lists a={key}; the release is invisible")
+
+    def assert_changebox_new_saved(self, results):
+        """W-5's box-change half: the deadzone body, then B CHANGEs BOX to 12 and back to 1.
+
+        The shared half is `assert_dead_zone_new_saved` (A untouched, B's dead-zone catch is in
+        Box 12 at HP 0 with every box bank initialised). B's own receipt then proves the change:
+        Box 12 listed the memorial, the current box went back to 1, and the run sent no storage
+        event of its own — a box change is a local PC action, not a party/box transfer.
+        """
+        self.assert_dead_zone_new_saved(results)
+        b_text = results["b"]
+        at12 = marker(b_text, r"CHANGEBOX_TO 12 initialised=true count=(\d+)", "B change to Box 12")
+        if int(at12.group(1)) < 1:
+            raise RuntimeError(f"Box 12 listed {at12.group(1)} mon(s) after the change; the "
+                               f"memorial has to still be there")
+        marker(b_text, r"CHANGEBOX_BACK 1", "B change back to Box 1")
+        marker(b_text, r"SAVE_WITNESS changebox_new_b", "B save witness")
+        for pattern, label in ((r'"event":"party_to_box"', "party_to_box"),
+                               (r'"event":"box_to_party"', "box_to_party"),
+                               (r"RELEASE_SEEN", "RELEASE_SEEN")):
+            if re.search(pattern, b_text):
+                raise RuntimeError(f"B's changebox receipt carries {label}; a box change is not "
+                                   f"a storage transfer")
+
+        b_sram, _b_party, _b_box, codec = self._saved_gen1_party("b")
+        flag = b_sram[codec._CURRENT_BOX]
+        index = flag & ~codec._BOX_INITIALIZED
+        if not flag & codec._BOX_INITIALIZED:
+            raise RuntimeError("B's saved has-changed-boxes bit is clear after CHANGE BOX")
+        if index != 0:
+            raise RuntimeError(f"B's saved current box is {index}, expected Box 1 (index 0)")
+        verdict = codec.verify_boxes(b_sram)
+        box12 = verdict["boxes"][12]
+        memorial = codec.decode_box(b_sram[box12["offset"]:box12["offset"] + codec.BOX_SIZE])
+        if (len(memorial) != 1 or codec.key(memorial[0]) != self._deadzone_b_key
+                or memorial[0]["hp"] != 0):
+            raise RuntimeError(f"Box 12 no longer holds {self._deadzone_b_key} at HP 0: "
+                               f"{[(codec.key(mon), mon['hp']) for mon in memorial]}")
+        self._pydec_note(f"W-5 box change: Box 12 listed {at12.group(1)} memorial(s), back to "
+                         f"Box 1; saved flag set, index {index}, {self._deadzone_b_key} still "
+                         f"HP 0 in Box 12; no storage event on the wire")
+
     def assert_trade_new(self, results):
         """T-3/T-4: durable swapped halves plus each cartridge's actual saved party."""
         from pathlib import Path
@@ -2153,7 +2323,7 @@ class DuoRun:
             elif self.scenario == "dupes":
                 self.assert_species_clause_rejection()
             elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new",
-                                   "explode_new"):
+                                   "explode_new", "pc_ops_new"):
                 self.go()
                 self.assert_link_new()
             elif self.scenario in ("trade_new", "trade_decline_new"):
@@ -2178,7 +2348,7 @@ class DuoRun:
                                     for row in events),
                 }
                 self.go()
-            elif self.scenario == "deadzone_new":
+            elif self.scenario in ("deadzone_new", "changebox_new"):
                 self.assert_dead_zone_new()
             else:
                 self.go()

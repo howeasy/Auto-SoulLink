@@ -1239,3 +1239,212 @@ def test_explode_oracle_refuses_a_broken_marker(tmp_path, monkeypatch, old, new,
     run = _explode_stub(tmp_path, monkeypatch)
     with pytest.raises(RuntimeError, match=message):
         run.assert_explode_saved({"a": _EXPLODE_A, "b": _EXPLODE_B.replace(old, new)})
+
+
+# ── A6: the PC scenarios' oracles ────────────────────────────────────────────────────────
+# pc_ops_new drives Bill's PC by play and ends with a RELEASE the server never hears about;
+# changebox_new drives the deadzone half and then a real CHANGE BOX.
+
+_PC_LINK_A = "CCCC:3333:03"
+_PC_LINK_B = "DDDD:4444:04"
+_PC_A = "\n".join([
+    "PC_BOX_BEFORE box=1 count=0 init=false",
+    "PC_OP deposit start",
+    "PC_OP deposit done",
+    "PC_OP withdraw start",
+    "PC_OP withdraw done",
+    'TX {"event":"party_to_box","player":"a","key":"' + _PC_LINK_A + '"}',
+    'TX {"event":"box_to_party","player":"a","key":"' + _PC_LINK_A + '"}',
+    "PC_DEPOSIT_KEY " + _PC_LINK_A,
+    "PC_WITHDRAW_KEY " + _PC_LINK_A,
+    "PC_MID party=2 box=1 count=0",
+    "PC_OP deposit start",
+    "PC_OP deposit done",
+    "PC_OP release_box start",
+    "PC_OP release_box done",
+    'TX {"event":"party_to_box","player":"a","key":"' + _PC_LINK_A + '"}',
+    "[SLink-gen1] RELEASE_SEEN key=" + _PC_LINK_A + " box=0",
+    "PC_RELEASE_SEEN " + _PC_LINK_A,
+    "PC_FINAL party=1 box=1 count=0 init=true",
+    "SAVE_WITNESS pc_ops_new_a frames=900",
+])
+_PC_B = "\n".join([
+    "PC_PARTNER_RX 1 box_mon " + _PC_LINK_B,
+    "PC_PARTNER_RX 2 party_mon " + _PC_LINK_B,
+    "SAVE_WITNESS pc_ops_new_b frames=910",
+])
+
+
+def _empty_box1(image):
+    """Box 1 (SRAM box 0) written empty with its bank and individual checksums recomputed, as
+    the game's own box close leaves it after pc_ops_new's deposit+release. The untouched banks
+    stay $FF, which is why that oracle does not claim all twelve."""
+    start = codec.SRAM_LAYOUT["box_banks"][0]
+    image[start:start + codec.BOX_SIZE] = bytes(codec.BOX_SIZE)
+    image[start + codec.BOX_LAYOUT["species"]] = codec.SPECIES_END
+    for slot in range(6):
+        offset = start + slot * codec.BOX_SIZE
+        image[codec.SRAM_LAYOUT["individual_checksums"][0] + slot] = codec.sav_checksum(
+            image[offset:offset + codec.BOX_SIZE])
+    end = codec.SRAM_LAYOUT["all_boxes_checksums"][0]
+    image[end] = codec.sav_checksum(image[start:end])
+    _seal_main(image)
+    return image
+
+
+def _pc_stub(tmp_path, monkeypatch, box1_stored=None, box_index=0, initialised=False,
+             memorial=False):
+    """The pc_ops/changebox stub: real fixture bytes for both cartridges, the box state the
+    scenario leaves behind, and the server surfaces the oracle reads."""
+    a_sram, _a_rom = _fixture_save("red")
+    b_sram, b_rom = _fixture_save("blue")
+    start = codec.SRAM_LAYOUT["sPartyData"]
+    a_image = _empty_box1(bytearray(a_sram))
+    if box1_stored is not None:
+        a_image[codec.SRAM_LAYOUT["individual_checksums"][0]] = box1_stored
+    a_image[codec._CURRENT_BOX] = (codec._BOX_INITIALIZED if initialised else 0) | box_index
+    _seal_main(a_image)
+    a_party = codec.decode_party(bytes(a_image)[start:start + codec.PARTY_LAYOUT["size"]])
+    boot_a = codec.key(a_party[0])
+    b_image = bytearray(b_sram)
+    link_b = _add_caught_to_party(b_image, b_rom)
+    if memorial:
+        link_b = _put_fainted_in_box12(b_image, b_rom)
+    # The changebox oracle reads B's saved flag/index, so the stub writes the box state into
+    # both images: pc_ops ignores the flag and changebox ignores A.
+    b_image[codec._CURRENT_BOX] = (codec._BOX_INITIALIZED if initialised else 0) | box_index
+    _seal_main(b_image)
+    b_party = codec.decode_party(bytes(b_image)[start:start + codec.PARTY_LAYOUT["size"]])
+
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.emus = []
+    run.cfg = dict(duo.SCENARIOS["pc_ops_new"])
+    run.gcfg = dict(duo.GAMES["gen1_new"])
+    run.data_dir = str(tmp_path)
+    run._boot_keys = {"a": boot_a, "b": codec.key(b_party[0])}
+    run._link_keys = {"a": _PC_LINK_A, "b": link_b}
+    run._deadzone_b_key = link_b
+    run._status = lambda: {"links": [{"area_id": "route_1", "a_key": _PC_LINK_A,
+                                      "b_key": link_b, "status": "alive"}]}
+    run._links_json = lambda: [{"area_id": "route_1", "status": "alive",
+                                "a": {"key": _PC_LINK_A}, "b": {"key": link_b}}]
+
+    def saved(inst, **_kwargs):
+        if inst == "a":
+            return bytes(a_image), a_party, [], codec
+        return bytes(b_image), b_party, [], codec
+
+    monkeypatch.setattr(run, "_saved_gen1_party", saved)
+    run._pydec_note = lambda fact: None
+    # B's linked key is derived from the fixture bytes, so the receipt template gets it here.
+    return run, {"a": _PC_A, "b": _PC_B.replace(_PC_LINK_B, link_b)}
+
+
+def _pc_fixture(tmp_path, monkeypatch, **kwargs):
+    return _pc_stub(tmp_path, monkeypatch, **kwargs)[1]
+
+
+def test_pc_ops_oracle_reads_the_cycle_and_the_documented_gap(tmp_path, monkeypatch):
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    run.assert_pc_ops_new_saved(receipts)
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    # a storage send never happened: the third TX line is gone
+    # the THIRD storage send (the second deposit) is gone; .replace(1) keeps the first
+    ("PC_OP release_box done\nTX {\"event\":\"party_to_box\",\"player\":\"a\",\"key\":\""
+     + _PC_LINK_A + "\"}", "PC_OP release_box done", "sent 1 party_to_box"),
+    ("PC_FINAL party=1", "PC_FINAL party=2", "not found in the receipt"),
+    ("PC_MID party=2 box=1 count=0", "PC_MID party=2 box=1 count=1", "not found in the receipt"),
+])
+def test_pc_ops_oracle_refuses_a_broken_receipt(tmp_path, monkeypatch, old, new, message):
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match=message):
+        run.assert_pc_ops_new_saved({"a": receipts["a"].replace(old, new, 1), "b": receipts["b"]})
+
+
+def test_pc_ops_oracle_refuses_a_second_release(tmp_path, monkeypatch):
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    twice = receipts["a"].replace(
+        "PC_RELEASE_SEEN", "[SLink-gen1] RELEASE_SEEN key=" + _PC_LINK_A + " box=0\nPC_RELEASE_SEEN")
+    with pytest.raises(RuntimeError, match="RELEASE_SEEN line"):
+        run.assert_pc_ops_new_saved({"a": twice, "b": receipts["b"]})
+
+
+def test_pc_ops_oracle_refuses_a_release_before_the_third_send(tmp_path, monkeypatch):
+    """The wire stamp is what proves no release fired during the withdraw window."""
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    line = "[SLink-gen1] RELEASE_SEEN key=" + _PC_LINK_A + " box=0"
+    moved = receipts["a"].replace(line + "\n", "")           # out of its real place...
+    moved = moved.replace('TX {"event":"party_to_box","player":"a","key":"' + _PC_LINK_A + '"}',
+                          'TX {"event":"party_to_box","player":"a","key":"' + _PC_LINK_A + '"}\n'
+                          + line, 1)                          # ...and before the third send
+    with pytest.raises(RuntimeError, match="not after the third storage send"):
+        run.assert_pc_ops_new_saved({"a": moved, "b": receipts["b"]})
+
+
+def test_pc_ops_oracle_refuses_a_third_partner_command(tmp_path, monkeypatch):
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match="third storage command"):
+        run.assert_pc_ops_new_saved(
+            {"a": receipts["a"], "b": receipts["b"] + "\nPC_PARTNER_RX 3 box_mon " + _PC_LINK_B})
+
+
+def test_pc_ops_oracle_refuses_a_saved_box_that_still_holds_the_key(tmp_path, monkeypatch):
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    monkeypatch.setattr(codec, "decode_box", lambda _blob: [_fake_mon(run._link_keys["a"])])
+    with pytest.raises(RuntimeError, match="still holds the released key"):
+        run.assert_pc_ops_new_saved(receipts)
+
+
+def test_pc_ops_oracle_refuses_a_box_checksum_that_does_not_match(tmp_path, monkeypatch):
+    run, receipts = _pc_stub(tmp_path, monkeypatch, box1_stored=0x01)
+    with pytest.raises(RuntimeError, match="Box 1 checksum does not match"):
+        run.assert_pc_ops_new_saved(receipts)
+
+
+# ── changebox_new ────────────────────────────────────────────────────────────────────────
+
+_CHANGEBOX_B = "\n".join([
+    "CHANGEBOX_TO 12 initialised=true count=1",
+    "CHANGEBOX_BACK 1",
+    "SAVE_WITNESS changebox_new_b frames=800",
+])
+
+
+def _changebox_stub(tmp_path, monkeypatch, **kwargs):
+    run, receipts = _pc_stub(tmp_path, monkeypatch, memorial=True, **kwargs)
+    run.cfg = dict(duo.SCENARIOS["changebox_new"])
+    monkeypatch.setattr(run, "assert_dead_zone_new_saved", lambda results: None)
+    return run, receipts
+
+
+def test_changebox_oracle_reads_the_change_and_the_saved_index(tmp_path, monkeypatch):
+    run, _receipts = _changebox_stub(tmp_path, monkeypatch, initialised=True, box_index=0)
+    run.assert_changebox_new_saved({"a": "", "b": _CHANGEBOX_B})
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    ("CHANGEBOX_TO 12 initialised=true count=1", "CHANGEBOX_TO 12 initialised=true count=0",
+     "has to still be there"),
+    ("CHANGEBOX_BACK 1", "CHANGEBOX_BACK 2", "not found in the receipt"),
+    ("CHANGEBOX_BACK 1",
+     'CHANGEBOX_BACK 1\nTX {"event":"party_to_box","player":"b","key":"X"}',
+     "carries party_to_box"),
+])
+def test_changebox_oracle_refuses_a_broken_receipt(tmp_path, monkeypatch, old, new, message):
+    run, _receipts = _changebox_stub(tmp_path, monkeypatch, initialised=True, box_index=0)
+    with pytest.raises(RuntimeError, match=message):
+        run.assert_changebox_new_saved({"a": "", "b": _CHANGEBOX_B.replace(old, new)})
+
+
+def test_changebox_oracle_refuses_a_cleared_saved_flag(tmp_path, monkeypatch):
+    run, _receipts = _changebox_stub(tmp_path, monkeypatch, initialised=False, box_index=0)
+    with pytest.raises(RuntimeError, match="has-changed-boxes bit is clear"):
+        run.assert_changebox_new_saved({"a": "", "b": _CHANGEBOX_B})
+
+
+def test_changebox_oracle_refuses_a_current_box_that_is_not_one(tmp_path, monkeypatch):
+    run, _receipts = _changebox_stub(tmp_path, monkeypatch, initialised=True, box_index=2)
+    with pytest.raises(RuntimeError, match="current box is 2"):
+        run.assert_changebox_new_saved({"a": "", "b": _CHANGEBOX_B})
