@@ -20,13 +20,15 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
     companion patch's VBlank hook, its START-menu row, and the in-game panel — including a
     page turn and a close — on both a clean and a randomized+injected cartridge.
-    All **nine** scenarios run on **two pairings** — Red/Blue and **Yellow/Red** — so Yellow's
-    −1 WRAM shift is exercised through the server and against a partner, not just by
-    single-instance gates.
+    The rewritten client's duo harness (`tools/e2e_duo.py`, game `gen1_new`) runs **eighteen**
+    scenarios, all paired **Red (player A) against Blue (player B)** — there is no Yellow duo
+    pairing in this harness. Yellow's −1 WRAM shift is instead exercised by the non-duo
+    inspect/scripted live gates (`tests/live/test_gen1_new_gates.py`), which run on all three
+    cartridges individually.
   - **Proven live, without injection** — encounter linking, the ball gate, the dead zone and
-    the species clause: `playthrough`, `deadzone` and `dupes` walk Route 1's grass on both
-    cartridges, meet real wild Pokemon and throw real Poke Balls, and the server pairs the
-    captures by area.
+    the species clause: `link_new`, `ball_gate_new`, `deadzone_new` and `species_clause_new`
+    walk Route 1's grass on both cartridges, meet real wild Pokemon and throw real Poke Balls,
+    and the server pairs the captures by area (`docs/gen1_requirements.md` D-1..D-4).
   - **NOT proven live** — whiteout and the gender/type clauses; any map *transition* (every
     playing scenario stays on Route 1, so 1 of 39 encounter areas is exercised); evolution
     `key_change`; and the Archipelago variants, which have never been launched. The scripted
@@ -158,9 +160,9 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
 
 ```
 [BizHawk – Gen 1 (GB)]             [BizHawk – Gen 1 (GB)]
-  lua/clients/gen1_rby_client.lua    lua/clients/gen1_rby_client.lua
-  lua/memory_gb.lua                  lua/memory_gb.lua
-  lua/games/gen1_rby.lua             lua/games/gen1_rby.lua
+  lua/gen1/run.lua                    lua/gen1/run.lua
+  lua/gen1/entry.lua                  lua/gen1/entry.lua
+  lua/gen1/{client,reads,writes,...}  lua/gen1/{client,reads,writes,...}
 
 [BizHawk – Gen 3 (GBA)]            [BizHawk – Gen 3 (GBA)]
   lua/clients/gen3_frlge_client.lua    lua/clients/gen3_frlge_client.lua
@@ -923,25 +925,28 @@ pytest tests/unit/test_phase1_comms.py -v
 **Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 5: patched + menu row + randomized panel
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18: 9 scenarios x Red/Blue and Yellow/Red
-python tools/e2e_duo.py --game gen1 --scenario all     # the same duo run, directly
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q       # 5: patched + menu row + randomized panel
+SLINK_LIVE=1 pytest tests/live/test_gen1_new_gates.py -q   # the rewritten client's own inspect/scripted gates, all 3 cartridges
+SLINK_LIVE=1 pytest tests/live/test_gen1_trade_gates.py -q # SLINK TRADE receptionist gates on the patched Red/Blue build
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen1_new.py -q      # 18 scenarios, Red/Blue (gen1_new)
+python tools/e2e_duo.py --game gen1_new --scenario all     # the same duo run, directly
 
 SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
 SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # 3 duo scenarios, two Crystal instances
 ```
 
-> `--scenario all` is **Gen 1 / Gen 3 only.** It expands to every entry in the runner's
-> `SCENARIOS` dict, and the per-scenario `games` key is read by `tests/e2e/test_duo.py`, not by
-> `e2e_duo.py` — so `--game gen2 --scenario all` would launch Gen 3-only scenarios and fail for
-> reasons unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2 --scenario faint`
+> `--scenario all` is **`gen1_new` / Gen 3 only** (the old `gen1`/`gen1_yellow` game ids were
+> retired with their client and scenario drivers, commit `9aa7989`). It expands to every entry
+> in the runner's `SCENARIOS` dict that names the given game via `scenarios_for()` — `--game
+> gen2 --scenario all` would otherwise launch Gen 3/Gen 1-only scenarios and fail for reasons
+> unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2 --scenario faint`
 > (likewise `boxsync`, `memorialize`).
 
-`tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua in Phase 8; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. Every Gen 1 duo scenario is parameterised over **two pairings**, Red/Blue and Yellow/Red, and needs no patched ROM.
+`tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua and the other legacy Gen 1 probes/console diagnostics in commit `9aa7989`; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. The `gen1_new` duo harness (`tools/e2e_duo.py`) pairs **Red as player A against Blue as player B only** — there is no Yellow pairing — and boots the companion-patched builds (`patch/build/gen1_red.gb` / `gen1_blue.gb`) by default for every `gen1_new` scenario; `trade_new` and `trade_decline_new` additionally override to the dedicated trade-carrying build (`patch/gen1/build/slink_red.gb` / `slink_blue.gb`) for the SLINK TRADE receptionist.
 
 The Gen 2 gates (`test_gen2_memory_gate.lua`, `test_gen2_writes_gate.lua`) run on **Crystal only** — see the Supported Games caveat above for why a silently-skipping Gold/Silver entry would be worse than none. Its three duo scenarios (`faint`, `boxsync`, `memorialize`) run **two instances of the same Crystal dump**. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
 
-The duo Lua is shared: `lua/tests/duo/duo_gb_main.lua` resolves each scenario as `scenario_<prefix><name>` and then falls back to `scenario_gb_<name>`, so `faint` / `boxsync` / `memorialize` come from one set of files that both generations run. Genuinely Gen 1-specific scenarios (`whiteout`, `playthrough`, `deadzone`, `dupes`, `rivalswap`, `explode_g1`) keep the `scenario_gen1_` prefix.
+Gen 2's duo scenarios go through the shared driver: `lua/tests/duo/duo_gb_main.lua` resolves each name as `scenario_gen2_<name>` and then falls back to `scenario_gb_<name>`, so `faint` / `boxsync` / `memorialize` come from files (`scenario_gb_*.lua`) any GB generation could share. **The rewritten Gen 1 client does not go through this file at all.** Its `gen1_new` duo scenarios run under a dedicated driver, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` client they drove were deleted with the legacy client (commit `9aa7989`).
 
 Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crystal_town.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates) or `python tools/gen2_playthrough.py`. Gen 2 has an **indoor `town` target only** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
 
@@ -955,8 +960,10 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crysta
 | `lua/slink_gen3.lua` | **Gen 3 launcher** — configure host/port/player, load in BizHawk |
 | `lua/slink_gen4.lua` | **Gen 4 launcher** — configure host/port/player, load in BizHawk |
 | `lua/slink_gen5.lua` | **Gen 5 launcher** — configure host/port/player, load in BizHawk |
-| `lua/clients/gen1_rby_client.lua` | Gen 1 production client — Red/Blue/Yellow + Archipelago Red/Blue. Runs off `event.onframeend` behind a pcall, so it composes with the duo harness. Rival team swap + Explode Mode with no ROM patch. |
-| `lua/games/gen1_rby.lua` | Gen 1 game module — ROM header detection, per-variant address profiles (Yellow is −1 on most; `red_ap` is a full literal profile because the AP fork relocates WRAM), Archipelago detection from the `ROM` domain at `0x5F22` |
+| `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
+| `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
+| `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
+| `lua/clients/gen1_rby_client.lua`, `lua/games/gen1_rby.lua` | **Legacy** Gen 1 client + game module (ROM header detection, per-variant address profiles, Archipelago detection). No longer reachable from either launcher; still shipped in the player ZIP and still present in the tree until Track B step 5 (P8-4) retires them. |
 | `lua/memory_gb.lua` | GB/GBC RAM helpers — **shared by Gen 1 and Gen 2**, so every offset is profile-keyed, never a per-game constant. Party/box read+write, PP-Up masking, `isInOverworld`, enemy-party write, force-faint, force-explode |
 | `lua/clients/gen3_frlge_client.lua` | Gen 3 production client — FRLG/Emerald/Radical Red. Localized BizHawk memory functions, display data cache, battle/overworld state cached once per frame. |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
@@ -1577,13 +1584,14 @@ See `.github/copilot-instructions.md` → "Adapter Isolation Rules" for the full
 
 ### Adapter methods added in 0.2.6
 
-Each is gated to the games that support it; the base `GameRulesAdapter` / `GamePresentationAdapter` ships inert defaults so every other gen inherits the no-op — never branch on `game_id` in shared code. `rival_trainer_ids()` and `supports_explode_mode()` are overridden by **both** Gen 3 Radical Red and Gen 1; the rest are Gen 3 RR only.
+Each is gated to the games that support it; the base `GameRulesAdapter` / `GamePresentationAdapter` ships inert defaults so every other gen inherits the no-op — never branch on `game_id` in shared code. `rival_trainer_ids()` and `supports_explode_mode()` are overridden by **both** Gen 3 Radical Red and Gen 1; `native_trade_ui()` is overridden by **Gen 1 only**; the rest are Gen 3 RR only.
 
 | Method | Returns / does | Base default |
 |---|---|---|
 | `rival_trainer_ids()` | Trainer IDs treated as the rival for `--rival-team-swap`. Gen 3 RR: 27 "Terry" IDs in classes 81/89/90, built at import from `rr_trainers.json`. Gen 1: `{225, 242, 243}` — RIVAL1/2/3 classes `$19`/`$2A`/`$2B` plus `OPP_ID_OFFSET(200)`. | `set()` |
 | `party_blob_size()` | Expected byte length of one party-mon blob, used by `_ingest_party_blobs` to reject malformed payloads. Gen 3 returns `100` (its boxmon struct); **Gen 1 returns `66`** — 44-byte struct + 11-byte OT name + 11-byte nickname, because Gen 1 keeps names in parallel arrays rather than inside the struct. `0` disables blob ingestion. | `0` |
-| `supports_info_panel()` | Whether this client can render the native in-game SOULLINK screen; gates the `link_panel` command so no other client is sent something it would only log. Gen 3 opts in for Radical Red. | `False` |
+| `supports_info_panel()` | Whether this client can render the native in-game SOULLINK screen; gates the `link_panel` command so no other client is sent something it would only log. Gen 3 opts in for Radical Red; Gen 1 opts in for Red/Blue only (`self._variant != "yellow"`) — Yellow has no free WRAM for the mailbox. | `False` |
+| `native_trade_ui()` | Whether the cartridge itself drives the trade menus (native receptionist offer, eligible-slot mask, native slot offer, confirm payload) instead of the shared server-driven trade FSM. Gen 1 opts in for Red/Blue only (the companion patch's receptionist hooks); Yellow and every other game take the default. Replaced six `game_id == "gen1_rby"` branches in the shared trade FSM (commit `eef6a1c`). | `False` |
 | `supports_abilities()` | Whether the game has abilities at all — drives the party table's Ability column. Overridden `False` by Gen 1 and Gen 2. | `True` |
 | `status_token(status_cond)` | Three-letter status (`PSN`/`PAR`/`SLP`/`BRN`/`FRZ`/`TOX`) from the raw per-generation bitfield. | `""` |
 | `gift_link_area(area_id)` | Maps a gift/egg capture into the `gift_<area>` namespace for standalone gift pairs. | `gift_<area>` remap |

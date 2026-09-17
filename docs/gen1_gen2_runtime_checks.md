@@ -2,10 +2,15 @@
 
 **Gen 1 was rewritten, and this file now describes the rewrite.** The old Gen 1 sections — the
 manual checklist's descendants, the pre-rewrite gate list, and the ABI-3 panel narrative — were
-deleted with the code they described. Note what is *still* old: `lua/slink_gen1.lua` loads
-`lua/clients/gen1_rby_client.lua` to this day, so the launcher is not the source of truth until
-Phase 8. The new client is `lua/gen1/run.lua` (BizHawk entry: io, transport, HUD, frame loop)
-over `lua/gen1/entry.lua` (composition root), and the live gates load it directly.
+deleted with the code they described. The production launchers now load the new client too
+(commit `ca17a26`): `lua/slink_gen1.lua` `dofile`s `lua/gen1/run.lua` directly, and the
+universal `lua/slink.lua` routes any GB/GBC cartridge through `Entry.detect_title` to
+`lua/gen1/run.lua` before it ever reaches the legacy `game_detect`/`_CLIENT_MAP` path. The new
+client is `lua/gen1/run.lua` (BizHawk entry: io, transport, HUD, frame loop) over
+`lua/gen1/entry.lua` (composition root), and the live gates load it directly. The old
+`lua/clients/gen1_rby_client.lua` / `lua/games/gen1_rby.lua` client still exists and still ships
+in the player ZIP alongside the new one — it is legacy, kept only until Track B step 5 (P8-4)
+retires it, and production routing no longer reaches it.
 
 **The Gen 2 sections below are unchanged.**
 
@@ -13,7 +18,7 @@ over `lua/gen1/entry.lua` (composition root), and the live gates load it directl
 
 ```bash
 python tools/verify_gen1_release.py --quick      # the 8 fast lanes; no emulator
-python tools/verify_gen1_release.py              # all 11 lanes, emulator lanes included
+python tools/verify_gen1_release.py              # all 12 lanes, emulator lanes included
 python tools/verify_gen1_release.py --lane live-new-gates    # only the physical lane
 python tools/verify_gen1_release.py --list       # lanes + the requirement ids each serves
 ```
@@ -21,9 +26,9 @@ python tools/verify_gen1_release.py --list       # lanes + the requirement ids e
 A lane that did not run did not pass: a skip is a failure in this runner, which is why a
 missing ROM, jar or emulator fails the gate rather than shrinking it.
 
-Eleven lanes: `unit`, `rom-layout`, `lua-parse`, `profile-addresses`, `profile-generated`,
+Twelve lanes: `unit`, `rom-layout`, `lua-parse`, `profile-addresses`, `profile-generated`,
 `statics-generated`, `fixtures`, `patch-build` (fast) and `live-gates`, `live-new-gates`,
-`duo-pairs` (slow, emulator). The two that carry the rewrite:
+`live-trade-gates`, `duo-pairs` (slow, emulator). The two that carry the rewrite:
 
 * **`live-new-gates`** (`SLINK_LIVE=1`) runs `tests/live/test_gen1_new_gates.py`: six inspect
   cases (3 titles × town/battle) that boot a committed battery save in EmuHawk and run

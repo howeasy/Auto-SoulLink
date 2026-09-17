@@ -32,7 +32,7 @@ The game binding owns species and item identities, key formats, evolution famili
 
 The concrete rewrite modules and harness contracts are specified in the following sections.
 
-The rules interface pins gift policy (`server/adapters/base.py:61-124`), evolution/gender/types/shininess/identity (`:126-173`), rival ids and party-blob size (`:188-218`), and status/native-panel capabilities (`:232-264`). Track B P8-0 additionally requires `native_trade_ui()` to replace Gen 1-name branches; that is a planned isolation change, not an existing method in this baseline (`prep/PLAN_v3.9.md:758-764`).
+The rules interface pins gift policy (`server/adapters/base.py:61-124`), evolution/gender/types/shininess/identity (`:126-173`), rival ids and party-blob size (`:188-218`), and status/native-panel capabilities (`:232-264`). Track B P8-0's `native_trade_ui()` has shipped (`server/adapters/base.py:281`, default `False`; commit `eef6a1c`): it replaced the six `game_id == "gen1_rby"` branches in the shared trade FSM. The Gen 1 adapter returns `True` for the Red/Blue variants and `False` for Yellow (`server/adapters/gen1_rby.py:351-353`), consistent with `supports_info_panel()`.
 
 ## Gen 1 modules containing reusable mechanisms
 
