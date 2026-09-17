@@ -118,6 +118,9 @@ function M.new(expected)
             assert(point.money<self.cancel_baseline.money,"first ball lacks purchase debit")
             return idle(),"first-ball-readback"
         end
+        -- A clear signature is what ends a stray-box window; the latch has to go with it, or a
+        -- second box opened more than the bound after the first one fails on its first frame.
+        if point.menu_kind=="none" then self.stray_box_frame=nil end
         if point.menu_kind~="none" then
             if point.map~=0x2A or not point.oak_got_parcel then
                 -- Before the delivery no Mart can be open: the clerk's DisplayPokemartDialogue
@@ -126,7 +129,13 @@ function M.new(expected)
                 -- display here is a plain text box -- the clerk's "say hi to OAK" line
                 -- (pokeyellow scripts/ViridianMart.asm:77-78,92-94), re-opened by this driver's
                 -- own A tap on the frame ViridianMartOaksParcelScript finished and wrote
-                -- mart_script 2 (:49-62). B closes it and, unlike A, opens nothing new:
+                -- mart_script 2 (:49-62). Only the PRE-delivery half of the two maps' scripts is
+                -- equivalent (the RLE walk, the parcel GiveItem and both text-pointer tables match
+                -- pokered :24-26,:43-46,:65-78 / pokeyellow :25-27,:44-47,:77-90); the scripts as
+                -- a whole are not, since Yellow's script 2 is a live handler with a post-training
+                -- side effect where Red's is a bare ret (pokeyellow :60-75, pokered :59-63).
+                -- That divergence is after this window, so it does not reach this fresh-game
+                -- fixture. B closes the box and, unlike A, opens nothing new:
                 -- WaitForTextScrollButtonPress takes A or B (pokeyellow home/joypad2.asm:80-82).
                 bounded(self,"stray_box_frame",frame,600,
                     "Mart display never cleared before the parcel exit")

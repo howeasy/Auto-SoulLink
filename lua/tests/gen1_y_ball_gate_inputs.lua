@@ -17,7 +17,8 @@
 --   the map reload after ANY battle zeroes wJoyIgnore    home/overworld.asm:40-41
 --   the end of a simulated-joypad walk zeroes it too     home/overworld.asm:1623-1629
 --   so Pallet script 5's two text boxes run at 0 and it
---     only writes $FC once both are done                 scripts/PalletTown.asm:155-169
+--     only writes $FF once both are done                 scripts/PalletTown.asm:155-169
+--     ($FF, not $FC: PAD_BUTTONS|PAD_CTRL_PAD)           scripts/PalletTown.asm:168-169
 --   demo battle: wBattleType = BATTLE_TYPE_PIKACHU (4),
 --     wCurOpponent = STARTER_PIKACHU ($54), level 5      scripts/PalletTown.asm:143-148
 --     BATTLE_TYPE_PIKACHU = 4                            constants/battle_constants.asm:46
@@ -30,8 +31,24 @@
 --   the single Eevee ball object sits at x=7, y=3        data/maps/objects/OaksLab.asm:22
 --   pressing A on it sets script 8 (no yes/no menu)      scripts/OaksLab.asm:781-806
 --   script 9 shows the rival's text with wJoyIgnore $FC  scripts/OaksLab.asm:229-235
---   script 11's text does AddPartyMon (Pikachu L5) with
---     NO nickname screen -- unlike R/B -- and then 12    scripts/OaksLab.asm:1017-1043,285-297
+--   script 11's text does AddPartyMon (Pikachu L5) and
+--     then 12                                            scripts/OaksLab.asm:1017-1043,285-297
+--   Yellow DOES ask for a nickname here, exactly as R/B:
+--     wMonDataLocation is 0                              scripts/OaksLab.asm:1029-1036
+--     so _AddPartyMon reaches AskName                    engine/pokemon/add_mon.asm:43-52
+--     which is a TWO_OPTION_MENU prompt                  engine/menus/naming_screen.asm:13-31
+--   but the party count is written BEFORE the prompt     engine/pokemon/add_mon.asm:12-16
+--     so the driver is already out of the party_count==0
+--     window when the prompt appears, and the
+--     `decline-nickname` B pulse below is what answers
+--     it: B picks the second option (NO)                 engine/menus/text_box.asm:283-286,
+--                                                        :300-303
+--     and the mon keeps the species name GetMonName left
+--     in wNameBuffer                                     engine/menus/naming_screen.asm:10-12,
+--                                                        :21-23,:44-49
+--   DO NOT remove that B branch as "Yellow has no naming
+--     screen": the naming screen would open and the
+--     Yellow fixture would never reach the rival battle.
 --   script 12 fires at wYCoord == 6 (as R/B's 10)        scripts/OaksLab.asm:299-303
 --   lab rival is OPP_RIVAL1 = 200 + $19 = 225 with a
 --     lone Eevee L5 (Tackle / Tail Whip)                 constants/trainer_constants.asm:1,42;
@@ -128,7 +145,8 @@ function M.new(expected)
             if script==1 or script==3 or script==5 then
                 -- Scripts 1/3 set $FC before their DisplayTextID, but script 5 runs on whatever the
                 -- post-demonstration map reload left -- EnterMap zeroes wJoyIgnore, and script 5
-                -- writes $FC only after both of its text boxes are done. Testing for $FC exactly
+                -- writes $FF (PAD_BUTTONS|PAD_CTRL_PAD, PalletTown.asm:168-169) only after both of
+                -- its text boxes are done -- never $FC at all. Testing for $FC exactly
                 -- therefore parked the route at script 5 with joy_ignore 0 forever, so the gate is
                 -- the real question the engine asks: is PAD_A (bit 0) in the ignore mask?
                 if point.joy_ignore%2==0 then return press("A",frame),"pallet-oak-dialogue" end
@@ -166,13 +184,22 @@ function M.new(expected)
             -- in .doneSimulating, which zeroes wJoyIgnore (home/overworld.asm:1623-1629).
             if self.ball_fired or (type(script)=="number" and script>=8) then
                 self.ball_fired=true
+                -- The stall window is latched on the DIALOGUE STATE, never on an attempted press.
+                -- A wedged text box keeps permitting A forever, so clearing the latch whenever the
+                -- driver was allowed to press meant the bound could never be reached (a live run
+                -- sat on script 11 for 7201 frames and 901 A pulses without failing). Only an
+                -- observed script transition counts as progress; the other exit from this window,
+                -- party_count going 0 -> 1, leaves the enclosing party_count==0 branch outright.
+                if script~=self.ball_script then
+                    self.ball_script=script
+                    self.fired_frame=nil
+                end
+                bounded(self,"fired_frame",frame,3600,"Eevee-ball window made no bounded progress",point)
                 if (script==9 or script==11) and point.joy_ignore%2==0
                     and not point.npc_moving and point.simulated_joypad_index==0 then
-                    self.fired_frame=nil -- an accepted press is progress; re-latch the stall window
                     return press("A",frame),
                         script==9 and "rival-takes-eevee-ball" or "receive-pikachu-dialogue"
                 end
-                bounded(self,"fired_frame",frame,3600,"Eevee-ball window made no bounded progress",point)
                 return idle(),"eevee-ball-window"
             end
             if script==5 then
@@ -208,9 +235,16 @@ function M.new(expected)
             if type(script)~="number" or script<12 then
                 return press("B",frame),"decline-nickname"
             end
-            -- Yellow never asks for a nickname here, so the B pulse above is only ever advancing
-            -- script 11's remaining "OAK: ... received PIKACHU!" boxes; script 12 is the receipt
-            -- that DisplayTextID returned (OaksLab.asm:285-297). The R/B name kept for the twin.
+            -- Yellow asks for the nickname exactly as R/B does: OaksLabPlayerReceivedMonText
+            -- leaves wMonDataLocation 0 (OaksLab.asm:1029-1036), so _AddPartyMon reaches AskName
+            -- (add_mon.asm:43-52, naming_screen.asm:13-31) -- but it writes the party count first
+            -- (add_mon.asm:12-16), which is why this branch, not the Eevee-ball window, is the one
+            -- holding the pad when the prompt opens. The B pulse above therefore does two jobs:
+            -- it answers the TWO_OPTION_MENU with NO (B = second option, text_box.asm:283-286,
+            -- :300-303, keeping the species name GetMonName left in wNameBuffer,
+            -- naming_screen.asm:21-23,:44-49) and it advances script 11's remaining
+            -- "OAK: ... received PIKACHU!" boxes; script 12 is the receipt that DisplayTextID
+            -- returned (OaksLab.asm:285-297). Deleting it strands the fixture on the name screen.
             self.nickname_declined=true
         end
         if point.battle~=0 then
