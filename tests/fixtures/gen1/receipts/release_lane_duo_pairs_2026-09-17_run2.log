@@ -1,0 +1,77 @@
+Gen 1 release gate — 1 lanes
+
+[ .. ] duo-pairs
+file written for a
+E         [duo] go-file written for b
+E         [duo] real captures: a=5F2F:4190:A5 b=33C2:AFB9:A5
+E         [duo] ENCOUNTER LINK FROM REAL PLAY (new client): 5F2F:4190:A5 <-> 33C2:AFB9:A5 on route_1, alive
+E         [duo] PYDEC: FAIL client RESULT before saved-state oracle
+E         [duo] rival_swap_new: a=FAIL b=PASS
+E         --- rival_swap_new a result ---
+E         RIVAL_PHASE route22_rival @11427 map=33 (33,9) battle=0 opponent=0 hp=19
+E         RIVAL_TRIGGER map=33 x=29 y=5
+E         RIVAL_PHASE close-text @11551 map=33 (29,5) battle=0 opponent=0 hp=19
+E         RIVAL_PHASE route22_rival-detour @12356 map=33 (29,5) battle=0 opponent=0 hp=19
+E         RIVAL_BATTLE_BEGIN frame=12360 opponent=225
+E         TX {"event":"trainer_battle_start","player":"a","seq":378,"trainer_id":225}
+E         RX replace_rival_team n=2
+E         RX replace_rival_team
+E         [client] [SLink-gen1] RIVAL_WINDOW init_frames=182
+E         TX {"event":"rival_team_replaced","player":"a","seq":385,"species_ids":[176,165],"trainer_id":225}
+E         RIVAL_PHASE rival-fight @12542 map=33 (29,5) battle=2 opponent=225 hp=19
+E         RIVAL_TEAM_REPLACED frame=12541 within=181
+E         ENEMY_MONS_MATCH slots=2
+E         [client] [SLink-gen1] RIVAL_WINDOW init_frames=182 staged_frames=302
+E         ENEMY_SENDOUT species=176 expected=176
+E         heartbeat f=14400 party=2 connected=true
+E         heartbeat f=18000 party=2 connected=true
+E         heartbeat f=21600 party=2 connected=true
+E         heartbeat f=25200 party=2 connected=true
+E         BATTLE_FAINT_SITE 06C3:4190:99 @25320 slot=0 battle_hp=0
+E         TX {"area_id":"route_22","event":"faint","key":"06C3:4190:99","player":"a","seq":811}
+E         heartbeat f=28800 party=2 connected=true
+E         RIVAL_FIGHT end=no-replacement
+E         RIVAL_PHASE rival-fight-stuck @29216 map=33 (29,5) battle=2 opponent=225 hp=0
+E         RESULT: FAIL (the rival battle plan stalled (no-replacement))
+E         --- rival_swap_new b result ---
+E         SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_b_1_witness.bin bytes=31592 saves=1 frame=7616
+E         SAVE_PHASE link_new save-await-close
+E         SAVE_PHASE link_new save-witnessed
+E         SAVE_WITNESS link_new frames=539
+E         RIVAL_IDLE b
+E         heartbeat f=10800 party=2 connected=true
+E         RX play_sound
+E         RX msgbox text=Route 22 is a dead zone!
+E         heartbeat f=14400 party=2 connected=true
+E         heartbeat f=18000 party=2 connected=true
+E         heartbeat f=21600 party=2 connected=true
+E         heartbeat f=25200 party=2 connected=true
+E         heartbeat f=28800 party=2 connected=true
+E         heartbeat f=32400 party=2 connected=true
+E         heartbeat f=36000 party=2 connected=true
+E         SAVE_PHASE rival_swap_new_b save-open-start-menu
+E         SAVE_PHASE rival_swap_new_b save-close-foreign-menu
+E         SAVE_PHASE rival_swap_new_b save-choose-save
+E         heartbeat f=39600 party=2 connected=true
+E         SAVE_PHASE rival_swap_new_b save-confirm
+E         SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_b_1_witness.bin bytes=31592 saves=2 frame=39744
+E         SAVE_PHASE rival_swap_new_b save-await-close
+E         SAVE_PHASE rival_swap_new_b save-witnessed
+E         SAVE_WITNESS rival_swap_new_b frames=474
+E         RESULT: PASS (idled through the partner's rival battle and saved)
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_j65sjmnn
+E         
+E         ========== summary ==========
+E           rival_swap_new: FAIL (attempt 1 of 2)
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...nk_duo_rival_swap_new_j65sjmnn\n\n========== summary ==========\n  rival_swap_new: FAIL (attempt 1 of 2)\n', stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+1 failed, 17 passed in 703.66s (0:11:43)
+
+[FAIL] duo-pairs          17 passed, 0 skipped (0 unexplained), 1 failed, 0 xfailed, 0 deselected  (705s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
