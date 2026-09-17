@@ -1,0 +1,50 @@
+duo instance b scenario=species_clause_new game=gen1_new
+attempt 2 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:56391 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:56391
+[client] [SLink] TCP connected to 127.0.0.1:56391
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @649
+PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"B00013000014142D0A
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 4519:AFB9:B0
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+JITTER requested=37 applied=37 attempt=2
+heartbeat f=3600 party=1 connected=true
+heartbeat f=7200 party=1 connected=true
+RX hud_show text=>> Got PIDGEY
+heartbeat f=10800 party=1 connected=true
+A_PENDING species=36
+ENCOUNTER 1 species=36 dupe_of_a=true
+[hunt] encounter 1 at (10,34) mode=run balls=1
+phase wild-intro @11766 (10,34) battle=1 party=1
+RX gui_prompt text=Dupes clause: Pidgey -- reroll!
+RX unresolve_area
+phase wild-run @12532 (10,34) battle=1 party=1
+TX {"area_id":"route_1","event":"no_catch","level":3,"player":"b","seq":422,"species_id":36}
+TX {"event":"safe","player":"b","seq":423}
+RX unresolve_area
+[hunt] battle outcome battle_over receipts run:timeout
+phase wild-battle_over @13428 (10,34) battle=0 party=1
+[hunt] after battle: outcome=battle_over result=2 party=1 balls=1 -> escaped
+phase escaped @13429 (10,34) battle=0 party=1
+HUNT escaped after 1664 frames, 1 encounter(s)
+REROLL_SEEN species=36 prompt=Dupes clause: Pidgey -- reroll!
+REROLL_RAN no_catch=1 unresolve_area=route_1
+ENCOUNTER 2 species=36 dupe_of_a=true
+[hunt] encounter 1 at (10,35) mode=run balls=1
+phase wild-intro @13517 (10,35) battle=1 party=1
+RX gui_prompt text=Dupes clause: Pidgey -- reroll!
+RX unresolve_area
+phase wild-run @14279 (10,35) battle=1 party=1
+heartbeat f=14400 party=1 connected=true
+[hunt] battle outcome timeout receipts run:timeout
+phase stuck @16247 (10,35) battle=1 party=1
+HUNT stuck after 2731 frames, 1 encounter(s)
+RESULT: FAIL (reroll battle ended stuck)
