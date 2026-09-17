@@ -1,10 +1,11 @@
 attempt 1 of 2
-baseline mon_stats keys: ['06C3:4190:99', '4519:AFB9:B0']
+baseline mon_stats keys: ['4519:AFB9:B0']
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
 SAVE_WITNESS_SHA256 inst=a site=ff5b3ef96960b10268dcd26660a4483dd907a8bf77245480b8fd1b43261cfd0e file=ff5b3ef96960b10268dcd26660a4483dd907a8bf77245480b8fd1b43261cfd0e match=true saves=1
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=b site=aa0b02de2f9c9d487b358a9a2a753a55309d8864d31730637b353bc3d043c9a3 file=aa0b02de2f9c9d487b358a9a2a753a55309d8864d31730637b353bc3d043c9a3 match=true saves=1
-W-6 markers: RESET_SEEN=55 HELLO_CLEARED=17 WRITES_PAUSED=257 OT=4190 re-hello=4190; NO_WRITES_IN_WINDOW 0/0; no BOX_WRITE/force_faint/box_mon
+SAVE_WITNESS_SHA256 inst=b site=a42c4d8866fddfce5555d01a090bef9672aa6bc81b2d26a0b4f03123c61cffed file=a42c4d8866fddfce5555d01a090bef9672aa6bc81b2d26a0b4f03123c61cffed match=true saves=1
+W-6 markers: RESET_SEEN=54 HELLO_CLEARED=7 WRITES_PAUSED=247 OT=4190 re-hello=4190; NO_WRITES_IN_WINDOW 0/0; no BOX_WRITE/force_faint/box_mon
+links.json differs from the baseline only in ORDER (nested maps) and the deferred mon_stats flush for ['06C3:4190:99']; the state is identical, baseline kept at C:\Users\howar\AppData\Local\Temp\slink_duo_soft_reset_new_8qb41yoy\links_baseline.json
 server: A hellos 2 = baseline 1+1, B 1, 0 REJECTED, gameplay counts unchanged, links.json canonically identical to the baseline
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
 a saved party ['06C3:4190:99'] == fixture red_battle; OT 0x4190 unchanged

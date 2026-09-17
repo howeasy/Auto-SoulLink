@@ -1,0 +1,11 @@
+rerun_sr2 start 23:05:31 HEAD 26d08f4
+soft_reset_new rc=0
+[duo] baseline mon_stats keys: ['4519:AFB9:B0']
+[duo] chord go-file written for a
+[duo] links.json differs from the baseline only in ORDER (nested maps) and the deferred mon_stats flush for ['06C3:4190:99']; the state is identical, baseline kept at C:\Users\howar\AppData\Local\Temp\slink_duo_soft_reset_new_8qb41yoy\links_baseline.json
+[duo] PYDEC: PASS asserted scenario facts
+  soft_reset_new: PASS (attempt 1 of 2)
+species_clause_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+[duo] PYDEC: PASS asserted scenario facts
+  species_clause_new: PASS (attempt 2 of 8)

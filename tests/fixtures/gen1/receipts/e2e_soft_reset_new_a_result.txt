@@ -1,8 +1,8 @@
 duo instance a scenario=soft_reset_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:51808 (non-blocking)…
-client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:51808
-[client] [SLink] TCP connected to 127.0.0.1:51808
+[client] [SLink] TCP connecting to 127.0.0.1:62096 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:62096
+[client] [SLink] TCP connected to 127.0.0.1:62096
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -17,21 +17,22 @@ MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
 HELLO_AT_CHECKPOINT ot=4190 hellos=1 map=12
-PARTY_COUNT 1 -> 0 @2142
-RESET_SEEN frame=55 abs=2142
-PARTY_UNREADABLE @2150 missing species terminator (count=0 species=00 00 00 00 00 00 00)
-HELLO_CLEARED frame=2159 delta=17
+CHORD_GATE released @958
+PARTY_COUNT 1 -> 0 @1012
+RESET_SEEN frame=54 abs=1012
+HELLO_CLEARED frame=1019 delta=7
+PARTY_UNREADABLE @1020 missing species terminator (count=0 species=00 00 00 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-WRITES_PAUSED frame=2399 delta=257
-PARTY_COUNT 0 -> 1 @2882
-PARTY_READABLE @2890  (count=1 species=99 FF 00 00 00 00 00)
+WRITES_PAUSED frame=1259 delta=247
+PARTY_COUNT 0 -> 1 @1746
+PARTY_READABLE @1750  (count=1 species=99 FF 00 00 00 00 00)
 [client] [SLink-gen1] writes re-enabled after a live validation
-WRITES_RESUMED frame=2939 delta=797
+WRITES_RESUMED frame=1799 delta=787
 TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"990013000016032D21
 RX resolved_areas
 RX config
-CONTINUED frame=3087 map=12 party=1
-REHELLO ot=4190 hellos=2 frame=3087
+CONTINUED frame=1951 map=12 party=1
+REHELLO ot=4190 hellos=2 frame=1951
 NO_WRITES_IN_WINDOW writes=0 cart_writes=0
 MYKEY 0 06C3:4190:99
 POST_RESET slot=0 key=06C3:4190:99 species=153 level=5 hp=19
@@ -40,9 +41,8 @@ SAVE_PHASE soft_reset_new_a save-close-foreign-menu
 SAVE_PHASE soft_reset_new_a save-select-save
 SAVE_PHASE soft_reset_new_a save-choose-save
 SAVE_PHASE soft_reset_new_a save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_soft_reset_new_a_1_witness.bin bytes=31592 saves=1 frame=3344
+SAVE_WITNESS_DUMP path=patch/build/e2e_soft_reset_new_a_1_witness.bin bytes=31592 saves=1 frame=2208
 SAVE_PHASE soft_reset_new_a save-await-close
-heartbeat f=3600 party=1 connected=true
 SAVE_PHASE soft_reset_new_a save-witnessed
 SAVE_WITNESS soft_reset_new_a frames=528
 RESULT: PASS (same-save soft reset: one re-hello, no writes in the cleared window)

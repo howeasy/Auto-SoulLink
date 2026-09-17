@@ -1,8 +1,8 @@
 duo instance b scenario=soft_reset_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:51808 (non-blocking)…
-client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:51808
-[client] [SLink] TCP connected to 127.0.0.1:51808
+[client] [SLink] TCP connecting to 127.0.0.1:62096 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:62096
+[client] [SLink] TCP connected to 127.0.0.1:62096
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -16,14 +16,13 @@ booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
-IDLE_PARTNER hellos=1 frame=3241
+IDLE_PARTNER hellos=1 frame=2219
 SAVE_PHASE soft_reset_new_b save-open-start-menu
 SAVE_PHASE soft_reset_new_b save-close-foreign-menu
 SAVE_PHASE soft_reset_new_b save-select-save
 SAVE_PHASE soft_reset_new_b save-choose-save
 SAVE_PHASE soft_reset_new_b save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_soft_reset_new_b_1_witness.bin bytes=31592 saves=1 frame=3504
-heartbeat f=3600 party=1 connected=true
+SAVE_WITNESS_DUMP path=patch/build/e2e_soft_reset_new_b_1_witness.bin bytes=31592 saves=1 frame=2480
 SAVE_PHASE soft_reset_new_b save-await-close
 SAVE_PHASE soft_reset_new_b save-witnessed
 SAVE_WITNESS soft_reset_new_b frames=537
