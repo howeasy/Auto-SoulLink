@@ -114,6 +114,16 @@ function M.new(o)
     -- FIGHT/ITEM/PKMN/RUN menu: entered (DisplayBattleMenu executed, bank $0F) and the cursor
     -- variables already written for one of the two columns (they are stale until then).
     local menu_base=0
+    -- Both halves of that test survive the battle they were taken in: `hits` counts for the
+    -- driver's whole lifetime and wTopMenuItemX/wMenuWatchedKeys are plain RAM nobody clears.
+    -- A driver built once for a leg that meets MORE THAN ONE battle therefore answers "a menu
+    -- was drawn" for the NEXT battle out of the last one's leftovers -- measured live: the
+    -- rival leg's incidental wild battle ran DisplayBattleMenu and left the cursor on RUN
+    -- (x=15, watched=LEFT|A, gen1_rb_route1_inputs.lua:44-47), so D.wait_menu accepted the
+    -- rival battle's button-gated intro text as a drawn menu. A caller that drives a battle
+    -- start to finish calls this on its first frame; it cannot be derived in here, because the
+    -- driver is not ticked between battles and so never observes the edge itself.
+    function D.new_battle()menu_base=count("display_battle_menu");return menu_base end
     function D.wait_menu(max_frames)
         local why,frames,st=until_(function(st)
             if st.in_battle==0 then return "battle_over"end

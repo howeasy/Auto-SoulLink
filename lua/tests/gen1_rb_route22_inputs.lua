@@ -254,6 +254,11 @@ function M.new(expected, opts)
     -- FIGHT + move slot 1 every turn, a replacement on every KO. Every menu press goes through
     -- the battle driver, which pins the geometry and the 1-based move cursor to core.asm.
     local function battle_plan()
+        -- This coroutine is created on the first frame of the rival battle, and the driver it
+        -- runs on already drove the walk's incidental wild battles: re-seed its DisplayBattleMenu
+        -- baseline so "the battle menu is up" cannot be answered out of those
+        -- (gen1_battle_driver.lua D.new_battle).
+        D.new_battle()
         for _ = 1, 400 do
             if D.state().in_battle==0 then return "battle-over" end
             if needs_replacement() then
@@ -269,6 +274,13 @@ function M.new(expected, opts)
                     if c.ok then
                         local t = D.commit_move(1, 900)
                         if t.why=="battle_over" then return "battle-over" end
+                    elseif not needs_replacement() then
+                        -- The cursor never reached FIGHT, so a PrintText box owns the frame and
+                        -- the menu is not really up; D.choose only ever emits directions here and
+                        -- WaitForTextScrollButtonPress watches A|B alone (home/joypad2.asm:55-81),
+                        -- so without this the plan burns its whole 400-iteration budget pressing a
+                        -- key nothing reads. Same B-mash, same reason, as the branch below.
+                        mash("B", 32)
                     end
                 elseif not needs_replacement() then
                     mash("B", 32) -- a PrintText box between menus; B is watched by neither
