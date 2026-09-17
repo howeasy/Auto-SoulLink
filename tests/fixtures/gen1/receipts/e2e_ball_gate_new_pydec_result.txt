@@ -1,0 +1,9 @@
+attempt 1 of 1
+cold bedroom: two distinct OTs, zero balls, both gates closed
+starter gift_map_40 pair linked with both zero-ball gates closed
+both real Rival1 faints suppressed; gift pair alive; parked B HP unchanged
+both filtered bag_received signals followed by client and server activation
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+both flushed SaveRAMs qualify; one living original starter per cartridge
+PYDEC: PASS asserted scenario facts

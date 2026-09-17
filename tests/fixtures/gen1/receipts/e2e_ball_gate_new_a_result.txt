@@ -1,0 +1,146 @@
+duo instance a scenario=ball_gate_new game=gen1_new
+attempt 1 of 1
+[client] [SLink] TCP connecting to 127.0.0.1:59922 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:59922
+[client] [SLink] TCP connected to 127.0.0.1:59922
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_READABLE @670  (count=0 species=FF 00 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"","badges":0,"ball_count":0,"event":"hello","has_pokeballs":false,"in_battle":false,"loc_name":"map_38","ot_id":16784,"party":[],"pc_boxes":[],"player":"a","rom_content":{"good_rod":"0a9d0a47","old_rod":"8505
+RX resolved_areas
+RX config
+[scripted] bedroom reached after 3512 frames
+booted at frame 3511 party=0 map=38 (3,6)
+BALL_HELLO {"ball_count":0,"has_pokeballs":false,"map":38,"ot_id":16784,"party_count":0}
+JITTER requested=0 applied=0 attempt=1
+heartbeat f=3600 party=0 connected=true
+TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"a","seq":66}
+TX {"area_id":"oaks_lab","event":"area_enter","loc_name":"Oak's Lab","player":"a","seq":113}
+heartbeat f=7200 party=0 connected=true
+PARTY_COUNT 0 -> 1 @9483
+PARTY_UNREADABLE @9490 species list and struct disagree (count=1 species=99 FF 00 00 00 00 00)
+TX {"area_id":"gift_map_40","event":"capture","gift":true,"hp":20,"in_box":false,"key":"BEEA:4190:99","level":5,"maxHP":20,"nickname":"BULBASAUR","player":"a","seq":204,"species_id":153,"stats":{"level":5,"maxHP":20}}
+PARTY_READABLE @9640  (count=1 species=99 FF 00 00 00 00 00)
+RX play_sound
+RX msgbox text=BULBASAUR and CHARMANDER linked!
+RX party_mon key=BEEA:4190:99
+TX {"event":"sync_retrieve_done","key":"BEEA:4190:99","player":"a","seq":221}
+BALL_PRE_RIVAL {"ball_count":0,"capture_count":1,"faint_count":0,"gift":true,"hp":20,"key":"BEEA:4190:99","player":"a"}
+heartbeat f=10800 party=1 connected=true
+BALL_RELEASE_RIVAL {"force_faint":0,"hp":20,"memorialize":0,"player":"a"}
+TX {"event":"trainer_battle_start","player":"a","seq":259,"trainer_id":225}
+heartbeat f=14400 party=1 connected=true
+heartbeat f=18000 party=1 connected=true
+BATTLE_FAINT_SITE BEEA:4190:99 slot=0 battle_hp=0
+TX {"area_id":"oaks_lab","event":"faint","key":"BEEA:4190:99","player":"a","seq":578}
+TX {"event":"whiteout","player":"a","seq":579}
+TX {"event":"safe","player":"a","seq":591}
+heartbeat f=21600 party=1 connected=true
+BALL_LAB {"ball_count":0,"faint_count":1,"force_faint":0,"has_pokeballs":false,"hp":20,"memorialize":0,"player":"a","result":1}
+heartbeat f=25200 party=1 connected=true
+heartbeat f=28800 party=1 connected=true
+heartbeat f=32400 party=1 connected=true
+BALL_AFTER_LABS {"force_faint":0,"hp":20,"memorialize":0,"player":"a"}
+BALL_PHASE parcel lab_exit
+BALL_PHASE parcel pallet_north
+TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"a","seq":1002}
+BALL_PHASE parcel route_north
+TX {"area_id":"route_1","event":"area_enter","loc_name":"Route 1","player":"a","seq":1015}
+BALL_PHASE parcel wild-dialogue
+BALL_PHASE parcel wild-select-right-column
+BALL_PHASE parcel wild-select-run
+BALL_PHASE parcel wild-attempt-run
+BALL_PHASE parcel unknown-wild-menu
+BALL_PHASE parcel wild-dialogue
+[client] [SLink-gen1] no Poke Balls yet: no_catch withheld, route_1 stays open
+TX {"event":"safe","player":"a","seq":1042}
+BALL_PHASE parcel route_north
+BALL_PHASE parcel wild-dialogue
+BALL_PHASE parcel wild-select-right-column
+BALL_PHASE parcel wild-select-run
+BALL_PHASE parcel wild-attempt-run
+BALL_PHASE parcel unknown-wild-menu
+BALL_PHASE parcel wild-dialogue
+[client] [SLink-gen1] no Poke Balls yet: no_catch withheld, route_1 stays open
+TX {"event":"safe","player":"a","seq":1077}
+BALL_PHASE parcel route_north
+heartbeat f=36000 party=1 connected=true
+BALL_PHASE parcel wild-dialogue
+BALL_PHASE parcel wild-select-right-column
+BALL_PHASE parcel wild-select-run
+BALL_PHASE parcel wild-attempt-run
+BALL_PHASE parcel unknown-wild-menu
+BALL_PHASE parcel wild-dialogue
+[client] [SLink-gen1] no Poke Balls yet: no_catch withheld, route_1 stays open
+TX {"event":"safe","player":"a","seq":1124}
+BALL_PHASE parcel route_north
+BALL_PHASE parcel viridian_mart
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":1132}
+BALL_PHASE parcel mart-parcel-wait
+BALL_PHASE parcel mart-initial-clerk-dialogue
+BALL_PHASE parcel mart-auto-walk
+BALL_PHASE parcel mart-parcel-wait
+BALL_PHASE parcel mart-parcel-dialogue
+BALL_PHASE parcel leave-with-parcel
+BALL_PHASE parcel viridian_south
+BALL_PHASE parcel route_south
+TX {"area_id":"route_1","event":"area_enter","loc_name":"Route 1","player":"a","seq":1191}
+BALL_PHASE parcel wild-dialogue
+heartbeat f=39600 party=1 connected=true
+BALL_PHASE parcel wild-select-right-column
+BALL_PHASE parcel wild-select-run
+BALL_PHASE parcel wild-attempt-run
+BALL_PHASE parcel unknown-wild-menu
+BALL_PHASE parcel wild-dialogue
+[client] [SLink-gen1] no Poke Balls yet: no_catch withheld, route_1 stays open
+TX {"event":"safe","player":"a","seq":1235}
+BALL_PHASE parcel route_south
+BALL_PHASE parcel pallet_lab
+TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"a","seq":1249}
+BALL_PHASE parcel lab_oak
+TX {"area_id":"oaks_lab","event":"area_enter","loc_name":"Oak's Lab","player":"a","seq":1260}
+BALL_PHASE parcel give-parcel-to-oak
+BALL_PHASE parcel oak-delivery-dialogue
+BALL_PHASE parcel oak-delivery-script-wait
+BALL_PHASE parcel oak-delivery-dialogue
+heartbeat f=43200 party=1 connected=true
+BALL_PHASE parcel oak-post-event-dialogue
+BALL_PHASE parcel oak-post-event-script-wait
+BALL_PHASE parcel lab_exit
+BALL_PHASE parcel pallet_north
+TX {"area_id":"pallet_town","event":"area_enter","loc_name":"Pallet Town","player":"a","seq":1408}
+BALL_PHASE parcel route_north
+TX {"area_id":"route_1","event":"area_enter","loc_name":"Route 1","player":"a","seq":1421}
+BALL_PHASE parcel viridian_mart
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":1453}
+heartbeat f=46800 party=1 connected=true
+BALL_PHASE parcel mart-clerk-position
+BALL_PHASE parcel face-mart-clerk
+BALL_PHASE parcel open-mart
+BALL_PHASE parcel mart-unknown-wait
+BALL_PHASE parcel mart-buy
+BALL_PHASE parcel mart-unknown-wait
+BALL_PHASE parcel mart-poke-ball
+BALL_PHASE parcel mart-one-ball
+BALL_PHASE parcel cancel-first-purchase
+BALL_PHASE parcel mart-unknown-wait
+BALL_PHASE parcel mart-poke-ball
+BALL_PHASE parcel mart-one-ball
+BALL_PHASE parcel confirm-first-ball
+BALL_PHASE parcel mart-unknown-wait
+BAG_RECEIVED item=4 quantity=1
+BALL_PHASE parcel first-ball-readback
+BALL_FLIP {"ball_count":1,"has_pokeballs":true,"player":"a","signal_count":1}
+MART_CLOSED after 218 frames
+SAVE_PHASE ball_gate_new save-open-start-menu
+SAVE_PHASE ball_gate_new save-close-foreign-menu
+SAVE_PHASE ball_gate_new save-select-save
+SAVE_PHASE ball_gate_new save-choose-save
+SAVE_PHASE ball_gate_new save-confirm
+SAVE_PHASE ball_gate_new save-await-close
+SAVE_PHASE ball_gate_new save-witnessed
+SAVE_WITNESS ball_gate_new frames=521
+BALL_SAVED {"hp":20,"party_count":1,"player":"a"}
+RESULT: PASS (cold lab loss suppressed; bag site activated; normal SAVE witnessed)
