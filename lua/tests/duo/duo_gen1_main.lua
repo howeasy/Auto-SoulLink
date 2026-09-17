@@ -817,7 +817,14 @@ function scenarios.species_clause_new()
     end
 
     local caught_key, rerolls = nil, 0
-    for battle = 1, 4 do
+    -- Cap raised 4 -> 8 (D-4-2): Route 1's slot table is an exact 50/50 Pidgey/Rattata split
+    -- (pret data/wild/maps/Route1.asm:1-13 weighed by data/wild/probabilities.asm:4-29), so a
+    -- dupe-species run of length k has probability 0.5^k. At M=4 with N=3 whole-scenario
+    -- attempts, only 76.5625% of runs land completed reroll evidence before a body-cap or
+    -- attempt-cap stop; M=8 (with N=8, tools/e2e_duo.py's own attempt cap) raises that to
+    -- 98.8312% (docs/gen1_reference/proposals D-4_completion.md ss1). No cuts: owner ruled
+    -- keep every legal duplicate RUN up to this bound, then catch the first non-duplicate.
+    for battle = 1, 8 do
         -- The cursor is taken BEFORE the encounter exists. The server queues the dupes prompt
         -- from the wild-battle-start tick (server/server.py:1815-1834 -> state.py:1726-1738),
         -- and the client drains the reply queue on every tick (lua/gen1/client.lua:1038-1051),
@@ -869,7 +876,12 @@ function scenarios.species_clause_new()
         log(fmt("REROLL_RAN no_catch=%d unresolve_area=%s", seen.no_catch or 0,
                 unres and (unres.area_id or "?") or "none"))
     end
-    if not caught_key then return false, "B never landed a non-duplicate catch" end
+    -- Exhausting the cap on nothing but dupes is the game's RNG, not a body defect -- classify
+    -- it CAUSE_RNG (tools/e2e_duo.py GEN1_RNG_REASON_CLASS) so the runner retries the whole
+    -- scenario the same way it does out-of-balls, instead of treating this as a FINAL failure.
+    if not caught_key then
+        return false, "RNG: the species hunt met only duplicates within its battle budget"
+    end
     log_party("PARTY")
     log("CAUGHT " .. caught_key)
     wait_until(function()
@@ -1565,8 +1577,40 @@ local function linked_faint_scenario(active, explode)
             local reentered, reentry_why = explode_free_reentry(driver, key)
             if not reentered then driver.close();return false, reentry_why end
             local committed = driver.commit_move(1, 900)
-            log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(committed.why),
+            -- The coerced turn is a REAL turn. SelectMenuItem's z return falls through to
+            -- `.selectEnemyMove` (core.asm:332-339) and the speed order decides who swings first
+            -- (`.compareSpeed`, core.asm:389-396), so the foe's half of the turn runs before
+            -- ExecutePlayerMove -- the ONLY site commit_move reports as `player_move`. Two things
+            -- follow, and the run of 2026-09-17 hit both:
+            --   * the foe's half can end in `prompt` (a stat drop prints _FellText,
+            --     data/text/text_3.asm:122-124 -> home/text.asm:209-217 -> home/joypad2.asm:55-81,
+            --     and Rattata carries TAIL WHIP), and commit_move only IDLES while it waits --
+            --     WO-1's stall, in a new place. Its two A retries clear at most two such lines
+            --     (gen1_battle_driver.lua:180-198), so tap B until the site fires instead. B is
+            --     not in the battle menu's watched keys (RIGHT|A / LEFT|A, DisplayBattleMenu
+            --     core.asm:.leftColumn_WaitForInput), so a stray tap cannot pick a menu item, and
+            --     SelectMenuItem is long past.
+            --   * if the foe's swing KO'd the linked mon -- it leaves the hunt at its capture HP,
+            --     3/15 in that run -- `.enemyMovesFirst` goes `jp z, HandlePlayerMonFainted`
+            --     (core.asm:410-417) and EXPLOSION can never run at all. Say so HERE: the receipt
+            --     otherwise carried a bare `timeout` and then 12000 frames of escape_after_faint.
+            local why = committed.why
+            local function battle_hp() return rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1) end
+            if why ~= "player_move" then
+                local fired = driver.hits().execute_player_move.count
+                for _ = 1, 900 do
+                    if driver.hits().execute_player_move.count > fired then why = "player_move" break end
+                    if rd(ram.wIsInBattle) == 0 or battle_hp() == 0 then break end
+                    yield_frame(pulse_at_frame("B"))
+                end
+            end
+            log(fmt("B_ACTIVE_COMMIT %s selected=%02X pp_before=%s", tostring(why),
                     committed.selected_move or 0xFF, tostring(committed.pp_before)))
+            if why ~= "player_move" then
+                driver.close()
+                return false, fmt("EXPLOSION never executed (%s): the wild foe took the turn "
+                                  .. "first and the linked mon is at %d HP", tostring(why), battle_hp())
+            end
         else
             -- B is parked INSIDE DisplayBattleMenu, one loop head too late for the queued write,
             -- and the linked mon is still at its capture HP (5/15 in the run that failed).
