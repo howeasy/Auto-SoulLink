@@ -53,7 +53,7 @@ def test_a_failed_client_ends_even_when_the_other_is_still_running(tmp_path, mon
     that half can no longer produce helps nobody."""
     run = _run({"a": FAIL_LINE, "b": "IDLE_PARTNER hellos=1\n"})
     _patch_results(monkeypatch, run)
-    with pytest.raises(duo.ClientFinishedEarly, match="a client RESULT landed"):
+    with pytest.raises(duo.ClientFinishedEarly, match="a client finished"):
         run.wait_for("the pair", lambda: None, 5)
 
 
@@ -122,3 +122,65 @@ def test_a_mid_wait_ball_miss_still_retries(tmp_path, monkeypatch):
         "gen1_new",
         {"a": duo.RNG_OUT_OF_BALLS, "b": "RESULT: FAIL (runner never released B (A_PENDING))"},
         1)
+
+
+# ── H-3: the phase receipts, a dead process, and the run's own deadline ─────
+
+def test_a_failed_phase_receipt_ends_the_wait(tmp_path, monkeypatch):
+    """reconnect_new's relaunched A writes same_save/wrong_save receipts; a FAIL there has to
+    end a wait the same way an initial receipt's would, and the initial file must not mask it."""
+    run = _run({"a": PASS_LINE, "b": "IDLE_PARTNER hellos=1"})
+    _patch_results(monkeypatch, run)
+    run._phase = {"a": "same_save", "b": "initial"}
+    run._result_path = lambda inst: str(tmp_path / f"e2e_whiteout_new_{inst}_result.txt")
+    run._phase_result_path = lambda inst, phase="initial": str(
+        tmp_path / f"e2e_whiteout_new_{inst}_{phase}_result.txt")
+    phase = tmp_path / "e2e_whiteout_new_a_same_save_result.txt"
+    phase.write_text("RELAUNCH\nRESULT: FAIL (the relaunch never helloed)\n", encoding="utf-8")
+    with pytest.raises(duo.ClientFinishedEarly) as excinfo:
+        run.wait_for("a marker that never lands", lambda: None, 5)
+    assert excinfo.value.finished["a"].startswith("RESULT: FAIL")
+
+
+def test_a_dead_process_with_no_result_ends_the_wait(tmp_path, monkeypatch):
+    """A client that dies without writing RESULT used to leave the wait to its full budget."""
+    class Dead:
+        def poll(self):
+            return 0
+
+    run = _run({"a": "", "b": "IDLE_PARTNER hellos=1"})
+    _patch_results(monkeypatch, run)
+    run.emu_by_inst = {"a": Dead(), "b": None}
+    with pytest.raises(duo.ClientFinishedEarly) as excinfo:
+        run.wait_for("a marker that never lands", lambda: None, 5)
+    assert excinfo.value.exited == ["a"]
+    assert "process gone with no RESULT: a" in str(excinfo.value)
+
+
+def test_an_expected_exit_does_not_end_the_wait(tmp_path, monkeypatch):
+    """reconnect_new kills A on purpose; the waits that follow are waiting for the relaunch."""
+    class Dead:
+        def poll(self):
+            return 0
+
+    run = _run({"a": "", "b": "IDLE_PARTNER hellos=1"})
+    _patch_results(monkeypatch, run)
+    run.emu_by_inst = {"a": Dead(), "b": None}
+    run._expected_exit = {"a"}
+    with pytest.raises(TimeoutError, match="a marker that never lands"):
+        run.wait_for("a marker that never lands", lambda: None, 0.2)
+
+
+def test_the_runs_own_deadline_bounds_every_wait(tmp_path, monkeypatch):
+    """The registry's timeout is per wait; the run itself gets one wall-clock bound, so an
+    overrun ends with a FAIL summary instead of the wrapper's external kill."""
+    import time as _time
+
+    run = _run({"a": "", "b": ""})
+    _patch_results(monkeypatch, run)
+    run._run_deadline = _time.time() - 1
+    with pytest.raises(TimeoutError, match="wall-clock budget expired"):
+        run.wait_for("a marker that never lands", lambda: None, 60)
+    run._run_deadline = _time.time() + 0.2
+    with pytest.raises(TimeoutError, match="wall-clock budget expired"):
+        run.wait_for("a marker that never lands", lambda: None, 60)

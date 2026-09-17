@@ -32,7 +32,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # the point, and it was retired with the rest of the Archipelago gate in Phase 8. If a script
 # ever needs literals again, exempt it here by NAME and say why — never by widening the glob.
 SCRIPTS = sorted(
-    glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gen1_*.lua"))
+    # (deletion step 3 removed scenario_gen1_*.lua and gen1_hunt.lua; duo_gen1_main.lua is
+    # covered by the duo_*.lua glob below)
+    glob.glob(os.path.join(REPO, "lua", "tests", "duo", "duo_gen1_main.lua"))
     # The generation-agnostic scenarios and the shared duo wrapper. These were named
     # scenario_gen1_* until Gen 2 became their second caller, and renaming them silently
     # dropped three files out of this guard — the exact way coverage disappears without
@@ -46,9 +48,8 @@ SCRIPTS = sorted(
     # Gen 2 half is currently held by the shared files containing no WRAM literals at all.
     + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gb_*.lua"))
     + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "duo_gb_main.lua"))
-    # gen1_hunt.lua is not a scenario, but the scenarios delegate every cartridge read to
-    # it — leaving it out would let the literals simply move one file over.
-    + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "gen1_*.lua"))
+    # The gen1_*.lua scenario helpers were deleted with the old client; anything that grows
+    # back in that directory is covered by the duo_*.lua glob above.
     + glob.glob(os.path.join(REPO, "lua", "tests", "test_gen1_*_gate.lua"))
 )
 

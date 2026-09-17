@@ -18,10 +18,12 @@ import pytest
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
+import e2e_duo as duo_module  # noqa: E402
 from e2e_duo import (  # noqa: E402
     GAMES,
     SCENARIOS,
     DuoRun,
+    list_lines as duo_list_lines,
     scenario_applies,
     scenario_attempt_limit,
     scenarios_for,
@@ -73,30 +75,27 @@ def test_gen2_runs_the_three_scenarios_crystal_is_verified_on():
     assert sorted(scenarios_for("gen2")) == sorted(["faint", "boxsync", "memorialize"])
 
 
-def test_a_games_entry_matches_the_whole_family():
-    """`("gen1",)` has to cover gen1_yellow.
-
-    The Yellow/Red pairing exists so a byte-shift bug shows up as an asymmetry between the two
-    halves instead of cancelling out, and tests/e2e/test_duo_gen1.py runs the full scenario
-    list against it. Exact-id matching would have silently reduced that pairing to the
-    scenarios carrying no `games` key at all — coverage vanishing with nothing going red.
-    """
-    assert scenarios_for("gen1_yellow") == scenarios_for("gen1")
-    assert scenario_applies("rivalswap", "gen1_yellow")
+def test_the_old_gen1_titles_are_gone():
+    """Deletion step 3: the `gen1`/`gen1_yellow` titles, their scenario drivers and the family
+    rule that covered them are removed, so every `games` tuple is exact."""
+    assert "gen1" not in GAMES and "gen1_yellow" not in GAMES
+    for name in ("rivalswap", "explode_g1", "whiteout", "playthrough", "deadzone", "dupes"):
+        assert name not in SCENARIOS, name
+    assert not hasattr(duo_module, "FAMILIES") or not duo_module.FAMILIES
 
 
-def test_family_matching_does_not_leak_across_generations():
-    """Prefix matching must not make "gen1" swallow "gen1x", nor gen2 inherit Gen 1's set."""
-    assert not scenario_applies("rivalswap", "gen2")
-    assert not scenario_applies("whiteout", "gen3_rr")
-    assert not scenario_applies("trade", "gen1")
+def test_selection_does_not_leak_across_generations():
+    """Exact matching: nothing from another title's set may appear."""
+    assert "memorialize" in scenarios_for("gen2") and "memorialize" not in scenarios_for("gen3_rr")
+    assert not scenario_applies("trade", "gen2")
+    assert not scenario_applies("link_new", "gen2")
 
 
 def test_the_pytest_wrappers_agree_with_the_runner():
-    """Each per-generation wrapper hardcodes the scenarios it runs. If one names a scenario the
-    runner would refuse for that game, the two have drifted — which is the original bug, just
-    pointing the other way."""
-    for module, game in (("test_duo_gen1", "gen1"), ("test_duo_gen2", "gen2")):
+    """The per-generation wrapper hardcodes the scenarios it runs. If it names one the runner
+    would refuse for that game, the two have drifted — which is the original bug, just pointing
+    the other way."""
+    for module, game in (("test_duo_gen2", "gen2"),):
         sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
         mod = __import__(module)
         for name in mod.SCENARIOS:
@@ -126,8 +125,7 @@ def test_gen1_new_does_not_inherit_the_old_gen1_family():
     refuses every old scenario name, so `--scenario all --game gen1_new` must select only its
     own eight rather than six scenarios it cannot run."""
     assert sorted(scenarios_for("gen1_new")) == sorted(GEN1_NEW_SCENARIOS)
-    assert not scenario_applies("playthrough", "gen1_new")
-    assert scenarios_for("gen1_yellow") == scenarios_for("gen1")
+    assert not scenario_applies("trade", "gen1_new")
 
 
 def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
@@ -239,3 +237,15 @@ def test_the_wrapper_resolves_fixtures_per_instance_not_as_a_cross_product():
     assert mod.missing_fixtures("poison_new", exists=exists) == [("red", "town")]
     present.discard("blue_battle.SaveRAM")
     assert len(mod.missing_fixtures("poison_new", exists=exists)) == 2
+
+
+def test_list_lines_carry_the_attempt_limit_and_the_targets():
+    """(r): lane cards quote these two numbers, so --list prints them from the same table the
+    runner uses."""
+    lines = {line.split()[0]: line for line in duo_list_lines("gen1_new")}
+    assert lines["species_clause_new"] == "species_clause_new  attempts=8  targets=battle"
+    assert lines["poison_new"] == "poison_new  attempts=2  targets=a:town, b:battle"
+    assert lines["rival_swap_new"] == "rival_swap_new  attempts=2  targets=a:battle, b:battle"
+    assert lines["ball_gate_new"] == "ball_gate_new  attempts=1  targets=town"
+    for name in scenarios_for("gen1_new"):
+        assert name in lines, name

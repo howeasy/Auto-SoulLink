@@ -88,7 +88,8 @@ end
 -- can force one, and dead-zones the area whichever way the battle is then ended (measured:
 -- a flush that ran away produced area_states {"route_1": "dead_zone"}). Closing the
 -- engine's own NewBattle gate for the duration of the boot makes a grass fixture behave
--- like a town one. Scenarios that want battles reopen it -- gen1_hunt.force_wild does so as
+-- like a town one. Scenarios that want battles reopen it themselves (the old client's
+-- gen1_hunt did so with a RAM poke; that module went with it in deletion step 3) as
 -- soon as it has chosen the species, so the window is only ever open before that choice.
 --
 -- Advisory, not fatal: Gen 2 has no such address wired and AP disowns it, and neither of
@@ -117,7 +118,7 @@ end
 local booted = Lib.prove_booted(M, GAME, nb_step, nb_hold)
 if M.setNoBattles then
     -- THE WINDOW CLOSES HERE, and it covers the boot walk and nothing else. Scenarios walk
-    -- in wildly different ways -- gen1_hunt.H.hunt, or a hand-rolled loop as in
+    -- in wildly different ways -- the old client's gen1_hunt.H.hunt did, or a hand-rolled loop as in
     -- `playthrough` -- so any boundary further in has to be repeated per scenario and will
     -- be missed: reopening inside force_wild stranded `playthrough` and `deadzone`, which
     -- hunt without forcing, and reopening inside H.hunt still stranded `playthrough`, which

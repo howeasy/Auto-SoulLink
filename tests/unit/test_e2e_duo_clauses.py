@@ -589,6 +589,7 @@ def test_scenario_attempt_limit_is_the_single_source(capsys, tmp_path, monkeypat
     assert duo.scenario_attempt_limit("species_clause_new", "gen1_new") == 8
     assert duo.scenario_attempt_limit("link_new", "gen1_new") == 2
     assert duo.scenario_attempt_limit("poison_new", "gen1_new") == 2
+    assert duo.scenario_attempt_limit("explode_new", "gen1_new") == 4
     assert duo.scenario_attempt_limit("ball_gate_new", "gen1_new") == 1
     assert duo.scenario_attempt_limit("faint", "gen3_rr") == 1
 
@@ -742,6 +743,12 @@ def test_the_explode_ko_phrase_is_retryable_within_its_own_budget():
     assert not duo.retryable_gen1_rng(
         "gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 2, limit=2)
     assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 1, limit=2)
+    # (s): explode_new's own budget is 4, so the phrase stays retryable on attempts 2 and 3.
+    limit = duo.scenario_attempt_limit("explode_new", "gen1_new")
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 2, limit=limit)
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 3, limit=limit)
+    assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 4,
+                                      limit=limit)
 
 
 def test_the_explode_ko_phrase_is_cross_checked_against_the_body():

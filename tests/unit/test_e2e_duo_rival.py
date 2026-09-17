@@ -40,6 +40,7 @@ def _receipt_a(within=12, blobs=2, match=2, sendout=("19", "19"), outcome="win",
     else:
         rows.append(f"ENEMY_MONS_MATCH slots={match}")
     rows += [
+        "[SLink-gen1] RIVAL_WINDOW init_frames=12 staged_frames=7",
         f"ENEMY_SENDOUT species={sendout[0]} expected={sendout[1]}",
         f"RIVAL_RESULT {outcome}",
         "RIVAL_DONE",
@@ -117,7 +118,7 @@ def test_rival_swap_oracle_reads_a_lost_swap(tmp_path, monkeypatch):
 @pytest.mark.parametrize(("kwargs", "message"), [
     ({"opponent": 226}, "not Rival1's 225"),
     ({"tx_count": 2}, "trainer_battle_start line"),
-    ({"within": 120}, "late reply, not a swap"),
+    ({"within": -1}, "late reply, not a swap"),   # a reply older than the window's own origin
     ({"mismatch": True}, "ENEMY_MONS_MISMATCH"),
     ({"sendout": ("16", "19")}, "not the partner's slot-1"),
     ({"match": 1}, "compare covered 1 slot"),
@@ -165,6 +166,34 @@ def test_rival_swap_oracle_refuses_a_dead_pair_after_a_win(tmp_path, monkeypatch
 def test_rival_swap_oracle_refuses_a_party_that_lost_the_catch(tmp_path, monkeypatch):
     run, results = _stub(tmp_path, monkeypatch, party_has_catch=False)
     with pytest.raises(RuntimeError, match="expected starter \\+"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_reads_the_window_constants_from_the_client(tmp_path, monkeypatch):
+    """A13-r3 replaced RIVAL_SWAP_FRAMES=120 with RIVAL_INIT_FRAMES/RIVAL_STAGED_FRAMES; the
+    oracle reads them from the client by name, so a changed constant moves the bound with it."""
+    run, results = _stub(tmp_path, monkeypatch, a_text=_receipt_a(within=240))
+    run.assert_rival_swap_new_saved(results)          # exactly at the constant passes
+    run, results = _stub(tmp_path, monkeypatch, a_text=_receipt_a(within=241))
+    with pytest.raises(RuntimeError, match="RIVAL_INIT_FRAMES=240"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_refuses_a_duplicate_apply(tmp_path, monkeypatch):
+    """One replacement per battle: an already_applied ack means the command was delivered
+    twice, which the client refuses to write again."""
+    run, results = _stub(tmp_path, monkeypatch)
+    results["a"] += ('\nTX {"event":"rival_team_replaced","player":"a","trainer_id":225,'
+                     '"species_ids":[],"error":"already_applied"}')
+    with pytest.raises(RuntimeError, match="already_applied"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_refuses_a_missing_window_line(tmp_path, monkeypatch):
+    run, results = _stub(tmp_path, monkeypatch)
+    results["a"] = "\n".join(line for line in results["a"].splitlines()
+                             if "RIVAL_WINDOW" not in line)
+    with pytest.raises(RuntimeError, match="no RIVAL_WINDOW line"):
         run.assert_rival_swap_new_saved(results)
 
 

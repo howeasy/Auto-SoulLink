@@ -48,9 +48,8 @@ WT_FWD = REPO.replace("\\", "/")
 # `games` is which titles a scenario applies to. ABSENT MEANS EVERY TITLE — read it through
 # scenarios_for(), never inline.
 #
-# An entry matches the FAMILY as well as the exact id: ("gen1",) covers gen1_yellow, the same
-# way the `is_gen1` check does. Without that, adding a second Gen 1 pairing would mean editing
-# the tuple on every scenario it inherits, and forgetting one silently drops coverage.
+# Matching is exact: an entry names the titles it runs. (The `("gen1",)` family that used to
+# cover `gen1_yellow` went with those two titles in deletion step 3.)
 #
 # This key was declared and documented here for a long time while nothing but
 # tests/e2e/test_duo.py read it, so `--scenario all` expanded to the whole table regardless of
@@ -61,31 +60,10 @@ SCENARIOS = {
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
     # Gen 1, Box 14 on Gen 2. Gen 3 has its own memorial path and is not covered here.
-    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1", "gen2")},
-    # Gen 1 does the rival swap from pure RAM — no companion patch, unlike Gen 3.
-    "rivalswap": {"flags": ["--rival-team-swap"], "timeout": 300, "games": ("gen1",)},
-    # Gen 1 explode: RAM-only, no companion patch. Distinct from the Gen 3 "explode" entry
-    # below, which loads savestates and keeps B at a single mon.
-    "explode_g1": {"flags": ["--explode-mode"], "timeout": 300, "games": ("gen1",)},
-    # A poisons its last mon to death and takes pokered's real HandleBlackOut. Longer than
-    # `faint` because it walks for the poison tick, mashes through two text boxes and then
-    # waits out the auto-rebuild round trip.
-    "whiteout": {"flags": [], "timeout": 600, "games": ("gen1",)},
-    # The only scenario that PLAYS. Both instances walk Route 1's grass, meet a real wild
-    # Pokemon and throw a real ball; the link is formed by the server from the resulting
-    # `capture` events. Nothing is injected and the Nuzlocke gate comes from the real bag,
-    # so this is the only coverage of encounter linking, area_enter and the ball gate.
-    "playthrough": {"flags": [], "timeout": 1500, "games": ("gen1",),
-                    "target": "battle", "no_setup": True, "frames": 200000},
-    # A meets a real wild Pokemon and KILLS it — a genuine failed encounter, no ball spent —
-    # which must lock the area for BOTH players. B is released only once the SERVER reports
-    # the lock, then catches there and must have the catch taken away.
-    "deadzone": {"flags": [], "timeout": 1500, "games": ("gen1",),
-                 "target": "battle", "no_setup": True, "frames": 200000},
-    # Species clause. Both cartridges point their wild table at ONE species, both catch it in
-    # the same area, and the later capture must be rejected as a same-family duplicate.
-    "dupes": {"flags": ["--species-clause"], "timeout": 1500, "games": ("gen1",),
-              "target": "battle", "no_setup": True, "frames": 200000},
+    "memorialize": {"flags": [], "timeout": 300, "games": ("gen2",)},
+    # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
+    # step 3): lua/tests/duo/scenario_gen1_*.lua and gen1_hunt.lua are gone, so every entry that
+    # named `("gen1",)` went with them. The Gen 2 scenarios below are the shared GB ones.
     # NEW Gen 1 client (lua/gen1/*, game "gen1_new"): docs/gen1_requirements.md D-1 and D-3
     # from real play through lua/tests/duo/duo_gen1_main.lua. Both battle fixtures carry
     # exactly ONE Poke Ball, so each side gets one throw; the hunt fights one Tackle first
@@ -220,12 +198,8 @@ SCENARIOS = {
 }
 
 
-# Titles that share a family for `games` matching. `gen1_new` runs the same hardware as the
-# `gen1` entries but is a DIFFERENT client: lua/tests/duo/duo_gen1_main.lua refuses every
-# scenario the old drivers own. The old prefix rule therefore handed it six scenarios it cannot
-# run, and `--scenario all --game gen1_new` died on the first of them.
-FAMILIES = {"gen1": ("gen1", "gen1_yellow")}
-
+# No families any more: the `gen1`/`gen1_yellow` pair was the only one, and both titles (and
+# their scenario drivers) were deleted in the same step. `games` matching is exact.
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
@@ -237,7 +211,7 @@ def scenario_applies(name, game):
     allowed = SCENARIOS[name].get("games")
     if allowed is None:
         return game not in OPT_IN_GAMES
-    return any(game in FAMILIES.get(entry, (entry,)) for entry in allowed)
+    return game in allowed
 
 
 def scenarios_for(game):
@@ -375,7 +349,16 @@ def scenario_attempt_limit(name, game):
     """
     if game != "gen1_new" or name == "ball_gate_new":
         return 1
-    return 8 if name == "species_clause_new" else 2
+    if name == "species_clause_new":
+        return 8
+    if name == "explode_new":
+        # EX-3/EX-4: the linked mon IS the lead at the second battle, but the speed order is a
+        # coin flip across Route 1's encounters and the hunt weakens the catch to ~3/15 HP, so
+        # one foe hit kills it about half the time (~25-49% failure per attempt as the
+        # explode-KO phrase). The Lua card heals it before the encounter; 4 covers the crit/tie
+        # cases that remain.
+        return 4
+    return 2
 
 
 def species_reroll_state(receipts):
@@ -683,12 +666,15 @@ class ClientFinishedEarly(Exception):
     keep its retry).
     """
 
-    def __init__(self, finished: dict, awaited: str):
+    def __init__(self, finished: dict, awaited: str, exited=()):
         self.finished = dict(finished)
         self.awaited = awaited
+        self.exited = sorted(exited)
         detail = "; ".join(f"{inst}: {reason or 'no RESULT'}"
                            for inst, reason in sorted(self.finished.items()))
-        super().__init__(f"a client RESULT landed before {awaited!r} ({detail})")
+        if self.exited:
+            detail += f"; process gone with no RESULT: {', '.join(self.exited)}"
+        super().__init__(f"a client finished before {awaited!r} ({detail})")
 
 
 # links.json's per-player maps are dicts (insertion-ordered) and three of them are set-derived
@@ -845,9 +831,8 @@ def saved_money(sram):
 #   * NO SAVESTATE. Gen 1 boots from a battery save (tests/fixtures/gen1/*.SaveRAM), which
 #     is not BizHawk-version-locked the way a .State is — nothing to rebuild after an
 #     emulator upgrade.
-#   * DIFFERENT CARTRIDGES per instance: A is Red, B is Blue. Closer to how the feature is
-#     actually played, and the two cannot collide over BizHawk's SaveRAM because it names
-#     saves from its own gamedb entry.
+#   * DIFFERENT CARTRIDGES per instance on the new Gen 1 client: A is Red, B is Blue. The two
+#     cannot collide over BizHawk's SaveRAM because it names saves from its own gamedb entry.
 #   * The shared GB duo wrapper (duo_gb_main.lua), since the boot and the HP endianness
 #     differ from Gen 3. Gen 2 uses the same one.
 #
@@ -859,19 +844,10 @@ GAMES = {
         "uses_savestate": True,
         "scenario_prefix": "",
     },
-    "gen1": {
-        "main": "lua/tests/duo/duo_gb_main.lua",
-        "game": "gen1_rby",
-        "play": "gen1_playthrough",
-        "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
-        "uses_savestate": False,
-        "fixture": {"a": "red", "b": "blue"},
-        "scenario_prefix": "gen1_",
-    },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
     # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
-    # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the `("gen1",)`
-    # family entries and the savestate-less shared ones do not leak in, and every scenario here
+    # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the
+    # savestate-less shared ones do not leak in, and every scenario here
     # carries an `oracle` -- a Gen 1 verdict always reads the saved state (A0-H2). duo_gen1_main
     # refuses any name it does not implement, so `--scenario all --game gen1_new` must select
     # exactly this set (pinned in tests/unit/test_e2e_duo_scenario_selection.py).
@@ -882,20 +858,6 @@ GAMES = {
         "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
         "uses_savestate": False,
         "fixture": {"a": "red", "b": "blue"},
-        "scenario_prefix": "gen1_",
-    },
-    # Yellow paired against Red. Yellow shifts nearly every WRAM address by -1, and until now
-    # it only ever ran SINGLE-instance gates — no duo, so no Yellow address had ever been
-    # exercised through the server, and none of its WRITE paths had run alongside a partner.
-    # Pairing it with Red rather than another Yellow means a shift bug shows up as an
-    # asymmetry between the two halves instead of cancelling out.
-    "gen1_yellow": {
-        "main": "lua/tests/duo/duo_gb_main.lua",
-        "game": "gen1_rby",
-        "play": "gen1_playthrough",
-        "rom": {"a": "patch/build/gen1_yellow.gbc", "b": "patch/build/gen1_red.gb"},
-        "uses_savestate": False,
-        "fixture": {"a": "yellow", "b": "red"},
         "scenario_prefix": "gen1_",
     },
     # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
@@ -950,6 +912,16 @@ class DuoRun:
         # post-result oracle: a client RESULT must not stand in for a leg that never ran.
         self._live_complete = {}
         self._same_save_artifact = None
+        # Which phase each instance is currently writing a receipt for (reconnect relaunches),
+        # the exits the harness itself asked for, and the run's own wall-clock bound.
+        self._phase = {"a": "initial", "b": "initial"}
+        self._expected_exit: set[str] = set()
+        # What the wrapper would kill the subprocess at anyway (scenario_attempt_limit x timeout
+        # + the teardown allowance), enforced here so an overrunning run ends with a FAIL
+        # summary instead of an external kill.
+        self._run_deadline = (time.time()
+                              + scenario_attempt_limit(scenario, self.game) * self.cfg["timeout"]
+                              + 300)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def wait_for(self, desc, pred, timeout, interval=2.0):
@@ -969,18 +941,43 @@ class DuoRun:
         The predicate is checked FIRST, so waits whose predicate IS the RESULT (wait_results,
         the reconnect B-done wait) still return normally.
         """
-        deadline = time.time() + timeout
+        deadline = min(time.time() + timeout, getattr(self, "_run_deadline", float("inf")))
         while time.time() < deadline:
             value = pred()
             if value:
                 return value
-            finished = {inst: terminal_result(read_result(self.scenario, inst))
-                        for inst in ("a", "b")}
+            finished = {inst: terminal_result(self._read_receipt(inst)) for inst in ("a", "b")}
+            expected = getattr(self, "_expected_exit", set())
+            exited = sorted(inst for inst in ("a", "b")
+                            if inst not in expected and self._process_exited(inst))
             failed = any(reason.startswith("RESULT: FAIL") for reason in finished.values())
-            if failed or all(finished.values()):
-                raise ClientFinishedEarly(finished, desc)
+            if failed or exited or all(finished.values()):
+                raise ClientFinishedEarly(finished, desc, exited=exited)
             time.sleep(interval)
+        if time.time() >= getattr(self, "_run_deadline", float("inf")):
+            raise TimeoutError(f"the run's wall-clock budget expired while waiting for {desc}")
         raise TimeoutError(f"timed out after {timeout}s waiting for {desc}")
+
+    def _read_receipt(self, inst):
+        """The receipt an instance is CURRENTLY writing: its phase file once relaunched.
+
+        reconnect_new's A writes `same_save` / `wrong_save` receipts after its relaunches, and a
+        FAIL there has to end a wait the same way an initial receipt's would.
+        """
+        phase = getattr(self, "_phase", {}).get(inst, "initial")
+        if phase == "initial":
+            return read_result(self.scenario, inst) or ""
+        path = self._phase_result_path(inst, phase)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                return handle.read()
+        except OSError:
+            return ""
+
+    def _process_exited(self, inst) -> bool:
+        """True when this instance's emulator is gone — a dead client that never wrote a RESULT."""
+        process = getattr(self, "emu_by_inst", {}).get(inst)
+        return bool(process) and process.poll() is not None
 
     def start_server(self):
         cmd = [sys.executable, "-m", "server.server",
@@ -1160,6 +1157,8 @@ class DuoRun:
             write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst))
         else:
             shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+        self._phase = getattr(self, "_phase", {})
+        self._phase[inst] = phase
         result = self._phase_result_path(inst, phase)
         if os.path.exists(result):
             os.remove(result)  # stale phase receipts cannot satisfy a new relaunch
@@ -1214,7 +1213,13 @@ class DuoRun:
         return p
 
     def terminate_instance(self, inst):
-        """Harness-only crash; keep the server and the other emulator running."""
+        """Harness-only crash; keep the server and the other emulator running.
+
+        Recorded as an EXPECTED exit: the waits that follow it are waiting for the relaunch, and
+        a dead process with no RESULT must not end them.
+        """
+        self._expected_exit = getattr(self, "_expected_exit", set())
+        self._expected_exit.add(inst)
         p = self.emu_by_inst[inst]
         if p.poll() is None:
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
@@ -1249,19 +1254,29 @@ class DuoRun:
         return all(self._boot_keys.get(inst) in stats for inst in ("a", "b"))
 
     def _clear_attempt_artifacts(self):
-        """Drop every result, go-file and witness this attempt has to produce for itself.
+        """Drop every receipt, go-file and witness this scenario could read as its own.
 
-        Freshness is identity for the witness: the name carries the attempt, but a rerun of the
-        same scenario (or a crashed attempt re-entered) would otherwise leave its dump where
-        this attempt's check reads it, and an old save would pass as this one. Every
-        `e2e_<scenario>_<inst>_*_witness.bin` goes, not just this attempt's number.
+        Freshness is identity here: a rerun (or a crashed attempt re-entered) leaves results,
+        phase receipts, attempt archives, witnesses and PYDEC copies from OLDER runs in the same
+        build directory, and the lane's evidence collection has been picking them up. Everything
+        matching `e2e_<scenario>_*` under patch/build goes — this attempt's own PYDEC receipt is
+        opened before the launch and is the one exception — and the removal is printed so the
+        run's log says what it threw away.
         """
+        keep = os.path.basename(getattr(self, "_pydec_path", "") or "")
+        removed = []
+        for path in sorted(glob.glob(os.path.join(BUILD, f"e2e_{self.scenario}_*"))):
+            if keep and os.path.basename(path) == keep:
+                continue
+            os.remove(path)
+            removed.append(os.path.basename(path))
         for inst in ("a", "b"):
-            stale = [self._result_path(inst), self.go_files[inst],
-                     *glob.glob(os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_*_witness.bin"))]
-            for f in stale:
-                if os.path.exists(f):
-                    os.remove(f)
+            if os.path.exists(self.go_files[inst]):
+                os.remove(self.go_files[inst])
+                removed.append(os.path.basename(self.go_files[inst]))
+        if removed:
+            print(f"[duo] cleared {len(removed)} stale artifact(s) for {self.scenario}: "
+                  f"{', '.join(sorted(removed))}")
 
     def wait_keys(self):
         """Both wrappers log MYKEY lines right after savestate+mutation."""
@@ -1360,7 +1375,7 @@ class DuoRun:
         TWO SOURCES, BECAUSE THE FIRST IS A RACE THE SCENARIO ALREADY GAVE UP ON.
         `CAUGHT` is printed by the hunt only if it can still read the mon in the party --
         and inside a dead zone the server force-faints and memorialises the capture so
-        quickly that it very often cannot. scenario_gen1_deadzone.lua says so in as many
+        quickly that it very often cannot. The (now deleted) old-client deadzone driver said so
         words ("The return value is a bonus, not a requirement") and asserts on the ball
         count and the memorial instead. This poller was left demanding the line the Lua
         had stopped promising, so a run where the server won the race timed out after
@@ -2279,10 +2294,26 @@ class DuoRun:
         blobs = int(rx.group(1))
         replaced = marker(a_text, r"RIVAL_TEAM_REPLACED frame=\d+ within=(-?\d+)", "A swap ack")
         within = int(replaced.group(1))
-        if within < 0 or within >= 120:
+        # The window constants are read from the client BY NAME (the way the poison phrases are
+        # read from the body): A13-r3 replaced RIVAL_SWAP_FRAMES=120 with RIVAL_INIT_FRAMES
+        # (battle_begin -> $FF staging) and RIVAL_STAGED_FRAMES (staging -> the write). Nothing
+        # here derives a bound from 120 any more.
+        with open(os.path.join(REPO, "lua", "gen1", "client.lua"), encoding="utf-8") as handle:
+            client_lua = handle.read()
+        init_frames = int(re.search(r"RIVAL_INIT_FRAMES = (\d+)", client_lua).group(1))
+        staged_frames = int(re.search(r"RIVAL_STAGED_FRAMES = (\d+)", client_lua).group(1))
+        if within < 0 or within > init_frames:
             raise RuntimeError(f"the swap landed {within} frames after battle_begin; the "
-                               f"client's own window is RIVAL_SWAP_FRAMES=120, so this is a "
-                               f"late reply, not a swap")
+                               f"client's own init window is RIVAL_INIT_FRAMES={init_frames} "
+                               f"(RIVAL_STAGED_FRAMES={staged_frames} bounds the write after "
+                               f"staging), so this is a late reply, not a swap")
+        if "already_applied" in a_text:
+            raise RuntimeError("the client acked already_applied: the swap was delivered twice, "
+                               "and a live run has to apply exactly once")
+        window = re.findall(r"RIVAL_WINDOW init_frames=(\d+)(?: staged_frames=(\d+))?", a_text)
+        if not window:
+            raise RuntimeError("A logged no RIVAL_WINDOW line; the window diagnostics are how "
+                               "the lane measures the real staging age")
         # The mismatch line is the more informative failure, so it is checked first: a receipt
         # with a mismatch carries no MATCH line at all.
         if "ENEMY_MONS_MISMATCH" in a_text:
@@ -2329,10 +2360,13 @@ class DuoRun:
             if link.get("status") not in ("dead", "memorial") or link.get("cause") != "whiteout":
                 raise RuntimeError(f"A lost to the rival, so the whited-out pair has to be "
                                    f"retired with cause whiteout: {link}")
-            self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames (limit 120), "
-                             f"compare slots={match.group(1)}, send-out "
-                             f"{sendout.group(1)}, result=loss, pair "
-                             f"{link.get('status')}/{link.get('cause')}")
+            self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames "
+                             f"(RIVAL_INIT_FRAMES={init_frames}), compare "
+                             f"slots={match.group(1)}, send-out {sendout.group(1)}, "
+                             f"result=loss, pair {link.get('status')}/{link.get('cause')}; "
+                             f"RIVAL_WINDOW init_frames={window[-1][0]} "
+                             f"staged_frames={window[-1][1] or '-'} — diagnostics only, neither "
+                             f"number may widen the window")
         else:
             if link.get("status") != "alive":
                 raise RuntimeError(f"A {outcome.group(1)}s the rival battle, so the pair has to "
@@ -2344,9 +2378,13 @@ class DuoRun:
                     raise RuntimeError(f"{inst}'s saved party is {keys}, expected starter + {key}")
                 if any(codec.key(mon) == key for mon in current_box):
                     raise RuntimeError(f"{inst}'s current box still holds {key}")
-            self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames (limit 120), "
-                             f"compare slots={match.group(1)}, send-out {sendout.group(1)}, "
-                             f"result={outcome.group(1)}, pair alive, both flushes starter+catch")
+            self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames "
+                             f"(RIVAL_INIT_FRAMES={init_frames}), compare "
+                             f"slots={match.group(1)}, send-out {sendout.group(1)}, "
+                             f"result={outcome.group(1)}, pair alive, both flushes starter+catch; "
+                             f"RIVAL_WINDOW init_frames={window[-1][0]} "
+                             f"staged_frames={window[-1][1] or '-'} — diagnostics only, neither "
+                             f"number may widen the window")
 
     def assert_pc_ops_new_saved(self, results):
         """S-6 (Bill's PC by play) and the documented release gap.
@@ -3787,12 +3825,17 @@ class DuoRun:
                 input("[duo] --keep-alive: press Enter to tear down…")
         except ClientFinishedEarly as exc:
             # Not an error of the run: the cartridges ended while a wait was still pending, so
-            # the receipts on disk are the verdict. Recorded, torn down, and returned as False
-            # so run_scenario_with_rng_retry still classifies them (a mid-wait ball miss keeps
-            # its retry; anything else fails as the receipts say).
+            # the receipts on disk are the verdict. Recorded, printed (the lane's evidence
+            # collection reads these tails), torn down, and returned as False so
+            # run_scenario_with_rng_retry still classifies them (a mid-wait ball miss keeps its
+            # retry; anything else fails as the receipts say).
             if getattr(self, "_pydec_path", None):
                 self._pydec_note(f"PYDEC: FAIL client RESULT before {exc.awaited}")
             print(f"[duo] {self.scenario}: {exc}")
+            for inst in ("a", "b"):
+                text = self._read_receipt(inst) or ""
+                print(f"--- {self.scenario} {inst} result (last 25 lines) ---")
+                print("\n".join(text.splitlines()[-25:]))
             return False
         except Exception as exc:
             if getattr(self, "_pydec_path", None):
@@ -3801,6 +3844,22 @@ class DuoRun:
         finally:
             self.cleanup(passed)
         return passed
+
+
+def list_lines(game):
+    """`--list`'s output: each scenario with the attempt limit and the fixtures it boots.
+
+    Lane cards quote these, so the table's own two load-bearing numbers are printed rather than
+    looked up again: `scenario_attempt_limit` (how many whole runs the scenario may take) and
+    the per-instance `target` (which fixture each half boots).
+    """
+    lines = []
+    for name in scenarios_for(game):
+        targets = SCENARIOS[name].get("target", "town")
+        shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
+                 if isinstance(targets, dict) else targets)
+        lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
+    return lines
 
 
 def summary_lines(results, game):
@@ -3898,7 +3957,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
                     help="gen3_rr (Radical Red, default), gen1 (Red as A, Blue as B), "
-                         "gen1_yellow (Yellow as A, Red as B) or gen2 (Crystal both sides)")
+                         "or gen2 (Crystal both sides)")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
@@ -3917,8 +3976,8 @@ def main():
     args = ap.parse_args()
 
     if args.list:
-        for name in scenarios_for(args.game):
-            print(name)
+        for line in list_lines(args.game):
+            print(line)
         sys.exit(0)
 
     if args.scenario == "all":
