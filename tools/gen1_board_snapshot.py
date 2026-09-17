@@ -8,13 +8,13 @@ Exit 0: capture/replay completed and required markers pass; 1: required marker
 failed; 2: input/network error. No browser, emulator, or server is launched.
 """
 import argparse
-from datetime import datetime, timezone
-from html.parser import HTMLParser
 import json
-from pathlib import Path
 import sys
+from datetime import UTC, datetime
+from html.parser import HTMLParser
+from pathlib import Path
 from urllib.parse import urljoin, urlsplit
-from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 LABELS = ["ATK", "DEF", "SPD", "SPC", "", "ACC", "EVA"]
 ASSERTIONS = ("paired_sprites", "trainer_names", "badge_pips", "phase_label",
@@ -42,7 +42,7 @@ class Node:
 
 
 class DOM(HTMLParser):
-    VOID = set("area base br col embed hr img input link meta param source track wbr".split())
+    VOID = set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"])
 
     def __init__(self, source):
         super().__init__(convert_charrefs=True)
@@ -193,7 +193,7 @@ def main():
     else:
         if not args.http_port or not 1 <= args.http_port <= 65535 or not args.out:
             ap.error("capture requires --http-port 1..65535 --out DIR")
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         receipt = args.out / ("board-" + stamp)
         receipt.mkdir(parents=True, exist_ok=False)
         base = f"http://127.0.0.1:{args.http_port}/"
@@ -204,13 +204,13 @@ def main():
             url = urljoin(base, path)
             if urlsplit(url).netloc != urlsplit(base).netloc or urlsplit(url).scheme != "http":
                 raise ValueError("Poll URL is not on the requested loopback origin")
-            started = datetime.now(timezone.utc).isoformat()
+            started = datetime.now(UTC).isoformat()
             headers = {"HX-Request": "true", "HX-Target": "content"} if partial else {}
             with opener.open(Request(url, headers=headers), timeout=5) as response:
                 data = response.read()
             (receipt / filename).write_bytes(data)
             provenance["fetches"].append({"url": url, "file": filename, "started": started,
-                                           "ended": datetime.now(timezone.utc).isoformat()})
+                                           "ended": datetime.now(UTC).isoformat()})
             return data.decode("utf-8")
 
         source = fetch("/", "index.html")
