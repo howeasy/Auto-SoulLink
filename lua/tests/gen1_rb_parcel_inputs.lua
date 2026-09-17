@@ -1,5 +1,15 @@
 -- Pure R/B parcel route. Caller owns frames, observation, and the paired grant.
 local M = {}
+-- The Oak's-lab script indices are per-title: pokered scripts/OaksLab.asm:31-33,490-495 use
+-- 15/16/17 with SCRIPT_OAKSLAB_NOOP 18, pokeyellow scripts/OaksLab.asm:31-33,490-495 use
+-- 19/20/21 with 22 (verified against pokeyellow 0a08515 when the Yellow lab driver landed).
+-- The title arrives in `expected.title`; the R/B values are untouched.
+local LAB = {
+    red =    { delivery = {15, 16, 17}, noop = 18 },
+    blue =   { delivery = {15, 16, 17}, noop = 18 },
+    yellow = { delivery = {19, 20, 21}, noop = 22 },
+}
+M.LAB = LAB
 local function idle() return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false} end
 local function tap(key, frame)
     local b=idle(); b[key]=frame%16<2; return b
@@ -26,9 +36,11 @@ function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
         "complete R/B parcel identity required")
+    local lab = assert(LAB[expected.title or "red"],
+        "no lab script table for " .. tostring(expected.title))
     local self={last_frame=-1, segments={}, parcel_seen=false, delivered=false,
         cancel_baseline=nil, cancelled=false, purchase_started=false,
-        wild_active=false, delivery_in_progress=false}
+        wild_active=false, delivery_in_progress=false, lab=lab}
     local function follow(name, point)
         local targets=paths[name]
         local index=self.segments[name] or 1
@@ -129,17 +141,17 @@ function M.new(expected)
                 if point.parcel_count>0 then self.delivery_in_progress=true end
                 if not self.delivery_in_progress then return follow("lab_exit",point) end
                 if point.parcel_count==0 then
-                    assert(point.lab_script==15 or point.lab_script==16
-                        or point.lab_script==17,
+                    assert(point.lab_script==lab.delivery[1] or point.lab_script==lab.delivery[2]
+                        or point.lab_script==lab.delivery[3],
                         "parcel removed outside Oak delivery script")
-                    -- Scripts 15-17 show text with wJoyIgnore 0 or $F0; only $FF (scripted NPC walk) forbids A.
+                    -- The delivery scripts show text with wJoyIgnore 0 or $F0; only $FF (scripted NPC walk) forbids A.
                     if point.joy_ignore~=0xFF and not point.npc_moving then
                         return tap("A",frame),"oak-delivery-dialogue"
                     end
                     return idle(),"oak-delivery-script-wait"
                 end
                 if point.x==5 and point.y==3 then
-                    if (point.lab_script==0 or point.lab_script==18) and point.joy_ignore==0 then -- 18 = SCRIPT_OAKSLAB_NOOP after the rival leaves
+                    if (point.lab_script==0 or point.lab_script==lab.noop) and point.joy_ignore==0 then -- lab.noop = SCRIPT_OAKSLAB_NOOP after the rival leaves
                         local b=tap("A",frame);b.Up=true;return b,"give-parcel-to-oak"
                     end
                     if point.joy_ignore==0xFC then return tap("A",frame),"oak-parcel-dialogue" end
@@ -152,7 +164,7 @@ function M.new(expected)
                 self.delivered=true
                 self.segments={} -- second outbound journey starts at the lab again.
             end
-            if point.lab_script~=18 or point.joy_ignore~=0 then
+            if point.lab_script~=lab.noop or point.joy_ignore~=0 then
                 if point.joy_ignore~=0xFF and not point.npc_moving then
                     return tap("A",frame),"oak-post-event-dialogue"
                 end

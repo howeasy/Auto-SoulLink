@@ -62,10 +62,15 @@ local party = t.parts.reads.read_party()
 t.check("party decodes after the route", party ~= nil)
 if party then
     t.check("one starter in the party", #party == 1, fmt("got %d", #party))
-    local expect = player == "a" and 0x99 or 0xB0 -- Bulbasaur / Charmander internal indices
+    -- Yellow's starter is Pikachu ($54) for either player; R/B hand out the player's choice.
+    local expect = t.title == "yellow" and 0x54 or (player == "a" and 0x99 or 0xB0)
     t.check("starter species matches the player", party[1] and party[1].species == expect,
             fmt("got %s", party[1] and party[1].species))
-    t.check("starter is level 5 with exp consistent (a real game state)", party[1] and party[1].level == 5 and party[1].exp > 0,
+    -- L5 exp is the curve's own threshold: 135 on Bulbasaur/Charmander, 125 on Pikachu's
+    -- MEDIUM_FAST (pret data/pokemon/base_stats/pikachu.asm:13; a0349b8 verified 125).
+    local expect_exp = t.title == "yellow" and 125 or 135
+    t.check("starter is level 5 with exp consistent (a real game state)",
+            party[1] and party[1].level == 5 and party[1].exp == expect_exp,
             party[1] and fmt("L%d exp %d", party[1].level, party[1].exp))
 end
 local function hex(addr, n)

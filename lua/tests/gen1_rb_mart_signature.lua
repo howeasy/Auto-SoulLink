@@ -1,6 +1,14 @@
 local M={}
--- Viridian Mart: POKE_BALL, ANTIDOTE, PARLYZ_HEAL, BURN_HEAL (pokered data/items/marts.asm:4-5).
-local inventory={0x04,0x0B,0x0F,0x0C}
+-- Viridian Mart, per title:
+--   R/B     POKE_BALL, ANTIDOTE, PARLYZ_HEAL, BURN_HEAL          (pokered  data/items/marts.asm:4-5)
+--   Yellow  POKE_BALL, REPEL, ANTIDOTE, PARLYZ_HEAL, BURN_HEAL   (pokeyellow data/items/marts.asm:5)
+-- The ball is index 1 in both, which is what the parcel driver's purchase step keys on.
+local INVENTORY = {
+    red =    {0x04,0x0B,0x0F,0x0C},
+    blue =   {0x04,0x0B,0x0F,0x0C},
+    yellow = {0x04,0x14,0x0B,0x0F,0x0C},
+}
+function M.inventory(title) return INVENTORY[title] or INVENTORY.red end
 -- Returns kind, item_id, confirm_index. kind is one of
 -- "none" (no Mart display can be live: not in the Mart, script~=2, or no list/text display),
 -- "mart-choice" | "mart-item" | "mart-quantity" | "mart-confirm" (source signatures below), or
@@ -17,7 +25,8 @@ local inventory={0x04,0x0B,0x0F,0x0C}
 -- wCurItem is overwritten per printed price (home/list_menu.asm:417), so item_id comes from the
 -- inventory row at menu_index+list_scroll_offset. Sentinels: item_id 0 and confirm_index -1 can never
 -- satisfy the parcel module's ==4 / ==0 checks.
-function M.mart_menu(r)
+function M.mart_menu(r, title)
+    local list = M.inventory(title)
     local item,confirm=0,-1
     if r.map~=0x2A or r.mart_script~=2 then return "none",item,confirm end
     if not r.font_loaded then
@@ -33,7 +42,8 @@ function M.mart_menu(r)
         -- (MESSAGE_BOX) through the item list and quantity prompt on both cartridges.
         if r.menu_watch_oob==1 then
             local s=r.list_scroll_offset
-            if type(s)=="number" and s%1==0 and s>=0 and s<=2 then return "mart-item",inventory[i+s+1] or 0,confirm end
+            -- The bound is the list length's: 4 items allow 0..2, Yellow's 5 allow 0..3.
+            if type(s)=="number" and s%1==0 and s>=0 and s<=#list-2 then return "mart-item",list[i+s+1] or 0,confirm end
         elseif r.menu_watch_oob==0 and r.menu_exit_method==1 and type(r.quantity)=="number" and r.quantity>=1 and r.quantity<=99 then
             return "mart-quantity",item,confirm
         end

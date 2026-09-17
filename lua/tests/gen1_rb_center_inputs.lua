@@ -70,7 +70,9 @@ end
 -- The cursor geometry symbols are absent from profile.ram. Read the committed pret .sym:
 -- data/pret/pokered.sym:18329-18330 (Blue uses the same addresses).
 function M.menu_symbols(root, title)
-    local file = assert(io.open(root .. "/data/pret/" .. (title == "blue" and "pokeblue.sym" or "pokered.sym"), "r"))
+    local file_name = title == "yellow" and "pokeyellow.sym"
+        or (title == "blue" and "pokeblue.sym" or "pokered.sym")
+    local file = assert(io.open(root .. "/data/pret/" .. file_name, "r"))
     local addresses = {}
     for line in file:lines() do
         local bank, addr, name = line:match("^(%x+):(%x+) (%S+)")

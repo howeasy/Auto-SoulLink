@@ -86,6 +86,9 @@ GENS = {
             # path of None means "the vanilla dump for the key before _cold".
             "red_cold": (None, None, "Pokemon - Red Version (USA, Europe).SaveRAM"),
             "blue_cold": (None, None, "Pokemon - Blue Version (USA, Europe).SaveRAM"),
+            # Yellow's cold key for the scripted host: `rom_key.rsplit("_", 1)[0]` resolves the
+            # staged dump, and the saveram name above is the one BizHawk itself will write.
+            "yellow_cold": (None, None, "Pokemon - Yellow Version (USA, Europe).SaveRAM"),
         },
     },
     "gen2": {

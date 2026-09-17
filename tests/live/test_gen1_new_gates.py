@@ -85,7 +85,7 @@ def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
 SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"
 
 
-@pytest.mark.parametrize("rom", ("red", "blue"))
+@pytest.mark.parametrize("rom", ("red", "blue", "yellow"))
 def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch):
     """S-1 PHYSICAL: a cold cartridge, NEW GAME -> starter -> rival battle by buttons only, with
     the signals layer armed. The engine-site sequence must be the one pret's scripts imply."""
@@ -96,12 +96,24 @@ def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch)
     passed, path, text = run_gate(SCRIPTED_GATE, rom_key=f"{rom}_cold", target="town", timeout=600, quiet=True)
     assert passed, f"scripted lab route FAILED on {rom}: {text[-1500:]}"
     kinds = [tok.split("@")[0] for tok in re.search(r"^SIGNALS (.*)$", text, re.M).group(1).split()]
-    # gift starter, then the rival battle: its enemy party is built through AddPartyMon too
-    assert kinds[:3] == ["starter_begin", "add_party_mon", "starter_end"], kinds[:6]
-    assert kinds[3:5] == ["battle_begin", "add_party_mon"], kinds[3:6]
-    assert kinds.count("battle_faint") >= 1 and kinds[-1] == "battle_end", kinds[-4:]
-    assert kinds.count("battle_loop_head") >= 3
-    assert "blackout" not in kinds and "wild_begin" not in kinds and "capture_box" not in kinds
+    if rom == "yellow":
+        # Yellow opens with Oak's Pikachu DEMONSTRATION battle (BATTLE_TYPE_PIKACHU, wCurOpponent
+        # $54) before the gift, so its sequence is battle/wild first and the starter second; the
+        # rival battle still follows through AddPartyMon (a0349b8's driver expectations).
+        assert kinds[:3] == ["battle_begin", "wild_begin", "battle_end"], kinds[:6]
+        assert kinds[3:6] == ["starter_begin", "add_party_mon", "starter_end"], kinds[:6]
+        assert kinds[6:8] == ["battle_begin", "add_party_mon"], kinds[6:9]
+        assert kinds.count("battle_faint") >= 1 and kinds[-1] == "battle_end", kinds[-4:]
+        assert "blackout" not in kinds and "capture_box" not in kinds
+    else:
+        # gift starter, then the rival battle: its enemy party is built through AddPartyMon too
+        assert kinds[:3] == ["starter_begin", "add_party_mon", "starter_end"], kinds[:6]
+        assert kinds[3:5] == ["battle_begin", "add_party_mon"], kinds[3:6]
+        assert kinds.count("battle_faint") >= 1 and kinds[-1] == "battle_end", kinds[-4:]
+        assert kinds.count("battle_loop_head") >= 3
+        assert "blackout" not in kinds and "wild_begin" not in kinds and "capture_box" not in kinds
     raw = bytes.fromhex(re.search(r"^PARTY_RAW ([0-9A-F]+)$", text, re.M).group(1))
     (mon,) = codec.decode_party(raw)
-    assert mon["level"] == 5 and mon["exp"] == 135  # a real L5 starter (add_mon.asm stores exp_for_level)
+    # a real L5 starter (add_mon.asm stores exp_for_level): 135 on Bulbasaur/Charmander's
+    # curves, 125 on Pikachu's MEDIUM_FAST (data/pokemon/base_stats/pikachu.asm:13).
+    assert mon["level"] == 5 and mon["exp"] == (125 if rom == "yellow" else 135)

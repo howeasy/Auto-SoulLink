@@ -42,7 +42,8 @@ CHAINS = {"town": "lab,save", "battle": "lab,parcel,route1,save", "town_ot2": "l
 # refuses a second-OT save whose id equals the original's).
 DEFAULT_OT = 0x4190
 SAVERAM_NAME = {"red": "Pokemon - Red Version (USA, Europe).SaveRAM",
-                "blue": "Pokemon - Blue Version (USA, Europe).SaveRAM"}
+                "blue": "Pokemon - Blue Version (USA, Europe).SaveRAM",
+                "yellow": "Pokemon - Yellow Version (USA, Europe).SaveRAM"}
 DUMP = {"red": "patch/build/gen1_red.gb", "blue": "patch/build/gen1_blue.gb",
         "yellow": "patch/build/gen1_yellow.gbc"}
 FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen1")
@@ -51,6 +52,13 @@ FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen1")
 # mon has a level byte and exp 0, which no game state produces (AddPartyMon derives exp from
 # the level, engine/pokemon/add_mon.asm:202-207). Named individually so a regenerated fixture
 # cannot hide behind a blanket tolerance -- anything not listed here must qualify clean.
+#
+# TODO(release): once the lane has rebuilt Yellow from scripted play
+#   (`python tools/gen1_fixtures.py yellow town` and `... yellow battle`), delete the two
+#   yellow entries from LEGACY below AND the yellow pair in
+#   tests/unit/test_gen1_stat_control.py's LEGACY_FIXTURES, then flip the two Yellow rows of
+#   tests/unit/test_gen1_fixture_qualify.py from the LEGACY expectation to the clean one.
+#   Kept until then so an un-rebuilt fixture cannot read as a regression.
 LEGACY = {"yellow_town", "yellow_battle"}
 _LEGACY_PROBLEM = re.compile(r"^slot \d+: exp 0 is not level \d+ on curve \d+$")
 

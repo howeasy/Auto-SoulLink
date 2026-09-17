@@ -20,6 +20,14 @@ local MODULES = {
 }
 P.MODULES = MODULES
 
+-- The lab route is the one module with a per-title twin: Yellow's Pallet intercept, Pikachu
+-- demonstration battle and Oak's-lab scripts all differ from Red/Blue, so its driver is a
+-- separate file (a0349b8). MODULES is built at file scope while the title only exists inside
+-- P.new, so the choice is made there and everything else stays shared.
+local LAB_FILES = { red = "gen1_rb_ball_gate_inputs.lua", blue = "gen1_rb_ball_gate_inputs.lua",
+                    yellow = "gen1_y_ball_gate_inputs.lua" }
+P.LAB_FILES = LAB_FILES
+
 local IDLE = { A = false, B = false, Start = false, Select = false, Up = false, Down = false, Left = false, Right = false }
 
 local function load_symbols(ROOT, title)
@@ -33,15 +41,21 @@ local function load_symbols(ROOT, title)
 end
 
 function P.new(ROOT, title, player, opts)
-    assert(title == "red" or title == "blue", "scripted play is a Red/Blue lab route (Yellow's intro differs)")
+    assert(title == "red" or title == "blue" or title == "yellow",
+           "scripted play has a Red/Blue lab route and a Yellow one; nothing else")
     assert(player == "a" or player == "b")
     opts = opts or {}
     local symbols = load_symbols(ROOT, title)
+    -- Per-instance module table: the lab entry is the title's driver, the rest are shared.
+    local modules = {}
+    for name, spec in pairs(MODULES) do modules[name] = spec end
+    modules.lab = { file = assert(LAB_FILES[title], "no lab driver for " .. title),
+                    terminal = MODULES.lab.terminal }
     local FIELDS = dofile(ROOT .. "/lua/tests/gen1_rb_point_fields.lua")
     local SIG = dofile(ROOT .. "/lua/tests/gen1_rb_mart_signature.lua")
     local function rd(addr) return memory.read_u8(addr, "System Bus") end
     local function sym(name) return rd(assert(symbols[name], "no symbol " .. name)) end
-    local self = { symbols = symbols, log = opts.log or function() end }
+    local self = { symbols = symbols, log = opts.log or function() end, modules = modules }
 
     -- New Game menus, from gen1/rc's bootstrap: A on a 16-frame cadence with Start pulses; the
     -- four-item name menus (wMaxMenuItem 3 at Y2/X1) take Down once then A = the first preset
@@ -99,14 +113,15 @@ function P.new(ROOT, title, player, opts)
             got_pokedex = FIELDS.event_bit(rd, assert(symbols.wEventFlags), 37), -- EVENT_GOT_POKEDEX
             start_menu_save_index = save_row(),
         }
-        raw.menu_kind, raw.item_id, raw.confirm_index = SIG.mart_menu(raw)
+        raw.menu_kind, raw.item_id, raw.confirm_index = SIG.mart_menu(raw, title)
         return raw
     end
 
     -- The route modules assert a paired handshake and an owned-runtime status; standalone play
     -- supplies constant identities (the assertions are identity checks, not behaviour).
     local expected = { run_id = "scripted", player = player, rom_sha1 = gameinfo.getromhash():lower(),
-                       context_generation = 1, physical_instance = "scripted-host" }
+                       context_generation = 1, physical_instance = "scripted-host", title = title }
+    self.expected = expected
     local handshake = { ready = true, run_id = expected.run_id, player = player, rom_sha1 = expected.rom_sha1,
                         context_generation = 1, physical_instance = expected.physical_instance }
     local status = { observation_loop = true, context = { context_generation = 1, physical_instance = expected.physical_instance },
@@ -146,7 +161,7 @@ function P.new(ROOT, title, player, opts)
         max_frames_each = max_frames_each or 120000
         local receipts = {}
         for _, name in ipairs(chain) do
-            local spec = assert(MODULES[name], "unknown route " .. tostring(name))
+            local spec = assert(modules[name], "unknown route " .. tostring(name))
             local driver = assert(dofile(ROOT .. "/lua/tests/" .. spec.file)).new(expected)
             local last_phase, frames = nil, 0
             while true do
