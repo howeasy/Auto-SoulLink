@@ -38,8 +38,9 @@
                wTopMenuItemY wListScrollOffset wPlayerMonNumber wWhichPokemon wPartyCount
                wBattleMonMoves wBattleMonPP wBattleMonHP wEnemyMonHP wEnemySelectedMove
                wCurItem hJoyPressed hJoy5 (optional, enrich the evidence)
-               wNumRunAttempts (optional, but it is D.run's receipt that the press was taken;
-                                without it D.run re-presses on its own cadence instead)
+               wNumRunAttempts (optional for construction, but D.run's receipt that the RUN
+                                press was taken; without it D.run refuses with why=no_run_counter
+                                rather than repress blind)
     optional:  hook=function(pc, fn) -> id (default event.on_bus_exec, "System Bus"),
                unhook=function(id), framecount=function() (default emu.framecount),
                press={pre=2, hold=3, post=3}
@@ -313,8 +314,12 @@ function M.new(o)
     --   * "Got away safely!" (:1608-1612) and "Can't escape!" (:1573-1580) are PrintText boxes that
     --     wait for a button, so an input-free wait burns the whole budget on a run that has in fact
     --     escaped. B advances them and, being unwatched, cannot disturb the menu.
+    -- wNumRunAttempts is D.run's only receipt that a RUN press was taken (see above); without it
+    -- a repress cannot be told apart from a miss, and a blind repress can land on "Use next
+    -- Pokémon?" after an escape-turn KO. Require it rather than falling back to a blind cadence.
     function D.run(max_frames)
         max_frames=max_frames or 600
+        if not A.wNumRunAttempts then return{ok=false,why="no_run_counter",presses=0,frames=0,stages={}}end
         local t={stages={},ok=false,attempts_before=rd("wNumRunAttempts"),presses=1,frames=0}
         local base={dbm=count("display_battle_menu")}
         t.choose=D.choose("RUN");if not t.choose.ok then t.why="RUN not chosen";return t end
@@ -328,7 +333,9 @@ function M.new(o)
             end,taken() and left or math.min(M.RUN_REPRESS,left),"B")
             t.frames=t.frames+used
             if why or t.frames>=max_frames then break end
-            t.presses=t.presses+1;t.stages["repress"..t.presses]=press("A");t.frames=t.frames+PRE+HOLD+POST
+            -- re-check right before the press: a counter that moved during the wait means the
+            -- earlier A was in fact taken, so this repress would be spurious.
+            if not taken()then t.presses=t.presses+1;t.stages["repress"..t.presses]=press("A");t.frames=t.frames+PRE+HOLD+POST end
         end
         t.why=why or "timeout";t.ok=why=="escaped";t.state=st;t.attempts_after=rd("wNumRunAttempts")
         return t
