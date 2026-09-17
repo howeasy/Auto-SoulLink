@@ -134,3 +134,28 @@ Queue for the next session (from the reconciled reviews; all under `scratchpad/p
    AddPartyMon); legacy clients render the HUD inside the protected handler (move after pcall);
    `harness_waits.patch` after H-1; `driver_dedup.patch` after the reruns pass; `A9_dashboard.md`
    + `gen1_board_snapshot.py` selftest before use; `LEDGER_drafts.md` cells as receipts land.
+
+## Phase R1 (resumed 2026-09-17 ~20:00Z) — work mode again; owner: use union-alpha headless agents freely, validate everything
+
+Commits this phase (all verified by the coordinator before commit, falsifiers rerun locally):
+d9f95e7 PO-2 forest PSN masking · f453238 DUO-1 walk-back grass / receptionist mark / Growl drain ·
+35d2745 H-1 harness (waits end on client RESULT, canonical soft-reset compare, species budget 8 + RNG
+phrase, pc_ops active box, save-witness ordering) · 93a1602 + 5000ab4 SMALL-1 (Yellow comments,
+tools/gen1_board_snapshot.py) · 5b30e20 whiteout_new receipts (PASS attempt 1 at f453238) ·
+733cd59 EX-2 explode KO phrase · 77d1e91 HUD-3 legacy clients render after the pcall ·
+ca17a26 P8-1 launchers load the new client + manifest closure.
+
+Lane results: whiteout_new PASS (attempt 1, all new markers seen). poison_new: both clients PASS, oracle
+FAILED on two dead-zone rows in links.json (legit no-catch dead zones; H-2 item k). pc_ops_new: both
+clients PASS, oracle FAILED on `PC_FINAL ... init=true` vs receipt `init=false` (H-2 item n). Both runs
+also reproduced the traceback-instead-of-summary shape (H-2 item l).
+
+In flight: OMP A13-py then H-2 (k,l,m,n) in place on tools/e2e_duo.py; A13-r3 (Opus, fix-ups from
+review cx-a00d4b8d: $FF closing-edge frame-boundary check, exactly-once write, measured window frames,
+tests past 161 + staged expiry, KO slot attribution); P8-0 patch `p80.patch` (-p1; adapter guard PASS,
+correctness review cx-ce9f92b9 pending; commit when the lane is idle); DOCS-1 patch; LANE-BOOT1 EmuHawk
+boot smoke of ca17a26 through the Manager launcher shape (Opus). Then species_clause_new (8 attempts),
+soft_reset_new, poison/pc_ops/explode reruns after H-2, rival_swap_new after A13-r3 + A13-py.
+Union-alpha reviews accepted so far: PO-2 (cx-38bd0176), HUD placement (cx-27d06ce5 -> HUD-3),
+explode analysis (cx-08436c96; its candidate-2 recommendation rejected on its own catch-rate math),
+P8-1 fact-check (cx-21d6ae90) and review (cx-c4e4f53c).
