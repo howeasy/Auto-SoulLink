@@ -1,21 +1,31 @@
 duo instance a scenario=admit_randomized_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:51689 (non-blocking)…
-client built: title=red player=a rom=a733d8ca -> 127.0.0.1:51689
-[client] [SLink] TCP connected to 127.0.0.1:51689
+[client] [SLink] TCP connecting to 127.0.0.1:65245 (non-blocking)…
+client built: title=red player=a rom=2199efe6 -> 127.0.0.1:65245
+[client] [SLink] TCP connected to 127.0.0.1:65245
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
 PARTY_COUNT 0 -> 1 @641
 PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
 [client] [SLink-gen1] writes ENABLED
-TX {"area_id":"oaks_lab","badges":0,"ball_count":0,"event":"hello","has_pokeballs":false,"in_battle":false,"loc_name":"Oak's Lab","ot_id":16784,"party":[{"active":false,"blob_hex":"990013000016032D212D0000419000008700000000
+TX {"area_id":"oaks_lab","badges":0,"ball_count":0,"event":"hello","has_pokeballs":false,"in_battle":false,"loc_name":"Oak's Lab","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"99001300001603
 RX resolved_areas
 RX config
 booted at frame 847 party=1 map=40 (5,6)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
 ADMIT_MAP 40 5 6
 ADMIT_PARTY 1
 HELLO_RECEIPT red 57 wild_maps
+SAVE_PHASE admit_randomized_new save-open-start-menu
+SAVE_PHASE admit_randomized_new save-close-foreign-menu
+SAVE_PHASE admit_randomized_new save-select-save
+SAVE_PHASE admit_randomized_new save-choose-save
+SAVE_PHASE admit_randomized_new save-close-foreign-menu
+SAVE_PHASE admit_randomized_new save-confirm
+SAVE_PHASE admit_randomized_new save-await-close
+SAVE_PHASE admit_randomized_new save-witnessed
+SAVE_WITNESS admit_randomized_new frames=365
 RESULT: PASS (live hello held for 600 frames)

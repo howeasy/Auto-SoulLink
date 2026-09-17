@@ -1,0 +1,7 @@
+attempt 1 of 2
+F-4 public verdicts: A admitted, clean B rejected; expected=ef885b9303ae reported=98381ab26d01 (admission-only, no save mutation)
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+phase initial: patch\build\saveram_admit_randomized_new_a\slink red randomized.SaveRAM written after launch, qualifies against patch/build/e2e_admit_randomized_new/slink_red_randomized.gb, party ['06C3:4190:99']
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+B's saved party/current box identical to the seed; one durable REJECTED hello; no B key in links.json
+PYDEC: PASS asserted scenario facts
