@@ -13,7 +13,7 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
 ```json
 {
   "schema": 1,
-  "updated_at_utc": "2026-09-17T15:59:42+00:00",
+  "updated_at_utc": "2026-09-17T16:08:21+00:00",
   "coordinator_session_id": "9a7ac120-04eb-489f-8fd1-c9ecb67b31a6",
   "source_head": "2411a7b",
   "live_lane": null,
@@ -27,14 +27,13 @@ The finish line remains a frozen-source, non-quick release evaluator pass for th
       "files": [
         "docs/gen1_resume.md",
         "docs/gen1_reference checkpoint (this file)",
-        "LEASED subagent A11-wiring: lua/gen1/client.lua, lua/gen1/entry.lua, lua/gen1/writes.lua, lua/hud.lua, server/server.py, tests/unit/protocol_schema.py, tests/unit/test_gen1_writes.py, tests/unit/test_gen1_client.py",
-        "LEASED subagent A7-driver: NEW lua/tests/gen1_rb_forest_inputs.lua",
+        "LEASED subagent A2-lua: lua/tests/duo/duo_gen1_main.lua",
         "LEASED subagent A10-driver: NEW lua/tests/gen1_y_ball_gate_inputs.lua",
         "LEASED OMP A1 (cx-14f0b481): lua/tests/gen1_scripted_play.lua, lua/tests/test_gen1_scripted_gate.lua, tools/gen1_fixtures.py, tests/unit/test_gen1_fixture_qualify.py, tests/e2e/test_duo_gen1_new.py"
       ],
-      "next_action": "HEAD 5ef2c3c. ball_gate_new PASSES live (b1cee87): D-2 + S-7 New Game identity PHYSICAL; three client findings fixed with red replays (850f9f5 gift key read mid-AddPartyMon; f0ce91a no_catch withheld before the first ball + Mart close before SAVE). Landed today: b9f3a82 decode_bag, 354efa7 panel.lua (A11 module), 9e4a686 A0-H1 harness (OMP, newest-first events correction accepted), a8a1010 gen1_rb_pc_inputs.lua (A6 driver), 5ef2c3c docs/agents/worker_card.md (standing worker contract; briefs point at it). Owner 2026-09-17: coordinator orchestrates only -- Lua bodies and wiring go to Opus subagents with OMP review. Codex at usage cap until 2026-09-19 07:34 (headless refused). LANE: free; next scenario reconnect_new waits on A1 (red_town_ot2 fixture build). Queue after A1: OMP A0-H2 (post-result oracle registry + provenance + bag baseline in assert_link_new_saved) then A0 ledger flips (D-2/S-7 receipts, three approved amendments) + resume-note refresh; subagent A2 soft_reset_new/trade_decline_new bodies once A11 wiring lands.",
+      "next_action": "HEAD 095b63f. Landed since last checkpoint: 7374bf2 gen1_rb_forest_inputs.lua (A7 driver; plan correction: Route 1 north forces 15 grass steps), 095b63f A11 panel wiring (client/entry/writes/hud/server/schema; slink-adapter-guard PASS, Gen 3 + shared unit subset 957 passed). OMP adversarial review of 354efa7+095b63f queued behind its A1 card. In flight: OMP A1; subagent A2-lua (soft_reset_new + trade_decline_new bodies, duo_gen1_main.lua); subagent A10 Yellow lab driver. LANE: free, reconnect_new waits on the red_town_ot2 fixture (A1). Next dispatch on a free subagent slot: A11 gate port (test_gen1_menu_row_gate.lua, test_gen1_patch_gate.lua, gen1_rb_center_inputs.lua digits, tests/live/test_gen1_gates.py) or the client-card MODEL tests (test_gen1_client.py now free).",
       "reuse_decision": "shared infra (state.py/server.py/connector/hud/adapters/base.py) reused unchanged; Gen 1 facts regenerated from pret; RC runtime not adopted; harness mechanisms (post-result oracle registry, fail-closed runner) recorded for docs/shared_runtime.md",
-      "source_head": "5ef2c3c",
+      "source_head": "095b63f",
       "independent_review": "OMP Gen1 Peer 2 reviews every coordinator Lua/client diff before a lane run; subagent cuts are coordinator-reviewed and OMP adversarial-reviewed before the tag; no worker reviews its own cut"
     },
     {
