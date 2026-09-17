@@ -1012,3 +1012,371 @@ def test_rows_arriving_past_the_deadline_are_held_for_the_next_open(world):
     world.step()
     assert _row(world, 0) == _tiles("ROW 0")
     assert world.bus[PANEL_STATE] == 2
+
+
+# ── the last client card: falsifying tests, written before the fixes ─────────────────────
+# Each case below is RED against HEAD and names, in its own assertions, exactly what the
+# implementer has to produce. Engine facts are pret pokered 405b624 / pokeyellow 0a08515.
+
+def _box_mon(rng, species, level=5):
+    """A 33-byte box record (macros/ram.asm:7-19); level lives in byte 3 for boxed mons."""
+    m = codec.decode_party_mon(bytes(rng.randrange(256) for _ in range(33)), box=True)
+    m["species"], m["box_level"], m["level"] = species, level, level
+    return m
+
+
+def _seed_active_box(world, mons, ot="RED", nick="BOXED"):
+    """The open box's WRAM mirror (ram/wram.asm:2226-2248), the way seed_party does the party."""
+    r, cap, stride = world.ram, world.d["box_capacity"], world.d["box_struct_size"]
+    n = world.d["name_length"]
+    world.bus[r["wBoxCount"]] = len(mons)
+    for i in range(cap + 1):
+        world.bus[r["wBoxSpecies"] + i] = 0
+    for i, m in enumerate(mons):
+        world.bus[r["wBoxSpecies"] + i] = m["species"]
+        base = r["wBoxMons"] + i * stride
+        world.bus[base:base + stride] = codec.encode_party_mon(m)
+        world.bus[r["wBoxMonOT"] + i * n:r["wBoxMonOT"] + i * n + n] = codec.encode_name(ot)
+        world.bus[r["wBoxMonNicks"] + i * n:r["wBoxMonNicks"] + i * n + n] = codec.encode_name(nick)
+    world.bus[r["wBoxSpecies"] + len(mons)] = 0xFF
+
+
+def _rival_blob(rng, species, level=9):
+    """One 66-byte `replace_rival_team` blob: struct(44) + OT(11) + nick(11), as hex."""
+    m = _mon(rng, species, level=level)
+    return (codec.encode_party_mon(m) + codec.encode_name("BLUE") + codec.encode_name("MON")).hex().upper()
+
+
+def test_a_refused_memorialize_goes_to_the_deferred_tail_so_a_queued_party_mon_runs_first(world):
+    """A5: `memorialize` refuses the last party mon (boxes.lua:479) and client.lua:381 re-inserts
+    the command at the HEAD of `deferred` (`table.insert(self.deferred, 1, cmd)`), which starves
+    everything queued behind it -- including the rebuild `party_mon` that would make the memorial
+    legal in the first place. Fix: append at the TAIL (`self.deferred[#self.deferred + 1] = cmd`),
+    never "drop when party == 1" (a restore can arrive in a later reply). The server half of the
+    ordering is already covered by test_state.py:1708-1735.
+    """
+    world.connect()
+    world.step(60)                              # writes ENABLED
+    world.seed_party(world.party()[:1])         # one mon: the memorialize can only be refused
+    last = codec.key(world.party()[0])
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": last},
+                {"cmd": "party_mon", "key": "0000:0000:99", "stats": {"level": 5, "maxHP": 20}})
+    world.step()                                # this frame drains the memorialize and refuses it
+    queued = [str(world.client.deferred[i]["cmd"]) for i in (1, 2)]
+    assert queued == ["party_mon", "memorialize"], f"a refused memorialize belongs at the tail, got {queued}"
+    world.step()                                # one command per frame: now the party_mon
+    assert [e["key"] for e in world.events("sync_retrieve_failed")] == ["0000:0000:99"], \
+        "the party_mon queued behind the refused memorialize never ran"
+    assert world.events("memorialize_failed") == [], "'last party mon' blocks, it does not NACK"
+    world.assert_all_conform()
+
+
+def test_party_to_box_keys_from_the_move_mon_snapshot_not_from_a_read_after_the_shift(world):
+    """A6(1): the `move_mon` point must snapshot wPartyCount..+404 and the active box the way
+    `battle_point` does (signals.lua:47-58), and the client must key from that snapshot.
+    _MoveMon copies the mon and _RemovePokemon shifts every later slot down
+    (engine/pokemon/add_mon.asm:365-413, remove_mon.asm:8-107), so by the time the client drains
+    the signal the live party no longer holds the deposited mon: today client.lua:510-517 reads it
+    live and reports the WRONG key for a non-last slot and NO event at all for the last slot.
+    """
+    r = world.ram
+    world.connect()
+    before = world.party()
+    moved, stayed = before[0], before[1]
+    world.bus[r["wMoveMonType"]] = 1            # PARTY_TO_BOX (menu_constants.asm:60-63)
+    world.bus[r["wWhichPokemon"]] = 0
+    world.fire("move_mon")
+    world.seed_party(before[1:])                # the engine has already shifted slot 1 into slot 0
+    world.step()
+    ptb = world.events("party_to_box")
+    assert len(ptb) == 1, ptb
+    assert ptb[0]["key"] == codec.key(moved), "the DEPOSITED mon's key, not the one now in its slot"
+    assert ptb[0]["key"] != codec.key(stayed)
+    assert ptb[0]["stats"] == {"level": moved["level"], "maxHP": moved["max_hp"]}
+
+    # the LAST slot: after the shift that slot does not exist, so a live read emits nothing at all
+    world.seed_party(before)
+    world.step()
+    n = len(world.events("party_to_box"))
+    world.bus[r["wWhichPokemon"]] = 1
+    world.fire("move_mon")
+    world.seed_party(before[:1])
+    world.step()
+    ptb = world.events("party_to_box")
+    assert len(ptb) == n + 1, "a last-slot deposit still emits party_to_box"
+    assert ptb[-1]["key"] == codec.key(stayed)
+    world.assert_all_conform()
+
+
+def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(world):
+    """A6(2): Bill's WITHDRAW also ends in wRemoveMonFromBox = 1 + RemovePokemon
+    (bills_pc.asm:282-287, right after its BOX_TO_PARTY MoveMon), so `from_box` alone is NOT the
+    discriminator; the RELEASE is the standalone one (bills_pc.asm:293-312). The rule is
+    `release = pt.from_box and not self.moved_this_frame and not trading` (moved_this_frame is
+    assigned at client.lua:550 by the same frame's move_mon and cleared at :918). The shared
+    protocol has no release event (tests/unit/protocol_schema.py) and `_handle_party_to_box`
+    (state.py:2066-2112) never retires a pair, so a `party_to_box` for a key that was never in the
+    party would be a lie: the client LOGS `RELEASE_SEEN key=<key> box=<index>` from the box
+    snapshot taken in the remove_pokemon point and sends nothing. Today client.lua:530 tests only
+    `not pt.from_box`, so a box release is entirely invisible.
+    """
+    r = world.ram
+    boxed = _box_mon(random.Random(31), 0xB0, level=6)   # a Charmander in the open box
+    _seed_active_box(world, [boxed])
+    world.connect()
+
+    # (a) WITHDRAW: MoveMon BOX_TO_PARTY and RemovePokemon(from_box=1) in ONE frame
+    world.bus[r["wMoveMonType"]] = 0                     # BOX_TO_PARTY
+    world.bus[r["wWhichPokemon"]] = 0
+    world.fire("move_mon")
+    world.bus[r["wRemoveMonFromBox"]] = 1
+    world.fire("remove_pokemon")
+    world.step()
+    assert [e["key"] for e in world.events("box_to_party")] == [codec.key(boxed)]
+    assert world.events("party_to_box") == [], "a withdraw is not a deposit"
+    assert [ln for ln in world.logs if "RELEASE_SEEN" in ln] == [], "a withdraw is not a release"
+
+    # (b) RELEASE: the standalone box removal, no MoveMon in the frame. The box mirror is left as
+    # it was on purpose -- it is the fixture the remove_pokemon point snapshots.
+    n = len(world.sent)
+    world.bus[r["wRemoveMonFromBox"]] = 1
+    world.bus[r["wWhichPokemon"]] = 0
+    world.fire("remove_pokemon")
+    world.step()
+    marks = [ln for ln in world.logs if "RELEASE_SEEN" in ln]
+    assert len(marks) == 1, marks
+    assert f"RELEASE_SEEN key={codec.key(boxed)} box=0" in marks[0], marks[0]
+    assert [m for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [], \
+        "no wire event: the pair keeps a phantom boxed half (shared-protocol gap, limits list)"
+    world.assert_all_conform()
+
+
+def test_an_ambiguous_key_writes_nothing_on_either_lookup_path(world):
+    """A8/D-13: the client has TWO key lookups -- `find_party_slot` takes the FIRST match
+    (client.lua:216-221, used by force_faint/faint_party_slot and the box paths) and
+    `on_battle_loop_head` takes the LAST (:621). One ambiguity-aware resolver must serve both:
+    more than one matching slot returns nil + "ambiguous key", and force_faint/box/loop-head then
+    log one line and skip (fail-closed, as boxes.lua:121-130 already refuses ambiguous
+    duplicates). The server half exists (test_gen1_identity_and_collisions.py:72-128).
+    Outbound ambiguity stays (emit_faint :422-425 reports the colliding key) -- D-13 is MODEL-only.
+    """
+    r = world.ram
+    rng = random.Random(21)
+    twin = _mon(rng, 0x99, nick="BULBA")
+    other = dict(twin)
+    other["nick"] = "CLONE"                     # same DVs + OT + species => the SAME identity key
+    key = codec.key(twin)
+    world.connect()
+    world.step(60)
+
+    # (a) the overworld checkpoint path
+    world.seed_party([twin, other])
+    assert codec.key(world.party()[0]) == codec.key(world.party()[1]) == key
+    n = len(world.writes)
+    world.reply({"cmd": "force_faint", "key": key})
+    world.overworld_safe()
+    world.step(2)
+    assert world.writes[n:] == [], "an ambiguous key must not faint either candidate"
+    assert world.party()[0]["hp"] > 0 and world.party()[1]["hp"] > 0
+    amb = [ln for ln in world.logs if "ambiguous key" in ln and key in ln]
+    assert len(amb) == 1, f"exactly one 'ambiguous key <key>' line on the checkpoint path: {amb}"
+
+    # (b) the MainInBattleLoop hook path: the duplicate appears AFTER the command was queued
+    world.seed_party([twin, _mon(rng, 0xB1, nick="PIDGEY")])
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    world.reply({"cmd": "force_faint", "key": key})
+    world.step()
+    assert len(world.client.pending_battle_writes) == 1, "queued for the loop head"
+    world.seed_party([twin, other])
+    hp_before = (world.bus[r["wBattleMonHP"]], world.bus[r["wBattleMonHP"] + 1])
+    before = len(amb)
+    world.fire("battle_loop_head")
+    assert (world.bus[r["wBattleMonHP"]], world.bus[r["wBattleMonHP"] + 1]) == hp_before, \
+        "the loop-head resolver must refuse an ambiguous key too"
+    assert world.bus[r["wPlayerSelectedMove"]] != 0xFF
+    assert world.party()[0]["hp"] > 0 and world.party()[1]["hp"] > 0
+    amb = [ln for ln in world.logs if "ambiguous key" in ln and key in ln]
+    assert len(amb) == before + 1, f"exactly one more line at the loop head: {amb}"
+
+    # control (client.lua:564-566): a capture whose key the client already knows is never reported
+    world.bus[r["wIsInBattle"]] = 0
+    world.bus[r["wMonDataLocation"]] = 0
+    world.fire("add_party_mon")
+    world.step()
+    newcomer = _mon(rng, 0x2D, level=8, nick="JYNX")
+    world.seed_party([twin, other, newcomer])
+    world.step(3)
+    caps = world.events("capture")
+    assert caps and caps[-1]["key"] == codec.key(newcomer), "the first sighting IS reported"
+    world.bus[r["wMonDataLocation"]] = 0
+    world.fire("add_party_mon")
+    world.step()
+    world.seed_party([twin, other, newcomer, dict(newcomer, nick="TWIN2")])
+    world.step(3)
+    assert len(world.events("capture")) == len(caps), "a key already known is never captured twice"
+    world.assert_all_conform()
+
+
+def test_a_demonstration_battle_type_emits_neither_capture_nor_no_catch(world):
+    """Y-0: only the DEMONSTRATION battles are not the player's own encounter --
+    BATTLE_TYPE_OLD_MAN (1) and Yellow's BATTLE_TYPE_PIKACHU (4)
+    (constants/battle_constants.asm:43-46). Today the old-man Weedle demo dead-zones Viridian and
+    Oak's Pikachu battle dead-zones Pallet Town. BATTLE_TYPE_SAFARI (2) IS a real encounter --
+    item_effects.asm:130-137 spends the player's Safari Balls, :514-516 skips the catch only for
+    the old man, :549-560 adds a Safari catch to the party/box -- so it keeps both semantics.
+    `signals.lua:94-101` already captures `battle_type` in the point; gate client.lua's
+    battle_begin/wild_begin handler on the explicit set {1, 4}.
+    """
+    r = world.ram
+    world.connect()
+
+    # (a) type 1, the old man's demo: nothing about Pallet Town was learned
+    world.set_map(0x00)                                   # Pallet Town
+    world.step()
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.bus[r["wBattleType"]] = 1
+    world.fire("battle_begin")
+    world.step()
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert world.events("no_catch") == [], "a demonstration battle is not a failed encounter"
+
+    # (b) control: a type 2 battle on the SAME map does resolve it, which also proves (a) left
+    # Pallet Town open -- a resolved area would have swallowed this one
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.bus[r["wBattleType"]] = 2                       # BATTLE_TYPE_SAFARI
+    world.fire("battle_begin")
+    world.step()
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    nc = world.events("no_catch")
+    assert len(nc) == 1 and nc[0]["area_id"] == "pallet_town", nc
+
+    # (c) type 4, Yellow's Pikachu demo: the mon Oak catches is not the player's capture
+    world.set_map(0x0C)                                   # Route 1
+    world.step()
+    world.in_battle(opponent=0x54, species=0x54, level=5)
+    world.bus[r["wBattleType"]] = 4
+    world.fire("wild_begin")
+    world.step()
+    world.bus[r["wMonDataLocation"]] = 0
+    world.fire("add_party_mon")
+    world.step()
+    rng = random.Random(51)
+    demo = _mon(rng, 0x54, level=5, nick="PIKA")
+    world.seed_party(world.party() + [demo])
+    world.step(3)
+    assert world.events("capture") == [], "a demonstration battle reports no capture"
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert len(world.events("no_catch")) == 1, "and still no no_catch"
+
+    # (d) control: a type 2 catch IS the player's -- Safari keeps capture semantics
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.bus[r["wBattleType"]] = 2
+    world.fire("wild_begin")
+    world.step()
+    world.bus[r["wMonDataLocation"]] = 0
+    world.fire("add_party_mon")
+    world.step()
+    caught = _mon(rng, 0xA5, level=3, nick="RATTA")
+    world.seed_party(world.party() + [caught])
+    world.step(3)
+    caps = world.events("capture")
+    assert [c["key"] for c in caps] == [codec.key(caught)], caps
+    assert caps[0]["area_id"] == "route_1" and caps[0]["gift"] is False
+    world.assert_all_conform()
+
+
+def test_replace_rival_team_nacks_a_late_reply_and_writes_nothing(world):
+    """A13: the swap is only safe between InitBattleCommon setting wEnemyMonPartyPos = $FF
+    (engine/battle/core.asm:6686) and EnemySendOutFirstMon clearing it (:1292+) before
+    LoadEnemyMonData (:1358); ReadTrainer itself runs in the hook's own frame (:6679), so every
+    reply lands after it. Refuse with `error = "late_reply"` unless wEnemyMonPartyPos == $FF AND
+    at most 120 frames have passed since the `battle_begin` point recorded the frame. Today
+    client.lua:309-337 checks only in_battle and the trainer id, so a reply that arrives after the
+    send-out rewrites a party the engine has already read.
+    """
+    r = world.ram
+    pos = r["wEnemyMonPartyPos"]
+    blobs = [_rival_blob(random.Random(41), 0x99)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)   # RIVAL1 = class 225
+    world.bus[pos] = 0xFF
+    world.fire("battle_begin")
+    world.step()
+
+    # (1) the first mon is already out: wEnemyMonPartyPos is no longer $FF
+    world.bus[pos] = 0
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
+    assert world.writes[n:] == [], "a reply after the send-out must not write a byte"
+
+    # (2) still $FF, but far past the 120-frame window
+    world.bus[pos] = 0xFF
+    world.step(200)
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") == "late_reply" and ev["species_ids"] == [], ev
+    assert world.writes[n:] == [], "a reply 200 frames after battle_begin must not write a byte"
+
+    # control: a fresh battle_begin re-opens the window and the very same reply lands
+    world.fire("battle_begin")
+    world.step()
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev.get("error") is None and ev["species_ids"] == [0x99], ev
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+    world.assert_all_conform()
+
+
+def test_a_bad_byte_in_the_third_blob_leaves_the_enemy_party_untouched(world):
+    """A13/W-4: writes.lua:102-108 validates count, lengths and species for every mon before the
+    first write, but the per-BYTE check lives in write_bytes (:60-63) and therefore runs once per
+    CALL -- so a bad byte in the third blob is only caught after blobs one and two have already
+    landed in wEnemyMons. Validate every byte of every blob (client.lua:315-328 decodes them)
+    before the first byte moves.
+    """
+    r = world.ram
+    rng = random.Random(42)
+    blobs = [_rival_blob(rng, 0x99), _rival_blob(rng, 0xB0), _rival_blob(rng, 0xB1)]
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xE1, species=0xB0, level=9)
+    world.bus[r["wEnemyMonPartyPos"]] = 0xFF
+    world.fire("battle_begin")
+    world.step()
+
+    # `tonumber(pair, 16)` accepts a sign, so "-1" decodes to a NUMBER outside byte range: the
+    # length and species checks all pass and write_bytes only refuses when it reaches mon 3.
+    bad = blobs[:2] + [blobs[2][:38] + "-1" + blobs[2][40:]]
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": bad})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev["species_ids"] == [] and isinstance(ev.get("error"), str) and ev["error"], ev
+    assert world.writes[n:] == [], "blobs one and two must not land before the third is validated"
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 3 * 44]) == bytes(3 * 44)
+
+    # known-positive control: the same three blobs, unmangled, do land
+    n = len(world.writes)
+    world.reply({"cmd": "replace_rival_team", "trainer_id": 0xE1, "blobs_hex": blobs})
+    world.step()
+    ev = world.events("rival_team_replaced")[-1]
+    assert ev["species_ids"] == [0x99, 0xB0, 0xB1] and ev.get("error") is None, ev
+    assert world.writes[n:] != []
+    assert bytes(world.bus[r["wEnemyMons"]:r["wEnemyMons"] + 44]) == bytes.fromhex(blobs[0])[:44]
+    world.assert_all_conform()

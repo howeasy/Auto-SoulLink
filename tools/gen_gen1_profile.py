@@ -66,6 +66,9 @@ RAM_SYMBOLS = [
     "wEnemyMon", "wEnemyMonSpecies", "wEnemyMonHP", "wEnemyMonLevel",
     "wEnemyPartyCount", "wEnemyPartySpecies", "wEnemyMons", "wEnemyMon1", "wEnemyMon2", "wEnemyMonOT",
     "wEnemyMonNicks",
+    # $FF between InitBattleCommon (engine/battle/core.asm:6688-6689) and EnemySendOutFirstMon
+    # clearing it: the only window in which the enemy party may still be rewritten (A13)
+    "wEnemyMonPartyPos",
     "wBattleMon", "wBattleMonSpecies", "wBattleMonHP", "wBattleMonStatus", "wBattleMonMoves",
     "wBattleMonLevel", "wBattleMonMaxHP", "wBattleMonPP",
     # named sub-fields of slot 1 (offsets of every other slot follow by struct size)

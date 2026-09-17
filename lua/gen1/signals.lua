@@ -125,23 +125,42 @@ local function acquisition_point(io, ram)
 end
 S.KINDS.add_party_mon = { point = acquisition_point }
 S.KINDS.capture_box = { point = acquisition_point }
+-- _MoveMon copies the mon and _RemovePokemon shifts every later slot down
+-- (engine/pokemon/add_mon.asm:365-413, remove_mon.asm:8-107), so by the time the client drains
+-- one of these signals the live party/box no longer holds what moved. Both points therefore
+-- snapshot the whole party and the whole active box, the way `battle_point` snapshots the party.
+local function block_len(ram, prefix)
+    -- count + species list + structs + OT names + nicknames is one contiguous WRAM run whose
+    -- tail (the nickname block) is the same size as the OT block: ram/wram.asm:1722-1744 (party),
+    -- :2226-2248 (box); Yellow :1903-1925, :2491-2513.
+    return (ram["w" .. prefix .. "MonNicks"] - ram["w" .. prefix .. "Count"])
+         + (ram["w" .. prefix .. "MonNicks"] - ram["w" .. prefix .. "MonOT"])
+end
+
+local function storage_point(io, ram)
+    return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+             party_count = io.read_u8(ram.wPartyCount, "System Bus"),
+             box_count = io.read_u8(ram.wBoxCount, "System Bus"),
+             box_num = io.read_u8(ram.wCurrentBoxNum, "System Bus"),
+             party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus"),
+             box = io.read_range(ram.wBoxCount, block_len(ram, "Box"), "System Bus") }
+end
+
 S.KINDS.move_mon = {
     -- wMoveMonType: 0 BOX_TO_PARTY, 1 PARTY_TO_BOX, 2 DAYCARE_TO_PARTY, 3 PARTY_TO_DAYCARE
     -- (constants/menu_constants.asm:60-63); wWhichPokemon is the source slot.
     point = function(io, ram)
-        return { move_type = io.read_u8(ram.wMoveMonType, "System Bus"),
-                 which = io.read_u8(ram.wWhichPokemon, "System Bus"),
-                 party_count = io.read_u8(ram.wPartyCount, "System Bus"),
-                 box_count = io.read_u8(ram.wBoxCount, "System Bus") }
+        local pt = storage_point(io, ram)
+        pt.move_type = io.read_u8(ram.wMoveMonType, "System Bus")
+        return pt
     end,
 }
 S.KINDS.remove_pokemon = {
     -- wRemoveMonFromBox non-zero = the current box, else the party (ram/wram.asm:1120-1122).
     point = function(io, ram)
-        return { from_box = io.read_u8(ram.wRemoveMonFromBox, "System Bus") ~= 0,
-                 which = io.read_u8(ram.wWhichPokemon, "System Bus"),
-                 party_count = io.read_u8(ram.wPartyCount, "System Bus"),
-                 box_count = io.read_u8(ram.wBoxCount, "System Bus") }
+        local pt = storage_point(io, ram)
+        pt.from_box = io.read_u8(ram.wRemoveMonFromBox, "System Bus") ~= 0
+        return pt
     end,
 }
 S.KINDS.evolve = {

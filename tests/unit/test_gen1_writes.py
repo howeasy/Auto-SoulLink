@@ -205,12 +205,12 @@ def test_disarm_clears_the_predicate_as_well_as_the_reason():
     assert f.mem[f.ram["wPartyMons"]] == 7, "a window armed with no predicate is unrestricted"
 
 
-def _entry_parts(cart_writes):
+def _entry_parts(cart_writes, framecount=lambda: 0):
     """entry.lua's REAL box_io, built by Entry.build over a stub BizHawk."""
     L = lupa.LuaRuntime(unpack_returned_tuples=True)
     io = L.table(read_u8=lambda a, d=None: 0, read_range=lambda a, n, d=None: L.table(*[0] * int(n)),
                  write_u8=lambda a, v, d=None: cart_writes.append((int(a), int(v), str(d))),
-                 on_bus_exec=lambda *a: 1, unregister=lambda i: None, framecount=lambda: 0,
+                 on_bus_exec=lambda *a: 1, unregister=lambda i: None, framecount=framecount,
                  register=lambda n: 0, domains=lambda: L.table("System Bus", "ROM", "CartRAM"))
     net = L.table(init=lambda h, p: None, connected=lambda: False, pump=lambda: None,
                   send=lambda line: None, receive=lambda: None)
@@ -236,3 +236,52 @@ def test_the_panel_window_never_reaches_the_save_battery():
     writes.arm(writes, "overworld")
     box_io.write_cart_bytes(0x100, L.table(1, 2))
     assert cart_writes == [(0x100, 1, "CartRAM"), (0x101, 2, "CartRAM")]
+
+
+def test_a_bad_byte_in_a_later_blob_is_caught_before_the_first_one_lands():
+    """W-4 by BYTE, not just by length: `tonumber("-1", 16)` is a number, so a mangled hex pair
+    in the client's decode (client.lua:322) survives every count/length/species check and used
+    to be refused only when write_bytes reached that call -- with the earlier mons already in
+    wEnemyMons.
+    """
+    rng = random.Random(6)
+    f = Fake()
+    L = f.lua.table
+
+    def entry(m, poison=None):
+        b = list(codec.encode_party_mon(m))
+        if poison is not None:
+            b[19] = poison
+        return L(species=m["species"], blob=L(*b), ot=L(*([0x80] * 10 + [0x50])), nick=L(*([0x81] * 10 + [0x50])))
+
+    good = [_mon(rng, 20), _mon(rng, 21)]
+    third = _mon(rng, 22)
+    f.call("arm", "overworld")
+    with pytest.raises(lupa.LuaError, match="enemy mon 3: blob: byte 20 out of range"):
+        f.call("write_enemy_party", L(entry(good[0]), entry(good[1]), entry(third, poison=-1)))
+    assert f.writes == [], "a bad byte in the third blob must not leave the first two written"
+    assert f.mem[f.ram["wEnemyPartyCount"]] == 0
+    # known-positive control: the same three mons, unpoisoned, do land
+    f.call("write_enemy_party", L(entry(good[0]), entry(good[1]), entry(third)))
+    assert f.mem[f.ram["wEnemyPartyCount"]] == 3
+    assert f.mem[f.ram["wEnemyMons"] + 2 * 44 + 19] == list(codec.encode_party_mon(third))[19]
+
+
+def test_every_write_receipt_carries_the_frame_and_the_cart_door_leaves_one():
+    """A2 receipt gap: a write log entry with no frame cannot be lined up against the scenario's
+    signal trace, and entry.lua's CartRAM door wrote the save battery without logging anything
+    at all -- so a box move looked, in the receipts, like no write had happened.
+    """
+    frame = [0]
+    cart_writes: list[tuple[int, int, str]] = []
+    L, parts = _entry_parts(cart_writes, framecount=lambda: frame[0])
+    writes = parts.writes
+    frame[0] = 41
+    writes.arm(writes, "overworld")
+    writes.write_bytes(writes, PROFILE["red"]["ram"]["wPartyMons"], L.table(1, 2, 3))
+    frame[0] = 42
+    parts.box_io.write_cart_bytes(0x100, L.table(7, 8))
+    wram, cart = writes.log[1], writes.log[2]
+    assert (wram.addr, wram.n, wram.why, wram.frame) == (PROFILE["red"]["ram"]["wPartyMons"], 3, "overworld", 41)
+    assert (cart.off, cart.n, cart.why, cart.cart, cart.frame) == (0x100, 2, "overworld", True, 42)
+    assert [w for w in cart_writes if w[2] == "CartRAM"] == [(0x100, 7, "CartRAM"), (0x101, 8, "CartRAM")]

@@ -163,12 +163,19 @@ function R.new(profile, io)
         if offset < 0 or offset + d.sram_box_stride > #sram_bytes then
             return nil, "SRAM box outside image"
         end
-        local raw = take(sram_bytes, offset + 1, d.sram_box_stride)
-        local count = raw[1]
+        return r.box_from_snapshot(take(sram_bytes, offset + 1, d.sram_box_stride))
+    end
+
+    -- One contiguous box image -> the same decoded list read_active_box returns: count,
+    -- species list (+ $FF), structs, OT names, nicknames. ram/sram.asm:29-49 lays a saved box
+    -- out that way and the WRAM mirror (ram/wram.asm:2226-2248) is the identical run, so a
+    -- byte snapshot taken at an engine site decodes here without a second live read.
+    function r.box_from_snapshot(raw)
+        if type(raw[1]) ~= "number" then return nil, "box snapshot is empty" end
         local species_start, mon_start = 2, 2 + d.box_capacity + 1
         local ot_start = mon_start + d.box_capacity * d.box_struct_size
         local nick_start = ot_start + d.box_capacity * d.name_length
-        return collection(count, take(raw, species_start, d.box_capacity + 1),
+        return collection(raw[1], take(raw, species_start, d.box_capacity + 1),
             take(raw, mon_start, d.box_capacity * d.box_struct_size),
             take(raw, ot_start, d.box_capacity * d.name_length),
             take(raw, nick_start, d.box_capacity * d.name_length),

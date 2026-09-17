@@ -15,7 +15,11 @@
 -- only read after a site that legitimately changes the party fired (AddPartyMon,
 -- SendNewMonToBox, MoveMon, RemovePokemon, TryEvolvingMon, InGameTrade_DoTrade).
 -- Every write happens at the overworld checkpoint or inside the MainInBattleLoop hook.
-local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600 }
+local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
+                 -- A13: how long after a battle opened a `replace_rival_team` reply may still
+                 -- be believed. The engine reads the party at EnemySendOutFirstMon, a second or
+                 -- two in; wEnemyMonPartyPos is the exact edge, this is the belt.
+                 RIVAL_SWAP_FRAMES = 120 }
 
 local BALL_ITEMS = { [1] = true, [2] = true, [3] = true, [4] = true } -- MASTER..POKE (item_constants.asm:10-13)
 -- Pokemon Tower 1F-7F ($8E-$94, map_constants.asm:228-234). A wild battle on these maps
@@ -27,6 +31,13 @@ local TOWER_MAPS = { [0x8E] = true, [0x8F] = true, [0x90] = true, [0x91] = true,
                      [0x92] = true, [0x93] = true, [0x94] = true }
 local SILPH_SCOPE = 0x48
 local MOVE_BOX_TO_PARTY, MOVE_PARTY_TO_BOX, MOVE_DAYCARE_TO_PARTY, MOVE_PARTY_TO_DAYCARE = 0, 1, 2, 3
+-- Y-0: the two DEMONSTRATION battle types (constants/battle_constants.asm:43-46) —
+-- BATTLE_TYPE_OLD_MAN (1, the Viridian catching tutorial) and BATTLE_TYPE_PIKACHU (4, Oak
+-- catching the Pikachu in Yellow). Neither is the player's own encounter, so neither resolves
+-- the area and neither reports a capture. BATTLE_TYPE_SAFARI (2) is NOT here: item_effects.asm
+-- spends the player's Safari Balls (:130-137) and adds a Safari catch to the party/box
+-- (:549-560), so it keeps both semantics.
+local DEMO_BATTLE_TYPES = { [1] = true, [4] = true }
 local TRANSFORMED_BIT = 8 -- bit 3 of wPlayerBattleStatus3 (battle_constants.asm:106)
 
 local function hex_of(bytes)
@@ -213,11 +224,21 @@ function Client.new(p)
         elseif cmd.cmd == "choose_mon" then send("mon_chosen", { token = cmd.token, slot = 7 }) end
     end
 
+    -- D-13 (MODEL): two party slots can answer to one identity key (same DVs, OT and species).
+    -- Inbound commands then have no way to tell which mon the server meant, so the resolver
+    -- refuses rather than guesses -- the same fail-closed rule boxes.lua:121-130 already applies.
+    -- Returns slot, mon, party, why; `why` is "ambiguous key" when more than one slot matches.
     local function find_party_slot(key)
         local party = current_party()
         if not party then return nil end
-        for _, m in ipairs(party) do if mon_key(m) == key then return m.slot, m, party end end
-        return nil, nil, party
+        local slot, mon
+        for _, m in ipairs(party) do
+            if mon_key(m) == key then
+                if slot then return nil, nil, party, "ambiguous key" end
+                slot, mon = m.slot, m
+            end
+        end
+        return slot, mon, party
     end
 
     local function hud_color(cmd)
@@ -229,7 +250,8 @@ function Client.new(p)
         local c = cmd.cmd
         if c == "noop" then return end
         if c == "force_faint" or c == "force_explode" then
-            local slot, mon, party = find_party_slot(cmd.key)
+            local slot, mon, party, why = find_party_slot(cmd.key)
+            if why then log("[SLink-gen1] " .. c .. ": " .. why .. " " .. tostring(cmd.key)) return end
             if not party then
                 -- unreadable right now (AddPartyMon's AskName window): keep it; the checkpoint
                 -- re-finds the key (a server command is never resent)
@@ -312,9 +334,20 @@ function Client.new(p)
             send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "not_in_battle" })
             return
         end
+        -- A13: the enemy party may only be rewritten between InitBattleCommon staging it
+        -- (engine/battle/core.asm:6688-6689 sets wEnemyMonPartyPos = $FF) and EnemySendOutFirstMon
+        -- clearing it before LoadEnemyMonData (:1292+, :1358). Past either edge the engine has
+        -- already read the bytes we would replace, so the reply is stale, not applicable.
+        local fresh = self.battle and (self.frame - self.battle.frame) <= Client.RIVAL_SWAP_FRAMES
+        if not fresh or io.read_u8(profile.ram.wEnemyMonPartyPos, "System Bus") ~= 0xFF then
+            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "late_reply" })
+            return
+        end
         local mons, ids = {}, arr({})
         for i, hex in ipairs(cmd.blobs_hex or {}) do
-            if #hex ~= 66 * 2 then
+            -- `#hex` on a server-supplied non-string raises outside the pcall below, and an
+            -- error thrown here leaves the server with no answer at all: check the type first.
+            if type(hex) ~= "string" or #hex ~= 66 * 2 then
                 send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "bad_blob_length" })
                 return
             end
@@ -345,14 +378,16 @@ function Client.new(p)
         local ok, err = pcall(function()
             writes:arm("overworld")
             if cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
-                local slot = find_party_slot(cmd.key)
+                local slot, _, _, why = find_party_slot(cmd.key)
                 if slot then
                     writes:faint_party_slot(slot)
                     self.sync_written[cmd.key] = true
                 else
-                    -- the mon left the party before the checkpoint (PC deposit): no byte moves,
-                    -- and no echo-suppression either. The protocol has no force_faint NACK.
-                    log("[SLink-gen1] " .. cmd.cmd .. " dropped at the checkpoint: key not in party " .. tostring(cmd.key))
+                    -- the mon left the party before the checkpoint (PC deposit), or a duplicate
+                    -- arrived and the key no longer names one mon: no byte moves, and no
+                    -- echo-suppression either. The protocol has no force_faint NACK.
+                    log("[SLink-gen1] " .. cmd.cmd .. " dropped at the checkpoint: "
+                        .. (why or "key not in party") .. " " .. tostring(cmd.key))
                 end
             elseif cmd.cmd == "box_mon" then
                 local slot, mon = find_party_slot(cmd.key)
@@ -378,7 +413,10 @@ function Client.new(p)
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
-                    table.insert(self.deferred, 1, cmd) -- block until a party_mon lands
+                    -- block until a party_mon lands -- at the TAIL, because the rebuild that
+                    -- makes the memorial legal is itself queued behind this command; re-inserting
+                    -- at the head starves it and the pair never recovers (A5)
+                    self.deferred[#self.deferred + 1] = cmd
                 else send("memorialize_failed", { key = cmd.key, reason = reason or "memorial refused" }) end
             end
             writes:disarm()
@@ -443,7 +481,8 @@ function Client.new(p)
             if not self.battle or self.battle.frame ~= sig.frame then
                 self.battle = { frame = sig.frame, wild = pt.cur_opponent < 200, species = pt.species,
                                 level = pt.level, area_id = area_id, map = map_id,
-                                cur_opponent = pt.cur_opponent, captured = false }
+                                cur_opponent = pt.cur_opponent, captured = false,
+                                demo = DEMO_BATTLE_TYPES[pt.battle_type] and pt.battle_type or false }
                 self.whiteout_sent = false
                 if not self.battle.wild then send("trainer_battle_start", { trainer_id = pt.cur_opponent }) end
                 if self.battle.wild then
@@ -465,7 +504,9 @@ function Client.new(p)
             end
         elseif k == "battle_end" then
             local b = self.battle
-            if b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
+            if b and b.demo then
+                log("[SLink-gen1] demonstration battle (type " .. tostring(b.demo) .. "): nothing resolved")
+            elseif b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
                 -- A Tower ghost without the Scope: the battle cannot be won or caught, so it
                 -- is not evidence of a failed encounter. `has_item` returns nil when the bag
                 -- cannot be read (reads.lua:200-207), and the safe reading of "cannot tell" is
@@ -504,11 +545,16 @@ function Client.new(p)
                 -- already tracking the trade; the key_change settles it
             else
                 self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle ~= 0,
-                                        to_box = (k == "capture_box"), area_id = area_id, map = pt.map }
+                                        to_box = (k == "capture_box"), area_id = area_id, map = pt.map,
+                                        -- stamped now: the demo battle can end before this settles
+                                        demo = (self.battle and self.battle.demo) or false }
             end
         elseif k == "move_mon" then
-            local party = current_party()
+            -- both sides come from the point's snapshot: _MoveMon has already copied the mon and
+            -- _RemovePokemon shifts the rest down, so a live read here names the wrong slot (or
+            -- none at all, when the last slot moved)
             if pt.move_type == MOVE_PARTY_TO_BOX or pt.move_type == MOVE_PARTY_TO_DAYCARE then
+                local party = party_from_snapshot(pt.party or {})
                 local key, mon
                 if party then key, mon = key_at(party, pt.which) end
                 if key and not self.sync_written[key] then
@@ -516,7 +562,7 @@ function Client.new(p)
                 end
                 self.sync_written[key or ""] = nil
             elseif pt.move_type == MOVE_BOX_TO_PARTY or pt.move_type == MOVE_DAYCARE_TO_PARTY then
-                local box = reads.read_active_box()
+                local box = reads.box_from_snapshot(pt.box or {})
                 local key = box and key_at(box, pt.which)
                 if key and not self.sync_written[key] then send("box_to_party", { key = key, area_id = area_id }) end
                 self.sync_written[key or ""] = nil
@@ -527,7 +573,19 @@ function Client.new(p)
             -- the received one; trade_done accounts for both (receipt: a spurious party_to_box
             -- for the INCOMING key went out mid-apply and the server ordered a box_mon back)
             local trading = self.trade_state and self.trade_state.kind == "apply"
-            if not pt.from_box and not self.moved_this_frame and not trading then
+            local standalone = not self.moved_this_frame and not trading
+            if pt.from_box then
+                -- Bill's WITHDRAW ends in RemovePokemon(from_box) too, right after its
+                -- BOX_TO_PARTY MoveMon, so `from_box` alone is not the discriminator; the
+                -- standalone box removal is the RELEASE. The shared protocol has no release
+                -- event and a party_to_box for a mon that was never in the party would be a
+                -- lie, so this is a marker for the receipts, not a wire event.
+                local box = standalone and reads.box_from_snapshot(pt.box or {})
+                local key = box and key_at(box, pt.which)
+                if key then
+                    log(string.format("[SLink-gen1] RELEASE_SEEN key=%s box=%d", key, (pt.box_num or 0) % 128))
+                end
+            elseif standalone then
                 local party = current_party()
                 local key = party and key_at(party, pt.which)
                 if key and not self.sync_written[key] then send("party_to_box", { key = key }) end -- release
@@ -577,6 +635,13 @@ function Client.new(p)
                 return
             end
             self.known_keys[key] = true
+            if pc.demo then
+                -- Y-0: the mon Oak (or the old man) catches during a demonstration is not the
+                -- player's capture and its map is not resolved by it. Known, but not reported.
+                log("[SLink-gen1] demonstration battle: capture of " .. key .. " not reported")
+                self.pending_change = { kind = "rescan", frame = self.frame }
+                return
+            end
             local gift = not pc.in_battle
             local area_id = pc.area_id
             if gift then area_id = "gift_map_" .. tostring(pc.map)
@@ -613,13 +678,18 @@ function Client.new(p)
     function self:on_battle_loop_head(sig)
         if #self.pending_battle_writes == 0 or not self.writes_enabled then return end
         local pt = sig.point
-        local party = current_party()
-        if not party then return end
+        -- an unreadable party keeps the queue: find_party_slot could not tell "gone" from
+        -- "not readable yet", and a dropped in-battle write never comes back
+        if not current_party() then return end
         local keep = {}
         for _, w in ipairs(self.pending_battle_writes) do
-            local slot, mon = nil, nil
-            for _, m in ipairs(party) do if mon_key(m) == w.key then slot, mon = m.slot, m end end
-            if slot and slot == pt.active_slot then
+            -- the same ambiguity-aware resolver the checkpoint uses: this one used to take the
+            -- LAST match where find_party_slot took the first, so one duplicate made the two
+            -- paths faint different mons (D-13)
+            local slot, mon, _, why = find_party_slot(w.key)
+            if why then
+                log("[SLink-gen1] battle write dropped: " .. why .. " " .. tostring(w.key))
+            elseif slot and slot == pt.active_slot then
                 local battle = { in_battle = pt.in_battle, type = pt.battle_type, link_state = pt.link_state,
                                  player_mon_number = pt.active_slot, battle_species = pt.battle_species,
                                  transformed = math.floor(pt.status3 / TRANSFORMED_BIT) % 2 == 1 }

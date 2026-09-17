@@ -19,6 +19,14 @@ local W = { EXPLOSION = 0x99, CANNOT_MOVE = 0xFF }
 
 local function be16(v) return math.floor(v / 256) % 256, v % 256 end
 
+local function is_byte(b) return type(b) == "number" and b % 1 == 0 and b >= 0 and b <= 255 end
+
+-- Every element of `list` is a byte, by INDEX rather than by `#list`: a payload decoded from
+-- hex can carry a nil hole, and `#` on a table with a hole may stop short of it.
+local function check_bytes(list, n, what)
+    for i = 1, n do assert(is_byte(list[i]), what .. ": byte " .. i .. " out of range") end
+end
+
 -- Guard for W-2 (pure; caller passes the reads). Returns ok, reason.
 --   battle: {in_battle, type, link_state, player_mon_number, battle_species, transformed}
 --   party_mon: the decoded party entry the server named (species = internal index)
@@ -57,12 +65,11 @@ function W.new(profile, io)
         assert(not self.allow or self.allow(addr, #bytes),
                string.format("write refused: %d byte(s) at $%04X outside the %s window (W-7)",
                              #bytes, addr, tostring(self.armed)))
-        for i = 1, #bytes do
-            local b = bytes[i]
-            assert(type(b) == "number" and b >= 0 and b <= 255 and b % 1 == 0, "byte out of range")
-        end
+        for i = 1, #bytes do assert(is_byte(bytes[i]), "byte out of range") end
         for i = 1, #bytes do io.write_u8(addr + i - 1, bytes[i], "System Bus") end
-        self.log[#self.log + 1] = { addr = addr, n = #bytes, why = self.armed }
+        -- the frame is what lines a receipt up against a scenario's signal trace
+        self.log[#self.log + 1] = { addr = addr, n = #bytes, why = self.armed,
+                                    frame = io.framecount and io.framecount() or nil }
     end
 
     local function party_slot_base(slot) return ram.wPartyMons + slot * d.party_struct_size end
@@ -105,6 +112,12 @@ function W.new(profile, io)
             assert(#m.blob == d.battle_struct_size, "enemy mon " .. i .. ": blob must be " .. d.battle_struct_size .. " bytes")
             assert(#m.ot == d.name_length and #m.nick == d.name_length, "enemy mon " .. i .. ": names must be " .. d.name_length .. " bytes")
             assert(m.species >= 1 and m.species <= 190 and m.species == m.blob[1], "enemy mon " .. i .. ": species/blob mismatch")
+            -- W-4: write_bytes checks bytes per CALL, so without this the first two mons would
+            -- already be in wEnemyMons when the third one's bad byte is found. `tonumber("-1", 16)`
+            -- is a number that passes every length and species check, so this is reachable.
+            check_bytes(m.blob, d.battle_struct_size, "enemy mon " .. i .. ": blob")
+            check_bytes(m.ot, d.name_length, "enemy mon " .. i .. ": OT name")
+            check_bytes(m.nick, d.name_length, "enemy mon " .. i .. ": nickname")
         end
         local species = {}
         for i, m in ipairs(mons) do species[i] = m.species end
