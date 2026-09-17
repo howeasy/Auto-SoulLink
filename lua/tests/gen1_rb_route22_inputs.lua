@@ -192,8 +192,25 @@ function M.new(expected, opts)
     -- The party menu is only FORCED when the active battler is down; the menu's geometry alone
     -- does not say that, because nothing on the acceptance path clears it (see below). This is
     -- the predicate that decides whether a replacement is owed, and it is engine truth.
+    -- ...and somewhere to send it. With NOTHING alive the engine never opened this menu at
+    -- all: HandlePlayerMonFainted tests AnyPartyAlive BEFORE ChooseNextMon and jumps to
+    -- HandlePlayerBlackOut instead (core.asm:969-976), which then owns the frame -- and for
+    -- OPP_RIVAL1 in particular that is ScrollTrainerPicAfterBattle, 40 DelayFrames and
+    -- Rival1WinText before the ordinary blackout (:1132-1146) -- all while wIsInBattle is
+    -- still 2 and the party-menu fields nobody clears (see below) still read as a menu.
+    -- Without this clause that stale geometry made the plan demand a replacement it could not
+    -- possibly make and report the WHITEOUT as the driver fault `no-replacement`. With it the
+    -- plan drops to the B-mash below and rides the blackout out to wIsInBattle == 0, i.e. to
+    -- the "rival-lost" terminal, which is a real outcome of this scenario: the pydec oracle's
+    -- loss branch retires the pair with cause whiteout instead of checking the two flushes.
+    local function live_slot()
+        local down, count = rd(ACTIVE), math.min(rd(COUNT), 6)
+        for slot = 0, count - 1 do
+            if slot ~= down and slot_hp(slot) > 0 then return slot end
+        end
+    end
     local function needs_replacement()
-        return party_menu_up() and slot_hp(rd(ACTIVE)) == 0
+        return party_menu_up() and slot_hp(rd(ACTIVE)) == 0 and live_slot() ~= nil
     end
 
     -- Forced replacement after a KO: HandlePlayerMonFainted -> ChooseNextMon -> DisplayPartyMenu
@@ -215,28 +232,42 @@ function M.new(expected, opts)
     --     AnimateSendingOutMon, PlayCry). Waiting for the fields to go stale-clear declared
     --     `no-replacement` on a slow send-out the engine had already accepted, or pressed A into
     --     it a second time. party_menu_up() is kept only for deciding whether to PRESS.
+    --   * a press this menu did not take is ORDINARY, not terminal. hJoy7 is 0, so
+    --     JoypadLowSensitivity reports an edge against the game's own last poll only
+    --     (home/window.asm:19-27), and this menu polls sparsely: HandleMenuInput_ runs
+    --     PlaceMenuCursor + Delay3 before its FIRST poll (:14-18) and every later pass first
+    --     farcalls AnimatePartyMon, which ends in DelayFrame (engine/gfx/mon_icons.asm:12-42),
+    --     with DrawPartyMenu / RedrawPartyMenu ahead of both. So nav and commit are RETRIED as
+    --     a unit here, with the settles the two proven siblings already use: idle before the
+    --     cursor loop, idle between cursor presses, and a longer idle before the committing A
+    --     so every earlier press has been seen released (gen1_battle_driver.lua:176,184,194
+    --     and :241,247). The old shape had none of those and abandoned the whole replacement
+    --     on the first press the menu did not take (`if not moved then break end`, after which
+    --     the cursor guard could no longer hold) -- which is how a legitimate rival LOSS came
+    --     back as the driver fault `no-replacement`, the scenario's last red receipt.
     local function choose_replacement()
         local count = rd(COUNT)
         local down = rd(ACTIVE) -- the slot that just fainted; the receipt is a move away from it
         for slot = 0, math.min(count, 6) - 1 do
             if slot ~= down and slot_hp(slot) > 0 then
-                for _ = 1, 8 do
-                    local cur = rd(CURSOR)
-                    if cur == slot then break end
-                    press(cur < slot and "Down" or "Up")
-                    local moved = false
-                    for _ = 1, 12 do
-                        if rd(CURSOR) ~= cur then moved = true break end
-                        step(nil)
+                for _ = 1, 4 do
+                    idle_frames(4)
+                    for _ = 1, 8 do
+                        local cur = rd(CURSOR)
+                        if cur == slot then break end
+                        press(cur < slot and "Down" or "Up")
+                        for _ = 1, 20 do
+                            if rd(CURSOR) ~= cur then break end
+                            step(nil)
+                        end
+                        idle_frames(4)
                     end
-                    if not moved then break end
-                end
-                if party_menu_up() and rd(CURSOR) == slot then
-                    for _ = 1, 3 do
+                    if party_menu_up() and rd(CURSOR) == slot then
+                        idle_frames(24)
                         press("A")
                         -- the commit is a handful of frames behind the accepted press
                         -- (HandlePartyMenuInput -> .monChosen -> ClearSprites -> :1108)
-                        for _ = 1, 90 do
+                        for _ = 1, 150 do
                             if rd(ACTIVE)==slot and slot_hp(down)==0 then
                                 log(string.format("RIVAL_SWITCH slot=%d", slot))
                                 return true
@@ -262,7 +293,10 @@ function M.new(expected, opts)
         for _ = 1, 400 do
             if D.state().in_battle==0 then return "battle-over" end
             if needs_replacement() then
-                if not choose_replacement() then return "no-replacement" end
+                if not choose_replacement() then
+                    -- the KO that closed the battle can land inside the retries above
+                    return D.state().in_battle==0 and "battle-over" or "no-replacement"
+                end
                 -- the menu-entry evidence is the NEXT loop's D.wait_menu: needs_replacement() is
                 -- false the moment the engine commits, so the send-out plays out down there
             else
