@@ -99,3 +99,39 @@ python tools/e2e_duo_head.py --game gen1_new --scenario <name> --keep-data
 python tools/gen1_fixtures.py --qualify                     # all seven fixtures OK
 node "E:/Howard/ClaudEx/bin/magi.mjs" exchange <task_id>    # read a peer reply from the mailbox
 ```
+
+## Prep fan-out (owner: "no cuts; use Union Alpha agents for research and prep")
+
+Nineteen headless union-alpha tasks were dispatched at ~22:50Z against the read-only snapshot
+`scratchpad/wt-prep/` (c2605ae); each writes its deliverable under `scratchpad/prep/` (the plan copy
+is `prep/PLAN_v3.9.md`). Replies arrive as cross-session messages or in the bridge mailbox
+(`node "E:/Howard/ClaudEx/bin/magi.mjs" exchange <task_id>`); each needs an `outcome` recorded.
+Headless sessions have no shell: every patch they draft must be red/green-verified by a Claude
+subagent before it is applied.
+
+| Task | Deliverable | Purpose |
+|---|---|---|
+| cx-3d36e2d8 | `prep/WO-2_walk_back.md`, `prep/wo2.patch` | whiteout walk-back grass handling |
+| cx-0cf4747e | `prep/SV-2_trade_watchdog.md`, `prep/sv2.patch` (verification running: Sonnet) | silent trade watchdog msgbox |
+| cx-bb335811 | `prep/A12_lane_pass.md` | full lane pass checklist |
+| cx-ee671d4c | `prep/P8-0_P8-1_isolation_launcher.md`, `prep/p8-1.patch` | Track B isolation + launcher |
+| cx-74f72d15 | `prep/P8-2_P8-3_deletions_memory_gb.md`, `prep/p8-3.patch` | deletions + memory_gb trim |
+| cx-669b378a | `prep/shared_runtime.md`, `prep/protocol_md.patch` | docs regeneration |
+| cx-e1570f99 | `prep/RELEASE_NOTE_v0.3.0.md`, `prep/REBASE_PLAN.md` | release note + rebase |
+| cx-445d9e66 | `prep/P8-6_P8-7_gen3_package.md` | Gen 3 check, full runner, package boot, FF, tag |
+| cx-f8b8d68f | `prep/LEDGER_drafts.md` | remaining ledger cells + limits entries |
+| cx-7b4b1be4 | `prep/A9_dashboard.md`, `prep/gen1_board_snapshot.py` | C-3 dashboard snapshots |
+| cx-35a6daa8 | reply | adversarial review of 471529b (driver RUN) |
+| cx-f74a2ec9 | reply | adversarial review of 052cf62 (rival body + Route 22 driver) |
+| cx-a2c12d1b | `prep/UNVERIFIED_audit.md`, `prep/citations.patch` | †UNVERIFIED + stale pret citations |
+| cx-d21ffcef | reply | fact-check of today's changebox/trade_decline/species/Yellow receipts vs ledger |
+| cx-5cce3c14 | `prep/RERUN_RISK.md` | predicted next failure per pending rerun |
+| cx-9a202d53 | `prep/DRIVER_DEDUP.md`, `prep/driver_dedup.patch` | one shared tapping wait in the battle driver |
+| cx-dfc88b4f | `prep/D-4_completion.md` | link-after-reroll odds + body change |
+| cx-a7796b93 | `prep/PC_OPS_release.md` | RELEASE/second-deposit legs after the client rework |
+| cx-0bb1ef9e | `prep/HARNESS_waits_audit.md`, `prep/harness_waits.patch` | every Lua wait that can hang |
+
+Also running: Opus EX-1 (explode post-faint stall) → `scratchpad/ex1.patch`; Sonnet full-suite +
+Gen 3 subset at HEAD 1c3a324; OMP H-1 then A13-py (`tools/e2e_duo.py` leased).
+Committed since the break note: d9225a1 (server in-flight sync window), 1c3a324 (client storage
+classification, no per-key echo mark).
