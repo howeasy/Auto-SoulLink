@@ -343,3 +343,55 @@ def test_species_zero_inside_the_count_is_refused():
     body[codec.PARTY_LAYOUT["mons"]:codec.PARTY_LAYOUT["mons"] + 44] = codec.encode_party_mon(mon)
     with pytest.raises(ValueError, match="species 0 inside the count"):
         codec.decode_party(bytes(body))
+
+
+def _synthetic_bag(pairs, count=None):
+    b = bytearray(32768)
+    b[codec._BAG_COUNT] = len(pairs) if count is None else count
+    offset = codec._BAG_COUNT + 1
+    for item_id, qty in pairs:
+        b[offset], b[offset + 1] = item_id, qty
+        offset += 2
+    b[offset] = 0xFF
+    return bytes(b)
+
+
+def test_decode_bag_reads_counted_pairs():
+    sram = _synthetic_bag([(0x04, 5), (0x46, 1)])
+    assert codec.decode_bag(sram) == [(0x04, 5), (0x46, 1)]
+    assert codec.bag_quantity(sram, codec.POKE_BALL) == 5
+
+
+def test_bag_quantity_absent_item_is_zero():
+    sram = _synthetic_bag([(0x04, 5), (0x46, 1)])
+    assert codec.bag_quantity(sram, 0x01) == 0
+
+
+def test_decode_bag_stops_at_terminator_before_declared_count():
+    # Declared count says 3, but $FF lands right after the first pair.
+    sram = _synthetic_bag([(0x04, 5)], count=3)
+    assert codec.decode_bag(sram) == [(0x04, 5)]
+
+
+def test_decode_bag_real_battle_fixture():
+    """docs/gen1_resume.md: this scripted-play save holds exactly one Poke Ball."""
+    path = Path(__file__).resolve().parents[1] / "fixtures" / "gen1" / "red_battle.SaveRAM"
+    if not path.is_file():
+        pytest.skip(f"Gen 1 battle save absent: {path}")
+    sram = path.read_bytes()
+    bag = codec.decode_bag(sram)
+    assert bag, "expected a non-empty bag"
+    assert all(isinstance(i, int) and isinstance(q, int) and 0 <= i <= 0xFE and 0 <= q <= 0xFF
+               for i, q in bag)
+    assert codec.bag_quantity(sram, codec.POKE_BALL) == 1
+    OAKS_PARCEL = 0x46  # lua/tests/gen1_rb_point_fields.lua:6
+    assert codec.bag_quantity(sram, OAKS_PARCEL) == 0, "parcel already delivered before this save"
+
+
+def test_decode_bag_real_town_fixture():
+    path = Path(__file__).resolve().parents[1] / "fixtures" / "gen1" / "red_town.SaveRAM"
+    if not path.is_file():
+        pytest.skip(f"Gen 1 town save absent: {path}")
+    bag = codec.decode_bag(path.read_bytes())
+    assert all(isinstance(i, int) and isinstance(q, int) and 0 <= i <= 0xFE and 0 <= q <= 0xFF
+               for i, q in bag)

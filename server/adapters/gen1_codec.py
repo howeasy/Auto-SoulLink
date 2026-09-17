@@ -76,6 +76,15 @@ SRAM_SIZE = 0x8000  # layout.link:195-202: four SRAM banks, $a000-$bfff per bank
 _CURRENT_BOX = 0x284C
 _BOX_INITIALIZED = 0x80  # constants/ram_constants.asm:50-52
 
+# sMainData + (wNumBagItems - wMainDataStart), identical offset in R/B/Y:
+# pokered.sym:19158,19164,19166 (wMainDataStart=D2F7,wNumBagItems=D31D,wBagItems=D31E);
+# pokeyellow.sym:22386,22392,22394 (D2F6,D31C,D31D) -- same +0x26 delta either way.
+# wBagItems immediately follows the count byte: ram/wram.asm:1757-1761;
+# terminated by $FF: engine/items/get_bag_item_quantity.asm:5-17.
+_BAG_COUNT = 0x25C9
+BAG_CAPACITY = 20  # constants/item_constants.asm: MAX_ITEMS
+POKE_BALL = 0x04  # constants/item_constants.asm; lua/games/gen2_crystal.lua:44 notes gen2's differs
+
 # Generated from the cited English charmap rows; alternate graphics modes are
 # deliberately excluded (constants/charmap.asm:65-88,199-386).
 _CHARMAP = {
@@ -609,6 +618,30 @@ def key(mon: dict) -> str:
     return (f"{_uint(mon['dvs']['raw'], 16, 'dvs.raw'):04X}:"
             f"{_uint(mon['ot_id'], 16, 'ot_id'):04X}:"
             f"{_uint(mon['species'], 8, 'species'):02X}")
+
+
+def decode_bag(sram: bytes) -> list[tuple[int, int]]:
+    """(item id, quantity) pairs from a 32 KiB SRAM image's saved bag.
+
+    Mirrors lua/gen1/reads.lua:183-198: count byte first, then id/qty pairs,
+    stopping at ``count`` slots or a $FF id byte, whichever comes first; never
+    reads past BAG_CAPACITY slots even if the saved count is corrupt/oversized.
+    """
+    if len(sram) != SRAM_SIZE:
+        raise ValueError(f"expected exactly {SRAM_SIZE} SRAM bytes")
+    items = []
+    for slot in range(min(sram[_BAG_COUNT], BAG_CAPACITY)):
+        offset = _BAG_COUNT + 1 + slot * 2
+        item_id = sram[offset]
+        if item_id == 0xFF:
+            break
+        items.append((item_id, sram[offset + 1]))
+    return items
+
+
+def bag_quantity(sram: bytes, item_id: int) -> int:
+    """Quantity of item_id in the saved bag; 0 when absent."""
+    return next((qty for stored_id, qty in decode_bag(sram) if stored_id == item_id), 0)
 
 
 def sav_checksum(b: bytes) -> int:
