@@ -1531,3 +1531,37 @@ def test_a_removal_inside_an_npc_trade_keeps_the_pending_key_change(world):
     assert len(kc) == 1 and kc[0]["old_key"] == old and kc[0]["reason"] == "npc_trade", kc
     assert kc[0]["new_key"] == codec.key(world.party()[1])
     world.assert_all_conform()
+
+
+def test_a_server_box_write_does_not_swallow_the_players_own_later_deposit(world):
+    """PC-1 (whiteout_new, 2026-09-17): the server's quarantine round trip (`RX box_mon`, then
+    `RX party_mon` to withdraw) marks `sync_written[key]` (client.lua:430,438) as an echo guard,
+    but `boxes.lua` moves the bytes itself (`io.write_bytes`, boxes.lua:520-521) -- the engine's
+    _MoveMon never runs, so no `move_mon` signal ever arrives to consume the mark. It stayed set
+    for 3475 frames and ate the player's OWN Bill's-PC deposit of that key: the receipt shows
+    `PC op 1 deposit(2) done frame=10834 party=1 box_count=1` and no `TX party_to_box` anywhere.
+    An echo guard must age out; it may not outlive the write it guards.
+    """
+    world.connect()
+    world.step(60)                              # writes ENABLED
+    before = list(world.party())
+    key = codec.key(before[0])
+    world.overworld_safe()
+    world.reply({"cmd": "box_mon", "key": key})
+    world.step(2)                               # the deferred box_mon deposits it in the open box
+    assert world.events("box_mon_failed") == [], world.events("box_mon_failed")
+    world.seed_party(before)                    # the round trip withdrew it again (RX party_mon)
+    world.step(300)                             # the receipt then walked to the Pokemon Center
+
+    r = world.ram
+    n = len(world.sent)
+    world.bus[r["wMoveMonType"]] = 1            # PARTY_TO_BOX (menu_constants.asm:60-63)
+    world.bus[r["wWhichPokemon"]] = 0
+    world.fire("move_mon")
+    world.bus[r["wRemoveMonFromBox"]] = 0
+    world.fire("remove_pokemon")                # bills_pc.asm:232-235, straight after _MoveMon
+    world.seed_party(before[1:])
+    world.step()
+    ptb = [m["key"] for m in world.sent[n:] if m["event"] == "party_to_box"]
+    assert ptb == [key], f"the player's deposit must send party_to_box for {key}; got {ptb}"
+    world.assert_all_conform()
