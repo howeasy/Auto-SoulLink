@@ -1,0 +1,107 @@
+duo instance a scenario=trade_decline_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:61033 (non-blocking)…
+client built: title=red player=a rom=5cd6ca75 -> 127.0.0.1:61033
+[client] [SLink] TCP connected to 127.0.0.1:61033
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @641
+PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"panel":true,"panel_abi":3,"party":[{"active":false,"blob_hex":"990013000016032D212
+RX resolved_areas
+RX config
+RX link_panel
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @1048 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @1136 (10,34) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @1901 (10,34) battle=1 party=1
+[hunt] turn 2 foe hp 11/15 odds 0.63 dmax 5 -> fight
+[hunt] turn 3 foe hp 7/15 odds 1.00 dmax 5 -> throw
+phase wild-throw @3029 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @5030
+PARTY_UNREADABLE @5030 species list and struct disagree (count=2 species=99 24 FF 00 00 00 00)
+[client] [SLink-gen1] writes PAUSED: party unreadable
+PARTY_READABLE @5550  (count=2 species=99 24 FF 00 00 00 00)
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":7,"in_box":false,"key":"92A6:4190:24","level":3,"maxHP":15,"nickname":"PIDGEY","player":"a","seq":142,"species_id":36,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"a","seq":143}
+RX box_mon key=92A6:4190:24
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @5567 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @5568 (10,34) battle=0 party=2
+HUNT caught after 4521 frames, 1 encounter(s)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=11
+MYKEY 1 92A6:4190:24
+PARTY slot=1 key=92A6:4190:24 species=36 level=3 hp=7
+CAUGHT 92A6:4190:24
+[client] [SLink-gen1] writes re-enabled after a live validation
+TX {"event":"stats_cache","key":"92A6:4190:24","player":"a","seq":145,"stats":{"level":3,"maxHP":15}}
+PARTY_COUNT 2 -> 1 @5599
+RX play_sound
+RX msgbox text=PIDGEY and RATTATA linked!
+RX party_mon key=92A6:4190:24
+RX link_panel
+TX {"event":"sync_retrieve_done","key":"92A6:4190:24","player":"a","seq":153}
+PARTY_COUNT 1 -> 2 @5791
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=11
+MYKEY 1 92A6:4190:24
+PARTY slot=1 key=92A6:4190:24 species=36 level=3 hp=7
+SEEN capture=1 box_mon=1 stats_cache=1 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+SAVE_PHASE link_new save-open-start-menu
+SAVE_PHASE link_new save-close-foreign-menu
+SAVE_PHASE link_new save-select-save
+SAVE_PHASE link_new save-choose-save
+SAVE_PHASE link_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_decline_new_a_1_witness.bin bytes=31592 saves=1 frame=6176
+SAVE_PHASE link_new save-await-close
+SAVE_PHASE link_new save-witnessed
+SAVE_WITNESS link_new frames=536
+MYKEY 0 06C3:4190:99
+PRE_TRADE slot=0 key=06C3:4190:99 species=153 level=5 hp=11
+MYKEY 1 92A6:4190:24
+PRE_TRADE slot=1 key=92A6:4190:24 species=36 level=3 hp=7
+heartbeat f=7200 party=2 connected=true
+TX {"event":"safe","player":"a","seq":209}
+TX {"event":"safe","player":"a","seq":247}
+ROUTE route_one_north -> map 1 at (21,35) frame 8898
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":259}
+ROUTE viridian_center -> map 41 at (23,25) frame 9171
+CENTER_RECEPTIONIST map=41 (11,3)
+TX {"event":"trade_query","player":"a","seq":281}
+RX trade_mask
+TRADE_MASK 2 linked_slot=1 picker_row=0
+NATIVE_MENU tile= Trade a linked    |  POK·MON?         
+TRADE_WHICH tile=                   |                   
+TX {"event":"trade_offer","player":"a","seq":284,"slot":1}
+TRADE_OFFER slot=1
+RX hud_show text=Trade offer sent - waiting for partner...
+RX trade_offer_ack
+OFFER_SENT tile=Trade offer sent.  |                   
+OFFER_RETURNED
+RX msgbox text=Your partner declined the trade.
+DECLINE_OVERWORLD
+MYKEY 0 06C3:4190:99
+POST_DECLINE slot=0 key=06C3:4190:99 species=153 level=5 hp=11
+MYKEY 1 92A6:4190:24
+POST_DECLINE slot=1 key=92A6:4190:24 species=36 level=3 hp=7
+SAVE_PHASE trade_decline_new save-open-start-menu
+SAVE_PHASE trade_decline_new save-close-foreign-menu
+SAVE_PHASE trade_decline_new save-select-save
+SAVE_PHASE trade_decline_new save-choose-save
+SAVE_PHASE trade_decline_new save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_decline_new_a_1_witness.bin bytes=31592 saves=2 frame=10224
+SAVE_PHASE trade_decline_new save-await-close
+SAVE_PHASE trade_decline_new save-witnessed
+SAVE_WITNESS trade_decline_new frames=524
+RESULT: PASS (native trade declined; nothing applied)

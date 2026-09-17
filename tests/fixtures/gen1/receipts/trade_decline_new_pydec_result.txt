@@ -1,0 +1,8 @@
+attempt 1 of 2
+both receipts: DECLINE_OVERWORLD + SAVE_WITNESS trade_decline_new; absent: RX apply_trade / TRADE_DONE / PARTNER_ACCEPTED
+durable route_1 pair unchanged: a=92A6:4190:24 b=2A11:AFB9:A5
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved party ['06C3:4190:99', '92A6:4190:24']; linked half 92A6:4190:24 on a, no swap
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved party ['4519:AFB9:B0', '2A11:AFB9:A5']; linked half 2A11:AFB9:A5 on b, no swap
+PYDEC: PASS asserted scenario facts
