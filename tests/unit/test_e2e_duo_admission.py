@@ -1030,3 +1030,142 @@ def test_link_new_saved_requires_the_encounter_to_have_cost_one_ball(runner, tmp
     spent["n"] = 2  # the same count survives the encounter: nothing was spent
     with pytest.raises(RuntimeError, match="Poke Balls"):
         runner.assert_link_new_saved({"a": "", "b": ""})
+
+
+# ── A2: the soft-reset and trade-decline oracles ─────────────────────────────────────────
+# Both read the driver's markers and refuse on anything absent or out of range; neither trusts
+# the driver's own pass/fail, so a body that logs a bad number without failing still fails here.
+
+_SOFT_RESET_A = "\n".join([
+    "HELLO_AT_CHECKPOINT ot=4190 hellos=1 map=12",
+    "RESET_SEEN frame=48 abs=1000",
+    "HELLO_CLEARED frame=1100 delta=52",
+    "WRITES_PAUSED frame=1290 delta=242",
+    "WRITES_RESUMED frame=1400 delta=352",
+    "CONTINUED frame=1800 map=12 party=1",
+    "REHELLO ot=4190 hellos=2 frame=1900",
+    "NO_WRITES_IN_WINDOW writes=0 cart_writes=0",
+    "SAVE_WITNESS soft_reset_new_a frames=2000",
+    "[SLink-gen1] writes PAUSED (hello withheld on a cleared WRAM)",
+    "[SLink-gen1] writes re-enabled after a live validation",
+])
+_SOFT_RESET_B = "\n".join([
+    "IDLE_PARTNER hellos=1 frame=1500",
+    "SAVE_WITNESS soft_reset_new_b frames=1600",
+])
+
+
+def _reset_stub(tmp_path, monkeypatch):
+    """assert_soft_reset_saved's state: real fixture bytes for the saved parties and the
+    artifact links.json, synthetic receipts passed in by each test."""
+    from server.adapters import gen1_codec as codec
+
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.emus = []
+    run.cfg = dict(duo.SCENARIOS["soft_reset_new"])
+    run.gcfg = dict(duo.GAMES["gen1_new"])
+    run.data_dir = str(tmp_path / "run")
+    (tmp_path / "run").mkdir()
+    links = b'{"links": [], "player_identity": {}}'
+    (tmp_path / "run" / "links.json").write_bytes(links)
+    run._reset_baseline = {"status": {}, "links": [], "links_bytes": links, "events": [],
+                           "a_hellos": 1}
+    run._reconnect_events = lambda: [
+        {"player": "a", "type": "hello", "text": "Connected (Red, 1 mons)"},
+        {"player": "b", "type": "hello", "text": "Connected (Blue, 1 mons)"},
+        {"player": "a", "type": "hello", "text": "Connected (Red, 1 mons)"},
+    ]
+    run._fixture_save_path = lambda inst: str(
+        REPO / "tests" / "fixtures" / "gen1" / f"{'red' if inst == 'a' else 'blue'}_battle.SaveRAM")
+
+    def saved(inst, **_kwargs):
+        sram = Path(run._fixture_save_path(inst)).read_bytes()
+        start = codec.SRAM_LAYOUT["sPartyData"]
+        party = codec.decode_party(sram[start:start + codec.PARTY_LAYOUT["size"]])
+        return sram, party, [], codec
+
+    monkeypatch.setattr(run, "_saved_gen1_party", saved)
+    run._pydec_note = lambda fact: None
+    return run
+
+
+def test_soft_reset_oracle_reads_markers_ranges_and_server_invariance(tmp_path, monkeypatch):
+    _reset_stub(tmp_path, monkeypatch).assert_soft_reset_saved(
+        {"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    ("SAVE_WITNESS soft_reset_new_a frames=2000\n", "", "A save witness"),
+    ("RESET_SEEN frame=48", "RESET_SEEN frame=90", "outside 40..60"),
+    ("WRITES_PAUSED frame=1290 delta=242", "WRITES_PAUSED frame=1290 delta=200",
+     "outside 240..360"),
+    ("REHELLO ot=4190", "REHELLO ot=4191", "not the pre-reset"),
+    ("NO_WRITES_IN_WINDOW writes=0 cart_writes=0",
+     "NO_WRITES_IN_WINDOW writes=0 cart_writes=0\nBOX_WRITE off=1234 n=3 frame=1200",
+     "nothing may write"),
+])
+def test_soft_reset_oracle_refuses_a_broken_marker(tmp_path, monkeypatch, old, new, message):
+    run = _reset_stub(tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match=message):
+        run.assert_soft_reset_saved({"a": _SOFT_RESET_A.replace(old, new), "b": _SOFT_RESET_B})
+
+
+def test_soft_reset_oracle_refuses_a_changed_link_document(tmp_path, monkeypatch):
+    run = _reset_stub(tmp_path, monkeypatch)
+    (tmp_path / "run" / "links.json").write_bytes(b'{"links": [{"area_id": "route_1"}]}')
+    with pytest.raises(RuntimeError, match="links.json changed"):
+        run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+_TRADE_DECLINE_A = "\n".join([
+    "CENTER_RECEPTIONIST map=40 (11,3)",
+    "DECLINE_OVERWORLD",
+    "SAVE_WITNESS trade_decline_new frames=900",
+])
+_TRADE_DECLINE_B = "\n".join([
+    "TRADE_DECLINED",
+    "DECLINE_OVERWORLD",
+    "SAVE_WITNESS trade_decline_new frames=910",
+])
+
+
+def _trade_decline_stub(tmp_path, monkeypatch, moved=False):
+    from server.adapters import gen1_codec as codec
+
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.emus = []
+    run.cfg = dict(duo.SCENARIOS["trade_decline_new"])
+    run.gcfg = dict(duo.GAMES["gen1_new"])
+    run.data_dir = str(tmp_path)
+    run._boot_keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
+    run._link_keys = {"a": "CCCC:3333:03", "b": "DDDD:4444:04"}
+    run._trade_before = (run._link_keys["a"], run._link_keys["b"])
+    run._links_json = lambda: [{"area_id": "route_1", "status": "alive",
+                                "a": {"key": run._link_keys["a"]},
+                                "b": {"key": run._link_keys["b"]}}]
+
+    def saved(inst, **_kwargs):
+        keys = [run._boot_keys[inst], "EEEE:5555:05" if moved else run._link_keys[inst]]
+        return b"", [_fake_mon(key) for key in keys], [], codec
+
+    monkeypatch.setattr(run, "_saved_gen1_party", saved)
+    run._pydec_note = lambda fact: None
+    return run
+
+
+def test_trade_decline_oracle_accepts_a_declined_run(tmp_path, monkeypatch):
+    _trade_decline_stub(tmp_path, monkeypatch).assert_trade_decline_saved(
+        {"a": _TRADE_DECLINE_A, "b": _TRADE_DECLINE_B})
+
+
+def test_trade_decline_oracle_refuses_an_applied_trade(tmp_path, monkeypatch):
+    run = _trade_decline_stub(tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match="RX apply_trade"):
+        run.assert_trade_decline_saved(
+            {"a": _TRADE_DECLINE_A, "b": _TRADE_DECLINE_B + "\nRX apply_trade slot=0"})
+
+
+def test_trade_decline_oracle_refuses_a_saved_party_that_moved(tmp_path, monkeypatch):
+    run = _trade_decline_stub(tmp_path, monkeypatch, moved=True)
+    with pytest.raises(RuntimeError, match="staged a blob"):
+        run.assert_trade_decline_saved({"a": _TRADE_DECLINE_A, "b": _TRADE_DECLINE_B})

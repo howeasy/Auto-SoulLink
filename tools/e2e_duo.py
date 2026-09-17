@@ -120,6 +120,21 @@ SCENARIOS = {
                           "b": "patch/gen1/build/slink_blue.gb"},
                   "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                   "oracle": "assert_trade_new"},
+    # W-6/R-4: A holds A+B+Select+Start for 16 polls, the WRAM clear lands, the client withholds
+    # its hello and pauses writes, CONTINUE reloads the SAME save, and the re-hello carries the
+    # same trainer ID. Marker ranges and the reset timing come from the body's header comment
+    # (duo_gen1_main.lua:1240-1265): the clear lands ~48 frames into a 24-frame chord.
+    "soft_reset_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
+                       "target": "battle", "no_setup": True, "frames": 2000000,
+                       "oracle": "assert_soft_reset_saved"},
+    # T-3/T-4's NO path: the same receptionist route, but the partner answers NO at the native
+    # confirm, so no blob is ever staged and no party moves.
+    "trade_decline_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
+                          "target": "battle", "no_setup": True, "frames": 2500000,
+                          "rom": {"a": "patch/gen1/build/slink_red.gb",
+                                  "b": "patch/gen1/build/slink_blue.gb"},
+                          "patched_saves": {"a": "red_patched", "b": "blue_patched"},
+                          "oracle": "assert_trade_decline_saved"},
     # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
     # Blue contract. The second UPR output is required by prepare_pair but is not launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
@@ -473,6 +488,20 @@ def wait_for(desc, pred, timeout, interval=2.0):
             return v
         time.sleep(interval)
     raise TimeoutError(f"timed out after {timeout}s waiting for {desc}")
+
+
+def marker(text, pattern, label):
+    """The named driver marker's regex match, or a failure that names it.
+
+    A marker is the driver's own log line; one that is absent is absent evidence, so an oracle
+    refuses rather than reading a default. The oracle re-derives the ranges from the matched
+    values instead of trusting the driver's pass/fail, so a driver that logged a bad number
+    without failing still fails here.
+    """
+    match = re.search(pattern, text or "")
+    if not match:
+        raise RuntimeError(f"{label}: marker /{pattern}/ not found in the receipt")
+    return match
 
 
 def extract_keys(text):
@@ -1082,6 +1111,18 @@ class DuoRun:
         with open(os.path.join(self.data_dir, "links.json"), encoding="utf-8") as handle:
             return json.load(handle)
 
+    def _links_bytes(self):
+        """The persisted link document's raw bytes, or None before the server writes one.
+
+        Byte identity is the strongest server-side claim a scenario like the soft reset can
+        make: it is checked against a baseline taken before either client acted.
+        """
+        path = os.path.join(self.data_dir, "links.json")
+        if not os.path.exists(path):
+            return None
+        with open(path, "rb") as handle:
+            return handle.read()
+
     def _reconnect_events(self):
         path = os.path.join(self.data_dir, "events.json")
         if not os.path.exists(path):
@@ -1348,6 +1389,104 @@ class DuoRun:
                                f"{self._link_keys['a']}: {final_keys}")
         self._pydec_note(f"phase wrong_save: OT 0x{final_ot:04X} != 0x{DEFAULT_OT:04X}, "
                          f"linked key absent, party {final_keys}")
+
+    def assert_soft_reset_saved(self, results):
+        """W-6/R-4: A's same-save soft reset, from the driver's markers and the server's refusal
+        to see anything but a reconnect.
+
+        The reset zero-fills $C000-$DFFF while the client is mid-flight, so the load-bearing
+        claims are about what did NOT happen: no WRAM and no cart write landed on the cleared
+        window, the durable pair is byte-identical to the pre-reset baseline, and the re-hello
+        carried the SAME trainer ID. Every marker read here is named in the PYDEC receipt.
+        """
+        from pathlib import Path
+
+        from gen1_fixtures import saved_ot
+
+        from server.adapters import gen1_codec as codec
+
+        for process in self.emus:
+            process.wait(timeout=30)  # client.exit flushes CartRAM
+        a_text, b_text = results["a"], results["b"]
+
+        ot = marker(a_text, r"HELLO_AT_CHECKPOINT ot=([0-9A-Fa-f]{4}) hellos=1",
+                    "A checkpoint hello")
+        reset = marker(a_text, r"RESET_SEEN frame=(\d+)", "A soft reset")
+        if not 40 <= int(reset.group(1)) <= 60:
+            raise RuntimeError(f"A's WRAM clear landed {reset.group(1)} frames after the chord "
+                               f"started, outside 40..60 (16 polls + 32 DelayFrames)")
+        cleared = marker(a_text, r"HELLO_CLEARED frame=\d+ delta=(\d+)", "A hello withhold")
+        if int(cleared.group(1)) > 120:
+            raise RuntimeError(f"A's hello_sent survived {cleared.group(1)} frames of cleared "
+                               f"WRAM (one validation is 60)")
+        paused = marker(a_text, r"WRITES_PAUSED frame=\d+ delta=(\d+)", "A writes pause")
+        if not 240 <= int(paused.group(1)) <= 360:
+            raise RuntimeError(f"A paused writes {paused.group(1)} frames after the reset, "
+                               f"outside 240..360 (5 x 60-frame validations)")
+        started, resumed = a_text.find("WRITES_PAUSED"), a_text.find("WRITES_RESUMED")
+        if resumed < 0 or resumed < started:
+            raise RuntimeError("A never logged WRITES_RESUMED after WRITES_PAUSED")
+        marker(a_text, r"CONTINUED frame=", "A CONTINUE")
+        rehello = marker(a_text, r"REHELLO ot=([0-9A-Fa-f]{4}) hellos=2", "A re-hello")
+        if rehello.group(1).upper() != ot.group(1).upper():
+            raise RuntimeError(f"A re-helloed as OT {rehello.group(1)}, not the pre-reset "
+                               f"OT {ot.group(1)}")
+        marker(a_text, r"NO_WRITES_IN_WINDOW writes=0 cart_writes=0", "A cleared-window witness")
+        marker(a_text, r"SAVE_WITNESS soft_reset_new_a", "A save witness")
+        marker(a_text, r"\[SLink-gen1\] writes PAUSED", "A client pause line")
+        marker(a_text, r"writes re-enabled after a live validation", "A client resume line")
+        for absent in ("BOX_WRITE ", "RX force_faint", "RX box_mon"):
+            if absent in a_text:
+                raise RuntimeError(f"A's reset receipt carries {absent!r}; nothing may write to "
+                                   f"the cleared window")
+        marker(b_text, r"IDLE_PARTNER hellos=1", "B idle partner")
+        marker(b_text, r"SAVE_WITNESS soft_reset_new_b", "B save witness")
+        self._pydec_note(f"W-6 markers: RESET_SEEN={reset.group(1)} HELLO_CLEARED="
+                         f"{cleared.group(1)} WRITES_PAUSED={paused.group(1)} "
+                         f"OT={ot.group(1)} re-hello={rehello.group(1)}; "
+                         f"NO_WRITES_IN_WINDOW 0/0; no BOX_WRITE/force_faint/box_mon")
+
+        baseline = self._reset_baseline
+        rows = self._reconnect_events()
+        a_hellos = [row for row in rows if row.get("type") == "hello" and row.get("player") == "a"]
+        b_hellos = [row for row in rows if row.get("type") == "hello" and row.get("player") == "b"]
+        # The baseline is taken after `wait_connected`, and a client's ticks are gated on its
+        # hello (lua/gen1/client.lua:908-912,920), so both players had exactly one hello row
+        # when it was taken. If that ever stops being true this fails loudly instead of quietly
+        # checking "one more than whatever the baseline happened to be".
+        if baseline["a_hellos"] != 1:
+            raise RuntimeError(f"the pre-reset baseline saw {baseline['a_hellos']} A hellos, not "
+                               f"the one the checkpoint hello produces")
+        if (len(a_hellos) != baseline["a_hellos"] + 1
+                or not all(row.get("text", "").startswith("Connected (") for row in a_hellos)):
+            raise RuntimeError(f"A's durable hellos are not baseline+1 accepted rows: {a_hellos}")
+        if len(b_hellos) != 1 or not b_hellos[0].get("text", "").startswith("Connected ("):
+            raise RuntimeError(f"B's durable hello is not one accepted row: {b_hellos}")
+        if any("REJECTED" in row.get("text", "") for row in rows):
+            raise RuntimeError("a REJECTED hello appeared during a same-save reset")
+        if _event_counts(baseline["events"]) != _event_counts(rows):
+            raise RuntimeError("gameplay event counts changed across the soft reset")
+        if self._links_bytes() != baseline["links_bytes"]:
+            raise RuntimeError("links.json changed across the soft reset")
+        self._pydec_note(f"server: A hellos {len(a_hellos)} = baseline {baseline['a_hellos']}+1, "
+                         f"B {len(b_hellos)}, 0 REJECTED, gameplay counts unchanged, "
+                         f"links.json byte-identical")
+
+        for inst, title in (("a", "red"), ("b", "blue")):
+            fixture = Path(self._fixture_save_path(inst)).read_bytes()
+            start = codec.SRAM_LAYOUT["sPartyData"]
+            want = [codec.key(mon) for mon in codec.decode_party(
+                fixture[start:start + codec.PARTY_LAYOUT["size"]])]
+            sram, party, _box, _codec = self._saved_gen1_party(inst)
+            got = [codec.key(mon) for mon in party]
+            if got != want:
+                raise RuntimeError(f"{inst}'s saved party {got} is not the fixture's {want}: the "
+                                   f"reset did not reload the same save")
+            if saved_ot(sram, title) != saved_ot(fixture, title):
+                raise RuntimeError(f"{inst}'s saved trainer ID changed across the reset")
+            self._pydec_note(f"{inst} saved party {got} == fixture "
+                             f"{self.gcfg['fixture'][inst]}_{self.cfg.get('target', 'town')}; "
+                             f"OT 0x{saved_ot(sram, title):04X} unchanged")
 
     def assert_link_new(self):
         """D-1: ONE alive link on route_1 whose halves are the two keys the cartridges caught."""
@@ -1643,6 +1782,54 @@ class DuoRun:
             self._pydec_note(f"{inst} saved LAST slot {incoming}, OT {original_ot}, trade_done valid")
         self._pydec_note(f"T-3/T-4 durable swapped halves: a={before_b}, b={before_a}")
 
+    def assert_trade_decline_saved(self, results):
+        """T-3/T-4's NO path: the partner declined, so no blob was staged and no party moved.
+
+        The server exposes no pending-trade field on /api/status (recorded finding), so the
+        decline is evidenced by what is ABSENT on the wire — no RX apply_trade, no TRADE_DONE,
+        no PARTNER_ACCEPTED — by the durable route_1 pair keeping both pre-trade keys, and by
+        both saved parties still holding [starter, linked] with the linked half on the side
+        that caught it.
+        """
+        if REPO not in sys.path:
+            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from run_gb_gate import GENS
+
+        for process in self.emus:
+            process.wait(timeout=30)  # client.exit flushes CartRAM to its per-instance SaveRAM
+        for inst, text in results.items():
+            marker(text, r"DECLINE_OVERWORLD", f"{inst} decline return")
+            marker(text, r"SAVE_WITNESS trade_decline_new", f"{inst} save witness")
+            for absent in ("RX apply_trade", "TRADE_DONE ", "PARTNER_ACCEPTED"):
+                if absent in text:
+                    raise RuntimeError(f"{inst}'s declined trade receipt carries {absent!r}")
+        marker(results["b"], r"TRADE_DECLINED", "B decline answer")
+        self._pydec_note("both receipts: DECLINE_OVERWORLD + SAVE_WITNESS trade_decline_new; "
+                         "absent: RX apply_trade / TRADE_DONE / PARTNER_ACCEPTED")
+
+        before_a, before_b = self._trade_before
+        matches = [entry for entry in self._links_json()
+                   if entry.get("area_id") == "route_1" and entry.get("status") == "alive"]
+        if len(matches) != 1:
+            raise RuntimeError(f"expected one durable alive route_1 link, got {matches}")
+        link = matches[0]
+        if link["a"]["key"] != before_a or link["b"]["key"] != before_b:
+            raise RuntimeError(f"the declined trade moved the durable pair: {link['a']['key']} / "
+                               f"{link['b']['key']} != {before_a} / {before_b}")
+        self._pydec_note(f"durable route_1 pair unchanged: a={before_a} b={before_b}")
+
+        for inst in ("a", "b"):
+            save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
+            _sram, party, _box, codec = self._saved_gen1_party(
+                inst, rom=self.cfg["rom"][inst], save_name=save_name)
+            keys = [codec.key(mon) for mon in party]
+            want = [self._boot_keys[inst], self._link_keys[inst]]
+            if keys != want:
+                raise RuntimeError(f"{inst}'s saved party {keys} is not the pre-trade pair "
+                                   f"{want}: the declined trade staged a blob")
+            own = before_a if inst == "a" else before_b
+            self._pydec_note(f"{inst} saved party {keys}; linked half {own} on {inst}, no swap")
+
     def assert_admit_randomized_new(self):
         """The server verdict and durable hello events, not the TCP connected bit, decide F-4."""
         def both_verdicts():
@@ -1882,14 +2069,28 @@ class DuoRun:
             elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new"):
                 self.go()
                 self.assert_link_new()
-            elif self.scenario == "trade_new":
+            elif self.scenario in ("trade_new", "trade_decline_new"):
                 self.go()
                 self.assert_link_new()
                 before = [entry for entry in self._links_json()
                           if entry.get("area_id") == "route_1" and entry.get("status") == "alive"]
                 if len(before) != 1:
-                    raise RuntimeError("trade_new has no durable post-link_new pair")
+                    raise RuntimeError(f"{self.scenario} has no durable post-link_new pair")
                 self._trade_before = (before[0]["a"]["key"], before[0]["b"]["key"])
+            elif self.scenario == "soft_reset_new":
+                # The reset's evidence is that NOTHING changed, so the baseline is taken before
+                # either client acts: the end state is compared against it, which is what stops
+                # a duplicated or rewritten log from passing as "the same save reconnected".
+                events = self._reconnect_events()
+                self._reset_baseline = {
+                    "status": self._status() or {},
+                    "links": self._links_json(),
+                    "links_bytes": self._links_bytes(),
+                    "events": events,
+                    "a_hellos": sum(row.get("type") == "hello" and row.get("player") == "a"
+                                    for row in events),
+                }
+                self.go()
             elif self.scenario == "deadzone_new":
                 self.assert_dead_zone_new()
             else:
