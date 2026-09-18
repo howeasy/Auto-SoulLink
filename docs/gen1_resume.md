@@ -276,3 +276,24 @@ QUEUE (not release-blocking): latent server bug -- hello handler saves before _c
 vs 1641); a restart between hellos loses the last hello's box-level cache; fix shape in the 26d08f4 commit body; needs
 slink-adapter-guard. Hunt/forest drivers share the stale menu_base exposure fixed for rival (D.new_battle available). Manifest
 closure test traverses from lua/gen1/run.lua, not the launchers, and ignores .dll rows (UA-2).
+
+## Phase R2 finish-up (2026-09-18 ~00:00-01:25Z)
+- Full release runner: run 1 (d12f441) 11/12, duo 17/18 (rival qualifier instrument -> H-8 1484de0 stat band); run 2 (2fd24b2)
+  11/12, duo 16/18 (rival no-replacement -> RIVAL-2 7370ff1 then RIVAL-4 b8374a2; linked_faint_bench hunt whiteout -> 1dcb910
+  retry phrase); run 3 (e7a98ef) 11/12, duo 16/18 (species: two consecutive one-ball misses, retry-once by design; memorial status
+  0x80 -> DIAG-LFA 6e01e33 mask, INSTRUMENT: pokered RemoveFaintedPlayerMon leaves $80 in a red-bar faint's status byte, the client
+  copies the party struct faithfully). Run 4 launched at 1267d39 for the clean P8-7 receipt.
+- Rival: the product half (W-4/D-11) was green from the first live run; every later red was the driver or oracle. RIVAL-4 proved the
+  replacement path live for the first time (RIVAL_SWITCH slot=1 -> RIVAL_RESULT loss -> PYDEC PASS): after a KO a NoWillText box
+  owns the frame (D.commit_move's retry A on the fainted slot), watched A|B only; choose_replacement now B-mashes after each failed
+  pass. Open (not release-blocking): D.commit_move presses A up to twice into a forced party menu when the foe moves first.
+- Rival oracle 785d11d: blob count vs B's party AT COMMAND TIME (D-6 retires B's copy when A's linked mon falls in the fight);
+  loss branch expects cause=battle when A's receipt has BATTLE_FAINT_SITE for the linked key.
+- HUD (owner reports 'overflow to ...' and 'notifications aren't vanishing'): HUD-3 7d64f76 word-wrap (3/4 lines) + burst dwell
+  (coalesce, 90-frame head clamp, newest 4); HUD-4 ebc2639 cleartext restored; HUD-5 92ae732 THE ROOT CAUSE: BizHawk API is NLua
+  userdata, `type(gui.clearGraphics) == "function"` was false in EmuHawk, so no clear ever ran in production while lupa tests passed;
+  guards are now `~= nil` + pcall and the lupa stub wraps APIs in callable tables (memory: reference_bizhawk_api_userdata). Pixel
+  receipts tests/fixtures/gen1/receipts/hud_wrap/ (frame 180 three-line bar, frame 1000 clean, frame 1310 four-line prompt).
+- RB-2: rebase of aa69f5e onto master cb9cf5c conflict-free (209 commits), gates green in the clone; redo at the final HEAD (RB-3)
+  before the owner's FF. In flight at this note: run 4, OMP DOCS-4 (release_notes: HUD, harness hardening, runner table, limits).
+NEXT: run 4 receipt -> release_notes row; RB-3; owner decides FF + tag (no push/merge/tag without owner authority).
