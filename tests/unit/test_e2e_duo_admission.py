@@ -686,7 +686,8 @@ def test_the_poison_rng_phrases_are_the_bodies_own_return_strings():
       (True, "RESULT: PASS (caught)", "RESULT: PASS (caught)")], 2, True),
     ([(False, "RESULT: PASS (caught)", "RESULT: FAIL (timeout)")], 1, False),
     ([(False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS),
-      (False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS)], 2, False),
+      (False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS),
+      (False, duo.RNG_OUT_OF_BALLS, duo.RNG_OUT_OF_BALLS)], 3, False),
 ])
 def test_rng_retry_restarts_a_whole_run_once_with_labeled_receipts(
     tmp_path, monkeypatch, capsys, outcomes, expected_attempts, passed,

@@ -161,9 +161,10 @@ def test_a_one_sided_non_retryable_fail_still_aborts():
     assert not duo.retryable_gen1_rng("gen1_new", {"a": final, "b": _SILENT_HALF}, 1, limit=8)
     assert not duo.retryable_gen1_rng("gen1_new", {"a": _SILENT_HALF, "b": _SILENT_HALF},
                                       1, limit=8)
-    # and a silent half never buys a LATE attempt for the ball miss either (addendum (j))
+    # and a silent half never buys a LATE attempt for the ball miss either (addendum (j);
+    # the ball miss itself now has two retries, so "late" starts at attempt 3)
     assert not duo.retryable_gen1_rng("gen1_new", {"a": duo.RNG_OUT_OF_BALLS, "b": _SILENT_HALF},
-                                      2, limit=8)
+                                      3, limit=8)
 
 
 # ── H-3: the phase receipts, a dead process, and the run's own deadline ─────

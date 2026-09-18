@@ -244,8 +244,8 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
     runner uses."""
     lines = {line.split()[0]: line for line in duo_list_lines("gen1_new")}
     assert lines["species_clause_new"] == "species_clause_new  attempts=8  targets=battle"
-    assert lines["poison_new"] == "poison_new  attempts=2  targets=a:town, b:battle"
-    assert lines["rival_swap_new"] == "rival_swap_new  attempts=2  targets=a:battle, b:battle"
+    assert lines["poison_new"] == "poison_new  attempts=4  targets=a:town, b:battle"
+    assert lines["rival_swap_new"] == "rival_swap_new  attempts=3  targets=a:battle, b:battle"
     assert lines["ball_gate_new"] == "ball_gate_new  attempts=1  targets=town"
     for name in scenarios_for("gen1_new"):
         assert name in lines, name

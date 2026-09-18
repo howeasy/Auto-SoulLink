@@ -328,7 +328,7 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
     Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
     on the other. Later attempts are only for the species hunt's own budget phrase — its
     reroll observation and its RNG budget are the same attempts, so a duplicate-flooded hunt
-    gets another whole run within `limit` (addendum (j)); a second ball miss does not.
+    gets another whole run within `limit` (addendum (j)); a ball miss gets two retries (owner 2026-09-18).
 
     A half with NO RESULT is NOT "worse than CONSEQUENCE" — it made no claim at all. The RNG
     half's FAIL is what ended the wait (`DuoRun.wait_for` -> `ClientFinishedEarly`) and the
@@ -347,7 +347,10 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
         return False
     if not all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS", None) for c in classes):
         return False
-    if attempt == 1:
+    # Owner 2026-09-18: a ball miss (and any other CAUSE_RNG) earns TWO whole-run retries, not
+    # one -- four full runner passes each lost a different scenario to a second consecutive
+    # roll (species double miss, poison double KO) with no defect behind it.
+    if attempt <= 2:
         return True
     causes = [text for text in results.values()
               if classify_gen1_result(text) == "CAUSE_RNG"]
@@ -373,7 +376,11 @@ def scenario_attempt_limit(name, game):
         # explode-KO phrase). The Lua card heals it before the encounter; 4 covers the crit/tie
         # cases that remain.
         return 4
-    return 2
+    if name == "poison_new":
+        # The forest hunt races the wild table against the starter's HP; run 4 of the full
+        # runner lost both attempts to 'a wild foe knocked the starter out' (owner: raise it).
+        return 4
+    return 3
 
 
 def species_reroll_state(receipts):

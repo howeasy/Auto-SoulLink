@@ -587,8 +587,8 @@ def test_species_retry_keeps_the_ball_rng_retry_on_top(capsys, tmp_path, monkeyp
 
 def test_scenario_attempt_limit_is_the_single_source(capsys, tmp_path, monkeypatch):
     assert duo.scenario_attempt_limit("species_clause_new", "gen1_new") == 8
-    assert duo.scenario_attempt_limit("link_new", "gen1_new") == 2
-    assert duo.scenario_attempt_limit("poison_new", "gen1_new") == 2
+    assert duo.scenario_attempt_limit("link_new", "gen1_new") == 3
+    assert duo.scenario_attempt_limit("poison_new", "gen1_new") == 4
     assert duo.scenario_attempt_limit("explode_new", "gen1_new") == 4
     assert duo.scenario_attempt_limit("ball_gate_new", "gen1_new") == 1
     assert duo.scenario_attempt_limit("faint", "gen3_rr") == 1
@@ -693,9 +693,11 @@ def test_the_species_budget_phrase_is_retryable_on_later_attempts():
     assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 7, limit=8)
     assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 8,
                                       limit=8)
-    # a second ball miss still does not
+    # a second ball miss retries too (owner 2026-09-18); a third does not
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": duo.RNG_OUT_OF_BALLS},
+                                  2, limit=8)
     assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": duo.RNG_OUT_OF_BALLS},
-                                      2, limit=8)
+                                      3, limit=8)
 
 
 # ── H-2 (l)/(m): the FAIL summary and the explode KO phrase ─────────────────
@@ -722,7 +724,7 @@ def test_an_oracle_failure_becomes_a_fail_summary_not_a_traceback(capsys, tmp_pa
                                  "['route_1', 'viridian_forest']")
     assert built == [1], "an oracle failure is never retried"
     lines = duo.summary_lines({"poison_new": outcome}, "gen1_new")
-    assert lines == ["  poison_new: FAIL (attempt 1 of 2) — RuntimeError: links.json carries "
+    assert lines == ["  poison_new: FAIL (attempt 1 of 4) — RuntimeError: links.json carries "
                      "2 link(s) ['route_1', 'viridian_forest']"], lines
     assert duo.exit_code({"poison_new": outcome}) == 1
     assert duo.exit_code({"poison_new": (True, 1)}) == 0
