@@ -20,6 +20,7 @@ Launch rules match run_gate.py / e2e_duo.py: cwd = repo root with RELATIVE EmuHa
 paths, because absolute paths containing the "Google Drive" space break BizHawk's CLI
 parser. Absolute paths are fine inside Lua.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -45,12 +46,74 @@ ROMS = {
 }
 TARGETS = ("town", "battle")
 
+# ── pureRGB (P3b-e) ────────────────────────────────────────────────────────────────────────────
+# The three pureRGB titles are NOT files at the repo root: they are the BUILT cartridges, whose
+# names and sha1s are pinned in data/purergb_sources.lock.json. They resolve from
+# $SLINK_PURERGB_ROMS first, then .cache/purergb/. A key is refused unless the file's sha1 equals
+# the lock's output — a stale build, or a randomizer-patched .gbc, would otherwise be staged as
+# the canonical cartridge and every downstream fact would be read from a different game.
+PURERGB_ROMS = os.environ.get("SLINK_PURERGB_ROMS") or os.path.join(REPO, ".cache", "purergb")
+PURERGB_LOCK = os.path.join(REPO, "data", "purergb_sources.lock.json")
+# rom key -> the lock's output name. The key is the title the client admits the build as
+# (data/games/gen1_purergb/admission.json), so harness and client spell the foundation the same way.
+PURERGB_KEYS = {"purered": "pokered", "pureblue": "pokeblue", "puregreen": "pokegreen"}
+
+
+def is_purergb(rom_key: str) -> bool:
+    return rom_key in PURERGB_KEYS
+
+
+def purergb_dump(rom_key: str) -> str:
+    """Absolute path of a pinned pureRGB build (sha1-checked)."""
+    with open(PURERGB_LOCK, encoding="utf-8") as f:
+        want = json.load(f)["outputs"][PURERGB_KEYS[rom_key]]
+    path = os.path.join(PURERGB_ROMS, want["filename"])
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"pureRGB {rom_key} is not at {path} — build it (make {want['filename']} in the pinned "
+            f"checkout) or point $SLINK_PURERGB_ROMS at a directory holding it")
+    with open(path, "rb") as f:
+        got = hashlib.sha1(f.read()).hexdigest()
+    if got != want["sha1"]:
+        raise ValueError(
+            f"{path} is not the pinned {rom_key} build: sha1 {got}, expected {want['sha1']} "
+            f"(data/purergb_sources.lock.json outputs.{PURERGB_KEYS[rom_key]}) — a rebuilt or "
+            f"randomized cartridge must not be run as the canonical one")
+    return path
+
+
+def dump_path(rom_key: str) -> str:
+    """Absolute path of a key's cartridge dump (vanilla keys are repo-root filenames)."""
+    if is_purergb(rom_key):
+        return purergb_dump(rom_key)
+    return os.path.join(REPO, ROMS[rom_key])
+
+
+def save_name_for(rom_rel: str) -> str:
+    """The SaveRAM filename BizHawk derives for a ROM whose hash is not in its gamedb.
+
+    BizHawk looks the cartridge up by hash; an unknown hash falls back to the ROM's FILENAME with
+    the extension dropped and underscores turned into spaces. Measured on this machine's
+    Gameboy/SaveRAM directory: patch/build/gen1_red_ap.gb is "gen1 red ap.SaveRAM" and
+    patch/gen1/build/slink_blue.gb is "slink blue.SaveRAM" — the two forms run_gb_gate.GENS
+    already carries as literals, which the unit test pins against this function. Known hashes
+    (every vanilla cartridge) use the gamedb name instead, so this applies only to the patched and
+    pureRGB builds.
+    """
+    base = os.path.splitext(os.path.basename(rom_rel))[0]
+    return base.replace("_", " ") + ".SaveRAM"
+
+
+def dump_keys() -> tuple:
+    """Every rom key that has a cartridge: the vanilla three then the pureRGB three."""
+    return tuple(ROMS) + tuple(PURERGB_KEYS)
+
 
 def staged_rom(rom_key: str) -> str:
     """Copy the ROM to a space-free relative path and return it (relative to REPO)."""
-    src = os.path.join(REPO, ROMS[rom_key])
+    src = dump_path(rom_key)
     if not os.path.exists(src):
-        raise FileNotFoundError(f"ROM not found: {ROMS[rom_key]}")
+        raise FileNotFoundError(f"ROM not found: {src}")
     ext = os.path.splitext(src)[1]
     rel = f"patch/build/gen1_{rom_key}{ext}"
     dst = os.path.join(REPO, rel)
@@ -72,12 +135,19 @@ EMU_WINDOW = os.environ.get("SLINK_EMU_WINDOW", "1200,-1300")
 EMU_SOUND = os.environ.get("SLINK_EMU_SOUND", "0") == "1"
 
 
-def write_run_config(src: str, dst: str, saveram_dir: str | None = None) -> None:
+def write_run_config(src: str, dst: str, saveram_dir: str | None = None,
+                     purergb: bool = False) -> None:
     """Copy BizHawk's config, muted and positioned, without touching the user's own.
 
     config.ini is JSON with a BOM. Unknown-key edits are harmless, but SaveWindowPosition
     must be turned off too — otherwise BizHawk writes the window back on exit and the next
     run reads the moved position from OUR copy rather than the requested one.
+
+    `purergb` pins the run to GBC (PLAN A15): a pureRGB cartridge is a GBC cartridge, and the
+    client reads hGBC — its 2x-speed and palette-fade paths are CGB-only. ConsoleMode is
+    Gambatte's sync setting (GambatteSyncSettings.ConsoleModeType: Auto 0, GB 1, GBC 2, GBA 3,
+    SGB2 4, BizHawk 2.11.1 Gambatte.ISettable.cs) and GbAsSgb is the client's own top-level
+    switch: GBC + not-SGB.
 
     `saveram_dir` redirects the Game Boy Save RAM path for THIS run only.
 
@@ -122,6 +192,12 @@ def write_run_config(src: str, dst: str, saveram_dir: str | None = None) -> None
                              "+GambatteSyncSettings, BizHawk.Emulation.Cores")
     sync["RealTimeRTC"] = False
     sync["InitialTime"] = 0
+
+    if purergb:
+        # Values, not names: BizHawk deserialises both as numbers/bools (its own config on this
+        # machine reads ConsoleMode 0, the Auto default this replaces for pure runs).
+        sync["ConsoleMode"] = 2
+        cfg["GbAsSgb"] = False
 
     if saveram_dir:
         os.makedirs(saveram_dir, exist_ok=True)

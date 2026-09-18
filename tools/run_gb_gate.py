@@ -80,6 +80,13 @@ GENS = {
             "red": "Pokemon - Red Version (USA, Europe).SaveRAM",
             "blue": "Pokemon - Blue Version (USA, Europe).SaveRAM",
             "yellow": "Pokemon - Yellow Version (USA, Europe).SaveRAM",
+            # pureRGB: a built cartridge BizHawk has never seen, so the name is derived from the
+            # staged FILENAME (underscores -> spaces, .gbc dropped): patch/build/gen1_purered.gbc
+            # -> "gen1 purered.SaveRAM". g1.save_name_for derives the same string from the path,
+            # and the unit test pins these three literals against it.
+            "purered": "gen1 purered.SaveRAM",
+            "pureblue": "gen1 pureblue.SaveRAM",
+            "puregreen": "gen1 puregreen.SaveRAM",
         },
         "patched": {
             "red_patched": ("red", "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
@@ -99,6 +106,17 @@ GENS = {
             # Yellow's cold key for the scripted host: `rom_key.rsplit("_", 1)[0]` resolves the
             # staged dump, and the saveram name above is the one BizHawk itself will write.
             "yellow_cold": (None, None, "Pokemon - Yellow Version (USA, Europe).SaveRAM"),
+            # pureRGB (P3b-e): the built cartridges take the same treatment as the patched builds
+            # — BizHawk has no gamedb entry for them, so the SaveRAM name is filename-derived and
+            # the ROM is staged from the pinned lock (g1.PURERGB_KEYS), not from a repo-root dump.
+            # The `_cold` rows are what the fixture builder drives: a previous build's save must
+            # not be seeded into the next one. The bare keys boot FROM a built pure fixture.
+            "purered": ("purered", None, "gen1 purered.SaveRAM"),
+            "pureblue": ("pureblue", None, "gen1 pureblue.SaveRAM"),
+            "puregreen": ("puregreen", None, "gen1 puregreen.SaveRAM"),
+            "purered_cold": (None, None, "gen1 purered.SaveRAM"),
+            "pureblue_cold": (None, None, "gen1 pureblue.SaveRAM"),
+            "puregreen_cold": (None, None, "gen1 puregreen.SaveRAM"),
         },
     },
     "gen2": {
@@ -122,7 +140,9 @@ for _gen, _spec in GENS.items():
                                f"and {_gen} — --rom could not resolve it")
         ROM_TO_GEN[_key] = _gen
 
-# tests/live/test_gen1_gates.py reads this to find each patched build's ROM path.
+# tests/live/test_gen1_gates.py reads this to find each patched build's ROM path. The pureRGB
+# rows live here too: "patched" means "BizHawk's gamedb does not know this cartridge", which is
+# exactly what a built pureRGB ROM is.
 PATCHED = GENS["gen1"]["patched"]
 
 # Gates name their own verdict file; read it out of the source so we watch exactly one file
@@ -143,6 +163,35 @@ def _result_path_for(script):
     # gatelib builds the path from the gate's own name.
     m = re.search(r'G\.start\("([A-Za-z0-9_]+)"', src)
     return os.path.join(BUILD, m.group(1) + "_result.txt") if m else None
+
+
+def named_title(rom_key: str) -> str | None:
+    """The family to hand a gate whose sha1 cannot be admitted, or None to require admission.
+
+    Only the vanilla companion-patch rows qualify: the patch adds code, it does not move WRAM, and
+    vanilla's admission table does not exist yet (gen1_rby has no admission.json), so their sha1 is
+    in no pack. A pureRGB row never qualifies — its pack ships admission.json, so a pure cartridge
+    is admitted on its bytes or the gate refuses.
+    """
+    spec = GENS["gen1"]
+    base = spec["patched"].get(rom_key, (None, None, None))[0]
+    return base if base in spec["play"].ROMS else None
+
+
+def gate_env(rom_key: str, title: str | None = None) -> dict:
+    """The environment a gate runs with.
+
+    SLINK_ROOT is how every gate finds the repo. `title` is set only for a cartridge whose sha1
+    cannot be admitted: the vanilla companion-patch artifacts are vanilla-layout by construction
+    (the patch adds code, it does not move WRAM), and vanilla's admission table does not exist yet,
+    so the launcher names the family and the gate skips the sha1 lookup. A pureRGB build is never
+    named from outside — it ships data/games/gen1_purergb/admission.json, so it has to be admitted
+    on its bytes.
+    """
+    env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
+    if title:
+        env["SLINK_GATE_TITLE"] = title
+    return env
 
 
 def gen_for(rom_key: str) -> str:
@@ -187,8 +236,9 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
         if rom_rel is None:
             rom_rel = play.staged_rom(rom_key.rsplit("_", 1)[0])
         if not os.path.exists(os.path.join(REPO, rom_rel)):
-            raise FileNotFoundError(f"{rom_rel} missing — build it with "
-                                    f"`python patch/gen1/tools/build.py`")
+            how = ("build the pinned pureRGB source (see data/purergb_sources.lock.json)"
+                   if g1.is_purergb(rom_key) else "python patch/gen1/tools/build.py")
+            raise FileNotFoundError(f"{rom_rel} missing — build it with `{how}`")
         os.makedirs(SAVERAM_DIR, exist_ok=True)
         if base_key is None:
             # Cold boot. A leftover save from an earlier run would put the title screen on
@@ -213,9 +263,9 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
     tag = os.path.splitext(os.path.basename(script))[0]
     cfg_rel = f"patch/build/gate_cfg_{tag}_{rom_key}.ini"
     if os.path.exists(BIZHAWK_CONFIG):
-        write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+        write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), purergb=g1.is_purergb(rom_key))
 
-    env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
+    env = gate_env(rom_key, named_title(rom_key))
     cmd = [EMUHAWK, f"--lua={script}"]
     if os.path.exists(os.path.join(REPO, cfg_rel)):
         cmd.append(f"--config={cfg_rel}")

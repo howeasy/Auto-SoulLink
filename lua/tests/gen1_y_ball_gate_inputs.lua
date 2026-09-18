@@ -73,8 +73,17 @@ local C = dofile(here() .. "gen1_inputs_common.lua")
 local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
 
 local M={}
+-- The lane's game facts (P3b-e): vanilla twin at load, the caller's table through `with_facts`
+-- (and `M.new` re-points it from `expected.facts`). The rival id is the one that moves: pureRGB's
+-- lab rival is 221 (OPP_ID_OFFSET 197 + RIVAL1 $18), not the vanilla 225.
+local F=dofile(here().."gen1_rb_facts.lua")
+function M.with_facts(facts)
+    assert(facts and facts.TRAINER and facts.MOVE and facts.MENU,"yellow lab route needs a facts table")
+    F=facts
+    return facts
+end
 local function press(button,frame)
-    local buttons=idle();buttons[button]=frame%16<2;return buttons
+    local buttons=idle();buttons[button]=frame%F.TUNING.input_cadence<2;return buttons
 end
 local function walk(point,x,y)
     local buttons=idle()
@@ -104,6 +113,7 @@ function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
         "complete owned Yellow route identity required")
+    M.with_facts(expected.facts or dofile(here().."gen1_rb_facts.lua"))
     local self={last_frame=-1,starter_seen=false,battle_seen=false,loss_seen=false,demo_seen=false,
         ball_fired=false,nickname_declined=false,pending_growl_pp=nil,awaiting_main_menu=false}
     function self.step(handshake,status,point,frame)
@@ -225,7 +235,7 @@ function M.new(expected)
             end
             if script==6 and point.x==5 and point.y==3 and point.joy_ignore==0 then
                 bounded(self,"text_exit_frame",frame,600,"lab script6 text exit made no bounded progress",point)
-                if frame%16<2 then return press("B",frame),"lab-text-exit" end
+                if frame%F.TUNING.input_cadence<2 then return press("B",frame),"lab-text-exit" end
                 return walk(point,5,4),"lab-text-exit"
             end
             self.text_exit_frame=nil
@@ -258,14 +268,14 @@ function M.new(expected)
             self.nickname_declined=true
         end
         if point.battle~=0 then
-            assert(point.opponent==225,"first party battle was not lab Rival1"..describe(point))
+            assert(point.opponent==F.TRAINER.OPP_RIVAL1,"first party battle was not lab Rival1"..describe(point))
             self.battle_seen=true
             if self.pending_growl_pp and point.move2_pp<self.pending_growl_pp then
                 self.pending_growl_pp=nil
                 self.awaiting_main_menu=true
             end
             if self.awaiting_main_menu then
-                if point.menu_y==14 and point.menu_max==1 then
+                if point.menu_y==F.MENU.BATTLE.menu_y and point.menu_max==F.MENU.BATTLE.menu_max then
                     self.awaiting_main_menu=false
                 else
                     return press("B",frame),"rival-turn-text"
@@ -278,14 +288,16 @@ function M.new(expected)
                 -- the PP drop is the acceptance oracle. Until then pulse B: the driver never presses B inside the open
                 -- move menu (index 2 -> A), and B only advances prompt-gated text (WaitForTextScrollButtonPress takes A|B,
                 -- e.g. enemy-first "fell!"/"fainted!" before ExecutePlayerMove, core.asm:418-424) or backs out of nothing.
-                if point.menu_y==12 and point.menu_x==5 and point.menu_max>=2 and point.menu_index==2 then
+                if point.menu_y==F.MENU.MOVE.menu_y and point.menu_x==F.MENU.MOVE.menu_x
+                    and point.menu_max>=2 and point.menu_index==F.MOVE.GROWL_SLOT then
                     return press("A",frame),"use-growl"
                 end
                 return press("B",frame),"await-growl-acceptance"
             end
-            local move_menu=point.menu_y==12 and point.menu_x==5 and point.menu_max>=2
-            local main_menu=point.menu_y==14 and point.menu_max==1
-            if (point.menu_y==12 or point.menu_y==14) and not move_menu and not main_menu then
+            local move_menu=point.menu_y==F.MENU.MOVE.menu_y and point.menu_x==F.MENU.MOVE.menu_x and point.menu_max>=2
+            local main_menu=point.menu_y==F.MENU.BATTLE.menu_y and point.menu_max==F.MENU.BATTLE.menu_max
+            if (point.menu_y==F.MENU.MOVE.menu_y or point.menu_y==F.MENU.BATTLE.menu_y)
+                and not move_menu and not main_menu then
                 -- ponytail: retained/transient menu geometry between game routines is common (cf. the Mart
                 -- signature history); wait bounded instead of crashing the run, but still never blind-A here.
                 bounded(self,"unknown_menu_frame",frame,600,"unknown battle menu; refuse blind A",point)
@@ -295,9 +307,9 @@ function M.new(expected)
             if move_menu then
                 -- Pikachu L5 knows THUNDERSHOCK, GROWL: slot 2 is Growl ($2d), the same damage-free
                 -- loss the R/B starters give, so the lab script's HealParty is what ends the battle.
-                assert(point.move2==0x2d and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage"..describe(point))
-                if point.menu_index<2 then return press("Down",frame),"select-growl" end
-                if point.menu_index==2 then
+                assert(point.move2==F.MOVE.GROWL and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage"..describe(point))
+                if point.menu_index<F.MOVE.GROWL_SLOT then return press("Down",frame),"select-growl" end
+                if point.menu_index==F.MOVE.GROWL_SLOT then
                     local buttons=press("A",frame)
                     if buttons.A then
                         self.pending_growl_pp=point.move2_pp

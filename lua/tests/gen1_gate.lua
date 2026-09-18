@@ -52,14 +52,43 @@ function Lib.start(gate_name, opts)
     end
     function t.idle(frames) for _ = 1, frames do t.step(nil) end end
 
-    client.speedmode(6399)
-    local title, header = Entry.detect_title(function(a) return memory.read_u8(a, "ROM") end)
-    if not title then
-        t.log(fmt("RESULT: FAIL not a Gen 1 ROM (header %q)", tostring(header)))
-        client.exit()
-        error("slink-gate-finished", 0)
+    -- Foundation first, by sha1, exactly as lua/gen1/run.lua does it (P3b-e). The built pureRGB
+    -- cartridges keep the vanilla header, so the header names the family but cannot name the
+    -- foundation -- and PureGreen has no family at all -- so admission, not detect_title, is what
+    -- decides which pack and which title the gate runs against.
+    local json_codec = dofile(ROOT .. "/lua/json_codec.lua")
+    local function rom_u8(a) return memory.read_u8(a, "ROM") end
+    local env_title = os.getenv("SLINK_GATE_TITLE")
+    local title, pack, kind
+    if env_title and env_title ~= "" then
+        -- The launcher named the cartridge: only for a build whose sha1 cannot be admitted (the
+        -- vanilla companion-patch artifacts, which are vanilla-layout). run_gb_gate.gate_env
+        -- sets this, and never for a pureRGB build.
+        title, kind = env_title, "named"
+        pack = env_title:sub(1, 4) == "pure" and "gen1_purergb" or "gen1_rby"
+    else
+        local admitted, why = Entry.admit({
+            root = ROOT, json = json_codec,
+            rom_sha1 = gameinfo.getromhash and gameinfo.getromhash() or "",
+            indatabase = gameinfo.indatabase and gameinfo.indatabase() or false,
+            read_rom_u8 = rom_u8, rom_size = memory.getmemorydomainsize("ROM"),
+            header = Entry.header_title(rom_u8),
+        })
+        if not admitted then
+            t.log(fmt("RESULT: FAIL not an admitted Gen 1 cartridge: %s", tostring(why)))
+            client.exit()
+            error("slink-gate-finished", 0)
+        end
+        title, pack, kind = admitted.title, admitted.pack, admitted.kind
     end
-    t.title = title
+    t.title, t.pack, t.kind = title, pack, kind
+    -- The lane's driver-facts table (P3b-e) and the pack's own write checkpoint: a pure gate has to
+    -- read data/games/gen1_purergb/write_checkpoint.json, keyed by the pure title.
+    t.facts = dofile(ROOT .. "/lua/tests/"
+                     .. (pack == "gen1_purergb" and "gen1_pure_facts.lua" or "gen1_rb_facts.lua"))
+    t.checkpoint_path = ROOT .. "/" .. Entry.PACK_FILES[pack].checkpoint
+    -- Emulator speed multiplier: a BizHawk-level fact, SAME in both tables (F.CLIENT.speedmode).
+    client.speedmode(t.facts.CLIENT.speedmode)
     t.deps = Entry.bizhawk_deps()
     local sent, replies = {}, {}
     t.sent, t.replies = sent, replies
@@ -76,7 +105,8 @@ function Lib.start(gate_name, opts)
     t.hud = { show = function() end, prompt = function() end, set_game_over = function() end,
               set_rebuilding = function() end, clear_rebuilding = function() end,
               sanitize = dofile(ROOT .. "/lua/hud.lua").sanitize }
-    t.client, t.parts = Entry.build({ root = ROOT, io = t.deps, net = t.net, hud = t.hud, title = title,
+    t.client, t.parts = Entry.build({ root = ROOT, io = t.deps, net = t.net, hud = t.hud,
+                                      pack = pack, title = title, kind = kind,
                                       player = "a", rom_sha1 = gameinfo.getromhash():lower(),
                                       log = function(s) console.log(s) end })
     local ram = t.parts.profile.ram
@@ -91,7 +121,7 @@ function Lib.start(gate_name, opts)
     -- OverworldLoop's DelayFrame, PC at the IRQ vector, no battle/script/text/serial owner.
     -- That is unreachable from any menu or loading screen, and it moves the player nowhere.
     local safety = dofile(ROOT .. "/lua/gen1_write_safety.lua")
-    local ws = t.parts.json.decode(assert(io.open(ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[title]
+    local ws = t.parts.json.decode(assert(io.open(t.checkpoint_path, "rb")):read("*a"))[title]
     t.overworld_ok = function() return safety.check(ws, t.deps) == true end
     local booted, settled = false, 0
     for f = 1, 6000 do
@@ -99,8 +129,9 @@ function Lib.start(gate_name, opts)
         local ok = count >= 1 and count <= 6 and t.overworld_ok()
         settled = ok and settled + 1 or 0
         if settled >= 30 then booted = true break end
-        -- A on a 16-frame cadence walks the title and CONTINUE prompts; never Down.
-        t.step((not ok and f % 16 < 2) and { A = true } or nil)
+        -- A on the lane's tap cadence (F.TUNING.input_cadence) walks the title and CONTINUE
+        -- prompts; never Down.
+        t.step((not ok and f % t.facts.TUNING.input_cadence < 2) and { A = true } or nil)
     end
     if not booted then
         client.screenshot(ROOT .. "/patch/build/" .. gate_name .. "_bootfail.png")

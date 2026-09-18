@@ -26,6 +26,17 @@
 
 local M = {}
 
+-- The input cadence is a lane fact (F.TUNING.input_cadence): 16 frames on both foundations
+-- (the fact is SAME), but it comes from the table so a lane that changes it is a data edit
+-- rather than a source edit. Vanilla default at load; `with_facts` re-points it.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local F = dofile(here() .. "gen1_rb_facts.lua")
+function M.with_facts(facts)
+    assert(facts and facts.TUNING, "input cadence needs a facts table")
+    F = facts
+    return M
+end
+
 function M.idle()
     return {A = false, B = false, Start = false, Select = false,
             Up = false, Down = false, Left = false, Right = false}
@@ -39,7 +50,7 @@ end
 
 function M.tap(key, frame)
     local b = M.idle()
-    b[key] = frame % 16 < 2
+    b[key] = frame % F.TUNING.input_cadence < 2
     return b
 end
 

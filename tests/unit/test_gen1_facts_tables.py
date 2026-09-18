@@ -22,9 +22,8 @@ _TESTS = os.path.join(_REPO, "lua", "tests")
 PURE = "gen1_pure_facts.lua"
 RB = "gen1_rb_facts.lua"
 
-# The drivers that took their literals out of the facts table. gen1_y_ball_gate_inputs.lua (Yellow's
-# lab driver) is NOT in this list: it was outside that card's scope and still carries the literal
-# 225 in its own rival assertion.
+# The drivers that took their literals out of the facts table (P3b-e). gen1_y_ball_gate_inputs.lua
+# (Yellow's lab driver) is now in it: its 225/0x2d went to F.TRAINER.OPP_RIVAL1 / F.MOVE.GROWL.
 DRIVERS = (
     "gen1_rb_ball_gate_inputs.lua",
     "gen1_rb_parcel_inputs.lua",
@@ -38,6 +37,13 @@ DRIVERS = (
     "gen1_rb_point_fields.lua",
     "gen1_battle_driver.lua",
     "gen1_scripted_play.lua",
+    # the P3b-e tail: Yellow's lab driver, the Center route, the cold-trade planner, the shared
+    # input shapes and the gate library.
+    "gen1_y_ball_gate_inputs.lua",
+    "gen1_rb_center_inputs.lua",
+    "gen1_cold_trade_inputs.lua",
+    "gen1_inputs_common.lua",
+    "gen1_gate.lua",
 )
 
 # Literals that must not survive in those files: the rival opponent id, the single battle-core bank
@@ -49,6 +55,8 @@ REPLACED = {
     "START menu count": r"save\s*\+\s*3",
     "Mart Red-list fallback": r"INVENTORY\.red",
     "item-list ball scan": r"id\s*>=\s*1\s+and\s+id\s*<=\s*4",
+    "Growl's move id": r"0x2d",
+    "16-frame tap cadence": r"%\s*16\s*<\s*2",
 }
 
 # Exactly the keys the two tables disagree on. `BANKS.<hook>` is the engine-signal site bank:

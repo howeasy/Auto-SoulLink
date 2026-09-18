@@ -44,9 +44,17 @@ CHAINS = {"town": "lab,save", "battle": "lab,parcel,route1,save", "town_ot2": "l
 DEFAULT_OT = 0x4190
 SAVERAM_NAME = {"red": "Pokemon - Red Version (USA, Europe).SaveRAM",
                 "blue": "Pokemon - Blue Version (USA, Europe).SaveRAM",
-                "yellow": "Pokemon - Yellow Version (USA, Europe).SaveRAM"}
+                "yellow": "Pokemon - Yellow Version (USA, Europe).SaveRAM",
+                # pureRGB (P3b-e): unknown to BizHawk's gamedb, so the emulator names the file after
+                # the staged ROM (see g1.save_name_for). The build is the pinned lock output, staged
+                # by g1.staged_rom; a pure fixture is built by the SAME chains through the same gate
+                # (the driver facts follow the admitted title, so no chain changes).
+                "purered": "gen1 purered.SaveRAM", "pureblue": "gen1 pureblue.SaveRAM",
+                "puregreen": "gen1 puregreen.SaveRAM"}
 DUMP = {"red": "patch/build/gen1_red.gb", "blue": "patch/build/gen1_blue.gb",
-        "yellow": "patch/build/gen1_yellow.gbc"}
+        "yellow": "patch/build/gen1_yellow.gbc",
+        "purered": "patch/build/gen1_purered.gbc", "pureblue": "patch/build/gen1_pureblue.gbc",
+        "puregreen": "patch/build/gen1_puregreen.gbc"}
 FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen1")
 
 # Fixtures still holding the OLD harness' bytes: written directly into SaveRAM, so the party
@@ -201,7 +209,8 @@ def main() -> int:
         return qualify_all()
     if args.rom is None or args.target is None:
         ap.error("rom and target are required unless --qualify")
-    player = args.player or ("a" if args.rom == "red" else "b")
+    # Red and PureRed lead with Bulbasaur (the A-side starter); everything else with Charmander.
+    player = args.player or ("a" if args.rom in ("red", "purered") else "b")
 
     import gen1_playthrough as play
     from run_gb_gate import run_gate

@@ -28,17 +28,35 @@ P.MODULES = MODULES
 -- The lab route is the one module with a per-title twin: Yellow's Pallet intercept, Pikachu
 -- demonstration battle and Oak's-lab scripts all differ from Red/Blue, so its driver is a
 -- separate file (a0349b8). MODULES is built at file scope while the title only exists inside
--- P.new, so the choice is made there and everything else stays shared.
+-- P.new, so the choice is made there and everything else stays shared. The pureRGB titles take
+-- the shared R/B driver: pureRGB's Oak's-lab script tables match pokered's (SAME rows, verified
+-- against the pinned source) and the pure leg ran that route live.
 local LAB_FILES = { red = "gen1_rb_ball_gate_inputs.lua", blue = "gen1_rb_ball_gate_inputs.lua",
-                    yellow = "gen1_y_ball_gate_inputs.lua" }
+                    yellow = "gen1_y_ball_gate_inputs.lua",
+                    purered = "gen1_rb_ball_gate_inputs.lua", pureblue = "gen1_rb_ball_gate_inputs.lua",
+                    puregreen = "gen1_rb_ball_gate_inputs.lua" }
 P.LAB_FILES = LAB_FILES
+
+-- Title -> the lane's driver-facts table (P3b-e). These are the titles the packs admit
+-- (lua/gen1/entry.lua Entry.PACKS), so the SYMBOLS come from the matching .sym set too: the
+-- pureRAM addresses moved, and reading vanilla symbols on a pure cartridge would be plausible
+-- bytes from the wrong places. `opts.facts` still overrides the table for a caller that knows
+-- better (the pure probes did, before the vocabulary existed).
+local TITLE_FACTS = { red = "gen1_rb_facts.lua", blue = "gen1_rb_facts.lua", yellow = "gen1_rb_facts.lua",
+                      purered = "gen1_pure_facts.lua", pureblue = "gen1_pure_facts.lua",
+                      puregreen = "gen1_pure_facts.lua" }
+P.TITLE_FACTS = TITLE_FACTS
+local TITLE_SYMBOLS = { red = "data/pret/pokered.sym", blue = "data/pret/pokeblue.sym",
+                        yellow = "data/pret/pokeyellow.sym", purered = "data/purergb/pokered.sym",
+                        pureblue = "data/purergb/pokeblue.sym", puregreen = "data/purergb/pokegreen.sym" }
+P.TITLE_SYMBOLS = TITLE_SYMBOLS
 
 local IDLE = { A = false, B = false, Start = false, Select = false, Up = false, Down = false, Left = false, Right = false }
 
 local function load_symbols(ROOT, title)
-    local file = title == "yellow" and "pokeyellow.sym" or (title == "blue" and "pokeblue.sym" or "pokered.sym")
+    local rel = assert(TITLE_SYMBOLS[title], "no symbol set for " .. tostring(title))
     local symbols = {}
-    for line in io.lines(ROOT .. "/data/pret/" .. file) do
+    for line in io.lines(ROOT .. "/" .. rel) do
         local _, address, name = line:match("^(%x+):(%x+) (%S+)$")
         if address then symbols[name] = tonumber(address, 16) end
     end
@@ -46,8 +64,9 @@ local function load_symbols(ROOT, title)
 end
 
 function P.new(ROOT, title, player, opts)
-    assert(title == "red" or title == "blue" or title == "yellow",
-           "scripted play has a Red/Blue lab route and a Yellow one; nothing else")
+    assert(TITLE_FACTS[title],
+           "scripted play has a Red/Blue lab route and a Yellow one, plus the pureRGB titles; "
+           .. "nothing else")
     assert(player == "a" or player == "b")
     opts = opts or {}
     local symbols = load_symbols(ROOT, title)
@@ -60,8 +79,7 @@ function P.new(ROOT, title, player, opts)
     -- The lane names its own file by title; `opts.facts` names it outright for callers whose title
     -- vocabulary has no pure spelling yet (pureRGB keeps the R/B ROM header, so
     -- Entry.detect_title still answers "red" on a pure cartridge).
-    local F = dofile(ROOT .. "/lua/tests/"
-                     .. (opts.facts or (title:match("^Pure") and "gen1_pure_facts.lua" or "gen1_rb_facts.lua")))
+    local F = dofile(ROOT .. "/lua/tests/" .. (opts.facts or TITLE_FACTS[title]))
     local FIELDS = dofile(ROOT .. "/lua/tests/gen1_rb_point_fields.lua").with_facts(F)
     local SIG = dofile(ROOT .. "/lua/tests/gen1_rb_mart_signature.lua").with_facts(F)
     local function rd(addr) return memory.read_u8(addr, "System Bus") end

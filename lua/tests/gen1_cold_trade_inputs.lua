@@ -4,12 +4,29 @@
 -- ViridianCity,ViridianPokecenter}.asm. Story/menu branches: scripts/PalletTown,
 -- scripts/OaksLab and engine/{battle/core,menus/naming_screen}.asm.
 local M={}
+-- Map ids and the 16-frame pulse cadence are lane facts (P3b-e). MAP is mutated in place by
+-- `with_facts` so a closure that already aliased it keeps seeing the lane's values.
+local function here()return(debug.getinfo(1,"S").source or ""):match("^@(.*[/\\])") or ""end
 local MAP={pallet=0x00,viridian=0x01,route1=0x0c,house1=0x25,house2=0x26,lab=0x28,center=0x29}
+local F=dofile(here().."gen1_rb_facts.lua")
+function M.with_facts(facts)
+    assert(facts and facts.MAP and facts.TUNING,"cold-trade route needs a facts table")
+    MAP.pallet=facts.MAP.PALLET_TOWN
+    MAP.viridian=facts.MAP.VIRIDIAN_CITY
+    MAP.route1=facts.MAP.ROUTE_1
+    MAP.house1=facts.MAP.REDS_HOUSE_1F
+    MAP.house2=facts.MAP.REDS_HOUSE_2F
+    MAP.lab=facts.MAP.OAKS_LAB
+    MAP.center=facts.MAP.VIRIDIAN_POKECENTER
+    F=facts
+    return facts
+end
 local function integer(v)return type(v)=="number"and v%1==0 and v>=0 end
 local function empty()return {A=false,B=false,Start=false,Select=false,Up=false,Down=false,Left=false,Right=false}end
 local function key(name)local buttons=empty();if name then buttons[name]=true end;return buttons end
 function M.new(options)
     assert(type(options)=="table"and(options.variant=="red"or options.variant=="blue"or options.variant=="yellow"),"route variant required")
+    M.with_facts(options.facts or dofile(here().."gen1_rb_facts.lua"))
     assert(type(options.initiator)=="boolean","explicit route initiator required")
     local limit=options.max_frames or 18000
     assert(integer(limit)and limit>=1,"bounded route frame budget required")
@@ -22,7 +39,9 @@ function M.new(options)
             self.phase=name;self.transitions[#self.transitions+1]={phase=name,frame=point.frame,map=point.map,x=point.x,y=point.y}
         end
     end
-    local function pulse(point,name)return point.frame%16<2 and key(name or "A")or empty()end
+    local function pulse(point,name)
+        return point.frame%F.TUNING.input_cadence<2 and key(name or "A")or empty()
+    end
     local function navigate(point,x,y)
         local desired=point.map..":"..x..":"..y
         local tile=point.map..":"..point.x..":"..point.y

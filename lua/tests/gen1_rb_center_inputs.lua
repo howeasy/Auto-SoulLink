@@ -2,19 +2,32 @@
 -- and the paired trade lane. No game-state writes. Route geometry: gen1_rb_parcel_inputs.lua:24-29
 -- and RC_MASTER_GUIDE.md:1316; map IDs: pret/constants/map_constants.asm.
 local M = {}
-M.MAP = {lab = 0x28, pallet = 0x00, route1 = 0x0C, viridian = 0x01, center = 0x29}
-M.STAGES = {
-    {name="lab_exit", map=M.MAP.lab, next=M.MAP.pallet, waypoints={{5,11}}},
-    {name="pallet_north", map=M.MAP.pallet, next=M.MAP.route1,
-     waypoints={{12,11},{9,11},{9,2},{10,2},{10,-1}}},
-    {name="route_one_north", map=M.MAP.route1, next=M.MAP.viridian,
-     waypoints={{10,31},{8,31},{8,24},{12,24},{12,22},{9,22},
-                {9,14},{14,14},{14,4},{11,4},{11,-1}}},
-    {name="viridian_center", map=M.MAP.viridian, next=M.MAP.center,
-     waypoints={{20,30},{19,30},{19,26},{23,26},{23,25}}},
-    {name="center_receptionist", map=M.MAP.center,
-     waypoints={{3,4},{11,4},{11,3}}},
-}
+-- Map ids and the five stage tables are lane facts (P3b-e): F.MAP and F.WAYPOINTS.CENTER, copied
+-- in by `with_facts`. The vanilla values are installed at load so a caller that reads M.STAGES
+-- before building a driver still sees them.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local F = dofile(here() .. "gen1_rb_facts.lua")
+function M.with_facts(facts)
+    assert(facts and facts.MAP and facts.WAYPOINTS and facts.WAYPOINTS.CENTER,
+        "center route needs a facts table")
+    local W = facts.WAYPOINTS.CENTER
+    M.MAP = {lab = facts.MAP.OAKS_LAB, pallet = facts.MAP.PALLET_TOWN, route1 = facts.MAP.ROUTE_1,
+             viridian = facts.MAP.VIRIDIAN_CITY, center = facts.MAP.VIRIDIAN_POKECENTER}
+    F = facts
+    M.STAGES = {
+        {name="lab_exit", map=W.lab_exit.map, next=W.lab_exit.next, waypoints=W.lab_exit.waypoints},
+        {name="pallet_north", map=W.pallet_north.map, next=W.pallet_north.next,
+         waypoints=W.pallet_north.waypoints},
+        {name="route_one_north", map=W.route_one_north.map, next=W.route_one_north.next,
+         waypoints=W.route_one_north.waypoints},
+        {name="viridian_center", map=W.viridian_center.map, next=W.viridian_center.next,
+         waypoints=W.viridian_center.waypoints},
+        {name="center_receptionist", map=W.center_recept.map,
+         waypoints=W.center_recept.waypoints},
+    }
+    return facts
+end
+M.with_facts(dofile(here() .. "gen1_rb_facts.lua")) -- load-time defaults
 
 -- Tile IDs from pret/charmap.asm:63,92-117,126-151,168-170.
 -- Digits, '/' and '-' are here for the SLINK panel probe (test_gen1_menu_row_gate.lua):
@@ -97,7 +110,7 @@ function M.new(opts)
     local waypoint_index, still, last_point = 1, 0, ""
     local wild_active, wild_attempts = false, 0
     local function at(symbol) return read(assert(ram[symbol], symbol .. " missing from profile")) end
-    local function pulse(key) return opts.frame() % 16 < 2 and {[key]=true} or {} end
+    local function pulse(key) return opts.frame() % F.TUNING.input_cadence < 2 and {[key]=true} or {} end
 
     local self = {}
     function self.step()
@@ -126,7 +139,7 @@ function M.new(opts)
                 opts.invariant("wild RUN column observed", mx == 15, fmt("x=%d", mx))
                 if index == 0 then return pulse("Down") end
                 opts.invariant("wild RUN row observed", index == 1, fmt("index=%d", index))
-                if opts.frame() % 16 < 2 then wild_attempts = wild_attempts + 1;return {A=true} end
+                if opts.frame() % F.TUNING.input_cadence < 2 then wild_attempts = wild_attempts + 1;return {A=true} end
                 return {}
             end
             return pulse("A")

@@ -38,7 +38,7 @@ local function step(buttons)
 end
 
 local safety = dofile(t.ROOT .. "/lua/gen1_write_safety.lua")
-local ws = json.decode(assert(io.open(t.ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[t.title]
+local ws = json.decode(assert(io.open(t.checkpoint_path or (t.ROOT .. "/data/games/gen1_rby/write_checkpoint.json"), "rb")):read("*a"))[t.title]
 local function overworld_ok() return safety.check(ws, t.deps) == true end
 
 local play = P.new(t.ROOT, t.title, player, { log = t.log,
