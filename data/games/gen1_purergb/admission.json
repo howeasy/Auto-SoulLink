@@ -1,0 +1,32 @@
+{
+  "2e94d09c1e16a57eb079404c030f26fdeeac949d": {
+    "crc32": "BA3325C6",
+    "header_crc": "929B",
+    "header_title": "POKEMON RED",
+    "kind": "clean",
+    "md5": "6f9ab804e11679ec3f29923063a50115",
+    "profile_id": "gen1_purergb/purered",
+    "size": 1048576,
+    "title": "purered"
+  },
+  "d419fe244fa17196f7df46ddab47c840e7573652": {
+    "crc32": "E566AB2E",
+    "header_crc": "CC68",
+    "header_title": "POKEMON BLUE",
+    "kind": "clean",
+    "md5": "feaf1177a83be4517f7711dad85102b2",
+    "profile_id": "gen1_purergb/pureblue",
+    "size": 1048576,
+    "title": "pureblue"
+  },
+  "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02": {
+    "crc32": "03729DCF",
+    "header_crc": "C775",
+    "header_title": "POKEMON GREEN",
+    "kind": "clean",
+    "md5": "03b83b94f8f0915967a9b8063e6e9f6f",
+    "profile_id": "gen1_purergb/puregreen",
+    "size": 1048576,
+    "title": "puregreen"
+  }
+}

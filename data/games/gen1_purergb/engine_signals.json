@@ -1,0 +1,2590 @@
+{
+ "schema": "rby-engine-signal-sites-v1",
+ "sha256": "66cda4eb70c5974dd1418ac740e6d47767c14146a3f7f4641b6bfbd3717f9b4c",
+ "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
+ "titles": {
+  "pureblue": {
+   "addresses": {
+    "hLoadedROMBank": 65464,
+    "wBattleMonHP": 53269,
+    "wBattleMonSpecies": 53268,
+    "wBattleResult": 53003,
+    "wBattleType": 53338,
+    "wBoxCount": 55944,
+    "wBoxMonNicks": 56846,
+    "wBoxMonOT": 56626,
+    "wCurEnemyLevel": 53551,
+    "wCurItem": 53137,
+    "wCurMap": 54118,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wCurrentBoxNum": 54696,
+    "wDayCareMon": 55911,
+    "wEnemyMonSpecies2": 53248,
+    "wInGameTradeGiveMonSpecies": 52495,
+    "wInGameTradeReceiveMonSpecies": 52532,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wLinkState": 53555,
+    "wLoadedMonSpecies": 53144,
+    "wMonDataLocation": 52297,
+    "wMoveMonType": 53141,
+    "wNumBagItems": 54594,
+    "wPartyCount": 53611,
+    "wPartyMon1HP": 53620,
+    "wPartyMonNicks": 53949,
+    "wPartyMonOT": 53883,
+    "wPlayerBattleStatus3": 53348,
+    "wPlayerMonNumber": 52271,
+    "wRemoveMonFromBox": 53141,
+    "wSaveFileStatus": 53384,
+    "wTradedEnemyMonSpecies": 52542,
+    "wTradedPlayerMonSpecies": 52541,
+    "wTrainerClass": 53297,
+    "wUsedItemOnWhichPokemon": 52998,
+    "wWhichPokemon": 53138
+   },
+   "rom_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
+   "sites": {
+    "add_party_mon": {
+     "address": 13466,
+     "anchor_offset": 0,
+     "assert": "AddPartyMon::\n\tpush hl\n\tpush de\n\tpush bc\n\tfarcall _AddPartyMon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "E5D5C5060321526F",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "rom_offset": 13466,
+     "source": "home/move_mon.asm",
+     "symbol": "AddPartyMon"
+    },
+    "apex_commit": {
+     "address": 23365,
+     "anchor_offset": 17,
+     "assert": "\tpop hl\n\tpush hl\n\tcall .recalculateStats",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "E1E5CD4D5AE10122",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56133,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "apex_preflight": {
+     "address": 23363,
+     "anchor_offset": 15,
+     "assert": ".setDVs\n\tld [hli], a ; set first byte of DVs to max\n\tld [hl], a  ; set second byte of DVs to max\n\tpop hl\n\tpush hl\n\tcall .recalculateStats",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "2277E1E5CD4D5AE1",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56131,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "apex_recalc_call": {
+     "address": 23367,
+     "anchor_offset": 19,
+     "assert": "\tcall .recalculateStats\n\tpop hl\n\tld bc, (wPartyMon1MaxHP) - wPartyMon1",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD4D5AE101220009",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56135,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "bag_received": {
+     "address": 20564,
+     "anchor_offset": 0,
+     "assert": ".done\n\tpop hl\n\tpop de\n\tpop bc\n\tpop bc\n\tld a, b\n\tld [wItemQuantity], a",
+     "bank": 3,
+     "capture_offset": 8,
+     "expected_hex": "E1D1C1C178EA96CFC9",
+     "point": [
+      "wCurItem",
+      "wItemQuantity",
+      "wNumBagItems"
+     ],
+     "rom_offset": 53332,
+     "source": "engine/items/inventory.asm",
+     "symbol": "AddItemToInventory_.done"
+    },
+    "battle_begin": {
+     "address": 28378,
+     "anchor_offset": 0,
+     "assert": "InitBattleCommon:\n;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;\n; shinpokerednote: ADDED: store PKMN Levels at the beginning of the Battle.\n\tfarcall StorePKMNLevels",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "0635210C5BC7FA65",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState"
+     ],
+     "rom_offset": 257754,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitBattleCommon"
+    },
+    "battle_end": {
+     "address": 17661,
+     "anchor_offset": 0,
+     "assert": "EndOfBattle:\n\tld a, [wLinkState]\n\tcp LINK_STATE_BATTLING\n\tjr nz, .notLinkBattle",
+     "bank": 58,
+     "capture_offset": 0,
+     "expected_hex": "FA33D1FE042036FA",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState",
+      "wBattleResult"
+     ],
+     "rom_offset": 951549,
+     "source": "engine/battle/end_of_battle.asm",
+     "symbol": "EndOfBattle"
+    },
+    "battle_faint": {
+     "address": 18381,
+     "anchor_offset": 0,
+     "assert": "RemoveFaintedPlayerMon:\n\tld a, [wPlayerMonNumber]\n\tld c, a\n\tld hl, wPartyGainExpFlags",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "FA2FCC4F2158D006",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 247757,
+     "source": "engine/battle/core.asm",
+     "symbol": "RemoveFaintedPlayerMon"
+    },
+    "battle_loop_head": {
+     "address": 16979,
+     "anchor_offset": 6,
+     "assert": "\tld hl, wPlayerTurnCount\n\tinc [hl]\n\tinc hl\n\tinc [hl] ; wEnemyTurnCount\n;;;;;;\n\tcall ReadPlayerMonCurHPAndStatus\n\tld hl, wBattleMonHP",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD004E2115D02AB6",
+     "point": [
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wIsInBattle",
+      "wBattleType",
+      "wLinkState",
+      "wPlayerBattleStatus3"
+     ],
+     "prelude": {
+      "address": 16973,
+      "expected_hex": "21E0CC342334",
+      "rom_offset": 246349
+     },
+     "rom_offset": 246355,
+     "source": "engine/battle/core.asm",
+     "symbol": "MainInBattleLoop"
+    },
+    "blackout": {
+     "address": 16560,
+     "anchor_offset": 0,
+     "assert": "ResetStatusAndHalveMoneyOnBlackout::\n; Reset player status on blackout.\n\txor a\n\tld [wBattleResult], a\n\tld [wWalkBikeSurfState], a\n\tld [wIsInBattle], a",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "AFEA0BCFEA08D7EA",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 16560,
+     "source": "engine/events/black_out.asm",
+     "symbol": "ResetStatusAndHalveMoneyOnBlackout"
+    },
+    "cable_partial_save": {
+     "address": 22256,
+     "anchor_offset": 44,
+     "assert": "\tcallfar SavePartyAndDexData ; this allows reset into Pokecenter",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "218078061CC70E32",
+     "point": [
+      "wSaveFileStatus"
+     ],
+     "rom_offset": 22256,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.tradeCompleted"
+    },
+    "cable_trade_add": {
+     "address": 22134,
+     "anchor_offset": 157,
+     "assert": "\trst _CopyData\n\tcall AddEnemyMonToPlayerParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wWhichPokemon], a",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "CDCB34FA6BD13DEA92CF",
+     "point": [
+      "wWhichPokemon",
+      "wTradedPlayerMonSpecies",
+      "wTradedEnemyMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 22134,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.doTrade"
+    },
+    "cable_trade_remove": {
+     "address": 22096,
+     "anchor_offset": 119,
+     "assert": "\tld [wTradedPlayerMonSpecies], a\n\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, [wTradingWhichEnemyMon]",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "CD9334FA3ECD4FEA",
+     "point": [
+      "wWhichPokemon",
+      "wTradedPlayerMonSpecies",
+      "wTradedEnemyMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 22096,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.doTrade"
+    },
+    "capture_box": {
+     "address": 25931,
+     "anchor_offset": 0,
+     "assert": "SendNewMonToBox:\n\tld de, wBoxCount\n\tld a, [de]\n\tinc a\n\tld [de], a",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "1188DA1A3C12FA91",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "rom_offset": 58699,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "SendNewMonToBox"
+    },
+    "capture_box_begin": {
+     "address": 21537,
+     "anchor_offset": 3,
+     "assert": ".sendToBox\n\tcall ClearSprites\n\tcall SendNewMonToBox\n\tld hl, ItemUseBallText07",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD4B65216854FAF9",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "rom_offset": 54305,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.sendToBox"
+    },
+    "capture_box_end": {
+     "address": 21540,
+     "anchor_offset": 6,
+     "assert": "\tcall SendNewMonToBox\n\tld hl, ItemUseBallText07",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "216854FAF9D7CB47",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "prelude": {
+      "address": 21537,
+      "expected_hex": "CD4B65",
+      "rom_offset": 54305
+     },
+     "rom_offset": 54308,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.sendToBox"
+    },
+    "capture_party_begin": {
+     "address": 21509,
+     "anchor_offset": 34,
+     "assert": "\tld [wMonDataLocation], a\n\tcall ClearSprites\n\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD9A34F1A7283221",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "rom_offset": 54277,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.skipShowingPokedexData"
+    },
+    "capture_party_end": {
+     "address": 21512,
+     "anchor_offset": 37,
+     "assert": "\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "F1A72832219E5606",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "prelude": {
+      "address": 21509,
+      "expected_hex": "CD9A34",
+      "rom_offset": 54277
+     },
+     "rom_offset": 54280,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.skipShowingPokedexData"
+    },
+    "changebox_full_save": {
+     "address": 31114,
+     "anchor_offset": 53,
+     "assert": "\tcall ChangeBoxData\n\tcall SaveGameData\n\tld a, SFX_SAVE\n\tcall PlaySoundWaitForCurrent",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CDB5783EB6CDA533",
+     "point": [
+      "wSaveFileStatus",
+      "wCurrentBoxNum"
+     ],
+     "rom_offset": 473482,
+     "source": "engine/menus/save.asm",
+     "symbol": "ChangeBox.yes"
+    },
+    "daycare_withdraw": {
+     "address": 27080,
+     "anchor_offset": 39,
+     "assert": "\tld a, DAYCARE_TO_PARTY\n\tld [wMoveMonType], a\n\tcall MoveMon\n\tld a, [wDayCareMonSpecies]\n\tld [wCurPartySpecies], a",
+     "bank": 21,
+     "capture_offset": 0,
+     "expected_hex": "CDDC34FA67DAEA91CF",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wMoveMonType",
+      "wDayCareMon"
+     ],
+     "prelude": {
+      "address": 27075,
+      "expected_hex": "3E02EA95CF",
+      "rom_offset": 354755
+     },
+     "rom_offset": 354760,
+     "source": "scripts/Daycare.asm",
+     "symbol": "DaycareGentlemanText.enoughMoney"
+    },
+    "evolve": {
+     "address": 21707,
+     "anchor_offset": 0,
+     "assert": "TryEvolvingMon:\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
+     "bank": 44,
+     "capture_offset": 0,
+     "expected_hex": "21D3CCAF77FA92CF",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 726219,
+     "source": "engine/pokemon/evos_moves.asm",
+     "symbol": "TryEvolvingMon"
+    },
+    "evolve_species_store": {
+     "address": 22213,
+     "anchor_offset": 60,
+     "assert": "\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n\tjr .nextEvoEntry2",
+     "bank": 44,
+     "capture_offset": 0,
+     "expected_hex": "77E56B6218012323",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wLoadedMonSpecies"
+     ],
+     "prelude": {
+      "address": 22210,
+      "expected_hex": "FA98CF",
+      "rom_offset": 726722
+     },
+     "rom_offset": 726725,
+     "source": "engine/pokemon/evos_moves.asm",
+     "symbol": "Evolution_PartyMonLoop.skipfix_end"
+    },
+    "move_mon": {
+     "address": 13532,
+     "anchor_offset": 0,
+     "assert": "MoveMon::\n\thomecall_sf _MoveMon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "F0B8F53E03CDA332",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wMoveMonType"
+     ],
+     "rom_offset": 13532,
+     "source": "home/move_mon.asm",
+     "symbol": "MoveMon"
+    },
+    "npc_trade": {
+     "address": 21708,
+     "anchor_offset": 0,
+     "assert": "InGameTrade_DoTrade:\n\txor a ; NORMAL_PARTY_MENU\n\tld [wPartyMenuTypeOrMessageID], a\n\tdec a\n\tld [wUpdateSpritesEnabled], a",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "AFEA7DD03DEACBCF",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464076,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_add": {
+     "address": 21839,
+     "anchor_offset": 131,
+     "assert": "\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD9A34CD0756CD34",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount",
+      "wMonDataLocation"
+     ],
+     "rom_offset": 464207,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_done": {
+     "address": 21845,
+     "anchor_offset": 137,
+     "assert": "\tcall InGameTrade_CopyDataToReceivedMon\n\t;callfar InGameTrade_CheckForTradeEvo ; PureRGBnote: REMOVED: not needed\n\tcall ClearScreen\n\tcall InGameTrade_RestoreScreen",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD3416CD95550603",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464213,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_remove": {
+     "address": 21831,
+     "anchor_offset": 123,
+     "assert": "\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, %10000000 ; prevent the player from naming the mon\n\tld [wMonDataLocation], a\n\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD93343E80EA49CC",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464199,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "pc_deposit": {
+     "address": 17270,
+     "anchor_offset": 75,
+     "assert": "\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, wBoxNumString",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33213DCDFAA8",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "prelude": {
+      "address": 17267,
+      "expected_hex": "CD9334",
+      "rom_offset": 836467
+     },
+     "rom_offset": 836470,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCDeposit"
+    },
+    "pc_release": {
+     "address": 17602,
+     "anchor_offset": 112,
+     "assert": "\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld a, [wCurPartySpecies]",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33FA91CFCD5F",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox",
+      "wCurPartySpecies"
+     ],
+     "prelude": {
+      "address": 17599,
+      "expected_hex": "CD9334",
+      "rom_offset": 836799
+     },
+     "rom_offset": 836802,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCRelease"
+    },
+    "pc_withdraw": {
+     "address": 17439,
+     "anchor_offset": 103,
+     "assert": "\tld a, 1\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, MonIsTakenOutText",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33212646CDCE",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "prelude": {
+      "address": 17436,
+      "expected_hex": "CD9334",
+      "rom_offset": 836636
+     },
+     "rom_offset": 836639,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCWithdraw"
+    },
+    "poison_faint": {
+     "address": 18225,
+     "anchor_offset": 4,
+     "assert": "; the mon fainted from the damage\n\tpush hl\n\tinc hl\n\tinc hl\n\tld [hl], a\n\tld a, [de]\n\tld [wPokedexNum], a",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "E52323771AEA26D1",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wWhichPokemon"
+     ],
+     "prelude": {
+      "address": 18221,
+      "expected_hex": "2AB620",
+      "rom_offset": 50989
+     },
+     "rom_offset": 50993,
+     "source": "engine/events/poison.asm",
+     "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+    },
+    "remove_pokemon": {
+     "address": 13459,
+     "anchor_offset": 0,
+     "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "2193770601C7C9E5",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "rom_offset": 13459,
+     "source": "home/move_mon.asm",
+     "symbol": "RemovePokemon"
+    },
+    "save_witness": {
+     "address": 30673,
+     "anchor_offset": 3,
+     "assert": ".save\n\tcall SaveGameData\n\tcall ClearTextBox\n\thlcoord 1, 14",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD562921B9C421FF",
+     "point": [
+      "wSaveFileStatus"
+     ],
+     "prelude": {
+      "address": 30670,
+      "expected_hex": "CDB578",
+      "rom_offset": 473038
+     },
+     "rom_offset": 473041,
+     "source": "engine/menus/save.asm",
+     "symbol": "SaveMenu.save"
+    },
+    "starter_begin": {
+     "address": 18906,
+     "anchor_offset": 35,
+     "assert": "\txor a\n\tld [wIsAltPalettePkmnData], a\n\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
+     "bank": 7,
+     "capture_offset": 0,
+     "expected_hex": "CD9A342136D7CBDE",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 117210,
+     "source": "scripts/OaksLab.asm",
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "starter_end": {
+     "address": 18909,
+     "anchor_offset": 38,
+     "assert": "\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
+     "bank": 7,
+     "capture_offset": 0,
+     "expected_hex": "2136D7CBDECD6244",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "prelude": {
+      "address": 18906,
+      "expected_hex": "CD9A34",
+      "rom_offset": 117210
+     },
+     "rom_offset": 117213,
+     "source": "scripts/OaksLab.asm",
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "trainer_staging": {
+     "address": 28450,
+     "anchor_offset": 72,
+     "assert": "\tld a, $ff\n\tld [wEnemyMonPartyPos], a\n\tld a, $2\n\tld [wIsInBattle], a\n\tjr _InitBattleCommon",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "3E02EA57D0184921",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState",
+      "wTrainerClass"
+     ],
+     "prelude": {
+      "address": 28445,
+      "expected_hex": "3EFFEAE6CF",
+      "rom_offset": 257821
+     },
+     "rom_offset": 257826,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitBattleCommon"
+    },
+    "transform": {
+     "address": 26034,
+     "anchor_offset": 0,
+     "assert": "ChangePartyPokemonSpecies::\n\tld a, [wCurPartySpecies]\n\tld [wCurSpecies], a\n\tcall GetMonHeader",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "FA91CFEAB5D0CDBB13",
+     "point": [
+      "wWhichPokemon",
+      "wCurPartySpecies",
+      "wPartyCount",
+      "wPartyMon1HP"
+     ],
+     "rom_offset": 878002,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "transform_hp_hi": {
+     "address": 26108,
+     "anchor_offset": 74,
+     "assert": "\tld a, b\n\tld [hli], a\n\tld a, c\n\tld [hld], a\n\tpop hl\n\t; reassign types",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "227932E101050009",
+     "point": [
+      "wWhichPokemon"
+     ],
+     "rom_offset": 878076,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "transform_hp_lo": {
+     "address": 26110,
+     "anchor_offset": 76,
+     "assert": "\tld a, c\n\tld [hld], a\n\tpop hl\n\t; reassign types",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "32E101050009FABE",
+     "point": [
+      "wWhichPokemon"
+     ],
+     "rom_offset": 878078,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "wild_begin": {
+     "address": 28490,
+     "anchor_offset": 19,
+     "assert": "\tcallfar PreventInvalidEncounters\n;;;;;;;;;;\n\tld a, $1\n\tld [wIsInBattle], a\n\tcall LoadEnemyMonData\n\tcall DoBattleTransitionAndInitBattleVariables",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD8A6ACD426C2172",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState"
+     ],
+     "prelude": {
+      "address": 28485,
+      "expected_hex": "3E01EA57D0",
+      "rom_offset": 257861
+     },
+     "rom_offset": 257866,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitWildBattle"
+    }
+   },
+   "symbols_sha256": "01e5aa730d7fed79c9518de9203eae65e9a7a495884683282117e3965cfbdff8"
+  },
+  "puregreen": {
+   "addresses": {
+    "hLoadedROMBank": 65464,
+    "wBattleMonHP": 53269,
+    "wBattleMonSpecies": 53268,
+    "wBattleResult": 53003,
+    "wBattleType": 53338,
+    "wBoxCount": 55944,
+    "wBoxMonNicks": 56846,
+    "wBoxMonOT": 56626,
+    "wCurEnemyLevel": 53551,
+    "wCurItem": 53137,
+    "wCurMap": 54118,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wCurrentBoxNum": 54696,
+    "wDayCareMon": 55911,
+    "wEnemyMonSpecies2": 53248,
+    "wInGameTradeGiveMonSpecies": 52495,
+    "wInGameTradeReceiveMonSpecies": 52532,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wLinkState": 53555,
+    "wLoadedMonSpecies": 53144,
+    "wMonDataLocation": 52297,
+    "wMoveMonType": 53141,
+    "wNumBagItems": 54594,
+    "wPartyCount": 53611,
+    "wPartyMon1HP": 53620,
+    "wPartyMonNicks": 53949,
+    "wPartyMonOT": 53883,
+    "wPlayerBattleStatus3": 53348,
+    "wPlayerMonNumber": 52271,
+    "wRemoveMonFromBox": 53141,
+    "wSaveFileStatus": 53384,
+    "wTradedEnemyMonSpecies": 52542,
+    "wTradedPlayerMonSpecies": 52541,
+    "wTrainerClass": 53297,
+    "wUsedItemOnWhichPokemon": 52998,
+    "wWhichPokemon": 53138
+   },
+   "rom_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
+   "sites": {
+    "add_party_mon": {
+     "address": 13466,
+     "anchor_offset": 0,
+     "assert": "AddPartyMon::\n\tpush hl\n\tpush de\n\tpush bc\n\tfarcall _AddPartyMon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "E5D5C5060321526F",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "rom_offset": 13466,
+     "source": "home/move_mon.asm",
+     "symbol": "AddPartyMon"
+    },
+    "apex_commit": {
+     "address": 23365,
+     "anchor_offset": 17,
+     "assert": "\tpop hl\n\tpush hl\n\tcall .recalculateStats",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "E1E5CD4D5AE10122",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56133,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "apex_preflight": {
+     "address": 23363,
+     "anchor_offset": 15,
+     "assert": ".setDVs\n\tld [hli], a ; set first byte of DVs to max\n\tld [hl], a  ; set second byte of DVs to max\n\tpop hl\n\tpush hl\n\tcall .recalculateStats",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "2277E1E5CD4D5AE1",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56131,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "apex_recalc_call": {
+     "address": 23367,
+     "anchor_offset": 19,
+     "assert": "\tcall .recalculateStats\n\tpop hl\n\tld bc, (wPartyMon1MaxHP) - wPartyMon1",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD4D5AE101220009",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56135,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "bag_received": {
+     "address": 20564,
+     "anchor_offset": 0,
+     "assert": ".done\n\tpop hl\n\tpop de\n\tpop bc\n\tpop bc\n\tld a, b\n\tld [wItemQuantity], a",
+     "bank": 3,
+     "capture_offset": 8,
+     "expected_hex": "E1D1C1C178EA96CFC9",
+     "point": [
+      "wCurItem",
+      "wItemQuantity",
+      "wNumBagItems"
+     ],
+     "rom_offset": 53332,
+     "source": "engine/items/inventory.asm",
+     "symbol": "AddItemToInventory_.done"
+    },
+    "battle_begin": {
+     "address": 28378,
+     "anchor_offset": 0,
+     "assert": "InitBattleCommon:\n;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;\n; shinpokerednote: ADDED: store PKMN Levels at the beginning of the Battle.\n\tfarcall StorePKMNLevels",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "0635210C5BC7FA65",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState"
+     ],
+     "rom_offset": 257754,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitBattleCommon"
+    },
+    "battle_end": {
+     "address": 17661,
+     "anchor_offset": 0,
+     "assert": "EndOfBattle:\n\tld a, [wLinkState]\n\tcp LINK_STATE_BATTLING\n\tjr nz, .notLinkBattle",
+     "bank": 58,
+     "capture_offset": 0,
+     "expected_hex": "FA33D1FE042036FA",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState",
+      "wBattleResult"
+     ],
+     "rom_offset": 951549,
+     "source": "engine/battle/end_of_battle.asm",
+     "symbol": "EndOfBattle"
+    },
+    "battle_faint": {
+     "address": 18381,
+     "anchor_offset": 0,
+     "assert": "RemoveFaintedPlayerMon:\n\tld a, [wPlayerMonNumber]\n\tld c, a\n\tld hl, wPartyGainExpFlags",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "FA2FCC4F2158D006",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 247757,
+     "source": "engine/battle/core.asm",
+     "symbol": "RemoveFaintedPlayerMon"
+    },
+    "battle_loop_head": {
+     "address": 16979,
+     "anchor_offset": 6,
+     "assert": "\tld hl, wPlayerTurnCount\n\tinc [hl]\n\tinc hl\n\tinc [hl] ; wEnemyTurnCount\n;;;;;;\n\tcall ReadPlayerMonCurHPAndStatus\n\tld hl, wBattleMonHP",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD004E2115D02AB6",
+     "point": [
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wIsInBattle",
+      "wBattleType",
+      "wLinkState",
+      "wPlayerBattleStatus3"
+     ],
+     "prelude": {
+      "address": 16973,
+      "expected_hex": "21E0CC342334",
+      "rom_offset": 246349
+     },
+     "rom_offset": 246355,
+     "source": "engine/battle/core.asm",
+     "symbol": "MainInBattleLoop"
+    },
+    "blackout": {
+     "address": 16560,
+     "anchor_offset": 0,
+     "assert": "ResetStatusAndHalveMoneyOnBlackout::\n; Reset player status on blackout.\n\txor a\n\tld [wBattleResult], a\n\tld [wWalkBikeSurfState], a\n\tld [wIsInBattle], a",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "AFEA0BCFEA08D7EA",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 16560,
+     "source": "engine/events/black_out.asm",
+     "symbol": "ResetStatusAndHalveMoneyOnBlackout"
+    },
+    "cable_partial_save": {
+     "address": 22256,
+     "anchor_offset": 44,
+     "assert": "\tcallfar SavePartyAndDexData ; this allows reset into Pokecenter",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "218078061CC70E32",
+     "point": [
+      "wSaveFileStatus"
+     ],
+     "rom_offset": 22256,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.tradeCompleted"
+    },
+    "cable_trade_add": {
+     "address": 22134,
+     "anchor_offset": 157,
+     "assert": "\trst _CopyData\n\tcall AddEnemyMonToPlayerParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wWhichPokemon], a",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "CDCB34FA6BD13DEA92CF",
+     "point": [
+      "wWhichPokemon",
+      "wTradedPlayerMonSpecies",
+      "wTradedEnemyMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 22134,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.doTrade"
+    },
+    "cable_trade_remove": {
+     "address": 22096,
+     "anchor_offset": 119,
+     "assert": "\tld [wTradedPlayerMonSpecies], a\n\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, [wTradingWhichEnemyMon]",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "CD9334FA3ECD4FEA",
+     "point": [
+      "wWhichPokemon",
+      "wTradedPlayerMonSpecies",
+      "wTradedEnemyMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 22096,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.doTrade"
+    },
+    "capture_box": {
+     "address": 25931,
+     "anchor_offset": 0,
+     "assert": "SendNewMonToBox:\n\tld de, wBoxCount\n\tld a, [de]\n\tinc a\n\tld [de], a",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "1188DA1A3C12FA91",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "rom_offset": 58699,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "SendNewMonToBox"
+    },
+    "capture_box_begin": {
+     "address": 21537,
+     "anchor_offset": 3,
+     "assert": ".sendToBox\n\tcall ClearSprites\n\tcall SendNewMonToBox\n\tld hl, ItemUseBallText07",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD4B65216854FAF9",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "rom_offset": 54305,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.sendToBox"
+    },
+    "capture_box_end": {
+     "address": 21540,
+     "anchor_offset": 6,
+     "assert": "\tcall SendNewMonToBox\n\tld hl, ItemUseBallText07",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "216854FAF9D7CB47",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "prelude": {
+      "address": 21537,
+      "expected_hex": "CD4B65",
+      "rom_offset": 54305
+     },
+     "rom_offset": 54308,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.sendToBox"
+    },
+    "capture_party_begin": {
+     "address": 21509,
+     "anchor_offset": 34,
+     "assert": "\tld [wMonDataLocation], a\n\tcall ClearSprites\n\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD9A34F1A7283221",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "rom_offset": 54277,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.skipShowingPokedexData"
+    },
+    "capture_party_end": {
+     "address": 21512,
+     "anchor_offset": 37,
+     "assert": "\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "F1A72832219E5606",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "prelude": {
+      "address": 21509,
+      "expected_hex": "CD9A34",
+      "rom_offset": 54277
+     },
+     "rom_offset": 54280,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.skipShowingPokedexData"
+    },
+    "changebox_full_save": {
+     "address": 31114,
+     "anchor_offset": 53,
+     "assert": "\tcall ChangeBoxData\n\tcall SaveGameData\n\tld a, SFX_SAVE\n\tcall PlaySoundWaitForCurrent",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CDB5783EB6CDA533",
+     "point": [
+      "wSaveFileStatus",
+      "wCurrentBoxNum"
+     ],
+     "rom_offset": 473482,
+     "source": "engine/menus/save.asm",
+     "symbol": "ChangeBox.yes"
+    },
+    "daycare_withdraw": {
+     "address": 27080,
+     "anchor_offset": 39,
+     "assert": "\tld a, DAYCARE_TO_PARTY\n\tld [wMoveMonType], a\n\tcall MoveMon\n\tld a, [wDayCareMonSpecies]\n\tld [wCurPartySpecies], a",
+     "bank": 21,
+     "capture_offset": 0,
+     "expected_hex": "CDDC34FA67DAEA91CF",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wMoveMonType",
+      "wDayCareMon"
+     ],
+     "prelude": {
+      "address": 27075,
+      "expected_hex": "3E02EA95CF",
+      "rom_offset": 354755
+     },
+     "rom_offset": 354760,
+     "source": "scripts/Daycare.asm",
+     "symbol": "DaycareGentlemanText.enoughMoney"
+    },
+    "evolve": {
+     "address": 21707,
+     "anchor_offset": 0,
+     "assert": "TryEvolvingMon:\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
+     "bank": 44,
+     "capture_offset": 0,
+     "expected_hex": "21D3CCAF77FA92CF",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 726219,
+     "source": "engine/pokemon/evos_moves.asm",
+     "symbol": "TryEvolvingMon"
+    },
+    "evolve_species_store": {
+     "address": 22213,
+     "anchor_offset": 60,
+     "assert": "\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n\tjr .nextEvoEntry2",
+     "bank": 44,
+     "capture_offset": 0,
+     "expected_hex": "77E56B6218012323",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wLoadedMonSpecies"
+     ],
+     "prelude": {
+      "address": 22210,
+      "expected_hex": "FA98CF",
+      "rom_offset": 726722
+     },
+     "rom_offset": 726725,
+     "source": "engine/pokemon/evos_moves.asm",
+     "symbol": "Evolution_PartyMonLoop.skipfix_end"
+    },
+    "move_mon": {
+     "address": 13532,
+     "anchor_offset": 0,
+     "assert": "MoveMon::\n\thomecall_sf _MoveMon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "F0B8F53E03CDA332",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wMoveMonType"
+     ],
+     "rom_offset": 13532,
+     "source": "home/move_mon.asm",
+     "symbol": "MoveMon"
+    },
+    "npc_trade": {
+     "address": 21708,
+     "anchor_offset": 0,
+     "assert": "InGameTrade_DoTrade:\n\txor a ; NORMAL_PARTY_MENU\n\tld [wPartyMenuTypeOrMessageID], a\n\tdec a\n\tld [wUpdateSpritesEnabled], a",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "AFEA7DD03DEACBCF",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464076,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_add": {
+     "address": 21839,
+     "anchor_offset": 131,
+     "assert": "\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD9A34CD0756CD34",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount",
+      "wMonDataLocation"
+     ],
+     "rom_offset": 464207,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_done": {
+     "address": 21845,
+     "anchor_offset": 137,
+     "assert": "\tcall InGameTrade_CopyDataToReceivedMon\n\t;callfar InGameTrade_CheckForTradeEvo ; PureRGBnote: REMOVED: not needed\n\tcall ClearScreen\n\tcall InGameTrade_RestoreScreen",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD3416CD95550603",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464213,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_remove": {
+     "address": 21831,
+     "anchor_offset": 123,
+     "assert": "\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, %10000000 ; prevent the player from naming the mon\n\tld [wMonDataLocation], a\n\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD93343E80EA49CC",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464199,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "pc_deposit": {
+     "address": 17270,
+     "anchor_offset": 75,
+     "assert": "\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, wBoxNumString",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33213DCDFAA8",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "prelude": {
+      "address": 17267,
+      "expected_hex": "CD9334",
+      "rom_offset": 836467
+     },
+     "rom_offset": 836470,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCDeposit"
+    },
+    "pc_release": {
+     "address": 17602,
+     "anchor_offset": 112,
+     "assert": "\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld a, [wCurPartySpecies]",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33FA91CFCD5F",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox",
+      "wCurPartySpecies"
+     ],
+     "prelude": {
+      "address": 17599,
+      "expected_hex": "CD9334",
+      "rom_offset": 836799
+     },
+     "rom_offset": 836802,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCRelease"
+    },
+    "pc_withdraw": {
+     "address": 17439,
+     "anchor_offset": 103,
+     "assert": "\tld a, 1\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, MonIsTakenOutText",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33212646CDCE",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "prelude": {
+      "address": 17436,
+      "expected_hex": "CD9334",
+      "rom_offset": 836636
+     },
+     "rom_offset": 836639,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCWithdraw"
+    },
+    "poison_faint": {
+     "address": 18225,
+     "anchor_offset": 4,
+     "assert": "; the mon fainted from the damage\n\tpush hl\n\tinc hl\n\tinc hl\n\tld [hl], a\n\tld a, [de]\n\tld [wPokedexNum], a",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "E52323771AEA26D1",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wWhichPokemon"
+     ],
+     "prelude": {
+      "address": 18221,
+      "expected_hex": "2AB620",
+      "rom_offset": 50989
+     },
+     "rom_offset": 50993,
+     "source": "engine/events/poison.asm",
+     "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+    },
+    "remove_pokemon": {
+     "address": 13459,
+     "anchor_offset": 0,
+     "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "2198770601C7C9E5",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "rom_offset": 13459,
+     "source": "home/move_mon.asm",
+     "symbol": "RemovePokemon"
+    },
+    "save_witness": {
+     "address": 30673,
+     "anchor_offset": 3,
+     "assert": ".save\n\tcall SaveGameData\n\tcall ClearTextBox\n\thlcoord 1, 14",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD562921B9C421FF",
+     "point": [
+      "wSaveFileStatus"
+     ],
+     "prelude": {
+      "address": 30670,
+      "expected_hex": "CDB578",
+      "rom_offset": 473038
+     },
+     "rom_offset": 473041,
+     "source": "engine/menus/save.asm",
+     "symbol": "SaveMenu.save"
+    },
+    "starter_begin": {
+     "address": 18906,
+     "anchor_offset": 35,
+     "assert": "\txor a\n\tld [wIsAltPalettePkmnData], a\n\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
+     "bank": 7,
+     "capture_offset": 0,
+     "expected_hex": "CD9A342136D7CBDE",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 117210,
+     "source": "scripts/OaksLab.asm",
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "starter_end": {
+     "address": 18909,
+     "anchor_offset": 38,
+     "assert": "\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
+     "bank": 7,
+     "capture_offset": 0,
+     "expected_hex": "2136D7CBDECD6244",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "prelude": {
+      "address": 18906,
+      "expected_hex": "CD9A34",
+      "rom_offset": 117210
+     },
+     "rom_offset": 117213,
+     "source": "scripts/OaksLab.asm",
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "trainer_staging": {
+     "address": 28450,
+     "anchor_offset": 72,
+     "assert": "\tld a, $ff\n\tld [wEnemyMonPartyPos], a\n\tld a, $2\n\tld [wIsInBattle], a\n\tjr _InitBattleCommon",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "3E02EA57D0184921",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState",
+      "wTrainerClass"
+     ],
+     "prelude": {
+      "address": 28445,
+      "expected_hex": "3EFFEAE6CF",
+      "rom_offset": 257821
+     },
+     "rom_offset": 257826,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitBattleCommon"
+    },
+    "transform": {
+     "address": 26034,
+     "anchor_offset": 0,
+     "assert": "ChangePartyPokemonSpecies::\n\tld a, [wCurPartySpecies]\n\tld [wCurSpecies], a\n\tcall GetMonHeader",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "FA91CFEAB5D0CDBB13",
+     "point": [
+      "wWhichPokemon",
+      "wCurPartySpecies",
+      "wPartyCount",
+      "wPartyMon1HP"
+     ],
+     "rom_offset": 878002,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "transform_hp_hi": {
+     "address": 26108,
+     "anchor_offset": 74,
+     "assert": "\tld a, b\n\tld [hli], a\n\tld a, c\n\tld [hld], a\n\tpop hl\n\t; reassign types",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "227932E101050009",
+     "point": [
+      "wWhichPokemon"
+     ],
+     "rom_offset": 878076,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "transform_hp_lo": {
+     "address": 26110,
+     "anchor_offset": 76,
+     "assert": "\tld a, c\n\tld [hld], a\n\tpop hl\n\t; reassign types",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "32E101050009FABE",
+     "point": [
+      "wWhichPokemon"
+     ],
+     "rom_offset": 878078,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "wild_begin": {
+     "address": 28490,
+     "anchor_offset": 19,
+     "assert": "\tcallfar PreventInvalidEncounters\n;;;;;;;;;;\n\tld a, $1\n\tld [wIsInBattle], a\n\tcall LoadEnemyMonData\n\tcall DoBattleTransitionAndInitBattleVariables",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD8A6ACD426C2172",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState"
+     ],
+     "prelude": {
+      "address": 28485,
+      "expected_hex": "3E01EA57D0",
+      "rom_offset": 257861
+     },
+     "rom_offset": 257866,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitWildBattle"
+    }
+   },
+   "symbols_sha256": "db9963d7c351afb4baf8cb512cade6ba190b171ac4372f192dd1d63830c7e180"
+  },
+  "purered": {
+   "addresses": {
+    "hLoadedROMBank": 65464,
+    "wBattleMonHP": 53269,
+    "wBattleMonSpecies": 53268,
+    "wBattleResult": 53003,
+    "wBattleType": 53338,
+    "wBoxCount": 55944,
+    "wBoxMonNicks": 56846,
+    "wBoxMonOT": 56626,
+    "wCurEnemyLevel": 53551,
+    "wCurItem": 53137,
+    "wCurMap": 54118,
+    "wCurOpponent": 53337,
+    "wCurPartySpecies": 53137,
+    "wCurrentBoxNum": 54696,
+    "wDayCareMon": 55911,
+    "wEnemyMonSpecies2": 53248,
+    "wInGameTradeGiveMonSpecies": 52495,
+    "wInGameTradeReceiveMonSpecies": 52532,
+    "wIsInBattle": 53335,
+    "wItemQuantity": 53142,
+    "wLinkState": 53555,
+    "wLoadedMonSpecies": 53144,
+    "wMonDataLocation": 52297,
+    "wMoveMonType": 53141,
+    "wNumBagItems": 54594,
+    "wPartyCount": 53611,
+    "wPartyMon1HP": 53620,
+    "wPartyMonNicks": 53949,
+    "wPartyMonOT": 53883,
+    "wPlayerBattleStatus3": 53348,
+    "wPlayerMonNumber": 52271,
+    "wRemoveMonFromBox": 53141,
+    "wSaveFileStatus": 53384,
+    "wTradedEnemyMonSpecies": 52542,
+    "wTradedPlayerMonSpecies": 52541,
+    "wTrainerClass": 53297,
+    "wUsedItemOnWhichPokemon": 52998,
+    "wWhichPokemon": 53138
+   },
+   "rom_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+   "sites": {
+    "add_party_mon": {
+     "address": 13466,
+     "anchor_offset": 0,
+     "assert": "AddPartyMon::\n\tpush hl\n\tpush de\n\tpush bc\n\tfarcall _AddPartyMon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "E5D5C5060321526F",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "rom_offset": 13466,
+     "source": "home/move_mon.asm",
+     "symbol": "AddPartyMon"
+    },
+    "apex_commit": {
+     "address": 23365,
+     "anchor_offset": 17,
+     "assert": "\tpop hl\n\tpush hl\n\tcall .recalculateStats",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "E1E5CD4D5AE10122",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56133,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "apex_preflight": {
+     "address": 23363,
+     "anchor_offset": 15,
+     "assert": ".setDVs\n\tld [hli], a ; set first byte of DVs to max\n\tld [hl], a  ; set second byte of DVs to max\n\tpop hl\n\tpush hl\n\tcall .recalculateStats",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "2277E1E5CD4D5AE1",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56131,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "apex_recalc_call": {
+     "address": 23367,
+     "anchor_offset": 19,
+     "assert": "\tcall .recalculateStats\n\tpop hl\n\tld bc, (wPartyMon1MaxHP) - wPartyMon1",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD4D5AE101220009",
+     "point": [
+      "wUsedItemOnWhichPokemon",
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 56135,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseMedicine.useApexChip"
+    },
+    "bag_received": {
+     "address": 20564,
+     "anchor_offset": 0,
+     "assert": ".done\n\tpop hl\n\tpop de\n\tpop bc\n\tpop bc\n\tld a, b\n\tld [wItemQuantity], a",
+     "bank": 3,
+     "capture_offset": 8,
+     "expected_hex": "E1D1C1C178EA96CFC9",
+     "point": [
+      "wCurItem",
+      "wItemQuantity",
+      "wNumBagItems"
+     ],
+     "rom_offset": 53332,
+     "source": "engine/items/inventory.asm",
+     "symbol": "AddItemToInventory_.done"
+    },
+    "battle_begin": {
+     "address": 28378,
+     "anchor_offset": 0,
+     "assert": "InitBattleCommon:\n;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;\n; shinpokerednote: ADDED: store PKMN Levels at the beginning of the Battle.\n\tfarcall StorePKMNLevels",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "0635210C5BC7FA65",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState"
+     ],
+     "rom_offset": 257754,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitBattleCommon"
+    },
+    "battle_end": {
+     "address": 17661,
+     "anchor_offset": 0,
+     "assert": "EndOfBattle:\n\tld a, [wLinkState]\n\tcp LINK_STATE_BATTLING\n\tjr nz, .notLinkBattle",
+     "bank": 58,
+     "capture_offset": 0,
+     "expected_hex": "FA33D1FE042036FA",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState",
+      "wBattleResult"
+     ],
+     "rom_offset": 951549,
+     "source": "engine/battle/end_of_battle.asm",
+     "symbol": "EndOfBattle"
+    },
+    "battle_faint": {
+     "address": 18381,
+     "anchor_offset": 0,
+     "assert": "RemoveFaintedPlayerMon:\n\tld a, [wPlayerMonNumber]\n\tld c, a\n\tld hl, wPartyGainExpFlags",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "FA2FCC4F2158D006",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 247757,
+     "source": "engine/battle/core.asm",
+     "symbol": "RemoveFaintedPlayerMon"
+    },
+    "battle_loop_head": {
+     "address": 16979,
+     "anchor_offset": 6,
+     "assert": "\tld hl, wPlayerTurnCount\n\tinc [hl]\n\tinc hl\n\tinc [hl] ; wEnemyTurnCount\n;;;;;;\n\tcall ReadPlayerMonCurHPAndStatus\n\tld hl, wBattleMonHP",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD004E2115D02AB6",
+     "point": [
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wIsInBattle",
+      "wBattleType",
+      "wLinkState",
+      "wPlayerBattleStatus3"
+     ],
+     "prelude": {
+      "address": 16973,
+      "expected_hex": "21E0CC342334",
+      "rom_offset": 246349
+     },
+     "rom_offset": 246355,
+     "source": "engine/battle/core.asm",
+     "symbol": "MainInBattleLoop"
+    },
+    "blackout": {
+     "address": 16560,
+     "anchor_offset": 0,
+     "assert": "ResetStatusAndHalveMoneyOnBlackout::\n; Reset player status on blackout.\n\txor a\n\tld [wBattleResult], a\n\tld [wWalkBikeSurfState], a\n\tld [wIsInBattle], a",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "AFEA0BCFEA08D7EA",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 16560,
+     "source": "engine/events/black_out.asm",
+     "symbol": "ResetStatusAndHalveMoneyOnBlackout"
+    },
+    "cable_partial_save": {
+     "address": 22256,
+     "anchor_offset": 44,
+     "assert": "\tcallfar SavePartyAndDexData ; this allows reset into Pokecenter",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "218078061CC70E32",
+     "point": [
+      "wSaveFileStatus"
+     ],
+     "rom_offset": 22256,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.tradeCompleted"
+    },
+    "cable_trade_add": {
+     "address": 22134,
+     "anchor_offset": 157,
+     "assert": "\trst _CopyData\n\tcall AddEnemyMonToPlayerParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wWhichPokemon], a",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "CDCB34FA6BD13DEA92CF",
+     "point": [
+      "wWhichPokemon",
+      "wTradedPlayerMonSpecies",
+      "wTradedEnemyMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 22134,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.doTrade"
+    },
+    "cable_trade_remove": {
+     "address": 22096,
+     "anchor_offset": 119,
+     "assert": "\tld [wTradedPlayerMonSpecies], a\n\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, [wTradingWhichEnemyMon]",
+     "bank": 1,
+     "capture_offset": 0,
+     "expected_hex": "CD9334FA3ECD4FEA",
+     "point": [
+      "wWhichPokemon",
+      "wTradedPlayerMonSpecies",
+      "wTradedEnemyMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 22096,
+     "source": "engine/link/cable_club.asm",
+     "symbol": "TradeCenter_Trade.doTrade"
+    },
+    "capture_box": {
+     "address": 25931,
+     "anchor_offset": 0,
+     "assert": "SendNewMonToBox:\n\tld de, wBoxCount\n\tld a, [de]\n\tinc a\n\tld [de], a",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "1188DA1A3C12FA91",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "rom_offset": 58699,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "SendNewMonToBox"
+    },
+    "capture_box_begin": {
+     "address": 21537,
+     "anchor_offset": 3,
+     "assert": ".sendToBox\n\tcall ClearSprites\n\tcall SendNewMonToBox\n\tld hl, ItemUseBallText07",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD4B65216854FAF9",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "rom_offset": 54305,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.sendToBox"
+    },
+    "capture_box_end": {
+     "address": 21540,
+     "anchor_offset": 6,
+     "assert": "\tcall SendNewMonToBox\n\tld hl, ItemUseBallText07",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "216854FAF9D7CB47",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount",
+      "wBoxCount"
+     ],
+     "prelude": {
+      "address": 21537,
+      "expected_hex": "CD4B65",
+      "rom_offset": 54305
+     },
+     "rom_offset": 54308,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.sendToBox"
+    },
+    "capture_party_begin": {
+     "address": 21509,
+     "anchor_offset": 34,
+     "assert": "\tld [wMonDataLocation], a\n\tcall ClearSprites\n\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "CD9A34F1A7283221",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "rom_offset": 54277,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.skipShowingPokedexData"
+    },
+    "capture_party_end": {
+     "address": 21512,
+     "anchor_offset": 37,
+     "assert": "\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "F1A72832219E5606",
+     "point": [
+      "wIsInBattle",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wCurMap",
+      "wPartyCount"
+     ],
+     "prelude": {
+      "address": 21509,
+      "expected_hex": "CD9A34",
+      "rom_offset": 54277
+     },
+     "rom_offset": 54280,
+     "source": "engine/items/item_effects.asm",
+     "symbol": "ItemUseBall.skipShowingPokedexData"
+    },
+    "changebox_full_save": {
+     "address": 31114,
+     "anchor_offset": 53,
+     "assert": "\tcall ChangeBoxData\n\tcall SaveGameData\n\tld a, SFX_SAVE\n\tcall PlaySoundWaitForCurrent",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CDB5783EB6CDA533",
+     "point": [
+      "wSaveFileStatus",
+      "wCurrentBoxNum"
+     ],
+     "rom_offset": 473482,
+     "source": "engine/menus/save.asm",
+     "symbol": "ChangeBox.yes"
+    },
+    "daycare_withdraw": {
+     "address": 27080,
+     "anchor_offset": 39,
+     "assert": "\tld a, DAYCARE_TO_PARTY\n\tld [wMoveMonType], a\n\tcall MoveMon\n\tld a, [wDayCareMonSpecies]\n\tld [wCurPartySpecies], a",
+     "bank": 21,
+     "capture_offset": 0,
+     "expected_hex": "CDDC34FA67DAEA91CF",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wMoveMonType",
+      "wDayCareMon"
+     ],
+     "prelude": {
+      "address": 27075,
+      "expected_hex": "3E02EA95CF",
+      "rom_offset": 354755
+     },
+     "rom_offset": 354760,
+     "source": "scripts/Daycare.asm",
+     "symbol": "DaycareGentlemanText.enoughMoney"
+    },
+    "evolve": {
+     "address": 21707,
+     "anchor_offset": 0,
+     "assert": "TryEvolvingMon:\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
+     "bank": 44,
+     "capture_offset": 0,
+     "expected_hex": "21D3CCAF77FA92CF",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount"
+     ],
+     "rom_offset": 726219,
+     "source": "engine/pokemon/evos_moves.asm",
+     "symbol": "TryEvolvingMon"
+    },
+    "evolve_species_store": {
+     "address": 22213,
+     "anchor_offset": 60,
+     "assert": "\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n\tjr .nextEvoEntry2",
+     "bank": 44,
+     "capture_offset": 0,
+     "expected_hex": "77E56B6218012323",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wLoadedMonSpecies"
+     ],
+     "prelude": {
+      "address": 22210,
+      "expected_hex": "FA98CF",
+      "rom_offset": 726722
+     },
+     "rom_offset": 726725,
+     "source": "engine/pokemon/evos_moves.asm",
+     "symbol": "Evolution_PartyMonLoop.skipfix_end"
+    },
+    "move_mon": {
+     "address": 13532,
+     "anchor_offset": 0,
+     "assert": "MoveMon::\n\thomecall_sf _MoveMon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "F0B8F53E03CDA332",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wMoveMonType"
+     ],
+     "rom_offset": 13532,
+     "source": "home/move_mon.asm",
+     "symbol": "MoveMon"
+    },
+    "npc_trade": {
+     "address": 21708,
+     "anchor_offset": 0,
+     "assert": "InGameTrade_DoTrade:\n\txor a ; NORMAL_PARTY_MENU\n\tld [wPartyMenuTypeOrMessageID], a\n\tdec a\n\tld [wUpdateSpritesEnabled], a",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "AFEA7DD03DEACBCF",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464076,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_add": {
+     "address": 21839,
+     "anchor_offset": 131,
+     "assert": "\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD9A34CD0756CD34",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount",
+      "wMonDataLocation"
+     ],
+     "rom_offset": 464207,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_done": {
+     "address": 21845,
+     "anchor_offset": 137,
+     "assert": "\tcall InGameTrade_CopyDataToReceivedMon\n\t;callfar InGameTrade_CheckForTradeEvo ; PureRGBnote: REMOVED: not needed\n\tcall ClearScreen\n\tcall InGameTrade_RestoreScreen",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD3416CD95550603",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464213,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "npc_trade_remove": {
+     "address": 21831,
+     "anchor_offset": 123,
+     "assert": "\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, %10000000 ; prevent the player from naming the mon\n\tld [wMonDataLocation], a\n\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD93343E80EA49CC",
+     "point": [
+      "wWhichPokemon",
+      "wInGameTradeGiveMonSpecies",
+      "wInGameTradeReceiveMonSpecies",
+      "wPartyCount"
+     ],
+     "rom_offset": 464199,
+     "source": "engine/events/in_game_trades.asm",
+     "symbol": "InGameTrade_DoTrade"
+    },
+    "pc_deposit": {
+     "address": 17270,
+     "anchor_offset": 75,
+     "assert": "\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, wBoxNumString",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33213DCDFAA8",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "prelude": {
+      "address": 17267,
+      "expected_hex": "CD9334",
+      "rom_offset": 836467
+     },
+     "rom_offset": 836470,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCDeposit"
+    },
+    "pc_release": {
+     "address": 17602,
+     "anchor_offset": 112,
+     "assert": "\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld a, [wCurPartySpecies]",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33FA91CFCD5F",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox",
+      "wCurPartySpecies"
+     ],
+     "prelude": {
+      "address": 17599,
+      "expected_hex": "CD9334",
+      "rom_offset": 836799
+     },
+     "rom_offset": 836802,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCRelease"
+    },
+    "pc_withdraw": {
+     "address": 17439,
+     "anchor_offset": 103,
+     "assert": "\tld a, 1\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, MonIsTakenOutText",
+     "bank": 51,
+     "capture_offset": 0,
+     "expected_hex": "CDAC33212646CDCE",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "prelude": {
+      "address": 17436,
+      "expected_hex": "CD9334",
+      "rom_offset": 836636
+     },
+     "rom_offset": 836639,
+     "source": "engine/pokemon/bills_pc.asm",
+     "symbol": "BillsPCWithdraw"
+    },
+    "poison_faint": {
+     "address": 18225,
+     "anchor_offset": 4,
+     "assert": "; the mon fainted from the damage\n\tpush hl\n\tinc hl\n\tinc hl\n\tld [hl], a\n\tld a, [de]\n\tld [wPokedexNum], a",
+     "bank": 3,
+     "capture_offset": 0,
+     "expected_hex": "E52323771AEA26D1",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel",
+      "wWhichPokemon"
+     ],
+     "prelude": {
+      "address": 18221,
+      "expected_hex": "2AB620",
+      "rom_offset": 50989
+     },
+     "rom_offset": 50993,
+     "source": "engine/events/poison.asm",
+     "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
+    },
+    "remove_pokemon": {
+     "address": 13459,
+     "anchor_offset": 0,
+     "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
+     "bank": 0,
+     "capture_offset": 0,
+     "expected_hex": "2192770601C7C9E5",
+     "point": [
+      "wWhichPokemon",
+      "wPartyCount",
+      "wBoxCount",
+      "wCurrentBoxNum",
+      "wPartyMonOT",
+      "wPartyMonNicks",
+      "wBoxMonOT",
+      "wBoxMonNicks",
+      "wRemoveMonFromBox"
+     ],
+     "rom_offset": 13459,
+     "source": "home/move_mon.asm",
+     "symbol": "RemovePokemon"
+    },
+    "save_witness": {
+     "address": 30673,
+     "anchor_offset": 3,
+     "assert": ".save\n\tcall SaveGameData\n\tcall ClearTextBox\n\thlcoord 1, 14",
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD562921B9C421FF",
+     "point": [
+      "wSaveFileStatus"
+     ],
+     "prelude": {
+      "address": 30670,
+      "expected_hex": "CDB578",
+      "rom_offset": 473038
+     },
+     "rom_offset": 473041,
+     "source": "engine/menus/save.asm",
+     "symbol": "SaveMenu.save"
+    },
+    "starter_begin": {
+     "address": 18906,
+     "anchor_offset": 35,
+     "assert": "\txor a\n\tld [wIsAltPalettePkmnData], a\n\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
+     "bank": 7,
+     "capture_offset": 0,
+     "expected_hex": "CD9A342136D7CBDE",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "rom_offset": 117210,
+     "source": "scripts/OaksLab.asm",
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "starter_end": {
+     "address": 18909,
+     "anchor_offset": 38,
+     "assert": "\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
+     "bank": 7,
+     "capture_offset": 0,
+     "expected_hex": "2136D7CBDECD6244",
+     "point": [
+      "wPartyCount",
+      "wCurMap",
+      "wIsInBattle",
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wMonDataLocation",
+      "wCurPartySpecies",
+      "wCurEnemyLevel"
+     ],
+     "prelude": {
+      "address": 18906,
+      "expected_hex": "CD9A34",
+      "rom_offset": 117210
+     },
+     "rom_offset": 117213,
+     "source": "scripts/OaksLab.asm",
+     "symbol": "OaksLabMonChoiceMenu.continue"
+    },
+    "trainer_staging": {
+     "address": 28450,
+     "anchor_offset": 72,
+     "assert": "\tld a, $ff\n\tld [wEnemyMonPartyPos], a\n\tld a, $2\n\tld [wIsInBattle], a\n\tjr _InitBattleCommon",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "3E02EA57D0184921",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState",
+      "wTrainerClass"
+     ],
+     "prelude": {
+      "address": 28445,
+      "expected_hex": "3EFFEAE6CF",
+      "rom_offset": 257821
+     },
+     "rom_offset": 257826,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitBattleCommon"
+    },
+    "transform": {
+     "address": 26034,
+     "anchor_offset": 0,
+     "assert": "ChangePartyPokemonSpecies::\n\tld a, [wCurPartySpecies]\n\tld [wCurSpecies], a\n\tcall GetMonHeader",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "FA91CFEAB5D0CDBB13",
+     "point": [
+      "wWhichPokemon",
+      "wCurPartySpecies",
+      "wPartyCount",
+      "wPartyMon1HP"
+     ],
+     "rom_offset": 878002,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "transform_hp_hi": {
+     "address": 26108,
+     "anchor_offset": 74,
+     "assert": "\tld a, b\n\tld [hli], a\n\tld a, c\n\tld [hld], a\n\tpop hl\n\t; reassign types",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "227932E101050009",
+     "point": [
+      "wWhichPokemon"
+     ],
+     "rom_offset": 878076,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "transform_hp_lo": {
+     "address": 26110,
+     "anchor_offset": 76,
+     "assert": "\tld a, c\n\tld [hld], a\n\tpop hl\n\t; reassign types",
+     "bank": 53,
+     "capture_offset": 0,
+     "expected_hex": "32E101050009FABE",
+     "point": [
+      "wWhichPokemon"
+     ],
+     "rom_offset": 878078,
+     "source": "engine/pokemon/change_mon_species.asm",
+     "symbol": "ChangePartyPokemonSpecies"
+    },
+    "wild_begin": {
+     "address": 28490,
+     "anchor_offset": 19,
+     "assert": "\tcallfar PreventInvalidEncounters\n;;;;;;;;;;\n\tld a, $1\n\tld [wIsInBattle], a\n\tcall LoadEnemyMonData\n\tcall DoBattleTransitionAndInitBattleVariables",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD8A6ACD426C2172",
+     "point": [
+      "wCurOpponent",
+      "wEnemyMonSpecies2",
+      "wCurEnemyLevel",
+      "wBattleType",
+      "wIsInBattle",
+      "wCurMap",
+      "wLinkState"
+     ],
+     "prelude": {
+      "address": 28485,
+      "expected_hex": "3E01EA57D0",
+      "rom_offset": 257861
+     },
+     "rom_offset": 257866,
+     "source": "engine/battle/core.asm",
+     "symbol": "InitWildBattle"
+    }
+   },
+   "symbols_sha256": "eb5bbf4854445b323aa20ba6568f7eae53346cd9d4a17179283ecc7f11d16baf"
+  }
+ }
+}

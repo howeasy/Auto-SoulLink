@@ -1,0 +1,113 @@
+{
+  "pureblue": {
+    "BATTLE_FLAG_ADDR": 53335,
+    "FONT_LOADED_ADDR": 53188,
+    "JOY_IGNORE_ADDR": 52587,
+    "write_safe": {
+      "delay_frame": 7798,
+      "delay_frame_bank": 53547,
+      "delay_frame_halt": 7821,
+      "delay_frame_resume": 7822,
+      "delay_frame_rst": 16,
+      "disconnected_serial": 255,
+      "entering_cable_club": 52295,
+      "expected_hex": {
+        "delay_frame_halt": "7600F0D6A720F9C9",
+        "delay_frame_rst": "C3761E",
+        "irq_vector": "C3F31D",
+        "overworld_loop": "D721BD680635C7"
+      },
+      "irq_vector": 64,
+      "link_none": 0,
+      "link_state": 53555,
+      "overworld_loop": 982,
+      "overworld_loop_less_delay": 983,
+      "overworld_return": 983,
+      "serial_status": 65450,
+      "stack_end": 57343,
+      "stack_min": 57088,
+      "vblank_entry": 7667,
+      "vblank_flag": 65494,
+      "version": "gen1-main-loop-purergb-v1",
+      "wram_bank_register": 65392,
+      "wram_banks": [
+        0,
+        1
+      ]
+    }
+  },
+  "puregreen": {
+    "BATTLE_FLAG_ADDR": 53335,
+    "FONT_LOADED_ADDR": 53188,
+    "JOY_IGNORE_ADDR": 52587,
+    "write_safe": {
+      "delay_frame": 7798,
+      "delay_frame_bank": 53547,
+      "delay_frame_halt": 7821,
+      "delay_frame_resume": 7822,
+      "delay_frame_rst": 16,
+      "disconnected_serial": 255,
+      "entering_cable_club": 52295,
+      "expected_hex": {
+        "delay_frame_halt": "7600F0D6A720F9C9",
+        "delay_frame_rst": "C3761E",
+        "irq_vector": "C3F31D",
+        "overworld_loop": "D721BD680635C7"
+      },
+      "irq_vector": 64,
+      "link_none": 0,
+      "link_state": 53555,
+      "overworld_loop": 982,
+      "overworld_loop_less_delay": 983,
+      "overworld_return": 983,
+      "serial_status": 65450,
+      "stack_end": 57343,
+      "stack_min": 57088,
+      "vblank_entry": 7667,
+      "vblank_flag": 65494,
+      "version": "gen1-main-loop-purergb-v1",
+      "wram_bank_register": 65392,
+      "wram_banks": [
+        0,
+        1
+      ]
+    }
+  },
+  "purered": {
+    "BATTLE_FLAG_ADDR": 53335,
+    "FONT_LOADED_ADDR": 53188,
+    "JOY_IGNORE_ADDR": 52587,
+    "write_safe": {
+      "delay_frame": 7798,
+      "delay_frame_bank": 53547,
+      "delay_frame_halt": 7821,
+      "delay_frame_resume": 7822,
+      "delay_frame_rst": 16,
+      "disconnected_serial": 255,
+      "entering_cable_club": 52295,
+      "expected_hex": {
+        "delay_frame_halt": "7600F0D6A720F9C9",
+        "delay_frame_rst": "C3761E",
+        "irq_vector": "C3F31D",
+        "overworld_loop": "D721BD680635C7"
+      },
+      "irq_vector": 64,
+      "link_none": 0,
+      "link_state": 53555,
+      "overworld_loop": 982,
+      "overworld_loop_less_delay": 983,
+      "overworld_return": 983,
+      "serial_status": 65450,
+      "stack_end": 57343,
+      "stack_min": 57088,
+      "vblank_entry": 7667,
+      "vblank_flag": 65494,
+      "version": "gen1-main-loop-purergb-v1",
+      "wram_bank_register": 65392,
+      "wram_banks": [
+        0,
+        1
+      ]
+    }
+  }
+}
