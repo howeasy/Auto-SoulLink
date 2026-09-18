@@ -768,6 +768,198 @@ def natdex_to_internal(dex: int) -> int:
     return _NATDEX_TO_INTERNAL[dex]
 
 
+# ── per-foundation layout (pureRGB and friends) ──────────────────────────────────────────
+# Everything above this point is the vanilla R/B/Y layout, addressed by the module-level
+# names tools/e2e_duo.py and Gen1Adapter already import; those stay untouched so existing
+# vanilla callers keep working unchanged. pureRGB reuses every decode/encode routine above
+# (struct geometry is identical — PLAN.md docs/purergb/PLAN.md §4 row 4) but reads different
+# WRAM/SRAM addresses, a different bag slot count, dex order and charmap, so those five
+# tables move into a small per-foundation view (`Gen1Layout`) instead of a second set of
+# module globals that would silently shadow the vanilla ones.
+class Gen1Layout:
+    """The subset of gen1_codec's tables that differ between Gen 1 foundations.
+
+    Built once per foundation via ``for_foundation`` and used by a foundation's adapter
+    (and its tests) wherever a non-vanilla WRAM/SRAM address, bag size, dex order or
+    charmap is needed. The struct-geometry constants and decode_party/decode_box above are
+    NOT parametrised here because PLAN.md's assumption matrix found them identical.
+    """
+
+    def __init__(self, *, wram_bases: dict, sram_layout: dict, current_box: int,
+                bag_count: int, bag_capacity: int, ball_items, dex_order, charmap: dict,
+                name_end: int = NAME_END):
+        self.wram_bases = dict(wram_bases)
+        self.sram_layout = dict(sram_layout)
+        self.current_box = current_box
+        self.bag_count = bag_count
+        self.bag_capacity = bag_capacity
+        self.ball_items = frozenset(ball_items)
+        self.dex_order = tuple(dex_order)
+        self._natdex_to_internal = {dex: idx for idx, dex in enumerate(self.dex_order, 1) if dex}
+        self.charmap = dict(charmap)
+        self.name_end = name_end
+        self._encode_chars = {text: byte for byte, text in self.charmap.items()}
+        self._name_tokens = sorted(self._encode_chars, key=len, reverse=True)
+
+    def internal_to_natdex(self, idx: int) -> int:
+        """Mirrors the module-level function, over this foundation's own dex order."""
+        if not isinstance(idx, int) or isinstance(idx, bool) or not 1 <= idx <= len(self.dex_order):
+            raise ValueError(f"internal index must be in 1..{len(self.dex_order)}")
+        return self.dex_order[idx - 1]
+
+    def natdex_to_internal(self, dex: int) -> int:
+        if not isinstance(dex, int) or isinstance(dex, bool) or dex not in self._natdex_to_internal:
+            raise ValueError("national dex has no unique internal index in this foundation")
+        return self._natdex_to_internal[dex]
+
+    def decode_name(self, b: bytes) -> str:
+        """Mirrors decode_name() over this foundation's own charmap/terminator."""
+        if len(b) > NAME_SIZE:
+            raise ValueError("name field exceeds 11 bytes")
+        return "".join(self.charmap.get(value, f"<${value:02X}>")
+                      for value in b.split(bytes([self.name_end]), 1)[0])
+
+    def encode_name(self, name: str) -> bytes:
+        """Mirrors encode_name() over this foundation's own charmap/terminator."""
+        name = name.split("@", 1)[0]
+        out = bytearray()
+        while name:
+            if name.startswith("<$") and len(name) >= 5 and name[4] == ">":
+                try:
+                    value = int(name[2:4], 16)
+                except ValueError:
+                    raise ValueError(f"invalid byte escape: {name[:5]}") from None
+                if value == self.name_end:
+                    raise ValueError("use @ for the name terminator")
+                token = name[:5]
+            else:
+                token = next((t for t in self._name_tokens if name.startswith(t)), None)
+                if token is None:
+                    raise ValueError(f"unsupported name character: {name[0]!r}")
+                value = self._encode_chars[token]
+            out.append(value)
+            name = name[len(token):]
+        if len(out) >= NAME_SIZE:
+            raise ValueError("name exceeds ten glyphs plus terminator")
+        return bytes(out) + bytes([self.name_end]) * (NAME_SIZE - len(out))
+
+    def decode_bag(self, sram: bytes) -> list[tuple[int, int]]:
+        """Mirrors decode_bag() over this foundation's own bag address/capacity."""
+        if len(sram) != SRAM_SIZE:
+            raise ValueError(f"expected exactly {SRAM_SIZE} SRAM bytes")
+        items = []
+        for slot in range(min(sram[self.bag_count], self.bag_capacity)):
+            offset = self.bag_count + 1 + slot * 2
+            item_id = sram[offset]
+            if item_id == 0xFF:
+                break
+            items.append((item_id, sram[offset + 1]))
+        return items
+
+    def bag_quantity(self, sram: bytes, item_id: int) -> int:
+        return next((qty for stored_id, qty in self.decode_bag(sram) if stored_id == item_id), 0)
+
+    def verify_bank1(self, sram: bytes) -> bool:
+        """Mirrors verify_bank1() over this foundation's own SRAM layout."""
+        if len(sram) != SRAM_SIZE:
+            return False
+        start, end = self.sram_layout["sPlayerName"], self.sram_layout["sMainDataCheckSum"]
+        return sav_checksum(sram[start:end]) == sram[end]
+
+    def verify_boxes(self, sram: bytes) -> dict:
+        """Mirrors verify_boxes() over this foundation's own SRAM layout/current-box address."""
+        if len(sram) != SRAM_SIZE:
+            raise ValueError(f"expected exactly {SRAM_SIZE} SRAM bytes")
+        initialized = bool(sram[self.current_box] & _BOX_INITIALIZED)
+        boxes, banks = {}, {}
+        for bank_index, start in enumerate(self.sram_layout["box_banks"]):
+            bank = bank_index + 2
+            end = self.sram_layout["all_boxes_checksums"][bank_index]
+            calculated = sav_checksum(sram[start:end])
+            stored = sram[end]
+            banks[bank] = {"stored": stored, "calculated": calculated, "valid": stored == calculated}
+            for slot in range(BOX_COUNT // 2):
+                offset = start + slot * BOX_SIZE
+                calculated = sav_checksum(sram[offset:offset + BOX_SIZE])
+                stored = sram[self.sram_layout["individual_checksums"][bank_index] + slot]
+                count = sram[offset]
+                boxes[bank_index * (BOX_COUNT // 2) + slot + 1] = {
+                    "offset": offset, "count": count, "initialized": initialized,
+                    "populated": bool(count) if initialized else None,
+                    "stored": stored, "calculated": calculated, "valid": stored == calculated,
+                }
+        return {"initialized": initialized, "boxes": boxes, "banks": banks}
+
+
+def _purergb_layout() -> Gen1Layout:
+    """Build the pureRGB Gen1Layout from data/games/gen1_purergb/{profile,charmap,species_index}.json.
+
+    RAM addresses are identical across all three titles (verified: purered/pureblue/
+    puregreen agree on every ``ram`` key — only two ROM symbols differ, and neither is one
+    this module reads), so any one title's profile block gives the WRAM/SRAM layout.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    pack = _Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_purergb"
+    profile = _json.loads((pack / "profile.json").read_text(encoding="utf-8"))
+    charmap_data = _json.loads((pack / "charmap.json").read_text(encoding="utf-8"))
+    species = _json.loads((pack / "species_index.json").read_text(encoding="utf-8"))["species"]
+
+    title = profile["titles"]["purered"]
+    ram, sram_bank, derived = title["ram"], title["sram_bank"], title["derived"]
+
+    def sram_offset(name: str) -> int:
+        return sram_bank[name] * 0x2000 + (ram[name] - 0xA000)
+
+    sram_layout = {
+        sym: sram_offset(sym) for sym in
+        ("sPlayerName", "sMainData", "sSpriteData", "sPartyData", "sCurBoxData",
+         "sTileAnimations", "sMainDataCheckSum")
+    }
+    sram_layout["box_banks"] = (sram_offset("sBox1"), sram_offset("sBox7"))
+    sram_layout["all_boxes_checksums"] = (
+        sram_offset("sBank2AllBoxesChecksum"), sram_offset("sBank3AllBoxesChecksum"))
+    sram_layout["individual_checksums"] = (
+        sram_offset("sBank2IndividualBoxChecksums"), sram_offset("sBank3IndividualBoxChecksums"))
+
+    current_box = sram_layout["sMainData"] + (ram["wCurrentBoxNum"] - ram["wMainDataStart"])
+    bag_count = sram_layout["sMainData"] + (ram["wNumBagItems"] - ram["wMainDataStart"])
+    dex_order = tuple(species[str(i)]["dex"] for i in range(1, len(species) + 1))
+    charmap = {int(k): v for k, v in charmap_data["glyphs"].items()}
+
+    return Gen1Layout(
+        wram_bases={"party": ram["wPartyCount"], "box": ram["wBoxCount"]},
+        sram_layout=sram_layout, current_box=current_box, bag_count=bag_count,
+        bag_capacity=derived["bag_capacity"], ball_items=derived["ball_items"],
+        dex_order=dex_order, charmap=charmap, name_end=charmap_data["terminator"])
+
+
+_LAYOUTS: dict[str, Gen1Layout] = {}
+
+
+def for_foundation(foundation: str) -> Gen1Layout:
+    """The Gen1Layout for a Gen 1 foundation: "gen1_rby" (vanilla) or "gen1_purergb".
+
+    Cached after the first build. An unknown foundation raises rather than defaulting to
+    vanilla, the same fail-closed rule Gen1Adapter.__init__ applies to rom_type.
+    """
+    if foundation not in _LAYOUTS:
+        if foundation == "gen1_rby":
+            # Red and Blue share every table below; Yellow's WRAM bases differ by one byte
+            # (WRAM_BASES["yellow"]) but nothing in this foundation's own adapter or tests
+            # consumes Gen1Layout for vanilla today, so Red/Blue's values are the default.
+            _LAYOUTS[foundation] = Gen1Layout(
+                wram_bases=WRAM_BASES["red"], sram_layout=SRAM_LAYOUT, current_box=_CURRENT_BOX,
+                bag_count=_BAG_COUNT, bag_capacity=BAG_CAPACITY, ball_items=(POKE_BALL,),
+                dex_order=_DEX_ORDER, charmap=_CHARMAP, name_end=NAME_END)
+        elif foundation == "gen1_purergb":
+            _LAYOUTS[foundation] = _purergb_layout()
+        else:
+            raise ValueError(f"unknown Gen 1 foundation: {foundation!r}")
+    return _LAYOUTS[foundation]
+
+
 def recompute_stats(mon: dict, base_stats: dict) -> dict:
     """Rebuild stored stat names from a gen1_rom_scan.scan_base_stats() entry.
 

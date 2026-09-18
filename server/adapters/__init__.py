@@ -47,6 +47,10 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # Archipelago (Alchav's Red/Blue world). Same adapter, same RAM layout — the AP fork
     # only changes ROM content. Yellow has no upstream AP world.
     "red_ap": "gen1_rby", "blue_ap": "gen1_rby",
+    # pureRGB (Vortyne): a second Gen 1 foundation, not a vanilla variant — its own
+    # adapter, its own data/games/gen1_purergb/ pack (docs/purergb/PLAN.md §4 row 2).
+    "PureRed": "gen1_purergb", "PureBlue": "gen1_purergb", "PureGreen": "gen1_purergb",
+    "purered": "gen1_purergb", "pureblue": "gen1_purergb", "puregreen": "gen1_purergb",
     # Gen 2. `lua/games/gen2_crystal.lua:rom_type_for_variant` returns the title-cased forms;
     # the lowercase ones mirror the Gen 1 convention above and are what new code should send.
     # Registering BOTH is deliberate: a rom_type is persisted into the run directory
@@ -76,6 +80,8 @@ _VARIANT_LABEL: dict[str, str] = {
     "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
     "red": "Red", "blue": "Blue", "yellow": "Yellow",
     "red_ap": "Red (AP)", "blue_ap": "Blue (AP)",
+    "PureRed": "PureRed", "PureBlue": "PureBlue", "PureGreen": "PureGreen",
+    "purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen",
     "Crystal": "Crystal", "crystal": "Crystal",
     "Gold": "Gold", "gold": "Gold",
     "Silver": "Silver", "silver": "Silver",
@@ -124,6 +130,10 @@ except ImportError:
 from .gen1_rby import Gen1Adapter  # noqa: E402
 
 register_adapter("gen1_rby", Gen1Adapter)
+
+from .gen1_purergb import Gen1PureRGBAdapter  # noqa: E402
+
+register_adapter("gen1_purergb", Gen1PureRGBAdapter)
 
 from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
 

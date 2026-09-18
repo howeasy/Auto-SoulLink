@@ -139,6 +139,93 @@
       "EVA"
     ]
   },
+  "PureBlue": {
+    "abilities": false,
+    "badges": [
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Soul Badge",
+      "Marsh Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen1_purergb",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 11,
+    "mons_per_box": 20,
+    "party_blob_size": 66,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
+  },
+  "PureGreen": {
+    "abilities": false,
+    "badges": [
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Soul Badge",
+      "Marsh Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen1_purergb",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 11,
+    "mons_per_box": 20,
+    "party_blob_size": 66,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
+  },
+  "PureRed": {
+    "abilities": false,
+    "badges": [
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Soul Badge",
+      "Marsh Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen1_purergb",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 11,
+    "mons_per_box": 20,
+    "party_blob_size": 66,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
+  },
   "Red": {
     "abilities": false,
     "badges": [
@@ -219,8 +306,8 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": true,
-    "info_panel_width": 20,
+    "info_panel": false,
+    "info_panel_width": 0,
     "memorial_box_index": 11,
     "mons_per_box": 20,
     "party_blob_size": 66,
@@ -796,6 +883,93 @@
       "EVA"
     ]
   },
+  "pureblue": {
+    "abilities": false,
+    "badges": [
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Soul Badge",
+      "Marsh Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen1_purergb",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 11,
+    "mons_per_box": 20,
+    "party_blob_size": 66,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
+  },
+  "puregreen": {
+    "abilities": false,
+    "badges": [
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Soul Badge",
+      "Marsh Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen1_purergb",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 11,
+    "mons_per_box": 20,
+    "party_blob_size": 66,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
+  },
+  "purered": {
+    "abilities": false,
+    "badges": [
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Soul Badge",
+      "Marsh Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen1_purergb",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 11,
+    "mons_per_box": 20,
+    "party_blob_size": 66,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SPC",
+      "",
+      "ACC",
+      "EVA"
+    ]
+  },
   "red": {
     "abilities": false,
     "badges": [
@@ -979,8 +1153,8 @@
     ],
     "explode_mode": true,
     "game_id": "gen1_rby",
-    "info_panel": true,
-    "info_panel_width": 20,
+    "info_panel": false,
+    "info_panel_width": 0,
     "memorial_box_index": 11,
     "mons_per_box": 20,
     "party_blob_size": 66,

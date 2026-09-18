@@ -54,6 +54,25 @@ from server.upr_settings import (
 )
 
 RANDOMIZE_TIMEOUT = 600
+
+# pureRGB (game_id gen1_purergb) is a second Gen 1 foundation (docs/purergb/PLAN.md), but
+# its UPR fork (M5) has not landed: no INI entries, no fingerprint-format audit, no
+# lossless-baseline proof. identify() DOES recognise a clean pureRGB ROM (P3b), which
+# would otherwise let it sail through preflight/prepare_pair as if it were an ordinary
+# vanilla cartridge — this refusal is what keeps the randomizer greyed for that family
+# until M5 lands, per the P3b lease's "server/upr_pipeline.py (only to keep the pure
+# family refused-with-a-clear-message until M5)" instruction.
+PUREGB_RANDOMIZER_REFUSAL = (
+    "pureRGB randomization is not supported yet — the UPR fork lands in a later phase "
+    "(docs/purergb/PLAN.md M5). Use a vanilla Red/Blue/Yellow ROM to randomize today."
+)
+
+
+def _reject_purergb(rom_path: str) -> None:
+    with open(rom_path, "rb") as f:
+        ident = identify(f.read())
+    if ident.get("foundation") == "gen1_purergb":
+        raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
 _SEED_RE = re.compile(r"^Random Seed:\s*(\d+)\s*$")
 _SETTINGS_RE = re.compile(r"^Settings String:\s*(\S+)\s*$")
 _VERSION_RE = re.compile(r"^Randomizer Version:\s*(\S+)\s*$")
@@ -136,8 +155,11 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
             try:
                 with open(path, "rb") as f:
                     ident = identify(f.read())
-                info["clean"] = bool(ident.get("clean"))
-                info["title"] = ident.get("title") or ""
+                if ident.get("foundation") == "gen1_purergb":
+                    info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
+                else:
+                    info["clean"] = bool(ident.get("clean"))
+                    info["title"] = ident.get("title") or ""
             except Exception as exc:                                 # noqa: BLE001
                 info["clean"], info["title"] = False, f"unreadable: {exc}"
         out["roms"][pid] = info
@@ -282,6 +304,9 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         raise UprPipelineError(
             "these settings are outside the supported set — SLink only runs configurations "
             "it can itself produce: " + "; ".join(odd))
+
+    for path in sources.values():
+        _reject_purergb(path)
 
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}

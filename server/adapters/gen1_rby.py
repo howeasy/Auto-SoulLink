@@ -228,18 +228,22 @@ _FIXED_GIFTS = frozenset({"celadon_mansion_roof", "mt_moon_pokecenter", "silph_c
 _FIXED_SPECIES_GIFTS = _FIXED_GIFTS
 _GEN1_ENCOUNTERS = _ENCOUNTERS
 
-# Script-set fixed wild battles, by (map id, National Dex number). These are
-# discovered from the event trainer/encounter setup and species constants:
-# Route12.asm:25-36; Route16.asm:25-36; PowerPlant.asm:39-52,113;
-# SeafoamIslandsB4F.asm:148,162; VictoryRoad2F.asm:100,142;
-# CeruleanCaveB1F.asm:25,37; PokemonTower6F.asm:35-39.
-# PowerPlant's six Voltorb and two Electrode object events are additionally
-# pinned by data/maps/objects/PowerPlant.asm:28-36.
-# Map IDs: constants/map_constants.asm:41-277; dex order: dex_order.asm:3-192.
-_STATIC_SITES = frozenset({
-    (23, 143), (27, 143), (83, 100), (83, 101), (83, 145), (162, 144),
-    (194, 146), (227, 150), (147, 105),
-})
+# Script-set fixed wild battles, by (map id, National Dex number). Read from
+# static_encounters.json's "statics" map (map id -> internal species ids), converted to
+# (map, natdex) here because that is the namespace the client's area_id already uses
+# (lua/gen1/client.lua:644 builds "static_<map>_<dex>"). The JSON's own species list is
+# INTERNAL-index (matching the file's own doc comment); it was hand-verified to equal the
+# nine (map, natdex) pairs this frozenset used to carry literally, so this is a data-driven
+# equivalent, not a behaviour change: Route12.asm:25-36; Route16.asm:25-36;
+# PowerPlant.asm:39-52,113; SeafoamIslandsB4F.asm:148,162; VictoryRoad2F.asm:100,142;
+# CeruleanCaveB1F.asm:25,37; PokemonTower6F.asm:35-39. PowerPlant's six Voltorb and two
+# Electrode object events are additionally pinned by data/maps/objects/PowerPlant.asm:28-36.
+_STATICS_JSON = _json("static_encounters.json")
+_STATIC_SITES = frozenset(
+    (int(map_id), gen1_codec.internal_to_natdex(internal))
+    for map_id, species_list in _STATICS_JSON["statics"].items()
+    for internal in species_list
+)
 _STATIC_ID = re.compile(r"static_(\d+)_(\d+)\Z")
 _KEY = re.compile(r"[0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{2}\Z")
 _ROM_VARIANT = {"Red": "red", "red": "red", "red_ap": "red",
@@ -259,7 +263,12 @@ class Gen1Adapter(GameAdapter):
 
     def __init__(self, **kwargs):
         rom_type = kwargs.get("rom_type") or "red"
-        self._variant = _ROM_VARIANT.get(rom_type, "red")
+        if rom_type not in _ROM_VARIANT:
+            # PLAN.md §4 row 2 / §11.2 B2: an unrecognised rom_type used to default to
+            # "red" silently — the exact bug class the Gen 2 registry comment warns about.
+            # Fail closed instead: an unknown variant is a routing bug, not a preference.
+            raise ValueError(f"unrecognised Gen 1 rom_type: {rom_type!r}")
+        self._variant = _ROM_VARIANT[rom_type]
         self._enc_variant = self._variant  # existing AP/table consumers inspect this label
         self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
 

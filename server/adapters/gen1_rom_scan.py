@@ -57,6 +57,7 @@ log = logging.getLogger(__name__)
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 _SYMS_PATH = os.path.join(_REPO, "data", "pret_rom_syms.json")
+_PUREGB_DATA = os.path.join(_REPO, "data", "games", "gen1_purergb")
 
 # The ROM header's title field. Randomizing changes the contents but never this, so it is
 # how a randomized ROM is identified -- the SHA-1 only tells us whether it is UNTOUCHED.
@@ -84,6 +85,8 @@ class RomScanError(Exception):
 
 # ── symbols ──────────────────────────────────────────────────────────────────────────────
 _SYMS_CACHE: dict | None = None
+_PUREGB_ADMISSION_CACHE: dict | None = None
+_PUREGB_PROFILE_CACHE: dict | None = None
 
 
 def _load_syms() -> dict:
@@ -92,6 +95,44 @@ def _load_syms() -> dict:
         with open(_SYMS_PATH, encoding="utf-8") as f:
             _SYMS_CACHE = json.load(f)
     return _SYMS_CACHE
+
+
+def _load_purergb_admission() -> dict:
+    """sha1 -> {title, kind, header_title, ...}, from data/games/gen1_purergb/admission.json.
+
+    This is the ONLY correct way to identify a pureRGB cartridge (PLAN.md §11.2 trap 7):
+    PureRed/PureBlue's header titles are byte-identical to vanilla Red/Blue ("POKEMON
+    RED"/"POKEMON BLUE"), so a header-only lookup would silently hand a pure ROM to the
+    vanilla pret symbol table. The sha1 table is checked before the header-based path.
+    """
+    global _PUREGB_ADMISSION_CACHE
+    if _PUREGB_ADMISSION_CACHE is None:
+        with open(os.path.join(_PUREGB_DATA, "admission.json"), encoding="utf-8") as f:
+            _PUREGB_ADMISSION_CACHE = json.load(f)
+    return _PUREGB_ADMISSION_CACHE
+
+
+def _load_purergb_profile() -> dict:
+    global _PUREGB_PROFILE_CACHE
+    if _PUREGB_PROFILE_CACHE is None:
+        with open(os.path.join(_PUREGB_DATA, "profile.json"), encoding="utf-8") as f:
+            _PUREGB_PROFILE_CACHE = json.load(f)
+    return _PUREGB_PROFILE_CACHE
+
+
+def _pure_syms(title: str) -> dict:
+    """name -> bank<<16|addr, in the SAME encoding pret's syms use, so sym_to_offset() and
+    every scan_* function below work unchanged over either source.
+
+    Verified: profile.json's own precomputed "flat" field for every ROM symbol equals
+    sym_to_offset(bank<<16|addr) exactly (checked against all three built ROMs), so this
+    round-trip introduces no drift. Entries the profile records as null (a symbol pureRGB's
+    build does not carry, e.g. MewBaseStats, EvosMovesPointerTable) are omitted, which is
+    exactly the "in syms" absence the vanilla branches below already test for.
+    """
+    rom_syms = _load_purergb_profile()["titles"][title]["rom"]
+    return {name: (entry["bank"] << 16 | entry["addr"])
+            for name, entry in rom_syms.items() if entry is not None}
 
 
 def sym_to_offset(value: int) -> int:
@@ -116,22 +157,44 @@ def identify(rom: bytes) -> dict:
     ``clean`` is a statement about the bytes and nothing else. It is NOT provenance: a
     randomized ROM is not clean, but neither is a patched one, and a ROM being clean says
     nothing about which settings or seed produced a different one.
+
+    A pureRGB cartridge is identified by a full-ROM sha1 lookup against admission.json
+    FIRST, before the header-title path below runs at all: PureRed/PureBlue's header
+    titles are byte-identical to vanilla Red/Blue ("POKEMON RED"/"POKEMON BLUE"), so
+    checking the header first would silently route a pure ROM through the vanilla pret
+    symbol table (PLAN.md §11.2 trap 7). A sha1 that is not in that table falls through to
+    the header-based vanilla path unchanged — including a pure ROM that has been modified
+    (randomized/overlaid) and so no longer matches any pinned clean sha1; recognising THAT
+    case is M5's job (the UPR fork's own admission contract), not this function's.
     """
     if len(rom) != GEN1_ROM_SIZE:
         raise RomScanError(
             f"expected a {GEN1_ROM_SIZE}-byte Gen 1 ROM, got {len(rom)} bytes")
+    sha1 = hashlib.sha1(rom).hexdigest()
+    pure_entry = _load_purergb_admission().get(sha1)
+    if pure_entry is not None and pure_entry.get("kind") == "clean":
+        return {
+            "title": pure_entry.get("header_title") or rom_title(rom),
+            "syms_key": f"purergb:{pure_entry['title']}",
+            "variant": pure_entry["title"],
+            "foundation": "gen1_purergb",
+            "sha1": sha1,
+            "clean": True,
+            "clean_sha1": sha1,
+            "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
+        }
     title = rom_title(rom)
     syms_key = _HEADER_TITLE_TO_SYMS.get(title)
     if not syms_key:
         raise RomScanError(
             f"ROM header title {title!r} is not a supported Gen 1 title "
             f"(expected one of {sorted(_HEADER_TITLE_TO_SYMS)})")
-    sha1 = hashlib.sha1(rom).hexdigest()
     entry = _load_syms()[syms_key]
     return {
         "title": title,
         "syms_key": syms_key,
         "variant": _SYMS_TO_VARIANT[syms_key],
+        "foundation": "gen1_rby",
         "sha1": sha1,
         "clean": sha1 == entry["rom_sha1"],
         "clean_sha1": entry["rom_sha1"],
@@ -141,6 +204,8 @@ def identify(rom: bytes) -> dict:
 
 def _syms_for(rom: bytes) -> tuple[dict, dict]:
     ident = identify(rom)
+    if ident.get("foundation") == "gen1_purergb":
+        return ident, _pure_syms(ident["variant"])
     return ident, _load_syms()[ident["syms_key"]]["symbols"]
 
 
@@ -212,24 +277,88 @@ def scan_wild(rom: bytes) -> dict[int, dict]:
     return out
 
 
+# ── fishing (pureRGB) ────────────────────────────────────────────────────────────────────
+def _scan_old_rod_purergb(rom: bytes, syms: dict) -> list[dict]:
+    """pureRGB's Old Rod is a 50/50 species choice, not vanilla's one fixed species.
+
+    engine/items/item_effects.asm's ItemUseOldRod (pureRGB 7e7a4653) is::
+
+        call Random
+        and 1
+        jr z, .goldeen
+        lb bc, 10, MAGIKARP
+        jr .done
+    .goldeen
+        lb bc, 10, GOLDEEN
+    .done
+
+    so there are TWO `lb bc, 10, SPECIES` immediates a few bytes apart, each compiling to
+    `ld bc,nn` (01 <species> <level>) exactly like vanilla's single one. The fixed-length
+    instructions ahead of them (call FishingInit + jp c,.. + call Random + and 1 + jr z,..
+    = 13 bytes, then jr .done + the second `lb bc` = 5 more) put them at ItemUseOldRod+13
+    and +18 in all three built ROMs (only CableClubNPC and Evolution_ChangeMonPic differ
+    across purered/pureblue/puregreen, and neither is upstream of this routine). Each
+    offset asserts the `ld bc,nn` opcode first, the same defence vanilla's ItemUseOldRod+6
+    check uses, so a reassembled routine that moves them fails loudly instead of a
+    pattern scan silently matching a `01` operand byte inside `and 1` (0xE6 0x01) instead.
+    """
+    base = sym_to_offset(syms["ItemUseOldRod"])
+    entries = []
+    for offset in (13, 18):
+        if rom[base + offset] != 0x01:
+            raise RomScanError(
+                f"ItemUseOldRod+{offset} is 0x{rom[base + offset]:02X}, expected the "
+                f"0x01 `ld bc,nn` opcode")
+        entries.append({"species_index": rom[base + offset + 1], "level": rom[base + offset + 2]})
+    return entries
+
+
+def _scan_good_rod_purergb(rom: bytes, syms: dict) -> tuple[list[dict], list[dict]]:
+    """pureRGB's Good Rod picks from one of TWO tables (land vs ocean), each up to ten
+    (level, species) pairs terminated by -1,-1 (data/wild/good_rod.asm). GoodRodMons is the
+    only symbol recorded (GoodRodMonsOcean is not in the profile); the ocean table is the
+    next `INCLUDE`d block, immediately after the land table's own terminator — confirmed
+    against the built ROM, where the land table's 4 pairs + FF FF are followed directly by
+    the ocean table's own 4 pairs + FF FF with no gap.
+    """
+    def read_pairs(off: int) -> tuple[list[dict], int]:
+        entries, cur = [], off
+        for _ in range(WILD_SLOTS):
+            level, species = rom[cur], rom[cur + 1]
+            cur += 2
+            if level == 0xFF and species == 0xFF:
+                return entries, cur
+            entries.append({"level": level, "species_index": species})
+        raise RomScanError("GoodRodMons: no -1,-1 terminator within 10 entries")
+
+    base = sym_to_offset(syms["GoodRodMons"])
+    land, after_land = read_pairs(base)
+    ocean, _ = read_pairs(after_land)
+    return land, ocean
+
+
 # ── fishing ──────────────────────────────────────────────────────────────────────────────
 def scan_fishing(rom: bytes) -> dict:
     """The three rods. Old and Good are global; Super is per-map in both titles' formats."""
     ident, syms = _syms_for(rom)
     out: dict = {}
 
-    # Old Rod: `lb bc, 5, MAGIKARP` -> 01 85 05 at ItemUseOldRod+6. Assert the opcode rather
-    # than trusting the displacement, so a relocated routine fails loudly instead of
-    # reporting whatever byte happens to sit there.
-    old = sym_to_offset(syms["ItemUseOldRod"]) + 6
-    if rom[old] != 0x01:
-        raise RomScanError(
-            f"ItemUseOldRod+6 is 0x{rom[old]:02X}, expected the 0x01 `ld bc,nn` opcode")
-    out["old_rod"] = [{"level": rom[old + 2], "species_index": rom[old + 1]}]
+    if ident.get("foundation") == "gen1_purergb":
+        out["old_rod"] = _scan_old_rod_purergb(rom, syms)
+        out["good_rod"], out["good_rod_ocean"] = _scan_good_rod_purergb(rom, syms)
+    else:
+        # Old Rod: `lb bc, 5, MAGIKARP` -> 01 85 05 at ItemUseOldRod+6. Assert the opcode
+        # rather than trusting the displacement, so a relocated routine fails loudly
+        # instead of reporting whatever byte happens to sit there.
+        old = sym_to_offset(syms["ItemUseOldRod"]) + 6
+        if rom[old] != 0x01:
+            raise RomScanError(
+                f"ItemUseOldRod+6 is 0x{rom[old]:02X}, expected the 0x01 `ld bc,nn` opcode")
+        out["old_rod"] = [{"level": rom[old + 2], "species_index": rom[old + 1]}]
 
-    good = sym_to_offset(syms["GoodRodMons"])
-    out["good_rod"] = [{"level": rom[good + 2 * i], "species_index": rom[good + 2 * i + 1]}
-                       for i in range(2)]
+        good = sym_to_offset(syms["GoodRodMons"])
+        out["good_rod"] = [{"level": rom[good + 2 * i], "species_index": rom[good + 2 * i + 1]}
+                           for i in range(2)]
 
     if "SuperRodFishingSlots" in syms:
         # Yellow. Flat 9-byte records, SPECIES FIRST, terminated by 0xFF.
@@ -285,11 +414,12 @@ def scan_base_stats(rom: bytes) -> dict[int, dict]:
     """
     ident, syms = _syms_for(rom)
     base = sym_to_offset(syms["BaseStats"])
+    record_size, count, mew_symbol = _base_stats_shape(ident, syms)
     out: dict[int, dict] = {}
 
     def read(off: int) -> dict:
-        r = rom[off:off + BASE_STATS_RECORD]
-        if len(r) < BASE_STATS_RECORD:
+        r = rom[off:off + record_size]
+        if len(r) < record_size:
             raise RomScanError("base stats record runs past the end of the ROM")
         return {
             "dex": r[0], "hp": r[1], "attack": r[2], "defense": r[3],
@@ -301,35 +431,55 @@ def scan_base_stats(rom: bytes) -> dict[int, dict]:
             # that lands there is data/pokemon/base_stats/bulbasaur.asm:14. The value is
             # one of the six constants at constants/pokemon_data_constants.asm:87-93
             # (MEDIUM_FAST=0, SLIGHTLY_FAST=1, SLIGHTLY_SLOW=2, MEDIUM_SLOW=3, FAST=4,
-            # SLOW=5); Gen 1 only ever uses 0, 3, 4 and 5.
+            # SLOW=5); Gen 1 only ever uses 0, 3, 4 and 5. pureRGB's 35-byte record keeps
+            # the same first 20 bytes (PLAN.md §11.2 A13); only the stride grows.
             "growth_rate": r[19],
         }
 
-    # HOW MANY RECORDS THE MAIN TABLE HOLDS DEPENDS ON THE TITLE.
-    # pokered/data/pokemon/base_stats.asm ends `assert_table_length NUM_POKEMON - 1 ;
-    # discount Mew` and stores Mew at its own symbol; pokeyellow's ends
-    # `assert_table_length NUM_POKEMON` with mew.asm included, so Yellow's Mew is record 150.
-    # Reading a flat 150 on Yellow silently dropped dex 151 from every Python scan -- while
-    # the Lua client got it right, so the two disagreed -- and _check_content diffs
-    # the scan against itself, giving the pipeline's only rule-data guard a species-shaped
-    # hole on Yellow.
-    count = BASE_STATS_COUNT if "MewBaseStats" in syms else BASE_STATS_COUNT_YELLOW
     for i in range(count):
-        rec = read(base + BASE_STATS_RECORD * i)
+        rec = read(base + record_size * i)
         # The table is dex-ordered, so record i MUST describe dex i+1. If it does not, the
         # stride or the symbol is wrong and everything downstream is fiction.
         if rec["dex"] != i + 1:
             raise RomScanError(
                 f"base stats record {i} reports dex {rec['dex']}, expected {i + 1} — "
-                f"the {BASE_STATS_RECORD}-byte stride or the BaseStats symbol is wrong")
+                f"the {record_size}-byte stride or the BaseStats symbol is wrong")
         out[rec["dex"]] = rec
 
-    if "MewBaseStats" in syms:
-        mew = read(sym_to_offset(syms["MewBaseStats"]))
+    if mew_symbol:
+        mew = read(sym_to_offset(syms[mew_symbol]))
         if mew["dex"] != 151:
-            raise RomScanError(f"MewBaseStats reports dex {mew['dex']}, expected 151")
+            raise RomScanError(f"{mew_symbol} reports dex {mew['dex']}, expected 151")
         out[151] = mew
     return out
+
+
+def _base_stats_shape(ident: dict, syms: dict) -> tuple[int, int, str | None]:
+    """(record size, how many main-table records, the separate-Mew symbol name or None).
+
+    HOW MANY RECORDS THE MAIN TABLE HOLDS DEPENDS ON THE TITLE.
+    pokered/data/pokemon/base_stats.asm ends `assert_table_length NUM_POKEMON - 1 ;
+    discount Mew` and stores Mew at its own symbol; pokeyellow's ends
+    `assert_table_length NUM_POKEMON` with mew.asm included, so Yellow's Mew is record 150.
+    Reading a flat 150 on Yellow silently dropped dex 151 from every Python scan -- while
+    the Lua client got it right, so the two disagreed -- and _check_content diffs
+    the scan against itself, giving the pipeline's only rule-data guard a species-shaped
+    hole on Yellow.
+
+    pureRGB has NO separate Mew symbol either (verified: absent from every title's `rom`
+    symbol table), so a "MewBaseStats" in syms" test alone would take the Yellow branch
+    for the right COUNT but by the wrong reasoning (PLAN.md §11.2 trap 5) — and the wrong
+    STRIDE (28, not 35: trap 4). This reads both facts from profile.derived instead of
+    inferring them from symbol absence.
+    """
+    if ident.get("foundation") == "gen1_purergb":
+        derived = _load_purergb_profile()["titles"][ident["variant"]]["derived"]
+        # dex_count is 152 = dex ids 0..151 (PLAN.md §11.2 trap 6); Mew is inline as the
+        # last of the 151 ordinary records, so there is no separate symbol to read.
+        return derived["base_stats_stride"], derived["dex_count"] - 1, None
+    if "MewBaseStats" in syms:
+        return BASE_STATS_RECORD, BASE_STATS_COUNT, "MewBaseStats"
+    return BASE_STATS_RECORD, BASE_STATS_COUNT_YELLOW, None
 
 
 # ── evolutions and learnsets ─────────────────────────────────────────────────────────────
@@ -552,7 +702,10 @@ def parse_client_content(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise RomScanError("rom_content payload is not an object")
     variant = payload.get("variant")
-    if variant not in _SYMS_TO_VARIANT.values():
+    # Vanilla's three ("red"/"blue"/"yellow") plus the pack's own three pureRGB titles —
+    # a second foundation's client reports its OWN variant string (Gen1PureRGBAdapter's
+    # ``_variant``), not one of vanilla's.
+    if variant not in _SYMS_TO_VARIANT.values() and variant not in ("purered", "pureblue", "puregreen"):
         raise RomScanError(f"rom_content declares unknown variant {variant!r}")
 
     raw_wild = payload.get("wild")
@@ -577,13 +730,24 @@ def parse_client_content(payload: dict) -> dict:
             wild[map_id] = rec
 
     fishing: dict = {}
+    # (species, level) pair count is 1 for vanilla's fixed Old Rod, 2 for pureRGB's 50/50
+    # choice; (level, species) pair count is 2 for vanilla's Good Rod, 4 for pureRGB's —
+    # generalised to "however many whole pairs the client sent" so both foundations share
+    # one parse without vanilla's own exactly-2/exactly-4-byte payloads changing meaning.
     old = _hex_to_bytes(payload.get("old_rod") or "", "old_rod")
-    if len(old) == 2:
-        fishing["old_rod"] = [{"species_index": old[0], "level": old[1]}]
+    if old and len(old) % 2 == 0:
+        fishing["old_rod"] = [{"species_index": old[2 * i], "level": old[2 * i + 1]}
+                              for i in range(len(old) // 2)]
     good = _hex_to_bytes(payload.get("good_rod") or "", "good_rod")
-    if len(good) == 4:
-        fishing["good_rod"] = [{"level": good[0], "species_index": good[1]},
-                               {"level": good[2], "species_index": good[3]}]
+    if good and len(good) % 2 == 0:
+        fishing["good_rod"] = [{"level": good[2 * i], "species_index": good[2 * i + 1]}
+                               for i in range(len(good) // 2)]
+    # pureRGB-only: a second, ocean-specific Good Rod table (data/wild/good_rod.asm). Absent
+    # from vanilla's payload shape, so this key is simply never populated for vanilla.
+    ocean = _hex_to_bytes(payload.get("good_rod_ocean") or "", "good_rod_ocean")
+    if ocean and len(ocean) % 2 == 0:
+        fishing["good_rod_ocean"] = [{"level": ocean[2 * i], "species_index": ocean[2 * i + 1]}
+                                     for i in range(len(ocean) // 2)]
 
     super_rod: dict[int, list[dict]] = {}
     raw_super = payload.get("super_rod") or {}
@@ -658,7 +822,7 @@ def _pad_to_slots(entries: list[dict]) -> list[dict]:
 
 
 def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
-                           species_name) -> dict:
+                           species_name, floor_labels: dict[str, str] | None = None) -> dict:
     """area_id -> method -> entries, in exactly the shape encounter_tables.json uses.
 
     FIRST-WINS BY MAP ID, matching tools/gen_gen1_encounters.py: several floors of one
@@ -667,9 +831,15 @@ def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
     mirroring it here means a CLEAN ROM reproduces the shipped tables exactly, which is a
     control worth more than a partial improvement. Sub-area ids are the proper fix and are
     a separate piece of work.
+
+    ``floor_labels`` defaults to vanilla's own file (the historical behaviour, unchanged
+    for every existing caller); a foundation whose maps are renumbered -- pureRGB's are
+    (docs/purergb/PLAN.md §11.2 A13/W1) -- MUST pass its own
+    data/games/<foundation>/floor_labels.json instead, or a floor suffix would be applied
+    using the WRONG map id's meaning.
     """
     out: dict = {}
-    floors = _floor_labels()
+    floors = _floor_labels() if floor_labels is None else floor_labels
 
     def add(area_id: str, method: str, slots: list[dict], map_id: int | None = None) -> None:
         # ONE RULE AREA PER DUNGEON, BUT EVERY FLOOR'S TABLE -- the same split
@@ -759,6 +929,10 @@ def content_fingerprint(variant: str, wild: dict, fishing: dict) -> str:
             "super_rod": {str(k): v for k, v in sorted((fishing.get("super_rod") or {}).items())},
         },
     }
+    # pureRGB-only table; adding an always-empty key here would change every EXISTING
+    # (vanilla) fingerprint's hash for no reason, so it is included only when present.
+    if fishing.get("good_rod_ocean"):
+        body["fishing"]["good_rod_ocean"] = fishing["good_rod_ocean"]
     return hashlib.sha256(
         json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 

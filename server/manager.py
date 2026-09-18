@@ -61,6 +61,7 @@ GAMES = [
     ("", "Detect when players connect", []),
     ("gen1", "Red · Blue · Yellow", ["red", "blue", "yellow"]),
     ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
+    ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
     ("gen2_ap", "Crystal (Archipelago)", ["crystal_ap"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
@@ -97,21 +98,27 @@ OPTIONS = {
 }
 OPTION_SUPPORT = {
     "species_lock": {"all": True},
-    "gender_lock": {"all": True, "gen1_rby": {"ok": False, "why": "Gen 1 has no gender mechanic, so the clause can never fire."}},
+    "gender_lock": {"all": True,
+                    "gen1_rby": {"ok": False, "why": "Gen 1 has no gender mechanic, so the clause can never fire."},
+                    "gen1_purergb": {"ok": False, "why": "pureRGB has no gender mechanic, so the clause can never fire."}},
     "type_lock": {"all": True},
     "explode_mode": {"all": False, "why": "Only the Radical Red client handles force_explode.",
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
+                     "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen3_frlge_rr": {"ok": True}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
+                        "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen3_frlge_rr": {"ok": True}},
     "overworld_presence": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
     "native_messages": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
     "native_sounds": {"all": False, "why": "Radical Red only.",
                       "gen1_rby": {"ok": False, "why": "The Gen 1 companion patch ships without audio: its only hook re-enters a non-reentrant sound routine."},
+                      "gen1_purergb": {"ok": False, "why": "The pureRGB source overlay (M3) is not built yet, and ships without audio like the Gen 1 companion patch."},
                       "gen3_frlge_rr": {"ok": True}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
+                    "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
                     "gen3_frlge_rr": {"ok": True}},
     "pc_trade_npc": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
 }
@@ -174,7 +181,9 @@ def new_run_form() -> dict:
         "groups": [{"label": lbl, "keys": keys} for lbl, keys in OPTION_GROUPS],
         "options": {k: {"label": lbl, "desc": d} for k, (lbl, d) in OPTIONS.items()},
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
-        "gen1_games": [k for k, _, m in GAMES if m and all(rt in ("red", "blue", "yellow", "red_ap", "blue_ap") for rt in m)],
+        "gen1_games": [k for k, _, m in GAMES if m and all(
+            rt in ("red", "blue", "yellow", "red_ap", "blue_ap",
+                   "purered", "pureblue", "puregreen") for rt in m)],
     }
 
 
