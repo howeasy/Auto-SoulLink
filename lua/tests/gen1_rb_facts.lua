@@ -167,6 +167,7 @@ return {
     PARTY      = { menu_y = 1, menu_x = 0, watched = 0x03 }, -- SAME: home/pokemon.asm:128-131 (Y=1, X=0) + engine/menus/party_menu.asm:301-303 (PAD_A|PAD_B in battle)
     SWITCH_BOX = { menu_y = 0x0C, menu_x = 0x0C, menu_max = 2, watched = 0x03 }, -- SAME: engine/battle/core.asm:2564-2573 ("ld a, $c" twice, "ld a, $2", PAD_B|PAD_A)
     NAMING     = { menu_y = 2, menu_x = 1, menu_max = 3, watched = 0x01 }, -- SAME: engine/movie/oak_speech/oak_speech2.asm:172-182 (X=1, watched=PAD_A, Y=2, max=3); 4 rows = NEW NAME + 3 presets (constants/player_constants.asm:1 NUM_PLAYER_NAMES=3)
+    BAG        = { menu_y = 4, menu_x = 5, watched = 0x07 }, -- SAME: pret home/list_menu.asm DisplayListMenuID (Y=4, X=5, PAD_A|PAD_B|PAD_SELECT)
     PC = {
       menu_y     = 2, -- SAME: engine/pokemon/bills_pc.asm:77-79
       menu_x     = 1, -- SAME: engine/pokemon/bills_pc.asm:77-79

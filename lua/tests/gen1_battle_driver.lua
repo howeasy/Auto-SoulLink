@@ -50,7 +50,7 @@
 local M={}
 local PAD={A=0x01,B=0x02,SELECT=0x04,START=0x08,RIGHT=0x10,LEFT=0x20,UP=0x40,DOWN=0x80}
 M.PAD=PAD
-M.BAG={x=5,y=4,watched=PAD.A+PAD.B+PAD.SELECT}
+M.BAG={x=5,y=4,watched=PAD.A+PAD.B+PAD.SELECT} -- replaced by F.MENU.BAG in with_facts
 M.TARGET={FIGHT={"left",0},ITEM={"left",1},PKMN={"right",0},RUN={"right",1}}
 -- Menu geometry and D.run's repress bound are lane facts (P3b-e): F.MENU.BATTLE / F.MENU.MOVE /
 -- F.MENU.PARTY / F.MENU.SWITCH_BOX / F.TUNING.run_repress, copied in by `with_facts`.
@@ -61,6 +61,7 @@ function M.with_facts(facts)
     M.BATTLE_MENU={left_x=B.left_x,right_x=B.right_x,left_watched=B.left_watched,right_watched=B.right_watched}
     M.MOVE_MENU={x=Mv.menu_x,y=Mv.menu_y,watched=0xFF-(PAD.LEFT+PAD.RIGHT+PAD.START)}
     M.PARTY_MENU={x=P.menu_x,y=P.menu_y,watched=P.watched}
+    local G=facts.MENU.BAG; M.BAG={x=G.menu_x,y=G.menu_y,watched=G.watched}
     M.SWITCH_BOX={x=S.menu_x,y=S.menu_y,max=S.menu_max,watched=S.watched}
     M.BATTLE_Y=B.menu_y
     M.BATTLE_MAX=B.menu_max

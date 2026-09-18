@@ -93,20 +93,41 @@ def test_purergb_gifts_present_and_well_formed():
             assert not g["fixed_species"]
 
 
-def test_purergb_area_map_collapses_three_gift_buildings_into_wild_areas():
-    """Named and asserted, not a silent gotcha: unlike vanilla (each gift building gets its
-    own area id — "celadon_mansion_roof" is never "celadon_city"), pureRGB's area_map.json
-    collapses Celadon Mansion Roof House / Celadon Hotel / Game Corner into "celadon_city",
-    the fossil rooms into "cinnabar_island", and Oak's Lab into "pallet_town" — and all
-    three of those outdoor buckets carry real wild tables in this pack. The adapter (below)
-    must never call one of these three a gift area: doing so would dead-zone real wild grass
-    the same way Route 4 briefly did for vanilla (tests/unit/test_gen1_gift_areas.py).
+# The seven gift interiors that used to inherit their town's area id, before
+# tools/gen_gen1_area_map.py's `gift_building_own_area` rule gave each its own (the same thing
+# vanilla does by hand for oaks_lab / celadon_mansion_roof / game_corner).
+_GIFT_BUILDING_AREAS = {
+    "OAKS_LAB": "oaks_lab",
+    "CELADON_MANSION_ROOF_HOUSE": "celadon_mansion_roof_house",
+    "GAME_CORNER_PRIZE_ROOM": "game_corner_prize_room",
+    "CELADON_HOTEL": "celadon_hotel",
+    "CINNABAR_LAB_FOSSIL_ROOM": "cinnabar_lab_fossil_room",
+    "FIGHTING_DOJO": "fighting_dojo",
+    "FOSSIL_GUYS_HOUSE": "fossil_guys_house",
+}
+
+
+def test_the_pure_gift_areas_carry_no_wild_table():
+    """Every gift map's area id is absent from encounter_tables.json — and every key of that file
+    carries a real grass/water/fishing table (51 of them), so "absent" means "no wild data at
+    all". This is what lets the adapter key gift areas straight off area_map.json: a gift area
+    that coincided with a wild area would dead-zone that wild table on the first gift, the same
+    way Route 4 briefly did for vanilla (tests/unit/test_gen1_gift_areas.py).
+
+    The generator refuses to emit a map that violates it (tools/gen_gen1_area_map.py rule 3 +
+    its overlap check); this pins the committed file.
     """
     encounters = json.loads((REPO / "data" / "games" / "gen1_purergb" / "encounter_tables.json")
-                            .read_text(encoding="utf-8"))
-    wild = {k for k, v in encounters.get("purered", {}).items() if v}
+                            .read_text(encoding="utf-8"))["purered"]
+    wild = {area for area, tables in encounters.items() if any(tables.values())}
+    assert len(wild) == 51, f"expected every one of the 51 keys to carry a table, got {sorted(wild)}"
     gift_areas, _ = derive_gift_sets(_gifts("gen1_purergb"), _area_map("gen1_purergb"))
-    assert wild & gift_areas == {"celadon_city", "cinnabar_island", "pallet_town"}
+    assert gift_areas & wild == set(), sorted(gift_areas & wild)
+
+    areas = _area_map("gen1_purergb")
+    for const, area_id in _GIFT_BUILDING_AREAS.items():
+        maps = {str(g["map_id"]) for g in _gifts("gen1_purergb") if g["map_const"] == const}
+        assert maps and {areas[m] for m in maps} == {area_id}, (const, maps)
 
 
 # The exact facts docs/purergb/PLAN.md A2 named, so a re-run against a different pureRGB
@@ -135,24 +156,38 @@ def pure_adapter():
     return Gen1PureRGBAdapter(rom_type="PureRed")
 
 
-def test_pure_adapter_recognises_narrative_gift_areas(pure_adapter):
-    """Only the gift areas that carry NO wild table of their own are safe to wire live
-    (mt_moon_pokecenter, saffron_city, silph_co) -- the three collapsed-with-wild buckets
-    (celadon_city, cinnabar_island, pallet_town, previous test) are deliberately withheld."""
+def test_pure_adapter_recognises_every_gift_area(pure_adapter):
+    """All nine areas a gift site routes into are live now: each gift building has its own id
+    and none of them carries a wild table (previous test). The set is pinned so a map change
+    cannot quietly add or drop a gift area."""
     gift_areas, fixed_areas = derive_gift_sets(_gifts("gen1_purergb"), _area_map("gen1_purergb"))
-    safe = gift_areas - {"celadon_city", "cinnabar_island", "pallet_town"}
-    assert safe == {"mt_moon_pokecenter", "saffron_city", "silph_co"}
-    for area in safe:
+    assert gift_areas == {"oaks_lab", "celadon_mansion_roof_house", "game_corner_prize_room",
+                          "celadon_hotel", "cinnabar_lab_fossil_room", "fossil_guys_house",
+                          "fighting_dojo", "mt_moon_pokecenter", "silph_co"}
+    assert fixed_areas == {"celadon_mansion_roof_house", "celadon_hotel", "mt_moon_pokecenter",
+                           "silph_co"}
+    for area in sorted(gift_areas):
         assert pure_adapter.is_gift_area(area), f"{area!r} has a gift site but isn't recognised"
-    for area in fixed_areas & safe:
+    for area in sorted(fixed_areas):
         assert pure_adapter.is_fixed_species_gift(area)
+    # a choice or a register-fed reveal (Oak's Lab starter, the fossil rooms, the two dojo
+    # rooms, the six Game Corner prizes) is a gift area but never a fixed-species one
+    for area in sorted(gift_areas - fixed_areas):
+        assert not pure_adapter.is_fixed_species_gift(area), area
 
 
-def test_pure_adapter_withholds_wild_carrying_collapsed_gift_buildings(pure_adapter):
-    for area in ("celadon_city", "cinnabar_island", "pallet_town"):
+def test_pure_adapter_never_calls_a_wild_area_a_gift(pure_adapter):
+    """The inverse guard, over every wild area rather than the three that used to be affected:
+    the towns a gift building stands in (celadon_city, cinnabar_island, pallet_town) keep their
+    own wild/fishing tables and must never be gift areas — a gift inside a building no longer
+    speaks for the town it stands in (state.py:_handle_area_enter)."""
+    encounters = json.loads((REPO / "data" / "games" / "gen1_purergb" / "encounter_tables.json")
+                            .read_text(encoding="utf-8"))["purered"]
+    for area in sorted(area for area, tables in encounters.items() if any(tables.values())):
         assert not pure_adapter.is_gift_area(area), (
-            f"{area!r} carries a real wild table in this pack; calling it a gift area "
-            f"would dead-zone that wild grass (state.py:_handle_area_enter)")
+            f"{area!r} carries a real wild/fishing table; calling it a gift area would "
+            f"dead-zone it")
+        assert not pure_adapter.is_fixed_species_gift(area), area
 
 
 def test_pure_adapter_still_recognises_static_sites(pure_adapter):

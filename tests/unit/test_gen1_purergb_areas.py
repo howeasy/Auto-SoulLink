@@ -79,6 +79,42 @@ def test_safari_zone_quadrants_do_not_collapse_into_each_other():
         assert area_id == f"safari_zone_{q}", (q, area_id)
 
 
+# Gift interiors with no wild table of their own: each gets its OWN area id instead of
+# inheriting the town it stands in (tools/gen_gen1_area_map.py rule 3, `gift_building_own_area`).
+# The rest of the pack's gift maps already had one (mt_moon_pokecenter from the dungeon group,
+# silph_co likewise), so these seven are the ones the rule decides.
+_GIFT_BUILDING_AREAS = {
+    40: ("OAKS_LAB", "oaks_lab"),                                  # was pallet_town
+    132: ("CELADON_MANSION_ROOF_HOUSE", "celadon_mansion_roof_house"),  # was celadon_city
+    137: ("GAME_CORNER_PRIZE_ROOM", "game_corner_prize_room"),      # was celadon_city
+    140: ("CELADON_HOTEL", "celadon_hotel"),                        # was celadon_city
+    170: ("CINNABAR_LAB_FOSSIL_ROOM", "cinnabar_lab_fossil_room"),  # was cinnabar_island
+    177: ("FIGHTING_DOJO", "fighting_dojo"),                        # was saffron_city
+    205: ("FOSSIL_GUYS_HOUSE", "fossil_guys_house"),                # was cinnabar_island
+}
+
+
+def test_gift_interiors_are_their_own_area():
+    """A gift building must not share an area with the town it stands in: the town carries the
+    pack's wild/fishing tables and a gift capture there would dead-zone them (PLAN §2.3). The
+    generator refuses to emit a map where a gift area coincides with an encounter area."""
+    areas = _areas()
+    for map_id, (const, area_id) in _GIFT_BUILDING_AREAS.items():
+        assert areas[str(map_id)]["area_id"] == area_id, (map_id, const)
+    gifts = json.loads((DATA / "gifts.json").read_text(encoding="utf-8"))["gifts"]
+    gift_maps = {str(g["map_id"]) for g in gifts}
+    gift_areas = {areas[m]["area_id"] for m in gift_maps}
+    assert len(gift_areas) == len(gift_maps) == 9, sorted(gift_maps)
+    encounters = _encounters()["purered"]
+    wild = {area for area, tables in encounters.items() if any(tables.values())}
+    assert gift_areas & wild == set(), sorted(gift_areas & wild)
+    # every one of the seven is recorded so a regeneration cannot silently revert it
+    notes = json.loads((DATA / "area_map_notes.json").read_text(encoding="utf-8"))["notes"]
+    recorded = {row["map_id"]: row["area_id"] for row in notes
+                if row["rule"] == "gift_building_own_area"}
+    assert recorded == {mid: area for mid, (_c, area) in _GIFT_BUILDING_AREAS.items()}
+
+
 def test_bills_garden_is_its_own_area():
     areas = _areas()
     bills_garden = [mid for mid, row in areas.items() if row["area_id"] == "bills_garden"]

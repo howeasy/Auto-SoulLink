@@ -65,6 +65,7 @@ REPLACED = {
 # the foundations' own values: the parcel flag pureRGB deleted, its HYPER_BALL, the START-menu
 # row-index change, and the renumbered rival opponent id.
 EXPECTED_DELTA = frozenset({
+    "MENU.BAG.watched",
     "BANKS.apex_commit",
     "BANKS.apex_preflight",
     "BANKS.apex_recalc_call",
