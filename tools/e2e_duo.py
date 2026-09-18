@@ -206,6 +206,11 @@ SCENARIOS = {
 OPT_IN_GAMES = ("gen1_new",)
 
 
+def scenario_family(game):
+    """The scenario family a pairing row runs (GAMES[row]["game"]); gen1_pure -> gen1_new."""
+    return GAMES.get(game, {}).get("game", game) if isinstance(GAMES, dict) else game
+
+
 def scenario_applies(name, game):
     """Does `name` apply to `game`? Absent `games` means every title but the opt-in ones."""
     allowed = SCENARIOS[name].get("games")
@@ -358,7 +363,7 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
     the seam BOTH paths share: `run()`'s GameRngMiss branch calls it after `wait_results`, where
     both halves are present by construction, so only the early-finish path changes.
     """
-    if game != "gen1_new" or attempt >= limit:
+    if scenario_family(game) != "gen1_new" or attempt >= limit:
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
     if "CAUSE_RNG" not in classes:
@@ -383,7 +388,7 @@ def scenario_attempt_limit(name, game):
     (`retryable_gen1_rng`); three for species_clause_new, whose PASS may still be a
     coin-flip outcome (see `run_scenario_with_rng_retry`).
     """
-    if game != "gen1_new" or name == "ball_gate_new":
+    if scenario_family(game) != "gen1_new" or name == "ball_gate_new":
         return 1
     if name == "species_clause_new":
         return 8
@@ -4031,11 +4036,11 @@ class DuoRun:
         """
         method = self.cfg.get("oracle")
         if not method:
-            if getattr(self, "game", "") == "gen1_new":
+            if scenario_family(getattr(self, "game", "")) == "gen1_new":
                 raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
                                    f"a Gen 1 verdict needs a saved-state readback")
             return
-        if getattr(self, "game", "") == "gen1_new":
+        if scenario_family(getattr(self, "game", "")) == "gen1_new":
             # S-7 runs for EVERY gen1_new scenario, before its own oracle: the save witness is
             # the physical half of the verdict and each scenario's oracle prologue waits on the
             # same flush boundary this check needs.
@@ -4073,7 +4078,7 @@ class DuoRun:
             pb = "RESULT: PASS" in rb
             if pa and pb:
                 self._run_oracle({"a": ra, "b": rb})
-            if pa and pb and getattr(self, "game", "") == "gen1_new":
+            if pa and pb and scenario_family(getattr(self, "game", "")) == "gen1_new":
                 # Harness finding, not a scenario verdict: the harness wrote the expected count
                 # into the stub, so the driver's echo is checkable without the game. Checked
                 # only on a double PASS so a real failure keeps its own error, not this one.
