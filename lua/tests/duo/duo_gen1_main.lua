@@ -93,6 +93,11 @@ elseif family then
 else
     finish(false, "not a Gen 1 cartridge (header " .. tostring(header) .. ")")
 end
+-- The lane's driver-facts table (P3b-e): every route/battle module reads its game facts from it,
+-- and a module's `new(expected)` falls back to the VANILLA table when `expected.facts` is nil --
+-- so the pure pack hands the pure table to every module here, at file scope and per instance.
+local FACTS = dofile(ROOT .. "/lua/tests/" .. (pack == "gen1_purergb" and "gen1_pure_facts.lua" or "gen1_rb_facts.lua"))
+Hunt.with_facts(FACTS); Center.with_facts(FACTS); Driver.with_facts(FACTS); PC.with_facts(FACTS)
 local deps = Entry.bizhawk_deps()
 
 -- ── S-7 (plan A12): dump the cartridge's save bytes so the SAVE is proven physically ──
@@ -394,7 +399,7 @@ local function hunt(mode, options)
                       wEnemySelectedMove = symbols.wEnemySelectedMove, wCurItem = symbols.wCurItem,
                       wNumRunAttempts = symbols.wNumRunAttempts, hJoyPressed = symbols.hJoyPressed },
     })
-    local route = Hunt.new({ player = D.player }, { driver = driver, step = yield_buttons, rd = rd, symbols = symbols,
+    local route = Hunt.new({ player = D.player, facts = FACTS }, { driver = driver, step = yield_buttons, rd = rd, symbols = symbols,
                                                    mode = mode, log = log, switch_slot = options.switch_slot,
                                                    move_slot = options.move_slot, fainted = options.fainted,
                                                    start_active = options.start_active })
@@ -481,7 +486,7 @@ end
 -- Returns the terminal phase and the LAST extended point (box number / count / initialised flag
 -- read back in the overworld, after the PC has written the active box home).
 local function pc_drive(ops, tag)
-    local driver = PC.new({ player = D.player }, {
+    local driver = PC.new({ player = D.player, facts = FACTS }, {
         rd = rd, symbols = symbols, center = Center, ops = ops,
         log = function(line)
             local op, what = line:match("^PC op %d+ ([%a_]+)%(%d+%) (%a+)")
@@ -2361,7 +2366,7 @@ end
 -- RUN from incidental battles using the forest walk's delegation pattern
 -- (gen1_rb_forest_inputs.lua:242-258); the hunt owns encounters after arrival.
 function walk_back_to_route1()
-    local escape = dofile(ROOT .. "/lua/tests/gen1_rb_route1_inputs.lua").new({ player = D.player })
+    local escape = dofile(ROOT .. "/lua/tests/gen1_rb_route1_inputs.lua").new({ player = D.player, facts = FACTS })
     local incidental_battles = 0
     local legs = {
         { map = Center.MAP.center,   points = back_waypoints("center_receptionist"), into = Center.MAP.viridian },
@@ -2715,7 +2720,7 @@ function scenarios.poison_new()
         return true, "idled through the partner's poison faint and blackout"
     end
 
-    local Forest = dofile(ROOT .. "/lua/tests/gen1_rb_forest_inputs.lua")
+    local Forest = dofile(ROOT .. "/lua/tests/gen1_rb_forest_inputs.lua"); Forest.with_facts(FACTS)
     local start = party_keys()
     if #start ~= 1 then
         return false, fmt("the poison fixture must hold exactly one mon, not %d", #start)
@@ -2786,7 +2791,7 @@ function scenarios.poison_new()
     -- solid grass (15 forced steps at 25/256, gen1_rb_forest_inputs.lua:112-120), so incidental
     -- wild battles on this leg are EXPECTED; the module RUNs from them and logs
     -- INCIDENTAL_BATTLE. They are not failures.
-    local walked = drive(Forest.new({ player = D.player }, { log = log }), "walk",
+    local walked = drive(Forest.new({ player = D.player, facts = FACTS }, { log = log }), "walk",
                          { ["forest-parked"] = true, ["unknown-map"] = true })
     if walked == "starter-koed" then
         return false, "RNG: a wild foe knocked the starter out before the poisoning"
@@ -2996,7 +3001,7 @@ function scenarios.rival_swap_new()
         return true, "idled through the partner's rival battle and saved"
     end
 
-    local Route22 = dofile(ROOT .. "/lua/tests/gen1_rb_route22_inputs.lua")
+    local Route22 = dofile(ROOT .. "/lua/tests/gen1_rb_route22_inputs.lua"); Route22.with_facts(FACTS)
     local derived = parts.profile.derived
     log_party("PRE_RIVAL")
     -- Whose mon it is decides what a KO on the walk means, and the keys only exist HERE: the
@@ -3146,7 +3151,7 @@ function scenarios.rival_swap_new()
                   execute_player_move = rom.ExecutePlayerMove.addr,
                   execute_enemy_move = rom.ExecuteEnemyMove.addr },
     })
-    local route = Route22.new({ player = D.player }, { log = log, driver = driver,
+    local route = Route22.new({ player = D.player, facts = FACTS }, { log = log, driver = driver,
                                                        step = yield_buttons, rd = rd, symbols = symbols })
     local terminal = { ["rival-won"] = true, ["rival-lost"] = true, ["rival-drawn"] = true,
                        ["rival-never-triggered"] = true, ["active-koed"] = true,
