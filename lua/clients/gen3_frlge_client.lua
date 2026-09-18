@@ -427,8 +427,9 @@ local prompt_show  = HUD.prompt
 -- not in battle (out-of-battle + unpatched unchanged). Text must be FR-charmap-safe (A-Z/a-z/0-9/space/!?.-,/:).
 local NATIVE_BATTLE_FRAMES = 180   -- how long to hold the native notification once first shown (~3s; tunable)
 local NATIVE_BATTLE_WIN    = 0x0D  -- the Battle Calc's move-info area (top-left) — see slink_battletext_hook
--- Window 0xD clips visually at ~28 chars ("…Squirtle linke|"); truncate per line like hud.lua's fit_hud
--- so a long notification ends in ".." instead of being cut mid-glyph. FR-safe ('.' is in the charmap).
+-- Window 0xD clips visually at ~28 chars ("…Squirtle linke|"); truncate per line so a long
+-- notification ends in ".." instead of being cut mid-glyph. FR-safe ('.' is in the charmap).
+-- The native window is a fixed one-line box, so it truncates where hud.lua's overlay wraps.
 local NATIVE_BATTLE_MAXCHARS = 28
 local function fit_battle_text(text)
     local out = {}

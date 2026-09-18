@@ -37,7 +37,7 @@ HUD = (REPO / "lua" / "hud.lua").as_posix()
 # (never drawn by hud.lua), so it must NOT be treated as clearing box/text.
 GUI_STUB = """
 return function(rec)
-  local state = {box = false, text = false, cleartext_calls = 0}
+  local state = {box = false, text = false, cleartext_calls = 0, texts = {}, logs = {}}
   gui = {
     clearGraphics = function(...)
       rec("clearGraphics")
@@ -52,11 +52,13 @@ return function(rec)
       rec("drawBox")
       state.box = true
     end,
-    drawText = function(...)
+    drawText = function(x, y, s, ...)
       rec("drawText")
       state.text = true
+      state.texts[#state.texts + 1] = s
     end,
   }
+  console = {log = function(s) state.logs[#state.logs + 1] = s end}
   return state
 end
 """
@@ -72,8 +74,19 @@ class World:
     def render(self):
         """One frame; returns just that frame's gui calls, in order."""
         mark = len(self.calls)
+        self.state.texts = self.lua.eval("{}")
         self.H.render()
         return self.calls[mark:]
+
+    @property
+    def drawn(self) -> list[str]:
+        """The text hud.lua handed gui.drawText during the last render(), in order."""
+        return list(self.state.texts.values())
+
+    def gbc(self):
+        """Gen 1/2 geometry: 160x144 -> font 8, char_width 5, 30 chars per line."""
+        self.H.init(self.lua.eval("{screen_w = 160, screen_h = 144}"))
+        return self
 
 
 def test_expired_message_frame_clears_and_draws_nothing():
@@ -113,4 +126,104 @@ def test_explicit_clear_wipes_the_surface_once():
     assert w.calls.count("clearGraphics") == 1, w.calls
     assert w.state.box is False
     assert w.state.text is False
+    assert "drawText" not in w.render()
+
+
+# ── HUD-3: word wrap instead of "..." ────────────────────────────────────────
+# Truncation ate the end of every long notification -- and the end is where the
+# mon name and the outcome live ("[x] Dead in par..."). The bar wraps and grows
+# upward instead; "..." survives only past the 3-line cap.
+
+def test_long_message_wraps_instead_of_truncating():
+    """A 2-line message is drawn as two full lines, joined back to the original text."""
+    w = World().gbc()
+    text = "LINKED PIKACHU AND CHARMANDER IN VIRIDIAN FOREST NOW"
+    w.H.show(text, 255, 255, 0, 240)
+    frame = w.render()
+    assert frame.count("drawText") == 2, frame
+    assert w.drawn == ["LINKED PIKACHU AND CHARMANDER", "IN VIRIDIAN FOREST NOW"]
+    assert "..." not in "".join(w.drawn)
+    assert all(len(line) <= 30 for line in w.drawn)
+    assert w.state.box is True
+
+
+def test_wrapped_bar_grows_upward_so_the_bottom_edge_holds():
+    """hud_y stays the bottom line: the extra lines must not fall off a 144px screen.
+
+    Read off the y hud.lua passes gui.drawText: bottom line at hud_y-1 = 131, each
+    earlier line one font_size+2 higher. A bar that grew DOWNWARD would draw at
+    141/151 and put line 2 under the screen.
+    """
+    ys = []
+    w = World().gbc()
+    w.lua.execute(
+        "local d = gui.drawText; gui.drawText = function(x, y, ...) YS[#YS+1] = y; return d(x, y, ...) end"
+    )
+    w.lua.globals().YS = w.lua.eval("{}")
+    w.H.show("LINKED PIKACHU AND CHARMANDER IN VIRIDIAN FOREST NOW", 255, 255, 0, 240)
+    w.render()
+    ys = list(w.lua.globals().YS.values())
+    assert ys == [121, 131], ys          # font_size 8 -> line_h 10, hud_y 132
+
+
+def test_only_past_the_line_cap_does_it_ellipsize_and_say_so():
+    """Beyond 3 lines the last line is cut -- once, with a console.log receipt."""
+    w = World().gbc()
+    text = " ".join(["WORD"] * 40)       # ~200 chars, far past 3 x 30
+    w.H.show(text, 255, 255, 0, 240)
+    frame = w.render()
+    assert frame.count("drawText") == 3, frame
+    assert w.drawn[-1].endswith("...")
+    assert not any(line.endswith("...") for line in w.drawn[:-1])
+    logs = list(w.state.logs.values())
+    assert len(logs) == 1 and "ellipsized" in logs[0], logs
+
+
+def test_prompt_wraps_too():
+    """H.prompt gets the same treatment, growing downward from prompt_y."""
+    w = World().gbc()
+    w.H.prompt("SOUL LINK BROKEN BETWEEN PIKACHU AND CHARMANDER FOREVER", 255, 0, 0, 300)
+    frame = w.render()
+    assert frame.count("drawText") == 2, frame
+    assert "..." not in "".join(w.drawn)
+
+
+# ── HUD-3: messages actually go away ─────────────────────────────────────────
+# Only the HEAD of the queue ages, so K queued messages used to hold the screen
+# for K x their duration in sequence (a hello that re-memorializes a party, or a
+# whiteout cascade). Bounds: coalesce identical text, shorten the head while a
+# backlog exists, cap the queue depth.
+
+def test_a_burst_of_distinct_messages_drains_within_the_bounded_dwell():
+    """5 x 240 frames would be 1200 frames of HUD; the bound is 3*90 + 240 = 510."""
+    w = World()
+    for i in range(5):
+        w.H.show(f"MSG {i}", 255, 255, 0, 240)
+    for _ in range(400):
+        w.render()
+    assert w.state.text is True, "the burst must not be dropped outright"
+    for _ in range(200):
+        w.render()
+    assert w.state.text is False
+    assert w.state.box is False
+
+
+def test_identical_text_coalesces_instead_of_stacking():
+    """The hello re-memorialize loop queues the SAME string once per dead party mon."""
+    w = World()
+    for _ in range(6):
+        w.H.show("[x] Dead in party -> grave", 255, 80, 80, 240)
+    for _ in range(241):
+        w.render()
+    assert w.state.text is False, "6 copies would have held the bar for 1440 frames"
+
+
+def test_clear_empties_both_queues():
+    """H.clear() must drop a queued backlog, not just the head of each queue."""
+    w = World()
+    for i in range(3):
+        w.H.show(f"MSG {i}", 255, 255, 0, 240)
+        w.H.prompt(f"ASK {i}", 255, 255, 0, 300)
+    w.render()
+    w.H.clear()
     assert "drawText" not in w.render()

@@ -96,33 +96,72 @@ local cfg = {
     prompt_h   = 14,    -- center prompt height
     gameover_y = 60,    -- game-over banner top
     font_size  = 10,    -- text font size
-    -- Empirical Courier New Bold advance per font size, used by the safety-net
-    -- truncate in H.show / H.prompt to prevent text from bleeding past the dark
-    -- backdrop. Numbers are intentionally GENEROUS — the truncate is a last-
-    -- resort net for runaway strings, not a tight fit. Real GDI+ Courier Bold
-    -- at 10pt advances ~6px; at 8pt ~5px. Budgets at these widths:
+    -- Empirical Courier New Bold advance per font size, used by the word wrap in
+    -- H.show / H.prompt to keep text from bleeding past the dark backdrop.
+    -- Numbers are intentionally GENEROUS — wrapping a little early is invisible,
+    -- wrapping late puts pixels outside the box. Real GDI+ Courier Bold at 10pt
+    -- advances ~6px; at 8pt ~5px. Per-line budgets at these widths:
     --   GBC (font_size=8,  char_width=5): 156 / 5 = 31 chars
     --   GBA (font_size=10, char_width=6): 234 / 6 = 39 chars
     --   NDS (font_size=10, char_width=6): 250 / 6 = 41 chars
     char_width = 6,
 }
 
--- Truncate `text` so it fits within the bottom HUD bar at the current font.
--- Reserves 3 chars for "..." when truncation occurs. Returns the original
--- string when it already fits.
-local function fit_hud(text)
-    if type(text) ~= "string" then return text end
-    local max_chars = math.floor((cfg.hud_right - cfg.hud_x) / cfg.char_width)
-    if #text <= max_chars then return text end
-    return text:sub(1, math.max(0, max_chars - 3)) .. "..."
+-- Word wrap -------------------------------------------------------------------
+-- Notifications used to be truncated to one line with "...", which threw away
+-- exactly the tail that names the mon ("[x] Dead in par..."). They are wrapped
+-- instead: up to MAX_*_LINES lines of max_chars, and the bar/banner grows to fit.
+-- "..." only survives as a last resort when even the full line budget is short,
+-- and that case is logged so a lane receipt names the message that overflowed.
+local MAX_HUD_LINES    = 3   -- bottom bar: 3 lines still clear the Gen 1 144px screen
+local MAX_PROMPT_LINES = 4
+
+-- Split `text` into at most `max_lines` lines of `max_chars`, breaking on spaces;
+-- a single token longer than max_chars is hard-broken. Returns a list of lines
+-- (always at least one). Runs once per message, at H.show / H.prompt time.
+local function wrap(text, max_chars, max_lines)
+    if type(text) ~= "string" then return { text == nil and "" or tostring(text) } end
+    if max_chars < 1 then max_chars = 1 end
+    local lines, cur = {}, ""
+    local function push() lines[#lines + 1] = cur; cur = "" end
+    for tok in text:gmatch("%S+") do
+        local word = tok                    -- a for-loop variable is const in Lua 5.5
+        while #word > max_chars do          -- hard-break an over-long token
+            if cur ~= "" then push() end
+            lines[#lines + 1] = word:sub(1, max_chars)
+            word = word:sub(max_chars + 1)
+        end
+        if cur == "" then
+            cur = word
+        elseif #cur + 1 + #word <= max_chars then
+            cur = cur .. " " .. word
+        else
+            push()
+            cur = word
+        end
+    end
+    if cur ~= "" then push() end
+    if #lines == 0 then lines[1] = "" end
+    if #lines > max_lines then
+        local last = lines[max_lines]
+        for i = #lines, max_lines + 1, -1 do lines[i] = nil end
+        lines[max_lines] = last:sub(1, math.max(0, max_chars - 3)) .. "..."
+        if type(console) == "table" and type(console.log) == "function" then
+            console.log(fmt("[SLink-HUD] message exceeds %dx%d, ellipsized: %s",
+                            max_lines, max_chars, text))
+        end
+    end
+    return lines
 end
 
--- Same as fit_hud but for the center prompt (full screen width minus 8px).
-local function fit_prompt(text)
-    if type(text) ~= "string" then return text end
-    local max_chars = math.floor((cfg.screen_w - 8) / cfg.char_width)
-    if #text <= max_chars then return text end
-    return text:sub(1, math.max(0, max_chars - 3)) .. "..."
+-- Wrap `text` to the bottom HUD bar at the current font.
+local function wrap_hud(text)
+    return wrap(text, math.floor((cfg.hud_right - cfg.hud_x) / cfg.char_width), MAX_HUD_LINES)
+end
+
+-- Same as wrap_hud but for the center prompt (full screen width minus 8px).
+local function wrap_prompt(text)
+    return wrap(text, math.floor((cfg.screen_w - 8) / cfg.char_width), MAX_PROMPT_LINES)
 end
 
 function H.init(opts)
@@ -176,50 +215,86 @@ local function clear_surface()
 end
 
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────
+-- Message lifecycle -----------------------------------------------------------
+-- Only the HEAD of a queue ages, so K queued messages used to occupy the screen
+-- for K x their duration, one after another. A hello that re-memorializes a full
+-- party, or a whiteout cascade, then reads as "the HUD never clears". Three
+-- bounds, applied to both queues:
+--   * identical text already queued REFRESHES it instead of stacking a copy;
+--   * a backlog shortens each head remaining dwell to BURST_FRAMES;
+--   * the queue is capped, dropping the OLDEST (the newest event is the one the
+--     player needs to read).
+-- Worst case on screen is therefore (MAX_QUEUE-1) * BURST_FRAMES + duration.
+local MAX_QUEUE    = 4    -- hard ceiling per queue
+local BURST_FRAMES = 90   -- 1.5s per message while a backlog exists
+
+local function enqueue(q, text, lines, color, frames)
+    for i = 1, #q do
+        if q[i].text == text then
+            q[i].frames = math.max(q[i].frames, frames)
+            return
+        end
+    end
+    q[#q + 1] = { text = text, lines = lines, color = color, frames = frames }
+    while #q > MAX_QUEUE do remove(q, 1) end
+end
+
+-- Age the head of `q` by one frame and pop it when spent.
+local function age(q)
+    local m = q[1]
+    if #q > 1 and m.frames > BURST_FRAMES then m.frames = BURST_FRAMES end
+    m.frames = m.frames - 1
+    if m.frames <= 0 then remove(q, 1) end
+end
+
 local hud_queue = {}
 
 function H.show(text, r, g, b, duration_frames)
-    text = fit_hud(sanitize(text))
-    hud_queue[#hud_queue + 1] = {
-        text   = text,
-        color  = fmt("#%02X%02X%02X", r or 255, g or 255, b or 255),
-        frames = duration_frames or 240,
-    }
+    text = sanitize(text)
+    enqueue(hud_queue, text, wrap_hud(text),
+            fmt("#%02X%02X%02X", r or 255, g or 255, b or 255),
+            duration_frames or 240)
 end
 
 local function render_hud()
     if #hud_queue == 0 then return end
     local msg = hud_queue[1]
-    gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
+    -- cfg.hud_y is the BOTTOM line: extra lines grow UPWARD so a 3-line bar
+    -- still ends on the same pixel row of the 144px Gen 1 screen.
+    local n, line_h = #msg.lines, cfg.font_size + 2
+    gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2 - (n - 1) * line_h,
                 cfg.hud_right, cfg.hud_y + cfg.font_size,
                 0xFF000000, 0xBB000000)
-    gui.drawText(cfg.hud_x, cfg.hud_y - 1, msg.text, msg.color,
-                 nil, cfg.font_size, "Courier New", "Bold")
-    msg.frames = msg.frames - 1
-    if msg.frames <= 0 then remove(hud_queue, 1) end
+    for i = 1, n do
+        gui.drawText(cfg.hud_x, cfg.hud_y - 1 - (n - i) * line_h, msg.lines[i],
+                     msg.color, nil, cfg.font_size, "Courier New", "Bold")
+    end
+    age(hud_queue)
 end
 
 -- ── Center-screen prompt (prominent banner, auto-dismiss) ───────────────────
 local prompt_queue = {}
 
 function H.prompt(text, r, g, b, duration_frames)
-    text = fit_prompt(sanitize(text))
-    prompt_queue[#prompt_queue + 1] = {
-        text   = text,
-        color  = fmt("#%02X%02X%02X", r or 255, g or 255, b or 255),
-        frames = duration_frames or 300,
-    }
+    text = sanitize(text)
+    enqueue(prompt_queue, text, wrap_prompt(text),
+            fmt("#%02X%02X%02X", r or 255, g or 255, b or 255),
+            duration_frames or 300)
 end
 
 local function render_prompt()
     if #prompt_queue == 0 then return end
     local py = cfg.prompt_y
-    local py2 = py + cfg.prompt_h
     local p = prompt_queue[1]
-    gui.drawBox(1, py, cfg.screen_w - 1, py2, 0xFF000000, 0xCC000000)
-    gui.drawText(4, py + 1, p.text, p.color, nil, cfg.font_size, "Courier New", "Bold")
-    p.frames = p.frames - 1
-    if p.frames <= 0 then remove(prompt_queue, 1) end
+    -- The prompt floats mid-screen, so extra lines grow DOWNWARD from prompt_y.
+    local n, line_h = #p.lines, cfg.font_size + 2
+    gui.drawBox(1, py, cfg.screen_w - 1, py + cfg.prompt_h + (n - 1) * line_h,
+                0xFF000000, 0xCC000000)
+    for i = 1, n do
+        gui.drawText(4, py + 1 + (i - 1) * line_h, p.lines[i], p.color,
+                     nil, cfg.font_size, "Courier New", "Bold")
+    end
+    age(prompt_queue)
 end
 
 -- ── Game-over persistent overlay ────────────────────────────────────────────
