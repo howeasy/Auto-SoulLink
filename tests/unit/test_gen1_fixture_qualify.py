@@ -29,7 +29,7 @@ _CLEAN = ("red_town", "blue_town", "red_battle", "blue_battle", "red_town_ot2", 
           "yellow_battle")
 # The pureRGB town fixtures (built by the same chain on the pinned builds); battle ones follow.
 _PURE = tuple(n for n in ("purered_town", "pureblue_town", "puregreen_town",
-                          "purered_battle", "pureblue_battle", "puregreen_battle")
+                          "purered_battle", "pureblue_battle", "puregreen_battle", "purered_town_ot2")
               if os.path.exists(os.path.join(_REPO, "tests", "fixtures", "gen1", n + ".SaveRAM")))
 _CLEAN = _CLEAN + _PURE
 _LEGACY = ()
