@@ -1803,16 +1803,18 @@ class DuoRun:
 
         source = Path(path)
         name = source.name.lower()
+        title_a = self.gcfg["fixture"]["a"]  # red, or purered on the pure pairing
         if (not source.is_file() or source.suffix != ".SaveRAM"
-                or not (name.startswith("red") or "red version" in name)):
-            raise RuntimeError("--wrong-save must name an existing second-OT Red SaveRAM")
+                or not (name.startswith(title_a) or f"{title_a} version" in name)):
+            raise RuntimeError(f"--wrong-save must name an existing second-OT {title_a} SaveRAM")
         sram = source.read_bytes()
         rom = (Path(REPO) / self.gcfg["rom"]["a"]).read_bytes()
         problems = qualify(sram, rom)  # gen1_fixtures.py:81-148, game's checksum/stat oracle
         if problems:
             raise RuntimeError(f"--wrong-save is not a game-loadable Red save: {problems}")
-        profile = json.loads((Path(REPO) / "data/games/gen1_rby/profile.json").read_text(
-            encoding="utf-8"))["titles"]["red"]["ram"]
+        pack = "gen1_purergb" if title_a.startswith("pure") else "gen1_rby"
+        profile = json.loads((Path(REPO) / "data/games" / pack / "profile.json").read_text(
+            encoding="utf-8"))["titles"][title_a]["ram"]
         # save.asm:208-220 copies wMainDataStart..End to sMainData; never subtract
         # wPlayerName here (gen1_codec.py:74-77 uses the same compacted offset rule).
         offset = codec.SRAM_LAYOUT["sMainData"] + profile["wPlayerID"] - profile["wMainDataStart"]
@@ -1942,7 +1944,7 @@ class DuoRun:
         same = self._artifact(self._same_save_artifact, "C-2 same-save SaveRAM")
         same_sram, same_party, _same_box, codec = self._saved_gen1_party("a", save_name=str(same))
         same_keys = [codec.key(mon) for mon in same_party]
-        same_ot = saved_ot(same_sram, "red")
+        same_ot = saved_ot(same_sram, self.gcfg["fixture"]["a"])
         if self._link_keys["a"] not in same_keys:
             raise RuntimeError(f"same-save artifact lacks A's linked key {self._link_keys['a']}: "
                                f"{same_keys}")
@@ -1954,7 +1956,7 @@ class DuoRun:
 
         final_sram, final_party, _final_box, _codec = self._saved_gen1_party("a")
         final_keys = [codec.key(mon) for mon in final_party]
-        final_ot = saved_ot(final_sram, "red")
+        final_ot = saved_ot(final_sram, self.gcfg["fixture"]["a"])
         if final_ot == DEFAULT_OT:
             raise RuntimeError(f"final A save still carries the clean Red OT 0x{final_ot:04X}; "
                                f"the wrong-OT relaunch did not replace the same-save file")
@@ -2084,7 +2086,7 @@ class DuoRun:
                          f"B {len(b_hellos)}, 0 REJECTED, gameplay counts unchanged, "
                          f"links.json canonically identical to the baseline")
 
-        for inst, title in (("a", "red"), ("b", "blue")):
+        for inst, title in (("a", self.gcfg["fixture"]["a"]), ("b", self.gcfg["fixture"]["b"])):
             fixture = Path(self._fixture_save_path(inst)).read_bytes()
             start = codec.SRAM_LAYOUT["sPartyData"]
             want = [codec.key(mon) for mon in codec.decode_party(
