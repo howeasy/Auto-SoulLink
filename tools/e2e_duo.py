@@ -2203,8 +2203,20 @@ class DuoRun:
                 boxed = codec.decode_box(sram[offset:offset + codec.BOX_SIZE])  # validates count/FF
                 if number == 12:
                     memorial = boxed
+            # Bit 7 of the boxed status byte is an ENGINE artifact, not an ailment, so it is
+            # masked off here: RemoveFaintedPlayerMon (pokered 405b624
+            # engine/battle/core.asm:1003-1023) does `ld [wBattleMonStatus], a` and then
+            # ReadPlayerMonCurHPAndStatus (:1800-1810) copies HP/party-pos/status into the party
+            # slot the memorial is cut from. The comment there ("a is 0") only holds when the
+            # low-health alarm was off; when the HP bar was RED (home/palettes.asm:44-56 ->
+            # DrawPlayerHUDAndHPBar core.asm:1857-1873 sets bit 7 of wLowHealthAlarm) the routine
+            # first stores DISABLE_LOW_HEALTH_ALARM ($ff) and calls WaitForSoundToFinish, which
+            # returns with a == $80 from its own `and $80` (home/delay.asm:15-18) -- so the corpse
+            # is saved with status $80. $80 is not a status bit (SLP_MASK %111, PSN/BRN/FRZ/PAR =
+            # bits 3-6, constants/status_constants.asm), and whether it lands depends only on the
+            # mon's HP fraction at the faint (red below 10/48 bar pixels), i.e. on hunt RNG.
             if len(memorial) != 1 or codec.key(memorial[0]) != key or (
-                    memorial[0]["hp"], memorial[0]["status"]) != (0, 0):
+                    memorial[0]["hp"], memorial[0]["status"] & 0x7F) != (0, 0):
                 raise RuntimeError(f"{inst} Box 12 lacks the HP0000/status00 linked key {key}: "
                                    f"{[(codec.key(m), m['hp'], m['status']) for m in memorial]}")
             self._pydec_note(f"{inst} saved living starter; linked key {key} absent from party/current box")

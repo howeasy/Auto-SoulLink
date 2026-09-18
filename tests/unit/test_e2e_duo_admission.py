@@ -913,17 +913,25 @@ def test_synthetic_bench_faint_oracle_passes_then_rejects_status_corruption(tmp_
     run.assert_linked_faint_saved(fast_memorial, active=False)
     path, sram, _rom = paths["b"]
     box = codec.verify_boxes(sram)["boxes"][12]["offset"]
-    sram[box + codec.BOX_LAYOUT["mons"] + 4] = 1  # status, not HP; preserve structure
     bank_index = 1
-    sram[codec.SRAM_LAYOUT["individual_checksums"][bank_index] + 5] = (
-        codec.sav_checksum(sram[box:box + codec.BOX_SIZE]))
-    bank = codec.SRAM_LAYOUT["box_banks"][bank_index]
-    end = codec.SRAM_LAYOUT["all_boxes_checksums"][bank_index]
-    sram[end] = codec.sav_checksum(sram[bank:end])
-    path.write_bytes(sram)
+
+    def rewrite_status(value):
+        sram[box + codec.BOX_LAYOUT["mons"] + 4] = value  # status, not HP; preserve structure
+        sram[codec.SRAM_LAYOUT["individual_checksums"][bank_index] + 5] = (
+            codec.sav_checksum(sram[box:box + codec.BOX_SIZE]))
+        bank = codec.SRAM_LAYOUT["box_banks"][bank_index]
+        end = codec.SRAM_LAYOUT["all_boxes_checksums"][bank_index]
+        sram[end] = codec.sav_checksum(sram[bank:end])
+        path.write_bytes(sram)
+
+    # $80 is RemoveFaintedPlayerMon's low-health-alarm artifact (pokered
+    # engine/battle/core.asm:1011-1023 + home/delay.asm:15-18), not a Gen 1 ailment bit: accepted.
+    rewrite_status(0x80)
+    run.assert_linked_faint_saved(results, active=False)
+    rewrite_status(1)  # one turn of SLP is a real ailment and still fails
     with pytest.raises(RuntimeError, match="HP0000/status00"):
         run.assert_linked_faint_saved(results, active=False)
-    print("synthetic bench faint: PASS; boxed status corruption: FAIL")
+    print("synthetic bench faint: PASS; engine $80 accepted; boxed status corruption: FAIL")
 
 
 def test_synthetic_active_faint_oracle_requires_loop_write_before_engine_site(tmp_path, capsys):
