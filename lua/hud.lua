@@ -146,7 +146,7 @@ local function wrap(text, max_chars, max_lines)
         local last = lines[max_lines]
         for i = #lines, max_lines + 1, -1 do lines[i] = nil end
         lines[max_lines] = last:sub(1, math.max(0, max_chars - 3)) .. "..."
-        if type(console) == "table" and type(console.log) == "function" then
+        if type(console) == "table" and console.log ~= nil then
             console.log(fmt("[SLink-HUD] message exceeds %dx%d, ellipsized: %s",
                             max_lines, max_chars, text))
         end
@@ -212,8 +212,13 @@ end
 -- one-frame flicker, not lost output. Guarded so the module loads outside BizHawk.
 local function clear_surface()
     if type(gui) ~= "table" then return end
-    if type(gui.clearGraphics) == "function" then gui.clearGraphics() end
-    if type(gui.cleartext) == "function" then gui.cleartext() end
+    -- BizHawk exposes its API as NLua delegates: type(gui.clearGraphics) is "userdata",
+    -- never "function". A type()=="function" guard here was false on every real frame,
+    -- so no clear ever ran in production (HUD-SHOT 2026-09-18: unguarded call -> text
+    -- gone; guarded -> "Weedle linked!" still on screen at frame 1000 with zero draws).
+    -- Test for presence, call through pcall, and let the lupa stub model the same shape.
+    if gui.clearGraphics ~= nil then pcall(gui.clearGraphics) end
+    if gui.cleartext ~= nil then pcall(gui.cleartext) end
 end
 
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────

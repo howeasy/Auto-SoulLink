@@ -58,7 +58,12 @@ return function(rec)
       state.texts[#state.texts + 1] = s
     end,
   }
-  console = {log = function(s) state.logs[#state.logs + 1] = s end}
+  -- BizHawk hands Lua its API as NLua delegates, whose type() is "userdata", not "function".
+  -- Wrap every stubbed API in a callable TABLE so a type(x) == "function" guard in hud.lua
+  -- fails here exactly as it fails in EmuHawk (the HUD-SHOT finding, 2026-09-18).
+  local function callable(f) return setmetatable({}, {__call = function(_, ...) return f(...) end}) end
+  for k, f in pairs(gui) do gui[k] = callable(f) end
+  console = {log = callable(function(s) state.logs[#state.logs + 1] = s end)}
   return state
 end
 """
