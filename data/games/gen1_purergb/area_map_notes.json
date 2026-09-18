@@ -2,6 +2,20 @@
   "schema": "gen1-purergb-area-notes-v1",
   "notes": [
     {
+      "map_id": 68,
+      "const": "MT_MOON_POKECENTER",
+      "rule": "dungeon_pokecenter_own_area",
+      "area_id": "mt_moon_pokecenter",
+      "why": "table-less rest stop; mirrors vanilla's mt_moon_pokecenter singleton"
+    },
+    {
+      "map_id": 81,
+      "const": "ROCK_TUNNEL_POKECENTER",
+      "rule": "dungeon_pokecenter_own_area",
+      "area_id": "rock_tunnel_pokecenter",
+      "why": "table-less rest stop; mirrors vanilla's mt_moon_pokecenter singleton"
+    },
+    {
       "map_id": 37,
       "const": "REDS_HOUSE_1F",
       "rule": "game_knowledge_override",

@@ -333,6 +333,7 @@ def build(root) -> tuple[dict, dict, list]:
     # Rocket Hideout's 5 and Silph Co.'s 12 get none (every one points at NothingWildMons).
     pointer_label = dict(pointers)
     group_of: dict[int, str] = {}       # map_id -> collapsed area_id
+    notes: list[dict] = []
     group_name: dict[str, str] = {}     # area_id -> display name
     floor_suffix: dict[int, str] = {}   # map_id -> " 1F" / " B1F" / ...
     for area_id, spec in DUNGEON_GROUPS.items():
@@ -356,6 +357,9 @@ def build(root) -> tuple[dict, dict, list]:
             pc_id = name_to_id[pokecenter_const]
             group_of[pc_id] = snake(pokecenter_const)  # own id, NOT folded into the group
             group_name[snake(pokecenter_const)] = display_name(pokecenter_const)
+            notes.append({"map_id": pc_id, "const": pokecenter_const, "rule": "dungeon_pokecenter_own_area",
+                          "area_id": snake(pokecenter_const),
+                          "why": "table-less rest stop; mirrors vanilla's mt_moon_pokecenter singleton"})
 
     own_area_tokens = {tuple(id_to_name[mid].split("_")): mid for mid in own_area}
     route_name_to_id = {id_to_name[mid]: mid for mid in ROUTE_IDS}
@@ -379,7 +383,6 @@ def build(root) -> tuple[dict, dict, list]:
         return city_first_token.get(const_name.split("_")[0])
 
     result: dict[int, dict] = {}
-    notes: list[dict] = []
     for mid in range(NUM_MAPS):
         const_name = id_to_name[mid]
         name = display_name(const_name)
