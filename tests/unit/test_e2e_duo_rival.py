@@ -6,6 +6,7 @@ check removed has to fail its own case here.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -56,7 +57,8 @@ _B_TEXT = "\n".join([
 
 
 def _stub(tmp_path, monkeypatch, *, a_text=None, outcome="win", link=None, ack="[19, 16]",
-          ack_line=True, is_rival=True, b_party=2, party_has_catch=True):
+          ack_line=True, is_rival=True, b_party=2, party_has_catch=True, loss_cause="whiteout",
+          retired=(), queued_ts="2026-09-17 12:00:00,000"):
     a_sram, a_rom = adm._fixture_save("red")
     b_sram, b_rom = adm._fixture_save("blue")
     a_image, b_image = bytearray(a_sram), bytearray(b_sram)
@@ -80,10 +82,15 @@ def _stub(tmp_path, monkeypatch, *, a_text=None, outcome="win", link=None, ack="
     default_link = {"area_id": "route_1", "status": "alive", "cause": "",
                     "a": {"key": key_a}, "b": {"key": key_b}}
     if outcome == "loss":
-        default_link = {"area_id": "route_1", "status": "memorial", "cause": "whiteout",
+        default_link = {"area_id": "route_1", "status": "memorial", "cause": loss_cause,
                         "a": {"key": key_a}, "b": {"key": key_b}}
     run._links_json = lambda: [link or default_link]
     run._status = lambda: {"players": {"b": {"party_keys": [f"K{i}" for i in range(b_party)]}}}
+    # events.json is how the oracle dates B's party against the queued command: each row is a
+    # b-side retirement (`key=None` means the link's own b key, i.e. the D-6 linked faint).
+    (tmp_path / "events.json").write_text(json.dumps(
+        [{"ts": ts, "player": "b", "type": "force_faint", "area_id": "route_22",
+          "key": key or key_b} for key, ts in retired]), encoding="utf-8")
 
     def saved(inst, **_kwargs):
         image = bytes(a_image if inst == "a" else b_image)
@@ -97,6 +104,9 @@ def _stub(tmp_path, monkeypatch, *, a_text=None, outcome="win", link=None, ack="
         lines.append("[a] trainer_battle_start trainer_id=225 is_rival=False")
     if ack_line:
         lines.append(f"[a] rival_team_replaced ack trainer_id=225 species={ack}")
+    if queued_ts:
+        lines.append(f"{queued_ts} [INFO] server.state: [a] queued replace_rival_team "
+                     f"(trainer_id=225, n=2, source=auto)")
     (tmp_path / "slink.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return run, {"a": a_text if a_text is not None else _receipt_a(outcome=outcome),
                  "b": _B_TEXT}
@@ -146,6 +156,51 @@ def test_rival_swap_oracle_refuses_a_blob_count_that_is_not_bs_party(tmp_path, m
     party size as the server sees it."""
     run, results = _stub(tmp_path, monkeypatch, b_party=3)
     with pytest.raises(RuntimeError, match="B's party holds 3"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_reads_a_party_that_shrank_after_the_command(tmp_path, monkeypatch):
+    """RIVAL-2 sends A's LINKED mon into the rival fight, so it can faint there: D-6 retires B's
+    copy AFTER the blobs were taken and /api/status, read at the end of the run, shows one mon
+    fewer than the command carried. The consequence is asserted (the retired key belongs to a
+    retired link, and the pair is memorial with cause `battle`), never scored as a mismatch."""
+    notes = []
+    run, results = _stub(tmp_path, monkeypatch, outcome="loss", loss_cause="battle", b_party=1,
+                         retired=((None, "2026-09-17T12:00:05"),),
+                         a_text=_receipt_a(outcome="loss"))
+    run._pydec_note = notes.append
+    results["a"] += ("\nBATTLE_FAINT_SITE "
+                      f"{run._link_keys['a']} @23878 slot=1 battle_hp=0")
+    run.assert_rival_swap_new_saved(results)
+    assert any(run._link_keys["b"] in note and "D-6" in note for note in notes)
+
+
+def test_rival_swap_oracle_refuses_a_party_that_was_short_at_command_time(tmp_path, monkeypatch):
+    """No retirement after the command means B really did have one mon when the blobs were
+    taken: the original failure, word for word."""
+    run, results = _stub(tmp_path, monkeypatch, b_party=1)
+    with pytest.raises(RuntimeError, match="B's party holds 1"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_refuses_a_shrink_no_retired_link_explains(tmp_path, monkeypatch):
+    run, results = _stub(tmp_path, monkeypatch, b_party=1,
+                         retired=(("ZZZZ:9999:99", "2026-09-17T12:00:05"),))
+    with pytest.raises(RuntimeError, match="no retired link names it"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_refuses_a_shrink_that_predates_the_command(tmp_path, monkeypatch):
+    """A retirement older than the queue row cannot explain the blob count."""
+    run, results = _stub(tmp_path, monkeypatch, b_party=1,
+                         retired=((None, "2026-09-17T11:59:59"),))
+    with pytest.raises(RuntimeError, match="B's party holds 1"):
+        run.assert_rival_swap_new_saved(results)
+
+
+def test_rival_swap_oracle_refuses_a_missing_queue_row(tmp_path, monkeypatch):
+    run, results = _stub(tmp_path, monkeypatch, queued_ts=None)
+    with pytest.raises(RuntimeError, match="no queued replace_rival_team row"):
         run.assert_rival_swap_new_saved(results)
 
 

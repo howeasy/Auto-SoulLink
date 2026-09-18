@@ -2402,19 +2402,63 @@ class DuoRun:
                                f"blob(s): {ack.group(1)}")
         status = self._status() or {}
         b_keys = ((status.get("players") or {}).get("b") or {}).get("party_keys") or []
-        if len(b_keys) != blobs:
+        # The blobs are B's party AT COMMAND TIME (state.py:2938-2948 copies `partner_blobs` as
+        # the command is queued), while /api/status is read after the run ends. RIVAL-2's
+        # replacement path sends A's LINKED mon into the rival fight, so a linked faint (D-6)
+        # can retire B's copy in between and shrink B's party — a consequence to assert, not a
+        # mismatch. Reconstruct the command-time size from the queue row's own timestamp plus
+        # the retirements that follow it; both stamps are ISO, so string order is time order.
+        queued = re.search(r"^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d),\d+ .*queued replace_rival_team",
+                           log_text, re.M)
+        if not queued:
+            raise RuntimeError("the server logged no queued replace_rival_team row; its "
+                               "timestamp is what dates B's party against the command")
+        command_ts = f"{queued.group(1)}T{queued.group(2)}"
+        links = self._links_json()
+        retired = []
+        # ponytail: events.json stamps are second-granular, so a retirement inside the queue's
+        # own second counts as "after" — it is still a real retirement, and the link check below
+        # is what keeps that lenient edge from swallowing an unrelated shortfall.
+        for row in self._reconnect_events():
+            if row.get("player") != "b" or row.get("type") not in ("force_faint", "faint"):
+                continue
+            key = row.get("key")
+            if not key or key in b_keys or key in retired or str(row.get("ts")) < command_ts:
+                continue
+            if not any((entry.get("b") or {}).get("key") == key
+                       and entry.get("status") != "alive" for entry in links):
+                raise RuntimeError(f"B's party lost {key} after the swap command but no retired "
+                                   f"link names it; only a linked faint (D-6) may shrink the "
+                                   f"partner's party once the blobs were taken")
+            retired.append(key)
+        at_command = len(b_keys) + len(retired)
+        if at_command != blobs:
             raise RuntimeError(f"the command carried {blobs} blob(s) but the server's view of "
-                               f"B's party holds {len(b_keys)}; the swap mirrors the partner's "
+                               f"B's party holds {at_command}; the swap mirrors the partner's "
                                f"current party")
+        if retired:
+            self._pydec_note(f"D-6 after the swap: B's party reads {len(b_keys)} at the end "
+                             f"because {', '.join(retired)} was retired with its link after the "
+                             f"command at {command_ts}; command-time party {at_command} == "
+                             f"{blobs} blob(s)")
 
         durable = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
         if len(durable) != 1:
             raise RuntimeError(f"expected one durable Route 1 link, got {durable}")
         link = durable[0]
         if outcome.group(1) == "loss":
-            if link.get("status") not in ("dead", "memorial") or link.get("cause") != "whiteout":
-                raise RuntimeError(f"A lost to the rival, so the whited-out pair has to be "
-                                   f"retired with cause whiteout: {link}")
+            # A's own site marker says whether the LINKED mon fought and fainted INSIDE the
+            # rival battle (RIVAL-2's replacement path is what sends it in). If it did, D-6
+            # retires the pair right there with cause `battle` and the blackout that follows
+            # finds nothing left to retire; only an untouched linked mon leaves the whiteout
+            # itself as the cause.
+            a_key = (link.get("a") or {}).get("key") or ""
+            fainted_in_battle = bool(a_key) and bool(
+                re.search(rf"BATTLE_FAINT_SITE {re.escape(a_key)}\b", a_text))
+            cause = "battle" if fainted_in_battle else "whiteout"
+            if link.get("status") not in ("dead", "memorial") or link.get("cause") != cause:
+                raise RuntimeError(f"A lost to the rival, so the retired pair has to be dead or "
+                                   f"memorial with cause {cause}: {link}")
             self._pydec_note(f"W-4 swap: {blobs} blob(s), within={within} frames "
                              f"(RIVAL_INIT_FRAMES={init_frames}), compare "
                              f"slots={match.group(1)}, send-out {sendout.group(1)}, "
