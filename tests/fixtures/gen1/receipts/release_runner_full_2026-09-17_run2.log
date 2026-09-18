@@ -1,0 +1,95 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3031 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (68s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (20s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     9 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (109s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (22s)
+[ .. ] duo-pairs
+ESULT before both RESULT lines
+E         [duo] rival_swap_new: a client finished before 'both RESULT lines' (a: RESULT: FAIL (the rival battle plan stalled (no-replacement)); b: no RESULT)
+E         --- rival_swap_new a result (last 25 lines) ---
+E         RIVAL_PHASE route22_rival @8746 map=33 (39,9) battle=0 opponent=0 hp=13
+E         TX {"area_id":"route_22","event":"area_enter","loc_name":"Route 22","player":"a","seq":255}
+E         RIVAL_TRIGGER map=33 x=29 y=5
+E         RIVAL_PHASE close-text @9089 map=33 (29,5) battle=0 opponent=0 hp=13
+E         RIVAL_PHASE route22_rival-detour @9908 map=33 (29,5) battle=0 opponent=0 hp=13
+E         RIVAL_BATTLE_BEGIN frame=9912 opponent=225
+E         TX {"event":"trainer_battle_start","player":"a","seq":295,"trainer_id":225}
+E         RX replace_rival_team n=2
+E         RX replace_rival_team
+E         [client] [SLink-gen1] RIVAL_WINDOW init_frames=182
+E         TX {"event":"rival_team_replaced","player":"a","seq":302,"species_ids":[176,165],"trainer_id":225}
+E         RIVAL_PHASE rival-fight @10094 map=33 (29,5) battle=2 opponent=225 hp=13
+E         RIVAL_TEAM_REPLACED frame=10093 within=181
+E         ENEMY_MONS_MATCH slots=2
+E         [client] [SLink-gen1] RIVAL_WINDOW init_frames=182 staged_frames=302
+E         ENEMY_SENDOUT species=176 expected=176
+E         heartbeat f=10800 party=2 connected=true
+E         heartbeat f=14400 party=2 connected=true
+E         heartbeat f=18000 party=2 connected=true
+E         BATTLE_FAINT_SITE 06C3:4190:99 @18076 slot=0 battle_hp=0
+E         TX {"area_id":"route_22","event":"faint","key":"06C3:4190:99","player":"a","seq":569}
+E         heartbeat f=21600 party=2 connected=true
+E         RIVAL_FIGHT end=no-replacement
+E         RIVAL_PHASE rival-fight-stuck @23004 map=33 (29,5) battle=2 opponent=225 hp=0
+E         RESULT: FAIL (the rival battle plan stalled (no-replacement))
+E         --- rival_swap_new b result (last 25 lines) ---
+E         PARTY slot=1 key=BC19:AFB9:A5 species=165 level=3 hp=5
+E         SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
+E         SAVE_PHASE link_new save-open-start-menu
+E         SAVE_PHASE link_new save-close-foreign-menu
+E         SAVE_PHASE link_new save-select-save
+E         SAVE_PHASE link_new save-choose-save
+E         SAVE_PHASE link_new save-confirm
+E         SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_b_1_witness.bin bytes=31592 saves=1 frame=6000
+E         SAVE_PHASE link_new save-await-close
+E         SAVE_PHASE link_new save-witnessed
+E         SAVE_WITNESS link_new frames=544
+E         RIVAL_IDLE b
+E         heartbeat f=7200 party=2 connected=true
+E         heartbeat f=10800 party=2 connected=true
+E         heartbeat f=14400 party=2 connected=true
+E         heartbeat f=18000 party=2 connected=true
+E         heartbeat f=21600 party=2 connected=true
+E         heartbeat f=25200 party=2 connected=true
+E         heartbeat f=28800 party=2 connected=true
+E         SAVE_PHASE rival_swap_new_b save-open-start-menu
+E         SAVE_PHASE rival_swap_new_b save-close-foreign-menu
+E         SAVE_PHASE rival_swap_new_b save-choose-save
+E         SAVE_PHASE rival_swap_new_b save-confirm
+E         SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_b_1_witness.bin bytes=31592 saves=2 frame=30432
+E         SAVE_PHASE rival_swap_new_b save-await-close
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_yx00hkyi
+E         
+E         ========== summary ==========
+E           rival_swap_new: FAIL (attempt 1 of 2)
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...nk_duo_rival_swap_new_yx00hkyi\n\n========== summary ==========\n  rival_swap_new: FAIL (attempt 1 of 2)\n', stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+2 failed, 16 passed in 676.92s (0:11:16)
+
+[FAIL] duo-pairs          16 passed, 0 skipped (0 unexplained), 2 failed, 0 xfailed, 0 deselected  (678s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
