@@ -1,0 +1,94 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3038 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (67s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     9 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (107s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] duo-pairs
+both RESULT lines' (a: no RESULT; b: RESULT: FAIL (hunt ended out-of-balls))
+E         --- species_clause_new a result (last 25 lines) ---
+E         [client] [SLink-gen1] writes re-enabled after a live validation
+E         TX {"event":"stats_cache","key":"FE9A:4190:A5","player":"a","seq":182,"stats":{"level":4,"maxHP":17}}
+E         PARTY_COUNT 2 -> 1 @6673
+E         heartbeat f=7200 party=1 connected=true
+E         heartbeat f=10800 party=1 connected=true
+E         RX play_sound
+E         RX msgbox text=Route 1 is a dead zone!
+E         RX force_faint key=FE9A:4190:A5
+E         [client] [SLink-gen1] force_faint: key not in party FE9A:4190:A5
+E         RX memorialize key=FE9A:4190:A5
+E         TX {"event":"memorialize_failed","key":"FE9A:4190:A5","player":"a","reason":"saved boxes not initialized","seq":372}
+E         RX memorialize key=FE9A:4190:A5
+E         TX {"event":"memorialize_failed","key":"FE9A:4190:A5","player":"a","reason":"saved boxes not initialized","seq":374}
+E         RX memorialize key=FE9A:4190:A5
+E         TX {"event":"memorialize_failed","key":"FE9A:4190:A5","player":"a","reason":"saved boxes not initialized","seq":376}
+E         RX memorialize key=FE9A:4190:A5
+E         TX {"event":"memorialize_failed","key":"FE9A:4190:A5","player":"a","reason":"saved boxes not initialized","seq":378}
+E         MYKEY 0 06C3:4190:99
+E         PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=3
+E         SPECIES_CLAUSE {"box_mon":1,"capture":1,"force_faint":1,"key":"FE9A:4190:A5","party_mon":0,"player":"a","species":165,"sync_retrieve_done":0}
+E         SAVE_PHASE species_clause_new_a save-open-start-menu
+E         SAVE_PHASE species_clause_new_a save-close-foreign-menu
+E         RX memorialize key=FE9A:4190:A5
+E         SAVE_PHASE species_clause_new_a save-select-save
+E         RX memorialize key=FE9A:4190:A5
+E         --- species_clause_new b result (last 25 lines) ---
+E         PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+E         JITTER requested=37 applied=37 attempt=2
+E         heartbeat f=3600 party=1 connected=true
+E         heartbeat f=7200 party=1 connected=true
+E         heartbeat f=10800 party=1 connected=true
+E         RX hud_show text=>> Got RATTATA
+E         A_PENDING species=165
+E         ENCOUNTER 1 species=36 dupe_of_a=false
+E         [hunt] encounter 1 at (10,34) mode=catch balls=1
+E         phase wild-intro @13066 (10,34) battle=1 party=1
+E         [hunt] turn 1 foe hp 16/16 odds 0.34 dmax nil -> fight
+E         phase wild-fight @13832 (10,34) battle=1 party=1
+E         heartbeat f=14400 party=1 connected=true
+E         [hunt] turn 2 foe hp 9/16 odds 0.67 dmax 9 -> throw
+E         phase wild-throw @14692 (10,34) battle=1 party=1
+E         [hunt] threw ball index 0 -> timeout
+E         phase wild-no-balls @15870 (10,34) battle=1 party=1
+E         TX {"area_id":"route_1","event":"no_catch","level":3,"player":"b","seq":507,"species_id":36}
+E         TX {"event":"safe","player":"b","seq":508}
+E         [hunt] battle outcome ran receipts move1:player_move,throw:timeout,run:escaped
+E         phase wild-ran @15968 (10,34) battle=0 party=1
+E         [hunt] after battle: outcome=ran result=2 party=1 balls=0 -> out-of-balls
+E         phase out-of-balls @15969 (10,34) battle=0 party=1
+E         HUNT out-of-balls after 2904 frames, 1 encounter(s)
+E         RESULT: FAIL (hunt ended out-of-balls)
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_new_iswincgp
+E         
+E         ========== summary ==========
+E           species_clause_new: FAIL (attempt 2 of 8)
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...pecies_clause_new_iswincgp\n\n========== summary ==========\n  species_clause_new: FAIL (attempt 2 of 8)\n', stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+2 failed, 16 passed in 618.97s (0:10:18)
+
+[FAIL] duo-pairs          16 passed, 0 skipped (0 unexplained), 2 failed, 0 xfailed, 0 deselected  (620s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
