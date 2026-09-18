@@ -1,9 +1,18 @@
 local M={}
 -- Read-only Red/Blue WRAM decoders for the scripted route point. `read(addr)` returns one byte.
-M.EVENT_OAK_GOT_PARCEL=56  -- pokered constants/event_constants.asm: const_next $28, +2, skip 14
-M.EVENT_GOT_OAKS_PARCEL=57
-M.POKE_BALL=0x04
-M.OAKS_PARCEL=0x46
+-- The game facts (event bits, bag item ids) come from the foundation's facts table (P3b-e): the
+-- vanilla twin at load, or the caller's lane through `with_facts`. Red/Blue values are
+-- 56/57/0x04/0x46 (pokered constants/event_constants.asm: `const_next $28, +2, const_skip 14`).
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+function M.with_facts(facts)
+    assert(facts and facts.EVENT and facts.ITEM, "point fields need a facts table")
+    M.EVENT_OAK_GOT_PARCEL  = facts.EVENT.OAK_GOT_PARCEL
+    M.EVENT_GOT_OAKS_PARCEL = facts.EVENT.GOT_OAKS_PARCEL
+    M.POKE_BALL             = facts.ITEM.POKE_BALL
+    M.OAKS_PARCEL           = facts.ITEM.OAKS_PARCEL
+    return M
+end
+M.with_facts(dofile(here() .. "gen1_rb_facts.lua"))
 local FACING={[0x00]="down",[0x04]="up",[0x08]="left",[0x0C]="right"}
 function M.event_bit(read,base,bit)
     return math.floor(read(base+math.floor(bit/8))/(2^(bit%8)))%2==1

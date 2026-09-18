@@ -17,16 +17,32 @@ local C = dofile(here() .. "gen1_inputs_common.lua")
 local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
 
 local M = {}
-M.PARK = {10, 35}
--- Route 1 grass at the parking tile: pret maps/Route1.blk + gfx/blocksets/overworld.bst, grass
--- tile $52 read at the half-block's bottom-right tile (engine/battle/wild_encounters.asm:27-31)
--- -> steps x 10-11, y 32-35. (10,36) is the Pallet Town edge: never walk there.
-M.GRASS = {{10, 33}, {10, 35}}
-M.MAX_ENCOUNTERS = 6
+-- The parking tile, the grass patch and the encounter bound are lane facts (P3b-e):
+-- F.WAYPOINTS.HUNT.* and F.TUNING.max_encounters_hunt. (Route 1 grass at the parking tile: pret
+-- maps/Route1.blk + gfx/blocksets/overworld.bst, grass tile $52 read at the half-block's
+-- bottom-right tile (engine/battle/wild_encounters.asm:27-31) -> steps x 10-11, y 32-35; (10,36)
+-- is the Pallet Town edge: never walk there.)
+local F = dofile(here() .. "gen1_rb_facts.lua")
+function M.with_facts(facts)
+    assert(facts and facts.WAYPOINTS and facts.WAYPOINTS.HUNT and facts.TUNING, "hunt needs a facts table")
+    F = facts
+    M.PARK = facts.WAYPOINTS.HUNT.park
+    M.GRASS = facts.WAYPOINTS.HUNT.grass
+    M.MAX_ENCOUNTERS = facts.TUNING.max_encounters_hunt
+    return facts
+end
+M.with_facts(F)
+-- One ball id test for every scan below: F.ITEM.BALL_IDS is the ItemUseBall dispatch set
+-- (MASTER..POKE on vanilla, plus HYPER_BALL on pureRGB), so a scan can never miss a ball the
+-- player can throw.
+function M.is_ball(id)
+    for _, b in ipairs(F.ITEM.BALL_IDS) do if id == b then return true end end
+    return false
+end
 
 
 -- Fields gen1_scripted_play's point lacks: the foe's HP for the fight/throw decision and the
--- bag index of the first ball (MASTER..POKE = 1..4, constants/item_constants.asm:10-13).
+-- bag index of the first ball (F.ITEM.BALL_IDS, the ItemUseBall dispatch set).
 -- rd(addr) reads one System Bus byte; symbols is the title's pret .sym table.
 function M.extend_point(point, rd, symbols)
     local function u16(name) local a = assert(symbols[name], name); return rd(a) * 256 + rd(a + 1) end
@@ -35,7 +51,7 @@ function M.extend_point(point, rd, symbols)
     local n = rd(assert(symbols.wNumBagItems))
     for i = 0, math.min(n, 20) - 1 do
         local id = rd(symbols.wBagItems + 2 * i)
-        if id >= 1 and id <= 4 and point.ball_index == nil then point.ball_index = i end
+        if M.is_ball(id) and point.ball_index == nil then point.ball_index = i end
     end
     return point
 end
@@ -44,9 +60,11 @@ end
 -- catch rate always holds for Pidgey/Rattata (255); W = floor(floor(maxhp*255/12) /
 -- max(floor(hp/4), 1)); caught when W > 255 or Rand2 <= W.
 function M.catch_odds(hp, maxhp)
-    local w = math.floor(math.floor(maxhp * 255 / 12) / math.max(math.floor(hp / 4), 1))
-    if w >= 255 then return 1 end
-    return (w + 1) / 256
+    local C = F.CATCH
+    local w = math.floor(math.floor(maxhp * C.maxhp_factor / C.maxhp_divisor)
+                          / math.max(math.floor(hp / C.hp_divisor), 1))
+    if w >= C.sure_catch_w then return 1 end
+    return (w + 1) / (C.first_rand_max + 1)
 end
 
 -- opts.driver   gen1_battle_driver built by the caller with a step that yields the buttons
@@ -64,6 +82,7 @@ function M.new(expected, opts)
     local mode = opts.mode or "catch"
     assert(mode == "catch" or mode == "run" or mode == "sacrifice" or mode == "switch-hold",
            "mode catch|run|sacrifice|switch-hold")
+    local F = M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
     if mode == "sacrifice" then
         assert(type(opts.move_slot) == "number" and opts.move_slot >= 1 and opts.move_slot <= 4
                and type(opts.fainted) == "function", "sacrifice needs a move slot and faint receipt")
@@ -78,7 +97,7 @@ function M.new(expected, opts)
         local n, total = rd(S.wNumBagItems), 0
         for i = 0, math.min(n, 20) - 1 do
             local id = rd(S.wBagItems + 2 * i)
-            if id >= 1 and id <= 4 then total = total + rd(S.wBagItems + 2 * i + 1) end
+            if M.is_ball(id) then total = total + rd(S.wBagItems + 2 * i + 1) end
         end
         return total
     end
@@ -86,12 +105,12 @@ function M.new(expected, opts)
         local n = rd(S.wNumBagItems)
         for i = 0, math.min(n, 20) - 1 do
             local id = rd(S.wBagItems + 2 * i)
-            if id >= 1 and id <= 4 then return i end
+            if M.is_ball(id) then return i end
         end
         return nil
     end
     local function mash(btn, frames)
-        for i = 1, frames do step({[btn] = i % 16 < 2}) end
+        for i = 1, frames do step({[btn] = i % F.TUNING.input_cadence < 2}) end
     end
     -- The next battle menu after the driver's last A press, tapping B through anything that
     -- waits for a button (level-up stats box, caught/dex screens, the nickname prompt = NO).
@@ -252,7 +271,7 @@ function M.new(expected, opts)
             if self.terminal then return idle(), self.terminal end
         end
         if point.font_loaded or point.joy_ignore ~= 0 then return tap("B", frame), "close-text" end
-        if point.map ~= 0x0C then return idle(), "unknown-map" end
+        if point.map ~= F.MAP.ROUTE_1 then return idle(), "unknown-map" end
         local target = M.GRASS[self.target]
         if point.x == target[1] and point.y == target[2] then
             self.target = 3 - self.target

@@ -152,23 +152,34 @@ local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
 
 local M = {}
 
-M.MAP = { route1 = 0x0C, viridian = 0x01, route2 = 0x0D, gate = 0x32, forest = 0x33 }
-M.WEEDLE = 0x70          -- internal species id, see the header
-M.GROWL_SLOT = 2         -- Charmander's move 2
-M.PARK = { 18, 41 }
-M.PACE = { { 18, 41 }, { 18, 40 } }
-M.SHUTTLE = { { 18, 43 }, { 18, 44 } }
-M.MAX_ENCOUNTERS = 60    -- 3x the ~20-encounter mean for a slot-8 Weedle
-M.MAX_GRASS_STEPS = 2000 -- ~3x the ~630 eligible-step mean; 0 encounters here = a real fault
-M.MAX_GROWL_TURNS = 20
-M.STALL_BOUND = 1800     -- the gate drivers' NPC stall bound
-M.STALL_NUDGE = 48       -- frames on one tile before sidestepping a wanderer
-M.DETOUR_FRAMES = 32
-M.DETOUR_BOUND = 4       -- detours on one segment before re-aiming at the previous waypoint
-M.DETOUR_BACKOFFS = 3    -- back-offs before the route fails closed
+-- Map ids, the Weedle species id, Growl's slot, the forest tiles and every tuning bound are lane
+-- facts (P3b-e): F.MAP / F.SPECIES / F.MOVE / F.WAYPOINTS.FOREST / F.TUNING.
+function M.with_facts(facts)
+    assert(facts and facts.MAP and facts.WAYPOINTS and facts.TUNING, "forest needs a facts table")
+    M.MAP = { route1 = facts.MAP.ROUTE_1, viridian = facts.MAP.VIRIDIAN_CITY,
+              route2 = facts.MAP.ROUTE_2, gate = facts.MAP.VIRIDIAN_FOREST_SOUTH_GATE,
+              forest = facts.MAP.VIRIDIAN_FOREST }
+    M.WEEDLE = facts.SPECIES.WEEDLE          -- internal species id, see the header
+    M.GROWL_SLOT = facts.MOVE.GROWL_SLOT     -- Charmander's move 2
+    M.PARK = facts.WAYPOINTS.FOREST.park
+    M.PACE = facts.WAYPOINTS.FOREST.pace
+    M.SHUTTLE = facts.WAYPOINTS.FOREST.shuttle
+    M.MAX_ENCOUNTERS = facts.TUNING.max_encounters_forest
+    M.MAX_GRASS_STEPS = facts.TUNING.max_grass_steps
+    M.MAX_GROWL_TURNS = facts.TUNING.max_growl_turns
+    M.STALL_BOUND = facts.TUNING.stall_bound
+    M.STALL_NUDGE = facts.TUNING.stall_nudge
+    M.DETOUR_FRAMES = facts.TUNING.detour_frames
+    M.DETOUR_BOUND = facts.TUNING.detour_bound
+    M.DETOUR_BACKOFFS = facts.TUNING.detour_backoffs
+    return facts
+end
+-- Load-time defaults: duo_gen1_main reads Forest.MAX_ENCOUNTERS for its frame bound.
+M.with_facts(dofile(here() .. "gen1_rb_facts.lua"))
 
 -- Northbound waypoints. Route 1's list is gen1_rb_parcel_inputs.lua:18 `route_north`
--- (proven live, and provably the minimum-grass crossing); the rest are decoded here.
+-- (proven live, and provably the minimum-grass crossing); the rest are decoded here. F carries
+-- the forest tiles only (F.WAYPOINTS.FOREST has park/pace/shuttle, not these approach paths).
 local paths = {
     route1_north = { {10,31},{8,31},{8,24},{12,24},{12,22},{9,22},{9,14},{14,14},{14,4},{11,4},{11,-1} },
     viridian_north = { {20,30},{19,30},{19,26},{19,2},{18,2},{18,-1} },
@@ -196,6 +207,7 @@ function M.new(expected, opts)
     identity(expected, "R/B forest route")
     opts = opts or {}
     local log = opts.log or function() end
+    M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
     local r1 = dofile(here() .. "gen1_rb_route1_inputs.lua").new(expected)
     local self = { last_frame=-1, segments={}, wild_active=false, incidental_battles=0,
                    tile=nil, tile_frame=0, detour=nil, detour_along=nil, detour_until=nil, flip=false }
@@ -297,12 +309,17 @@ function M.hunt(expected, opts)
         "forest hunt needs driver/step/rd/symbols")
     local D, step, rd, S = opts.driver, opts.step, opts.rd, opts.symbols
     local log = opts.log or function() end
+    local F = M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
     local self = { last_frame=-1, encounters=0, grass_steps=0, target=1, tile=nil,
                    battle_co=nil, stage="pace", terminal=nil, outcome=nil }
     -- assert() returns (value, message), so bind first: rd must be called with one argument.
     local function u8(name) local a = assert(S[name], "no symbol "..name); return rd(a) end
-    local function poisoned() return math.floor(u8("wPartyMon1Status")/8)%2 == 1 end
-    local function mash(btn, frames) for i=1,frames do step({[btn] = i%16<2}) end end
+    -- PSN is bit 3 of the status word (F.POISON.psn_mask / status_bit_shift), so the test is the
+    -- engine's own `and 1 << PSN` (engine/events/poison.asm:16).
+    local function poisoned()
+        return math.floor(u8("wPartyMon1Status") / F.POISON.psn_mask) % 2 == 1
+    end
+    local function mash(btn, frames) for i=1,frames do step({[btn] = i%F.TUNING.input_cadence<2}) end end
     -- The next battle menu after the driver's last A press, tapping B through anything that
     -- waits for a button (damage text, the "was poisoned" box, level-up boxes).
     local function wait_menu(budget)
@@ -441,6 +458,7 @@ function M.shuttle(expected, opts)
     identity(expected, "R/B forest shuttle")
     opts = opts or {}
     local log = opts.log or function() end
+    M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
     local self = { last_frame=-1, target=1, terminal=nil, steps=0, tile=nil, announced=false }
     function self.step(handshake, status, point, frame)
         assert(type(frame)=="number" and frame>self.last_frame, "forest shuttle frame did not advance")

@@ -10,6 +10,11 @@
 --   play.boot(step)                                      -- title -> NEW GAME -> bedroom
 --   play.run(step, {"lab", "parcel", "save"}, on_phase)  -- chain of route modules to their terminals
 -- `step(buttons)` advances one frame with the buttons held (the gate harness owns it).
+--
+-- Every game literal the route modules read comes from one facts table (P3b-e): the vanilla twin
+-- lua/tests/gen1_rb_facts.lua by default, the lane's own file for a pureRGB run. `expected.facts`
+-- is how the drivers receive it, so a lane that is not vanilla passes its own file:
+--   local play = P.new(ROOT, title, player, {facts = "gen1_pure_facts.lua"})
 local P = {}
 
 local MODULES = {
@@ -51,21 +56,30 @@ function P.new(ROOT, title, player, opts)
     for name, spec in pairs(MODULES) do modules[name] = spec end
     modules.lab = { file = assert(LAB_FILES[title], "no lab driver for " .. title),
                     terminal = MODULES.lab.terminal }
-    local FIELDS = dofile(ROOT .. "/lua/tests/gen1_rb_point_fields.lua")
-    local SIG = dofile(ROOT .. "/lua/tests/gen1_rb_mart_signature.lua")
+    -- Foundation facts (P3b-e): every game literal the drivers below read comes from one table.
+    -- The lane names its own file by title; `opts.facts` names it outright for callers whose title
+    -- vocabulary has no pure spelling yet (pureRGB keeps the R/B ROM header, so
+    -- Entry.detect_title still answers "red" on a pure cartridge).
+    local F = dofile(ROOT .. "/lua/tests/"
+                     .. (opts.facts or (title:match("^Pure") and "gen1_pure_facts.lua" or "gen1_rb_facts.lua")))
+    local FIELDS = dofile(ROOT .. "/lua/tests/gen1_rb_point_fields.lua").with_facts(F)
+    local SIG = dofile(ROOT .. "/lua/tests/gen1_rb_mart_signature.lua").with_facts(F)
     local function rd(addr) return memory.read_u8(addr, "System Bus") end
     local function sym(name) return rd(assert(symbols[name], "no symbol " .. name)) end
     local self = { symbols = symbols, log = opts.log or function() end, modules = modules }
 
     -- New Game menus, from gen1/rc's bootstrap: A on a 16-frame cadence with Start pulses; the
-    -- four-item name menus (wMaxMenuItem 3 at Y2/X1) take Down once then A = the first preset
-    -- name (engine/menus/naming_screen.asm), so both players and rivals get preset names.
+    -- four-item name menus (wMaxMenuItem 3 at Y2/X1) take Down once then A = the first preset name
+    -- (engine/movie/oak_speech/oak_speech2.asm:172-182; the alphabet grid in
+    -- engine/menus/naming_screen.asm is Y3/X1/max7 and is a different screen), so both players and
+    -- rivals get preset names. The geometry is a lane fact (F.MENU.NAMING).
     local beat = 0
     local function menu_buttons()
         beat = beat + 1
-        local moment = beat % 16
+        local moment = beat % F.TUNING.input_cadence
         local buttons = { A = moment < 2, Start = moment == 8 }
-        if sym("wMaxMenuItem") == 3 and sym("wTopMenuItemY") == 2 and sym("wTopMenuItemX") == 1 then
+        if sym("wMaxMenuItem") == F.MENU.NAMING.menu_max and sym("wTopMenuItemY") == F.MENU.NAMING.menu_y
+            and sym("wTopMenuItemX") == F.MENU.NAMING.menu_x then
             buttons = { Down = sym("wCurrentMenuItem") == 0, A = sym("wCurrentMenuItem") > 0 and moment < 2 }
         end
         local pressed = {}
@@ -73,11 +87,13 @@ function P.new(ROOT, title, player, opts)
         return pressed
     end
 
-    -- 0-based START menu row whose glyphs read "SAVE" (S,A,V,E = $92,$80,$95,$84); rows at
-    -- tilemap (12, 2+2*i) (engine/menus/draw_start_menu.asm); -1 if the menu is not drawn.
+    -- 0-based START menu row whose glyphs read "SAVE" (S,A,V,E = $92,$80,$95,$84); the menu's
+    -- cursor sits at (menu_x, menu_y) = (11, 2) and its glyph column is one tile right of it
+    -- (engine/menus/draw_start_menu.asm:17-38,83-89), so the rows are (menu_x+1, menu_y+2*i);
+    -- -1 if the menu is not drawn.
     local function save_row()
         for i = 0, 7 do
-            local at = assert(symbols.wTileMap) + (2 + 2 * i) * 20 + 12
+            local at = assert(symbols.wTileMap) + (F.MENU.START.menu_y + 2 * i) * 20 + (F.MENU.START.menu_x + 1)
             if rd(at) == 0x92 and rd(at + 1) == 0x80 and rd(at + 2) == 0x95 and rd(at + 3) == 0x84 then return i end
         end
         return -1
@@ -110,7 +126,7 @@ function P.new(ROOT, title, player, opts)
             chosen_menu_item = sym("wChosenMenuItem"), menu_exit_method = sym("wMenuExitMethod"),
             list_scroll_offset = sym("wListScrollOffset"), menu_watch_oob = sym("wMenuWatchMovingOutOfBounds"),
             font_loaded = sym("wFontLoaded") % 2 == 1, save_file_status = sym("wSaveFileStatus"),
-            got_pokedex = FIELDS.event_bit(rd, assert(symbols.wEventFlags), 37), -- EVENT_GOT_POKEDEX
+            got_pokedex = FIELDS.event_bit(rd, assert(symbols.wEventFlags), F.EVENT.GOT_POKEDEX),
             start_menu_save_index = save_row(),
         }
         raw.menu_kind, raw.item_id, raw.confirm_index = SIG.mart_menu(raw, title)
@@ -120,7 +136,8 @@ function P.new(ROOT, title, player, opts)
     -- The route modules assert a paired handshake and an owned-runtime status; standalone play
     -- supplies constant identities (the assertions are identity checks, not behaviour).
     local expected = { run_id = "scripted", player = player, rom_sha1 = gameinfo.getromhash():lower(),
-                       context_generation = 1, physical_instance = "scripted-host", title = title }
+                       context_generation = 1, physical_instance = "scripted-host", title = title,
+                       facts = F }
     self.expected = expected
     local handshake = { ready = true, run_id = expected.run_id, player = player, rom_sha1 = expected.rom_sha1,
                         context_generation = 1, physical_instance = expected.physical_instance }
@@ -128,7 +145,7 @@ function P.new(ROOT, title, player, opts)
                      host = { owner_id = expected.physical_instance, held = false },
                      runtime = { connected = true, session_state = "admitted", failed = false } }
 
-    -- Boot: title -> NEW GAME -> names -> Oak's speech -> the bedroom (map $26).
+    -- Boot: title -> NEW GAME -> names -> Oak's speech -> the bedroom (REDS_HOUSE_2F).
     -- WRAM already reads map $26 / party 0 / joy_ignore 0 while Oak is still talking (the
     -- intro pre-loads the bedroom), so no static read can say the player is in control. The
     -- oracle is `overworld_ok()` = gen1_write_safety.check(): the main thread parked in
@@ -147,7 +164,7 @@ function P.new(ROOT, title, player, opts)
         for _ = 1, (opts.title_idle or 0) do step(IDLE); idled = idled + 1 end
         if opts.log then opts.log(("TITLE_IDLE requested=%d applied=%d"):format(opts.title_idle or 0, idled)) end
         for f = 1, max_frames do
-            local ok = sym("wCurMap") == 0x26 and sym("wPartyCount") == 0 and overworld_ok()
+            local ok = sym("wCurMap") == F.MAP.REDS_HOUSE_2F and sym("wPartyCount") == 0 and overworld_ok()
             settled = ok and settled + 1 or 0
             if settled >= 30 then self.log(string.format("[scripted] bedroom reached after %d frames", f)) return f end
             step(ok and IDLE or menu_buttons())

@@ -9,13 +9,25 @@ local M = {}
 -- The Oak's-lab script indices are per-title: pokered scripts/OaksLab.asm:31-33,490-495 use
 -- 15/16/17 with SCRIPT_OAKSLAB_NOOP 18, pokeyellow scripts/OaksLab.asm:31-33,490-495 use
 -- 19/20/21 with 22 (verified against pokeyellow 0a08515 when the Yellow lab driver landed).
--- The title arrives in `expected.title`; the R/B values are untouched.
+-- The title arrives in `expected.title`. Yellow's row stays here (a pokeyellow fact with no lane
+-- twin); every other title takes the LANE's row, `F.SCRIPT.LAB_DELIVERY` — 15/16/17+18 on both
+-- foundations (P3b-e) — so a pureRGB title resolves through the facts table and never inherits
+-- Red's row by fallback. A title that is neither R/B, pureRGB or Yellow is still refused.
 local LAB = {
     red =    { delivery = {15, 16, 17}, noop = 18 },
     blue =   { delivery = {15, 16, 17}, noop = 18 },
     yellow = { delivery = {19, 20, 21}, noop = 22 },
 }
 M.LAB = LAB
+local function lab_for(title, F)
+    if title == "yellow" then return assert(LAB.yellow, "no lab script table for yellow") end
+    if title == "red" or title == "blue" or title:match("^Pure") then
+        local row = F and F.SCRIPT and F.SCRIPT.LAB_DELIVERY
+        assert(row, "facts table has no SCRIPT.LAB_DELIVERY")
+        return row
+    end
+    error("no lab script table for " .. tostring(title), 0)
+end
 -- Stall guard, same shape as the sibling route drivers (gen1_y_ball_gate_inputs.lua:74-77):
 -- the first frame in a window is latched under `key`, and the window has a bound. The gate
 -- harness prints the whole point on a failed route, so the message carries no dump of its own.
@@ -23,22 +35,22 @@ local function bounded(self, key, frame, limit, message)
     self[key]=self[key] or frame
     assert(frame-self[key]<limit, message)
 end
-local paths={
-    lab_exit={{5,11}},
-    pallet_north={{12,11},{9,11},{9,2},{10,2},{10,-1}}, -- (9,1) is a tree; -1/36 drive past the edge until the engine changes map
-    route_north={{10,31},{8,31},{8,24},{12,24},{12,22},{9,22},{9,14},{14,14},{14,4},{11,4},{11,-1}},
-    viridian_mart={{20,35},{20,30},{19,30},{19,20},{29,20},{29,19}},
-    viridian_south={{29,20},{19,20},{19,30},{20,30},{20,36}},
-    route_south={{10,4},{14,4},{14,14},{9,14},{9,22},{12,22},{12,24},{8,24},{8,31},{10,31},{10,36}},
-    pallet_lab={{10,2},{9,2},{9,12},{12,12},{12,11}},
-    lab_oak={{5,11},{5,3}},
-}
+-- The waypoints are lane facts (P3b-e): F.WAYPOINTS.PARCEL, copied in by `with_facts` so the
+-- vanilla twin reproduces this list and a pureRGB run can override it. ((9,1) is a tree; the -1/36
+-- entries drive past the map edge until the engine changes map.)
+local paths={}
+function M.with_facts(facts)
+    assert(facts and facts.WAYPOINTS and facts.WAYPOINTS.PARCEL, "parcel route needs a facts table")
+    for name, tiles in pairs(facts.WAYPOINTS.PARCEL) do paths[name] = tiles end
+    return facts
+end
+M.with_facts(dofile(here() .. "gen1_rb_facts.lua")) -- load-time defaults
 function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
         "complete R/B parcel identity required")
-    local lab = assert(LAB[expected.title or "red"],
-        "no lab script table for " .. tostring(expected.title))
+    local F = M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
+    local lab = lab_for(expected.title or "red", F)
     local self={last_frame=-1, segments={}, parcel_seen=false, delivered=false,
         cancel_baseline=nil, cancelled=false, purchase_started=false,
         wild_active=false, delivery_in_progress=false, lab=lab}
@@ -74,18 +86,18 @@ function M.new(expected)
             and type(point.oak_got_parcel)=="boolean" and type(point.menu_kind)=="string",
             "complete read-only parcel point required")
         if point.battle~=0 then
-            assert(point.map==0x0C and point.battle==1 and point.battle_type==0
+            assert(point.map==F.MAP.ROUTE_1 and point.battle==1 and point.battle_type==0
                 and type(point.party_hp)=="number" and point.party_hp>0,
                 "unexpected trainer, special battle or whiteout")
             self.wild_active=true
-            assert(type(point.run_attempts)=="number" and point.run_attempts<8,
+            assert(type(point.run_attempts)=="number" and point.run_attempts<F.TUNING.wild_run_attempt_bound,
                 "wild RUN attempt bound exceeded")
-            if point.text_box==0x0B then -- BATTLE_MENU_TEMPLATE, normal battle.
-                if point.menu_y~=14 or point.menu_max~=1 then
+            if point.text_box==F.MENU.BATTLE.template then -- BATTLE_MENU_TEMPLATE, normal battle.
+                if point.menu_y~=F.MENU.BATTLE.menu_y or point.menu_max~=F.MENU.BATTLE.menu_max then
                     return idle(),"unknown-wild-menu"
                 end
-                if point.menu_x==9 then return tap("Right",frame),"wild-select-right-column" end
-                if point.menu_x~=15 then return idle(),"unknown-wild-menu" end
+                if point.menu_x==F.MENU.BATTLE.left_x then return tap("Right",frame),"wild-select-right-column" end
+                if point.menu_x~=F.MENU.BATTLE.right_x then return idle(),"unknown-wild-menu" end
                 if point.menu_index==0 then return tap("Down",frame),"wild-select-run" end
                 if point.menu_index~=1 then return idle(),"unknown-wild-menu" end
                 return tap("A",frame),"wild-attempt-run"
@@ -96,7 +108,7 @@ function M.new(expected)
             return tap("A",frame),"wild-dialogue"
         end
         if self.wild_active then
-            assert(point.map==0x0C and point.battle_result==2
+            assert(point.map==F.MAP.ROUTE_1 and point.battle_result==2
                 and type(point.party_hp)=="number" and point.party_hp>0,
                 "wild battle ended without observed escape")
             self.wild_active=false
@@ -116,7 +128,7 @@ function M.new(expected)
         -- second box opened more than the bound after the first one fails on its first frame.
         if point.menu_kind=="none" then self.stray_box_frame=nil end
         if point.menu_kind~="none" then
-            if point.map~=0x2A or not point.oak_got_parcel then
+            if point.map~=F.MAP.VIRIDIAN_MART or not point.oak_got_parcel then
                 -- Before the delivery no Mart can be open: the clerk's DisplayPokemartDialogue
                 -- lives in ViridianMart_TextPointers2, installed only once EVENT_OAK_GOT_PARCEL
                 -- is set (pokeyellow scripts/ViridianMart.asm:9-21, pokered :8-20). So a live
@@ -136,7 +148,7 @@ function M.new(expected)
                 return tap("B",frame),"close-stray-mart-box"
             end
             if point.menu_kind=="unknown" then return idle(),"mart-unknown-wait" end
-            if point.menu_kind=="mart-choice" and point.menu_index==0 then
+            if point.menu_kind=="mart-choice" and point.menu_index==F.MART.VIRIDIAN_BALL_ROW then
                 return tap("A",frame),"mart-buy"
             end
             if point.menu_kind=="mart-item" and point.menu_index==0
@@ -156,7 +168,7 @@ function M.new(expected)
             end
             return idle(),"unknown-mart-menu"
         end
-        if point.map==0x28 then
+        if point.map==F.MAP.OAKS_LAB then
             if not point.oak_got_parcel then
                 if point.parcel_count>0 then self.delivery_in_progress=true end
                 if not self.delivery_in_progress then return follow("lab_exit",point) end
@@ -171,7 +183,7 @@ function M.new(expected)
                     return idle(),"oak-delivery-script-wait"
                 end
                 if point.x==5 and point.y==3 then
-                    if (point.lab_script==0 or point.lab_script==lab.noop) and point.joy_ignore==0 then -- lab.noop = SCRIPT_OAKSLAB_NOOP after the rival leaves
+                    if (point.lab_script==F.SCRIPT.OAKSLAB.DEFAULT or point.lab_script==lab.noop) and point.joy_ignore==0 then -- lab.noop = SCRIPT_OAKSLAB_NOOP after the rival leaves
                         local b=tap("A",frame);b.Up=true;return b,"give-parcel-to-oak"
                     end
                     if point.joy_ignore==0xFC then return tap("A",frame),"oak-parcel-dialogue" end
@@ -192,36 +204,36 @@ function M.new(expected)
             end
             return follow("lab_exit",point)
         end
-        if point.map==0 then
+        if point.map==F.MAP.PALLET_TOWN then
             if point.parcel_count>0 and not point.oak_got_parcel then return follow("pallet_lab",point) end
             return follow("pallet_north",point)
         end
-        if point.map==0x0C then
+        if point.map==F.MAP.ROUTE_1 then
             if point.parcel_count>0 and not point.oak_got_parcel then return follow("route_south",point) end
             return follow("route_north",point)
         end
-        if point.map==1 then
+        if point.map==F.MAP.VIRIDIAN_CITY then
             if point.parcel_count>0 and not point.oak_got_parcel then return follow("viridian_south",point) end
             return follow("viridian_mart",point)
         end
-        if point.map==0x2A then
+        if point.map==F.MAP.VIRIDIAN_MART then
             if not point.oak_got_parcel then
                 if point.got_parcel and point.parcel_count>0 then
                     self.parcel_seen=true
                     return move(point,{3,7}),"leave-with-parcel"
                 end
-                if point.mart_script==0 and point.y==7
+                if point.mart_script==F.SCRIPT.VIRIDIANMART.DEFAULT and point.y==7
                     and (point.x==3 or point.x==4) and point.joy_ignore==0 then
                     return tap("A",frame),"mart-initial-clerk-dialogue"
                 end
-                if point.mart_script==1 then
+                if point.mart_script==F.SCRIPT.VIRIDIANMART.OAKS_PARCEL then
                     assert(type(point.simulated_joypad_index)=="number",
                         "Mart simulated movement index missing")
                 end
-                if point.mart_script==1 and point.simulated_joypad_index~=0 then
+                if point.mart_script==F.SCRIPT.VIRIDIANMART.OAKS_PARCEL and point.simulated_joypad_index~=0 then
                     return idle(),"mart-auto-walk"
                 end
-                if point.mart_script==1 and point.simulated_joypad_index==0
+                if point.mart_script==F.SCRIPT.VIRIDIANMART.OAKS_PARCEL and point.simulated_joypad_index==0
                     and point.x==2 and point.y==5 and point.joy_ignore==0 then
                     return tap("A",frame),"mart-parcel-dialogue"
                 end

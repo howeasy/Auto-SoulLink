@@ -8,7 +8,24 @@ local INVENTORY = {
     blue =   {0x04,0x0B,0x0F,0x0C},
     yellow = {0x04,0x14,0x0B,0x0F,0x0C},
 }
-function M.inventory(title) return INVENTORY[title] or INVENTORY.red end
+-- Foundation facts (P3b-e): the Mart's map id, its R/B stock row and the list-menu signature come
+-- from the lane's table (`with_facts`), defaulting to the vanilla twin. Yellow's five-item stock
+-- is a pokeyellow fact with no lane twin, so it stays in the table above; an unknown title is
+-- refused rather than silently given Red's four rows (the old `INVENTORY[title] or INVENTORY.red`
+-- fallback would have handed a pureRGB title the vanilla list).
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+local F = dofile(here() .. "gen1_rb_facts.lua")
+function M.with_facts(facts)
+    assert(facts and facts.MAP and facts.MART, "mart signature needs a facts table")
+    F = facts
+    return M
+end
+function M.inventory(title)
+    if title ~= "yellow" then return F.MART.VIRIDIAN_STOCK end
+    local rows = INVENTORY[title]
+    assert(rows, "no Mart inventory for " .. tostring(title))
+    return rows
+end
 -- Returns kind, item_id, confirm_index. kind is one of
 -- "none" (no Mart display can be live: not in the Mart, script~=2, or no list/text display),
 -- "mart-choice" | "mart-item" | "mart-quantity" | "mart-confirm" (source signatures below), or
@@ -28,14 +45,16 @@ function M.inventory(title) return INVENTORY[title] or INVENTORY.red end
 function M.mart_menu(r, title)
     local list = M.inventory(title)
     local item,confirm=0,-1
-    if r.map~=0x2A or r.mart_script~=2 then return "none",item,confirm end
+    if r.map~=F.MAP.VIRIDIAN_MART or r.mart_script~=2 then return "none",item,confirm end
     if not r.font_loaded then
         if r.list_menu_id~=2 then return "none",item,confirm end
         return "unknown",item,confirm -- retained geometry after a closed Mart is never a live menu.
     end
     local i=r.menu_index
     if type(i)~="number" or i%1~=0 then return "unknown",item,confirm end
-    if r.list_menu_id==2 and r.text_box==0x0E and r.menu_y==1 and r.menu_x==1 and r.menu_max==2 and i>=0 and i<=2 then
+    local S=F.MART.LIST_SIGNATURE
+    if r.list_menu_id==S.list_menu_id and r.text_box==S.text_box and r.menu_y==S.menu_y and r.menu_x==S.menu_x
+        and r.menu_max==S.menu_max and i>=0 and i<=2 then
         return "mart-choice",item,confirm
     elseif r.list_menu_id==2 and r.menu_y==4 and r.menu_x==5 and r.menu_max==2 and i>=0 and i<=2 then
         -- text_box is deliberately not consulted here: live parcel attempt 5 showed wTextBoxID==1

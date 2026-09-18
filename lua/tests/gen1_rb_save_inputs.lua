@@ -6,7 +6,9 @@
 --               wraps on its own counts). The SLink companion cartridge appends a SLINK row
 --               (patch/gen1/tools/manifest.py:114-117): counts 7/8, SAVE row unchanged. So the cursor
 --               target is the row whose glyphs read SAVE (route_point start_menu_save_index) and the
---               count must be that index + 3 (vanilla) or + 4 (companion); anything else is refused.
+--               count must be that index + F.MENU.START.max_minus_save (3 on vanilla, 2 on
+--               pureRGB, which stores the row index rather than the count) or + 1 more for the
+--               companion row; anything else is refused. All of that geometry is a lane fact.
 --   Save prompt engine/menus/save.asm:150-153,186-194: TWO_OPTION_MENU ($14) at wTopMenuItemY=8,
 --               wTopMenuItemX=1, wMaxMenuItem=1, index 0 = YES; the "older file" prompt has the same shape.
 --   Witness     the client's save_witness site is SaveMenu.save+3; the server-acked gen1-save-witness
@@ -25,6 +27,7 @@ function M.new(expected)
     assert(expected and (expected.player=="a" or expected.player=="b")
         and expected.run_id and expected.rom_sha1 and expected.context_generation and expected.physical_instance,
         "complete R/B save identity required")
+    local F = expected.facts or dofile(here() .. "gen1_rb_facts.lua")
     local self={last_frame=-1,confirmed=false,closing=0}
     function self.step(handshake,status,point,frame)
         if not handshake then return idle(),"await-pair-handshake" end
@@ -58,15 +61,19 @@ function M.new(expected)
             return tap("Start",frame),"save-open-start-menu"
         end
         local save=point.start_menu_save_index
-        if save>=0 and point.menu_y==2 and point.menu_x==11 then
-            assert((save==3 or save==4) and (point.menu_max==save+3 or point.menu_max==save+4),
+        local S=F.MENU.START
+        if save>=0 and point.menu_y==S.menu_y and point.menu_x==S.menu_x then
+            assert((save==S.save_index_without_pokedex or save==S.save_index_with_pokedex)
+                and (point.menu_max==save+S.max_minus_save or point.menu_max==save+S.max_minus_save+1),
                 "START menu row count disagrees with the SAVE row")
             if point.menu_index<save then return tap("Down",frame),"save-select-save" end
             if point.menu_index>save then return tap("Up",frame),"save-select-save" end
             return tap("A",frame),"save-choose-save"
         end
-        if point.text_box==0x14 and point.menu_y==8 and point.menu_x==1 and point.menu_max==1 then
-            if point.menu_index~=0 then return tap("Up",frame),"save-select-yes" end
+        local P=F.MENU.SAVE_PROMPT
+        if point.text_box==P.text_box and point.menu_y==P.menu_y and point.menu_x==P.menu_x
+            and point.menu_max==P.menu_max then
+            if point.menu_index~=P.yes_index then return tap("Up",frame),"save-select-yes" end
             self.confirmed=true
             return tap("A",frame),"save-confirm"
         end
@@ -74,11 +81,11 @@ function M.new(expected)
             -- A foreign menu is open (the Mart purchase UI the parcel route ends inside; a text
             -- box). Close it with B on the 16-frame cadence until the START menu can be opened.
             self.closing_foreign=(self.closing_foreign or 0)+1
-            assert(self.closing_foreign<=1800,"foreign menu did not close before the save")
+            assert(self.closing_foreign<=F.TUNING.stall_bound,"foreign menu did not close before the save")
             return tap("B",frame),"save-close-foreign-menu"
         end
         self.closing=self.closing+1  -- "Now saving..." (120 frames) + GAME SAVED + two CloseTextDisplay
-        assert(self.closing<=1800,"START menu did not close after the save")
+        assert(self.closing<=F.TUNING.stall_bound,"START menu did not close after the save")
         return idle(),"save-await-close"
     end
     return self

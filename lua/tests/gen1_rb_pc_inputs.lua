@@ -85,14 +85,18 @@ local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
 local M = {}
 local fmt = string.format
 
-M.MAP_CENTER = 0x29        -- VIRIDIAN_POKECENTER, as gen1_rb_center_inputs.lua:5
 M.STAND = {13, 4}          -- the tile to stand on, facing UP
 M.FLOOR_Y = 4              -- the open floor row this module walks along
 
--- Tilemap offsets (20 * row + column) and the 0-based Bill's PC item ids.
-M.OFF = {main = 42, withdraw = 42, deposit = 82, release = 122, changebox = 162, seeya = 202,
-         sub_action = 251, sub_cancel = 331, yes = 176, no = 216,
-         list = 86, list_step = 40, box = 33, box_last = 253, text1 = 281, text2 = 321}
+-- The tilemap offsets (20 * row + column) and the map id are lane facts (P3b-e): F.MENU.PC and
+-- F.MAP.VIRIDIAN_POKECENTER, copied in by `with_facts` (`here` above locates the facts file).
+function M.with_facts(facts)
+    assert(facts and facts.MENU and facts.MENU.PC and facts.MAP, "PC driver needs a facts table")
+    M.OFF = facts.MENU.PC
+    M.MAP_CENTER = facts.MAP.VIRIDIAN_POKECENTER
+    return facts
+end
+M.with_facts(dofile(here() .. "gen1_rb_facts.lua"))
 -- Per-op screen expectations: `item` is the 0-based Bill's PC row, `done` the success text's
 -- dialogue line. (SEE YA is item 4; this module leaves it by B, which is the same exit.)
 M.OPS = {
@@ -102,12 +106,13 @@ M.OPS = {
     changebox   = {item = 3, boxlist = true},
 }
 local OPS = M.OPS
--- Refusal texts -> named terminal failure phases (see the header citations).
+-- Refusal texts -> named terminal failure phases (see the header citations). The third field is
+-- the M.OFF key of the tilemap row, resolved at the probe so a facts swap moves it too.
 local REFUSALS = {
-    {"the last", M.OFF.text2, "deposit-refused-last-mon"},
-    {"full of ", M.OFF.text2, "deposit-refused-box-full"},
-    {"any more", M.OFF.text2, "withdraw-refused-party-full"},
-    {"What? There are", M.OFF.text1, "pc-refused-empty-box"},
+    {"the last", "text2", "deposit-refused-last-mon"},
+    {"full of ", "text2", "deposit-refused-box-full"},
+    {"any more", "text2", "withdraw-refused-party-full"},
+    {"What? There are", "text1", "pc-refused-empty-box"},
 }
 M.TERMINALS = {["pc-done"] = true, ["pc-stuck"] = true, ["pc-left-the-center"] = true,
                ["pc-op-unconfirmed"] = true}
@@ -137,6 +142,7 @@ function M.new(expected, opts)
     assert(expected and (expected.player == "a" or expected.player == "b"), "R/B route identity required")
     assert(opts and opts.rd and opts.symbols and type(opts.ops) == "table" and #opts.ops > 0,
            "pc driver needs ops/rd/symbols")
+    M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
     local Center = opts.center or dofile(assert(opts.root, "pc driver needs opts.center or opts.root")
                                          .. "/lua/tests/gen1_rb_center_inputs.lua")
     local rd, S, log = opts.rd, opts.symbols, opts.log or function() end
@@ -246,7 +252,7 @@ function M.new(expected, opts)
         end
         -- No PC screen: the overworld, or a dialogue box. Refusals end the route by name.
         for _, refusal in ipairs(REFUSALS) do
-            if tiles(refusal[1], refusal[2]) then return idle(), refusal[3] end
+            if tiles(refusal[1], M.OFF[refusal[2]]) then return idle(), refusal[3] end
         end
         -- The success line is drawn on row 16, then "taken out."/"released outside." scroll up
         -- to row 14 behind their `cont` continuation, so both rows are probed.

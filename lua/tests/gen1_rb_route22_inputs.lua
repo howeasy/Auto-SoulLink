@@ -106,19 +106,30 @@ local idle, hold, tap, move = C.idle, C.hold, C.tap, C.move
 
 local M = {}
 
-M.MAP = { route1 = 0x0C, viridian = 0x01, route22 = 0x21 }
-M.RIVAL1 = 225                 -- OPP_RIVAL1, see the header
-M.TRIGGER = { { 29, 5 }, { 29, 4 } }
-M.STALL_BOUND = 1800           -- the gate drivers' NPC stall bound
-M.STALL_NUDGE = 48             -- frames on one tile before sidestepping a wanderer
-M.DETOUR_FRAMES = 32
-M.DETOUR_BOUND = 4       -- detours on one segment before re-aiming at the previous waypoint
-M.DETOUR_BACKOFFS = 3    -- back-offs before the route fails closed
-M.BATTLE_BOUND = 60000         -- a rival battle that never closes is a driver fault
-M.TRIGGER_GRACE = 600          -- frames parked on (29,4) before "the rival never triggered"
--- PartyMenuInit geometry (home/pokemon.asm:210-216) and PARTYMON_STRUCT_LENGTH = $2c
--- (constants/pokemon_data_constants.asm:56); current HP is bytes +1/+2, so wPartyMon1HP is base.
-M.PARTY_MENU = { y = 1, x = 0, watched = 0x03 }  -- watched = PAD_A | PAD_B
+-- Map ids, the rival's opponent id, the trigger tiles, the tuning bounds and the in-battle party
+-- menu geometry are lane facts (P3b-e). M.RIVAL1 is the one that moves: wCurOpponent is
+-- OPP_ID_OFFSET + class -- 200 + RIVAL1($19) = 225 on vanilla, 197 + RIVAL1($18) = 221 on pureRGB
+-- (docs/purergb/PLAN.md A12).
+function M.with_facts(facts)
+    assert(facts and facts.MAP and facts.TRAINER and facts.TUNING, "Route 22 needs a facts table")
+    M.MAP = { route1 = facts.MAP.ROUTE_1, viridian = facts.MAP.VIRIDIAN_CITY, route22 = facts.MAP.ROUTE_22 }
+    M.RIVAL1 = facts.TRAINER.OPP_RIVAL1
+    M.TRIGGER = facts.WAYPOINTS.ROUTE22.trigger
+    M.STALL_BOUND = facts.TUNING.stall_bound
+    M.STALL_NUDGE = facts.TUNING.stall_nudge
+    M.DETOUR_FRAMES = facts.TUNING.detour_frames
+    M.DETOUR_BOUND = facts.TUNING.detour_bound
+    M.DETOUR_BACKOFFS = facts.TUNING.detour_backoffs
+    M.BATTLE_BOUND = facts.TUNING.battle_bound
+    M.TRIGGER_GRACE = facts.TUNING.trigger_grace
+    M.PARTY_MENU = { y = facts.MENU.PARTY.menu_y, x = facts.MENU.PARTY.menu_x, watched = facts.MENU.PARTY.watched }
+    return facts
+end
+-- Load-time defaults, so a caller that reads M.RIVAL1/... before building the driver (duo_gen1_main
+-- reads M.RIVAL1 at 3036, before Route22.new at 3127) still sees the vanilla values.
+M.with_facts(dofile(here() .. "gen1_rb_facts.lua"))
+-- PARTYMON_STRUCT_LENGTH = $2c (constants/pokemon_data_constants.asm:56); current HP is bytes
+-- +1/+2, so wPartyMon1HP is the base of the struct.
 M.PARTY_STRUCT = 44
 
 -- This file is dofile'd by absolute path, so its own directory locates its siblings.
@@ -159,6 +170,7 @@ end
 function M.new(expected, opts)
     assert(expected and (expected.player=="a" or expected.player=="b"), "R/B Route 22 identity required")
     opts = opts or {}
+    local F = M.with_facts(expected.facts or dofile(here() .. "gen1_rb_facts.lua"))
     assert(opts.driver and opts.step and opts.rd and opts.symbols,
            "Route 22 needs driver/step/rd/symbols: the rival fight runs on gen1_battle_driver")
     local D, step, rd, S = opts.driver, opts.step, opts.rd, opts.symbols
@@ -187,7 +199,7 @@ function M.new(expected, opts)
         return st.y==M.PARTY_MENU.y and st.x==M.PARTY_MENU.x and st.watched==M.PARTY_MENU.watched
     end
     local function idle_frames(n) for _=1,n do step(nil) end end
-    local function mash(btn, frames) for i=1,frames do step({[btn]=i%16<2}) end end
+    local function mash(btn, frames) for i=1,frames do step({[btn]=i%F.TUNING.input_cadence<2}) end end
     -- the un-mergeable press shape gen1_battle_driver.lua:87-88 uses: released, held, released
     local function press(btn) idle_frames(2); for _=1,3 do step({[btn]=true}) end; idle_frames(3) end
 

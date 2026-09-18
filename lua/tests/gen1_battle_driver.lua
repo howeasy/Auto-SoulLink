@@ -41,6 +41,7 @@
                wNumRunAttempts (optional for construction, but D.run's receipt that the RUN
                                 press was taken; without it D.run refuses with why=no_run_counter
                                 rather than repress blind)
+    facts:     the foundation's game facts (o.facts; lua/tests/gen1_rb_facts.lua by default)
     optional:  hook=function(pc, fn) -> id (default event.on_bus_exec, "System Bus"),
                unhook=function(id), framecount=function() (default emu.framecount),
                press={pre=2, hold=3, post=3}
@@ -49,13 +50,24 @@
 local M={}
 local PAD={A=0x01,B=0x02,SELECT=0x04,START=0x08,RIGHT=0x10,LEFT=0x20,UP=0x40,DOWN=0x80}
 M.PAD=PAD
-M.BATTLE_MENU={left_x=9,right_x=15,left_watched=PAD.RIGHT+PAD.A,right_watched=PAD.LEFT+PAD.A}
-M.MOVE_MENU={x=5,y=0x0c,watched=0xFF-(PAD.LEFT+PAD.RIGHT+PAD.START)}
-M.PARTY_MENU={x=0,y=1}
-M.SWITCH_BOX={x=0x0c,y=0x0c,max=2}
 M.BAG={x=5,y=4,watched=PAD.A+PAD.B+PAD.SELECT}
 M.TARGET={FIGHT={"left",0},ITEM={"left",1},PKMN={"right",0},RUN={"right",1}}
-M.RUN_REPRESS=120 -- frames D.run waits for a sign the RUN press was taken before pressing again
+-- Menu geometry and D.run's repress bound are lane facts (P3b-e): F.MENU.BATTLE / F.MENU.MOVE /
+-- F.MENU.PARTY / F.MENU.SWITCH_BOX / F.TUNING.run_repress, copied in by `with_facts`.
+local function here() return (debug.getinfo(1, "S").source or ""):match("^@(.*[/\\])") or "" end
+function M.with_facts(facts)
+    assert(facts and facts.MENU and facts.TUNING, "battle driver needs a facts table")
+    local B, Mv, P, S = facts.MENU.BATTLE, facts.MENU.MOVE, facts.MENU.PARTY, facts.MENU.SWITCH_BOX
+    M.BATTLE_MENU={left_x=B.left_x,right_x=B.right_x,left_watched=B.left_watched,right_watched=B.right_watched}
+    M.MOVE_MENU={x=Mv.menu_x,y=Mv.menu_y,watched=0xFF-(PAD.LEFT+PAD.RIGHT+PAD.START)}
+    M.PARTY_MENU={x=P.menu_x,y=P.menu_y,watched=P.watched}
+    M.SWITCH_BOX={x=S.menu_x,y=S.menu_y,max=S.menu_max,watched=S.watched}
+    M.BATTLE_Y=B.menu_y
+    M.BATTLE_MAX=B.menu_max
+    M.RUN_REPRESS=facts.TUNING.run_repress -- frames D.run waits for a sign the RUN press was taken before pressing again
+    return facts
+end
+M.with_facts(dofile(here().."gen1_rb_facts.lua"))
 
 function M.new(o)
     local step,u8,A=assert(o.step),assert(o.u8),assert(o.addresses)
@@ -64,6 +76,7 @@ function M.new(o)
     local hook=o.hook or function(pc,fn)return event.on_bus_exec(fn,pc,"gen1-battle-driver-"..tostring(pc),"System Bus")end
     local unhook=o.unhook or function(id)event.unregisterbyid(id)end
     local P=o.press or {};local PRE,HOLD,POST=P.pre or 2,P.hold or 3,P.post or 3
+    local F=M.with_facts(o.facts or dofile(here().."gen1_rb_facts.lua"))
     local bank_addr=assert(A.hLoadedROMBank,"addresses.hLoadedROMBank")
     for _,k in ipairs({"wTopMenuItemX","wCurrentMenuItem","wMaxMenuItem","wMenuWatchedKeys","wIsInBattle","wPlayerSelectedMove","wActionResultOrTookBattleTurn"})do assert(A[k],"addresses."..k)end
     local D={}
@@ -71,9 +84,14 @@ function M.new(o)
     local hits={}                   -- site -> {count, first, last, last_step}
     local ids={}
     for name,pc in pairs(S)do
+        -- Every hooked PC is filtered by ITS bank from F.BANKS.<hook>: the vanilla battle core is
+        -- one bank ($0F), pureRGB's is not (EndOfBattle moved to $3A, the capture/PC/cable hooks
+        -- live elsewhere). A name the table does not carry -- a caller's extra hook -- falls back
+        -- to the battle-core bank, which is what the single 0x0F literal meant.
+        local want=F.BANKS[name] or F.BANKS.battle_loop_head
         hits[name]={count=0}
         ids[#ids+1]=hook(pc,function()
-            if u8(bank_addr)==0x0F then
+            if u8(bank_addr)==want then
                 local h=hits[name];h.count=h.count+1;h.last=frame_of();h.last_step=n;h.first=h.first or h.last
             end
         end)
@@ -106,7 +124,8 @@ function M.new(o)
         for i=0,max do
             local st=D.state();local why=pred(st)
             if why then return why,i,st end
-            if i<max then tick(tap and i%16<2 and {[tap]=true} or nil)end
+            local cadence=F.TUNING.input_cadence
+            if i<max then tick(tap and i%cadence<2 and {[tap]=true} or nil)end
         end
         return nil,max,D.state()
     end
