@@ -84,7 +84,12 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
                  -- staging frame, so this only refuses a server answering about a second late.
                  RIVAL_STAGED_FRAMES = 60 }
 
-local BALL_ITEMS = { [1] = true, [2] = true, [3] = true, [4] = true } -- MASTER..POKE (item_constants.asm:10-13)
+-- The ball set is profile.derived.ball_items (vanilla MASTER..POKE 1..4, item_constants.asm:10-13;
+-- pureRGB adds 5 and 8): built per client below, never a module literal.
+-- ponytail: the vanilla profile predates the field; the fallback is its value.
+local VANILLA_BALL_ITEMS = { 1, 2, 3, 4 }
+local VANILLA_OPP_ID_OFFSET = 200 -- constants/trainer_constants.asm:1
+local SRAM_BANK_SIZE = 0x2000     -- layout.link:195-202, one SRAM bank window
 -- Pokemon Tower 1F-7F ($8E-$94, map_constants.asm:228-234). A wild battle on these maps
 -- without the Silph Scope (item_constants.asm:84) in the bag is a "ghost": the engine
 -- refuses both the fight and the throw, so the battle ending says nothing about whether the
@@ -108,6 +113,18 @@ local function hex_of(bytes)
     for i = 1, #bytes do out[i] = string.format("%02X", bytes[i]) end
     return table.concat(out)
 end
+local function hex_bytes(hex)
+    local out = {}
+    for i = 1, #hex, 2 do out[#out + 1] = tonumber(hex:sub(i, i + 1), 16) end
+    return out
+end
+-- key_change reasons by pending_change kind (PLAN §4 row 19: evolution, npc_trade, transform,
+-- apex_chip); the settle sends `reason = KEY_CHANGE_REASON[pc.kind]`
+local KEY_CHANGE_REASON = { evolution = "evolution", npc_trade = "npc_trade",
+                            transform = "transform", apex_chip = "apex_chip" }
+-- wBattleFunctionalFlags bit 1: the player ran (pureRGB; PLAN M2-b). †UNVERIFIED bit index
+-- against the pinned pureRGB source (no local checkout); the profile symbol gates the read.
+local RAN_FLAG_BIT = 2
 
 -- Gen 1 raw stage 7 == neutral; the wire wants seven slots, 6 == neutral, SDEF blank.
 local function wire_stages(raw)
@@ -123,9 +140,15 @@ function Client.new(p)
     local log = p.log or function(...) end
     local d = profile.derived
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
+    local BALL_ITEMS = {}
+    for _, id in ipairs(d.ball_items or VANILLA_BALL_ITEMS) do BALL_ITEMS[id] = true end
+    local opp_id_offset = d.opp_id_offset or VANILLA_OPP_ID_OFFSET
+    local box_count = d.sram_boxes_per_bank * #d.sram_box_banks
+    local sram_size = (d.sram_box_banks[#d.sram_box_banks] + 1) * SRAM_BANK_SIZE
 
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
+        foundation = p.foundation or "gen1_rby", artifact_kind = p.artifact_kind or "clean",
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
@@ -133,6 +156,9 @@ function Client.new(p)
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
         trade = p.trade, trade_enabled = false, trade_state = nil,
+        -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
+        -- old->new alias held between a key_change and its ack
+        pending_keys = {}, key_alias = nil, apex = nil, transforming = nil,
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
@@ -215,15 +241,16 @@ function Client.new(p)
         return out
     end
 
-    -- Rescan the twelve boxes (SRAM) and the active box (WRAM mirror) into box_cache.
+    -- Rescan every SRAM box (derived.sram_boxes_per_bank x banks) and the active box (WRAM
+    -- mirror) into box_cache. The flat CartRAM image spans bank 0 through the last box bank.
     function self:rescan_boxes()
         local cache = {}
         local cur = reads.read_current_box_num()
         local active = reads.read_active_box()
         -- SRAM boxes are garbage until the game's first ChangeBox initialises them (bit 7 of
         -- wCurrentBoxNum; save.asm EmptyAllSRAMBoxes) — only the WRAM mirror is real before that
-        local sram = (cur and cur.initialized) and io.read_range(0, 0x8000, "CartRAM") or nil
-        for box = 0, 11 do
+        local sram = (cur and cur.initialized) and io.read_range(0, sram_size, "CartRAM") or nil
+        for box = 0, box_count - 1 do
             local mons
             if cur and box == cur.index then mons = active
             elseif sram then mons = reads.read_sram_box(sram, box) end
@@ -352,6 +379,24 @@ function Client.new(p)
             self.seeded = true
         elseif c == "unresolve_area" then
             self.resolved_areas[cmd.area_id] = nil
+        elseif c == "key_change_ack" then
+            -- A1: the rename is committed server-side; the old key stops being an alias
+            local a = self.key_alias
+            if a and a.old_key == cmd.old_key then
+                self.known_keys[a.old_key] = nil
+                self.key_alias = nil
+            end
+        elseif c == "key_change_rejected" then
+            -- U5: the server kills the pair itself (force_faint/memorialize follow); here the
+            -- alias is dropped and the player is told why
+            local a = self.key_alias
+            if a and a.old_key == cmd.old_key then self.key_alias = nil end
+            log("[SLink-gen1] key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
+            hud.show("IDENTITY CHANGE REFUSED: " .. tostring(cmd.reason or "collision"), 255, 64, 64, 600)
+        elseif c == "pending_keys" then
+            -- A1: keys the server holds as pending captures; part of the APEX collision set
+            self.pending_keys = {}
+            for _, k in ipairs(cmd.keys or {}) do self.pending_keys[k] = true end
         elseif c == "config" then
             self.config = cmd
         elseif c == "game_over" then
@@ -450,15 +495,15 @@ function Client.new(p)
         for i, hex in ipairs(cmd.blobs_hex or {}) do
             -- `#hex` on a server-supplied non-string raises outside the pcall below, and an
             -- error thrown here leaves the server with no answer at all: check the type first.
-            if type(hex) ~= "string" or #hex ~= 66 * 2 then
+            if type(hex) ~= "string" or #hex ~= (d.battle_struct_size + 2 * d.name_length) * 2 then
                 send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "bad_blob_length" })
                 return
             end
-            local bytes = {}
-            for j = 1, #hex, 2 do bytes[#bytes + 1] = tonumber(hex:sub(j, j + 1), 16) end
+            local bytes = hex_bytes(hex)
             local blob, ot, nick = {}, {}, {}
-            for j = 1, 44 do blob[j] = bytes[j] end
-            for j = 1, 11 do ot[j] = bytes[44 + j]; nick[j] = bytes[55 + j] end
+            local bs, nl = d.battle_struct_size, d.name_length
+            for j = 1, bs do blob[j] = bytes[j] end
+            for j = 1, nl do ot[j] = bytes[bs + j]; nick[j] = bytes[bs + nl + j] end
             mons[i] = { species = blob[1], blob = blob, ot = ot, nick = nick }
             ids[i] = blob[1]
         end
@@ -548,7 +593,7 @@ function Client.new(p)
             elseif cmd.cmd == "memorialize" then
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:memorialize(cmd.key) end
-                if done then send("memorialize_done", { key = cmd.key, box = 11 }); self:rescan_boxes()
+                if done then send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
@@ -575,7 +620,7 @@ function Client.new(p)
     end
 
     local function party_from_snapshot(bytes)
-        -- decode the 404-byte snapshot a battle hook captured (party is stale for the active
+        -- decode the party-block snapshot a battle hook captured (party is stale for the active
         -- mon's HP at RemoveFaintedPlayerMon; the hook's battle_hp is authoritative for it)
         -- bytes[k + 1] is offset k from wPartyCount: count @0, species list @1..7, structs @8,
         -- OT names @8 + 6*44, nicknames after those (ram/wram.asm party block)
@@ -624,13 +669,19 @@ function Client.new(p)
         local map_id = pt.map or reads.read_map().map
         local area_id = select(1, area_of(map_id))
         if k == "battle_begin" or k == "wild_begin" then
-            if not self.battle or self.battle.frame ~= sig.frame then
-                self.battle = { frame = sig.frame, wild = pt.cur_opponent < 200, species = pt.species,
+            -- Live 2: InitBattleCommon fires once with wCurOpponent == 0 right after the starter
+            -- pick (a non-battle caller); nothing to stage for it
+            if pt.cur_opponent == 0 then
+                log("[SLink-gen1] " .. k .. " with no opponent: ignored")
+            elseif not self.battle or self.battle.frame ~= sig.frame then
+                -- a trainer is wCurOpponent >= derived.opp_id_offset (200 vanilla, 197 pureRGB)
+                local trainer = pt.cur_opponent >= opp_id_offset
+                self.battle = { frame = sig.frame, wild = not trainer, species = pt.species,
                                 level = pt.level, area_id = area_id, map = map_id,
                                 cur_opponent = pt.cur_opponent, captured = false,
                                 demo = DEMO_BATTLE_TYPES[pt.battle_type] and pt.battle_type or false }
                 self.whiteout_sent = false
-                if not self.battle.wild then send("trainer_battle_start", { trainer_id = pt.cur_opponent }) end
+                if trainer then send("trainer_battle_start", { trainer_id = pt.cur_opponent }) end
                 if self.battle.wild then
                     -- A scripted, fixed-species encounter owns its own slot and must not consume
                     -- the map's wild area: data/games/gen1_rby/static_encounters.json lists the
@@ -650,8 +701,14 @@ function Client.new(p)
             end
         elseif k == "battle_end" then
             local b = self.battle
+            -- M2-b witness: EndOfBattle is the terminal site; when the profile carries
+            -- wBattleFunctionalFlags (pureRGB) its RUN bit says the player never got a fair
+            -- shot, so the area stays open. Vanilla has no such byte and keeps its logic.
+            local ran = pt.functional_flags ~= nil and math.floor(pt.functional_flags / RAN_FLAG_BIT) % 2 == 1
             if b and b.demo then
                 log("[SLink-gen1] demonstration battle (type " .. tostring(b.demo) .. "): nothing resolved")
+            elseif b and b.wild and ran then
+                log("[SLink-gen1] player ran (wBattleFunctionalFlags): no_catch suppressed, " .. tostring(b.area_id) .. " stays open")
             elseif b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
                 -- A Tower ghost without the Scope: the battle cannot be won or caught, so it
                 -- is not evidence of a failed encounter. `has_item` returns nil when the bag
@@ -685,12 +742,14 @@ function Client.new(p)
             local loc = pt.mon_location or 0
             if k == "add_party_mon" and loc % 16 ~= 0 then
                 -- ReadTrainer building the ENEMY party through the same routine: not ours
-            elseif k == "add_party_mon" and loc == 0x80 then
-                -- NPC in-game trade appending the incoming mon: the npc_trade signal owns it
-            elseif self.pending_change and self.pending_change.kind == "npc_trade" then
-                -- already tracking the trade; the key_change settles it
+            elseif self.pending_change and (self.pending_change.kind == "npc_trade"
+                                            or self.pending_change.kind == "daycare_withdraw") then
+                -- the NPC trade's own append ($80, no naming) or the daycare's: that signal
+                -- owns it and the readback settles it. wMonDataLocation == $80 alone is NOT the
+                -- discriminator: Bill's Garden Pikachu is a wild capture with exactly $80
+                -- (PLAN §4 row 10); a capture is wIsInBattle == 1.
             else
-                self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle ~= 0,
+                self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle == 1,
                                         to_box = (k == "capture_box"), area_id = area_id, map = pt.map,
                                         -- stamped now: the demo battle can end before this settles
                                         demo = (self.battle and self.battle.demo) or false }
@@ -711,12 +770,21 @@ function Client.new(p)
                 if key then
                     send("party_to_box", { key = key, stats = { level = mon.level, maxHP = mon.max_hp } })
                 end
+            elseif pt.move_type == MOVE_DAYCARE_TO_PARTY and sites.daycare_withdraw then
+                -- the pack pins the daycare site: it snapshots wDayCareMon itself (row 24)
             elseif pt.move_type == MOVE_BOX_TO_PARTY or pt.move_type == MOVE_DAYCARE_TO_PARTY then
                 local box = reads.box_from_snapshot(pt.box or {})
                 local key = box and key_at(box, pt.which)
                 if key then send("box_to_party", { key = key, area_id = area_id }) end
             end
-            self.pending_change = { kind = "rescan", frame = sig.frame }
+            local pk = self.pending_change and self.pending_change.kind
+            if pk ~= "daycare_withdraw" then self.pending_change = { kind = "rescan", frame = sig.frame } end
+        elseif k == "daycare_withdraw" then
+            -- PLAN §4 row 24: MoveMon(DAYCARE_TO_PARTY) copies wDayCareMon and appends it at
+            -- wPartyCount-1; the box is never touched. The key is read back at settle.
+            local mon = pt.daycare and reads.decode_party_mon(pt.daycare, false) or nil
+            self.pending_change = { kind = "daycare_withdraw", frame = sig.frame, area_id = area_id,
+                                    expect_key = mon and mon_key(mon) or nil }
         elseif k == "remove_pokemon" then
             -- the native SLINK apply removes the offered mon through _RemovePokemon and appends
             -- the received one; trade_done accounts for both (receipt: a spurious party_to_box
@@ -726,7 +794,11 @@ function Client.new(p)
             -- hundred-odd frames later (:179-180 DelayFrames 100, :204 save, then
             -- trade_service.asm:106-113): only the APPLY state spans that gap, which is why this
             -- is a state test and not an age window.
-            local trading = self.trade_state and self.trade_state.kind == "apply"
+            local pc0 = self.pending_change
+            local trading = (self.trade_state and self.trade_state.kind == "apply")
+                            -- pureRGB NPC trade: the removal site already owns this mon's
+                            -- identity and the key_change accounts for it (row 25)
+                            or (pc0 and pc0.kind == "npc_trade" and pc0.readback_last_slot) or false
             -- What separates a removal that finishes a MoveMon from a standalone one is WHERE
             -- THE MON IS, not how many frames ago the MoveMon fired: _MoveMon runs to completion
             -- before RemovePokemon is called, and both collections are in this point's snapshot.
@@ -780,7 +852,7 @@ function Client.new(p)
             -- a live npc_trade/evolution still owes a key_change; RemovePokemon runs INSIDE the
             -- NPC trade (in_game_trades.asm:145), so a rescan here would swallow it
             local pk = self.pending_change and self.pending_change.kind
-            if pk ~= "npc_trade" and pk ~= "evolution" then
+            if pk ~= "npc_trade" and pk ~= "evolution" and pk ~= "transform" and pk ~= "apex_chip" then
                 self.pending_change = { kind = "rescan", frame = sig.frame }
             end
         elseif k == "evolve" then
@@ -788,10 +860,32 @@ function Client.new(p)
             local key, mon
                 if party then key, mon = key_at(party, pt.which) end
             if key then self.pending_change = { kind = "evolution", frame = sig.frame, slot = pt.which, old_key = key, old_species = mon.species } end
-        elseif k == "npc_trade" then
+        elseif k == "npc_trade" and not sites.npc_trade_remove then
+            -- vanilla: wWhichPokemon is final at InGameTrade_DoTrade+0 and the slot is stable
             local party = party_from_snapshot(pt.party or {})
             local key = party and key_at(party, pt.which)
             if key then self.pending_change = { kind = "npc_trade", frame = sig.frame, slot = pt.which, old_key = key } end
+        elseif k == "npc_trade_remove" then
+            -- pureRGB (PLAN §4 row 25): the selection is final only at the RemovePokemon call,
+            -- the party is compacted and the received mon is APPENDED: identity here, readback
+            -- of the last slot at npc_trade_done
+            local party = party_from_snapshot(pt.party or {})
+            local key = party and key_at(party, pt.which)
+            if key then
+                self.pending_change = { kind = "npc_trade", frame = sig.frame, slot = pt.which, old_key = key,
+                                        readback_last_slot = true }
+            end
+        elseif k == "npc_trade_done" then
+            local pc = self.pending_change
+            if pc and pc.kind == "npc_trade" then pc.done, pc.frame = true, sig.frame end
+        elseif k == "transform" then
+            -- A2: recorded synchronously by on_transform; the key change settles after the
+            -- routine, the HP re-zero is queued there when the mon was dead
+            local t = self.transforming
+            if t and t.frame == sig.frame then
+                self.pending_change = { kind = "transform", frame = sig.frame, slot = t.slot,
+                                        old_key = t.old_key, old_hp = t.old_hp }
+            end
         elseif k == "save_witness" then
             if io.saveram then pcall(io.saveram) end
         elseif k == "starter_begin" or k == "starter_end" or k == "battle_loop_head" then
@@ -845,19 +939,47 @@ function Client.new(p)
             if self.battle and not gift then self.battle.captured = true end
             self.resolved_areas[area_id] = true
             self.pending_change = { kind = "rescan", frame = self.frame }
-        elseif pc.kind == "evolution" or pc.kind == "npc_trade" then
-            local key, mon = key_at(party, pc.slot)
+        elseif KEY_CHANGE_REASON[pc.kind] then
+            -- M2-b: never reconcile a key while Cable Club link code rewrites party bytes
+            if reads.read_battle().link_state ~= 0 then return end
+            local key, mon
+            if pc.readback_last_slot then
+                if not pc.done then
+                    if self.frame - pc.frame > 300 then self.pending_change = nil end -- declined
+                    return
+                end
+                mon = party[#party]
+                key = mon and mon_key(mon)
+            else
+                key, mon = key_at(party, pc.slot)
+            end
             if not key then self.pending_change = nil return end
             if key ~= pc.old_key then
-                self.known_keys[pc.old_key] = nil
+                -- A1 alias-until-ack: BOTH keys stay known until key_change_ack/_rejected
                 self.known_keys[key] = true
+                self.key_alias = { old_key = pc.old_key, new_key = key, since = self.frame }
                 send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                     reason = pc.kind == "evolution" and "evolution" or "npc_trade",
-                                     new_nickname = mon.nickname })
+                                     reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname })
+                if pc.kind == "transform" and pc.old_hp == 0 then
+                    -- A2 backstop: the in-hook zero is unproven (T2 gate); the checkpoint
+                    -- re-zero through the ordinary deferred path never revives a dead mon
+                    self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = key }
+                end
                 self.pending_change = nil
             elseif self.frame - pc.frame > 300 then
                 self.pending_change = nil -- trade declined / evolution cancelled
             end
+        elseif pc.kind == "daycare_withdraw" then
+            -- row 24 readback: the appended mon is the LAST party entry, never a box slot
+            local mon = party[#party]
+            local key = mon and mon_key(mon)
+            if not key or (pc.expect_key and key ~= pc.expect_key) then
+                if self.frame - pc.frame > 300 then self.pending_change = nil end
+                return
+            end
+            self.known_keys[key] = true
+            send("box_to_party", { key = key, area_id = pc.area_id })
+            self.pending_change = { kind = "rescan", frame = self.frame }
         elseif pc.kind == "rescan" then
             self:rescan_boxes()
             for _, m in ipairs(party) do self.known_keys[mon_key(m)] = true end
@@ -901,6 +1023,81 @@ function Client.new(p)
         self.pending_battle_writes = keep
     end
 
+    -- ── APEX CHIP (pureRGB, PLAN A1) and transformations (A2): synchronous hook handlers ──
+    -- The live key set an APEX use must not collide with: party + every scanned box +
+    -- server-seeded pending captures + the held alias, minus the mon's own current key.
+    local function collision_set(own_key)
+        local set = {}
+        for k in pairs(self.known_keys) do set[k] = true end
+        for k in pairs(self.pending_keys) do set[k] = true end
+        if self.key_alias then set[self.key_alias.old_key], set[self.key_alias.new_key] = true, true end
+        set[own_key] = nil
+        return set
+    end
+
+    -- .setDVs, before the two $FF stores: HL names the slot's first DV byte, the target is
+    -- wUsedItemOnWhichPokemon. Predict the FFFF:OTID:SS key and whether it is already live.
+    function self:on_apex_preflight(sig)
+        local pt = sig.point
+        self.apex = nil
+        local party = party_from_snapshot(pt.party or {})
+        local key, mon = nil, nil
+        if party then key, mon = key_at(party, pt.target) end
+        if not key then return end
+        local new_key = string.format("%04X:%04X:%02X", 0xFFFF, mon.ot_id, mon.species)
+        local dvs = io.read_range(pt.hl, 2, "System Bus")
+        self.apex = { slot = pt.target, dv_addr = pt.hl, dvs = { dvs[1], dvs[2] }, old_key = key,
+                      new_key = new_key, species = mon.species, ot_id = mon.ot_id,
+                      collide = (key ~= new_key) and (collision_set(key)[new_key] == true) or false }
+    end
+
+    -- +$11, both DV bytes written, before `call .recalculateStats`: restore on a predicted
+    -- collision (the chip is still consumed, U6); otherwise the key change settles after.
+    function self:on_apex_commit(sig)
+        local a = self.apex
+        self.apex = nil
+        if not a or a.slot ~= sig.point.target then return end
+        local party = party_from_snapshot(sig.point.party or {})
+        local _, mon = nil, nil
+        if party then _, mon = key_at(party, a.slot) end
+        if not mon or mon.species ~= a.species or mon.ot_id ~= a.ot_id then return end
+        if a.collide then
+            if not self.writes_enabled then return end
+            writes:arm("apex_commit", function(addr, n) return addr == a.dv_addr and n == 2 end)
+            local ok, why = pcall(function() writes:restore_apex_dvs(a.dv_addr, a.dvs) end)
+            writes:disarm()
+            if ok then
+                log("[SLink-gen1] APEX refused: " .. a.new_key .. " already live; DVs restored for " .. a.old_key)
+                hud.show("APEX CHIP REFUSED: IDENTITY COLLISION", 255, 64, 64, 600)
+            else
+                log("[SLink-gen1] APEX DV restore failed: " .. tostring(why))
+            end
+        elseif a.old_key ~= a.new_key then
+            self.pending_change = { kind = "apex_chip", frame = sig.frame, slot = a.slot, old_key = a.old_key }
+        end
+    end
+
+    -- ChangePartyPokemonSpecies+0: remember the slot, its key and its HP before the rewrite.
+    function self:on_transform(sig)
+        local pt = sig.point
+        local party = party_from_snapshot(pt.party or {})
+        local key = party and key_at(party, pt.which)
+        self.transforming = key and { slot = pt.which, old_key = key, old_hp = pt.old_hp, frame = sig.frame } or nil
+    end
+
+    -- +$4C, the low-byte HP store (HL names it; the high byte at HL-1 is already stored): a
+    -- mon that was at 0 HP goes back to 0 right here. †UNVERIFIED that the low byte survives
+    -- the store that follows the callback (T2 gate); settle queues the checkpoint re-zero too.
+    function self:on_transform_hp_lo(sig)
+        local t = self.transforming
+        if not t or t.old_hp ~= 0 or not self.writes_enabled then return end
+        local addr = sig.point.hl - 1
+        writes:arm("transform", function(a, n) return a == addr and n == 2 end)
+        local ok, why = pcall(function() writes:restore_transform_hp_zero(addr) end)
+        writes:disarm()
+        if not ok then log("[SLink-gen1] transform HP zero failed: " .. tostring(why)) end
+    end
+
     -- ── hello / tick ─────────────────────────────────────────────────────────────────
     function self:send_hello()
         local party, battle = snapshot_party()
@@ -920,7 +1117,8 @@ function Client.new(p)
             end
         end
         send("hello", {
-            rom_type = self.rom_type, party = party or arr({}), ot_id = reads.read_player_id(),
+            rom_type = self.rom_type, foundation = self.foundation, artifact_kind = self.artifact_kind,
+            party = party or arr({}), ot_id = reads.read_player_id(),
             trainer_name = reads.read_player_name(), has_pokeballs = self.has_pokeballs,
             ball_count = ball_count(), badges = reads.read_badges(), area_id = area_id, loc_name = loc,
             pc_boxes = pc_boxes_wire(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
@@ -950,6 +1148,7 @@ function Client.new(p)
             trainer_id = in_battle and battle.is_trainer and battle.cur_opponent or nil,
             enemy_party = enemy_party(battle), badges = reads.read_badges(),
             trainer_name = reads.read_player_name(), pc_boxes = pc_boxes_wire(),
+            safari_type = battle.safari_type, -- pureRGB only (PLAN §3.5); nil elsewhere
         })
     end
 
@@ -957,32 +1156,29 @@ function Client.new(p)
     -- The overlay is a 16-byte lease the patched game hands the host at wSerialPartyMonsPatchList;
     -- writes to it (and the staged enemy party) happen inside that lease, not at the overworld
     -- checkpoint: the receptionist waits <=30/180 frames in its own loop for our bytes.
-    local TRADE_DISPATCH = { 0x21, 0x00, 0x4C, 0x06, 0x3F } -- receptionist hook at 0x29C3 once patched
+    -- the companion patch's receptionist dispatch and service entry come from profile.trade
+    -- (entry.lua: the shipped vanilla patch, or an overlay pack's own block); no block = no
+    -- native trade path on this cartridge and no probe of a foreign ROM
+    local trade_cfg = profile.trade
     local PROMPT, APPLY = 3, 5
 
-    -- pret charmap subset for the partner name shown by the prompt/animation
+    -- partner name shown by the prompt/animation: A-Z, 0-9 and space through the foundation's
+    -- ONE charmap (reads.charmap), terminator-padded to name_length
     local function encode_name11(text)
+        local cm = reads.charmap
         local out = {}
         for ch in tostring(text or ""):upper():gmatch(".") do
-            local b = ch:byte()
-            local code
-            if b >= 65 and b <= 90 then code = 0x80 + (b - 65)
-            elseif b >= 48 and b <= 57 then code = 0xF6 + (b - 48)
-            elseif ch == " " then code = 0x7F end
-            if code and #out < 10 then out[#out + 1] = code end
+            local code = ch:match("^[A-Z0-9 ]$") and cm.codes[ch] or nil
+            if code and #out < d.name_length - 1 then out[#out + 1] = code end
         end
-        out[#out + 1] = 0x50
-        while #out < 11 do out[#out + 1] = 0x50 end
-        return out
-    end
-    local function hex_bytes(hex)
-        local out = {}
-        for i = 1, #hex, 2 do out[#out + 1] = tonumber(hex:sub(i, i + 1), 16) end
+        out[#out + 1] = cm.terminator
+        while #out < d.name_length do out[#out + 1] = cm.terminator end
         return out
     end
     local function ot_of(blob)
         local name = {}
-        for i = 45, 55 do name[#name + 1] = blob[i] end -- the incoming mon carries its OT name
+        -- the incoming mon carries its OT name right after the struct
+        for i = d.battle_struct_size + 1, d.battle_struct_size + d.name_length do name[#name + 1] = blob[i] end
         return name
     end
     local function new_token()
@@ -992,8 +1188,10 @@ function Client.new(p)
     end
 
     function self:trade_patch_present()
-        for i, b in ipairs(TRADE_DISPATCH) do
-            if io.read_u8(0x29C3 + i - 1, "ROM") ~= b then return false end
+        if not trade_cfg or not trade_cfg.receptionist_hook or not trade_cfg.dispatch_hex then return false end
+        local want = hex_bytes(trade_cfg.dispatch_hex)
+        for i, b in ipairs(want) do
+            if io.read_u8(trade_cfg.receptionist_hook + i - 1, "ROM") ~= b then return false end
         end
         return true
     end
@@ -1129,12 +1327,18 @@ function Client.new(p)
 
     -- ── per-frame driver ─────────────────────────────────────────────────────────────
     function self:start()
-        local handlers = { battle_loop_head = function(sig) self:on_battle_loop_head(sig) end }
+        local handlers = {
+            battle_loop_head = function(sig) self:on_battle_loop_head(sig) end,
+            apex_preflight = function(sig) self:on_apex_preflight(sig) end,
+            apex_commit = function(sig) self:on_apex_commit(sig) end,
+            transform = function(sig) self:on_transform(sig) end,
+            transform_hp_lo = function(sig) self:on_transform_hp_lo(sig) end,
+        }
         local all_sites = sites
         if self.trade and self:trade_patch_present() then
-            -- the receptionist service entry (bank $3F:$4500) exists only in a patched cartridge,
-            -- so it is pinned against the running ROM here rather than in engine_signals.json
-            local svc = self.trade.service_address and self.trade.service_address() or { bank = 0x3F, addr = 0x4500 }
+            -- the receptionist service entry exists only in a patched cartridge, so it is
+            -- pinned against the running ROM here rather than in engine_signals.json
+            local svc = self.trade.service_address()
             local flat = svc.bank * 0x4000 + (svc.addr - 0x4000)
             local bytes = io.read_range(flat, 6, "ROM")
             all_sites = {}
@@ -1167,7 +1371,17 @@ function Client.new(p)
         end
         if connected and not self.hello_sent and game_is_live()
            and (reads.read_battle().in_battle ~= 0 or safety.check(ws_profile, io)) then
-            self:send_hello()
+            -- pureRGB: the updater saves BEFORE stamping wGameInternalVersion, so a save whose
+            -- stamp differs from the pack's pinned version is not live yet (hard hold, no hello)
+            local want, have = d.game_internal_version, reads.read_game_internal_version()
+            if want and have ~= nil and have ~= want then
+                if not self.version_hold_logged then
+                    log("[SLink-gen1] hello held: wGameInternalVersion " .. have .. " != " .. want)
+                    self.version_hold_logged = true
+                end
+            else
+                self:send_hello()
+            end
         end
         connected = connected and self.hello_sent
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end

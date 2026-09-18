@@ -136,6 +136,17 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "area_map.json",
         "static_encounters.json",
     ],
+    "gen1_purergb": [
+        # The pureRGB pack the same client loads when the cartridge sha1 admits a pure title.
+        "admission.json",
+        "area_map.json",
+        "charmap.lua",
+        "engine_signals.json",
+        "profile.json",
+        "species_index.json",
+        "static_encounters.json",
+        "write_checkpoint.json",
+    ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
         "gen3_frlge_locations.lua",

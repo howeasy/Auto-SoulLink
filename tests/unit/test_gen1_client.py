@@ -1908,3 +1908,68 @@ def test_an_undecodable_snapshot_classifies_nothing_and_says_which_half_was_miss
     world.step(3)                                # and it is not retried from a later snapshot
     assert [ln for ln in world.logs[nlog:] if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln] ==         [ln for ln in lines if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln]
     world.assert_all_conform()
+
+
+# ── A1 acknowledged key_change, row 10 discriminator, Live 2 spurious battle_begin ───────
+
+def test_key_change_keeps_the_old_key_as_an_alias_until_the_ack(world):
+    world.connect()
+    old = codec.key(world.party()[0])
+    world.bus[world.ram["wWhichPokemon"]] = 0
+    world.fire("evolve")
+    world.step()
+    party = world.party()
+    party[0]["species"] = 0x09
+    world.seed_party(party)
+    world.step()
+    new = codec.key(world.party()[0])
+    assert world.events("key_change")[-1]["new_key"] == new
+    known = set(world.client.known_keys.keys())
+    assert old in known and new in known, "both keys stay known until the server answers"
+    world.reply({"cmd": "key_change_ack", "old_key": old, "new_key": new})
+    world.step()
+    known = set(world.client.known_keys.keys())
+    assert old not in known and new in known
+    assert not any("unknown command" in line for line in world.logs)
+
+
+def test_key_change_rejected_is_handled_not_logged_as_unknown(world):
+    world.connect()
+    old = codec.key(world.party()[0])
+    world.bus[world.ram["wWhichPokemon"]] = 0
+    world.fire("evolve")
+    world.step()
+    party = world.party()
+    party[0]["species"] = 0x09
+    world.seed_party(party)
+    world.step()
+    world.reply({"cmd": "key_change_rejected", "old_key": old, "new_key": codec.key(world.party()[0]),
+                 "reason": "collision"})
+    world.step()
+    assert world.client.key_alias is None
+    assert any("REFUSED" in str(h[1]) for h in world.hud)
+    assert not any("unknown command" in line for line in world.logs)
+
+
+def test_an_in_battle_add_with_location_80_and_no_pending_trade_is_a_capture(world):
+    """Row 10: $80 is not the NPC-trade discriminator (Bill's Garden uses it for a wild catch)."""
+    world.connect()
+    world.in_battle(opponent=0x54, species=0x54, level=25)
+    world.fire("wild_begin")
+    world.step()
+    world.bus[world.ram["wMonDataLocation"]] = 0x80
+    world.fire("add_party_mon")
+    world.step()
+    rng = random.Random(21)
+    world.seed_party(world.party() + [_mon(rng, 0x54, level=25, nick="PIKA")])
+    world.step(2)
+    assert [c["species_id"] for c in world.events("capture")] == [0x54]
+
+
+def test_a_battle_begin_with_no_opponent_stages_nothing(world):
+    """Live 2: InitBattleCommon fires once with wCurOpponent == 0 after the starter pick."""
+    world.connect()
+    world.bus[world.ram["wCurOpponent"]] = 0
+    world.fire("battle_begin")
+    world.step()
+    assert world.client.battle is None and world.events("trainer_battle_start") == []

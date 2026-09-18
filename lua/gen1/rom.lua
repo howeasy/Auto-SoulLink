@@ -1,21 +1,50 @@
 -- lua/gen1/rom.lua — the two ROM tables the client needs, read from the cartridge itself.
 --
 --   dex order   PokedexOrder (data/pokemon/dex_order.asm): internal index (1..190) -> dex (0 = hole)
---   base stats  BaseStats (data/pokemon/base_stats.asm): 28-byte records in dex order,
---               dex 1..150 on R/B (Mew apart at MewBaseStats), 1..151 inline on Yellow.
+--   base stats  BaseStats (data/pokemon/base_stats.asm): records in dex order, stride
+--               profile.derived.base_stats_stride (28 vanilla, 35 pureRGB; PLAN §4 row 8),
+--               dex 1..150 on R/B (Mew apart at MewBaseStats), 1..151 inline on Yellow/pureRGB.
 --               Record: dex @0, hp/atk/def/spd/spc @1..5, types @6-7, catch rate @8, exp yield @9,
---               ... growth rate @19 (constants/pokemon_data_constants.asm:3-24).
+--               ... growth rate @19 (constants/pokemon_data_constants.asm:3-24). pureRGB appends
+--               8 bytes after vanilla's 27 + padding, so every offset above is shared.
 -- Addresses come from profile.rom (pret .sym); the Python twin is server/adapters/gen1_rom_scan.py.
 -- io.read_u8(addr, "ROM") reads the flat ROM image.
+--
+-- `species_index` (optional, the pack's species_index.json) carries `species[internal]` for a
+-- foundation whose dex map is many-to-one (pureRGB: forms carry their base dex "for rules",
+-- MISSINGNO $B5 is the real dex 0, NonDex records live outside BaseStats). When it is absent
+-- (vanilla) the cartridge's own PokedexOrder/BaseStats are the only source, as before.
 local Rom = { RECORD = 28, GROWTH = 19 }
+-- constants/pokemon_data_constants.asm:88-93 (const order), for pack-supplied growth names
+Rom.GROWTH_INDEX = { GROWTH_MEDIUM_FAST = 0, GROWTH_SLIGHTLY_FAST = 1, GROWTH_SLIGHTLY_SLOW = 2,
+                     GROWTH_MEDIUM_SLOW = 3, GROWTH_FAST = 4, GROWTH_SLOW = 5 }
 
-function Rom.new(profile, io)
+function Rom.new(profile, io, species_index)
     local rom = assert(profile.rom, "profile.rom required")
-    local self = {}
+    local d = profile.derived or {}
+    -- ponytail: vanilla profile.json predates these fields; the fallbacks are vanilla's values
+    local stride = d.base_stats_stride or Rom.RECORD
+    local species_count = d.species_count or 190
+    -- dex_count counts dex NUMBERS: 151 (1..151) vanilla, 152 (0..151) when the pack seats
+    -- MISSINGNO at dex 0. Either way the last numbered record is dex_hi.
+    local dex_hi = d.dex_count and (d.dex_count - 1) or 151
+    local pack = species_index and species_index.species or nil
+    local self = { stride = stride }
     local dex_cache, stats_cache = {}, {}
 
+    local function pack_entry(internal)
+        if not pack then return nil end
+        return pack[tostring(internal)] or pack[internal]
+    end
+
     function self.natdex(internal)
-        if type(internal) ~= "number" or internal < 1 or internal > 190 then return nil end
+        if type(internal) ~= "number" or internal < 1 or internal > species_count then return nil end
+        local e = pack_entry(internal)
+        if e then
+            if e.dex and e.dex > 0 then return e.dex end
+            if e.classification == "missingno" then return 0 end -- a real, catchable dex 0
+            return nil
+        end
         if dex_cache[internal] == nil then
             dex_cache[internal] = io.read_u8(rom.PokedexOrder.flat + internal - 1, "ROM")
         end
@@ -26,27 +55,43 @@ function Rom.new(profile, io)
 
     local function record_at(flat)
         local r = {}
-        for i = 0, Rom.RECORD - 1 do r[i] = io.read_u8(flat + i, "ROM") end
+        for i = 0, stride - 1 do r[i] = io.read_u8(flat + i, "ROM") end
         return { dex = r[0], hp = r[1], attack = r[2], defense = r[3], speed = r[4], special = r[5],
                  type1 = r[6], type2 = r[7], catch_rate = r[8], growth_rate = r[Rom.GROWTH] }
+    end
+
+    -- A pack record (NonDex table / MISSINGNO) in the same shape record_at produces.
+    local function pack_record(e)
+        local st = e.stats or {}
+        local growth = Rom.GROWTH_INDEX[e.growth_rate or ""]
+        if not growth or not st.hp then return nil, "pack record incomplete for " .. tostring(e.name) end
+        return { dex = e.dex, hp = st.hp, attack = st.atk, defense = st.def, speed = st.spd, special = st.spc,
+                 type1 = e.types and e.types[1], type2 = e.types and e.types[2],
+                 catch_rate = e.catch_rate, growth_rate = growth, pack = true }
     end
 
     -- Base stats for a national dex number; nil when the dex is out of range or the record's
     -- own dex byte disagrees (a wrong stride or symbol, never silently "close enough").
     function self.base_stats(dex)
-        if type(dex) ~= "number" or dex < 1 or dex > 151 then return nil, "dex out of range" end
+        if type(dex) ~= "number" or dex < 1 or dex > dex_hi then return nil, "dex out of range" end
         if stats_cache[dex] then return stats_cache[dex] end
         local flat
         if dex == 151 and rom.MewBaseStats then flat = rom.MewBaseStats.flat
-        else flat = rom.BaseStats.flat + (dex - 1) * Rom.RECORD end
+        else flat = rom.BaseStats.flat + (dex - 1) * stride end
         local rec = record_at(flat)
         if rec.dex ~= dex then return nil, "base stats record dex byte differs" end
         stats_cache[dex] = rec
         return rec
     end
 
-    -- Convenience: base stats straight from a party mon's internal species index.
+    -- Convenience: base stats straight from a party mon's internal species index. A species
+    -- whose record is not in BaseStats (pureRGB forms/spirits: stats_source "NonDex:n",
+    -- MISSINGNO dex 0) comes from the pack, which was walked from the built ROM.
     function self.base_stats_for(internal)
+        local e = pack_entry(internal)
+        if e and (not e.stats_source or e.stats_source:sub(1, 9) ~= "BaseStats") then
+            return pack_record(e)
+        end
         local dex = self.natdex(internal)
         if not dex then return nil, "no dex entry for species " .. tostring(internal) end
         return self.base_stats(dex)

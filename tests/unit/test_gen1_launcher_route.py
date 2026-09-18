@@ -122,3 +122,9 @@ def test_the_manual_gen1_launcher_loads_the_new_client():
     """slink_gen1.lua is what a player loads by hand; it has no detection of its own."""
     loaded = _run_launcher("slink_gen1.lua", "GB", _rom("POKEMON RED"))
     assert loaded == [_NEW_CLIENT], loaded
+
+
+def test_a_pure_green_header_reaches_the_gen1_route():
+    """PureGreen's header is POKEMON GREEN; run.lua then admits by sha1, never by header."""
+    loaded = _run_launcher("slink.lua", "GBC", _rom("POKEMON GREEN"))
+    assert _NEW_CLIENT in loaded and _OLD_CLIENT not in loaded, loaded

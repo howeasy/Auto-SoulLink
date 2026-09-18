@@ -34,6 +34,33 @@ local function glyph(b)
     return EXTRA[b] or string.format("<$%02X>", b)
 end
 
+-- The ONE glyph table per foundation: {terminator, glyphs[0..255], codes[glyph] = byte}.
+-- A pack that ships charmap.lua (gen1_purergb) supplies `profile.charmap` = its return value;
+-- vanilla has no generated file yet, so its table is built once from EXTRA/glyph above.
+-- reads.decode_name, boxes.encode_nickname, panel tiles and the trade name encoder all
+-- consume this object, never a second transcription. `codes` keeps the FIRST byte of a glyph.
+function R.charmap(profile)
+    local cm = profile and profile.charmap
+    if not cm then
+        if not R.VANILLA then
+            local glyphs = {}
+            for b = 0, 255 do glyphs[b] = glyph(b) end
+            R.VANILLA = { terminator = 0x50, glyphs = glyphs } -- constants/charmap.asm:12, @
+        end
+        cm = R.VANILLA
+    end
+    assert(type(cm.glyphs) == "table" and type(cm.terminator) == "number", "charmap needs glyphs + terminator")
+    if not cm.codes then
+        local codes = {}
+        for b = 0, 255 do
+            local g = cm.glyphs[b]
+            if g and codes[g] == nil then codes[g] = b end
+        end
+        cm.codes = codes
+    end
+    return cm
+end
+
 local function word(b, i) return b[i] * 256 + b[i + 1] end
 local function take(b, start, length)
     local out = {}
@@ -47,14 +74,21 @@ function R.new(profile, io)
     assert(type(io) == "table" and type(io.read_u8) == "function" and
            type(io.read_range) == "function", "injected WRAM byte reader required")
     local a, d = profile.ram, profile.derived
-    local r = {NULL = R.NULL}
+    local cm = R.charmap(profile)
+    local r = {NULL = R.NULL, charmap = cm}
+    -- ponytail: vanilla profile.json predates these derived fields; the fallbacks ARE
+    -- vanilla's values (bag: ram/wram.asm:1757-1761 formula; constants/trainer_constants.asm:1).
+    -- Drop them once data/games/gen1_rby/profile.json carries bag_capacity/opp_id_offset.
+    local bag_capacity = d.bag_capacity or math.floor((a.wPlayerMoney - a.wBagItems - 1) / 2)
+    local opp_id_offset = d.opp_id_offset or 200
+    r.bag_capacity, r.opp_id_offset = bag_capacity, opp_id_offset
 
     function r.decode_name(bytes)
         if #bytes > d.name_length then return nil, "name exceeds profile length" end
         local out = {}
         for i = 1, #bytes do
-            if bytes[i] == 0x50 then break end -- constants/charmap.asm:12, @ terminator
-            out[#out + 1] = glyph(bytes[i])
+            if bytes[i] == cm.terminator then break end
+            out[#out + 1] = cm.glyphs[bytes[i]] or string.format("<$%02X>", bytes[i])
         end
         return table.concat(out)
     end
@@ -191,7 +225,7 @@ function R.new(profile, io)
         -- ram/wram.asm:1757-1761; constants/menu_constants.asm:1; and
         -- engine/items/get_bag_item_quantity.asm:5-17 ($FF terminates IDs).
         local count = io.read_u8(a.wNumBagItems)
-        local capacity = math.floor((a.wPlayerMoney - a.wBagItems - 1) / 2)
+        local capacity = bag_capacity
         if count > capacity then return nil, "bag count exceeds storage" end
         local raw = io.read_range(a.wBagItems, capacity * 2 + 1)
         if raw[count * 2 + 1] ~= 0xFF then return nil, "missing bag terminator" end
@@ -241,18 +275,41 @@ function R.new(profile, io)
     end
     function r.read_battle()
         -- ram/wram.asm:1236-1252, battle structs in macros/ram.asm:39-59;
-        -- constants/trainer_constants.asm:1: trainer class = opponent - 200.
+        -- constants/trainer_constants.asm:1: trainer class = opponent - OPP_ID_OFFSET
+        -- (200 vanilla, 197 pureRGB: profile.derived.opp_id_offset). With the vanilla value
+        -- this reads exactly as before: is_trainer = opponent >= 200 and
+        -- trainer_class = opponent >= 200 and opponent - 200 or NULL.
         local opponent = io.read_u8(a.wCurOpponent)
         local enemy_hp = io.read_range(a.wEnemyMonHP, 2)
         local player_hp = io.read_range(a.wBattleMonHP, 2)
         return {in_battle = io.read_u8(a.wIsInBattle), type = io.read_u8(a.wBattleType),
-                cur_opponent = opponent, is_trainer = opponent >= 200,
-                trainer_class = opponent >= 200 and opponent - 200 or R.NULL,
+                cur_opponent = opponent, is_trainer = opponent >= opp_id_offset,
+                trainer_class = opponent >= opp_id_offset and opponent - opp_id_offset or R.NULL,
                 enemy_species = io.read_u8(a.wEnemyMonSpecies),
                 enemy_level = io.read_u8(a.wEnemyMonLevel), enemy_hp = word(enemy_hp, 1),
                 battle_mon_hp = word(player_hp, 1),
                 player_mon_number = io.read_u8(a.wPlayerMonNumber),
-                result = io.read_u8(a.wBattleResult), link_state = io.read_u8(a.wLinkState)}
+                result = io.read_u8(a.wBattleResult), link_state = io.read_u8(a.wLinkState),
+                -- pureRGB-only symbols (PLAN §3.5 SAFARI_TYPE_CLASSIC; RUN witness bit 1): absent
+                -- from the vanilla profile, so absent from the vanilla table too
+                safari_type = a.wSafariType and io.read_u8(a.wSafariType) or nil,
+                functional_flags = a.wBattleFunctionalFlags and io.read_u8(a.wBattleFunctionalFlags) or nil}
+    end
+    -- Daycare: one full party-mon record at wDayCareMon (PLAN §4 row 24 / A7); nil when the
+    -- profile has no symbol. The struct is the party shape, so decode_party_mon is the decoder.
+    function r.read_daycare_mon()
+        if not a.wDayCareMon then return nil, "profile has no wDayCareMon" end
+        if a.wDayCareInUse and io.read_u8(a.wDayCareInUse) == 0 then return nil, "daycare empty" end
+        local mon, why = r.decode_party_mon(io.read_range(a.wDayCareMon, d.party_struct_size), false)
+        if not mon then return nil, why end
+        if mon.species == 0 or mon.species == 0xFF then return nil, "daycare empty" end
+        return mon
+    end
+    -- pureRGB stamps its save with wGameInternalVersion; the updater saves before stamping, so a
+    -- mismatch against derived.game_internal_version means "not live yet". nil = no such symbol.
+    function r.read_game_internal_version()
+        if not a.wGameInternalVersion then return nil end
+        return io.read_u8(a.wGameInternalVersion)
     end
     function r.read_stat_stages(side)
         -- ram/wram.asm:543-576 has SIX named modifiers and two unused bytes.

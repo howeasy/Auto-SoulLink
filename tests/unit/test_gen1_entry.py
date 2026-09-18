@@ -90,7 +90,19 @@ def test_the_real_dumps_report_their_own_title(entry, title):
 
 def test_rom_type_strings_are_the_ones_the_server_routes_on(entry):
     """The Lua table is not allowed to be a third opinion about capitalisation."""
-    assert dict(entry.ROM_TYPE.items()) == {"red": "Red", "blue": "Blue", "yellow": "Yellow"}
+    got = dict(entry.ROM_TYPE.items())
+    assert {k: got[k] for k in ("red", "blue", "yellow")} == {"red": "Red", "blue": "Blue", "yellow": "Yellow"}
     for value in ("Red", "Blue", "Yellow"):
         assert game_id_for_rom_type(value) == "gen1_rby", (
             f"{value!r} is not the rom_type the server registers for gen1_rby")
+    # PLAN §4 row 2: the pureRGB strings the server's gen1_purergb adapter routes on
+    assert {k: got[k] for k in ("purered", "pureblue", "puregreen")} == {
+        "purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen"}
+    assert dict(entry.PACKS.gen1_purergb.rom_type.items()) == {
+        "purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen"}
+
+
+def test_a_green_header_is_a_gen1_family_for_the_launcher_route(entry):
+    """PureGreen's header is POKEMON GREEN; the header only narrows, admission is by sha1."""
+    assert entry.detect_title(_reader(_header_image("POKEMON GREEN"))) == "green"
+    assert entry.header_title(_reader(_header_image("POKEMON GREEN"))) == "POKEMON GREEN"

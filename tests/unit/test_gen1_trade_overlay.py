@@ -199,3 +199,13 @@ def test_clobber_detection_and_rearm_uses_new_local_preimage():
     assert second == 44
     assert f.call("clobbered") is False
     assert bytes(f.memory[f.ram["wEnemyMons"] + 44:f.ram["wEnemyMons"] + 60]) == new_preimage
+
+
+def test_service_address_follows_the_profile_trade_block():
+    f = Fake()
+    assert dict(f.module.service_address().items()) == {"bank": 0x3F, "addr": 0x4500}
+    overlay = f.lua.table_from({**PROFILES["red"], "trade": {"service": {"bank": 0x3E, "addr": 0x5000}}},
+                               recursive=True)
+    driver = f.module.new(overlay, f.lua.eval("function() return {read_u8=function() return 0 end,"
+                                              "read_range=function() return {} end} end")(), f.writer)
+    assert dict(driver.service_address().items()) == {"bank": 0x3E, "addr": 0x5000}

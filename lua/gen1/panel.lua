@@ -10,7 +10,9 @@
 -- present() asks the capability bits first, and only an OBSERVED transition into AWAIT arms.
 local P = {}
 
--- slink.asm:38-66. A module constant exactly as trade_overlay.lua's MAGIC is.
+-- slink.asm:38-66. The vanilla companion patch's mailbox; an overlay build names its own
+-- through profile.trade.mailbox (PLAN A4: pureRGB's is linker-placed in the bank-1 tail,
+-- $DEE2 being inside its box data). The offsets below are the shared mailbox ABI.
 local MAILBOX = 0xDEE2
 local BEACON  = { 0x53, 0x4C, 0x4E, 0x4B }  -- 'SLNK', rewritten every VBlank
 local ABI     = MAILBOX + 4
@@ -18,6 +20,7 @@ local CAPS    = MAILBOX + 8                 -- SLINK_CAPS
 local STATE   = MAILBOX + 9                 -- SLINK_PANEL_STATE
 local PAGE    = MAILBOX + 10                -- patch -> client: page wanted
 local PAGES   = MAILBOX + 11                -- client -> patch: page count (0 reads as one)
+local OFF_ABI, OFF_CAPS, OFF_STATE, OFF_PAGE, OFF_PAGES = 4, 8, 9, 10, 11
 local CAP_PANEL = 0x02                      -- SLINK_CAP_PANEL
 local CLOSED, AWAIT, STAGED = 0, 1, 2
 
@@ -51,6 +54,18 @@ local function _tile_for(ch)
 end
 P.tile_for = _tile_for
 
+--- The same whitelist over the foundation's ONE charmap object (reads.lua R.charmap): letters,
+--- digits, '/' and '-' by their glyph codes, everything else BLANK. On vanilla this yields
+--- exactly _tile_for's bytes; on pureRGB it follows the pack's charmap.lua.
+function P.tile_for_charmap(cm)
+    local codes = cm and cm.codes
+    if not codes then return _tile_for end
+    return function(ch)
+        if ch:match("^[A-Za-z0-9/%-]$") then return codes[ch] or BLANK end
+        return BLANK
+    end
+end
+
 function P.new(profile, io, writes, sanitize)
     -- Presence, not type(...) == "function": under lupa the injected io/sanitize may be
     -- Python callables, which Lua sees as userdata (trade_overlay.lua gets Lua wrappers
@@ -62,6 +77,11 @@ function P.new(profile, io, writes, sanitize)
            "writes.lua instance required")
     assert(sanitize, "injected sanitize required (hud.lua)")
     local tilemap = assert(profile.ram.wTileMap, "profile.ram.wTileMap required")
+    -- the mailbox and its ABI bytes, per cartridge build (module defaults = vanilla patch)
+    local MAILBOX = profile.trade and profile.trade.mailbox or MAILBOX
+    local ABI, CAPS, STATE = MAILBOX + OFF_ABI, MAILBOX + OFF_CAPS, MAILBOX + OFF_STATE
+    local PAGE, PAGES = MAILBOX + OFF_PAGE, MAILBOX + OFF_PAGES
+    local tile_for = P.tile_for_charmap(profile.charmap)
 
     -- The only bytes this window may ever touch. write_bytes is expected to check the FULL
     -- interval; the predicate takes an optional length so it answers for either convention.
@@ -122,7 +142,7 @@ function P.new(profile, io, writes, sanitize)
                 local text = clean[(p - 1) * ROWS + r + 1] or ""
                 for c = 1, COLS do
                     local ch = text:sub(c, c)               -- pad AND truncate to 20
-                    page[r * COLS + c] = ch == "" and BLANK or _tile_for(ch)
+                    page[r * COLS + c] = ch == "" and BLANK or tile_for(ch)
                 end
             end
             tiles[p] = page

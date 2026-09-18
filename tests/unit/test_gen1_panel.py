@@ -289,3 +289,26 @@ def test_present_abi_and_awaiting_read_the_mailbox():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_an_overlay_profile_moves_the_mailbox_and_its_abi_bytes(monkeypatch):
+    """PLAN A4: the overlay build's mailbox is linker-placed; $DEE2 is inside pureRGB box data."""
+    other = 0xDF40
+    w = World(patched=False)
+    L = w.lua
+    profile = L.table(ram=L.table(wTileMap=TILEMAP), trade=L.table(mailbox=other))
+    io = L.table(read_u8=lambda a, d=None: w.bus[int(a)], framecount=lambda: w.frame)
+    writes = L.execute(FAKE_WRITES)(w._arm, w._disarm, w._write, lambda: w.fail_write)
+    panel = w.P.new(profile, io, writes, lambda s: s)
+    w.bus[other:other + 4] = b"SLNK"
+    w.bus[other + 4] = 3
+    w.bus[other + 8] = 0x02
+    assert panel.present(panel) is True and panel.abi(panel) == 3
+    w.bus[other + 9] = AWAIT
+    assert panel.awaiting(panel) is True
+    # the vanilla mailbox bytes are not consulted at all
+    w.bus[MB:MB + 4] = b"SLNK"
+    w.bus[other:other + 4] = bytes(4)
+    assert panel.present(panel) is False
+    # and the module default is still the vanilla patch's mailbox
+    assert w.P.MAILBOX == MB

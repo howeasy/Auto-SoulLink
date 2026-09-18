@@ -319,3 +319,82 @@ def test_ancillary_reads_and_all_addresses_follow_shifted_profile(title):
     assert not battle["is_trainer"] and battle["trainer_class"] is None
     got, reason = r.read_stat_stages("invalid")
     assert got is None and "side" in reason
+
+
+# ── pureRGB profile (data/games/gen1_purergb): rows 6, 11 and the new accessors ──────────
+PURE_PROFILE = ROOT / "data" / "games" / "gen1_purergb" / "profile.json"
+
+
+def _pure_runtime(title="purered"):
+    rt = LuaRuntime(unpack_returned_tuples=True)
+    load = rt.eval("dofile")
+    json_codec = load(JSON.as_posix())
+    profile = json_codec.decode(PURE_PROFILE.read_text(encoding="utf-8"))["titles"][title]
+    profile["charmap"] = load((PURE_PROFILE.parent / "charmap.lua").as_posix())  # as entry.lua does
+    module = load(READS.as_posix())
+    memory = bytearray(65536)
+    make_io = rt.eval("function(u, range) return {"
+                      "read_u8=function(addr) return u(addr) end,"
+                      "read_range=function(addr,n) return range(addr,n) end} end")
+    io = make_io(lambda addr: memory[addr],
+                 lambda addr, n: rt.table_from(list(memory[addr:addr + n])))
+    return rt, profile, module, module.new(profile, io), memory
+
+
+def test_pure_bag_capacity_comes_from_derived_not_from_symbol_arithmetic():
+    """wPlayerMoney precedes wBagItems on pureRGB: the vanilla formula would be negative."""
+    rt, profile, module, r, memory = _pure_runtime()
+    ram = profile["ram"]
+    assert ram["wPlayerMoney"] < ram["wBagItems"]
+    assert r.bag_capacity == profile["derived"]["bag_capacity"] == 30
+    memory[ram["wNumBagItems"]] = 30
+    for i in range(30):
+        memory[ram["wBagItems"] + 2 * i], memory[ram["wBagItems"] + 2 * i + 1] = 4, i + 1
+    memory[ram["wBagItems"] + 60] = 0xFF
+    bag = _py(r.read_bag(), module.NULL)
+    assert len(bag["items"]) == 30 and bag["items"][29] == {"id": 4, "qty": 30}
+
+
+def test_pure_trainer_threshold_and_the_new_battle_fields():
+    rt, profile, module, r, memory = _pure_runtime()
+    ram = profile["ram"]
+    memory[ram["wCurOpponent"]] = 199
+    memory[ram["wSafariType"]] = 1
+    memory[ram["wBattleFunctionalFlags"]] = 0x02
+    battle = _py(r.read_battle(), module.NULL)
+    assert battle["is_trainer"] and battle["trainer_class"] == 2
+    assert battle["safari_type"] == 1 and battle["functional_flags"] == 2
+    memory[ram["wCurOpponent"]] = 196
+    assert not _py(r.read_battle(), module.NULL)["is_trainer"]
+    # vanilla carries neither symbol, so neither field
+    _, _, vmodule, vr, _ = _runtime("red")
+    vb = _py(vr.read_battle(), vmodule.NULL)
+    assert "safari_type" not in vb and "functional_flags" not in vb
+
+
+def test_pure_daycare_and_game_version_accessors():
+    rt, profile, module, r, memory = _pure_runtime()
+    ram = profile["ram"]
+    got, why = r.read_daycare_mon()
+    assert got is None and "empty" in why
+    memory[ram["wDayCareInUse"]] = 1
+    mon = oracle.decode_party_mon(bytes(random.Random(3).randrange(256) for _ in range(44)))
+    mon["species"] = 0x15
+    memory[ram["wDayCareMon"]:ram["wDayCareMon"] + 44] = oracle.encode_party_mon(mon)
+    assert _py(r.read_daycare_mon(), module.NULL)["species"] == 0x15
+    memory[ram["wGameInternalVersion"]] = 7
+    assert r.read_game_internal_version() == 7
+    _, _, _, vr, _ = _runtime("red")
+    assert vr.read_game_internal_version() is None
+    assert vr.read_daycare_mon()[0] is None
+
+
+def test_the_pack_charmap_drives_decode_name_when_present():
+    rt, profile, module, r, memory = _pure_runtime()
+    cm = r.charmap
+    assert cm.terminator == 0x50 and cm.glyphs[0xE9] == "→"
+    assert r.decode_name(rt.table_from([0x80, 0x9E, 0x50, 0x81])) == "A“"
+    # without a pack charmap the vanilla table is the same object for every reader
+    vrt, _, vmodule, vr, _ = _runtime("red")
+    assert vr.decode_name(vrt.table_from([0x9E, 0x50])) == "["
+    assert vmodule.charmap(None).glyphs[0x9E] == "["

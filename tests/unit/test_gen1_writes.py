@@ -285,3 +285,77 @@ def test_every_write_receipt_carries_the_frame_and_the_cart_door_leaves_one():
     assert (wram.addr, wram.n, wram.why, wram.frame) == (PROFILE["red"]["ram"]["wPartyMons"], 3, "overworld", 41)
     assert (cart.addr, cart.n, cart.why, cart.cart, cart.frame) == (0x100, 2, "overworld", True, 42)
     assert [w for w in cart_writes if w[2] == "CartRAM"] == [(0x100, 7, "CartRAM"), (0x101, 8, "CartRAM")]
+
+
+# ── pureRGB: the WRAM-bank write gate (W-10) and the APEX/transform windows (W-8/W-9) ────
+PURE_PROFILE = json.loads((REPO / "data" / "games" / "gen1_purergb" / "profile.json")
+                          .read_text(encoding="utf-8"))["titles"]
+
+
+class PureFake(Fake):
+    def __init__(self, title="purered"):
+        self.title = title
+        self.ram = PURE_PROFILE[title]["ram"]
+        self.d = PURE_PROFILE[title]["derived"]
+        self.mem = bytearray(0x10000)
+        self.writes = []
+        self.bank = 1
+        self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        io = self.lua.table(read_u8=lambda a, dom: self.mem[int(a)], write_u8=self._write_u8,
+                            register=lambda name: self.bank if str(name) == "WRAM BANK" else 0)
+        self.W = self.lua.eval(f'dofile("{WRITES_LUA}")')
+        self.prof = self.lua.table_from(PURE_PROFILE[title], recursive=True)
+        self.w = self.W.new(self.prof, io)
+
+
+def test_a_dxxx_write_needs_the_wram_bank_in_0_or_1_on_a_banked_foundation():
+    f = PureFake()
+    assert f.d["wram_bank_gate"] is True
+    f.call("arm", "overworld")
+    for bank in (2, 3, 7):
+        f.bank = bank
+        with pytest.raises(lupa.LuaError, match=f"WRAM BANK {bank}"):
+            f.call("faint_party_slot", 0)
+    assert f.writes == []
+    for bank in (0, 1):
+        f.bank = bank
+        f.call("faint_party_slot", 0)
+    assert len(f.writes) == 6
+    # a $Cxxx write (the tile map) never consults the bank
+    f.bank = 2
+    f.call("write_bytes", f.ram["wTileMap"], f.lua.table(0x7F))
+    assert f.writes[-1] == (f.ram["wTileMap"], 0x7F)
+
+
+def test_the_vanilla_profile_never_asks_for_the_bank_register():
+    """No wram_bank_gate: writes.lua must not call io.register (the fake io has none)."""
+    f = Fake("red")
+    f.call("arm", "overworld")
+    f.call("faint_party_slot", 0)
+    assert len(f.writes) == 3
+
+
+def test_apex_and_transform_windows_are_bound_to_their_hooks_and_the_party_structs():
+    f = PureFake()
+    dv = f.ram["wPartyMons"] + 27
+    for reason in ("overworld", "battle_loop_head", "transform"):
+        f.call("arm", reason)
+        with pytest.raises(lupa.LuaError, match="apex_commit hook"):
+            f.call("restore_apex_dvs", dv, f.lua.table(0x12, 0x34))
+    f.call("arm", "apex_commit")
+    with pytest.raises(lupa.LuaError, match="outside the party structs"):
+        f.call("restore_apex_dvs", f.ram["wPartyMons"] - 2, f.lua.table(0x12, 0x34))
+    with pytest.raises(lupa.LuaError, match="two DV bytes"):
+        f.call("restore_apex_dvs", dv, f.lua.table(0x12))
+    f.call("restore_apex_dvs", dv, f.lua.table(0x12, 0x34))
+    assert f.writes == [(dv, 0x12), (dv + 1, 0x34)]
+    hp = f.ram["wPartyMon1HP"]
+    f.call("arm", "apex_commit")
+    with pytest.raises(lupa.LuaError, match="transform hook"):
+        f.call("restore_transform_hp_zero", hp)
+    f.call("arm", "transform")
+    f.call("restore_transform_hp_zero", hp)
+    assert f.writes[-2:] == [(hp, 0), (hp + 1, 0)]
+    f.call("disarm")
+    with pytest.raises(lupa.LuaError, match="transform hook"):
+        f.call("restore_transform_hp_zero", hp)

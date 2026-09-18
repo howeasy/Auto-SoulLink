@@ -217,3 +217,33 @@ def test_on_fire_handler_runs_inside_the_hook_and_its_error_is_recorded():
     h2.svc = h2.S.new(h2._profile, h2._sites, h2._io, bad)
     h2.arrive("battle_loop_head")
     assert "boom" in str(h2.status().handler_error) and h2.status().failed is None
+
+
+def test_an_all_zero_guid_registration_is_refused_and_registrations_are_counted():
+    """BizHawk returns the all-zero GUID for a registration it could not honour (A15); a
+    string is truthy, so a bare `assert(id)` would arm nothing and believe it did."""
+    h = Harness("red")
+    calls = {"n": 0}
+
+    def on_bus_exec(fn, addr, name, domain):
+        calls["n"] += 1
+        return "{00000000-0000-0000-0000-000000000000}" if calls["n"] == 2 else f"hook-{calls['n']}"
+
+    h._io.on_bus_exec = on_bus_exec
+    with pytest.raises(lupa.LuaError, match="engine signal registration failed"):
+        h.start()
+    good = Harness("red")
+    good.start()
+    assert good.svc.registered == len(SITES["red"]["sites"])
+
+
+def test_the_bag_snapshot_length_is_derived_not_a_literal():
+    """Vanilla's 20-slot bag: 1 count byte + 20 pairs + the terminator = 42, from the profile."""
+    h = Harness("red")
+    h.start()
+    ram = PROFILE["red"]["ram"]
+    h.bus[ram["wCurItem"]] = 4
+    h.regs["H"], h.regs["L"], h.regs["F"] = ram["wNumBagItems"] >> 8, ram["wNumBagItems"] & 0xFF, 0x10
+    h.arrive("bag_received")
+    sig = h.drain()[0]
+    assert len(sig["point"]["bag"]) == 2 + 2 * ((ram["wPlayerMoney"] - ram["wBagItems"] - 1) // 2) == 42

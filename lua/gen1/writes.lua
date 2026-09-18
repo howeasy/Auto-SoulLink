@@ -16,6 +16,12 @@
 --   EXPLOSION = $99 (constants/move_constants.asm:161).
 --   TRANSFORMED = bit 3 of wPlayerBattleStatus3 (constants/battle_constants.asm:106).
 local W = { EXPLOSION = 0x99, CANNOT_MOVE = 0xFF }
+-- CGB WRAM banking (Pan Docs SVBK $FF70): banks 0 and 1 both map bank 1 at $D000-$DFFF; any
+-- other value maps a bank the profile's $Dxxx symbols do not describe. pureRGB runs its
+-- palette fade with bank 2 selected and interrupts enabled (PLAN §4 row 13, A8/A15), so a
+-- $Dxxx write landing there would hit the fade buffer. Gated by profile.derived.wram_bank_gate.
+W.WRAM_BANKED_LO, W.WRAM_BANKED_HI = 0xD000, 0xDFFF
+W.WRAM_BANKS_OK = { [0] = true, [1] = true }
 
 local function be16(v) return math.floor(v / 256) % 256, v % 256 end
 
@@ -48,6 +54,7 @@ function W.u16be(v) return { be16(v) } end
 function W.new(profile, io)
     local ram, d = assert(profile.ram), assert(profile.derived)
     local self = { armed = nil, log = {} }
+    local species_count = d.species_count or 190 -- ponytail: vanilla profile lacks the field
 
     -- Open the write window for this frame. `reason` names the checkpoint that authorised it
     -- ("overworld", "battle_loop_head"); it is recorded with every write for the receipts.
@@ -66,6 +73,12 @@ function W.new(profile, io)
                string.format("write refused: %d byte(s) at $%04X outside the %s window (W-7)",
                              #bytes, addr, tostring(self.armed)))
         for i = 1, #bytes do assert(is_byte(bytes[i]), "byte out of range") end
+        if d.wram_bank_gate and addr + #bytes - 1 >= W.WRAM_BANKED_LO and addr <= W.WRAM_BANKED_HI then
+            -- W-10: never switch rWBK from Lua; refuse instead, the caller retries next frame
+            local bank = io.register and io.register("WRAM BANK")
+            assert(W.WRAM_BANKS_OK[bank], string.format(
+                "write refused: WRAM BANK %s outside {0,1} for $%04X (W-10)", tostring(bank), addr))
+        end
         for i = 1, #bytes do io.write_u8(addr + i - 1, bytes[i], "System Bus") end
         -- the frame is what lines a receipt up against a scenario's signal trace
         self.log[#self.log + 1] = { addr = addr, n = #bytes, why = self.armed,
@@ -91,6 +104,31 @@ function W.new(profile, io)
         self:faint_party_slot(slot)
     end
 
+    -- W-8 (pureRGB APEX CHIP, PLAN A1 / Live 4): put the two original DV bytes back after
+    -- ItemUseMedicine.useApexChip stored $FFFF and before `call .recalculateStats` runs, so a
+    -- use whose FFFF:OTID:SS key would collide with a live key changes nothing (the chip is
+    -- still consumed, decision U6). `addr` is HL from the preflight hook (the slot's first DV
+    -- byte); it must lie inside the party structs. Armed only inside the apex_commit hook.
+    function self:restore_apex_dvs(addr, dvs)
+        assert(self.armed == "apex_commit", "APEX DV restore only inside the apex_commit hook")
+        assert(type(dvs) == "table" and #dvs == 2, "two DV bytes required")
+        assert(addr >= ram.wPartyMons and addr + 1 < ram.wPartyMons + d.party_capacity * d.party_struct_size,
+               "APEX DV address outside the party structs")
+        self:write_bytes(addr, { dvs[1], dvs[2] })
+    end
+
+    -- W-9 (pureRGB transformations, PLAN A2): ChangePartyPokemonSpecies stores HP := new max
+    -- HP; a mon whose pre-transform HP was 0 (dead or fainted) is zeroed again right after
+    -- that store, from inside the transform_hp_lo hook. `addr` is the HP word's address.
+    -- †UNVERIFIED (T2 gate): the hook fires BEFORE `ld [hld],a` lands the low byte; the
+    -- client backs this write with a checkpoint re-zero through the deferred force_faint path.
+    function self:restore_transform_hp_zero(addr)
+        assert(self.armed == "transform", "transform HP zero only inside the transform hook")
+        assert(addr >= ram.wPartyMons and addr + 1 < ram.wPartyMons + d.party_capacity * d.party_struct_size,
+               "transform HP address outside the party structs")
+        self:write_bytes(addr, { 0, 0 })
+    end
+
     -- W-3: Explode Mode — all four move slots become EXPLOSION with PP 1 (battle struct AND
     -- party mirror), so the engine offers nothing else. Slot-0-only was escapable (RC).
     function self:explode_active_battler(slot)
@@ -111,7 +149,7 @@ function W.new(profile, io)
         for i, m in ipairs(mons) do
             assert(#m.blob == d.battle_struct_size, "enemy mon " .. i .. ": blob must be " .. d.battle_struct_size .. " bytes")
             assert(#m.ot == d.name_length and #m.nick == d.name_length, "enemy mon " .. i .. ": names must be " .. d.name_length .. " bytes")
-            assert(m.species >= 1 and m.species <= 190 and m.species == m.blob[1], "enemy mon " .. i .. ": species/blob mismatch")
+            assert(m.species >= 1 and m.species <= species_count and m.species == m.blob[1], "enemy mon " .. i .. ": species/blob mismatch")
             -- W-4: write_bytes checks bytes per CALL, so without this the first two mons would
             -- already be in wEnemyMons when the third one's bad byte is found. `tonumber("-1", 16)`
             -- is a number that passes every length and species check, so this is reachable.
@@ -140,6 +178,7 @@ function W.bizhawk_io()
     return {
         read_u8 = function(addr, domain) return memory.read_u8(addr, domain) end,
         write_u8 = function(addr, v, domain) return memory.write_u8(addr, v, domain) end,
+        register = function(name) return emu.getregister(name) end,
     }
 end
 

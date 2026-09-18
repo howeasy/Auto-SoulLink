@@ -1,10 +1,12 @@
 -- lua/gen1/signals.lua — Gen 1 game events detected from the engine's own execution.
 --
 -- Every event the client reports (faint, capture, save, map load, ...) is a bus-exec hook
--- at a pret routine, not a WRAM-diff heuristic. Sites come from
--- data/games/gen1_rby/engine_signals.json (+ extensions): bank, address, capture_offset,
--- expected bytes, flat ROM offset. At load the expected bytes are checked in the ROM domain;
--- a mismatch refuses to start, because hooking the wrong bytes reports the wrong game.
+-- at a pret routine, not a WRAM-diff heuristic. Sites come from the pack's
+-- engine_signals.json (data/games/gen1_rby or gen1_purergb): bank, address (= anchor),
+-- capture_offset (hook = address + capture_offset), expected bytes, flat ROM offset. At load
+-- the expected bytes are checked in the ROM domain; a mismatch refuses to start, because
+-- hooking the wrong bytes reports the wrong game. A kind with no S.KINDS entry gets the
+-- generic point: every symbol the site lists under `point`, read as one byte each.
 --
 -- Pattern proven live on gen1/rc (gen1_engine_signals.lua): bank check via hLoadedROMBank,
 -- PC == site + capture_offset, bytes re-read on the System Bus at fire time, frame stamped
@@ -15,6 +17,15 @@
 --   io.on_bus_exec(fn, addr, name, domain) -> id      io.unregister(id)
 --   io.framecount()               io.register(name) -> value ("PC", "SP", "H", "L", "F")
 local S = { MAX_PENDING = 64 }
+-- BizHawk's sentinel for a registration it could not honour (research card A15). A string is
+-- truthy, so `assert(id)` alone would arm nothing and believe it did.
+-- †UNVERIFIED exact casing/braces across BizHawk versions: compared after stripping braces,
+-- case-insensitively, so any spelling of the all-zero GUID is refused.
+S.NULL_GUID = "00000000-0000-0000-0000-000000000000"
+local function is_null_guid(id)
+    if type(id) ~= "string" then return false end
+    return id:gsub("[{}]", ""):lower() == S.NULL_GUID
+end
 
 local function hex_of(bytes)
     local out = {}
@@ -22,30 +33,54 @@ local function hex_of(bytes)
     return table.concat(out)
 end
 
--- kind -> { filter = function(io, ram) -> bool, point = function(io, ram, reads) -> table }
+-- kind -> { filter = function(io, ram, d) -> bool, point = function(io, ram, d) -> table }
 -- `filter` drops hits that are not the event (e.g. AddItemToInventory_.done fires for every
 -- item; only a Poke Ball class item with the carry flag set is `bag_received`).
 -- `point` snapshots the WRAM the server needs at the instant the engine is there.
+-- `d` is profile.derived: capacities, the ball set, struct sizes.
 S.KINDS = {}
+
+-- ponytail: vanilla profile.json predates derived.ball_items/bag_capacity; the fallbacks are
+-- vanilla's values (constants/item_constants.asm:10-13; ram/wram.asm:1757-1761 formula).
+local function ball_set(d)
+    if d.__ball_set then return d.__ball_set end
+    local set = {}
+    for _, id in ipairs(d.ball_items or { 1, 2, 3, 4 }) do set[id] = true end
+    d.__ball_set = set
+    return set
+end
+local function bag_bytes(ram, d)
+    -- count byte + capacity id/qty pairs + the $FF terminator
+    local capacity = d.bag_capacity or math.floor((ram.wPlayerMoney - ram.wBagItems - 1) / 2)
+    return 2 + 2 * capacity
+end
 
 S.KINDS.bag_received = {
     -- AddItemToInventory_.done: HL == wNumBagItems and carry set means "added to the bag"
-    -- (home/inventory.asm); items 1..4 are the four ball classes (constants/item_constants.asm).
-    filter = function(io, ram)
+    -- (home/inventory.asm); the ball classes are profile.derived.ball_items.
+    filter = function(io, ram, d)
         local hl = io.register("H") * 256 + io.register("L")
         local carry = math.floor(io.register("F") / 16) % 2 == 1
         local item = io.read_u8(ram.wCurItem, "System Bus")
-        return hl == ram.wNumBagItems and carry and item >= 1 and item <= 4
+        return hl == ram.wNumBagItems and carry and ball_set(d)[item] == true
     end,
-    point = function(io, ram)
+    point = function(io, ram, d)
         return { item = io.read_u8(ram.wCurItem, "System Bus"),
                  quantity = io.read_u8(ram.wItemQuantity, "System Bus"),
-                 bag = io.read_range(ram.wNumBagItems, 42, "System Bus") }
+                 bag = io.read_range(ram.wNumBagItems, bag_bytes(ram, d), "System Bus") }
     end,
 }
 
+-- count + species list + structs + OT names + nicknames is one contiguous WRAM run whose
+-- tail (the nickname block) is the same size as the OT block: ram/wram.asm:1722-1744 (party),
+-- :2226-2248 (box); Yellow :1903-1925, :2491-2513; pureRGB keeps the run (404 / 1122 bytes).
+local function block_len(ram, prefix)
+    return (ram["w" .. prefix .. "MonNicks"] - ram["w" .. prefix .. "Count"])
+         + (ram["w" .. prefix .. "MonNicks"] - ram["w" .. prefix .. "MonOT"])
+end
+
 local function battle_point(io, ram)
-    return { party = io.read_range(ram.wPartyCount, 404, "System Bus"),
+    return { party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus"),
              map = io.read_u8(ram.wCurMap, "System Bus"),
              in_battle = io.read_u8(ram.wIsInBattle, "System Bus"),
              active_slot = io.read_u8(ram.wPlayerMonNumber, "System Bus"),
@@ -106,6 +141,17 @@ S.KINDS.battle_end = {
     point = function(io, ram)
         local p = opponent_point(io, ram)
         p.result = io.read_u8(ram.wBattleResult, "System Bus")  -- 0 won, 1 lost, 2 ran (core.asm)
+        -- pureRGB: bit 1 = the player RAN (PLAN M2-b RUN witness); no such byte on vanilla
+        if ram.wBattleFunctionalFlags then
+            p.functional_flags = io.read_u8(ram.wBattleFunctionalFlags, "System Bus")
+        end
+        return p
+    end,
+}
+S.KINDS.trainer_staging = {
+    point = function(io, ram)
+        local p = opponent_point(io, ram)
+        if ram.wTrainerClass then p.trainer_class = io.read_u8(ram.wTrainerClass, "System Bus") end
         return p
     end,
 }
@@ -125,18 +171,19 @@ local function acquisition_point(io, ram)
 end
 S.KINDS.add_party_mon = { point = acquisition_point }
 S.KINDS.capture_box = { point = acquisition_point }
+S.KINDS.capture_party_begin = { point = acquisition_point }
+S.KINDS.capture_party_end = { point = acquisition_point }
+S.KINDS.capture_box_begin = { point = acquisition_point }
+S.KINDS.capture_box_end = { point = acquisition_point }
 -- _MoveMon copies the mon and _RemovePokemon shifts every later slot down
 -- (engine/pokemon/add_mon.asm:365-413, remove_mon.asm:8-107), so by the time the client drains
 -- one of these signals the live party/box no longer holds what moved. Both points therefore
 -- snapshot the whole party and the whole active box, the way `battle_point` snapshots the party.
-local function block_len(ram, prefix)
-    -- count + species list + structs + OT names + nicknames is one contiguous WRAM run whose
-    -- tail (the nickname block) is the same size as the OT block: ram/wram.asm:1722-1744 (party),
-    -- :2226-2248 (box); Yellow :1903-1925, :2491-2513.
-    return (ram["w" .. prefix .. "MonNicks"] - ram["w" .. prefix .. "Count"])
-         + (ram["w" .. prefix .. "MonNicks"] - ram["w" .. prefix .. "MonOT"])
-end
-
+--
+-- wMoveMonType and wRemoveMonFromBox are ONE byte in both foundations (vanilla $CF95 =
+-- pureRGB $CF95: ram/wram.asm:1120-1122 declares them as a union; they are never live at
+-- once). `move_mon` reads it as the move type, `remove_pokemon` as the party/box flag, and
+-- nothing here may read both from one hook.
 local function storage_point(io, ram)
     return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
              party_count = io.read_u8(ram.wPartyCount, "System Bus"),
@@ -163,27 +210,99 @@ S.KINDS.remove_pokemon = {
         return pt
     end,
 }
+S.KINDS.pc_deposit = S.KINDS.remove_pokemon
+S.KINDS.pc_withdraw = S.KINDS.remove_pokemon
+S.KINDS.pc_release = S.KINDS.remove_pokemon
+-- DaycareGentlemanText.enoughMoney: `call MoveMon` with DAYCARE_TO_PARTY staged. The daycare
+-- never touches the box (PLAN §4 row 24): the mon about to be appended at wPartyCount-1 is
+-- the wDayCareMon record, snapshotted here before _MoveMon copies it.
+S.KINDS.daycare_withdraw = {
+    point = function(io, ram, d)
+        local pt = storage_point(io, ram)
+        pt.move_type = io.read_u8(ram.wMoveMonType, "System Bus")
+        if ram.wDayCareMon then pt.daycare = io.read_range(ram.wDayCareMon, d.party_struct_size, "System Bus") end
+        return pt
+    end,
+}
 S.KINDS.evolve = {
     point = function(io, ram)
         return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
-                 party = io.read_range(ram.wPartyCount, 404, "System Bus") }
+                 party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus") }
     end,
 }
-S.KINDS.npc_trade = {
-    point = function(io, ram)
-        return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
-                 give = io.read_u8(ram.wInGameTradeGiveMonSpecies, "System Bus"),
-                 receive = io.read_u8(ram.wInGameTradeReceiveMonSpecies, "System Bus"),
-                 party = io.read_range(ram.wPartyCount, 404, "System Bus") }
+local function npc_trade_point(io, ram)
+    return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+             give = io.read_u8(ram.wInGameTradeGiveMonSpecies, "System Bus"),
+             receive = io.read_u8(ram.wInGameTradeReceiveMonSpecies, "System Bus"),
+             party_count = io.read_u8(ram.wPartyCount, "System Bus"),
+             party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus") }
+end
+S.KINDS.npc_trade = { point = npc_trade_point }
+-- pureRGB (PLAN §4 row 25): selection happens INSIDE InGameTrade_DoTrade, RemovePokemon
+-- compacts the party and the received mon is appended, so identity is taken at the removal
+-- call (wWhichPokemon is final there) and the readback at npc_trade_done is wPartyCount-1.
+S.KINDS.npc_trade_remove = { point = npc_trade_point }
+S.KINDS.npc_trade_add = { point = npc_trade_point }
+S.KINDS.npc_trade_done = { point = npc_trade_point }
+
+-- ChangePartyPokemonSpecies+0 (pureRGB transformations, PLAN A2): the slot is wWhichPokemon
+-- and its HP is still the PRE-transform value here; +$4A/+$4C are the new-max-HP stores.
+local function party_hp_addr(ram, d, slot)
+    return ram.wPartyMons + slot * d.party_struct_size + (ram.wPartyMon1HP - ram.wPartyMon1)
+end
+S.KINDS.transform = {
+    point = function(io, ram, d)
+        local which = io.read_u8(ram.wWhichPokemon, "System Bus")
+        local hp = party_hp_addr(ram, d, which)
+        return { which = which,
+                 cur_species = io.read_u8(ram.wCurPartySpecies, "System Bus"),
+                 party_count = io.read_u8(ram.wPartyCount, "System Bus"),
+                 old_hp = io.read_u8(hp, "System Bus") * 256 + io.read_u8(hp + 1, "System Bus"),
+                 party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus") }
     end,
 }
+-- The HP stores: HL names the byte about to be written (`ld [hli],a` / `ld [hld],a`).
+local function hp_store_point(io, ram)
+    return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+             hl = io.register("H") * 256 + io.register("L") }
+end
+S.KINDS.transform_hp_hi = { point = hp_store_point }
+S.KINDS.transform_hp_lo = { point = hp_store_point }
+
+-- ItemUseMedicine.useApexChip (PLAN A1): the target slot is wUsedItemOnWhichPokemon, NOT
+-- wWhichPokemon, and HL points at the slot's first DV byte at .setDVs (Live 4: hl=D18E ==
+-- wPartyMon1DVs for slot 0). preflight = before the $FF stores, commit = after both.
+local function apex_point(io, ram)
+    local hl = io.register("H") * 256 + io.register("L")
+    return { target = io.read_u8(ram.wUsedItemOnWhichPokemon, "System Bus"),
+             which = io.read_u8(ram.wWhichPokemon, "System Bus"),
+             party_count = io.read_u8(ram.wPartyCount, "System Bus"),
+             hl = hl,
+             party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus") }
+end
+S.KINDS.apex_preflight = { point = apex_point }
+S.KINDS.apex_commit = { point = apex_point }
+S.KINDS.apex_recalc_call = { point = apex_point }
+
+-- Generic point for a site kind with no entry above: one byte per listed symbol.
+local function generic_point(site)
+    return function(io, ram)
+        local out = {}
+        for _, sym in ipairs(site.point or {}) do
+            if ram[sym] then out[sym] = io.read_u8(ram[sym], "System Bus") end
+        end
+        return out
+    end
+end
 
 -- profile: the title's table from profile.json (ram/rom/derived); sites: the title's
 -- `sites` table from engine_signals.json (kind -> site); on_fire: optional kind -> function(signal)
 -- run synchronously inside the hook (for writes that must land at that exact instant).
 function S.new(profile, sites, io, on_fire)
     local ram = assert(profile.ram, "profile.ram required")
-    local self = { pending = {}, hooks = {}, failure = nil, closed = false, handler_error = nil }
+    local d = profile.derived or {}
+    local self = { pending = {}, hooks = {}, failure = nil, closed = false, handler_error = nil,
+                   registered = 0 }
     on_fire = on_fire or {}
 
     -- Load-time anchor: every site's bytes must be in the ROM where the JSON says.
@@ -202,8 +321,8 @@ function S.new(profile, sites, io, on_fire)
     local function fire(kind, site)
         if self.closed or self.failure then return end
         if site.bank > 0 and io.read_u8(ram.hLoadedROMBank, "System Bus") ~= site.bank then return end
-        local spec = S.KINDS[kind] or {}
-        if spec.filter and not spec.filter(io, ram) then return end
+        local spec = S.KINDS[kind] or { point = generic_point(site) }
+        if spec.filter and not spec.filter(io, ram, d) then return end
         local pc = site.address + (site.capture_offset or 0)
         local ok, why = pcall(function()
             assert(io.register("PC") == pc, kind .. ": callback PC differs")
@@ -214,7 +333,7 @@ function S.new(profile, sites, io, on_fire)
             local frame = io.framecount()
             local signal = {
                 kind = kind, frame = frame, pc = pc, bank = site.bank, sp = io.register("SP"),
-                point = spec.point and spec.point(io, ram) or nil,
+                point = spec.point and spec.point(io, ram, d) or nil,
             }
             self.pending[#self.pending + 1] = signal
             if on_fire[kind] then
@@ -225,12 +344,17 @@ function S.new(profile, sites, io, on_fire)
         if not ok then self.failure = tostring(why) end
     end
 
+    local expected = 0
     for kind, site in pairs(sites) do
+        expected = expected + 1
         local pc = site.address + (site.capture_offset or 0)
         local id = io.on_bus_exec(function() fire(kind, site) end, pc, "SLink-gen1-" .. kind, "System Bus")
-        assert(id, "engine signal registration failed: " .. kind)
+        assert(id and not is_null_guid(id), "engine signal registration failed: " .. kind)
         self.hooks[#self.hooks + 1] = id
+        self.registered = self.registered + 1
     end
+    assert(self.registered == expected, "engine signal registration incomplete: "
+           .. self.registered .. " of " .. expected)
 
     -- Hand the queued signals to the caller in arrival order and start a fresh queue.
     function self:drain()

@@ -24,8 +24,11 @@ local function same_token(a, b)
     return true
 end
 
-function T.service_address()
-    -- Fixed linked SECTION in trade_service.asm:67-68, bank $3F:$4500.
+function T.service_address(profile)
+    -- The vanilla companion patch's fixed linked SECTION (trade_service.asm:67-68, bank
+    -- $3F:$4500); an overlay build names its own through profile.trade.service (PLAN M3).
+    local t = profile and profile.trade
+    if t and t.service then return {bank = t.service.bank, addr = t.service.addr} end
     return {bank = 0x3F, addr = 0x4500}
 end
 
@@ -196,7 +199,7 @@ function T.new(profile, io, writes)
         return true
     end
 
-    self.service_address = T.service_address
+    self.service_address = function() return T.service_address(profile) end
     return self
 end
 
