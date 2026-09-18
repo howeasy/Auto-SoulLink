@@ -1,0 +1,80 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3026 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (70s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     9 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (108s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (25s)
+[ .. ] duo-pairs
+phase pace-grass @1188 (10,35) battle=0 party=1
+E         [hunt] encounter 1 at (10,34) mode=catch balls=1
+E         phase wild-intro @1310 (10,34) battle=1 party=1
+E         [hunt] turn 1 foe hp 14/14 odds 0.39 dmax nil -> fight
+E         phase wild-fight @2076 (10,34) battle=1 party=1
+E         [hunt] turn 2 foe hp 8/14 odds 0.58 dmax 8 -> throw
+E         phase wild-throw @2936 (10,34) battle=1 party=1
+E         [hunt] threw ball index 0 -> timeout
+E         heartbeat f=3600 party=1 connected=true
+E         phase wild-no-balls @4114 (10,34) battle=1 party=1
+E         TX {"area_id":"route_1","event":"no_catch","level":2,"player":"b","seq":115,"species_id":36}
+E         TX {"event":"safe","player":"b","seq":116}
+E         [hunt] battle outcome ran receipts move1:player_move,throw:timeout,run:escaped
+E         phase wild-ran @4212 (10,34) battle=0 party=1
+E         [hunt] after battle: outcome=ran result=2 party=1 balls=0 -> out-of-balls
+E         phase out-of-balls @4213 (10,34) battle=0 party=1
+E         HUNT out-of-balls after 3026 frames, 1 encounter(s)
+E         RESULT: FAIL (hunt ended out-of-balls)
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_b01t_0cf
+E         [duo] rival_swap_new: the cartridge's only ball missed; restarting attempt 2 of 2 with a fresh server, run directory and SaveRAM seeds
+E         [duo] rival_swap_new: attempt 2 of 2
+E         [duo] JITTER requested=37 attempt=2
+E         [duo] server up: tcp=54231 http=54232 data=C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_bwskw7oz
+E         [duo] cleared 5 stale artifact(s) for rival_swap_new: e2e_rival_swap_new_a_attempt1_result.txt, e2e_rival_swap_new_a_result.txt, e2e_rival_swap_new_b_attempt1_result.txt, e2e_rival_swap_new_b_result.txt, e2e_rival_swap_new_pydec_attempt1_result.txt
+E         [duo] launched a phase=initial seed=True
+E         [duo] launched b phase=initial seed=True
+E         [duo] two EmuHawk instances launched
+E         [duo] keys: a=06C3:4190:99 b=4519:AFB9:B0
+E         [duo] both players connected
+E         [duo] go-file written for a
+E         [duo] go-file written for b
+E         [duo] real captures: a=2A12:4190:24 b=86F4:AFB9:24
+E         [duo] ENCOUNTER LINK FROM REAL PLAY (new client): 2A12:4190:24 <-> 86F4:AFB9:24 on route_1, alive
+E         [duo] a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+E         [duo] SAVE_WITNESS_SHA256 inst=a site=0a8d200d78ed9b943806693e09b28591d2819bbd4014828a3a3cb30b93e30575 file=0a8d200d78ed9b943806693e09b28591d2819bbd4014828a3a3cb30b93e30575 match=true saves=2
+E         [duo] b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+E         [duo] SAVE_WITNESS_SHA256 inst=b site=16c7cf101924f45848cd9400d63ca074e2de65669c65430c6ef179d2b9f15260 file=16c7cf101924f45848cd9400d63ca074e2de65669c65430c6ef179d2b9f15260 match=true saves=2
+E         [duo] PYDEC: FAIL the command carried 2 blob(s) but the server's view of B's party holds 1; the swap mirrors the partner's current party
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_new_bwskw7oz
+E         [duo] rival_swap_new: attempt 2 aborted — RuntimeError: the command carried 2 blob(s) but the server's view of B's party holds 1; the swap mirrors the partner's current party
+E         
+E         ========== summary ==========
+E           rival_swap_new: FAIL (attempt 2 of 2) — RuntimeError: the command carried 2 blob(s) but the server's view of B's party holds 1; the swap mirrors the partner's current party
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...ed 2 blob(s) but the server\'s view of B\'s party holds 1; the swap mirrors the partner\'s current party\n', stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+1 failed, 17 passed in 644.15s (0:10:44)
+
+[FAIL] duo-pairs          17 passed, 0 skipped (0 unexplained), 1 failed, 0 xfailed, 0 deselected  (645s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
