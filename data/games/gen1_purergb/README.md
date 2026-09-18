@@ -23,6 +23,13 @@ real catchable species), so National Dex is not a stable key here the way it is 
   Pokecenter` keep their own area id rather than folding into an arbitrary floor, again matching
   vanilla. Regenerate with `python tools/gen_gen1_area_map.py`; `--check` verifies without
   writing.
+  - **Gift interiors get their own area id** (rule `gift_building_own_area`, recorded in
+    `area_map_notes.json`): every table-less map named by `gifts.json` is its own area (78 areas
+    after collapse) instead of inheriting the town it stands in — the same thing vanilla does by
+    hand for `oaks_lab` / `celadon_mansion_roof` / `game_corner`. A gift must never share an area
+    with the wild or fishing table the town carries, or the first gift there would dead-zone it
+    (PLAN §2.3); the generator refuses to emit a map where a gift area coincides with an
+    encounter area.
 - `floor_labels.json` — Map id → floor suffix (`" 1F"`, `" B1F"`, ...) for every map that belongs
   to a collapsed multi-floor area **and** carries its own wild-data pointer (a floor with no
   pointer of its own, e.g. the new `POKEMON_TOWER_B1F` or any Rocket Hideout/Silph Co. floor,

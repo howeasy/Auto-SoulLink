@@ -163,3 +163,36 @@ def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch)
     # a real L5 starter (add_mon.asm stores exp_for_level): 135 on Bulbasaur/Charmander's
     # curves, 125 on Pikachu's MEDIUM_FAST (data/pokemon/base_stats/pikachu.asm:13).
     assert mon["level"] == 5 and mon["exp"] == (125 if rom == "yellow" else 135)
+
+
+APEX_GATE = "lua/tests/test_gen1_apex_gate.lua"
+# The four checks the APEX CHIP contract must print (lua/tests/test_gen1_apex_gate.lua:121-145).
+# Both halves are asserted: a predicted key collision must restore the two DV bytes and send NO
+# key_change, and a real use must send exactly one key_change{apex_chip} whose alias the server's
+# ack clears.
+_APEX_OK_LINES = (
+    "collision: DVs restored (unchanged)",
+    "apex: DVs are FFFF",
+    "apex: one key_change sent",
+    "apex: alias cleared by key_change_ack",
+)
+
+
+@pytest.mark.skipif("purered" not in ROMS,
+                    reason="purered is not one of this lane's cartridges (SLINK_GEN1_ROMS)")
+def test_apex_chip_contract_on_a_pure_cartridge(emuhawk):
+    """T1/T3 PHYSICAL: the APEX CHIP identity contract on a real pureRGB cartridge.
+
+    purered only: the gate needs the one-mon town fixture (a starter and an empty bag) and it
+    refuses a vanilla cartridge outright (vanilla has no APEX CHIP). The release gate's
+    apex-purergb lane names this test by node id and pins SLINK_GEN1_ROMS=purered, so the lane
+    cannot pass by skipping: a missing dump or fixture skips with its own reason, and only the
+    lane-SELECTION reason is in ALLOWED_SKIPS.
+    """
+    from run_gb_gate import run_gate
+    _skip_if_absent("purered", "town")
+    passed, path, text = run_gate(APEX_GATE, rom_key="purered", target="town", timeout=600,
+                                  quiet=True)
+    assert passed, f"APEX gate FAILED on purered/town: {text[-1500:]}"
+    for line in _APEX_OK_LINES:
+        assert f"[ok] {line}" in text, f"APEX gate did not report {line!r}:\n{text[-1500:]}"

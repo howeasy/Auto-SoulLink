@@ -18,7 +18,8 @@ import verify_gen1_release as gate  # noqa: E402  (tools/ is not a package; the 
 
 LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-addresses", "profile-generated",
               "profile-generated-purergb", "statics-generated", "fixtures", "patch-build",
-              "live-gates", "live-new-gates", "inspect-purergb", "live-trade-gates", "duo-pairs"]
+              "live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
+              "live-trade-gates", "duo-pairs"]
 
 
 def test_lane_order_is_the_gate_order():
@@ -38,7 +39,8 @@ def test_every_lane_has_requirements_and_no_requirements_lack_a_lane():
 def test_the_generated_artifact_lanes_serve_what_they_claim():
     """The mapping is the release paperwork: which lane is the evidence for which rule."""
     expected = {"profile-generated": ["F-1"], "profile-generated-purergb": ["F-1"],
-                "statics-generated": ["F-5", "S-8"], "fixtures": ["F-6"]}
+                "apex-purergb": ["T1", "T3"], "statics-generated": ["F-5", "S-8"],
+                "fixtures": ["F-6"]}
     for name, ids in expected.items():
         assert gate.REQUIREMENTS[name] == ids, (
             f"{name} claims {gate.REQUIREMENTS[name]}, not {ids}")
@@ -56,8 +58,8 @@ def test_the_fixtures_lane_reason_matches_the_legacy_set():
 
 def test_slow_lanes_are_exactly_the_emulator_lanes():
     """--quick's promise is that it stops before anything that needs an emulator."""
-    assert {"live-gates", "live-new-gates", "inspect-purergb", "live-trade-gates",
-            "duo-pairs"} == gate._SLOW
+    assert {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
+            "live-trade-gates", "duo-pairs"} == gate._SLOW
 
 
 def test_the_pure_lanes_are_fail_closed():
@@ -68,7 +70,8 @@ def test_the_pure_lanes_are_fail_closed():
         assert not any(frag in reason for frag, _why in gate.ALLOWED_SKIPS), (
             f"an ALLOWED_SKIPS fragment would excuse the pure lane's own skip: {reason}")
     pure = [lane for lane in gate.LANES if lane.name.endswith("purergb") or "purergb" in lane.name]
-    assert {lane.name for lane in pure} == {"profile-generated-purergb", "inspect-purergb"}
+    assert {lane.name for lane in pure} == {"profile-generated-purergb", "inspect-purergb",
+                                            "apex-purergb"}
     for lane in pure:
         assert lane.why, f"{lane.name} claims no reason"
     inspect = next(lane for lane in pure if lane.name == "inspect-purergb")
@@ -77,6 +80,23 @@ def test_the_pure_lanes_are_fail_closed():
     assert inspect.env.get("SLINK_GEN1_ROMS", "").split() == ["purered", "pureblue", "puregreen"]
     profile = next(lane for lane in pure if lane.name == "profile-generated-purergb")
     assert profile.argv[-2:] == ["--foundation", "purergb"]
+    apex = next(lane for lane in pure if lane.name == "apex-purergb")
+    # One test, named by node id: a lane that collects a subset with -k would be scored as
+    # failing (deselection counts), and the node id also pins WHICH test is the evidence.
+    assert apex.argv[3] == ("tests/live/test_gen1_new_gates.py"
+                            "::test_apex_chip_contract_on_a_pure_cartridge")
+    assert "-k" not in apex.argv
+    assert apex.env.get("SLINK_GEN1_ROMS") == "purered"
+    assert apex.env.get("SLINK_LIVE") == "1"
+
+
+def test_the_lane_selection_skip_is_the_only_gen1_skip_that_is_excused():
+    """A test for a cartridge a lane did not select is not part of that lane; every skip about a
+    MISSING input stays unexcused, which is what keeps a machine without the builds red."""
+    fragments = [frag for frag, _why in gate.ALLOWED_SKIPS]
+    assert "is not one of this lane's cartridges" in fragments
+    for reason in ("cartridge dump not present", "SaveRAM not present", "EmuHawk not found"):
+        assert not any(frag in reason for frag in fragments), reason
 
 
 def test_every_plain_lane_runs_a_script_that_exists():

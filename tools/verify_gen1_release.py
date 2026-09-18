@@ -23,8 +23,9 @@ explains a failure later:
                             row, and the panel on a randomized+injected ROM
    10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
    11. inspect-purergb    — the same inspect gate on the three built pureRGB cartridges
-   12. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
-   13. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
+   12. apex-purergb       — the APEX CHIP identity contract on the real PureRed cartridge
+   13. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
+   14. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -51,15 +52,19 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
-_SLOW = {"live-gates", "live-new-gates", "inspect-purergb", "live-trade-gates", "duo-pairs"}
+_SLOW = {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb", "live-trade-gates",
+         "duo-pairs"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
 # The gate's whole point is that a skip is a failure, so an exception has to be argued for
 # by name. These fragments are matched against pytest's own `-rs` reason lines; anything
 # NOT matched fails the lane, which is what stops a newly-disabled test reading as green.
 #
-# Every entry is out of Gen 1's scope, not merely inconvenient. There are deliberately no
-# Gen 1 entries: a Gen 1 test that skips is a defect in this gate's inputs.
+# Every entry is out of Gen 1's scope, not merely inconvenient. There are deliberately no Gen 1
+# INPUT entries: a Gen 1 test that skips because its cartridge, fixture or emulator is missing is
+# a defect in this gate's inputs, and those reasons ("cartridge dump not present", "SaveRAM not
+# present", "EmuHawk not found") stay unexcused. The one Gen 1 entry below is a lane-SELECTION
+# skip: it says a test belongs to a different lane, not that an input is missing.
 ALLOWED_SKIPS = [
     ("boots from a battery save",
      "the Gen 1/Gen 2 duo configs load a .SaveRAM rather than a savestate, and this test "
@@ -72,6 +77,11 @@ ALLOWED_SKIPS = [
      "template fragments have no <svg> root of their own, by design"),
     ("stream/memorial.html not present",
      "optional OBS overlay template"),
+    ("is not one of this lane's cartridges",
+     "a lane names the cartridges it runs (SLINK_GEN1_ROMS), so a test for a cartridge the lane "
+     "did not select is not part of it — the lane-selection counterpart of the input skips above, "
+     "which stay unexcused. Only the selection reason matches this fragment; a lane that names "
+     "purered still fails if purered's dump or fixture is missing."),
 ]
 
 
@@ -133,6 +143,16 @@ LANES = [
              "present, hooks armed, live party decoded identically in Lua and Python, overworld "
              "write checkpoint reached -- skip = lane failure, so the staged .gbc files and the "
              "per-title fixtures have to be in the tree"),
+    Lane("apex-purergb",
+         [_PY, "-m", "pytest",
+          "tests/live/test_gen1_new_gates.py::test_apex_chip_contract_on_a_pure_cartridge",
+          "-q", "-p", "no:randomly", "-rs"],
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": "purered"},
+         why="the APEX CHIP identity contract on the real PureRed cartridge (PLAN T1/T3): a "
+             "predicted key collision restores the two DV bytes and sends no key_change, a real "
+             "use sends one key_change{apex_chip} whose alias the ack clears. Selected by node "
+             "id, so nothing is collected-then-deselected; skip = lane failure, so the staged "
+             ".gbc and purered_town.SaveRAM have to be in the tree"),
     Lane("live-trade-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_trade_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
@@ -165,6 +185,7 @@ REQUIREMENTS = {
     "live-gates": ["T-1 prerequisites (panel, menu row, randomized+injected panel)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
     "inspect-purergb": ["R-1", "S", "W-7", "F-6"],
+    "apex-purergb": ["T1", "T3"],
     "live-trade-gates": ["T-1", "T-2"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],
 }
