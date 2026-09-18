@@ -1,0 +1,93 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3040 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (84s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (24s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     9 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (119s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (22s)
+[ .. ] duo-pairs
+lt ---
+E         heartbeat f=10800 party=1 connected=true
+E         heartbeat f=14400 party=1 connected=true
+E         heartbeat f=18000 party=1 connected=true
+E         heartbeat f=21600 party=1 connected=true
+E         heartbeat f=25200 party=1 connected=true
+E         heartbeat f=28800 party=1 connected=true
+E         heartbeat f=32400 party=1 connected=true
+E         heartbeat f=36000 party=1 connected=true
+E         heartbeat f=39600 party=1 connected=true
+E         heartbeat f=43200 party=1 connected=true
+E         heartbeat f=46800 party=1 connected=true
+E         heartbeat f=50400 party=1 connected=true
+E         heartbeat f=54000 party=1 connected=true
+E         heartbeat f=57600 party=1 connected=true
+E         SAVE_PHASE poison_new_a save-open-start-menu
+E         SAVE_PHASE poison_new_a save-close-foreign-menu
+E         SAVE_PHASE poison_new_a save-select-save
+E         SAVE_PHASE poison_new_a save-choose-save
+E         SAVE_PHASE poison_new_a save-close-foreign-menu
+E         SAVE_PHASE poison_new_a save-confirm
+E         SAVE_WITNESS_DUMP path=patch/build/e2e_poison_new_a_1_witness.bin bytes=31592 saves=1 frame=58560
+E         SAVE_PHASE poison_new_a save-await-close
+E         SAVE_PHASE poison_new_a save-witnessed
+E         SAVE_WITNESS poison_new_a frames=488
+E         RESULT: PASS (idled through the partner's poison faint and blackout)
+E         --- poison_new b result ---
+E         POISON_PHASE walk route1_north-detour @89285 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @89349 map=12 (11,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @89431 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @89495 map=12 (7,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @89577 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @89641 map=12 (11,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @89723 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @89787 map=12 (7,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @89869 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @89933 map=12 (11,24) battle=0 hp=19
+E         heartbeat f=90000 party=1 connected=true
+E         POISON_PHASE walk route1_north-detour @90015 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @90079 map=12 (7,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @90161 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @90225 map=12 (11,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @90307 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @90371 map=12 (7,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @90453 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @90517 map=12 (11,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @90599 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @90663 map=12 (7,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @90745 map=12 (9,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north @90809 map=12 (11,24) battle=0 hp=19
+E         POISON_PHASE walk route1_north-detour @90891 map=12 (9,24) battle=0 hp=19
+E         RESULT: FAIL (the walk to Viridian Forest ended walk-timeout)
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_poison_new_yhcmyg6d
+E         
+E         ========== summary ==========
+E           poison_new: FAIL (attempt 1 of 4)
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...emp\\slink_duo_poison_new_yhcmyg6d\n\n========== summary ==========\n  poison_new: FAIL (attempt 1 of 4)\n", stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+1 failed, 17 passed in 779.49s (0:12:59)
+
+[FAIL] duo-pairs          17 passed, 0 skipped (0 unexplained), 1 failed, 0 xfailed, 0 deselected  (781s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
