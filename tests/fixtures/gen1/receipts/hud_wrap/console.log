@@ -1,0 +1,15 @@
+=== HUD_SHOT boot Thu Sep 17 21:19:45 2026 ===
+[HUD_SHOT] init ok (Gen1 160x144)
+[HUD_SHOT] frame=1 draws text=0 box=0
+[HUD_SHOT] frame=120 queued burst[1] + LONG + burst[2..4] (5 pushes, cap=4)
+[HUD_SHOT] frame=120 draws text=3 box=1
+HUD_SHOT frame=180 queue_proxy_text=3 queue_proxy_box=1 -> C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/hud_shot/hud_shot_180.png
+[HUD_SHOT] frame=210 draws text=1 box=1
+[HUD_SHOT] frame=630 draws text=0 box=0
+HUD_SHOT frame=700 queue_proxy_text=0 queue_proxy_box=0 -> C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/hud_shot/hud_shot_700.png
+HUD_SHOT frame=1000 queue_proxy_text=0 queue_proxy_box=0 -> C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/hud_shot/hud_shot_1000.png
+[SLink-HUD] message exceeds 4x30, ellipsized: Route 1 rendezvous complete. Both trainers should now proceed north together toward Viridian Forest before the next gym challenge begins.
+[HUD_SHOT] frame=1300 prompt queued
+[HUD_SHOT] frame=1300 draws text=4 box=1
+HUD_SHOT frame=1310 (prompt) queue_proxy_text=4 queue_proxy_box=1 -> C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-gen1-master-release-plan-6b4279/e136b7e5-2160-411d-b1cf-7b538efc4203/scratchpad/hud_shot/hud_shot_1310_prompt.png
+[HUD_SHOT] exiting
