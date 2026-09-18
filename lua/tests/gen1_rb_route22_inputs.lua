@@ -299,9 +299,9 @@ function M.new(expected, opts)
                 end
             end
             -- Nothing took, so a PrintText box owns the frame and the menu is not really up:
-            -- an A on a FAINTED slot (D.commit_move re-presses A up to twice more when the
-            -- enemy moved first and no ExecutePlayerMove ever fires -- gen1_battle_driver.lua
-            -- :238-247 -- and the cursor is sitting on the slot that just fainted) returns
+            -- an A on a FAINTED slot (D.commit_move USED to re-press A up to twice more when
+            -- the enemy moved first; since Q-1 it stops on player_fainted/party_menu, so this
+            -- path is now belt-and-braces against any other stray A on the fainted slot) returns
             -- through HasMonFainted, which PrintTexts NoWillText, "There's no will to fight!"
             -- (core.asm:1473-1488). WaitForTextScrollButtonPress watches A|B alone
             -- (home/joypad2.asm:55-81), so Up/Down go nowhere -- measured: 12 Down presses,
