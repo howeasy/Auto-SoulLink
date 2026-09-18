@@ -36,6 +36,20 @@ Record format (`evos_moves.asm:1-9`), repeated until a `db 0` terminator:
     db EVOLVE_ITEM,  item, 1,    species
     db EVOLVE_TRADE, 1,          species
 The trailing operand is always the target species constant, which is what we want.
+
+PUREGRB (--foundation purergb). pureRGB's evolution edges are keyed by INTERNAL
+species id, never national dex: forms/spirits share a dex number with their base
+species (docs/purergb/PLAN.md S3.3), so dex can no longer identify a species. Only
+the 151 "ordinary" internal ids ever evolve (every form/spirit/MissingNo points its
+`EvosMovesPointerTable` entry at a shared `NothingEvosMoves`/its base's own list, per
+PLAN S7.1) so the union-find family graph is built over exactly those 151 ids, the
+same shape (72 edges / 79 families) as vanilla's. pureRGB also adds a level-37
+`EVOLVE_LEVEL` entry beside the existing `EVOLVE_TRADE` for the four classic
+trade-evolution species (Haunter/Kadabra/Graveler/Machoke), so 4 more *method*
+entries than edges (76 methods / 72 edges). The pointer table is walked from the
+BUILT ROM (not label text) because several internal ids intentionally share one
+label (`NothingEvosMoves`) that source-only label matching cannot disambiguate;
+source text is still used as an independent cross-check per ordinary species.
 """
 from __future__ import annotations
 
@@ -52,7 +66,10 @@ _OUT = os.path.join(_REPO, "data", "games", "gen1_rby", "evolutions.json")
 _SPECIES_INDEX = os.path.join(_REPO, "data", "games", "gen1_rby", "species_index.json")
 
 sys.path.insert(0, _THIS_DIR)
+import gen1_foundation as fnd  # noqa: E402
 from gen_gen1_encounters import parse_pokemon_constants  # noqa: E402
+
+_EVOLVE_LEVEL, _EVOLVE_ITEM, _EVOLVE_TRADE = 1, 2, 3
 
 _LABEL_RE = re.compile(r"^(\w+)EvosMoves:")
 _EVOLVE_RE = re.compile(r"^db\s+EVOLVE_(LEVEL|ITEM|TRADE)\s*,\s*(.+)$")
@@ -161,18 +178,181 @@ def build() -> dict:
     }
 
 
+def _read_evolution_entries(rom: bytes, flat_addr: int) -> list[tuple[int, int]]:
+    """[(method, target_internal_id), ...] at a `db 0`-terminated evos block."""
+    out: list[tuple[int, int]] = []
+    p = flat_addr
+    while rom[p] != 0:
+        method = rom[p]
+        if method == _EVOLVE_LEVEL:
+            out.append((method, rom[p + 2]))
+            p += 3
+        elif method == _EVOLVE_ITEM:
+            out.append((method, rom[p + 3]))
+            p += 4
+        elif method == _EVOLVE_TRADE:
+            out.append((method, rom[p + 2]))
+            p += 3
+        else:
+            raise SystemExit(f"unknown evolution method byte {method:#x} at flat {p:#x}")
+    return out
+
+
+def build_purergb() -> dict:
+    """Walk `EvosMovesPointerTable` in the built ROM (bank $2C) for every internal
+    id classified "ordinary" by `gen_gen1_species.py` -- forms/spirits/MissingNo
+    never evolve further (PLAN S7.1), so the evolution graph is exactly the 151
+    ordinary ids, keyed by internal id (dex cannot key it: forms share a base
+    species' dex). Cross-checked against `data/pokemon/evos_moves.asm` label text
+    for the same 151 ids (their own labels are unique, unlike the shared
+    `NothingEvosMoves` label the non-evolving forms point at).
+    """
+    species_index_path = fnd.data_dir("purergb") / "species_index.json"
+    species = json.loads(species_index_path.read_text(encoding="utf-8"))
+    ordinary = {int(k): v for k, v in species["species"].items() if v["classification"] == "ordinary"}
+    transform_edges = species["transform_edges"]
+
+    consts_text = fnd.read_source("purergb", "constants/pokemon_constants.asm")
+    consts = parse_pokemon_constants_generic(consts_text)  # NAME -> internal id
+    name_by_id = {i: n for n, i in consts.items()}
+
+    src_text = fnd.read_source("purergb", "data/pokemon/evos_moves.asm")
+    tmp_source = _write_tmp_source(src_text)
+    try:
+        src_by_label = parse_evolutions(tmp_source)
+    finally:
+        os.remove(tmp_source)
+    # Reuse `_label_to_const`'s tested label->species-constant resolution (handles
+    # the handful of labels whose casing doesn't round-trip, e.g. `FarfetchdEvosMoves`)
+    # instead of re-deriving a label spelling from the constant name.
+    label_by_id: dict[int, str] = {}
+    for label in src_by_label:
+        const = _label_to_const(label, consts)
+        if const in consts:
+            label_by_id[consts[const]] = label
+
+    titles = list(fnd.foundation("purergb")["titles"])
+    edges: dict[int, set[int]] = {}
+    methods: list[tuple[int, int]] = []
+    per_title: dict[str, dict[int, list[tuple[int, int]]]] = {}
+    for title in titles:
+        syms = fnd.parse_sym(fnd.sym_path("purergb", title))
+        rom = fnd.rom_path("purergb", title).read_bytes()
+        table_flat = fnd.flat(*syms["EvosMovesPointerTable"])
+        table_bank = syms["EvosMovesPointerTable"][0]
+        per_id: dict[int, list[tuple[int, int]]] = {}
+        for internal_id in ordinary:
+            ptr_addr = table_flat + (internal_id - 1) * 2
+            target_addr = rom[ptr_addr] | (rom[ptr_addr + 1] << 8)
+            entries = _read_evolution_entries(rom, fnd.flat(table_bank, target_addr))
+            per_id[internal_id] = entries
+        per_title[title] = per_id
+
+    mismatches = [t for t in titles[1:] if per_title[t] != per_title[titles[0]]]
+    if mismatches:
+        raise SystemExit(f"EvosMovesPointerTable disagrees between titles: {mismatches}")
+
+    for internal_id, entries in per_title[titles[0]].items():
+        label_name = label_by_id.get(internal_id)
+        src_targets = src_by_label.get(label_name) if label_name else None
+        for _method, target_id in entries:
+            methods.append((internal_id, target_id))
+            edges.setdefault(internal_id, set()).add(target_id)
+            if src_targets is not None and name_by_id.get(target_id) not in src_targets:
+                raise SystemExit(
+                    f"ROM/source disagreement: {label_name} ROM target id {target_id} "
+                    f"({name_by_id.get(target_id)}) not in source targets {src_targets}")
+
+    parent = {i: i for i in ordinary}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            lo, hi = (ra, rb) if ra < rb else (rb, ra)
+            parent[hi] = lo
+
+    for src, targets in edges.items():
+        for dst in targets:
+            union(src, dst)
+
+    family = {i: find(i) for i in ordinary}
+    return {
+        "_source": "pureRGB data/pokemon/evos_moves.asm, ROM-verified via "
+                   "EvosMovesPointerTable (all three built titles agree)",
+        "evolutions": {str(k): sorted(v) for k, v in sorted(edges.items())},
+        "family": {str(i): family[i] for i in sorted(ordinary)},
+        "transform_edges": transform_edges,
+    }, len(methods)
+
+
+def parse_pokemon_constants_generic(text: str) -> dict[str, int]:
+    """NAME -> internal id, generic `const_def`/`const`/`const_skip` parser."""
+    out: dict[str, int] = {}
+    value = -1
+    for raw in text.splitlines():
+        line = raw.split(";", 1)[0].strip()
+        if line == "const_def":
+            value = 0
+            continue
+        if value < 0:
+            continue
+        m = re.match(r"^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*$", line)
+        if m:
+            out[m.group(1)] = value
+            value += 1
+        elif line == "const_skip":
+            value += 1
+        elif line and not line.startswith(";"):
+            break
+    return out
+
+
+def _write_tmp_source(text: str) -> str:
+    """`parse_evolutions` reads a path; hand it a scratch copy of the source text."""
+    import tempfile
+    fd, path = tempfile.mkstemp(suffix=".asm")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
 def main() -> int:
-    if not os.path.isdir(_PRET):
-        raise SystemExit(f"pret/pokered not found at {_PRET} "
-                         f"(set SLINK_PRET_DIR to override)")
-    data = build()
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--foundation", default="pret", choices=["pret", "purergb"])
+    args = p.parse_args()
+
+    if args.foundation == "pret":
+        if not os.path.isdir(_PRET):
+            raise SystemExit(f"pret/pokered not found at {_PRET} "
+                             f"(set SLINK_PRET_DIR to override)")
+        data = build()
+        n_edges = sum(len(v) for v in data["evolutions"].values())
+        n_families = len(set(data["family"].values()))
+        with open(_OUT, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1, sort_keys=False)
+            f.write("\n")
+        print(f"[gen1-evos] {n_edges} evolution edges, {n_families} families "
+              f"-> {os.path.relpath(_OUT, _REPO)}", file=sys.stderr)
+        return 0
+
+    data, n_methods = build_purergb()
     n_edges = sum(len(v) for v in data["evolutions"].values())
     n_families = len(set(data["family"].values()))
-    with open(_OUT, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=1, sort_keys=False)
-        f.write("\n")
-    print(f"[gen1-evos] {n_edges} evolution edges, {n_families} families "
-          f"-> {os.path.relpath(_OUT, _REPO)}", file=sys.stderr)
+    if (n_methods, n_edges, n_families) != (76, 72, 79):
+        raise SystemExit(
+            f"purergb evolution shape drifted: methods={n_methods} edges={n_edges} "
+            f"families={n_families} (expected 76/72/79)")
+    out_path = fnd.data_dir("purergb") / "evolutions.json"
+    out_path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
+    print(f"[gen1-evos:purergb] {n_methods} method entries, {n_edges} edges, "
+          f"{n_families} families -> {out_path}", file=sys.stderr)
     return 0
 
 

@@ -1,0 +1,836 @@
+{
+ "items": {
+  "1": {
+   "name": "Master Ball",
+   "key_item": false,
+   "ball": true,
+   "tm_hm": null
+  },
+  "2": {
+   "name": "Ultra Ball",
+   "key_item": false,
+   "ball": true,
+   "tm_hm": null
+  },
+  "3": {
+   "name": "Great Ball",
+   "key_item": false,
+   "ball": true,
+   "tm_hm": null
+  },
+  "4": {
+   "name": "Pok\u00e9 Ball",
+   "key_item": false,
+   "ball": true,
+   "tm_hm": null
+  },
+  "5": {
+   "name": "Hyper Ball",
+   "key_item": false,
+   "ball": true,
+   "tm_hm": null
+  },
+  "6": {
+   "name": "Bicycle",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "8": {
+   "name": "Safari Ball",
+   "key_item": false,
+   "ball": true,
+   "tm_hm": null
+  },
+  "9": {
+   "name": "Pok\u00e9dex",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "10": {
+   "name": "Moon Stone",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "11": {
+   "name": "Antidote",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "12": {
+   "name": "Burn Heal",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "13": {
+   "name": "Ice Heal",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "14": {
+   "name": "Awakening",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "15": {
+   "name": "Parlyz Heal",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "16": {
+   "name": "Full Restore",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "17": {
+   "name": "Max Potion",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "18": {
+   "name": "Hyper Potion",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "19": {
+   "name": "Super Potion",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "20": {
+   "name": "Potion",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "21": {
+   "name": "Bait",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "22": {
+   "name": "Rock",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "23": {
+   "name": "Old Coin",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "24": {
+   "name": "Topsecretkey",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "25": {
+   "name": "Camera",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "26": {
+   "name": "UNUSED4",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "27": {
+   "name": "UNUSED5",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "28": {
+   "name": "UNUSED6",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "29": {
+   "name": "Escape Rope",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "30": {
+   "name": "Repel",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "31": {
+   "name": "Old Amber",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "32": {
+   "name": "Fire Stone",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "33": {
+   "name": "Thunderstone",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "34": {
+   "name": "Water Stone",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "35": {
+   "name": "Hp Up",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "36": {
+   "name": "Protein",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "37": {
+   "name": "Iron",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "38": {
+   "name": "Carbos",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "39": {
+   "name": "Calcium",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "40": {
+   "name": "Rare Candy",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "41": {
+   "name": "Dome Fossil",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "42": {
+   "name": "Helix Fossil",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "43": {
+   "name": "Secret Key",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "44": {
+   "name": "Pocket Abra",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "45": {
+   "name": "Bike Voucher",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "46": {
+   "name": "X Accuracy",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "47": {
+   "name": "Leaf Stone",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "48": {
+   "name": "Card Key",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "49": {
+   "name": "Nugget",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "50": {
+   "name": "Apex Chip",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "51": {
+   "name": "Pok\u00e9 Doll",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "52": {
+   "name": "Full Heal",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "53": {
+   "name": "Revive",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "54": {
+   "name": "Max Revive",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "55": {
+   "name": "Guard SPEC.",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "56": {
+   "name": "Super Repel",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "57": {
+   "name": "Max Repel",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "58": {
+   "name": "Dire Hit",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "59": {
+   "name": "Coin",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "60": {
+   "name": "Fresh Water",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "61": {
+   "name": "Soda Pop",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "62": {
+   "name": "Lemonade",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "63": {
+   "name": "S.S. Ticket",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "64": {
+   "name": "Gold Teeth",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "65": {
+   "name": "X Attack",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "66": {
+   "name": "X Defend",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "67": {
+   "name": "X Speed",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "68": {
+   "name": "X Special",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "69": {
+   "name": "Lost Wallet",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "70": {
+   "name": "Oak's Parcel",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "71": {
+   "name": "Itemfinder",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "72": {
+   "name": "Silph Scope",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "73": {
+   "name": "Pok\u00e9 Flute",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "74": {
+   "name": "Lift Key",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "75": {
+   "name": "Booster Chip",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "76": {
+   "name": "Old Rod",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "77": {
+   "name": "Good Rod",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "78": {
+   "name": "Super Rod",
+   "key_item": true,
+   "ball": false,
+   "tm_hm": null
+  },
+  "79": {
+   "name": "PP Up",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "80": {
+   "name": "Ether",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "81": {
+   "name": "Max Ether",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "82": {
+   "name": "Elixer",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "83": {
+   "name": "Max Elixer",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": null
+  },
+  "196": {
+   "name": "HM01",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "HM01"
+  },
+  "197": {
+   "name": "HM02",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "HM02"
+  },
+  "198": {
+   "name": "HM03",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "HM03"
+  },
+  "199": {
+   "name": "HM04",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "HM04"
+  },
+  "200": {
+   "name": "HM05",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "HM05"
+  },
+  "201": {
+   "name": "TM01",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM01"
+  },
+  "202": {
+   "name": "TM02",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM02"
+  },
+  "203": {
+   "name": "TM03",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM03"
+  },
+  "204": {
+   "name": "TM04",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM04"
+  },
+  "205": {
+   "name": "TM05",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM05"
+  },
+  "206": {
+   "name": "TM06",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM06"
+  },
+  "207": {
+   "name": "TM07",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM07"
+  },
+  "208": {
+   "name": "TM08",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM08"
+  },
+  "209": {
+   "name": "TM09",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM09"
+  },
+  "210": {
+   "name": "TM10",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM10"
+  },
+  "211": {
+   "name": "TM11",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM11"
+  },
+  "212": {
+   "name": "TM12",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM12"
+  },
+  "213": {
+   "name": "TM13",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM13"
+  },
+  "214": {
+   "name": "TM14",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM14"
+  },
+  "215": {
+   "name": "TM15",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM15"
+  },
+  "216": {
+   "name": "TM16",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM16"
+  },
+  "217": {
+   "name": "TM17",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM17"
+  },
+  "218": {
+   "name": "TM18",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM18"
+  },
+  "219": {
+   "name": "TM19",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM19"
+  },
+  "220": {
+   "name": "TM20",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM20"
+  },
+  "221": {
+   "name": "TM21",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM21"
+  },
+  "222": {
+   "name": "TM22",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM22"
+  },
+  "223": {
+   "name": "TM23",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM23"
+  },
+  "224": {
+   "name": "TM24",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM24"
+  },
+  "225": {
+   "name": "TM25",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM25"
+  },
+  "226": {
+   "name": "TM26",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM26"
+  },
+  "227": {
+   "name": "TM27",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM27"
+  },
+  "228": {
+   "name": "TM28",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM28"
+  },
+  "229": {
+   "name": "TM29",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM29"
+  },
+  "230": {
+   "name": "TM30",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM30"
+  },
+  "231": {
+   "name": "TM31",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM31"
+  },
+  "232": {
+   "name": "TM32",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM32"
+  },
+  "233": {
+   "name": "TM33",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM33"
+  },
+  "234": {
+   "name": "TM34",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM34"
+  },
+  "235": {
+   "name": "TM35",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM35"
+  },
+  "236": {
+   "name": "TM36",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM36"
+  },
+  "237": {
+   "name": "TM37",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM37"
+  },
+  "238": {
+   "name": "TM38",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM38"
+  },
+  "239": {
+   "name": "TM39",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM39"
+  },
+  "240": {
+   "name": "TM40",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM40"
+  },
+  "241": {
+   "name": "TM41",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM41"
+  },
+  "242": {
+   "name": "TM42",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM42"
+  },
+  "243": {
+   "name": "TM43",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM43"
+  },
+  "244": {
+   "name": "TM44",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM44"
+  },
+  "245": {
+   "name": "TM45",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM45"
+  },
+  "246": {
+   "name": "TM46",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM46"
+  },
+  "247": {
+   "name": "TM47",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM47"
+  },
+  "248": {
+   "name": "TM48",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM48"
+  },
+  "249": {
+   "name": "TM49",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM49"
+  },
+  "250": {
+   "name": "TM50",
+   "key_item": false,
+   "ball": false,
+   "tm_hm": "TM50"
+  }
+ },
+ "ball_items": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  8
+ ],
+ "bag_capacity": 30,
+ "pc_item_capacity": 60
+}

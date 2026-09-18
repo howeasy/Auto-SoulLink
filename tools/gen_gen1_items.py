@@ -24,11 +24,16 @@ formats those names at runtime from the id (`GetItemName` special-cases
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.normpath(os.path.join(_THIS_DIR, ".."))
+
+sys.path.insert(0, _THIS_DIR)
+import gen1_foundation as fnd  # noqa: E402
 
 
 def _find_pret() -> str:
@@ -124,8 +129,138 @@ def render(names: dict[int, str]) -> str:
     return "\n".join(lines)
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# pureRGB (--foundation purergb). The worker card for this pack asks for a JSON
+# file (`data/games/gen1_purergb/items.json`), not a Python module: {name,
+# key_item, ball, tm_hm} per item, plus the shared ball-gate set (docs/purergb/
+# PLAN.md S3.4 / S11.2 A6). HM01=$C4 / TM01=$C9 match vanilla's own numbering
+# (constants/item_constants.asm), so the id ranges below are the same as this
+# module's vanilla TM/HM synthesis, just re-asserted against pureRGB's source.
+# ---------------------------------------------------------------------------
+
+
+def parse_purergb_item_names(text: str) -> list[str | None]:
+    """[name_or_None, ...] for ids 1..NUM_ITEMS, from `ItemNameJumpTable`'s labels
+    (in id order) and each label's own `db "TEXT@"` string. `?????` = unused id."""
+    labels = re.findall(r"^\s*dw\s+(\w+)", text, re.MULTILINE)
+    names: dict[str, str] = {}
+    label = None
+    for raw in text.splitlines():
+        if label and (m := re.match(r'^\s*db\s+"([^"@]*)@?"', raw)):
+            names[label] = m.group(1)
+            label = None
+            continue
+        if (m := re.match(r"^(\w+):$", raw.strip())) and m.group(1) in labels:
+            label = m.group(1)
+    return [None if names[lbl].strip("?") == "" else names[lbl] for lbl in labels]
+
+
+def parse_ball_item_ids(text: str) -> list[int]:
+    """Item ids whose `ItemUsePtrTable` slot points at `ItemUseBall` (positional,
+    starting at item id 1) -- this is the actual ball-gate dispatch, not a guess."""
+    m = re.search(r"ItemUsePtrTable:\n(.*?)\n\n", text, re.DOTALL)
+    rows = re.findall(r"dw\s+(\w+)", m.group(1))
+    return [i + 1 for i, target in enumerate(rows) if target == "ItemUseBall"]
+
+
+def parse_key_item_flags(text: str) -> list[bool]:
+    return [line.strip().startswith("dbit TRUE")
+            for line in text.splitlines() if line.strip().startswith("dbit ")]
+
+
+def build_purergb() -> dict:
+    consts_text = fnd.read_source("purergb", "constants/item_constants.asm")
+    fnd.assert_source("purergb", "constants/item_constants.asm", "add_hm CUT          ; $C4")
+    fnd.assert_source("purergb", "constants/item_constants.asm", "add_tm ICE_PUNCH   \t; $C9")
+    num_items_m = re.search(r"DEF NUM_ITEMS EQU const_value - 1", consts_text)
+    if not num_items_m:
+        raise SystemExit("item_constants.asm: NUM_ITEMS definition not found")
+    # NUM_ITEMS is one less than the running const_value at that point; recover it
+    # the same way `parse_item_names`'s caller relies on positional 1..N ids.
+    num_items = 0x53  # asserted below against the parsed name/flag table lengths
+
+    names = parse_purergb_item_names(fnd.read_source("purergb", "data/items/names.asm"))
+    if len(names) != num_items:
+        raise SystemExit(f"item_constants.asm NUM_ITEMS={num_items} but ItemNameJumpTable has {len(names)} rows")
+    key_flags = parse_key_item_flags(fnd.read_source("purergb", "data/items/key_items.asm"))
+    if len(key_flags) != num_items:
+        raise SystemExit(f"KeyItemFlags has {len(key_flags)} rows, expected {num_items}")
+    ball_ids = parse_ball_item_ids(fnd.read_source("purergb", "engine/items/item_effects.asm"))
+    if ball_ids != [1, 2, 3, 4, 5, 8]:
+        raise SystemExit(f"ball item ids drifted from {{1,2,3,4,5,8}}: {ball_ids}")
+
+    # HYPER_BALL=$05, APEX_CHIP=$32, POCKET_ABRA=$2C (docs/purergb/PLAN.md S3.4).
+    item_ids: dict[str, int] = {}
+    for m in re.finditer(r"const\s+(\w+)\s*;\s*\$([0-9A-Fa-f]+)", consts_text):
+        item_ids[m.group(1)] = int(m.group(2), 16)
+    for const, expected in (("HYPER_BALL", 0x05), ("APEX_CHIP", 0x32), ("POCKET_ABRA", 0x2C)):
+        if item_ids.get(const) != expected:
+            raise SystemExit(f"{const} is {item_ids.get(const)!r}, expected {expected:#x}")
+
+    items: dict[int, dict] = {}
+    for i in range(1, num_items + 1):
+        name = names[i - 1]
+        if name is None:
+            continue
+        items[i] = {"name": _title(name), "key_item": key_flags[i - 1], "ball": i in ball_ids, "tm_hm": None}
+    for i in range(1, 6):
+        items[0xC3 + i] = {"name": f"HM{i:02d}", "key_item": False, "ball": False, "tm_hm": f"HM{i:02d}"}
+    for i in range(1, 51):
+        items[0xC8 + i] = {"name": f"TM{i:02d}", "key_item": False, "ball": False, "tm_hm": f"TM{i:02d}"}
+
+    # ROM cross-check: ItemNameJumpTable decode must agree with the source strings
+    # (skipping "?????" placeholders) in every built title.
+    from gen_gen1_charmap import parse_charmap
+    glyphs, terminator = parse_charmap(fnd.read_source("purergb", "constants/charmap.asm"))
+    disagreements = []
+    for title in fnd.foundation("purergb")["titles"]:
+        syms = fnd.parse_sym(fnd.sym_path("purergb", title))
+        rom = fnd.rom_path("purergb", title).read_bytes()
+        table_flat = fnd.flat(*syms["ItemNameJumpTable"])
+        table_bank = syms["ItemNameJumpTable"][0]
+        for i in range(1, num_items + 1):
+            if names[i - 1] is None:
+                continue
+            ptr_addr = table_flat + (i - 1) * 2
+            target = rom[ptr_addr] | (rom[ptr_addr + 1] << 8)
+            flat_name = fnd.flat(table_bank, target)
+            raw = rom[flat_name:flat_name + 20]
+            decoded = "".join(glyphs.get(b, f"<${b:02X}>") for b in raw[:raw.index(terminator)])
+            if decoded != names[i - 1]:
+                disagreements.append(f"{title}: item {i} ROM={decoded!r} source={names[i - 1]!r}")
+    if disagreements:
+        raise SystemExit("item name ROM/source disagreements:\n" + "\n".join(disagreements))
+
+    return {
+        "items": {str(k): v for k, v in sorted(items.items())},
+        "ball_items": ball_ids,
+        "bag_capacity": 30,
+        "pc_item_capacity": 60,
+    }
+
+
+def main() -> int:
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--foundation", default="pret", choices=["pret", "purergb"])
+    args = p.parse_args()
+
+    if args.foundation == "purergb":
+        doc = build_purergb()
+        out_dir = fnd.data_dir("purergb")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "items.json"
+        out_path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        print(f"[gen1-items:purergb] {len(doc['items'])} items, ball_items={doc['ball_items']} "
+              f"-> {out_path}", file=sys.stderr)
+        return 0
+
     out = render(build())
     with open(_OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write(out)
     print(f"wrote {_OUT}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,4335 @@
+{
+ "_comment": "Gen 1 internal species index -> attributes, generated for purergb (docs/purergb/PLAN.md S3.3/S11.2 A13).",
+ "generator": "tools/gen_gen1_species.py",
+ "index_to_national": {
+  "1": 112,
+  "2": 115,
+  "3": 32,
+  "4": 35,
+  "5": 21,
+  "6": 100,
+  "7": 34,
+  "8": 80,
+  "9": 2,
+  "10": 103,
+  "11": 108,
+  "12": 102,
+  "13": 88,
+  "14": 94,
+  "15": 29,
+  "16": 31,
+  "17": 104,
+  "18": 111,
+  "19": 131,
+  "20": 59,
+  "21": 151,
+  "22": 130,
+  "23": 90,
+  "24": 72,
+  "25": 92,
+  "26": 123,
+  "27": 120,
+  "28": 9,
+  "29": 127,
+  "30": 114,
+  "31": 103,
+  "33": 58,
+  "34": 95,
+  "35": 22,
+  "36": 16,
+  "37": 79,
+  "38": 64,
+  "39": 75,
+  "40": 113,
+  "41": 67,
+  "42": 122,
+  "43": 106,
+  "44": 107,
+  "45": 24,
+  "46": 47,
+  "47": 54,
+  "48": 96,
+  "49": 76,
+  "50": 107,
+  "51": 126,
+  "52": 126,
+  "53": 125,
+  "54": 82,
+  "55": 109,
+  "56": 82,
+  "57": 56,
+  "58": 86,
+  "59": 50,
+  "60": 128,
+  "64": 83,
+  "65": 48,
+  "66": 149,
+  "70": 84,
+  "71": 60,
+  "72": 124,
+  "73": 146,
+  "74": 144,
+  "75": 145,
+  "76": 132,
+  "77": 52,
+  "78": 98,
+  "82": 37,
+  "83": 38,
+  "84": 25,
+  "85": 26,
+  "86": 26,
+  "88": 147,
+  "89": 148,
+  "90": 140,
+  "91": 141,
+  "92": 116,
+  "93": 117,
+  "94": 148,
+  "96": 27,
+  "97": 28,
+  "98": 138,
+  "99": 139,
+  "100": 39,
+  "101": 40,
+  "102": 133,
+  "103": 136,
+  "104": 135,
+  "105": 134,
+  "106": 66,
+  "107": 41,
+  "108": 23,
+  "109": 46,
+  "110": 61,
+  "111": 62,
+  "112": 13,
+  "113": 14,
+  "114": 15,
+  "115": 40,
+  "116": 85,
+  "117": 57,
+  "118": 51,
+  "119": 49,
+  "120": 87,
+  "123": 10,
+  "124": 11,
+  "125": 12,
+  "126": 68,
+  "128": 55,
+  "129": 97,
+  "130": 42,
+  "131": 150,
+  "132": 143,
+  "133": 129,
+  "134": 42,
+  "136": 89,
+  "138": 99,
+  "139": 91,
+  "141": 101,
+  "142": 36,
+  "143": 110,
+  "144": 53,
+  "145": 105,
+  "146": 110,
+  "147": 93,
+  "148": 63,
+  "149": 65,
+  "150": 17,
+  "151": 18,
+  "152": 121,
+  "153": 1,
+  "154": 3,
+  "155": 73,
+  "157": 118,
+  "158": 119,
+  "163": 77,
+  "164": 78,
+  "165": 19,
+  "166": 20,
+  "167": 33,
+  "168": 30,
+  "169": 74,
+  "170": 137,
+  "171": 142,
+  "172": 95,
+  "173": 81,
+  "174": 150,
+  "175": 93,
+  "176": 4,
+  "177": 7,
+  "178": 5,
+  "179": 8,
+  "180": 6,
+  "185": 43,
+  "186": 44,
+  "187": 45,
+  "188": 69,
+  "189": 70,
+  "190": 71
+ },
+ "national_to_index": {
+  "1": 153,
+  "2": 9,
+  "3": 154,
+  "4": 176,
+  "5": 178,
+  "6": 180,
+  "7": 177,
+  "8": 179,
+  "9": 28,
+  "10": 123,
+  "11": 124,
+  "12": 125,
+  "13": 112,
+  "14": 113,
+  "15": 114,
+  "16": 36,
+  "17": 150,
+  "18": 151,
+  "19": 165,
+  "20": 166,
+  "21": 5,
+  "22": 35,
+  "23": 108,
+  "24": 45,
+  "25": 84,
+  "26": 85,
+  "27": 96,
+  "28": 97,
+  "29": 15,
+  "30": 168,
+  "31": 16,
+  "32": 3,
+  "33": 167,
+  "34": 7,
+  "35": 4,
+  "36": 142,
+  "37": 82,
+  "38": 83,
+  "39": 100,
+  "40": 101,
+  "41": 107,
+  "42": 130,
+  "43": 185,
+  "44": 186,
+  "45": 187,
+  "46": 109,
+  "47": 46,
+  "48": 65,
+  "49": 119,
+  "50": 59,
+  "51": 118,
+  "52": 77,
+  "53": 144,
+  "54": 47,
+  "55": 128,
+  "56": 57,
+  "57": 117,
+  "58": 33,
+  "59": 20,
+  "60": 71,
+  "61": 110,
+  "62": 111,
+  "63": 148,
+  "64": 38,
+  "65": 149,
+  "66": 106,
+  "67": 41,
+  "68": 126,
+  "69": 188,
+  "70": 189,
+  "71": 190,
+  "72": 24,
+  "73": 155,
+  "74": 169,
+  "75": 39,
+  "76": 49,
+  "77": 163,
+  "78": 164,
+  "79": 37,
+  "80": 8,
+  "81": 173,
+  "82": 54,
+  "83": 64,
+  "84": 70,
+  "85": 116,
+  "86": 58,
+  "87": 120,
+  "88": 13,
+  "89": 136,
+  "90": 23,
+  "91": 139,
+  "92": 25,
+  "93": 147,
+  "94": 14,
+  "95": 34,
+  "96": 48,
+  "97": 129,
+  "98": 78,
+  "99": 138,
+  "100": 6,
+  "101": 141,
+  "102": 12,
+  "103": 10,
+  "104": 17,
+  "105": 145,
+  "106": 43,
+  "107": 44,
+  "108": 11,
+  "109": 55,
+  "110": 143,
+  "111": 18,
+  "112": 1,
+  "113": 40,
+  "114": 30,
+  "115": 2,
+  "116": 92,
+  "117": 93,
+  "118": 157,
+  "119": 158,
+  "120": 27,
+  "121": 152,
+  "122": 42,
+  "123": 26,
+  "124": 72,
+  "125": 53,
+  "126": 51,
+  "127": 29,
+  "128": 60,
+  "129": 133,
+  "130": 22,
+  "131": 19,
+  "132": 76,
+  "133": 102,
+  "134": 105,
+  "135": 104,
+  "136": 103,
+  "137": 170,
+  "138": 98,
+  "139": 99,
+  "140": 90,
+  "141": 91,
+  "142": 171,
+  "143": 132,
+  "144": 74,
+  "145": 75,
+  "146": 73,
+  "147": 88,
+  "148": 89,
+  "149": 66,
+  "150": 131,
+  "151": 21
+ },
+ "species": {
+  "1": {
+   "dex": 112,
+   "name": "RHYDON",
+   "classification": "ordinary",
+   "base_species": 1,
+   "types": [
+    4,
+    5
+   ],
+   "stats": {
+    "hp": 105,
+    "atk": 130,
+    "def": 120,
+    "spd": 40,
+    "spc": 45
+   },
+   "catch_rate": 60,
+   "base_exp": 255,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:111",
+   "obtainable": true
+  },
+  "2": {
+   "dex": 115,
+   "name": "KANGASKHAN",
+   "classification": "ordinary",
+   "base_species": 2,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 115,
+    "atk": 95,
+    "def": 80,
+    "spd": 90,
+    "spc": 40
+   },
+   "catch_rate": 65,
+   "base_exp": 175,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:114",
+   "obtainable": true
+  },
+  "3": {
+   "dex": 32,
+   "name": "NIDORAN\u2642",
+   "classification": "ordinary",
+   "base_species": 3,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 46,
+    "atk": 57,
+    "def": 40,
+    "spd": 50,
+    "spc": 40
+   },
+   "catch_rate": 235,
+   "base_exp": 60,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:31",
+   "obtainable": true
+  },
+  "4": {
+   "dex": 35,
+   "name": "CLEFAIRY",
+   "classification": "ordinary",
+   "base_species": 4,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 45,
+    "def": 48,
+    "spd": 35,
+    "spc": 60
+   },
+   "catch_rate": 150,
+   "base_exp": 68,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:34",
+   "obtainable": true
+  },
+  "5": {
+   "dex": 21,
+   "name": "SPEAROW",
+   "classification": "ordinary",
+   "base_species": 5,
+   "types": [
+    0,
+    2
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 60,
+    "def": 30,
+    "spd": 70,
+    "spc": 31
+   },
+   "catch_rate": 255,
+   "base_exp": 58,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:20",
+   "obtainable": true
+  },
+  "6": {
+   "dex": 100,
+   "name": "VOLTORB",
+   "classification": "ordinary",
+   "base_species": 6,
+   "types": [
+    23,
+    20
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 30,
+    "def": 50,
+    "spd": 100,
+    "spc": 55
+   },
+   "catch_rate": 190,
+   "base_exp": 103,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:99",
+   "obtainable": true
+  },
+  "7": {
+   "dex": 34,
+   "name": "NIDOKING",
+   "classification": "ordinary",
+   "base_species": 7,
+   "types": [
+    3,
+    4
+   ],
+   "stats": {
+    "hp": 81,
+    "atk": 92,
+    "def": 77,
+    "spd": 85,
+    "spc": 75
+   },
+   "catch_rate": 65,
+   "base_exp": 195,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:33",
+   "obtainable": true
+  },
+  "8": {
+   "dex": 80,
+   "name": "SLOWBRO",
+   "classification": "ordinary",
+   "base_species": 8,
+   "types": [
+    21,
+    24
+   ],
+   "stats": {
+    "hp": 95,
+    "atk": 75,
+    "def": 110,
+    "spd": 30,
+    "spc": 90
+   },
+   "catch_rate": 75,
+   "base_exp": 164,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:79",
+   "obtainable": true
+  },
+  "9": {
+   "dex": 2,
+   "name": "IVYSAUR",
+   "classification": "ordinary",
+   "base_species": 9,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 62,
+    "def": 63,
+    "spd": 60,
+    "spc": 80
+   },
+   "catch_rate": 45,
+   "base_exp": 141,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:1",
+   "obtainable": true
+  },
+  "10": {
+   "dex": 103,
+   "name": "EXEGGUTOR",
+   "classification": "ordinary",
+   "base_species": 10,
+   "types": [
+    22,
+    24
+   ],
+   "stats": {
+    "hp": 95,
+    "atk": 95,
+    "def": 85,
+    "spd": 55,
+    "spc": 125
+   },
+   "catch_rate": 65,
+   "base_exp": 212,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:102",
+   "obtainable": true
+  },
+  "11": {
+   "dex": 108,
+   "name": "LICKITUNG",
+   "classification": "ordinary",
+   "base_species": 11,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 120,
+    "atk": 65,
+    "def": 75,
+    "spd": 85,
+    "spc": 60
+   },
+   "catch_rate": 125,
+   "base_exp": 127,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:107",
+   "obtainable": true
+  },
+  "12": {
+   "dex": 102,
+   "name": "EXEGGCUTE",
+   "classification": "ordinary",
+   "base_species": 12,
+   "types": [
+    22,
+    24
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 40,
+    "def": 80,
+    "spd": 40,
+    "spc": 60
+   },
+   "catch_rate": 90,
+   "base_exp": 98,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:101",
+   "obtainable": true
+  },
+  "13": {
+   "dex": 88,
+   "name": "GRIMER",
+   "classification": "ordinary",
+   "base_species": 13,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 80,
+    "def": 50,
+    "spd": 25,
+    "spc": 40
+   },
+   "catch_rate": 190,
+   "base_exp": 90,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:87",
+   "obtainable": true
+  },
+  "14": {
+   "dex": 94,
+   "name": "GENGAR",
+   "classification": "ordinary",
+   "base_species": 14,
+   "types": [
+    8,
+    3
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 65,
+    "def": 60,
+    "spd": 110,
+    "spc": 130
+   },
+   "catch_rate": 45,
+   "base_exp": 190,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:93",
+   "obtainable": true
+  },
+  "15": {
+   "dex": 29,
+   "name": "NIDORAN\u2640",
+   "classification": "ordinary",
+   "base_species": 15,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 47,
+    "def": 52,
+    "spd": 41,
+    "spc": 40
+   },
+   "catch_rate": 235,
+   "base_exp": 59,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:28",
+   "obtainable": true
+  },
+  "16": {
+   "dex": 31,
+   "name": "NIDOQUEEN",
+   "classification": "ordinary",
+   "base_species": 16,
+   "types": [
+    3,
+    4
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 82,
+    "def": 87,
+    "spd": 76,
+    "spc": 75
+   },
+   "catch_rate": 45,
+   "base_exp": 194,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:30",
+   "obtainable": true
+  },
+  "17": {
+   "dex": 104,
+   "name": "CUBONE",
+   "classification": "ordinary",
+   "base_species": 17,
+   "types": [
+    4,
+    4
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 50,
+    "def": 95,
+    "spd": 35,
+    "spc": 40
+   },
+   "catch_rate": 190,
+   "base_exp": 87,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:103",
+   "obtainable": true
+  },
+  "18": {
+   "dex": 111,
+   "name": "RHYHORN",
+   "classification": "ordinary",
+   "base_species": 18,
+   "types": [
+    4,
+    5
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 85,
+    "def": 95,
+    "spd": 25,
+    "spc": 30
+   },
+   "catch_rate": 120,
+   "base_exp": 105,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:110",
+   "obtainable": true
+  },
+  "19": {
+   "dex": 131,
+   "name": "LAPRAS",
+   "classification": "ordinary",
+   "base_species": 19,
+   "types": [
+    21,
+    25
+   ],
+   "stats": {
+    "hp": 130,
+    "atk": 85,
+    "def": 80,
+    "spd": 60,
+    "spc": 95
+   },
+   "catch_rate": 45,
+   "base_exp": 219,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:130",
+   "obtainable": true
+  },
+  "20": {
+   "dex": 59,
+   "name": "ARCANINE",
+   "classification": "ordinary",
+   "base_species": 20,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 110,
+    "def": 80,
+    "spd": 95,
+    "spc": 80
+   },
+   "catch_rate": 75,
+   "base_exp": 213,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:58",
+   "obtainable": true
+  },
+  "21": {
+   "dex": 151,
+   "name": "MEW",
+   "classification": "ordinary",
+   "base_species": 21,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 100,
+    "atk": 100,
+    "def": 100,
+    "spd": 100,
+    "spc": 100
+   },
+   "catch_rate": 25,
+   "base_exp": 64,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:150",
+   "obtainable": true
+  },
+  "22": {
+   "dex": 130,
+   "name": "GYARADOS",
+   "classification": "ordinary",
+   "base_species": 22,
+   "types": [
+    21,
+    2
+   ],
+   "stats": {
+    "hp": 95,
+    "atk": 125,
+    "def": 79,
+    "spd": 81,
+    "spc": 100
+   },
+   "catch_rate": 45,
+   "base_exp": 214,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:129",
+   "obtainable": true
+  },
+  "23": {
+   "dex": 90,
+   "name": "SHELLDER",
+   "classification": "ordinary",
+   "base_species": 23,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 65,
+    "def": 100,
+    "spd": 40,
+    "spc": 45
+   },
+   "catch_rate": 190,
+   "base_exp": 97,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:89",
+   "obtainable": true
+  },
+  "24": {
+   "dex": 72,
+   "name": "TENTACOOL",
+   "classification": "ordinary",
+   "base_species": 24,
+   "types": [
+    21,
+    3
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 40,
+    "def": 35,
+    "spd": 70,
+    "spc": 100
+   },
+   "catch_rate": 190,
+   "base_exp": 105,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:71",
+   "obtainable": true
+  },
+  "25": {
+   "dex": 92,
+   "name": "GASTLY",
+   "classification": "ordinary",
+   "base_species": 25,
+   "types": [
+    8,
+    3
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 35,
+    "def": 30,
+    "spd": 80,
+    "spc": 100
+   },
+   "catch_rate": 190,
+   "base_exp": 95,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:91",
+   "obtainable": true
+  },
+  "26": {
+   "dex": 123,
+   "name": "SCYTHER",
+   "classification": "ordinary",
+   "base_species": 26,
+   "types": [
+    7,
+    2
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 110,
+    "def": 80,
+    "spd": 105,
+    "spc": 55
+   },
+   "catch_rate": 75,
+   "base_exp": 187,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:122",
+   "obtainable": true
+  },
+  "27": {
+   "dex": 120,
+   "name": "STARYU",
+   "classification": "ordinary",
+   "base_species": 27,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 45,
+    "def": 55,
+    "spd": 85,
+    "spc": 70
+   },
+   "catch_rate": 225,
+   "base_exp": 106,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:119",
+   "obtainable": true
+  },
+  "28": {
+   "dex": 9,
+   "name": "BLASTOISE",
+   "classification": "ordinary",
+   "base_species": 28,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 79,
+    "atk": 83,
+    "def": 100,
+    "spd": 78,
+    "spc": 85
+   },
+   "catch_rate": 45,
+   "base_exp": 210,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:8",
+   "obtainable": true
+  },
+  "29": {
+   "dex": 127,
+   "name": "PINSIR",
+   "classification": "ordinary",
+   "base_species": 29,
+   "types": [
+    7,
+    1
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 125,
+    "def": 100,
+    "spd": 85,
+    "spc": 55
+   },
+   "catch_rate": 65,
+   "base_exp": 200,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:126",
+   "obtainable": true
+  },
+  "30": {
+   "dex": 114,
+   "name": "TANGELA",
+   "classification": "ordinary",
+   "base_species": 30,
+   "types": [
+    22,
+    22
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 55,
+    "def": 140,
+    "spd": 60,
+    "spc": 100
+   },
+   "catch_rate": 85,
+   "base_exp": 166,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:113",
+   "obtainable": true
+  },
+  "31": {
+   "dex": 103,
+   "name": "TORCHED",
+   "classification": "spirit",
+   "base_species": 10,
+   "types": [
+    22,
+    20
+   ],
+   "stats": {
+    "hp": 95,
+    "atk": 95,
+    "def": 85,
+    "spd": 55,
+    "spc": 125
+   },
+   "catch_rate": 65,
+   "base_exp": 212,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "NonDex:6",
+   "obtainable": false
+  },
+  "32": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "33": {
+   "dex": 58,
+   "name": "GROWLITHE",
+   "classification": "ordinary",
+   "base_species": 33,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 70,
+    "def": 45,
+    "spd": 60,
+    "spc": 50
+   },
+   "catch_rate": 190,
+   "base_exp": 90,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:57",
+   "obtainable": true
+  },
+  "34": {
+   "dex": 95,
+   "name": "ONIX",
+   "classification": "ordinary",
+   "base_species": 34,
+   "types": [
+    5,
+    4
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 25,
+    "def": 180,
+    "spd": 80,
+    "spc": 75
+   },
+   "catch_rate": 45,
+   "base_exp": 108,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:94",
+   "obtainable": true
+  },
+  "35": {
+   "dex": 22,
+   "name": "FEAROW",
+   "classification": "ordinary",
+   "base_species": 35,
+   "types": [
+    1,
+    2
+   ],
+   "stats": {
+    "hp": 85,
+    "atk": 100,
+    "def": 65,
+    "spd": 100,
+    "spc": 61
+   },
+   "catch_rate": 90,
+   "base_exp": 162,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:21",
+   "obtainable": true
+  },
+  "36": {
+   "dex": 16,
+   "name": "PIDGEY",
+   "classification": "ordinary",
+   "base_species": 36,
+   "types": [
+    0,
+    2
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 45,
+    "def": 40,
+    "spd": 56,
+    "spc": 35
+   },
+   "catch_rate": 255,
+   "base_exp": 55,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:15",
+   "obtainable": true
+  },
+  "37": {
+   "dex": 79,
+   "name": "SLOWPOKE",
+   "classification": "ordinary",
+   "base_species": 37,
+   "types": [
+    21,
+    24
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 65,
+    "def": 65,
+    "spd": 15,
+    "spc": 40
+   },
+   "catch_rate": 190,
+   "base_exp": 99,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:78",
+   "obtainable": true
+  },
+  "38": {
+   "dex": 64,
+   "name": "KADABRA",
+   "classification": "ordinary",
+   "base_species": 38,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 35,
+    "def": 30,
+    "spd": 105,
+    "spc": 120
+   },
+   "catch_rate": 100,
+   "base_exp": 145,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:63",
+   "obtainable": true
+  },
+  "39": {
+   "dex": 75,
+   "name": "GRAVELER",
+   "classification": "ordinary",
+   "base_species": 39,
+   "types": [
+    5,
+    4
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 95,
+    "def": 115,
+    "spd": 35,
+    "spc": 45
+   },
+   "catch_rate": 120,
+   "base_exp": 134,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:74",
+   "obtainable": true
+  },
+  "40": {
+   "dex": 113,
+   "name": "CHANSEY",
+   "classification": "ordinary",
+   "base_species": 40,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 250,
+    "atk": 5,
+    "def": 5,
+    "spd": 50,
+    "spc": 105
+   },
+   "catch_rate": 45,
+   "base_exp": 255,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:112",
+   "obtainable": true
+  },
+  "41": {
+   "dex": 67,
+   "name": "MACHOKE",
+   "classification": "ordinary",
+   "base_species": 41,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 100,
+    "def": 70,
+    "spd": 45,
+    "spc": 50
+   },
+   "catch_rate": 90,
+   "base_exp": 146,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:66",
+   "obtainable": true
+  },
+  "42": {
+   "dex": 122,
+   "name": "MR.MIME",
+   "classification": "ordinary",
+   "base_species": 42,
+   "types": [
+    24,
+    8
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 45,
+    "def": 65,
+    "spd": 90,
+    "spc": 100
+   },
+   "catch_rate": 95,
+   "base_exp": 136,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:121",
+   "obtainable": true
+  },
+  "43": {
+   "dex": 106,
+   "name": "HITMONLEE",
+   "classification": "ordinary",
+   "base_species": 43,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 85,
+    "atk": 140,
+    "def": 53,
+    "spd": 87,
+    "spc": 45
+   },
+   "catch_rate": 95,
+   "base_exp": 139,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:105",
+   "obtainable": true
+  },
+  "44": {
+   "dex": 107,
+   "name": "HITMONCHAN",
+   "classification": "ordinary",
+   "base_species": 44,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 115,
+    "def": 79,
+    "spd": 76,
+    "spc": 90
+   },
+   "catch_rate": 95,
+   "base_exp": 140,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:106",
+   "obtainable": true
+  },
+  "45": {
+   "dex": 24,
+   "name": "ARBOK",
+   "classification": "ordinary",
+   "base_species": 45,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 85,
+    "atk": 95,
+    "def": 69,
+    "spd": 96,
+    "spc": 70
+   },
+   "catch_rate": 90,
+   "base_exp": 147,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:23",
+   "obtainable": true
+  },
+  "46": {
+   "dex": 47,
+   "name": "PARASECT",
+   "classification": "ordinary",
+   "base_species": 46,
+   "types": [
+    7,
+    22
+   ],
+   "stats": {
+    "hp": 140,
+    "atk": 95,
+    "def": 80,
+    "spd": 30,
+    "spc": 80
+   },
+   "catch_rate": 75,
+   "base_exp": 128,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:46",
+   "obtainable": true
+  },
+  "47": {
+   "dex": 54,
+   "name": "PSYDUCK",
+   "classification": "ordinary",
+   "base_species": 47,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 52,
+    "def": 48,
+    "spd": 55,
+    "spc": 50
+   },
+   "catch_rate": 190,
+   "base_exp": 80,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:53",
+   "obtainable": true
+  },
+  "48": {
+   "dex": 96,
+   "name": "DROWZEE",
+   "classification": "ordinary",
+   "base_species": 48,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 48,
+    "def": 45,
+    "spd": 42,
+    "spc": 90
+   },
+   "catch_rate": 190,
+   "base_exp": 102,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:95",
+   "obtainable": true
+  },
+  "49": {
+   "dex": 76,
+   "name": "GOLEM",
+   "classification": "ordinary",
+   "base_species": 49,
+   "types": [
+    5,
+    4
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 110,
+    "def": 130,
+    "spd": 45,
+    "spc": 65
+   },
+   "catch_rate": 65,
+   "base_exp": 177,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:75",
+   "obtainable": true
+  },
+  "50": {
+   "dex": 107,
+   "name": "IRRADIATED",
+   "classification": "spirit",
+   "base_species": 44,
+   "types": [
+    1,
+    8
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 115,
+    "def": 115,
+    "spd": 50,
+    "spc": 115
+   },
+   "catch_rate": 95,
+   "base_exp": 140,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "NonDex:9",
+   "obtainable": false
+  },
+  "51": {
+   "dex": 126,
+   "name": "MAGMAR",
+   "classification": "ordinary",
+   "base_species": 51,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 95,
+    "def": 57,
+    "spd": 93,
+    "spc": 95
+   },
+   "catch_rate": 85,
+   "base_exp": 167,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:125",
+   "obtainable": true
+  },
+  "52": {
+   "dex": 126,
+   "name": "MAGMAR",
+   "classification": "form",
+   "base_species": 51,
+   "types": [
+    20,
+    19
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 95,
+    "def": 57,
+    "spd": 93,
+    "spc": 95
+   },
+   "catch_rate": 85,
+   "base_exp": 167,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "NonDex:12",
+   "obtainable": true
+  },
+  "53": {
+   "dex": 125,
+   "name": "ELECTABUZZ",
+   "classification": "ordinary",
+   "base_species": 53,
+   "types": [
+    23,
+    1
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 93,
+    "def": 57,
+    "spd": 105,
+    "spc": 95
+   },
+   "catch_rate": 75,
+   "base_exp": 156,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:124",
+   "obtainable": true
+  },
+  "54": {
+   "dex": 82,
+   "name": "MAGNETON",
+   "classification": "ordinary",
+   "base_species": 54,
+   "types": [
+    23,
+    23
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 60,
+    "def": 95,
+    "spd": 70,
+    "spc": 120
+   },
+   "catch_rate": 60,
+   "base_exp": 161,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:81",
+   "obtainable": true
+  },
+  "55": {
+   "dex": 109,
+   "name": "KOFFING",
+   "classification": "ordinary",
+   "base_species": 55,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 65,
+    "def": 95,
+    "spd": 35,
+    "spc": 60
+   },
+   "catch_rate": 190,
+   "base_exp": 114,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:108",
+   "obtainable": true
+  },
+  "56": {
+   "dex": 82,
+   "name": "MAGNETON",
+   "classification": "form",
+   "base_species": 54,
+   "types": [
+    23,
+    18
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 60,
+    "def": 95,
+    "spd": 70,
+    "spc": 120
+   },
+   "catch_rate": 60,
+   "base_exp": 161,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "NonDex:4",
+   "obtainable": true
+  },
+  "57": {
+   "dex": 56,
+   "name": "MANKEY",
+   "classification": "ordinary",
+   "base_species": 57,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 80,
+    "def": 35,
+    "spd": 70,
+    "spc": 35
+   },
+   "catch_rate": 190,
+   "base_exp": 74,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:55",
+   "obtainable": true
+  },
+  "58": {
+   "dex": 86,
+   "name": "SEEL",
+   "classification": "ordinary",
+   "base_species": 58,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 45,
+    "def": 55,
+    "spd": 45,
+    "spc": 70
+   },
+   "catch_rate": 190,
+   "base_exp": 100,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:85",
+   "obtainable": true
+  },
+  "59": {
+   "dex": 50,
+   "name": "DIGLETT",
+   "classification": "ordinary",
+   "base_species": 59,
+   "types": [
+    4,
+    4
+   ],
+   "stats": {
+    "hp": 10,
+    "atk": 55,
+    "def": 25,
+    "spd": 95,
+    "spc": 45
+   },
+   "catch_rate": 255,
+   "base_exp": 81,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:49",
+   "obtainable": true
+  },
+  "60": {
+   "dex": 128,
+   "name": "TAUROS",
+   "classification": "ordinary",
+   "base_species": 60,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 100,
+    "def": 95,
+    "spd": 110,
+    "spc": 70
+   },
+   "catch_rate": 45,
+   "base_exp": 211,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:127",
+   "obtainable": true
+  },
+  "61": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "62": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "63": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "64": {
+   "dex": 83,
+   "name": "FARFETCH'D",
+   "classification": "ordinary",
+   "base_species": 64,
+   "types": [
+    0,
+    2
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 65,
+    "def": 55,
+    "spd": 121,
+    "spc": 58
+   },
+   "catch_rate": 85,
+   "base_exp": 130,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:82",
+   "obtainable": true
+  },
+  "65": {
+   "dex": 48,
+   "name": "VENONAT",
+   "classification": "ordinary",
+   "base_species": 65,
+   "types": [
+    7,
+    3
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 55,
+    "def": 50,
+    "spd": 45,
+    "spc": 40
+   },
+   "catch_rate": 190,
+   "base_exp": 75,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:47",
+   "obtainable": true
+  },
+  "66": {
+   "dex": 149,
+   "name": "DRAGONITE",
+   "classification": "ordinary",
+   "base_species": 66,
+   "types": [
+    26,
+    2
+   ],
+   "stats": {
+    "hp": 91,
+    "atk": 134,
+    "def": 95,
+    "spd": 80,
+    "spc": 100
+   },
+   "catch_rate": 45,
+   "base_exp": 218,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:148",
+   "obtainable": true
+  },
+  "67": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "68": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "69": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "70": {
+   "dex": 84,
+   "name": "DODUO",
+   "classification": "ordinary",
+   "base_species": 70,
+   "types": [
+    4,
+    2
+   ],
+   "stats": {
+    "hp": 35,
+    "atk": 85,
+    "def": 45,
+    "spd": 75,
+    "spc": 35
+   },
+   "catch_rate": 190,
+   "base_exp": 96,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:83",
+   "obtainable": true
+  },
+  "71": {
+   "dex": 60,
+   "name": "POLIWAG",
+   "classification": "ordinary",
+   "base_species": 71,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 50,
+    "def": 40,
+    "spd": 90,
+    "spc": 40
+   },
+   "catch_rate": 255,
+   "base_exp": 77,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:59",
+   "obtainable": true
+  },
+  "72": {
+   "dex": 124,
+   "name": "JYNX",
+   "classification": "ordinary",
+   "base_species": 72,
+   "types": [
+    25,
+    24
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 50,
+    "def": 75,
+    "spd": 95,
+    "spc": 105
+   },
+   "catch_rate": 75,
+   "base_exp": 137,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:123",
+   "obtainable": true
+  },
+  "73": {
+   "dex": 146,
+   "name": "MOLTRES",
+   "classification": "ordinary",
+   "base_species": 73,
+   "types": [
+    20,
+    2
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 100,
+    "def": 90,
+    "spd": 90,
+    "spc": 125
+   },
+   "catch_rate": 25,
+   "base_exp": 217,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:145",
+   "obtainable": true
+  },
+  "74": {
+   "dex": 144,
+   "name": "ARTICUNO",
+   "classification": "ordinary",
+   "base_species": 74,
+   "types": [
+    25,
+    2
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 85,
+    "def": 100,
+    "spd": 85,
+    "spc": 125
+   },
+   "catch_rate": 25,
+   "base_exp": 215,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:143",
+   "obtainable": true
+  },
+  "75": {
+   "dex": 145,
+   "name": "ZAPDOS",
+   "classification": "ordinary",
+   "base_species": 75,
+   "types": [
+    23,
+    2
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 90,
+    "def": 85,
+    "spd": 100,
+    "spc": 125
+   },
+   "catch_rate": 25,
+   "base_exp": 216,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:144",
+   "obtainable": true
+  },
+  "76": {
+   "dex": 132,
+   "name": "DITTO",
+   "classification": "ordinary",
+   "base_species": 76,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 48,
+    "def": 48,
+    "spd": 48,
+    "spc": 48
+   },
+   "catch_rate": 45,
+   "base_exp": 95,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:131",
+   "obtainable": true
+  },
+  "77": {
+   "dex": 52,
+   "name": "MEOWTH",
+   "classification": "ordinary",
+   "base_species": 77,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 45,
+    "def": 35,
+    "spd": 90,
+    "spc": 40
+   },
+   "catch_rate": 255,
+   "base_exp": 69,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:51",
+   "obtainable": true
+  },
+  "78": {
+   "dex": 98,
+   "name": "KRABBY",
+   "classification": "ordinary",
+   "base_species": 78,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 105,
+    "def": 90,
+    "spd": 50,
+    "spc": 25
+   },
+   "catch_rate": 225,
+   "base_exp": 115,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:97",
+   "obtainable": true
+  },
+  "79": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "80": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "81": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "82": {
+   "dex": 37,
+   "name": "VULPIX",
+   "classification": "ordinary",
+   "base_species": 82,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 38,
+    "atk": 41,
+    "def": 40,
+    "spd": 65,
+    "spc": 65
+   },
+   "catch_rate": 190,
+   "base_exp": 63,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:36",
+   "obtainable": true
+  },
+  "83": {
+   "dex": 38,
+   "name": "NINETALES",
+   "classification": "ordinary",
+   "base_species": 83,
+   "types": [
+    20,
+    8
+   ],
+   "stats": {
+    "hp": 73,
+    "atk": 76,
+    "def": 75,
+    "spd": 100,
+    "spc": 100
+   },
+   "catch_rate": 75,
+   "base_exp": 178,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:37",
+   "obtainable": true
+  },
+  "84": {
+   "dex": 25,
+   "name": "PIKACHU",
+   "classification": "ordinary",
+   "base_species": 84,
+   "types": [
+    23,
+    23
+   ],
+   "stats": {
+    "hp": 35,
+    "atk": 55,
+    "def": 30,
+    "spd": 90,
+    "spc": 50
+   },
+   "catch_rate": 190,
+   "base_exp": 82,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:24",
+   "obtainable": true
+  },
+  "85": {
+   "dex": 26,
+   "name": "RAICHU",
+   "classification": "ordinary",
+   "base_species": 85,
+   "types": [
+    23,
+    23
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 85,
+    "def": 65,
+    "spd": 100,
+    "spc": 100
+   },
+   "catch_rate": 95,
+   "base_exp": 122,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:25",
+   "obtainable": true
+  },
+  "86": {
+   "dex": 26,
+   "name": "CHUNKY",
+   "classification": "spirit",
+   "base_species": 85,
+   "types": [
+    23,
+    18
+   ],
+   "stats": {
+    "hp": 225,
+    "atk": 85,
+    "def": 65,
+    "spd": 25,
+    "spc": 100
+   },
+   "catch_rate": 95,
+   "base_exp": 122,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "NonDex:7",
+   "obtainable": false
+  },
+  "87": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "88": {
+   "dex": 147,
+   "name": "DRATINI",
+   "classification": "ordinary",
+   "base_species": 88,
+   "types": [
+    26,
+    26
+   ],
+   "stats": {
+    "hp": 41,
+    "atk": 64,
+    "def": 45,
+    "spd": 50,
+    "spc": 50
+   },
+   "catch_rate": 45,
+   "base_exp": 67,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:146",
+   "obtainable": true
+  },
+  "89": {
+   "dex": 148,
+   "name": "DRAGONAIR",
+   "classification": "ordinary",
+   "base_species": 89,
+   "types": [
+    26,
+    26
+   ],
+   "stats": {
+    "hp": 61,
+    "atk": 84,
+    "def": 65,
+    "spd": 70,
+    "spc": 70
+   },
+   "catch_rate": 45,
+   "base_exp": 144,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:147",
+   "obtainable": true
+  },
+  "90": {
+   "dex": 140,
+   "name": "KABUTO",
+   "classification": "ordinary",
+   "base_species": 90,
+   "types": [
+    5,
+    7
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 80,
+    "def": 90,
+    "spd": 55,
+    "spc": 45
+   },
+   "catch_rate": 45,
+   "base_exp": 119,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:139",
+   "obtainable": true
+  },
+  "91": {
+   "dex": 141,
+   "name": "KABUTOPS",
+   "classification": "ordinary",
+   "base_species": 91,
+   "types": [
+    5,
+    7
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 115,
+    "def": 105,
+    "spd": 80,
+    "spc": 70
+   },
+   "catch_rate": 45,
+   "base_exp": 201,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:140",
+   "obtainable": true
+  },
+  "92": {
+   "dex": 116,
+   "name": "HORSEA",
+   "classification": "ordinary",
+   "base_species": 92,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 40,
+    "def": 70,
+    "spd": 60,
+    "spc": 70
+   },
+   "catch_rate": 225,
+   "base_exp": 83,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:115",
+   "obtainable": true
+  },
+  "93": {
+   "dex": 117,
+   "name": "SEADRA",
+   "classification": "ordinary",
+   "base_species": 93,
+   "types": [
+    21,
+    26
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 65,
+    "def": 95,
+    "spd": 85,
+    "spc": 120
+   },
+   "catch_rate": 95,
+   "base_exp": 155,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:116",
+   "obtainable": true
+  },
+  "94": {
+   "dex": 148,
+   "name": "DRAGONAIR",
+   "classification": "form",
+   "base_species": 89,
+   "types": [
+    26,
+    25
+   ],
+   "stats": {
+    "hp": 91,
+    "atk": 84,
+    "def": 75,
+    "spd": 80,
+    "spc": 130
+   },
+   "catch_rate": 45,
+   "base_exp": 218,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "NonDex:11",
+   "obtainable": true
+  },
+  "95": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "96": {
+   "dex": 27,
+   "name": "SANDSHREW",
+   "classification": "ordinary",
+   "base_species": 96,
+   "types": [
+    4,
+    0
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 75,
+    "def": 85,
+    "spd": 40,
+    "spc": 30
+   },
+   "catch_rate": 255,
+   "base_exp": 93,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:26",
+   "obtainable": true
+  },
+  "97": {
+   "dex": 28,
+   "name": "SANDSLASH",
+   "classification": "ordinary",
+   "base_species": 97,
+   "types": [
+    4,
+    0
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 105,
+    "def": 105,
+    "spd": 91,
+    "spc": 40
+   },
+   "catch_rate": 90,
+   "base_exp": 163,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:27",
+   "obtainable": true
+  },
+  "98": {
+   "dex": 138,
+   "name": "OMANYTE",
+   "classification": "ordinary",
+   "base_species": 98,
+   "types": [
+    5,
+    21
+   ],
+   "stats": {
+    "hp": 35,
+    "atk": 40,
+    "def": 100,
+    "spd": 35,
+    "spc": 90
+   },
+   "catch_rate": 45,
+   "base_exp": 120,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:137",
+   "obtainable": true
+  },
+  "99": {
+   "dex": 139,
+   "name": "OMASTAR",
+   "classification": "ordinary",
+   "base_species": 99,
+   "types": [
+    5,
+    21
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 60,
+    "def": 125,
+    "spd": 55,
+    "spc": 115
+   },
+   "catch_rate": 45,
+   "base_exp": 199,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:138",
+   "obtainable": true
+  },
+  "100": {
+   "dex": 39,
+   "name": "JIGGLYPUFF",
+   "classification": "ordinary",
+   "base_species": 100,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 115,
+    "atk": 45,
+    "def": 20,
+    "spd": 20,
+    "spc": 25
+   },
+   "catch_rate": 170,
+   "base_exp": 76,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:38",
+   "obtainable": true
+  },
+  "101": {
+   "dex": 40,
+   "name": "WIGGLYTUFF",
+   "classification": "ordinary",
+   "base_species": 101,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 140,
+    "atk": 80,
+    "def": 45,
+    "spd": 55,
+    "spc": 80
+   },
+   "catch_rate": 50,
+   "base_exp": 109,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:39",
+   "obtainable": true
+  },
+  "102": {
+   "dex": 133,
+   "name": "EEVEE",
+   "classification": "ordinary",
+   "base_species": 102,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 55,
+    "def": 50,
+    "spd": 55,
+    "spc": 65
+   },
+   "catch_rate": 150,
+   "base_exp": 92,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:132",
+   "obtainable": true
+  },
+  "103": {
+   "dex": 136,
+   "name": "FLAREON",
+   "classification": "ordinary",
+   "base_species": 103,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 130,
+    "def": 60,
+    "spd": 65,
+    "spc": 110
+   },
+   "catch_rate": 65,
+   "base_exp": 198,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:135",
+   "obtainable": true
+  },
+  "104": {
+   "dex": 135,
+   "name": "JOLTEON",
+   "classification": "ordinary",
+   "base_species": 104,
+   "types": [
+    23,
+    23
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 65,
+    "def": 60,
+    "spd": 130,
+    "spc": 110
+   },
+   "catch_rate": 65,
+   "base_exp": 197,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:134",
+   "obtainable": true
+  },
+  "105": {
+   "dex": 134,
+   "name": "VAPOREON",
+   "classification": "ordinary",
+   "base_species": 105,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 130,
+    "atk": 65,
+    "def": 60,
+    "spd": 65,
+    "spc": 110
+   },
+   "catch_rate": 65,
+   "base_exp": 196,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:133",
+   "obtainable": true
+  },
+  "106": {
+   "dex": 66,
+   "name": "MACHOP",
+   "classification": "ordinary",
+   "base_species": 106,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 80,
+    "def": 50,
+    "spd": 35,
+    "spc": 35
+   },
+   "catch_rate": 180,
+   "base_exp": 88,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:65",
+   "obtainable": true
+  },
+  "107": {
+   "dex": 41,
+   "name": "ZUBAT",
+   "classification": "ordinary",
+   "base_species": 107,
+   "types": [
+    3,
+    2
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 45,
+    "def": 35,
+    "spd": 55,
+    "spc": 40
+   },
+   "catch_rate": 255,
+   "base_exp": 54,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:40",
+   "obtainable": true
+  },
+  "108": {
+   "dex": 23,
+   "name": "EKANS",
+   "classification": "ordinary",
+   "base_species": 108,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 35,
+    "atk": 60,
+    "def": 44,
+    "spd": 55,
+    "spc": 40
+   },
+   "catch_rate": 255,
+   "base_exp": 90,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:22",
+   "obtainable": true
+  },
+  "109": {
+   "dex": 46,
+   "name": "PARAS",
+   "classification": "ordinary",
+   "base_species": 109,
+   "types": [
+    7,
+    22
+   ],
+   "stats": {
+    "hp": 35,
+    "atk": 70,
+    "def": 55,
+    "spd": 25,
+    "spc": 55
+   },
+   "catch_rate": 190,
+   "base_exp": 70,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:45",
+   "obtainable": true
+  },
+  "110": {
+   "dex": 61,
+   "name": "POLIWHIRL",
+   "classification": "ordinary",
+   "base_species": 110,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 65,
+    "def": 65,
+    "spd": 90,
+    "spc": 50
+   },
+   "catch_rate": 120,
+   "base_exp": 131,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:60",
+   "obtainable": true
+  },
+  "111": {
+   "dex": 62,
+   "name": "POLIWRATH",
+   "classification": "ordinary",
+   "base_species": 111,
+   "types": [
+    21,
+    1
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 85,
+    "def": 95,
+    "spd": 70,
+    "spc": 80
+   },
+   "catch_rate": 65,
+   "base_exp": 185,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:61",
+   "obtainable": true
+  },
+  "112": {
+   "dex": 13,
+   "name": "WEEDLE",
+   "classification": "ordinary",
+   "base_species": 112,
+   "types": [
+    7,
+    3
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 35,
+    "def": 30,
+    "spd": 50,
+    "spc": 20
+   },
+   "catch_rate": 255,
+   "base_exp": 52,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:12",
+   "obtainable": true
+  },
+  "113": {
+   "dex": 14,
+   "name": "KAKUNA",
+   "classification": "ordinary",
+   "base_species": 113,
+   "types": [
+    7,
+    3
+   ],
+   "stats": {
+    "hp": 45,
+    "atk": 25,
+    "def": 50,
+    "spd": 35,
+    "spc": 25
+   },
+   "catch_rate": 120,
+   "base_exp": 85,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:13",
+   "obtainable": true
+  },
+  "114": {
+   "dex": 15,
+   "name": "BEEDRILL",
+   "classification": "ordinary",
+   "base_species": 114,
+   "types": [
+    7,
+    3
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 92,
+    "def": 75,
+    "spd": 95,
+    "spc": 50
+   },
+   "catch_rate": 105,
+   "base_exp": 159,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:14",
+   "obtainable": true
+  },
+  "115": {
+   "dex": 40,
+   "name": "PAINLESS",
+   "classification": "spirit",
+   "base_species": 101,
+   "types": [
+    0,
+    8
+   ],
+   "stats": {
+    "hp": 140,
+    "atk": 80,
+    "def": 45,
+    "spd": 55,
+    "spc": 80
+   },
+   "catch_rate": 50,
+   "base_exp": 109,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "NonDex:8",
+   "obtainable": false
+  },
+  "116": {
+   "dex": 85,
+   "name": "DODRIO",
+   "classification": "ordinary",
+   "base_species": 116,
+   "types": [
+    4,
+    2
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 115,
+    "def": 70,
+    "spd": 105,
+    "spc": 60
+   },
+   "catch_rate": 45,
+   "base_exp": 158,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:84",
+   "obtainable": true
+  },
+  "117": {
+   "dex": 57,
+   "name": "PRIMEAPE",
+   "classification": "ordinary",
+   "base_species": 117,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 115,
+    "def": 60,
+    "spd": 95,
+    "spc": 60
+   },
+   "catch_rate": 75,
+   "base_exp": 149,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:56",
+   "obtainable": true
+  },
+  "118": {
+   "dex": 51,
+   "name": "DUGTRIO",
+   "classification": "ordinary",
+   "base_species": 118,
+   "types": [
+    4,
+    4
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 95,
+    "def": 50,
+    "spd": 120,
+    "spc": 70
+   },
+   "catch_rate": 50,
+   "base_exp": 153,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:50",
+   "obtainable": true
+  },
+  "119": {
+   "dex": 49,
+   "name": "VENOMOTH",
+   "classification": "ordinary",
+   "base_species": 119,
+   "types": [
+    7,
+    3
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 85,
+    "def": 70,
+    "spd": 90,
+    "spc": 90
+   },
+   "catch_rate": 75,
+   "base_exp": 138,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:48",
+   "obtainable": true
+  },
+  "120": {
+   "dex": 87,
+   "name": "DEWGONG",
+   "classification": "ordinary",
+   "base_species": 120,
+   "types": [
+    21,
+    25
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 70,
+    "def": 80,
+    "spd": 90,
+    "spc": 95
+   },
+   "catch_rate": 75,
+   "base_exp": 176,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:86",
+   "obtainable": true
+  },
+  "121": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "122": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "123": {
+   "dex": 10,
+   "name": "CATERPIE",
+   "classification": "ordinary",
+   "base_species": 123,
+   "types": [
+    7,
+    7
+   ],
+   "stats": {
+    "hp": 45,
+    "atk": 30,
+    "def": 35,
+    "spd": 45,
+    "spc": 20
+   },
+   "catch_rate": 255,
+   "base_exp": 53,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:9",
+   "obtainable": true
+  },
+  "124": {
+   "dex": 11,
+   "name": "METAPOD",
+   "classification": "ordinary",
+   "base_species": 124,
+   "types": [
+    7,
+    7
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 20,
+    "def": 55,
+    "spd": 30,
+    "spc": 25
+   },
+   "catch_rate": 120,
+   "base_exp": 85,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:10",
+   "obtainable": true
+  },
+  "125": {
+   "dex": 12,
+   "name": "BUTTERFREE",
+   "classification": "ordinary",
+   "base_species": 125,
+   "types": [
+    7,
+    24
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 25,
+    "def": 75,
+    "spd": 95,
+    "spc": 92
+   },
+   "catch_rate": 105,
+   "base_exp": 160,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:11",
+   "obtainable": true
+  },
+  "126": {
+   "dex": 68,
+   "name": "MACHAMP",
+   "classification": "ordinary",
+   "base_species": 126,
+   "types": [
+    1,
+    1
+   ],
+   "stats": {
+    "hp": 120,
+    "atk": 130,
+    "def": 80,
+    "spd": 55,
+    "spc": 65
+   },
+   "catch_rate": 75,
+   "base_exp": 193,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:67",
+   "obtainable": true
+  },
+  "127": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "128": {
+   "dex": 55,
+   "name": "GOLDUCK",
+   "classification": "ordinary",
+   "base_species": 128,
+   "types": [
+    21,
+    24
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 82,
+    "def": 78,
+    "spd": 85,
+    "spc": 95
+   },
+   "catch_rate": 75,
+   "base_exp": 174,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:54",
+   "obtainable": true
+  },
+  "129": {
+   "dex": 97,
+   "name": "HYPNO",
+   "classification": "ordinary",
+   "base_species": 129,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 73,
+    "def": 70,
+    "spd": 72,
+    "spc": 115
+   },
+   "catch_rate": 75,
+   "base_exp": 165,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:96",
+   "obtainable": true
+  },
+  "130": {
+   "dex": 42,
+   "name": "GOLBAT",
+   "classification": "ordinary",
+   "base_species": 130,
+   "types": [
+    3,
+    2
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 95,
+    "def": 75,
+    "spd": 101,
+    "spc": 75
+   },
+   "catch_rate": 90,
+   "base_exp": 171,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:41",
+   "obtainable": true
+  },
+  "131": {
+   "dex": 150,
+   "name": "MEWTWO",
+   "classification": "ordinary",
+   "base_species": 131,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 106,
+    "atk": 110,
+    "def": 90,
+    "spd": 130,
+    "spc": 154
+   },
+   "catch_rate": 25,
+   "base_exp": 220,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "BaseStats:149",
+   "obtainable": true
+  },
+  "132": {
+   "dex": 143,
+   "name": "SNORLAX",
+   "classification": "ordinary",
+   "base_species": 132,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 160,
+    "atk": 110,
+    "def": 65,
+    "spd": 30,
+    "spc": 65
+   },
+   "catch_rate": 25,
+   "base_exp": 154,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:142",
+   "obtainable": true
+  },
+  "133": {
+   "dex": 129,
+   "name": "MAGIKARP",
+   "classification": "ordinary",
+   "base_species": 133,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 20,
+    "atk": 10,
+    "def": 55,
+    "spd": 80,
+    "spc": 20
+   },
+   "catch_rate": 255,
+   "base_exp": 20,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:128",
+   "obtainable": true
+  },
+  "134": {
+   "dex": 42,
+   "name": "THE MAW",
+   "classification": "spirit",
+   "base_species": 130,
+   "types": [
+    8,
+    2
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 250,
+    "def": 75,
+    "spd": 250,
+    "spc": 75
+   },
+   "catch_rate": 90,
+   "base_exp": 171,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "NonDex:10",
+   "obtainable": false
+  },
+  "135": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "136": {
+   "dex": 89,
+   "name": "MUK",
+   "classification": "ordinary",
+   "base_species": 136,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 135,
+    "atk": 105,
+    "def": 75,
+    "spd": 50,
+    "spc": 65
+   },
+   "catch_rate": 75,
+   "base_exp": 157,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:88",
+   "obtainable": true
+  },
+  "137": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "138": {
+   "dex": 99,
+   "name": "KINGLER",
+   "classification": "ordinary",
+   "base_species": 138,
+   "types": [
+    21,
+    4
+   ],
+   "stats": {
+    "hp": 75,
+    "atk": 130,
+    "def": 115,
+    "spd": 75,
+    "spc": 50
+   },
+   "catch_rate": 60,
+   "base_exp": 206,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:98",
+   "obtainable": true
+  },
+  "139": {
+   "dex": 91,
+   "name": "CLOYSTER",
+   "classification": "ordinary",
+   "base_species": 139,
+   "types": [
+    21,
+    25
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 95,
+    "def": 180,
+    "spd": 70,
+    "spc": 85
+   },
+   "catch_rate": 70,
+   "base_exp": 203,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:90",
+   "obtainable": true
+  },
+  "140": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "141": {
+   "dex": 101,
+   "name": "ELECTRODE",
+   "classification": "ordinary",
+   "base_species": 141,
+   "types": [
+    23,
+    20
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 50,
+    "def": 70,
+    "spd": 135,
+    "spc": 105
+   },
+   "catch_rate": 60,
+   "base_exp": 150,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:100",
+   "obtainable": true
+  },
+  "142": {
+   "dex": 36,
+   "name": "CLEFABLE",
+   "classification": "ordinary",
+   "base_species": 142,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 95,
+    "atk": 70,
+    "def": 73,
+    "spd": 60,
+    "spc": 105
+   },
+   "catch_rate": 65,
+   "base_exp": 129,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:35",
+   "obtainable": true
+  },
+  "143": {
+   "dex": 110,
+   "name": "WEEZING",
+   "classification": "ordinary",
+   "base_species": 143,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 85,
+    "atk": 90,
+    "def": 120,
+    "spd": 60,
+    "spc": 85
+   },
+   "catch_rate": 70,
+   "base_exp": 173,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:109",
+   "obtainable": true
+  },
+  "144": {
+   "dex": 53,
+   "name": "PERSIAN",
+   "classification": "ordinary",
+   "base_species": 144,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 100,
+    "def": 60,
+    "spd": 115,
+    "spc": 65
+   },
+   "catch_rate": 90,
+   "base_exp": 148,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:52",
+   "obtainable": true
+  },
+  "145": {
+   "dex": 105,
+   "name": "MAROWAK",
+   "classification": "ordinary",
+   "base_species": 145,
+   "types": [
+    4,
+    8
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 125,
+    "def": 110,
+    "spd": 45,
+    "spc": 60
+   },
+   "catch_rate": 75,
+   "base_exp": 124,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:104",
+   "obtainable": true
+  },
+  "146": {
+   "dex": 110,
+   "name": "WEEZING",
+   "classification": "form",
+   "base_species": 143,
+   "types": [
+    3,
+    18
+   ],
+   "stats": {
+    "hp": 85,
+    "atk": 90,
+    "def": 120,
+    "spd": 60,
+    "spc": 85
+   },
+   "catch_rate": 70,
+   "base_exp": 173,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "NonDex:5",
+   "obtainable": true
+  },
+  "147": {
+   "dex": 93,
+   "name": "HAUNTER",
+   "classification": "ordinary",
+   "base_species": 147,
+   "types": [
+    8,
+    3
+   ],
+   "stats": {
+    "hp": 45,
+    "atk": 50,
+    "def": 45,
+    "spd": 95,
+    "spc": 115
+   },
+   "catch_rate": 90,
+   "base_exp": 126,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:92",
+   "obtainable": true
+  },
+  "148": {
+   "dex": 63,
+   "name": "ABRA",
+   "classification": "ordinary",
+   "base_species": 148,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 25,
+    "atk": 20,
+    "def": 15,
+    "spd": 90,
+    "spc": 105
+   },
+   "catch_rate": 200,
+   "base_exp": 73,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:62",
+   "obtainable": true
+  },
+  "149": {
+   "dex": 65,
+   "name": "ALAKAZAM",
+   "classification": "ordinary",
+   "base_species": 149,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 55,
+    "atk": 50,
+    "def": 45,
+    "spd": 120,
+    "spc": 135
+   },
+   "catch_rate": 50,
+   "base_exp": 186,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:64",
+   "obtainable": true
+  },
+  "150": {
+   "dex": 17,
+   "name": "PIDGEOTTO",
+   "classification": "ordinary",
+   "base_species": 150,
+   "types": [
+    0,
+    2
+   ],
+   "stats": {
+    "hp": 63,
+    "atk": 60,
+    "def": 55,
+    "spd": 71,
+    "spc": 50
+   },
+   "catch_rate": 120,
+   "base_exp": 113,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:16",
+   "obtainable": true
+  },
+  "151": {
+   "dex": 18,
+   "name": "PIDGEOT",
+   "classification": "ordinary",
+   "base_species": 151,
+   "types": [
+    0,
+    2
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 90,
+    "def": 75,
+    "spd": 91,
+    "spc": 70
+   },
+   "catch_rate": 65,
+   "base_exp": 172,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:17",
+   "obtainable": true
+  },
+  "152": {
+   "dex": 121,
+   "name": "STARMIE",
+   "classification": "ordinary",
+   "base_species": 152,
+   "types": [
+    21,
+    24
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 75,
+    "def": 85,
+    "spd": 115,
+    "spc": 100
+   },
+   "catch_rate": 60,
+   "base_exp": 207,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:120",
+   "obtainable": true
+  },
+  "153": {
+   "dex": 1,
+   "name": "BULBASAUR",
+   "classification": "ordinary",
+   "base_species": 153,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 45,
+    "atk": 49,
+    "def": 49,
+    "spd": 45,
+    "spc": 65
+   },
+   "catch_rate": 45,
+   "base_exp": 64,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:0",
+   "obtainable": true
+  },
+  "154": {
+   "dex": 3,
+   "name": "VENUSAUR",
+   "classification": "ordinary",
+   "base_species": 154,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 82,
+    "def": 83,
+    "spd": 80,
+    "spc": 100
+   },
+   "catch_rate": 45,
+   "base_exp": 208,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:2",
+   "obtainable": true
+  },
+  "155": {
+   "dex": 73,
+   "name": "TENTACRUEL",
+   "classification": "ordinary",
+   "base_species": 155,
+   "types": [
+    21,
+    3
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 70,
+    "def": 65,
+    "spd": 100,
+    "spc": 120
+   },
+   "catch_rate": 60,
+   "base_exp": 205,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:72",
+   "obtainable": true
+  },
+  "156": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "157": {
+   "dex": 118,
+   "name": "GOLDEEN",
+   "classification": "ordinary",
+   "base_species": 157,
+   "types": [
+    21,
+    0
+   ],
+   "stats": {
+    "hp": 45,
+    "atk": 67,
+    "def": 60,
+    "spd": 63,
+    "spc": 50
+   },
+   "catch_rate": 225,
+   "base_exp": 111,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:117",
+   "obtainable": true
+  },
+  "158": {
+   "dex": 119,
+   "name": "SEAKING",
+   "classification": "ordinary",
+   "base_species": 158,
+   "types": [
+    21,
+    0
+   ],
+   "stats": {
+    "hp": 90,
+    "atk": 102,
+    "def": 65,
+    "spd": 68,
+    "spc": 95
+   },
+   "catch_rate": 90,
+   "base_exp": 170,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:118",
+   "obtainable": true
+  },
+  "159": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "160": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "161": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "162": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "unused",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "163": {
+   "dex": 77,
+   "name": "PONYTA",
+   "classification": "ordinary",
+   "base_species": 163,
+   "types": [
+    20,
+    0
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 85,
+    "def": 55,
+    "spd": 90,
+    "spc": 65
+   },
+   "catch_rate": 190,
+   "base_exp": 152,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:76",
+   "obtainable": true
+  },
+  "164": {
+   "dex": 78,
+   "name": "RAPIDASH",
+   "classification": "ordinary",
+   "base_species": 164,
+   "types": [
+    20,
+    0
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 100,
+    "def": 70,
+    "spd": 105,
+    "spc": 90
+   },
+   "catch_rate": 60,
+   "base_exp": 192,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:77",
+   "obtainable": true
+  },
+  "165": {
+   "dex": 19,
+   "name": "RATTATA",
+   "classification": "ordinary",
+   "base_species": 165,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 30,
+    "atk": 56,
+    "def": 35,
+    "spd": 72,
+    "spc": 25
+   },
+   "catch_rate": 255,
+   "base_exp": 57,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:18",
+   "obtainable": true
+  },
+  "166": {
+   "dex": 20,
+   "name": "RATICATE",
+   "classification": "ordinary",
+   "base_species": 166,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 101,
+    "def": 60,
+    "spd": 97,
+    "spc": 50
+   },
+   "catch_rate": 125,
+   "base_exp": 116,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:19",
+   "obtainable": true
+  },
+  "167": {
+   "dex": 33,
+   "name": "NIDORINO",
+   "classification": "ordinary",
+   "base_species": 167,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 61,
+    "atk": 72,
+    "def": 57,
+    "spd": 65,
+    "spc": 55
+   },
+   "catch_rate": 120,
+   "base_exp": 118,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:32",
+   "obtainable": true
+  },
+  "168": {
+   "dex": 30,
+   "name": "NIDORINA",
+   "classification": "ordinary",
+   "base_species": 168,
+   "types": [
+    3,
+    3
+   ],
+   "stats": {
+    "hp": 70,
+    "atk": 62,
+    "def": 67,
+    "spd": 56,
+    "spc": 55
+   },
+   "catch_rate": 120,
+   "base_exp": 117,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:29",
+   "obtainable": true
+  },
+  "169": {
+   "dex": 74,
+   "name": "GEODUDE",
+   "classification": "ordinary",
+   "base_species": 169,
+   "types": [
+    5,
+    4
+   ],
+   "stats": {
+    "hp": 40,
+    "atk": 80,
+    "def": 100,
+    "spd": 20,
+    "spc": 30
+   },
+   "catch_rate": 255,
+   "base_exp": 86,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:73",
+   "obtainable": true
+  },
+  "170": {
+   "dex": 137,
+   "name": "PORYGON",
+   "classification": "ordinary",
+   "base_species": 170,
+   "types": [
+    0,
+    0
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 80,
+    "def": 70,
+    "spd": 80,
+    "spc": 120
+   },
+   "catch_rate": 45,
+   "base_exp": 130,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "BaseStats:136",
+   "obtainable": true
+  },
+  "171": {
+   "dex": 142,
+   "name": "AERODACTYL",
+   "classification": "ordinary",
+   "base_species": 171,
+   "types": [
+    5,
+    2
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 105,
+    "def": 65,
+    "spd": 130,
+    "spc": 60
+   },
+   "catch_rate": 45,
+   "base_exp": 202,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:141",
+   "obtainable": true
+  },
+  "172": {
+   "dex": 95,
+   "name": "ONIX",
+   "classification": "form",
+   "base_species": 34,
+   "types": [
+    9,
+    4
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 85,
+    "def": 180,
+    "spd": 80,
+    "spc": 75
+   },
+   "catch_rate": 45,
+   "base_exp": 108,
+   "growth_rate": "GROWTH_FAST",
+   "stats_source": "NonDex:3",
+   "obtainable": true
+  },
+  "173": {
+   "dex": 81,
+   "name": "MAGNEMITE",
+   "classification": "ordinary",
+   "base_species": 173,
+   "types": [
+    23,
+    23
+   ],
+   "stats": {
+    "hp": 25,
+    "atk": 35,
+    "def": 70,
+    "spd": 45,
+    "spc": 95
+   },
+   "catch_rate": 190,
+   "base_exp": 89,
+   "growth_rate": "GROWTH_MEDIUM_FAST",
+   "stats_source": "BaseStats:80",
+   "obtainable": true
+  },
+  "174": {
+   "dex": 150,
+   "name": "MEWTWO",
+   "classification": "form",
+   "base_species": 131,
+   "types": [
+    24,
+    24
+   ],
+   "stats": {
+    "hp": 130,
+    "atk": 110,
+    "def": 130,
+    "spd": 115,
+    "spc": 154
+   },
+   "catch_rate": 25,
+   "base_exp": 220,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "NonDex:1",
+   "obtainable": true
+  },
+  "175": {
+   "dex": 93,
+   "name": "HAUNTER",
+   "classification": "form",
+   "base_species": 147,
+   "types": [
+    8,
+    3
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 65,
+    "def": 60,
+    "spd": 110,
+    "spc": 130
+   },
+   "catch_rate": 45,
+   "base_exp": 190,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "NonDex:2",
+   "obtainable": true
+  },
+  "176": {
+   "dex": 4,
+   "name": "CHARMANDER",
+   "classification": "ordinary",
+   "base_species": 176,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 39,
+    "atk": 52,
+    "def": 43,
+    "spd": 65,
+    "spc": 50
+   },
+   "catch_rate": 45,
+   "base_exp": 65,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:3",
+   "obtainable": true
+  },
+  "177": {
+   "dex": 7,
+   "name": "SQUIRTLE",
+   "classification": "ordinary",
+   "base_species": 177,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 44,
+    "atk": 48,
+    "def": 65,
+    "spd": 43,
+    "spc": 50
+   },
+   "catch_rate": 45,
+   "base_exp": 66,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:6",
+   "obtainable": true
+  },
+  "178": {
+   "dex": 5,
+   "name": "CHARMELEON",
+   "classification": "ordinary",
+   "base_species": 178,
+   "types": [
+    20,
+    20
+   ],
+   "stats": {
+    "hp": 58,
+    "atk": 64,
+    "def": 58,
+    "spd": 80,
+    "spc": 65
+   },
+   "catch_rate": 45,
+   "base_exp": 142,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:4",
+   "obtainable": true
+  },
+  "179": {
+   "dex": 8,
+   "name": "WARTORTLE",
+   "classification": "ordinary",
+   "base_species": 179,
+   "types": [
+    21,
+    21
+   ],
+   "stats": {
+    "hp": 59,
+    "atk": 63,
+    "def": 80,
+    "spd": 58,
+    "spc": 65
+   },
+   "catch_rate": 45,
+   "base_exp": 143,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:7",
+   "obtainable": true
+  },
+  "180": {
+   "dex": 6,
+   "name": "CHARIZARD",
+   "classification": "ordinary",
+   "base_species": 180,
+   "types": [
+    20,
+    2
+   ],
+   "stats": {
+    "hp": 78,
+    "atk": 84,
+    "def": 78,
+    "spd": 100,
+    "spc": 85
+   },
+   "catch_rate": 45,
+   "base_exp": 209,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:5",
+   "obtainable": true
+  },
+  "181": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "missingno",
+   "base_species": null,
+   "types": [
+    8,
+    0
+   ],
+   "stats": {
+    "hp": 255,
+    "atk": 150,
+    "def": 150,
+    "spd": 5,
+    "spc": 5
+   },
+   "catch_rate": 3,
+   "base_exp": 255,
+   "growth_rate": "GROWTH_SLOW",
+   "stats_source": "NonDex:0",
+   "obtainable": true
+  },
+  "182": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "picture_only",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "183": {
+   "dex": 0,
+   "name": "MISSINGNO.",
+   "classification": "picture_only",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "184": {
+   "dex": 0,
+   "name": "GHOST",
+   "classification": "picture_only",
+   "base_species": null,
+   "types": null,
+   "stats": null,
+   "catch_rate": null,
+   "base_exp": null,
+   "growth_rate": null,
+   "stats_source": null,
+   "obtainable": false
+  },
+  "185": {
+   "dex": 43,
+   "name": "ODDISH",
+   "classification": "ordinary",
+   "base_species": 185,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 45,
+    "atk": 50,
+    "def": 55,
+    "spd": 30,
+    "spc": 75
+   },
+   "catch_rate": 255,
+   "base_exp": 78,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:42",
+   "obtainable": true
+  },
+  "186": {
+   "dex": 44,
+   "name": "GLOOM",
+   "classification": "ordinary",
+   "base_species": 186,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 60,
+    "atk": 65,
+    "def": 70,
+    "spd": 40,
+    "spc": 85
+   },
+   "catch_rate": 120,
+   "base_exp": 132,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:43",
+   "obtainable": true
+  },
+  "187": {
+   "dex": 45,
+   "name": "VILEPLUME",
+   "classification": "ordinary",
+   "base_species": 187,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 105,
+    "atk": 80,
+    "def": 85,
+    "spd": 50,
+    "spc": 115
+   },
+   "catch_rate": 45,
+   "base_exp": 184,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:44",
+   "obtainable": true
+  },
+  "188": {
+   "dex": 69,
+   "name": "BELLSPROUT",
+   "classification": "ordinary",
+   "base_species": 188,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 50,
+    "atk": 75,
+    "def": 35,
+    "spd": 40,
+    "spc": 70
+   },
+   "catch_rate": 255,
+   "base_exp": 84,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:68",
+   "obtainable": true
+  },
+  "189": {
+   "dex": 70,
+   "name": "WEEPINBELL",
+   "classification": "ordinary",
+   "base_species": 189,
+   "types": [
+    22,
+    3
+   ],
+   "stats": {
+    "hp": 65,
+    "atk": 90,
+    "def": 50,
+    "spd": 55,
+    "spc": 85
+   },
+   "catch_rate": 120,
+   "base_exp": 151,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:69",
+   "obtainable": true
+  },
+  "190": {
+   "dex": 71,
+   "name": "VICTREEBEL",
+   "classification": "ordinary",
+   "base_species": 190,
+   "types": [
+    22,
+    26
+   ],
+   "stats": {
+    "hp": 80,
+    "atk": 105,
+    "def": 65,
+    "spd": 70,
+    "spc": 100
+   },
+   "catch_rate": 45,
+   "base_exp": 191,
+   "growth_rate": "GROWTH_MEDIUM_SLOW",
+   "stats_source": "BaseStats:70",
+   "obtainable": true
+  }
+ },
+ "transform_edges": [
+  {
+   "from": 51,
+   "to": 52,
+   "site": "CinnabarVolcanoWest",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 34,
+   "to": 172,
+   "site": "DiamondMine",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 175,
+   "to": 14,
+   "site": "LavenderCuboneHouse",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 14,
+   "to": 175,
+   "site": "PokemonTowerB1F",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 145,
+   "to": 17,
+   "site": "PokemonTowerB1F",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 54,
+   "to": 56,
+   "site": "PowerPlant",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 89,
+   "to": 94,
+   "site": "SeafoamIslands1F",
+   "trigger": "script",
+   "bidirectional": false
+  },
+  {
+   "from": 131,
+   "to": 174,
+   "site": "SecretLab",
+   "trigger": "script",
+   "bidirectional": true
+  },
+  {
+   "from": 143,
+   "to": 146,
+   "site": "SilphCo1F",
+   "trigger": "script",
+   "bidirectional": false
+  }
+ ]
+}

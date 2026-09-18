@@ -22,16 +22,29 @@ Each entry: {id, name, type, power, accuracy, pp, split, effect_chance?}
 
 import json
 import os
+import re
+import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GEN1_OUT = os.path.join(REPO_ROOT, "data", "games", "gen1_rby", "moves.json")
 GEN2_OUT = os.path.join(REPO_ROOT, "data", "games", "gen2_crystal", "moves.json")
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gen1_foundation as fnd  # noqa: E402
 
 # Gen 1/2 type-based physical/special split. Gen 2 adds DARK (special) and STEEL (physical).
 _PHYSICAL_TYPES_GEN1 = {"NORMAL", "FIGHTING", "FLYING", "POISON", "GROUND", "ROCK", "BUG", "GHOST"}
 _SPECIAL_TYPES_GEN1 = {"FIRE", "WATER", "GRASS", "ELECTRIC", "ICE", "PSYCHIC", "DRAGON"}
 _PHYSICAL_TYPES_GEN2 = _PHYSICAL_TYPES_GEN1 | {"STEEL"}
 _SPECIAL_TYPES_GEN2 = _SPECIAL_TYPES_GEN1 | {"DARK"}
+
+# pureRGB's three new move-type assignments (data/moves/moves.asm: BONEMERANG ->
+# BONEMERANG_TYPE, TRI_ATTACK/CONVERSION -> TRI, STRUGGLE -> TYPELESS; docs/purergb/
+# PLAN.md S3.3 new type ids). TRI_ATTACK's own source comment states "uses SPECIAL
+# stat" (fact, not a guess); BONEMERANG_TYPE and TYPELESS are mechanically Ground-like
+# and Normal-like recoil attacks respectively, both physical in every other gen.
+_PHYSICAL_TYPES_PURERGB = _PHYSICAL_TYPES_GEN1 | {"BONEMERANG", "TYPELESS"}
+_SPECIAL_TYPES_PURERGB = _SPECIAL_TYPES_GEN1 | {"TRI"}
 
 
 def normalize_type(raw: str) -> str:
@@ -546,7 +559,141 @@ def build_entry_gen2(idx, internal, power, type_, acc, pp, eff_chance):
     }
 
 
+# pureRGB display-name renames (docs/purergb/PLAN.md S11.2 A10, `data/moves/names.asm`),
+# keyed by move id -- the internal/pret name (e.g. RAZOR_WIND) is unchanged, only what
+# the player sees changes.
+_PURERGB_RENAMES = {
+    0x0D: "ROOST", 0x15: "FILTHY SLAM", 0x24: "HEAT RUSH", 0x44: "DRAIN PUNCH",
+    0x84: "SIPHON SNAG", 0x86: "FIREWALL", 0x9A: "DUST CLAW",
+}
+
+_MOVE_MACRO_RE = re.compile(
+    r"^\s*move\s+(\w+),\s*\w+,\s*(\d+),\s*(\w+),\s*(\d+),\s*(\d+)")
+
+
+def parse_purergb_moves_asm(text: str) -> list[dict]:
+    """[{internal_name, power, type, accuracy, pp}, ...] in move-id order (1..165)."""
+    out = []
+    for raw in text.splitlines():
+        m = _MOVE_MACRO_RE.match(raw.split(";", 1)[0])
+        if m:
+            name, power, type_, acc, pp = m.groups()
+            out.append({"internal_name": name, "power": int(power), "type": type_,
+                        "accuracy": int(acc), "pp": int(pp)})
+    return out
+
+
+def parse_purergb_move_names(text: str) -> list[str]:
+    """Display name in `MoveNameJumpTable` order, from the `XxxName: db "TEXT@"` labels."""
+    names = []
+    label = None
+    for raw in text.splitlines():
+        if label and (m := re.match(r'^\s*db\s+"([^"@]*)@?"', raw)):
+            names.append(m.group(1))
+            label = None
+            continue
+        if re.match(r"^\w+Name:$", raw.strip()):
+            label = raw.strip()
+    return names
+
+
+def build_purergb_moves() -> dict:
+    """Read `Moves` (bank $0E, 165 x 6-byte records) + `MoveNameJumpTable` names from
+    the built ROM, cross-checked against `data/moves/moves.asm` / `data/moves/names.asm`
+    (docs/purergb/PLAN.md S11.2 A6/A10). Same per-entry schema as the vanilla file
+    (PACK_SCHEMAS.md S10.1: "no pureRGB-specific schema change identified").
+    """
+    moves_src = parse_purergb_moves_asm(fnd.read_source("purergb", "data/moves/moves.asm"))
+    if len(moves_src) != 165:
+        raise SystemExit(f"data/moves/moves.asm: expected 165 move rows, parsed {len(moves_src)}")
+    names_src = parse_purergb_move_names(fnd.read_source("purergb", "data/moves/names.asm"))
+    if len(names_src) != 165:
+        raise SystemExit(f"data/moves/names.asm: expected 165 names, parsed {len(names_src)}")
+
+    titles = list(fnd.foundation("purergb")["titles"])
+    per_title_records = {}
+    for title in titles:
+        syms = fnd.parse_sym(fnd.sym_path("purergb", title))
+        rom = fnd.rom_path("purergb", title).read_bytes()
+        moves_flat = fnd.flat(*syms["Moves"])
+        recs = []
+        for i in range(165):
+            anim, effect, power, type_id, acc, pp = rom[moves_flat + i * 6:moves_flat + i * 6 + 6]
+            recs.append((power, type_id, acc, pp))
+        per_title_records[title] = recs
+    mismatched_titles = [t for t in titles[1:] if per_title_records[t] != per_title_records[titles[0]]]
+    if mismatched_titles:
+        raise SystemExit(f"Moves table disagrees between titles: {mismatched_titles}")
+
+    type_names = {}  # id -> constant name, from constants/type_constants.asm
+    value, started = 0, False
+    for raw in fnd.read_source("purergb", "constants/type_constants.asm").splitlines():
+        line = raw.split(";", 1)[0].strip()
+        if line == "const_def":
+            started = True
+            continue
+        if not started:
+            continue
+        if m := re.match(r"^const\s+(\w+)\s*$", line):
+            type_names[value] = m.group(1)
+            value += 1
+        elif m := re.match(r"^const_next\s+(\d+)\s*$", line):
+            value = int(m.group(1))
+        elif line.startswith("DEF NUM_TYPES"):
+            break
+
+    disagreements = []
+    for i, src in enumerate(moves_src):
+        rom_power, rom_type_id, rom_acc_byte, rom_pp = per_title_records[titles[0]][i]
+        src_type_id = next(tid for tid, n in type_names.items() if n == src["type"])
+        # `\5 percent` in the `move` macro pre-scales the human percent to the 0-255
+        # byte the RNG check compares against (`rom_byte = (percent * 255) // 100`,
+        # confirmed against every sampled value); the JSON keeps plain percent.
+        expected_acc_byte = (src["accuracy"] * 255) // 100
+        if (rom_power, rom_type_id, rom_acc_byte, rom_pp) != (src["power"], src_type_id, expected_acc_byte, src["pp"]):
+            disagreements.append(
+                f"move id {i + 1} ({src['internal_name']}): ROM=(power={rom_power},type={rom_type_id},"
+                f"acc_byte={rom_acc_byte},pp={rom_pp}) source=(power={src['power']},type={src_type_id},"
+                f"acc_byte={expected_acc_byte},pp={src['pp']})")
+    if disagreements:
+        raise SystemExit("Moves ROM/source disagreements:\n" + "\n".join(disagreements))
+
+    for move_id, expected in _PURERGB_RENAMES.items():
+        if names_src[move_id - 1] != expected:
+            raise SystemExit(f"move id {move_id:#x}: expected rename {expected!r}, "
+                             f"got {names_src[move_id - 1]!r}")
+
+    entries = []
+    for i, (src, name) in enumerate(zip(moves_src, names_src, strict=True)):
+        type_upper = normalize_type(src["type"]).upper()
+        entries.append({
+            "id": i + 1,
+            "name": name.title(),
+            "internal_name": src["internal_name"],
+            "type": normalize_type(src["type"]),
+            "power": src["power"],
+            "accuracy": src["accuracy"],
+            "pp": src["pp"],
+            "split": split_for(type_upper, src["power"], _PHYSICAL_TYPES_PURERGB, _SPECIAL_TYPES_PURERGB),
+        })
+    return {"moves": entries}
+
+
 def main():
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--foundation", default="pret", choices=["pret", "purergb"])
+    args = p.parse_args()
+
+    if args.foundation == "purergb":
+        doc = build_purergb_moves()
+        out_dir = fnd.data_dir("purergb")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "moves.json"
+        out_path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+        print(f"Wrote {len(doc['moves'])} pureRGB moves to {out_path}")
+        return
+
     gen1_entries = [build_entry_gen1(i + 1, *row) for i, row in enumerate(GEN1_MOVES)]
     gen2_entries = [build_entry_gen2(i + 1, *row) for i, row in enumerate(GEN2_MOVES)]
 
