@@ -313,3 +313,8 @@ manifest closure test traverses from run.lua only and ignores .dll rows.
 RB-3 (Sonnet): rebase of the final head onto master cb9cf5c in <scratchpad>/rb3 -- result appended below when it lands.
 OWNER ACTIONS: push the rebased branch, `git -C "E:/Google Drive/SLink" -c maintenance.auto=false -c gc.auto=0 merge --ff-only
 <rebased sha>`, tag (version lives in the tag; `gh release create`). No push/merge/tag was performed by this session.
+RB-3 result: rebase of bf22342 onto master cb9cf5c CONFLICT-FREE, 232 commits, clone <scratchpad>/rb3 tip 96c56f9; ruff 0, lua 181
+OK, unit 3027 passed / 24 env skips. Three docs-only commits landed after bf22342 (c01a13f ca72147 7861905 + this one), so the
+real rebase replays a few more; expect no conflicts (docs/ receipts only). NOTE for the FF: the main checkout's gitignored
+tests/fixtures/gen1/*.SaveRAM are STALE (legacy byte-written shape, 22 unit failures); copy the worktree's fixtures (F-6 scripted
+play) before running the suite there.
