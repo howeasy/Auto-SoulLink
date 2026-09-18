@@ -53,7 +53,7 @@ A site row has three numbers: **anchor** = the address whose bytes are verified,
 ### 1b. Why each non-`SAME-SHAPE` row is what it is
 
 - **`add_party_mon` (UNMATCHED)** — No S1 row at the AddPartyMon entry. S1 only pins the three call sites (capture_party_begin/end, npc_trade_add, starter) and names the callee as `call AddPartyMon (CD 9A 34 = call $349A)`.
-- **`bag_received` (SAME-SHAPE)** — Same symbol, same hook offset +8 (the `ret` of the 9-byte epilogue). Bytes differ only in the operand of the trailing `ld [n],a` (vanilla `$CF96` = `V.addresses.wItemQuantity`; pureRGB `$CF92`).
+- **`bag_received` (SAME-SHAPE)** — Same symbol, same hook offset +8 (the `ret` of the 9-byte epilogue). Bytes differ only in the operand of the trailing `ld [n],a` (vanilla `$CF96` = `V.addresses.wItemQuantity`; pureRGB also `$CF96` — the `FA 92 CF` S1 sliced at +8 belongs to the *next* routine; corrected by P2-A, whose shape check resolves the operand from the .sym).
 - **`battle_begin` (OFFSET-MOVED)** — S1's InitBattleCommon row is at +$48 (the trainer branch `ld a,2` / `ld [wIsInBattle],a`); the vanilla +0 anchor has NO S1 row, so the bytes at +0 are UNKNOWN for pureRGB.
 - **`battle_end` (SAME-SHAPE)** — Same symbol, same offset +0; bank moved $04 -> $3A. The S1 note carries no .asm citation (dump-only check).
 - **`battle_faint` (SAME-SHAPE)** — Same symbol, same offset +0, byte-identical 8-byte slice.
