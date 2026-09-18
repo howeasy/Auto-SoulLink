@@ -65,6 +65,7 @@ REPLACED = {
 # the foundations' own values: the parcel flag pureRGB deleted, its HYPER_BALL, the START-menu
 # row-index change, and the renumbered rival opponent id.
 EXPECTED_DELTA = frozenset({
+    "LAB_LOSS.tackle_turns",
     "BLACKOUT.after_center.map", "BLACKOUT.after_center.x", "BLACKOUT.after_center.y",
     "MENU.BAG.watched",
     "BANKS.apex_commit",
@@ -169,7 +170,7 @@ def test_both_tables_carry_the_same_groups_and_leaf_names(lua):
     pure, rb = _dofile(lua, PURE), _dofile(lua, RB)
     groups = lambda t: {k for k in t.keys() if isinstance(k, str)}  # noqa: E731, SIM118
     assert groups(pure) == groups(rb)
-    assert len(groups(pure)) == 17
+    assert len(groups(pure)) == 18
     assert set(_leaves(pure)) == set(_leaves(rb))
 
 

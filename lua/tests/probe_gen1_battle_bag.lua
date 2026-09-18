@@ -52,6 +52,8 @@ end
 t.check("battle menu shown", at_menu, fmt("frame %d", t.frame))
 local st = driver.state()
 t.log(fmt("battle menu state x=%d y=%d cur=%d max=%d watched=%02X", st.x, st.y, st.cur, st.max, st.watched))
+local function hexn(a, n) local o = {} for i = 0, n - 1 do o[#o + 1] = fmt("%02X", rd(a + i)) end return table.concat(o, " ") end
+t.log(fmt("BATTLE_MON moves=%s pp=%s | PARTY1 moves=%s pp=%s | wBattleMon=%04X wBattleMonPP=%04X", hexn(sym.wBattleMonMoves, 4), hexn(sym.wBattleMonPP, 4), hexn(sym.wPartyMon1Moves, 4), hexn(sym.wPartyMon1PP, 4), sym.wBattleMon, sym.wBattleMonPP))
 t.log(fmt("M.BAG = x=%d y=%d watched=%02X", Driver.BAG.x, Driver.BAG.y, Driver.BAG.watched))
 local u = driver.use_item(0, 600)
 t.log(fmt("use_item why=%s ok=%s stages=%s", tostring(u.why), tostring(u.ok), t.parts.json.encode(u.stages or {})))

@@ -143,6 +143,9 @@ return {
     default      = { map = 0, x = 5, y = 6 }, -- SAME: new-game blackout point = Pallet Town (RedsHouse1F sets it; poison_new blacks out here on both foundations)
     after_center = { map = 0, x = 5, y = 6 }, -- SAME: pret engine/events/pokecenter.asm:17 sets wLastBlackoutMap only when the nurse HEALS; the whiteout lane uses the Center PC and never heals, so the destination stays the new-game default (Pallet Town)
   },
+  LAB_LOSS = { -- the deliberate lab loss (gen1_rb_ball_gate_inputs.lua): Tackle turns before Growl stacking
+    tackle_turns = 0, -- SAME: vanilla's rival KOs a Growl-stacked starter in ~15 turns, well inside Growl's 40 PP
+  },
   MENU = {
     START = {
       menu_y                     = 2, -- SAME: engine/menus/draw_start_menu.asm:9-10

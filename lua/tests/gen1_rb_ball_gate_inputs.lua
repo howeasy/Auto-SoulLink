@@ -33,7 +33,10 @@ function M.new(expected)
     -- The lane's game facts (P3b-e): the vanilla twin unless the caller carries its own table.
     local F = expected.facts or dofile(here() .. "gen1_rb_facts.lua")
     local self={last_frame=-1,starter_seen=false,battle_seen=false,loss_seen=false,nickname_declined=false,
-        pending_growl_pp=nil,awaiting_main_menu=false}
+        pending_growl_pp=nil,awaiting_main_menu=false,
+        -- F.LAB_LOSS.tackle_turns: full-attack turns (Tackle, slot 1) before Growl stacking starts,
+        -- so the rival's damage lands while its attack is intact and the loss fits Growl's 40 PP.
+        tackles_used=0,pending_tackle_pp=nil,pending_tackle_frame=nil}
     function self.step(handshake,status,point,frame)
         if not handshake then return idle(),"await-pair-handshake" end
         assert(handshake.ready==true and handshake.run_id==expected.run_id
@@ -118,12 +121,25 @@ function M.new(expected)
                 self.pending_growl_pp=nil
                 self.awaiting_main_menu=true
             end
+            if self.pending_tackle_pp and point.move1_pp<self.pending_tackle_pp then
+                self.pending_tackle_pp=nil
+                self.tackles_used=self.tackles_used+1
+                self.awaiting_main_menu=true
+            end
             if self.awaiting_main_menu then
                 if point.menu_y==14 and point.menu_max==1 then
                     self.awaiting_main_menu=false
                 else
                     return press("B",frame),"rival-turn-text"
                 end
+            end
+            if self.pending_tackle_pp then
+                assert(frame-self.pending_tackle_frame<600,"selected Tackle has no accepted PP/action evidence"..describe(point))
+                if point.menu_y==F.MENU.MOVE.menu_y and point.menu_x==F.MENU.MOVE.menu_x
+                    and point.menu_max>=2 and point.menu_index==1 then
+                    return press("A",frame),"use-tackle"
+                end
+                return press("B",frame),"await-tackle-acceptance"
             end
             if self.pending_growl_pp then
                 assert(frame-self.pending_growl_frame<600,"selected Growl has no accepted PP/action evidence"..describe(point))
@@ -148,6 +164,16 @@ function M.new(expected)
                 return idle(),"unknown-battle-menu-wait"
             end
             self.unknown_menu_frame=nil
+            if move_menu and self.tackles_used<((F.LAB_LOSS and F.LAB_LOSS.tackle_turns) or 0) then
+                -- the lane's opening full-attack turns: Tackle (slot 1) while the rival's attack is intact
+                if point.menu_index>1 then return press("Up",frame),"select-tackle" end
+                local buttons=press("A",frame)
+                if buttons.A then
+                    self.pending_tackle_pp=point.move1_pp
+                    self.pending_tackle_frame=frame
+                end
+                return buttons,"use-tackle"
+            end
             if move_menu then
                 assert(point.move2==F.MOVE.GROWL and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage"..describe(point))
                 if point.menu_index<F.MOVE.GROWL_SLOT then return press("Down",frame),"select-growl" end

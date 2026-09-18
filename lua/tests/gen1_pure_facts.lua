@@ -136,6 +136,9 @@ return {
     default      = { map = 0, x = 5, y = 6 }, -- SAME: new-game blackout point = Pallet Town (RedsHouse1F sets it; poison_new blacks out here on both foundations)
     after_center = { map = 1, x = 23, y = 26 }, -- DELTA: scripts/ViridianPokecenter.asm:2 `call SetLastBlackoutMap` on Center ENTRY (engine/events/pokecenter.asm:49 removed the heal-time call; home/overworld.asm:2380-2401 stores wLastMap = VIRIDIAN_CITY from the door warp at :546) -> fly_warp VIRIDIAN_CITY, 23, 26 (data/maps/special_warps.asm:98)
   },
+  LAB_LOSS = { -- the deliberate lab loss (gen1_rb_ball_gate_inputs.lua): Tackle turns before Growl stacking
+    tackle_turns = 2, -- DELTA: measured 2026-09-18 -- the pure rival at -6 attack needs 38-40+ turns (two cold runs hit Growl's 40 PP: move2_pp=0 refusal); two full-attack turns first cost the starter ~10 HP without risking the rival (20 HP vs ~4-6 per Tackle)
+  },
   MENU = {
     START = { -- engine/menus/draw_start_menu.asm
       menu_y                     = 2, -- SAME: engine/menus/draw_start_menu.asm:9-10

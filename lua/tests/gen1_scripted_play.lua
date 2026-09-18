@@ -126,6 +126,7 @@ function P.new(ROOT, title, player, opts)
             menu_y = sym("wTopMenuItemY"), menu_x = sym("wTopMenuItemX"), menu_max = sym("wMaxMenuItem"),
             menu_index = sym("wCurrentMenuItem"), move2 = rd(assert(symbols.wBattleMonMoves) + 1),
             move2_pp = rd(assert(symbols.wBattleMonPP) + 1),
+            move1 = rd(assert(symbols.wBattleMonMoves)), move1_pp = rd(assert(symbols.wBattleMonPP)),
             text_box = sym("wTextBoxID"), lab_script = sym("wOaksLabCurScript"),
             pallet_script = sym("wPalletTownCurScript"), joy_ignore = sym("wJoyIgnore"),
             npc_moving = sym("wStatusFlags5") % 2 == 1,
