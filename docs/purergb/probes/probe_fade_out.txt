@@ -1,0 +1,15 @@
+frame=2000 map=26 warps=0 vblanks=1953 vblank_bank2=0 readwriteinc_calls=0 halt_bank2=0
+fade_set frame=2504 wOptions2=20
+frame=4000 map=26 warps=16 vblanks=3889 vblank_bank2=0 readwriteinc_calls=768 halt_bank2=0
+frame=6000 map=25 warps=39 vblanks=5799 vblank_bank2=0 readwriteinc_calls=1872 halt_bank2=0
+frame=8000 map=25 warps=61 vblanks=7707 vblank_bank2=0 readwriteinc_calls=2928 halt_bank2=0
+frame=10000 map=26 warps=84 vblanks=9615 vblank_bank2=0 readwriteinc_calls=4032 halt_bank2=0
+frame=12000 map=25 warps=107 vblanks=11527 vblank_bank2=0 readwriteinc_calls=5136 halt_bank2=0
+frame=14000 map=25 warps=129 vblanks=13435 vblank_bank2=0 readwriteinc_calls=6192 halt_bank2=0
+frame=16000 map=26 warps=152 vblanks=15344 vblank_bank2=0 readwriteinc_calls=7296 halt_bank2=0
+frame=18000 map=25 warps=175 vblanks=17255 vblank_bank2=0 readwriteinc_calls=8352 halt_bank2=0
+frame=20000 map=25 warps=197 vblanks=19163 vblank_bank2=0 readwriteinc_calls=9456 halt_bank2=0
+frame=22000 map=26 warps=220 vblanks=21073 vblank_bank2=0 readwriteinc_calls=10560 halt_bank2=0
+frame=24000 map=25 warps=243 vblanks=22983 vblank_bank2=0 readwriteinc_calls=11616 halt_bank2=0
+FINAL frames=24000 warps=243 vblanks=22983 vblank_bank2=0 readwriteinc_calls=11616 halt_bank2=0 fade_set=true
+RESULT: DONE

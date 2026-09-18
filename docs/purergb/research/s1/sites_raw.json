@@ -1,0 +1,2944 @@
+{
+  "sites": {
+    "wild_begin": {
+      "symbol": "InitWildBattle",
+      "offset": 19,
+      "note": "call LoadEnemyMonData (CD lo hi) right after ld [wIsInBattle],a",
+      "titles": {
+        "red": {
+          "symbol": "InitWildBattle",
+          "bank": 15,
+          "address": 28471,
+          "eff_address": 28490,
+          "offset": 19,
+          "rom_offset": 257866,
+          "bytes": "CD 8A 6A CD 42 6C 21 72",
+          "bytes_raw": [
+            205,
+            138,
+            106,
+            205,
+            66,
+            108,
+            33,
+            114
+          ]
+        },
+        "blue": {
+          "symbol": "InitWildBattle",
+          "bank": 15,
+          "address": 28471,
+          "eff_address": 28490,
+          "offset": 19,
+          "rom_offset": 257866,
+          "bytes": "CD 8A 6A CD 42 6C 21 72",
+          "bytes_raw": [
+            205,
+            138,
+            106,
+            205,
+            66,
+            108,
+            33,
+            114
+          ]
+        },
+        "green": {
+          "symbol": "InitWildBattle",
+          "bank": 15,
+          "address": 28471,
+          "eff_address": 28490,
+          "offset": 19,
+          "rom_offset": 257866,
+          "bytes": "CD 8A 6A CD 42 6C 21 72",
+          "bytes_raw": [
+            205,
+            138,
+            106,
+            205,
+            66,
+            108,
+            33,
+            114
+          ]
+        }
+      }
+    },
+    "battle_loop_head": {
+      "symbol": "MainInBattleLoop",
+      "offset": 6,
+      "note": "call ReadPlayerMonCurHPAndStatus (CD lo hi)",
+      "titles": {
+        "red": {
+          "symbol": "MainInBattleLoop",
+          "bank": 15,
+          "address": 16973,
+          "eff_address": 16979,
+          "offset": 6,
+          "rom_offset": 246355,
+          "bytes": "CD 00 4E 21 15 D0 2A B6",
+          "bytes_raw": [
+            205,
+            0,
+            78,
+            33,
+            21,
+            208,
+            42,
+            182
+          ]
+        },
+        "blue": {
+          "symbol": "MainInBattleLoop",
+          "bank": 15,
+          "address": 16973,
+          "eff_address": 16979,
+          "offset": 6,
+          "rom_offset": 246355,
+          "bytes": "CD 00 4E 21 15 D0 2A B6",
+          "bytes_raw": [
+            205,
+            0,
+            78,
+            33,
+            21,
+            208,
+            42,
+            182
+          ]
+        },
+        "green": {
+          "symbol": "MainInBattleLoop",
+          "bank": 15,
+          "address": 16973,
+          "eff_address": 16979,
+          "offset": 6,
+          "rom_offset": 246355,
+          "bytes": "CD 00 4E 21 15 D0 2A B6",
+          "bytes_raw": [
+            205,
+            0,
+            78,
+            33,
+            21,
+            208,
+            42,
+            182
+          ]
+        }
+      }
+    },
+    "trainer_staging_1": {
+      "symbol": "_InitBattleCommon",
+      "offset": 72,
+      "note": "task hypothesis: 3E 02 (ld a,2) -- to be checked against derived byte count",
+      "titles": {
+        "red": {
+          "symbol": "_InitBattleCommon",
+          "bank": 15,
+          "address": 28530,
+          "eff_address": 28602,
+          "offset": 72,
+          "rom_offset": 257978,
+          "bytes": "4E 21 74 74 06 35 C7 CD",
+          "bytes_raw": [
+            78,
+            33,
+            116,
+            116,
+            6,
+            53,
+            199,
+            205
+          ]
+        },
+        "blue": {
+          "symbol": "_InitBattleCommon",
+          "bank": 15,
+          "address": 28530,
+          "eff_address": 28602,
+          "offset": 72,
+          "rom_offset": 257978,
+          "bytes": "4E 21 74 74 06 35 C7 CD",
+          "bytes_raw": [
+            78,
+            33,
+            116,
+            116,
+            6,
+            53,
+            199,
+            205
+          ]
+        },
+        "green": {
+          "symbol": "_InitBattleCommon",
+          "bank": 15,
+          "address": 28530,
+          "eff_address": 28602,
+          "offset": 72,
+          "rom_offset": 257978,
+          "bytes": "4E 21 74 74 06 35 C7 CD",
+          "bytes_raw": [
+            78,
+            33,
+            116,
+            116,
+            6,
+            53,
+            199,
+            205
+          ]
+        }
+      }
+    },
+    "trainer_staging_2": {
+      "symbol": "_InitBattleCommon",
+      "offset": 77,
+      "note": "task hypothesis: continuation of above",
+      "titles": {
+        "red": {
+          "symbol": "_InitBattleCommon",
+          "bank": 15,
+          "address": 28530,
+          "eff_address": 28607,
+          "offset": 77,
+          "rom_offset": 257983,
+          "bytes": "35 C7 CD 44 41 21 FD 44",
+          "bytes_raw": [
+            53,
+            199,
+            205,
+            68,
+            65,
+            33,
+            253,
+            68
+          ]
+        },
+        "blue": {
+          "symbol": "_InitBattleCommon",
+          "bank": 15,
+          "address": 28530,
+          "eff_address": 28607,
+          "offset": 77,
+          "rom_offset": 257983,
+          "bytes": "35 C7 CD 44 41 21 FD 44",
+          "bytes_raw": [
+            53,
+            199,
+            205,
+            68,
+            65,
+            33,
+            253,
+            68
+          ]
+        },
+        "green": {
+          "symbol": "_InitBattleCommon",
+          "bank": 15,
+          "address": 28530,
+          "eff_address": 28607,
+          "offset": 77,
+          "rom_offset": 257983,
+          "bytes": "35 C7 CD 44 41 21 FD 44",
+          "bytes_raw": [
+            53,
+            199,
+            205,
+            68,
+            65,
+            33,
+            253,
+            68
+          ]
+        }
+      }
+    },
+    "battle_faint": {
+      "symbol": "RemoveFaintedPlayerMon",
+      "offset": 0,
+      "note": "FA lo hi = ld a,[wPlayerMonNumber]",
+      "titles": {
+        "red": {
+          "symbol": "RemoveFaintedPlayerMon",
+          "bank": 15,
+          "address": 18381,
+          "eff_address": 18381,
+          "offset": 0,
+          "rom_offset": 247757,
+          "bytes": "FA 2F CC 4F 21 58 D0 06",
+          "bytes_raw": [
+            250,
+            47,
+            204,
+            79,
+            33,
+            88,
+            208,
+            6
+          ]
+        },
+        "blue": {
+          "symbol": "RemoveFaintedPlayerMon",
+          "bank": 15,
+          "address": 18381,
+          "eff_address": 18381,
+          "offset": 0,
+          "rom_offset": 247757,
+          "bytes": "FA 2F CC 4F 21 58 D0 06",
+          "bytes_raw": [
+            250,
+            47,
+            204,
+            79,
+            33,
+            88,
+            208,
+            6
+          ]
+        },
+        "green": {
+          "symbol": "RemoveFaintedPlayerMon",
+          "bank": 15,
+          "address": 18381,
+          "eff_address": 18381,
+          "offset": 0,
+          "rom_offset": 247757,
+          "bytes": "FA 2F CC 4F 21 58 D0 06",
+          "bytes_raw": [
+            250,
+            47,
+            204,
+            79,
+            33,
+            88,
+            208,
+            6
+          ]
+        }
+      }
+    },
+    "poison_faint": {
+      "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow",
+      "offset": 4,
+      "note": "E5 23 23 77 1A EA lo hi (wPokedexNum store)",
+      "titles": {
+        "red": {
+          "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow",
+          "bank": 3,
+          "address": 18221,
+          "eff_address": 18225,
+          "offset": 4,
+          "rom_offset": 50993,
+          "bytes": "E5 23 23 77 1A EA 26 D1",
+          "bytes_raw": [
+            229,
+            35,
+            35,
+            119,
+            26,
+            234,
+            38,
+            209
+          ]
+        },
+        "blue": {
+          "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow",
+          "bank": 3,
+          "address": 18221,
+          "eff_address": 18225,
+          "offset": 4,
+          "rom_offset": 50993,
+          "bytes": "E5 23 23 77 1A EA 26 D1",
+          "bytes_raw": [
+            229,
+            35,
+            35,
+            119,
+            26,
+            234,
+            38,
+            209
+          ]
+        },
+        "green": {
+          "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow",
+          "bank": 3,
+          "address": 18221,
+          "eff_address": 18225,
+          "offset": 4,
+          "rom_offset": 50993,
+          "bytes": "E5 23 23 77 1A EA 26 D1",
+          "bytes_raw": [
+            229,
+            35,
+            35,
+            119,
+            26,
+            234,
+            38,
+            209
+          ]
+        }
+      }
+    },
+    "bag_received": {
+      "symbol": "AddItemToInventory_.done",
+      "offset": 8,
+      "note": "C9 (ret) -- epilogue E1 D1 C1 C1 78 EA lo hi C9, +8=C9",
+      "titles": {
+        "red": {
+          "symbol": "AddItemToInventory_.done",
+          "bank": 3,
+          "address": 20564,
+          "eff_address": 20572,
+          "offset": 8,
+          "rom_offset": 53340,
+          "bytes": "C9 E5 23 FA 92 CF 87 85",
+          "bytes_raw": [
+            201,
+            229,
+            35,
+            250,
+            146,
+            207,
+            135,
+            133
+          ]
+        },
+        "blue": {
+          "symbol": "AddItemToInventory_.done",
+          "bank": 3,
+          "address": 20564,
+          "eff_address": 20572,
+          "offset": 8,
+          "rom_offset": 53340,
+          "bytes": "C9 E5 23 FA 92 CF 87 85",
+          "bytes_raw": [
+            201,
+            229,
+            35,
+            250,
+            146,
+            207,
+            135,
+            133
+          ]
+        },
+        "green": {
+          "symbol": "AddItemToInventory_.done",
+          "bank": 3,
+          "address": 20564,
+          "eff_address": 20572,
+          "offset": 8,
+          "rom_offset": 53340,
+          "bytes": "C9 E5 23 FA 92 CF 87 85",
+          "bytes_raw": [
+            201,
+            229,
+            35,
+            250,
+            146,
+            207,
+            135,
+            133
+          ]
+        }
+      }
+    },
+    "save_witness": {
+      "symbol": "SaveMenu.save",
+      "offset": 3,
+      "note": "CD lo hi of ClearTextBox (after CD lo hi SaveGameData at +0)",
+      "titles": {
+        "red": {
+          "symbol": "SaveMenu.save",
+          "bank": 28,
+          "address": 30670,
+          "eff_address": 30673,
+          "offset": 3,
+          "rom_offset": 473041,
+          "bytes": "CD 56 29 21 B9 C4 21 FF",
+          "bytes_raw": [
+            205,
+            86,
+            41,
+            33,
+            185,
+            196,
+            33,
+            255
+          ]
+        },
+        "blue": {
+          "symbol": "SaveMenu.save",
+          "bank": 28,
+          "address": 30670,
+          "eff_address": 30673,
+          "offset": 3,
+          "rom_offset": 473041,
+          "bytes": "CD 56 29 21 B9 C4 21 FF",
+          "bytes_raw": [
+            205,
+            86,
+            41,
+            33,
+            185,
+            196,
+            33,
+            255
+          ]
+        },
+        "green": {
+          "symbol": "SaveMenu.save",
+          "bank": 28,
+          "address": 30670,
+          "eff_address": 30673,
+          "offset": 3,
+          "rom_offset": 473041,
+          "bytes": "CD 56 29 21 B9 C4 21 FF",
+          "bytes_raw": [
+            205,
+            86,
+            41,
+            33,
+            185,
+            196,
+            33,
+            255
+          ]
+        }
+      }
+    },
+    "capture_party_begin": {
+      "symbol": "ItemUseBall.skipShowingPokedexData",
+      "offset": 34,
+      "note": "call AddPartyMon (CD lo hi)",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseBall.skipShowingPokedexData",
+          "bank": 3,
+          "address": 21475,
+          "eff_address": 21509,
+          "offset": 34,
+          "rom_offset": 54277,
+          "bytes": "CD 9A 34 F1 A7 28 32 21",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            241,
+            167,
+            40,
+            50,
+            33
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseBall.skipShowingPokedexData",
+          "bank": 3,
+          "address": 21475,
+          "eff_address": 21509,
+          "offset": 34,
+          "rom_offset": 54277,
+          "bytes": "CD 9A 34 F1 A7 28 32 21",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            241,
+            167,
+            40,
+            50,
+            33
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseBall.skipShowingPokedexData",
+          "bank": 3,
+          "address": 21475,
+          "eff_address": 21509,
+          "offset": 34,
+          "rom_offset": 54277,
+          "bytes": "CD 9A 34 F1 A7 28 32 21",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            241,
+            167,
+            40,
+            50,
+            33
+          ]
+        }
+      }
+    },
+    "capture_party_end": {
+      "symbol": "ItemUseBall.skipShowingPokedexData",
+      "offset": 37,
+      "note": "pop af (Bill's Garden $80 branch epilogue)",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseBall.skipShowingPokedexData",
+          "bank": 3,
+          "address": 21475,
+          "eff_address": 21512,
+          "offset": 37,
+          "rom_offset": 54280,
+          "bytes": "F1 A7 28 32 21 9E 56 06",
+          "bytes_raw": [
+            241,
+            167,
+            40,
+            50,
+            33,
+            158,
+            86,
+            6
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseBall.skipShowingPokedexData",
+          "bank": 3,
+          "address": 21475,
+          "eff_address": 21512,
+          "offset": 37,
+          "rom_offset": 54280,
+          "bytes": "F1 A7 28 32 21 9E 56 06",
+          "bytes_raw": [
+            241,
+            167,
+            40,
+            50,
+            33,
+            158,
+            86,
+            6
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseBall.skipShowingPokedexData",
+          "bank": 3,
+          "address": 21475,
+          "eff_address": 21512,
+          "offset": 37,
+          "rom_offset": 54280,
+          "bytes": "F1 A7 28 32 21 9E 56 06",
+          "bytes_raw": [
+            241,
+            167,
+            40,
+            50,
+            33,
+            158,
+            86,
+            6
+          ]
+        }
+      }
+    },
+    "capture_box_begin": {
+      "symbol": "ItemUseBall.sendToBox",
+      "offset": 3,
+      "note": "call SendNewMonToBox (CD lo hi)",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseBall.sendToBox",
+          "bank": 3,
+          "address": 21534,
+          "eff_address": 21537,
+          "offset": 3,
+          "rom_offset": 54305,
+          "bytes": "CD 4B 65 21 68 54 FA F9",
+          "bytes_raw": [
+            205,
+            75,
+            101,
+            33,
+            104,
+            84,
+            250,
+            249
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseBall.sendToBox",
+          "bank": 3,
+          "address": 21534,
+          "eff_address": 21537,
+          "offset": 3,
+          "rom_offset": 54305,
+          "bytes": "CD 4B 65 21 68 54 FA F9",
+          "bytes_raw": [
+            205,
+            75,
+            101,
+            33,
+            104,
+            84,
+            250,
+            249
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseBall.sendToBox",
+          "bank": 3,
+          "address": 21534,
+          "eff_address": 21537,
+          "offset": 3,
+          "rom_offset": 54305,
+          "bytes": "CD 4B 65 21 68 54 FA F9",
+          "bytes_raw": [
+            205,
+            75,
+            101,
+            33,
+            104,
+            84,
+            250,
+            249
+          ]
+        }
+      }
+    },
+    "capture_box_end": {
+      "symbol": "ItemUseBall.sendToBox",
+      "offset": 6,
+      "note": "start of next instr after call SendNewMonToBox",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseBall.sendToBox",
+          "bank": 3,
+          "address": 21534,
+          "eff_address": 21540,
+          "offset": 6,
+          "rom_offset": 54308,
+          "bytes": "21 68 54 FA F9 D7 CB 47",
+          "bytes_raw": [
+            33,
+            104,
+            84,
+            250,
+            249,
+            215,
+            203,
+            71
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseBall.sendToBox",
+          "bank": 3,
+          "address": 21534,
+          "eff_address": 21540,
+          "offset": 6,
+          "rom_offset": 54308,
+          "bytes": "21 68 54 FA F9 D7 CB 47",
+          "bytes_raw": [
+            33,
+            104,
+            84,
+            250,
+            249,
+            215,
+            203,
+            71
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseBall.sendToBox",
+          "bank": 3,
+          "address": 21534,
+          "eff_address": 21540,
+          "offset": 6,
+          "rom_offset": 54308,
+          "bytes": "21 68 54 FA F9 D7 CB 47",
+          "bytes_raw": [
+            33,
+            104,
+            84,
+            250,
+            249,
+            215,
+            203,
+            71
+          ]
+        }
+      }
+    },
+    "pc_deposit": {
+      "symbol": "BillsPCDeposit",
+      "offset": 75,
+      "note": "derived: CD lo hi call WaitForSoundToFinish",
+      "titles": {
+        "red": {
+          "symbol": "BillsPCDeposit",
+          "bank": 51,
+          "address": 17195,
+          "eff_address": 17270,
+          "offset": 75,
+          "rom_offset": 836470,
+          "bytes": "CD AC 33 21 3D CD FA A8",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            33,
+            61,
+            205,
+            250,
+            168
+          ]
+        },
+        "blue": {
+          "symbol": "BillsPCDeposit",
+          "bank": 51,
+          "address": 17195,
+          "eff_address": 17270,
+          "offset": 75,
+          "rom_offset": 836470,
+          "bytes": "CD AC 33 21 3D CD FA A8",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            33,
+            61,
+            205,
+            250,
+            168
+          ]
+        },
+        "green": {
+          "symbol": "BillsPCDeposit",
+          "bank": 51,
+          "address": 17195,
+          "eff_address": 17270,
+          "offset": 75,
+          "rom_offset": 836470,
+          "bytes": "CD AC 33 21 3D CD FA A8",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            33,
+            61,
+            205,
+            250,
+            168
+          ]
+        }
+      }
+    },
+    "pc_withdraw": {
+      "symbol": "BillsPCWithdraw",
+      "offset": 103,
+      "note": "derived: CD lo hi call WaitForSoundToFinish",
+      "titles": {
+        "red": {
+          "symbol": "BillsPCWithdraw",
+          "bank": 51,
+          "address": 17336,
+          "eff_address": 17439,
+          "offset": 103,
+          "rom_offset": 836639,
+          "bytes": "CD AC 33 21 26 46 CD CE",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            33,
+            38,
+            70,
+            205,
+            206
+          ]
+        },
+        "blue": {
+          "symbol": "BillsPCWithdraw",
+          "bank": 51,
+          "address": 17336,
+          "eff_address": 17439,
+          "offset": 103,
+          "rom_offset": 836639,
+          "bytes": "CD AC 33 21 26 46 CD CE",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            33,
+            38,
+            70,
+            205,
+            206
+          ]
+        },
+        "green": {
+          "symbol": "BillsPCWithdraw",
+          "bank": 51,
+          "address": 17336,
+          "eff_address": 17439,
+          "offset": 103,
+          "rom_offset": 836639,
+          "bytes": "CD AC 33 21 26 46 CD CE",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            33,
+            38,
+            70,
+            205,
+            206
+          ]
+        }
+      }
+    },
+    "pc_release": {
+      "symbol": "BillsPCRelease",
+      "offset": 112,
+      "note": "derived: CD lo hi call WaitForSoundToFinish",
+      "titles": {
+        "red": {
+          "symbol": "BillsPCRelease",
+          "bank": 51,
+          "address": 17490,
+          "eff_address": 17602,
+          "offset": 112,
+          "rom_offset": 836802,
+          "bytes": "CD AC 33 FA 91 CF CD 5F",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            250,
+            145,
+            207,
+            205,
+            95
+          ]
+        },
+        "blue": {
+          "symbol": "BillsPCRelease",
+          "bank": 51,
+          "address": 17490,
+          "eff_address": 17602,
+          "offset": 112,
+          "rom_offset": 836802,
+          "bytes": "CD AC 33 FA 91 CF CD 5F",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            250,
+            145,
+            207,
+            205,
+            95
+          ]
+        },
+        "green": {
+          "symbol": "BillsPCRelease",
+          "bank": 51,
+          "address": 17490,
+          "eff_address": 17602,
+          "offset": 112,
+          "rom_offset": 836802,
+          "bytes": "CD AC 33 FA 91 CF CD 5F",
+          "bytes_raw": [
+            205,
+            172,
+            51,
+            250,
+            145,
+            207,
+            205,
+            95
+          ]
+        }
+      }
+    },
+    "changebox_full_save": {
+      "symbol": "ChangeBox.yes",
+      "offset": 56,
+      "note": "derived: CD lo hi call SaveGameData",
+      "titles": {
+        "red": {
+          "symbol": "ChangeBox.yes",
+          "bank": 28,
+          "address": 31061,
+          "eff_address": 31117,
+          "offset": 56,
+          "rom_offset": 473485,
+          "bytes": "3E B6 CD A5 33 CD AC 33",
+          "bytes_raw": [
+            62,
+            182,
+            205,
+            165,
+            51,
+            205,
+            172,
+            51
+          ]
+        },
+        "blue": {
+          "symbol": "ChangeBox.yes",
+          "bank": 28,
+          "address": 31061,
+          "eff_address": 31117,
+          "offset": 56,
+          "rom_offset": 473485,
+          "bytes": "3E B6 CD A5 33 CD AC 33",
+          "bytes_raw": [
+            62,
+            182,
+            205,
+            165,
+            51,
+            205,
+            172,
+            51
+          ]
+        },
+        "green": {
+          "symbol": "ChangeBox.yes",
+          "bank": 28,
+          "address": 31061,
+          "eff_address": 31117,
+          "offset": 56,
+          "rom_offset": 473485,
+          "bytes": "3E B6 CD A5 33 CD AC 33",
+          "bytes_raw": [
+            62,
+            182,
+            205,
+            165,
+            51,
+            205,
+            172,
+            51
+          ]
+        }
+      }
+    },
+    "evolve_species_store": {
+      "symbol": "Evolution_PartyMonLoop.skipfix_end",
+      "offset": 60,
+      "note": "77 (ld [hl],a) then E5 6B 62 18 01 (push hl; ld l,e; ld h,d; jr +1)",
+      "titles": {
+        "red": {
+          "symbol": "Evolution_PartyMonLoop.skipfix_end",
+          "bank": 44,
+          "address": 22153,
+          "eff_address": 22213,
+          "offset": 60,
+          "rom_offset": 726725,
+          "bytes": "77 E5 6B 62 18 01 23 23",
+          "bytes_raw": [
+            119,
+            229,
+            107,
+            98,
+            24,
+            1,
+            35,
+            35
+          ]
+        },
+        "blue": {
+          "symbol": "Evolution_PartyMonLoop.skipfix_end",
+          "bank": 44,
+          "address": 22153,
+          "eff_address": 22213,
+          "offset": 60,
+          "rom_offset": 726725,
+          "bytes": "77 E5 6B 62 18 01 23 23",
+          "bytes_raw": [
+            119,
+            229,
+            107,
+            98,
+            24,
+            1,
+            35,
+            35
+          ]
+        },
+        "green": {
+          "symbol": "Evolution_PartyMonLoop.skipfix_end",
+          "bank": 44,
+          "address": 22153,
+          "eff_address": 22213,
+          "offset": 60,
+          "rom_offset": 726725,
+          "bytes": "77 E5 6B 62 18 01 23 23",
+          "bytes_raw": [
+            119,
+            229,
+            107,
+            98,
+            24,
+            1,
+            35,
+            35
+          ]
+        }
+      }
+    },
+    "transform_base": {
+      "symbol": "ChangePartyPokemonSpecies",
+      "offset": 0,
+      "note": "FA lo hi ld a,[wCurPartySpecies]",
+      "titles": {
+        "red": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26034,
+          "offset": 0,
+          "rom_offset": 878002,
+          "bytes": "FA 91 CF EA B5 D0 CD BB",
+          "bytes_raw": [
+            250,
+            145,
+            207,
+            234,
+            181,
+            208,
+            205,
+            187
+          ]
+        },
+        "blue": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26034,
+          "offset": 0,
+          "rom_offset": 878002,
+          "bytes": "FA 91 CF EA B5 D0 CD BB",
+          "bytes_raw": [
+            250,
+            145,
+            207,
+            234,
+            181,
+            208,
+            205,
+            187
+          ]
+        },
+        "green": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26034,
+          "offset": 0,
+          "rom_offset": 878002,
+          "bytes": "FA 91 CF EA B5 D0 CD BB",
+          "bytes_raw": [
+            250,
+            145,
+            207,
+            234,
+            181,
+            208,
+            205,
+            187
+          ]
+        }
+      }
+    },
+    "transform_species_list": {
+      "symbol": "ChangePartyPokemonSpecies",
+      "offset": 22,
+      "note": "77 = ld [hl],a (species-list write)",
+      "titles": {
+        "red": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26056,
+          "offset": 22,
+          "rom_offset": 878024,
+          "bytes": "77 FA 92 CF 21 73 D1 01",
+          "bytes_raw": [
+            119,
+            250,
+            146,
+            207,
+            33,
+            115,
+            209,
+            1
+          ]
+        },
+        "blue": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26056,
+          "offset": 22,
+          "rom_offset": 878024,
+          "bytes": "77 FA 92 CF 21 73 D1 01",
+          "bytes_raw": [
+            119,
+            250,
+            146,
+            207,
+            33,
+            115,
+            209,
+            1
+          ]
+        },
+        "green": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26056,
+          "offset": 22,
+          "rom_offset": 878024,
+          "bytes": "77 FA 92 CF 21 73 D1 01",
+          "bytes_raw": [
+            119,
+            250,
+            146,
+            207,
+            33,
+            115,
+            209,
+            1
+          ]
+        }
+      }
+    },
+    "transform_struct_species": {
+      "symbol": "ChangePartyPokemonSpecies",
+      "offset": 39,
+      "note": "77 = ld [hl],a (struct species write)",
+      "titles": {
+        "red": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26073,
+          "offset": 39,
+          "rom_offset": 878041,
+          "bytes": "77 01 21 00 09 2A EA 2F",
+          "bytes_raw": [
+            119,
+            1,
+            33,
+            0,
+            9,
+            42,
+            234,
+            47
+          ]
+        },
+        "blue": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26073,
+          "offset": 39,
+          "rom_offset": 878041,
+          "bytes": "77 01 21 00 09 2A EA 2F",
+          "bytes_raw": [
+            119,
+            1,
+            33,
+            0,
+            9,
+            42,
+            234,
+            47
+          ]
+        },
+        "green": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26073,
+          "offset": 39,
+          "rom_offset": 878041,
+          "bytes": "77 01 21 00 09 2A EA 2F",
+          "bytes_raw": [
+            119,
+            1,
+            33,
+            0,
+            9,
+            42,
+            234,
+            47
+          ]
+        }
+      }
+    },
+    "transform_hp_hi": {
+      "symbol": "ChangePartyPokemonSpecies",
+      "offset": 74,
+      "note": "22 = ld [hli],a (HP MSB store)",
+      "titles": {
+        "red": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26108,
+          "offset": 74,
+          "rom_offset": 878076,
+          "bytes": "22 79 32 E1 01 05 00 09",
+          "bytes_raw": [
+            34,
+            121,
+            50,
+            225,
+            1,
+            5,
+            0,
+            9
+          ]
+        },
+        "blue": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26108,
+          "offset": 74,
+          "rom_offset": 878076,
+          "bytes": "22 79 32 E1 01 05 00 09",
+          "bytes_raw": [
+            34,
+            121,
+            50,
+            225,
+            1,
+            5,
+            0,
+            9
+          ]
+        },
+        "green": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26108,
+          "offset": 74,
+          "rom_offset": 878076,
+          "bytes": "22 79 32 E1 01 05 00 09",
+          "bytes_raw": [
+            34,
+            121,
+            50,
+            225,
+            1,
+            5,
+            0,
+            9
+          ]
+        }
+      }
+    },
+    "transform_hp_lo": {
+      "symbol": "ChangePartyPokemonSpecies",
+      "offset": 76,
+      "note": "32 = ld [hld],a (HP LSB store)",
+      "titles": {
+        "red": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26110,
+          "offset": 76,
+          "rom_offset": 878078,
+          "bytes": "32 E1 01 05 00 09 FA BE",
+          "bytes_raw": [
+            50,
+            225,
+            1,
+            5,
+            0,
+            9,
+            250,
+            190
+          ]
+        },
+        "blue": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26110,
+          "offset": 76,
+          "rom_offset": 878078,
+          "bytes": "32 E1 01 05 00 09 FA BE",
+          "bytes_raw": [
+            50,
+            225,
+            1,
+            5,
+            0,
+            9,
+            250,
+            190
+          ]
+        },
+        "green": {
+          "symbol": "ChangePartyPokemonSpecies",
+          "bank": 53,
+          "address": 26034,
+          "eff_address": 26110,
+          "offset": 76,
+          "rom_offset": 878078,
+          "bytes": "32 E1 01 05 00 09 FA BE",
+          "bytes_raw": [
+            50,
+            225,
+            1,
+            5,
+            0,
+            9,
+            250,
+            190
+          ]
+        }
+      }
+    },
+    "apex_preflight": {
+      "symbol": "ItemUseMedicine.useApexChip",
+      "offset": 15,
+      "note": "= .setDVs; 22 (ld [hli],a, first DV byte max)",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23363,
+          "offset": 15,
+          "rom_offset": 56131,
+          "bytes": "22 77 E1 E5 CD 4D 5A E1",
+          "bytes_raw": [
+            34,
+            119,
+            225,
+            229,
+            205,
+            77,
+            90,
+            225
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23363,
+          "offset": 15,
+          "rom_offset": 56131,
+          "bytes": "22 77 E1 E5 CD 4D 5A E1",
+          "bytes_raw": [
+            34,
+            119,
+            225,
+            229,
+            205,
+            77,
+            90,
+            225
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23363,
+          "offset": 15,
+          "rom_offset": 56131,
+          "bytes": "22 77 E1 E5 CD 4D 5A E1",
+          "bytes_raw": [
+            34,
+            119,
+            225,
+            229,
+            205,
+            77,
+            90,
+            225
+          ]
+        }
+      }
+    },
+    "apex_commit": {
+      "symbol": "ItemUseMedicine.useApexChip",
+      "offset": 17,
+      "note": "E1 (pop hl) after both DV bytes maxed",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23365,
+          "offset": 17,
+          "rom_offset": 56133,
+          "bytes": "E1 E5 CD 4D 5A E1 01 22",
+          "bytes_raw": [
+            225,
+            229,
+            205,
+            77,
+            90,
+            225,
+            1,
+            34
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23365,
+          "offset": 17,
+          "rom_offset": 56133,
+          "bytes": "E1 E5 CD 4D 5A E1 01 22",
+          "bytes_raw": [
+            225,
+            229,
+            205,
+            77,
+            90,
+            225,
+            1,
+            34
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23365,
+          "offset": 17,
+          "rom_offset": 56133,
+          "bytes": "E1 E5 CD 4D 5A E1 01 22",
+          "bytes_raw": [
+            225,
+            229,
+            205,
+            77,
+            90,
+            225,
+            1,
+            34
+          ]
+        }
+      }
+    },
+    "apex_recalc_call": {
+      "symbol": "ItemUseMedicine.useApexChip",
+      "offset": 19,
+      "note": "CD lo hi of ItemUseMedicine.recalculateStats",
+      "titles": {
+        "red": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23367,
+          "offset": 19,
+          "rom_offset": 56135,
+          "bytes": "CD 4D 5A E1 01 22 00 09",
+          "bytes_raw": [
+            205,
+            77,
+            90,
+            225,
+            1,
+            34,
+            0,
+            9
+          ]
+        },
+        "blue": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23367,
+          "offset": 19,
+          "rom_offset": 56135,
+          "bytes": "CD 4D 5A E1 01 22 00 09",
+          "bytes_raw": [
+            205,
+            77,
+            90,
+            225,
+            1,
+            34,
+            0,
+            9
+          ]
+        },
+        "green": {
+          "symbol": "ItemUseMedicine.useApexChip",
+          "bank": 3,
+          "address": 23348,
+          "eff_address": 23367,
+          "offset": 19,
+          "rom_offset": 56135,
+          "bytes": "CD 4D 5A E1 01 22 00 09",
+          "bytes_raw": [
+            205,
+            77,
+            90,
+            225,
+            1,
+            34,
+            0,
+            9
+          ]
+        }
+      }
+    },
+    "npc_trade_remove": {
+      "symbol": "InGameTrade_DoTrade",
+      "offset": 123,
+      "note": "CD lo hi call RemovePokemon",
+      "titles": {
+        "red": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21831,
+          "offset": 123,
+          "rom_offset": 464199,
+          "bytes": "CD 93 34 3E 80 EA 49 CC",
+          "bytes_raw": [
+            205,
+            147,
+            52,
+            62,
+            128,
+            234,
+            73,
+            204
+          ]
+        },
+        "blue": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21831,
+          "offset": 123,
+          "rom_offset": 464199,
+          "bytes": "CD 93 34 3E 80 EA 49 CC",
+          "bytes_raw": [
+            205,
+            147,
+            52,
+            62,
+            128,
+            234,
+            73,
+            204
+          ]
+        },
+        "green": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21831,
+          "offset": 123,
+          "rom_offset": 464199,
+          "bytes": "CD 93 34 3E 80 EA 49 CC",
+          "bytes_raw": [
+            205,
+            147,
+            52,
+            62,
+            128,
+            234,
+            73,
+            204
+          ]
+        }
+      }
+    },
+    "npc_trade_add": {
+      "symbol": "InGameTrade_DoTrade",
+      "offset": 131,
+      "note": "CD lo hi call AddPartyMon, preceded by 3E 80 EA lo hi wMonDataLocation",
+      "titles": {
+        "red": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21839,
+          "offset": 131,
+          "rom_offset": 464207,
+          "bytes": "CD 9A 34 CD 07 56 CD 34",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            205,
+            7,
+            86,
+            205,
+            52
+          ]
+        },
+        "blue": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21839,
+          "offset": 131,
+          "rom_offset": 464207,
+          "bytes": "CD 9A 34 CD 07 56 CD 34",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            205,
+            7,
+            86,
+            205,
+            52
+          ]
+        },
+        "green": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21839,
+          "offset": 131,
+          "rom_offset": 464207,
+          "bytes": "CD 9A 34 CD 07 56 CD 34",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            205,
+            7,
+            86,
+            205,
+            52
+          ]
+        }
+      }
+    },
+    "npc_trade_done": {
+      "symbol": "InGameTrade_DoTrade",
+      "offset": 137,
+      "note": "CD lo hi call ClearScreen",
+      "titles": {
+        "red": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21845,
+          "offset": 137,
+          "rom_offset": 464213,
+          "bytes": "CD 34 16 CD 95 55 06 03",
+          "bytes_raw": [
+            205,
+            52,
+            22,
+            205,
+            149,
+            85,
+            6,
+            3
+          ]
+        },
+        "blue": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21845,
+          "offset": 137,
+          "rom_offset": 464213,
+          "bytes": "CD 34 16 CD 95 55 06 03",
+          "bytes_raw": [
+            205,
+            52,
+            22,
+            205,
+            149,
+            85,
+            6,
+            3
+          ]
+        },
+        "green": {
+          "symbol": "InGameTrade_DoTrade",
+          "bank": 28,
+          "address": 21708,
+          "eff_address": 21845,
+          "offset": 137,
+          "rom_offset": 464213,
+          "bytes": "CD 34 16 CD 95 55 06 03",
+          "bytes_raw": [
+            205,
+            52,
+            22,
+            205,
+            149,
+            85,
+            6,
+            3
+          ]
+        }
+      }
+    },
+    "cable_remove": {
+      "symbol": "TradeCenter_Trade.doTrade",
+      "offset": 119,
+      "note": "CD lo hi call RemovePokemon",
+      "titles": {
+        "red": {
+          "symbol": "TradeCenter_Trade.doTrade",
+          "bank": 1,
+          "address": 21977,
+          "eff_address": 22096,
+          "offset": 119,
+          "rom_offset": 22096,
+          "bytes": "CD 93 34 FA 3E CD 4F EA",
+          "bytes_raw": [
+            205,
+            147,
+            52,
+            250,
+            62,
+            205,
+            79,
+            234
+          ]
+        },
+        "blue": {
+          "symbol": "TradeCenter_Trade.doTrade",
+          "bank": 1,
+          "address": 21977,
+          "eff_address": 22096,
+          "offset": 119,
+          "rom_offset": 22096,
+          "bytes": "CD 93 34 FA 3E CD 4F EA",
+          "bytes_raw": [
+            205,
+            147,
+            52,
+            250,
+            62,
+            205,
+            79,
+            234
+          ]
+        },
+        "green": {
+          "symbol": "TradeCenter_Trade.doTrade",
+          "bank": 1,
+          "address": 21977,
+          "eff_address": 22096,
+          "offset": 119,
+          "rom_offset": 22096,
+          "bytes": "CD 93 34 FA 3E CD 4F EA",
+          "bytes_raw": [
+            205,
+            147,
+            52,
+            250,
+            62,
+            205,
+            79,
+            234
+          ]
+        }
+      }
+    },
+    "cable_add": {
+      "symbol": "TradeCenter_Trade.doTrade",
+      "offset": 160,
+      "note": "CD lo hi call AddEnemyMonToPlayerParty",
+      "titles": {
+        "red": {
+          "symbol": "TradeCenter_Trade.doTrade",
+          "bank": 1,
+          "address": 21977,
+          "eff_address": 22137,
+          "offset": 160,
+          "rom_offset": 22137,
+          "bytes": "FA 6B D1 3D EA 92 CF 3E",
+          "bytes_raw": [
+            250,
+            107,
+            209,
+            61,
+            234,
+            146,
+            207,
+            62
+          ]
+        },
+        "blue": {
+          "symbol": "TradeCenter_Trade.doTrade",
+          "bank": 1,
+          "address": 21977,
+          "eff_address": 22137,
+          "offset": 160,
+          "rom_offset": 22137,
+          "bytes": "FA 6B D1 3D EA 92 CF 3E",
+          "bytes_raw": [
+            250,
+            107,
+            209,
+            61,
+            234,
+            146,
+            207,
+            62
+          ]
+        },
+        "green": {
+          "symbol": "TradeCenter_Trade.doTrade",
+          "bank": 1,
+          "address": 21977,
+          "eff_address": 22137,
+          "offset": 160,
+          "rom_offset": 22137,
+          "bytes": "FA 6B D1 3D EA 92 CF 3E",
+          "bytes_raw": [
+            250,
+            107,
+            209,
+            61,
+            234,
+            146,
+            207,
+            62
+          ]
+        }
+      }
+    },
+    "cable_partial_save": {
+      "symbol": "TradeCenter_Trade.tradeCompleted",
+      "offset": 44,
+      "note": "callfar SavePartyAndDexData = 21 lo hi 06 bank C7",
+      "titles": {
+        "red": {
+          "symbol": "TradeCenter_Trade.tradeCompleted",
+          "bank": 1,
+          "address": 22212,
+          "eff_address": 22256,
+          "offset": 44,
+          "rom_offset": 22256,
+          "bytes": "21 80 78 06 1C C7 0E 32",
+          "bytes_raw": [
+            33,
+            128,
+            120,
+            6,
+            28,
+            199,
+            14,
+            50
+          ]
+        },
+        "blue": {
+          "symbol": "TradeCenter_Trade.tradeCompleted",
+          "bank": 1,
+          "address": 22212,
+          "eff_address": 22256,
+          "offset": 44,
+          "rom_offset": 22256,
+          "bytes": "21 80 78 06 1C C7 0E 32",
+          "bytes_raw": [
+            33,
+            128,
+            120,
+            6,
+            28,
+            199,
+            14,
+            50
+          ]
+        },
+        "green": {
+          "symbol": "TradeCenter_Trade.tradeCompleted",
+          "bank": 1,
+          "address": 22212,
+          "eff_address": 22256,
+          "offset": 44,
+          "rom_offset": 22256,
+          "bytes": "21 80 78 06 1C C7 0E 32",
+          "bytes_raw": [
+            33,
+            128,
+            120,
+            6,
+            28,
+            199,
+            14,
+            50
+          ]
+        }
+      }
+    },
+    "daycare_withdraw": {
+      "symbol": "DaycareGentlemanText.enoughMoney",
+      "offset": 39,
+      "note": "CD lo hi call MoveMon",
+      "titles": {
+        "red": {
+          "symbol": "DaycareGentlemanText.enoughMoney",
+          "bank": 21,
+          "address": 27041,
+          "eff_address": 27080,
+          "offset": 39,
+          "rom_offset": 354760,
+          "bytes": "CD DC 34 FA 67 DA EA 91",
+          "bytes_raw": [
+            205,
+            220,
+            52,
+            250,
+            103,
+            218,
+            234,
+            145
+          ]
+        },
+        "blue": {
+          "symbol": "DaycareGentlemanText.enoughMoney",
+          "bank": 21,
+          "address": 27041,
+          "eff_address": 27080,
+          "offset": 39,
+          "rom_offset": 354760,
+          "bytes": "CD DC 34 FA 67 DA EA 91",
+          "bytes_raw": [
+            205,
+            220,
+            52,
+            250,
+            103,
+            218,
+            234,
+            145
+          ]
+        },
+        "green": {
+          "symbol": "DaycareGentlemanText.enoughMoney",
+          "bank": 21,
+          "address": 27041,
+          "eff_address": 27080,
+          "offset": 39,
+          "rom_offset": 354760,
+          "bytes": "CD DC 34 FA 67 DA EA 91",
+          "bytes_raw": [
+            205,
+            220,
+            52,
+            250,
+            103,
+            218,
+            234,
+            145
+          ]
+        }
+      }
+    },
+    "blackout": {
+      "symbol": "ResetStatusAndHalveMoneyOnBlackout",
+      "offset": 0,
+      "note": "dump only",
+      "titles": {
+        "red": {
+          "symbol": "ResetStatusAndHalveMoneyOnBlackout",
+          "bank": 1,
+          "address": 16560,
+          "eff_address": 16560,
+          "offset": 0,
+          "rom_offset": 16560,
+          "bytes": "AF EA 0B CF EA 08 D7 EA",
+          "bytes_raw": [
+            175,
+            234,
+            11,
+            207,
+            234,
+            8,
+            215,
+            234
+          ]
+        },
+        "blue": {
+          "symbol": "ResetStatusAndHalveMoneyOnBlackout",
+          "bank": 1,
+          "address": 16560,
+          "eff_address": 16560,
+          "offset": 0,
+          "rom_offset": 16560,
+          "bytes": "AF EA 0B CF EA 08 D7 EA",
+          "bytes_raw": [
+            175,
+            234,
+            11,
+            207,
+            234,
+            8,
+            215,
+            234
+          ]
+        },
+        "green": {
+          "symbol": "ResetStatusAndHalveMoneyOnBlackout",
+          "bank": 1,
+          "address": 16560,
+          "eff_address": 16560,
+          "offset": 0,
+          "rom_offset": 16560,
+          "bytes": "AF EA 0B CF EA 08 D7 EA",
+          "bytes_raw": [
+            175,
+            234,
+            11,
+            207,
+            234,
+            8,
+            215,
+            234
+          ]
+        }
+      }
+    },
+    "whiteout_endofbattle": {
+      "symbol": "EndOfBattle",
+      "offset": 0,
+      "note": "dump only, bank must be 0x3A",
+      "titles": {
+        "red": {
+          "symbol": "EndOfBattle",
+          "bank": 58,
+          "address": 17661,
+          "eff_address": 17661,
+          "offset": 0,
+          "rom_offset": 951549,
+          "bytes": "FA 33 D1 FE 04 20 36 FA",
+          "bytes_raw": [
+            250,
+            51,
+            209,
+            254,
+            4,
+            32,
+            54,
+            250
+          ]
+        },
+        "blue": {
+          "symbol": "EndOfBattle",
+          "bank": 58,
+          "address": 17661,
+          "eff_address": 17661,
+          "offset": 0,
+          "rom_offset": 951549,
+          "bytes": "FA 33 D1 FE 04 20 36 FA",
+          "bytes_raw": [
+            250,
+            51,
+            209,
+            254,
+            4,
+            32,
+            54,
+            250
+          ]
+        },
+        "green": {
+          "symbol": "EndOfBattle",
+          "bank": 58,
+          "address": 17661,
+          "eff_address": 17661,
+          "offset": 0,
+          "rom_offset": 951549,
+          "bytes": "FA 33 D1 FE 04 20 36 FA",
+          "bytes_raw": [
+            250,
+            51,
+            209,
+            254,
+            4,
+            32,
+            54,
+            250
+          ]
+        }
+      }
+    },
+    "starter": {
+      "symbol": "OaksLabMonChoiceMenu.continue",
+      "offset": 35,
+      "note": "CD lo hi call AddPartyMon",
+      "titles": {
+        "red": {
+          "symbol": "OaksLabMonChoiceMenu.continue",
+          "bank": 7,
+          "address": 18871,
+          "eff_address": 18906,
+          "offset": 35,
+          "rom_offset": 117210,
+          "bytes": "CD 9A 34 21 36 D7 CB DE",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            33,
+            54,
+            215,
+            203,
+            222
+          ]
+        },
+        "blue": {
+          "symbol": "OaksLabMonChoiceMenu.continue",
+          "bank": 7,
+          "address": 18871,
+          "eff_address": 18906,
+          "offset": 35,
+          "rom_offset": 117210,
+          "bytes": "CD 9A 34 21 36 D7 CB DE",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            33,
+            54,
+            215,
+            203,
+            222
+          ]
+        },
+        "green": {
+          "symbol": "OaksLabMonChoiceMenu.continue",
+          "bank": 7,
+          "address": 18871,
+          "eff_address": 18906,
+          "offset": 35,
+          "rom_offset": 117210,
+          "bytes": "CD 9A 34 21 36 D7 CB DE",
+          "bytes_raw": [
+            205,
+            154,
+            52,
+            33,
+            54,
+            215,
+            203,
+            222
+          ]
+        }
+      }
+    },
+    "checkpoint_delayframe_halt": {
+      "symbol": "DelayFrame",
+      "offset": 23,
+      "note": "76 00 = halt; nop",
+      "titles": {
+        "red": {
+          "symbol": "DelayFrame",
+          "bank": 0,
+          "address": 7798,
+          "eff_address": 7821,
+          "offset": 23,
+          "rom_offset": 7821,
+          "bytes": "76 00 F0 D6 A7 20 F9 C9",
+          "bytes_raw": [
+            118,
+            0,
+            240,
+            214,
+            167,
+            32,
+            249,
+            201
+          ]
+        },
+        "blue": {
+          "symbol": "DelayFrame",
+          "bank": 0,
+          "address": 7798,
+          "eff_address": 7821,
+          "offset": 23,
+          "rom_offset": 7821,
+          "bytes": "76 00 F0 D6 A7 20 F9 C9",
+          "bytes_raw": [
+            118,
+            0,
+            240,
+            214,
+            167,
+            32,
+            249,
+            201
+          ]
+        },
+        "green": {
+          "symbol": "DelayFrame",
+          "bank": 0,
+          "address": 7798,
+          "eff_address": 7821,
+          "offset": 23,
+          "rom_offset": 7821,
+          "bytes": "76 00 F0 D6 A7 20 F9 C9",
+          "bytes_raw": [
+            118,
+            0,
+            240,
+            214,
+            167,
+            32,
+            249,
+            201
+          ]
+        }
+      }
+    },
+    "checkpoint_overworldloop": {
+      "symbol": "OverworldLoop",
+      "offset": 0,
+      "note": "D7 = rst _DelayFrame",
+      "titles": {
+        "red": {
+          "symbol": "OverworldLoop",
+          "bank": 0,
+          "address": 982,
+          "eff_address": 982,
+          "offset": 0,
+          "rom_offset": 982,
+          "bytes": "D7 21 BD 68 06 35 C7 CD",
+          "bytes_raw": [
+            215,
+            33,
+            189,
+            104,
+            6,
+            53,
+            199,
+            205
+          ]
+        },
+        "blue": {
+          "symbol": "OverworldLoop",
+          "bank": 0,
+          "address": 982,
+          "eff_address": 982,
+          "offset": 0,
+          "rom_offset": 982,
+          "bytes": "D7 21 BD 68 06 35 C7 CD",
+          "bytes_raw": [
+            215,
+            33,
+            189,
+            104,
+            6,
+            53,
+            199,
+            205
+          ]
+        },
+        "green": {
+          "symbol": "OverworldLoop",
+          "bank": 0,
+          "address": 982,
+          "eff_address": 982,
+          "offset": 0,
+          "rom_offset": 982,
+          "bytes": "D7 21 BD 68 06 35 C7 CD",
+          "bytes_raw": [
+            215,
+            33,
+            189,
+            104,
+            6,
+            53,
+            199,
+            205
+          ]
+        }
+      }
+    },
+    "checkpoint_init": {
+      "symbol": "Init",
+      "offset": 0,
+      "note": "dump only",
+      "titles": {
+        "red": {
+          "symbol": "Init",
+          "bank": 0,
+          "address": 7440,
+          "eff_address": 7440,
+          "offset": 0,
+          "rom_offset": 7440,
+          "bytes": "F3 AF E0 0F E0 FF E0 43",
+          "bytes_raw": [
+            243,
+            175,
+            224,
+            15,
+            224,
+            255,
+            224,
+            67
+          ]
+        },
+        "blue": {
+          "symbol": "Init",
+          "bank": 0,
+          "address": 7440,
+          "eff_address": 7440,
+          "offset": 0,
+          "rom_offset": 7440,
+          "bytes": "F3 AF E0 0F E0 FF E0 43",
+          "bytes_raw": [
+            243,
+            175,
+            224,
+            15,
+            224,
+            255,
+            224,
+            67
+          ]
+        },
+        "green": {
+          "symbol": "Init",
+          "bank": 0,
+          "address": 7440,
+          "eff_address": 7440,
+          "offset": 0,
+          "rom_offset": 7440,
+          "bytes": "F3 AF E0 0F E0 FF E0 43",
+          "bytes_raw": [
+            243,
+            175,
+            224,
+            15,
+            224,
+            255,
+            224,
+            67
+          ]
+        }
+      }
+    },
+    "checkpoint_softreset": {
+      "symbol": "SoftReset",
+      "offset": 0,
+      "note": "dump only",
+      "titles": {
+        "red": {
+          "symbol": "SoftReset",
+          "bank": 0,
+          "address": 7431,
+          "eff_address": 7431,
+          "offset": 0,
+          "rom_offset": 7431,
+          "bytes": "CD DD 1D CD 32 38 0E 20",
+          "bytes_raw": [
+            205,
+            221,
+            29,
+            205,
+            50,
+            56,
+            14,
+            32
+          ]
+        },
+        "blue": {
+          "symbol": "SoftReset",
+          "bank": 0,
+          "address": 7431,
+          "eff_address": 7431,
+          "offset": 0,
+          "rom_offset": 7431,
+          "bytes": "CD DD 1D CD 32 38 0E 20",
+          "bytes_raw": [
+            205,
+            221,
+            29,
+            205,
+            50,
+            56,
+            14,
+            32
+          ]
+        },
+        "green": {
+          "symbol": "SoftReset",
+          "bank": 0,
+          "address": 7431,
+          "eff_address": 7431,
+          "offset": 0,
+          "rom_offset": 7431,
+          "bytes": "CD DD 1D CD 32 38 0E 20",
+          "bytes_raw": [
+            205,
+            221,
+            29,
+            205,
+            50,
+            56,
+            14,
+            32
+          ]
+        }
+      }
+    },
+    "checkpoint_start": {
+      "symbol": "_Start",
+      "offset": 0,
+      "note": "dump only (cp BOOTUP_A_CGB; ld a,TRUE; jr z .gbc; dec a; ...)",
+      "titles": {
+        "red": {
+          "symbol": "_Start",
+          "bank": 0,
+          "address": 336,
+          "eff_address": 336,
+          "offset": 0,
+          "rom_offset": 336,
+          "bytes": "FE 11 3E 01 28 01 3D E0",
+          "bytes_raw": [
+            254,
+            17,
+            62,
+            1,
+            40,
+            1,
+            61,
+            224
+          ]
+        },
+        "blue": {
+          "symbol": "_Start",
+          "bank": 0,
+          "address": 336,
+          "eff_address": 336,
+          "offset": 0,
+          "rom_offset": 336,
+          "bytes": "FE 11 3E 01 28 01 3D E0",
+          "bytes_raw": [
+            254,
+            17,
+            62,
+            1,
+            40,
+            1,
+            61,
+            224
+          ]
+        },
+        "green": {
+          "symbol": "_Start",
+          "bank": 0,
+          "address": 336,
+          "eff_address": 336,
+          "offset": 0,
+          "rom_offset": 336,
+          "bytes": "FE 11 3E 01 28 01 3D E0",
+          "bytes_raw": [
+            254,
+            17,
+            62,
+            1,
+            40,
+            1,
+            61,
+            224
+          ]
+        }
+      }
+    }
+  },
+  "raw_addr_sites": {
+    "checkpoint_vblank_vector": {
+      "address": 64,
+      "note": "C3 lo hi of VBlank",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 64,
+          "rom_offset": 64,
+          "bytes": "C3 F3 1D A7 A0 B5 A4 50",
+          "bytes_raw": [
+            195,
+            243,
+            29,
+            167,
+            160,
+            181,
+            164,
+            80
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 64,
+          "rom_offset": 64,
+          "bytes": "C3 F3 1D A7 A0 B5 A4 50",
+          "bytes_raw": [
+            195,
+            243,
+            29,
+            167,
+            160,
+            181,
+            164,
+            80
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 64,
+          "rom_offset": 64,
+          "bytes": "C3 F3 1D A7 A0 B5 A4 50",
+          "bytes_raw": [
+            195,
+            243,
+            29,
+            167,
+            160,
+            181,
+            164,
+            80
+          ]
+        }
+      }
+    },
+    "rst_0000": {
+      "address": 0,
+      "note": "C3 lo hi _Bankswitch = jp Bankswitch, then text",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 0,
+          "rom_offset": 0,
+          "bytes": "C3 97 32 15 14 41 20 FF",
+          "bytes_raw": [
+            195,
+            151,
+            50,
+            21,
+            20,
+            65,
+            32,
+            255
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 0,
+          "rom_offset": 0,
+          "bytes": "C3 97 32 15 14 41 20 FF",
+          "bytes_raw": [
+            195,
+            151,
+            50,
+            21,
+            20,
+            65,
+            32,
+            255
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 0,
+          "rom_offset": 0,
+          "bytes": "C3 97 32 15 14 41 20 FF",
+          "bytes_raw": [
+            195,
+            151,
+            50,
+            21,
+            20,
+            65,
+            32,
+            255
+          ]
+        }
+      }
+    },
+    "rst_0008": {
+      "address": 8,
+      "note": "C3 lo hi _Predef = jp Predef, then text",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 8,
+          "rom_offset": 8,
+          "bytes": "C3 D0 38 15 8B 77 28 FD",
+          "bytes_raw": [
+            195,
+            208,
+            56,
+            21,
+            139,
+            119,
+            40,
+            253
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 8,
+          "rom_offset": 8,
+          "bytes": "C3 D0 38 15 8B 77 28 FD",
+          "bytes_raw": [
+            195,
+            208,
+            56,
+            21,
+            139,
+            119,
+            40,
+            253
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 8,
+          "rom_offset": 8,
+          "bytes": "C3 D0 38 15 8B 77 28 FD",
+          "bytes_raw": [
+            195,
+            208,
+            56,
+            21,
+            139,
+            119,
+            40,
+            253
+          ]
+        }
+      }
+    },
+    "rst_0010": {
+      "address": 16,
+      "note": "C3 lo hi _DelayFrame = jp DelayFrame, then text",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 16,
+          "rom_offset": 16,
+          "bytes": "C3 76 1E A8 A6 A7 B3 50",
+          "bytes_raw": [
+            195,
+            118,
+            30,
+            168,
+            166,
+            167,
+            179,
+            80
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 16,
+          "rom_offset": 16,
+          "bytes": "C3 76 1E A8 A6 A7 B3 50",
+          "bytes_raw": [
+            195,
+            118,
+            30,
+            168,
+            166,
+            167,
+            179,
+            80
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 16,
+          "rom_offset": 16,
+          "bytes": "C3 76 1E A8 A6 A7 B3 50",
+          "bytes_raw": [
+            195,
+            118,
+            30,
+            168,
+            166,
+            167,
+            179,
+            80
+          ]
+        }
+      }
+    },
+    "rst_0018": {
+      "address": 24,
+      "note": "D7 0D 20 xx C9 = rst _DelayFrame; dec c; jr nz DelayFrames; ret",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 24,
+          "rom_offset": 24,
+          "bytes": "D7 0D 20 FC C9 93 8C 50",
+          "bytes_raw": [
+            215,
+            13,
+            32,
+            252,
+            201,
+            147,
+            140,
+            80
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 24,
+          "rom_offset": 24,
+          "bytes": "D7 0D 20 FC C9 93 8C 50",
+          "bytes_raw": [
+            215,
+            13,
+            32,
+            252,
+            201,
+            147,
+            140,
+            80
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 24,
+          "rom_offset": 24,
+          "bytes": "D7 0D 20 FC C9 93 8C 50",
+          "bytes_raw": [
+            215,
+            13,
+            32,
+            252,
+            201,
+            147,
+            140,
+            80
+          ]
+        }
+      }
+    },
+    "rst_0020": {
+      "address": 32,
+      "note": "C3 lo hi _CopyData = jp CopyData, then text",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 32,
+          "rom_offset": 32,
+          "bytes": "C3 AE 00 B6 A8 B3 A7 50",
+          "bytes_raw": [
+            195,
+            174,
+            0,
+            182,
+            168,
+            179,
+            167,
+            80
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 32,
+          "rom_offset": 32,
+          "bytes": "C3 AE 00 B6 A8 B3 A7 50",
+          "bytes_raw": [
+            195,
+            174,
+            0,
+            182,
+            168,
+            179,
+            167,
+            80
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 32,
+          "rom_offset": 32,
+          "bytes": "C3 AE 00 B6 A8 B3 A7 50",
+          "bytes_raw": [
+            195,
+            174,
+            0,
+            182,
+            168,
+            179,
+            167,
+            80
+          ]
+        }
+      }
+    },
+    "rst_0028": {
+      "address": 40,
+      "note": "C3 lo hi _PrintText = jp PrintText, then text",
+      "titles": {
+        "red": {
+          "bank": 0,
+          "address": 40,
+          "rom_offset": 40,
+          "bytes": "C3 A5 36 15 AE 77 28 FF",
+          "bytes_raw": [
+            195,
+            165,
+            54,
+            21,
+            174,
+            119,
+            40,
+            255
+          ]
+        },
+        "blue": {
+          "bank": 0,
+          "address": 40,
+          "rom_offset": 40,
+          "bytes": "C3 A5 36 15 AE 77 28 FF",
+          "bytes_raw": [
+            195,
+            165,
+            54,
+            21,
+            174,
+            119,
+            40,
+            255
+          ]
+        },
+        "green": {
+          "bank": 0,
+          "address": 40,
+          "rom_offset": 40,
+          "bytes": "C3 A5 36 15 AE 77 28 FF",
+          "bytes_raw": [
+            195,
+            165,
+            54,
+            21,
+            174,
+            119,
+            40,
+            255
+          ]
+        }
+      }
+    }
+  }
+}

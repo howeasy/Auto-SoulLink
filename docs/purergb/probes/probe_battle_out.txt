@@ -1,0 +1,32 @@
+map FF frame 1
+map 00 frame 3
+map 26 frame 595
+frame 1200 map 26 pos 3,6 walk=false
+frame 2400 map 26 pos 3,6 walk=false
+map 25 frame 2650
+map 00 frame 2893
+frame 3600 map 00 pos 10,1 walk=true
+frame 4800 map 00 pos 9,12 walk=true
+map 28 frame 4896
+frame 6000 map 28 pos 5,3 walk=true
+frame 7200 map 28 pos 5,3 walk=true
+frame 8400 map 28 pos 5,3 walk=true
+frame 9600 map 28 pos 5,3 walk=true
+frame 10800 map 28 pos 5,3 walk=true
+frame 12000 map 28 pos 5,3 walk=true
+frame 13200 map 28 pos 5,3 walk=true
+frame 14400 map 28 pos 5,3 walk=true
+frame 15600 map 28 pos 5,3 walk=true
+frame 16800 map 28 pos 5,3 walk=true
+frame 18000 map 28 pos 5,3 walk=true
+frame 19200 map 28 pos 5,3 walk=true
+frame 20400 map 28 pos 5,3 walk=true
+frame 21600 map 28 pos 5,3 walk=true
+frame 22800 map 28 pos 5,3 walk=true
+frame 24000 map 28 pos 5,3 walk=true
+frame 25200 map 28 pos 5,3 walk=true
+frame 26400 map 28 pos 5,3 walk=true
+frame 27600 map 28 pos 5,3 walk=true
+frame 28800 map 28 pos 5,3 walk=true
+frame 30000 map 28 pos 5,3 walk=true
+RESULT: DONE (no battle)

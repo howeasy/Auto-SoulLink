@@ -1,0 +1,288 @@
+TITLE_IDLE requested=0 applied=0
+HOOK battle_faint_RemoveFaintedPlayerMon pc=47CD romx=01 hLoaded=01 frame=10 bytes=01 80 0A 21 DA 47 inb=0 type=0 opp=00 species2=00 level=0 monnum=0 map=00
+[scripted] bedroom reached after 2471 frames
+boot ok=true 2471
+phase lab: bedroom-row @2471
+phase lab: bedroom-column @2487
+phase lab: bedroom-to-stairs @2567
+phase lab: house-clear-stairs @2615
+phase lab: house-row @2697
+phase lab: house-to-pallet @2777
+phase lab: pallet-row @2857
+phase lab: pallet-clear-house @2892
+phase lab: pallet-row @2920
+phase lab: pallet-to-oak @3003
+phase lab: pallet-oak-dialogue @3084
+phase lab: pallet-script-wait @3194
+phase lab: pallet-oak-dialogue @3370
+phase lab: pallet-script-wait @3638
+phase lab: lab-to-starter @3930
+phase lab: lab-clear-entry @4185
+phase lab: lab-oak-speech-wait @4192
+phase lab: lab-oak-choose-mon-speech @4193
+phase lab: lab-text-exit @4981
+phase lab: lab-to-starter @4997
+phase lab: choose-growl-starter @5045
+phase lab: decline-nickname @5477
+HOOK trainer_staging__InitBattleCommon+48 pc=6FBA romx=03 hLoaded=03 frame=5567 bytes=CD C1 00 5D 54 E5 inb=0 type=0 opp=00 species2=00 level=5 monnum=0 map=28
+phase lab: rival-walks-to-ball @5568
+phase lab: rival-ball-movement @5572
+phase lab: rival-chooses-starter @5672
+phase lab: lab-clear-ball-row @5893
+phase lab: lab-center-row @5909
+phase lab: start-lab-rival @5957
+phase lab: rival-challenge-dialogue @5973
+phase lab: rival-battle-transition @6115
+HOOK trainer_staging__InitBattleCommon+48 pc=6FBA romx=03 hLoaded=03 frame=6183 bytes=CD C1 00 5D 54 E5 inb=0 type=0 opp=DD species2=DD level=5 monnum=0 map=28
+phase lab: rival-dialogue @6364
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=6900 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @6905
+phase lab: select-growl @6913
+phase lab: use-growl @6929
+phase lab: await-growl-acceptance @6945
+phase lab: rival-turn-text @7156
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=7185 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=7328 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @7334
+phase lab: select-growl @7345
+phase lab: use-growl @7346
+phase lab: await-growl-acceptance @7361
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=7422 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: rival-turn-text @7610
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=7639 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=7776 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @7782
+phase lab: select-growl @7793
+phase lab: use-growl @7794
+phase lab: await-growl-acceptance @7809
+phase lab: rival-turn-text @8007
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=8036 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=8176 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @8182
+phase lab: select-growl @8193
+phase lab: use-growl @8194
+phase lab: await-growl-acceptance @8209
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=8270 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: rival-turn-text @8457
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=8486 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=8624 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @8630
+phase lab: select-growl @8641
+phase lab: use-growl @8642
+phase lab: await-growl-acceptance @8657
+phase lab: rival-turn-text @8848
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=8877 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=9024 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @9030
+phase lab: select-growl @9041
+phase lab: use-growl @9042
+phase lab: await-growl-acceptance @9057
+phase lab: rival-turn-text @9252
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=9281 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=9424 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @9430
+phase lab: select-growl @9441
+phase lab: use-growl @9442
+phase lab: await-growl-acceptance @9457
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=9520 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: rival-turn-text @9706
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=9760 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @9766
+phase lab: select-growl @9777
+phase lab: use-growl @9778
+phase lab: await-growl-acceptance @9793
+phase lab: rival-turn-text @9913
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=9968 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @9974
+phase lab: select-growl @9985
+phase lab: use-growl @9986
+phase lab: await-growl-acceptance @10001
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=10063 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: rival-turn-text @10250
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=10304 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @10310
+phase lab: select-growl @10321
+phase lab: use-growl @10322
+phase lab: await-growl-acceptance @10337
+phase lab: rival-turn-text @10534
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=10592 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @10598
+phase lab: select-growl @10609
+phase lab: use-growl @10610
+phase lab: await-growl-acceptance @10625
+phase lab: rival-turn-text @10817
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=10880 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @10886
+phase lab: select-growl @10897
+phase lab: use-growl @10898
+phase lab: await-growl-acceptance @10913
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=10976 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: rival-turn-text @11162
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=11216 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @11222
+phase lab: select-growl @11233
+phase lab: use-growl @11234
+phase lab: await-growl-acceptance @11249
+phase lab: rival-turn-text @11369
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=11424 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @11430
+phase lab: select-growl @11441
+phase lab: use-growl @11442
+phase lab: await-growl-acceptance @11457
+HOOK save_witness_SaveMenu.save+3 pc=77D1 romx=0F hLoaded=0F frame=11518 bytes=DC 7E 7D F0 F3 A7 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: rival-turn-text @11705
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=11760 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @11766
+phase lab: select-growl @11777
+phase lab: use-growl @11778
+phase lab: await-growl-acceptance @11793
+phase lab: rival-turn-text @11914
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=11968 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @11974
+phase lab: select-growl @11985
+phase lab: use-growl @11986
+phase lab: await-growl-acceptance @12001
+phase lab: rival-turn-text @12121
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=12176 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @12182
+phase lab: select-growl @12193
+phase lab: use-growl @12194
+phase lab: await-growl-acceptance @12209
+phase lab: rival-turn-text @12330
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=12384 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @12390
+phase lab: select-growl @12401
+phase lab: use-growl @12402
+phase lab: await-growl-acceptance @12417
+phase lab: rival-turn-text @12610
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=12672 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @12678
+phase lab: select-growl @12689
+phase lab: use-growl @12690
+phase lab: await-growl-acceptance @12705
+phase lab: rival-turn-text @12826
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=12880 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @12886
+phase lab: select-growl @12897
+phase lab: use-growl @12898
+phase lab: await-growl-acceptance @12913
+phase lab: rival-turn-text @13106
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=13168 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @13174
+phase lab: select-growl @13185
+phase lab: use-growl @13186
+phase lab: await-growl-acceptance @13201
+phase lab: rival-turn-text @13322
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=13376 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @13382
+phase lab: select-growl @13393
+phase lab: use-growl @13394
+phase lab: await-growl-acceptance @13409
+phase lab: rival-turn-text @13604
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=13664 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @13670
+phase lab: select-growl @13681
+phase lab: use-growl @13682
+phase lab: await-growl-acceptance @13697
+phase lab: rival-turn-text @13817
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=13872 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @13878
+phase lab: select-growl @13889
+phase lab: use-growl @13890
+phase lab: await-growl-acceptance @13905
+phase lab: rival-turn-text @14026
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=14080 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @14086
+phase lab: select-growl @14097
+phase lab: use-growl @14098
+phase lab: await-growl-acceptance @14113
+phase lab: rival-turn-text @14233
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=14288 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @14294
+phase lab: select-growl @14305
+phase lab: use-growl @14306
+phase lab: await-growl-acceptance @14321
+phase lab: rival-turn-text @14514
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=14576 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @14582
+phase lab: select-growl @14593
+phase lab: use-growl @14594
+phase lab: await-growl-acceptance @14609
+phase lab: rival-turn-text @14730
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=14784 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @14790
+phase lab: select-growl @14801
+phase lab: use-growl @14802
+phase lab: await-growl-acceptance @14817
+phase lab: rival-turn-text @15009
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=15072 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @15078
+phase lab: select-growl @15089
+phase lab: use-growl @15090
+phase lab: await-growl-acceptance @15105
+phase lab: rival-turn-text @15305
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=15360 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @15366
+phase lab: select-growl @15377
+phase lab: use-growl @15378
+phase lab: await-growl-acceptance @15393
+phase lab: rival-turn-text @15584
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=15648 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @15654
+phase lab: select-growl @15665
+phase lab: use-growl @15666
+phase lab: await-growl-acceptance @15681
+phase lab: rival-turn-text @15801
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=15856 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @15862
+phase lab: select-growl @15873
+phase lab: use-growl @15874
+phase lab: await-growl-acceptance @15889
+phase lab: rival-turn-text @16009
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=16064 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @16070
+phase lab: select-growl @16081
+phase lab: use-growl @16082
+phase lab: await-growl-acceptance @16097
+phase lab: rival-turn-text @16218
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=16272 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @16278
+phase lab: select-growl @16289
+phase lab: use-growl @16290
+phase lab: await-growl-acceptance @16305
+phase lab: rival-turn-text @16426
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=16480 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @16486
+phase lab: select-growl @16497
+phase lab: use-growl @16498
+phase lab: await-growl-acceptance @16513
+phase lab: rival-turn-text @16707
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=16768 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @16774
+phase lab: select-growl @16785
+phase lab: use-growl @16786
+phase lab: await-growl-acceptance @16801
+phase lab: rival-turn-text @16992
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=17056 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @17062
+phase lab: select-growl @17073
+phase lab: use-growl @17074
+phase lab: await-growl-acceptance @17089
+phase lab: rival-turn-text @17210
+HOOK loop_head_MainInBattleLoop+6 pc=4253 romx=0F hLoaded=0F frame=17264 bytes=CD 00 4E 21 15 D0 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+phase lab: open-fight @17270
+phase lab: select-growl @17281
+phase lab: use-growl @17282
+phase lab: await-growl-acceptance @17297
+HOOK battle_faint_RemoveFaintedPlayerMon pc=47CD romx=0F hLoaded=0F frame=17463 bytes=FA 2F CC 4F 21 58 inb=2 type=0 opp=DD species2=B0 level=5 monnum=0 map=28
+HOOK EndOfBattle_3A pc=44FD romx=3A hLoaded=3A frame=17713 bytes=FA 33 D1 FE 04 20 inb=2 type=0 opp=DD species2=00 level=5 monnum=0 map=28
+phase lab: rival-battle-transition @17714
+phase lab: rival-exit-dialogue @17774
+phase lab: watch-rival-exit @17955
+phase lab: lab-loss-complete @18154
+phase save: save-open-start-menu @18155
+phase save: save-close-foreign-menu @18161
+lab ok=false ...4bb1/scratchpad/rcplay/lua/tests/gen1_rb_save_inputs.lua:62: START menu row count disagrees with the SAVE row
+POINT 
+saveram flushed
+RESULT: DONE

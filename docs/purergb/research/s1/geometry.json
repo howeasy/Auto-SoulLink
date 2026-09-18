@@ -1,0 +1,234 @@
+{
+  "wPartyMon2-wPartyMon1": {
+    "red": {
+      "a_bank": 1,
+      "a_addr": "D19F",
+      "b_bank": 1,
+      "b_addr": "D173",
+      "same_bank": true,
+      "delta_dec": 44,
+      "delta_hex": "0x002c"
+    },
+    "blue": {
+      "a_bank": 1,
+      "a_addr": "D19F",
+      "b_bank": 1,
+      "b_addr": "D173",
+      "same_bank": true,
+      "delta_dec": 44,
+      "delta_hex": "0x002c"
+    },
+    "green": {
+      "a_bank": 1,
+      "a_addr": "D19F",
+      "b_bank": 1,
+      "b_addr": "D173",
+      "same_bank": true,
+      "delta_dec": 44,
+      "delta_hex": "0x002c"
+    }
+  },
+  "wBoxMon2-wBoxMon1": {
+    "red": {
+      "a_bank": 1,
+      "a_addr": "DABF",
+      "b_bank": 1,
+      "b_addr": "DA9E",
+      "same_bank": true,
+      "delta_dec": 33,
+      "delta_hex": "0x0021"
+    },
+    "blue": {
+      "a_bank": 1,
+      "a_addr": "DABF",
+      "b_bank": 1,
+      "b_addr": "DA9E",
+      "same_bank": true,
+      "delta_dec": 33,
+      "delta_hex": "0x0021"
+    },
+    "green": {
+      "a_bank": 1,
+      "a_addr": "DABF",
+      "b_bank": 1,
+      "b_addr": "DA9E",
+      "same_bank": true,
+      "delta_dec": 33,
+      "delta_hex": "0x0021"
+    }
+  },
+  "wPartyMonOT-wPartyMons": {
+    "red": {
+      "a_bank": 1,
+      "a_addr": "D27B",
+      "b_bank": 1,
+      "b_addr": "D173",
+      "same_bank": true,
+      "delta_dec": 264,
+      "delta_hex": "0x0108"
+    },
+    "blue": {
+      "a_bank": 1,
+      "a_addr": "D27B",
+      "b_bank": 1,
+      "b_addr": "D173",
+      "same_bank": true,
+      "delta_dec": 264,
+      "delta_hex": "0x0108"
+    },
+    "green": {
+      "a_bank": 1,
+      "a_addr": "D27B",
+      "b_bank": 1,
+      "b_addr": "D173",
+      "same_bank": true,
+      "delta_dec": 264,
+      "delta_hex": "0x0108"
+    }
+  },
+  "sBox2-sBox1": {
+    "red": {
+      "a_bank": 2,
+      "a_addr": "A462",
+      "b_bank": 2,
+      "b_addr": "A000",
+      "same_bank": true,
+      "delta_dec": 1122,
+      "delta_hex": "0x0462"
+    },
+    "blue": {
+      "a_bank": 2,
+      "a_addr": "A462",
+      "b_bank": 2,
+      "b_addr": "A000",
+      "same_bank": true,
+      "delta_dec": 1122,
+      "delta_hex": "0x0462"
+    },
+    "green": {
+      "a_bank": 2,
+      "a_addr": "A462",
+      "b_bank": 2,
+      "b_addr": "A000",
+      "same_bank": true,
+      "delta_dec": 1122,
+      "delta_hex": "0x0462"
+    }
+  },
+  "sBox7-sBox1": {
+    "red": {
+      "a_bank": 3,
+      "a_addr": "A000",
+      "b_bank": 2,
+      "b_addr": "A000",
+      "same_bank": false,
+      "delta_dec": 0,
+      "delta_hex": "0x0000"
+    },
+    "blue": {
+      "a_bank": 3,
+      "a_addr": "A000",
+      "b_bank": 2,
+      "b_addr": "A000",
+      "same_bank": false,
+      "delta_dec": 0,
+      "delta_hex": "0x0000"
+    },
+    "green": {
+      "a_bank": 3,
+      "a_addr": "A000",
+      "b_bank": 2,
+      "b_addr": "A000",
+      "same_bank": false,
+      "delta_dec": 0,
+      "delta_hex": "0x0000"
+    }
+  },
+  "wMainDataEnd-wMainDataStart": {
+    "red": {
+      "a_bank": 1,
+      "a_addr": "DA88",
+      "b_bank": 1,
+      "b_addr": "D2FF",
+      "same_bank": true,
+      "delta_dec": 1929,
+      "delta_hex": "0x0789"
+    },
+    "blue": {
+      "a_bank": 1,
+      "a_addr": "DA88",
+      "b_bank": 1,
+      "b_addr": "D2FF",
+      "same_bank": true,
+      "delta_dec": 1929,
+      "delta_hex": "0x0789"
+    },
+    "green": {
+      "a_bank": 1,
+      "a_addr": "DA88",
+      "b_bank": 1,
+      "b_addr": "D2FF",
+      "same_bank": true,
+      "delta_dec": 1929,
+      "delta_hex": "0x0789"
+    }
+  },
+  "wBoxDataEnd-wBoxDataStart": {
+    "red": {
+      "a_bank": 1,
+      "a_addr": "DEEA",
+      "b_bank": 1,
+      "b_addr": "DA88",
+      "same_bank": true,
+      "delta_dec": 1122,
+      "delta_hex": "0x0462"
+    },
+    "blue": {
+      "a_bank": 1,
+      "a_addr": "DEEA",
+      "b_bank": 1,
+      "b_addr": "DA88",
+      "same_bank": true,
+      "delta_dec": 1122,
+      "delta_hex": "0x0462"
+    },
+    "green": {
+      "a_bank": 1,
+      "a_addr": "DEEA",
+      "b_bank": 1,
+      "b_addr": "DA88",
+      "same_bank": true,
+      "delta_dec": 1122,
+      "delta_hex": "0x0462"
+    }
+  },
+  "wPartyDataEnd-wPartyDataStart": {
+    "red": {
+      "a_bank": 1,
+      "a_addr": "D2FF",
+      "b_bank": 1,
+      "b_addr": "D16B",
+      "same_bank": true,
+      "delta_dec": 404,
+      "delta_hex": "0x0194"
+    },
+    "blue": {
+      "a_bank": 1,
+      "a_addr": "D2FF",
+      "b_bank": 1,
+      "b_addr": "D16B",
+      "same_bank": true,
+      "delta_dec": 404,
+      "delta_hex": "0x0194"
+    },
+    "green": {
+      "a_bank": 1,
+      "a_addr": "D2FF",
+      "b_bank": 1,
+      "b_addr": "D16B",
+      "same_bank": true,
+      "delta_dec": 404,
+      "delta_hex": "0x0194"
+    }
+  }
+}

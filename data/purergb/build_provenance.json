@@ -1,0 +1,64 @@
+{
+  "schema": "purergb-build-provenance-v0 (research phase; tools/build_purergb_syms.py will regenerate this in M0)",
+  "generated": "2026-09-17",
+  "source": {
+    "url": "https://github.com/Vortyne/pureRGB",
+    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
+    "tag_v2.7.6": "9c6d40f6dc040624de67ec97137345055ad109a7",
+    "note": "master = v2.7.6 + 'Remove older build 2.7.5 from git'; ROM output identical"
+  },
+  "toolchain": {
+    "rgbds": {
+      "version": "v1.0.3",
+      "asset": "rgbds-win64.zip",
+      "sha256": "b66c23cb6d073dd3866ea30ef1ca5164549e0dae9ebe771957aff25e2658b0e3"
+    },
+    "w64devkit": {
+      "version": "2.10.0",
+      "asset": "w64devkit-x64-2.10.0.7z.exe",
+      "sha256": "18d0a4c71a166f8401ab6305781bec5882b40b5e06ba9807c61cb5f3b3c6325e"
+    },
+    "command": "make -j4 pokered.gbc pokeblue.gbc pokegreen.gbc"
+  },
+  "roms": {
+    "pokered.gbc": {
+      "sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+      "header_crc": "929B",
+      "crc32": "BA3325C6",
+      "title": "POKEMON RED"
+    },
+    "pokeblue.gbc": {
+      "sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
+      "header_crc": "CC68",
+      "crc32": "E566AB2E",
+      "title": "POKEMON BLUE"
+    },
+    "pokegreen.gbc": {
+      "sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
+      "header_crc": "C775",
+      "crc32": "03729DCF",
+      "title": "POKEMON GREEN"
+    },
+    "equivalence": "built ROMs byte-identical to the v2.7.6 release BPS applied to the clean Red/Blue dumps (verified 2026-09-17)"
+  },
+  "symbols": {
+    "pokeblue.sym": {
+      "sha256": "01e5aa730d7fed79c9518de9203eae65e9a7a495884683282117e3965cfbdff8"
+    },
+    "pokegreen.sym": {
+      "sha256": "db9963d7c351afb4baf8cb512cade6ba190b171ac4372f192dd1d63830c7e180"
+    },
+    "pokered.sym": {
+      "sha256": "eb5bbf4854445b323aa20ba6568f7eae53346cd9d4a17179283ecc7f11d16baf"
+    },
+    "pokeblue.map": {
+      "sha256": "41d0bb13ea9e76d2f3aa1ead5bd242260a2abc27733ebae05f7e9b6eb4cd9c65"
+    },
+    "pokegreen.map": {
+      "sha256": "12bec98b81fc3040025943c1de59dafeeaf9d18357f2250c4b267005ac69e79b"
+    },
+    "pokered.map": {
+      "sha256": "5c74f2ec8efff61029ed1c7190edb86e218e43a03749e5a89031890dbbcff984"
+    }
+  }
+}

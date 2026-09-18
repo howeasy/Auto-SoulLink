@@ -1,0 +1,933 @@
+{
+  "wPartyCount": {
+    "red": {
+      "bank": 1,
+      "address": 53611,
+      "hex": "D16B"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53611,
+      "hex": "D16B"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53611,
+      "hex": "D16B"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPartySpecies": {
+    "red": {
+      "bank": 1,
+      "address": 53612,
+      "hex": "D16C"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53612,
+      "hex": "D16C"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53612,
+      "hex": "D16C"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPartyMons": {
+    "red": {
+      "bank": 1,
+      "address": 53619,
+      "hex": "D173"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53619,
+      "hex": "D173"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53619,
+      "hex": "D173"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPartyMonOT": {
+    "red": {
+      "bank": 1,
+      "address": 53883,
+      "hex": "D27B"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53883,
+      "hex": "D27B"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53883,
+      "hex": "D27B"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPartyMonNicks": {
+    "red": {
+      "bank": 1,
+      "address": 53949,
+      "hex": "D2BD"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53949,
+      "hex": "D2BD"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53949,
+      "hex": "D2BD"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBoxCount": {
+    "red": {
+      "bank": 1,
+      "address": 55944,
+      "hex": "DA88"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55944,
+      "hex": "DA88"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55944,
+      "hex": "DA88"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBoxSpecies": {
+    "red": {
+      "bank": 1,
+      "address": 55945,
+      "hex": "DA89"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55945,
+      "hex": "DA89"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55945,
+      "hex": "DA89"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBoxMons": {
+    "red": {
+      "bank": 1,
+      "address": 55966,
+      "hex": "DA9E"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55966,
+      "hex": "DA9E"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55966,
+      "hex": "DA9E"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBoxMonOT": {
+    "red": {
+      "bank": 1,
+      "address": 56626,
+      "hex": "DD32"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 56626,
+      "hex": "DD32"
+    },
+    "green": {
+      "bank": 1,
+      "address": 56626,
+      "hex": "DD32"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBoxMonNicks": {
+    "red": {
+      "bank": 1,
+      "address": 56846,
+      "hex": "DE0E"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 56846,
+      "hex": "DE0E"
+    },
+    "green": {
+      "bank": 1,
+      "address": 56846,
+      "hex": "DE0E"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wCurrentBoxNum": {
+    "red": {
+      "bank": 1,
+      "address": 54696,
+      "hex": "D5A8"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54696,
+      "hex": "D5A8"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54696,
+      "hex": "D5A8"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wIsInBattle": {
+    "red": {
+      "bank": 1,
+      "address": 53335,
+      "hex": "D057"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53335,
+      "hex": "D057"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53335,
+      "hex": "D057"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBattleType": {
+    "red": {
+      "bank": 1,
+      "address": 53338,
+      "hex": "D05A"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53338,
+      "hex": "D05A"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53338,
+      "hex": "D05A"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wCurOpponent": {
+    "red": {
+      "bank": 1,
+      "address": 53337,
+      "hex": "D059"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53337,
+      "hex": "D059"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53337,
+      "hex": "D059"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wEnemyMonSpecies2": {
+    "red": {
+      "bank": 1,
+      "address": 53248,
+      "hex": "D000"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53248,
+      "hex": "D000"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53248,
+      "hex": "D000"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wCurEnemyLevel": {
+    "red": {
+      "bank": 1,
+      "address": 53551,
+      "hex": "D12F"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53551,
+      "hex": "D12F"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53551,
+      "hex": "D12F"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wCurMap": {
+    "red": {
+      "bank": 1,
+      "address": 54118,
+      "hex": "D366"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54118,
+      "hex": "D366"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54118,
+      "hex": "D366"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPlayerID": {
+    "red": {
+      "bank": 1,
+      "address": 54113,
+      "hex": "D361"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54113,
+      "hex": "D361"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54113,
+      "hex": "D361"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPlayerName": {
+    "red": {
+      "bank": 1,
+      "address": 53600,
+      "hex": "D160"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53600,
+      "hex": "D160"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53600,
+      "hex": "D160"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wNumBagItems": {
+    "red": {
+      "bank": 1,
+      "address": 54594,
+      "hex": "D542"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54594,
+      "hex": "D542"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54594,
+      "hex": "D542"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wBagItems": {
+    "red": {
+      "bank": 1,
+      "address": 54595,
+      "hex": "D543"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54595,
+      "hex": "D543"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54595,
+      "hex": "D543"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPocketAbraNick": {
+    "red": {
+      "bank": 1,
+      "address": 54656,
+      "hex": "D580"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54656,
+      "hex": "D580"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54656,
+      "hex": "D580"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPlayerMoney": {
+    "red": {
+      "bank": 1,
+      "address": 54095,
+      "hex": "D34F"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54095,
+      "hex": "D34F"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54095,
+      "hex": "D34F"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wMonDataLocation": {
+    "red": {
+      "bank": 0,
+      "address": 52297,
+      "hex": "CC49"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 52297,
+      "hex": "CC49"
+    },
+    "green": {
+      "bank": 0,
+      "address": 52297,
+      "hex": "CC49"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wWhichPokemon": {
+    "red": {
+      "bank": 0,
+      "address": 53138,
+      "hex": "CF92"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 53138,
+      "hex": "CF92"
+    },
+    "green": {
+      "bank": 0,
+      "address": 53138,
+      "hex": "CF92"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wMoveMonType": {
+    "red": {
+      "bank": 0,
+      "address": 53141,
+      "hex": "CF95"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 53141,
+      "hex": "CF95"
+    },
+    "green": {
+      "bank": 0,
+      "address": 53141,
+      "hex": "CF95"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wRemoveMonFromBox": {
+    "red": {
+      "bank": 0,
+      "address": 53141,
+      "hex": "CF95"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 53141,
+      "hex": "CF95"
+    },
+    "green": {
+      "bank": 0,
+      "address": 53141,
+      "hex": "CF95"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wCurPartySpecies": {
+    "red": {
+      "bank": 0,
+      "address": 53137,
+      "hex": "CF91"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 53137,
+      "hex": "CF91"
+    },
+    "green": {
+      "bank": 0,
+      "address": 53137,
+      "hex": "CF91"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wLinkState": {
+    "red": {
+      "bank": 1,
+      "address": 53555,
+      "hex": "D133"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53555,
+      "hex": "D133"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53555,
+      "hex": "D133"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wDayCareMon": {
+    "red": {
+      "bank": 1,
+      "address": 55911,
+      "hex": "DA67"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55911,
+      "hex": "DA67"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55911,
+      "hex": "DA67"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wDayCareInUse": {
+    "red": {
+      "bank": 1,
+      "address": 55888,
+      "hex": "DA50"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55888,
+      "hex": "DA50"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55888,
+      "hex": "DA50"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wUsedItemOnWhichPokemon": {
+    "red": {
+      "bank": 0,
+      "address": 52998,
+      "hex": "CF06"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 52998,
+      "hex": "CF06"
+    },
+    "green": {
+      "bank": 0,
+      "address": 52998,
+      "hex": "CF06"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wSaveFileStatus": {
+    "red": {
+      "bank": 1,
+      "address": 53384,
+      "hex": "D088"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 53384,
+      "hex": "D088"
+    },
+    "green": {
+      "bank": 1,
+      "address": 53384,
+      "hex": "D088"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wOptions": {
+    "red": {
+      "bank": 1,
+      "address": 54109,
+      "hex": "D35D"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54109,
+      "hex": "D35D"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54109,
+      "hex": "D35D"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wOptions2": {
+    "red": {
+      "bank": 1,
+      "address": 55877,
+      "hex": "DA45"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55877,
+      "hex": "DA45"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55877,
+      "hex": "DA45"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wPkmnTypeRemapFlags": {
+    "red": {
+      "bank": 1,
+      "address": 55869,
+      "hex": "DA3D"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55869,
+      "hex": "DA3D"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55869,
+      "hex": "DA3D"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wSafariType": {
+    "red": {
+      "bank": 1,
+      "address": 55874,
+      "hex": "DA42"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 55874,
+      "hex": "DA42"
+    },
+    "green": {
+      "bank": 1,
+      "address": 55874,
+      "hex": "DA42"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "wGameInternalVersion": {
+    "red": {
+      "bank": 1,
+      "address": 54111,
+      "hex": "D35F"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 54111,
+      "hex": "D35F"
+    },
+    "green": {
+      "bank": 1,
+      "address": 54111,
+      "hex": "D35F"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "hLoadedROMBank": {
+    "red": {
+      "bank": 0,
+      "address": 65464,
+      "hex": "FFB8"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 65464,
+      "hex": "FFB8"
+    },
+    "green": {
+      "bank": 0,
+      "address": 65464,
+      "hex": "FFB8"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "hGBC": {
+    "red": {
+      "bank": 0,
+      "address": 65534,
+      "hex": "FFFE"
+    },
+    "blue": {
+      "bank": 0,
+      "address": 65534,
+      "hex": "FFFE"
+    },
+    "green": {
+      "bank": 0,
+      "address": 65534,
+      "hex": "FFFE"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sPlayerName": {
+    "red": {
+      "bank": 1,
+      "address": 42392,
+      "hex": "A598"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 42392,
+      "hex": "A598"
+    },
+    "green": {
+      "bank": 1,
+      "address": 42392,
+      "hex": "A598"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sMainData": {
+    "red": {
+      "bank": 1,
+      "address": 42403,
+      "hex": "A5A3"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 42403,
+      "hex": "A5A3"
+    },
+    "green": {
+      "bank": 1,
+      "address": 42403,
+      "hex": "A5A3"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sPartyData": {
+    "red": {
+      "bank": 1,
+      "address": 44844,
+      "hex": "AF2C"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 44844,
+      "hex": "AF2C"
+    },
+    "green": {
+      "bank": 1,
+      "address": 44844,
+      "hex": "AF2C"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sCurBoxData": {
+    "red": {
+      "bank": 1,
+      "address": 45248,
+      "hex": "B0C0"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 45248,
+      "hex": "B0C0"
+    },
+    "green": {
+      "bank": 1,
+      "address": 45248,
+      "hex": "B0C0"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sMainDataCheckSum": {
+    "red": {
+      "bank": 1,
+      "address": 46371,
+      "hex": "B523"
+    },
+    "blue": {
+      "bank": 1,
+      "address": 46371,
+      "hex": "B523"
+    },
+    "green": {
+      "bank": 1,
+      "address": 46371,
+      "hex": "B523"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sBox1": {
+    "red": {
+      "bank": 2,
+      "address": 40960,
+      "hex": "A000"
+    },
+    "blue": {
+      "bank": 2,
+      "address": 40960,
+      "hex": "A000"
+    },
+    "green": {
+      "bank": 2,
+      "address": 40960,
+      "hex": "A000"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sBox7": {
+    "red": {
+      "bank": 3,
+      "address": 40960,
+      "hex": "A000"
+    },
+    "blue": {
+      "bank": 3,
+      "address": 40960,
+      "hex": "A000"
+    },
+    "green": {
+      "bank": 3,
+      "address": 40960,
+      "hex": "A000"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sBank2AllBoxesChecksum": {
+    "red": {
+      "bank": 2,
+      "address": 47692,
+      "hex": "BA4C"
+    },
+    "blue": {
+      "bank": 2,
+      "address": 47692,
+      "hex": "BA4C"
+    },
+    "green": {
+      "bank": 2,
+      "address": 47692,
+      "hex": "BA4C"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  },
+  "sBank3AllBoxesChecksum": {
+    "red": {
+      "bank": 3,
+      "address": 47692,
+      "hex": "BA4C"
+    },
+    "blue": {
+      "bank": 3,
+      "address": 47692,
+      "hex": "BA4C"
+    },
+    "green": {
+      "bank": 3,
+      "address": 47692,
+      "hex": "BA4C"
+    },
+    "identical_across_titles": true,
+    "all_resolved": true
+  }
+}

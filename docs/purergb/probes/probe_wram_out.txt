@@ -1,0 +1,3 @@
+write_roundtrip before=00 viabus_after_write=5A restored=00
+frames=3600 same=3600 mism=0 wrambank0=0 wrambank1=3600 wrambank2=0 SVBK=F8
+RESULT: DONE

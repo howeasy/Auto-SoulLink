@@ -1,0 +1,182 @@
+{
+  "red": {
+    "summary": {
+      "ROM0": {
+        "used": 15002,
+        "free": 1382,
+        "banks": null
+      },
+      "ROMX": {
+        "used": 909787,
+        "free": 89637,
+        "banks": 61
+      },
+      "SRAM": {
+        "used": 25983,
+        "free": 6785,
+        "banks": 4
+      },
+      "WRAM0": {
+        "used": 4096,
+        "free": 0,
+        "banks": null
+      },
+      "WRAMX": {
+        "used": 4202,
+        "free": 3990,
+        "banks": 2
+      },
+      "HRAM": {
+        "used": 127,
+        "free": 0,
+        "banks": null
+      }
+    },
+    "rom0_empty": [
+      "EMPTY: $3a9a-$3fff ($0566 bytes)",
+      "TOTAL EMPTY: $0566 bytes"
+    ],
+    "romx_3d_empty": [
+      "EMPTY: $4c47-$7fff ($33b9 bytes)",
+      "TOTAL EMPTY: $33b9 bytes",
+      "EMPTY",
+      "TOTAL EMPTY: $0000 bytes"
+    ],
+    "romx_3e_present": false,
+    "romx_3f_present": false,
+    "wram0_empty": [
+      "TOTAL EMPTY: $0000 bytes"
+    ],
+    "wramx_bank1_empty": [
+      "EMPTY: $deea-$deff ($0016 bytes)",
+      "TOTAL EMPTY: $0016 bytes"
+    ],
+    "wramx_bank2_empty": [
+      "EMPTY: $d080-$dfff ($0f80 bytes)",
+      "TOTAL EMPTY: $0f80 bytes"
+    ],
+    "hram_empty": [
+      "TOTAL EMPTY: $0000 bytes"
+    ]
+  },
+  "blue": {
+    "summary": {
+      "ROM0": {
+        "used": 15002,
+        "free": 1382,
+        "banks": null
+      },
+      "ROMX": {
+        "used": 909978,
+        "free": 89446,
+        "banks": 61
+      },
+      "SRAM": {
+        "used": 25983,
+        "free": 6785,
+        "banks": 4
+      },
+      "WRAM0": {
+        "used": 4096,
+        "free": 0,
+        "banks": null
+      },
+      "WRAMX": {
+        "used": 4202,
+        "free": 3990,
+        "banks": 2
+      },
+      "HRAM": {
+        "used": 127,
+        "free": 0,
+        "banks": null
+      }
+    },
+    "rom0_empty": [
+      "EMPTY: $3a9a-$3fff ($0566 bytes)",
+      "TOTAL EMPTY: $0566 bytes"
+    ],
+    "romx_3d_empty": [
+      "EMPTY: $4d14-$7fff ($32ec bytes)",
+      "TOTAL EMPTY: $32ec bytes",
+      "EMPTY",
+      "TOTAL EMPTY: $0000 bytes"
+    ],
+    "romx_3e_present": false,
+    "romx_3f_present": false,
+    "wram0_empty": [
+      "TOTAL EMPTY: $0000 bytes"
+    ],
+    "wramx_bank1_empty": [
+      "EMPTY: $deea-$deff ($0016 bytes)",
+      "TOTAL EMPTY: $0016 bytes"
+    ],
+    "wramx_bank2_empty": [
+      "EMPTY: $d080-$dfff ($0f80 bytes)",
+      "TOTAL EMPTY: $0f80 bytes"
+    ],
+    "hram_empty": [
+      "TOTAL EMPTY: $0000 bytes"
+    ]
+  },
+  "green": {
+    "summary": {
+      "ROM0": {
+        "used": 15002,
+        "free": 1382,
+        "banks": null
+      },
+      "ROMX": {
+        "used": 909904,
+        "free": 89520,
+        "banks": 61
+      },
+      "SRAM": {
+        "used": 25983,
+        "free": 6785,
+        "banks": 4
+      },
+      "WRAM0": {
+        "used": 4096,
+        "free": 0,
+        "banks": null
+      },
+      "WRAMX": {
+        "used": 4202,
+        "free": 3990,
+        "banks": 2
+      },
+      "HRAM": {
+        "used": 127,
+        "free": 0,
+        "banks": null
+      }
+    },
+    "rom0_empty": [
+      "EMPTY: $3a9a-$3fff ($0566 bytes)",
+      "TOTAL EMPTY: $0566 bytes"
+    ],
+    "romx_3d_empty": [
+      "EMPTY: $4cb4-$7fff ($334c bytes)",
+      "TOTAL EMPTY: $334c bytes",
+      "EMPTY",
+      "TOTAL EMPTY: $0000 bytes"
+    ],
+    "romx_3e_present": false,
+    "romx_3f_present": false,
+    "wram0_empty": [
+      "TOTAL EMPTY: $0000 bytes"
+    ],
+    "wramx_bank1_empty": [
+      "EMPTY: $deea-$deff ($0016 bytes)",
+      "TOTAL EMPTY: $0016 bytes"
+    ],
+    "wramx_bank2_empty": [
+      "EMPTY: $d080-$dfff ($0f80 bytes)",
+      "TOTAL EMPTY: $0f80 bytes"
+    ],
+    "hram_empty": [
+      "TOTAL EMPTY: $0000 bytes"
+    ]
+  }
+}

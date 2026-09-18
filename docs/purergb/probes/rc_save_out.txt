@@ -1,0 +1,10 @@
+TITLE_IDLE requested=0 applied=0
+[scripted] bedroom reached after 2471 frames
+lab ok=true table: 000001D2863A9430
+BEFORE DVs=7693 HP=0014 stats=00 14 00 0A 00 0A 00 0A 00 0B bag=0 item0=FF x0
+menu item=3
+SAVE_WITNESS SaveMenu.save+3 frame=18548
+saves=1
+saveram flushed
+FINAL DVs=7693 HP=0014 stats=00 14 00 0A 00 0A 00 0A 00 0B bag=0 item0=FF x0
+RESULT: DONE

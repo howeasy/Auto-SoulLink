@@ -1,0 +1,13 @@
+TITLE_IDLE requested=0 applied=0
+[scripted] bedroom reached after 2471 frames
+lab ok=true table: 000002A31B327700
+BEFORE DVs=7693 HP=0014 stats=00 14 00 0A 00 0A 00 0A 00 0B bag=0 item0=FF x0
+INJECTED DVs=7693 HP=0014 stats=00 14 00 0A 00 0A 00 0A 00 0B bag=1 item0=32 x1
+menu item=0
+PREFLIGHT .setDVs pc=5B43 hl=D18E dv=7693 target=0 frame=18435
+COMMIT +11 pc=5B45 hl=D18F written=FFFF frame=18435
+RESTORED dv=7693 (bus write inside the callback)
+AFTER DVs=7693 HP=0014 stats=00 14 00 0A 00 0A 00 0A 00 0B bag=1 item0=32 x1
+FINAL DVs=7693 HP=0014 stats=00 14 00 0A 00 0A 00 0A 00 0B bag=0 item0=FF x0
+hits preflight=1 commit=1 recalc=1
+RESULT: DONE
