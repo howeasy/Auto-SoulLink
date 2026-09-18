@@ -209,9 +209,12 @@ OPT_IN_GAMES = ("gen1_new",)
 def scenario_applies(name, game):
     """Does `name` apply to `game`? Absent `games` means every title but the opt-in ones."""
     allowed = SCENARIOS[name].get("games")
+    # A pairing row can belong to a scenario family (GAMES[...]["game"], e.g. gen1_pure runs
+    # the gen1_new scenarios on the pure builds); scenarios declare the family, not the row.
+    family = GAMES.get(game, {}).get("game", game) if isinstance(GAMES, dict) else game
     if allowed is None:
-        return game not in OPT_IN_GAMES
-    return game in allowed
+        return game not in OPT_IN_GAMES and family not in OPT_IN_GAMES
+    return game in allowed or family in allowed
 
 
 def scenarios_for(game):
