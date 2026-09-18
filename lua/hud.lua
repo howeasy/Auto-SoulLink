@@ -202,16 +202,18 @@ end
 -- area erases nothing, so an expired banner used to sit there forever.
 -- Instead we wipe the whole surface at the top of every render and repaint
 -- only what is still live.
--- clearGraphics is the only call needed: it covers drawBox/drawText, which
--- is all this module draws with. gui.cleartext (gui.d.lua:34-39) clears only
--- text drawn with the separate gui.text() API, which this module never
--- calls but the diagnostic harnesses (lua/tests/test_*_force_faint.lua,
--- test_force_explosion.lua, sprite_gallery.lua) do -- calling cleartext here
--- would erase their output every frame this HUD renders alongside them.
--- Guarded so the module still loads outside BizHawk (lupa, unit tests).
+-- Two layers, two clears: gui.clearGraphics wipes the box layer (drawBox), but the
+-- text gui.drawText paints lives in BizHawk's text layer, which only gui.cleartext
+-- wipes -- measured 2026-09-18 (HUD-SHOT): at frame 1000 with zero draw calls the box
+-- was gone and 'Weedle linked!' was still on screen. 6c9f72c had dropped cleartext to
+-- spare the diagnostic harnesses' gui.text (lua/tests/test_*_force_faint.lua,
+-- test_force_explosion.lua, sprite_gallery.lua); they redraw their text every frame
+-- from their own onframeend handlers, so the worst case alongside this HUD is a
+-- one-frame flicker, not lost output. Guarded so the module loads outside BizHawk.
 local function clear_surface()
     if type(gui) ~= "table" then return end
     if type(gui.clearGraphics) == "function" then gui.clearGraphics() end
+    if type(gui.cleartext) == "function" then gui.cleartext() end
 end
 
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────

@@ -13,11 +13,9 @@ wipes it) rather than just recording call names, so a bug that clears AFTER draw
 call-order-only check based on "clear appears somewhere in the call list" would miss -- shows
 up as the surface ending the frame empty.
 
-gui.cleartext is stubbed too (BizHawk exposes it) but hud.lua must never call it: per
-`_docs_luacats/gui.d.lua:34-39` it clears only text drawn with the separate gui.text() API,
-which the diagnostic harnesses under lua/tests use and hud.lua does not -- see hud.lua's
-clear_surface(). The stub tracks calls to it separately so a regression that reintroduces the
-call is visible without erasing the harnesses' actual output.
+gui.cleartext is stubbed too: hud.lua MUST call it every render (drawText text lives in the text layer).
+The diagnostic harnesses under lua/tests redraw their gui.text every frame from their own
+onframeend handlers, so the per-render cleartext costs them at most a one-frame flicker.
 
 The stub is written in Lua (not a lupa-wrapped Python callable) so that hud.lua's
 `type(gui.clearGraphics) == "function"` guards see a real function.
@@ -32,9 +30,11 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 HUD = (REPO / "lua" / "hud.lua").as_posix()
 
 # `state` mirrors what would actually be visible on the BizHawk lua surface:
-# drawBox/drawText mark it dirty, clearGraphics wipes it. cleartext_calls is a
-# separate tally -- BizHawk's gui.cleartext only affects gui.text() output
-# (never drawn by hud.lua), so it must NOT be treated as clearing box/text.
+# Two layers, as BizHawk really has them (HUD-SHOT screenshot 2026-09-18: with zero draws
+# the box was gone and the drawText text still on screen): clearGraphics wipes the BOX layer
+# only, cleartext wipes the TEXT layer that gui.drawText paints. A render that clears one and
+# not the other leaves state.text (or state.box) stale, which is exactly the owner's
+# 'notifications never vanish' report.
 GUI_STUB = """
 return function(rec)
   local state = {box = false, text = false, cleartext_calls = 0, texts = {}, logs = {}}
@@ -42,11 +42,11 @@ return function(rec)
     clearGraphics = function(...)
       rec("clearGraphics")
       state.box = false
-      state.text = false
     end,
     cleartext = function(...)
       rec("cleartext")
       state.cleartext_calls = state.cleartext_calls + 1
+      state.text = false
     end,
     drawBox = function(...)
       rec("drawBox")
@@ -98,7 +98,7 @@ def test_expired_message_frame_clears_and_draws_nothing():
     w.render()  # frame 3, expired
     assert w.state.box is False
     assert w.state.text is False
-    assert w.state.cleartext_calls == 0
+    assert w.state.cleartext_calls >= 1
 
 
 def test_live_message_ends_the_frame_with_box_and_text_visible():
@@ -113,7 +113,7 @@ def test_live_message_ends_the_frame_with_box_and_text_visible():
     assert "drawText" in frame, frame
     assert w.state.box is True
     assert w.state.text is True
-    assert w.state.cleartext_calls == 0
+    assert w.state.cleartext_calls >= 1
 
 
 def test_explicit_clear_wipes_the_surface_once():
