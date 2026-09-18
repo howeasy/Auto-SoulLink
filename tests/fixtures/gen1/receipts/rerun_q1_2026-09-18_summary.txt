@@ -1,0 +1,7 @@
+poison + rival rerun 3 start 08:04:26 HEAD f6dc5b0
+poison_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  poison_new: PASS (attempt 1 of 4)
+rival_swap_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  rival_swap_new: PASS (attempt 1 of 3)

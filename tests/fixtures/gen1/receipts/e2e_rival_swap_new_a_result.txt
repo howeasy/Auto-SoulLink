@@ -1,8 +1,8 @@
 duo instance a scenario=rival_swap_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:50282 (non-blocking)…
-client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:50282
-[client] [SLink] TCP connected to 127.0.0.1:50282
+[client] [SLink] TCP connecting to 127.0.0.1:51340 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:51340
+[client] [SLink] TCP connected to 127.0.0.1:51340
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -16,157 +16,105 @@ booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
-phase pace-grass @2065 (10,35) battle=0 party=1
-[hunt] encounter 1 at (10,33) mode=catch balls=1
-phase wild-intro @2169 (10,33) battle=1 party=1
+phase pace-grass @1152 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @1342 (10,34) battle=1 party=1
 [hunt] turn 1 foe hp 13/13 odds 0.36 dmax nil -> fight
-phase wild-fight @2934 (10,33) battle=1 party=1
+phase wild-fight @2107 (10,34) battle=1 party=1
 [hunt] turn 2 foe hp 8/13 odds 0.54 dmax 6 -> fight
-heartbeat f=3600 party=1 connected=true
 [hunt] turn 3 foe hp 3/13 odds 1.00 dmax 6 -> throw
-phase wild-throw @3992 (10,33) battle=1 party=1
+phase wild-throw @3165 (10,34) battle=1 party=1
+heartbeat f=3600 party=1 connected=true
 [hunt] threw ball index 0 -> timeout
-PARTY_COUNT 1 -> 2 @5993
-PARTY_UNREADABLE @6000 species list and struct disagree (count=2 species=99 A5 FF 00 00 00 00)
+PARTY_COUNT 1 -> 2 @5166
+PARTY_UNREADABLE @5170 species list and struct disagree (count=2 species=99 A5 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":3,"in_box":false,"key":"C322:4190:A5","level":2,"maxHP":13,"nickname":"RATTATA","player":"a","seq":174,"species_id":165,"stats":{"level":2,"maxHP":13}}
-TX {"event":"safe","player":"a","seq":175}
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":3,"in_box":false,"key":"41C8:4190:A5","level":2,"maxHP":13,"nickname":"RATTATA","player":"a","seq":147,"species_id":165,"stats":{"level":2,"maxHP":13}}
+TX {"event":"safe","player":"a","seq":148}
 RX hud_show text=>> Got PIDGEY
 RX play_sound
 RX msgbox text=RATTATA and PIDGEY linked!
-RX party_mon key=C322:4190:A5
-PARTY_READABLE @6520  (count=2 species=99 A5 FF 00 00 00 00)
-[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @6530 (10,33) battle=0 party=2
-[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @6531 (10,33) battle=0 party=2
-HUNT caught after 4467 frames, 1 encounter(s)
-MYKEY 0 06C3:4190:99
-PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=17
-MYKEY 1 C322:4190:A5
-PARTY slot=1 key=C322:4190:A5 species=165 level=2 hp=3
-CAUGHT C322:4190:A5
+RX party_mon key=41C8:4190:A5
+PARTY_READABLE @5690  (count=2 species=99 A5 FF 00 00 00 00)
 [client] [SLink-gen1] writes re-enabled after a live validation
-TX {"event":"sync_retrieve_done","key":"C322:4190:A5","player":"a","seq":177}
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @5703 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @5704 (10,34) battle=0 party=2
+HUNT caught after 4553 frames, 1 encounter(s)
 MYKEY 0 06C3:4190:99
 PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=17
-MYKEY 1 C322:4190:A5
-PARTY slot=1 key=C322:4190:A5 species=165 level=2 hp=3
+MYKEY 1 41C8:4190:A5
+PARTY slot=1 key=41C8:4190:A5 species=165 level=2 hp=3
+CAUGHT 41C8:4190:A5
+TX {"event":"sync_retrieve_done","key":"41C8:4190:A5","player":"a","seq":151}
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=17
+MYKEY 1 41C8:4190:A5
+PARTY slot=1 key=41C8:4190:A5 species=165 level=2 hp=3
 SEEN capture=1 box_mon=0 stats_cache=0 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
 SAVE_PHASE link_new save-open-start-menu
 SAVE_PHASE link_new save-close-foreign-menu
 SAVE_PHASE link_new save-select-save
 SAVE_PHASE link_new save-choose-save
 SAVE_PHASE link_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_a_1_witness.bin bytes=31592 saves=1 frame=6944
+SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_a_1_witness.bin bytes=31592 saves=1 frame=6112
 SAVE_PHASE link_new save-await-close
-heartbeat f=7200 party=2 connected=true
 SAVE_PHASE link_new save-witnessed
-SAVE_WITNESS link_new frames=533
+SAVE_WITNESS link_new frames=528
 MYKEY 0 06C3:4190:99
 PRE_RIVAL slot=0 key=06C3:4190:99 species=153 level=5 hp=17
-MYKEY 1 C322:4190:A5
-PRE_RIVAL slot=1 key=C322:4190:A5 species=165 level=2 hp=3
-RIVAL_KEYS starter=06C3:4190:99 linked=C322:4190:A5
+MYKEY 1 41C8:4190:A5
+PRE_RIVAL slot=1 key=41C8:4190:A5 species=165 level=2 hp=3
+RIVAL_KEYS starter=06C3:4190:99 linked=41C8:4190:A5
 RIVAL_EVENTS byte164=81 first=1 wants=1
-RIVAL_PHASE route1_north @7246 map=12 (10,33) battle=0 opponent=0 hp=17
-INCIDENTAL_BATTLE 1 map=12 (12,24)
-RIVAL_PHASE wild-dialogue @7503 map=12 (12,24) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-right-column @8088 map=12 (12,24) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-run @8097 map=12 (12,24) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-attempt-run @8113 map=12 (12,24) battle=1 opponent=0 hp=17
-RIVAL_PHASE unknown-wild-menu @8129 map=12 (12,24) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-dialogue @8146 map=12 (12,24) battle=1 opponent=0 hp=17
-TX {"event":"safe","player":"a","seq":233}
-RIVAL_PHASE route1_north @8211 map=12 (12,24) battle=0 opponent=0 hp=17
-RIVAL_PHASE close-text @8221 map=12 (12,24) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @8258 map=12 (12,24) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north-detour @8259 map=12 (12,24) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @8323 map=12 (10,24) battle=0 opponent=0 hp=17
-INCIDENTAL_BATTLE 2 map=12 (14,12)
-RIVAL_PHASE wild-dialogue @8697 map=12 (14,12) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-right-column @9288 map=12 (14,12) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-run @9297 map=12 (14,12) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-attempt-run @9313 map=12 (14,12) battle=1 opponent=0 hp=17
-RIVAL_PHASE unknown-wild-menu @9329 map=12 (14,12) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-dialogue @9346 map=12 (14,12) battle=1 opponent=0 hp=17
-TX {"event":"safe","player":"a","seq":274}
-RIVAL_PHASE route1_north @9411 map=12 (14,12) battle=0 opponent=0 hp=17
-RIVAL_PHASE close-text @9421 map=12 (14,12) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @9458 map=12 (14,12) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north-detour @9459 map=12 (14,12) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @9523 map=12 (16,11) battle=0 opponent=0 hp=17
-INCIDENTAL_BATTLE 3 map=12 (14,9)
-RIVAL_PHASE wild-dialogue @9578 map=12 (14,9) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-right-column @10169 map=12 (14,9) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-run @10177 map=12 (14,9) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-attempt-run @10193 map=12 (14,9) battle=1 opponent=0 hp=17
-RIVAL_PHASE unknown-wild-menu @10209 map=12 (14,9) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-dialogue @10226 map=12 (14,9) battle=1 opponent=0 hp=17
-TX {"event":"safe","player":"a","seq":305}
-RIVAL_PHASE route1_north @10306 map=12 (14,9) battle=0 opponent=0 hp=17
-RIVAL_PHASE close-text @10316 map=12 (14,9) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @10353 map=12 (14,9) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north-detour @10354 map=12 (14,9) battle=0 opponent=0 hp=17
-INCIDENTAL_BATTLE 4 map=12 (12,8)
-RIVAL_PHASE wild-dialogue @10405 map=12 (12,8) battle=1 opponent=0 hp=17
-heartbeat f=10800 party=2 connected=true
-RIVAL_PHASE wild-select-right-column @11000 map=12 (12,8) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-run @11009 map=12 (12,8) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-attempt-run @11025 map=12 (12,8) battle=1 opponent=0 hp=17
-RIVAL_PHASE unknown-wild-menu @11041 map=12 (12,8) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-dialogue @11058 map=12 (12,8) battle=1 opponent=0 hp=17
-TX {"event":"safe","player":"a","seq":333}
-RIVAL_PHASE route1_north @11123 map=12 (12,8) battle=0 opponent=0 hp=17
-RIVAL_PHASE close-text @11133 map=12 (12,8) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @11170 map=12 (12,8) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north-detour @11171 map=12 (12,8) battle=0 opponent=0 hp=17
-RIVAL_PHASE route1_north @11235 map=12 (13,10) battle=0 opponent=0 hp=17
-RIVAL_PHASE viridian_west @11476 map=1 (21,35) battle=0 opponent=0 hp=17
-TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":346}
-RIVAL_PHASE route22_rival @12157 map=33 (39,9) battle=0 opponent=0 hp=17
-TX {"area_id":"route_22","event":"area_enter","loc_name":"Route 22","player":"a","seq":370}
-INCIDENTAL_BATTLE 5 map=33 (31,11)
-RIVAL_PHASE wild-dialogue @12363 map=33 (31,11) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-right-column @12969 map=33 (31,11) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-select-run @12977 map=33 (31,11) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-attempt-run @12993 map=33 (31,11) battle=1 opponent=0 hp=17
-RIVAL_PHASE unknown-wild-menu @13009 map=33 (31,11) battle=1 opponent=0 hp=17
-RIVAL_PHASE wild-dialogue @13026 map=33 (31,11) battle=1 opponent=0 hp=17
-TX {"area_id":"route_22","event":"no_catch","level":3,"player":"a","seq":402,"species_id":165}
-TX {"event":"safe","player":"a","seq":403}
-RIVAL_PHASE route22_rival @13091 map=33 (31,11) battle=0 opponent=0 hp=17
+RIVAL_PHASE route1_north @6414 map=12 (10,34) battle=0 opponent=0 hp=17
+heartbeat f=7200 party=2 connected=true
+RIVAL_PHASE viridian_west @7299 map=1 (21,35) battle=0 opponent=0 hp=17
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"a","seq":204}
+TX {"area_id":"route_22","event":"area_enter","loc_name":"Route 22","player":"a","seq":227}
+RIVAL_PHASE route22_rival @7980 map=33 (39,9) battle=0 opponent=0 hp=17
+INCIDENTAL_BATTLE 1 map=33 (31,9)
+RIVAL_PHASE wild-dialogue @8220 map=33 (31,9) battle=1 opponent=0 hp=17
+RIVAL_PHASE wild-select-right-column @8825 map=33 (31,9) battle=1 opponent=0 hp=17
+RIVAL_PHASE wild-select-run @8833 map=33 (31,9) battle=1 opponent=0 hp=17
+RIVAL_PHASE wild-attempt-run @8849 map=33 (31,9) battle=1 opponent=0 hp=17
+RIVAL_PHASE unknown-wild-menu @8865 map=33 (31,9) battle=1 opponent=0 hp=17
+RIVAL_PHASE wild-dialogue @8882 map=33 (31,9) battle=1 opponent=0 hp=17
+TX {"area_id":"route_22","event":"no_catch","level":4,"player":"a","seq":261,"species_id":3}
+TX {"event":"safe","player":"a","seq":262}
+RIVAL_PHASE route22_rival @8947 map=33 (31,9) battle=0 opponent=0 hp=17
 RX play_sound
 RX msgbox text=Route 22 is a dead zone!
-RIVAL_PHASE close-text @13101 map=33 (31,11) battle=0 opponent=0 hp=17
-RIVAL_PHASE route22_rival @13138 map=33 (31,11) battle=0 opponent=0 hp=17
-RIVAL_PHASE route22_rival-detour @13139 map=33 (31,11) battle=0 opponent=0 hp=17
-RIVAL_PHASE route22_rival @13203 map=33 (30,10) battle=0 opponent=0 hp=17
+RIVAL_PHASE close-text @8957 map=33 (31,9) battle=0 opponent=0 hp=17
+RIVAL_PHASE route22_rival @8994 map=33 (31,9) battle=0 opponent=0 hp=17
+RIVAL_PHASE route22_rival-detour @8995 map=33 (31,9) battle=0 opponent=0 hp=17
+RIVAL_PHASE route22_rival @9059 map=33 (30,8) battle=0 opponent=0 hp=17
 RIVAL_TRIGGER map=33 x=29 y=5
-RIVAL_PHASE close-text @13326 map=33 (29,5) battle=0 opponent=0 hp=17
-RIVAL_PHASE route22_rival-detour @14132 map=33 (29,5) battle=0 opponent=0 hp=17
-RIVAL_BATTLE_BEGIN frame=14136 opponent=225
-TX {"event":"trainer_battle_start","player":"a","seq":439,"trainer_id":225}
+RIVAL_PHASE close-text @9162 map=33 (29,5) battle=0 opponent=0 hp=17
+RIVAL_PHASE route22_rival-detour @9972 map=33 (29,5) battle=0 opponent=0 hp=17
+RIVAL_BATTLE_BEGIN frame=9976 opponent=225
+TX {"event":"trainer_battle_start","player":"a","seq":297,"trainer_id":225}
 RX replace_rival_team n=2
 RX replace_rival_team
 [client] [SLink-gen1] RIVAL_WINDOW init_frames=182
-TX {"event":"rival_team_replaced","player":"a","seq":446,"species_ids":[176,36],"trainer_id":225}
-RIVAL_PHASE rival-fight @14318 map=33 (29,5) battle=2 opponent=225 hp=17
-RIVAL_TEAM_REPLACED frame=14317 within=181
+TX {"event":"rival_team_replaced","player":"a","seq":304,"species_ids":[176,36],"trainer_id":225}
+RIVAL_PHASE rival-fight @10158 map=33 (29,5) battle=2 opponent=225 hp=17
+RIVAL_TEAM_REPLACED frame=10157 within=181
 ENEMY_MONS_MATCH slots=2
-heartbeat f=14400 party=2 connected=true
 [client] [SLink-gen1] RIVAL_WINDOW init_frames=182 staged_frames=302
 ENEMY_SENDOUT species=176 expected=176
+heartbeat f=10800 party=2 connected=true
+heartbeat f=14400 party=2 connected=true
 heartbeat f=18000 party=2 connected=true
-heartbeat f=21600 party=2 connected=true
-TX {"event":"safe","player":"a","seq":766}
+TX {"event":"safe","player":"a","seq":622}
 RIVAL_OVER result=0
-RIVAL_PHASE rival-won @23906 map=33 (29,5) battle=0 opponent=0 hp=3
+RIVAL_PHASE rival-won @19667 map=33 (29,5) battle=0 opponent=0 hp=10
 RIVAL_RESULT win
 MYKEY 0 06C3:4190:99
-POST_RIVAL slot=0 key=06C3:4190:99 species=153 level=7 hp=3
-MYKEY 1 C322:4190:A5
-POST_RIVAL slot=1 key=C322:4190:A5 species=165 level=2 hp=3
+POST_RIVAL slot=0 key=06C3:4190:99 species=153 level=7 hp=10
+MYKEY 1 41C8:4190:A5
+POST_RIVAL slot=1 key=41C8:4190:A5 species=165 level=2 hp=3
 RIVAL_DONE
 SAVE_PHASE rival_swap_new_a save-open-start-menu
 SAVE_PHASE rival_swap_new_a save-close-foreign-menu
@@ -176,9 +124,8 @@ SAVE_PHASE rival_swap_new_a save-close-foreign-menu
 SAVE_PHASE rival_swap_new_a save-select-save
 SAVE_PHASE rival_swap_new_a save-choose-save
 SAVE_PHASE rival_swap_new_a save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_a_1_witness.bin bytes=31592 saves=2 frame=25088
-heartbeat f=25200 party=2 connected=true
+SAVE_WITNESS_DUMP path=patch/build/e2e_rival_swap_new_a_1_witness.bin bytes=31592 saves=2 frame=20848
 SAVE_PHASE rival_swap_new_a save-await-close
 SAVE_PHASE rival_swap_new_a save-witnessed
-SAVE_WITNESS rival_swap_new_a frames=1407
+SAVE_WITNESS rival_swap_new_a frames=1406
 RESULT: PASS (rival team swapped to the partner's 2 mon(s) and the battle was a win)

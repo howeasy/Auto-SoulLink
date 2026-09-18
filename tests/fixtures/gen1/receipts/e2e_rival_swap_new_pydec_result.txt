@@ -1,8 +1,8 @@
-attempt 1 of 2
+attempt 1 of 3
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=a site=1dc5f09a16d96d78c84cc6464ee7bf0c787aab54fa46a4862e0116631211ce0b file=1dc5f09a16d96d78c84cc6464ee7bf0c787aab54fa46a4862e0116631211ce0b match=true saves=2
+SAVE_WITNESS_SHA256 inst=a site=048238b6a10c37e6b3c6bafa16f0a166ea2bd1408b0b11b3e212135a731c9e56 file=048238b6a10c37e6b3c6bafa16f0a166ea2bd1408b0b11b3e212135a731c9e56 match=true saves=2
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=b site=675e3cf5f564821631d60af35fdd56840dcda816a941e116e1f71de8ae167921 file=675e3cf5f564821631d60af35fdd56840dcda816a941e116e1f71de8ae167921 match=true saves=2
+SAVE_WITNESS_SHA256 inst=b site=026b866629e7c43002ee2084d9b6d9d1f64bb16f4f6c657182d21ecb58dfd0be file=026b866629e7c43002ee2084d9b6d9d1f64bb16f4f6c657182d21ecb58dfd0be match=true saves=2
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
 W-4 swap: 2 blob(s), within=181 frames (RIVAL_INIT_FRAMES=240), compare slots=2, send-out 176, result=win, pair alive, both flushes starter+catch; RIVAL_WINDOW init_frames=182 staged_frames=302 — diagnostics only, neither number may widen the window

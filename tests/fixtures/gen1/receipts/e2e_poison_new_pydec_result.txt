@@ -1,10 +1,10 @@
-attempt 1 of 2
+attempt 1 of 4
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=a site=1a8842e6e1e51aee1812fb8d0a532ab4c43f5ca7b4e719ec78c0f2c2c73a2af4 file=1a8842e6e1e51aee1812fb8d0a532ab4c43f5ca7b4e719ec78c0f2c2c73a2af4 match=true saves=1
+SAVE_WITNESS_SHA256 inst=a site=5dbc4128b760c0baa0bbdbe5c5371405dd367b19aa91f1477d18351a32bf82ff file=5dbc4128b760c0baa0bbdbe5c5371405dd367b19aa91f1477d18351a32bf82ff match=true saves=1
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=b site=fc963b06a0c06fad4b47350afd3eee3cf704c3e7be3fbc5dbd926c681c84d3ad file=fc963b06a0c06fad4b47350afd3eee3cf704c3e7be3fbc5dbd926c681c84d3ad match=true saves=1
+SAVE_WITNESS_SHA256 inst=b site=408f485c3b4f284ac085047f4ae0768a0cea1691240cf6a2489315231ce604b4 file=408f485c3b4f284ac085047f4ae0768a0cea1691240cf6a2489315231ce604b4 match=true saves=1
 links.json carries 2 dead-zone record(s) (no_catch areas) — area locks, not links
-S-4 poison: PSN $08 after 7 encounters, one faint then whiteout on the wire, no memorial; the empty link table left the server idle
+S-4 poison: PSN $08 after 8 encounters, one faint then whiteout on the wire, no memorial; the empty link table left the server idle
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
 B saved the starter at 19/19 status 0 and money 1400 (the receipt's MONEY_AFTER)
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
