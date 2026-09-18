@@ -11,3 +11,18 @@
 - `../../data/purergb/` — canonical `.sym`/`.map` for the three titles + `build_provenance.json`.
 
 Nothing here is wired into the runtime; implementation starts only after the Gen 1 R/B RC ships (owner order). Built ROMs are not committed.
+
+## Build recipe (M0 build-equivalence gate)
+
+- `../../data/purergb_sources.lock.json` pins the pureRGB commit and the sha1 of each
+  built ROM (`outputs.<pokered|pokeblue|pokegreen>.sha1`) — the source of truth for
+  "does this build match the one we reviewed".
+- `../../tools/build_purergb_syms.py` drives the build and regenerates
+  `../../data/purergb/*.sym|*.map` from source.
+- `.github/workflows/purergb-syms.yml` reproduces the canonical build from a clean
+  Ubuntu checkout (pinned RGBDS v1.0.3 + pinned pureRGB commit), checks the built
+  ROMs' sha1 against the lock, and diffs the `.sym`/`.map` output against what's
+  committed here — the CI-side half of the same gate.
+- `../../tools/apply_bps.py` applies a BPS v1 patch to a source ROM (used by the probe
+  harness in `probes/bps_apply.py`'s original form); see `tests/unit/test_apply_bps.py`
+  for the format details it implements.

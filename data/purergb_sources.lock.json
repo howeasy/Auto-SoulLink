@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "rgbds_version": "v1.0.3",
+  "w64devkit_version": "2.10.0",
+  "source": {
+    "url": "https://github.com/Vortyne/pureRGB",
+    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
+    "tag": "v2.7.6",
+    "tag_commit": "9c6d40f6dc040624de67ec97137345055ad109a7"
+  },
+  "outputs": {
+    "pokered": {
+      "filename": "pokered.gbc",
+      "sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+      "header_crc": "929B",
+      "crc32": "BA3325C6",
+      "title": "POKEMON RED"
+    },
+    "pokeblue": {
+      "filename": "pokeblue.gbc",
+      "sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
+      "header_crc": "CC68",
+      "crc32": "E566AB2E",
+      "title": "POKEMON BLUE"
+    },
+    "pokegreen": {
+      "filename": "pokegreen.gbc",
+      "sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
+      "header_crc": "C775",
+      "crc32": "03729DCF",
+      "title": "POKEMON GREEN"
+    }
+  },
+  "make_targets": ["pokered.gbc", "pokeblue.gbc", "pokegreen.gbc"]
+}

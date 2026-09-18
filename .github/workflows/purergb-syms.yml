@@ -1,0 +1,96 @@
+# Build-equivalence gate for docs/purergb/PLAN.md milestone M0: reproduce the
+# canonical pureRGB build from source on a clean Ubuntu runner, at the pinned
+# commit, with the pinned RGBDS release, and prove the result matches what we
+# committed to data/purergb/*.sym|*.map byte-for-byte. Nothing here is pushed;
+# it only verifies and uploads the build artifacts for inspection.
+name: purergb-syms
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - data/purergb_sources.lock.json
+      - tools/build_purergb_syms.py
+      - .github/workflows/purergb-syms.yml
+
+env:
+  PUREGB_COMMIT: 7e7a46535ca332ad24ecb02e326ea2f75e79ebb9
+  RGBDS_VERSION: v1.0.3
+  # sha256 of rgbds-linux-x86_64.tar.xz, from `gh release view v1.0.3 --repo
+  # gbdev/rgbds --json assets` (the asset's GitHub-computed content digest).
+  RGBDS_SHA256: 280a52061a0c516999bee75ac357628d6d50784309e0486cef25f7460e6f330b
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SLink
+        uses: actions/checkout@v4
+
+      - name: Install RGBDS (pinned release binary)
+        run: |
+          curl -fLo rgbds.tar.xz \
+            "https://github.com/gbdev/rgbds/releases/download/${RGBDS_VERSION}/rgbds-linux-x86_64.tar.xz"
+          echo "${RGBDS_SHA256}  rgbds.tar.xz" | sha256sum -c -
+          sudo tar -xJf rgbds.tar.xz -C /usr/local/bin rgbasm rgblink rgbfix rgbgfx
+          rgbasm --version
+
+      - name: Install build deps (pureRGB's tools/ Makefile needs make + gcc)
+        run: sudo apt-get update && sudo apt-get install -y make gcc
+
+      - name: Clone pureRGB at the pinned commit
+        run: |
+          git clone https://github.com/Vortyne/pureRGB.git pureRGB
+          git -C pureRGB checkout "${PUREGB_COMMIT}"
+
+      - name: Build the three ROMs
+        working-directory: pureRGB
+        run: make -j4 pokered.gbc pokeblue.gbc pokegreen.gbc
+
+      - name: Verify sha1 against the source-of-truth pins
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys
+
+          lock_path = pathlib.Path("data/purergb_sources.lock.json")
+          pins = {}
+          if lock_path.exists():
+              outputs = json.loads(lock_path.read_text())["outputs"]
+              pins = {name: info["sha1"] for name, info in outputs.items()}
+          else:
+              pins = {
+                  "pokered": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+                  "pokeblue": "d419fe244fa17196f7df46ddab47c840e7573652",
+                  "pokegreen": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
+              }
+          ok = True
+          lines = []
+          for name, expect in pins.items():
+              data = pathlib.Path(f"pureRGB/{name}.gbc").read_bytes()
+              got = hashlib.sha1(data).hexdigest()
+              status = "OK" if got == expect else "MISMATCH"
+              if got != expect:
+                  ok = False
+              lines.append(f"{name}: {got} (expect {expect}) {status}")
+          report = "\n".join(lines) + "\n"
+          print(report)
+          pathlib.Path("sha1-report.txt").write_text(report)
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Compare .sym/.map against the committed snapshot (fail on drift)
+        run: |
+          for name in pokered pokeblue pokegreen; do
+            cmp "pureRGB/$name.sym" "data/purergb/$name.sym"
+            cmp "pureRGB/$name.map" "data/purergb/$name.map"
+          done
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: purergb-build
+          path: |
+            pureRGB/*.sym
+            pureRGB/*.map
+            sha1-report.txt
