@@ -383,7 +383,7 @@ local rom = parts.profile.rom
 local function hunt(mode, options)
     options = options or {}
     local driver = Driver.new({
-        step = yield_buttons, u8 = rd,
+        step = yield_buttons, u8 = rd, facts = FACTS,
         sites = { display_battle_menu = rom.DisplayBattleMenu.addr, move_selection_menu = rom.MoveSelectionMenu.addr,
                   select_enemy_move = rom.SelectEnemyMove.addr, execute_player_move = rom.ExecutePlayerMove.addr,
                   execute_enemy_move = rom.ExecuteEnemyMove.addr },
@@ -2803,7 +2803,7 @@ function scenarios.poison_new()
     -- looks addresses up by NAME and never iterates that table (gen1_battle_driver.lua:63-80),
     -- so the whole .sym map is a valid bundle; `sites` IS iterated (:69), so it stays curated.
     local driver = Driver.new({
-        step = yield_buttons, u8 = rd, addresses = symbols,
+        step = yield_buttons, u8 = rd, facts = FACTS, addresses = symbols,
         sites = { display_battle_menu = rom.DisplayBattleMenu.addr,
                   move_selection_menu = rom.MoveSelectionMenu.addr,
                   select_enemy_move = rom.SelectEnemyMove.addr,
@@ -3144,7 +3144,7 @@ function scenarios.rival_swap_new()
     -- the whole .sym map is a valid `addresses` bundle because the driver looks names up and
     -- never iterates it (gen1_battle_driver.lua:63-80), while `sites` IS iterated (:72).
     local driver = Driver.new({
-        step = yield_buttons, u8 = rd, addresses = symbols,
+        step = yield_buttons, u8 = rd, facts = FACTS, addresses = symbols,
         sites = { display_battle_menu = rom.DisplayBattleMenu.addr,
                   move_selection_menu = rom.MoveSelectionMenu.addr,
                   select_enemy_move = rom.SelectEnemyMove.addr,
