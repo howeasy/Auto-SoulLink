@@ -98,6 +98,22 @@ EXPECTED_DELTA = frozenset({
     "EVENT.OAK_GOT_PARCEL_SUBSTITUTE",
     "ITEM.BALL_IDS",
     "MENU.START.max_minus_save",
+    # The PC confirmations and the box list: pureRGB routes the release/change-box prompts through
+    # DisplayMultiChoiceMenu (one column left of YesNoChoice, a third HIDE entry on CHANGE BOX,
+    # START-to-release on RELEASE) and moves the box NAMES off column 13, which now holds the counts.
+    "MENU.PC.release_confirm.menu_x",
+    "MENU.PC.release_confirm.yes",
+    "MENU.PC.release_confirm.no",
+    "MENU.PC.release_confirm.confirm",
+    "MENU.PC.changebox_prompt.menu_y",
+    "MENU.PC.changebox_prompt.menu_x",
+    "MENU.PC.changebox_prompt.menu_max",
+    "MENU.PC.changebox_prompt.yes",
+    "MENU.PC.changebox_prompt.no",
+    "MENU.PC.changebox_prompt.hide",
+    "MENU.PC.box_menu.menu_x",
+    "MENU.PC.box_menu.name",
+    "MENU.PC.box_menu.count_col",
     "TRAINER.OPP_ID_OFFSET",
     "TRAINER.OPP_RIVAL1",
 })
@@ -318,3 +334,161 @@ def test_the_hunt_ball_test_follows_the_lane(lua):
     assert [hunt.is_ball(i) for i in (1, 4, 5, 8)] == [True, True, False, False]
     hunt.with_facts(_dofile(lua, PURE))
     assert [hunt.is_ball(i) for i in (1, 4, 5, 8)] == [True, True, True, True]
+
+
+# ── the PC driver's confirmations and box list, per lane ────────────────────────────────────────
+
+_TILE_BASE = 0xC000  # an arbitrary wTileMap address for the synthetic reader
+
+
+def _tile_bytes(text):
+    """The pret charmap bytes for the glyphs the probes spell (gen1_rb_center_inputs.glyph)."""
+    out = []
+    for char in text:
+        if "A" <= char <= "Z":
+            out.append(0x80 + ord(char) - ord("A"))
+        elif "a" <= char <= "z":
+            out.append(0xA0 + ord(char) - ord("a"))
+        elif char == " ":
+            out.append(0x7F)
+        else:
+            raise AssertionError(f"the probes cannot spell {char!r}")
+    return out
+
+
+def _pc_driver(lua, facts_name, ops, screen):
+    """A PC driver over a synthetic wTileMap: `screen` = {offset: text}. The wTileMap table comes
+    back too, so a test can change the screen between two steps of ONE driver."""
+    facts = _dofile(lua, facts_name)
+    memory = lua.table()
+    for offset, text in screen.items():
+        for i, byte in enumerate(_tile_bytes(text)):
+            memory[offset + i] = byte
+    reader = lua.eval("function(mem, base) return function(addr) return mem[addr - base] or 0 end end")
+    driver = _dofile(lua, "gen1_rb_pc_inputs.lua").new(
+        _identity(lua, facts),
+        lua.table(rd=reader(memory, _TILE_BASE),
+                  symbols=lua.table(wTileMap=_TILE_BASE),
+                  ops=lua.table(*[lua.table(*op) for op in ops]),
+                  center=_dofile(lua, "gen1_rb_center_inputs.lua")))
+    return driver, facts, memory
+
+
+def _pc_point(lua, facts, **fields):
+    point = {"map": facts["MAP"]["VIRIDIAN_POKECENTER"], "x": 13, "y": 4, "party_count": 2,
+             "menu_index": 0, "list_menu_id": 0, "list_scroll_offset": 0, "facing": "up",
+             "text_box": 0}
+    point.update(fields)
+    return lua.table(**point)
+
+
+def _unclassified(lua, driver, point):
+    """A screen the driver does not recognise falls through to the A-on-cadence branch -- the
+    `pc-activate` phase here, since these tests never open the PC from Bill's menu."""
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-activate" and buttons["A"] is True
+    return phase
+
+
+def test_the_pc_release_confirmation_follows_the_lane(lua):
+    """The release YES/NO is YesNoChoice on vanilla and TwoOptionSmallMenu on pureRGB: the cursor
+    column and both string offsets are the table's, and only pureRGB's YES needs the second key
+    (A prints "Press START to / confirm release." and arms START, which then releases)."""
+    pure = _dofile(lua, PURE)["MENU"]["PC"]["release_confirm"]
+    vanilla = _dofile(lua, RB)["MENU"]["PC"]["release_confirm"]
+    assert (vanilla["menu_x"], vanilla["yes"], vanilla["no"], vanilla["confirm"]) == \
+        (15, 176, 216, "A")
+    assert (pure["menu_x"], pure["yes"], pure["no"], pure["confirm"]) == \
+        (14, 175, 215, "A_THEN_START")
+
+    # vanilla: the same screen twice, A both times -- YesNoChoice takes A on YES
+    point = _pc_point(lua, _dofile(lua, RB), menu_y=vanilla["menu_y"], menu_x=vanilla["menu_x"],
+                      menu_max=vanilla["menu_max"])
+    driver = _pc_driver(lua, RB, [("release_box", 1)],
+                        {vanilla["yes"]: "YES", vanilla["no"]: "NO"})[0]
+    for frame in (16, 32):
+        buttons, phase = _step(lua, driver, point, frame)
+        assert phase == "pc-yes" and buttons["A"] is True and buttons["Start"] is False
+
+    # pureRGB: A first (that only prints the hint), then START once the hint's first line is up
+    point = _pc_point(lua, _dofile(lua, PURE), menu_y=pure["menu_y"], menu_x=pure["menu_x"],
+                      menu_max=pure["menu_max"])
+    driver, facts, memory = _pc_driver(lua, PURE, [("release_box", 1)],
+                                       {pure["yes"]: "YES", pure["no"]: "NO"})
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-yes" and buttons["A"] is True and buttons["Start"] is False
+    text1 = facts["MENU"]["PC"]["text1"]
+    for i, byte in enumerate(_tile_bytes("Press START to")):
+        memory[text1 + i] = byte
+    buttons, phase = _step(lua, driver, point, 32)
+    assert phase == "pc-yes-confirm" and buttons["Start"] is True and buttons["A"] is False
+
+    # the other lane's box must not classify it: the geometry is the table's, not a literal
+    driver = _pc_driver(lua, RB, [("release_box", 1)], {pure["yes"]: "YES", pure["no"]: "NO"})[0]
+    _unclassified(lua, driver, point)
+
+
+def test_the_pc_changebox_prompt_follows_the_lane(lua):
+    """Vanilla's prompt is YesNoChoice; pureRGB's is YES/NO/HIDE and the driver picks YES -- HIDE
+    would set EVENT_HIDE_CHANGE_BOX_SAVE_MSG and silence the prompt for the rest of the save."""
+    pure = _dofile(lua, PURE)["MENU"]["PC"]["changebox_prompt"]
+    vanilla = _dofile(lua, RB)["MENU"]["PC"]["changebox_prompt"]
+    assert (vanilla["menu_y"], vanilla["menu_x"], vanilla["menu_max"], vanilla["hide"]) == \
+        (8, 15, 1, False)
+    assert (pure["menu_y"], pure["menu_x"], pure["menu_max"], pure["yes"], pure["no"],
+            pure["hide"]) == (6, 12, 2, 133, 173, 213)
+
+    point = _pc_point(lua, _dofile(lua, RB), menu_y=vanilla["menu_y"], menu_x=vanilla["menu_x"],
+                      menu_max=vanilla["menu_max"])
+    driver, _, _ = _pc_driver(lua, RB, [("changebox", 12)],
+                              {vanilla["yes"]: "YES", vanilla["no"]: "NO"})
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-changebox-yes" and buttons["A"] is True
+
+    screen = {pure["yes"]: "YES", pure["no"]: "NO", pure["hide"]: "HIDE"}
+    point = _pc_point(lua, _dofile(lua, PURE), menu_y=pure["menu_y"], menu_x=pure["menu_x"],
+                      menu_max=pure["menu_max"])
+    driver, _, _ = _pc_driver(lua, PURE, [("changebox", 12)], screen)
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-changebox-yes" and buttons["A"] is True
+    # cursor left on HIDE (item 2): the driver walks back to YES and never presses A there
+    point = _pc_point(lua, _dofile(lua, PURE), menu_y=pure["menu_y"], menu_x=pure["menu_x"],
+                      menu_max=pure["menu_max"], menu_index=2)
+    driver, _, _ = _pc_driver(lua, PURE, [("changebox", 12)], screen)
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-changebox-yes" and buttons["Up"] is True and buttons["A"] is False
+
+    # the other lane's box must not classify it either
+    driver, _, _ = _pc_driver(lua, PURE, [("changebox", 12)],
+                              {vanilla["yes"]: "YES", vanilla["no"]: "NO"})
+    _unclassified(lua, driver, point)
+
+
+def test_the_pc_box_list_follows_the_lane(lua):
+    """pureRGB moved the box NAMES off column 13 (wTopMenuItemX=7, names at hlcoord 8,1) and gave
+    column 13 to the box counts; both anchors come from F.MENU.PC.box_menu."""
+    pure = _dofile(lua, PURE)["MENU"]["PC"]["box_menu"]
+    vanilla = _dofile(lua, RB)["MENU"]["PC"]["box_menu"]
+    assert (vanilla["menu_x"], vanilla["name"], vanilla["count_col"]) == (12, 33, False)
+    assert (pure["menu_x"], pure["name"], pure["count_col"]) == (7, 28, 13)
+    assert vanilla["name"] + vanilla["menu_max"] * vanilla["name_step"] == 253
+    assert pure["name"] + pure["menu_max"] * pure["name_step"] == 248
+
+    last = lambda spec: spec["name"] + spec["menu_max"] * spec["name_step"]  # noqa: E731
+    point = _pc_point(lua, _dofile(lua, RB), menu_y=vanilla["menu_y"], menu_x=vanilla["menu_x"],
+                      menu_max=vanilla["menu_max"])
+    driver, _, _ = _pc_driver(lua, RB, [("changebox", 12)],
+                              {vanilla["name"]: "BOX", last(vanilla): "BOX"})
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-box-move" and buttons["Down"] is True
+
+    point = _pc_point(lua, _dofile(lua, PURE), menu_y=pure["menu_y"], menu_x=pure["menu_x"],
+                      menu_max=pure["menu_max"])
+    driver, _, _ = _pc_driver(lua, PURE, [("changebox", 12)], {pure["name"]: "BOX", last(pure): "BOX"})
+    buttons, phase = _step(lua, driver, point, 16)
+    assert phase == "pc-box-move" and buttons["Down"] is True
+
+    # the vanilla anchors (33/253) are pureRGB's COUNT column, not its box names: a screen that
+    # only has those must not classify as the box list there
+    driver, _, _ = _pc_driver(lua, PURE, [("changebox", 12)], {33: "BOX", 253: "BOX"})
+    _unclassified(lua, driver, point)

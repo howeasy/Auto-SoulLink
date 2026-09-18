@@ -175,22 +175,47 @@ return {
     PC = {
       menu_y     = 2, -- SAME: engine/pokemon/bills_pc.asm:77-79
       menu_x     = 1, -- SAME: engine/pokemon/bills_pc.asm:77-79
-      main       = 42, -- SAME: engine/pokemon/bills_pc.asm:32 (hlcoord 2,2 = 42)
-      withdraw   = 42, -- SAME: engine/pokemon/bills_pc.asm:36 (hlcoord 2,2 = 42)
-      deposit    = 82, -- SAME: engine/pokemon/bills_pc.asm:40 (hlcoord 2,4 = 82)
-      release    = 122, -- SAME: engine/pokemon/bills_pc.asm:49 (hlcoord 2,6 = 122)
-      changebox  = 162, -- SAME: engine/pokemon/bills_pc.asm:57 (hlcoord 2,8 = 162)
-      seeya      = 202, -- SAME: engine/pokemon/bills_pc.asm:60 (hlcoord 2,10 = 202)
-      sub_action = 251, -- SAME: engine/pokemon/bills_pc.asm:474 (hlcoord 11,12 = 251)
-      sub_cancel = 331, -- SAME: engine/pokemon/bills_pc.asm:476-478 (hlcoord 11,14 / 11,16 = 291 / 331)
-      yes        = 176, -- SAME: home/yes_no.asm:6 (hlcoord 14,7 box; YES one row below)
-      no         = 216, -- SAME: home/yes_no.asm:6 (NO one row below YES)
-      list       = 86, -- SAME: home/list_menu.asm:411 (hlcoord 6,4 = 86); the vanilla driver cites home/list_menu.asm:364-365, whose lines shifted in pureRGB
-      list_step  = 40, -- SAME: home/list_menu.asm:411 region (entries two tile rows apart)
-      box        = 33, -- SAME: engine/menus/change_box_menu.asm:96 (hlcoord 13,1 = 33)
-      box_last   = 253, -- SAME: engine/menus/change_box_menu.asm:96 region (one box per tile row; n=12 -> 253)
-      text1      = 281, -- UNVERIFIED: vanilla driver offset 14*20+1; I did not open the line that places this text on pureRGB
-      text2      = 321, -- UNVERIFIED: vanilla driver offset 16*20+1; same reason
+      -- `main` is the PC MAIN menu's first row (SOMEONE's/BILL's PC) and `withdraw`..`seeya` are
+      -- BILL's PC menu rows: two screens, both placing rows at (2,2),(2,4),... so the offsets
+      -- coincide. `next` in a menu string moves two tile rows (BillsPCMenuText below).
+      main       = 42, -- SAME: engine/pokemon/bills_pc.asm:33 (DisplayPCMainMenu, hlcoord 2,2 = 42)
+      withdraw   = 42, -- SAME: engine/pokemon/bills_pc.asm:126 (BillsPCMenu, hlcoord 2,2) + BillsPCMenuText :341-347
+      deposit    = 82, -- SAME: engine/pokemon/bills_pc.asm:341-347 (row 2 of BillsPCMenuText)
+      release    = 122, -- SAME: engine/pokemon/bills_pc.asm:341-347 (row 3, RELEASE)
+      changebox  = 162, -- SAME: engine/pokemon/bills_pc.asm:341-347 (row 4, CHANGE BOX)
+      seeya      = 202, -- SAME: engine/pokemon/bills_pc.asm:341-347 (row 5, SEE YA!)
+      sub_action = 251, -- SAME: engine/pokemon/bills_pc.asm:393 (hlcoord 11,12 = 251)
+      sub_cancel = 331, -- SAME: engine/pokemon/bills_pc.asm:395 (hlcoord 11,14 / 11,16 = 291 / 331)
+      list       = 86, -- SAME: home/list_menu.asm:364 (hlcoord 6,4 = 86)
+      list_step  = 40, -- SAME: home/list_menu.asm:364 region (entries two tile rows apart)
+      text1      = 281, -- SAME: home/text.asm:242 (hlcoord 1, 14) + data/text_boxes.asm:10 MESSAGE_BOX 0,12,19,17
+      text2      = 321, -- SAME: home/text.asm:242 region (the box's second line, two rows below the first)
+      -- The two confirmation screens the driver presses through; both are YesNoChoice here
+      -- (home/yes_no.asm:3-18 -> the two-option box at hlcoord 14,7 with b=8/c=15).
+      release_confirm = {
+        menu_y   = 8, -- SAME: home/yes_no.asm:18 "lb bc, 8, 15" (b = the menu Y)
+        menu_x   = 15, -- SAME: home/yes_no.asm:18 (c = the menu X)
+        yes      = 176, -- SAME: home/yes_no.asm:17 + engine/menus/text_box.asm:278-279 (strings one row below the corner)
+        no       = 216, -- SAME: engine/menus/text_box.asm:278-279 (NO one row below YES)
+        menu_max = 1, -- SAME: engine/menus/text_box.asm:219-220 "ld a, $1 / ld [wMaxMenuItem], a"
+        confirm  = "A", -- SAME: engine/pokemon/bills_pc.asm:304-311 (OnceReleasedText -> YesNoChoice; A on YES releases)
+      },
+      changebox_prompt = {
+        menu_y   = 8, -- SAME: engine/menus/save.asm:361 "call YesNoChoice" (the same box)
+        menu_x   = 15, -- SAME: engine/menus/save.asm:361
+        menu_max = 1, -- SAME: engine/menus/save.asm:361
+        yes      = 176, -- SAME: engine/menus/save.asm:361
+        no       = 216, -- SAME: engine/menus/save.asm:361
+        hide     = false, -- SAME: a two-option box has no third entry
+      },
+      box_menu = {
+        menu_y    = 1, -- SAME: engine/menus/save.asm:444-445 "ld a, 1 / ld [wTopMenuItemY], a"
+        menu_x    = 12, -- SAME: engine/menus/save.asm:446-447 "ld a, 12 / ld [wTopMenuItemX], a"
+        menu_max  = 11, -- SAME: engine/menus/save.asm:442-443 "ld a, 11 / ld [wMaxMenuItem], a"
+        name      = 33, -- SAME: engine/menus/save.asm:467 (hlcoord 13,1 = 33, BoxNames, single-spaced)
+        name_step = 20, -- SAME: one box per tile row; n=12 -> 33 + 11*20 = 253
+        count_col = false, -- SAME: vanilla has no count column -- the names themselves are at column 13
+      },
     },
   },
 

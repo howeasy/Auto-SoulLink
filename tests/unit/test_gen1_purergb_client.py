@@ -923,3 +923,20 @@ def test_a_wild_battle_is_staged_by_wild_begin_without_a_trainer_id(world):
     world.fire("battle_begin")
     world.step()
     assert any("battle_begin with no opponent: ignored" in line for line in world.logs), world.logs[-5:]
+
+
+def test_an_unsettled_in_battle_acquisition_counts_as_a_capture_at_battle_end(world):
+    """The capture settles only once the party reads back consistently; on pureRGB that can be
+    after EndOfBattle, so battle_end must not call the battle a failed encounter while an
+    in-battle acquisition is pending (whiteout_new/reconnect_new: no_catch a frame before the
+    capture, dead zone, both mons retired)."""
+    world.connect()
+    world.in_battle(opponent=0, species=0xA5, level=3)
+    world.fire("wild_begin")
+    world.step()
+    world.bus[world.ram["wMonDataLocation"]] = 0
+    world.fire("add_party_mon")            # ItemUseBall -> AddPartyMon, party not yet readable
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert world.events("no_catch") == []

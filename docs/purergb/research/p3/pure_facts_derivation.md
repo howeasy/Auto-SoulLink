@@ -12,7 +12,7 @@ pureRGB column is the pure file.
 Sources: the pinned pureRGB checkout (commit `7e7a4653`) and the packs under `data/games/gen1_purergb/`; `data/games/gen1_rby/engine_signals.json` and `data/pret/pokered.sym` /
 `data/purergb/pokered.sym` for the vanilla column, which no earlier revision of this table had.
 
-Counts: **230 facts** — SAME 170, DELTA 33, UNVERIFIED 27.
+Counts: **250 rows** — SAME 176, DELTA 49, UNVERIFIED 25.
 
 ## Table
 
@@ -125,22 +125,42 @@ Counts: **230 facts** — SAME 170, DELTA 33, UNVERIFIED 27.
 | `MENU.NAMING.watched` | `1` | `1` | SAME |  |
 | `MENU.PC.menu_y` | `2` | `2` | SAME | SAME: engine/pokemon/bills_pc.asm:77-79 |
 | `MENU.PC.menu_x` | `1` | `1` | SAME | SAME: engine/pokemon/bills_pc.asm:77-79 |
-| `MENU.PC.main` | `42` | `42` | SAME | SAME: engine/pokemon/bills_pc.asm:32 (hlcoord 2,2 = 42) |
-| `MENU.PC.withdraw` | `42` | `42` | SAME | SAME: engine/pokemon/bills_pc.asm:36 (hlcoord 2,2 = 42) |
-| `MENU.PC.deposit` | `82` | `82` | SAME | SAME: engine/pokemon/bills_pc.asm:40 (hlcoord 2,4 = 82) |
-| `MENU.PC.release` | `122` | `122` | SAME | SAME: engine/pokemon/bills_pc.asm:49 (hlcoord 2,6 = 122) |
-| `MENU.PC.changebox` | `162` | `162` | SAME | SAME: engine/pokemon/bills_pc.asm:57 (hlcoord 2,8 = 162) |
-| `MENU.PC.seeya` | `202` | `202` | SAME | SAME: engine/pokemon/bills_pc.asm:60 (hlcoord 2,10 = 202) |
-| `MENU.PC.sub_action` | `251` | `251` | SAME | SAME: engine/pokemon/bills_pc.asm:474 (hlcoord 11,12 = 251) |
-| `MENU.PC.sub_cancel` | `331` | `331` | SAME | SAME: engine/pokemon/bills_pc.asm:476-478 (hlcoord 11,14 / 11,16 = 291 / 331) |
-| `MENU.PC.yes` | `176` | `176` | SAME | SAME: home/yes_no.asm:6 (hlcoord 14,7 box; YES one row below) |
-| `MENU.PC.no` | `216` | `216` | SAME | SAME: home/yes_no.asm:6 (NO one row below YES) |
-| `MENU.PC.list` | `86` | `86` | SAME | SAME: home/list_menu.asm:411 (hlcoord 6,4 = 86); the vanilla driver cites home/list_menu.asm:364-365, whose lines shifted in pureRGB |
-| `MENU.PC.list_step` | `40` | `40` | SAME | SAME: home/list_menu.asm:411 region (entries two tile rows apart) |
-| `MENU.PC.box` | `33` | `33` | SAME | SAME: engine/menus/change_box_menu.asm:96 (hlcoord 13,1 = 33) |
-| `MENU.PC.box_last` | `253` | `253` | SAME | SAME: engine/menus/change_box_menu.asm:96 region (one box per tile row; n=12 -> 253) |
-| `MENU.PC.text1` | `281` | `281` | UNVERIFIED | UNVERIFIED: vanilla driver offset 14*20+1; I did not open the line that places this text on pureRGB |
-| `MENU.PC.text2` | `321` | `321` | UNVERIFIED | UNVERIFIED: vanilla driver offset 16*20+1; same reason |
+| `MENU.PC.main` | `42` | `42` | SAME | SAME: the PC MAIN menu's first row (SOMEONE's/BILL's PC) -- vanilla engine/pokemon/bills_pc.asm:33, pure :32 (DisplayPCMainMenu, hlcoord 2,2 = 42) |
+| `MENU.PC.withdraw` | `42` | `42` | SAME | SAME: BILL's PC menu's first row -- vanilla engine/pokemon/bills_pc.asm:126 + BillsPCMenuText :341-347, pure :119 + :426-432 |
+| `MENU.PC.deposit` | `82` | `82` | SAME | SAME: row 2 of BillsPCMenuText (vanilla :341-347, pure :426-432; `next` moves two tile rows) |
+| `MENU.PC.release` | `122` | `122` | SAME | SAME: row 3 of BillsPCMenuText (same lines) |
+| `MENU.PC.changebox` | `162` | `162` | SAME | SAME: row 4 of BillsPCMenuText (same lines) |
+| `MENU.PC.seeya` | `202` | `202` | SAME | SAME: row 5 of BillsPCMenuText (same lines) |
+| `MENU.PC.sub_action` | `251` | `251` | SAME | SAME: vanilla engine/pokemon/bills_pc.asm:393, pure :474 (hlcoord 11,12 = 251) |
+| `MENU.PC.sub_cancel` | `331` | `331` | SAME | SAME: vanilla engine/pokemon/bills_pc.asm:395, pure :476-478 (hlcoord 11,14 / 11,16 = 291 / 331) |
+| `MENU.PC.list` | `86` | `86` | SAME | SAME: vanilla home/list_menu.asm:364, pure :411 (hlcoord 6,4 = 86) |
+| `MENU.PC.list_step` | `40` | `40` | SAME | SAME: list entries are two tile rows apart (same regions) |
+| `MENU.PC.text1` | `281` | `281` | SAME | SAME: the message box's first line -- vanilla home/text.asm:242, pure :182 (hlcoord 1,14 = 281) + data/text_boxes.asm MESSAGE_BOX `0,12,19,17` (identical in both) |
+| `MENU.PC.text2` | `321` | `321` | SAME | SAME: the box's second line, two rows below the first (same lines); pureRGB's live PC receipt read the release hint's first line at 281 |
+| `MENU.PC.release_confirm.menu_y` | `8` | `8` | SAME | SAME: vanilla home/yes_no.asm:18 "lb bc, 8, 15"; pure engine/menus/multi_choice_menu.asm:73-74 |
+| `MENU.PC.release_confirm.menu_x` | `15` | `14` | DELTA | vanilla home/yes_no.asm:18; pure multi_choice_menu.asm:75-76 (TwoOptionSmallMenu sits one column left) |
+| `MENU.PC.release_confirm.yes` | `176` | `175` | DELTA | vanilla home/yes_no.asm:17 + engine/menus/text_box.asm:278-279 (strings one row below the corner); pure multi_choice_menu.asm:82 (hlcoord 15,8 = 175) |
+| `MENU.PC.release_confirm.no` | `216` | `215` | DELTA | the second entry, two tile rows down (same lines as above) |
+| `MENU.PC.release_confirm.menu_max` | `1` | `1` | SAME | SAME: vanilla engine/menus/text_box.asm:219-220; pure multi_choice_menu.asm:69-71 |
+| `MENU.PC.release_confirm.confirm` | `A` | `A_THEN_START` | DELTA | vanilla engine/pokemon/bills_pc.asm:304-311 (OnceReleasedText -> YesNoChoice, A on YES releases); pure :372-383 -- A prints "Press START to / confirm release." (data/text/text_2.asm:1650-1652) and arms PAD_START, and START is what releases (:384-388) |
+| `MENU.PC.changebox_prompt.menu_y` | `8` | `6` | DELTA | vanilla engine/menus/save.asm:361 (YesNoChoice); pure multi_choice_menu.asm:113 (ThreeOptionMenuSmall) |
+| `MENU.PC.changebox_prompt.menu_x` | `15` | `12` | DELTA | vanilla engine/menus/save.asm:361; pure multi_choice_menu.asm:107-108 |
+| `MENU.PC.changebox_prompt.menu_max` | `1` | `2` | DELTA | pure has THREE entries: multi_choice_menu.asm:104-106 "ld a, 2 / ld [wMaxMenuItem], a" |
+| `MENU.PC.changebox_prompt.yes` | `176` | `133` | DELTA | pure multi_choice_menu.asm:118 (hlcoord 13,6 = 133) |
+| `MENU.PC.changebox_prompt.no` | `216` | `173` | DELTA | the second entry, two tile rows down |
+| `MENU.PC.changebox_prompt.hide` | `false` | `213` | DELTA | pure adds HIDE (multi_choice_menu.asm:118 + YesNoHide :285-289, passed at engine/menus/save.asm:355); HIDE sets EVENT_HIDE_CHANGE_BOX_SAVE_MSG (save.asm:375-376) |
+| `MENU.PC.box_menu.menu_y` | `1` | `1` | SAME | SAME: vanilla engine/menus/save.asm:444-445; pure engine/menus/change_box_menu.asm:25-26 |
+| `MENU.PC.box_menu.menu_x` | `12` | `7` | DELTA | vanilla engine/menus/save.asm:446-447; pure change_box_menu.asm:27-28 |
+| `MENU.PC.box_menu.menu_max` | `11` | `11` | SAME | SAME: vanilla save.asm:442-443; pure change_box_menu.asm:23-24 |
+| `MENU.PC.box_menu.name` | `33` | `28` | DELTA | vanilla save.asm:467 (hlcoord 13,1 = 33, BoxNames single-spaced); pure change_box_menu.asm:66 (hlcoord 8,1 = 28) |
+| `MENU.PC.box_menu.name_step` | `20` | `20` | SAME | SAME: one box per tile row; vanilla 33 + 11*20 = 253, pure 28 + 11*20 = 248 |
+| `MENU.PC.box_menu.count_col` | `false` | `13` | DELTA | pure change_box_menu.asm:96 (hlcoord 13,1 -- the column vanilla keeps the NAMES in, now the box counts). Not probed: an empty box leaves it blank |
+| `BLACKOUT.default.map` | `0` | `0` | SAME | SAME: the new-game blackout point is Pallet Town -- scripts/RedsHouse1F.asm:3 `call SetOnlyLastBlackoutMap` with wLastMap = PALLET_TOWN (engine/overworld/special_warps.asm:28) |
+| `BLACKOUT.default.x` | `5` | `5` | SAME | SAME: FlyWarpDataPtr `fly_warp PALLET_TOWN, 5, 6` (data/maps/special_warps.asm:97) |
+| `BLACKOUT.default.y` | `6` | `6` | SAME | SAME: same line |
+| `BLACKOUT.after_center.map` | `0` | `1` | DELTA | vanilla engine/events/pokecenter.asm:17 sets wLastBlackoutMap only when the nurse HEALS; pureRGB moved the call to Pokemon-Center ENTRY (scripts/ViridianPokecenter.asm:2 -> home/overworld.asm:2394/2401), so the lane's Center-PC visit leaves VIRIDIAN_CITY |
+| `BLACKOUT.after_center.x` | `5` | `23` | DELTA | pure: FlyWarpDataPtr `fly_warp VIRIDIAN_CITY, 23, 26` (data/maps/special_warps.asm:98) |
+| `BLACKOUT.after_center.y` | `6` | `26` | DELTA | same line |
 | `POISON.psn_mask` | `8` | `8` | SAME | SAME: engine/events/poison.asm:16 "and 1 << PSN" + constants/battle_constants.asm:65 "const PSN ; 3" |
 | `POISON.hp_per_tick` | `1` | `1` | SAME | SAME: engine/events/poison.asm:25 ("subtract 1 from HP") |
 | `POISON.steps_per_tick` | `4` | `4` | SAME | SAME: engine/events/poison.asm:8-10 (wStepCounter & $3 -> damage every fourth step) |
@@ -251,7 +271,7 @@ Counts: **230 facts** — SAME 170, DELTA 33, UNVERIFIED 27.
 
 ## What differs, and why
 
-Eight scalar facts, each at its definition and at its consumers:
+The scalar facts, each at its definition and at its consumers:
 
 1. **`TRAINER.OPP_RIVAL1` (+ `OPP_ID_OFFSET`)** — `wCurOpponent` is `OPP_ID_OFFSET + class`: 200 +
    `RIVAL1` `$19` = **225** on vanilla, 197 + `RIVAL1` `$18` = **221** on pureRGB
@@ -266,6 +286,17 @@ Eight scalar facts, each at its definition and at its consumers:
 4. **`ITEM.BALL_IDS` / `CATCH.hunt_ball_max`** — pureRGB adds `HYPER_BALL` `$05`
    (`constants/item_constants.asm:14`, replacing TOWN MAP) with its own `ItemUseBall` dispatch, so
    the vanilla scan `{1,2,3,4}` misses a ball the player can throw: `{1,2,3,4,5,8}`.
+5. **`MENU.PC.{release_confirm,changebox_prompt,box_menu}`** — pureRGB routes the RELEASE
+   confirmation and the CHANGE BOX prompt through `DisplayMultiChoiceMenu`
+   (`engine/menus/multi_choice_menu.asm:8`) instead of `YesNoChoice`: the small variants sit one
+   column left (`wTopMenuItemX` 15 → 14, YES 176 → 175), CHANGE BOX gains a third HIDE entry
+   (`:285-289` + `ThreeOptionMenuSmall` `:112-119`) that sets `EVENT_HIDE_CHANGE_BOX_SAVE_MSG`
+   (`engine/menus/save.asm:375-376`) and silences the prompt for the rest of the save, and RELEASE
+   needs A (the "Press START to / confirm release." hint, `engine/pokemon/bills_pc.asm:378-383`)
+   before START releases. Its box list moved the NAMES off column 13 (`wTopMenuItemX` 12 → 7, names
+   at `hlcoord 8,1` = 28) and gave column 13 to the box counts. `MENU.PC.yes` / `.no` / `.box` /
+   `.box_last` are superseded by these three groups (the old `.box`/`.box_last` cited pureRGB's
+   count column as if it were the names).
 
 And the `BANKS` group, which is not a scalar fact but a per-foundation SITE INVENTORY:
 
@@ -275,7 +306,7 @@ And the `BANKS` group, which is not a scalar fact but a per-foundation SITE INVE
   at all — the twin carries `false` for those, and a driver reading one finds the battle-core bank;
 - the five battle-menu hooks the live battle driver filters on are bank `$0F` in BOTH `.sym` sets.
 
-## The 27 UNVERIFIED facts
+## The 25 UNVERIFIED facts
 
 - **`MART.LIST_SIGNATURE.*`** (5) — a runtime list-menu signature the mart driver matches; the
   generic list menu sets these from its own state (`home/list_menu.asm:44-53`) and the Mart path was
@@ -283,8 +314,11 @@ And the `BANKS` group, which is not a scalar fact but a per-foundation SITE INVE
 - **`WAYPOINTS.{CENTER,FOREST,ROUTE22,HUNT}`** (20) — tile coordinates: map layout, not ROM
   constants. `WAYPOINTS.PARCEL` and `WAYPOINTS.ROUTE1` are SAME because the live pureRGB run walked
   those tiles; these four groups have only been walked on vanilla R/B.
-- **`MENU.PC.text1` / `MENU.PC.text2`** (2) — tilemap offsets (14×20+1, 16×20+1) the vanilla PC
-  driver carries; the lines that place that text on pureRGB were not opened.
+
+(`MENU.PC.text1` / `MENU.PC.text2` left this list: the message box's two text lines are
+`hlcoord 1,14` / two rows down in both foundations -- vanilla `home/text.asm:242`, pureRGB
+`home/text.asm:182`, over an identical `MESSAGE_BOX 0,12,19,17` -- and the pure lane's own PC
+receipt read the release hint's first line at 281.)
 
 ## Two citation traps when porting the drivers
 

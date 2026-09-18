@@ -168,22 +168,48 @@ return {
     PC = { -- tilemap offsets are y*20 + x
       menu_y     = 2, -- SAME: engine/pokemon/bills_pc.asm:77-79
       menu_x     = 1, -- SAME: engine/pokemon/bills_pc.asm:77-79
-      main       = 42, -- SAME: engine/pokemon/bills_pc.asm:32 (hlcoord 2,2 = 42)
-      withdraw   = 42, -- SAME: engine/pokemon/bills_pc.asm:36 (hlcoord 2,2 = 42)
-      deposit    = 82, -- SAME: engine/pokemon/bills_pc.asm:40 (hlcoord 2,4 = 82)
-      release    = 122, -- SAME: engine/pokemon/bills_pc.asm:49 (hlcoord 2,6 = 122)
-      changebox  = 162, -- SAME: engine/pokemon/bills_pc.asm:57 (hlcoord 2,8 = 162)
-      seeya      = 202, -- SAME: engine/pokemon/bills_pc.asm:60 (hlcoord 2,10 = 202)
+      -- `main` is the PC MAIN menu's first row (SOMEONE's/BILL's PC) and `withdraw`..`seeya` are
+      -- BILL's PC menu rows: two screens, both placing rows at (2,2),(2,4),... so the offsets
+      -- coincide. `next` in a menu string moves two tile rows (BillsPCMenuText below).
+      main       = 42, -- SAME: engine/pokemon/bills_pc.asm:32 (DisplayPCMainMenu, hlcoord 2,2 = 42)
+      withdraw   = 42, -- SAME: engine/pokemon/bills_pc.asm:119 (BillsPCMenu, hlcoord 2,2) + BillsPCMenuText :426-432
+      deposit    = 82, -- SAME: engine/pokemon/bills_pc.asm:426-432 (row 2 of BillsPCMenuText)
+      release    = 122, -- SAME: engine/pokemon/bills_pc.asm:426-432 (row 3, RELEASE)
+      changebox  = 162, -- SAME: engine/pokemon/bills_pc.asm:426-432 (row 4, CHANGE BOX)
+      seeya      = 202, -- SAME: engine/pokemon/bills_pc.asm:426-432 (row 5, SEE YA!)
       sub_action = 251, -- SAME: engine/pokemon/bills_pc.asm:474 (hlcoord 11,12 = 251)
       sub_cancel = 331, -- SAME: engine/pokemon/bills_pc.asm:476-478 (hlcoord 11,14 / 11,16 = 291 / 331)
-      yes        = 176, -- SAME: home/yes_no.asm:6 (hlcoord 14,7 box; YES one row below)
-      no         = 216, -- SAME: home/yes_no.asm:6 (NO one row below YES)
-      list       = 86,  -- SAME: home/list_menu.asm:411 (hlcoord 6,4 = 86); the vanilla driver cites home/list_menu.asm:364-365, whose lines shifted in pureRGB
-      list_step  = 40,  -- SAME: home/list_menu.asm:411 region (entries two tile rows apart)
-      box        = 33,  -- SAME: engine/menus/change_box_menu.asm:96 (hlcoord 13,1 = 33)
-      box_last   = 253, -- SAME: engine/menus/change_box_menu.asm:96 region (one box per tile row; n=12 -> 253)
-      text1      = 281, -- UNVERIFIED: vanilla driver offset 14*20+1; I did not open the line that places this text on pureRGB
-      text2      = 321, -- UNVERIFIED: vanilla driver offset 16*20+1; same reason
+      list       = 86, -- SAME: home/list_menu.asm:411 (hlcoord 6,4 = 86); the vanilla driver cites home/list_menu.asm:364-365, whose lines shifted in pureRGB
+      list_step  = 40, -- SAME: home/list_menu.asm:411 region (entries two tile rows apart)
+      text1      = 281, -- SAME: home/text.asm:182 (hlcoord 1, 14) + data/text_boxes.asm:11 MESSAGE_BOX 0,12,19,17
+      text2      = 321, -- SAME: home/text.asm:182 region (the box's second line, two rows below the first)
+      -- The RELEASE confirmation (bills_pc.asm:339-396) and the CHANGE BOX prompt (save.asm:344-377)
+      -- both went from YesNoChoice to DisplayMultiChoiceMenu (multi_choice_menu.asm:8), whose small
+      -- variants sit one column left of the classic box; the release YES no longer confirms on A.
+      release_confirm = {
+        menu_y   = 8, -- SAME: multi_choice_menu.asm:73-74 "ld a, 8 / ld [wTopMenuItemY], a"
+        menu_x   = 14, -- DELTA: multi_choice_menu.asm:75-76 (TwoOptionSmallMenu) vs home/yes_no.asm:18 X=15
+        yes      = 175, -- DELTA: multi_choice_menu.asm:82 (hlcoord 15,8 = 175) vs hlcoord 14,7 -> 176
+        no       = 215, -- DELTA: multi_choice_menu.asm:82 (the "next" entry two rows down = 215)
+        menu_max = 1, -- SAME: multi_choice_menu.asm:69-71 "ld a, 1 / ld [wMaxMenuItem], a"
+        confirm  = "A_THEN_START", -- DELTA: bills_pc.asm:372-383 -- A prints "Press START to / confirm release." (data/text/text_2.asm:1650-1652) and arms PAD_START; START confirms (:384-388). Vanilla's YesNoChoice takes A
+      },
+      changebox_prompt = {
+        menu_y   = 6, -- DELTA: multi_choice_menu.asm:113 (ThreeOptionMenuSmall) vs home/yes_no.asm:18 Y=8
+        menu_x   = 12, -- DELTA: multi_choice_menu.asm:107-108 vs X=15
+        menu_max = 2, -- DELTA: multi_choice_menu.asm:104-106 "ld a, 2 / ld [wMaxMenuItem], a" -- three entries
+        yes      = 133, -- DELTA: multi_choice_menu.asm:118 (hlcoord 13,6 = 133)
+        no       = 173, -- DELTA: multi_choice_menu.asm:118 (one entry down = 173)
+        hide     = 213, -- DELTA: multi_choice_menu.asm:118 (two entries down = 213; YesNoHide :285-289, passed at save.asm:355 -- HIDE sets EVENT_HIDE_CHANGE_BOX_SAVE_MSG)
+      },
+      box_menu = {
+        menu_y    = 1, -- SAME: engine/menus/change_box_menu.asm:25-26 "ld a, 1 / ld [wTopMenuItemY], a"
+        menu_x    = 7, -- DELTA: engine/menus/change_box_menu.asm:27-28 vs save.asm:446-447 X=12
+        menu_max  = 11, -- SAME: engine/menus/change_box_menu.asm:23-24 "ld a, 11 / ld [wMaxMenuItem], a"
+        name      = 28, -- DELTA: engine/menus/change_box_menu.asm:66 (hlcoord 8,1 = 28) vs hlcoord 13,1 -> 33
+        name_step = 20, -- SAME: one box per tile row; n=12 -> 28 + 11*20 = 248
+        count_col = 13, -- DELTA: engine/menus/change_box_menu.asm:96 (hlcoord 13,1 -- where vanilla keeps the NAMES; the box counts moved into it). Not probed: an empty box leaves it blank
+      },
     },
   },
 

@@ -709,6 +709,11 @@ function Client.new(p)
             -- deadzone rule; PLAN §2.3). pureRGB's wBattleFunctionalFlags RUN bit is recorded
             -- as the escape witness for the log/receipt, never as a reason to keep the area open.
             local ran = pt.functional_flags ~= nil and math.floor(pt.functional_flags / RAN_FLAG_BIT) % 2 == 1
+            -- An in-battle acquisition that has not settled yet (the party can stay unreadable
+            -- through the naming prompt and, on pureRGB, past EndOfBattle) is still a capture:
+            -- whiteout_new on the pure lane sent no_catch a frame before the capture settled.
+            local pc = self.pending_change
+            if b and pc and pc.kind == "acquire" and pc.in_battle then b.captured = true end
             if b and b.demo then
                 log("[SLink-gen1] demonstration battle (type " .. tostring(b.demo) .. "): nothing resolved")
             elseif b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then

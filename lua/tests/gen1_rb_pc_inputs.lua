@@ -59,19 +59,34 @@
 --    wMoveMonType = BOX_TO_PARTY (0) -> MoveMon -> wRemoveMonFromBox = 1 -> RemovePokemon ->
 --    MonIsTakenOutText "<nick> is / taken out." -- i.e. a withdraw ALSO ends in a from_box
 --    RemovePokemon, which is why from_box alone cannot discriminate a release (A6 client note).
---  Release. :293-318: box list -> OnceReleasedText "... is / gone forever. OK?" -> YesNoChoice
---    -> wRemoveMonFromBox = 1 -> standalone RemovePokemon -> MonWasReleasedText "<nick> was /
---    released outside.". † VERIFIED.
---  Change box. ChangeBox (engine/menus/save.asm:358-402): WhenYouChangeBoxText "...data / will
---    be saved." + "Is that okay?" -> YesNoChoice -> DisplayChangeBoxMenu (:437-506) with
---    wMaxMenuItem=11, wTopMenuItemY=1, wTopMenuItemX=12 and BoxNames placed at hlcoord 13,1 with
---    BIT_SINGLE_SPACED_LINES, so "BOX n" sits at 20*n + 13 for n = 1..12 (33 .. 253) -- the
---    plan's "20r+13" read with a 1-BASED row. wCurrentMenuItem is preseeded with the current
---    box. Then old box WRAM->SRAM, new box SRAM->WRAM, SaveGameData. † VERIFIED.
---  YES/NO box. home/yes_no.asm:3-19 puts it at hlcoord 14,7 with b=8,c=15;
---    engine/menus/text_box.asm:206-224,266-276 sets wTopMenuItemY=8, wTopMenuItemX=15,
---    wMaxMenuItem=1 and places the strings one row below the corner -> "YES" at 176, "NO" at
---    216. Item 0 is YES. † VERIFIED (176/216).
+--  Release. VANILLA bills_pc.asm:293-318: mon list -> OnceReleasedText "... is / gone forever.
+--    OK?" -> YesNoChoice -> wRemoveMonFromBox = 1 -> standalone RemovePokemon ->
+--    MonWasReleasedText "<nick> was / released outside.". PURE bills_pc.asm:339-396: the same,
+--    but the list is preceded by a "Release which?" title window (:348-349, DisplayPCTopTitleWindow
+--    :653) and the confirmation is DisplayMultiChoiceMenu with YesNoSmall (:363-368;
+--    multi_choice_menu.asm:297-300 -> TwoOptionSmallMenu :68-83): wTopMenuItemX=14, strings at
+--    hlcoord 15,8 -> YES 175 / NO 215, and A on YES only prints "Press START to / confirm
+--    release." (data/text/text_2.asm:1650-1652) while arming PAD_START (:378-383) -- START is
+--    the key that releases (:384-388). F.MENU.PC.release_confirm carries geometry AND key.
+--    † VERIFIED (source; the pure lane stalled here on A).
+--  Change box. VANILLA ChangeBox (engine/menus/save.asm:358-402): WhenYouChangeBoxText -> YesNoChoice
+--    -> DisplayChangeBoxMenu (:437-506) with wMaxMenuItem=11, wTopMenuItemY=1, wTopMenuItemX=12 and
+--    BoxNames at hlcoord 13,1 with BIT_SINGLE_SPACED_LINES, so "BOX n" sits at 20*n + 13 for
+--    n = 1..12 (33 .. 253) -- the plan's "20r+13" read with a 1-BASED row. PURE (save.asm:344-402,
+--    engine/menus/change_box_menu.asm): the prompt is YesNoHide, THREE entries YES/NO/HIDE
+--    (multi_choice_menu.asm:285-289 -> ThreeOptionMenuSmall :112-119: wTopMenuItemY=6,
+--    wTopMenuItemX=12, wMaxMenuItem=2, strings at hlcoord 13,6 -> 133/173/213; HIDE sets
+--    EVENT_HIDE_CHANGE_BOX_SAVE_MSG, save.asm:375-376), and the box list moved to wTopMenuItemX=7
+--    with the names at hlcoord 8,1 (28 .. 248) and the counts now at hlcoord 13,1.
+--    wCurrentMenuItem is preseeded with the current box. Then old box WRAM->SRAM, new box
+--    SRAM->WRAM, SaveGameData. F.MENU.PC.changebox_prompt / .box_menu carry both.
+--    † VERIFIED (source; the pure lane has not reached the change box yet).
+--  YES/NO box. home/yes_no.asm:3-19 (vanilla :13-18) puts the classic two-option box at
+--    hlcoord 14,7 with b=8,c=15; engine/menus/text_box.asm sets wTopMenuItemY=8,
+--    wTopMenuItemX=15, wMaxMenuItem=1 and places the strings one row below the corner -> "YES"
+--    at 176, "NO" at 216. Item 0 is YES. pureRGB keeps this path for the SAVE prompt
+--    (F.MENU.SAVE_PROMPT) and the Pokecenter heal, but routes the two PC confirmations above
+--    through DisplayMultiChoiceMenu, whose small variants sit one column left. † VERIFIED.
 --  wCurrentBoxNum. BOX_NUM_MASK = %01111111 and BIT_HAS_CHANGED_BOXES = 7
 --    (constants/ram_constants.asm:51-52): bit 7 set means the SRAM boxes have been initialised,
 --    the low 7 bits are the 0-based box. wMoveMonType and wRemoveMonFromBox are the SAME byte
@@ -176,13 +191,19 @@ function M.new(expected, opts)
                and (tiles("DEPOSIT", M.OFF.sub_action) or tiles("WITHDRAW", M.OFF.sub_action))
                and tiles("CANCEL", M.OFF.sub_cancel)
     end
-    local function yes_no(p)
-        return p.menu_y == 8 and p.menu_x == 15 and p.menu_max == 1
-               and tiles("YES", M.OFF.yes) and tiles("NO", M.OFF.no)
+    -- The two confirmation screens and the box list, from F.MENU.PC. Vanilla's YesNoChoice and
+    -- pureRGB's DisplayMultiChoiceMenu variants differ in the cursor column, the string offsets
+    -- and, for the release, the key that confirms. `hide` is a number only where a third entry
+    -- exists (pureRGB's YES/NO/HIDE change-box prompt).
+    local function confirm_screen(p, spec)
+        return p.menu_y == spec.menu_y and p.menu_x == spec.menu_x and p.menu_max == spec.menu_max
+               and tiles("YES", spec.yes) and tiles("NO", spec.no)
+               and (type(spec.hide) ~= "number" or tiles("HIDE", spec.hide))
     end
     local function box_menu(p)
-        return p.menu_y == 1 and p.menu_x == 12 and p.menu_max == 11
-               and tiles("BOX", M.OFF.box) and tiles("BOX", M.OFF.box_last)
+        local b = M.OFF.box_menu
+        return p.menu_y == b.menu_y and p.menu_x == b.menu_x and p.menu_max == b.menu_max
+               and tiles("BOX", b.name) and tiles("BOX", b.name + b.menu_max * b.name_step)
     end
     local function toward(current, target, frame)
         if current < target then return tap("Down", frame) end
@@ -239,10 +260,25 @@ function M.new(expected, opts)
             if turn then return turn, "pc-sub-move" end
             return tap("A", frame), "pc-sub-confirm"
         end
-        if yes_no(p) then
+        if op and op[1] == "changebox" and confirm_screen(p, M.OFF.changebox_prompt) then
+            local turn = toward(p.menu_index, 0, frame)      -- item 0 = YES; HIDE is never chosen
+            if turn then return turn, "pc-changebox-yes" end
+            return tap("A", frame), "pc-changebox-yes"
+        end
+        if op and op[1] == "release_box" and confirm_screen(p, M.OFF.release_confirm) then
             local turn = toward(p.menu_index, 0, frame)      -- item 0 = YES
             if turn then return turn, "pc-yes-move" end
-            return tap("A", frame), "pc-yes"
+            -- pureRGB's YES needs two keys: A prints "Press START to / confirm release." and arms
+            -- PAD_START (bills_pc.asm:378-383). The hint's first line lands on the message box's
+            -- first line (F.MENU.PC.text1), and START is the key that releases. Vanilla's
+            -- YesNoChoice takes A.
+            if M.OFF.release_confirm.confirm ~= "A_THEN_START" then
+                return tap("A", frame), "pc-yes"
+            end
+            if not tiles("Press START", M.OFF.text1) then
+                return tap("A", frame), "pc-yes"
+            end
+            return tap("Start", frame), "pc-yes-confirm"
         end
         if box_menu(p) and op then
             local turn = toward(p.menu_index, op[2] - 1, frame)
