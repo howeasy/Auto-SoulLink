@@ -2223,8 +2223,12 @@ class DuoRun:
             # qualify() above independently invokes codec.recompute_stats on both mons
             # (tools/gen1_fixtures.py:118-147; gen1_codec.py:738-751).
             fixture = Path(self._fixture_save_path(inst)).read_bytes()
-            baseline = codec.bag_quantity(fixture, codec.POKE_BALL)  # gen1_codec.py:642-645
-            final = codec.bag_quantity(sram, codec.POKE_BALL)
+            # The bag's SRAM offset is a foundation fact (pureRGB moved wNumBagItems, PLAN §4
+            # row 6): a pure pairing reads it through the pack layout, vanilla keeps the literal.
+            layout = codec.for_foundation("gen1_purergb") if getattr(self, "game", "") == "gen1_pure" else None
+            bag_quantity = layout.bag_quantity if layout else codec.bag_quantity
+            baseline = bag_quantity(fixture, codec.POKE_BALL)  # gen1_codec.py:642-645
+            final = bag_quantity(sram, codec.POKE_BALL)
             self._pydec_note(f"BAG_BALLS baseline={baseline} final={final} inst={inst}")
             if final != baseline - 1:
                 raise RuntimeError(
