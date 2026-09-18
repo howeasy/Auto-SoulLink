@@ -134,6 +134,7 @@ def test_identity_lost_is_never_an_explosion(st):
 @pytest.mark.parametrize("structure", (
     "party_keys", "pending_captures", "bonus_keys", "pending_bonus", "partner_blobs",
     "rebuild_pending", "pending_trade", "queued_commands", "sync_inflight", "presentation",
+    "pending_memorials",
 ))
 def test_a_key_that_is_load_bearing_anywhere_rejects_with_structures_untouched(st, structure):
     _link(st)
@@ -157,6 +158,8 @@ def test_a_key_that_is_load_bearing_anywhere_rejects_with_structures_untouched(s
         st.queued_commands["b"].append({"cmd": "box_mon", "key": NEW})
     elif structure == "sync_inflight":
         st.sync_inflight["b"][(NEW, "party_mon")] = 3
+    elif structure == "pending_memorials":
+        st.pending_memorials["b"].add(NEW)
     elif structure == "presentation":
         def hook(key):
             seen["presentation"] = key == NEW
@@ -296,6 +299,8 @@ def test_a_live_presentation_key_is_a_collision_but_the_memorial_box_is_not(tmp_
     srv.pc_boxes["b"] = [{"box": 0, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW) is True
     srv.pc_boxes["b"] = []
+    srv._mon_cache[NEW] = {"level": 1}
+    assert srv._presentation_key_in_use(NEW) is False, "_mon_cache is never pruned; a cache hit is not a collision"
     srv.party_details["b"][NEW] = {"level": 1}
     assert srv._presentation_key_in_use(NEW) is True
     # The state consults it through the adapter-neutral hook.
