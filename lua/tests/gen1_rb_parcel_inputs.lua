@@ -21,7 +21,7 @@ local LAB = {
 M.LAB = LAB
 local function lab_for(title, F)
     if title == "yellow" then return assert(LAB.yellow, "no lab script table for yellow") end
-    if title == "red" or title == "blue" or title:match("^Pure") then
+    if title == "red" or title == "blue" or title:match("^[Pp]ure") then
         local row = F and F.SCRIPT and F.SCRIPT.LAB_DELIVERY
         assert(row, "facts table has no SCRIPT.LAB_DELIVERY")
         return row

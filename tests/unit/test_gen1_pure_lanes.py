@@ -135,18 +135,16 @@ def test_every_pure_saveram_name_is_the_filename_derivation():
         assert GENS["gen1"]["saveram_names"][key] == g1.save_name_for(rom_rel)
 
 
-def test_run_gate_resolves_a_pure_key_to_the_staged_build_and_says_how_to_get_it(monkeypatch, tmp_path):
-    """No emulator: the gate refuses at ROM resolution, which is the branch a pure key takes."""
+def test_run_gate_refuses_a_pure_key_whose_build_is_absent(monkeypatch, tmp_path):
+    """No emulator: with no pinned build present the gate refuses at ROM resolution and says
+    how to get one (the branch a pure key takes before anything is staged or launched)."""
     import run_gb_gate
 
-    dump = tmp_path / "pokered.gbc"
-    dump.write_bytes(b"\x00" * 32)
-    monkeypatch.setattr(g1, "purergb_dump", lambda _key: str(dump))
+    monkeypatch.setattr(g1, "PURERGB_ROMS", str(tmp_path / "no-builds-here"))
     monkeypatch.setattr(g1, "REPO", str(tmp_path))
+    monkeypatch.setattr(run_gb_gate, "REPO", str(tmp_path))
     monkeypatch.setattr(g1, "BUILD", str(tmp_path / "patch" / "build"))
-    (tmp_path / "patch" / "build").mkdir(parents=True)
-    (tmp_path / "patch" / "build" / "gen1_purered.gbc").unlink(missing_ok=True)
-    with pytest.raises(FileNotFoundError, match="pinned pureRGB source"):
+    with pytest.raises(FileNotFoundError, match="SLINK_PURERGB_ROMS"):
         run_gb_gate.run_gate("lua/tests/test_gen1_inspect_gate.lua", rom_key="purered")
 
 

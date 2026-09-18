@@ -79,7 +79,8 @@ def saved_ot(sram: bytes, title: str) -> int:
     ram/wram.asm), reached at sMainData + (wPlayerID - wMainDataStart) because the save copies
     wMainDataStart..End to sMainData (engine/menus/save.asm:63-68).
     """
-    profile = json.loads((Path(REPO) / "data/games/gen1_rby" / "profile.json").read_text(
+    pack = "gen1_purergb" if title.startswith("pure") else "gen1_rby"
+    profile = json.loads((Path(REPO) / "data/games" / pack / "profile.json").read_text(
         encoding="utf-8"))
     ram = profile["titles"][title]["ram"]
     offset = codec.SRAM_LAYOUT["sMainData"] + ram["wPlayerID"] - ram["wMainDataStart"]
