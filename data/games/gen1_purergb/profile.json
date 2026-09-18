@@ -342,6 +342,11 @@
      "bank": 44,
      "flat": 726255
     },
+    "EvosMovesPointerTable": {
+     "addr": 22741,
+     "bank": 44,
+     "flat": 727253
+    },
     "ExecuteEnemyMove": {
      "addr": 26347,
      "bank": 15,
@@ -356,6 +361,11 @@
      "addr": 24360,
      "bank": 3,
      "flat": 57128
+    },
+    "GoodRodMonsOcean": {
+     "addr": 24370,
+     "bank": 3,
+     "flat": 57138
     },
     "HandlePlayerBlackOut": {
      "addr": 18638,
@@ -392,6 +402,11 @@
      "bank": 15,
      "flat": 257847
     },
+    "ItemNameJumpTable": {
+     "addr": 17167,
+     "bank": 1,
+     "flat": 17167
+    },
     "ItemUseOldRod": {
      "addr": 24285,
      "bank": 3,
@@ -427,10 +442,30 @@
      "bank": 1,
      "flat": 22751
     },
+    "MonsterNames": {
+     "addr": 21958,
+     "bank": 51,
+     "flat": 841158
+    },
+    "MoveNameJumpTable": {
+     "addr": 16384,
+     "bank": 44,
+     "flat": 720896
+    },
     "MoveSelectionMenu": {
      "addr": 21201,
      "bank": 15,
      "flat": 250577
+    },
+    "Moves": {
+     "addr": 17805,
+     "bank": 14,
+     "flat": 230797
+    },
+    "NonDexMonsBaseStats": {
+     "addr": 30954,
+     "bank": 44,
+     "flat": 735466
     },
     "OverworldLoop": {
      "addr": 982,
@@ -522,6 +557,16 @@
      "bank": 3,
      "flat": 59224
     },
+    "TrainerDataPointers": {
+     "addr": 21784,
+     "bank": 14,
+     "flat": 234776
+    },
+    "TrainerNames": {
+     "addr": 28785,
+     "bank": 58,
+     "flat": 962673
+    },
     "TryEvolvingMon": {
      "addr": 21707,
      "bank": 44,
@@ -536,6 +581,11 @@
      "addr": 30412,
      "bank": 28,
      "flat": 472780
+    },
+    "TypeEffects": {
+     "addr": 25690,
+     "bank": 15,
+     "flat": 255066
     },
     "WildDataPointers": {
      "addr": 18506,
@@ -896,6 +946,11 @@
      "bank": 44,
      "flat": 726255
     },
+    "EvosMovesPointerTable": {
+     "addr": 22741,
+     "bank": 44,
+     "flat": 727253
+    },
     "ExecuteEnemyMove": {
      "addr": 26347,
      "bank": 15,
@@ -910,6 +965,11 @@
      "addr": 24360,
      "bank": 3,
      "flat": 57128
+    },
+    "GoodRodMonsOcean": {
+     "addr": 24370,
+     "bank": 3,
+     "flat": 57138
     },
     "HandlePlayerBlackOut": {
      "addr": 18638,
@@ -946,6 +1006,11 @@
      "bank": 15,
      "flat": 257847
     },
+    "ItemNameJumpTable": {
+     "addr": 17167,
+     "bank": 1,
+     "flat": 17167
+    },
     "ItemUseOldRod": {
      "addr": 24285,
      "bank": 3,
@@ -981,10 +1046,30 @@
      "bank": 1,
      "flat": 22751
     },
+    "MonsterNames": {
+     "addr": 21958,
+     "bank": 51,
+     "flat": 841158
+    },
+    "MoveNameJumpTable": {
+     "addr": 16384,
+     "bank": 44,
+     "flat": 720896
+    },
     "MoveSelectionMenu": {
      "addr": 21201,
      "bank": 15,
      "flat": 250577
+    },
+    "Moves": {
+     "addr": 17805,
+     "bank": 14,
+     "flat": 230797
+    },
+    "NonDexMonsBaseStats": {
+     "addr": 30954,
+     "bank": 44,
+     "flat": 735466
     },
     "OverworldLoop": {
      "addr": 982,
@@ -1076,6 +1161,16 @@
      "bank": 3,
      "flat": 59224
     },
+    "TrainerDataPointers": {
+     "addr": 21784,
+     "bank": 14,
+     "flat": 234776
+    },
+    "TrainerNames": {
+     "addr": 28785,
+     "bank": 58,
+     "flat": 962673
+    },
     "TryEvolvingMon": {
      "addr": 21707,
      "bank": 44,
@@ -1090,6 +1185,11 @@
      "addr": 30412,
      "bank": 28,
      "flat": 472780
+    },
+    "TypeEffects": {
+     "addr": 25690,
+     "bank": 15,
+     "flat": 255066
     },
     "WildDataPointers": {
      "addr": 18506,
@@ -1450,6 +1550,11 @@
      "bank": 44,
      "flat": 726255
     },
+    "EvosMovesPointerTable": {
+     "addr": 22741,
+     "bank": 44,
+     "flat": 727253
+    },
     "ExecuteEnemyMove": {
      "addr": 26347,
      "bank": 15,
@@ -1464,6 +1569,11 @@
      "addr": 24360,
      "bank": 3,
      "flat": 57128
+    },
+    "GoodRodMonsOcean": {
+     "addr": 24370,
+     "bank": 3,
+     "flat": 57138
     },
     "HandlePlayerBlackOut": {
      "addr": 18638,
@@ -1500,6 +1610,11 @@
      "bank": 15,
      "flat": 257847
     },
+    "ItemNameJumpTable": {
+     "addr": 17167,
+     "bank": 1,
+     "flat": 17167
+    },
     "ItemUseOldRod": {
      "addr": 24285,
      "bank": 3,
@@ -1535,10 +1650,30 @@
      "bank": 1,
      "flat": 22751
     },
+    "MonsterNames": {
+     "addr": 21958,
+     "bank": 51,
+     "flat": 841158
+    },
+    "MoveNameJumpTable": {
+     "addr": 16384,
+     "bank": 44,
+     "flat": 720896
+    },
     "MoveSelectionMenu": {
      "addr": 21201,
      "bank": 15,
      "flat": 250577
+    },
+    "Moves": {
+     "addr": 17805,
+     "bank": 14,
+     "flat": 230797
+    },
+    "NonDexMonsBaseStats": {
+     "addr": 30954,
+     "bank": 44,
+     "flat": 735466
     },
     "OverworldLoop": {
      "addr": 982,
@@ -1630,6 +1765,16 @@
      "bank": 3,
      "flat": 59224
     },
+    "TrainerDataPointers": {
+     "addr": 21784,
+     "bank": 14,
+     "flat": 234776
+    },
+    "TrainerNames": {
+     "addr": 28785,
+     "bank": 58,
+     "flat": 962673
+    },
     "TryEvolvingMon": {
      "addr": 21707,
      "bank": 44,
@@ -1644,6 +1789,11 @@
      "addr": 30412,
      "bank": 28,
      "flat": 472780
+    },
+    "TypeEffects": {
+     "addr": 25690,
+     "bank": 15,
+     "flat": 255066
     },
     "WildDataPointers": {
      "addr": 18506,

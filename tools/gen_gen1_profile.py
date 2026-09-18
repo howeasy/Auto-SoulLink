@@ -135,6 +135,15 @@ OPTIONAL_ROM_SYMBOLS = [
     "SuperRodFishingSlots",  # pokeyellow data/wild/super_rod.asm:1-2 (Yellow only)
 ]  # pureRGB: Mew is BaseStats record 150 and fishing is SuperRodData only, so both are absent there
 
+# ROM symbols the pure scanners/generators need on top of ROM_SYMBOLS (pureRGB only; vanilla unchanged).
+EXTRA_ROM_SYMBOLS = {
+    "pret": [],
+    "purergb": [
+        "EvosMovesPointerTable", "TrainerDataPointers", "GoodRodMonsOcean", "NonDexMonsBaseStats",
+        "MonsterNames", "MoveNameJumpTable", "ItemNameJumpTable", "TrainerNames", "Moves", "TypeEffects",
+    ],
+}
+
 # RAM symbols the pure client reads on top of RAM_SYMBOLS (pureRGB only; vanilla's list is unchanged).
 EXTRA_RAM_SYMBOLS = {
     "pret": [],
@@ -238,9 +247,9 @@ def build(foundation: str = "pret") -> dict:
             ram[name] = syms[name][1]  # RAM: bank is 0 (WRAM0/HRAM) or the SRAM bank; addr is what code reads
         sram_banks = {name: syms[name][0] for name in ram_symbols if name.startswith("s") and name in syms}
         rom: dict[str, dict] = {}
-        for name in ROM_SYMBOLS + OPTIONAL_ROM_SYMBOLS:
+        for name in ROM_SYMBOLS + EXTRA_ROM_SYMBOLS[foundation] + OPTIONAL_ROM_SYMBOLS:
             if name not in syms:
-                if name in ROM_SYMBOLS:
+                if name in ROM_SYMBOLS or name in EXTRA_ROM_SYMBOLS[foundation]:
                     missing.append(f"{title}: {name}")
                 continue
             bank, addr = syms[name]
