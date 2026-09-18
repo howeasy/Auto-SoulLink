@@ -1,0 +1,103 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3038 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (67s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     9 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (107s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (20s)
+[ .. ] duo-pairs
+, e2e_poison_new_b_result.txt, e2e_poison_new_pydec_attempt1_result.txt
+E         [duo] launched a phase=initial seed=True
+E         [duo] launched b phase=initial seed=True
+E         [duo] two EmuHawk instances launched
+E         [duo] keys: a=06C3:4190:99 b=4519:AFB9:B0
+E         [duo] both players connected
+E         [duo] go-file written for a
+E         [duo] go-file written for b
+E         [duo] PYDEC: FAIL client RESULT before saved-state oracle
+E         [duo] poison_new: a=PASS b=FAIL
+E         --- poison_new a result ---
+E         heartbeat f=7200 party=1 connected=true
+E         heartbeat f=10800 party=1 connected=true
+E         heartbeat f=14400 party=1 connected=true
+E         heartbeat f=18000 party=1 connected=true
+E         heartbeat f=21600 party=1 connected=true
+E         heartbeat f=25200 party=1 connected=true
+E         heartbeat f=28800 party=1 connected=true
+E         heartbeat f=32400 party=1 connected=true
+E         heartbeat f=36000 party=1 connected=true
+E         heartbeat f=39600 party=1 connected=true
+E         heartbeat f=43200 party=1 connected=true
+E         heartbeat f=46800 party=1 connected=true
+E         heartbeat f=50400 party=1 connected=true
+E         heartbeat f=54000 party=1 connected=true
+E         SAVE_PHASE poison_new_a save-open-start-menu
+E         SAVE_PHASE poison_new_a save-close-foreign-menu
+E         SAVE_PHASE poison_new_a save-select-save
+E         SAVE_PHASE poison_new_a save-choose-save
+E         SAVE_PHASE poison_new_a save-close-foreign-menu
+E         SAVE_PHASE poison_new_a save-confirm
+E         SAVE_WITNESS_DUMP path=patch/build/e2e_poison_new_a_2_witness.bin bytes=31592 saves=1 frame=55008
+E         SAVE_PHASE poison_new_a save-await-close
+E         SAVE_PHASE poison_new_a save-witnessed
+E         SAVE_WITNESS poison_new_a frames=489
+E         RESULT: PASS (idled through the partner's poison faint and blackout)
+E         --- poison_new b result ---
+E         POISON_PHASE hunt wild-ran @45858 map=51 (18,41) battle=0 hp=19
+E         POISON_PHASE hunt pace-grass @45859 map=51 (18,41) battle=0 hp=19
+E         POISON_PHASE hunt close-text @45868 map=51 (18,41) battle=0 hp=19
+E         POISON_PHASE hunt pace-grass @45903 map=51 (18,41) battle=0 hp=19
+E         HUNT_ENCOUNTER 27 species=112 (18,40)
+E         POISON_PHASE hunt wild-intro @46363 map=51 (18,40) battle=1 hp=19
+E         heartbeat f=46800 party=1 connected=true
+E         POISON_PHASE hunt wild-growl @47125 map=51 (18,40) battle=1 hp=19
+E         HUNT_GROWL turn=1 why=player_move
+E         HUNT_GROWL turn=2 why=player_move
+E         HUNT_GROWL turn=3 why=player_move
+E         HUNT_GROWL turn=4 why=player_move
+E         HUNT_GROWL turn=5 why=player_move
+E         HUNT_GROWL turn=6 why=player_move
+E         heartbeat f=50400 party=1 connected=true
+E         HUNT_GROWL turn=7 why=player_move
+E         HUNT_GROWL turn=8 why=player_move
+E         HUNT_GROWL turn=9 why=player_move
+E         HUNT_GROWL turn=10 why=player_move
+E         heartbeat f=54000 party=1 connected=true
+E         HUNT_GROWL turn=11 why=player_move
+E         BATTLE_FAINT_SITE 4519:AFB9:B0 @54793 slot=0 battle_hp=0
+E         TX {"area_id":"viridian_forest","event":"faint","key":"4519:AFB9:B0","player":"b","seq":1835}
+E         TX {"event":"whiteout","player":"b","seq":1836}
+E         RESULT: FAIL (RNG: a wild foe knocked the starter out before the poisoning)
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_poison_new_7ndn9h95
+E         
+E         ========== summary ==========
+E           poison_new: FAIL (attempt 2 of 2)
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...emp\\slink_duo_poison_new_7ndn9h95\n\n========== summary ==========\n  poison_new: FAIL (attempt 2 of 2)\n', stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+1 failed, 17 passed in 753.64s (0:12:33)
+
+[FAIL] duo-pairs          17 passed, 0 skipped (0 unexplained), 1 failed, 0 xfailed, 0 deselected  (754s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
