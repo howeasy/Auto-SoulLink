@@ -44,7 +44,7 @@ def test_schema_and_kinds():
         (REPO / "data" / "purergb_sources.lock.json").read_text(encoding="utf-8"))["source"]["commit"]
     assert set(SIGNALS["titles"]) == set(TITLES)
     kinds = set(SIGNALS["titles"]["purered"]["sites"])
-    assert kinds == set(gen.SITES) and len(kinds) == 40
+    assert kinds == set(gen.SITES) and len(kinds) == 41
     assert kinds >= VANILLA_KINDS  # the 17 vanilla kinds survive under their names
     assert kinds >= {"trainer_staging", "transform", "transform_hp_hi", "transform_hp_lo", "apex_preflight", "apex_commit",
             "apex_recalc_call", "npc_trade_remove", "npc_trade_add", "npc_trade_done", "daycare_withdraw",

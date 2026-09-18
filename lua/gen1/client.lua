@@ -1023,6 +1023,23 @@ function Client.new(p)
         self.pending_battle_writes = keep
     end
 
+    -- pureRGB (site battle_loop_no_move): the MOVE menu's cancel path re-enters the loop below
+    -- the HP check, so the loop-head write would wait a whole committed turn (and a natural KO
+    -- could pre-empt it). Land the same write here and move PC back to the loop head (+6, the
+    -- HP check): same stack frame, no instruction of .loopNoMoveSelected has run yet. Proven
+    -- live 2026-09-18 (lua/tests/probe_gen1_loop_reentry.lua -> HandlePlayerMonFainted).
+    function self:on_battle_loop_no_move(sig)
+        if #self.pending_battle_writes == 0 or not self.writes_enabled or not io.set_register then return end
+        local head = sites.battle_loop_head
+        if not head then return end
+        local before = #self.pending_battle_writes
+        self:on_battle_loop_head(sig)
+        if #self.pending_battle_writes < before then
+            io.set_register("PC", head.address + (head.capture_offset or 0))
+            log("[SLink-gen1] battle write landed at the no-move re-entry; PC moved to the loop head")
+        end
+    end
+
     -- ── APEX CHIP (pureRGB, PLAN A1) and transformations (A2): synchronous hook handlers ──
     -- The live key set an APEX use must not collide with: party + every scanned box +
     -- server-seeded pending captures + the held alias, minus the mon's own current key.
@@ -1329,6 +1346,7 @@ function Client.new(p)
     function self:start()
         local handlers = {
             battle_loop_head = function(sig) self:on_battle_loop_head(sig) end,
+            battle_loop_no_move = function(sig) self:on_battle_loop_no_move(sig) end,
             apex_preflight = function(sig) self:on_apex_preflight(sig) end,
             apex_commit = function(sig) self:on_apex_commit(sig) end,
             transform = function(sig) self:on_transform(sig) end,

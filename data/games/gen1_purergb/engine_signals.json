@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "66cda4eb70c5974dd1418ac740e6d47767c14146a3f7f4641b6bfbd3717f9b4c",
+ "sha256": "af94050eae03716c46824771652dc9078be2211d5db26307a5f3fb17e17396d9",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -216,6 +216,26 @@
      "rom_offset": 246355,
      "source": "engine/battle/core.asm",
      "symbol": "MainInBattleLoop"
+    },
+    "battle_loop_no_move": {
+     "address": 17004,
+     "anchor_offset": 0,
+     "assert": ".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move from the move selection menu\n\tcall SaveScreenTilesToBuffer1\n\txor a\n\tld [wFirstMonsNotOutYet], a",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD6733AFEA25D1FA",
+     "point": [
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wIsInBattle",
+      "wBattleType",
+      "wLinkState",
+      "wPlayerBattleStatus3"
+     ],
+     "rom_offset": 246380,
+     "source": "engine/battle/core.asm",
+     "symbol": "MainInBattleLoop.loopNoMoveSelected"
     },
     "blackout": {
      "address": 16560,
@@ -1078,6 +1098,26 @@
      "source": "engine/battle/core.asm",
      "symbol": "MainInBattleLoop"
     },
+    "battle_loop_no_move": {
+     "address": 17004,
+     "anchor_offset": 0,
+     "assert": ".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move from the move selection menu\n\tcall SaveScreenTilesToBuffer1\n\txor a\n\tld [wFirstMonsNotOutYet], a",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD6733AFEA25D1FA",
+     "point": [
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wIsInBattle",
+      "wBattleType",
+      "wLinkState",
+      "wPlayerBattleStatus3"
+     ],
+     "rom_offset": 246380,
+     "source": "engine/battle/core.asm",
+     "symbol": "MainInBattleLoop.loopNoMoveSelected"
+    },
     "blackout": {
      "address": 16560,
      "anchor_offset": 0,
@@ -1938,6 +1978,26 @@
      "rom_offset": 246355,
      "source": "engine/battle/core.asm",
      "symbol": "MainInBattleLoop"
+    },
+    "battle_loop_no_move": {
+     "address": 17004,
+     "anchor_offset": 0,
+     "assert": ".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move from the move selection menu\n\tcall SaveScreenTilesToBuffer1\n\txor a\n\tld [wFirstMonsNotOutYet], a",
+     "bank": 15,
+     "capture_offset": 0,
+     "expected_hex": "CD6733AFEA25D1FA",
+     "point": [
+      "wPlayerMonNumber",
+      "wBattleMonHP",
+      "wBattleMonSpecies",
+      "wIsInBattle",
+      "wBattleType",
+      "wLinkState",
+      "wPlayerBattleStatus3"
+     ],
+     "rom_offset": 246380,
+     "source": "engine/battle/core.asm",
+     "symbol": "MainInBattleLoop.loopNoMoveSelected"
     },
     "blackout": {
      "address": 16560,

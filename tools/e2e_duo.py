@@ -1839,7 +1839,7 @@ class DuoRun:
         _sram, party, _current, codec = self._saved_gen1_party("a")
         if [codec.key(mon) for mon in party] != [self._boot_keys["a"], self._link_keys["a"]]:
             raise RuntimeError("A's flushed Red save does not hold the linked pair before the crash")
-        correct_save = Path(self._saveram_dir("a")) / GENS["gen1"]["saveram_names"]["red"]
+        correct_save = Path(self._saveram_dir("a")) / GENS["gen1"]["saveram_names"][self.gcfg["fixture"]["a"]]
         shutil.copyfile(correct_save, os.path.join(self.data_dir, "a_original_before_reconnect.SaveRAM"))
         baseline = {"links": self._reconnect_document(), "events": self._reconnect_events()}
         shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
@@ -2458,6 +2458,20 @@ class DuoRun:
                     if row.get("type") == "force_explode"]
         self._pydec_note(f"events.json force_explode rows: {exploded} (routing only)")
 
+    def _rival1_id(self) -> str:
+        """OPP_RIVAL1 for this pairing: the pack's trainers.json rival_ids[0] (vanilla 225,
+        pureRGB 221 — OPP_ID_OFFSET 197 + RIVAL1 $18), never a literal."""
+        pack = "gen1_purergb" if getattr(self, "game", "") == "gen1_pure" else "gen1_rby"
+        path = os.path.join(REPO, "data", "games", pack, "trainers.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                ids = json.load(f).get("rival_ids")
+            if ids:
+                return str(ids[0])
+        except (OSError, ValueError):
+            pass
+        return "225"
+
     def assert_rival_swap_new_saved(self, results):
         """W-4 / D-11 (swap half): the Route 22 rival fights the PARTNER's party.
 
@@ -2486,14 +2500,15 @@ class DuoRun:
         marker(a_text, r"RIVAL_EVENTS byte164=[0-9A-Fa-f]{2} first=1 wants=1",
                "A rival-event precondition")
         marker(b_text, r"RIVAL_IDLE b", "B idle receipt")
+        rival1 = self._rival1_id()
         begin = marker(a_text, r"RIVAL_BATTLE_BEGIN frame=\d+ opponent=(\d+)", "A battle begin")
-        if begin.group(1) != "225":
+        if begin.group(1) != rival1:
             raise RuntimeError(f"the battle_begin that opened the window named opponent "
-                               f"{begin.group(1)}, not Rival1's 225")
+                               f"{begin.group(1)}, not Rival1's {rival1}")
         tx = re.findall(r'^TX .*"event":"trainer_battle_start".*"trainer_id":(\d+)', a_text, re.M)
-        if tx != ["225"]:
+        if tx != [rival1]:
             raise RuntimeError(f"A sent {len(tx)} trainer_battle_start line(s) for "
-                               f"{tx}; exactly one naming 225 is expected")
+                               f"{tx}; exactly one naming {rival1} is expected")
         rx = marker(a_text, r"RX replace_rival_team n=(\d+)", "A swap command")
         blobs = int(rx.group(1))
         replaced = marker(a_text, r"RIVAL_TEAM_REPLACED frame=\d+ within=(-?\d+)", "A swap ack")
@@ -2538,10 +2553,10 @@ class DuoRun:
 
         with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
             log_text = handle.read()
-        if "[a] trainer_battle_start trainer_id=225 is_rival=True" not in log_text:
-            raise RuntimeError("the server never saw A's 225 as a rival; the swap cannot have "
+        if f"[a] trainer_battle_start trainer_id={rival1} is_rival=True" not in log_text:
+            raise RuntimeError(f"the server never saw A's {rival1} as a rival; the swap cannot have "
                                "been triggered by the id gate")
-        ack = re.search(r"\[a\] rival_team_replaced ack trainer_id=225 species=\[([0-9,\s]*)\]",
+        ack = re.search(r"\[a\] rival_team_replaced ack trainer_id=" + rival1 + r" species=\[([0-9,\s]*)\]",
                         log_text)
         if not ack:
             raise RuntimeError("the server logged no rival_team_replaced ack for A")

@@ -100,6 +100,19 @@ SITES: dict[str, dict] = {
                 "\tcall ReadPlayerMonCurHPAndStatus\n\tld hl, wBattleMonHP",
         shape="CD {ReadPlayerMonCurHPAndStatus} 21 {wBattleMonHP}",
         prelude=(0, "21 {wPlayerTurnCount} 34 23 34")),
+    # pureRGB re-enters the loop BELOW the HP check when the MOVE menu is cancelled
+    # (`jr nz, .loopNoMoveSelected`, core.asm), so a force-faint written at the loop head never
+    # gets a free re-entry the way vanilla's `jr nz, MainInBattleLoop` gives it. The client lands
+    # the pending battle write here and moves PC back to the loop head (+6, the HP check);
+    # proven live 2026-09-18 (probe_gen1_loop_reentry: HandlePlayerMonFainted reached).
+    "battle_loop_no_move": _site(
+        symbol="MainInBattleLoop.loopNoMoveSelected", off=0, cap=0, len=8, source=CORE,
+        point=["wPlayerMonNumber", "wBattleMonHP", "wBattleMonSpecies", "wIsInBattle", "wBattleType",
+               "wLinkState", "wPlayerBattleStatus3"],
+        assert_=(".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move"
+                 " from the move selection menu" + chr(10) + chr(9) + "call SaveScreenTilesToBuffer1"
+                 + chr(10) + chr(9) + "xor a" + chr(10) + chr(9) + "ld [wFirstMonsNotOutYet], a"),
+        shape="CD {SaveScreenTilesToBuffer1} AF EA {wFirstMonsNotOutYet}"),
     "blackout": _site(
         symbol="ResetStatusAndHalveMoneyOnBlackout", off=0, cap=0, len=8, point=BATTLE,
         source="engine/events/black_out.asm",

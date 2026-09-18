@@ -309,6 +309,7 @@ function Entry.bizhawk_deps()
         unregister = function(id) return event.unregisterbyid(id) end,
         framecount = function() return emu.framecount() end,
         register = function(name) return emu.getregister(name) end,
+        set_register = function(name, value) return emu.setregister(name, value) end,
         domains = function() return memory.getmemorydomainlist() end,
         saveram = function() if client and client.saveram then return client.saveram() end end,
     }

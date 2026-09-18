@@ -122,6 +122,10 @@ S.KINDS.battle_loop_head = {
     end,
 }
 
+-- pureRGB: cancelling the MOVE menu re-enters the loop BELOW the HP check (.loopNoMoveSelected),
+-- so the client lands a pending battle write there and moves PC back to the loop head.
+S.KINDS.battle_loop_no_move = { point = S.KINDS.battle_loop_head.point }
+
 -- Battle lifecycle. InitBattleCommon runs for wild and trainer battles; wCurOpponent is the
 -- wild species, or trainer class + 200 (constants/trainer_constants.asm). InitWildBattle+5 is
 -- past `ld a,1 / ld [wIsInBattle],a` so the species/level are already staged.

@@ -88,6 +88,7 @@ class PureWorld:
         self.replies: list[str] = []
         self.hud: list[tuple] = []
         self.writes: list[tuple[int, int, str]] = []
+        self.set_registers: list[tuple[str, int]] = []
         self.logs: list[str] = []
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         L = self.lua
@@ -95,6 +96,7 @@ class PureWorld:
             read_u8=self._read_u8, read_range=self._read_range, write_u8=self._write_u8,
             on_bus_exec=self._on_bus_exec, unregister=lambda i: None,
             framecount=lambda: self.frame, register=lambda name: self.regs[str(name)],
+            set_register=self._set_register,
             domains=lambda: L.table("System Bus", "ROM", "CartRAM", "WRAM"),
             saveram=lambda: None,
         )
@@ -118,6 +120,10 @@ class PureWorld:
         self.overworld_safe()
 
     # -- BizHawk fakes ------------------------------------------------------------------
+    def _set_register(self, name, value):
+        self.regs[str(name)] = int(value)
+        self.set_registers.append((str(name), int(value)))
+
     def _read_u8(self, addr, domain=None):
         addr, dom = int(addr), str(domain) if domain is not None else "System Bus"
         if dom == "ROM":
@@ -875,3 +881,26 @@ def test_hello_is_held_while_the_save_stamp_differs_from_the_pinned_version(worl
     world.bus[world.ram["wGameInternalVersion"]] = 5
     world.step()
     assert len(world.events("hello")) == 1
+
+
+def test_a_pending_battle_write_lands_at_the_no_move_reentry_and_moves_pc_to_the_loop_head(world):
+    """pureRGB's MOVE-menu cancel re-enters MainInBattleLoop.loopNoMoveSelected (below the HP
+    check). The client writes the faint there and moves PC to the loop head's HP check so the
+    engine faints the battler on this very re-entry (probe_gen1_loop_reentry, 2026-09-18)."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[0])
+    world.reply({"cmd": "force_faint", "key": key})
+    world.step(3)
+    assert world.bus[world.ram["wBattleMonHP"]] != 0 or world.bus[world.ram["wBattleMonHP"] + 1] != 0
+    world.fire("battle_loop_no_move")
+    assert world.bus[world.ram["wBattleMonHP"]] == 0 and world.bus[world.ram["wBattleMonHP"] + 1] == 0
+    assert world.bus[world.ram["wPlayerSelectedMove"]] == 0xFF
+    head = SITES[world.title]["sites"]["battle_loop_head"]
+    assert world.set_registers == [("PC", head["address"] + head.get("capture_offset", 0))]
+    # nothing pending => the re-entry hook is inert and never touches PC
+    world.fire("battle_loop_no_move")
+    assert len(world.set_registers) == 1
