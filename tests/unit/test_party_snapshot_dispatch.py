@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -77,6 +78,20 @@ def test_tick_with_omitted_party_retains_display_and_empty_party_clears_it(tmp_p
     assert srv.party_details["a"] == before
     srv._dispatch("a", {"event": "tick", "party": []})
     assert srv.party_details["a"] == {}
+
+
+def test_hello_persists_mon_stats_for_the_party_it_just_cached(tmp_path, monkeypatch):
+    """Q-2: the mon_stats written by _cache_mon_info in the hello handler's party
+    loop must actually reach links.json, not just live in memory until some later
+    save happens to catch it."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    monkeypatch.setattr(srv, "_player_has_panel", lambda _: False)
+    key = party()[0]["key"]
+    srv._dispatch("a", legacy_hello(party()))
+    saved = json.loads((tmp_path / "links.json").read_text())
+    assert key in saved["mon_stats"]
+    assert saved["mon_stats"][key]["level"] == 10
+    assert saved["mon_stats"][key]["maxHP"] == 30
 
 
 def test_rejected_hello_never_constructs_or_publishes_a_new_party_snapshot(tmp_path, monkeypatch):

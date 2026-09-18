@@ -18,6 +18,7 @@ Run:
 import argparse
 import asyncio
 import contextlib
+import copy
 import functools
 import html
 import json
@@ -1653,8 +1654,11 @@ class SLinkServer:
                     self.state.trainer_names[player_id] = tname
                     _dirty = True
                     log.info(f"Committed trainer name '{tname}' for player {player_id}")
-            if _dirty:
-                self.state._save()
+            # Both _cache_mon_info call sites below (pc_boxes and party) can write
+            # self.state.mon_stats. Snapshot before either runs so the single save at
+            # the end of the handler catches every path, instead of saving too early
+            # (before either loop) and losing whichever one runs after it.
+            stats_before = copy.deepcopy(self.state.mon_stats)
             if msg.get("rom_content"):
                 self._ingest_rom_content(player_id, msg["rom_content"])
             if "pc_boxes" in msg:
@@ -1668,6 +1672,8 @@ class SLinkServer:
             self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
             for k, det in self.party_details[player_id].items():
                 self._cache_mon_info(k, det)
+            if _dirty or self.state.mon_stats != stats_before:
+                self.state._save()
             # Seed battle state from hello (so page reflects battle immediately)
             if "in_battle" in msg:
                 self.battle_state[player_id]["in_battle"] = bool(msg["in_battle"])
