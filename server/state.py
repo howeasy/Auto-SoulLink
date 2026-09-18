@@ -162,6 +162,13 @@ class SoulLinkState:
         self.pokeballs_obtained: dict[str, bool] = {"a": False, "b": False}
         # Committed ROM type — set once on first hello, persisted across restarts.
         self.rom_type: str = ""
+        # Committed artifact kind (hello `artifact_kind`, default "clean") — set once like
+        # rom_type; a later hello of another kind is refused as MIXED GAMES (PLAN A3).
+        self.artifact_kind: str = ""
+        # Presentation-side "is this key in use?" hook (server.py caches: pc_boxes,
+        # party_details, _mon_cache) consulted by the key_change collision preflight.
+        # Adapter-neutral: the rules layer never sees what the presentation layer stores.
+        self.presentation_key_in_use = None
         # Committed trainer names — set once per player on first hello, static for run.
         self.trainer_names: dict[str, str] = {"a": "", "b": ""}
         # monKeys awaiting memorialize_done confirmation from each player
@@ -886,6 +893,7 @@ class SoulLinkState:
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
+            state.artifact_kind = data.get("artifact_kind", "")
             # Infer is_rr from persisted rom_type (belt-and-suspenders with CLI flag)
             if state.rom_type.endswith("_rr"):
                 state.is_rr = True
@@ -2532,7 +2540,7 @@ class SoulLinkState:
         self._save()
 
     def _handle_key_change(self, player_id: str, msg: dict):
-        """Handle a key change (nature change, NPC trade, or evolution).
+        """Handle a key change (nature change, NPC trade, evolution, transform, APEX chip).
 
         The Lua client detected that a mon's key changed.  For Gen 3 (RR Nature
         Changer), personality changes but otId/species/nickname stay the same.
@@ -2541,9 +2549,23 @@ class SoulLinkState:
         For Gen 1, evolution changes the internal species index in the key, and
         may also update species/nickname.
 
-        Migrate the old key → new key in all server-side tracking structures.
-        Optional fields ``new_species`` and ``new_nickname`` update the linked
-        MonInfo when present (used by Gen 1 evolution key migration).
+        Validate -> accept | reject -> mutate (PLAN A1).  The reply always carries one of
+        `key_change_ack{old_key,new_key,migrated}` or `key_change_rejected{old_key,new_key,
+        reason}`, appended to this player's queue so it drains in the same reply.
+
+          - replay (`new_key` already indexes the old key's link): ack, no mutation;
+          - `old_key` referenced nowhere (Gen 3 nature change on an unlinked mon): ack
+            `migrated:false`, no mutation;
+          - `new_key` load-bearing elsewhere (a different ALIVE link, or any live structure,
+            including the presentation caches through `presentation_key_in_use`): REJECT.
+            The pair cannot be told apart from the colliding one any more, so the decided
+            consequence (U5) is fail-closed: the old key's link dies `cause="identity_lost"`,
+            partner force-fainted, both memorialized.  A DEAD/MEMORIAL index hit is NOT a
+            collision -- a buried key is reusable by design (`_index_entry` logs it);
+          - otherwise migrate old -> new in every server-side tracking structure.
+            Optional ``new_species`` / ``new_nickname`` update the linked MonInfo (Gen 1
+            evolution).  If the old key's link is already DEAD/MEMORIAL the death is
+            re-queued under the new key (A2: a transformation never revives).
         """
         old_key = msg.get("old_key", "")
         new_key = msg.get("new_key", "")
@@ -2552,18 +2574,59 @@ class SoulLinkState:
 
         reason = msg.get("reason", "nature_change")
         log.info(f"[{player_id}] key_change ({reason}): {old_key[:8]} → {new_key[:8]}")
+        entry = self._key_index.get(old_key)
 
-        _migrated = False
+        def _ack(migrated: bool):
+            self.queued_commands[player_id].append(
+                {"cmd": "key_change_ack", "old_key": old_key, "new_key": new_key,
+                 "migrated": migrated})
 
+        if entry is None and not self._key_refs(old_key):
+            if self._key_index.get(new_key) is not None:
+                # Replay: the migration already happened (resent after a reconnect).
+                log.info(f"[{player_id}] key_change replay for {new_key[:8]} — already migrated")
+            else:
+                # Unknown old key: nothing to migrate (Gen 3 nature change on an unlinked mon).
+                log.warning(
+                    f"[{player_id}] key_change: old_key {old_key[:8]} not found in any"
+                    " tracking structure — possible spurious event"
+                )
+            _ack(False)
+            return
+
+        # Collision check BEFORE any mutation.
+        hit = self._key_index.get(new_key)
+        collision = ""
+        if hit is not None and hit is not entry and hit.status == LinkStatus.ALIVE:
+            collision = f"live link in {hit.area_id}"
+        else:
+            refs = self._key_refs(new_key)
+            if refs:
+                collision = ", ".join(sorted(refs))
+            elif self.presentation_key_in_use and self.presentation_key_in_use(new_key):
+                collision = "presentation cache"
+        if collision:
+            log.error(f"[{player_id}] key_change REJECTED: {new_key[:8]} is load-bearing "
+                      f"({collision}); {old_key[:8]} keeps its identity")
+            self.queued_commands[player_id].append(
+                {"cmd": "key_change_rejected", "old_key": old_key, "new_key": new_key,
+                 "reason": f"key collision: {collision}"})
+            msg["_rejected"] = True
+            if entry is not None and entry.status == LinkStatus.ALIVE:
+                # U5: the pair dies -- the mon can no longer be told apart from the other one.
+                self._propagate_faint(player_id, entry, cause="identity_lost")
+            return
+
+        # ── accepted: migrate ────────────────────────────────────────────────────────
         # 1. Links + key index
-        mon = None
-        entry = self._key_index.pop(old_key, None)
-        if entry:
-            _migrated = True
+        if entry is not None:
+            self._key_index.pop(old_key, None)
+            for mon in (entry.a, entry.b, entry.encounter_a, entry.encounter_b):
+                if mon and mon.key == old_key:
+                    mon.key = new_key
             side = "a" if player_id == "a" else "b"
             mon = getattr(entry, side)
-            if mon and mon.key == old_key:
-                mon.key = new_key
+            if mon and mon.key == new_key:
                 # Update species/nickname if provided (Gen 1 evolution changes species)
                 new_species = msg.get("new_species")
                 new_nickname = msg.get("new_nickname")
@@ -2571,43 +2634,39 @@ class SoulLinkState:
                     mon.species = new_species
                 if new_nickname is not None:
                     mon.nickname = new_nickname
-            self._key_index[new_key] = entry
+            self._index_entry(entry)   # logs KEY COLLISION when a buried key is displaced
 
         # 2. Pending captures
         for _area_id, players in self.pending_captures.items():
             cap = players.get(player_id)
             if cap and cap.key == old_key:
                 cap.key = new_key
-                _migrated = True
 
         # 3. Party keys
         if old_key in self.party_keys[player_id]:
             self.party_keys[player_id].discard(old_key)
             self.party_keys[player_id].add(new_key)
-            _migrated = True
 
         # 4. Mon stats cache
         if old_key in self.mon_stats:
             self.mon_stats[new_key] = self.mon_stats.pop(old_key)
-            _migrated = True
 
         # 5. Bonus keys (shiny clause)
         if old_key in self.bonus_keys[player_id]:
             self.bonus_keys[player_id].discard(old_key)
             self.bonus_keys[player_id].add(new_key)
-            _migrated = True
 
         # 6. Pending memorials
         if old_key in self.pending_memorials[player_id]:
             self.pending_memorials[player_id].discard(old_key)
             self.pending_memorials[player_id].add(new_key)
-            _migrated = True
 
         # 7. Queued commands referencing the old key — and the same commands already
         #    on the wire, so the drift reconciler still sees them as in flight.
         for cmd in self.queued_commands[player_id]:
-            if cmd.get("key") == old_key:
-                cmd["key"] = new_key
+            for field in ("key", "old_key"):
+                if cmd.get(field) == old_key:
+                    cmd[field] = new_key
         inflight = self.sync_inflight[player_id]
         for ident in [i for i in inflight if i[0] == old_key]:
             inflight[(new_key, ident[1])] = inflight.pop(ident)
@@ -2618,13 +2677,73 @@ class SoulLinkState:
                 new_key if k == old_key else k for k in self.pending_bonus[pid]
             )
 
-        if not _migrated:
-            log.warning(
-                f"[{player_id}] key_change: old_key {old_key[:8]} not found in any"
-                " tracking structure — possible spurious event"
-            )
+        # 9. Partner blobs (rival team swap cache) and an active whiteout rebuild
+        for be in self.partner_blobs[player_id]:
+            if be.get("key") == old_key:
+                be["key"] = new_key
+        rb = self.rebuild_pending.get(player_id)
+        if rb:
+            for field in ("queued_keys", "queued_partner_keys"):
+                rb[field] = [new_key if k == old_key else k for k in rb.get(field, [])]
+            if old_key in rb.get("restored_keys", set()):
+                rb["restored_keys"].discard(old_key)
+                rb["restored_keys"].add(new_key)
+
+        # 10. An in-flight trade naming the old key
+        pt = self.pending_trade
+        if pt:
+            for field in ("a_key", "b_key"):
+                if pt.get(field) == old_key:
+                    pt[field] = new_key
+
+        _ack(True)
+
+        # A2: a transformation never revives.  The link was already buried under the old
+        # key, so the death is owed again under the new one.
+        if entry is not None and entry.status != LinkStatus.ALIVE \
+                and not self._has_pending_command(player_id, new_key, *DEATH_COMMANDS, "memorialize"):
+            self.queued_commands[player_id].append({"cmd": "force_faint", "key": new_key})
+            self._queue_memorialize(player_id, new_key)
+            log.info(f"[{player_id}] key_change on a buried link — re-queued death for {new_key[:8]}")
 
         self._save()
+
+    def _key_refs(self, key: str) -> set[str]:
+        """Names of the live tracking structures that reference `key` (empty = unreferenced).
+
+        The collision preflight for `_handle_key_change`.  `_key_index` is judged separately
+        (a DEAD/MEMORIAL hit is not load-bearing) and `mon_stats` is deliberately absent: it
+        is a never-pruned cache that still holds every buried key, and the migration
+        overwrites it -- counting it would turn "buried keys are reusable" into a pair kill.
+        """
+        refs: set[str] = set()
+        for pid in ("a", "b"):
+            if key in self.party_keys[pid]:
+                refs.add("party_keys")
+            if key in self.bonus_keys[pid]:
+                refs.add("bonus_keys")
+            if key in self.pending_memorials[pid]:
+                refs.add("pending_memorials")
+            if key in self.pending_bonus[pid]:
+                refs.add("pending_bonus")
+            if any(be.get("key") == key for be in self.partner_blobs[pid]):
+                refs.add("partner_blobs")
+            if any(c.get("key") == key or c.get("old_key") == key
+                   for c in self.queued_commands[pid]):
+                refs.add("queued_commands")
+            if any(i[0] == key for i in self.sync_inflight[pid]):
+                refs.add("sync_inflight")
+            rb = self.rebuild_pending.get(pid)
+            if rb and (key in rb.get("queued_keys", []) or key in rb.get("queued_partner_keys", [])
+                       or key in rb.get("restored_keys", set())):
+                refs.add("rebuild_pending")
+        if any(cap.key == key for players in self.pending_captures.values()
+               for cap in players.values() if cap):
+            refs.add("pending_captures")
+        pt = self.pending_trade
+        if pt and key in (pt.get("a_key"), pt.get("b_key")):
+            refs.add("pending_trade")
+        return refs
 
     def _check_link_violation(self, a_mon: MonInfo, b_mon: MonInfo) -> tuple[str, str] | None:
         """Return (violation_message, violating_player_id) or None if the link is valid."""
@@ -2734,9 +2853,11 @@ class SoulLinkState:
         return None
 
     def _propagate_faint(self, player_id: str, entry: LinkEntry, killer: dict | None = None,
-                         level: int = 0):
+                         level: int = 0, cause: str = "battle"):
         """Mark entry dead, queue force_faint (or force_explode if Explode Mode is on)
-        for partner, queue memorialize for both."""
+        for partner, queue memorialize for both.  `cause` is what the memorial records:
+        "battle" (default) or "identity_lost" (a rejected key_change, PLAN A1/U5 -- the
+        retire is not an Explosion cue, so explode mode is not consulted for it)."""
         partner     = _partner(player_id)
         player_mon  = entry.a if player_id == "a" else entry.b
         partner_mon = entry.b if player_id == "a" else entry.a
@@ -2748,7 +2869,7 @@ class SoulLinkState:
             # `force_faint` deferred-faint command.  Without the adapter gate,
             # a Gen 1/2/4/5 run with --explode-mode would emit a command those
             # clients only log, and the linked mon would never faint.
-            explode = self.explode_mode and bool(
+            explode = cause == "battle" and self.explode_mode and bool(
                 self.adapter and self.adapter.supports_explode_mode())
             cmd_name = "force_explode" if explode else "force_faint"
             self.queued_commands[partner].append({"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
@@ -2758,7 +2879,7 @@ class SoulLinkState:
             log.info(f"[{player_id}] faint → {cmd_name} {partner}:{partner_mon.key}")
         entry.status = LinkStatus.DEAD
         entry.killed_at = datetime.now(UTC).isoformat()
-        entry.cause = "battle"
+        entry.cause = cause
         entry.killer = killer
         entry.initiating_player = player_id
         # Update MonInfo levels to death-time values so memorial shows current level.
@@ -3143,6 +3264,7 @@ class SoulLinkState:
             "pokeballs_obtained": self.pokeballs_obtained,
             # Committed ROM type (set once on first hello, static for run lifetime).
             "rom_type": self.rom_type,
+            "artifact_kind": self.artifact_kind,
             "trainer_names": self.trainer_names,
             # Player identity lock: OT ID + trainer name per slot.
             "player_identity": self.player_identity,

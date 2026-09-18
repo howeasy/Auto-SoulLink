@@ -21,7 +21,8 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
               {"game": "str", "player": "str", "ot_id": "int", "panel": "bool", "panel_abi": "int", "patch": "bool",
                "version": "str", "client": "str", "badges": "int", "has_pokeballs": "bool",
                "trainer_name": "str", "pc_boxes": "list", "area_id": "str", "loc_name": "str",
-               "rom_sha1": "str", "caps": "dict", "rom_content": "dict"}),
+               "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
+               "artifact_kind": "str"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
                   "in_battle": "bool", "is_trainer_battle": "bool", "trainer_id": "int",
                   "opponent_name": "str", "opponent_class": "str", "enemy_party": "list",
@@ -37,6 +38,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "whiteout": ({}, {}),
     "party_to_box": ({"key": "key"}, {"stats": "dict"}),
     "box_to_party": ({"key": "key"}, {"area_id": "str", "nickname": "str"}),
+    # reason vocabulary (free text on the wire): KEY_CHANGE_REASONS
     "key_change": ({"old_key": "key", "new_key": "key"},
                    {"reason": "str", "new_species": "int", "new_nickname": "str"}),
     "trainer_battle_start": ({"trainer_id": "int"}, {}),
@@ -63,6 +65,9 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
 EVENTS["safe"] = ({}, dict(EVENTS["tick"][1]))
 
 ENVELOPE = {"event": "str", "player": "str", "seq": "int"}
+
+# docs/protocol.md §3.2: the `reason` values a client may send; unknown ones are still accepted
+KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "transform", "apex_chip")
 
 # cmd -> (required fields, optional fields); docs/protocol.md §5
 COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
@@ -93,6 +98,9 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "apply_trade": ({"slot": "int", "blob_hex": "hex", "old_key": "key", "token": "str"}, {"partner_name": "str"}),
     "ghost_pos": ({}, {}),
     "link_panel": ({"rows": "list"}, {}),
+    # one-way replies to key_change (docs/protocol.md §5): no ACKS row, nothing to answer
+    "key_change_ack": ({"old_key": "key", "new_key": "key", "migrated": "bool"}, {}),
+    "key_change_rejected": ({"old_key": "key", "new_key": "key", "reason": "str"}, {}),
 }
 
 # Which commands a client must answer, and with what (docs/protocol.md §5, §5.1).

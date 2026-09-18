@@ -96,3 +96,21 @@ def test_validate_reply_requires_a_non_empty_command_list():
     assert ps.validate_reply({"commands": [{"cmd": "noop"}]}) == []
     assert ps.validate_reply({"commands": []})
     assert ps.validate_reply({"commands": [{"cmd": "noop"}], "extra": 1})
+
+
+def test_key_change_replies_are_one_way_and_the_reason_vocabulary_is_documented():
+    """PLAN A1: the two replies are server commands the client never answers (no ACKS row),
+    and every documented `reason` is what state.py/docs name."""
+    for cmd in ("key_change_ack", "key_change_rejected"):
+        assert cmd in ps.COMMANDS and cmd not in ps.ACKS and cmd not in ps.DEFERRED
+    assert ps.validate_command({"cmd": "key_change_ack", "old_key": "ABCD:1234:99",
+                                "new_key": "FFFF:1234:99", "migrated": True}) == []
+    assert ps.validate_command({"cmd": "key_change_rejected", "old_key": "ABCD:1234:99",
+                                "new_key": "FFFF:1234:99", "reason": "key collision: party_keys"}) == []
+    assert ps.validate_command({"cmd": "key_change_ack", "old_key": "ABCD:1234:99"})
+    assert set(ps.KEY_CHANGE_REASONS) == {"nature_change", "evolution", "npc_trade", "trade_undo",
+                                          "transform", "apex_chip"}
+    doc = (REPO / "docs" / "protocol.md").read_text(encoding="utf-8")
+    for reason in ps.KEY_CHANGE_REASONS:
+        assert f"`{reason}`" in doc, f"docs/protocol.md does not document reason {reason!r}"
+    assert "artifact_kind" in ps.EVENTS["hello"][1] and "`artifact_kind`" in doc

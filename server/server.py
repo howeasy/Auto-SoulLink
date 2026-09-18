@@ -305,6 +305,7 @@ class SLinkServer:
                                         native_sounds=native_sounds,
                                         battle_calc=battle_calc,
                                         pc_trade_npc=pc_trade_npc)
+        self.state.presentation_key_in_use = self._presentation_key_in_use
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -482,6 +483,22 @@ class SLinkServer:
             self._rom_contract = self._load_rom_contract()
             self._rom_contract_mtime = mtime
 
+    def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str) -> str:
+        """Why this hello cannot join the committed run, or "" when it can: the run is
+        locked to one game_id (variants of one game -- Red beside Blue -- still pair) and
+        to one artifact kind (hello `artifact_kind`, default "clean")."""
+        from server.adapters import game_id_for_rom_type
+        if self.state.rom_type and rom_type:
+            want = game_id_for_rom_type(self.state.rom_type)
+            got = game_id_for_rom_type(rom_type)
+            if want and got and got != want:
+                return (f"Mixed games: slot {player_id.upper()} runs {got}, "
+                        f"this run is committed to {want}")
+        if self.state.artifact_kind and artifact_kind != self.state.artifact_kind:
+            return (f"Mixed artifact kinds: slot {player_id.upper()} runs a "
+                    f"{artifact_kind!r} ROM, this run is committed to {self.state.artifact_kind!r}")
+        return ""
+
     def _decide_admission(self, player_id: str, msg: dict) -> dict:
         """Re-run on EVERY hello, so a reconnect or a swapped ROM is re-checked.
 
@@ -498,6 +515,14 @@ class SLinkServer:
         if not want:
             return {"state": "rejected",
                     "reason": f"the contract names no cartridge for player {player_id}"}
+        # The full-ROM sha1 the preparation bound (PLAN A3), checked when the client reports
+        # one; the table fingerprint below stays the check for clients that do not.
+        want_sha1 = str(expected.get("rom_sha1") or "").lower()
+        got_sha1 = str(msg.get("rom_sha1") or "").lower()
+        if want_sha1 and got_sha1 and got_sha1 != want_sha1:
+            return {"state": "rejected",
+                    "reason": (f"this is not the ROM built for player {player_id} "
+                               f"(sha1 {got_sha1[:12]}, expected {want_sha1[:12]})")}
 
         payload = msg.get("rom_content")
         if not payload:
@@ -1255,6 +1280,23 @@ class SLinkServer:
                     elif rom_type and rom_type != self.state.rom_type:
                         log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
                                     f"run already locked to {self.state.rom_type!r}")
+                    # A recognised hello for ANOTHER game, or another artifact kind of the
+                    # same game, is refused rather than ignored (PLAN A3 / §4 row 31): the
+                    # two cartridges would share one rules run with different species,
+                    # type and area domains -- or, for mixed kinds, a run-level native
+                    # capability that only one side has.
+                    _mixed = self._mixed_games_error(player_id, rom_type,
+                                                     msg.get("artifact_kind") or "clean")
+                    if _mixed:
+                        log.warning(f"[{player_id}] REJECTED: {_mixed}")
+                        self.state.identity_error[player_id] = _mixed
+                        self._rom_type_rejected.add(player_id)
+                        await self._respond(writer, [{
+                            "cmd": "hud_show", "text": "[x] MIXED GAMES",
+                            "color": [255, 0, 0], "duration": 600,
+                        }])
+                        self._notify_sse()
+                        continue
                 # Hello-first. A connection has proved nothing until it has said hello, so
                 # nothing else on it is listened to. Without this a cartridge whose hello was
                 # lost still had its ticks reconciled into whichever slot it named, and a
@@ -1640,6 +1682,9 @@ class SLinkServer:
                 self.state.rom_type = rom
                 _dirty = True
                 log.info(f"Committed ROM type '{rom}' for this run")
+            if not self.state.artifact_kind:
+                self.state.artifact_kind = msg.get("artifact_kind") or "clean"
+                _dirty = True
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -1778,17 +1823,8 @@ class SLinkServer:
             log.info(f"[{player_id}] memorialize_done key={key}")
             self.party_details[player_id].pop(key, None)
         elif event == "key_change":
-            old_key = msg.get("old_key", "")
-            new_key = msg.get("new_key", "")
-            log.info(f"[{player_id}] key_change {old_key[:8]} → {new_key[:8]}")
-            # Migrate party_details: move old entry to new key
-            old_detail = self.party_details[player_id].pop(old_key, None)
-            if old_detail:
-                self.party_details[player_id][new_key] = old_detail
-            # Migrate _mon_cache
-            old_mon = self._mon_cache.pop(old_key, None)
-            if old_mon:
-                self._mon_cache[new_key] = old_mon
+            # Presentation caches migrate AFTER state.handle_event accepts it (below).
+            log.info(f"[{player_id}] key_change {msg.get('old_key', '')[:8]} → {msg.get('new_key', '')[:8]}")
         elif event == "safe":
             log.debug(f"[{player_id}] safe state")
         elif event == "tick":
@@ -1900,6 +1936,9 @@ class SLinkServer:
 
         cmds = self.state.handle_event(player_id, msg)
 
+        if event == "key_change" and not msg.get("_rejected"):
+            self._migrate_presentation_key(player_id, msg.get("old_key", ""), msg.get("new_key", ""))
+
         # Refresh the native in-game panel, but only when its content actually changed — this runs
         # on every tick, and the panel is a few hundred bytes. The client keeps the last one staged
         # in EWRAM so opening the menu needs no round-trip at all.
@@ -1991,7 +2030,9 @@ class SLinkServer:
             _migrated = self.party_details[player_id].get(_new_key, {})
             _nick = _migrated.get("nickname", "") or msg.get("old_key", "")[:8]
             _reason = msg.get("reason", "")
-            if msg.get("new_species") is not None:
+            if msg.get("_rejected"):
+                _what = "key change REJECTED (identity lost)"
+            elif msg.get("new_species") is not None:
                 _what = "evolved"
             elif _reason == "trade_undo":
                 _what = "trade reverted"
@@ -4176,6 +4217,7 @@ class SLinkServer:
             native_sounds=self.state.native_sounds,
             battle_calc=self.state.battle_calc,
             pc_trade_npc=self.state.pc_trade_npc)
+        self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
         # Restore events.json and reload ring buffer
         if os.path.exists(backup_events):
@@ -4208,6 +4250,7 @@ class SLinkServer:
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
+        self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
         self.connected_players.clear()
         # Clear derived display caches so SSE doesn't broadcast stale data.
@@ -4269,6 +4312,34 @@ class SLinkServer:
             if mem_idx - i >= 0:
                 indices.add(mem_idx - i)
         return indices
+
+    def _presentation_key_in_use(self, key: str) -> bool:
+        """Is `key` a live mon in the presentation caches?  The state's key_change collision
+        preflight asks this (PLAN A1): a party mon or a mon in a non-memorial box of either
+        player is load-bearing; the memorial box holds buried keys, which are reusable, and
+        `_mon_cache` is never pruned, so neither counts."""
+        mem_idx = self.adapter.memorial_box_index if self.adapter else -1
+        for pid in ("a", "b"):
+            if key in self.party_details.get(pid, {}):
+                return True
+            for bentry in self.pc_boxes.get(pid, []):
+                if bentry.get("key") == key and bentry.get("box") != mem_idx:
+                    return True
+        return False
+
+    def _migrate_presentation_key(self, player_id: str, old_key: str, new_key: str):
+        """Move the presentation caches from old_key to new_key AFTER state accepted the
+        key_change (a rejected one leaves them alone, so the dashboard keeps showing the
+        identity the rules layer still holds)."""
+        old_detail = self.party_details[player_id].pop(old_key, None)
+        if old_detail:
+            self.party_details[player_id][new_key] = old_detail
+        old_mon = self._mon_cache.pop(old_key, None)
+        if old_mon:
+            self._mon_cache[new_key] = old_mon
+        for bentry in self.pc_boxes.get(player_id, []):
+            if bentry.get("key") == old_key:
+                bentry["key"] = new_key
 
     def _check_memorial_box_contamination(self, player_id: str, pc_boxes: list):
         """Scan pc_boxes for memorial box integrity violations and take corrective action.
