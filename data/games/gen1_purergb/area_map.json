@@ -160,7 +160,7 @@
     "name": "Blue's House"
   },
   "40": {
-    "area_id": "pallet_town",
+    "area_id": "oaks_lab",
     "name": "Oak's Lab"
   },
   "41": {
@@ -528,7 +528,7 @@
     "name": "Celadon Mansion Roof"
   },
   "132": {
-    "area_id": "celadon_city",
+    "area_id": "celadon_mansion_roof_house",
     "name": "Celadon Mansion Roof House"
   },
   "133": {
@@ -548,7 +548,7 @@
     "name": "Celadon Mart 5f"
   },
   "137": {
-    "area_id": "celadon_city",
+    "area_id": "game_corner_prize_room",
     "name": "Game Corner Prize Room"
   },
   "138": {
@@ -560,7 +560,7 @@
     "name": "Celadon Chief House"
   },
   "140": {
-    "area_id": "celadon_city",
+    "area_id": "celadon_hotel",
     "name": "Celadon Hotel"
   },
   "141": {
@@ -680,7 +680,7 @@
     "name": "Cinnabar Lab Metronome Room"
   },
   "170": {
-    "area_id": "cinnabar_island",
+    "area_id": "cinnabar_lab_fossil_room",
     "name": "Cinnabar Lab Fossil Room"
   },
   "171": {
@@ -708,7 +708,7 @@
     "name": "Copycat's House 2F"
   },
   "177": {
-    "area_id": "saffron_city",
+    "area_id": "fighting_dojo",
     "name": "Fighting Dojo"
   },
   "178": {
@@ -820,7 +820,7 @@
     "name": "Fuchsia Tree Deleter House"
   },
   "205": {
-    "area_id": "cinnabar_island",
+    "area_id": "fossil_guys_house",
     "name": "Fossil Guy's House"
   },
   "206": {

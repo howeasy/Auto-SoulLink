@@ -26,13 +26,25 @@ suffix, exactly like Mt. Moon's three floors do). This tool follows the same nin
   2. Safari Zone's four quadrants (East/North/West/Center) do NOT collapse -- U10 says they
      "stay one area each", matching vanilla's actual `safari_zone_{east,north,west,center}`
      rows -- so no special-casing is needed: each quadrant already has its own wild table.
-  3. Every other map (a house, gym, cave with no table, etc.) inherits its parent town/route's
+  3. A table-less map that grants a gift in this pack's `gifts.json` gets its OWN area id
+     (the snake of its constant), ahead of the inheritance rules below. A gift must never share
+     an area with the town/route the building stands in: that area carries a real wild (or
+     fishing) table in pureRGB, and the first gift there would dead-zone the wild table
+     (docs/purergb/PLAN.md §2.3 "gift_map_<map> areas must never coincide with an encounter
+     area"). Vanilla does the same by hand for Oak's Lab, Celadon Mansion Roof and the Game
+     Corner (data/games/gen1_rby/area_map.json 40/132/137).
+  4. Every other map (a house, gym, cave with no table, etc.) inherits its parent town/route's
      area id for display, by constant-name prefix/route-number/city-token matching, with a
      small hand table for names that carry no derivable prefix (mirrors vanilla's own set of
      un-derivable interiors: Oak's Lab, S.S. Anne, the Elite Four rooms, ...).
 
 Unlike vanilla's hand-maintained file (which only lists ~88 "interesting" ids), this generator
 emits a `display_name` for all 248 map ids, so a client can label any map it lands on.
+
+The gift table is an INPUT, not a source of truth about the ROM: `tools/gen_gen1_gifts.py` must
+have run first (its output is committed, so a normal checkout needs nothing). If the file is
+missing the generator refuses rather than silently dropping rule 3 — a dropped rule reads exactly
+like "this pack has no gift buildings", which is the bug this exists to prevent.
 
 Overrides that could not be derived from the constant name alone are recorded in the sibling
 `area_map_notes.json` (kept OUT of area_map.json itself: that file's shape --
@@ -54,6 +66,7 @@ FOUNDATION = "purergb"
 NUM_MAPS = 248
 EXPECTED_AREAS_BEFORE_COLLAPSE = 69  # W1 census: 66 grass/water tables + 3 fishing-only maps
 
+_GIFTS_IN = gf.data_dir(FOUNDATION) / "gifts.json"
 _OUT_AREA = gf.data_dir(FOUNDATION) / "area_map.json"
 _OUT_FLOORS = gf.data_dir(FOUNDATION) / "floor_labels.json"
 _OUT_NOTES = gf.data_dir(FOUNDATION) / "area_map_notes.json"
@@ -296,6 +309,12 @@ def build(root) -> tuple[dict, dict, list]:
         label_to_path[p.stem + "WildMons"] = p
     label_to_path["NothingWildMons"] = maps_dir / "nothing.asm"
 
+    if not _GIFTS_IN.exists():
+        raise SystemExit(
+            f"{_GIFTS_IN} is missing — run tools/gen_gen1_gifts.py first: the gift interiors take "
+            f"their own area ids from that table (rule 3 in this file's docstring)")
+    gift_map_ids = {int(g["map_id"]) for g in json.loads(_GIFTS_IN.read_text(encoding="utf-8"))["gifts"]}
+
     ocean_names = parse_name_list(
         (root / "data" / "maps" / "ocean_maps.asm").read_text(encoding="utf-8"), "OceanMaps")
     ocean_ids = {name_to_id[n] for n in ocean_names if n in name_to_id}
@@ -396,6 +415,16 @@ def build(root) -> tuple[dict, dict, list]:
         if const_name.startswith("UNUSED_MAP_"):
             result[mid] = {"area_id": snake(const_name), "name": name}
             continue
+        if mid in gift_map_ids:
+            # Rule 3: a table-less gift interior keeps its own area id, ahead of every
+            # inheritance rule below (including the hand table, whose rows for OAKS_LAB,
+            # GAME_CORNER_PRIZE_ROOM, FIGHTING_DOJO and FOSSIL_GUYS_HOUSE are pre-empted here).
+            result[mid] = {"area_id": snake(const_name), "name": name}
+            notes.append({"map_id": mid, "const": const_name, "rule": "gift_building_own_area",
+                          "area_id": result[mid]["area_id"],
+                          "why": "table-less gift interior; a gift area must never coincide with an "
+                                 "encounter area (PLAN 2.3)"})
+            continue
         if const_name in GAME_KNOWLEDGE_OVERRIDES:
             parent = GAME_KNOWLEDGE_OVERRIDES[const_name]
             if parent is None:
@@ -416,6 +445,15 @@ def build(root) -> tuple[dict, dict, list]:
         if mid not in CITY_TOWN_IDS and mid not in ROUTE_IDS:
             notes.append({"map_id": mid, "const": const_name, "rule": "unresolved_own_id_fallback",
                           "area_id": result[mid]["area_id"]})
+
+    # Rule 3's whole point: no gift area may carry a wild/fishing table. The generator refuses
+    # rather than emitting a map where one does — that is what lets the adapter key gift areas
+    # straight off this file with no wild-area filter of its own.
+    wild_area_ids = {own_area[mid] for mid in own_area} | set(group_of.values())
+    gift_area_ids = {row["area_id"] for row in notes if row["rule"] == "gift_building_own_area"}
+    overlap = sorted(gift_area_ids & wild_area_ids)
+    if overlap:
+        raise SystemExit(f"gift area(s) coincide with a wild/encounter area: {overlap}")
 
     published = {str(k): v for k, v in sorted(result.items())}
     return published, {str(k): v for k, v in sorted(floor_suffix.items())}, notes

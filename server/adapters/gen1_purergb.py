@@ -128,22 +128,19 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         # species (two Fighting Dojo rooms or six Game Corner prizes each give one species,
         # but two different ones per area, so the area itself stays non-fixed — same
         # derivation tests/unit/test_gen1_gifts.py proves against vanilla's literals).
-        # pureRGB's area_map.json collapses an interior gift building into its OUTDOOR area
-        # (Celadon Mansion Roof House, the Game Corner and the Celadon Hotel all read
-        # "celadon_city" — vanilla gives each its own "celadon_mansion_roof"-style id
-        # instead). Marking a whole collapsed city area as a gift would dead-zone any real
-        # wild grass that city also carries (the exact Route-4 class bug
-        # tests/unit/test_gen1_gift_areas.py exists to catch for vanilla) — celadon_city,
-        # cinnabar_island and pallet_town all carry real wild tables in this pack. So an
-        # area only ever counts as a gift area here when it carries NO wild encounters of
-        # its own; a collapsed area that does is a pre-existing area_map.json granularity
-        # gap (reported, not fixed here — fixing it means giving those buildings their own
-        # area ids, out of this file's scope).
-        wild_areas = frozenset(self._encounters.get(self._variant, {}))
+        #
+        # Every gift map has its OWN area id in this pack's area_map.json: the generator's
+        # `gift_building_own_area` rule gives a table-less gift interior its own id ahead of the
+        # inheritance rules (the same thing vanilla does by hand for oaks_lab /
+        # celadon_mansion_roof / game_corner), and refuses to emit a map where a gift area
+        # coincides with a wild/fishing area. So no wild-area filter is needed here: marking a
+        # city as a gift area because a gift building stood in it would dead-zone that city's
+        # real wild water, which is the Route-4 class bug tests/unit/test_gen1_gift_areas.py
+        # catches for vanilla and test_the_pure_gift_areas_carry_no_wild_table catches here.
         species_by_area: dict[str, set[int | None]] = {}
         for gift in _json("gifts.json")["gifts"]:
             area = self._area_by_map.get(gift["map_id"])
-            if area is None or area in wild_areas:
+            if area is None:
                 continue
             species_by_area.setdefault(area, set())
             species_by_area[area].add(gift["species"] if gift["fixed_species"] else None)

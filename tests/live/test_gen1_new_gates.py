@@ -78,8 +78,6 @@ def _lua_to_py(mon: dict) -> dict:
     return out
 
 
-@pytest.mark.parametrize("target", TARGETS)
-@pytest.mark.parametrize("rom", ROMS)
 def _skip_if_absent(rom: str, target: str) -> None:
     """Skip when this cartridge or its battery save is not in the tree.
 
@@ -101,6 +99,8 @@ def _skip_if_absent(rom: str, target: str) -> None:
         pytest.skip(f"{rom}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
 
 
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("rom", ROMS)
 def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
     from run_gb_gate import run_gate
     _skip_if_absent(rom, target)
@@ -126,7 +126,7 @@ def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
 SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"
 
 
-@pytest.mark.parametrize("rom", ALL_ROMS)
+@pytest.mark.parametrize("rom", ROMS)
 def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch):
     """S-1 PHYSICAL: a cold cartridge, NEW GAME -> starter -> rival battle by buttons only, with
     the signals layer armed. The engine-site sequence must be the one pret's scripts imply."""

@@ -36,8 +36,9 @@
     {
       "map_id": 40,
       "const": "OAKS_LAB",
-      "rule": "game_knowledge_override",
-      "area_id": "pallet_town"
+      "rule": "gift_building_own_area",
+      "area_id": "oaks_lab",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
     },
     {
       "map_id": 52,
@@ -184,6 +185,13 @@
       "area_id": "route_7"
     },
     {
+      "map_id": 132,
+      "const": "CELADON_MANSION_ROOF_HOUSE",
+      "rule": "gift_building_own_area",
+      "area_id": "celadon_mansion_roof_house",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
+    },
+    {
       "map_id": 135,
       "const": "GAME_CORNER",
       "rule": "game_knowledge_override",
@@ -192,8 +200,16 @@
     {
       "map_id": 137,
       "const": "GAME_CORNER_PRIZE_ROOM",
-      "rule": "game_knowledge_override",
-      "area_id": "celadon_city"
+      "rule": "gift_building_own_area",
+      "area_id": "game_corner_prize_room",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
+    },
+    {
+      "map_id": 140,
+      "const": "CELADON_HOTEL",
+      "rule": "gift_building_own_area",
+      "area_id": "celadon_hotel",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
     },
     {
       "map_id": 149,
@@ -212,6 +228,13 @@
       "const": "SAFARI_ZONE_GATE",
       "rule": "game_knowledge_override",
       "area_id": "safari_zone_center"
+    },
+    {
+      "map_id": 170,
+      "const": "CINNABAR_LAB_FOSSIL_ROOM",
+      "rule": "gift_building_own_area",
+      "area_id": "cinnabar_lab_fossil_room",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
     },
     {
       "map_id": 173,
@@ -240,8 +263,9 @@
     {
       "map_id": 177,
       "const": "FIGHTING_DOJO",
-      "rule": "game_knowledge_override",
-      "area_id": "saffron_city"
+      "rule": "gift_building_own_area",
+      "area_id": "fighting_dojo",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
     },
     {
       "map_id": 183,
@@ -252,8 +276,9 @@
     {
       "map_id": 205,
       "const": "FOSSIL_GUYS_HOUSE",
-      "rule": "game_knowledge_override",
-      "area_id": "cinnabar_island"
+      "rule": "gift_building_own_area",
+      "area_id": "fossil_guys_house",
+      "why": "table-less gift interior; a gift area must never coincide with an encounter area (PLAN 2.3)"
     },
     {
       "map_id": 222,
