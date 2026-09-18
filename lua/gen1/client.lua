@@ -669,13 +669,16 @@ function Client.new(p)
         local map_id = pt.map or reads.read_map().map
         local area_id = select(1, area_of(map_id))
         if k == "battle_begin" or k == "wild_begin" then
-            -- Live 2: InitBattleCommon fires once with wCurOpponent == 0 right after the starter
-            -- pick (a non-battle caller); nothing to stage for it
-            if pt.cur_opponent == 0 then
-                log("[SLink-gen1] " .. k .. " with no opponent: ignored")
+            -- A wild encounter never sets wCurOpponent (both foundations stage the species in
+            -- wEnemyMonSpecies2, engine/battle/wild_encounters.asm), so wild_begin is the wild
+            -- witness and battle_begin (the trainer staging site) counts only with a trainer id
+            -- >= derived.opp_id_offset (200 vanilla, 197 pureRGB). Live 2: InitBattleCommon
+            -- fires once with wCurOpponent == 0 right after the starter pick (a non-battle
+            -- caller) -- that is what the trainer-id gate ignores.
+            local trainer = pt.cur_opponent >= opp_id_offset
+            if k == "battle_begin" and pt.cur_opponent == 0 then
+                log("[SLink-gen1] battle_begin with no opponent: ignored")
             elseif not self.battle or self.battle.frame ~= sig.frame then
-                -- a trainer is wCurOpponent >= derived.opp_id_offset (200 vanilla, 197 pureRGB)
-                local trainer = pt.cur_opponent >= opp_id_offset
                 self.battle = { frame = sig.frame, wild = not trainer, species = pt.species,
                                 level = pt.level, area_id = area_id, map = map_id,
                                 cur_opponent = pt.cur_opponent, captured = false,

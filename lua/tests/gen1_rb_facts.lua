@@ -139,6 +139,10 @@ return {
   },
 
   -- ── Menu geometry ───────────────────────────────────────────────────────────────────────────
+  BLACKOUT = { -- where a whiteout puts the player (per SCENARIO: the whiteout lane visits the Viridian Center's PC first)
+    default      = { map = 0, x = 5, y = 6 }, -- SAME: new-game blackout point = Pallet Town (RedsHouse1F sets it; poison_new blacks out here on both foundations)
+    after_center = { map = 0, x = 5, y = 6 }, -- SAME: pret engine/events/pokecenter.asm:17 sets wLastBlackoutMap only when the nurse HEALS; the whiteout lane uses the Center PC and never heals, so the destination stays the new-game default (Pallet Town)
+  },
   MENU = {
     START = {
       menu_y                     = 2, -- SAME: engine/menus/draw_start_menu.asm:9-10

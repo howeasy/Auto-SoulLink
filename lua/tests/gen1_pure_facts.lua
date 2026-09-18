@@ -132,6 +132,10 @@ return {
   },
 
   -- ── Menu geometry ───────────────────────────────────────────────────────────────────────────
+  BLACKOUT = { -- where a whiteout puts the player (per SCENARIO: the whiteout lane visits the Viridian Center's PC first)
+    default      = { map = 0, x = 5, y = 6 }, -- SAME: new-game blackout point = Pallet Town (RedsHouse1F sets it; poison_new blacks out here on both foundations)
+    after_center = { map = 1, x = 23, y = 26 }, -- DELTA: scripts/ViridianPokecenter.asm:2 `call SetLastBlackoutMap` on Center ENTRY (engine/events/pokecenter.asm:49 removed the heal-time call; home/overworld.asm:2380-2401 stores wLastMap = VIRIDIAN_CITY from the door warp at :546) -> fly_warp VIRIDIAN_CITY, 23, 26 (data/maps/special_warps.asm:98)
+  },
   MENU = {
     START = { -- engine/menus/draw_start_menu.asm
       menu_y                     = 2, -- SAME: engine/menus/draw_start_menu.asm:9-10

@@ -904,3 +904,22 @@ def test_a_pending_battle_write_lands_at_the_no_move_reentry_and_moves_pc_to_the
     # nothing pending => the re-entry hook is inert and never touches PC
     world.fire("battle_loop_no_move")
     assert len(world.set_registers) == 1
+
+
+def test_a_wild_battle_is_staged_by_wild_begin_without_a_trainer_id(world):
+    """Wild encounters never set wCurOpponent on either foundation (the species lives in
+    wEnemyMonSpecies2), so wild_begin stages the battle with cur_opponent == 0 and a fled
+    encounter still resolves the area (deadzone_new on the pure lane failed on this)."""
+    world.connect()
+    world.in_battle(opponent=0, species=0xA5, level=3)
+    world.fire("wild_begin")
+    world.step()
+    assert not any("ignored" in line and "wild_begin" in line for line in world.logs)
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    assert len(world.events("no_catch")) == 1
+    # the trainer staging site with wCurOpponent == 0 (Live 2: right after the starter pick) stays ignored
+    world.fire("battle_begin")
+    world.step()
+    assert any("battle_begin with no opponent: ignored" in line for line in world.logs), world.logs[-5:]

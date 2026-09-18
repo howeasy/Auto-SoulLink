@@ -2916,9 +2916,13 @@ class DuoRun:
                                f"blackout halves it to {expected}")
         marker(a_text, r"MONEY_HALVED before=\d+ after=\d+", "A money-halving receipt")
         site = marker(a_text, r"BLACKOUT_SITE map=(\d+) x=(\d+) y=(\d+)", "A blackout site")
-        if site.groups() != ("0", "5", "6"):
+        # The lane visited the Viridian Center's PC first: pureRGB sets the blackout map on Center
+        # ENTRY (Viridian City 1,23,26), vanilla only when the nurse heals (Pallet Town 0,5,6).
+        want = ("1", "23", "26") if getattr(self, "game", "") == "gen1_pure" else ("0", "5", "6")
+        if site.groups() != want:
+            where = "Viridian City (1, 23, 26)" if want[0] == "1" else "Pallet Town (0, 5, 6)"
             raise RuntimeError(f"A blacked out to map={site.group(1)} "
-                               f"({site.group(2)},{site.group(3)}), not Pallet Town (0, 5, 6)")
+                               f"({site.group(2)},{site.group(3)}), not {where}")
         ko = marker(a_text, r"STARTER_KO frame=\d+ key=(\S+)", "A starter KO")
         if ko.group(1) != self._boot_keys["a"]:
             raise RuntimeError(f"A's KO'd key is {ko.group(1)}, not the boot starter "

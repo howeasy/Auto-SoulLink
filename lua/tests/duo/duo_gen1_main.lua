@@ -2644,21 +2644,25 @@ function scenarios.whiteout_new()
     end
     log(fmt("TX whiteout x%d", seen.whiteout))
 
+    -- The destination is a lane fact (F.BLACKOUT.after_center): this lane entered the Viridian
+    -- Center for Bill's PC, and pureRGB sets wLastBlackoutMap on Center ENTRY (vanilla only when
+    -- the nurse heals), so pure lands in Viridian City (1,23,26) and vanilla in Pallet (0,5,6).
+    local dest = FACTS.BLACKOUT.after_center
     local blacked_out, arrived = nil, false
     for _ = 1, 9000 do
         if not blacked_out and tile_text("blacked out") then blacked_out = frame end
-        if rd(ram.wCurMap) == 0 and overworld_ok() then arrived = true;break end
+        if rd(ram.wCurMap) == dest.map and overworld_ok() then arrived = true;break end
         yield_frame(pulse_at_frame("B")) -- B advances text and never talks to an NPC
     end
     if not arrived then
-        return false, fmt("A never reached the Pallet Town blackout checkpoint (map=%d)", rd(ram.wCurMap))
+        return false, fmt("A never reached the blackout checkpoint map=%d (at map=%d)", dest.map, rd(ram.wCurMap))
     end
     log(blacked_out and fmt("BLACKED_OUT_TEXT frame=%d", blacked_out)
         or "BLACKED_OUT_TEXT unavailable: the text advanced before the probe")
     local site = reads.read_map()
     log(fmt("BLACKOUT_SITE map=%d x=%d y=%d", site.map, site.x, site.y))
-    if site.map ~= 0 or site.x ~= 5 or site.y ~= 6 then
-        return false, fmt("the blackout warp was map=%d (%d,%d), not Pallet Town (5,6)", site.map, site.x, site.y)
+    if site.map ~= dest.map or site.x ~= dest.x or site.y ~= dest.y then
+        return false, fmt("the blackout warp was map=%d (%d,%d), not the lane's map=%d (%d,%d)", site.map, site.x, site.y, dest.map, dest.x, dest.y)
     end
     local money_after = play.point().money
     log(fmt("MONEY_AFTER %d", money_after))
