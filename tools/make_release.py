@@ -111,6 +111,12 @@ _LUA_CLIENTS = [
 # lua/games/
 _LUA_GAMES = [
     "gen2_crystal.lua",
+    # Unconditionally required at module load by lua/clients/gen2_crystal_client.lua:101
+    # (`local TRAINERS = require("games.gen2_crystal_trainers")`) for trainer-name resolution
+    # in battle/HUD messages. Missing from this list before test_make_release_manifest.py's
+    # launcher-rooted closure caught it -- the require runs at module load, so a Crystal
+    # player's release build failed to start the client at all.
+    "gen2_crystal_trainers.lua",
     "gen3_frlge.lua",
     "gen4_hgsspt.lua",
     "gen5_bw.lua",

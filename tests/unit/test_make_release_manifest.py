@@ -7,8 +7,8 @@ failure this pins: every file is present when you test locally and absent in the
 player downloads, where the first missing dofile is a Lua error in BizHawk's console.
 
 So rather than restating the manifest, the closure is re-derived here from the Lua source
-(every `"...lua"` / `"...json"` path and `require` name reachable from run.lua), and the
-actual built ZIP has to contain it.
+(every quoted path / `require` name reachable from the two production launchers, `lua/slink.lua`
+and `lua/slink_gen1.lua`), and the actual built ZIP has to contain it.
 """
 from __future__ import annotations
 
@@ -24,18 +24,61 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import make_release  # noqa: E402
 
-_ENTRYPOINT = "lua/gen1/run.lua"
-# Paths a Lua source names literally, e.g. "lua/gen1/reads.lua" or "/data/games/.../x.json".
-_PATH_RE = re.compile(r'"/?((?:lua|data)/[\w./-]+\.(?:lua|json))"')
-_REQUIRE_RE = re.compile(r'require\(\s*"([\w.]+)"\s*\)')
+# The two scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
+# `lua/gen1/run.lua` alone (as this test used to) misses anything only the launchers reach:
+# slink.lua's own game_detect dispatch and its lua/games/gen{2,4,5}_*.lua registry, and the
+# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title.
+_ENTRYPOINTS = ["lua/slink.lua", "lua/slink_gen1.lua"]
+
+# Paths a Lua source names literally: "lua/gen1/reads.lua", '/data/games/.../x.json', or a
+# bare dir-relative literal like "gen1/entry.lua" (the `_dir .. "x"` idiom the launchers use,
+# where _dir is their own directory, lua/). Single- or double-quoted.
+_PATH_RE = re.compile(r'["\']/?([\w.-]+(?:/[\w.-]+)+\.(?:lua|json))["\']')
+# require("x"), require('x'), require "x" (no parens), and pcall(require, "x") -- all four
+# appear in this codebase. A bare `pcall(require, name)` with a variable (game_detect.lua's
+# module registry) still can't be traced textually; that residual gap is real but its targets
+# (lua/games/gen{2,4,5}_*.lua) are independently reached below via each client's own require.
+_REQUIRE_RE = re.compile(r'\brequire\s*[(,]?\s*[\'"]([\w.]+)[\'"]')
 # lua/socket.lua requires these; they are the interpreter's, not files SLink ships.
 _STDLIB = {"string", "math", "table", "io", "os", "coroutine", "debug", "utf8", "package"}
 
+# Extra roots a `require()` name can resolve against, beyond plain lua/<name>.lua: each Gen
+# 2-5 client prepends lua/games/, lua/clients/, and its own data/games/<gen>/ to package.path
+# (e.g. lua/clients/gen4_hgsspt_client.lua:56-59). Mirrors that search order so a name that
+# only exists under one of these roots (e.g. "gen4_hgsspt_areas") resolves to the real file
+# instead of a lua/<name>.lua that doesn't exist.
+_REQUIRE_SEARCH_DIRS = ["lua", "lua/games", "lua/clients"] + [
+    f"data/games/{gen}" for gen in make_release._DATA_GAME_LUA
+]
 
-def _closure(start: str) -> set[str]:
-    """Every repo-relative file reachable from `start` by dofile / require / load_json."""
+
+def _require_to_path(name: str) -> str:
+    rel = name.replace(".", "/") + ".lua"
+    for d in _REQUIRE_SEARCH_DIRS:
+        candidate = f"{d}/{rel}"
+        if os.path.exists(os.path.join(_REPO, candidate)):
+            return candidate
+    return f"lua/{rel}"  # not found anywhere -- keep it so a real typo still surfaces as "missing"
+
+
+def _resolve_literal_path(rel: str, literal: str) -> str | None:
+    """A `_PATH_RE` match is repo-root-relative if it already carries the lua/ or data/
+    prefix. Otherwise it's only a real dofile target when it appears in one of the launcher
+    scripts at the lua/ root (the `_dir .. "x"` idiom, _dir == lua/) -- anywhere else a bare
+    "sub/dir.lua"-shaped string is prose (e.g. a comment naming another file), and resolving
+    it as if it were relative to *this* file's directory produces a path that doesn't exist.
+    """
+    if literal.startswith("lua/") or literal.startswith("data/"):
+        return literal
+    if rel.rsplit("/", 1)[0] == "lua":
+        return f"lua/{literal}"
+    return None
+
+
+def _closure(starts: list[str]) -> set[str]:
+    """Every repo-relative file reachable from `starts` by dofile / require / load_json."""
     seen: set[str] = set()
-    todo = [start]
+    todo = list(starts)
     while todo:
         rel = todo.pop()
         if rel in seen:
@@ -46,9 +89,14 @@ def _closure(start: str) -> set[str]:
             continue
         with open(path, encoding="utf-8") as fh:
             src = fh.read()
-        found = set(_PATH_RE.findall(src))
-        found |= {f"lua/{name.replace('.', '/')}.lua"
-                  for name in _REQUIRE_RE.findall(src) if name not in _STDLIB}
+        found: set[str] = set()
+        for m in _PATH_RE.findall(src):
+            resolved = _resolve_literal_path(rel, m)
+            if resolved:
+                found.add(resolved)
+        for name in _REQUIRE_RE.findall(src):
+            if name not in _STDLIB:
+                found.add(_require_to_path(name))
         todo.extend(found - seen)
     return seen
 
@@ -67,17 +115,31 @@ def archive(tmp_path_factory) -> set[str]:
 
 def test_the_closure_is_the_gen1_client_and_nothing_stale():
     """A guard on the derivation itself: if this drifts, the manifest test means nothing."""
-    closure = _closure(_ENTRYPOINT)
-    for expected in ("lua/gen1/entry.lua", "lua/gen1/client.lua", "lua/json_codec.lua",
-                     "lua/gen1_write_safety.lua", "lua/connector.lua", "lua/hud.lua",
-                     "data/games/gen1_rby/profile.json"):
-        assert expected in closure, f"{expected} was not derived from {_ENTRYPOINT}: {closure}"
+    closure = _closure(_ENTRYPOINTS)
+    for expected in (
+        # The Gen 1 client, reached via slink_gen1.lua -> gen1/run.lua -> gen1/entry.lua,
+        # and via slink.lua's own Gen 1 route (dofile("gen1/entry.lua") for detect_title).
+        "lua/gen1/entry.lua", "lua/gen1/client.lua", "lua/json_codec.lua",
+        "lua/gen1_write_safety.lua", "lua/connector.lua", "lua/hud.lua",
+        "data/games/gen1_rby/profile.json",
+        # Only reachable once the closure is rooted at the launchers, not run.lua alone.
+        "lua/game_detect.lua",
+        "lua/clients/gen2_crystal_client.lua",
+        "lua/clients/gen4_hgsspt_client.lua",
+        "lua/clients/gen5_bw_client.lua",
+        "lua/games/gen2_crystal.lua",
+        "lua/games/gen4_hgsspt.lua",
+        "lua/games/gen5_bw.lua",
+        "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
+        "data/games/gen5_bw/gen5_bw_areas.lua",
+    ):
+        assert expected in closure, f"{expected} was not derived from {_ENTRYPOINTS}: {closure}"
 
 
 def test_every_runtime_dependency_of_the_new_gen1_client_is_packaged(archive):
-    missing = sorted(f for f in _closure(_ENTRYPOINT) if f not in archive)
+    missing = sorted(f for f in _closure(_ENTRYPOINTS) if f not in archive)
     assert not missing, (
-        "the release ZIP is missing files lua/gen1/run.lua loads at runtime; a player "
+        "the release ZIP is missing files a launcher loads at runtime; a player "
         f"extracting it would hit a Lua error on the first one: {missing}"
     )
 
@@ -94,6 +156,22 @@ def test_every_manifest_entry_names_a_file_that_exists():
     )
     missing = [p for p in listed if not os.path.exists(os.path.join(_REPO, p))]
     assert not missing, f"manifest names files that do not exist: {missing}"
+
+
+def test_the_shipped_socket_dll_is_packaged(archive):
+    """lua/socket.lua (socket.lua:18-49) resolves its native lib to
+    lua/x64/socket-<os>-<lua major>-<lua minor>.<ext> at runtime -- computed, not read from
+    make_release's own _LUA_X64_OPTIONAL list, so a manifest that silently drops the row
+    would still be caught. On Windows x64 / Lua 5.4 (this machine's BizHawk) that's
+    socket-windows-5-4.dll; skip only if the tree itself doesn't have the DLL to ship."""
+    dll_name = "socket-windows-5-4.dll"
+    if not os.path.exists(os.path.join(_REPO, "lua", "x64", dll_name)):
+        pytest.skip(f"lua/x64/{dll_name} not present in this checkout")
+    arcname = f"lua/x64/{dll_name}"
+    assert arcname in archive, (
+        f"{arcname} exists in the tree (lua/socket.lua will try to load it on Windows "
+        "x64/Lua 5.4) but the built release ZIP does not contain it"
+    )
 
 
 def test_the_old_gen1_client_is_not_shipped(archive):
