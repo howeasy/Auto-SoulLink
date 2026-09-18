@@ -318,3 +318,17 @@ OK, unit 3027 passed / 24 env skips. Three docs-only commits landed after bf2234
 real rebase replays a few more; expect no conflicts (docs/ receipts only). NOTE for the FF: the main checkout's gitignored
 tests/fixtures/gen1/*.SaveRAM are STALE (legacy byte-written shape, 22 unit failures); copy the worktree's fixtures (F-6 scripted
 play) before running the suite there.
+
+## MERGED TO LOCAL MASTER (2026-09-18 ~08:20Z) -- owner: "merge to main but do not create a release. I want to test a run first."
+Queue items done first: Q-1 947a577 (commit_move stops on player_fainted/party_menu; hunt throws only at odds 1.00 -- measured:
+45/45 catches at 1.00, every miss came from the dmax+1 rule at 0.58-0.67), Q-2 0fce67c (hello handler saves after
+_cache_mon_info; slink-adapter-guard APPROVE), Q-3 3e45ebe (manifest test rooted at both launchers; FOUND AND FIXED a real
+package bug: lua/games/gen2_crystal_trainers.lua was never shipped and the Crystal client requires it at load), plus 94f0058
+(route walkers: detour back-off after 4 detours on a segment, fail closed after 3 back-offs -- the poison walk had oscillated
+90000 frames behind Route 1's ledge). Full runner run 6 at 09d0afb: 11/12, duo 17/18 (f6dc5b0); poison + rival then PASS
+first attempt (50f9803). Real rebase of the branch onto master cb9cf5c: 243 commits, conflict-free; fast lanes on the
+rebased tree all PASS (unit 3042). `git -C E:/Google Drive/SLink merge --ff-only 24fdb06` done: LOCAL master = 24fdb06.
+NOT pushed (origin/master adf3362 is 352 commits behind local master, most of them predating this work), NOT tagged, no
+release. pureRGB session notified (branches off 24fdb06; my writes frozen).
+OWNER NEXT: test a run from the main checkout (fixtures and ROM artifacts present there); then push master, tag, gh release.
+If the test run finds something, new commits go on top of master (tell the pureRGB session first).
