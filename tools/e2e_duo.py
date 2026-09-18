@@ -257,6 +257,11 @@ RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
 GEN1_RNG_REASON_CLASS = {
     "hunt ended out-of-balls": "CAUSE_RNG",  # link_new/deadzone_new direct
     "link_new prerequisite failed: hunt ended out-of-balls": "CAUSE_RNG",  # nested trade/faint
+    # The Route 1 hunter can also lose its wild battle outright (a Rattata crit chain on the L5
+    # starter): the walk-back whiteout is the game's RNG, same shape as poison's starter KO,
+    # so a whole-run retry is the right response (seen in the duo-pairs lane, linked_faint_bench).
+    "hunt ended whiteout": "CAUSE_RNG",
+    "link_new prerequisite failed: hunt ended whiteout": "CAUSE_RNG",
     # poison_new's two forest legs (duo_gen1_main.lua:2352,2385): the poisoning is a race
     # between the wild table and the starter's HP, so both outcomes are the game's RNG and a
     # whole-run retry is the right response. Any other poison leg failure is FINAL.
