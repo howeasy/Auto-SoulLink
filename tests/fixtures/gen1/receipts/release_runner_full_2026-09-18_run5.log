@@ -1,0 +1,96 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3038 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (68s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     9 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (101s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (20s)
+[ .. ] duo-pairs
+  [duo] two EmuHawk instances launched
+E         [duo] keys: a=06C3:4190:99 b=4519:AFB9:B0
+E         [duo] both players connected
+E         [duo] go-file written for a
+E         [duo] go-file written for b
+E         [duo] PYDEC: FAIL client RESULT before both RESULT lines
+E         [duo] species_clause_new: a client finished before 'both RESULT lines' (a: RESULT: FAIL (hunt ended out-of-balls); b: no RESULT)
+E         --- species_clause_new a result (last 25 lines) ---
+E         TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"990013000016032D21
+E         RX resolved_areas
+E         RX config
+E         booted at frame 846 party=1 map=12 (10,35)
+E         MYKEY 0 06C3:4190:99
+E         PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+E         JITTER requested=74 applied=74 attempt=3
+E         phase pace-grass @1382 (10,35) battle=0 party=1
+E         [hunt] encounter 1 at (10,35) mode=catch balls=1
+E         phase wild-intro @1453 (10,35) battle=1 party=1
+E         [hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+E         phase wild-fight @2218 (10,35) battle=1 party=1
+E         [hunt] turn 2 foe hp 8/15 odds 0.63 dmax 9 -> throw
+E         phase wild-throw @2758 (10,35) battle=1 party=1
+E         [hunt] threw ball index 0 -> timeout
+E         heartbeat f=3600 party=1 connected=true
+E         phase wild-no-balls @3936 (10,35) battle=1 party=1
+E         TX {"area_id":"route_1","event":"no_catch","level":3,"player":"a","seq":109,"species_id":165}
+E         TX {"event":"safe","player":"a","seq":110}
+E         [hunt] battle outcome ran receipts move1:player_move,throw:timeout,run:escaped
+E         phase wild-ran @4034 (10,35) battle=0 party=1
+E         [hunt] after battle: outcome=ran result=2 party=1 balls=0 -> out-of-balls
+E         phase out-of-balls @4035 (10,35) battle=0 party=1
+E         HUNT out-of-balls after 2654 frames, 1 encounter(s)
+E         RESULT: FAIL (hunt ended out-of-balls)
+E         --- species_clause_new b result (last 25 lines) ---
+E         duo instance b scenario=species_clause_new game=gen1_new
+E         attempt 3 of 2
+E         [client] [SLink] TCP connecting to 127.0.0.1:62455 (non-blocking)…
+E         client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:62455
+E         [client] [SLink] TCP connected to 127.0.0.1:62455
+E         PARTY_COUNT nil -> 255 @1
+E         PARTY_COUNT 255 -> 0 @5
+E         PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+E         PARTY_COUNT 0 -> 1 @649
+E         PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
+E         [client] [SLink-gen1] writes ENABLED
+E         TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"B00013000014142D0A
+E         RX resolved_areas
+E         RX config
+E         booted at frame 846 party=1 map=12 (10,35)
+E         MYKEY 0 4519:AFB9:B0
+E         PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
+E         JITTER requested=74 applied=74 attempt=3
+E         heartbeat f=3600 party=1 connected=true
+E         RX play_sound
+E         RX msgbox text=Route 1 is a dead zone!
+E         [duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_new_0ipxr_aq
+E         
+E         ========== summary ==========
+E           species_clause_new: FAIL (attempt 3 of 8)
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['E:\\Google Drive\\SLink\\.venv\\Scripts\\python.exe', 'E:\\Google Drive\\SLink\\.claude\\workt...pecies_clause_new_0ipxr_aq\n\n========== summary ==========\n  species_clause_new: FAIL (attempt 3 of 8)\n', stderr='').returncode
+
+tests\e2e\test_duo_gen1_new.py:122: AssertionError
+1 failed, 17 passed in 592.85s (0:09:52)
+
+[FAIL] duo-pairs          17 passed, 0 skipped (0 unexplained), 1 failed, 0 xfailed, 0 deselected  (594s)
+
+GATE FAILED — duo-pairs
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
