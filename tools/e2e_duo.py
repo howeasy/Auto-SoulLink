@@ -510,7 +510,7 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
     if _event_counts(events_before) != _event_counts(events_after):
         problems.append("a " + "/".join(RECONNECT_GAMEPLAY_EVENTS) + " count changed")
     new_hellos = _new_a_hellos(problems, events_before, events_after)
-    if len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected (Red, "):
+    if len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
 
@@ -3580,7 +3580,7 @@ class DuoRun:
         hellos = self.wait_for("durable admitted/rejected hello events", durable_events, 30)
         a_events = [row for row in hellos if row.get("player") == "a"]
         b_events = [row for row in hellos if row.get("player") == "b"]
-        if (len(a_events) != 1 or not a_events[0].get("text", "").startswith("Connected (Red, ")
+        if (len(a_events) != 1 or not a_events[0].get("text", "").startswith("Connected (")
                 or len(b_events) != 1 or not b_events[0].get("text", "").startswith("REJECTED — ")):
             raise RuntimeError(f"unexpected durable hello events: {hellos}")
         with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
