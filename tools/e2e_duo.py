@@ -1937,14 +1937,18 @@ class DuoRun:
             raise RuntimeError("reconnect_new's live legs did not complete — the final A save "
                                "belongs to the wrong-save phase and the same-save flush was "
                                "never copied out")
-        from gen1_fixtures import DEFAULT_OT, saved_ot
+        from gen1_fixtures import saved_ot
 
         for process in self.emus:
             process.wait(timeout=30)  # client.exit flushes CartRAM
+        # The clean OT is the pairing's own A fixture (red 0x4190, purered 0xC131), not a literal.
+        title_a = self.gcfg["fixture"]["a"]
+        with open(self._fixture_save_path("a"), "rb") as handle:
+            DEFAULT_OT = saved_ot(handle.read(), title_a)
         same = self._artifact(self._same_save_artifact, "C-2 same-save SaveRAM")
         same_sram, same_party, _same_box, codec = self._saved_gen1_party("a", save_name=str(same))
         same_keys = [codec.key(mon) for mon in same_party]
-        same_ot = saved_ot(same_sram, self.gcfg["fixture"]["a"])
+        same_ot = saved_ot(same_sram, title_a)
         if self._link_keys["a"] not in same_keys:
             raise RuntimeError(f"same-save artifact lacks A's linked key {self._link_keys['a']}: "
                                f"{same_keys}")
