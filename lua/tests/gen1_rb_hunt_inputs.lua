@@ -161,11 +161,18 @@ function M.new(expected, opts)
             return "stuck"
         end
         local dmax = nil -- largest Tackle damage seen so far (a non-crit roll is 217-255/255 of base)
+        -- Throw only at a sure catch (odds 1.00 = W >= 255, ItemUseBall) or on the last turn.
+        -- Measured over 51 throws (release runs 1-5 + every kept receipt, 2026-09-17/18): all 45
+        -- throws at odds 1.00 caught; the 6 thrown early because the next Tackle MIGHT KO the foe
+        -- (hp <= dmax+1, odds 0.58-0.67) missed 4 times, and every miss ends the hunt
+        -- out-of-balls -- a whole-run retry. A foe KO costs one encounter and keeps the ball
+        -- (the caller's "hunt again" path), so the KO guard was the expensive side of that trade.
+        -- For a 13-19 HP Route 1 foe odds are 1.00 iff hp <= 7 (floor(maxhp*255/12) >= 255 over
+        -- divisor 1) and 0.53-0.79 at hp 8-11; there is no 0.8-0.99 band to aim for.
         for turn = 1, 4 do
             local hp, maxhp = foe()
             local odds = M.catch_odds(hp, maxhp)
-            local throw = odds >= 0.99 or turn == 4 or (dmax ~= nil and hp <= dmax + 1)
-                or (hp < maxhp and odds >= 0.8)
+            local throw = odds >= 0.99 or turn == 4
             log(string.format("[hunt] turn %d foe hp %d/%d odds %.2f dmax %s -> %s", turn, hp, maxhp, odds,
                               tostring(dmax), throw and "throw" or "fight"))
             if throw then break end

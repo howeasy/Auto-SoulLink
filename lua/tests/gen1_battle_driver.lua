@@ -193,6 +193,17 @@ function M.new(o)
         --    press right after the FIGHT confirmation was not taken; the next one, later, was).
         idle(24)
         t.attempts=0
+        -- The foe moved first and KO'd us: `.enemyMovesFirst ... jp z, HandlePlayerMonFainted`
+        -- (core.asm:413-424) never reaches ExecutePlayerMove, so the retry below would press A
+        -- again -- into "Use next POKeMON?" (wild, :1052-1071) and then the forced party menu
+        -- (ChooseNextMon :1086) with the cursor on the slot that just fainted -> NoWillText, a
+        -- PrintText box watching A|B only (RIVAL-4, b8374a2; measured ~2900-3900 dead frames per
+        -- KO). Stop on the first sign and press nothing: wBattleMonHP 0 is the engine's own
+        -- test (:285, :424) and the party-menu geometry is PartyMenuInit's (y=1, x=0, A|B).
+        local function player_down(s)
+            if A.wBattleMonHP and hp("wBattleMonHP")==0 then return "player_fainted"end
+            if s.x==M.PARTY_MENU.x and s.y==M.PARTY_MENU.y and s.watched==PAD.A+PAD.B then return "party_menu"end
+        end
         repeat
             t.attempts=t.attempts+1
             t.stages.selected=press("A")
@@ -201,6 +212,7 @@ function M.new(o)
             why,used,st=until_(function(s)
                 if s.in_battle==0 then return "battle_over"end
                 if count("execute_player_move")>base.epm then return "player_move"end
+                local down=player_down(s);if down then return down end
                 if count("select_enemy_move")>base.sem or count("execute_enemy_move")>base.eem then return nil end -- turn under way: keep waiting
                 if count("display_battle_menu")>base.dbm and battle_menu_consistent(s)then return "battle_menu_again"end
             end,(t.attempts<3) and 240 or max_frames)
@@ -208,6 +220,7 @@ function M.new(o)
                 why,used,st=until_(function(s)
                     if s.in_battle==0 then return "battle_over"end
                     if count("execute_player_move")>base.epm then return "player_move"end
+                    local down=player_down(s);if down then return down end
                     if count("display_battle_menu")>base.dbm and battle_menu_consistent(s)then return "battle_menu_again"end
                 end,max_frames)
             end
