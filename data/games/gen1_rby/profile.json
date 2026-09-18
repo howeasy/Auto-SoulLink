@@ -21,12 +21,28 @@
  "titles": {
   "blue": {
    "derived": {
+    "bag_capacity": 20,
+    "ball_items": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "base_stats_stride": 28,
     "battle_struct_size": 44,
     "box_capacity": 20,
     "box_struct_size": 33,
+    "dex_count": 152,
     "name_length": 11,
+    "opp_id_offset": 200,
     "party_capacity": 6,
     "party_struct_size": 44,
+    "rival_trainer_ids": [
+     225,
+     242,
+     243
+    ],
+    "species_count": 190,
     "sram_box_banks": [
      2,
      3
@@ -548,12 +564,28 @@
   },
   "red": {
    "derived": {
+    "bag_capacity": 20,
+    "ball_items": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "base_stats_stride": 28,
     "battle_struct_size": 44,
     "box_capacity": 20,
     "box_struct_size": 33,
+    "dex_count": 152,
     "name_length": 11,
+    "opp_id_offset": 200,
     "party_capacity": 6,
     "party_struct_size": 44,
+    "rival_trainer_ids": [
+     225,
+     242,
+     243
+    ],
+    "species_count": 190,
     "sram_box_banks": [
      2,
      3
@@ -1075,12 +1107,28 @@
   },
   "yellow": {
    "derived": {
+    "bag_capacity": 20,
+    "ball_items": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "base_stats_stride": 28,
     "battle_struct_size": 44,
     "box_capacity": 20,
     "box_struct_size": 33,
+    "dex_count": 152,
     "name_length": 11,
+    "opp_id_offset": 200,
     "party_capacity": 6,
     "party_struct_size": 44,
+    "rival_trainer_ids": [
+     225,
+     242,
+     243
+    ],
+    "species_count": 190,
     "sram_box_banks": [
      2,
      3

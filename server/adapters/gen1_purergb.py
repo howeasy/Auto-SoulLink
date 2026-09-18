@@ -121,6 +121,38 @@ class Gen1PureRGBAdapter(Gen1Adapter):
                             if k not in ("species_id_space",)}
         self._floor_labels = _json("floor_labels.json")
 
+        # Narrative (non-static) grants: tools/gen_gen1_gifts.py's own table -- pureRGB has no
+        # equivalent of vanilla's hand-typed _GIFT_AREAS/_FIXED_GIFTS (docs/purergb/PLAN.md
+        # A2). An area is a gift area if any gift site's map routes into it; it is a
+        # fixed-species gift area only when every such site resolves to the SAME one known
+        # species (two Fighting Dojo rooms or six Game Corner prizes each give one species,
+        # but two different ones per area, so the area itself stays non-fixed — same
+        # derivation tests/unit/test_gen1_gifts.py proves against vanilla's literals).
+        # pureRGB's area_map.json collapses an interior gift building into its OUTDOOR area
+        # (Celadon Mansion Roof House, the Game Corner and the Celadon Hotel all read
+        # "celadon_city" — vanilla gives each its own "celadon_mansion_roof"-style id
+        # instead). Marking a whole collapsed city area as a gift would dead-zone any real
+        # wild grass that city also carries (the exact Route-4 class bug
+        # tests/unit/test_gen1_gift_areas.py exists to catch for vanilla) — celadon_city,
+        # cinnabar_island and pallet_town all carry real wild tables in this pack. So an
+        # area only ever counts as a gift area here when it carries NO wild encounters of
+        # its own; a collapsed area that does is a pre-existing area_map.json granularity
+        # gap (reported, not fixed here — fixing it means giving those buildings their own
+        # area ids, out of this file's scope).
+        wild_areas = frozenset(self._encounters.get(self._variant, {}))
+        species_by_area: dict[str, set[int | None]] = {}
+        for gift in _json("gifts.json")["gifts"]:
+            area = self._area_by_map.get(gift["map_id"])
+            if area is None or area in wild_areas:
+                continue
+            species_by_area.setdefault(area, set())
+            species_by_area[area].add(gift["species"] if gift["fixed_species"] else None)
+        self._gift_areas = frozenset(species_by_area)
+        self._fixed_gift_areas = frozenset(
+            area for area, species in species_by_area.items()
+            if len(species) == 1 and next(iter(species)) is not None
+        )
+
     # ── identity ─────────────────────────────────────────────────────────────────────────
     @property
     def game_id(self) -> str:
@@ -131,15 +163,17 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         if not isinstance(area_id, str):
             return False
         static = _STATIC_ID.fullmatch(area_id)
-        return bool(static and (int(static[1]), int(static[2])) in self._static_sites)
+        return bool(static and (int(static[1]), int(static[2])) in self._static_sites) or (
+            area_id in self._gift_areas)
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
         # Every static site here is a script/object-event placed encounter with no player
         # choice (a fixed species at a fixed level), exactly like vanilla's _STATIC_SITES
-        # membership — pureRGB's pack carries no separate "narrative gift" table (Oak's
-        # starter, a fossil choice, the Game Corner prize): unresolved, see the report.
+        # membership. Narrative gifts (Eevee, Magikarp, the Silph/Celadon Lapras, the
+        # Fighting Dojo, the Game Corner, the fossil rooms) are gifts.json's own table.
         static = _STATIC_ID.fullmatch(area_id) if isinstance(area_id, str) else None
-        return bool(static and (int(static[1]), int(static[2])) in self._static_sites)
+        return bool(static and (int(static[1]), int(static[2])) in self._static_sites) or (
+            area_id in self._fixed_gift_areas)
 
     def evo_family(self, species_id: int) -> int:
         # PLAN.md §11.2 A13: families are keyed by INTERNAL id here (unlike vanilla's

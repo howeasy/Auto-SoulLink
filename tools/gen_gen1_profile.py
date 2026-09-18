@@ -36,6 +36,7 @@ PRET_COMMITS = {
     "pokered": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
     "pokeyellow": "0a08515",
 }
+YELLOW_SRC = REPO / ".cache" / "pret" / "pokeyellow"  # separate repo; gen1_foundation only pins pokered
 
 TITLES = {
     # title: (repo, sym file, rom_syms key)
@@ -183,6 +184,81 @@ PURERGB_CONSTANT_ASSERTS = {
 }
 
 
+# Vanilla (pret) derived constants no symbol carries directly -- lua/gen1/*.lua fall back to
+# hand-typed `-- ponytail:` literals for these today. Each is proven against pret's own pinned
+# source text; base_stats_stride additionally comes out of the built ROM's own table spacing
+# (BaseStats..CryData), the same style _purergb_derived already uses for its stride.
+PRET_DERIVED = {
+    "ball_items": [1, 2, 3, 4],  # MASTER_BALL, ULTRA_BALL, GREAT_BALL, POKE_BALL
+    "opp_id_offset": 200,
+    "bag_capacity": 20,
+    # NUM_POKEMON (constants/pokedex_constants.asm) is 151 (DEX_MEW is the last const, and the
+    # dex is 1-indexed) -- dex_count follows the same "index 0 is a real slot" convention
+    # gen1_purergb's own dex_count uses (MissingNo there; an all-zero/no-such-species sentinel
+    # here), so dex_count = NUM_POKEMON + 1 = 152, valid indices 0..151.
+    "dex_count": 152,
+    # NUM_POKEMON_INDEXES (constants/pokemon_constants.asm): the internal index space runs
+    # 1..190 (VICTREEBEL is const $BE = 190, the last one); index 0 is UNOWN's polar opposite
+    # here too -- there is no species at internal 0 in R/B/Y, but the table itself must size
+    # for 190.
+    "species_count": 190,
+    "rival_trainer_ids": [200 + 0x19, 200 + 0x2A, 200 + 0x2B],  # OPP_ID_OFFSET + RIVAL1/2/3
+}
+PRET_DERIVED_ASSERTS = {
+    "ball_items": ("constants/item_constants.asm", [
+        "\tconst MASTER_BALL   ; $01", "\tconst ULTRA_BALL    ; $02",
+        "\tconst GREAT_BALL    ; $03", "\tconst POKE_BALL     ; $04"]),
+    "opp_id_offset": ("constants/trainer_constants.asm", ["DEF OPP_ID_OFFSET EQU 200"]),
+    "bag_capacity": ("constants/menu_constants.asm", ["DEF BAG_ITEM_CAPACITY EQU 20"]),
+    "dex_count": ("constants/pokedex_constants.asm", [
+        "\tconst DEX_MEW        ; 151", "DEF NUM_POKEMON EQU const_value - 1"]),
+    "species_count": ("constants/pokemon_constants.asm", [
+        "\tconst VICTREEBEL         ; $BE", "DEF NUM_POKEMON_INDEXES EQU const_value - 1"]),
+    "rival_trainer_ids": ("constants/trainer_constants.asm", [
+        "\tDEF OPP_\\1 EQU OPP_ID_OFFSET + \\1", "\ttrainer_const RIVAL1         ; $19",
+        "\ttrainer_const RIVAL2         ; $2A", "\ttrainer_const RIVAL3         ; $2B"]),
+}
+
+
+def _assert_yellow_matches_pret() -> None:
+    """pokeyellow is a separate repo gen1_foundation doesn't pin -- every PRET_DERIVED_ASSERTS
+    needle is checked against it too, so a Yellow-specific difference fails loudly here
+    instead of silently reusing Red/Blue's values for a title that doesn't share them."""
+    if not YELLOW_SRC.is_dir():
+        return
+    for rel, needles in PRET_DERIVED_ASSERTS.values():
+        text = (YELLOW_SRC / rel).read_text(encoding="utf-8", errors="replace")
+        for needle in needles:
+            if needle not in text:
+                sys.exit(f"gen_gen1_profile: pokeyellow {rel} lacks {needle!r} -- Yellow's "
+                         f"derived constants differ from Red/Blue and need their own values")
+
+
+def _pret_derived(title: str, syms: dict[str, tuple[int, int]]) -> dict:
+    """Vanilla-only derived constants, proven against pret's (and pokeyellow's) pinned source."""
+    for rel, needles in PRET_DERIVED_ASSERTS.values():
+        for needle in needles:
+            F.assert_source("pret", rel, needle)
+    _assert_yellow_matches_pret()
+    # Mew sits outside the main table for Red/Blue (a separate MewBaseStats record) but
+    # inline as its 151st record for Yellow (OPTIONAL_ROM_SYMBOLS's own comment), so the
+    # record count the table holds differs by title while the per-record stride does not;
+    # CryData is the very next ROM table after BaseStats in every title's .sym.
+    bank, base_addr = syms["BaseStats"]
+    cry_bank, cry_addr = syms["CryData"]
+    count = 150 if "MewBaseStats" in syms else 151
+    span = cry_addr - base_addr
+    if bank != cry_bank or span <= 0 or span % count != 0:
+        sys.exit(f"gen_gen1_profile: {title}: BaseStats..CryData does not hold {count} "
+                 f"equal-size records")
+    stride = span // count
+    if stride != 28:
+        sys.exit(f"gen_gen1_profile: {title}: base_stats_stride computed as {stride}, expected 28")
+    derived = dict(PRET_DERIVED)
+    derived["base_stats_stride"] = stride
+    return derived
+
+
 def parse_sym(path: pathlib.Path) -> dict[str, tuple[int, int]]:
     """{symbol: (bank, addr)} from an rgblink .sym file."""
     out: dict[str, tuple[int, int]] = {}
@@ -270,6 +346,8 @@ def build(foundation: str = "pret") -> dict:
         }
         if foundation == "purergb":
             derived.update(_purergb_derived(syms, ram))
+        elif foundation == "pret":
+            derived.update(_pret_derived(title, syms))
         rom_key = pathlib.Path(rom_file).stem  # pokered / pokeblue / pokeyellow / pokegreen
         profile["titles"][title] = {
             "variant": title,  # server/adapters/gen1_rom_scan.py:70 maps these title keys to variants

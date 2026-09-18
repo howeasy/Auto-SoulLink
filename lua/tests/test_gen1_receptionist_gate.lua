@@ -17,6 +17,9 @@ local fmt = string.format
 local r, json, ram = t.parts.reads, t.parts.json, t.parts.profile.ram
 local Center = dofile(t.ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
 local MAP = Center.MAP
+-- The tap cadence is a lane fact (P3b-e), not a literal: t.facts is the admitted foundation's
+-- driver-facts table (gen1_gate.lua sets it from Entry.admit).
+local CADENCE = t.facts.TUNING.input_cadence
 local TILE_COUNT = 20 * 18 -- pret/constants/gfx_constants.asm SCREEN_WIDTH/HEIGHT
 
 local function read(addr) return memory.read_u8(addr, "System Bus") end
@@ -97,7 +100,7 @@ local function wait_for(predicate, frames, label, repulse)
     -- button is re-pulsed every 16 frames until the predicate holds.
     for _ = 1, frames do
         if predicate() then return true end
-        step(repulse and t.frame % 16 < 2 and {[repulse] = true} or {})
+        step(repulse and t.frame % CADENCE < 2 and {[repulse] = true} or {})
     end
     require_check(label, false, fmt("not seen in %d frames; map=%d x=%d y=%d tile=%s",
                                    frames, at("wCurMap"), at("wXCoord"), at("wYCoord"), row(281, 18)))
@@ -167,7 +170,7 @@ local ok, err = xpcall(function()
         for _ = 1, 180 do
             offered = find_sent("trade_offer", first)
             if offered then break end
-            step(t.frame % 16 < 2 and {A=true} or {})
+            step(t.frame % CADENCE < 2 and {A=true} or {})
         end
         require_check("selected slot zero emitted trade_offer within 180 frames",
                       offered and offered.slot == 0 and t.frame - chosen <= 180,
@@ -180,7 +183,7 @@ local ok, err = xpcall(function()
         local returned = false
         for i = 1, 600 do
             if t.overworld_ok() then returned = true;break end
-            step(i % 16 < 2 and {A=true} or {})
+            step(i % CADENCE < 2 and {A=true} or {})
         end
         require_check("native offer returned cleanly to the overworld", returned,
                       fmt("notice=%s map=%d x=%d y=%d frame=%d", notice,
@@ -214,7 +217,7 @@ local ok, err = xpcall(function()
     local returned = false
     for i = 1, 900 do
         if t.overworld_ok() then returned = true;break end
-        step(i % 16 < 2 and {A=true} or {})
+        step(i % CADENCE < 2 and {A=true} or {})
     end
     require_check("CABLE CLUB fell through to vanilla and returned to the overworld", returned,
                   fmt("map=%d x=%d y=%d frame=%d", at("wCurMap"), at("wXCoord"), at("wYCoord"), t.frame))
@@ -225,7 +228,7 @@ local ok, err = xpcall(function()
     local closed = false
     for i = 1, 300 do
         if t.overworld_ok() and not has_tiles("SLINK TRADE", 42) then closed = true;break end
-        step(i % 16 < 2 and {A=true} or {})
+        step(i % CADENCE < 2 and {A=true} or {})
     end
     require_check("CANCEL closed the native menu with no offer", closed and
                   find_sent("trade_offer", before) == nil,

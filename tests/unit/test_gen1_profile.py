@@ -49,6 +49,11 @@ def test_geometry_pret_implies():
             "party_struct_size": 44, "box_struct_size": 33, "battle_struct_size": 44,
             "party_capacity": 6, "box_capacity": 20, "name_length": 11,
             "sram_box_stride": 1122, "sram_boxes_per_bank": 6, "sram_box_banks": [2, 3],
+            # Symbol-adjacent constants no address carries (F-1 follow-up C): same for every
+            # title, proven against pret's own source text (and pokeyellow's, for yellow).
+            "ball_items": [1, 2, 3, 4], "opp_id_offset": 200, "bag_capacity": 20,
+            "base_stats_stride": 28, "dex_count": 152, "species_count": 190,
+            "rival_trainer_ids": [225, 242, 243],
         }, title
 
 

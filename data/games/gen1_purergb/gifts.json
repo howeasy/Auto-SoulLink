@@ -1,0 +1,166 @@
+{
+  "schema": "gen1-gifts-v1",
+  "source": "purergb 7e7a46535ca3",
+  "gifts": [
+    {
+      "map_id": 40,
+      "map_const": "OAKS_LAB",
+      "species": null,
+      "natdex": null,
+      "level": 5,
+      "kind": "starter",
+      "fixed_species": false,
+      "source": "scripts/OaksLab.asm:843"
+    },
+    {
+      "map_id": 132,
+      "map_const": "CELADON_MANSION_ROOF_HOUSE",
+      "species": 102,
+      "natdex": 133,
+      "level": 25,
+      "kind": "npc_gift",
+      "fixed_species": true,
+      "source": "scripts/CeladonMansionRoofHouse.asm:20,22"
+    },
+    {
+      "map_id": 140,
+      "map_const": "CELADON_HOTEL",
+      "species": 19,
+      "natdex": 131,
+      "level": 30,
+      "kind": "npc_gift",
+      "fixed_species": true,
+      "source": "scripts/CeladonHotel.asm:77,79"
+    },
+    {
+      "map_id": 212,
+      "map_const": "SILPH_CO_7F",
+      "species": 19,
+      "natdex": 131,
+      "level": 40,
+      "kind": "npc_gift",
+      "fixed_species": true,
+      "source": "scripts/SilphCo7F.asm:269,271"
+    },
+    {
+      "map_id": 170,
+      "map_const": "CINNABAR_LAB_FOSSIL_ROOM",
+      "species": null,
+      "natdex": null,
+      "level": 30,
+      "kind": "fossil",
+      "fixed_species": false,
+      "source": "scripts/CinnabarLabFossilRoom.asm:46-48"
+    },
+    {
+      "map_id": 205,
+      "map_const": "FOSSIL_GUYS_HOUSE",
+      "species": null,
+      "natdex": null,
+      "level": 24,
+      "kind": "fossil",
+      "fixed_species": false,
+      "source": "scripts/FossilGuysHouse.asm:98-100"
+    },
+    {
+      "map_id": 205,
+      "map_const": "FOSSIL_GUYS_HOUSE",
+      "species": 171,
+      "natdex": 142,
+      "level": 24,
+      "kind": "fossil",
+      "fixed_species": true,
+      "source": "scripts/FossilGuysHouse.asm:134-135"
+    },
+    {
+      "map_id": 68,
+      "map_const": "MT_MOON_POKECENTER",
+      "species": 133,
+      "natdex": 129,
+      "level": 5,
+      "kind": "npc_gift",
+      "fixed_species": true,
+      "source": "scripts/MtMoonPokecenter.asm:35-36"
+    },
+    {
+      "map_id": 177,
+      "map_const": "FIGHTING_DOJO",
+      "species": 43,
+      "natdex": 106,
+      "level": 30,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "scripts/FightingDojo.asm:290,300"
+    },
+    {
+      "map_id": 177,
+      "map_const": "FIGHTING_DOJO",
+      "species": 44,
+      "natdex": 107,
+      "level": 30,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "scripts/FightingDojo.asm:326,336"
+    },
+    {
+      "map_id": 137,
+      "map_const": "GAME_CORNER_PRIZE_ROOM",
+      "species": 72,
+      "natdex": 124,
+      "level": 20,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "data/events/prize_mon_levels.asm"
+    },
+    {
+      "map_id": 137,
+      "map_const": "GAME_CORNER_PRIZE_ROOM",
+      "species": 53,
+      "natdex": 125,
+      "level": 20,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "data/events/prize_mon_levels.asm"
+    },
+    {
+      "map_id": 137,
+      "map_const": "GAME_CORNER_PRIZE_ROOM",
+      "species": 30,
+      "natdex": 114,
+      "level": 20,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "data/events/prize_mon_levels.asm"
+    },
+    {
+      "map_id": 137,
+      "map_const": "GAME_CORNER_PRIZE_ROOM",
+      "species": 88,
+      "natdex": 147,
+      "level": 18,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "data/events/prize_mon_levels.asm"
+    },
+    {
+      "map_id": 137,
+      "map_const": "GAME_CORNER_PRIZE_ROOM",
+      "species": 76,
+      "natdex": 132,
+      "level": 25,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "data/events/prize_mon_levels.asm"
+    },
+    {
+      "map_id": 137,
+      "map_const": "GAME_CORNER_PRIZE_ROOM",
+      "species": 170,
+      "natdex": 137,
+      "level": 20,
+      "kind": "prize",
+      "fixed_species": true,
+      "source": "data/events/prize_mon_levels.asm"
+    }
+  ]
+}

@@ -21,13 +21,12 @@ Rom.GROWTH_INDEX = { GROWTH_MEDIUM_FAST = 0, GROWTH_SLIGHTLY_FAST = 1, GROWTH_SL
 
 function Rom.new(profile, io, species_index)
     local rom = assert(profile.rom, "profile.rom required")
-    local d = profile.derived or {}
-    -- ponytail: vanilla profile.json predates these fields; the fallbacks are vanilla's values
-    local stride = d.base_stats_stride or Rom.RECORD
-    local species_count = d.species_count or 190
+    local d = assert(profile.derived, "profile.derived required")
+    local stride = assert(d.base_stats_stride, "profile.derived.base_stats_stride required")
+    local species_count = assert(d.species_count, "profile.derived.species_count required")
     -- dex_count counts dex NUMBERS: 151 (1..151) vanilla, 152 (0..151) when the pack seats
     -- MISSINGNO at dex 0. Either way the last numbered record is dex_hi.
-    local dex_hi = d.dex_count and (d.dex_count - 1) or 151
+    local dex_hi = assert(d.dex_count, "profile.derived.dex_count required") - 1
     local pack = species_index and species_index.species or nil
     local self = { stride = stride }
     local dex_cache, stats_cache = {}, {}
@@ -149,14 +148,57 @@ function Rom.new(profile, io, species_index)
             map_id = map_id + 1
         end
 
-        -- pret engine/items/item_effects.asm:1826-1830 (Yellow:2026-2030):
-        -- `lb bc, 5, MAGIKARP` assembles as opcode 01, then species, level;
-        -- gen1_rom_scan.py:220-228 pins the +6 displacement and byte order.
-        local old = assert(rom.ItemUseOldRod, "ItemUseOldRod symbol required").flat + 6
-        assert(byte(old) == 1, "Old Rod instruction changed")
-        payload.old_rod = hex_bytes(old + 1, 2)
-        -- pret data/wild/good_rod.asm:2-5: two level/species pairs.
-        payload.good_rod = hex_bytes(assert(rom.GoodRodMons, "GoodRodMons symbol required").flat, 4)
+        -- rom.GoodRodMonsOcean only exists in a pureRGB profile (EXTRA_ROM_SYMBOLS,
+        -- tools/gen_gen1_profile.py) -- vanilla's profile never carries it, so its presence
+        -- is the same profile-driven signal the rest of this module uses elsewhere
+        -- (rom.SuperRodFishingSlots above) rather than a foundation flag of its own.
+        if rom.GoodRodMonsOcean then
+            -- pureRGB engine/items/item_effects.asm's ItemUseOldRod is a 50/50 Magikarp/
+            -- Goldeen roll: TWO `lb bc, LEVEL, SPECIES` immediates (each compiles to
+            -- `ld bc,nn` = 01 <species> <level>, same shape as vanilla's one) at fixed
+            -- offsets from the symbol -- the fixed-length instructions ahead of them
+            -- (call FishingInit + jp c,.. + call Random + and 1 + jr z,.. = 13 bytes, then
+            -- the fall-through `lb bc` itself) put them at +13 and +18 in all three built
+            -- ROMs (gen1_rom_scan.py's _scan_old_rod_purergb docstring works out the same
+            -- offsets from the same source). Each opcode is asserted first, exactly like
+            -- vanilla's single site below, so a reassembled routine fails loudly instead of
+            -- silently reading whatever byte happens to sit there.
+            local old = assert(rom.ItemUseOldRod, "ItemUseOldRod symbol required").flat
+            assert(byte(old + 13) == 1, "pureRGB Old Rod first lb bc site moved")
+            assert(byte(old + 18) == 1, "pureRGB Old Rod second lb bc site moved")
+            payload.old_rod = hex_bytes(old + 14, 2) .. hex_bytes(old + 19, 2)
+
+            -- pureRGB data/wild/good_rod.asm: two tables back-to-back, GoodRodMons (land,
+            -- pond/lake encounters) then GoodRodMonsOcean, each up to ten (level, species)
+            -- pairs ending -1,-1 -- gen1_rom_scan.py's _scan_good_rod_purergb reads the same
+            -- shape. The terminator itself is never sent: server/adapters/gen1_rom_scan.py's
+            -- parse_client_content treats every two hex bytes as one more entry with no
+            -- length hint, so a stray FF,FF would read back as a bogus species/level pair.
+            local function read_pairs(flat)
+                local pairs, cursor = {}, flat
+                for _ = 1, 10 do
+                    local level, species = byte(cursor), byte(cursor + 1)
+                    if level == 255 and species == 255 then return table.concat(pairs) end
+                    pairs[#pairs + 1] = hex_bytes(cursor, 2)
+                    cursor = cursor + 2
+                end
+                error("Good Rod table: no -1,-1 terminator within 10 entries")
+            end
+            payload.good_rod = read_pairs(
+                assert(rom.GoodRodMons, "GoodRodMons symbol required").flat)
+            payload.good_rod_ocean = read_pairs(
+                assert(rom.GoodRodMonsOcean, "GoodRodMonsOcean symbol required").flat)
+        else
+            -- pret engine/items/item_effects.asm:1826-1830 (Yellow:2026-2030):
+            -- `lb bc, 5, MAGIKARP` assembles as opcode 01, then species, level;
+            -- gen1_rom_scan.py:220-228 pins the +6 displacement and byte order.
+            local old = assert(rom.ItemUseOldRod, "ItemUseOldRod symbol required").flat + 6
+            assert(byte(old) == 1, "Old Rod instruction changed")
+            payload.old_rod = hex_bytes(old + 1, 2)
+            -- pret data/wild/good_rod.asm:2-5: two level/species pairs.
+            payload.good_rod = hex_bytes(
+                assert(rom.GoodRodMons, "GoodRodMons symbol required").flat, 4)
+        end
 
         if rom.SuperRodFishingSlots then
             -- Yellow data/wild/super_rod.asm:1-2,32-33: 9-byte records,

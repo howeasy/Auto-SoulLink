@@ -76,11 +76,8 @@ function R.new(profile, io)
     local a, d = profile.ram, profile.derived
     local cm = R.charmap(profile)
     local r = {NULL = R.NULL, charmap = cm}
-    -- ponytail: vanilla profile.json predates these derived fields; the fallbacks ARE
-    -- vanilla's values (bag: ram/wram.asm:1757-1761 formula; constants/trainer_constants.asm:1).
-    -- Drop them once data/games/gen1_rby/profile.json carries bag_capacity/opp_id_offset.
-    local bag_capacity = d.bag_capacity or math.floor((a.wPlayerMoney - a.wBagItems - 1) / 2)
-    local opp_id_offset = d.opp_id_offset or 200
+    local bag_capacity = assert(d.bag_capacity, "profile.derived.bag_capacity required")
+    local opp_id_offset = assert(d.opp_id_offset, "profile.derived.opp_id_offset required")
     r.bag_capacity, r.opp_id_offset = bag_capacity, opp_id_offset
 
     function r.decode_name(bytes)

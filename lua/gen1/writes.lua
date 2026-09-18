@@ -54,7 +54,7 @@ function W.u16be(v) return { be16(v) } end
 function W.new(profile, io)
     local ram, d = assert(profile.ram), assert(profile.derived)
     local self = { armed = nil, log = {} }
-    local species_count = d.species_count or 190 -- ponytail: vanilla profile lacks the field
+    local species_count = assert(d.species_count, "profile.derived.species_count required")
 
     -- Open the write window for this frame. `reason` names the checkpoint that authorised it
     -- ("overworld", "battle_loop_head"); it is recorded with every write for the receipts.

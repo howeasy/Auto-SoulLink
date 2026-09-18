@@ -85,10 +85,8 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
                  RIVAL_STAGED_FRAMES = 60 }
 
 -- The ball set is profile.derived.ball_items (vanilla MASTER..POKE 1..4, item_constants.asm:10-13;
--- pureRGB adds 5 and 8): built per client below, never a module literal.
--- ponytail: the vanilla profile predates the field; the fallback is its value.
-local VANILLA_BALL_ITEMS = { 1, 2, 3, 4 }
-local VANILLA_OPP_ID_OFFSET = 200 -- constants/trainer_constants.asm:1
+-- pureRGB adds 5 and 8) and profile.derived.opp_id_offset (constants/trainer_constants.asm:1):
+-- built per client below, never a module literal.
 local SRAM_BANK_SIZE = 0x2000     -- layout.link:195-202, one SRAM bank window
 -- Pokemon Tower 1F-7F ($8E-$94, map_constants.asm:228-234). A wild battle on these maps
 -- without the Silph Scope (item_constants.asm:84) in the bag is a "ghost": the engine
@@ -141,8 +139,10 @@ function Client.new(p)
     local d = profile.derived
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
     local BALL_ITEMS = {}
-    for _, id in ipairs(d.ball_items or VANILLA_BALL_ITEMS) do BALL_ITEMS[id] = true end
-    local opp_id_offset = d.opp_id_offset or VANILLA_OPP_ID_OFFSET
+    for _, id in ipairs(assert(d.ball_items, "profile.derived.ball_items required")) do
+        BALL_ITEMS[id] = true
+    end
+    local opp_id_offset = assert(d.opp_id_offset, "profile.derived.opp_id_offset required")
     local box_count = d.sram_boxes_per_bank * #d.sram_box_banks
     local sram_size = (d.sram_box_banks[#d.sram_box_banks] + 1) * SRAM_BANK_SIZE
 

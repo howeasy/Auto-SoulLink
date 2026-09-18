@@ -683,8 +683,13 @@ def _validate_slots(block, what: str) -> None:
     if block is None:
         return
     for s in block["slots"]:
-        if not 1 <= s["level"] <= 100:
-            raise RomScanError(f"{what}: level {s['level']} outside 1-100")
+        # 100 is the real ceiling everywhere except one pureRGB placeholder: Cinnabar
+        # Island/Route 19/Route 20 have no land encounters at all, but WildDataPointers
+        # still needs a ten-slot grass block, so pureRGB stubs it with ten (level 120,
+        # MISSINGNO) entries -- deliberately unreachable in play (data/wild/maps/
+        # SeaRoutes.asm), not a client's malformed report.
+        if not 1 <= s["level"] <= 120:
+            raise RomScanError(f"{what}: level {s['level']} outside 1-120")
         if s["species_index"] == 0:
             raise RomScanError(f"{what}: species index 0 is NO_MON")
 

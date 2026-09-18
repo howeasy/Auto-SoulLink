@@ -71,8 +71,28 @@ log("duo instance " .. D.player .. " scenario=" .. D.scenario .. " game=" .. D.g
 log(fmt("attempt %d of %d", D.attempt or 1, D.max_attempts or 2))
 pcall(function() client.speedmode(D.speed or 1600) end)
 
-local title, header = Entry.detect_title(function(a) return memory.read_u8(a, "ROM") end)
-if not title then finish(false, "not a Gen 1 cartridge (header " .. tostring(header) .. ")") end
+-- Foundation by sha1 FIRST, the call lua/gen1/run.lua and lua/tests/gen1_gate.lua both make
+-- (P3b-e): the built pureRGB cartridges keep the vanilla header, so the header cannot name the
+-- foundation (and PureGreen has no family at all). The header is the fallback only for a family
+-- no pack can admit -- the vanilla companion-patch artifacts, which are vanilla-layout by
+-- construction and predate vanilla's admission table.
+local function rom_u8(a) return memory.read_u8(a, "ROM") end
+local family, header = Entry.detect_title(rom_u8)
+local admitted = Entry.admit({
+    root = ROOT, json = dofile(ROOT .. "/lua/json_codec.lua"),
+    rom_sha1 = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
+    indatabase = gameinfo and gameinfo.indatabase and gameinfo.indatabase() or false,
+    read_rom_u8 = rom_u8, rom_size = memory.getmemorydomainsize("ROM"),
+    header = Entry.header_title(rom_u8),
+})
+local title, pack, kind
+if admitted then
+    title, pack, kind = admitted.title, admitted.pack, admitted.kind
+elseif family then
+    title, pack, kind = family, "gen1_rby", "named"
+else
+    finish(false, "not a Gen 1 cartridge (header " .. tostring(header) .. ")")
+end
 local deps = Entry.bizhawk_deps()
 
 -- ── S-7 (plan A12): dump the cartridge's save bytes so the SAVE is proven physically ──
@@ -179,7 +199,8 @@ C.send = function(line)
 end
 
 local gclient, parts = Entry.build({ root = ROOT, io = deps, net = C, hud = H, title = title, player = D.player,
-                                     rom_sha1 = rom_sha1, log = function(s) console.log(s) end })
+                                     pack = pack, kind = kind, rom_sha1 = rom_sha1,
+                                     log = function(s) console.log(s) end })
 local _handle = gclient.handle_command
 gclient.handle_command = function(self, cmd)
     local c = cmd and cmd.cmd or "?"
@@ -204,7 +225,8 @@ end
 local okc, errc = pcall(function() gclient:start() end)
 if not okc then finish(false, "client refused to start: " .. tostring(errc)) end
 SLINK_GEN1_CLIENT = gclient
-log(fmt("client built: title=%s player=%s rom=%s -> %s:%s", title, D.player, rom_sha1:sub(1, 8), SLINK_HOST, tostring(SLINK_PORT)))
+log(fmt("client built: title=%s pack=%s kind=%s player=%s rom=%s -> %s:%s", title, pack, kind, D.player,
+        rom_sha1:sub(1, 8), SLINK_HOST, tostring(SLINK_PORT)))
 
 local reads, ram = parts.reads, parts.profile.ram
 local battle_site_keys = {}
@@ -227,7 +249,7 @@ gclient.on_signal = function(self, sig)
     end
     return original_on_signal(self, sig)
 end
-local ws = assert(json.decode(assert(io.open(ROOT .. "/data/games/gen1_rby/write_checkpoint.json", "rb")):read("*a"))[title])
+local ws = assert(json.decode(assert(io.open(ROOT .. "/" .. Entry.PACK_FILES[pack].checkpoint, "rb")):read("*a"))[title])
 local function overworld_ok() return safety.check(ws, deps) == true end
 
 -- ── Frame primitives: the client ticks on EVERY frame, boot included ─────────────────

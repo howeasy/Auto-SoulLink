@@ -40,19 +40,18 @@ end
 -- `d` is profile.derived: capacities, the ball set, struct sizes.
 S.KINDS = {}
 
--- ponytail: vanilla profile.json predates derived.ball_items/bag_capacity; the fallbacks are
--- vanilla's values (constants/item_constants.asm:10-13; ram/wram.asm:1757-1761 formula).
 local function ball_set(d)
     if d.__ball_set then return d.__ball_set end
     local set = {}
-    for _, id in ipairs(d.ball_items or { 1, 2, 3, 4 }) do set[id] = true end
+    for _, id in ipairs(assert(d.ball_items, "profile.derived.ball_items required")) do
+        set[id] = true
+    end
     d.__ball_set = set
     return set
 end
 local function bag_bytes(ram, d)
     -- count byte + capacity id/qty pairs + the $FF terminator
-    local capacity = d.bag_capacity or math.floor((ram.wPlayerMoney - ram.wBagItems - 1) / 2)
-    return 2 + 2 * capacity
+    return 2 + 2 * assert(d.bag_capacity, "profile.derived.bag_capacity required")
 end
 
 S.KINDS.bag_received = {
