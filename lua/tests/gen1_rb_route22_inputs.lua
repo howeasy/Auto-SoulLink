@@ -112,6 +112,8 @@ M.TRIGGER = { { 29, 5 }, { 29, 4 } }
 M.STALL_BOUND = 1800           -- the gate drivers' NPC stall bound
 M.STALL_NUDGE = 48             -- frames on one tile before sidestepping a wanderer
 M.DETOUR_FRAMES = 32
+M.DETOUR_BOUND = 4       -- detours on one segment before re-aiming at the previous waypoint
+M.DETOUR_BACKOFFS = 3    -- back-offs before the route fails closed
 M.BATTLE_BOUND = 60000         -- a rival battle that never closes is a driver fault
 M.TRIGGER_GRACE = 600          -- frames parked on (29,4) before "the rival never triggered"
 -- PartyMenuInit geometry (home/pokemon.asm:210-216) and PARTYMON_STRUCT_LENGTH = $2c
@@ -378,6 +380,26 @@ function M.new(expected, opts)
             return hold(sideways and self.detour or self.detour_along), name.."-detour"
         end
         if frame - self.tile_frame >= M.STALL_NUDGE then
+            -- A detour can leave the walker where x-then-y movement cannot reach the
+            -- waypoint (measured 2026-09-18: an incidental battle at (12,22) on Route 1, the
+            -- flip sidestepped Down to row 24, and (9,22) then sat behind the one-way ledge,
+            -- so the walker oscillated (7,24)<->(11,24) for 90000 frames -- every sidestep
+            -- changes the tile, so STALL_BOUND never fired). After DETOUR_BOUND detours on
+            -- one segment re-aim at the PREVIOUS waypoint (the path's own way round the
+            -- obstacle); after DETOUR_BACKOFFS such back-offs, fail closed like STALL_BOUND.
+            local key = name..":"..index
+            self.detours = self.detours or {}
+            self.detours[key] = (self.detours[key] or 0) + 1
+            if self.detours[key] > M.DETOUR_BOUND then
+                self.backoffs = (self.backoffs or 0) + 1
+                assert(self.backoffs <= M.DETOUR_BACKOFFS,
+                    "Route 22 route looped "..self.backoffs.." detour back-offs at "..tile)
+                self.segments[name] = math.max(1, index - 1)
+                log(string.format("[route] detour loop on %s: re-aiming at waypoint %d", key,
+                                  self.segments[name]))
+                self.detours[key] = 0
+                return idle(), name.."-backoff"
+            end
             self.flip = not self.flip
             if point.x == targets[index][1] then           -- walking on y: sidestep on x
                 self.detour = self.flip and "Left" or "Right"
