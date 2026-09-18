@@ -701,14 +701,13 @@ function Client.new(p)
             end
         elseif k == "battle_end" then
             local b = self.battle
-            -- M2-b witness: EndOfBattle is the terminal site; when the profile carries
-            -- wBattleFunctionalFlags (pureRGB) its RUN bit says the player never got a fair
-            -- shot, so the area stays open. Vanilla has no such byte and keeps its logic.
+            -- M2-b witness: EndOfBattle is the terminal site. A wild battle that ends without a
+            -- capture is a failed encounter on BOTH foundations -- running away included (the
+            -- deadzone rule; PLAN §2.3). pureRGB's wBattleFunctionalFlags RUN bit is recorded
+            -- as the escape witness for the log/receipt, never as a reason to keep the area open.
             local ran = pt.functional_flags ~= nil and math.floor(pt.functional_flags / RAN_FLAG_BIT) % 2 == 1
             if b and b.demo then
                 log("[SLink-gen1] demonstration battle (type " .. tostring(b.demo) .. "): nothing resolved")
-            elseif b and b.wild and ran then
-                log("[SLink-gen1] player ran (wBattleFunctionalFlags): no_catch suppressed, " .. tostring(b.area_id) .. " stays open")
             elseif b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
                 -- A Tower ghost without the Scope: the battle cannot be won or caught, so it
                 -- is not evidence of a failed encounter. `has_item` returns nil when the bag
@@ -722,6 +721,7 @@ function Client.new(p)
                     -- walk crosses Route 1 grass with an empty bag (ball_gate_new, 2026-09-17).
                     log("[SLink-gen1] no Poke Balls yet: no_catch withheld, " .. b.area_id .. " stays open")
                 else
+                    if ran then log("[SLink-gen1] player ran (wBattleFunctionalFlags): failed encounter in " .. tostring(b.area_id)) end
                     send("no_catch", { area_id = b.area_id, species_id = b.species, level = b.level })
                     self.resolved_areas[b.area_id] = true
                 end

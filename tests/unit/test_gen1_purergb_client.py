@@ -552,7 +552,10 @@ def test_a_trainer_battle_add_is_still_the_enemy_party_not_a_capture(world):
     assert world.events("capture") == [] and world.client.pending_change is None
 
 
-def test_a_run_witness_suppresses_no_catch(world):
+def test_a_fled_wild_battle_is_a_failed_encounter_with_the_run_witness_logged(world):
+    """Running from the first wild battle loses the area on both foundations (the deadzone rule,
+    PLAN §2.3; deadzone_new drives exactly that). pureRGB's wBattleFunctionalFlags RUN bit is a
+    witness in the log, never a reason to keep the area open."""
     world.connect()
     world.in_battle(opponent=0xA5, species=0xA5, level=3)
     world.fire("wild_begin")
@@ -561,17 +564,8 @@ def test_a_run_witness_suppresses_no_catch(world):
     world.bus[world.ram["wBattleFunctionalFlags"]] = 0x02  # bit 1: ran
     world.fire("battle_end")
     world.step(2)
-    assert world.events("no_catch") == []
-    assert any("ran" in line for line in world.logs)
-    # and without the bit the ordinary no_catch still goes out
-    world.in_battle(opponent=0xA5, species=0xA5, level=3)
-    world.fire("wild_begin")
-    world.step()
-    world.bus[world.ram["wIsInBattle"]] = 0
-    world.bus[world.ram["wBattleFunctionalFlags"]] = 0x00
-    world.fire("battle_end")
-    world.step(2)
     assert len(world.events("no_catch")) == 1
+    assert any("ran" in line for line in world.logs)
 
 
 def test_tick_carries_safari_type(world):

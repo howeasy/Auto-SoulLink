@@ -160,8 +160,10 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         if not isinstance(area_id, str):
             return False
         static = _STATIC_ID.fullmatch(area_id)
-        return bool(static and (int(static[1]), int(static[2])) in self._static_sites) or (
-            area_id in self._gift_areas)
+        # The "gift"/"gift_" namespace is the shared gift contract (base.gift_link_area): the
+        # client names an out-of-battle acquisition gift_map_<map> and the server links it there.
+        return (area_id == "gift" or area_id.startswith("gift_") or area_id in self._gift_areas
+                or bool(static and (int(static[1]), int(static[2])) in self._static_sites))
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
         # Every static site here is a script/object-event placed encounter with no player

@@ -243,3 +243,13 @@ def test_rom_content_fingerprint_is_stable_and_reproducible(adapter):
                "wild": {"1": (bytes([20] + [5, 153] * 10) + bytes([0])).hex()},
                "old_rod": "", "good_rod": "", "good_rod_ocean": ""}
     assert adapter.rom_content_fingerprint(payload) == adapter.rom_content_fingerprint(payload)
+
+
+def test_pure_adapter_recognises_the_shared_gift_namespace():
+    """base.gift_link_area prefixes 'gift_' unless the adapter already calls the area a gift; the
+    client names starter/gift acquisitions gift_map_<map>, so a pair must link there, never
+    under a doubled gift_gift_map_<map> (the ball_gate_new pure duo failed on exactly this)."""
+    from server.adapters.gen1_purergb import Gen1PureRGBAdapter
+    a = Gen1PureRGBAdapter(rom_type="PureRed")
+    assert a.is_gift_area("gift_map_40") and a.is_gift_area("gift")
+    assert a.gift_link_area("gift_map_40") == "gift_map_40"
