@@ -515,15 +515,6 @@ class SLinkServer:
         if not want:
             return {"state": "rejected",
                     "reason": f"the contract names no cartridge for player {player_id}"}
-        # The full-ROM sha1 the preparation bound (PLAN A3), checked when the client reports
-        # one; the table fingerprint below stays the check for clients that do not.
-        want_sha1 = str(expected.get("rom_sha1") or "").lower()
-        got_sha1 = str(msg.get("rom_sha1") or "").lower()
-        if want_sha1 and got_sha1 and got_sha1 != want_sha1:
-            return {"state": "rejected",
-                    "reason": (f"this is not the ROM built for player {player_id} "
-                               f"(sha1 {got_sha1[:12]}, expected {want_sha1[:12]})")}
-
         payload = msg.get("rom_content")
         if not payload:
             return {"state": "rejected",
@@ -544,6 +535,16 @@ class SLinkServer:
             return {"state": "rejected",
                     "reason": (f"this is not the cartridge built for player {player_id} "
                                f"(reported {got[:12]}, expected {want[:12]})")}
+        # The full-ROM sha1 the preparation bound (PLAN A3): the tables can agree while the
+        # build differs (an overlay or a re-randomized artifact), so it is checked AFTER the
+        # fingerprint, when the client reports one; the wrong-cartridge verdict above keeps
+        # its wording for clients and oracles that predate the sha1.
+        want_sha1 = str(expected.get("rom_sha1") or "").lower()
+        got_sha1 = str(msg.get("rom_sha1") or "").lower()
+        if want_sha1 and got_sha1 and got_sha1 != want_sha1:
+            return {"state": "rejected",
+                    "reason": (f"this is not the ROM built for player {player_id} "
+                               f"(tables match; sha1 {got_sha1[:12]}, expected {want_sha1[:12]})")}
         return {"state": "admitted", "reason": "cartridge matches the contract"}
 
     def is_admitted(self, player_id: str) -> bool:

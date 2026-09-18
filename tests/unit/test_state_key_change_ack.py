@@ -397,23 +397,25 @@ def test_the_committed_artifact_kind_survives_a_restart(tmp_path):
 
 
 class TestContractSha1:
-    """`rom_contract.json` records each player's full-ROM sha1; a client reporting a
-    different one is refused before the table fingerprint is even looked at."""
+    """`rom_contract.json` records each player's full-ROM sha1; a client whose tables match
+    but whose build differs is refused after the fingerprint check (whose wording is kept)."""
 
     def _srv(self, tmp_path, want="a" * 40):
         srv = SLinkServer(data_dir=str(tmp_path))
         srv._rom_contract = {"upr_version": "x", "categories": [],
                              "players": {"a": {"fingerprint": "f" * 64, "rom_sha1": want}}}
+        # the tables match; the sha1 is the only thing left to disagree
+        srv.adapter.rom_content_fingerprint = lambda payload: "f" * 64
         return srv
 
     def test_a_mismatching_sha1_is_rejected(self, tmp_path):
-        v = self._srv(tmp_path)._decide_admission("a", {"rom_sha1": "b" * 40, "rom_content": {}})
+        v = self._srv(tmp_path)._decide_admission("a", {"rom_sha1": "b" * 40, "rom_content": {"wild": {}}})
         assert v["state"] == "rejected" and "sha1" in v["reason"]
 
     def test_the_comparison_is_case_insensitive(self, tmp_path):
         """BizHawk reports an uppercase hash; the Manager stores lowercase."""
-        v = self._srv(tmp_path)._decide_admission("a", {"rom_sha1": "A" * 40})
-        assert "sha1" not in v["reason"]
+        v = self._srv(tmp_path)._decide_admission("a", {"rom_sha1": "A" * 40, "rom_content": {"wild": {}}})
+        assert v["state"] == "admitted" and "sha1" not in v["reason"]
 
     def test_a_client_that_reports_no_sha1_falls_through_to_the_fingerprint(self, tmp_path):
         v = self._srv(tmp_path)._decide_admission("a", {})

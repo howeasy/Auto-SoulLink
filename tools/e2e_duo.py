@@ -217,6 +217,10 @@ def scenario_applies(name, game):
     # A pairing row can belong to a scenario family (GAMES[...]["game"], e.g. gen1_pure runs
     # the gen1_new scenarios on the pure builds); scenarios declare the family, not the row.
     family = GAMES.get(game, {}).get("game", game) if isinstance(GAMES, dict) else game
+    # A pairing row may exclude scenarios its artifacts cannot run yet (gen1_pure: the native
+    # trade/explode scenarios need the M3 overlay, admit_randomized the M5 UPR fork).
+    if isinstance(GAMES, dict) and name in GAMES.get(game, {}).get("not_yet", ()):
+        return False
     if allowed is None:
         return game not in OPT_IN_GAMES and family not in OPT_IN_GAMES
     return game in allowed or family in allowed
@@ -913,6 +917,9 @@ GAMES = {
     "gen1_pure": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
+        # docs/purergb/PLAN.md §13: trade/explode need the M3 source overlay, admit_randomized
+        # the M5 UPR fork; `--scenario all` on this row runs the other fourteen.
+        "not_yet": ("trade_new", "trade_decline_new", "explode_new", "admit_randomized_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
         "uses_savestate": False,
