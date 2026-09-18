@@ -213,6 +213,21 @@ function M.new(expected, opts)
         return party_menu_up() and slot_hp(rd(ACTIVE)) == 0 and live_slot() ~= nil
     end
 
+    -- One compact line per state change while a replacement is owed: enough to tell a menu that
+    -- never opened from a cursor that never moved from a press the menu never took.
+    local traced, last_trace = 0, nil
+    local function trace(tag)
+        if traced >= 80 then return end
+        local st = D.state()
+        local line = string.format("RIVAL_REPLACE %s y=%s x=%s w=%02X cur=%s max=%s active=%s count=%d hp0=%d hp1=%d",
+            tag, tostring(st.y), tostring(st.x), st.watched or 0, tostring(st.cur), tostring(st.max),
+            tostring(st.player_mon), rd(COUNT), slot_hp(0), rd(COUNT) > 1 and slot_hp(1) or -1)
+        if line ~= last_trace then
+            last_trace, traced = line, traced + 1
+            log(line .. string.format(" @%d", st.frame))
+        end
+    end
+
     -- Forced replacement after a KO: HandlePlayerMonFainted -> ChooseNextMon -> DisplayPartyMenu
     -- (core.asm:1086-1089). Three rules, all the engine's:
     --   * only offer a slot whose party HP is non-zero. A on a fainted slot returns through
@@ -245,38 +260,57 @@ function M.new(expected, opts)
     --     on the first press the menu did not take (`if not moved then break end`, after which
     --     the cursor guard could no longer hold) -- which is how a legitimate rival LOSS came
     --     back as the driver fault `no-replacement`, the scenario's last red receipt.
+    --   * one flat, frame-bounded retry. The engine holds this menu open until a LIVE slot is
+    --     taken, so every pass is simply "put the cursor on the slot live_slot() already chose,
+    --     press A, watch wPlayerMonNumber" -- there is nothing to learn from a failed pass and
+    --     nothing to blacklist, only a window to outlast. Twelve passes is ~2300 frames against
+    --     M.BATTLE_BOUND, where the old four-attempt shape gave ~1000 and a press missed inside
+    --     a DrawPartyMenu/SendOutMon/text window (the only windows this menu does NOT poll in:
+    --     HandleMenuInput_ .loop2 polls once per frame, home/window.asm:19-38) spent them all.
     local function choose_replacement()
-        local count = rd(COUNT)
-        local down = rd(ACTIVE) -- the slot that just fainted; the receipt is a move away from it
-        for slot = 0, math.min(count, 6) - 1 do
-            if slot ~= down and slot_hp(slot) > 0 then
-                for _ = 1, 4 do
-                    idle_frames(4)
-                    for _ = 1, 8 do
-                        local cur = rd(CURSOR)
-                        if cur == slot then break end
-                        press(cur < slot and "Down" or "Up")
-                        for _ = 1, 20 do
-                            if rd(CURSOR) ~= cur then break end
-                            step(nil)
-                        end
-                        idle_frames(4)
+        local down = rd(ACTIVE)      -- the slot that just fainted; the receipt is a move away from it
+        local slot = live_slot()     -- the same live slot needs_replacement() proved exists
+        if not slot then return false end
+        for try = 1, 12 do
+            idle_frames(8)
+            trace("try"..try)
+            local cur = rd(CURSOR)
+            if cur ~= slot then
+                press(cur < slot and "Down" or "Up")
+                for _ = 1, 24 do
+                    if rd(CURSOR) == slot then break end
+                    step(nil)
+                end
+                trace("nav"..try)
+            end
+            if party_menu_up() and rd(CURSOR) == slot then
+                idle_frames(24)
+                press("A")
+                trace("post-a"..try)
+                -- the commit is a handful of frames behind the accepted press
+                -- (HandlePartyMenuInput -> .monChosen -> ClearSprites -> :1108)
+                for _ = 1, 150 do
+                    if rd(ACTIVE)==slot and slot_hp(down)==0 then
+                        log(string.format("RIVAL_SWITCH slot=%d", slot))
+                        return true
                     end
-                    if party_menu_up() and rd(CURSOR) == slot then
-                        idle_frames(24)
-                        press("A")
-                        -- the commit is a handful of frames behind the accepted press
-                        -- (HandlePartyMenuInput -> .monChosen -> ClearSprites -> :1108)
-                        for _ = 1, 150 do
-                            if rd(ACTIVE)==slot and slot_hp(down)==0 then
-                                log(string.format("RIVAL_SWITCH slot=%d", slot))
-                                return true
-                            end
-                            step(nil)
-                        end
-                    end
+                    if D.state().in_battle==0 then return false end
+                    step(nil)
                 end
             end
+            -- Nothing took, so a PrintText box owns the frame and the menu is not really up:
+            -- an A on a FAINTED slot (D.commit_move re-presses A up to twice more when the
+            -- enemy moved first and no ExecutePlayerMove ever fires -- gen1_battle_driver.lua
+            -- :238-247 -- and the cursor is sitting on the slot that just fainted) returns
+            -- through HasMonFainted, which PrintTexts NoWillText, "There's no will to fight!"
+            -- (core.asm:1473-1488). WaitForTextScrollButtonPress watches A|B alone
+            -- (home/joypad2.asm:55-81), so Up/Down go nowhere -- measured: 12 Down presses,
+            -- wCurrentMenuItem pinned at 0 for 384 frames, with y=1/x=0/watched=$03 still
+            -- reading as a party menu because HandlePartyMenuInput returned without clearing
+            -- them. B advances the box, and in the menu itself B is the engine's own cancel,
+            -- which ChooseNextMon loops straight back from (:1090-1094). Same B-mash, same
+            -- reason, as the two branches in battle_plan below.
+            mash("B", 24)
         end
         return false
     end
@@ -292,6 +326,7 @@ function M.new(expected, opts)
         D.new_battle()
         for _ = 1, 400 do
             if D.state().in_battle==0 then return "battle-over" end
+            if slot_hp(rd(ACTIVE))==0 then trace("owed") end
             if needs_replacement() then
                 if not choose_replacement() then
                     -- the KO that closed the battle can land inside the retries above
