@@ -141,7 +141,7 @@ EXTRA_RAM_SYMBOLS = {
     "purergb": [
         "wDelayFrameBank", "wUsedItemOnWhichPokemon", "wSafariType", "wPkmnTypeRemapFlags",
         "wGameInternalVersion", "wPocketAbraNick", "wDayCareMon", "wDayCareInUse",
-        "wBattleFunctionalFlags", "wEnemyMonSpecies2", "wOptions2", "hGBC",
+        "wBattleFunctionalFlags", "wEnemyMonSpecies2", "wOptions2", "hGBC", "wLoadedMonSpecies",
     ],
 }
 
