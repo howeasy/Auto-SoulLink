@@ -227,6 +227,7 @@ function M.new(expected, opts)
         if not self.entered then
             log(fmt("PC op %d %s(%d) start frame=%d", self.index, op[1], op[2], frame))
             self.entered = true
+            self.box_count_at_start = p.box_count
         end
         return tap("A", frame), "pc-enter-" .. op[1]   -- re-pulsed until the next screen draws
     end
@@ -265,7 +266,15 @@ function M.new(expected, opts)
             if turn then return turn, "pc-changebox-yes" end
             return tap("A", frame), "pc-changebox-yes"
         end
-        if op and op[1] == "release_box" and confirm_screen(p, M.OFF.release_confirm) then
+        -- The release is proven by the box count dropping (RemovePokemon ran); pureRGB leaves the
+        -- small YES/NO tiles on screen while "released outside." prints, so once the count has
+        -- dropped the confirm screen is stale: mark the op confirmed and only advance the text.
+        if op and op[1] == "release_box" and self.entered and self.box_count_at_start
+           and p.box_count ~= nil and p.box_count < self.box_count_at_start then
+            self.confirmed = true
+            self.box_count_at_start = nil
+        end
+        if op and op[1] == "release_box" and not self.confirmed and confirm_screen(p, M.OFF.release_confirm) then
             local turn = toward(p.menu_index, 0, frame)      -- item 0 = YES
             if turn then return turn, "pc-yes-move" end
             -- pureRGB's YES needs two keys: A prints "Press START to / confirm release." and arms
