@@ -29,8 +29,31 @@ pytestmark = [
 ]
 
 GATE = "lua/tests/test_gen1_inspect_gate.lua"
-ROMS = ("red", "blue", "yellow")
+VANILLA_ROMS = ("red", "blue", "yellow")
+# The built pureRGB cartridges (P3b-e). They are ordinary rom keys here: gen1_playthrough stages
+# them from data/purergb_sources.lock.json, run_gb_gate carries their SaveRAM names and fixtures,
+# and gen1_gate admits them by sha1, so a pure title boots exactly like a vanilla one.
+PURE_ROMS = ("purered", "pureblue", "puregreen")
+ALL_ROMS = VANILLA_ROMS + PURE_ROMS
 TARGETS = ("town", "battle")
+
+
+def _selected_roms() -> tuple:
+    """Which cartridges this run boots, from SLINK_GEN1_ROMS (space/comma separated).
+
+    The release gate's `inspect-purergb` lane selects the pure titles through this rather than
+    pytest's `-k`: the lane scorer counts a deselection as a failure, so a subset has to be built,
+    not filtered out. Unset means every cartridge -- the vanilla lane pins the vanilla three so
+    its coverage does not silently grow, and the pure lane pins the pure three.
+    """
+    wanted = tuple(part for part in re.split(r"[,\s]+", os.environ.get("SLINK_GEN1_ROMS", "")) if part)
+    unknown = [rom for rom in wanted if rom not in ALL_ROMS]
+    if unknown:
+        raise ValueError(f"unknown SLINK_GEN1_ROMS entries {unknown}; known: {ALL_ROMS}")
+    return wanted or ALL_ROMS
+
+
+ROMS = _selected_roms()
 
 
 @pytest.fixture(scope="module")
@@ -57,12 +80,30 @@ def _lua_to_py(mon: dict) -> dict:
 
 @pytest.mark.parametrize("target", TARGETS)
 @pytest.mark.parametrize("rom", ROMS)
-def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
+def _skip_if_absent(rom: str, target: str) -> None:
+    """Skip when this cartridge or its battery save is not in the tree.
+
+    Both facts are checked because the inspect gate boots a fixture: a pure title can have its
+    staged .gbc and no SaveRAM yet (tools/gen1_fixtures.py builds those per title), and a vanilla
+    title can have the dump and no fixture. In a release lane a skip is a lane failure, which is
+    the point -- the lane's inputs have to be there.
+    """
     import gen1_playthrough as play
-    from run_gb_gate import run_gate
-    if not os.path.exists(os.path.join(REPO, play.ROMS[rom])) and \
-            not os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.gb{'c' if rom == 'yellow' else ''}")):
+    if rom in PURE_ROMS:
+        dump_ok = os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.gbc"))
+    else:
+        ext = "gbc" if rom == "yellow" else "gb"
+        dump_ok = (os.path.exists(os.path.join(REPO, play.ROMS[rom]))
+                   or os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.{ext}")))
+    if not dump_ok:
         pytest.skip(f"{rom} cartridge dump not present")
+    if not os.path.exists(play.fixture_path(rom, target)):
+        pytest.skip(f"{rom}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
+
+
+def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
+    from run_gb_gate import run_gate
+    _skip_if_absent(rom, target)
     passed, path, text = run_gate(GATE, rom_key=rom, target=target, timeout=240, quiet=True)
     assert passed, f"gate FAILED on {rom}/{target}: {text[-1500:]}"
 
@@ -85,13 +126,18 @@ def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
 SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"
 
 
-@pytest.mark.parametrize("rom", ("red", "blue", "yellow"))
+@pytest.mark.parametrize("rom", ALL_ROMS)
 def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch):
     """S-1 PHYSICAL: a cold cartridge, NEW GAME -> starter -> rival battle by buttons only, with
     the signals layer armed. The engine-site sequence must be the one pret's scripts imply."""
+    import gen1_playthrough as play
     from run_gb_gate import run_gate
+    if rom in PURE_ROMS and not os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.gbc")):
+        pytest.skip(f"{rom} cartridge dump not present")
     monkeypatch.setenv("SLINK_SCRIPT_CHAIN", "lab")
-    monkeypatch.setenv("SLINK_SCRIPT_PLAYER", "a" if rom == "red" else "b")
+    # Bulbasaur on the A side (the R/B lab driver's slot 8), Charmander otherwise -- the pure
+    # titles take the shared R/B lab driver (their OaksLab script rows are SAME).
+    monkeypatch.setenv("SLINK_SCRIPT_PLAYER", "a" if rom in ("red", "purered") else "b")
     monkeypatch.delenv("SLINK_SCRIPT_FLUSH", raising=False)
     passed, path, text = run_gate(SCRIPTED_GATE, rom_key=f"{rom}_cold", target="town", timeout=600, quiet=True)
     assert passed, f"scripted lab route FAILED on {rom}: {text[-1500:]}"

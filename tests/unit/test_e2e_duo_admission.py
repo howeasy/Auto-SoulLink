@@ -396,7 +396,7 @@ def test_the_stub_carries_the_attempt_scaled_jitter(runner, tmp_path, monkeypatc
     for attempt, expected in ((1, 11), (2, 48)):
         runner.attempt = attempt
         runner.launch_instance("a", seed=False)
-        stub = (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+        stub = Path(runner.stub_path("a")).read_text(encoding="utf-8")
         assert f"idle_jitter = {expected}," in stub
         assert f"attempt = {attempt}," in stub
 
@@ -416,7 +416,7 @@ def test_the_stub_carries_the_scenario_timeout(runner, tmp_path, monkeypatch):
     runner.attempt = 1
     Path(duo.BUILD).mkdir(parents=True, exist_ok=True)
     runner.launch_instance("a", seed=False)
-    stub = (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+    stub = Path(runner.stub_path("a")).read_text(encoding="utf-8")
     assert f"timeout_secs = {runner.cfg['timeout']}," in stub
 
 
@@ -451,7 +451,7 @@ def test_a_only_relaunch_does_not_reseed_the_flushed_save(runner, tmp_path, monk
 
     monkeypatch.setattr(duo.subprocess, "Popen", lambda *_args, **_kw: FakeProcess())
     runner.launch_instance("a", phase="same_save", seed=False, expected_key="AAAA:1111:01")
-    stub = (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+    stub = Path(runner.stub_path("a")).read_text(encoding="utf-8")
     assert 'phase = "same_save"' in stub and 'expected_key = "AAAA:1111:01"' in stub
     assert runner.emu_by_inst["a"].pid == 42 and len(runner.emus) == 1
 
@@ -590,7 +590,7 @@ def test_cold_ball_gate_uses_a_fresh_save_directory_without_seeding(runner, tmp_
     runner.launch_instance("a", seed=False)
     assert Path(runner._saveram_dir("a")).is_dir()
     assert list(Path(runner._saveram_dir("a")).iterdir()) == []
-    assert 'cold_boot = true' in (Path(duo.BUILD) / "duo_a.lua").read_text(encoding="utf-8")
+    assert "cold_boot = true" in Path(runner.stub_path("a")).read_text(encoding="utf-8")
 
 
 def test_ball_gate_driver_failure_never_gets_rng_retry(tmp_path, monkeypatch):

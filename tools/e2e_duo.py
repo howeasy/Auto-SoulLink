@@ -238,6 +238,21 @@ def api(http_port, method, path, body=None, timeout=10):
         return json.loads(r.read().decode())
 
 
+# ── lane identity (docs/purergb/research/p3/harness_literals_bbcd037.md table 3) ────────────────
+# Two DuoRuns in ONE process must share no generated stub, no BizHawk config copy and no window
+# position. The stub is the worst of the three: it bakes SLINK_PORT, so a collision makes the
+# loser's emulator talk to the winner's server, and the config copy carries that instance's SaveRAM
+# directory. The lane id defaults to the TCP port (already free per run) and can be pinned with
+# --lane; the window offset comes from the lane's first-seen ordinal in this process, so lanes
+# created in one process never overlap even though the ordinals restart with the process.
+_LANE_ORDINAL: dict[str, int] = {}
+_LANE_WINDOW_STEP = 160
+
+
+def lane_ordinal(lane: str) -> int:
+    return _LANE_ORDINAL.setdefault(lane, len(_LANE_ORDINAL))
+
+
 def read_result(scenario, inst):
     path = os.path.join(BUILD, f"e2e_{scenario}_{inst}_result.txt")
     if not os.path.exists(path):
@@ -882,6 +897,20 @@ GAMES = {
         "fixture": {"a": "red", "b": "blue"},
         "scenario_prefix": "gen1_",
     },
+    # The pureRGB pairing (P3b-e): the SAME client, the same scenarios and the same driver main as
+    # gen1_new -- only the cartridges and their fixtures differ. A=purered, B=pureblue (the vanilla
+    # pair's shape). `game` stays "gen1_new" because the scenario registry names that game (a
+    # scenario's `games` tuple is what selects it), while `self.game` (the row key) carries the
+    # foundation: `is_gen1` and the battery-boot branch both read it.
+    "gen1_pure": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "game": "gen1_new",
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "purered", "b": "pureblue"},
+        "scenario_prefix": "gen1_",
+    },
     # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
     # works because write_run_config gives each instance its own SaveRAM directory: BizHawk
     # names a save from its gamedb entry, keyed on ROM hash rather than the path launched,
@@ -918,8 +947,12 @@ class DuoRun:
         self.tcp_port = free_port()
         self.http_port = free_port()
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
+        # This run's lane: the stub, the config copy, the SaveRAM directory and the window
+        # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
+        # that wants stable names ("pure-a", "lane3"); the port is the default.
+        self._lane = getattr(args, "lane", None)
         self._pydec_path = (os.path.join(BUILD, f"e2e_{scenario}_pydec_result.txt")
-                            if self.game == "gen1_new" else None)
+                            if self.is_gen1 else None)
         self.server = None
         self.emus = []
         self.emu_by_inst = {}
@@ -944,6 +977,32 @@ class DuoRun:
         self._run_deadline = (time.time()
                               + scenario_attempt_limit(scenario, self.game) * self.cfg["timeout"]
                               + 300)
+
+    # ── lane identity ────────────────────────────────────────────────────────
+    def stub_path(self, inst: str) -> str:
+        """The generated Lua stub for this lane and instance (one place that names it)."""
+        return os.path.join(BUILD, f"duo_{self.lane}_{inst}.lua")
+
+    def cfg_path(self, inst: str) -> str:
+        """The per-lane BizHawk config copy for this instance."""
+        return os.path.join(BUILD, f"duo_cfg_{self.lane}_{inst}.ini")
+
+    @property
+    def lane(self) -> str:
+        """This run's lane id (--lane, else the run's TCP port).
+
+        A property with a fallback because the unit tests build a DuoRun with `__new__` and fill
+        in only the fields a case needs; a bare instance laning by its port (or "0") is right for
+        the single run those cases describe.
+        """
+        named = getattr(self, "_lane", None)
+        if named:
+            return str(named)
+        return str(getattr(self, "tcp_port", "0"))
+
+    @property
+    def lane_index(self) -> int:
+        return lane_ordinal(self.lane)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def wait_for(self, desc, pred, timeout, interval=2.0):
@@ -1050,7 +1109,10 @@ class DuoRun:
         if self.cfg.get("cold_boot"):
             # A fresh per-run path makes a cold cartridge independent of any older attempt.
             return os.path.join(self.data_dir, f"saveram_{inst}")
-        return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
+        # Per scenario, instance AND LANE: two lanes on one scenario would otherwise seed and boot
+        # from one directory. Seeding still overwrites the file before every launch (that is what
+        # stops a crashed run's save leaking in), so this is belt-and-braces on the same rule.
+        return os.path.join(BUILD, f"saveram_{self.scenario}_{self.lane}_{inst}")
 
     def _pydec_note(self, fact):
         """Keep Python oracle facts beside both Lua receipts for the release ledger."""
@@ -1162,6 +1224,53 @@ class DuoRun:
             return target[inst]
         return target
 
+    def _lane_window(self) -> str | None:
+        """This lane's emulator window position, or None to leave the config's own position.
+
+        The base is the process default (SLINK_EMU_WINDOW, which write_run_config already applied),
+        moved one slot right per lane ordinal; "primary" keeps its meaning (leave the position).
+        """
+        base = os.environ.get("SLINK_EMU_WINDOW", "1200,-1300")
+        if base.lower() == "primary" or self.lane_index == 0:
+            return None
+        try:
+            x, y = (int(v) for v in base.split(","))
+        except ValueError:
+            return None
+        return f"{x + _LANE_WINDOW_STEP * self.lane_index}, {y}"
+
+    def _apply_lane_window(self, cfg_ini: str) -> None:
+        """Move this lane's copied config off the shared window position (no-op for lane 0)."""
+        pos = self._lane_window()
+        if not pos:
+            return
+        try:
+            with open(cfg_ini, encoding="utf-8-sig") as handle:
+                cfg = json.load(handle)
+        except (OSError, ValueError):
+            return
+        cfg["MainWindowPosition"] = pos
+        cfg["MainWindowMaximized"] = False
+        cfg["SaveWindowPosition"] = False
+        with open(cfg_ini, "w", encoding="utf-8") as handle:
+            json.dump(cfg, handle, indent=2)
+
+    def _rom_for(self, inst: str) -> str:
+        """The ROM path this instance launches.
+
+        A scenario that stages its own (the randomized-admission legs) wins. Otherwise a
+        battery-boot game resolves the ROM through its own play module's staged_rom(), which copies
+        and verifies it: that returns the same path the GAMES table spells out for the vanilla rows
+        and lets a pureRGB fixture key stage from the pinned source lock.
+        """
+        staged = getattr(self, "_admit_roms", None) or self.cfg.get("rom")
+        if staged:
+            return staged[inst]
+        if self.battery_boot and self.gcfg.get("play") and self.gcfg.get("fixture"):
+            play = importlib.import_module(self.gcfg["play"])
+            return play.staged_rom(self.gcfg["fixture"][inst])
+        return self.gcfg["rom"][inst]
+
     def _seed_instance_save(self, inst):
         from run_gb_gate import GENS, seed_saveram
 
@@ -1191,19 +1300,23 @@ class DuoRun:
 
     def launch_instance(self, inst, *, phase="initial", seed=True, expected_key=""):
         """Launch one cartridge; reconnect phases keep the existing per-instance SaveRAM."""
-        cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
+        cfg_ini = self.cfg_path(inst)
         if self.battery_boot:
-            from gen1_playthrough import write_run_config
+            import gen1_playthrough as g1
 
-            write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst))
+            # purergb pins the config to GBC + not-SGB (PLAN A15); the fixture key names the
+            # foundation, so the pure row needs nothing else to get it.
+            g1.write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst),
+                                purergb=g1.is_purergb(self.gcfg["fixture"][inst]))
         else:
             shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+        self._apply_lane_window(cfg_ini)
         self._phase = getattr(self, "_phase", {})
         self._phase[inst] = phase
         result = self._phase_result_path(inst, phase)
         if os.path.exists(result):
             os.remove(result)  # stale phase receipts cannot satisfy a new relaunch
-        stub = os.path.join(BUILD, f"duo_{inst}.lua")
+        stub = self.stub_path(inst)
         fillers = self.cfg.get("fillers", True)
         duo = {
             "wt": WT_FWD, "player": inst, "scenario": self.scenario,
@@ -1243,9 +1356,9 @@ class DuoRun:
             f.write("}\n")
             f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
         p = subprocess.Popen(
-            [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
-             f"--lua=patch/build/duo_{inst}.lua",
-             getattr(self, "_admit_roms", self.cfg.get("rom", self.gcfg["rom"]))[inst]],
+            [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
+             f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
+             self._rom_for(inst)],
             cwd=REPO)
         self.emus.append(p)
         self.emu_by_inst[inst] = p
@@ -4060,7 +4173,7 @@ def run_scenario_with_rng_retry(name, args):
     re-run for this reason: retrying a real failure would only multiply it.
     """
     limit = scenario_attempt_limit(name, args.game)
-    reroll_retry = name == "species_clause_new" and args.game == "gen1_new"
+    reroll_retry = name == "species_clause_new" and args.game.startswith("gen1")
     for attempt in range(1, limit + 1):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
@@ -4118,6 +4231,10 @@ def main():
                     help="pause before teardown for manual inspection")
     ap.add_argument("--keep-data", action="store_true",
                     help="never delete the temp server data dir")
+    ap.add_argument("--lane", default=None,
+                    help="this run's lane id; keys the generated stub, the BizHawk config copy, "
+                         "the SaveRAM directory and the window offset (default: the run's TCP port). "
+                         "Two DuoRuns in one process must not share them.")
     ap.add_argument("--idle-jitter", type=int, default=0,
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")

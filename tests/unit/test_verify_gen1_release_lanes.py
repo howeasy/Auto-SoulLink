@@ -17,8 +17,8 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 import verify_gen1_release as gate  # noqa: E402  (tools/ is not a package; the gate is a script)
 
 LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-addresses", "profile-generated",
-              "statics-generated", "fixtures", "patch-build", "live-gates", "live-new-gates",
-              "live-trade-gates", "duo-pairs"]
+              "profile-generated-purergb", "statics-generated", "fixtures", "patch-build",
+              "live-gates", "live-new-gates", "inspect-purergb", "live-trade-gates", "duo-pairs"]
 
 
 def test_lane_order_is_the_gate_order():
@@ -37,8 +37,8 @@ def test_every_lane_has_requirements_and_no_requirements_lack_a_lane():
 
 def test_the_generated_artifact_lanes_serve_what_they_claim():
     """The mapping is the release paperwork: which lane is the evidence for which rule."""
-    expected = {"profile-generated": ["F-1"], "statics-generated": ["F-5", "S-8"],
-                "fixtures": ["F-6"]}
+    expected = {"profile-generated": ["F-1"], "profile-generated-purergb": ["F-1"],
+                "statics-generated": ["F-5", "S-8"], "fixtures": ["F-6"]}
     for name, ids in expected.items():
         assert gate.REQUIREMENTS[name] == ids, (
             f"{name} claims {gate.REQUIREMENTS[name]}, not {ids}")
@@ -56,7 +56,27 @@ def test_the_fixtures_lane_reason_matches_the_legacy_set():
 
 def test_slow_lanes_are_exactly_the_emulator_lanes():
     """--quick's promise is that it stops before anything that needs an emulator."""
-    assert {"live-gates", "live-new-gates", "live-trade-gates", "duo-pairs"} == gate._SLOW
+    assert {"live-gates", "live-new-gates", "inspect-purergb", "live-trade-gates",
+            "duo-pairs"} == gate._SLOW
+
+
+def test_the_pure_lanes_are_fail_closed():
+    """A pure lane's inputs are the staged .gbc files and the per-title fixtures, and a skip is a
+    lane failure: no ALLOWED_SKIPS fragment may excuse one, or a machine without the builds would
+    read as green (the whole reason this gate exists)."""
+    for reason in ("cartridge dump not present", "SaveRAM not present"):
+        assert not any(frag in reason for frag, _why in gate.ALLOWED_SKIPS), (
+            f"an ALLOWED_SKIPS fragment would excuse the pure lane's own skip: {reason}")
+    pure = [lane for lane in gate.LANES if lane.name.endswith("purergb") or "purergb" in lane.name]
+    assert {lane.name for lane in pure} == {"profile-generated-purergb", "inspect-purergb"}
+    for lane in pure:
+        assert lane.why, f"{lane.name} claims no reason"
+    inspect = next(lane for lane in pure if lane.name == "inspect-purergb")
+    # The subset is selected by env, not by -k: the lane scorer counts a deselection as a failure.
+    assert "-k" not in inspect.argv
+    assert inspect.env.get("SLINK_GEN1_ROMS", "").split() == ["purered", "pureblue", "puregreen"]
+    profile = next(lane for lane in pure if lane.name == "profile-generated-purergb")
+    assert profile.argv[-2:] == ["--foundation", "purergb"]
 
 
 def test_every_plain_lane_runs_a_script_that_exists():

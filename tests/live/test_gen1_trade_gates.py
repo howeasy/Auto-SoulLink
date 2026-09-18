@@ -81,3 +81,19 @@ def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
     assert sum(message["event"] == "trade_query" for message in messages) == 4  # 2 offers + CABLE CLUB + CANCEL
     offers = [message for message in messages if message["event"] == "trade_offer"]
     assert len(offers) == 2 and [offer["slot"] for offer in offers] == [0, 0]
+
+
+PURE_ROMS = ("purered", "pureblue", "puregreen")
+
+
+@pytest.mark.parametrize("rom", PURE_ROMS)
+def test_pure_titles_have_no_companion_patch_yet(rom):
+    """The receptionist lives in the companion patch, and the pureRGB overlay is M3 work.
+
+    Stated as a test rather than left out, because "no pure case exists" and "the pure case was
+    forgotten" look identical in a report. It stays a skip here rather than an assertion so that a
+    checkout without the pure cartridges still runs the vanilla lane; the release gate counts a
+    skip as a failure, which is exactly why no pure trade lane is listed in tools/verify_gen1_release.py
+    yet -- the lane is created with the overlay (docs/purergb/PLAN.md section 6, M3).
+    """
+    pytest.skip(f"{rom}: no pureRGB companion patch until M3 (PLAN section 6)")

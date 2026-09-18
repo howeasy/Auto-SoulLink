@@ -22,8 +22,9 @@ explains a failure later:
     9. live-gates         — the companion patch on real cartridges: hook, mailbox, START-menu
                             row, and the panel on a randomized+injected ROM
    10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
-   11. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
-   12. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
+   11. inspect-purergb    — the same inspect gate on the three built pureRGB cartridges
+   12. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
+   13. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -50,7 +51,7 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
-_SLOW = {"live-gates", "live-new-gates", "live-trade-gates", "duo-pairs"}
+_SLOW = {"live-gates", "live-new-gates", "inspect-purergb", "live-trade-gates", "duo-pairs"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
 # The gate's whole point is that a skip is a failure, so an exception has to be argued for
@@ -96,6 +97,10 @@ LANES = [
     Lane("profile-generated", [_PY, "tools/gen_gen1_profile.py", "--check"],
          why="data/games/gen1_rby/profile.json is exactly what the pinned pret .sym files "
              "generate"),
+    Lane("profile-generated-purergb",
+         [_PY, "tools/gen_gen1_profile.py", "--check", "--foundation", "purergb"],
+         why="data/games/gen1_purergb/profile.json is exactly what the pinned pureRGB .sym files "
+             "generate (the M1 pack; needs the pinned source checkout, see gen1_foundation)"),
     Lane("statics-generated", [_PY, "tools/gen_gen1_statics.py", "--check"],
          why="static_encounters.json is exactly what pret's scripts/objects say"),
     Lane("fixtures", [_PY, "tools/gen1_fixtures.py", "--qualify"],
@@ -113,11 +118,21 @@ LANES = [
     Lane("live-new-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_new_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
-         env={"SLINK_LIVE": "1"},
+         # The vanilla three, named: the module also carries the pureRGB cases now, and this lane's
+         # coverage must not grow by accident (inspect-purergb is the lane for those).
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": " ".join(("red", "blue", "yellow"))},
          why="the rewritten Gen 1 modules on all three cartridges: pinned engine sites "
              "present, hooks armed, live party decoded identically in Lua and Python, "
              "overworld write checkpoint reached (docs/gen1_requirements.md R-1, S, W-7, "
              "F-6)"),
+    Lane("inspect-purergb",
+         [_PY, "-m", "pytest", "tests/live/test_gen1_new_gates.py", "-q", "-p", "no:randomly",
+          "-rs"],
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": " ".join(("purered", "pureblue", "puregreen"))},
+         why="the rewritten client on the three built pureRGB cartridges: pinned engine sites "
+             "present, hooks armed, live party decoded identically in Lua and Python, overworld "
+             "write checkpoint reached -- skip = lane failure, so the staged .gbc files and the "
+             "per-title fixtures have to be in the tree"),
     Lane("live-trade-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_trade_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
@@ -143,11 +158,13 @@ REQUIREMENTS = {
     "lua-parse": ["C-4"],
     "profile-addresses": ["F-1"],
     "profile-generated": ["F-1"],
+    "profile-generated-purergb": ["F-1"],
     "statics-generated": ["F-5", "S-8"],
     "fixtures": ["F-6"],
     "patch-build": ["T-1"],
     "live-gates": ["T-1 prerequisites (panel, menu row, randomized+injected panel)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
+    "inspect-purergb": ["R-1", "S", "W-7", "F-6"],
     "live-trade-gates": ["T-1", "T-2"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],
 }
