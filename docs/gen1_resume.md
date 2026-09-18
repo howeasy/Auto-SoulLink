@@ -297,3 +297,19 @@ closure test traverses from lua/gen1/run.lua, not the launchers, and ignores .dl
 - RB-2: rebase of aa69f5e onto master cb9cf5c conflict-free (209 commits), gates green in the clone; redo at the final HEAD (RB-3)
   before the owner's FF. In flight at this note: run 4, OMP DOCS-4 (release_notes: HUD, harness hardening, runner table, limits).
 NEXT: run 4 receipt -> release_notes row; RB-3; owner decides FF + tag (no push/merge/tag without owner authority).
+
+## WRAP-UP (2026-09-18 ~02:00Z) -- owner: "Do 2 and then move on. Wrap this up."
+Verdict recorded in docs/release_notes.md (c01a13f): five consecutive full runner passes at 11/12 lanes (unit up to 3038, rom/lua/
+profile/statics/fixtures/patch-build, live-gates 5, live-new-gates 9, live-trade-gates 2); duo-pairs 17/18, 16/18, 16/18, 17/18,
+17/18 -- every red was an instrument defect (all fixed: H-6/H-7/H-8, RIVAL-2/3/4, DIAG-SR2, DIAG-LFA) or an RNG roll (species
+one-ball misses x2 then x3, poison double KO, a hunt whiteout); no product defect found. Every one of the 18 gen1_new scenarios
+passed inside a full run at least once and has a committed PASS receipt at the final Lua tree. RNG budgets raised bf22342 (two
+retries per RNG-class failure, default limit 3, poison 4). Owner accepted the verdict.
+HUD: wrap (7d64f76), burst dwell, cleartext (ebc2639) and THE root cause of banners never vanishing -- BizHawk API is userdata, the
+type()=="function" guard never fired (92ae732; memory reference_bizhawk_api_userdata); pixel receipts 1267d39.
+Open, non-blocking (queue): D.commit_move stray A into a forced party menu; hello-handler save ordering for mon_stats; species
+one-ball miss rate is structurally high (full-HP wild mon, plain Poke Ball) -- weaken-before-throw would make that lane robust;
+manifest closure test traverses from run.lua only and ignores .dll rows.
+RB-3 (Sonnet): rebase of the final head onto master cb9cf5c in <scratchpad>/rb3 -- result appended below when it lands.
+OWNER ACTIONS: push the rebased branch, `git -C "E:/Google Drive/SLink" -c maintenance.auto=false -c gc.auto=0 merge --ff-only
+<rebased sha>`, tag (version lives in the tag; `gh release create`). No push/merge/tag was performed by this session.
