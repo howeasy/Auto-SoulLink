@@ -16,6 +16,14 @@ Slot percentages per pret/data/wild/probabilities.asm:
 
 Per-species rates are summed across all slots the species occupies.
 Min/max levels are min/max across those slots.
+
+``--foundation purergb`` switches to a second, independent pipeline (docs/purergb/PLAN.md M1):
+species are stored as INTERNAL indices (not NatDex -- pureRGB's internal/dex mapping is
+many-to-one, see A13), MISSINGNO rows are kept (dex 0 is a real catchable species there), and
+the grass/water tables are read from the BUILT ROM's ``WildDataPointers`` (bank $2C) and
+cross-checked against the source parse -- 0 mismatches is the exit gate (W1). Fishing (old/good/
+super rod) is generated only for purergb; vanilla's file has never carried fishing rows. The
+``--foundation pret`` (default) path is untouched byte-for-byte by this addition.
 """
 from __future__ import annotations
 
@@ -23,6 +31,9 @@ import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import tools.gen1_foundation as gf  # noqa: E402
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.normpath(os.path.join(_THIS_DIR, ".."))
@@ -214,14 +225,17 @@ def species_display_name(species_const: str) -> str:
     return species_const.title().replace("_", " ")
 
 
-def aggregate(entries: list[tuple[int, str]]) -> list[dict]:
+def aggregate(entries: list[tuple[int, str]], drop: tuple[str, ...] = ("NO_MON", "MISSINGNO")
+             ) -> list[dict]:
     """Collapse 10-slot list to per-species rate + min/max levels.
 
-    Drops MISSINGNO entries (species_const == "MISSINGNO") and NO_MON.
+    Drops any species const named in ``drop`` -- vanilla drops MISSINGNO and NO_MON (a species
+    that can't be identified isn't a species a client can classify); purergb keeps MISSINGNO
+    (a real catchable species there, task spec "dex 0 kept") and passes ``drop=("NO_MON",)``.
     """
     by_species: dict[str, dict] = {}
     for slot, (level, sp) in enumerate(entries):
-        if sp in ("NO_MON", "MISSINGNO"):
+        if sp in drop:
             continue
         rate = SLOT_RATES[slot] if slot < len(SLOT_RATES) else 0
         if sp not in by_species:
@@ -330,6 +344,251 @@ VARIANTS = {
     "yellow": (_PRET_YELLOW, frozenset()),
 }
 
+# ---------------------------------------------------------------------------------------------
+# pureRGB pipeline (docs/purergb/PLAN.md M1). Species are INTERNAL indices; MISSINGNO is kept;
+# grass/water come off the BUILT ROM's WildDataPointers (bank $2C) and are cross-checked against
+# the source parse; fishing (old/good/super rod) is generated only here.
+# ---------------------------------------------------------------------------------------------
+
+_PURERGB_TITLES = ["purered", "pureblue", "puregreen"]
+_PURERGB_SLOT_CHANCES_256 = [51, 51, 39, 25, 25, 25, 13, 13, 11, 3]  # WildMonEncounterSlotChances
+
+
+def _purergb_out_paths():
+    d = gf.data_dir("purergb")
+    return d / "encounter_tables.json", d / "area_map.json", d / "floor_labels.json"
+
+
+def parse_name_array(text: str, header: str) -> list[str]:
+    """``header::`` followed by ``dname "..."`` rows, in order -- pureRGB's names.asm shape."""
+    out: list[str] = []
+    in_table = False
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith(header + ":"):
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        if line.startswith("assert_table_length"):
+            break
+        m = re.match(r'^dname\s+"(.*)"\s*$', line)
+        if m:
+            out.append(m.group(1))
+    return out
+
+
+def parse_map_id_list(text: str, header: str) -> list[str]:
+    """``header:`` followed by ``db CONST`` rows terminated by ``db -1``."""
+    out: list[str] = []
+    in_table = False
+    for line in text.splitlines():
+        line = line.split(";", 1)[0].strip()
+        if line.startswith(header + ":"):
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        if line.startswith("db -1"):
+            break
+        m = re.match(r"^db\s+([A-Za-z_0-9]+)\s*$", line)
+        if m:
+            out.append(m.group(1))
+    return out
+
+
+def parse_super_rod_rows(text: str) -> list[tuple[str, str]]:
+    """SuperRodData: ``dbw MAP, GroupN`` rows, terminated by ``db -1``."""
+    out: list[tuple[str, str]] = []
+    in_table = False
+    for line in text.splitlines():
+        line = line.split(";", 1)[0].strip()
+        if line.startswith("SuperRodData:"):
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        if line.startswith("db -1"):
+            break
+        m = re.match(r"^dbw\s+([A-Za-z_0-9]+)\s*,\s*(\S+)\s*$", line)
+        if m:
+            out.append((m.group(1), m.group(2)))
+    return out
+
+
+def parse_super_rod_groups(text: str) -> dict[str, list[tuple[int, str]]]:
+    groups: dict[str, list[tuple[int, str]]] = {}
+    cur = None
+    for line in text.splitlines():
+        line = line.split(";", 1)[0].strip()
+        m = re.match(r"^(Group\d+):\s*$", line)
+        if m:
+            cur = m.group(1)
+            groups[cur] = []
+            continue
+        if cur is None:
+            continue
+        if re.match(r"^db\s+\d+\s*$", line):  # the leading "how many mons" count line
+            continue
+        m = re.match(r"^db\s+(\d+)\s*,\s*(\S+)\s*$", line)
+        if m:
+            groups[cur].append((int(m.group(1)), m.group(2)))
+    return groups
+
+
+def parse_good_rod_pools(text: str) -> dict[str, list[tuple[int, str]]]:
+    pools: dict[str, list[tuple[int, str]]] = {}
+    cur = None
+    for line in text.splitlines():
+        line = line.split(";", 1)[0].strip()
+        m = re.match(r"^(GoodRodMons|GoodRodMonsOcean):\s*$", line)
+        if m:
+            cur = m.group(1)
+            pools[cur] = []
+            continue
+        if cur is None:
+            continue
+        m = re.match(r"^db\s+(-?\d+)\s*,\s*(\S+)\s*$", line)
+        if m:
+            lvl = int(m.group(1))
+            if lvl == -1:
+                cur = None
+                continue
+            pools[cur].append((lvl, m.group(2)))
+    return pools
+
+
+def _even_rates(n: int) -> list[int]:
+    """n rates in [0, 100] summing to exactly 100, as equal as the rejection-sampled RNG."""
+    base, rem = divmod(100, n)
+    return [base + (1 if i < rem else 0) for i in range(n)]
+
+
+def _rom_wild_block(rom: bytes, flat_off: int) -> tuple[int, list[tuple[int, int]], int]:
+    """(rate, [(level, species_byte)]*10 or [], next_flat_offset)."""
+    rate = rom[flat_off]
+    if rate == 0:
+        return rate, [], flat_off + 1
+    slots = []
+    p = flat_off + 1
+    for _ in range(10):
+        slots.append((rom[p], rom[p + 1]))
+        p += 2
+    return rate, slots, p
+
+
+def build_purergb_title(title: str, root, species_to_id: dict[str, int], id_to_name: dict[int, str],
+                        map_id_to_area: dict[int, str], floor_labels: dict[str, str],
+                        ocean_ids: set[int], good_rod_pools: dict[str, list[tuple[int, str]]],
+                        super_rod_group_by_map: dict[int, str],
+                        super_rod_groups: dict[str, list[tuple[int, str]]]) -> dict[str, dict]:
+    """Build one title's {area_id: {method: [entries]}}, ROM-verified against ``title``."""
+    pointers = parse_wild_pointers(str(root / "data" / "wild" / "grass_water.asm"))
+    maps_dir = root / "data" / "wild" / "maps"
+    label_to_path = {p.stem + "WildMons": p for p in maps_dir.glob("*.asm")}
+    label_to_path["NothingWildMons"] = maps_dir / "nothing.asm"
+
+    syms = gf.parse_sym(gf.sym_path("purergb", title))
+    bank, addr = syms["WildDataPointers"]
+    if (bank, addr) != (0x2C, 0x484A):
+        raise SystemExit(f"{title}: WildDataPointers moved to {bank:02x}:{addr:04x}, expected 2c:484a")
+    rom = gf.rom_path("purergb", title).read_bytes()
+    ptr_flat = gf.flat(bank, addr)
+    rom_ptrs = []
+    off = ptr_flat
+    while True:
+        ptr = rom[off] | (rom[off + 1] << 8)
+        off += 2
+        if ptr == 0xFFFF:
+            break
+        rom_ptrs.append(ptr)
+    if len(rom_ptrs) != len(pointers):
+        raise SystemExit(f"{title}: ROM has {len(rom_ptrs)} WildDataPointers, source has {len(pointers)}")
+
+    def rod_entries(pairs: list[tuple[int, str]]) -> list[dict]:
+        rates = _even_rates(len(pairs))
+        return [{"species_id": species_to_id[c], "name": id_to_name.get(species_to_id[c], c),
+                 "rate": r, "min_level": lvl, "max_level": lvl}
+                for r, (lvl, c) in zip(rates, pairs, strict=True)]
+
+    old_rod_entries = rod_entries([(10, "GOLDEEN"), (10, "MAGIKARP")])  # Random&1, 50/50, both L10
+    good_rod_fresh = rod_entries(good_rod_pools["GoodRodMons"])
+    good_rod_ocean = rod_entries(good_rod_pools["GoodRodMonsOcean"])
+    super_rod_cache = {name: rod_entries(pairs) for name, pairs in super_rod_groups.items()}
+
+    areas: dict[str, dict] = {}
+    mismatches: list[str] = []
+    id_to_species = {v: k for k, v in species_to_id.items()}
+    for (map_id, label), ptr in zip(pointers, rom_ptrs, strict=True):
+        rom_flat = 0x2C * 0x4000 + (ptr - 0x4000)
+        grass_rate, grass_slots, next_off = _rom_wild_block(rom, rom_flat)
+        water_rate, water_slots, _ = _rom_wild_block(rom, next_off)
+
+        if label != "NothingWildMons":
+            path = label_to_path.get(label)
+            if path is None:
+                raise SystemExit(f"{title}: map {map_id}: no source asm for {label}")
+            s_grass_rate, s_grass, s_water_rate, s_water = parse_map_asm(str(path), frozenset())
+            if grass_rate != s_grass_rate or water_rate != s_water_rate:
+                mismatches.append(f"map {map_id} {label}: rate ROM=({grass_rate},{water_rate}) "
+                                  f"SRC=({s_grass_rate},{s_water_rate})")
+            for kind, rom_slots, src_slots in (("grass", grass_slots, s_grass),
+                                                ("water", water_slots, s_water)):
+                if len(rom_slots) != len(src_slots):
+                    mismatches.append(f"map {map_id} {label} {kind}: slot count "
+                                      f"ROM={len(rom_slots)} SRC={len(src_slots)}")
+                    continue
+                for i, ((rl, rs), (sl, ssp)) in enumerate(zip(rom_slots, src_slots, strict=True)):
+                    sid = species_to_id.get(ssp)
+                    if rl != sl or sid is None or rs != sid:
+                        mismatches.append(f"map {map_id} {label} {kind} slot{i}: "
+                                          f"ROM=({rl},0x{rs:02x}/{id_to_species.get(rs)}) "
+                                          f"SRC=({sl},{ssp}/{sid})")
+
+        area_id = map_id_to_area.get(map_id)
+        if not area_id:
+            continue
+        suffix = floor_labels.get(str(map_id), "")
+        block = areas.setdefault(area_id, {})
+        for method, rate, slots in (("Grass" + suffix, grass_rate, grass_slots),
+                                    ("Water" + suffix, water_rate, water_slots)):
+            if rate == 0 or not slots:
+                continue
+            entries = [(level, id_to_species.get(sp, f"$?{sp:02X}")) for level, sp in slots]
+            agg = aggregate(entries, drop=("NO_MON",))
+            # A byte with no known constant would already be a recorded mismatch above (and
+            # raises before this function returns) -- skip it here instead of a KeyError mid-scan.
+            agg = [e for e in agg if e["_const"] in species_to_id]
+            method_entries = [{
+                "species_id": species_to_id[e["_const"]],
+                "name": id_to_name.get(species_to_id[e["_const"]], e["_const"]),
+                "rate": e["rate"], "min_level": e["min_level"], "max_level": e["max_level"],
+            } for e in agg]
+            if method_entries:
+                method_entries.sort(key=lambda x: (-x["rate"], x["species_id"]))
+                block[method] = method_entries
+
+        # Fishing: Old Rod anywhere a water table/ocean/super-rod entry says a map is fishable
+        # (approximated, like W1, as no tile-level fishability scan is done here either). Good
+        # Rod picks the ocean pool for an OceanMaps member, the fresh pool otherwise. Super Rod
+        # only where this map has its own SuperRodData row.
+        group = super_rod_group_by_map.get(map_id)
+        fishable = water_rate > 0 or map_id in ocean_ids or group is not None
+        if fishable:
+            block["OldRod" + suffix] = old_rod_entries
+            block["GoodRodOcean" + suffix if map_id in ocean_ids else "GoodRod" + suffix] = (
+                good_rod_ocean if map_id in ocean_ids else good_rod_fresh)
+        if group is not None:
+            block["SuperRod" + suffix] = super_rod_cache[group]
+
+        if not block:
+            areas.pop(area_id, None)
+
+    if mismatches:
+        raise SystemExit(f"{title}: {len(mismatches)} ROM-vs-source mismatches:\n  " +
+                         "\n  ".join(mismatches[:40]))
+    return areas
+
 
 def _check_rates(variant: str, areas: dict) -> list[str]:
     """Each method block must sum to 100% and carry no zero-rate species.
@@ -347,6 +606,83 @@ def _check_rates(variant: str, areas: dict) -> list[str]:
                 if e["rate"] <= 0:
                     problems.append(f"{variant}/{area_id}/{method}: {e['name']} has rate {e['rate']}")
     return problems
+
+
+def main_purergb() -> int:
+    import argparse
+
+    import tools.gen_gen1_area_map as area_map_gen
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--foundation")  # consumed by the __main__ dispatcher, accepted here too
+    ap.add_argument("--check", action="store_true")
+    args = ap.parse_args(sys.argv[1:])
+
+    root = gf.source_root("purergb")
+    out_path, area_map_path, floor_labels_path = _purergb_out_paths()
+    if not area_map_path.exists():
+        sys.stderr.write(f"{area_map_path} missing -- run tools/gen_gen1_area_map.py first\n")
+        return 1
+    area_map = json.loads(area_map_path.read_text(encoding="utf-8"))
+    floor_labels = json.loads(floor_labels_path.read_text(encoding="utf-8"))
+    map_id_to_area = {int(k): v["area_id"] for k, v in area_map.items()}
+
+    species_to_id = parse_pokemon_constants(str(root / "constants" / "pokemon_constants.asm"))
+    _, name_to_map_id = area_map_gen.parse_map_constants(
+        (root / "constants" / "map_constants.asm").read_text(encoding="utf-8"))
+
+    # Slot chances: cross-check the raw /256 table cited by the plan against source text before
+    # trusting the derived rate percentages built on top of it (a (b)-class source assert).
+    probs_text = gf.read_source("purergb", "data/wild/probabilities.asm")
+    for chance in _PURERGB_SLOT_CHANCES_256:
+        needle = f"wild_chance {chance}"
+        if needle not in probs_text.replace("  ", " "):
+            raise SystemExit(f"probabilities.asm source assert failed: missing {needle!r}")
+
+    names_text = gf.read_source("purergb", "data/pokemon/names.asm")
+    display_names = parse_name_array(names_text, "MonsterNames")
+    if len(display_names) != 190:
+        raise SystemExit(f"MonsterNames: expected 190 entries, parsed {len(display_names)}")
+    # names.asm stores shouting-case ("RATTATA", "NIDORAN♂"); .capitalize() is a one-line,
+    # source-derived approximation of vanilla's Title Case convention -- good enough for display,
+    # and it never needs a per-species override table the way a hand-typed name list would.
+    id_to_name = {i + 1: n.capitalize() for i, n in enumerate(display_names)}
+
+    ocean_names = parse_map_id_list(gf.read_source("purergb", "data/maps/ocean_maps.asm"), "OceanMaps")
+    ocean_ids = {name_to_map_id[n] for n in ocean_names if n in name_to_map_id}
+
+    good_rod_pools = parse_good_rod_pools(gf.read_source("purergb", "data/wild/good_rod.asm"))
+
+    super_rod_text = gf.read_source("purergb", "data/wild/super_rod.asm")
+    super_rod_rows = parse_super_rod_rows(super_rod_text)
+    super_rod_group_by_map = {name_to_map_id[m]: g for m, g in super_rod_rows if m in name_to_map_id}
+    super_rod_groups = parse_super_rod_groups(super_rod_text)
+
+    out: dict = {"species_id_space": "internal"}
+    for title in _PURERGB_TITLES:
+        areas = build_purergb_title(title, root, species_to_id, id_to_name, map_id_to_area,
+                                    floor_labels, ocean_ids, good_rod_pools,
+                                    super_rod_group_by_map, super_rod_groups)
+        problems = _check_rates(title, areas)
+        if problems:
+            sys.stderr.write("REFUSING TO WRITE — rate validation failed:\n")
+            for p in problems[:40]:
+                sys.stderr.write(f"  {p}\n")
+            return 1
+        out[title] = areas
+        n_methods = sum(len(b) for b in areas.values())
+        print(f"{title}: {len(areas)} areas, {n_methods} method tables (ROM-verified, 0 mismatches)")
+
+    if args.check:
+        if not out_path.exists() or json.loads(out_path.read_text(encoding="utf-8")) != out:
+            print(f"{out_path} is stale — re-run without --check", file=sys.stderr)
+            return 1
+        print(f"{out_path} matches source")
+        return 0
+
+    out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"Wrote {out_path}")
+    return 0
 
 
 def main() -> int:
@@ -402,4 +738,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # A light hand-rolled pre-parse, not argparse: the pret path below takes no flags at all
+    # today, and giving it an argparse pass here (even one that only recognises --foundation)
+    # would be a behavior change to the byte-identical vanilla output this edit must not touch.
+    if "--foundation" in sys.argv and sys.argv[sys.argv.index("--foundation") + 1] == "purergb":
+        sys.exit(main_purergb())
     sys.exit(main())

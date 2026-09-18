@@ -1,0 +1,287 @@
+{
+  "schema": "gen1-purergb-area-notes-v1",
+  "notes": [
+    {
+      "map_id": 37,
+      "const": "REDS_HOUSE_1F",
+      "rule": "game_knowledge_override",
+      "area_id": "pallet_town"
+    },
+    {
+      "map_id": 38,
+      "const": "REDS_HOUSE_2F",
+      "rule": "game_knowledge_override",
+      "area_id": "pallet_town"
+    },
+    {
+      "map_id": 39,
+      "const": "BLUES_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "pallet_town"
+    },
+    {
+      "map_id": 40,
+      "const": "OAKS_LAB",
+      "rule": "game_knowledge_override",
+      "area_id": "pallet_town"
+    },
+    {
+      "map_id": 52,
+      "const": "MUSEUM_1F",
+      "rule": "game_knowledge_override",
+      "area_id": "pewter_city"
+    },
+    {
+      "map_id": 53,
+      "const": "MUSEUM_2F",
+      "rule": "game_knowledge_override",
+      "area_id": "pewter_city"
+    },
+    {
+      "map_id": 66,
+      "const": "BIKE_SHOP",
+      "rule": "game_knowledge_override",
+      "area_id": "cerulean_city"
+    },
+    {
+      "map_id": 72,
+      "const": "DAYCARE",
+      "rule": "game_knowledge_override",
+      "area_id": "route_5"
+    },
+    {
+      "map_id": 88,
+      "const": "BILLS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "route_25"
+    },
+    {
+      "map_id": 90,
+      "const": "POKEMON_FAN_CLUB",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 95,
+      "const": "SS_ANNE_1F",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 96,
+      "const": "SS_ANNE_2F",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 97,
+      "const": "SS_ANNE_3F",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 98,
+      "const": "SS_ANNE_B1F",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 99,
+      "const": "SS_ANNE_BOW",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 100,
+      "const": "SS_ANNE_KITCHEN",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 101,
+      "const": "SS_ANNE_CAPTAINS_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 102,
+      "const": "SS_ANNE_1F_ROOMS",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 103,
+      "const": "SS_ANNE_2F_ROOMS",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 104,
+      "const": "SS_ANNE_B1F_ROOMS",
+      "rule": "game_knowledge_override",
+      "area_id": "vermilion_city"
+    },
+    {
+      "map_id": 111,
+      "const": "SECRET_LAB",
+      "rule": "game_knowledge_override",
+      "area_id": "secret_lab"
+    },
+    {
+      "map_id": 113,
+      "const": "LANCES_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 114,
+      "const": "CHAMP_ARENA",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 115,
+      "const": "DIAMOND_MINE",
+      "rule": "game_knowledge_override",
+      "area_id": "diamond_mine"
+    },
+    {
+      "map_id": 118,
+      "const": "HALL_OF_FAME",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 119,
+      "const": "UNDERGROUND_PATH_NORTH_SOUTH",
+      "rule": "game_knowledge_override",
+      "area_id": "route_5"
+    },
+    {
+      "map_id": 120,
+      "const": "CHAMPIONS_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 121,
+      "const": "UNDERGROUND_PATH_WEST_EAST",
+      "rule": "game_knowledge_override",
+      "area_id": "route_7"
+    },
+    {
+      "map_id": 135,
+      "const": "GAME_CORNER",
+      "rule": "game_knowledge_override",
+      "area_id": "celadon_city"
+    },
+    {
+      "map_id": 137,
+      "const": "GAME_CORNER_PRIZE_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "celadon_city"
+    },
+    {
+      "map_id": 149,
+      "const": "MR_FUJIS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "lavender_town"
+    },
+    {
+      "map_id": 155,
+      "const": "WARDENS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "fuchsia_city"
+    },
+    {
+      "map_id": 156,
+      "const": "SAFARI_ZONE_GATE",
+      "rule": "game_knowledge_override",
+      "area_id": "safari_zone_center"
+    },
+    {
+      "map_id": 173,
+      "const": "TYPE_GUYS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 174,
+      "const": "INDIGO_PLATEAU_LOBBY",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 175,
+      "const": "COPYCATS_HOUSE_1F",
+      "rule": "game_knowledge_override",
+      "area_id": "saffron_city"
+    },
+    {
+      "map_id": 176,
+      "const": "COPYCATS_HOUSE_2F",
+      "rule": "game_knowledge_override",
+      "area_id": "saffron_city"
+    },
+    {
+      "map_id": 177,
+      "const": "FIGHTING_DOJO",
+      "rule": "game_knowledge_override",
+      "area_id": "saffron_city"
+    },
+    {
+      "map_id": 183,
+      "const": "MR_PSYCHICS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "route_8"
+    },
+    {
+      "map_id": 205,
+      "const": "FOSSIL_GUYS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "cinnabar_island"
+    },
+    {
+      "map_id": 222,
+      "const": "SAFARI_ZONE_SECRET_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "safari_zone_center"
+    },
+    {
+      "map_id": 229,
+      "const": "NAME_RATERS_HOUSE",
+      "rule": "game_knowledge_override",
+      "area_id": "cerulean_city"
+    },
+    {
+      "map_id": 239,
+      "const": "TRADE_CENTER",
+      "rule": "game_knowledge_override",
+      "area_id": "trade_center"
+    },
+    {
+      "map_id": 240,
+      "const": "COLOSSEUM",
+      "rule": "game_knowledge_override",
+      "area_id": "colosseum"
+    },
+    {
+      "map_id": 245,
+      "const": "LORELEIS_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 246,
+      "const": "BRUNOS_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    },
+    {
+      "map_id": 247,
+      "const": "AGATHAS_ROOM",
+      "rule": "game_knowledge_override",
+      "area_id": "indigo_plateau"
+    }
+  ]
+}

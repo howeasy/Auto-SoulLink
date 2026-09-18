@@ -1,0 +1,7522 @@
+{
+  "schema": "gen1-purergb-trainers-v1",
+  "source": "purergb 7e7a46535ca3",
+  "opp_id_offset": 197,
+  "rival_ids": [
+    221,
+    237,
+    238
+  ],
+  "num_trainers": 56,
+  "classes": {
+    "198": {
+      "class": "YOUNGSTER",
+      "name": "YOUNGSTER",
+      "data_label": "YoungsterData",
+      "party_count": 12,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "PIDGEY",
+            "SANDSHREW"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_M"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 10,
+          "alt_palette": false,
+          "species": [
+            "DIGLETT",
+            "SPEAROW",
+            "ZUBAT"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "MACHOP",
+            "DODUO",
+            "KRABBY"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "DIGLETT",
+            "SPEAROW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "GROWLITHE",
+            "SLOWPOKE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "EKANS",
+            "SANDSHREW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "NIDORINO"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "GRIMER",
+            "KRABBY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "SANDSHREW",
+            "BUTTERFREE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "PIDGEOTTO",
+            "STARYU",
+            "RATICATE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "NIDORINO",
+            "PONYTA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "199": {
+      "class": "BUG_CATCHER",
+      "name": "BUG CATCHER",
+      "data_label": "BugCatcherData",
+      "party_count": 15,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 7,
+          "alt_palette": false,
+          "species": [
+            "CATERPIE",
+            "CATERPIE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 6,
+          "alt_palette": false,
+          "species": [
+            "WEEDLE",
+            "RATTATA",
+            "KAKUNA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 9,
+          "alt_palette": false,
+          "species": [
+            "CATERPIE",
+            "VENONAT"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 10,
+          "alt_palette": false,
+          "species": [
+            "CATERPIE",
+            "WEEDLE",
+            "KAKUNA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 9,
+          "alt_palette": false,
+          "species": [
+            "WEEDLE",
+            "KAKUNA",
+            "RATTATA",
+            "VENONAT",
+            "METAPOD"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 12,
+          "alt_palette": false,
+          "species": [
+            "CATERPIE",
+            "METAPOD"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "PARAS",
+            "KAKUNA",
+            "VULPIX"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 10,
+          "alt_palette": false,
+          "species": [
+            "KAKUNA",
+            "METAPOD",
+            "PARAS"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "METAPOD",
+            "BEEDRILL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 20,
+          "alt_palette": false,
+          "species": [
+            "VENONAT",
+            "CATERPIE",
+            "WEEDLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 20,
+          "alt_palette": false,
+          "species": [
+            "BUTTERFREE",
+            "PARAS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "PONYTA",
+            "SCYTHER",
+            "PINSIR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "BUTTERFREE",
+            "SCYTHER"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "PINSIR",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 8,
+          "alt_palette": false,
+          "species": [
+            "WEEDLE",
+            "METAPOD"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "200": {
+      "class": "LASS",
+      "name": "LASS",
+      "data_label": "LassData",
+      "party_count": 19,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 9,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_F",
+            "PIDGEY",
+            "MEOWTH"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 10,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE",
+            "NIDORAN_M"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "JIGGLYPUFF"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "PARAS",
+            "PARAS",
+            "CLEFAIRY"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "ODDISH",
+            "BELLSPROUT",
+            "CHARMANDER"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "CLEFAIRY"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "EEVEE",
+            "PONYTA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 15,
+          "alt_palette": false,
+          "species": [
+            "JIGGLYPUFF",
+            "NIDORAN_F",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "NIDORINA",
+            "NIDORAN_F"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "ODDISH",
+            "JIGGLYPUFF",
+            "SEEL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "PSYDUCK",
+            "EEVEE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_F",
+            "PIKACHU",
+            "GOLDEEN"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_F",
+            "NIDORINA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "MEOWTH",
+            "FARFETCHD",
+            "EEVEE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "ARBOK",
+            "SLOWPOKE",
+            "VULPIX",
+            "MEOWTH",
+            "PIKACHU"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "CLEFAIRY",
+            "CLEFAIRY",
+            "CLEFABLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "NIDORINA",
+            "WEEPINBELL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "CHANSEY",
+            "GLOOM"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 6,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "PIDGEY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "201": {
+      "class": "SAILOR",
+      "name": "SAILOR",
+      "data_label": "SailorData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "SEEL",
+            "SHELLDER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "MACHOP",
+            "TENTACOOL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "SHELLDER",
+            "KRABBY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 20,
+          "alt_palette": false,
+          "species": [
+            "HORSEA",
+            "SHELLDER",
+            "EXEGGCUTE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "TENTACOOL",
+            "STARYU"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 20,
+          "alt_palette": false,
+          "species": [
+            "HORSEA",
+            "SANDSHREW",
+            "POLIWHIRL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "MACHOP",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "202": {
+      "class": "JR_TRAINER_M",
+      "name": "JR.TRAINER\u2642",
+      "data_label": "JrTrainerMData",
+      "party_count": 10,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "DIGLETT",
+            "SANDSHREW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "PIDGEOTTO",
+            "PARAS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "MANKEY"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE",
+            "PIDGEY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "SPEAROW",
+            "RATICATE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "DIGLETT",
+            "DIGLETT",
+            "FARFETCHD"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "RHYHORN",
+            "CHARMANDER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "KRABBY",
+            "DIGLETT",
+            "PIDGEOTTO",
+            "VULPIX"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 48,
+          "alt_palette": false,
+          "species": [
+            "NIDORINO",
+            "NIDORINA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_M",
+            "STARYU",
+            "EKANS"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "203": {
+      "class": "JR_TRAINER_F",
+      "name": "JR.TRAINER\u2640",
+      "data_label": "JrTrainerFData",
+      "party_count": 24,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "GOLDEEN",
+            "PSYDUCK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "PIKACHU",
+            "JIGGLYPUFF"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "PIDGEY",
+            "PIDGEOTTO",
+            "NIDORAN_F"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "BULBASAUR",
+            "GLOOM",
+            "EEVEE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "ODDISH",
+            "BELLSPROUT",
+            "DODUO",
+            "GLOOM"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "CHANSEY"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "PIKACHU",
+            "CLEFAIRY",
+            "EEVEE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "STARYU",
+            "PIDGEOTTO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "JIGGLYPUFF",
+            "GOLDEEN",
+            "MEOWTH"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "ODDISH",
+            "ABRA",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 30,
+          "alt_palette": false,
+          "species": [
+            "BULBASAUR",
+            "IVYSAUR",
+            "EEVEE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "RAICHU",
+            "VILEPLUME",
+            "BUTTERFREE",
+            "WIGGLYTUFF",
+            "CLEFABLE"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "NIDOQUEEN",
+            "WIGGLYTUFF"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "KANGASKHAN",
+            "PERSIAN",
+            "CLEFABLE",
+            "PIDGEOT"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "STARMIE",
+            "NIDOQUEEN",
+            "CHANSEY"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "WIGGLYTUFF",
+            "SEAKING"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "CLEFAIRY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "MEOWTH",
+            "ODDISH",
+            "ZUBAT"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "NIDORINA",
+            "ABRA",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "VILEPLUME",
+            "CHANSEY",
+            "CLEFABLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "TANGELA",
+            "RAICHU"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "CHANSEY"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "NIDOQUEEN",
+            "WIGGLYTUFF",
+            "DEWGONG"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "CHANSEY",
+            "DRAGONAIR",
+            "VENUSAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "204": {
+      "class": "POKEMANIAC",
+      "name": "POK\u00e9MANIAC",
+      "data_label": "PokemaniacData",
+      "party_count": 10,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "POLIWRATH",
+            "ELECTABUZZ"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "CUBONE",
+            "SLOWPOKE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "SLOWPOKE",
+            "PONYTA",
+            "EXEGGCUTE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "CHARMANDER",
+            "CUBONE",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "SLOWPOKE",
+            "VENONAT"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 56,
+          "alt_palette": false,
+          "species": [
+            "EXEGGUTOR",
+            "LAPRAS",
+            "LICKITUNG"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "CUBONE",
+            "SLOWPOKE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 44,
+          "alt_palette": false,
+          "species": [
+            "ARCANINE",
+            "TANGELA",
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 44,
+          "alt_palette": false,
+          "species": [
+            "LAPRAS",
+            "GOLEM",
+            "PERSIAN"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "PORYGON",
+            "BLASTOISE",
+            "VICTREEBEL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "205": {
+      "class": "SUPER_NERD",
+      "name": "SUPER NERD",
+      "data_label": "SuperNerdData",
+      "party_count": 10,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "MAGNEMITE",
+            "VOLTORB"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 12,
+          "alt_palette": false,
+          "species": [
+            "GRIMER",
+            "VOLTORB",
+            "KOFFING",
+            "DITTO"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "VOLTORB",
+            "KOFFING",
+            "PSYDUCK",
+            "MAGNEMITE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "GRIMER",
+            "MR_MIME",
+            "MUK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 29,
+          "alt_palette": false,
+          "species": [
+            "KOFFING",
+            "DITTO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "OMANYTE",
+            "KABUTO",
+            "OMASTAR",
+            "KABUTOPS"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "JIGGLYPUFF",
+            "PARAS",
+            "DITTO",
+            "WEEPINBELL"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 30,
+          "alt_palette": false,
+          "species": [
+            "SEEL",
+            "GEODUDE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "GOLEM",
+            "PORYGON",
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "FLAREON",
+            "KINGLER",
+            "TANGELA",
+            "DITTO"
+          ],
+          "moveset": null,
+          "party_size": 4
+        }
+      ]
+    },
+    "206": {
+      "class": "HIKER",
+      "name": "HIKER",
+      "data_label": "HikerData",
+      "party_count": 15,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 10,
+          "alt_palette": false,
+          "species": [
+            "GEODUDE",
+            "SHELLDER",
+            "ONIX"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "SPEAROW",
+            "GEODUDE",
+            "CHARMANDER"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "GEODUDE",
+            "CUBONE",
+            "PSYDUCK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "RHYHORN",
+            "MANKEY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "GRAVELER",
+            "ONIX"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "GEODUDE",
+            "DODUO",
+            "RHYHORN"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "PSYDUCK",
+            "ONIX"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "MAROWAK",
+            "GRAVELER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "SLOWPOKE",
+            "DODUO",
+            "GRAVELER"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "HITMONLEE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "SANDSLASH",
+            "NIDORINO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "GEODUDE",
+            "MACHOP",
+            "GRAVELER",
+            "POLIWAG"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "ONIX",
+            "KOFFING",
+            "GEODUDE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "MANKEY",
+            "GRAVELER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "HITMONCHAN",
+            "RHYHORN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "207": {
+      "class": "BIKER",
+      "name": "BIKER",
+      "data_label": "BikerData",
+      "party_count": 15,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "WEEZING",
+            "TAUROS",
+            "RAPIDASH"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "MAGMAR",
+            "VICTREEBEL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "RAPIDASH",
+            "VICTREEBEL",
+            "PINSIR",
+            "HAUNTER",
+            "RHYDON"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "ONIX",
+            "MAROWAK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "MUK",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 38,
+          "alt_palette": false,
+          "species": [
+            "HAUNTER",
+            "DODRIO",
+            "MUK",
+            "EXEGGUTOR"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "FLAREON",
+            "ELECTABUZZ",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "MUK"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "ELECTRODE",
+            "RHYDON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "MUK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "VICTREEBEL",
+            "HYPNO",
+            "PIDGEOT",
+            "MAGNETON",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "HITMONLEE",
+            "WARTORTLE",
+            "MUK",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "PINSIR",
+            "ELECTRODE",
+            "MUK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "GOLDUCK",
+            "MUK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "208": {
+      "class": "BURGLAR",
+      "name": "BURGLAR",
+      "data_label": "BurglarData",
+      "party_count": 9,
+      "grammars": [
+        "FE",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "FE",
+          "level": [
+            28,
+            28,
+            26,
+            26,
+            30,
+            28
+          ],
+          "alt_palette": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            false
+          ],
+          "species": [
+            "NIDORAN_M",
+            "ODDISH",
+            "DODUO",
+            "VENONAT",
+            "TAUROS",
+            "KANGASKHAN"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "GROWLITHE",
+            "DITTO",
+            "EXEGGCUTE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "DODRIO",
+            "DUGTRIO",
+            "RAPIDASH"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "PERSIAN",
+            "PRIMEAPE",
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 58,
+          "alt_palette": false,
+          "species": [
+            "MAGMAR"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "PINSIR",
+            "CHARIZARD"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "SANDSLASH",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 56,
+          "alt_palette": false,
+          "species": [
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 54,
+          "alt_palette": false,
+          "species": [
+            "RATICATE",
+            "FEAROW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "209": {
+      "class": "ENGINEER",
+      "name": "ENGINEER",
+      "data_label": "EngineerData",
+      "party_count": 5,
+      "grammars": [
+        "FE",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 47,
+          "alt_palette": false,
+          "species": [
+            "MAGNETON",
+            "SANDSLASH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "MAGNEMITE",
+            "DODUO",
+            "MAGNETON"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "PORYGON"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "PORYGON",
+            "JOLTEON",
+            "ALAKAZAM"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            45,
+            45,
+            45
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true
+          ],
+          "species": [
+            "SNORLAX",
+            "SLOWBRO",
+            "PARASECT"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "210": {
+      "class": "FISHER",
+      "name": "FISHERMAN",
+      "data_label": "FisherData",
+      "party_count": 11,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "GOLDEEN",
+            "TENTACOOL",
+            "SEEL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "SHELLDER",
+            "STARYU",
+            "NIDORINA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "GOLDEEN",
+            "POLIWAG",
+            "TANGELA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "TENTACOOL",
+            "TAUROS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 29,
+          "alt_palette": false,
+          "species": [
+            "SEADRA"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "POLIWAG",
+            "HORSEA",
+            "SEAKING",
+            "SCYTHER"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "SEADRA",
+            "VICTREEBEL",
+            "FEAROW",
+            "SEAKING"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "MAROWAK",
+            "CLOYSTER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 99,
+          "alt_palette": false,
+          "species": [
+            "MAGIKARP",
+            "MAGIKARP",
+            "MAGIKARP",
+            "MAGIKARP",
+            "MAGIKARP",
+            "DITTO"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "SEAKING",
+            "SCYTHER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "VAPOREON",
+            "SLOWBRO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "211": {
+      "class": "SWIMMER",
+      "name": "SWIMMER",
+      "data_label": "SwimmerData",
+      "party_count": 15,
+      "grammars": [
+        "FF",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            17,
+            17,
+            16
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HORSEA",
+            "ABRA",
+            "SHELLDER"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "CLOYSTER",
+            "FARFETCHD"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "PINSIR",
+            "TAUROS",
+            "STARMIE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 51,
+          "alt_palette": false,
+          "species": [
+            "RAICHU",
+            "POLIWRATH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 48,
+          "alt_palette": false,
+          "species": [
+            "SEADRA",
+            "RHYDON",
+            "MUK",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "LICKITUNG",
+            "DRAGONAIR",
+            "SEAKING"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 51,
+          "alt_palette": false,
+          "species": [
+            "KABUTOPS",
+            "LAPRAS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 48,
+          "alt_palette": false,
+          "species": [
+            "GYARADOS",
+            "KANGASKHAN",
+            "MACHAMP",
+            "SEADRA",
+            "TENTACRUEL"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "VENOMOTH",
+            "CLOYSTER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "GOLBAT",
+            "PARASECT",
+            "PRIMEAPE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "ELECTRODE",
+            "TENTACRUEL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "STARMIE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "SEADRA",
+            "CHARIZARD"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "GOLBAT",
+            "BEEDRILL",
+            "KINGLER"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "212": {
+      "class": "CUE_BALL",
+      "name": "CUE BALL",
+      "data_label": "CueBallData",
+      "party_count": 9,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "MACHOKE",
+            "PARASECT",
+            "DUGTRIO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "PRIMEAPE",
+            "VENOMOTH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "GOLEM"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "SNORLAX",
+            "PRIMEAPE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "TAUROS",
+            "MACHAMP"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "POLIWHIRL"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 38,
+          "alt_palette": false,
+          "species": [
+            "PERSIAN",
+            "GOLDUCK",
+            "KANGASKHAN",
+            "POLIWRATH"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "PRIMEAPE",
+            "RAPIDASH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 51,
+          "alt_palette": false,
+          "species": [
+            "FLAREON",
+            "POLIWRATH",
+            "TENTACRUEL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "213": {
+      "class": "GAMBLER",
+      "name": "GAMBLER",
+      "data_label": "GamblerData",
+      "party_count": 9,
+      "grammars": [
+        "FD",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "POLIWAG",
+            "VULPIX"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "MAGNEMITE",
+            "GROWLITHE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "VOLTORB",
+            "ODDISH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "GROWLITHE",
+            "HORSEA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "POLIWAG",
+            "GRAVELER",
+            "POLIWHIRL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "SANDSHREW",
+            "SEEL",
+            "GLOOM"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "DROWZEE",
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "DRATINI",
+            "POLIWHIRL",
+            "WEEPINBELL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            27,
+            27,
+            28
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MEOWTH",
+            "KADABRA",
+            "MACHOKE"
+          ],
+          "moveset": "METRONOME_GAMBLER_MOVESET",
+          "party_size": 3
+        }
+      ]
+    },
+    "214": {
+      "class": "BEAUTY",
+      "name": "BEAUTY",
+      "data_label": "BeautyData",
+      "party_count": 15,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 29,
+          "alt_palette": false,
+          "species": [
+            "JIGGLYPUFF",
+            "BELLSPROUT",
+            "BUTTERFREE",
+            "JYNX"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "ODDISH",
+            "TANGELA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 33,
+          "alt_palette": false,
+          "species": [
+            "PARASECT"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "WIGGLYTUFF",
+            "PIKACHU",
+            "RAICHU"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "VILEPLUME",
+            "PERSIAN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "DEWGONG"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 51,
+          "alt_palette": false,
+          "species": [
+            "NIDOQUEEN",
+            "FARFETCHD",
+            "LAPRAS"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "VAPOREON",
+            "SNORLAX"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "MACHOKE",
+            "HYPNO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "WIGGLYTUFF",
+            "VENUSAUR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "VILEPLUME",
+            "DEWGONG",
+            "JYNX"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 48,
+          "alt_palette": false,
+          "species": [
+            "PERSIAN",
+            "WIGGLYTUFF",
+            "SEAKING",
+            "NIDOQUEEN",
+            "DEWGONG"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "PIDGEOT",
+            "VAPOREON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "JYNX",
+            "VILEPLUME",
+            "LAPRAS"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "BUTTERFREE",
+            "RAICHU",
+            "SEADRA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "215": {
+      "class": "PSYCHIC_TR",
+      "name": "PSYCHIC",
+      "data_label": "PsychicData",
+      "party_count": 6,
+      "grammars": [
+        "FE",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 48,
+          "alt_palette": false,
+          "species": [
+            "KADABRA",
+            "POLIWRATH",
+            "MR_MIME",
+            "VENOMOTH"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "MR_MIME",
+            "ALAKAZAM"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "BUTTERFREE",
+            "JOLTEON",
+            "SLOWBRO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "STARMIE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "BUTTERFREE",
+            "SLOWBRO",
+            "GOLDUCK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            44,
+            44,
+            44
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false
+          ],
+          "species": [
+            "CLEFABLE",
+            "EXEGGUTOR",
+            "SLOWBRO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "216": {
+      "class": "ROCKER",
+      "name": "ROCKER",
+      "data_label": "RockerData",
+      "party_count": 6,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 22,
+          "alt_palette": false,
+          "species": [
+            "VOLTORB",
+            "WARTORTLE",
+            "CUBONE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "ELECTABUZZ",
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "CLEFABLE",
+            "WIGGLYTUFF",
+            "BUTTERFREE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "ELECTRODE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 47,
+          "alt_palette": false,
+          "species": [
+            "JOLTEON",
+            "FLAREON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "MAGMAR",
+            "ELECTABUZZ"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "217": {
+      "class": "JUGGLER",
+      "name": "JUGGLER",
+      "data_label": "JugglerData",
+      "party_count": 10,
+      "grammars": [
+        "FE",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "BUTTERFREE",
+            "ALAKAZAM"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "SCYTHER",
+            "HYPNO",
+            "ELECTABUZZ",
+            "SEADRA"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "HYPNO",
+            "BEEDRILL",
+            "KADABRA",
+            "GOLBAT"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "STARMIE",
+            "MR_MIME"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 62,
+          "alt_palette": false,
+          "species": [
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            40,
+            40,
+            40,
+            40,
+            40,
+            40
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false,
+            true,
+            false,
+            true
+          ],
+          "species": [
+            "TAUROS",
+            "TAUROS",
+            "TAUROS",
+            "TAUROS",
+            "TAUROS",
+            "TAUROS"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "HYPNO"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "DRAGONAIR",
+            "CLEFABLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            45,
+            45,
+            45,
+            45
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            true
+          ],
+          "species": [
+            "VOLTORB",
+            "ELECTRODE",
+            "VOLTORB",
+            "ELECTRODE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "MACHAMP"
+          ],
+          "moveset": null,
+          "party_size": 1
+        }
+      ]
+    },
+    "218": {
+      "class": "TAMER",
+      "name": "TAMER",
+      "data_label": "TamerData",
+      "party_count": 9,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "SANDSLASH",
+            "ARBOK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "VENUSAUR",
+            "NIDOQUEEN",
+            "ARBOK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 58,
+          "alt_palette": false,
+          "species": [
+            "RHYDON"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "ARBOK",
+            "TAUROS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 57,
+          "alt_palette": false,
+          "species": [
+            "GOLDUCK",
+            "PERSIAN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "EKANS",
+            "NIDORAN_M",
+            "DODUO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "DITTO",
+            "SEEL",
+            "DRATINI"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "SHELLDER",
+            "NIDORINO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "KINGLER",
+            "SNORLAX"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "219": {
+      "class": "BIRD_KEEPER",
+      "name": "BIRD KEEPER",
+      "data_label": "BirdKeeperData",
+      "party_count": 17,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "GOLBAT",
+            "SCYTHER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "FEAROW",
+            "NIDOKING",
+            "DEWGONG",
+            "PIDGEOT",
+            "DODRIO"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 38,
+          "alt_palette": false,
+          "species": [
+            "FEAROW",
+            "FARFETCHD",
+            "DUGTRIO",
+            "MACHAMP"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "FARFETCHD"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "PIDGEOT",
+            "SANDSLASH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "EXEGGUTOR",
+            "FARFETCHD",
+            "DODRIO",
+            "PIDGEOT"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "DODRIO",
+            "DRAGONAIR",
+            "AERODACTYL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "SCYTHER",
+            "FEAROW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "AERODACTYL"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "FEAROW",
+            "RAICHU",
+            "DUGTRIO",
+            "DODRIO"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "GOLEM",
+            "FEAROW",
+            "AERODACTYL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "DODRIO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 39,
+          "alt_palette": false,
+          "species": [
+            "JOLTEON",
+            "CLOYSTER",
+            "DODRIO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 38,
+          "alt_palette": false,
+          "species": [
+            "PIDGEOT",
+            "FEAROW",
+            "NIDOKING",
+            "PARASECT"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 41,
+          "alt_palette": false,
+          "species": [
+            "KINGLER",
+            "GOLBAT"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 40,
+          "alt_palette": false,
+          "species": [
+            "VENOMOTH",
+            "SNORLAX",
+            "FEAROW"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "220": {
+      "class": "BLACKBELT",
+      "name": "BLACKBELT",
+      "data_label": "BlackbeltData",
+      "party_count": 9,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "HITMONLEE",
+            "HITMONCHAN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 32,
+          "alt_palette": false,
+          "species": [
+            "MANKEY",
+            "MACHOP",
+            "PRIMEAPE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 34,
+          "alt_palette": false,
+          "species": [
+            "MANKEY",
+            "MACHOKE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 35,
+          "alt_palette": false,
+          "species": [
+            "PRIMEAPE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 32,
+          "alt_palette": false,
+          "species": [
+            "MACHOP",
+            "MANKEY",
+            "ELECTABUZZ"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 56,
+          "alt_palette": false,
+          "species": [
+            "HITMONLEE",
+            "HITMONCHAN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 58,
+          "alt_palette": false,
+          "species": [
+            "FEAROW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "CLOYSTER",
+            "GOLEM",
+            "PRIMEAPE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 57,
+          "alt_palette": false,
+          "species": [
+            "PINSIR",
+            "HITMONCHAN",
+            "MACHAMP"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "221": {
+      "class": "RIVAL1",
+      "name": null,
+      "data_label": "Rival1Data",
+      "party_count": 9,
+      "grammars": [
+        "FF",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 5,
+          "alt_palette": false,
+          "species": [
+            "CHARMANDER"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 5,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 5,
+          "alt_palette": false,
+          "species": [
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            9,
+            8
+          ],
+          "alt_palette": [
+            false,
+            false
+          ],
+          "species": [
+            "MEOWTH",
+            "CHARMANDER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            9,
+            8
+          ],
+          "alt_palette": [
+            false,
+            false
+          ],
+          "species": [
+            "PIDGEY",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            9,
+            8
+          ],
+          "alt_palette": [
+            false,
+            false
+          ],
+          "species": [
+            "SPEAROW",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            18,
+            15,
+            16,
+            17
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "BEEDRILL",
+            "KRABBY",
+            "DIGLETT",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            18,
+            15,
+            16,
+            17
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "PIDGEOTTO",
+            "EXEGGCUTE",
+            "PIKACHU",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            18,
+            15,
+            16,
+            17
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "NIDORINO",
+            "ABRA",
+            "VULPIX",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 4
+        }
+      ]
+    },
+    "222": {
+      "class": "PROF_OAK",
+      "name": "PROF.OAK",
+      "data_label": "ProfOakData",
+      "party_count": 3,
+      "grammars": [
+        "FE"
+      ],
+      "records": [
+        {
+          "grammar": "FE",
+          "level": [
+            70,
+            71,
+            72,
+            73,
+            74,
+            75
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          "species": [
+            "FLOATING_MAGNETON",
+            "TAUROS",
+            "EXEGGUTOR",
+            "ARCANINE",
+            "VENUSAUR",
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            70,
+            71,
+            72,
+            73,
+            74,
+            75
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          "species": [
+            "FLOATING_MAGNETON",
+            "TAUROS",
+            "EXEGGUTOR",
+            "ARCANINE",
+            "CHARIZARD",
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            70,
+            71,
+            72,
+            73,
+            74,
+            75
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          "species": [
+            "FLOATING_MAGNETON",
+            "TAUROS",
+            "EXEGGUTOR",
+            "ARCANINE",
+            "BLASTOISE",
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 6
+        }
+      ]
+    },
+    "223": {
+      "class": "SCIENTIST",
+      "name": "SCIENTIST",
+      "data_label": "ScientistData",
+      "party_count": 14,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "VENUSAUR",
+            "STARMIE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "PARASECT",
+            "PORYGON",
+            "MAGMAR",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 44,
+          "alt_palette": false,
+          "species": [
+            "FLAREON",
+            "STARMIE",
+            "MAGNETON"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "ELECTRODE",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 48,
+          "alt_palette": false,
+          "species": [
+            "DITTO"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "MAGNETON",
+            "TENTACRUEL",
+            "EXEGGUTOR",
+            "ELECTRODE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 42,
+          "alt_palette": false,
+          "species": [
+            "ELECTABUZZ",
+            "GOLDUCK",
+            "MAGNETON",
+            "TANGELA",
+            "LICKITUNG"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "ELECTRODE",
+            "MUK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "SLOWBRO",
+            "ELECTRODE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 44,
+          "alt_palette": false,
+          "species": [
+            "DRAGONAIR",
+            "JYNX",
+            "MAGNETON"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "MAGNETON",
+            "PORYGON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 52,
+          "alt_palette": false,
+          "species": [
+            "ONIX",
+            "MAGNETON",
+            "EXEGGUTOR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "ALAKAZAM",
+            "AERODACTYL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 54,
+          "alt_palette": false,
+          "species": [
+            "PORYGON",
+            "ELECTABUZZ"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "224": {
+      "class": "GIOVANNI",
+      "name": "GIOVANNI",
+      "data_label": "GiovanniData",
+      "party_count": 4,
+      "grammars": [
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            37,
+            35,
+            35,
+            38
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "SANDSLASH",
+            "RHYHORN",
+            "DODRIO",
+            "KANGASKHAN"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            52,
+            53,
+            53,
+            55
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "NIDOKING",
+            "KANGASKHAN",
+            "KINGLER",
+            "NIDOQUEEN"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            62,
+            61,
+            61,
+            62,
+            62,
+            64
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "KINGLER",
+            "DODRIO",
+            "DUGTRIO",
+            "NIDOQUEEN",
+            "NIDOKING",
+            "RHYDON"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            90,
+            91,
+            92,
+            93,
+            94,
+            95
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "KINGLER",
+            "DODRIO",
+            "DUGTRIO",
+            "NIDOQUEEN",
+            "NIDOKING",
+            "RHYDON"
+          ],
+          "moveset": null,
+          "party_size": 6
+        }
+      ]
+    },
+    "225": {
+      "class": "ROCKET",
+      "name": "ROCKET",
+      "data_label": "RocketData",
+      "party_count": 41,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 13,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_M",
+            "ZUBAT"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 11,
+          "alt_palette": false,
+          "species": [
+            "SANDSHREW",
+            "MANKEY",
+            "ZUBAT"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 12,
+          "alt_palette": false,
+          "species": [
+            "PSYDUCK",
+            "EKANS"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "RATICATE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "LICKITUNG",
+            "DROWZEE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 16,
+          "alt_palette": false,
+          "species": [
+            "EKANS",
+            "ABRA",
+            "ZUBAT",
+            "EXEGGCUTE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "PERSIAN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "DROWZEE",
+            "KINGLER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 32,
+          "alt_palette": false,
+          "species": [
+            "EXEGGCUTE",
+            "RATICATE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "GRIMER",
+            "KOFFING",
+            "DODRIO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "GEODUDE",
+            "MACHOKE",
+            "RATICATE",
+            "GOLBAT"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 32,
+          "alt_palette": false,
+          "species": [
+            "KOFFING",
+            "ELECTRODE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 30,
+          "alt_palette": false,
+          "species": [
+            "FEAROW",
+            "PORYGON",
+            "GRIMER",
+            "WARTORTLE",
+            "RATICATE"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "DROWZEE",
+            "GOLDUCK",
+            "HITMONLEE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 32,
+          "alt_palette": false,
+          "species": [
+            "MACHOKE",
+            "LICKITUNG"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 34,
+          "alt_palette": false,
+          "species": [
+            "HITMONCHAN",
+            "RAICHU",
+            "SANDSLASH"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 35,
+          "alt_palette": false,
+          "species": [
+            "PARASECT",
+            "MAROWAK",
+            "ARBOK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 33,
+          "alt_palette": false,
+          "species": [
+            "MAGMAR",
+            "TANGELA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 36,
+          "alt_palette": false,
+          "species": [
+            "PINSIR",
+            "KINGLER",
+            "PIDGEOT"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 38,
+          "alt_palette": false,
+          "species": [
+            "POLIWRATH",
+            "MAROWAK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 36,
+          "alt_palette": false,
+          "species": [
+            "GRAVELER",
+            "GOLDUCK",
+            "TENTACRUEL",
+            "NIDOKING"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 26,
+          "alt_palette": false,
+          "species": [
+            "MEW",
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "CLOYSTER",
+            "DUGTRIO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "GOLBAT",
+            "SANDSLASH",
+            "POLIWRATH",
+            "RATICATE",
+            "HITMONCHAN"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "RATICATE",
+            "HYPNO",
+            "CHARIZARD"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "ARCANINE",
+            "GENGAR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 44,
+          "alt_palette": false,
+          "species": [
+            "GOLEM",
+            "JOLTEON",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "GENGAR"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "SNORLAX"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "MACHAMP",
+            "VICTREEBEL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "DUGTRIO",
+            "NINETALES",
+            "GOLBAT"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 44,
+          "alt_palette": false,
+          "species": [
+            "SCYTHER",
+            "ARBOK",
+            "GENGAR",
+            "GOLEM"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "EXEGGUTOR",
+            "KINGLER"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "RAICHU",
+            "SANDSLASH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "RATICATE",
+            "NIDOKING",
+            "PRIMEAPE",
+            "RAPIDASH"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "HITMONLEE",
+            "GOLBAT",
+            "GENGAR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "VENOMOTH",
+            "HITMONCHAN",
+            "MAROWAK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 45,
+          "alt_palette": false,
+          "species": [
+            "RHYDON",
+            "SLOWBRO",
+            "MACHAMP"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "ALAKAZAM"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 43,
+          "alt_palette": false,
+          "species": [
+            "LICKITUNG",
+            "CHARIZARD",
+            "GOLEM",
+            "MAGMAR",
+            "GYARADOS"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "fixed",
+          "level": 46,
+          "alt_palette": false,
+          "species": [
+            "STARMIE",
+            "RAICHU",
+            "MAROWAK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "226": {
+      "class": "COOLTRAINER_M",
+      "name": "COOLTRAINER\u2642",
+      "data_label": "CooltrainerMData",
+      "party_count": 10,
+      "grammars": [
+        "FE",
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "PARASECT",
+            "NIDOKING"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 56,
+          "alt_palette": false,
+          "species": [
+            "EXEGGUTOR",
+            "CLOYSTER",
+            "ARCANINE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 56,
+          "alt_palette": false,
+          "species": [
+            "KINGLER",
+            "HITMONLEE",
+            "DRAGONITE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "DUGTRIO",
+            "JOLTEON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 54,
+          "alt_palette": false,
+          "species": [
+            "BEEDRILL",
+            "SANDSLASH",
+            "GOLDUCK",
+            "CHARIZARD"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            44,
+            44,
+            44
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false
+          ],
+          "species": [
+            "FARFETCHD",
+            "VENOMOTH",
+            "VENUSAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            46,
+            46
+          ],
+          "alt_palette": [
+            true,
+            false
+          ],
+          "species": [
+            "PINSIR",
+            "KANGASKHAN"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "KABUTOPS",
+            "OMASTAR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "SANDSLASH",
+            "DUGTRIO"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 58,
+          "alt_palette": false,
+          "species": [
+            "SNORLAX"
+          ],
+          "moveset": null,
+          "party_size": 1
+        }
+      ]
+    },
+    "227": {
+      "class": "COOLTRAINER_F",
+      "name": "COOLTRAINER\u2640",
+      "data_label": "CooltrainerFData",
+      "party_count": 6,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 31,
+          "alt_palette": false,
+          "species": [
+            "WEEPINBELL",
+            "GLOOM",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "WIGGLYTUFF",
+            "SEAKING",
+            "VICTREEBEL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "PARASECT",
+            "DEWGONG",
+            "CHANSEY"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 54,
+          "alt_palette": false,
+          "species": [
+            "PIDGEOT",
+            "DRAGONITE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 57,
+          "alt_palette": false,
+          "species": [
+            "PERSIAN",
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "ARBOK",
+            "NIDOQUEEN",
+            "CLEFABLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "228": {
+      "class": "BRUNO",
+      "name": "BRUNO",
+      "data_label": "BrunoData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            63,
+            63,
+            69,
+            64,
+            64,
+            67
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HITMONCHAN",
+            "HITMONLEE",
+            "ONIX",
+            "FEAROW",
+            "PRIMEAPE",
+            "MACHAMP"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            74,
+            74,
+            79,
+            77,
+            77,
+            78
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HITMONCHAN",
+            "HITMONLEE",
+            "HARDENED_ONIX",
+            "FEAROW",
+            "PRIMEAPE",
+            "MACHAMP"
+          ],
+          "moveset": "CHAMP_ARENA_BRUNO_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            83,
+            83,
+            89,
+            87,
+            87,
+            88
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HITMONCHAN",
+            "HITMONLEE",
+            "HARDENED_ONIX",
+            "FEAROW",
+            "PRIMEAPE",
+            "MACHAMP"
+          ],
+          "moveset": "CHAMP_ARENA_BRUNO_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "229": {
+      "class": "BROCK",
+      "name": "BROCK",
+      "data_label": "BrockData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            12,
+            14
+          ],
+          "alt_palette": [
+            false,
+            false
+          ],
+          "species": [
+            "GEODUDE",
+            "ONIX"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            80,
+            79,
+            79,
+            79,
+            80,
+            89
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "GOLEM",
+            "KANGASKHAN",
+            "KABUTOPS",
+            "OMASTAR",
+            "AERODACTYL",
+            "HARDENED_ONIX"
+          ],
+          "moveset": "CHAMP_ARENA_BROCK_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            90,
+            89,
+            89,
+            89,
+            90,
+            99
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "GOLEM",
+            "KANGASKHAN",
+            "KABUTOPS",
+            "OMASTAR",
+            "AERODACTYL",
+            "HARDENED_ONIX"
+          ],
+          "moveset": "CHAMP_ARENA_BROCK_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "230": {
+      "class": "MISTY",
+      "name": "MISTY",
+      "data_label": "MistyData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            22,
+            23
+          ],
+          "alt_palette": [
+            false,
+            false
+          ],
+          "species": [
+            "STARYU",
+            "STARMIE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            80,
+            76,
+            76,
+            77,
+            77,
+            80
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "STARYU",
+            "SEAKING",
+            "SEADRA",
+            "WIGGLYTUFF",
+            "VAPOREON",
+            "STARMIE"
+          ],
+          "moveset": "CHAMP_ARENA_MISTY_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            90,
+            83,
+            86,
+            87,
+            87,
+            90
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "STARYU",
+            "SEAKING",
+            "SEADRA",
+            "WIGGLYTUFF",
+            "VAPOREON",
+            "STARMIE"
+          ],
+          "moveset": "CHAMP_ARENA_MISTY_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "231": {
+      "class": "LT_SURGE",
+      "name": "LT.SURGE",
+      "data_label": "LtSurgeData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            26,
+            25,
+            28
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "VOLTORB",
+            "MAGNEMITE",
+            "RAICHU"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            73,
+            73,
+            73,
+            74,
+            76,
+            77
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ELECTRODE",
+            "FLOATING_MAGNETON",
+            "ELECTABUZZ",
+            "JOLTEON",
+            "RAICHU",
+            "ZAPDOS"
+          ],
+          "moveset": "CHAMP_ARENA_SURGE_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            83,
+            83,
+            83,
+            84,
+            86,
+            87
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ELECTRODE",
+            "FLOATING_MAGNETON",
+            "ELECTABUZZ",
+            "JOLTEON",
+            "RAICHU",
+            "ZAPDOS"
+          ],
+          "moveset": "CHAMP_ARENA_SURGE_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "232": {
+      "class": "ERIKA",
+      "name": "ERIKA",
+      "data_label": "ErikaData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            35,
+            33,
+            37
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "VICTREEBEL",
+            "TANGELA",
+            "VILEPLUME"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            70,
+            70,
+            72,
+            72,
+            72,
+            75
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "VICTREEBEL",
+            "TANGELA",
+            "CHANSEY",
+            "BUTTERFREE",
+            "VENUSAUR",
+            "VILEPLUME"
+          ],
+          "moveset": "CHAMP_ARENA_ERIKA_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            80,
+            80,
+            82,
+            82,
+            82,
+            85
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "VICTREEBEL",
+            "TANGELA",
+            "CHANSEY",
+            "BUTTERFREE",
+            "VENUSAUR",
+            "VILEPLUME"
+          ],
+          "moveset": "CHAMP_ARENA_ERIKA_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "233": {
+      "class": "KOGA",
+      "name": "KOGA",
+      "data_label": "KogaData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            46,
+            47,
+            47,
+            50
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "TENTACRUEL",
+            "MUK",
+            "VENOMOTH",
+            "WEEZING"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            77,
+            77,
+            77,
+            79,
+            79,
+            80
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "TENTACRUEL",
+            "SCYTHER",
+            "MUK",
+            "PARASECT",
+            "VENOMOTH",
+            "FLOATING_WEEZING"
+          ],
+          "moveset": "CHAMP_ARENA_KOGA_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            87,
+            87,
+            87,
+            89,
+            89,
+            90
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "TENTACRUEL",
+            "SCYTHER",
+            "MUK",
+            "PARASECT",
+            "VENOMOTH",
+            "FLOATING_WEEZING"
+          ],
+          "moveset": "CHAMP_ARENA_KOGA_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "234": {
+      "class": "BLAINE",
+      "name": "BLAINE",
+      "data_label": "BlaineData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            59,
+            60,
+            60,
+            61,
+            62
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "NINETALES",
+            "MAGMAR",
+            "FLAREON",
+            "RAPIDASH",
+            "ARCANINE"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            72,
+            72,
+            72,
+            73,
+            73,
+            76
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "NINETALES",
+            "VOLCANIC_MAGMAR",
+            "FLAREON",
+            "RAPIDASH",
+            "ARCANINE",
+            "MOLTRES"
+          ],
+          "moveset": "CHAMP_ARENA_BLAINE_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            82,
+            82,
+            82,
+            83,
+            83,
+            86
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "NINETALES",
+            "VOLCANIC_MAGMAR",
+            "FLAREON",
+            "RAPIDASH",
+            "ARCANINE",
+            "MOLTRES"
+          ],
+          "moveset": "CHAMP_ARENA_BLAINE_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "235": {
+      "class": "SABRINA",
+      "name": "SABRINA",
+      "data_label": "SabrinaData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            55,
+            55,
+            55,
+            56,
+            58
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "KADABRA",
+            "MR_MIME",
+            "GOLDUCK",
+            "BUTTERFREE",
+            "ALAKAZAM"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            74,
+            74,
+            74,
+            76,
+            76,
+            78
+          ],
+          "alt_palette": [
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HYPNO",
+            "MR_MIME",
+            "GOLDUCK",
+            "ALAKAZAM",
+            "BUTTERFREE",
+            "ALAKAZAM"
+          ],
+          "moveset": "CHAMP_ARENA_SABRINA_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            84,
+            84,
+            84,
+            86,
+            86,
+            88
+          ],
+          "alt_palette": [
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HYPNO",
+            "MR_MIME",
+            "GOLDUCK",
+            "ALAKAZAM",
+            "BUTTERFREE",
+            "ALAKAZAM"
+          ],
+          "moveset": "CHAMP_ARENA_SABRINA_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "236": {
+      "class": "GENTLEMAN",
+      "name": "GENTLEMAN",
+      "data_label": "GentlemanData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 20,
+          "alt_palette": false,
+          "species": [
+            "GROWLITHE",
+            "DRATINI"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_M",
+            "NIDORAN_F",
+            "WEEPINBELL"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "GROWLITHE"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "ABRA",
+            "PONYTA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 21,
+          "alt_palette": false,
+          "species": [
+            "POLIWHIRL",
+            "PONYTA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "CUBONE",
+            "RAICHU"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 28,
+          "alt_palette": false,
+          "species": [
+            "PIKACHU",
+            "MAROWAK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "237": {
+      "class": "RIVAL2",
+      "name": null,
+      "data_label": "Rival2Data",
+      "party_count": 12,
+      "grammars": [
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            25,
+            25,
+            24,
+            27
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "TANGELA",
+            "LICKITUNG",
+            "MACHOKE",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            25,
+            25,
+            24,
+            27
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "RATICATE",
+            "PORYGON",
+            "WEEPINBELL",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            25,
+            25,
+            22,
+            27
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "BUTTERFREE",
+            "HITMONLEE",
+            "KADABRA",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 4
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            35,
+            35,
+            34,
+            36,
+            35
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "HITMONCHAN",
+            "JOLTEON",
+            "GYARADOS",
+            "KADABRA",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            35,
+            35,
+            34,
+            36,
+            35
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "KABUTOPS",
+            "FLAREON",
+            "SANDSLASH",
+            "ELECTRODE",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            35,
+            35,
+            34,
+            36,
+            35
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "SCYTHER",
+            "VAPOREON",
+            "ARCANINE",
+            "DODRIO",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            53,
+            53,
+            52,
+            50,
+            54
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "GOLBAT",
+            "GYARADOS",
+            "TANGELA",
+            "CHANSEY",
+            "CHARIZARD"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            53,
+            53,
+            52,
+            50,
+            54
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "FEAROW",
+            "DUGTRIO",
+            "GOLEM",
+            "SNORLAX",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            53,
+            53,
+            52,
+            50,
+            54
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "PIDGEOT",
+            "ELECTABUZZ",
+            "WEEZING",
+            "ALAKAZAM",
+            "VENUSAUR"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            62,
+            62,
+            63,
+            63,
+            63,
+            65
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "TENTACRUEL",
+            "MACHAMP",
+            "VICTREEBEL",
+            "GOLEM",
+            "ALAKAZAM",
+            "CHARIZARD"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            62,
+            62,
+            63,
+            63,
+            63,
+            65
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "RAICHU",
+            "NIDOKING",
+            "PERSIAN",
+            "RAPIDASH",
+            "AERODACTYL",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FF",
+          "level": [
+            62,
+            62,
+            63,
+            63,
+            63,
+            65
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "FEAROW",
+            "POLIWRATH",
+            "MAGNETON",
+            "WEEZING",
+            "GENGAR",
+            "VENUSAUR"
+          ],
+          "moveset": null,
+          "party_size": 6
+        }
+      ]
+    },
+    "238": {
+      "class": "RIVAL3",
+      "name": null,
+      "data_label": "Rival3Data",
+      "party_count": 9,
+      "grammars": [
+        "FD"
+      ],
+      "records": [
+        {
+          "grammar": "FD",
+          "level": [
+            69,
+            68,
+            68,
+            68,
+            69,
+            72
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ARTICUNO",
+            "ALAKAZAM",
+            "RHYDON",
+            "EXEGGUTOR",
+            "SNORLAX",
+            "CHARIZARD"
+          ],
+          "moveset": "ELITE_FOUR_RIVAL1_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            69,
+            68,
+            68,
+            68,
+            69,
+            72
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MOLTRES",
+            "ALAKAZAM",
+            "RHYDON",
+            "TAUROS",
+            "GENGAR",
+            "BLASTOISE"
+          ],
+          "moveset": "ELITE_FOUR_RIVAL2_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            69,
+            68,
+            68,
+            68,
+            69,
+            72
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ZAPDOS",
+            "ALAKAZAM",
+            "KINGLER",
+            "RHYDON",
+            "GYARADOS",
+            "VENUSAUR"
+          ],
+          "moveset": "ELITE_FOUR_RIVAL3_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            85,
+            84,
+            84,
+            86,
+            88,
+            90
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ARTICUNO",
+            "ALAKAZAM",
+            "RHYDON",
+            "EXEGGUTOR",
+            "SNORLAX",
+            "CHARIZARD"
+          ],
+          "moveset": "CHAMP_ARENA_RIVAL1_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            85,
+            84,
+            84,
+            86,
+            88,
+            90
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MOLTRES",
+            "ALAKAZAM",
+            "RHYDON",
+            "TAUROS",
+            "GENGAR",
+            "BLASTOISE"
+          ],
+          "moveset": "CHAMP_ARENA_RIVAL2_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            85,
+            84,
+            84,
+            86,
+            88,
+            90
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ZAPDOS",
+            "ALAKAZAM",
+            "KINGLER",
+            "RHYDON",
+            "GYARADOS",
+            "VENUSAUR"
+          ],
+          "moveset": "CHAMP_ARENA_RIVAL3_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            95,
+            94,
+            94,
+            96,
+            98,
+            100
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ARTICUNO",
+            "ALAKAZAM",
+            "RHYDON",
+            "EXEGGUTOR",
+            "SNORLAX",
+            "CHARIZARD"
+          ],
+          "moveset": "CHAMP_ARENA_RIVAL1_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            95,
+            94,
+            94,
+            96,
+            98,
+            100
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MOLTRES",
+            "ALAKAZAM",
+            "RHYDON",
+            "TAUROS",
+            "GENGAR",
+            "BLASTOISE"
+          ],
+          "moveset": "CHAMP_ARENA_RIVAL2_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            95,
+            94,
+            94,
+            96,
+            98,
+            100
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "ZAPDOS",
+            "ALAKAZAM",
+            "KINGLER",
+            "RHYDON",
+            "GYARADOS",
+            "VENUSAUR"
+          ],
+          "moveset": "CHAMP_ARENA_RIVAL3_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "239": {
+      "class": "LORELEI",
+      "name": "LORELEI",
+      "data_label": "LoreleiData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            62,
+            63,
+            63,
+            62,
+            63,
+            66
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "DEWGONG",
+            "CLOYSTER",
+            "SLOWBRO",
+            "JYNX",
+            "VAPOREON",
+            "LAPRAS"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            77,
+            78,
+            77,
+            78,
+            81,
+            82
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "DEWGONG",
+            "SLOWBRO",
+            "JYNX",
+            "WINTER_DRAGONAIR",
+            "LAPRAS",
+            "ARTICUNO"
+          ],
+          "moveset": "CHAMP_ARENA_LORELEI_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            87,
+            88,
+            87,
+            88,
+            91,
+            92
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "DEWGONG",
+            "SLOWBRO",
+            "JYNX",
+            "WINTER_DRAGONAIR",
+            "LAPRAS",
+            "ARTICUNO"
+          ],
+          "moveset": "CHAMP_ARENA_LORELEI_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "240": {
+      "class": "CHANNELER",
+      "name": "CHANNELER",
+      "data_label": "ChannelerData",
+      "party_count": 24,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 30,
+          "alt_palette": false,
+          "species": [
+            "JYNX",
+            "GASTLY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "HAUNTER",
+            "GENGAR",
+            "HYPNO"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "MEW",
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 35,
+          "alt_palette": false,
+          "species": [
+            "GASTLY"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 35,
+          "alt_palette": false,
+          "species": [
+            "GASTLY"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 33,
+          "alt_palette": false,
+          "species": [
+            "GASTLY",
+            "DROWZEE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 36,
+          "alt_palette": false,
+          "species": [
+            "HAUNTER"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 34,
+          "alt_palette": false,
+          "species": [
+            "GASTLY",
+            "CUBONE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 35,
+          "alt_palette": false,
+          "species": [
+            "HYPNO"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "HAUNTER"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 24,
+          "alt_palette": false,
+          "species": [
+            "MEW"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 34,
+          "alt_palette": false,
+          "species": [
+            "GASTLY",
+            "MR_MIME"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "LICKITUNG"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 35,
+          "alt_palette": false,
+          "species": [
+            "GASTLY",
+            "VENONAT",
+            "GASTLY"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 37,
+          "alt_palette": false,
+          "species": [
+            "JYNX"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 36,
+          "alt_palette": false,
+          "species": [
+            "KADABRA"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 50,
+          "alt_palette": false,
+          "species": [
+            "MR_MIME",
+            "NINETALES"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 51,
+          "alt_palette": false,
+          "species": [
+            "GENGAR"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "HYPNO",
+            "LAPRAS",
+            "GOLDUCK"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "241": {
+      "class": "AGATHA",
+      "name": "AGATHA",
+      "data_label": "AgathaData",
+      "party_count": 3,
+      "grammars": [
+        "FD",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            63,
+            63,
+            64,
+            65,
+            65,
+            68
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MAROWAK",
+            "MR_MIME",
+            "NINETALES",
+            "ARBOK",
+            "TANGELA",
+            "GENGAR"
+          ],
+          "moveset": null,
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            80,
+            80,
+            80,
+            81,
+            81,
+            83
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MAROWAK",
+            "MR_MIME",
+            "NINETALES",
+            "ARBOK",
+            "TANGELA",
+            "GENGAR"
+          ],
+          "moveset": "CHAMP_ARENA_AGATHA_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            90,
+            90,
+            90,
+            91,
+            91,
+            93
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "MAROWAK",
+            "MR_MIME",
+            "NINETALES",
+            "ARBOK",
+            "TANGELA",
+            "GENGAR"
+          ],
+          "moveset": "CHAMP_ARENA_AGATHA_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "242": {
+      "class": "LANCE",
+      "name": "LANCE",
+      "data_label": "LanceData",
+      "party_count": 3,
+      "grammars": [
+        "FD"
+      ],
+      "records": [
+        {
+          "grammar": "FD",
+          "level": [
+            66,
+            66,
+            67,
+            68,
+            67,
+            69
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "GYARADOS",
+            "DRAGONAIR",
+            "SEADRA",
+            "DRAGONITE",
+            "AERODACTYL",
+            "DRAGONITE"
+          ],
+          "moveset": "ELITE_FOUR_LANCE_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            76,
+            76,
+            77,
+            78,
+            77,
+            79
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "GYARADOS",
+            "WINTER_DRAGONAIR",
+            "SEADRA",
+            "DRAGONITE",
+            "AERODACTYL",
+            "DRAGONITE"
+          ],
+          "moveset": "CHAMP_ARENA_LANCE_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            86,
+            86,
+            87,
+            88,
+            87,
+            89
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "GYARADOS",
+            "WINTER_DRAGONAIR",
+            "SEADRA",
+            "DRAGONITE",
+            "AERODACTYL",
+            "DRAGONITE"
+          ],
+          "moveset": "CHAMP_ARENA_LANCE_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "243": {
+      "class": "COOL_KID",
+      "name": "COOL KID",
+      "data_label": "CoolKidData",
+      "party_count": 4,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 8,
+          "alt_palette": false,
+          "species": [
+            "EKANS",
+            "SPEAROW",
+            "ABRA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_M",
+            "PSYDUCK"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "NIDORAN_F",
+            "KRABBY"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 27,
+          "alt_palette": false,
+          "species": [
+            "KADABRA",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "244": {
+      "class": "FIREFIGHTER",
+      "name": "FIREFIGHTER",
+      "data_label": "FireFighterData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 55,
+          "alt_palette": false,
+          "species": [
+            "RAPIDASH",
+            "TENTACRUEL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "ELECTRODE",
+            "ARCANINE",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "FLAREON",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 47,
+          "alt_palette": false,
+          "species": [
+            "RAPIDASH",
+            "DEWGONG",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 54,
+          "alt_palette": false,
+          "species": [
+            "ARCANINE",
+            "BLASTOISE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 53,
+          "alt_palette": false,
+          "species": [
+            "MACHAMP",
+            "CHARIZARD",
+            "VAPOREON"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 54,
+          "alt_palette": false,
+          "species": [
+            "MAGMAR",
+            "FLAREON",
+            "SEADRA"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "245": {
+      "class": "RANGER",
+      "name": "RANGER",
+      "data_label": "RangerData",
+      "party_count": 3,
+      "grammars": [
+        "FE",
+        "FF"
+      ],
+      "records": [
+        {
+          "grammar": "FF",
+          "level": [
+            49,
+            47,
+            48,
+            49,
+            49
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "species": [
+            "CLOYSTER",
+            "KANGASKHAN",
+            "PRIMEAPE",
+            "DRAGONAIR",
+            "VAPOREON"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            49,
+            47,
+            48,
+            49,
+            49
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            false,
+            false
+          ],
+          "species": [
+            "LICKITUNG",
+            "GENGAR",
+            "RHYDON",
+            "OMASTAR",
+            "SNORLAX"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            48,
+            48,
+            48,
+            50,
+            99,
+            100
+          ],
+          "alt_palette": [
+            false,
+            false,
+            true,
+            true,
+            true,
+            true
+          ],
+          "species": [
+            "SEAKING",
+            "KINGLER",
+            "NIDOQUEEN",
+            "NIDOKING",
+            "DITTO",
+            "MAGIKARP"
+          ],
+          "moveset": null,
+          "party_size": 6
+        }
+      ]
+    },
+    "246": {
+      "class": "RANGER_F",
+      "name": "RANGER",
+      "data_label": "RangerFData",
+      "party_count": 2,
+      "grammars": [
+        "FE"
+      ],
+      "records": [
+        {
+          "grammar": "FE",
+          "level": [
+            49,
+            47,
+            48,
+            49,
+            49
+          ],
+          "alt_palette": [
+            false,
+            false,
+            false,
+            true,
+            false
+          ],
+          "species": [
+            "VAPOREON",
+            "DRAGONAIR",
+            "WIGGLYTUFF",
+            "BUTTERFREE",
+            "VENUSAUR"
+          ],
+          "moveset": null,
+          "party_size": 5
+        },
+        {
+          "grammar": "FE",
+          "level": [
+            49,
+            47,
+            48,
+            49,
+            49
+          ],
+          "alt_palette": [
+            false,
+            true,
+            false,
+            false,
+            true
+          ],
+          "species": [
+            "CLEFABLE",
+            "VILEPLUME",
+            "JYNX",
+            "CHANSEY",
+            "CHANSEY"
+          ],
+          "moveset": null,
+          "party_size": 5
+        }
+      ]
+    },
+    "247": {
+      "class": "ROOKIE",
+      "name": "ROOKIE",
+      "data_label": "RookieData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "VULPIX",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "PIDGEY",
+            "KRABBY",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EEVEE",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EXEGGCUTE",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE",
+            "ABRA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "ABRA",
+            "CHARMANDER",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "248": {
+      "class": "SOLDIER",
+      "name": "SOLDIER",
+      "data_label": "SoldierData",
+      "party_count": 6,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 25,
+          "alt_palette": false,
+          "species": [
+            "ELECTABUZZ"
+          ],
+          "moveset": null,
+          "party_size": 1
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "PIKACHU",
+            "TENTACOOL"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 47,
+          "alt_palette": false,
+          "species": [
+            "MAGMAR",
+            "KANGASKHAN",
+            "POLIWRATH"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 49,
+          "alt_palette": false,
+          "species": [
+            "ARCANINE",
+            "VAPOREON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 65,
+          "alt_palette": false,
+          "species": [
+            "RHYDON",
+            "VENOMOTH"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 65,
+          "alt_palette": false,
+          "species": [
+            "ARCANINE",
+            "OMASTAR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        }
+      ]
+    },
+    "249": {
+      "class": "CHIEF",
+      "name": "CHIEF",
+      "data_label": "ChiefData",
+      "party_count": 1,
+      "grammars": [
+        "FE"
+      ],
+      "records": [
+        {
+          "grammar": "FE",
+          "level": [
+            70,
+            70,
+            70,
+            72,
+            73
+          ],
+          "alt_palette": [
+            true,
+            true,
+            true,
+            false,
+            true
+          ],
+          "species": [
+            "JOLTEON",
+            "KABUTOPS",
+            "ALAKAZAM",
+            "GOLBAT",
+            "TENTACRUEL"
+          ],
+          "moveset": null,
+          "party_size": 5
+        }
+      ]
+    },
+    "250": {
+      "class": "GYM_GUIDE",
+      "name": "GYM GUIDE",
+      "data_label": "GymGuideData",
+      "party_count": 2,
+      "grammars": [
+        "FD"
+      ],
+      "records": [
+        {
+          "grammar": "FD",
+          "level": [
+            81,
+            81,
+            82,
+            83,
+            83,
+            85
+          ],
+          "alt_palette": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "species": [
+            "CHANSEY",
+            "SNORLAX",
+            "CLOYSTER",
+            "ALAKAZAM",
+            "TAUROS",
+            "MISSINGNO"
+          ],
+          "moveset": "CHAMP_ARENA_GYM_GUIDE_MOVESET",
+          "party_size": 6
+        },
+        {
+          "grammar": "FD",
+          "level": [
+            91,
+            91,
+            92,
+            93,
+            93,
+            95
+          ],
+          "alt_palette": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "species": [
+            "CHANSEY",
+            "SNORLAX",
+            "CLOYSTER",
+            "ALAKAZAM",
+            "TAUROS",
+            "MISSINGNO"
+          ],
+          "moveset": "CHAMP_ARENA_GYM_GUIDE_MOVESET",
+          "party_size": 6
+        }
+      ]
+    },
+    "251": {
+      "class": "FITNESS_GIRL",
+      "name": "FITNESS PRO",
+      "data_label": "RookieData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "VULPIX",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "PIDGEY",
+            "KRABBY",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EEVEE",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EXEGGCUTE",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE",
+            "ABRA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "ABRA",
+            "CHARMANDER",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "252": {
+      "class": "SPRINTER",
+      "name": "SPRINTER",
+      "data_label": "RookieData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "VULPIX",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "PIDGEY",
+            "KRABBY",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EEVEE",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EXEGGCUTE",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE",
+            "ABRA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "ABRA",
+            "CHARMANDER",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    },
+    "253": {
+      "class": "FIST_FIGHTER",
+      "name": "FISTFIGHTER",
+      "data_label": "RookieData",
+      "party_count": 7,
+      "grammars": [
+        "fixed"
+      ],
+      "records": [
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "RATTATA",
+            "VULPIX",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 14,
+          "alt_palette": false,
+          "species": [
+            "PIDGEY",
+            "KRABBY",
+            "BULBASAUR"
+          ],
+          "moveset": null,
+          "party_size": 3
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EEVEE",
+            "IVYSAUR"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 17,
+          "alt_palette": false,
+          "species": [
+            "EXEGGCUTE",
+            "CHARMELEON"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 18,
+          "alt_palette": false,
+          "species": [
+            "SQUIRTLE",
+            "ABRA"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 19,
+          "alt_palette": false,
+          "species": [
+            "BELLSPROUT",
+            "WARTORTLE"
+          ],
+          "moveset": null,
+          "party_size": 2
+        },
+        {
+          "grammar": "fixed",
+          "level": 23,
+          "alt_palette": false,
+          "species": [
+            "ABRA",
+            "CHARMANDER",
+            "SQUIRTLE"
+          ],
+          "moveset": null,
+          "party_size": 3
+        }
+      ]
+    }
+  }
+}

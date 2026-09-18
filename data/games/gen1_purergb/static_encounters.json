@@ -1,0 +1,304 @@
+{
+  "schema": "gen1-statics-v1",
+  "source": "purergb 7e7a46535ca3",
+  "statics": {
+    "1": [
+      112
+    ],
+    "23": [
+      132
+    ],
+    "27": [
+      132
+    ],
+    "69": [
+      75
+    ],
+    "83": [
+      6,
+      75,
+      141
+    ],
+    "107": [
+      181
+    ],
+    "116": [
+      51,
+      73
+    ],
+    "147": [
+      145
+    ],
+    "162": [
+      74
+    ],
+    "192": [
+      139
+    ],
+    "194": [
+      73
+    ],
+    "227": [
+      131
+    ]
+  },
+  "cites": {
+    "1": [
+      "scripts/ViridianCity.asm:68"
+    ],
+    "23": [
+      "scripts/Route12.asm:46"
+    ],
+    "27": [
+      "scripts/Route16.asm:50"
+    ],
+    "69": [
+      "data/maps/objects/PowerPlantRoof.asm:18"
+    ],
+    "83": [
+      "data/maps/objects/PowerPlant.asm:44",
+      "data/maps/objects/PowerPlant.asm:45",
+      "data/maps/objects/PowerPlant.asm:46",
+      "data/maps/objects/PowerPlant.asm:47",
+      "data/maps/objects/PowerPlant.asm:48",
+      "data/maps/objects/PowerPlant.asm:49",
+      "data/maps/objects/PowerPlant.asm:50",
+      "data/maps/objects/PowerPlant.asm:51",
+      "data/maps/objects/PowerPlant.asm:52"
+    ],
+    "107": [
+      "scripts/CeruleanRocketHouseB1F.asm:95"
+    ],
+    "116": [
+      "scripts/CinnabarVolcano.asm:1498",
+      "scripts/CinnabarVolcano.asm:1823"
+    ],
+    "147": [
+      "scripts/PokemonTower6F.asm:30"
+    ],
+    "162": [
+      "scripts/SeafoamIslandsB4F.asm:278"
+    ],
+    "192": [
+      "scripts/SeafoamIslands1F.asm:464"
+    ],
+    "194": [
+      "data/maps/objects/VictoryRoad2F.asm:36"
+    ],
+    "227": [
+      "scripts/CeruleanCaveB1F.asm:81"
+    ]
+  },
+  "records": [
+    {
+      "map_id": 1,
+      "map_const": "VIRIDIAN_CITY",
+      "species": 112,
+      "species_const": "WEEDLE",
+      "level": 5,
+      "event_flag": null,
+      "kind": "script",
+      "cite": "scripts/ViridianCity.asm:68"
+    },
+    {
+      "map_id": 23,
+      "map_const": "ROUTE_12",
+      "species": 132,
+      "species_const": "SNORLAX",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_ROUTE12_SNORLAX",
+      "kind": "script",
+      "cite": "scripts/Route12.asm:46"
+    },
+    {
+      "map_id": 27,
+      "map_const": "ROUTE_16",
+      "species": 132,
+      "species_const": "SNORLAX",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_ROUTE16_SNORLAX",
+      "kind": "script",
+      "cite": "scripts/Route16.asm:50"
+    },
+    {
+      "map_id": 69,
+      "map_const": "POWER_PLANT_ROOF",
+      "species": 75,
+      "species_const": "ZAPDOS",
+      "level": 50,
+      "event_flag": "EVENT_BEAT_ZAPDOS",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlantRoof.asm:18"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 6,
+      "species_const": "VOLTORB",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_0",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:44"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 6,
+      "species_const": "VOLTORB",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_1",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:45"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 6,
+      "species_const": "VOLTORB",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_2",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:46"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 6,
+      "species_const": "VOLTORB",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_4",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:48"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 6,
+      "species_const": "VOLTORB",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_5",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:49"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 6,
+      "species_const": "VOLTORB",
+      "level": 40,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_7",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:51"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 75,
+      "species_const": "ZAPDOS",
+      "level": 50,
+      "event_flag": "EVENT_BEAT_ZAPDOS",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:52"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 141,
+      "species_const": "ELECTRODE",
+      "level": 43,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_3",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:47"
+    },
+    {
+      "map_id": 83,
+      "map_const": "POWER_PLANT",
+      "species": 141,
+      "species_const": "ELECTRODE",
+      "level": 43,
+      "event_flag": "EVENT_BEAT_POWER_PLANT_VOLTORB_6",
+      "kind": "object_event",
+      "cite": "data/maps/objects/PowerPlant.asm:50"
+    },
+    {
+      "map_id": 107,
+      "map_const": "CERULEAN_ROCKET_HOUSE_B1F",
+      "species": 181,
+      "species_const": "MISSINGNO",
+      "level": 120,
+      "event_flag": null,
+      "kind": "script",
+      "cite": "scripts/CeruleanRocketHouseB1F.asm:95"
+    },
+    {
+      "map_id": 116,
+      "map_const": "CINNABAR_VOLCANO",
+      "species": 51,
+      "species_const": "MAGMAR",
+      "level": 45,
+      "event_flag": "EVENT_DEFEATED_VOLCANO_MAGMAR",
+      "kind": "script",
+      "cite": "scripts/CinnabarVolcano.asm:1498"
+    },
+    {
+      "map_id": 116,
+      "map_const": "CINNABAR_VOLCANO",
+      "species": 73,
+      "species_const": "MOLTRES",
+      "level": 50,
+      "event_flag": "EVENT_BEAT_MOLTRES",
+      "kind": "script",
+      "cite": "scripts/CinnabarVolcano.asm:1823"
+    },
+    {
+      "map_id": 147,
+      "map_const": "POKEMON_TOWER_6F",
+      "species": 145,
+      "species_const": "RESTLESS_SOUL",
+      "level": 30,
+      "event_flag": "EVENT_BEAT_GHOST_MAROWAK",
+      "kind": "script",
+      "cite": "scripts/PokemonTower6F.asm:30"
+    },
+    {
+      "map_id": 162,
+      "map_const": "SEAFOAM_ISLANDS_B4F",
+      "species": 74,
+      "species_const": "ARTICUNO",
+      "level": 50,
+      "event_flag": "EVENT_BEAT_ARTICUNO",
+      "kind": "script",
+      "cite": "scripts/SeafoamIslandsB4F.asm:278"
+    },
+    {
+      "map_id": 192,
+      "map_const": "SEAFOAM_ISLANDS_1F",
+      "species": 139,
+      "species_const": "CLOYSTER",
+      "level": 45,
+      "event_flag": "EVENT_DRAGONAIR_EVENT_BEAT_CLOYSTER",
+      "kind": "script",
+      "cite": "scripts/SeafoamIslands1F.asm:464"
+    },
+    {
+      "map_id": 194,
+      "map_const": "VICTORY_ROAD_2F",
+      "species": 73,
+      "species_const": "MOLTRES",
+      "level": 50,
+      "event_flag": "EVENT_BEAT_MOLTRES",
+      "kind": "object_event",
+      "cite": "data/maps/objects/VictoryRoad2F.asm:36"
+    },
+    {
+      "map_id": 227,
+      "map_const": "CERULEAN_CAVE_B1F",
+      "species": 131,
+      "species_const": "MEWTWO",
+      "level": 70,
+      "event_flag": "EVENT_BEAT_MEWTWO",
+      "kind": "script",
+      "cite": "scripts/CeruleanCaveB1F.asm:81"
+    }
+  ]
+}

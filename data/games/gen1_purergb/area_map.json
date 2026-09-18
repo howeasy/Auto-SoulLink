@@ -1,0 +1,994 @@
+{
+  "0": {
+    "area_id": "pallet_town",
+    "name": "Pallet Town"
+  },
+  "1": {
+    "area_id": "viridian_city",
+    "name": "Viridian City"
+  },
+  "2": {
+    "area_id": "pewter_city",
+    "name": "Pewter City"
+  },
+  "3": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean City"
+  },
+  "4": {
+    "area_id": "lavender_town",
+    "name": "Lavender Town"
+  },
+  "5": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion City"
+  },
+  "6": {
+    "area_id": "celadon_city",
+    "name": "Celadon City"
+  },
+  "7": {
+    "area_id": "saffron_city",
+    "name": "Saffron City"
+  },
+  "8": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia City"
+  },
+  "9": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Island"
+  },
+  "10": {
+    "area_id": "indigo_plateau",
+    "name": "Indigo Plateau"
+  },
+  "11": {
+    "area_id": "unused_map_0b",
+    "name": "Unused Map 0B"
+  },
+  "12": {
+    "area_id": "route_1",
+    "name": "Route 1"
+  },
+  "13": {
+    "area_id": "route_2",
+    "name": "Route 2"
+  },
+  "14": {
+    "area_id": "route_3",
+    "name": "Route 3"
+  },
+  "15": {
+    "area_id": "route_4",
+    "name": "Route 4"
+  },
+  "16": {
+    "area_id": "route_5",
+    "name": "Route 5"
+  },
+  "17": {
+    "area_id": "route_6",
+    "name": "Route 6"
+  },
+  "18": {
+    "area_id": "route_7",
+    "name": "Route 7"
+  },
+  "19": {
+    "area_id": "route_8",
+    "name": "Route 8"
+  },
+  "20": {
+    "area_id": "route_9",
+    "name": "Route 9"
+  },
+  "21": {
+    "area_id": "route_10",
+    "name": "Route 10"
+  },
+  "22": {
+    "area_id": "route_11",
+    "name": "Route 11"
+  },
+  "23": {
+    "area_id": "route_12",
+    "name": "Route 12"
+  },
+  "24": {
+    "area_id": "route_13",
+    "name": "Route 13"
+  },
+  "25": {
+    "area_id": "route_14",
+    "name": "Route 14"
+  },
+  "26": {
+    "area_id": "route_15",
+    "name": "Route 15"
+  },
+  "27": {
+    "area_id": "route_16",
+    "name": "Route 16"
+  },
+  "28": {
+    "area_id": "route_17",
+    "name": "Route 17"
+  },
+  "29": {
+    "area_id": "route_18",
+    "name": "Route 18"
+  },
+  "30": {
+    "area_id": "route_19",
+    "name": "Route 19"
+  },
+  "31": {
+    "area_id": "route_20",
+    "name": "Route 20"
+  },
+  "32": {
+    "area_id": "route_21",
+    "name": "Route 21"
+  },
+  "33": {
+    "area_id": "route_22",
+    "name": "Route 22"
+  },
+  "34": {
+    "area_id": "route_23",
+    "name": "Route 23"
+  },
+  "35": {
+    "area_id": "route_24",
+    "name": "Route 24"
+  },
+  "36": {
+    "area_id": "route_25",
+    "name": "Route 25"
+  },
+  "37": {
+    "area_id": "pallet_town",
+    "name": "Red's House 1F"
+  },
+  "38": {
+    "area_id": "pallet_town",
+    "name": "Red's House 2F"
+  },
+  "39": {
+    "area_id": "pallet_town",
+    "name": "Blue's House"
+  },
+  "40": {
+    "area_id": "pallet_town",
+    "name": "Oak's Lab"
+  },
+  "41": {
+    "area_id": "viridian_city",
+    "name": "Viridian Pokecenter"
+  },
+  "42": {
+    "area_id": "viridian_city",
+    "name": "Viridian Mart"
+  },
+  "43": {
+    "area_id": "viridian_city",
+    "name": "Viridian School House"
+  },
+  "44": {
+    "area_id": "viridian_city",
+    "name": "Viridian Nickname House"
+  },
+  "45": {
+    "area_id": "viridian_city",
+    "name": "Viridian Gym"
+  },
+  "46": {
+    "area_id": "digletts_cave",
+    "name": "Diglett's Cave (Route 2)"
+  },
+  "47": {
+    "area_id": "viridian_forest",
+    "name": "Viridian Forest North Gate"
+  },
+  "48": {
+    "area_id": "route_2",
+    "name": "Route 2 Trade House"
+  },
+  "49": {
+    "area_id": "route_2",
+    "name": "Route 2 Gate"
+  },
+  "50": {
+    "area_id": "viridian_forest",
+    "name": "Viridian Forest South Gate"
+  },
+  "51": {
+    "area_id": "viridian_forest",
+    "name": "Viridian Forest"
+  },
+  "52": {
+    "area_id": "pewter_city",
+    "name": "Museum 1f"
+  },
+  "53": {
+    "area_id": "pewter_city",
+    "name": "Museum 2f"
+  },
+  "54": {
+    "area_id": "pewter_city",
+    "name": "Pewter Gym"
+  },
+  "55": {
+    "area_id": "pewter_city",
+    "name": "Pewter Nidoran House"
+  },
+  "56": {
+    "area_id": "pewter_city",
+    "name": "Pewter Mart"
+  },
+  "57": {
+    "area_id": "pewter_city",
+    "name": "Pewter Speech House"
+  },
+  "58": {
+    "area_id": "pewter_city",
+    "name": "Pewter Pokecenter"
+  },
+  "59": {
+    "area_id": "mt_moon",
+    "name": "Mt. Moon"
+  },
+  "60": {
+    "area_id": "mt_moon",
+    "name": "Mt. Moon"
+  },
+  "61": {
+    "area_id": "mt_moon",
+    "name": "Mt. Moon"
+  },
+  "62": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Trashed House"
+  },
+  "63": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Trade House"
+  },
+  "64": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Pokecenter"
+  },
+  "65": {
+    "area_id": "cerulean_gym",
+    "name": "Cerulean Gym"
+  },
+  "66": {
+    "area_id": "cerulean_city",
+    "name": "Bike Shop"
+  },
+  "67": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Mart"
+  },
+  "68": {
+    "area_id": "mt_moon_pokecenter",
+    "name": "Mt. Moon Pokecenter"
+  },
+  "69": {
+    "area_id": "power_plant",
+    "name": "Power Plant Roof"
+  },
+  "70": {
+    "area_id": "route_5",
+    "name": "Route 5 Gate"
+  },
+  "71": {
+    "area_id": "route_5",
+    "name": "Underground Path Route 5"
+  },
+  "72": {
+    "area_id": "route_5",
+    "name": "Daycare"
+  },
+  "73": {
+    "area_id": "route_6",
+    "name": "Route 6 Gate"
+  },
+  "74": {
+    "area_id": "route_6",
+    "name": "Underground Path Route 6"
+  },
+  "75": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Fitness Club"
+  },
+  "76": {
+    "area_id": "route_7",
+    "name": "Route 7 Gate"
+  },
+  "77": {
+    "area_id": "route_7",
+    "name": "Underground Path Route 7"
+  },
+  "78": {
+    "area_id": "celadon_city",
+    "name": "Celadon Back Alley"
+  },
+  "79": {
+    "area_id": "route_8",
+    "name": "Route 8 Gate"
+  },
+  "80": {
+    "area_id": "route_8",
+    "name": "Underground Path Route 8"
+  },
+  "81": {
+    "area_id": "rock_tunnel_pokecenter",
+    "name": "Rock Tunnel Pokecenter"
+  },
+  "82": {
+    "area_id": "rock_tunnel",
+    "name": "Rock Tunnel"
+  },
+  "83": {
+    "area_id": "power_plant",
+    "name": "Power Plant"
+  },
+  "84": {
+    "area_id": "route_11",
+    "name": "Route 11 Gate 1f"
+  },
+  "85": {
+    "area_id": "digletts_cave",
+    "name": "Diglett's Cave (Route 11)"
+  },
+  "86": {
+    "area_id": "route_11",
+    "name": "Route 11 Gate 2f"
+  },
+  "87": {
+    "area_id": "route_12",
+    "name": "Route 12 Gate 1f"
+  },
+  "88": {
+    "area_id": "route_25",
+    "name": "Bills House"
+  },
+  "89": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Pokecenter"
+  },
+  "90": {
+    "area_id": "vermilion_city",
+    "name": "Pokemon Fan Club"
+  },
+  "91": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Mart"
+  },
+  "92": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Gym"
+  },
+  "93": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Pidgey House"
+  },
+  "94": {
+    "area_id": "vermilion_dock",
+    "name": "Vermilion Dock"
+  },
+  "95": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne 1F"
+  },
+  "96": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne 2F"
+  },
+  "97": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne 3F"
+  },
+  "98": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne B1F"
+  },
+  "99": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne Bow"
+  },
+  "100": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne Kitchen"
+  },
+  "101": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne Captain's Room"
+  },
+  "102": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne 1F Rooms"
+  },
+  "103": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne 2F Rooms"
+  },
+  "104": {
+    "area_id": "vermilion_city",
+    "name": "S.S. Anne B1F Rooms"
+  },
+  "105": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Old Rod House"
+  },
+  "106": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Rocket House 1f"
+  },
+  "107": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Rocket House B1f"
+  },
+  "108": {
+    "area_id": "victory_road",
+    "name": "Victory Road"
+  },
+  "109": {
+    "area_id": "viridian_city",
+    "name": "Viridian School House B1f"
+  },
+  "110": {
+    "area_id": "bills_garden",
+    "name": "Bill's Garden"
+  },
+  "111": {
+    "area_id": "secret_lab",
+    "name": "Secret Lab"
+  },
+  "112": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "113": {
+    "area_id": "indigo_plateau",
+    "name": "Lance's Room"
+  },
+  "114": {
+    "area_id": "indigo_plateau",
+    "name": "Champ Arena"
+  },
+  "115": {
+    "area_id": "diamond_mine",
+    "name": "Diamond Mine"
+  },
+  "116": {
+    "area_id": "cinnabar_volcano",
+    "name": "Cinnabar Volcano"
+  },
+  "117": {
+    "area_id": "cinnabar_volcano_west",
+    "name": "Cinnabar Volcano West"
+  },
+  "118": {
+    "area_id": "indigo_plateau",
+    "name": "Hall Of Fame"
+  },
+  "119": {
+    "area_id": "route_5",
+    "name": "Underground Path North South"
+  },
+  "120": {
+    "area_id": "indigo_plateau",
+    "name": "Champion's Room"
+  },
+  "121": {
+    "area_id": "route_7",
+    "name": "Underground Path West East"
+  },
+  "122": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart 1f"
+  },
+  "123": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart 2f"
+  },
+  "124": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart 3f"
+  },
+  "125": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart 4f"
+  },
+  "126": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart Roof"
+  },
+  "127": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart Elevator"
+  },
+  "128": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mansion 1f"
+  },
+  "129": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mansion 2f"
+  },
+  "130": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mansion 3f"
+  },
+  "131": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mansion Roof"
+  },
+  "132": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mansion Roof House"
+  },
+  "133": {
+    "area_id": "celadon_city",
+    "name": "Celadon Pokecenter"
+  },
+  "134": {
+    "area_id": "celadon_city",
+    "name": "Celadon Gym"
+  },
+  "135": {
+    "area_id": "celadon_city",
+    "name": "Game Corner"
+  },
+  "136": {
+    "area_id": "celadon_city",
+    "name": "Celadon Mart 5f"
+  },
+  "137": {
+    "area_id": "celadon_city",
+    "name": "Game Corner Prize Room"
+  },
+  "138": {
+    "area_id": "celadon_city",
+    "name": "Celadon Diner"
+  },
+  "139": {
+    "area_id": "celadon_city",
+    "name": "Celadon Chief House"
+  },
+  "140": {
+    "area_id": "celadon_city",
+    "name": "Celadon Hotel"
+  },
+  "141": {
+    "area_id": "lavender_town",
+    "name": "Lavender Pokecenter"
+  },
+  "142": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "143": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "144": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "145": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "146": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "147": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "148": {
+    "area_id": "pokemon_tower",
+    "name": "Pokemon Tower"
+  },
+  "149": {
+    "area_id": "lavender_town",
+    "name": "Mr. Fuji's House"
+  },
+  "150": {
+    "area_id": "lavender_town",
+    "name": "Lavender Mart"
+  },
+  "151": {
+    "area_id": "lavender_town",
+    "name": "Lavender Cubone House"
+  },
+  "152": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Mart"
+  },
+  "153": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Bills Grandpas House"
+  },
+  "154": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Pokecenter"
+  },
+  "155": {
+    "area_id": "fuchsia_city",
+    "name": "Warden's House"
+  },
+  "156": {
+    "area_id": "safari_zone_center",
+    "name": "Safari Zone Gate"
+  },
+  "157": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Gym"
+  },
+  "158": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Meeting Room"
+  },
+  "159": {
+    "area_id": "seafoam_islands",
+    "name": "Seafoam Islands"
+  },
+  "160": {
+    "area_id": "seafoam_islands",
+    "name": "Seafoam Islands"
+  },
+  "161": {
+    "area_id": "seafoam_islands",
+    "name": "Seafoam Islands"
+  },
+  "162": {
+    "area_id": "seafoam_islands",
+    "name": "Seafoam Islands"
+  },
+  "163": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Old Rod House"
+  },
+  "164": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Good Rod House"
+  },
+  "165": {
+    "area_id": "pokemon_mansion",
+    "name": "Pokemon Mansion"
+  },
+  "166": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Gym"
+  },
+  "167": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Lab"
+  },
+  "168": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Lab Trade Room"
+  },
+  "169": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Lab Metronome Room"
+  },
+  "170": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Lab Fossil Room"
+  },
+  "171": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Pokecenter"
+  },
+  "172": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Mart"
+  },
+  "173": {
+    "area_id": "indigo_plateau",
+    "name": "Type Guy's House"
+  },
+  "174": {
+    "area_id": "indigo_plateau",
+    "name": "Indigo Plateau Lobby"
+  },
+  "175": {
+    "area_id": "saffron_city",
+    "name": "Copycat's House 1F"
+  },
+  "176": {
+    "area_id": "saffron_city",
+    "name": "Copycat's House 2F"
+  },
+  "177": {
+    "area_id": "saffron_city",
+    "name": "Fighting Dojo"
+  },
+  "178": {
+    "area_id": "saffron_city",
+    "name": "Saffron Gym"
+  },
+  "179": {
+    "area_id": "saffron_city",
+    "name": "Saffron Pidgey House"
+  },
+  "180": {
+    "area_id": "saffron_city",
+    "name": "Saffron Mart"
+  },
+  "181": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "182": {
+    "area_id": "saffron_city",
+    "name": "Saffron Pokecenter"
+  },
+  "183": {
+    "area_id": "route_8",
+    "name": "Mr. Psychic's House"
+  },
+  "184": {
+    "area_id": "route_15",
+    "name": "Route 15 Gate 1f"
+  },
+  "185": {
+    "area_id": "route_15",
+    "name": "Route 15 Gate 2f"
+  },
+  "186": {
+    "area_id": "route_16",
+    "name": "Route 16 Gate 1f"
+  },
+  "187": {
+    "area_id": "route_16",
+    "name": "Route 16 Gate 2f"
+  },
+  "188": {
+    "area_id": "route_16",
+    "name": "Route 16 Fly House"
+  },
+  "189": {
+    "area_id": "route_12",
+    "name": "Route 12 Super Rod House"
+  },
+  "190": {
+    "area_id": "route_18",
+    "name": "Route 18 Gate 1f"
+  },
+  "191": {
+    "area_id": "route_18",
+    "name": "Route 18 Gate 2f"
+  },
+  "192": {
+    "area_id": "seafoam_islands",
+    "name": "Seafoam Islands"
+  },
+  "193": {
+    "area_id": "route_22",
+    "name": "Route 22 Gate"
+  },
+  "194": {
+    "area_id": "victory_road",
+    "name": "Victory Road"
+  },
+  "195": {
+    "area_id": "route_12",
+    "name": "Route 12 Gate 2f"
+  },
+  "196": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Trade House"
+  },
+  "197": {
+    "area_id": "digletts_cave",
+    "name": "Diglett's Cave"
+  },
+  "198": {
+    "area_id": "victory_road",
+    "name": "Victory Road"
+  },
+  "199": {
+    "area_id": "rocket_hideout",
+    "name": "Rocket Hideout"
+  },
+  "200": {
+    "area_id": "rocket_hideout",
+    "name": "Rocket Hideout"
+  },
+  "201": {
+    "area_id": "rocket_hideout",
+    "name": "Rocket Hideout"
+  },
+  "202": {
+    "area_id": "rocket_hideout",
+    "name": "Rocket Hideout"
+  },
+  "203": {
+    "area_id": "rocket_hideout",
+    "name": "Rocket Hideout"
+  },
+  "204": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia Tree Deleter House"
+  },
+  "205": {
+    "area_id": "cinnabar_island",
+    "name": "Fossil Guy's House"
+  },
+  "206": {
+    "area_id": "unused_map_ce",
+    "name": "Unused Map CE"
+  },
+  "207": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "208": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "209": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "210": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "211": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "212": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "213": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "214": {
+    "area_id": "pokemon_mansion",
+    "name": "Pokemon Mansion"
+  },
+  "215": {
+    "area_id": "pokemon_mansion",
+    "name": "Pokemon Mansion"
+  },
+  "216": {
+    "area_id": "pokemon_mansion",
+    "name": "Pokemon Mansion"
+  },
+  "217": {
+    "area_id": "safari_zone_east",
+    "name": "Safari Zone East"
+  },
+  "218": {
+    "area_id": "safari_zone_north",
+    "name": "Safari Zone North"
+  },
+  "219": {
+    "area_id": "safari_zone_west",
+    "name": "Safari Zone West"
+  },
+  "220": {
+    "area_id": "safari_zone_center",
+    "name": "Safari Zone Center"
+  },
+  "221": {
+    "area_id": "safari_zone_center",
+    "name": "Safari Zone Center Rest House"
+  },
+  "222": {
+    "area_id": "safari_zone_center",
+    "name": "Safari Zone Secret House"
+  },
+  "223": {
+    "area_id": "safari_zone_west",
+    "name": "Safari Zone West Rest House"
+  },
+  "224": {
+    "area_id": "safari_zone_east",
+    "name": "Safari Zone East Rest House"
+  },
+  "225": {
+    "area_id": "safari_zone_north",
+    "name": "Safari Zone North Rest House"
+  },
+  "226": {
+    "area_id": "cerulean_cave",
+    "name": "Cerulean Cave"
+  },
+  "227": {
+    "area_id": "cerulean_cave",
+    "name": "Cerulean Cave"
+  },
+  "228": {
+    "area_id": "cerulean_cave",
+    "name": "Cerulean Cave"
+  },
+  "229": {
+    "area_id": "cerulean_city",
+    "name": "Name Rater's House"
+  },
+  "230": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Badge House"
+  },
+  "231": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean Ball Designer"
+  },
+  "232": {
+    "area_id": "rock_tunnel",
+    "name": "Rock Tunnel"
+  },
+  "233": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "234": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "235": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "236": {
+    "area_id": "silph_co",
+    "name": "Silph Co."
+  },
+  "237": {
+    "area_id": "unused_map_ed",
+    "name": "Unused Map ED"
+  },
+  "238": {
+    "area_id": "unused_map_ee",
+    "name": "Unused Map EE"
+  },
+  "239": {
+    "area_id": "trade_center",
+    "name": "Trade Center"
+  },
+  "240": {
+    "area_id": "colosseum",
+    "name": "Colosseum"
+  },
+  "241": {
+    "area_id": "unused_map_f1",
+    "name": "Unused Map F1"
+  },
+  "242": {
+    "area_id": "unused_map_f2",
+    "name": "Unused Map F2"
+  },
+  "243": {
+    "area_id": "unused_map_f3",
+    "name": "Unused Map F3"
+  },
+  "244": {
+    "area_id": "unused_map_f4",
+    "name": "Unused Map F4"
+  },
+  "245": {
+    "area_id": "indigo_plateau",
+    "name": "Lorelei's Room"
+  },
+  "246": {
+    "area_id": "indigo_plateau",
+    "name": "Bruno's Room"
+  },
+  "247": {
+    "area_id": "indigo_plateau",
+    "name": "Agatha's Room"
+  }
+}
