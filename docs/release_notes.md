@@ -22,6 +22,24 @@ Grouped by area, from the commit log between the merge-base `d2c30fb` and this b
 
 **An explicit physical-evidence bar carries through all of the above.** A ledger requirement closes only with SOURCE plus PHYSICAL evidence: real cartridges in BizHawk, judged independently through engine hooks, Python decoding, game screens/save loading, server state or an independent control. MODEL tests alone never close a row; pre-rewrite evidence does not count (`docs/gen1_requirements.md:3-11,26-36`). The reusable mechanisms this rewrite produced — signal dispatch, armed write windows, hello/validation/queue handling, composition, JSON/HUD helpers, post-result oracles and the fail-closed runner — are porting material, not a completed cross-generation framework: Gen 1 layouts and policies remain Gen 1-specific, and a later consumer must supply its own bank/register model, site table, layouts and checkpoint predicate (`prep/PLAN_v3.9.md:874-887`).
 
+## pureRGB (Gen 1, second foundation)
+
+Delivered after the Gen 1 R/B RC (`docs/purergb/PLAN.md`, owner-gated phases G0–G6; the §13.1 ledger records each signature and its evidence). In one paragraph: [pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6 (`7e7a4653`) is a second Gen 1 foundation, `game_id gen1_purergb`, titles PureRed/PureBlue/PureGreen, on the same rewritten client, codec, server and harness — nothing vanilla was weakened (every vanilla generated file is byte-identical after the generators learned a second foundation, and the vanilla lanes re-ran green).
+
+**Build and pack (M0/M1).** `data/purergb_sources.lock.json` + `tools/build_purergb_syms.py` reproduce the three release ROMs byte for byte (RGBDS 1.0.3, w64devkit 2.10.0, sha256-pinned) and publish `data/purergb/*.sym|map`; the generators (`tools/gen_gen1_{profile,engine_signals,write_checkpoint,area_map,species,evos,encounters,trainers,items,charmap,admission_profiles}.py`) emit `data/games/gen1_purergb/` with source-text asserts on the pinned checkout and every site's bytes sliced from the built ROMs (41 sites × 3 titles; three research-phase offsets would have shipped wrong without that step).
+
+**Client/server (M2, P3).** Hash-first admission (`lua/gen1/entry.lua`), profile-driven bag/balls/trainer-threshold/stride/charmap, flat-WRAM reads with the WRAM-bank write gate, the pure overworld checkpoint, the `battle_loop_no_move` re-entry (pureRGB's MOVE-menu cancel), transformation and APEX sites with the commit-site DV restore, acknowledged `key_change` (`key_change_ack` / `key_change_rejected`, `identity_lost` retire, MIXED GAMES refusal, contract sha1 after the fingerprint — the one shared `server/` change, adapter-guard + independent review), `Gen1PureRGBAdapter` with its own class-level tables, Manager rows and GBC run configs.
+
+**Companion overlay (M3, P4).** `patch/gen1/purergb/overlay/*.asm` linked into the pureRGB build (`tools/apply_purergb_overlay.py`, `tools/build_purergb_overlay.py`), shipped as `patch/dist/SLink-Pure{Red,Blue,Green}.ups`; ROM-level APEX collision guard; A4 save-ABI gate; overlay pack blocks selected by admission kind.
+
+**Randomizer (M5, P5).** SLink fork of UPR ZX 4.6.1 (`patch/upr/000*.patch`, jar `4.6.1-slink1`): lossless baseline for pure entries, 35-byte base-stat stride, non-dex records kept, pure INI rows, write-domain audit, no tweaks; `server/upr_pipeline.py` / `upr_settings.py` pure family.
+
+**Harness (P3b/P4c).** Per-foundation driver facts (`lua/tests/gen1_pure_facts.lua`, identical key set to `gen1_rb_facts.lua`), pure fixtures for all three titles, overlay ROM keys staged from the UPS, `tools/e2e_duo.py` pairings `gen1_pure` / `gen1_pure_green` / `gen1_pure_overlay` with per-lane isolation, new gates (`test_gen1_apex_gate.lua`, `test_gen1_apex_refusal_gate.lua`), release lanes `profile-generated-purergb`, `inspect-purergb`, `apex-purergb`, `inspect-purergb-overlay`, `live-trade-gates-purergb`, `apex-refusal-purergb`, `duo-pairs-purergb`.
+
+**Found on the way (fixed):** a patched vanilla cartridge crashed the production entry (no pack-file mapping for the `named` kind); harness reads of banked WRAM through the System Bus saw bank 2 for a frame; pureRGB's EXPLOSION only self-KOs below ⅓ HP; the overlay START menu stores the last index, not a count; `admit_randomized_new`'s oracle read a no-verdict player as admitted.
+
+**Not claimed:** DMG/SGB hardware modes; vanilla↔pureRGB pairs or cable trades; pureRGB versions other than v2.7.6; the four new duo scenarios (`transform_new`, `apex_new`, `npc_trade_new`, `daycare_new`) need mid-game routes and rest on the live gates (`apex-purergb`, `apex-refusal-purergb`) and model replays; a rand↔clean pure pair is refused (same-kind rule).
+
 ## What the recorded cartridge evidence proves
 
 These are the ledger's physical claims, not an assertion that all release rows are complete:

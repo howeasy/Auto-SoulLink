@@ -40,6 +40,51 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
   The optional Red/Blue companion patch adds the in-game SLINK panel and **no sound**: the
   VBlank `PlaySound` path ABI 2 used is swallowed during music fades and re-enters a
   non-reentrant audio routine, so ABI 3 ships panel-only and says so in its capability bits.
+- **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen (v2.7.6 `7e7a4653`, one pinned release) —
+  🟡 **Same bar as Red/Blue.** A second Gen 1 *foundation* (`game_id gen1_purergb`, adapter
+  `server/adapters/gen1_purergb.py`, pack `data/games/gen1_purergb/`) on the same client, codec
+  and server machinery; every game fact is generated from the pinned source and byte-verified
+  in the built ROMs (`docs/purergb/PLAN.md`, §13.1 gate ledger). What differs from vanilla and
+  how it is handled:
+  - **Admission by full ROM sha1** (`admission.json`, `admission_overlay.json`; the pure headers
+    collide with vanilla's) — any other pureRGB version is refused. Randomized pure cartridges
+    are admitted by every engine-site anchor + the overworld checkpoint bytes (kind `rand` /
+    `rand_overlay`) and then by the preparation contract's fingerprint **and** sha1.
+  - **Reads through the flat `WRAM` domain** for `$D000-$DFFF` and writes gated on
+    `WRAM BANK ∈ {0,1}`: pureRGB runs the overworld at GBC 2× and selects WRAM bank 2 inside
+    its palette-buffer loop with interrupts enabled. BizHawk **Console Mode GBC**, not SGB.
+  - **Overworld checkpoint** `PC == $0040`, `[SP] == DelayFrame+24`, `[SP+2] == OverworldLoop+1`,
+    `wDelayFrameBank == 0` (`write_checkpoint.json`, generated with source asserts).
+  - **Species by internal index**, never dex: 151 + 13 non-dex records (7 transformation forms,
+    5 uncatchable spirits, MissingNo `$B5`) with pureRGB's default typings (the per-save Type
+    Guy toggles are ignored by design) and `PokedexOrder` for the species clause.
+  - **Identity:** script transformations (`ChangePartyPokemonSpecies`, 10 sites) and the APEX
+    CHIP (DVs → `$FFFF`) are `key_change{reason: transform | apex_chip}`, **acknowledged** by the
+    server (`key_change_ack` / `key_change_rejected`); a predicted collision (same species +
+    OT already at `$FFFF`) restores the DV bytes at the commit site and sends nothing; a
+    server-side rejection retires the pair (`identity_lost`). A transformed DEAD mon is
+    re-fainted (the engine heals it to full HP).
+  - **Explode Mode:** pureRGB's EXPLOSION only faints its user below ⅓ HP, so `force_explode`
+    first drops the active battler under `max/3` (profile `derived.explode_low_hp_fraction`).
+  - **Pairing:** pureRGB pairs only with pureRGB, same artifact kind (clean↔overlay is refused);
+    Cable Club trades between a vanilla and a pure cartridge are not supportable.
+  - **Companion overlay** (`patch/gen1/purergb/`, `patch/dist/SLink-Pure*.ups`): the vanilla
+    binary patch cannot apply (ROM0 is full, RST vectors are live code, the vanilla mailbox
+    address is inside pureRGB's box data), so the native trade, the START-menu SLINK row + panel
+    and an APEX collision guard are **source sections** linked into the pureRGB build: bank
+    `$3F`, 15 bytes of ROM0, a 12-byte mailbox at `$DEEA` (the bank-1 WRAM tail), ABI 3 / lease
+    `SLT1` unchanged. RAM/SRAM placement is proven equal to the clean build, and a clean save
+    loads on the overlay unchanged (A4 gate, `tests/unit/test_gen1_purergb_overlay.py`).
+  - **Randomizer:** the SLink fork of UPR ZX 4.6.1 (`patch/upr/*.patch`, `tools/build_upr_fork.py`,
+    jar `4.6.1-slink1`) with lossless load→save for pure entries, generated INI rows
+    (`tools/gen_upr_gen1_ini.py`), a write-domain audit (`tools/upr_write_domain_diff.py`) and
+    every code-patching tweak refused (`server/upr_settings.py` pure family).
+  - **Evidence:** unit pins mirror the vanilla contract (`tests/unit/test_gen1_purergb_*.py`);
+    live: inspect on all six pure cartridges (clean + overlay), APEX restore and APEX refusal
+    gates, receptionist/menu-row/panel on the overlay, GBC FADE stress; duo: the vanilla
+    scenario set on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing
+    (`tests/e2e/test_duo_gen1_pure.py`, lane `duo-pairs-purergb`), including
+    `admit_randomized_new` on the fork jar.
 - **Gen 2** — Crystal (GB/GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
   *mechanisms* are proven against a running cartridge, a *playthrough* is not.
   - **Proven live** — faint propagation, party→box sync and memorialize into Box 14
@@ -90,8 +135,8 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.9+ | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core). **Gen 3:** Two instances with US 1.0 FRLG/Emerald ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US). **Gen 3:** Vanilla, randomized (UPR), Archipelago, or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
+| BizHawk 2.9+ | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FRLG/Emerald ROMs. **Gen 4:** Two instances with US HGSS ROMs |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** Vanilla, randomized (UPR), Archipelago, or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `memory_gba.lua`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
