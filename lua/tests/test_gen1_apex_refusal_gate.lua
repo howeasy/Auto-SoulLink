@@ -100,7 +100,9 @@ local function menu_state()
     return fmt("max=%d cur=%d bag=%d party=%d dvs1=%04X", menu_max(), menu_cur(), bag_count(),
                u8(ram.wPartyCount), dvs_slot1())
 end
+-- An overlay-admitted cartridge (profile.trade present) appends the SLINK row: one more index.
 local START_MAX = F.MENU.START.save_index_without_pokedex + F.MENU.START.max_minus_save
+                  + (t.parts.profile.trade and 1 or 0)
 
 --- Copy slot 1's whole struct + OT name + nickname into slot 2, and mark the CLONE's DVs
 --- $FFFF. Only the guard-visible fields (species/OT id/DVs) matter to apex_guard.asm's
@@ -126,8 +128,12 @@ end
 --- Drive the item menu onto slot 1 exactly like test_gen1_apex_gate.lua's use_chip_on_slot1,
 --- generalised to however many party mons are currently seeded (`party_max` = wMaxMenuItem the
 --- party-picker screen shows, 0-based: 0 with one mon, 1 with two).
-local function use_chip_on_slot1(tag, party_max)
+--- `probe` (optional) is a word to look for on the tilemap WHILE the item routine's text is up:
+--- the message box is gone by the time the overworld is back, so it has to be caught here.
+local function use_chip_on_slot1(tag, party_max, probe)
     local bag0 = bag_count()
+    local seen = false
+    local function look() if probe and not seen then seen = Center.has_tiles(u8, ram.wTileMap, probe) end end
     tap("Start", 30)
     t.check(tag .. ": START menu open", wait_menu(START_MAX, 120), menu_state())
     move_to(1); tap("A", 30)                              -- ITEM
@@ -137,15 +143,17 @@ local function use_chip_on_slot1(tag, party_max)
     tap("A", 30)                                          -- USE -> party menu
     t.check(tag .. ": party menu open", wait_menu(party_max, 120), menu_state())
     move_to(0); tap("A", 60)                               -- mon 1 (slot 1): the item routine runs now
+    look()
     for _ = 1, 40 do
         if t.overworld_ok() then break end
-        tap("A", 20); tap("B", 20)
+        tap("A", 20); look(); tap("B", 20); look()
     end
     for _ = 1, 400 do
         if t.overworld_ok() then break end
-        tap("B", 15)
+        tap("B", 15); look()
     end
     settle(120); t.log(tag .. " settled: " .. menu_state())
+    return seen
 end
 
 local ok, err = xpcall(function()
@@ -169,14 +177,14 @@ t.check("clone seeded: species list terminates after 2", u8(ram.wPartySpecies + 
 inject_chip()
 t.check("chip injected", bag_count() == 1, fmt("bag=%d", bag_count()))
 local sent_before = #t.sent
-use_chip_on_slot1("REFUSAL", 1)   -- party menu shows 2 mons -> max index 1
+local refusal_text_seen = use_chip_on_slot1("REFUSAL", 1, "already")   -- party menu shows 2 mons -> max index 1
 
 local dv1 = dvs_slot1()
 t.check("refusal: slot 1 DVs unchanged", dv1 == dv0, fmt("before=%04X after=%04X", dv0, dv1))
 t.check("refusal: chip NOT consumed", bag_count() == 1, fmt("bag=%d", bag_count()))
 t.check("refusal: pureRGB's own alreadyUsedApex text reached the message box",
-        Center.has_tiles(u8, ram.wTileMap, "already"),
-        "no 'already' tile run on screen — the guard did not branch to .alreadyUsedApex")
+        refusal_text_seen,
+        "no 'already' tile run on screen while the item routine ran — the guard did not branch to .alreadyUsedApex")
 t.check("refusal: no key_change sent (nothing to restore)",
         #sent_events("key_change") == 0, fmt("%d sent", #sent_events("key_change")))
 t.log(fmt("SENT_AFTER_REFUSAL %d lines", #t.sent - sent_before))
