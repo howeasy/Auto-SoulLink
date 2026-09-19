@@ -128,3 +128,16 @@ def test_a_pure_green_header_reaches_the_gen1_route():
     """PureGreen's header is POKEMON GREEN; run.lua then admits by sha1, never by header."""
     loaded = _run_launcher("slink.lua", "GBC", _rom("POKEMON GREEN"))
     assert _NEW_CLIENT in loaded and _OLD_CLIENT not in loaded, loaded
+
+
+def test_the_production_entry_boots_an_unadmitted_vanilla_header_as_the_named_family():
+    """Review finding (bbcd037..HEAD): `Entry.admit` is sha1-first and the vanilla companion-patch
+    and randomized artifacts (patch/gen1/build/slink_red.gb, patch/build/gen1_red_ap.gb) are in
+    no admission table, so run.lua must keep booting a recognised vanilla header as the named
+    vanilla family — exactly what lua/tests/duo/duo_gen1_main.lua does — and must never take
+    that path for a PureRed/PureBlue header (the pure builds are admitted by sha1)."""
+    with open(os.path.join(_REPO, "lua", "gen1", "run.lua"), encoding="utf-8") as handle:
+        src = handle.read()
+    assert 'family == "red" or family == "blue" or family == "yellow"' in src
+    assert 'pack = "gen1_rby", kind = "named"' in src
+    assert "Pure" not in src.split('family == "red"')[1].split("else")[0]

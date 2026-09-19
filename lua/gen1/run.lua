@@ -35,8 +35,20 @@ local admitted, why = Entry.admit({
     header = Entry.header_title(rom_u8),
 })
 if not admitted then
-    console.log("[SLink-gen1] refused: " .. tostring(why))
-    return
+    -- The vanilla companion-patch and randomized artifacts are vanilla-layout by construction
+    -- and predate the admission table (their sha1s are not pinned anywhere): a recognised
+    -- vanilla header still boots the vanilla pack exactly as before admission existed
+    -- (kind "named"). A PureRed/PureBlue header cannot take this path: the pure builds are
+    -- admitted by sha1 above, and the vanilla pack would read the wrong addresses on one.
+    if family == "red" or family == "blue" or family == "yellow" then
+        console.log("[SLink-gen1] no admission row for this cartridge (" .. tostring(why) .. "); booting the vanilla "
+                    .. family .. " pack by header (named family)")
+        admitted = { title = family, pack = "gen1_rby", kind = "named",
+                     rom_sha1 = (gameinfo and gameinfo.getromhash and gameinfo.getromhash() or ""):lower() }
+    else
+        console.log("[SLink-gen1] refused: " .. tostring(why))
+        return
+    end
 end
 local rom_sha1 = admitted.rom_sha1
 
