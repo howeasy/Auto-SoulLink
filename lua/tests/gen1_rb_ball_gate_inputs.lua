@@ -164,15 +164,21 @@ function M.new(expected)
                 return idle(),"unknown-battle-menu-wait"
             end
             self.unknown_menu_frame=nil
-            if move_menu and self.tackles_used<((F.LAB_LOSS and F.LAB_LOSS.tackle_turns) or 0) then
-                -- the lane's opening full-attack turns: Tackle (slot 1) while the rival's attack is intact
+            local L=F.LAB_LOSS or {}
+            -- Tackle for the lane's opening turns (tackle_turns) or, HP-driven, while the rival sits
+            -- above tackle_max_enemy_hp (pureRGB: its own Growls make Tackle harmless, its intact
+            -- Scratch is what ends the battle); Growl otherwise.
+            local tackle=self.tackles_used<(L.tackle_turns or 0)
+                or ((L.tackle_max_enemy_hp or 0)>0 and (point.enemy_hp or 0)>L.tackle_max_enemy_hp)
+            if move_menu and tackle then
                 if point.menu_index>1 then return press("Up",frame),"select-tackle" end
                 local buttons=press("A",frame)
                 if buttons.A then
                     self.pending_tackle_pp=point.move1_pp
                     self.pending_tackle_frame=frame
                 end
-                return buttons,"use-tackle"
+                return buttons,string.format("use-tackle hp=%d atk=%d ehp=%d eatk=%d",
+                        point.party_hp or -1,point.attack_mod or -1,point.enemy_hp or -1,point.enemy_attack_mod or -1)
             end
             if move_menu then
                 assert(point.move2==F.MOVE.GROWL and point.move2_pp>0,"Growl unavailable; refuse Struggle/damage"..describe(point))
@@ -183,7 +189,8 @@ function M.new(expected)
                         self.pending_growl_pp=point.move2_pp
                         self.pending_growl_frame=frame
                     end
-                    return buttons,"use-growl"
+                    return buttons,string.format("use-growl hp=%d atk=%d ehp=%d eatk=%d",
+                        point.party_hp or -1,point.attack_mod or -1,point.enemy_hp or -1,point.enemy_attack_mod or -1)
                 end
                 return press("Up",frame),"correct-growl-cursor"
             end

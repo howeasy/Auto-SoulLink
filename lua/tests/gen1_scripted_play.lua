@@ -132,6 +132,9 @@ function P.new(ROOT, title, player, opts)
             pallet_script = sym("wPalletTownCurScript"), joy_ignore = sym("wJoyIgnore"),
             npc_moving = sym("wStatusFlags5") % 2 == 1,
             battle_result = sym("wBattleResult"), party_hp = hp,
+            -- the deliberate lab loss reads both sides' attack stage (7 = neutral) and the foe's HP
+            attack_mod = sym("wPlayerMonAttackMod"), enemy_attack_mod = sym("wEnemyMonAttackMod"),
+            enemy_hp = rd(assert(symbols.wEnemyMonHP)) * 256 + rd(assert(symbols.wEnemyMonHP) + 1),
             lab_rival_done = math.floor(event_byte / 8) % 2 == 1,
             ball_count = FIELDS.bag_quantity(rd, assert(symbols.wNumBagItems), assert(symbols.wBagItems), FIELDS.POKE_BALL),
             parcel_count = FIELDS.bag_quantity(rd, assert(symbols.wNumBagItems), assert(symbols.wBagItems), FIELDS.OAKS_PARCEL),

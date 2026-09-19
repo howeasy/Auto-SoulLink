@@ -65,7 +65,7 @@ REPLACED = {
 # the foundations' own values: the parcel flag pureRGB deleted, its HYPER_BALL, the START-menu
 # row-index change, and the renumbered rival opponent id.
 EXPECTED_DELTA = frozenset({
-    "LAB_LOSS.tackle_turns",
+    "LAB_LOSS.tackle_max_enemy_hp",
     "COMPANION.playtime_frames_addr",
     "COMPANION.speed_multiplier",
     "BLACKOUT.after_center.map", "BLACKOUT.after_center.x", "BLACKOUT.after_center.y",

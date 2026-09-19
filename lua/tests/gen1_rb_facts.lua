@@ -145,6 +145,7 @@ return {
   },
   LAB_LOSS = { -- the deliberate lab loss (gen1_rb_ball_gate_inputs.lua): Tackle turns before Growl stacking
     tackle_turns = 0, -- SAME: vanilla's rival KOs a Growl-stacked starter in ~15 turns, well inside Growl's 40 PP
+    tackle_max_enemy_hp = 0, -- DELTA: vanilla never Tackles in the lab loss (Growl only); pureRGB Tackles while the rival's HP is above its value
   },
   MENU = {
     START = {

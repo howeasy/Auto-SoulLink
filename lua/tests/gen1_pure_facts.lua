@@ -137,7 +137,8 @@ return {
     after_center = { map = 1, x = 23, y = 26 }, -- DELTA: scripts/ViridianPokecenter.asm:2 `call SetLastBlackoutMap` on Center ENTRY (engine/events/pokecenter.asm:49 removed the heal-time call; home/overworld.asm:2380-2401 stores wLastMap = VIRIDIAN_CITY from the door warp at :546) -> fly_warp VIRIDIAN_CITY, 23, 26 (data/maps/special_warps.asm:98)
   },
   LAB_LOSS = { -- the deliberate lab loss (gen1_rb_ball_gate_inputs.lua): Tackle turns before Growl stacking
-    tackle_turns = 2, -- DELTA: measured 2026-09-18 -- the pure rival at -6 attack needs 38-40+ turns (two cold runs hit Growl's 40 PP: move2_pp=0 refusal); two full-attack turns first cost the starter ~10 HP without risking the rival (20 HP vs ~4-6 per Tackle)
+    tackle_turns = 0, -- SAME: no fixed opening Tackles; the pure loss is HP-driven (tackle_max_enemy_hp below)
+    tackle_max_enemy_hp = 8, -- DELTA: measured 2026-09-19 (cold PureRed receipts with hp/atk/ehp/eatk per turn): the rival Growls the starter to -6 within its first turns (its AI stops only when maxed) and a Growl-stacked rival at -6 deals 0-1 -- vanilla's Growl-only loss stalled at 2 HP with every PP spent (40 Growls, the rival's 35 Scratches gone). Tackle deals 2 at neutral / 1 at -6, a crit 5-6 (19->17->15->13, then 13->11->6->1 with two crits), so the starter Tackles while the rival has MORE than this much HP (never a KO: the rival keeps its full ~4-a-hit Scratch and the starter drops in ~5 hits) and Growls only below it
   },
   MENU = {
     START = { -- engine/menus/draw_start_menu.asm
