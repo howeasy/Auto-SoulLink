@@ -1196,8 +1196,11 @@ class DuoRun:
             if not os.path.isfile(source):
                 raise FileNotFoundError(f"clean {player} ROM missing: {source}")
         settings = os.path.join(self.data_dir, "settings.rnqs")
+        # The pure family refuses every tweak (fastest text is a code write; pureRGB has
+        # INSTANT text natively), so the pairing's family decides the flag.
+        fastest = not is_pure_pairing(getattr(self, "game", ""))
         with open(settings, "wb") as handle:
-            handle.write(build_categories({"wild"}))  # upr_settings.py:483-491
+            handle.write(build_categories({"wild"}, fastest_text=fastest))  # upr_settings.py:483-491
         # prepare_pair requires BOTH players, writes .gbc outputs and verifies distinct seeds
         # and rule-bearing data (upr_pipeline.py:254-335). One invocation, no retry.
         result = prepare_pair(jar, settings, sources, os.path.join(self.data_dir, "roms"))
