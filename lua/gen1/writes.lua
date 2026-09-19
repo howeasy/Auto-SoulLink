@@ -141,6 +141,12 @@ function W.new(profile, io)
             local u16 = function(a) return io.read_u8(a, "System Bus") * 256 + io.read_u8(a + 1, "System Bus") end
             local low = math.max(1, math.floor(u16(ram.wBattleMonMaxHP) / frac) - 1)
             if u16(ram.wBattleMonHP) > low then self:write_bytes(ram.wBattleMonHP, { math.floor(low / 256), low % 256 }) end
+            -- ...and it must move first, or the foe's hit lands on a mon at max/3 HP before the
+            -- explosion does (seen live: "the wild foe knocked the linked mon out before
+            -- EXPLOSION"). Turn order is a plain speed compare (core.asm .compareSpeed; only
+            -- priority moves come before it), so the battle-struct speed becomes 999 -- the
+            -- struct is discarded at the faint, the party mirror keeps the real stat.
+            self:write_bytes(ram.wBattleMonSpeed, { 3, 0xE7 })
         end
         self:write_bytes(ram.wBattleMonMoves, { W.EXPLOSION, W.EXPLOSION, W.EXPLOSION, W.EXPLOSION })
         self:write_bytes(ram.wBattleMonPP, { 1, 1, 1, 1 })

@@ -83,7 +83,7 @@ RAM_SYMBOLS = [
     # clearing it: the only window in which the enemy party may still be rewritten (A13)
     "wEnemyMonPartyPos",
     "wBattleMon", "wBattleMonSpecies", "wBattleMonHP", "wBattleMonStatus", "wBattleMonMoves",
-    "wBattleMonLevel", "wBattleMonMaxHP", "wBattleMonPP",
+    "wBattleMonLevel", "wBattleMonMaxHP", "wBattleMonPP", "wBattleMonSpeed",
     # named sub-fields of slot 1 (offsets of every other slot follow by struct size)
     "wPartyMon1HP", "wPartyMon1Status", "wPartyMon1Moves", "wPartyMon1PP", "wPartyMon1Level",
     "wPartyMon1MaxHP", "wEnemyMon1Species", "wEnemyMon1HP", "wEnemyMon1Moves", "wEnemyMon1PP",
