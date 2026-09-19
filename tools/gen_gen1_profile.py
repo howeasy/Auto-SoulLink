@@ -15,6 +15,12 @@ Foundations (tools/gen1_foundation.py):
 
     python tools/gen_gen1_profile.py [--foundation purergb]            # rewrite the profile
     python tools/gen_gen1_profile.py [--foundation purergb] --check    # exit 1 if stale
+    python tools/gen_gen1_profile.py --foundation purergb --kind overlay
+             data/games/gen1_purergb/profile_overlay.json from data/purergb/*_slink.sym + the
+             overlay ROMs (PLAN M3): the same generator over the "purergb_overlay" foundation,
+             plus a `trade` block per title (mailbox, service, receptionist hook, hook anchors)
+             that lua/gen1/entry.lua selects by admission kind. ROM symbols relocate, RAM does
+             not (tests/unit/test_gen1_purergb_overlay.py is the A4 gate).
 """
 from __future__ import annotations
 
@@ -274,12 +280,12 @@ def flat(bank: int, addr: int) -> int:
     return addr if addr < 0x4000 else bank * 0x4000 + (addr - 0x4000)
 
 
-def _purergb_derived(syms: dict, ram: dict) -> dict:
+def _purergb_derived(syms: dict, ram: dict, foundation: str = "purergb") -> dict:
     """pureRGB-only derived constants, each proven against the pinned source (and ROM where possible)."""
     for rel, needles in PURERGB_CONSTANT_ASSERTS.values():
         for needle in needles:
-            F.assert_source("purergb", rel, needle)
-    rom = F.rom_path("purergb", "purered").read_bytes()
+            F.assert_source(foundation, rel, needle)
+    rom = F.rom_path(foundation, "purered").read_bytes()
     base = F.flat(*syms["BaseStats"])
     stride = PURERGB_CONSTANTS["base_stats_stride"]
     # BASE_DEX_NO is byte 0 of every record; records run Bulbasaur..Mew in dex order (base_stats.asm)
@@ -295,8 +301,69 @@ def _purergb_derived(syms: dict, ram: dict) -> dict:
     return derived
 
 
+# The overlay's hook anchors (tools/apply_purergb_overlay.py), each proven against the overlay
+# ROM: `shape` tokens are bytes, `{sym}` a little-endian address, `{bank:sym}` a bank.
+OVERLAY_ANCHORS = {
+    # TextScript_CableClubNPC:: jpfar SlinkReceptionist = ld hl / ld b / rst _Bankswitch / ret
+    "receptionist": ("TextScript_CableClubNPC", 0, "21 {SlinkReceptionist} 06 {bank:SlinkReceptionist} C7 C9"),
+    # VBlank's `farcall SlinkHook` (the one farcall into SlinkHook in ROM0; located by scan)
+    "vblank": (None, 0, "06 {bank:SlinkHook} 21 {SlinkHook} C7"),
+    # OverworldLoop:: rst _DelayFrame / farcall SlinkForeground
+    "foreground": ("OverworldLoop", 0, "D7 06 {bank:SlinkForeground} 21 {SlinkForeground} C7"),
+    # StartMenuJumpTable row 7 (appended after CloseTextDisplay)
+    "start_menu_row": ("StartMenuJumpTable", 14, "{SlinkStartMenuEntry}"),
+    # ItemUseMedicine.setDVs: ld d,h / ld e,l / farcall SlinkApexGuard / jr c, .alreadyUsedApex
+    "apex_guard": ("ItemUseMedicine.setDVs", 0, "54 5D 06 {bank:SlinkApexGuard} 21 {SlinkApexGuard} C7 38"),
+}
+
+
+def _shape(shape: str, syms: dict) -> bytes:
+    out = bytearray()
+    for tok in shape.split():
+        m = re.match(r"^\{(?:(bank):)?([^}]+)\}$", tok)
+        if not m:
+            out.append(int(tok, 16))
+            continue
+        bank, addr = syms[m.group(2)]
+        out += bytes((bank,)) if m.group(1) == "bank" else bytes((addr & 0xFF, addr >> 8))
+    return bytes(out)
+
+
+def _overlay_trade(foundation: str, title: str, syms: dict) -> dict:
+    """The profile `trade` block lua/gen1/{trade_overlay,panel,client}.lua read for an overlay title."""
+    rom = F.rom_path(foundation, title).read_bytes()
+    anchors: dict[str, dict] = {}
+    for name, (symbol, off, shape) in OVERLAY_ANCHORS.items():
+        want = _shape(shape, syms)
+        if symbol is None:
+            hits = [i for i in range(0x4000) if rom[i:i + len(want)] == want]
+            if len(hits) != 1:
+                sys.exit(f"gen_gen1_profile: {title}: {name} anchor found {len(hits)} times in ROM0")
+            bank, addr = 0, hits[0]
+        else:
+            bank, addr = syms[symbol]
+            addr += off
+        flat = F.flat(bank, addr)
+        if rom[flat:flat + len(want)] != want:
+            sys.exit(f"gen_gen1_profile: {title}: {name} anchor at {bank:02X}:{addr:04X} is "
+                     f"{rom[flat:flat + len(want)].hex().upper()}, expected {want.hex().upper()}")
+        anchors[name] = {"bank": bank, "addr": addr, "flat": flat, "expected_hex": want.hex().upper()}
+    if syms["wSlinkMailboxEnd"][1] - syms["wSlinkMailbox"][1] != 12:
+        sys.exit(f"gen_gen1_profile: {title}: the SLink mailbox is not 12 bytes")
+    svc_bank, svc_addr = syms["SlinkTradeService"]
+    return {
+        "abi": 3,
+        "mailbox": syms["wSlinkMailbox"][1],
+        "service": {"bank": svc_bank, "addr": svc_addr},
+        "receptionist_hook": anchors["receptionist"]["flat"],
+        "dispatch_hex": anchors["receptionist"]["expected_hex"],
+        "anchors": anchors,
+    }
+
+
 def build(foundation: str = "pret") -> dict:
     fnd = F.foundation(foundation)
+    fam = F.family(foundation)
     lock = F.lock(foundation)
     rom_syms = None if lock else json.loads((REPO / "data" / "pret_rom_syms.json").read_text(encoding="utf-8"))
     profile: dict = {
@@ -306,7 +373,7 @@ def build(foundation: str = "pret") -> dict:
         "titles": {},
     }
     missing: list[str] = []
-    ram_symbols = RAM_SYMBOLS + EXTRA_RAM_SYMBOLS[foundation]
+    ram_symbols = RAM_SYMBOLS + EXTRA_RAM_SYMBOLS[fam]
     for title, (sym_name, rom_file, repo) in fnd["titles"].items():
         sym_path = F.sym_path(foundation, title)
         syms = parse_sym(sym_path)
@@ -323,9 +390,9 @@ def build(foundation: str = "pret") -> dict:
             ram[name] = syms[name][1]  # RAM: bank is 0 (WRAM0/HRAM) or the SRAM bank; addr is what code reads
         sram_banks = {name: syms[name][0] for name in ram_symbols if name.startswith("s") and name in syms}
         rom: dict[str, dict] = {}
-        for name in ROM_SYMBOLS + EXTRA_ROM_SYMBOLS[foundation] + OPTIONAL_ROM_SYMBOLS:
+        for name in ROM_SYMBOLS + EXTRA_ROM_SYMBOLS[fam] + OPTIONAL_ROM_SYMBOLS:
             if name not in syms:
-                if name in ROM_SYMBOLS or name in EXTRA_ROM_SYMBOLS[foundation]:
+                if name in ROM_SYMBOLS or name in EXTRA_ROM_SYMBOLS[fam]:
                     missing.append(f"{title}: {name}")
                 continue
             bank, addr = syms[name]
@@ -344,9 +411,9 @@ def build(foundation: str = "pret") -> dict:
             "sram_boxes_per_bank": (ram["sBox6"] - ram["sBox1"]) // (ram["sBox2"] - ram["sBox1"]) + 1,
             "sram_box_banks": [sram_banks["sBox1"], sram_banks["sBox7"]],
         }
-        if foundation == "purergb":
-            derived.update(_purergb_derived(syms, ram))
-        elif foundation == "pret":
+        if fam == "purergb":
+            derived.update(_purergb_derived(syms, ram, foundation))
+        elif fam == "pret":
             derived.update(_pret_derived(title, syms))
         rom_key = pathlib.Path(rom_file).stem  # pokered / pokeblue / pokeyellow / pokegreen
         profile["titles"][title] = {
@@ -359,6 +426,8 @@ def build(foundation: str = "pret") -> dict:
             "rom": rom,
             "derived": derived,
         }
+        if foundation == "purergb_overlay":
+            profile["titles"][title]["trade"] = _overlay_trade(foundation, title, syms)
     if missing:
         sys.exit("gen_gen1_profile: symbols missing from the .sym files:\n  " + "\n  ".join(missing))
     return profile
@@ -372,9 +441,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if the committed profile is stale")
     ap.add_argument("--foundation", default="pret", choices=sorted(F.FOUNDATIONS))
+    ap.add_argument("--kind", default="clean", choices=("clean", "overlay"),
+                    help="overlay: the SLink companion build of the foundation (profile_overlay.json)")
     args = ap.parse_args()
-    out = F.data_dir(args.foundation) / "profile.json"
-    text = render(build(args.foundation))
+    foundation = F.with_kind(args.foundation, args.kind)
+    out = F.out_path(foundation, "profile.json")
+    text = render(build(foundation))
     if args.check:
         current = out.read_text(encoding="utf-8") if out.exists() else ""
         if current != text:

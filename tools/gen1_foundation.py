@@ -48,6 +48,25 @@ FOUNDATIONS: dict[str, dict] = {
         "roms_env": "SLINK_PURERGB_ROMS",
         "lock": "data/purergb_sources.lock.json",
     },
+    # The SLink companion overlay built over pureRGB (tools/build_purergb_overlay.py): the same
+    # source family and data dir, its own .sym/.map (data/purergb/*_slink.*), ROMs (the overlay
+    # build tree) and lock (the overlay provenance, which carries `source` + `outputs` in the
+    # lock's shape). Generators write its pack files with the `_overlay` suffix (out_path).
+    "purergb_overlay": {
+        "family": "purergb",
+        "data_dir": "data/games/gen1_purergb",
+        "sym_dir": "data/purergb",
+        "titles": {
+            "purered": ("purered_slink.sym", "pokered.gbc", "purergb"),
+            "pureblue": ("pureblue_slink.sym", "pokeblue.gbc", "purergb"),
+            "puregreen": ("puregreen_slink.sym", "pokegreen.gbc", "purergb"),
+        },
+        "source_env": "SLINK_PURERGB_OVERLAY_SRC",
+        "source_default": ".cache/purergb-overlay",
+        "roms_env": "SLINK_PURERGB_OVERLAY_ROMS",
+        "lock": "data/purergb/overlay_provenance.json",
+        "out_suffix": "_overlay",
+    },
 }
 
 _SYM = re.compile(r"^([0-9A-Fa-f]{2,3}):([0-9A-Fa-f]{4}) (\S+)$")
@@ -61,6 +80,22 @@ def foundation(name: str) -> dict:
 
 def data_dir(name: str) -> pathlib.Path:
     return REPO / foundation(name)["data_dir"]
+
+
+def family(name: str) -> str:
+    """The source family a foundation derives from ("purergb" for both pure kinds)."""
+    return foundation(name).get("family", name)
+
+
+def with_kind(name: str, kind: str) -> str:
+    """`--kind overlay` on a generator selects the `<foundation>_overlay` foundation."""
+    return name if kind == "clean" else f"{name}_{kind}"
+
+
+def out_path(name: str, filename: str) -> pathlib.Path:
+    """A generator's output in the data dir, suffixed for a non-clean kind (profile_overlay.json)."""
+    stem, ext = filename.rsplit(".", 1)
+    return data_dir(name) / f"{stem}{foundation(name).get('out_suffix', '')}.{ext}"
 
 
 def sym_path(name: str, title: str) -> pathlib.Path:

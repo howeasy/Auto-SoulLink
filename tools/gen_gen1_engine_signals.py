@@ -18,6 +18,11 @@ site_crossref.md (the *_corrected rows; S1's capture_offset is 0 = anchor is the
 
     python tools/gen_gen1_engine_signals.py            # rewrite
     python tools/gen_gen1_engine_signals.py --check    # exit 1 if the committed file is stale
+    python tools/gen_gen1_engine_signals.py --kind overlay
+        engine_signals_overlay.json for the SLink companion build (the "purergb_overlay"
+        foundation: data/purergb/*_slink.sym + the overlay ROMs). Same kinds and points; every
+        expected_hex is re-sliced from the overlay ROM (ROM0/bank growth relocates sites by
+        design), and the rows whose source the overlay rewrites carry OVERLAY overrides.
 """
 from __future__ import annotations
 
@@ -33,7 +38,6 @@ sys.path.insert(0, str(REPO / "tools"))
 import gen1_foundation as F  # noqa: E402
 
 FOUNDATION = "purergb"
-OUT = F.data_dir(FOUNDATION) / "engine_signals.json"
 SCHEMA = "rby-engine-signal-sites-v1"
 
 # WRAM the client snapshots at each hook (lua/gen1/signals.lua S.KINDS point functions).
@@ -279,6 +283,25 @@ SITES: dict[str, dict] = {
         shape="77 E5 6B 62 18", prelude=(0x39, "FA {wLoadedMonSpecies}")),
 }
 
+# Rows the SLink overlay's source edits change (tools/apply_purergb_overlay.py): TryEvolvingMon
+# gains `::`; .setDVs gains `ld d,h / ld e,l / farcall SlinkApexGuard / jr c / ld h,d / ld l,e /
+# ld a, $FF` (14 bytes) before the DV store, so the three APEX anchors move by +14 while HL (the
+# DV pointer) and the points stay.
+OVERLAY = {
+    "evolve": {
+        "assert_": "TryEvolvingMon:: ; SLink overlay: exported for the native trade\n\tld hl, wCanEvolveFlags\n"
+                   "\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]"},
+    "apex_preflight": {
+        "off": 0x0F + 14,
+        "assert_": ".setDVs\n\tld d, h ; SLink overlay: the DV pointer rides in de (a farcall takes hl)\n\tld e, l\n"
+                   "\tfarcall SlinkApexGuard ; carry = a same-OT/same-species mon is already $FFFF\n"
+                   "\tjr c, .alreadyUsedApex ; refused before the chip is consumed\n\tld h, d\n\tld l, e\n\tld a, $FF\n"
+                   "\tld [hli], a ; set first byte of DVs to max\n\tld [hl], a  ; set second byte of DVs to max\n"
+                   "\tpop hl\n\tpush hl\n\tcall .recalculateStats"},
+    "apex_commit": {"off": 0x11 + 14},
+    "apex_recalc_call": {"off": 0x13 + 14},
+}
+
 _TOKEN = re.compile(r"^\{(?:(bank|lo):)?([^}]+)\}$")
 
 
@@ -302,23 +325,24 @@ def shape_bytes(shape: str, syms: dict) -> bytes:
     return bytes(out)
 
 
-def build() -> dict:
-    lock = F.lock(FOUNDATION)
-    fnd = F.foundation(FOUNDATION)
-    roms = {t: F.rom_path(FOUNDATION, t).read_bytes() for t in fnd["titles"]}
+def build(foundation: str = FOUNDATION) -> dict:
+    lock = F.lock(foundation)
+    fnd = F.foundation(foundation)
+    sites_spec = {k: {**v, **OVERLAY.get(k, {})} for k, v in SITES.items()} if foundation.endswith("_overlay") else SITES
+    roms = {t: F.rom_path(foundation, t).read_bytes() for t in fnd["titles"]}
     for title, rom in roms.items():
         want = lock["outputs"][pathlib.Path(fnd["titles"][title][1]).stem]["sha1"]
         if hashlib.sha1(rom).hexdigest() != want:
             raise SystemExit(f"{title}: built ROM sha1 differs from the lock")
-    for spec in SITES.values():
-        F.assert_source(FOUNDATION, spec["source"], spec["assert_"])
+    for spec in sites_spec.values():
+        F.assert_source(foundation, spec["source"], spec["assert_"])
     result: dict = {"schema": SCHEMA, "source_commit": lock["source"]["commit"], "titles": {}}
     for title, rom in roms.items():
-        sym_path = F.sym_path(FOUNDATION, title)
+        sym_path = F.sym_path(foundation, title)
         syms = F.parse_sym(sym_path)
         sites: dict[str, dict] = {}
         needed: set[str] = set()
-        for kind, spec in SITES.items():
+        for kind, spec in sites_spec.items():
             if spec["symbol"] not in syms:
                 raise SystemExit(f"{title}: {kind}: symbol {spec['symbol']!r} is not in {sym_path.name}")
             bank, base = syms[spec["symbol"]]
@@ -367,18 +391,22 @@ def render(value: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if the committed file is stale")
+    ap.add_argument("--kind", default="clean", choices=("clean", "overlay"),
+                    help="overlay: the SLink companion build (engine_signals_overlay.json)")
     args = ap.parse_args()
-    text = render(build())
+    foundation = F.with_kind(FOUNDATION, args.kind)
+    out = F.out_path(foundation, "engine_signals.json")
+    text = render(build(foundation))
     if args.check:
-        if not OUT.exists() or OUT.read_text(encoding="utf-8") != text:
-            print(f"{OUT.relative_to(REPO)} is stale; run tools/gen_gen1_engine_signals.py", file=sys.stderr)
+        if not out.exists() or out.read_text(encoding="utf-8") != text:
+            print(f"{out.relative_to(REPO)} is stale; run tools/gen_gen1_engine_signals.py", file=sys.stderr)
             return 1
-        print(f"{OUT.relative_to(REPO)} is current")
+        print(f"{out.relative_to(REPO)} is current")
         return 0
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text, encoding="utf-8", newline="\n")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8", newline="\n")
     titles = json.loads(text)["titles"]
-    print(f"wrote {OUT.relative_to(REPO)}: " + ", ".join(f"{t} sites={len(v['sites'])}" for t, v in titles.items()))
+    print(f"wrote {out.relative_to(REPO)}: " + ", ".join(f"{t} sites={len(v['sites'])}" for t, v in titles.items()))
     return 0
 
 

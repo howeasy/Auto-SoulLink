@@ -50,6 +50,14 @@ SOURCE_ASSERTS = [
     ("home/vblank.asm", "\tldh a, [hLoadedROMBank]\n\tld [wDelayFrameBank], a"),
     ("home/vblank.asm", "\txor a\n\tld [wDelayFrameBank], a"),
     ("home/overworld.asm", "OverworldLoop::\n\trst _DelayFrame\nOverworldLoopLessDelay::"),
+]
+# the overlay's OverworldLoop (tools/apply_purergb_overlay.py) replaces the row above
+OVERLAY_OVERWORLD_ASSERT = (
+    "home/overworld.asm",
+    "OverworldLoop::\n\trst _DelayFrame\n"
+    "\tfarcall SlinkForeground ; SLink overlay: foreground trade service (lease byte +10 == 1)\n"
+    "OverworldLoopLessDelay::")
+SOURCE_ASSERTS += [
     ("home/header.asm", 'SECTION "vblank", ROM0[$0040]\n\tjp VBlank'),
     ("home/header.asm", 'SECTION "rst10", ROM0[$0010]\n_DelayFrame::\n\tjp DelayFrame'),
     ("ram/wram.asm", "; the stack grows downward\n\tds $100 - 1\nwStack:: db"),
@@ -64,15 +72,18 @@ def _slice(rom: bytes, flat: int, want: bytes, what: str) -> str:
     return got.hex().upper()
 
 
-def build() -> dict:
-    lock = F.lock(FOUNDATION)
-    fnd = F.foundation(FOUNDATION)
+def build(foundation: str = FOUNDATION) -> dict:
+    lock = F.lock(foundation)
+    fnd = F.foundation(foundation)
+    is_overlay = foundation.endswith("_overlay")
     for rel, needle in SOURCE_ASSERTS:
-        F.assert_source(FOUNDATION, rel, needle)
+        if is_overlay and needle.startswith("OverworldLoop::"):
+            rel, needle = OVERLAY_OVERWORLD_ASSERT
+        F.assert_source(foundation, rel, needle)
     out: dict = {}
     for title in fnd["titles"]:
-        syms = F.parse_sym(F.sym_path(FOUNDATION, title))
-        rom = F.rom_path(FOUNDATION, title).read_bytes()
+        syms = F.parse_sym(F.sym_path(foundation, title))
+        rom = F.rom_path(foundation, title).read_bytes()
         if hashlib.sha1(rom).hexdigest() != lock["outputs"][pathlib.Path(fnd["titles"][title][1]).stem]["sha1"]:
             raise SystemExit(f"{title}: built ROM sha1 differs from the lock")
         a = {n: syms[n][1] for n in ("DelayFrame", "DelayFrame.halt", "OverworldLoop", "OverworldLoopLessDelay",
@@ -81,7 +92,9 @@ def build() -> dict:
                                      "wStack", "GBCSetCPU2xSpeed", "_DelayFrame")}
         if a["DelayFrame.halt"] != a["DelayFrame"] + HALT_OFFSET:
             raise SystemExit(f"{title}: DelayFrame.halt is not DelayFrame+{HALT_OFFSET}")
-        if a["OverworldLoopLessDelay"] != a["OverworldLoop"] + 1 or a["_DelayFrame"] != RST_DELAY_FRAME:
+        # the overlay inserts `farcall SlinkForeground` (6 bytes) between the rst and the label
+        less_delay = a["OverworldLoop"] + (7 if is_overlay else 1)
+        if a["OverworldLoopLessDelay"] != less_delay or a["_DelayFrame"] != RST_DELAY_FRAME:
             raise SystemExit(f"{title}: OverworldLoop / rst $10 layout changed")
         lo, hi = a["hVBlankOccurred"] & 0xFF, a["hVBlankOccurred"] >> 8
         if hi != 0xFF:
@@ -89,10 +102,15 @@ def build() -> dict:
         # halt; nop; ldh a,[hVBlankOccurred]; and a; jr nz,.halt (-7); ret
         halt_hex = _slice(rom, a["DelayFrame.halt"], bytes((0x76, 0x00, 0xF0, lo, 0xA7, 0x20, 0xF9, 0xC9)),
                           f"{title}: DelayFrame.halt")
-        # rst _DelayFrame; callfar GBCSetCPU2xSpeed = ld hl,addr; ld b,bank; rst _Bankswitch
+        # rst _DelayFrame; [overlay: farcall SlinkForeground = ld b,bank; ld hl,addr; rst _Bankswitch;]
+        # callfar GBCSetCPU2xSpeed = ld hl,addr; ld b,bank; rst _Bankswitch
         bank2x, addr2x = syms["GBCSetCPU2xSpeed"]
-        ow_hex = _slice(rom, a["OverworldLoop"], bytes((0xD7, 0x21, addr2x & 0xFF, addr2x >> 8, 0x06, bank2x, 0xC7)),
-                        f"{title}: OverworldLoop")
+        ow_want = bytes((0xD7,))
+        if is_overlay:
+            bank_fg, addr_fg = syms["SlinkForeground"]
+            ow_want += bytes((0x06, bank_fg, 0x21, addr_fg & 0xFF, addr_fg >> 8, 0xC7))
+        ow_want += bytes((0x21, addr2x & 0xFF, addr2x >> 8, 0x06, bank2x, 0xC7))
+        ow_hex = _slice(rom, a["OverworldLoop"], ow_want, f"{title}: OverworldLoop")
         irq_hex = _slice(rom, IRQ_VECTOR, bytes((0xC3, a["VBlank"] & 0xFF, a["VBlank"] >> 8)), f"{title}: $0040")
         rst_hex = _slice(rom, RST_DELAY_FRAME, bytes((0xC3, a["DelayFrame"] & 0xFF, a["DelayFrame"] >> 8)),
                          f"{title}: $0010")
@@ -136,18 +154,22 @@ def render(value: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if the committed file is stale")
+    ap.add_argument("--kind", default="clean", choices=("clean", "overlay"),
+                    help="overlay: the SLink companion build (write_checkpoint_overlay.json)")
     args = ap.parse_args()
-    text = render(build())
+    foundation = F.with_kind(FOUNDATION, args.kind)
+    out = F.out_path(foundation, "write_checkpoint.json")
+    text = render(build(foundation))
     if args.check:
-        if not OUT.exists() or OUT.read_text(encoding="utf-8") != text:
-            print(f"{OUT.relative_to(REPO)} is stale; run tools/gen_gen1_write_checkpoint.py", file=sys.stderr)
+        if not out.exists() or out.read_text(encoding="utf-8") != text:
+            print(f"{out.relative_to(REPO)} is stale; run tools/gen_gen1_write_checkpoint.py", file=sys.stderr)
             return 1
-        print(f"{OUT.relative_to(REPO)} is current")
+        print(f"{out.relative_to(REPO)} is current")
         return 0
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text, encoding="utf-8", newline="\n")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8", newline="\n")
     ws = json.loads(text)
-    print(f"wrote {OUT.relative_to(REPO)}: " + ", ".join(
+    print(f"wrote {out.relative_to(REPO)}: " + ", ".join(
         f"{t} DelayFrame.halt={v['write_safe']['delay_frame_halt']:#06x}" for t, v in ws.items()))
     return 0
 

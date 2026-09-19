@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Build the SLink companion overlay ROMs for pureRGB and publish their artifacts (PLAN M3/P4).
+
+    fresh copy of the pinned checkout (.cache/purergb, HEAD == data/purergb_sources.lock.json)
+      -> tools/apply_purergb_overlay.py            (hook edits + engine/slink/ sources)
+      -> make pokered.gbc pokeblue.gbc pokegreen.gbc (pinned RGBDS + w64devkit, as M0 does)
+      -> data/purergb/{purered,pureblue,puregreen}_slink.{sym,map}
+      -> patch/dist/SLink-Pure{Red,Blue,Green}.ups   (patch/tools/make_ups.py; CRC-bound to the
+                                                     clean pure ROM, round-trip verified)
+      -> data/purergb/overlay_provenance.json        (lock-shaped: `source` + `outputs`, so
+                                                     tools/gen1_foundation.py reads it as the
+                                                     "purergb_overlay" foundation's lock)
+
+The clean ROMs are never touched: the overlay is a separate artifact with its own sha1s,
+profile block, sites and admission rows (PLAN §5.2 A4). The build is byte-reproducible from the
+lock + overlay sources, so `--check` rebuilds and compares against the committed files.
+
+    python tools/build_purergb_overlay.py                    # build + publish
+    python tools/build_purergb_overlay.py --check            # build, compare, publish nothing
+    python tools/build_purergb_overlay.py --rgbds-bin DIR --w64devkit-bin DIR
+    python tools/build_purergb_overlay.py --repo-dir PATH    # clean checkout to copy from
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import zlib
+from datetime import UTC, datetime
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "patch" / "tools"))
+import apply_purergb_overlay as overlay  # noqa: E402
+from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit  # noqa: E402
+from build_purergb_syms import (  # noqa: E402
+    DATA_DIR,
+    PURERGB_CACHE,
+    _binary_name,
+    _git,
+    _toolchain_record,
+    _write_json,
+    load_lock,
+)
+from make_ups import ups_apply, ups_create  # noqa: E402
+
+REPO_ROOT = DATA_DIR.parent
+OVERLAY_CACHE = REPO_ROOT / ".cache" / "purergb-overlay"
+OUT_DIR = DATA_DIR / "purergb"
+DIST = REPO_ROOT / "patch" / "dist"
+PROVENANCE_PATH = OUT_DIR / "overlay_provenance.json"
+PROVENANCE_SCHEMA = "purergb-overlay-provenance-v1"
+
+# lock output key -> (SLink title, UPS artifact)
+TITLES = {
+    "pokered": ("purered", "SLink-PureRed.ups"),
+    "pokeblue": ("pureblue", "SLink-PureBlue.ups"),
+    "pokegreen": ("puregreen", "SLink-PureGreen.ups"),
+}
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def rom_facts(data: bytes) -> dict:
+    return {
+        "sha1": hashlib.sha1(data).hexdigest(),
+        "md5": hashlib.md5(data).hexdigest(),
+        "header_crc": data[0x14E:0x150].hex().upper(),
+        "crc32": format(zlib.crc32(data) & 0xFFFFFFFF, "08X"),
+        "title": data[0x134:0x143].rstrip(b"\x00").decode("ascii", "replace"),
+        "size": len(data),
+    }
+
+
+def fresh_copy(repo_dir: pathlib.Path, lock: dict) -> pathlib.Path:
+    """Copy the pinned checkout (build outputs included, so make only redoes what the overlay
+    touches) into OVERLAY_CACHE after checking it is clean and at the locked commit."""
+    status = _git(repo_dir, "status", "--porcelain").stdout
+    if status.strip():
+        raise RuntimeError(f"{repo_dir} has uncommitted changes; the overlay needs the pinned tree:\n{status}")
+    head = _git(repo_dir, "rev-parse", "HEAD").stdout.strip()
+    if head != lock["source"]["commit"]:
+        raise RuntimeError(f"{repo_dir} is at {head}, the lock wants {lock['source']['commit']}")
+    if OVERLAY_CACHE.exists():
+        shutil.rmtree(OVERLAY_CACHE, onexc=lambda fn, p, e: (os.chmod(p, 0o600), fn(p)))
+    shutil.copytree(repo_dir, OVERLAY_CACHE, symlinks=True)
+    return OVERLAY_CACHE
+
+
+def make(checkout: pathlib.Path, rgbds_bin: pathlib.Path, devkit_bin: pathlib.Path, lock: dict) -> str:
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
+    cmd = [str(devkit_bin / _binary_name("make")), "-j4", *lock["make_targets"]]
+    print(f"[overlay] {' '.join(cmd)}  (cwd={checkout})", file=sys.stderr)
+    result = subprocess.run(cmd, cwd=str(checkout), env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        raise RuntimeError(f"make failed with exit code {result.returncode}")
+    return " ".join(["make", "-j4", *lock["make_targets"]])
+
+
+def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
+          w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
+    lock = load_lock()
+    clean = repo_dir or PURERGB_CACHE
+    rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
+    devkit_bin = w64devkit_bin or ensure_w64devkit()
+
+    checkout = fresh_copy(clean, lock)
+    overlay.apply(checkout)
+    command = make(checkout, rgbds_bin, devkit_bin, lock)
+
+    outputs: dict[str, dict] = {}
+    files: dict[pathlib.Path, bytes] = {}  # destination -> bytes to publish
+    for key, spec in lock["outputs"].items():
+        title, ups_name = TITLES[key]
+        base = (clean / spec["filename"]).read_bytes()
+        if hashlib.sha1(base).hexdigest() != spec["sha1"]:
+            raise RuntimeError(f"{key}: the clean ROM in {clean} does not match the lock")
+        data = (checkout / spec["filename"]).read_bytes()
+        if data == base:
+            raise RuntimeError(f"{key}: the overlay build is byte-identical to the clean ROM")
+        ups = ups_create(base, data)
+        if ups_apply(base, ups) != data:  # the same round trip make_ups.py's CLI insists on
+            raise RuntimeError(f"{key}: UPS round trip failed")
+        files[DIST / ups_name] = ups
+        for ext in ("sym", "map"):
+            files[OUT_DIR / f"{title}_slink.{ext}"] = (checkout / f"{key}.{ext}").read_bytes()
+        outputs[key] = {
+            "filename": spec["filename"], "slink_title": title, "base_sha1": spec["sha1"],
+            **rom_facts(data),
+            "ups": {"file": f"patch/dist/{ups_name}", "size": len(ups), "sha256": _sha256(ups)},
+        }
+        print(f"[overlay] {key}: sha1={outputs[key]['sha1']} ups={len(ups)} bytes", file=sys.stderr)
+
+    provenance = {
+        "schema": PROVENANCE_SCHEMA,
+        "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": lock["source"],
+        "overlay": {
+            "apply_script": "tools/apply_purergb_overlay.py",
+            "edits": len(overlay.EDITS),
+            "bank": overlay.OVERLAY_BANK,
+            "sources": {p.name: _sha256(p.read_bytes()) for p in sorted(overlay.OVERLAY_SRC.iterdir())
+                        if p.suffix in (".asm", ".inc")},
+        },
+        "toolchain": _toolchain_record(rgbds_bin, devkit_bin, lock),
+        "command": command,
+        "outputs": outputs,
+        "symbols": {dst.name: _sha256(data) for dst, data in files.items() if dst.parent == OUT_DIR},
+    }
+
+    if check:
+        drift = [str(dst.relative_to(REPO_ROOT)) for dst, data in files.items()
+                 if not dst.exists() or dst.read_bytes() != data]
+        if PROVENANCE_PATH.exists():
+            committed = json.loads(PROVENANCE_PATH.read_text(encoding="utf-8"))
+            committed.pop("generated", None)
+            mine = dict(provenance)
+            mine.pop("generated")
+            if committed != mine:
+                drift.append(str(PROVENANCE_PATH.relative_to(REPO_ROOT)))
+        else:
+            drift.append(str(PROVENANCE_PATH.relative_to(REPO_ROOT)))
+        if drift:
+            print(f"[overlay] --check: drift from the committed artifacts: {drift}", file=sys.stderr)
+            return 1
+        print("[overlay] --check: the build reproduces every committed artifact byte-for-byte", file=sys.stderr)
+        return 0
+
+    for dst, data in files.items():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+    _write_json(PROVENANCE_PATH, provenance)
+    print(f"[overlay] published {len(files)} files + {PROVENANCE_PATH.relative_to(REPO_ROOT)}", file=sys.stderr)
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--repo-dir", type=pathlib.Path, default=None,
+                    help=f"clean pinned checkout to copy from (default {PURERGB_CACHE})")
+    ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--check", action="store_true", help="build and compare, publish nothing")
+    args = ap.parse_args()
+    try:
+        return build(repo_dir=args.repo_dir, rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin,
+                     check=args.check)
+    except (RuntimeError, SystemExit) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -5,10 +5,14 @@
 
 computed from the built pureRGB ROMs (SLINK_PURERGB_ROMS / SLINK_PURERGB_SRC) and cross-checked
 against data/purergb_sources.lock.json (sha1, header CRC, CRC32, header title). `kind` is
-"clean" for the built ROMs; overlay artifacts (M3) add their own rows later.
+"clean" for the built ROMs. `--kind overlay` writes admission_overlay.json the same way for the
+SLink companion build (PLAN M3): rows of kind "overlay" from the overlay ROMs, cross-checked
+against data/purergb/overlay_provenance.json, each naming the clean `base_sha1` its UPS applies to.
+lua/gen1/entry.lua reads both files into one sha1 table.
 
     python tools/gen_gen1_admission_profiles.py            # rewrite
     python tools/gen_gen1_admission_profiles.py --check    # exit 1 if the committed file is stale
+    python tools/gen_gen1_admission_profiles.py --kind overlay
 """
 from __future__ import annotations
 
@@ -24,7 +28,6 @@ sys.path.insert(0, str(REPO / "tools"))
 import gen1_foundation as F  # noqa: E402
 
 FOUNDATION = "purergb"
-OUT = F.data_dir(FOUNDATION) / "admission.json"
 
 
 def describe(rom: bytes) -> dict:
@@ -37,15 +40,19 @@ def describe(rom: bytes) -> dict:
     }
 
 
-def build() -> dict:
-    lock = F.lock(FOUNDATION)
-    fnd = F.foundation(FOUNDATION)
+def build(foundation: str = FOUNDATION) -> dict:
+    lock = F.lock(foundation)
+    fnd = F.foundation(foundation)
+    kind = "overlay" if foundation.endswith("_overlay") else "clean"
     out: dict = {}
     for title, (_sym, rom_file, _repo) in fnd["titles"].items():
-        rom = F.rom_path(FOUNDATION, title).read_bytes()
+        rom = F.rom_path(foundation, title).read_bytes()
         want = lock["outputs"][pathlib.Path(rom_file).stem]
         sha1 = hashlib.sha1(rom).hexdigest()
-        row = {"title": title, "kind": "clean", "profile_id": f"gen1_purergb/{title}", **describe(rom)}
+        row = {"title": title, "kind": kind, "profile_id": f"gen1_purergb/{title}", **describe(rom)}
+        if kind == "overlay":
+            row["base_sha1"] = want["base_sha1"]  # the clean ROM the UPS in patch/dist applies to
+            row["ups"] = want["ups"]["file"]
         for key in ("sha1", "header_crc", "crc32"):
             got = sha1 if key == "sha1" else row[key]
             if got != want[key]:
@@ -63,17 +70,21 @@ def render(value: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if the committed file is stale")
+    ap.add_argument("--kind", default="clean", choices=("clean", "overlay"),
+                    help="overlay: the SLink companion build (admission_overlay.json)")
     args = ap.parse_args()
-    text = render(build())
+    foundation = F.with_kind(FOUNDATION, args.kind)
+    out = F.out_path(foundation, "admission.json")
+    text = render(build(foundation))
     if args.check:
-        if not OUT.exists() or OUT.read_text(encoding="utf-8") != text:
-            print(f"{OUT.relative_to(REPO)} is stale; run tools/gen_gen1_admission_profiles.py", file=sys.stderr)
+        if not out.exists() or out.read_text(encoding="utf-8") != text:
+            print(f"{out.relative_to(REPO)} is stale; run tools/gen_gen1_admission_profiles.py", file=sys.stderr)
             return 1
-        print(f"{OUT.relative_to(REPO)} is current")
+        print(f"{out.relative_to(REPO)} is current")
         return 0
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text, encoding="utf-8", newline="\n")
-    print(f"wrote {OUT.relative_to(REPO)}: " + ", ".join(f"{v['title']}={k[:12]}" for k, v in json.loads(text).items()))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8", newline="\n")
+    print(f"wrote {out.relative_to(REPO)}: " + ", ".join(f"{v['title']}={k[:12]}" for k, v in json.loads(text).items()))
     return 0
 
 

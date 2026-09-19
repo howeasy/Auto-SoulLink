@@ -69,6 +69,13 @@ Entry.PACK_FILES = {
         admission = "data/games/gen1_purergb/admission.json",
         charmap = "data/games/gen1_purergb/charmap.lua",
         species_index = "data/games/gen1_purergb/species_index.json",
+        -- The SLink companion overlay (PLAN M3): a distinct artifact with its own profile
+        -- (+ the `trade` block), sites and checkpoint (ROM symbols relocate, RAM does not) and
+        -- its own admission rows; `<key>_<kind>` is what Entry.build loads for that kind.
+        profile_overlay = "data/games/gen1_purergb/profile_overlay.json",
+        sites_overlay = "data/games/gen1_purergb/engine_signals_overlay.json",
+        checkpoint_overlay = "data/games/gen1_purergb/write_checkpoint_overlay.json",
+        admission_overlay = "data/games/gen1_purergb/admission_overlay.json",
     },
 }
 Entry.ROM_TYPE = {}
@@ -125,9 +132,13 @@ function Entry.admission_table(root, json)
     for pack, def in pairs(Entry.PACKS) do
         local files = Entry.PACK_FILES[pack]
         if files.admission then
-            for sha, row in pairs(load_json(json, root .. "/" .. files.admission)) do
-                table_[sha:lower()] = { pack = pack, title = row.title, kind = row.kind or "clean",
-                                        rom_type = def.rom_type[row.title] }
+            for _, key in ipairs({ "admission", "admission_overlay" }) do
+                if files[key] then
+                    for sha, row in pairs(load_json(json, root .. "/" .. files[key])) do
+                        table_[sha:lower()] = { pack = pack, title = row.title, kind = row.kind or "clean",
+                                                rom_type = def.rom_type[row.title] }
+                    end
+                end
             end
         else
             for title, t in pairs(load_json(json, root .. "/" .. files.profile).titles) do
@@ -213,9 +224,15 @@ function Entry.build(deps)
     local pack_def = assert(Entry.PACKS[pack], "unknown pack " .. tostring(pack))
     local files = Entry.PACK_FILES[pack]
     local title = assert(deps.title, "deps.title required")
-    local profile = assert(load_json(json, root .. "/" .. files.profile).titles[title], "unknown title " .. title)
-    local sites = assert(load_json(json, root .. "/" .. files.sites).titles[title]).sites
-    local write_checkpoint = assert(load_json(json, root .. "/" .. files.checkpoint)[title])
+    -- the pack file for this artifact kind: profile.json for clean, profile_overlay.json for overlay
+    local kind = deps.kind or "clean"
+    local function pack_file(key)
+        local rel = kind == "clean" and files[key] or files[key .. "_" .. kind]
+        return root .. "/" .. assert(rel, pack .. " ships no " .. key .. " for artifact kind " .. kind)
+    end
+    local profile = assert(load_json(json, pack_file("profile")).titles[title], "unknown title " .. title)
+    local sites = assert(load_json(json, pack_file("sites")).titles[title]).sites
+    local write_checkpoint = assert(load_json(json, pack_file("checkpoint"))[title])
     local area_map = load_json(json, root .. "/" .. files.area_map)
     -- static (scripted, fixed-species) encounters get their own area id; generated from pret
     local statics = load_json(json, root .. "/" .. files.statics).statics

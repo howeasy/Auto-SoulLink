@@ -75,6 +75,41 @@ TARGETS: dict[str, dict] = {
         "out_name":    "Pokemon Blue (SLink companion).gb",
         "base_hint":   "a clean US/English Pokemon Blue dump",
     },
+    # pureRGB (Vortyne, v2.7.6 @ 7e7a4653): the SLink companion overlay is a source build
+    # linked into pureRGB (patch/gen1/purergb/, tools/build_purergb_overlay.py). The base is
+    # the locked pure build (data/purergb_sources.lock.json), the result is recorded in
+    # data/purergb/overlay_provenance.json and admitted by data/games/gen1_purergb/
+    # admission_overlay.json. md5s are copied from those two files.
+    "pure-red": {
+        "slug":        "pure-red",
+        "label":       "pureRGB Red",
+        "patch":       "SLink-PureRed.ups",
+        "base_md5":    "6f9ab804e11679ec3f29923063a50115",
+        "patched_md5": "fd6b28b56eb94bf7902cdb0e87fb3b40",
+        "accept":      ".gbc,.gb,application/octet-stream",
+        "out_name":    "Pokemon Red (pureRGB, SLink companion).gbc",
+        "base_hint":   "the pureRGB v2.7.6 Red build (pokered.gbc)",
+    },
+    "pure-blue": {
+        "slug":        "pure-blue",
+        "label":       "pureRGB Blue",
+        "patch":       "SLink-PureBlue.ups",
+        "base_md5":    "feaf1177a83be4517f7711dad85102b2",
+        "patched_md5": "56d0125450bd76e917e29b0f04ba79a2",
+        "accept":      ".gbc,.gb,application/octet-stream",
+        "out_name":    "Pokemon Blue (pureRGB, SLink companion).gbc",
+        "base_hint":   "the pureRGB v2.7.6 Blue build (pokeblue.gbc)",
+    },
+    "pure-green": {
+        "slug":        "pure-green",
+        "label":       "pureRGB Green",
+        "patch":       "SLink-PureGreen.ups",
+        "base_md5":    "03b83b94f8f0915967a9b8063e6e9f6f",
+        "patched_md5": "74f4acf51f863e6c49ef8d8e462efb6f",
+        "accept":      ".gbc,.gb,application/octet-stream",
+        "out_name":    "Pokemon Green (pureRGB, SLink companion).gbc",
+        "base_hint":   "the pureRGB v2.7.6 Green build (pokegreen.gbc)",
+    },
 }
 
 DEFAULT_TARGET = "rr"

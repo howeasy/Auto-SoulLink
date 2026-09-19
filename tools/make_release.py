@@ -146,6 +146,11 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "species_index.json",
         "static_encounters.json",
         "write_checkpoint.json",
+        # The SLink companion overlay's own pack files (PLAN M3), selected by admission kind.
+        "admission_overlay.json",
+        "engine_signals_overlay.json",
+        "profile_overlay.json",
+        "write_checkpoint_overlay.json",
     ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",

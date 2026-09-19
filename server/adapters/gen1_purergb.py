@@ -73,6 +73,10 @@ class Gen1PureRGBAdapter(Gen1Adapter):
             raise ValueError(f"unrecognised pureRGB rom_type: {rom_type!r}")
         self._variant = _ROM_VARIANT[rom_type]
         self._enc_variant = self._variant
+        # "clean" or "overlay" (the hello's artifact_kind; the SLink companion overlay is the
+        # only pure build with the native panel + receptionist, PLAN M3). Whoever constructs
+        # the adapter for a committed run passes it; a clean cartridge is the safe default.
+        self._artifact_kind = kwargs.get("artifact_kind") or "clean"
         self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
         self._layout = gen1_codec.for_foundation("gen1_purergb")
 
@@ -203,14 +207,25 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         return set(self._rival_ids)
 
     # ── presentation ─────────────────────────────────────────────────────────────────────
+    @property
+    def artifact_kind(self) -> str:
+        return self._artifact_kind
+
+    def set_artifact_kind(self, kind: str) -> None:
+        """Bind the run's committed artifact kind (server/state.py `artifact_kind`)."""
+        self._artifact_kind = kind or "clean"
+
     def supports_info_panel(self) -> bool:
-        # The native panel ships in the SLink source overlay (M3), not in a clean pureRGB
-        # ROM. Hook for M3: flip this once an overlay-kind artifact is detected per player.
-        return False
+        # The native panel ships in the SLink source overlay (M3), not in a clean pureRGB ROM.
+        return self._artifact_kind == "overlay"
 
     def native_trade_ui(self) -> bool:
-        # Same story as supports_info_panel: True only once the M3 overlay exists.
-        return False
+        # The receptionist + native trade scene ship in the same overlay.
+        return self._artifact_kind == "overlay"
+
+    def info_panel_width(self) -> int:
+        # Game Boy tilemap width, as the vanilla adapter reports for its panel.
+        return 20 if self.supports_info_panel() else 0
 
     def sprite_src(self, species_id: int) -> str:
         dex = self._sprite_dex(species_id)
