@@ -924,9 +924,9 @@ GAMES = {
     "gen1_pure": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
-        # docs/purergb/PLAN.md §13: trade/explode need the M3 source overlay, admit_randomized
-        # the M5 UPR fork; `--scenario all` on this row runs the other fourteen.
-        "not_yet": ("trade_new", "trade_decline_new", "explode_new", "admit_randomized_new"),
+        # docs/purergb/PLAN.md §13: trade/explode need the M3 source overlay (admit_randomized
+        # runs on the M5 fork jar); `--scenario all` on this row runs the other fifteen.
+        "not_yet": ("trade_new", "trade_decline_new", "explode_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
         "uses_savestate": False,
@@ -938,7 +938,7 @@ GAMES = {
     "gen1_pure_green": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
-        "not_yet": ("trade_new", "trade_decline_new", "explode_new", "admit_randomized_new"),
+        "not_yet": ("trade_new", "trade_decline_new", "explode_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_puregreen.gbc"},
         "uses_savestate": False,
