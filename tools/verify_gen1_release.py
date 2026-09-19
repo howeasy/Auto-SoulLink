@@ -53,7 +53,7 @@ _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
 _SLOW = {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb", "live-trade-gates",
-         "duo-pairs"}
+         "duo-pairs", "inspect-purergb-overlay", "live-trade-gates-purergb", "apex-refusal-purergb"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
 # The gate's whole point is that a skip is a failure, so an exception has to be argued for
@@ -157,9 +157,41 @@ LANES = [
          [_PY, "-m", "pytest", "tests/live/test_gen1_trade_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
          env={"SLINK_LIVE": "1"},
-         why="the SLINK TRADE receptionist on the patched Red/Blue cartridges: menu, offer, "
-             "refusal and acceptance texts, every client line schema-valid "
-             "(docs/gen1_requirements.md T-1, T-2)"),
+         why="the SLINK TRADE receptionist on the patched Red/Blue cartridges AND the pureRGB "
+             "companion overlay: menu, offer, refusal and acceptance texts, every client line "
+             "schema-valid (docs/gen1_requirements.md T-1, T-2; PLAN M3 for the overlay case)"),
+    Lane("inspect-purergb-overlay",
+         [_PY, "-m", "pytest",
+          "tests/live/test_gen1_new_gates.py::test_inspect_gate_overlay_round_trip",
+          "-q", "-p", "no:randomly", "-rs"],
+         env={"SLINK_LIVE": "1"},
+         why="A4 live: the three pureRGB companion-overlay cartridges (patch/dist/SLink-Pure*.ups "
+             "applied to the sha1-verified clean build) boot the CLEAN pure town/battle fixtures "
+             "unchanged, decode identically in Lua and Python -- the overlay adds ROM code, it "
+             "does not move SRAM. Selected by node id (parametrised over the three titles x two "
+             "targets), so nothing is collected-then-deselected; skip = lane failure, so the UPS "
+             "artifacts, the clean pure builds and the pure fixtures have to be in the tree"),
+    Lane("live-trade-gates-purergb",
+         [_PY, "-m", "pytest",
+          "tests/live/test_gen1_trade_gates.py::test_receptionist_query_offer_and_native_notices"
+          "[purered_overlay-purered-None]",
+          "-q", "-p", "no:randomly", "-rs"],
+         env={"SLINK_LIVE": "1"},
+         why="the SLINK TRADE receptionist on the pureRGB companion-overlay PureRed cartridge "
+             "(PLAN M3 P4): trade_query within the ABI window, the native SLINK TRADE/CABLE "
+             "CLUB/CANCEL menu, offer/refusal/acceptance notices, CABLE CLUB falling through to "
+             "vanilla pureRGB text, every client line schema-valid. Selected by the exact "
+             "parametrized node id -- red/blue stay live-trade-gates' job"),
+    Lane("apex-refusal-purergb",
+         [_PY, "tools/run_gb_gate.py", "lua/tests/test_gen1_apex_refusal_gate.lua",
+          "--rom", "purered_overlay", "--target", "town", "--timeout", "600"],
+         why="the M3 overlay's ROM-level APEX CHIP collision guard (SlinkApexGuard, retargeted "
+             "onto ItemUseMedicine.setDVs): a cross-mon same-species/same-OT DVs-$FFFF collision "
+             "refuses BEFORE the DV store (pureRGB's own .alreadyUsedApex text, chip not "
+             "consumed, DVs unchanged, no key_change sent), then the same chip on the same slot "
+             "goes through normally once the collision is removed. Not a pytest lane -- "
+             "run_gb_gate.py itself fails closed (raises on a missing ROM/fixture, exit 1 on a "
+             "FAIL result), so a missing artifact cannot read as green here either"),
     Lane("duo-pairs",
          [_PY, "-m", "pytest", "tests/e2e/test_duo_gen1_new.py", "-q", "-p", "no:randomly",
           "-rs"],
@@ -187,6 +219,9 @@ REQUIREMENTS = {
     "inspect-purergb": ["R-1", "S", "W-7", "F-6"],
     "apex-purergb": ["T1", "T3"],
     "live-trade-gates": ["T-1", "T-2"],
+    "inspect-purergb-overlay": ["R-1", "S", "W-7", "F-6", "A4 (PLAN M3)"],
+    "live-trade-gates-purergb": ["T-1", "T-2", "PLAN M3"],
+    "apex-refusal-purergb": ["U6 (PLAN M3, ROM-level guard)"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],
 }
 

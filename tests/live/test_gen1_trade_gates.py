@@ -1,12 +1,14 @@
-"""Physical receptionist gate on patched Red/Blue; normal-button town-to-Center walk.
+"""Physical receptionist gate on patched Red/Blue AND the pureRGB companion overlay
+(purered_overlay, PLAN M3/P4); normal-button town-to-Center walk.
 
 Run only when the owner releases the emulator lane:
     SLINK_LIVE=1 python -m pytest tests/live/test_gen1_trade_gates.py -q -p no:cacheprovider
 
-The gate boots the qualified, unmodified red_town/blue_town battery saves at
-Oak's Lab and walks to Viridian Center. It does not stage RAM, registers or a
-savestate, and it does not manufacture a Center fixture. A passed gate proves
-the live local receptionist query/offer/refusal path, not a paired physical trade.
+The gate boots the qualified, unmodified <rom>_town battery save at Oak's Lab and walks to
+Viridian Center. It does not stage RAM, registers or a savestate, and it does not manufacture a
+Center fixture. A passed gate proves the live local receptionist query/offer/refusal path, not a
+paired physical trade. The overlay case reuses the clean purered_town fixture (A4: a clean pure
+SaveRAM loads unchanged on the overlay build).
 """
 
 from __future__ import annotations
@@ -42,21 +44,39 @@ def emuhawk():
     return play.EMUHAWK
 
 
-@pytest.mark.parametrize("rom", ("red", "blue"))
-def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
+# (rom_key, fixture_key, legacy patched-ROM path or None). The overlay case has no fixed build
+# path: its cartridge is staged on demand by g1.staged_rom (apply the UPS, verify the sha1
+# against admission_overlay.json — tools/gen1_playthrough.purergb_overlay_dump, PLAN M3 A4).
+CASES = (
+    ("red_patched", "red", "patch/gen1/build/slink_red.gb"),
+    ("blue_patched", "blue", "patch/gen1/build/slink_blue.gb"),
+    ("purered_overlay", "purered", None),
+)
+
+
+@pytest.mark.parametrize(("rom_key", "fixture_key", "legacy_rom_path"), CASES)
+def test_receptionist_query_offer_and_native_notices(rom_key, fixture_key, legacy_rom_path, emuhawk):
+    import gen1_playthrough as play
     from run_gb_gate import PATCHED, run_gate
 
-    assert PATCHED[f"{rom}_patched"][0] == rom  # existing key seeds <rom>_town.SaveRAM
-    fixture = ROOT / f"tests/fixtures/gen1/{rom}_town.SaveRAM"
-    patched_rom = ROOT / f"patch/gen1/build/slink_{rom}.gb"
-    if not fixture.is_file() or not patched_rom.is_file():
-        pytest.skip(f"{rom}: qualified town SaveRAM or patched trade ROM absent")
-    passed, result_path, text = run_gate(GATE, rom_key=f"{rom}_patched", target="town",
+    assert PATCHED[rom_key][0] == fixture_key  # seeds <fixture_key>_town.SaveRAM (A4: shared pure fixture)
+    fixture = ROOT / f"tests/fixtures/gen1/{fixture_key}_town.SaveRAM"
+    if not fixture.is_file():
+        pytest.skip(f"{rom_key}: qualified town SaveRAM absent")
+    if legacy_rom_path is not None:
+        if not (ROOT / legacy_rom_path).is_file():
+            pytest.skip(f"{rom_key}: patched trade ROM absent ({legacy_rom_path})")
+    else:
+        try:
+            play.staged_rom(rom_key)   # applies the UPS and sha1-verifies the overlay cartridge
+        except Exception as exc:  # noqa: BLE001 - any staging failure just skips a live gate
+            pytest.skip(f"{rom_key}: overlay cartridge unavailable ({exc})")
+    passed, result_path, text = run_gate(GATE, rom_key=rom_key, target="town",
                                          timeout=900, quiet=True)
     # the gate overwrites one result file per run; keep a receipt per cartridge
-    kept = Path(result_path).with_name(f"test_gen1_receptionist_gate_{rom}_result.txt")
+    kept = Path(result_path).with_name(f"test_gen1_receptionist_gate_{rom_key}_result.txt")
     kept.write_text(text, encoding="utf-8")
-    assert passed, f"{rom}: receptionist gate failed ({result_path}):\n{text[-3000:]}"
+    assert passed, f"{rom_key}: receptionist gate failed ({result_path}):\n{text[-3000:]}"
     assert "[ok] trade_enabled on the patched build" in text
     assert "[ok] bank-qualified trade service site registered" in text
     assert "[ok] walked from Oak's Lab to the physical Center receptionist" in text
@@ -72,28 +92,12 @@ def test_receptionist_query_offer_and_native_notices(rom, emuhawk):
     assert "MENU SLINK" in text and "MENU CABLE" in text and "MENU CANCEL" in text
 
     lines = re.findall(r"^SENT (\{.*\})$", text, re.M)
-    assert lines, f"{rom}: gate did not record outbound client lines"
+    assert lines, f"{rom_key}: gate did not record outbound client lines"
     messages = [json.loads(line) for line in lines]
     for index, message in enumerate(messages):
-        assert schema.validate_event(message) == [], (rom, index, message)
+        assert schema.validate_event(message) == [], (rom_key, index, message)
     seq = [message["seq"] for message in messages]
-    assert seq == list(range(seq[0], seq[0] + len(seq))), f"{rom}: client seq discontinuity"
+    assert seq == list(range(seq[0], seq[0] + len(seq))), f"{rom_key}: client seq discontinuity"
     assert sum(message["event"] == "trade_query" for message in messages) == 4  # 2 offers + CABLE CLUB + CANCEL
     offers = [message for message in messages if message["event"] == "trade_offer"]
     assert len(offers) == 2 and [offer["slot"] for offer in offers] == [0, 0]
-
-
-PURE_ROMS = ("purered", "pureblue", "puregreen")
-
-
-@pytest.mark.parametrize("rom", PURE_ROMS)
-def test_pure_titles_have_no_companion_patch_yet(rom):
-    """The receptionist lives in the companion patch, and the pureRGB overlay is M3 work.
-
-    Stated as a test rather than left out, because "no pure case exists" and "the pure case was
-    forgotten" look identical in a report. It stays a skip here rather than an assertion so that a
-    checkout without the pure cartridges still runs the vanilla lane; the release gate counts a
-    skip as a failure, which is exactly why no pure trade lane is listed in tools/verify_gen1_release.py
-    yet -- the lane is created with the overlay (docs/purergb/PLAN.md section 6, M3).
-    """
-    pytest.skip(f"{rom}: no pureRGB companion patch until M3 (PLAN section 6)")

@@ -243,6 +243,22 @@ return {
     hunt_ball_max  = 4, -- DELTA: the vanilla ball dispatch stops at POKE_BALL $04 (engine/items/item_effects.asm:23-26); pureRGB adds HYPER_BALL $05 -> 5
   },
 
+  -- ── Companion overlay/patch ABI (PLAN M3 B5). The two tables carry the SAME frame counts —
+  -- only the addresses that anchor them move, and pureRGB's overlay runs the overworld at 2x
+  -- emulator speed (CGB double-speed), which is why speed_multiplier is recorded at all: the
+  -- windows below are counted in FRAMES, not wall time, so a 2x core does not scale them. ──────
+  COMPANION = {
+    playtime_frames_addr   = 0xDA44, -- SAME: pret ram/wram.asm wPlayTimeFrames (test_gen1_patch_gate.lua measured this address directly; pureRGB moves it, see gen1_pure_facts.lua DELTA)
+    channel_sound_ids_addr = 0xC026, -- SAME: pret ram/wram.asm wChannelSoundIDs (data/purergb/pokered.sym wChannelSoundIDs agrees)
+    speed_multiplier       = 1, -- SAME: the vanilla companion patch runs at native DMG/CGB single speed
+    panel_stage_timeout    = 90, -- SAME: patch/gen1/src/slink.asm SLINK_STAGE_TIMEOUT (patch/gen1/purergb/README.md "stage 90" is the same ABI)
+    panel_deadline         = 60, -- SAME: lua/gen1/panel.lua DEADLINE (measured from the transition the client observed, tighter than the patch's own poll)
+    query_frames           = 30, -- SAME: patch/gen1/purergb/README.md B5 "the same timings (QUERY 30, ...)"
+    offer_frames           = 180, -- SAME: patch/gen1/purergb/README.md B5 "OFFER 180"
+    settle_frames          = 20, -- SAME: patch/gen1/purergb/README.md B5 "settle 20" (ROM 20-frame button settle)
+    apply_frames           = 100, -- SAME: patch/gen1/purergb/README.md B5 "apply 100" (native apply pre-animation delay)
+  },
+
   -- ── Engine-signal banks per hook ────────────────────────────────────────────────────────────
 
   -- ── ── Engine-signal banks per hook (data/games/gen1_rby/engine_signals.json; the 5 battle-menu hooks gen1_battle_driver.lua hooks are bank $0F) ──

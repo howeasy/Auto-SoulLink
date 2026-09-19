@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIZHAWK = os.environ.get("SLINK_BIZHAWK_HOME", "E:/Howard/Bizhawk")
@@ -58,9 +59,69 @@ PURERGB_LOCK = os.path.join(REPO, "data", "purergb_sources.lock.json")
 # (data/games/gen1_purergb/admission.json), so harness and client spell the foundation the same way.
 PURERGB_KEYS = {"purered": "pokered", "pureblue": "pokeblue", "puregreen": "pokegreen"}
 
+# ── pureRGB companion overlay (M3/P4) ──────────────────────────────────────────────────────────
+# The overlay cartridge is the clean pure build + patch/dist/SLink-Pure{Red,Blue,Green}.ups
+# (tools/build_purergb_overlay.py); the harness never needs the full RGBDS toolchain to run a
+# gate against it, only the applier in patch/tools/make_ups.py and the admitted sha1 in
+# data/games/gen1_purergb/admission_overlay.json (A4: overlay == clean + UPS, nothing else).
+OVERLAY_SUFFIX = "_overlay"
+PURERGB_ADMISSION_OVERLAY = os.path.join(REPO, "data", "games", "gen1_purergb", "admission_overlay.json")
+# where the applied overlay bytes are cached, keyed by rom key (mirrors PURERGB_ROMS' role for
+# the clean builds: a place staged_rom's copy step reads FROM, never the final launch path).
+PURERGB_OVERLAY_STAGE = os.path.join(REPO, ".cache", "purergb-overlay-staged")
+
+
+def is_purergb_overlay(rom_key: str) -> bool:
+    return rom_key.endswith(OVERLAY_SUFFIX) and rom_key[: -len(OVERLAY_SUFFIX)] in PURERGB_KEYS
+
 
 def is_purergb(rom_key: str) -> bool:
-    return rom_key in PURERGB_KEYS
+    return rom_key in PURERGB_KEYS or is_purergb_overlay(rom_key)
+
+
+def _overlay_admission_row(base_key: str) -> tuple:
+    """(sha1, entry) from admission_overlay.json whose `title` is the clean rom key."""
+    with open(PURERGB_ADMISSION_OVERLAY, encoding="utf-8") as f:
+        table = json.load(f)
+    for sha1, entry in table.items():
+        if entry["title"] == base_key:
+            return sha1, entry
+    raise KeyError(f"no overlay admission row for {base_key!r} in {PURERGB_ADMISSION_OVERLAY}")
+
+
+def purergb_overlay_dump(rom_key: str) -> str:
+    """Apply the SLink UPS to the sha1-verified clean pureRGB build and assert the result
+    against admission_overlay.json (PLAN M3 A4: the overlay is the clean build + the UPS,
+    nothing else — no RGBDS toolchain needed here). Cached under PURERGB_OVERLAY_STAGE;
+    rebuilt when the clean ROM or the UPS is newer than the cache.
+    """
+    base_key = rom_key[: -len(OVERLAY_SUFFIX)]
+    clean_path = purergb_dump(base_key)
+    want_sha1, entry = _overlay_admission_row(base_key)
+    ups_path = os.path.join(REPO, entry["ups"])
+    ext = os.path.splitext(clean_path)[1]
+    cache = os.path.join(PURERGB_OVERLAY_STAGE, f"{rom_key}{ext}")
+    stale = (not os.path.exists(cache)
+             or os.path.getmtime(cache) < os.path.getmtime(clean_path)
+             or os.path.getmtime(cache) < os.path.getmtime(ups_path))
+    if stale:
+        sys.path.insert(0, os.path.join(REPO, "patch", "tools"))
+        from make_ups import ups_apply  # local import: keeps this module dependency-free otherwise
+        with open(clean_path, "rb") as f:
+            source = f.read()
+        with open(ups_path, "rb") as f:
+            patch = f.read()
+        overlay_bytes = ups_apply(source, patch)
+        os.makedirs(PURERGB_OVERLAY_STAGE, exist_ok=True)
+        with open(cache, "wb") as f:
+            f.write(overlay_bytes)
+    with open(cache, "rb") as f:
+        got = hashlib.sha1(f.read()).hexdigest()
+    if got != want_sha1:
+        raise ValueError(
+            f"{cache} is not the admitted overlay for {rom_key}: sha1 {got}, expected "
+            f"{want_sha1} ({PURERGB_ADMISSION_OVERLAY})")
+    return cache
 
 
 def purergb_dump(rom_key: str) -> str:
@@ -84,6 +145,8 @@ def purergb_dump(rom_key: str) -> str:
 
 def dump_path(rom_key: str) -> str:
     """Absolute path of a key's cartridge dump (vanilla keys are repo-root filenames)."""
+    if is_purergb_overlay(rom_key):
+        return purergb_overlay_dump(rom_key)
     if is_purergb(rom_key):
         return purergb_dump(rom_key)
     return os.path.join(REPO, ROMS[rom_key])
@@ -105,8 +168,8 @@ def save_name_for(rom_rel: str) -> str:
 
 
 def dump_keys() -> tuple:
-    """Every rom key that has a cartridge: the vanilla three then the pureRGB three."""
-    return tuple(ROMS) + tuple(PURERGB_KEYS)
+    """Every rom key that has a cartridge: vanilla three, pureRGB three, pureRGB-overlay three."""
+    return tuple(ROMS) + tuple(PURERGB_KEYS) + tuple(k + OVERLAY_SUFFIX for k in PURERGB_KEYS)
 
 
 def staged_rom(rom_key: str) -> str:
@@ -124,6 +187,11 @@ def staged_rom(rom_key: str) -> str:
 
 
 def fixture_path(rom_key: str, target: str) -> str:
+    """The committed SaveRAM fixture for a rom key. An overlay key has none of its own — A4 says
+    a clean pure SaveRAM loads on the overlay build unchanged, so it resolves to the clean pure
+    fixture (PLAN M3 P4)."""
+    if is_purergb_overlay(rom_key):
+        rom_key = rom_key[: -len(OVERLAY_SUFFIX)]
     return os.path.join(FIXTURES, f"{rom_key}_{target}.SaveRAM")
 
 

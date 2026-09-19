@@ -933,6 +933,25 @@ GAMES = {
         "fixture": {"a": "purered", "b": "pureblue"},
         "scenario_prefix": "gen1_",
     },
+    # The pureRGB companion OVERLAY pairing (PLAN M3/P4): clean build + the SLink UPS. Rules-only
+    # scenarios stage the CLEAN pure cartridge through the ordinary fixture path below (A4: a
+    # clean pure SaveRAM loads on the overlay build unchanged, so the two are behaviourally
+    # equivalent for anything that is not native trade) -- only a scenario carrying
+    # `patched_saves` needs the trade-carrying cartridge, and `patched_saves_override` is what
+    # redirects those three (SCENARIOS hardcodes them to the vanilla companion-patch keys, since
+    # a scenario dict has no idea which GAME row is running it; `_patch_key`/`_rom_for` in
+    # DuoRun read this override). `not_yet` is empty: the overlay artifacts exist.
+    "gen1_pure_overlay": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "game": "gen1_new",
+        "not_yet": (),
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "purered", "b": "pureblue"},
+        "scenario_prefix": "gen1_",
+        "patched_saves_override": {"a": "purered_overlay", "b": "pureblue_overlay"},
+    },
     # The third pure title on the B side (PureGreen's fixtures lead with Charmander like Blue's),
     # so every pure cartridge has a duo pairing; same deferred scenarios as gen1_pure.
     "gen1_pure_green": {
@@ -1292,14 +1311,38 @@ class DuoRun:
         with open(cfg_ini, "w", encoding="utf-8") as handle:
             json.dump(cfg, handle, indent=2)
 
+    def _patch_key(self, inst: str) -> str | None:
+        """Which `run_gb_gate.PATCHED` row a trade-carrying scenario needs on this instance, or
+        None when the running scenario does not carry one at all.
+
+        `trade_new`/`trade_decline_new`/`explode_new` hardcode `patched_saves` to the vanilla
+        companion-patch keys (`red_patched`/`blue_patched`) at the SCENARIO level, because they
+        predate any second foundation and a scenario has no idea which GAME row is running it.
+        A GAME row that needs a DIFFERENT trade-carrying cartridge for those same three scenarios
+        (the pureRGB overlay row, PLAN M3/P4) says so with its own `patched_saves_override`,
+        keyed the same way; this is the one place that override is read.
+        """
+        if not self.cfg.get("patched_saves"):
+            return None
+        override = self.gcfg.get("patched_saves_override")
+        return override[inst] if override else self.cfg["patched_saves"][inst]
+
     def _rom_for(self, inst: str) -> str:
         """The ROM path this instance launches.
 
-        A scenario that stages its own (the randomized-admission legs) wins. Otherwise a
-        battery-boot game resolves the ROM through its own play module's staged_rom(), which copies
-        and verifies it: that returns the same path the GAMES table spells out for the vanilla rows
-        and lets a pureRGB fixture key stage from the pinned source lock.
+        A trade-carrying scenario whose GAME row overrides `patched_saves` (the pureRGB overlay
+        row) stages ITS OWN cartridge first: g1.staged_rom applies the UPS and sha1-verifies the
+        result, so returning a bare literal path here would race the artifact into existing.
+        Otherwise a scenario that stages its own (the randomized-admission legs, or the vanilla
+        trade scenarios' literal patched-ROM path) wins; failing that, a battery-boot game
+        resolves the ROM through its own play module's staged_rom(), which copies and verifies
+        it: that returns the same path the GAMES table spells out for the vanilla rows and lets a
+        pureRGB fixture key stage from the pinned source lock.
         """
+        patch_key = self._patch_key(inst)
+        if patch_key and self.gcfg.get("patched_saves_override"):
+            import gen1_playthrough as g1
+            return g1.staged_rom(patch_key)
         staged = getattr(self, "_admit_roms", None) or self.cfg.get("rom")
         if staged:
             return staged[inst]
@@ -1313,8 +1356,8 @@ class DuoRun:
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
                               dest_dir=self._saveram_dir(inst))
-        if self.cfg.get("patched_saves"):
-            patch_key = self.cfg["patched_saves"][inst]
+        patch_key = self._patch_key(inst)
+        if patch_key:
             save_name = GENS["gen1"]["patched"][patch_key][2]
             shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), save_name))
         extra_name = getattr(self, "_admit_extra_saves", {}).get(inst)
@@ -2309,18 +2352,22 @@ class DuoRun:
         self._pydec_note(f"B Box 12 holds {self._deadzone_b_key} at HP 0")
 
     def _patched_saved_state(self, inst):
-        """The flushed SaveRAM of a trade-carrying cartridge (companion patch in the ROM).
+        """The flushed SaveRAM of a trade-carrying cartridge (companion patch in the ROM, or the
+        pureRGB companion OVERLAY on a row that sets `patched_saves_override`).
 
-        Those scenarios launch `patch/gen1/build/slink_{red,blue}.gb`, whose SaveRAM name is the
-        filename-derived patched one, so the clean-title default would read the wrong file. One
-        resolver, shared by every oracle that runs those ROMs.
+        Those scenarios launch `patch/gen1/build/slink_{red,blue}.gb` (or, overridden, the
+        overlay cartridge `_rom_for` staged), whose SaveRAM name is the filename-derived patched
+        one, so the clean-title default would read the wrong file. One resolver, shared by every
+        oracle that runs those ROMs.
         """
         if REPO not in sys.path:
             sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
         from run_gb_gate import GENS
 
-        save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
-        return self._saved_gen1_party(inst, rom=self.cfg["rom"][inst], save_name=save_name)
+        patch_key = self._patch_key(inst)
+        save_name = GENS["gen1"]["patched"][patch_key][2]
+        rom_path = self._rom_for(inst) if self.gcfg.get("patched_saves_override") else self.cfg["rom"][inst]
+        return self._saved_gen1_party(inst, rom=rom_path, save_name=save_name)
 
     def assert_linked_faint_saved(self, results, *, active, saved_state=None, explode=False):
         """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts.
@@ -3492,7 +3539,7 @@ class DuoRun:
             raise RuntimeError(f"links.json halves were not swapped: {link['a']['key']} / {link['b']['key']}")
 
         for inst, incoming, partner in (("a", before_b, "b"), ("b", before_a, "a")):
-            save_name = GENS["gen1"]["patched"][self.cfg["patched_saves"][inst]][2]
+            save_name = GENS["gen1"]["patched"][self._patch_key(inst)][2]
             save = Path(self._saveram_dir(inst)) / save_name
             sram = save.read_bytes()
             if len(sram) != codec.SRAM_SIZE:

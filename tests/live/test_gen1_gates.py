@@ -43,8 +43,12 @@ pytestmark = [
 ]
 
 # The companion-patch spike, which only exists for Red and Blue — Yellow has no free WRAM
-# for a mailbox (pret's map: WRAM0 TOTAL EMPTY $0000).
+# for a mailbox (pret's map: WRAM0 TOTAL EMPTY $0000). purered_overlay is the M3 companion
+# OVERLAY (PLAN P4): the same two gates, run against the pureRGB cartridge instead of the
+# vanilla one, reusing the clean purered_town fixture (A4).
 PATCH_ROMS = ("red_patched", "blue_patched")
+OVERLAY_ROMS = ("purered_overlay",)
+GATE_ROMS = PATCH_ROMS + OVERLAY_ROMS
 
 
 @pytest.fixture(scope="session")
@@ -54,7 +58,29 @@ def emuhawk():
     return play.EMUHAWK
 
 
-@pytest.mark.parametrize("rom", PATCH_ROMS)
+def _skip_unless_ready(rom):
+    """Skip with a reason unless `rom`'s fixture and cartridge are both ready to launch.
+
+    An overlay key has no fixed build path (`rom_rel is None`): its cartridge is staged on
+    demand by g1.staged_rom, which applies the UPS to the clean build and sha1-verifies the
+    result (tools/gen1_playthrough.purergb_overlay_dump, PLAN M3 A4) rather than failing a
+    plain os.path.exists on a path that was never going to exist.
+    """
+    from run_gb_gate import PATCHED
+    base_key, rom_rel, _ = PATCHED[rom]
+    if not os.path.exists(os.path.join(play.FIXTURES, f"{base_key}_town.SaveRAM")):
+        pytest.skip("missing fixture — `python tools/gen1_fixtures.py`")
+    if rom_rel is not None:
+        if not os.path.exists(os.path.join(REPO, rom_rel)):
+            pytest.skip(f"{rom_rel} not built — `python patch/gen1/tools/build.py`")
+        return
+    try:
+        play.staged_rom(rom)
+    except Exception as exc:  # noqa: BLE001 - any staging failure just skips a live gate
+        pytest.skip(f"{rom}: overlay cartridge unavailable ({exc})")
+
+
+@pytest.mark.parametrize("rom", GATE_ROMS)
 def test_gen1_companion_patch(rom, emuhawk):
     """The companion-patch spike: is the injected code reached, every frame, everywhere?
 
@@ -67,12 +93,7 @@ def test_gen1_companion_patch(rom, emuhawk):
     wIsInBattle, and a faked battle is not a battle. It is the A3 scenario's
     PANEL_COUNTER_IN_BATTLE marker, taken inside a real wild encounter, instead.
     """
-    from run_gb_gate import PATCHED
-    base_key, rom_rel, _ = PATCHED[rom]
-    if not os.path.exists(os.path.join(REPO, rom_rel)):
-        pytest.skip(f"{rom_rel} not built — `python patch/gen1/tools/build.py`")
-    if not os.path.exists(os.path.join(play.FIXTURES, f"{base_key}_town.SaveRAM")):
-        pytest.skip("missing fixture — `python tools/gen1_playthrough.py`")
+    _skip_unless_ready(rom)
 
     passed, result_path, text = run_gate("lua/tests/test_gen1_patch_gate.lua",
                                          rom_key=rom, target="town",
@@ -81,7 +102,7 @@ def test_gen1_companion_patch(rom, emuhawk):
                     f"result: {result_path}\n{text[-3000:]}")
 
 
-@pytest.mark.parametrize("rom", PATCH_ROMS)
+@pytest.mark.parametrize("rom", GATE_ROMS)
 def test_gen1_menu_row(rom, emuhawk):
     """The SLINK row the companion patch appends to the START menu, and the panel behind it.
 
@@ -93,12 +114,7 @@ def test_gen1_menu_row(rom, emuhawk):
     rows arrive as a real `link_panel` reply and the client decides whether it may paint, so
     what is under test is the shipped module and not a stand-in for it.
     """
-    from run_gb_gate import PATCHED
-    base_key, rom_rel, _ = PATCHED[rom]
-    if not os.path.exists(os.path.join(REPO, rom_rel)):
-        pytest.skip(f"{rom_rel} not built — `python patch/gen1/tools/build.py`")
-    if not os.path.exists(os.path.join(play.FIXTURES, f"{base_key}_town.SaveRAM")):
-        pytest.skip("missing fixture — `python tools/gen1_playthrough.py`")
+    _skip_unless_ready(rom)
 
     passed, result_path, text = run_gate("lua/tests/test_gen1_menu_row_gate.lua",
                                          rom_key=rom, target="town",

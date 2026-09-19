@@ -99,14 +99,11 @@ def _skip_if_absent(rom: str, target: str) -> None:
         pytest.skip(f"{rom}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
 
 
-@pytest.mark.parametrize("target", TARGETS)
-@pytest.mark.parametrize("rom", ROMS)
-def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
-    from run_gb_gate import run_gate
-    _skip_if_absent(rom, target)
-    passed, path, text = run_gate(GATE, rom_key=rom, target=target, timeout=240, quiet=True)
-    assert passed, f"gate FAILED on {rom}/{target}: {text[-1500:]}"
-
+def _assert_inspect_gate_agrees(text: str, rom: str, target: str) -> None:
+    """Lua's PARTY_RAW/PARTY_LUA/HELLO dump, cross-checked against the Python codec on the SAME
+    bytes. Shared by the vanilla/clean-pure lane and the overlay lane (A4): an overlay-admitted
+    cartridge decodes the identical party record, because the overlay adds ROM code and does not
+    move SRAM."""
     raw = bytes.fromhex(re.search(r"^PARTY_RAW ([0-9A-F]+)$", text, re.M).group(1))
     lua_party = _lua_json(text, "PARTY_LUA")
     py_party = codec.decode_party(raw)
@@ -121,6 +118,53 @@ def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
     assert ps.validate_event(hello) == []
     assert hello["party"][0]["key"] == codec.key(py_party[0])
     assert "write-safe overworld checkpoint reached" in text and "[ok] write-safe" in text
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("rom", ROMS)
+def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
+    from run_gb_gate import run_gate
+    _skip_if_absent(rom, target)
+    passed, path, text = run_gate(GATE, rom_key=rom, target=target, timeout=240, quiet=True)
+    assert passed, f"gate FAILED on {rom}/{target}: {text[-1500:]}"
+    _assert_inspect_gate_agrees(text, rom, target)
+
+
+# The pureRGB companion OVERLAY (PLAN M3/P4): the clean build + the SLink UPS, admitted on its
+# own sha1 (admission_overlay.json). Selected independently of ROMS/SLINK_GEN1_ROMS so a default
+# full run of this file does not silently pull the overlay cartridges into the vanilla/clean-pure
+# lab-route test above, which has no overlay wiring.
+OVERLAY_ROMS = ("purered_overlay", "pureblue_overlay", "puregreen_overlay")
+
+
+def _selected_overlay_roms() -> tuple:
+    wanted = tuple(part for part in re.split(r"[,\s]+", os.environ.get("SLINK_GEN1_OVERLAY_ROMS", "")) if part)
+    unknown = [rom for rom in wanted if rom not in OVERLAY_ROMS]
+    if unknown:
+        raise ValueError(f"unknown SLINK_GEN1_OVERLAY_ROMS entries {unknown}; known: {OVERLAY_ROMS}")
+    return wanted or OVERLAY_ROMS
+
+
+OVERLAY_SELECTED = _selected_overlay_roms()
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("rom", OVERLAY_SELECTED)
+def test_inspect_gate_overlay_round_trip(rom, target, emuhawk):
+    """A4 live: a clean pure SaveRAM loads on the overlay build unchanged. fixture_path resolves
+    an overlay key to the CLEAN pure fixture (g1.fixture_path); staged_rom applies the UPS and
+    sha1-verifies the result against admission_overlay.json."""
+    import gen1_playthrough as play
+    from run_gb_gate import run_gate
+    if not os.path.exists(play.fixture_path(rom, target)):
+        pytest.skip(f"{rom}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
+    try:
+        play.staged_rom(rom)
+    except Exception as exc:  # noqa: BLE001 - any staging failure just skips a live gate
+        pytest.skip(f"{rom}: overlay cartridge unavailable ({exc})")
+    passed, path, text = run_gate(GATE, rom_key=rom, target=target, timeout=240, quiet=True)
+    assert passed, f"gate FAILED on {rom}/{target}: {text[-1500:]}"
+    _assert_inspect_gate_agrees(text, rom, target)
 
 
 SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"

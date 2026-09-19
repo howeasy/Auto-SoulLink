@@ -20,6 +20,9 @@ local MAP = Center.MAP
 -- The tap cadence is a lane fact (P3b-e), not a literal: t.facts is the admitted foundation's
 -- driver-facts table (gen1_gate.lua sets it from Entry.admit).
 local CADENCE = t.facts.TUNING.input_cadence
+-- The exact ABI windows (PLAN M3 B5, patch/gen1/purergb/README.md): same frame counts on both
+-- foundations, only the anchoring addresses differ (F.COMPANION).
+local QUERY_FRAMES, OFFER_FRAMES = t.facts.COMPANION.query_frames, t.facts.COMPANION.offer_frames
 local TILE_COUNT = 20 * 18 -- pret/constants/gfx_constants.asm SCREEN_WIDTH/HEIGHT
 
 local function read(addr) return memory.read_u8(addr, "System Bus") end
@@ -114,7 +117,12 @@ local route = Center.new({
 local function route_buttons() return route.step() end
 
 local ok, err = xpcall(function()
-    require_check("patched Red/Blue client enabled SLINK TRADE", t.title == "red" or t.title == "blue")
+    -- Capability, not cartridge name: the vanilla companion patch ships on Red/Blue only, but
+    -- the pureRGB overlay adds native trade to ALL THREE titles (profile_overlay.json carries a
+    -- `trade` block for purered/pureblue/puregreen alike, PLAN M3) — the admitted profile's own
+    -- `trade` block is what the client actually gates on (entry.lua:243, panel/trade_overlay.lua).
+    require_check("trade-capable client (Red/Blue patch or pureRGB overlay) enabled SLINK TRADE",
+                  t.parts.profile.trade ~= nil, fmt("title=%s kind=%s", t.title, t.kind))
     t.client:start()
     require_check("trade_enabled on the patched build", t.client.trade_enabled == true,
                   tostring(t.client.trade_enabled))
@@ -141,13 +149,13 @@ local ok, err = xpcall(function()
         local talked = t.frame
         pulse("A")
         local query
-        for _ = 1, 26 do
+        for _ = 1, QUERY_FRAMES do
             query = find_sent("trade_query", first)
             if query then break end
             step({})
         end
-        require_check("native receptionist emitted trade_query within 30 frames",
-                      query ~= nil and t.frame - talked <= 30,
+        require_check(fmt("native receptionist emitted trade_query within %d frames", QUERY_FRAMES),
+                      query ~= nil and t.frame - talked <= QUERY_FRAMES,
                       fmt("visit=%d now=%d map=%d", talked, t.frame, at("wCurMap")))
         reply({cmd="trade_mask", mask=1})
         -- trade_receptionist.asm:270-296 prints these three rows at +42/+82/+122.
@@ -167,13 +175,13 @@ local ok, err = xpcall(function()
         -- mask=1 makes the first visible row physical slot 0; re-pulse A on the 16-frame
         -- cadence until the offer is on the wire (run 3: one pulse, picker stayed up 180 frames)
         local offered
-        for _ = 1, 180 do
+        for _ = 1, OFFER_FRAMES do
             offered = find_sent("trade_offer", first)
             if offered then break end
             step(t.frame % CADENCE < 2 and {A=true} or {})
         end
-        require_check("selected slot zero emitted trade_offer within 180 frames",
-                      offered and offered.slot == 0 and t.frame - chosen <= 180,
+        require_check(fmt("selected slot zero emitted trade_offer within %d frames", OFFER_FRAMES),
+                      offered and offered.slot == 0 and t.frame - chosen <= OFFER_FRAMES,
                       offered and fmt("slot=%s frame=%d", tostring(offered.slot), t.frame)
                               or fmt("no offer frame=%d", t.frame))
         reply({cmd="trade_offer_ack", ok=accepted})

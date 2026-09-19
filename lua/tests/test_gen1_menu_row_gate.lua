@@ -39,10 +39,17 @@ local Center = dofile(t.ROOT .. "/lua/tests/gen1_rb_center_inputs.lua")
 
 local COLS, SCREEN_ROWS = Panel.COLS, Panel.ROWS
 local TILEMAP = assert(ram.wTileMap, "wTileMap missing from profile")
+-- The mailbox itself moves on an overlay-admitted cartridge (profile.trade.mailbox, PLAN
+-- A4/M3); STATE/PAGE/PAGES are ABI-fixed offsets from it (+9/+10/+11), derived from Panel's own
+-- exported vanilla constants rather than a second copy of the offset numbers.
+local MAILBOX = t.parts.profile.trade and t.parts.profile.trade.mailbox or Panel.MAILBOX
+local STATE = MAILBOX + (Panel.STATE - Panel.MAILBOX)
+local PAGE  = MAILBOX + (Panel.PAGE - Panel.MAILBOX)
+local PAGES = MAILBOX + (Panel.PAGES - Panel.MAILBOX)
 
 local function read(addr) return memory.read_u8(addr, "System Bus") end
 local function at(symbol) return read(assert(ram[symbol], symbol .. " missing from profile")) end
-local function state() return read(Panel.STATE) end
+local function state() return read(STATE) end
 
 -- Every step runs the real client for that frame. panel:service() is the FIRST thing
 -- frame_end does, which is the only reason a paint can land while the player sits in a menu
@@ -184,18 +191,22 @@ local ok, err = xpcall(function()
             "the stage wait never timed out onto the fallback")
     -- The patch's timeout leaves the state alone (slink.asm:334-335). That is the whole
     -- reason panel.lua measures its own deadline from the transition IT observed.
-    idle(math.max(0, 120 - (t.frame - await_seen)))
-    t.check("+9 is still AWAIT after the patch's 90-frame stage timeout", state() == Panel.AWAIT,
+    -- F.COMPANION.panel_stage_timeout is the exact ABI number (90, same on both foundations,
+    -- PLAN M3 B5); the margin just clears it comfortably.
+    local STAGE_TIMEOUT = t.facts.COMPANION.panel_stage_timeout
+    idle(math.max(0, (STAGE_TIMEOUT + 30) - (t.frame - await_seen)))
+    t.check(fmt("+9 is still AWAIT after the patch's %d-frame stage timeout", STAGE_TIMEOUT),
+            state() == Panel.AWAIT,
             fmt("state=%d after %d frames of AWAIT", state(), t.frame - await_seen))
-    t.check("nothing was staged with no rows held", read(Panel.PAGES) == 0,
-            fmt("+11 = %d with no payload", read(Panel.PAGES)))
+    t.check("nothing was staged with no rows held", read(PAGES) == 0,
+            fmt("+11 = %d with no payload", read(PAGES)))
 
     -- ── a reply that misses the deadline paints NOTHING ──────────────────────────────
     -- This is the assertion the patch cannot make for itself: it has no clock the client can
     -- read, so "is this AWAIT still fresh" is answered only in panel.lua. The reply below is
     -- well past DEADLINE frames old by the time service() sees it.
     reply({ cmd = "link_panel", rows = PAGED })
-    idle(120)
+    idle(t.facts.COMPANION.panel_deadline + 60)
     t.check("a reply after the deadline is not painted", not on_screen("PAIRS 3/5"),
             fmt("a %d-frame-old AWAIT was painted over a revealed fallback",
                 t.frame - await_seen))
@@ -216,11 +227,11 @@ local ok, err = xpcall(function()
     local staged = wait(function() return on_screen("PAIRS 3/5") end, 300)
     t.check("rows held from the late reply stage on the next open", staged,
             fmt("state=%d +11=%d — held rows were dropped instead of kept",
-                state(), read(Panel.PAGES)))
+                state(), read(PAGES)))
     t.check("staging sets the handshake to STAGED", state() == Panel.STAGED,
             fmt("state is %d after the client painted", state()))
-    t.check("the client tells the patch how many pages there are", read(Panel.PAGES) == 2,
-            fmt("published %d pages for 26 rows", read(Panel.PAGES)))
+    t.check("the client tells the patch how many pages there are", read(PAGES) == 2,
+            fmt("published %d pages for 26 rows", read(PAGES)))
     t.check("the fallback was painted over", not on_screen("NO CLIENT"),
             "NO CLIENT is still visible under the staged page")
     t.check("a later row landed too", on_screen("VIRIDIAN FOREST"),
@@ -240,9 +251,9 @@ local ok, err = xpcall(function()
     -- our own service() answers with STAGED inside the same frame_end, so a poll that samples
     -- +9 between steps can legitimately never see it. +10 is written once and only cleared at
     -- dismissal, and the page-2 content below is what proves the AWAIT actually happened.
-    local re_awaited = press_until("A", function() return read(Panel.PAGE) == 1 end, 12, 30)
+    local re_awaited = press_until("A", function() return read(PAGE) == 1 end, 12, 30)
     t.check("A asks for another page", re_awaited,
-            fmt("page byte is %d, state=%d — the panel never turned", read(Panel.PAGE), state()))
+            fmt("page byte is %d, state=%d — the panel never turned", read(PAGE), state()))
     if re_awaited then
         t.check("the second page is on screen", wait(function() return on_screen(FIRST_ON_PAGE2) end, 300),
                 fmt("row 19 never appeared after the page turn (state=%d)", state()))
@@ -259,8 +270,8 @@ local ok, err = xpcall(function()
                 return not on_screen("PAIRS 3/5") and not on_screen(FIRST_ON_PAGE2)
             end, 12, 40),
             "B did not close the panel")
-    t.check("closing resets the page for next time", read(Panel.PAGE) == 0,
-            fmt("page byte left at %d", read(Panel.PAGE)))
+    t.check("closing resets the page for next time", read(PAGE) == 0,
+            fmt("page byte left at %d", read(PAGE)))
     t.check("closing resets the handshake", state() == Panel.CLOSED,
             fmt("panel state left at %d", state()))
 

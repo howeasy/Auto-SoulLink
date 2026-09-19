@@ -66,6 +66,8 @@ REPLACED = {
 # row-index change, and the renumbered rival opponent id.
 EXPECTED_DELTA = frozenset({
     "LAB_LOSS.tackle_turns",
+    "COMPANION.playtime_frames_addr",
+    "COMPANION.speed_multiplier",
     "BLACKOUT.after_center.map", "BLACKOUT.after_center.x", "BLACKOUT.after_center.y",
     "MENU.BAG.watched",
     "BANKS.apex_commit",
@@ -170,7 +172,7 @@ def test_both_tables_carry_the_same_groups_and_leaf_names(lua):
     pure, rb = _dofile(lua, PURE), _dofile(lua, RB)
     groups = lambda t: {k for k in t.keys() if isinstance(k, str)}  # noqa: E731, SIM118
     assert groups(pure) == groups(rb)
-    assert len(groups(pure)) == 18
+    assert len(groups(pure)) == 19
     assert set(_leaves(pure)) == set(_leaves(rb))
 
 
@@ -186,6 +188,8 @@ def test_only_the_expected_keys_differ(lua):
     ("EVENT.OAK_GOT_PARCEL_EXISTS", True, False),
     ("CATCH.hunt_ball_max", 4, 5),
     ("MENU.START.max_minus_save", 3, 2),
+    ("COMPANION.playtime_frames_addr", 0xDA44, 0xDA4D),
+    ("COMPANION.speed_multiplier", 1, 2),
 ])
 def test_the_foundational_deltas(lua, key, vanilla, pure):
     *parents, leaf = key.split(".")
@@ -194,6 +198,17 @@ def test_the_foundational_deltas(lua, key, vanilla, pure):
         nodes = tuple(node[part] for node in nodes)
     assert nodes[0][leaf] == vanilla
     assert nodes[1][leaf] == pure
+
+
+def test_companion_timing_windows_are_the_same_frame_counts_on_both_lanes(lua):
+    """PLAN M3 B5: the ABI windows are counted in frames, not wall time, so a 2x-speed overlay
+    core does not scale them -- only the two per-cartridge addresses differ."""
+    rb, pure = _dofile(lua, RB)["COMPANION"], _dofile(lua, PURE)["COMPANION"]
+    for leaf in ("panel_stage_timeout", "panel_deadline", "query_frames", "offer_frames",
+                 "settle_frames", "apply_frames", "channel_sound_ids_addr"):
+        assert rb[leaf] == pure[leaf], leaf
+    assert rb["speed_multiplier"] == 1 and pure["speed_multiplier"] == 2
+    assert rb["playtime_frames_addr"] != pure["playtime_frames_addr"]
 
 
 def test_the_ball_sets_are_the_foundations_item_use_ball_dispatch(lua):

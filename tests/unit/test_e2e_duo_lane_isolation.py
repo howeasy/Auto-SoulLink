@@ -174,3 +174,52 @@ def test_a_scenario_that_stages_its_own_rom_wins(monkeypatch, tmp_path):
                          "b": "patch/build/gen1_blue.gb"}, raising=False)
     assert run._rom_for("a") == "patch/build/e2e_admit_randomized_new/a.gb"
     assert run._rom_for("b") == "patch/build/gen1_blue.gb"
+
+
+# ── the pureRGB companion OVERLAY pairing row (PLAN M3/P4) ────────────────────────────────────────
+
+
+def test_the_overlay_pairing_row_reuses_the_clean_pure_fixture_and_overrides_the_trade_key():
+    row = duo.GAMES["gen1_pure_overlay"]
+    assert row["main"] == duo.GAMES["gen1_new"]["main"]
+    assert row["game"] == "gen1_new"
+    assert row["not_yet"] == ()                              # M3: every scenario runs here
+    assert row["uses_savestate"] is False
+    assert row["fixture"] == {"a": "purered", "b": "pureblue"}   # A4: the clean pure fixture
+    assert row["patched_saves_override"] == {"a": "purered_overlay", "b": "pureblue_overlay"}
+    for key in row["fixture"].values():
+        assert g1.is_purergb(key) and not g1.is_purergb_overlay(key)
+    for key in row["patched_saves_override"].values():
+        assert g1.is_purergb_overlay(key)
+
+
+def test_the_overlay_row_runs_all_18_scenarios_including_the_three_trade_ones():
+    all_ = duo.scenarios_for("gen1_pure_overlay")
+    clean = duo.scenarios_for("gen1_pure")
+    assert set(all_) - set(clean) == {"trade_new", "trade_decline_new", "explode_new"}
+    assert len(all_) == 18
+
+
+def test_a_trade_scenario_on_the_overlay_row_stages_the_overlay_cartridge_not_the_vanilla_one(monkeypatch):
+    """trade_new's SCENARIO dict hardcodes `patched_saves` to the vanilla red_patched/
+    blue_patched keys (it predates any second foundation); `_patch_key`/`_rom_for` must read the
+    overlay row's own `patched_saves_override` instead -- the whole mechanism that lets the three
+    trade scenarios run here without touching SCENARIOS at all."""
+    run = duo.DuoRun("trade_new", _args(game="gen1_pure_overlay", scenario="trade_new"), attempt=1)
+    assert run._patch_key("a") == "purered_overlay"
+    assert run._patch_key("b") == "pureblue_overlay"
+    monkeypatch.setattr(g1, "staged_rom", lambda key: f"STAGED:{key}")
+    assert run._rom_for("a") == "STAGED:purered_overlay"
+    assert run._rom_for("b") == "STAGED:pureblue_overlay"
+
+
+def test_a_non_trade_scenario_on_the_overlay_row_stages_the_clean_pure_cartridge(monkeypatch):
+    """link_new carries no `patched_saves`, so the override never applies: A4 says the clean and
+    overlay cartridges are behaviourally identical outside native trade, so the rules-only
+    scenarios stage the SAME clean build gen1_pure does."""
+    run = duo.DuoRun("link_new", _args(game="gen1_pure_overlay"), attempt=1)
+    assert run._patch_key("a") is None
+    try:
+        assert run._rom_for("a") == "patch/build/gen1_purered.gbc"
+    except FileNotFoundError as exc:
+        pytest.skip(f"pureRGB builds not staged here: {exc}")

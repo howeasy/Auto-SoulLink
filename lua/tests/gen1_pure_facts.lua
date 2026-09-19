@@ -237,6 +237,21 @@ return {
     hunt_ball_max  = 5, -- DELTA: pureRGB adds HYPER_BALL $05 (engine/items/item_effects.asm:28); the vanilla scan stops at 4 — prefer ITEM.BALL_IDS
   },
 
+  -- ── Companion overlay ABI (PLAN M3 B5). Same frame counts as the vanilla patch (see
+  -- gen1_rb_facts.lua for why speed_multiplier does not scale them) — only the addresses that
+  -- anchor them move. ──────────────────────────────────────────────────────────────────────────
+  COMPANION = {
+    playtime_frames_addr   = 0xDA4D, -- DELTA: data/purergb/pokered.sym wPlayTimeFrames (vanilla $DA44; the overlay's linked WRAM0 layout shifts it 9 bytes)
+    channel_sound_ids_addr = 0xC026, -- SAME: data/purergb/pokered.sym wChannelSoundIDs (unchanged from vanilla)
+    speed_multiplier       = 2, -- DELTA: PLAN A15 -- the overlay runs the overworld at 2x emulator speed (CGB double-speed); the ABI windows below are counted in FRAMES so the numbers themselves do not scale
+    panel_stage_timeout    = 90, -- SAME: patch/gen1/purergb/README.md "ABI (unchanged from the vanilla patch, B5)"
+    panel_deadline         = 60, -- SAME: lua/gen1/panel.lua DEADLINE (foundation-independent client constant)
+    query_frames           = 30, -- SAME: patch/gen1/purergb/README.md B5 "the same timings (QUERY 30, ...)"
+    offer_frames           = 180, -- SAME: patch/gen1/purergb/README.md B5 "OFFER 180"
+    settle_frames          = 20, -- SAME: patch/gen1/purergb/README.md B5 "settle 20"
+    apply_frames           = 100, -- SAME: patch/gen1/purergb/README.md B5 "apply 100"
+  },
+
   -- ── Engine-signal banks per hook ────────────────────────────────────────────────────────────
   BANKS = { -- SAME: data/games/gen1_purergb/engine_signals.json titles.purered.sites[*].bank (identical across titles); never hardcode a bank in a driver. The five battle-menu hooks are the banks gen1_battle_driver.lua filters on (data/purergb/pokered.sym).
       -- battle-menu hooks the live battle driver filters by bank

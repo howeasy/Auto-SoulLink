@@ -112,11 +112,112 @@ def test_the_vanilla_rom_table_is_unchanged():
         "blue": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb",
         "yellow": "Pokemon - Yellow Version (USA, Europe).gbc",
     }
-    assert g1.dump_keys() == VANILLA + PURE
+    assert g1.dump_keys() == VANILLA + PURE + tuple(f"{k}_overlay" for k in PURE)
     assert GENS["gen1"]["saveram_names"]["red"] == "Pokemon - Red Version (USA, Europe).SaveRAM"
     assert GENS["gen1"]["saveram_names"]["blue"] == "Pokemon - Blue Version (USA, Europe).SaveRAM"
     assert GENS["gen1"]["saveram_names"]["yellow"] == "Pokemon - Yellow Version (USA, Europe).SaveRAM"
     assert GENS["gen1"]["patched"]["blue_patched"][2] == "slink blue.SaveRAM"
+
+
+# ── the companion overlay (M3/P4) ───────────────────────────────────────────────────────────────
+
+OVERLAY = tuple(f"{k}_overlay" for k in PURE)
+
+
+def test_every_overlay_key_is_a_rom_key_the_gate_accepts():
+    for key in OVERLAY:
+        assert key in ROM_TO_GEN and ROM_TO_GEN[key] == "gen1"
+        assert key in GENS["gen1"]["patched"]
+        base, rom_rel, name = GENS["gen1"]["patched"][key]
+        assert base == key[: -len("_overlay")]     # reuses the CLEAN pure fixture (A4)
+        assert rom_rel is None
+        assert name == g1.save_name_for(f"patch/build/gen1_{key}.gbc")
+
+
+def test_fixture_path_of_an_overlay_key_is_the_clean_pure_fixture():
+    for key in PURE:
+        for target in g1.TARGETS:
+            assert g1.fixture_path(f"{key}_overlay", target) == g1.fixture_path(key, target)
+
+
+def test_is_purergb_covers_the_overlay_keys_but_not_clean_or_vanilla():
+    for key in OVERLAY:
+        assert g1.is_purergb(key) and g1.is_purergb_overlay(key)
+    for key in PURE:
+        assert g1.is_purergb(key) and not g1.is_purergb_overlay(key)
+    for key in VANILLA:
+        assert not g1.is_purergb(key) and not g1.is_purergb_overlay(key)
+
+
+def test_overlay_dump_applies_the_ups_and_verifies_the_admitted_sha1(monkeypatch, tmp_path):
+    """No RGBDS toolchain needed to run a gate against the overlay (PLAN M3 A4): applying the
+    committed UPS to the lock-verified clean build IS the overlay artifact."""
+    sys.path.insert(0, os.path.join(_REPO, "patch", "tools"))
+    import make_ups
+
+    source = bytes(range(256)) * 4         # 1024 fake "clean ROM" bytes
+    target = bytes((b + 1) % 256 for b in source)  # the "overlay" bytes
+    ups = make_ups.ups_create(source, target)
+
+    clean = tmp_path / "pokered.gbc"
+    clean.write_bytes(source)
+    ups_path = tmp_path / "SLink-PureRed.ups"
+    ups_path.write_bytes(ups)
+    admission = tmp_path / "admission_overlay.json"
+    import hashlib
+    want_sha1 = hashlib.sha1(target).hexdigest()
+    admission.write_text(json.dumps({want_sha1: {"title": "purered", "ups": "SLink-PureRed.ups"}}),
+                          encoding="utf-8")
+
+    monkeypatch.setattr(g1, "purergb_dump", lambda _key: str(clean))
+    monkeypatch.setattr(g1, "PURERGB_ADMISSION_OVERLAY", str(admission))
+    monkeypatch.setattr(g1, "REPO", str(tmp_path))
+    monkeypatch.setattr(g1, "PURERGB_OVERLAY_STAGE", str(tmp_path / "staged"))
+
+    path = g1.purergb_overlay_dump("purered_overlay")
+    with open(path, "rb") as f:
+        assert f.read() == target
+
+
+def test_overlay_dump_refuses_a_wrong_sha1(monkeypatch, tmp_path):
+    source = bytes(range(256))
+    target = bytes((b + 1) % 256 for b in source)
+    sys.path.insert(0, os.path.join(_REPO, "patch", "tools"))
+    import make_ups
+    ups = make_ups.ups_create(source, target)
+
+    clean = tmp_path / "pokered.gbc"
+    clean.write_bytes(source)
+    ups_path = tmp_path / "SLink-PureRed.ups"
+    ups_path.write_bytes(ups)
+    admission = tmp_path / "admission_overlay.json"
+    admission.write_text(json.dumps({"deadbeef": {"title": "purered", "ups": "SLink-PureRed.ups"}}),
+                          encoding="utf-8")
+
+    monkeypatch.setattr(g1, "purergb_dump", lambda _key: str(clean))
+    monkeypatch.setattr(g1, "PURERGB_ADMISSION_OVERLAY", str(admission))
+    monkeypatch.setattr(g1, "REPO", str(tmp_path))
+    monkeypatch.setattr(g1, "PURERGB_OVERLAY_STAGE", str(tmp_path / "staged"))
+    with pytest.raises(ValueError, match="not the admitted overlay"):
+        g1.purergb_overlay_dump("purered_overlay")
+
+
+def test_run_gate_stages_the_full_overlay_key_not_the_rsplit_form(monkeypatch, tmp_path):
+    """The rsplit-based staging shortcut (`purered_cold` -> `purered`) must not also strip
+    `_overlay` — that would silently launch the CLEAN cartridge under overlay facts."""
+    import run_gb_gate
+
+    fake_emuhawk = tmp_path / "EmuHawk.exe"
+    fake_emuhawk.write_bytes(b"")
+    monkeypatch.setattr(run_gb_gate, "EMUHAWK", str(fake_emuhawk))
+    monkeypatch.setattr(run_gb_gate, "REPO", str(tmp_path))
+
+    staged = []
+    monkeypatch.setattr(g1, "staged_rom", lambda key: staged.append(key) or f"patch/build/gen1_{key}.gbc")
+
+    with pytest.raises(FileNotFoundError):
+        run_gb_gate.run_gate("lua/tests/test_gen1_inspect_gate.lua", rom_key="purered_overlay")
+    assert staged == ["purered_overlay"]
 
 
 # ── the SaveRAM name rule ───────────────────────────────────────────────────────────────────────

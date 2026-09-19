@@ -117,6 +117,14 @@ GENS = {
             "purered_cold": (None, None, "gen1 purered.SaveRAM"),
             "pureblue_cold": (None, None, "gen1 pureblue.SaveRAM"),
             "puregreen_cold": (None, None, "gen1 puregreen.SaveRAM"),
+            # pureRGB companion overlay (M3/P4): the clean build + the SLink UPS
+            # (g1.purergb_overlay_dump), admitted on its own sha1 (admission_overlay.json). A4
+            # says a clean pure SaveRAM loads unchanged, so these rows reuse the clean pure
+            # fixture via `base_key` below rather than shipping a fixture of their own; the
+            # SaveRAM name is filename-derived same as the clean pure rows (g1.save_name_for).
+            "purered_overlay": ("purered", None, "gen1 purered overlay.SaveRAM"),
+            "pureblue_overlay": ("pureblue", None, "gen1 pureblue overlay.SaveRAM"),
+            "puregreen_overlay": ("puregreen", None, "gen1 puregreen overlay.SaveRAM"),
         },
     },
     "gen2": {
@@ -212,7 +220,9 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     """
     spec = GENS[gen_for(rom_key)]
     play = spec["play"]
-    fixture = os.path.join(play.FIXTURES, f"{rom_key}_{target}.SaveRAM")
+    # play.fixture_path, not a second copy of the naming rule: an overlay key resolves to the
+    # CLEAN pure fixture (A4), which this inlined f-string would miss.
+    fixture = play.fixture_path(rom_key, target)
     if not os.path.exists(fixture):
         raise FileNotFoundError(
             f"missing fixture {os.path.relpath(fixture, REPO)} — build it with "
@@ -234,7 +244,12 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
     if rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
         if rom_rel is None:
-            rom_rel = play.staged_rom(rom_key.rsplit("_", 1)[0])
+            # An overlay key stages ITS OWN cartridge (g1.purergb_overlay_dump applies the UPS)
+            # — rsplit("_", 1) would strip "_overlay" and stage the clean build instead. Every
+            # other None-rom_rel row (the bare pure keys, the "*_cold" rows) IS the stripped
+            # form: "purered" unchanged, "purered_cold" -> "purered".
+            stage_key = rom_key if g1.is_purergb_overlay(rom_key) else rom_key.rsplit("_", 1)[0]
+            rom_rel = play.staged_rom(stage_key)
         if not os.path.exists(os.path.join(REPO, rom_rel)):
             how = ("build the pinned pureRGB source (see data/purergb_sources.lock.json)"
                    if g1.is_purergb(rom_key) else "python patch/gen1/tools/build.py")

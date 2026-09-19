@@ -6,7 +6,8 @@
   sound, independently of any feature built on it.
 
   What has to be true:
-    1. the 'SLNK' beacon appears in WRAM at $DEE2 — the code is reached at all;
+    1. the 'SLNK' beacon appears in WRAM at the cartridge's mailbox (profile.trade.mailbox —
+       vanilla $DEE2, the pureRGB overlay's own address per PLAN A4/M3) — the code is reached at all;
     2. the frame counter ADVANCES — it runs every frame, not once;
     3. it keeps advancing WITH A MENU OPEN — VBlank is an interrupt, so a hook there must
        fire even while the main loop is parked;
@@ -41,9 +42,15 @@ local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen1_gat
 local t = G.start("test_gen1_patch_gate")
 local fmt = string.format
 local ram = t.parts.profile.ram
--- The mailbox layout comes from the module that owns it, not a second copy of the offsets.
+-- The mailbox layout comes from the module that owns it, not a second copy of the offsets. On
+-- an overlay-admitted cartridge the mailbox itself moves (profile.trade.mailbox, PLAN A4/M3);
+-- Panel.MAILBOX is only the vanilla companion-patch default panel.lua falls back to.
 local Panel = dofile(t.ROOT .. "/lua/gen1/panel.lua")
-local MAILBOX = Panel.MAILBOX
+local MAILBOX = t.parts.profile.trade and t.parts.profile.trade.mailbox or Panel.MAILBOX
+-- STATE/CAPS are mailbox-relative ABI offsets (+8/+9); derive the delta from Panel's own
+-- exported vanilla constants rather than a second copy of the offset numbers.
+local STATE = MAILBOX + (Panel.STATE - Panel.MAILBOX)
+local CAPS  = MAILBOX + (Panel.CAPS - Panel.MAILBOX)
 local ABI_BYTE = MAILBOX + 4          -- slink.asm:38-66 (panel.lua keeps this one private)
 local SFX_REQUEST = MAILBOX + 7
 
@@ -83,9 +90,11 @@ t.idle(30)
 -- 4. The displaced code still runs. TrackPlayTime increments the play-time counters; if the
 --    hook had swallowed it, the clock would be frozen — a patch that quietly breaks the game
 --    it hooks is worse than no patch.
---    wPlayTimeFrames is not a symbol the profile carries (it is not one the client reads);
---    $DA44 is pret/pokered's own address, and this gate only ever runs on Red/Blue.
-local PLAYTIME_FRAMES = 0xDA44
+--    wPlayTimeFrames is not a symbol the profile carries (it is not one the client reads), so
+--    its address is a driver-facts literal (F.COMPANION.playtime_frames_addr): pret/pokered's
+--    $DA44 on a vanilla/patched cartridge, data/purergb/pokered.sym's $DA4D on an
+--    overlay-admitted one (the overlay's linked WRAM0 layout shifts it 9 bytes).
+local PLAYTIME_FRAMES = t.facts.COMPANION.playtime_frames_addr
 local p0 = read(PLAYTIME_FRAMES)
 local ticked = false
 for _ = 1, 400 do
@@ -116,7 +125,7 @@ t.check("the player can still walk on the patched ROM", moved(x0, y0),
 --
 -- So the assertions below are the inverse of what they used to be. The old ones fired from a
 -- quiescent overworld and were structurally blind to both failures.
-local CHANNEL_SOUND_IDS = 0xC026    -- wChannelSoundIDs; audio RAM the client never reads
+local CHANNEL_SOUND_IDS = t.facts.COMPANION.channel_sound_ids_addr  -- wChannelSoundIDs; audio RAM the client never reads (SAME on both foundations, but sourced from the facts table like PLAYTIME_FRAMES rather than a second literal)
 local SFX_TINK = 0x8C               -- resolves identically in all three audio banks
 local CAP_SFX, CAP_PANEL = 0x01, 0x02
 
@@ -125,10 +134,10 @@ t.check("ABI version byte is 3", read(ABI_BYTE) == 3, fmt("got %d", read(ABI_BYT
 -- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER. This build dropping SFX
 -- while keeping ABI 3 is exactly the case that motivated the bits: a client reasoning
 -- "ABI 3 therefore both" would drive an audio path that is not there.
-t.check("the capability byte does NOT advertise SFX", read(Panel.CAPS) & CAP_SFX == 0,
-        fmt("caps=0x%02X — this build must not claim an unsafe audio path", read(Panel.CAPS)))
-t.check("the capability byte advertises the panel", read(Panel.CAPS) & CAP_PANEL ~= 0,
-        fmt("caps=0x%02X", read(Panel.CAPS)))
+t.check("the capability byte does NOT advertise SFX", read(CAPS) & CAP_SFX == 0,
+        fmt("caps=0x%02X — this build must not claim an unsafe audio path", read(CAPS)))
+t.check("the capability byte advertises the panel", read(CAPS) & CAP_PANEL ~= 0,
+        fmt("caps=0x%02X", read(CAPS)))
 
 -- The client's own reading of those same bytes. A beacon the gate can see but the shipped
 -- module cannot is a patch that works and a feature that never turns on.
@@ -138,8 +147,8 @@ t.check("the panel module sees the cartridge the gate does",
 
 -- The panel handshake byte must be CLOSED while the player is walking around. If it were
 -- not, a client would paint over the map.
-t.check("the panel handshake is closed outside the panel", read(Panel.STATE) == Panel.CLOSED,
-        fmt("panel state is %d in the overworld", read(Panel.STATE)))
+t.check("the panel handshake is closed outside the panel", read(STATE) == Panel.CLOSED,
+        fmt("panel state is %d in the overworld", read(STATE)))
 
 local function sfx_channels()
     return fmt("%d/%d/%d/%d", read(CHANNEL_SOUND_IDS + 4), read(CHANNEL_SOUND_IDS + 5),
