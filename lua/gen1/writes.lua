@@ -133,6 +133,15 @@ function W.new(profile, io)
     -- party mirror), so the engine offers nothing else. Slot-0-only was escapable (RC).
     function self:explode_active_battler(slot)
         assert(self.armed == "battle_loop_head", "explode only at the battle loop head")
+        -- pureRGB (profile derived.explode_low_hp_fraction): EXPLOSION faints its user only below
+        -- max/N HP, so the active battler is put there first (the engine writes the party mirror
+        -- back at the faint). ponytail: a max HP under 2N cannot go low enough; no real battler has one.
+        local frac = d.explode_low_hp_fraction
+        if frac then
+            local u16 = function(a) return io.read_u8(a, "System Bus") * 256 + io.read_u8(a + 1, "System Bus") end
+            local low = math.max(1, math.floor(u16(ram.wBattleMonMaxHP) / frac) - 1)
+            if u16(ram.wBattleMonHP) > low then self:write_bytes(ram.wBattleMonHP, { math.floor(low / 256), low % 256 }) end
+        end
         self:write_bytes(ram.wBattleMonMoves, { W.EXPLOSION, W.EXPLOSION, W.EXPLOSION, W.EXPLOSION })
         self:write_bytes(ram.wBattleMonPP, { 1, 1, 1, 1 })
         local base = party_slot_base(slot)

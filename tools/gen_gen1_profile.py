@@ -167,6 +167,9 @@ PURERGB_CONSTANTS = {
     "ball_items": [1, 2, 3, 4, 5, 8], "opp_id_offset": 197, "bag_capacity": 30, "base_stats_stride": 35,
     "dex_count": 152, "species_count": 190, "rival_trainer_ids": [197 + 0x18, 197 + 0x28, 197 + 0x29],
     "wram_bank_gate": True, "hardware": "cgb",
+    # pureRGB's EXPLOSION/SELFDESTRUCT only faint the user when its HP is below 1/3 (otherwise
+    # heavy recoil): Explode Mode's forced move must first drop wBattleMonHP under max/3.
+    "explode_low_hp_fraction": 3,
 }
 PURERGB_CONSTANT_ASSERTS = {
     "ball_items": ("constants/item_constants.asm", [
@@ -187,6 +190,9 @@ PURERGB_CONSTANT_ASSERTS = {
         "\ttrainer_const RIVAL2         ; $28", "\ttrainer_const RIVAL3         ; $29"]),
     "wram_bank_gate": ("home/vblank.asm", ["\tldh a, [hLoadedROMBank]\n\tld [wDelayFrameBank], a"]),
     "hardware": ("home/start.asm", ["\tcp BOOTUP_A_CGB\n\tld a, TRUE\n\tjr z, .gbc\n\tdec a\n.gbc\n\tldh [hGBC], a"]),
+    "explode_low_hp_fraction": ("engine/battle/remap_move_data.asm", [
+        "ExplosionSelfdestructModifier:", "\tld d, 3\n\tcallfar FarCheckIfPlayerHPBelowFraction",
+        "\tld [hl], 250\n\tld a, EXPLODE_EFFECT"]),
 }
 
 

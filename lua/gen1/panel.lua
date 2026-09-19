@@ -92,7 +92,8 @@ function P.new(profile, io, writes, sanitize)
         return (addr == STATE or addr == PAGES) and last == addr
     end
 
-    local self = { pages = nil, tiles = nil, last_state = nil, await_frame = nil, armed = false }
+    -- `mailbox` is read by the harness (duo VBlank-counter probe) so it never hard-codes vanilla's.
+    local self = { pages = nil, tiles = nil, last_state = nil, await_frame = nil, armed = false, mailbox = MAILBOX }
 
     local function u8(addr)
         local v = io.read_u8(addr)

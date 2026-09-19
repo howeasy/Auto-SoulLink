@@ -82,7 +82,8 @@ function P.new(ROOT, title, player, opts)
     local F = dofile(ROOT .. "/lua/tests/" .. (opts.facts or TITLE_FACTS[title]))
     local FIELDS = dofile(ROOT .. "/lua/tests/gen1_rb_point_fields.lua").with_facts(F)
     local SIG = dofile(ROOT .. "/lua/tests/gen1_rb_mart_signature.lua").with_facts(F)
-    local function rd(addr) return memory.read_u8(addr, "System Bus") end
+    -- banked WRAM via the flat domain, never the System Bus (see Entry.harness_bus_u8)
+    local rd = dofile(ROOT .. "/lua/gen1/entry.lua").harness_bus_u8()
     local function sym(name) return rd(assert(symbols[name], "no symbol " .. name)) end
     local self = { symbols = symbols, log = opts.log or function() end, modules = modules }
 

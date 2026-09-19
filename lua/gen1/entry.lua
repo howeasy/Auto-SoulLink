@@ -289,6 +289,13 @@ local function bank_safe_io(bio, d)
     end
     return wrapped
 end
+Entry.bank_safe_io = bank_safe_io
+-- A bus reader for the test harness: the same rerouting, unconditionally (the flat WRAM domain
+-- holds bank 1 at 0x1000 in DMG mode too), so no driver reads banked WRAM through the System Bus.
+function Entry.harness_bus_u8()
+    local bio = bank_safe_io(Entry.bizhawk_deps(), { wram_bank_gate = true })
+    return function(addr) return bio.read_u8(addr, "System Bus") end
+end
 
 function Entry.build(deps)
     local root = assert(deps.root, "deps.root required")

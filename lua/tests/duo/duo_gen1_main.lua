@@ -77,6 +77,9 @@ pcall(function() client.speedmode(D.speed or 1600) end)
 -- no pack can admit -- the vanilla companion-patch artifacts, which are vanilla-layout by
 -- construction and predate vanilla's admission table.
 local function rom_u8(a) return memory.read_u8(a, "ROM") end
+-- Banked WRAM through the flat domain (Entry.harness_bus_u8): a System Bus read at frame end
+-- can land inside pureRGB's bank-2 palette loop and read 0 for one frame (PLAN §4 row 13).
+local rd = Entry.harness_bus_u8()
 local family, header = Entry.detect_title(rom_u8)
 local admitted = Entry.admit({
     root = ROOT, json = dofile(ROOT .. "/lua/json_codec.lua"),
@@ -254,7 +257,9 @@ gclient.on_signal = function(self, sig)
     end
     return original_on_signal(self, sig)
 end
-local ws = assert(json.decode(assert(io.open(ROOT .. "/" .. Entry.PACK_FILES[pack].checkpoint, "rb")):read("*a"))[title])
+-- The admitted KIND picks the checkpoint file (Entry.pack_file): an overlay cartridge has its own
+-- DelayFrame/OverworldLoop bytes (write_checkpoint_overlay.json), and the clean one never holds there.
+local ws = assert(json.decode(assert(io.open(ROOT .. "/" .. assert(Entry.pack_file(Entry.PACK_FILES[pack], "checkpoint", kind)), "rb")):read("*a"))[title])
 local function overworld_ok() return safety.check(ws, deps) == true end
 
 -- ── Frame primitives: the client ticks on EVERY frame, boot included ─────────────────
@@ -269,14 +274,14 @@ local function step(buttons)
     H.render()
     -- Receipts: party count edges (quarantine deposit / withdraw / memorial show here) and the
     -- windows in which the client's own party read refuses (it revokes writes after 5 of them).
-    local count = memory.read_u8(ram.wPartyCount, "System Bus")
+    local count = rd(ram.wPartyCount)
     if count ~= last_count then log(fmt("PARTY_COUNT %s -> %d @%d", tostring(last_count), count, frame)); last_count = count end
     if frame % 10 == 0 then
         local party, why = reads.read_party()
         if (party == nil) ~= unreadable then
             unreadable = party == nil
             local species = {}
-            for i = 0, 6 do species[#species + 1] = fmt("%02X", memory.read_u8(ram.wPartySpecies + i, "System Bus")) end
+            for i = 0, 6 do species[#species + 1] = fmt("%02X", rd(ram.wPartySpecies + i)) end
             log(fmt("PARTY_%s @%d %s (count=%d species=%s)", unreadable and "UNREADABLE" or "READABLE", frame, why or "", count, table.concat(species, " ")))
         end
     end
@@ -293,7 +298,7 @@ if D.cold_boot then
     booted = true
 else
     for f = 1, 6000 do
-        local count = memory.read_u8(ram.wPartyCount, "System Bus")
+        local count = rd(ram.wPartyCount)
         local ok = count >= 1 and count <= 6 and overworld_ok()
         settled = ok and settled + 1 or 0
         if settled >= 30 then booted = true break end
@@ -305,7 +310,7 @@ if not booted then
     finish(false, "never booted into the overworld from the battery save (frame " .. frame .. ")")
 end
 local map = reads.read_map()
-log(fmt("booted at frame %d party=%d map=%d (%d,%d)", frame, memory.read_u8(ram.wPartyCount, "System Bus"), map.map, map.x, map.y))
+log(fmt("booted at frame %d party=%d map=%d (%d,%d)", frame, rd(ram.wPartyCount), map.map, map.x, map.y))
 if D.cold_boot then
     for _ = 1, 600 do
         if sent_events.hello then break end
@@ -377,7 +382,6 @@ local function wait_partner_done(secs) return wait_until(partner_done, secs or 6
 -- The hunt: gen1_scripted_play's WRAM point extended with the hunt's fields, the battle driver
 -- over a step that yields, and the route module run to a terminal phase.
 local symbols = play.symbols
-local function rd(addr) return memory.read_u8(addr, "System Bus") end
 local function hex4(addr) return fmt("%02X%02X%02X%02X", rd(addr), rd(addr + 1), rd(addr + 2), rd(addr + 3)) end
 local rom = parts.profile.rom
 local function hunt(mode, options)
@@ -1599,7 +1603,7 @@ local MOVE_ROWS = { 266, 286, 306, 326 }
 -- (patch/gen1/src/slink.asm:44,128-135), so two reads on two different frames are a live
 -- proof that the hook still runs inside a battle. Only a PATCHED cartridge has the mailbox:
 -- panel:present() checks the 'SLNK' beacon and the capability bits (lua/gen1/panel.lua:85-91).
-local function panel_counter() return rd(Panel.MAILBOX + 5) + rd(Panel.MAILBOX + 6) * 256 end
+local function panel_counter() local m = parts.panel.mailbox; return rd(m + 5) + rd(m + 6) * 256 end
 local function log_panel_counter_in_battle()
     if not parts.panel:present() then
         log("PANEL_COUNTER_IN_BATTLE absent (unpatched cartridge)")
@@ -2108,7 +2112,7 @@ function scenarios.soft_reset_new()
             resumed = frame
             log(fmt("WRITES_RESUMED frame=%d delta=%d", frame, frame - reset_frame))
         end
-        local count = memory.read_u8(ram.wPartyCount, "System Bus")
+        local count = rd(ram.wPartyCount)
         local live = count >= 1 and count <= 6 and overworld_ok()
         settled_again = live and settled_again + 1 or 0
         if settled_again >= 30 then rebooted = true break end
@@ -2116,7 +2120,7 @@ function scenarios.soft_reset_new()
     end
     if not rebooted then return false, "CONTINUE never came back to the overworld checkpoint" end
     log(fmt("CONTINUED frame=%d map=%d party=%d", frame, rd(ram.wCurMap),
-            memory.read_u8(ram.wPartyCount, "System Bus")))
+            rd(ram.wPartyCount)))
     if not resumed then
         if not wait_until(function()
             return gclient.writes_enabled and not gclient.gate_revoked
@@ -3252,6 +3256,6 @@ while true do
     if not ok then finish(false, "scenario error: " .. tostring(pass)) end
     if coroutine.status(co) == "dead" then finish(pass, msg) end
     step(nil)
-    if frame % 3600 == 0 then log(fmt("heartbeat f=%d party=%d connected=%s", frame, memory.read_u8(ram.wPartyCount, "System Bus"), tostring(C.connected()))) end
+    if frame % 3600 == 0 then log(fmt("heartbeat f=%d party=%d connected=%s", frame, rd(ram.wPartyCount), tostring(C.connected()))) end
     if frame > timeout then finish(false, "scenario timeout after " .. timeout .. " frames") end
 end

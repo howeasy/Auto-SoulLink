@@ -58,6 +58,7 @@ function Lib.start(gate_name, opts)
     -- decides which pack and which title the gate runs against.
     local json_codec = dofile(ROOT .. "/lua/json_codec.lua")
     local function rom_u8(a) return memory.read_u8(a, "ROM") end
+    local rd = Entry.harness_bus_u8()  -- banked WRAM via the flat domain, never the System Bus
     local env_title = os.getenv("SLINK_GATE_TITLE")
     local title, pack, kind
     if env_title and env_title ~= "" then
@@ -130,7 +131,7 @@ function Lib.start(gate_name, opts)
     t.overworld_ok = function() return safety.check(ws, t.deps) == true end
     local booted, settled = false, 0
     for f = 1, 6000 do
-        local count = memory.read_u8(ram.wPartyCount, "System Bus")
+        local count = rd(ram.wPartyCount)
         local ok = count >= 1 and count <= 6 and t.overworld_ok()
         settled = ok and settled + 1 or 0
         if settled >= 30 then booted = true break end
@@ -144,7 +145,7 @@ function Lib.start(gate_name, opts)
         t.finish("boot failed")
     end
     t.log(fmt("[%s] booted at frame %d (party=%d, map=%d)", gate_name, t.frame,
-              memory.read_u8(ram.wPartyCount, "System Bus"), memory.read_u8(ram.wCurMap, "System Bus")))
+              rd(ram.wPartyCount), rd(ram.wCurMap)))
     return t
 end
 
