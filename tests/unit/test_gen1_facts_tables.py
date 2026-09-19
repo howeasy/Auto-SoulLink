@@ -66,6 +66,7 @@ REPLACED = {
 # row-index change, and the renumbered rival opponent id.
 EXPECTED_DELTA = frozenset({
     "LAB_LOSS.tackle_max_enemy_hp",
+    "LAB_LOSS.growl_min_enemy_attack_mod",
     "COMPANION.playtime_frames_addr",
     "COMPANION.speed_multiplier",
     "BLACKOUT.after_center.map", "BLACKOUT.after_center.x", "BLACKOUT.after_center.y",

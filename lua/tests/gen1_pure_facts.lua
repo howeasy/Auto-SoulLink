@@ -138,7 +138,8 @@ return {
   },
   LAB_LOSS = { -- the deliberate lab loss (gen1_rb_ball_gate_inputs.lua): Tackle turns before Growl stacking
     tackle_turns = 0, -- SAME: no fixed opening Tackles; the pure loss is HP-driven (tackle_max_enemy_hp below)
-    tackle_max_enemy_hp = 8, -- DELTA: measured 2026-09-19 (cold PureRed receipts with hp/atk/ehp/eatk per turn): the rival Growls the starter to -6 within its first turns (its AI stops only when maxed) and a Growl-stacked rival at -6 deals 0-1 -- vanilla's Growl-only loss stalled at 2 HP with every PP spent (40 Growls, the rival's 35 Scratches gone). Tackle deals 2 at neutral / 1 at -6, a crit 5-6 (19->17->15->13, then 13->11->6->1 with two crits), so the starter Tackles while the rival has MORE than this much HP (never a KO: the rival keeps its full ~4-a-hit Scratch and the starter drops in ~5 hits) and Growls only below it
+    tackle_max_enemy_hp = 6, -- DELTA: measured 2026-09-19 (cold PureRed receipts with hp/atk/ehp/eatk per turn): the rival Growls the starter to -6 within its first turns (its AI stops only when maxed) and a Growl-stacked rival at -6 deals 0-1 -- vanilla's Growl-only loss stalled at 2 HP with every PP spent (40 Growls, the rival's 35 Scratches gone). Tackle deals 2 at neutral / 1 at -6, a crit 5-6 (19->17->15->13, then 13->11->6->1 with two crits), so the starter Tackles while the rival has MORE than this much HP (a 5-6 crit cannot KO it) and Growls only below it
+    growl_min_enemy_attack_mod = 6, -- DELTA: one Growl only (the rival's attack stage stays at -1; 7 = neutral): at -1 its Scratch still lands 3 and, once it has Growled the starter to -6, it Scratches EVERY turn (receipts: 16->12->9->7->5->4) -- the starter is low by the time Tackle stops being safe, so the -6 tail (0-1 a hit, 35 Scratch PP) is short
   },
   MENU = {
     START = { -- engine/menus/draw_start_menu.asm

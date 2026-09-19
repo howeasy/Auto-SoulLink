@@ -136,7 +136,11 @@ function M.new(expected)
             if self.pending_tackle_pp then
                 assert(frame-self.pending_tackle_frame<600,"selected Tackle has no accepted PP/action evidence"..describe(point))
                 if point.menu_y==F.MENU.MOVE.menu_y and point.menu_x==F.MENU.MOVE.menu_x
-                    and point.menu_max>=2 and point.menu_index==1 then
+                    and point.menu_max>=2 then
+                    -- the move menu restores its cursor to the last move (Growl's row) a frame after
+                    -- it opens: walk it back up rather than B (B here CANCELS the menu, and the turn
+                    -- is then spent on nothing)
+                    if point.menu_index>1 then return press("Up",frame),"select-tackle" end
                     return press("A",frame),"use-tackle"
                 end
                 return press("B",frame),"await-tackle-acceptance"
@@ -165,12 +169,18 @@ function M.new(expected)
             end
             self.unknown_menu_frame=nil
             local L=F.LAB_LOSS or {}
-            -- Tackle for the lane's opening turns (tackle_turns) or, HP-driven, while the rival sits
-            -- above tackle_max_enemy_hp (pureRGB: its own Growls make Tackle harmless, its intact
-            -- Scratch is what ends the battle); Growl otherwise.
+            -- The turn's move. Vanilla: Growl only (tackle_turns 0, no thresholds). pureRGB (facts):
+            -- Growl while the rival's attack stage is still above growl_min_enemy_attack_mod, then
+            -- Tackle while the rival sits above tackle_max_enemy_hp (its own Growls make Tackle
+            -- harmless; its still-working Scratch is what ends the battle), Growl only when neither
+            -- holds. tackle_turns keeps the older fixed opening-Tackle form.
+            local growl_first=(L.growl_min_enemy_attack_mod or 0)>0
+                and (point.enemy_attack_mod or 7)>L.growl_min_enemy_attack_mod
             local tackle=self.tackles_used<(L.tackle_turns or 0)
-                or ((L.tackle_max_enemy_hp or 0)>0 and (point.enemy_hp or 0)>L.tackle_max_enemy_hp)
+                or (not growl_first and (L.tackle_max_enemy_hp or 0)>0
+                    and (point.enemy_hp or 0)>L.tackle_max_enemy_hp)
             if move_menu and tackle then
+                -- Tackle is slot 1 = index 1 (1-based like GROWL_SLOT; the cursor sits on Growl's row after a Growl turn)
                 if point.menu_index>1 then return press("Up",frame),"select-tackle" end
                 local buttons=press("A",frame)
                 if buttons.A then
