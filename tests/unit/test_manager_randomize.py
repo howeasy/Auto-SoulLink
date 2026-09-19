@@ -161,7 +161,8 @@ class TestAgainstTheRealJar:
             "jar": _jar(), "settings": str(settings), "rom_a": _RED, "rom_b": _BLUE})
         assert status == 200, body
         rnd = body["randomizer"]
-        assert rnd["upr_version"] == "4.6.1"
+        from server.upr_pipeline import ACCEPTED_UPR_VERSIONS
+        assert rnd["upr_version"] in ACCEPTED_UPR_VERSIONS
         assert set(rnd["categories"]) == ALL_CATEGORIES
         assert rnd["spec"]["trainers"] == "random" and rnd["summary"].startswith("wild encounters random")
         a, b = rnd["players"]["a"], rnd["players"]["b"]

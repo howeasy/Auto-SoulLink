@@ -51,9 +51,9 @@
   <label class="mk-field"><span>Randomizer jar</span>
     <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.jar" placeholder="PokeRandoZX.jar" style="flex:1"><button type="button" class="mk-btn" @click="browse('jar', '.jar')">Browse</button></span></label>
   <label class="mk-field"><span>Player A clean ROM</span>
-    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_a" placeholder="a clean Red / Blue / Yellow dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_a', '.gb,.gbc')">Browse</button></span></label>
+    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_a" placeholder="a clean Red / Blue / Yellow or PureRed / PureBlue / PureGreen dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_a', '.gb,.gbc')">Browse</button></span></label>
   <label class="mk-field"><span>Player B clean ROM</span>
-    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_b" placeholder="a clean Red / Blue / Yellow dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_b', '.gb,.gbc')">Browse</button></span></label>
+    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_b" placeholder="a clean Red / Blue / Yellow or PureRed / PureBlue / PureGreen dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_b', '.gb,.gbc')">Browse</button></span></label>
 </div>
 
 <template x-if="picker.field">
@@ -71,7 +71,7 @@
 </template>
 
 <div class="mk-preview-rules" x-show="pre">
-  <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? 'jar found' : 'jar not found'"></span>
+  <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
   <span class="mk-tag" :class="pre && pre.java_found ? 'on' : 'off'" x-text="pre && pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
   <template x-for="pid in ['a', 'b']" :key="pid">
     <span class="mk-tag" :class="pre && pre.roms[pid] && pre.roms[pid].clean ? 'on' : 'off'"

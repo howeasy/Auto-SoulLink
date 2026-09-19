@@ -744,11 +744,15 @@ class RunManager:
         and where to start looking for the jar."""
         if run is not None and run.get("game") not in new_run_form()["gen1_games"]:
             return None
-        from server.upr_pipeline import find_upr_jar
+        from server.upr_pipeline import find_upr_jar, jar_is_fork
         from server.upr_settings import option_form
+        jar = find_upr_jar() or ""
         return {
             "options": option_form(),
-            "jar": find_upr_jar() or "",
+            "jar": jar,
+            # The pure family randomizes only on the SLink fork jar (upr_pipeline); the
+            # page says which jar it found so a greyed pure ROM is explained.
+            "jar_fork": bool(jar) and jar_is_fork(jar),
             "current": run.get("randomizer") if run else None,
         }
 
@@ -929,8 +933,15 @@ class RunManager:
         except Exception:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
-        from server.upr_pipeline import UprPipelineError, find_upr_jar, prepare_pair
-        from server.upr_settings import UprSettingsError, build_categories, build_spec
+        from server.upr_pipeline import UprPipelineError, family_of, find_upr_jar, prepare_pair
+        from server.upr_settings import (
+            FAMILY_PURE,
+            FAMILY_VANILLA,
+            UprSettingsError,
+            build_categories,
+            build_spec,
+            family_spec,
+        )
 
         jar = str(body.get("jar", "")).strip() or find_upr_jar() or ""
         settings = str(body.get("settings", "")).strip()
@@ -939,17 +950,24 @@ class RunManager:
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here
-        # is by construction one the pipeline admits.
+        # is by construction one the pipeline admits. The family (vanilla / pureRGB) comes
+        # from the ROMs: a pure pair gets every tweak turned off (the fork offers none).
         spec, categories = body.get("spec"), body.get("categories")
         if (spec is not None or categories is not None) and not settings:
+            family = FAMILY_VANILLA
+            if rom_a and rom_b and os.path.isfile(rom_a) and os.path.isfile(rom_b):
+                try:
+                    family = family_of({"a": rom_a, "b": rom_b})
+                except Exception as exc:                      # noqa: BLE001
+                    return web.json_response({"ok": False, "error": str(exc)}, status=400)
             try:
                 if spec is not None:
                     if not isinstance(spec, dict):
                         raise UprSettingsError("spec must be an object")
-                    blob = build_spec(spec)
+                    blob = build_spec(family_spec(spec, family))
                 else:
-                    blob = build_categories(set(map(str, categories)),
-                                            fastest_text=bool(body.get("fastest_text", True)))
+                    fastest = bool(body.get("fastest_text", True)) and family != FAMILY_PURE
+                    blob = build_categories(set(map(str, categories)), fastest_text=fastest)
             except UprSettingsError as exc:
                 return web.json_response({"ok": False, "error": str(exc)}, status=400)
             settings = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")

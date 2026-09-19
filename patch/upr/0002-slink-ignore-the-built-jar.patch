@@ -1,0 +1,23 @@
+From 7ed6e4ccde15ba30665d9470f0408855356e8cc8 Mon Sep 17 00:00:00 2001
+From: howeasy <howardabudd@gmail.com>
+Date: Fri, 18 Sep 2026 20:44:01 -0400
+Subject: [PATCH 2/2] slink: ignore the built jar
+
+---
+ .gitignore | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/.gitignore b/.gitignore
+index 5758b8c..30bf6d6 100755
+--- a/.gitignore
++++ b/.gitignore
+@@ -41,4 +41,5 @@ util/files
+ util/log
+ out/
+ .idea/
+-*.imlPokeRandoZX.jar
++*.iml
++PokeRandoZX.jar
+-- 
+2.54.0.windows.1
+

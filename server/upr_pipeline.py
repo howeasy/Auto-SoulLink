@@ -25,7 +25,11 @@ APPENDS ``.gbc`` to anything not already ending in it, so ``-o out.gb`` silently
 
 THE JAR IS NOT BUNDLED. UPR ZX is GPLv3 and redistributable, but the project policy is that
 players supply their own from the official releases, and SLink shells out to it as a
-separate process.
+separate process. Two jars are accepted: the stock 4.6.1 release (vanilla Red/Blue/Yellow
+only) and SLink's fork of it, ``4.6.1-slink1`` (built by tools/build_upr_fork.py from
+.cache/slink-upr, docs/purergb/PLAN.md §6 M5), which is the only jar that may randomize the
+pureRGB family: its entries are lossless and field-scoped, the stock jar has no entry for
+those cartridges at all. The fork is recognised by the entries it carries, not by its name.
 """
 from __future__ import annotations
 
@@ -55,29 +59,48 @@ from server.upr_settings import (
 
 RANDOMIZE_TIMEOUT = 600
 
-# pureRGB (game_id gen1_purergb) is a second Gen 1 foundation (docs/purergb/PLAN.md), but
-# its UPR fork (M5) has not landed: no INI entries, no fingerprint-format audit, no
-# lossless-baseline proof. identify() DOES recognise a clean pureRGB ROM (P3b), which
-# would otherwise let it sail through preflight/prepare_pair as if it were an ordinary
-# vanilla cartridge — this refusal is what keeps the randomizer greyed for that family
-# until M5 lands, per the P3b lease's "server/upr_pipeline.py (only to keep the pure
-# family refused-with-a-clear-message until M5)" instruction.
+# pureRGB (game_id gen1_purergb) randomizes only on the fork jar: the stock jar has no
+# entry for the cartridge and a hand-added one would repack base stats, evolutions and
+# trainer AI on every save (docs/purergb/research/d1/FORK_BRIEF.md). With the stock jar the
+# family stays greyed with this message.
 PUREGB_RANDOMIZER_REFUSAL = (
-    "pureRGB randomization is not supported yet — the UPR fork lands in a later phase "
-    "(docs/purergb/PLAN.md M5). Use a vanilla Red/Blue/Yellow ROM to randomize today."
+    "pureRGB randomization needs SLink's UPR fork jar (4.6.1-slink1; build it with "
+    "tools/build_upr_fork.py) — this jar is the stock 4.6.1 and has no pureRGB entry."
 )
-
-
-def _reject_purergb(rom_path: str) -> None:
-    with open(rom_path, "rb") as f:
-        ident = identify(f.read())
-    if ident.get("foundation") == "gen1_purergb":
-        raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
+FORK_JAR_MARKER = b"[PureRed (U)]"
 _SEED_RE = re.compile(r"^Random Seed:\s*(\d+)\s*$")
 _SETTINGS_RE = re.compile(r"^Settings String:\s*(\S+)\s*$")
 _VERSION_RE = re.compile(r"^Randomizer Version:\s*(\S+)\s*$")
 
-SUPPORTED_UPR_VERSION = "4.6.1"
+SUPPORTED_UPR_VERSION = "4.6.1-slink1"        # the fork: every family
+STOCK_UPR_VERSION = "4.6.1"                   # the release jar: the vanilla family only
+ACCEPTED_UPR_VERSIONS = (STOCK_UPR_VERSION, SUPPORTED_UPR_VERSION)
+
+
+def jar_is_fork(jar: str) -> bool:
+    """True when this PokeRandoZX.jar carries the pureRGB entries (the SLink fork)."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            return FORK_JAR_MARKER in zf.read("com/dabomstew/pkrandom/config/gen1_offsets.ini")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return False
+
+
+def family_of(sources: dict[str, str]) -> str:
+    """The randomizer family the pair belongs to (upr_settings.FAMILY_*); a pure/vanilla
+    mix is refused because the two would need different contracts and could not link."""
+    from server.upr_settings import FAMILY_PURE, FAMILY_VANILLA
+    families = {}
+    for pid, path in sources.items():
+        with open(path, "rb") as f:
+            ident = identify(f.read())
+        families[pid] = FAMILY_PURE if ident.get("foundation") == "gen1_purergb" else FAMILY_VANILLA
+    if len(set(families.values())) != 1:
+        raise UprPipelineError(
+            f"the two ROMs are different families ({families}); a pureRGB cartridge only pairs "
+            f"with another pureRGB cartridge")
+    return next(iter(families.values()))
 
 
 class UprPipelineError(Exception):
@@ -119,7 +142,8 @@ def _parse_log(path: str) -> dict:
 
 def find_upr_jar() -> str | None:
     """Absolute path to PokeRandoZX.jar, or None. Searches, in order: $SLINK_UPR_JAR,
-    <repo>/PokeRandoZX.jar, <repo>/tools/, and .cache/upr/ walking upward -- a git
+    <repo>/PokeRandoZX.jar, <repo>/tools/, then .cache/slink-upr/ (the fork, preferred:
+    it serves every family) and .cache/upr/ (the stock jar) walking upward -- a git
     worktree has no .cache of its own; it lives under the main repo's .claude/worktrees/."""
     env = os.environ.get("SLINK_UPR_JAR")
     if env and os.path.exists(env):
@@ -131,9 +155,10 @@ def find_upr_jar() -> str | None:
             return cand
     d = repo
     for _ in range(6):
-        cand = os.path.join(d, ".cache", "upr", "PokeRandoZX.jar")
-        if os.path.exists(cand):
-            return cand
+        for sub in ("slink-upr", "upr"):
+            cand = os.path.join(d, ".cache", sub, "PokeRandoZX.jar")
+            if os.path.exists(cand):
+                return cand
         parent = os.path.dirname(d)
         if parent == d:
             break
@@ -148,6 +173,7 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     from server.adapters.gen1_rom_scan import identify
     out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
            "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
+    out["jar_fork"] = out["jar_found"] and jar_is_fork(jar)
     for pid, path in sources.items():
         info = {"path": path, "exists": bool(path) and os.path.isfile(path),
                 "clean": None, "title": ""}
@@ -155,8 +181,11 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
             try:
                 with open(path, "rb") as f:
                     ident = identify(f.read())
-                if ident.get("foundation") == "gen1_purergb":
+                if ident.get("foundation") == "gen1_purergb" and not out["jar_fork"]:
                     info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
+                elif ident.get("foundation") == "gen1_purergb":
+                    info["clean"] = bool(ident.get("clean"))
+                    info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']})"
                 else:
                     info["clean"] = bool(ident.get("clean"))
                     info["title"] = ident.get("title") or ""
@@ -183,6 +212,10 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
         # Not a style preference: UPR APPENDS .gbc to anything else, so the artifact would
         # not be where the caller thinks it is.
         raise UprPipelineError(f"output must end in .gbc, got {output_rom!r}")
+    with open(source_rom, "rb") as f:
+        src_ident = identify(f.read())
+    if src_ident.get("foundation") == "gen1_purergb" and not jar_is_fork(jar):
+        raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
 
     before = set(os.listdir(os.path.dirname(os.path.abspath(output_rom)) or "."))
     proc = subprocess.run(
@@ -206,10 +239,10 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
             f"no log at {os.path.basename(log_path)} — the seed is unrecoverable without it")
 
     info = _parse_log(log_path)
-    if info["version"] and info["version"] != SUPPORTED_UPR_VERSION:
+    if info["version"] and info["version"] not in ACCEPTED_UPR_VERSIONS:
         raise UprPipelineError(
             f"log reports UPR {info['version']}, this pipeline is pinned to "
-            f"{SUPPORTED_UPR_VERSION}")
+            f"{' / '.join(ACCEPTED_UPR_VERSIONS)}")
     info.update({
         "output": output_rom,
         "log": log_path,
@@ -283,6 +316,13 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
     if set(sources) != {"a", "b"}:
         raise UprPipelineError(f"expected sources for players a and b, got {sorted(sources)}")
 
+    for path in sources.values():
+        if not os.path.isfile(path):
+            raise UprPipelineError(f"source ROM not found: {path}")
+    try:
+        family = family_of(sources)
+    except RomScanError as exc:
+        raise UprPipelineError(f"source ROM could not be identified: {exc}") from exc
     try:
         declared = load(settings_path)
     except UprSettingsError as exc:
@@ -292,7 +332,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             f"settings file is version {declared['version']}, not {SUPPORTED_UPR_VERSION}'s. "
             f"UPR would silently update it, and an updated file is not the file the other "
             f"player used")
-    if bad := forbidden_enabled(declared):
+    if bad := forbidden_enabled(declared, family):
         raise UprPipelineError(
             f"these settings change data the Soul Link rules read: {', '.join(bad)}")
     # ALLOWLIST, not just the named dangers. forbidden_enabled can only reject what someone
@@ -304,9 +344,6 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         raise UprPipelineError(
             "these settings are outside the supported set — SLink only runs configurations "
             "it can itself produce: " + "; ".join(odd))
-
-    for path in sources.values():
-        _reject_purergb(path)
 
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}
@@ -320,7 +357,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
                 f"player {player}: the log's settings string is unreadable: {exc}") from exc
         # tweakForRom may have changed things; what matters is that it did not touch the
         # allowlist and did not enable anything forbidden.
-        if bad := forbidden_enabled(effective):
+        if bad := forbidden_enabled(effective, family):
             raise UprPipelineError(
                 f"player {player}: after tweakForRom the run would randomize {', '.join(bad)}")
         info["categories"] = sorted(categories_enabled(effective))
@@ -351,8 +388,14 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             "both ROMs scanned to identical content despite different seeds — the "
             "randomization did not take effect")
 
+    if results["a"]["version"] != results["b"]["version"]:
+        raise UprPipelineError(
+            f"the two ROMs were made by different randomizer versions: "
+            f"{results['a']['version']} vs {results['b']['version']}")
+
     return {
-        "upr_version": SUPPORTED_UPR_VERSION,
+        "upr_version": results["a"]["version"] or SUPPORTED_UPR_VERSION,
+        "family": family,
         "settings_sha256": hashlib.sha256(
             open(settings_path, "rb").read()).hexdigest(),
         "categories": results["a"]["categories"],

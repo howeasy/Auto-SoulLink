@@ -184,6 +184,24 @@ def identify(rom: bytes) -> dict:
             "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
         }
     title = rom_title(rom)
+    # A MODIFIED pure ROM (the UPR fork's output, M5) no longer matches any admitted sha1
+    # and its header title is vanilla's. The pure PokedexOrder table is what tells them
+    # apart: it sits at an offset vanilla uses for other data, and nothing the fork can
+    # write touches it, so a valid dex permutation there means a pure cartridge.
+    pure_title = _purergb_title_for_modified(rom, title)
+    if pure_title is not None:
+        clean_sha1 = next(k for k, v in _load_purergb_admission().items()
+                          if v.get("title") == pure_title and v.get("kind") == "clean")
+        return {
+            "title": title,
+            "syms_key": f"purergb:{pure_title}",
+            "variant": pure_title,
+            "foundation": "gen1_purergb",
+            "sha1": sha1,
+            "clean": False,
+            "clean_sha1": clean_sha1,
+            "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
+        }
     syms_key = _HEADER_TITLE_TO_SYMS.get(title)
     if not syms_key:
         raise RomScanError(
@@ -200,6 +218,27 @@ def identify(rom: bytes) -> dict:
         "clean_sha1": entry["rom_sha1"],
         "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
     }
+
+
+_HEADER_TITLE_TO_PURE = {"POKEMON RED": "purered", "POKEMON BLUE": "pureblue",
+                         "POKEMON GREEN": "puregreen"}
+
+
+def _purergb_title_for_modified(rom: bytes, header_title: str) -> str | None:
+    """The pure title whose PokedexOrder table (190 internal ids -> dex 0..151, every dex
+    number 1..151 present exactly once) this ROM carries at the pure offset, else None."""
+    pure_title = _HEADER_TITLE_TO_PURE.get(header_title)
+    if pure_title is None:
+        return None
+    try:
+        off = sym_to_offset(_pure_syms(pure_title)["PokedexOrder"])
+    except (KeyError, OSError, ValueError):
+        return None
+    table = rom[off:off + INTERNAL_POKEMON_COUNT]
+    seen = [b for b in table if b]
+    if len(set(seen)) == 151 and max(seen) == 151:
+        return pure_title
+    return None
 
 
 def _syms_for(rom: bytes) -> tuple[dict, dict]:

@@ -166,7 +166,7 @@ def test_identical_seeds_are_refused(tmp_path, monkeypatch):
     monkeypatch.setattr(upr_pipeline, "randomize", fake)
     monkeypatch.setattr(upr_pipeline, "parse_settings_string",
                         lambda _s: {"flags": {}, "misc_tweaks": 0})
-    monkeypatch.setattr(upr_pipeline, "forbidden_enabled", lambda _p: [])
+    monkeypatch.setattr(upr_pipeline, "forbidden_enabled", lambda _p, _family=None: [])
     monkeypatch.setattr(upr_pipeline, "categories_enabled", lambda _p: {"wild"})
     monkeypatch.setattr(upr_pipeline, "spec_from_parsed", lambda _p: {"wild": "random"})
     monkeypatch.setattr(upr_pipeline, "_check_content", lambda _s, _o: {"wild": {}})
@@ -178,7 +178,8 @@ def test_identical_seeds_are_refused(tmp_path, monkeypatch):
 class TestAgainstTheRealJar:
     def test_a_pair_is_produced_with_different_seeds_and_content(self, tmp_path):
         res = prepare_pair(_jar(), _settings(tmp_path), _roms(), str(tmp_path / "out"))
-        assert res["upr_version"] == "4.6.1"
+        assert res["upr_version"] in upr_pipeline.ACCEPTED_UPR_VERSIONS
+        assert res["family"] == "gen1_rby"
         assert set(res["categories"]) == ALL_CATEGORIES
         a, b = res["players"]["a"], res["players"]["b"]
         assert a["seed"] != b["seed"], "the whole point of the pairing"

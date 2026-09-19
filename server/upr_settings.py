@@ -378,9 +378,33 @@ OPTIONS: dict[str, dict] = {
 # "enabled" means anything but unchanged.
 _CATEGORY_MODES = ("wild", "starters", "statics", "trainers", "tms", "field_items")
 
+# Foundations the pipeline randomizes. The pure family (docs/purergb/PLAN.md §6 M5) runs on
+# the SLink fork's lossless entries, which offer NO misc tweak: every tweak is a code write
+# (fastest text is a C9 at TextDelayFunctionOffset; pureRGB has instant text natively), and
+# the fork's tweakForRom would silently drop one that was asked for, so a settings file for
+# the pure family must not ask.
+FAMILY_VANILLA = "gen1_rby"
+FAMILY_PURE = "gen1_purergb"
+FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
 
-def default_spec() -> dict:
-    return {key: opt["default"] for key, opt in OPTIONS.items()}
+
+def misc_options() -> list[str]:
+    return [key for key, opt in OPTIONS.items() if "misc" in opt]
+
+
+def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
+    """``spec`` with the family's allowlist applied: the pure family has every tweak off."""
+    if family not in FAMILIES:
+        raise UprSettingsError(f"unknown randomizer family {family!r}")
+    out = dict(spec)
+    if family == FAMILY_PURE:
+        for key in misc_options():
+            out[key] = False
+    return out
+
+
+def default_spec(family: str = FAMILY_VANILLA) -> dict:
+    return family_spec({key: opt["default"] for key, opt in OPTIONS.items()}, family)
 
 
 def option_form() -> list[dict]:
@@ -557,15 +581,18 @@ def categories_enabled(parsed: dict) -> set[str]:
     return {cat for cat in _CATEGORY_MODES if spec[cat] != "unchanged"}
 
 
-def forbidden_enabled(parsed: dict) -> list[str]:
+def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     """Settings that change data the Soul Link rules read. Any of these must reject a run.
 
     Types and evolutions decide the type and species clauses; move and base-stat changes
     make every cached stat and damage figure wrong. These are the domains the project chose
-    NOT to support, so finding one enabled is a refusal, not a warning.
+    NOT to support, so finding one enabled is a refusal, not a warning. For the pure family
+    every misc tweak is forbidden too (see FAMILY_PURE).
     """
     f = parsed["flags"]
     bad = []
+    if family == FAMILY_PURE and parsed.get("misc_tweaks"):
+        bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
     if not f.get("types_UNCHANGED"):
         bad.append("types")
     if not f.get("evolutions_UNCHANGED"):

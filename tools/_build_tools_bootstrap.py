@@ -24,10 +24,12 @@ Usage:
     rgbds_bin = ensure_rgbds()             # v1.0.1 (default, existing callers)
     rgbds_bin = ensure_rgbds("v1.0.3")     # a different pinned version
     devkit_bin = ensure_w64devkit()        # 2.10.0, dir with make.exe etc.
+    jdk_bin = ensure_jdk()                 # Temurin JDK 17 (javac + jar), dir with javac.exe
 
 Env overrides (skip download, use an existing install as-is):
     SLINK_RGBDS_BIN      — dir already containing rgbasm/rgblink/rgbfix
     SLINK_W64DEVKIT_BIN  — dir already containing make/busybox (or sh)
+    SLINK_JDK_BIN        — dir already containing javac + jar
 """
 
 from __future__ import annotations
@@ -64,6 +66,17 @@ W64DEVKIT_VERSION = "2.10.0"
 W64DEVKIT_URL = "https://github.com/skeeto/w64devkit/releases/download/v2.10.0/w64devkit-x64-2.10.0.7z.exe"
 W64DEVKIT_SHA256 = "18d0a4c71a166f8401ab6305781bec5882b40b5e06ba9807c61cb5f3b3c6325e"
 W64DEVKIT_SIZE = 67_127_496
+
+# Pinned Eclipse Temurin JDK 17 (portable zip; the UPR ZX fork needs javac + jar,
+# the machine only ships a Java 8 JRE). Resolved through the Adoptium API
+# (`/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk`)
+# on 2026-09-18; the sha256 is the one the API published AND the one observed
+# on the downloaded file. The zip nests everything under `jdk-17.0.20.1+1/`.
+JDK_VERSION = "17.0.20.1+1"
+JDK_URL = ("https://github.com/adoptium/temurin17-binaries/releases/download/"
+           "jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20.1_1.zip")
+JDK_SHA256 = "e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0"
+JDK_SIZE = 190_817_615
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOWNLOAD_CACHE = REPO_ROOT / ".cache" / "downloads"
@@ -335,6 +348,51 @@ def ensure_w64devkit() -> pathlib.Path:
         )
 
     return _install_w64devkit_windows()
+
+
+def _find_jdk_bin(root: pathlib.Path) -> pathlib.Path | None:
+    for candidate in (root, root / "bin", *(p / "bin" for p in root.glob("jdk-*"))):
+        if (candidate / _binary_name("javac")).exists():
+            return candidate
+    return None
+
+
+def ensure_jdk() -> pathlib.Path:
+    """Locate or install the pinned Temurin JDK 17. Return the dir with javac + jar.
+
+    Resolution order:
+      1. SLINK_JDK_BIN env var — an existing dir with javac, trusted as-is.
+      2. .cache/build-tools/jdk-17/ inside the worktree (auto-installed).
+      3. On Windows only: auto-download + extract to .cache/build-tools/jdk-17/.
+      4. On macOS / Linux: raise (install a JDK 17 and set SLINK_JDK_BIN).
+    """
+    override = os.environ.get("SLINK_JDK_BIN")
+    if override:
+        override_dir = pathlib.Path(override)
+        if (override_dir / _binary_name("javac")).exists():
+            return override_dir
+        raise RuntimeError(f"SLINK_JDK_BIN={override} has no javac")
+
+    cache_dir = REPO_ROOT / ".cache" / "build-tools" / "jdk-17"
+    existing = _find_jdk_bin(cache_dir) if cache_dir.exists() else None
+    if existing:
+        return existing
+
+    if platform.system() != "Windows":
+        raise RuntimeError(
+            "The pinned JDK zip is Windows x64 only. Install a JDK 17 and set "
+            "SLINK_JDK_BIN to its bin dir."
+        )
+
+    zip_path = _download_and_verify(JDK_URL, JDK_SHA256, JDK_SIZE)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[bootstrap] Extracting JDK {JDK_VERSION} to {cache_dir}", file=sys.stderr)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(cache_dir)
+    bin_dir = _find_jdk_bin(cache_dir)
+    if not bin_dir:
+        raise RuntimeError(f"JDK extraction did not produce javac under {cache_dir}")
+    return bin_dir
 
 
 def main() -> int:
