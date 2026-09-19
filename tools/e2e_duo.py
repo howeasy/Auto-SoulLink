@@ -3573,7 +3573,11 @@ class DuoRun:
             status = self._status() or {}
             players = status.get("players") or {}
             a, b = players.get("a") or {}, players.get("b") or {}
-            return status if a.get("admission") == "admitted" and b.get("admission") == "rejected" else None
+            # server.py:2300-2303 reports "admitted" with an EMPTY reason for a player that has
+            # no verdict yet, so A must carry a real one: B's rejection can land before A's hello
+            # (a pure PureRed↔PureBlue lane did exactly that) and a no-verdict A is not admitted.
+            return (status if a.get("admission") == "admitted" and a.get("admission_reason")
+                    and b.get("admission") == "rejected" else None)
 
         status = self.wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
         a, b = status["players"]["a"], status["players"]["b"]
