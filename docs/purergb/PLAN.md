@@ -52,6 +52,19 @@ Totals: pure-rules RC (P0–P3) ≈ 3½ sessions; full scope ≈ 1–1.5 weeks w
 
 What is deliberately **not** gated by a human: intermediate commits inside a phase, fixture regeneration, worker dispatch within claimed files, re-running an unchanged-input gate. What is **always** gated: anything in the table's gate column, any change to a closed owner decision (U1–U10), any push, and the release claim.
 
+### 13.1 Gate ledger (coordinator-maintained; owner signatures are chat rulings, quoted)
+
+| Gate | Signed | Tree | Evidence |
+|---|---|---|---|
+| G0 | 2026-09-18 "G0 is merged. Just not tagged" | local master `bbcd037` (Gen 1 RC FF; not pushed, not tagged) | worktree rebased onto `bbcd037`; `git merge-base` = `bbcd037` |
+| G1 | 2026-09-18 "Looks good from my side … Lets do what we can" | `2138c82` | `data/purergb_sources.lock.json`, `tools/build_purergb_syms.py` local build sha1 == `2e94d09c…`/`d419fe24…`/`fe4c63a6…`; `tests/unit/test_purergb_build.py` |
+| G2 | 2026-09-18 "Let's continue" | `d4a9ce4` (+`8821643`, `4d748be`) | `data/games/gen1_purergb/*` (41 sites × 3 titles byte-verified, 78 areas, 190-row species index, admission table); `tests/unit/test_gen1_purergb_*.py` green; vanilla pack byte-identical after regeneration |
+| G3a | 2026-09-18 (same ruling as G2; shared diff reviewed) | `355f047` + `7be4a39` | acknowledged `key_change` / `identity_lost` / MIXED GAMES / contract sha1; `slink-adapter-guard` clean + one independent review; Gen 3 suite then full suite green |
+| G3 | 2026-09-18 "Let's continue with the next phase" | `3ad62de` … `c722250` | pure duo 14/14 PASS (PureRed↔PureBlue incl. reconnect wrong-save leg), vanilla `gen1_new` 18/18 PASS after the shared client changes, PureRed↔PureGreen 6/6 (`b9fff35`), lanes `profile-generated-purergb` / `inspect-purergb` / `apex-purergb` PASS |
+| G4 | **awaiting owner** | `3b893be` (M3) + P4c harness (pending harvest) | A4 gate `tests/unit/test_gen1_purergb_overlay.py` (39) green; UPS byte-reproducible; live overlay gates (receptionist, menu row, APEX refusal, 2× timing, `trade_new`/`trade_decline_new`/`explode_new` on `gen1_pure_overlay`, GBC FADE stress) run after P4c lands |
+| G5 | **awaiting owner** | `2e863f7` (M5) + `cc125f3` (rand admission) + `3df8a70` | fork `load→save` 3/3 IDENTICAL (`tools/upr_lossless_check.py`); T6 write-domain diff 0 stray (`tools/upr_write_domain_diff.py`); no UNRESOLVED INI key; **`admit_randomized_new` PASS on `gen1_pure` (lane R2, 2026-09-18 21:40)** — A's randomized PureRed admitted "cartridge matches the contract", clean PureBlue rejected with both fingerprint prefixes, neither save touched; vanilla `admit_randomized_new` PASS (lane V2) |
+| G6 | — | — | P6 not started |
+
 First action after this plan is approved (outside plan mode): sync this §13 into `docs/purergb/PLAN.md` in the worktree and commit it (`docs(purergb): phased execution with human gates`); no implementation until G0.
 
 ## 0. Context and decisions already taken
