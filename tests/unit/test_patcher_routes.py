@@ -197,3 +197,20 @@ class TestTheShippedPatchesActuallyApply:
         src, patch_bytes = self._bytes(self._clean(wrong), patcher.patch_path(slug))
         with pytest.raises(ValueError, match="source ROM CRC mismatch"):
             self._tools().ups_apply(src, patch_bytes)
+
+
+def test_pure_targets_advertise_the_admitted_overlay_hashes():
+    """The /patcher page's pure rows must name the md5 of the ROM the client admits (the overlay
+    admission table) and of the pinned clean build it is applied to -- a literal drifted once."""
+    import json
+    root = os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), ".."))
+    pack = os.path.join(root, "data", "games", "gen1_purergb")
+    with open(os.path.join(pack, "admission.json"), encoding="utf-8") as fh:
+        clean = json.load(fh)
+    with open(os.path.join(pack, "admission_overlay.json"), encoding="utf-8") as fh:
+        overlay = json.load(fh)
+    by_title = {row["title"]: row for row in overlay.values() if row.get("kind") == "overlay"}
+    for slug, title in (("pure-red", "purered"), ("pure-blue", "pureblue"), ("pure-green", "puregreen")):
+        row = by_title[title]
+        assert patcher.TARGETS[slug]["patched_md5"] == row["md5"]
+        assert patcher.TARGETS[slug]["base_md5"] == clean[row["base_sha1"]]["md5"]

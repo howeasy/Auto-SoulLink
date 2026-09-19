@@ -28,6 +28,25 @@ from server.templating import resolve_theme
 # ── Paths ───────────────────────────────────────────────────────────────────
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 _DIST = os.path.normpath(os.path.join(_SERVER_DIR, "..", "patch", "dist"))
+_PURE_ADMISSION = os.path.normpath(os.path.join(
+    _SERVER_DIR, "..", "data", "games", "gen1_purergb", "admission_overlay.json"))
+
+
+def _pure_md5s(title: str) -> tuple[str, str]:
+    """(base md5, overlay md5) for one pure title, from the overlay admission table — the same
+    file that admits the cartridge at runtime, so the page can never advertise a hash the
+    client would refuse (the literals drifted once after an overlay rebuild)."""
+    import json
+
+    with open(_PURE_ADMISSION, encoding="utf-8") as fh:
+        rows = json.load(fh)
+    clean_path = _PURE_ADMISSION.replace("admission_overlay.json", "admission.json")
+    with open(clean_path, encoding="utf-8") as fh:
+        clean = json.load(fh)
+    for row in rows.values():
+        if row.get("title") == title and row.get("kind") == "overlay":
+            return clean[row["base_sha1"]]["md5"], row["md5"]
+    raise KeyError(f"no overlay admission row for {title}")
 
 # ── Targets ─────────────────────────────────────────────────────────────────
 # A REGISTRY, not a single file. There are three companion patches now and they are not
@@ -79,13 +98,13 @@ TARGETS: dict[str, dict] = {
     # linked into pureRGB (patch/gen1/purergb/, tools/build_purergb_overlay.py). The base is
     # the locked pure build (data/purergb_sources.lock.json), the result is recorded in
     # data/purergb/overlay_provenance.json and admitted by data/games/gen1_purergb/
-    # admission_overlay.json. md5s are copied from those two files.
+    # admission_overlay.json, which is also where these md5s come from.
     "pure-red": {
         "slug":        "pure-red",
         "label":       "pureRGB Red",
         "patch":       "SLink-PureRed.ups",
-        "base_md5":    "6f9ab804e11679ec3f29923063a50115",
-        "patched_md5": "fd6b28b56eb94bf7902cdb0e87fb3b40",
+        "base_md5":    _pure_md5s("purered")[0],
+        "patched_md5": _pure_md5s("purered")[1],
         "accept":      ".gbc,.gb,application/octet-stream",
         "out_name":    "Pokemon Red (pureRGB, SLink companion).gbc",
         "base_hint":   "the pureRGB v2.7.6 Red build (pokered.gbc)",
@@ -94,8 +113,8 @@ TARGETS: dict[str, dict] = {
         "slug":        "pure-blue",
         "label":       "pureRGB Blue",
         "patch":       "SLink-PureBlue.ups",
-        "base_md5":    "feaf1177a83be4517f7711dad85102b2",
-        "patched_md5": "56d0125450bd76e917e29b0f04ba79a2",
+        "base_md5":    _pure_md5s("pureblue")[0],
+        "patched_md5": _pure_md5s("pureblue")[1],
         "accept":      ".gbc,.gb,application/octet-stream",
         "out_name":    "Pokemon Blue (pureRGB, SLink companion).gbc",
         "base_hint":   "the pureRGB v2.7.6 Blue build (pokeblue.gbc)",
@@ -104,8 +123,8 @@ TARGETS: dict[str, dict] = {
         "slug":        "pure-green",
         "label":       "pureRGB Green",
         "patch":       "SLink-PureGreen.ups",
-        "base_md5":    "03b83b94f8f0915967a9b8063e6e9f6f",
-        "patched_md5": "74f4acf51f863e6c49ef8d8e462efb6f",
+        "base_md5":    _pure_md5s("puregreen")[0],
+        "patched_md5": _pure_md5s("puregreen")[1],
         "accept":      ".gbc,.gb,application/octet-stream",
         "out_name":    "Pokemon Green (pureRGB, SLink companion).gbc",
         "base_hint":   "the pureRGB v2.7.6 Green build (pokegreen.gbc)",
