@@ -36,6 +36,7 @@ DATA = REPO / "data" / "games" / "gen1_purergb"
 # The P3b brief's own path, plus an env override for a different checkout.
 _PURE_ROM_DIRS = [
     os.environ.get("SLINK_PURERGB_ROMS", ""),
+    str(REPO / ".cache" / "purergb"),
     r"C:/Users/howar/AppData/Local/Temp/claude/E--Google-Drive-SLink--claude-worktrees-"
     r"recursing-hopper-86c382/27f97123-cfa0-473c-aed8-f288963eedeb/scratchpad/purergb",
 ]
@@ -237,3 +238,90 @@ def test_available_game_ids_covers_every_capability_generator_rom_type():
     assert set(ROM_TYPES) == set(_ROM_TYPE_TO_GAME_ID)
     for rom_type in ROM_TYPES:
         assert _ROM_TYPE_TO_GAME_ID[rom_type] in available_game_ids()
+
+
+# ── artifact kinds (A3 / A5): overlay by sha1, randomized by anchors ───────────────────────
+def _overlay_rom(title: str) -> bytes:
+    """The shipped UPS over the clean ROM, as the overlay tests build it."""
+    import sys
+    sys.path.insert(0, str(REPO / "patch" / "tools"))
+    from make_ups import ups_apply
+    admission_overlay = json.loads((DATA / "admission_overlay.json").read_text(encoding="utf-8"))
+    ups = next(REPO / r["ups"] for r in admission_overlay.values() if r["title"] == title)
+    return ups_apply(_pure_rom(title), ups.read_bytes())
+
+
+def _randomized(rom: bytes, title: str) -> bytes:
+    """Data tables changed, code untouched: what the fork's output looks like to identify()."""
+    profile = json.loads((DATA / "profile.json").read_text(encoding="utf-8"))
+    wild = profile["titles"][title]["rom"]["WildDataPointers"]["flat"]
+    out = bytearray(rom)
+    for i in range(0x200, 0x240):
+        out[wild + i] ^= 0x5A
+    return bytes(out)
+
+
+def test_identify_names_the_overlay_artifact_with_its_clean_base(pure_rom):
+    title, clean = pure_rom
+    ident = identify(_overlay_rom(title))
+    assert (ident["foundation"], ident["variant"], ident["kind"]) == ("gen1_purergb", title, "overlay")
+    assert ident["clean"] is False and ident["pinned"] is True
+    assert ident["clean_sha1"] == hashlib.sha1(clean).hexdigest()
+    clean_ident = identify(clean)
+    assert clean_ident["kind"] == "clean" and clean_ident["pinned"] is True
+
+
+def test_identify_names_the_base_kind_of_a_randomized_artifact(pure_rom):
+    title, clean = pure_rom
+    rand = identify(_randomized(clean, title))
+    assert (rand["kind"], rand["clean"], rand["pinned"]) == ("rand", False, False)
+    assert rand["clean_sha1"] == hashlib.sha1(clean).hexdigest()
+    overlay = _overlay_rom(title)
+    rand_ov = identify(_randomized(overlay, title))
+    assert (rand_ov["kind"], rand_ov["clean"], rand_ov["pinned"]) == ("rand_overlay", False, False)
+    assert rand_ov["clean_sha1"] == hashlib.sha1(overlay).hexdigest()
+
+
+def test_the_overlay_is_scanned_with_its_own_relocated_symbols(pure_rom):
+    """GoodRodMons/ItemUseOldRod move in the overlay build; the clean symbols would read
+    code as a fishing table."""
+    title, clean = pure_rom
+    overlay = _overlay_rom(title)
+    assert scan_fishing(overlay) == scan_fishing(clean)
+    assert scan_wild(overlay) == scan_wild(clean)
+    assert scan_fishing(_randomized(overlay, title)) == scan_fishing(clean)
+
+
+def test_a_vanilla_dump_reports_kind_clean_and_pinned():
+    if not _VANILLA_RED.is_file():
+        pytest.skip(f"vanilla clean Red dump absent: {_VANILLA_RED}")
+    ident = identify(_VANILLA_RED.read_bytes())
+    assert ident["kind"] == "clean" and ident["pinned"] is True
+
+
+# ── the pipeline takes an overlay as a pinned source (A5) ─────────────────────────────────
+def test_preflight_and_content_check_accept_an_overlay_source(tmp_path):
+    from server.upr_pipeline import UprPipelineError, _check_content, jar_is_fork, preflight
+    from tests.conftest import find_upr_jar
+    jar = find_upr_jar()
+    if not jar or not jar_is_fork(jar):
+        pytest.skip("the SLink fork jar (4.6.1-slink1) is not present")
+    clean = _pure_rom("purered")
+    overlay = _overlay_rom("purered")
+    src = tmp_path / "overlay.gbc"
+    src.write_bytes(overlay)
+    pre = preflight(jar, {"a": str(src)})
+    assert pre["roms"]["a"]["kind"] == "overlay" and "overlay" in pre["roms"]["a"]["title"]
+    assert pre["roms"]["a"]["clean"] is True, "a pinned overlay is a source the pipeline may start from"
+    rand_src = tmp_path / "rand.gbc"
+    rand_src.write_bytes(_randomized(clean, "purered"))
+    assert preflight(jar, {"a": str(rand_src)})["roms"]["a"]["clean"] is False
+    # a randomized overlay output from the overlay source passes; a rand output does not
+    out = tmp_path / "out.gbc"
+    out.write_bytes(_randomized(overlay, "purered"))
+    _check_content(str(src), str(out))
+    out.write_bytes(_randomized(clean, "purered"))
+    with pytest.raises(UprPipelineError, match="rand artifact but the source was overlay"):
+        _check_content(str(src), str(out))
+    with pytest.raises(UprPipelineError, match="not a clean dump"):
+        _check_content(str(rand_src), str(out))

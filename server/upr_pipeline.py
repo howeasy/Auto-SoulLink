@@ -168,8 +168,10 @@ def find_upr_jar() -> str | None:
 
 def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     """Everything that can be checked in milliseconds before anything is spent: is the
-    jar there, is Java on PATH, is each ROM present and a clean dump of a title the
-    scanner knows. randomize() checks the same things, but 600 s deep inside a worker."""
+    jar there, is Java on PATH, is each ROM present and a PINNED artifact of a title the
+    scanner knows -- a clean dump, or (pure family, A5) the byte-exact SLink companion
+    overlay, which is randomized as an overlay. randomize() checks the same things, but
+    600 s deep inside a worker. `roms[pid].clean` is that pinned verdict."""
     from server.adapters.gen1_rom_scan import identify
     out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
            "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
@@ -184,10 +186,12 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
                 if ident.get("foundation") == "gen1_purergb" and not out["jar_fork"]:
                     info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
                 elif ident.get("foundation") == "gen1_purergb":
-                    info["clean"] = bool(ident.get("clean"))
-                    info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']})"
+                    info["clean"] = bool(ident.get("pinned", ident.get("clean")))
+                    info["kind"] = ident.get("kind", "clean")
+                    info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']}, {info['kind']})"
                 else:
                     info["clean"] = bool(ident.get("clean"))
+                    info["kind"] = ident.get("kind", "clean")
                     info["title"] = ident.get("title") or ""
             except Exception as exc:                                 # noqa: BLE001
                 info["clean"], info["title"] = False, f"unreadable: {exc}"
@@ -248,8 +252,15 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
         "log": log_path,
         "sha1": _sha1(output_rom),
         "source_sha1": _sha1(source_rom),
+        # provenance (A5): the admitted kind the source was, clean or overlay; the client
+        # admits the output by that kind's anchors (rand / rand_overlay)
+        "base_kind": src_ident.get("kind", "clean"),
     })
     return info
+
+
+# identify()'s output kind -> the pinned kind it must have been randomized from.
+BASE_KIND_OF = {"clean": "clean", "rand": "clean", "overlay": "overlay", "rand_overlay": "overlay"}
 
 
 def _rule_bearing(base_stats: dict[int, dict]) -> dict[int, dict]:
@@ -275,10 +286,14 @@ def _check_content(source_rom: str, output_rom: str) -> dict:
         if src_ident["variant"] != out_ident["variant"]:
             raise UprPipelineError(
                 f"output is {out_ident['variant']} but the source was {src_ident['variant']}")
-        if not src_ident["clean"]:
+        if not src_ident.get("pinned", src_ident["clean"]):
             raise UprPipelineError(
                 f"source ROM is not a clean dump ({src_ident['sha1']}); randomize from a "
                 f"clean cartridge so the result is reproducible")
+        if src_ident.get("kind", "clean") != BASE_KIND_OF.get(out_ident.get("kind", "clean")):
+            raise UprPipelineError(
+                f"output is a {out_ident.get('kind')} artifact but the source was "
+                f"{src_ident.get('kind')} -- the randomizer changed a code byte")
         profile = scan(out)
         # Gen 1 keeps the catch rate inside the base-stats record, and the minimum-catch-
         # rate option legitimately raises it; no rule reads it, so it is not compared.

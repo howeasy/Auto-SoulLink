@@ -278,6 +278,17 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def set_artifact_kind(self, kind: str) -> None:
+        """Bind the run's committed artifact kind (hello `artifact_kind`; server/state.py).
+
+        A per-run capability such as `native_trade_ui()` may follow it: the server calls
+        this once the kind commits and on every adapter it builds for the run. No-op by
+        default; a game whose capabilities depend on the artifact opts in (Gen 1 pureRGB:
+        the SLink companion overlay carries the panel and the receptionist, a clean build
+        does not). A pair of mixed kinds never reaches here: the hello check refuses it.
+        """
+        return None
+
     def native_trade_ui(self) -> bool:
         """Whether the cartridge itself drives the trade menus.
 

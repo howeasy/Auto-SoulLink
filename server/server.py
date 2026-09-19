@@ -309,6 +309,9 @@ class SLinkServer:
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
+        # A restored run already committed its artifact kind; the adapter is rebuilt without it.
+        if self.state.artifact_kind:
+            self.adapter.set_artifact_kind(self.state.artifact_kind)
         # A run may be played on ROMs randomized per player -- same settings, different
         # seeds -- so "what does this route hold" has a different answer for each of them.
         # get_adapter() is not a singleton, so one adapter per player is cheap; absent an
@@ -423,7 +426,9 @@ class SLinkServer:
 
         rom_type = self.connected_players.get(player_id, {}).get("rom_type", "")
         game_id = game_id_for_rom_type(rom_type) or self.adapter.game_id
-        adapter = get_adapter(game_id, is_rr=self.state.is_rr, rom_type=rom_type)
+        # the run's committed kind (tests stub the state without one: default clean)
+        adapter = get_adapter(game_id, is_rr=self.state.is_rr, rom_type=rom_type,
+                              artifact_kind=getattr(self.state, "artifact_kind", "") or "clean")
         adopt = getattr(adapter, "use_rom_encounters", None)
         if adopt is None:
             return
@@ -1686,6 +1691,9 @@ class SLinkServer:
             if not self.state.artifact_kind:
                 self.state.artifact_kind = msg.get("artifact_kind") or "clean"
                 _dirty = True
+                # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
+                # follow the committed kind from here on (base adapter: no-op).
+                self.state.adapter.set_artifact_kind(self.state.artifact_kind)
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -4220,6 +4228,8 @@ class SLinkServer:
             pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
+        if self.state.artifact_kind:
+            self.adapter.set_artifact_kind(self.state.artifact_kind)
         # Restore events.json and reload ring buffer
         if os.path.exists(backup_events):
             shutil.copy2(backup_events, self._events_path)

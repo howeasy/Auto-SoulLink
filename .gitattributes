@@ -1,0 +1,3 @@
+# The overlay sources are hashed raw by overlay_provenance.json; keep them LF on every checkout.
+patch/gen1/purergb/** text eol=lf
+patch/upr/*.patch text eol=lf

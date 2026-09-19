@@ -39,7 +39,8 @@ if not admitted then
     -- and predate the admission table (their sha1s are not pinned anywhere): a recognised
     -- vanilla header still boots the vanilla pack exactly as before admission existed
     -- (kind "named"). A PureRed/PureBlue header cannot take this path: the pure builds are
-    -- admitted by sha1 above, and the vanilla pack would read the wrong addresses on one.
+    -- admitted by sha1 or by anchors above (kinds rand / rand_overlay for the randomized
+    -- ones), and the vanilla pack would read the wrong addresses on one.
     if family == "red" or family == "blue" or family == "yellow" then
         console.log("[SLink-gen1] no admission row for this cartridge (" .. tostring(why) .. "); booting the vanilla "
                     .. family .. " pack by header (named family)")
@@ -65,9 +66,9 @@ if not ok then
     console.log("[SLink-gen1] refused to start: " .. tostring(err))
     return
 end
-console.log(string.format("[SLink-gen1] %s/%s (%s%s, header %s) player %s -> %s:%d (rom %s)",
-                          admitted.pack, admitted.title, admitted.kind, admitted.rehashed and ", rehashed" or "",
-                          family, player, host, port, rom_sha1:sub(1, 8)))
+console.log(string.format("[SLink-gen1] %s/%s (%s by %s%s, header %s) player %s -> %s:%d (rom %s)",
+                          admitted.pack, admitted.title, admitted.kind, admitted.admitted_by or "header",
+                          admitted.rehashed and ", rehashed" or "", family, player, host, port, rom_sha1:sub(1, 8)))
 
 -- Exposed for live gates and the console.
 SLINK_GEN1_CLIENT = client

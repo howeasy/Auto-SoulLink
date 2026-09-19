@@ -73,9 +73,10 @@ class Gen1PureRGBAdapter(Gen1Adapter):
             raise ValueError(f"unrecognised pureRGB rom_type: {rom_type!r}")
         self._variant = _ROM_VARIANT[rom_type]
         self._enc_variant = self._variant
-        # "clean" or "overlay" (the hello's artifact_kind; the SLink companion overlay is the
-        # only pure build with the native panel + receptionist, PLAN M3). Whoever constructs
-        # the adapter for a committed run passes it; a clean cartridge is the safe default.
+        # clean / overlay / rand / rand_overlay (the hello's artifact_kind; the SLink companion
+        # overlay -- randomized or not -- is the only pure build with the native panel +
+        # receptionist, PLAN M3). Whoever constructs the adapter for a committed run passes
+        # it; a clean cartridge is the safe default.
         self._artifact_kind = kwargs.get("artifact_kind") or "clean"
         self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
         self._layout = gen1_codec.for_foundation("gen1_purergb")
@@ -215,13 +216,16 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         """Bind the run's committed artifact kind (server/state.py `artifact_kind`)."""
         self._artifact_kind = kind or "clean"
 
+    def _is_overlay(self) -> bool:
+        return self._artifact_kind in ("overlay", "rand_overlay")
+
     def supports_info_panel(self) -> bool:
         # The native panel ships in the SLink source overlay (M3), not in a clean pureRGB ROM.
-        return self._artifact_kind == "overlay"
+        return self._is_overlay()
 
     def native_trade_ui(self) -> bool:
         # The receptionist + native trade scene ship in the same overlay.
-        return self._artifact_kind == "overlay"
+        return self._is_overlay()
 
     def info_panel_width(self) -> int:
         # Game Boy tilemap width, as the vanilla adapter reports for its panel.

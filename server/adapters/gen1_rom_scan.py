@@ -86,7 +86,12 @@ class RomScanError(Exception):
 # ── symbols ──────────────────────────────────────────────────────────────────────────────
 _SYMS_CACHE: dict | None = None
 _PUREGB_ADMISSION_CACHE: dict | None = None
-_PUREGB_PROFILE_CACHE: dict | None = None
+_PUREGB_PACK_CACHE: dict[str, dict] = {}
+# The pack file for an artifact base kind: `<name>.json` for clean, `<name>_overlay.json` for
+# the SLink companion overlay (ROM symbols relocate, RAM does not: PLAN M3).
+_PURE_SUFFIX = {"clean": "", "overlay": "_overlay"}
+# identify()'s `kind` -> the base kind whose pack files describe the cartridge.
+BASE_KIND = {"clean": "clean", "rand": "clean", "overlay": "overlay", "rand_overlay": "overlay"}
 
 
 def _load_syms() -> dict:
@@ -98,7 +103,8 @@ def _load_syms() -> dict:
 
 
 def _load_purergb_admission() -> dict:
-    """sha1 -> {title, kind, header_title, ...}, from data/games/gen1_purergb/admission.json.
+    """sha1 -> {title, kind, header_title, base_sha1?, ...}: data/games/gen1_purergb/admission.json
+    (kind clean) plus admission_overlay.json (kind overlay, base_sha1 = the clean ROM's).
 
     This is the ONLY correct way to identify a pureRGB cartridge (PLAN.md §11.2 trap 7):
     PureRed/PureBlue's header titles are byte-identical to vanilla Red/Blue ("POKEMON
@@ -107,20 +113,28 @@ def _load_purergb_admission() -> dict:
     """
     global _PUREGB_ADMISSION_CACHE
     if _PUREGB_ADMISSION_CACHE is None:
-        with open(os.path.join(_PUREGB_DATA, "admission.json"), encoding="utf-8") as f:
-            _PUREGB_ADMISSION_CACHE = json.load(f)
+        rows: dict = {}
+        for name in ("admission.json", "admission_overlay.json"):
+            with open(os.path.join(_PUREGB_DATA, name), encoding="utf-8") as f:
+                rows.update(json.load(f))
+        _PUREGB_ADMISSION_CACHE = rows
     return _PUREGB_ADMISSION_CACHE
 
 
-def _load_purergb_profile() -> dict:
-    global _PUREGB_PROFILE_CACHE
-    if _PUREGB_PROFILE_CACHE is None:
-        with open(os.path.join(_PUREGB_DATA, "profile.json"), encoding="utf-8") as f:
-            _PUREGB_PROFILE_CACHE = json.load(f)
-    return _PUREGB_PROFILE_CACHE
+def _load_pure_pack(name: str, kind: str = "clean") -> dict:
+    """A pureRGB pack file (profile / engine_signals / write_checkpoint) for a base kind."""
+    key = f"{name}{_PURE_SUFFIX[BASE_KIND[kind]]}.json"
+    if key not in _PUREGB_PACK_CACHE:
+        with open(os.path.join(_PUREGB_DATA, key), encoding="utf-8") as f:
+            _PUREGB_PACK_CACHE[key] = json.load(f)
+    return _PUREGB_PACK_CACHE[key]
 
 
-def _pure_syms(title: str) -> dict:
+def _load_purergb_profile(kind: str = "clean") -> dict:
+    return _load_pure_pack("profile", kind)
+
+
+def _pure_syms(title: str, kind: str = "clean") -> dict:
     """name -> bank<<16|addr, in the SAME encoding pret's syms use, so sym_to_offset() and
     every scan_* function below work unchanged over either source.
 
@@ -130,9 +144,29 @@ def _pure_syms(title: str) -> dict:
     build does not carry, e.g. MewBaseStats, EvosMovesPointerTable) are omitted, which is
     exactly the "in syms" absence the vanilla branches below already test for.
     """
-    rom_syms = _load_purergb_profile()["titles"][title]["rom"]
+    rom_syms = _load_purergb_profile(kind)["titles"][title]["rom"]
     return {name: (entry["bank"] << 16 | entry["addr"])
             for name, entry in rom_syms.items() if entry is not None}
+
+
+def pure_anchors_hold(rom: bytes, title: str, kind: str) -> bool:
+    """Whether every engine site (+ prelude) and checkpoint slice of the pure pack for
+    `title`/`kind` reads as pinned in `rom` -- the same anchors lua/gen1/entry.lua admits
+    a randomized artifact by (A3 rand / rand_overlay): the UPR fork writes data tables
+    only, so a randomized ROM keeps every code byte of exactly one base kind."""
+    def slice_ok(off, hexs: str) -> bool:
+        want = bytes.fromhex(hexs)
+        return isinstance(off, int) and rom[off:off + len(want)] == want
+
+    sites = _load_pure_pack("engine_signals", kind)["titles"][title]["sites"]
+    for site in sites.values():
+        if not slice_ok(site["rom_offset"], site["expected_hex"]):
+            return False
+        pre = site.get("prelude")
+        if pre and not slice_ok(pre["rom_offset"], pre["expected_hex"]):
+            return False
+    ws = _load_pure_pack("write_checkpoint", kind)[title]["write_safe"]
+    return all(slice_ok(ws.get(key), hexs) for key, hexs in ws.get("expected_hex", {}).items())
 
 
 def sym_to_offset(value: int) -> int:
@@ -162,43 +196,56 @@ def identify(rom: bytes) -> dict:
     FIRST, before the header-title path below runs at all: PureRed/PureBlue's header
     titles are byte-identical to vanilla Red/Blue ("POKEMON RED"/"POKEMON BLUE"), so
     checking the header first would silently route a pure ROM through the vanilla pret
-    symbol table (PLAN.md §11.2 trap 7). A sha1 that is not in that table falls through to
-    the header-based vanilla path unchanged — including a pure ROM that has been modified
-    (randomized/overlaid) and so no longer matches any pinned clean sha1; recognising THAT
-    case is M5's job (the UPR fork's own admission contract), not this function's.
+    symbol table (PLAN.md §11.2 trap 7). The table holds both admitted kinds: a clean
+    build (kind "clean", ``clean`` True) and the SLink companion overlay (kind "overlay",
+    ``clean`` False, ``pinned`` True, ``clean_sha1`` = the clean base's). A pure sha1 in
+    neither is a modified pure ROM (the UPR fork's output, A3): its base kind is named by
+    the pack anchors (kind "rand" / "rand_overlay", ``pinned`` False).
+
+    ``pinned`` is what the randomizer pipeline may start from: a byte-exact admitted
+    artifact, clean or overlay (A5: the overlay is randomized as an overlay).
     """
     if len(rom) != GEN1_ROM_SIZE:
         raise RomScanError(
             f"expected a {GEN1_ROM_SIZE}-byte Gen 1 ROM, got {len(rom)} bytes")
     sha1 = hashlib.sha1(rom).hexdigest()
     pure_entry = _load_purergb_admission().get(sha1)
-    if pure_entry is not None and pure_entry.get("kind") == "clean":
+    if pure_entry is not None:
+        kind = pure_entry.get("kind") or "clean"
         return {
             "title": pure_entry.get("header_title") or rom_title(rom),
             "syms_key": f"purergb:{pure_entry['title']}",
             "variant": pure_entry["title"],
             "foundation": "gen1_purergb",
+            "kind": kind,
             "sha1": sha1,
-            "clean": True,
-            "clean_sha1": sha1,
+            "clean": kind == "clean",
+            "pinned": True,
+            "clean_sha1": pure_entry.get("base_sha1") or sha1,
             "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
         }
     title = rom_title(rom)
     # A MODIFIED pure ROM (the UPR fork's output, M5) no longer matches any admitted sha1
     # and its header title is vanilla's. The pure PokedexOrder table is what tells them
     # apart: it sits at an offset vanilla uses for other data, and nothing the fork can
-    # write touches it, so a valid dex permutation there means a pure cartridge.
+    # write touches it, so a valid dex permutation there means a pure cartridge. The base
+    # kind is then whichever pack's anchors hold (overlay first: its sites are the
+    # relocated ones, so a clean ROM never matches them); a ROM matching neither has a
+    # code byte changed and is reported against the clean base, as before.
     pure_title = _purergb_title_for_modified(rom, title)
     if pure_title is not None:
+        base = "overlay" if pure_anchors_hold(rom, pure_title, "overlay") else "clean"
         clean_sha1 = next(k for k, v in _load_purergb_admission().items()
-                          if v.get("title") == pure_title and v.get("kind") == "clean")
+                          if v.get("title") == pure_title and v.get("kind") == base)
         return {
             "title": title,
             "syms_key": f"purergb:{pure_title}",
             "variant": pure_title,
             "foundation": "gen1_purergb",
+            "kind": "rand" if base == "clean" else "rand_overlay",
             "sha1": sha1,
             "clean": False,
+            "pinned": False,
             "clean_sha1": clean_sha1,
             "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
         }
@@ -213,8 +260,10 @@ def identify(rom: bytes) -> dict:
         "syms_key": syms_key,
         "variant": _SYMS_TO_VARIANT[syms_key],
         "foundation": "gen1_rby",
+        "kind": "clean" if sha1 == entry["rom_sha1"] else "rand",
         "sha1": sha1,
         "clean": sha1 == entry["rom_sha1"],
+        "pinned": sha1 == entry["rom_sha1"],
         "clean_sha1": entry["rom_sha1"],
         "header_checksum": int.from_bytes(rom[0x14E:0x150], "big"),
     }
@@ -244,7 +293,7 @@ def _purergb_title_for_modified(rom: bytes, header_title: str) -> str | None:
 def _syms_for(rom: bytes) -> tuple[dict, dict]:
     ident = identify(rom)
     if ident.get("foundation") == "gen1_purergb":
-        return ident, _pure_syms(ident["variant"])
+        return ident, _pure_syms(ident["variant"], ident.get("kind", "clean"))
     return ident, _load_syms()[ident["syms_key"]]["symbols"]
 
 

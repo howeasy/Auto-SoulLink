@@ -71,7 +71,7 @@ def synth_rom(title: str = TITLE) -> bytes:
 class PureWorld:
     """Fake BizHawk + fake server over the pureRGB pack and the synthetic cartridge."""
 
-    def __init__(self, title: str = TITLE, player: str = "a"):
+    def __init__(self, title: str = TITLE, player: str = "a", kind: str = "clean"):
         self.title, self.player = title, player
         self.ram = PROFILE[title]["ram"]
         self.d = PROFILE[title]["derived"]
@@ -113,7 +113,7 @@ class PureWorld:
         )
         Entry = L.eval(f'dofile("{ENTRY}")')
         deps = L.table(root=REPO.as_posix(), io=io, net=net, hud=hud, pack="gen1_purergb", title=title,
-                       kind="clean", player=player, rom_sha1=PROFILE[title]["rom_sha1"],
+                       kind=kind, player=player, rom_sha1=PROFILE[title]["rom_sha1"],
                        log=lambda t: self.logs.append(str(t)))
         self.client, self.parts = Entry.build(deps)
         self.client.start(self.client)
@@ -940,3 +940,90 @@ def test_an_unsettled_in_battle_acquisition_counts_as_a_capture_at_battle_end(wo
     world.fire("battle_end")
     world.step(2)
     assert world.events("no_catch") == []
+
+
+# ── anchor admission (A3 rand / rand_overlay) ────────────────────────────────────────────
+# Built from the REAL cartridges (the pinned pureRGB build, the shipped overlay UPS, the vanilla
+# Red dump), skipped when absent: a synthetic image cannot show that vanilla's anchors differ.
+
+def _real_rom(kind: str, title: str = TITLE) -> bytes:
+    import sys
+    sys.path.insert(0, str(REPO / "tools"))
+    sys.path.insert(0, str(REPO / "patch" / "tools"))
+    import gen1_foundation as F
+    if kind == "vanilla":
+        path = REPO / "Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb"
+        if not path.is_file():
+            pytest.skip("vanilla Red dump not at the repo root")
+        return path.read_bytes()
+    try:
+        clean = F.rom_path("purergb", title).read_bytes()
+    except SystemExit as e:
+        pytest.skip(f"pureRGB build not available: {e}")
+    if kind == "clean":
+        return clean
+    from make_ups import ups_apply
+    ups = next(REPO / r["ups"] for r in ADMISSION_OVERLAY.values() if r["title"] == title)
+    return ups_apply(clean, ups.read_bytes())
+
+
+ADMISSION_OVERLAY = json.loads((PURE / "admission_overlay.json").read_text(encoding="utf-8"))
+_WILD = PROFILE[TITLE]["rom"]["WildDataPointers"]["flat"]
+
+
+def _randomized(rom: bytes) -> bytes:
+    """What the UPR fork does to a cartridge, in miniature: data tables change, code does not."""
+    out = bytearray(rom)
+    for i in range(0x200, 0x240):  # inside the wild encounter records the pointer table opens
+        out[_WILD + i] ^= 0x5A
+    return bytes(out)
+
+
+def test_a_randomized_pure_rom_is_admitted_by_anchors_as_rand(entry):
+    rom = _randomized(_real_rom("clean"))
+    got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=rom)
+    assert why is None, why
+    assert (got["pack"], got["title"], got["kind"], got["rom_type"]) == ("gen1_purergb", TITLE, "rand", "PureRed")
+    assert got["admitted_by"] == "anchors" and got["rehashed"] is True
+    assert got["rom_sha1"] == hashlib.sha1(rom).hexdigest()
+
+
+def test_a_randomized_pure_rom_with_one_site_byte_altered_is_refused(entry):
+    rom = bytearray(_randomized(_real_rom("clean")))
+    site = SITES[TITLE]["sites"]["add_party_mon"]
+    rom[site["rom_offset"] + 2] ^= 0xFF
+    got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=bytes(rom))
+    assert got is None and "matches no admitted cartridge" in why
+
+
+def test_a_randomized_vanilla_red_is_not_admitted_as_pure(entry):
+    """Vanilla's code sits elsewhere, so no pure anchor holds; run.lua's named fallback owns it."""
+    got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=_randomized(_real_rom("vanilla")))
+    assert got is None and "matches no admitted cartridge" in why
+    _, E, _ = entry
+    lua = entry[0]
+    rom = _real_rom("vanilla")
+    matches = E.anchor_matches(lua.table_from({"root": REPO.as_posix(), "json": entry[2],
+                                               "read_rom_u8": lambda i: rom[int(i)], "rom_size": len(rom)}),
+                               "POKEMON RED")
+    assert len(matches) == 0
+
+
+def test_an_overlay_rom_admits_by_sha1_and_randomized_by_anchors_as_rand_overlay(entry):
+    rom = _real_rom("overlay")
+    got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=rom)
+    assert why is None, why
+    assert got["kind"] == "overlay" and got["admitted_by"] == "sha1"
+    got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=_randomized(rom))
+    assert why is None, why
+    assert (got["title"], got["kind"], got["admitted_by"]) == (TITLE, "rand_overlay", "anchors")
+
+
+def test_a_rand_client_boots_on_the_clean_pack_files_and_hellos_its_kind():
+    w = PureWorld(kind="rand")
+    assert set(w.hooks) == {f"SLink-gen1-{k}" for k in SITES[TITLE]["sites"]}
+    rng = random.Random(1)
+    w.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    w.set_map(0x0C)
+    w.connect()
+    assert w.events("hello")[0]["artifact_kind"] == "rand"

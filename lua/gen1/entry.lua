@@ -12,15 +12,18 @@
 --   deps.hud         show/prompt/set_game_over/set_rebuilding/clear_rebuilding
 --   deps.pack        "gen1_rby" | "gen1_purergb" (the data/games directory; default gen1_rby)
 --   deps.title       "red" | "blue" | "yellow" | "purered" | "pureblue" | "puregreen"
---   deps.kind        admission artifact kind ("clean" | "overlay"; default "clean")
+--   deps.kind        admission artifact kind ("clean" | "overlay" | "rand" | "rand_overlay"; default
+--                    "clean"; the rand kinds load the base kind's pack files)
 --   deps.player      "a" | "b"
 --   deps.rom_sha1    sha1 of the running cartridge (may differ from clean when patched)
 --   deps.log         function(text)
 --
 -- Foundation selection (PLAN §4 row 1, A3) is hash-first: `Entry.admit` compares the ROM's
--- sha1, case-insensitively, against the union of every pack's admission set. The header
--- title only narrows candidates and words the refusal. This file is the ONLY place a
--- foundation is ever named; everything downstream sees pack data.
+-- sha1, case-insensitively, against the union of every pack's admission set; a sha1 in no
+-- table is then admitted by ANCHORS (every engine site + checkpoint slice of exactly one
+-- admitted pack/title/kind still reads as pinned: a randomized artifact, kinds rand /
+-- rand_overlay). The header title only narrows candidates and words the refusal. This file
+-- is the ONLY place a foundation is ever named; everything downstream sees pack data.
 local Entry = {}
 
 local function load_json(json, path)
@@ -152,13 +155,74 @@ function Entry.admission_table(root, json)
     return table_
 end
 
+-- The pack file for an artifact kind: `<key>` for clean, `<key>_<base kind>` otherwise; a
+-- randomized artifact (rand / rand_overlay) reads its base kind's files.
+Entry.BASE_KIND = { rand = "clean", rand_overlay = "overlay" }
+local function pack_file(files, key, kind)
+    local base = Entry.BASE_KIND[kind] or kind
+    return base == "clean" and files[key] or files[key .. "_" .. base]
+end
+
+-- Anchor admission (A3 rand / rand_overlay). The UPR fork writes data tables only, so a
+-- randomized artifact keeps every code byte: its sha1 is in no table, but every engine
+-- site (+ prelude) and checkpoint slice of exactly one admitted pack/title/kind reads as
+-- pinned. Candidates are the admission rows whose header_title matches; each is read slice
+-- by slice through the flat ROM domain and dropped at the first differing byte. Only packs
+-- that ship admission rows take part: a vanilla build with an unknown sha1 keeps run.lua's
+-- named-family fallback.
+local function anchors_hold(root, json, files, title, kind, read_u8, size)
+    local function slice_ok(off, hex)
+        local n = #hex // 2
+        if type(off) ~= "number" or off + n > size then return false end
+        for i = 0, n - 1 do
+            if read_u8(off + i) ~= tonumber(hex:sub(2 * i + 1, 2 * i + 2), 16) then return false end
+        end
+        return true
+    end
+    local sites = load_json(json, root .. "/" .. pack_file(files, "sites", kind)).titles[title].sites
+    for _, site in pairs(sites) do
+        if not slice_ok(site.rom_offset, site.expected_hex) then return false end
+        if site.prelude and not slice_ok(site.prelude.rom_offset, site.prelude.expected_hex) then return false end
+    end
+    local ws = load_json(json, root .. "/" .. pack_file(files, "checkpoint", kind))[title].write_safe
+    for key, hex in pairs(ws.expected_hex or {}) do
+        if not slice_ok(ws[key], hex) then return false end
+    end
+    return true
+end
+-- Every admitted (pack, title, base kind) whose anchors all hold in this ROM.
+function Entry.anchor_matches(args, header)
+    local seen, matches = {}, {}
+    for pack, def in pairs(Entry.PACKS) do
+        local files = Entry.PACK_FILES[pack]
+        for _, key in ipairs({ "admission", "admission_overlay" }) do
+            if files[key] then
+                for _, row in pairs(load_json(args.json, args.root .. "/" .. files[key])) do
+                    local kind = row.kind or "clean"
+                    local id = pack .. "/" .. row.title .. "/" .. kind
+                    if not seen[id] and row.header_title and header:find(row.header_title, 1, true) == 1 then
+                        seen[id] = true
+                        if anchors_hold(args.root, args.json, files, row.title, kind, args.read_rom_u8, args.rom_size) then
+                            matches[#matches + 1] = { pack = pack, title = row.title, kind = kind,
+                                                      rom_type = def.rom_type[row.title] }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    table.sort(matches, function(a, b) return a.pack .. a.title .. a.kind < b.pack .. b.title .. b.kind end)
+    return matches
+end
+
 -- Decide the foundation for the loaded cartridge.
 --   args.root, args.json           pack lookup
 --   args.rom_sha1                  gameinfo.getromhash() (any case; may be BizHawk's database hash)
 --   args.indatabase                gameinfo.indatabase() (true = the hash above is not the bytes')
 --   args.read_rom_u8, args.rom_size   the flat ROM domain, for the Lua rehash
 --   args.header                    the header title (Entry.detect_title's second value), for the reason
--- Returns { pack, title, kind, rom_type, rom_sha1, rehashed } or nil, reason.
+-- Returns { pack, title, kind, rom_type, rom_sha1, rehashed, admitted_by } or nil, reason;
+-- admitted_by is "sha1" or "anchors" (kind rand / rand_overlay, rom_sha1 = the hash of the bytes).
 function Entry.admit(args)
     local table_ = Entry.admission_table(args.root, args.json)
     local sha = (args.rom_sha1 or ""):lower()
@@ -171,6 +235,19 @@ function Entry.admit(args)
     end
     if not hit then
         local header = tostring(args.header or "")
+        if args.read_rom_u8 and args.rom_size then
+            local matches = Entry.anchor_matches(args, header)
+            if #matches == 1 then
+                local m = matches[1]
+                return { pack = m.pack, title = m.title, rom_type = m.rom_type, rom_sha1 = sha, rehashed = rehashed,
+                         kind = m.kind == "overlay" and "rand_overlay" or "rand", admitted_by = "anchors" }
+            elseif #matches > 1 then
+                local names = {}
+                for i, m in ipairs(matches) do names[i] = m.pack .. "/" .. m.title .. "/" .. m.kind end
+                return nil, "ambiguous: header " .. header .. " matches the anchors of "
+                            .. table.concat(names, ", ") .. ": sha1 " .. sha
+            end
+        end
         local reason
         if header:find("POKEMON RED", 1, true) or header:find("POKEMON BLUE", 1, true)
            or header:find("POKEMON GREEN", 1, true) then
@@ -182,7 +259,7 @@ function Entry.admit(args)
         return nil, reason
     end
     return { pack = hit.pack, title = hit.title, kind = hit.kind, rom_type = hit.rom_type,
-             rom_sha1 = sha, rehashed = rehashed }
+             rom_sha1 = sha, rehashed = rehashed, admitted_by = "sha1" }
 end
 
 -- ── build ────────────────────────────────────────────────────────────────────────────
@@ -224,15 +301,16 @@ function Entry.build(deps)
     local pack_def = assert(Entry.PACKS[pack], "unknown pack " .. tostring(pack))
     local files = Entry.PACK_FILES[pack]
     local title = assert(deps.title, "deps.title required")
-    -- the pack file for this artifact kind: profile.json for clean, profile_overlay.json for overlay
+    -- the pack file for this artifact kind: profile.json for clean/rand, profile_overlay.json
+    -- for overlay/rand_overlay
     local kind = deps.kind or "clean"
-    local function pack_file(key)
-        local rel = kind == "clean" and files[key] or files[key .. "_" .. kind]
+    local function kind_file(key)
+        local rel = pack_file(files, key, kind)
         return root .. "/" .. assert(rel, pack .. " ships no " .. key .. " for artifact kind " .. kind)
     end
-    local profile = assert(load_json(json, pack_file("profile")).titles[title], "unknown title " .. title)
-    local sites = assert(load_json(json, pack_file("sites")).titles[title]).sites
-    local write_checkpoint = assert(load_json(json, pack_file("checkpoint"))[title])
+    local profile = assert(load_json(json, kind_file("profile")).titles[title], "unknown title " .. title)
+    local sites = assert(load_json(json, kind_file("sites")).titles[title]).sites
+    local write_checkpoint = assert(load_json(json, kind_file("checkpoint"))[title])
     local area_map = load_json(json, root .. "/" .. files.area_map)
     -- static (scripted, fixed-species) encounters get their own area id; generated from pret
     local statics = load_json(json, root .. "/" .. files.statics).statics
