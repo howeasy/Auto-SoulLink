@@ -156,8 +156,11 @@ local ok, err = xpcall(function()
     slink_index = want_items - 1
     t.log(fmt("[menu] Pokedex present=%s -> %d items, SLINK is index %d",
               tostring(has_dex), want_items, slink_index))
-    t.check("wMaxMenuItem counts the extra row", at("wMaxMenuItem") == want_items,
-            fmt("got %d, expected %d", at("wMaxMenuItem"), want_items))
+    -- Vanilla stores the row COUNT in wMaxMenuItem, pureRGB the LAST 0-based index
+    -- (t.facts.MENU.START.max_minus_save: 3 vs 2, the same fact the SAVE driver uses).
+    local want_max = want_items - 3 + t.facts.MENU.START.max_minus_save
+    t.check("wMaxMenuItem counts the extra row", at("wMaxMenuItem") == want_max,
+            fmt("got %d, expected %d", at("wMaxMenuItem"), want_max))
 
     -- ── the cursor can reach it ──────────────────────────────────────────────────────
     local function cursor_on(index)

@@ -86,13 +86,12 @@ function Lib.start(gate_name, opts)
     -- read data/games/gen1_purergb/write_checkpoint.json, keyed by the pure title.
     t.facts = dofile(ROOT .. "/lua/tests/"
                      .. (pack == "gen1_purergb" and "gen1_pure_facts.lua" or "gen1_rb_facts.lua"))
-    -- The admitted KIND picks the checkpoint file, same rule as Entry.build's pack_file(): clean
-    -- reads "checkpoint", any other kind reads "checkpoint_<kind>" (overlay -> checkpoint_overlay).
+    -- The admitted KIND picks the checkpoint file by Entry.build's own pack_file() rule (clean /
+    -- named / rand read "checkpoint", overlay / rand_overlay read "checkpoint_overlay").
     -- Hard-coding "checkpoint" here booted an overlay-admitted cartridge against the CLEAN
     -- checkpoint's WRAM-bank/PC facts, which is a different build (PLAN M3 A4).
-    local checkpoint_key = kind == "clean" and "checkpoint" or ("checkpoint_" .. kind)
-    t.checkpoint_path = ROOT .. "/" .. assert(Entry.PACK_FILES[pack][checkpoint_key],
-        pack .. " ships no " .. checkpoint_key .. " for admitted kind " .. tostring(kind))
+    t.checkpoint_path = ROOT .. "/" .. assert(Entry.pack_file(Entry.PACK_FILES[pack], "checkpoint", kind),
+        pack .. " ships no checkpoint for admitted kind " .. tostring(kind))
     -- Emulator speed multiplier: a BizHawk-level fact, SAME in both tables (F.CLIENT.speedmode).
     client.speedmode(t.facts.CLIENT.speedmode)
     t.deps = Entry.bizhawk_deps()

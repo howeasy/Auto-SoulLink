@@ -156,12 +156,15 @@ function Entry.admission_table(root, json)
 end
 
 -- The pack file for an artifact kind: `<key>` for clean, `<key>_<base kind>` otherwise; a
--- randomized artifact (rand / rand_overlay) reads its base kind's files.
-Entry.BASE_KIND = { rand = "clean", rand_overlay = "overlay" }
+-- randomized artifact (rand / rand_overlay) reads its base kind's files, and a header-named
+-- vanilla family (run.lua's fallback for a patched vanilla cartridge, kind "named") reads the
+-- clean ones — the companion patch adds code, it does not move WRAM.
+Entry.BASE_KIND = { rand = "clean", rand_overlay = "overlay", named = "clean" }
 local function pack_file(files, key, kind)
     local base = Entry.BASE_KIND[kind] or kind
     return base == "clean" and files[key] or files[key .. "_" .. base]
 end
+Entry.pack_file = pack_file
 
 -- Anchor admission (A3 rand / rand_overlay). The UPR fork writes data tables only, so a
 -- randomized artifact keeps every code byte: its sha1 is in no table, but every engine
