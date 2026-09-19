@@ -53,7 +53,8 @@ _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
 _SLOW = {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb", "live-trade-gates",
-         "duo-pairs", "inspect-purergb-overlay", "live-trade-gates-purergb", "apex-refusal-purergb"}
+         "duo-pairs", "inspect-purergb-overlay", "live-trade-gates-purergb", "apex-refusal-purergb",
+         "duo-pairs-purergb"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
 # The gate's whole point is that a skip is a failure, so an exception has to be argued for
@@ -198,6 +199,15 @@ LANES = [
          env={"SLINK_E2E": "1", "SLINK_LIVE": "1"},
          why="the rewritten client on two real cartridges through the real server: encounter "
              "link, dead zone, in-game SLINK trade (docs/gen1_requirements.md D-1, D-3, T-3, T-4)"),
+    Lane("duo-pairs-purergb",
+         [_PY, "-m", "pytest", "tests/e2e/test_duo_gen1_pure.py", "-q", "-p", "no:randomly",
+          "-rs"],
+         env={"SLINK_E2E": "1", "SLINK_LIVE": "1"},
+         why="the same scenarios on the pureRGB foundation (docs/purergb/PLAN.md §13 P3b/P4/P5): "
+             "PureRed vs PureBlue on the clean builds (rules, PC/save, reconnect, whiteout, poison, "
+             "rival swap, randomized admission on the fork jar), the companion overlay pairing "
+             "(native trade YES/NO, Explode Mode) and PureRed vs PureGreen; a deferred scenario is "
+             "not collected, so every skip here is a missing artifact"),
 ]
 
 
@@ -223,6 +233,7 @@ REQUIREMENTS = {
     "live-trade-gates-purergb": ["T-1", "T-2", "PLAN M3"],
     "apex-refusal-purergb": ["U6 (PLAN M3, ROM-level guard)"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],
+    "duo-pairs-purergb": ["D-1", "D-3", "T-3", "T-4", "C-5", "PLAN M3/M5"],
 }
 
 

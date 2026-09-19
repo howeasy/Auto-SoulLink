@@ -177,6 +177,10 @@ _LUA_X64_OPTIONAL = ["socket-windows-5-4.dll"]
 # playgroup that already owns the base ROM.
 _COMPANION_UPS = "patch/dist/SLink-RR.ups"
 _COMPANION_README = "patch/README.md"
+# The Game Boy companion UPS files bundled with --with-patch: vanilla Red/Blue (patch/gen1) and
+# the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3). No Yellow (no free WRAM).
+_GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
+                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
@@ -438,7 +442,9 @@ def build_release(
             # the CRC32 of the exact dump it was diffed against. There is deliberately NO
             # Yellow patch: its WRAM has no free bytes for the mailbox, so no build
             # exists, and shipping one would advertise a capability that cannot be there.
-            for gb_ups in ("SLink-RB-Red.ups", "SLink-RB-Blue.ups"):
+            # pureRGB (PLAN M3): the companion source overlay over each pinned pure build,
+            # one UPS per title (PureGreen included -- it is a full pure build of its own).
+            for gb_ups in _GB_COMPANION_UPS:
                 src = REPO_ROOT / "patch" / "dist" / gb_ups
                 if src.exists():
                     zf.write(src, prefix + f"companion/{gb_ups}")

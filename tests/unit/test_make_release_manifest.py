@@ -179,3 +179,13 @@ def test_the_old_gen1_client_is_not_shipped(archive):
     themselves stay on disk until their unit consumers are migrated."""
     assert "lua/clients/gen1_rby_client.lua" not in archive
     assert "lua/games/gen1_rby.lua" not in archive
+
+
+def test_gb_companion_bundle_names_every_pure_overlay_ups():
+    """--with-patch ships one UPS per Game Boy companion build: vanilla Red/Blue and the three
+    pureRGB overlays (PLAN M3). A missing name here is a title whose players get no native trade."""
+    assert set(make_release._GB_COMPANION_UPS) == {
+        "SLink-RB-Red.ups", "SLink-RB-Blue.ups",
+        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups"}
+    for name in make_release._GB_COMPANION_UPS:
+        assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)

@@ -20,7 +20,7 @@ LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-addresses", "profile-g
               "profile-generated-purergb", "statics-generated", "fixtures", "patch-build",
               "live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
               "live-trade-gates", "inspect-purergb-overlay", "live-trade-gates-purergb",
-              "apex-refusal-purergb", "duo-pairs"]
+              "apex-refusal-purergb", "duo-pairs", "duo-pairs-purergb"]
 
 
 def test_lane_order_is_the_gate_order():
@@ -61,7 +61,7 @@ def test_slow_lanes_are_exactly_the_emulator_lanes():
     """--quick's promise is that it stops before anything that needs an emulator."""
     assert {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
             "live-trade-gates", "duo-pairs", "inspect-purergb-overlay",
-            "live-trade-gates-purergb", "apex-refusal-purergb"} == gate._SLOW
+            "live-trade-gates-purergb", "apex-refusal-purergb", "duo-pairs-purergb"} == gate._SLOW
 
 
 def test_the_pure_lanes_are_fail_closed():
@@ -74,7 +74,8 @@ def test_the_pure_lanes_are_fail_closed():
     pure = [lane for lane in gate.LANES if lane.name.endswith("purergb") or "purergb" in lane.name]
     assert {lane.name for lane in pure} == {"profile-generated-purergb", "inspect-purergb",
                                             "apex-purergb", "inspect-purergb-overlay",
-                                            "live-trade-gates-purergb", "apex-refusal-purergb"}
+                                            "live-trade-gates-purergb", "apex-refusal-purergb",
+                                            "duo-pairs-purergb"}
     for lane in pure:
         assert lane.why, f"{lane.name} claims no reason"
     inspect = next(lane for lane in pure if lane.name == "inspect-purergb")
