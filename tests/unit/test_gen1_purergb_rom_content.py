@@ -25,9 +25,10 @@ lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the Gen 1 R
 from server.adapters import gen1_rom_scan as scan  # noqa: E402
 
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-_SRC = os.environ.get("SLINK_PURERGB_SRC")
-if not _SRC or not os.path.isdir(_SRC):
-    pytest.skip("SLINK_PURERGB_SRC not set; no built pureRGB ROM to read", allow_module_level=True)
+# The pinned checkout: $SLINK_PURERGB_SRC, else tools/gen1_foundation.py's default .cache/purergb.
+_SRC = os.environ.get("SLINK_PURERGB_SRC") or os.path.join(REPO, ".cache", "purergb")
+if not os.path.isdir(_SRC):
+    pytest.skip(f"pureRGB checkout not found at {_SRC} (set SLINK_PURERGB_SRC)", allow_module_level=True)
 
 _ROM_PATH = os.path.join(_SRC, "pokered.gbc")
 if not os.path.isfile(_ROM_PATH):

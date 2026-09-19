@@ -14,6 +14,16 @@ from pathlib import Path
 
 import pytest
 
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+
+def _pure_src() -> str:
+    """The pinned checkout: $SLINK_PURERGB_SRC, else tools/gen1_foundation.py's default .cache/purergb."""
+    src = os.environ.get("SLINK_PURERGB_SRC") or os.path.join(REPO, ".cache", "purergb")
+    if not os.path.isdir(src):
+        pytest.skip(f"pureRGB checkout not found at {src} (set SLINK_PURERGB_SRC)")
+    return src
+
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data" / "games" / "gen1_purergb"
 
@@ -27,9 +37,7 @@ def _trainers() -> dict:
 
 
 def _purered_rom() -> bytes:
-    src = os.environ.get("SLINK_PURERGB_SRC")
-    if not src:
-        pytest.skip("SLINK_PURERGB_SRC not set")
+    src = _pure_src()
     roms = os.environ.get("SLINK_PURERGB_ROMS", src)
     path = Path(roms) / "pokered.gbc"
     if not path.is_file():
@@ -172,9 +180,7 @@ def test_fe_and_fd_grammars_each_parse_at_least_one_record():
 
 def test_trainer_data_pointers_rom_cross_check():
     """Re-run the generator's own ROM check against the built pureRed ROM."""
-    src = os.environ.get("SLINK_PURERGB_SRC")
-    if not src:
-        pytest.skip("SLINK_PURERGB_SRC not set")
+    _pure_src()  # skip when no checkout
     import sys
     sys.path.insert(0, str(ROOT))
     import tools.gen1_foundation as gf

@@ -13,6 +13,16 @@ from pathlib import Path
 
 import pytest
 
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+
+def _pure_src() -> str:
+    """The pinned checkout: $SLINK_PURERGB_SRC, else tools/gen1_foundation.py's default .cache/purergb."""
+    src = os.environ.get("SLINK_PURERGB_SRC") or os.path.join(REPO, ".cache", "purergb")
+    if not os.path.isdir(src):
+        pytest.skip(f"pureRGB checkout not found at {src} (set SLINK_PURERGB_SRC)")
+    return src
+
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data" / "games" / "gen1_purergb"
 
@@ -36,9 +46,7 @@ def test_all_three_titles_present():
 def test_route_1_grass_matches_source():
     """Independent re-derivation of Route 1's grass table from the pinned source, cross-checked
     against the generated file -- the same source list `tools/gen_gen1_area_map.py` scans."""
-    src = os.environ.get("SLINK_PURERGB_SRC")
-    if not src:
-        pytest.skip("SLINK_PURERGB_SRC not set")
+    src = _pure_src()
     root = Path(src)
     text = (root / "data" / "wild" / "maps" / "Route1.asm").read_text(encoding="utf-8")
     grass = re.findall(r"^\s*db\s+(\d+)\s*,\s*([A-Z_0-9]+)\s*$", text, re.MULTILINE)
@@ -87,9 +95,7 @@ def test_super_rod_present_only_where_a_super_rod_data_row_exists():
 
 
 def test_slot_chances_256_are_source_asserted():
-    src = os.environ.get("SLINK_PURERGB_SRC")
-    if not src:
-        pytest.skip("SLINK_PURERGB_SRC not set")
+    src = _pure_src()
     text = (Path(src) / "data" / "wild" / "probabilities.asm").read_text(encoding="utf-8")
     for chance in _SLOT_CHANCES_256:
         assert f"wild_chance {chance}" in text.replace("  ", " ")
@@ -98,9 +104,7 @@ def test_slot_chances_256_are_source_asserted():
 def test_rom_walk_zero_mismatches():
     """Re-run the generator's own build for one title and confirm it does not raise -- the
     build function itself asserts 0 ROM-vs-source mismatches or calls SystemExit."""
-    src = os.environ.get("SLINK_PURERGB_SRC")
-    if not src:
-        pytest.skip("SLINK_PURERGB_SRC not set")
+    _pure_src()  # skip when no checkout
     import sys
     sys.path.insert(0, str(ROOT))
     import tools.gen1_foundation as gf

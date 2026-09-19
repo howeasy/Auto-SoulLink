@@ -82,7 +82,8 @@ def test_transform_edges_count_and_shape(species_index):
     assert any(e["bidirectional"] for e in edges), "Mewtwo/Armored Mewtwo edge must be bidirectional"
 
 
-@pytest.mark.skipif(not os.environ.get("SLINK_PURERGB_SRC"), reason="needs a pinned pureRGB checkout + built ROMs")
+@pytest.mark.skipif(not os.path.isdir(os.environ.get("SLINK_PURERGB_SRC") or os.path.join(REPO, ".cache", "purergb")),
+                    reason="needs a pinned pureRGB checkout + built ROMs (.cache/purergb or SLINK_PURERGB_SRC)")
 def test_rom_agrees_with_source_for_a_sample():
     import gen_gen1_species as species_tool
     species_index_doc, types_doc_, disagreements = species_tool.build("purergb")
