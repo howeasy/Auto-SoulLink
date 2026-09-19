@@ -206,6 +206,13 @@ SCENARIOS = {
 OPT_IN_GAMES = ("gen1_new",)
 
 
+def is_pure_pairing(game) -> bool:
+    """A pairing row whose cartridges are pureRGB builds (its fixtures are pure titles)."""
+    row = GAMES.get(game, {}) if isinstance(GAMES, dict) else {}
+    fixtures = row.get("fixture") or {}
+    return any(str(t).startswith("pure") for t in fixtures.values())
+
+
 def scenario_family(game):
     """The scenario family a pairing row runs (GAMES[row]["game"]); gen1_pure -> gen1_new."""
     return GAMES.get(game, {}).get("game", game) if isinstance(GAMES, dict) else game
@@ -924,6 +931,18 @@ GAMES = {
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "pureblue"},
+        "scenario_prefix": "gen1_",
+    },
+    # The third pure title on the B side (PureGreen's fixtures lead with Charmander like Blue's),
+    # so every pure cartridge has a duo pairing; same deferred scenarios as gen1_pure.
+    "gen1_pure_green": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "game": "gen1_new",
+        "not_yet": ("trade_new", "trade_decline_new", "explode_new", "admit_randomized_new"),
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_puregreen.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "purered", "b": "puregreen"},
         "scenario_prefix": "gen1_",
     },
     # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
@@ -2243,7 +2262,7 @@ class DuoRun:
             fixture = Path(self._fixture_save_path(inst)).read_bytes()
             # The bag's SRAM offset is a foundation fact (pureRGB moved wNumBagItems, PLAN §4
             # row 6): a pure pairing reads it through the pack layout, vanilla keeps the literal.
-            layout = codec.for_foundation("gen1_purergb") if getattr(self, "game", "") == "gen1_pure" else None
+            layout = codec.for_foundation("gen1_purergb") if is_pure_pairing(getattr(self, "game", "")) else None
             bag_quantity = layout.bag_quantity if layout else codec.bag_quantity
             baseline = bag_quantity(fixture, codec.POKE_BALL)  # gen1_codec.py:642-645
             final = bag_quantity(sram, codec.POKE_BALL)
@@ -2474,7 +2493,7 @@ class DuoRun:
     def _rival1_id(self) -> str:
         """OPP_RIVAL1 for this pairing: the pack's trainers.json rival_ids[0] (vanilla 225,
         pureRGB 221 — OPP_ID_OFFSET 197 + RIVAL1 $18), never a literal."""
-        pack = "gen1_purergb" if getattr(self, "game", "") == "gen1_pure" else "gen1_rby"
+        pack = "gen1_purergb" if is_pure_pairing(getattr(self, "game", "")) else "gen1_rby"
         path = os.path.join(REPO, "data", "games", pack, "trainers.json")
         try:
             with open(path, encoding="utf-8") as f:
@@ -2931,7 +2950,7 @@ class DuoRun:
         site = marker(a_text, r"BLACKOUT_SITE map=(\d+) x=(\d+) y=(\d+)", "A blackout site")
         # The lane visited the Viridian Center's PC first: pureRGB sets the blackout map on Center
         # ENTRY (Viridian City 1,23,26), vanilla only when the nurse heals (Pallet Town 0,5,6).
-        want = ("1", "23", "26") if getattr(self, "game", "") == "gen1_pure" else ("0", "5", "6")
+        want = ("1", "23", "26") if is_pure_pairing(getattr(self, "game", "")) else ("0", "5", "6")
         if site.groups() != want:
             where = "Viridian City (1, 23, 26)" if want[0] == "1" else "Pallet Town (0, 5, 6)"
             raise RuntimeError(f"A blacked out to map={site.group(1)} "
