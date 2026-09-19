@@ -90,10 +90,18 @@ real catchable species), so National Dex is not a stable key here the way it is 
 
 ## The other files of this pack (M1 first half — profile, sites, checkpoint, admission, species, moves, items, charmap)
 
-- `profile.json` — `tools/gen_gen1_profile.py --foundation purergb`: 179 RAM / 62 ROM symbols per title from
+- `profile.json` — `tools/gen_gen1_profile.py --foundation purergb`: 180 RAM / 72 ROM symbols per title from
   `data/purergb/*.sym`, `rom_sha1`/commit from `data/purergb_sources.lock.json`, `derived` constants with source
   asserts (`ball_items` [1,2,3,4,5,8], `opp_id_offset` 197, `bag_capacity` 30, `base_stats_stride` 35,
-  `dex_count` 152 = dex ids 0..151, `species_count` 190, `rival_trainer_ids` [221,237,238], `hardware` cgb).
+  `dex_count` 152 = dex ids 0..151, `species_count` 190, `rival_trainer_ids` [221,237,238], `hardware` cgb,
+  `wram_bank_gate` true, `explode_low_hp_fraction` 3 — pureRGB's EXPLOSION only faints its user below ⅓ HP,
+  so Explode Mode drops the battler under `max/3` and makes it move first; vanilla has no such field).
+- `*_overlay.json` — `profile_overlay.json` (adds the `trade` block: mailbox `$DEEA`, service bank `$3F`,
+  receptionist hook, ABI 3, anchors), `engine_signals_overlay.json`, `write_checkpoint_overlay.json`,
+  `admission_overlay.json` (`{sha1 -> {…, kind: "overlay", base_sha1}}`): the same generators run with
+  `--kind overlay` on the companion-overlay build (`tools/build_purergb_overlay.py`); the client selects
+  them by the admitted artifact kind (`Entry.pack_file`). Randomized artifacts (`rand` / `rand_overlay`) read
+  their base kind's files.
 - `engine_signals.json` — `tools/gen_gen1_engine_signals.py`: 40 sites per title, each with a source-text assert,
   an operand-shape check resolved from the .sym and `expected_hex` sliced from the built ROM; `address` is the
   anchor, hook = `address + capture_offset` (non-zero only for `bag_received`). Independently fact-checked

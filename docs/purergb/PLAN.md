@@ -1,5 +1,11 @@
 # pureRGB on the Soul Link platform — investigation and implementation plan
 
+> **Status 2026-09-19: IMPLEMENTED.** P0–P6 are done and G0–G5 are signed (§13.1 is the gate
+> ledger; G6 = tag + release is the owner's). The sentence below ("nothing is implemented") is
+> the plan's original framing, kept for the record. What shipped and where: `CHANGELOG.md` in this
+> directory; the short form is in `docs/release_notes.md`. Everything in §0–§11 is the research
+> the implementation rests on and is still the citation source for the generated pack.
+
 Date 2026-09-15; Gen 1 status baseline refreshed 2026-09-17 (§0.1). Investigation only; nothing is implemented. Work does not start until the Gen 1 R/B RC (worktree `gen1-master-release-plan-6b4279`) is complete and tagged; this plan targets that tree as the foundation (owner-confirmed) and will be executed from a fresh worktree off the post-rebase master.
 
 Path prefixes used in citations:

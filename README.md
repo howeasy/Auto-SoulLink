@@ -145,6 +145,8 @@ Everything lives on the **Manager** (`python -m server.manager`, port 8090): the
 
 **Companion overlay.** The native trade + START-menu SLINK panel are a **source overlay** linked into the pureRGB build (`patch/gen1/purergb/`, `python tools/build_purergb_overlay.py`) and shipped as `patch/dist/SLink-Pure{Red,Blue,Green}.ups` over the pinned pure ROM (also in the `--with-patch` release bundle). The overlay build additionally refuses a *colliding* APEX CHIP use before the chip is consumed. A clean pure save loads on the overlay build unchanged.
 
+**Where to read more.** `docs/purergb/CHANGELOG.md` (everything that shipped, by area, with the evidence and the known limits), `docs/REFERENCE.md` (the Gen 1 · pureRGB bullet), `docs/purergb/PLAN.md` (the plan and its gate ledger).
+
 **Randomized pairs.** The Manager's randomizer runs pureRGB through the SLink fork of UPR ZX 4.6.1 (`python tools/build_upr_fork.py --bootstrap` → `.cache/slink-upr/PokeRandoZX.jar`, `4.6.1-slink1`): a lossless handler (an untouched pure ROM round-trips byte-identically), pure INI entries generated from the pinned symbols, and every code-patching tweak off (pureRGB has instant text natively). The run then admits only the two prepared cartridges (fingerprint + full sha1 from the contract).
 
 ## Companion Patch (Radical Red)

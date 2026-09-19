@@ -1,5 +1,10 @@
 # SLink Companion Patch (Radical Red) — testing guide
 
+> The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
+> `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
+> `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
+> six patches; `/patcher` applies any of them in the browser.
+
 An **optional** native code-injection layer for Radical Red. When applied, the SLink Lua
 client detects it and uses native in-game features; without it, everything falls back to
 the existing behaviour. **Unpatched players are unaffected.**

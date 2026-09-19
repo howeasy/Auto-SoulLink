@@ -3,6 +3,12 @@
 **Status: shipping. It carries the in-game SLINK panel and the SLINK TRADE receptionist, and
 it does NOT play sound.**
 
+> **pureRGB:** this binary patch does not apply to pureRGB (ROM0 is full, the RST vectors are live
+> code, `$DEE2` is inside pureRGB's box data). The same panel, receptionist and an APEX collision
+> guard are linked into the pureRGB build from source instead — see `purergb/README.md` and
+> `patch/dist/SLink-Pure{Red,Blue,Green}.ups`. The mailbox ABI (3) and the `SLT1` lease are shared,
+> so `lua/gen1/panel.lua` / `trade_overlay.lua` drive both builds from the profile's `trade` block.
+
 This started as a spike answering *can SLink inject code into Pokémon Red/Blue cleanly?*
 The answer was yes. What it grew into is a START-menu row that opens a full-screen Soul Link
 panel the player can read without leaving the game, and a Cable Club receptionist that runs
