@@ -614,6 +614,10 @@ function Client.new(p)
     -- DVs and OT (the two starters of a duo run do) made the prefix ambiguous and the
     -- migration was refused, leaving the link on the dead key (Codex cross-review, FIX-EVO-2).
     -- Refuses (nil, why) rather than guessing when zero or several keys still answer.
+    -- Accepted limit: with no party read before the signal's frame (the script was started
+    -- during the animation, or the site fired on the client's first frame) the pool falls back
+    -- to known_keys and a boxed mon with the same DVs and OT makes it ambiguous again; reading
+    -- wEvoOldSpecies at the site would remove that case (queued: it needs a profile symbol).
     local function evolved_from(party, new_key, sig_frame)
         local prefix, found = new_key:sub(1, 10), nil
         local pool = party_keys_before(sig_frame) or self.known_keys
@@ -938,9 +942,17 @@ function Client.new(p)
         local party = current_party()
         if not party then return end
         if pc.kind == "acquire" then
-            -- The catch is the record in the witnessed slot (on_signal above), and only once
-            -- those bytes have moved: a stale record that merely became "unknown" is not one.
-            if pc.witness and hex_of(io.read_range(pc.witness_base, pc.witness_size, "System Bus")) == pc.witness then
+            -- The catch is the record in the witnessed slot (on_signal above), and while the
+            -- player may still be on the naming screen only once those bytes have moved: a
+            -- stale record that merely became "unknown" is not one. Equality does not prove
+            -- the write did not happen -- a re-caught mon whose 44 bytes match the stale
+            -- record exactly (same species, DVs, OT, level, zero stat exp, moves/PP, HP; the
+            -- nickname is outside the struct) is real and rare -- so the veto is NOT
+            -- permanent: at battle_end (acquisition_complete) the engine has returned from
+            -- AddPartyMon, and the record in the slot is accepted on the readiness checks
+            -- alone (Codex cross-review of da2cf11, FIX-EVO-3).
+            if pc.witness and not acquisition_complete
+               and hex_of(io.read_range(pc.witness_base, pc.witness_size, "System Bus")) == pc.witness then
                 return -- the slot still holds what was there at the signal
             end
             local found = nil

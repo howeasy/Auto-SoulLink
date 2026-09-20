@@ -2347,3 +2347,60 @@ def test_evolution_with_no_prior_party_member_is_refused_and_logged(world):
     assert w.events("key_change") == []
     assert [ln for ln in w.logs if "old key unknown" in ln], w.logs[-5:]
     w.assert_all_conform()
+
+
+@pytest.mark.parametrize("title", sorted(DUMPS))
+def test_identical_reacquisition_into_the_stale_slot_is_reported_at_battle_end(title):
+    """FIX-EVO-3 (Codex cx-00b23e13 on da2cf11): the freshness witness must not be a
+    permanent veto. Same sequence as the stale-slot pin, but the re-caught mon's 44 bytes are
+    IDENTICAL to the stale record (only the nickname, outside the struct, differs). During
+    naming nothing may go out; at battle_end the engine has returned from AddPartyMon, so the
+    record in the target slot is the catch: exactly one capture, no no_catch, nothing pending."""
+    w = World(title)
+    rng = random.Random(71)
+    species = (0x99, 0xB1, 0xA5, 0xB0, 0x54, 0x7B)
+    mons = [_mon(rng, s, level=20, nick=f"M{i}") for i, s in enumerate(species)]
+    w.seed_party(mons)
+    w.set_map(0x0C)
+    w.give_poke_ball()
+    w.connect()
+    w.step(60)
+    r = w.ram
+    stale = codec.key(mons[5])
+    w.bus[r["wMoveMonType"]], w.bus[r["wWhichPokemon"]] = 1, 0
+    w.fire("move_mon")
+    _seed_active_box(w, [_boxed(mons[0])])
+    w.seed_party(mons[1:])
+    w.step(3)
+    _publish_species(w, 4, 0x7C, "M5")
+    w.fire("evolve")
+    w.step(2)
+    assert [c["old_key"] for c in w.events("key_change")] == [stale]
+    n = len(w.events("capture"))
+    w.in_battle(0x7B, 0x7B, 20)
+    w.fire("wild_begin")
+    w.step()
+    w.bus[r["wMonDataLocation"]], w.bus[r["wCurPartySpecies"]] = 0, 0x7B
+    w.fire("add_party_mon")
+    w.bus[r["wPartyCount"]] = 6
+    w.bus[r["wPartySpecies"] + 5], w.bus[r["wPartySpecies"] + 6] = 0x7B, 0xFF
+    w.bus[r["wPartyMonOT"] + 55:r["wPartyMonOT"] + 66] = codec.encode_name("RED")
+    w.step(600)                                                 # naming screen
+    assert w.events("capture")[n:] == []
+    # the engine writes the record: byte-for-byte the stale one, a new nickname beside it
+    base = r["wPartyMons"] + 5 * 44
+    w.bus[base:base + 44] = codec.encode_party_mon(mons[5])
+    w.bus[r["wPartyMonNicks"] + 55:r["wPartyMonNicks"] + 66] = codec.encode_name("CATER2")
+    w.step(300)                                                 # still naming: bytes-equal, no capture yet
+    assert w.events("capture")[n:] == []
+    w.bus[r["wIsInBattle"]] = 0
+    w.fire("battle_end")
+    w.step(3)
+    caps = w.events("capture")[n:]
+    assert len(caps) == 1, caps
+    assert caps[0]["key"] == stale == codec.key(w.party()[5]) and caps[0]["nickname"] == "CATER2"
+    assert caps[0]["level"] == 20 and caps[0]["area_id"] == "route_1" and caps[0]["in_box"] is False
+    assert w.events("no_catch") == []
+    w.step(5)
+    assert w.client.pending_change is None and len(w.events("capture")) == n + 1
+    w.assert_all_conform()
