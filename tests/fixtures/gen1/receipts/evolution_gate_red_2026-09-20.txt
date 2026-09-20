@@ -1,0 +1,97 @@
+[test_gen1_evolution_gate] title=red rom=ea9bcae6
+[test_gen1_evolution_gate] booted at frame 846 (party=1, map=12)
+WALK_PHASE route1_north
+WALK_PHASE route1_north-detour
+WALK_PHASE route1_north
+WALK_PHASE route1_north-detour
+WALK_PHASE route1_north
+INCIDENTAL_BATTLE 1 map=12 (14,6)
+WALK_PHASE wild-text-state-unknown
+WALK_PHASE wild-dialogue
+WALK_PHASE wild-select-right-column
+WALK_PHASE wild-select-run
+WALK_PHASE wild-attempt-run
+WALK_PHASE unknown-wild-menu
+WALK_PHASE wild-dialogue
+TX {"area_id":"route_1","event":"no_catch","level":3,"player":"a","seq":59,"species_id":165}
+WALK_PHASE route1_north
+WALK_PHASE close-text
+WALK_PHASE route1_north
+WALK_PHASE route1_north-detour
+WALK_PHASE route1_north
+WALK_PHASE viridian_north
+WALK_PHASE route2_north
+WALK_PHASE gate_north
+WALK_PHASE close-text
+WALK_PHASE gate_north
+WALK_PHASE forest_park
+WALK_PHASE close-text
+WALK_PHASE forest_park
+WALK_PHASE forest-parked
+FOREST_PARKED frame=4702
+HUNT_ENCOUNTER 1 species=71 (18,40) balls=1
+HUNT_RUN_WRONG_SPECIES species=71
+[hunt] encounter 1 at (18,40) mode=run balls=1
+TX {"area_id":"viridian_forest","event":"no_catch","level":5,"player":"a","seq":178,"species_id":113}
+[hunt] battle outcome ran receipts run:battle_menu_again,run:escaped
+[hunt] after battle: outcome=ran result=2 party=1 balls=1 -> escaped
+HUNT_ENCOUNTER 2 species=71 (18,40) balls=1
+HUNT_RUN_WRONG_SPECIES species=71
+[hunt] encounter 1 at (18,40) mode=run balls=1
+[hunt] battle outcome ran receipts run:battle_menu_again,run:escaped
+[hunt] after battle: outcome=ran result=2 party=1 balls=1 -> escaped
+HUNT_ENCOUNTER 3 species=70 (18,40) balls=1
+[hunt] encounter 1 at (18,40) mode=catch balls=1
+[hunt] turn 1 foe hp 16/16 odds 0.34 dmax nil -> fight
+[hunt] turn 2 foe hp 11/16 odds 0.67 dmax 6 -> fight
+[hunt] turn 3 foe hp 6/16 odds 1.00 dmax 6 -> throw
+[hunt] threw ball index 0 -> timeout
+TX {"area_id":"viridian_forest","event":"capture","gift":false,"hp":6,"in_box":false,"key":"7292:4190:70","level":3,"maxHP":16,"nickname":"WEEDLE","player":"a","seq":456,"species_id":112,"stats":{"level":3,"maxHP":16}}
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+CAUGHT WEEDLE slot=1 key=7292:4190:70 level=3 nick=WEEDLE frame=14712
+EXP_STAGED slot=1 species=70 growth=0 exp=27->342 level=3 key=7292:4190:70
+LEVEL_ENCOUNTER 1 species=70 (18,41)
+LEVEL_RUN_WRONG_SPECIES species=70
+[hunt] encounter 1 at (18,41) mode=run balls=0
+[hunt] battle outcome ran receipts run:escaped
+[hunt] after battle: outcome=ran result=2 party=2 balls=0 -> escaped
+LEVEL_ENCOUNTER 2 species=70 (18,40)
+LEVEL_RUN_WRONG_SPECIES species=70
+[hunt] encounter 1 at (18,40) mode=run balls=0
+[hunt] battle outcome ran receipts run:battle_menu_again,run:escaped
+[hunt] after battle: outcome=ran result=2 party=2 balls=0 -> escaped
+LEVEL_ENCOUNTER 3 species=70 (18,41)
+LEVEL_RUN_WRONG_SPECIES species=70
+[hunt] encounter 1 at (18,41) mode=run balls=0
+[hunt] battle outcome ran receipts run:battle_menu_again,run:escaped
+[hunt] after battle: outcome=ran result=2 party=2 balls=0 -> escaped
+LEVEL_ENCOUNTER 4 species=71 (18,40)
+LEVEL_SWITCH slot=1 -> switched
+LEVEL_TURN 1 foe_hp=18->18 catch_hp=6 -> player_move
+LEVEL_TURN 2 foe_hp=18->18 catch_hp=6 -> player_move
+LEVEL_TURN 3 foe_hp=17->17 catch_hp=6 -> player_move
+LEVEL_TURN 4 foe_hp=16->16 catch_hp=6 -> player_move
+LEVEL_TURN 5 foe_hp=15->15 catch_hp=6 -> player_move
+LEVEL_TURN 6 foe_hp=14->14 catch_hp=6 -> player_move
+LEVEL_TURN 7 foe_hp=13->13 catch_hp=6 -> player_move
+LEVEL_TURN 8 foe_hp=12->12 catch_hp=6 -> player_move
+LEVEL_TURN 9 foe_hp=11->11 catch_hp=6 -> player_move
+LEVEL_TURN 10 foe_hp=10->10 catch_hp=6 -> player_move
+LEVEL_TURN 11 foe_hp=9->9 catch_hp=6 -> player_move
+LEVEL_TURN 12 foe_hp=8->8 catch_hp=6 -> player_move
+LEVEL_TURN 13 foe_hp=7->7 catch_hp=6 -> player_move
+LEVEL_TURN 14 foe_hp=6->6 catch_hp=6 -> player_move
+LEVEL_TURN 15 foe_hp=5->5 catch_hp=6 -> player_move
+LEVEL_TURN 16 foe_hp=4->4 catch_hp=6 -> player_move
+LEVEL_TURN 17 foe_hp=3->3 catch_hp=6 -> player_move
+LEVEL_TURN 18 foe_hp=2->2 catch_hp=6 -> player_move
+LEVEL_TURN 19 foe_hp=1->1 catch_hp=6 -> player_move
+LEVEL_UP slot=1 level=7 frame=42480
+HOOK EvolutionAfterBattle@42749
+SIGNAL evolve@43711 pc=6ED5 which=1
+TX {"event":"key_change","new_key":"7292:4190:71","new_nickname":"KAKUNA","new_species":113,"old_key":"7292:4190:70","player":"a","reason":"evolution","seq":1428}
+LEVEL_OUTCOME battle_over
+EVOLUTION_RECEIPT variant=levelup catch_frame=14712 levelup_frame=42480 evolve_signal_frame=43711 key_change_frame=43712 after_battle_hits=1 try_hits=0 cancelled_hits=0 old=7292:4190:70 new=7292:4190:71 species=71 dex=14 level=7 nick=KAKUNA encounters=4
+  [ok] one key_change reason=evolution from the after-battle path; TryEvolvingMon never ran
+RESULT: PASS test_gen1_evolution_gate (0 checks failed)

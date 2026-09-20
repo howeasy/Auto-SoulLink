@@ -53,12 +53,12 @@ python -m server.manager --host 0.0.0.0
 #    http://localhost:8090/
 ```
 
-From the dashboard:
+From the Manager:
 
-1. **Create a run** — pick a name and enable any clause rules (species, gender, type)
-2. **Start the run** — the manager launches a server instance automatically
-3. **Download launcher scripts** — click the Player A / Player B download buttons
-4. **Load in BizHawk** — open each downloaded `.lua` file in a BizHawk Lua Console (one per emulator instance). The script auto-detects the game and connects to the server — no editing required.
+1. **New run** — name it, pick the game family (or leave *Detect when players connect*), tick any clauses or options; on Red · Blue · Yellow, tick *Randomize* to build a randomized pair while creating. **Create run** starts its server.
+2. **Download the launchers** — the empty board offers *Player A · .lua* and *Player B · .lua*; they are also under *Launchers ▾* in the run header.
+3. **Load in BizHawk** — each player loads their save, then the launcher in the Lua console (one per emulator). It finds the game and connects; the player's card on the board turns green.
+4. **Catch something** — the first catch both of you make in the same area starts the board.
 
 > Load the script **after** loading your save file. Writes are disabled until SaveBlock validation passes.
 

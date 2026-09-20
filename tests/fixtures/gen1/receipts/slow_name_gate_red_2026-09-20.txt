@@ -1,0 +1,23 @@
+[test_gen1_slow_name_gate] title=red rom=ea9bcae6
+[test_gen1_slow_name_gate] booted at frame 846 (party=1, map=12)
+HUNT_PHASE pace-grass
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+HUNT_PHASE wild-intro
+[hunt] turn 1 foe hp 13/13 odds 0.36 dmax nil -> fight
+HUNT_PHASE wild-fight
+[hunt] turn 2 foe hp 8/13 odds 0.54 dmax 6 -> fight
+[hunt] turn 3 foe hp 1/13 odds 1.00 dmax 9 -> throw
+HUNT_PHASE wild-throw
+[hunt] threw ball index 0 -> timeout
+ACQUIRE add_party_mon@4739
+NAMING_HOLD_BEGIN frame=4943 input_hits=1
+NAMING_HOLD_END frame=7343 frames=2400 input_hits=2401
+NAMING_CURSOR raw_row=0 x=1 alphabet=0 pointer=C405 glyph=80
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":1,"in_box":false,"key":"6B8F:4190:A5","level":2,"maxHP":13,"nickname":"AAA","player":"a","seq":131,"species_id":165,"stats":{"level":2,"maxHP":13}}
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+HUNT_PHASE wild-battle_over
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+HUNT_PHASE caught
+SLOW_NAME_RECEIPT acquire_frame=4739 capture_frame=7392 gap=2653 hold=2400 captures=1 no_catch=0 name=AAA
+  [ok] one Route 1 party capture after 2400 idle naming frames; no no_catch
+RESULT: PASS test_gen1_slow_name_gate (0 checks failed)

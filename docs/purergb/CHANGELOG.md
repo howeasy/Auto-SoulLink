@@ -493,6 +493,11 @@ Read this section if you only play vanilla.
 - `SoulLinkState.load` rebuilds the adapter without `artifact_kind` (compensated in `server.py`);
   a rand↔clean pure pair is refused as MIXED GAMES (same-kind rule); receipts are scenario-keyed,
   so the same scenario must not run on two lanes at once.
+- The Gen 1 RC's slow-name gate (`test_gen1_slow_name_gate.lua`, master `9a41d78`) runs on Red/Blue
+  only: its naming-screen anchors are vanilla's. The client path it proves (an acquisition never
+  expires on a frame budget) is shared and exercised on the pure pairings by every capture
+  scenario, but a pure twin of the gate (pure `DisplayNamingScreen` anchors + lane facts) is a
+  recorded follow-up, not shipped evidence.
 - OMP (DeepSeek) was unavailable for the second half (OpenRouter credits); reviews ran on Sonnet.
 
 ---

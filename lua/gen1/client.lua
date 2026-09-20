@@ -13,7 +13,8 @@
 --
 -- Events are derived from engine signals, never from polling heuristics: a party change is
 -- only read after a site that legitimately changes the party fired (AddPartyMon,
--- SendNewMonToBox, MoveMon, RemovePokemon, TryEvolvingMon, InGameTrade_DoTrade).
+-- SendNewMonToBox, MoveMon, RemovePokemon, Evolution_PartyMonLoop's species publish,
+-- InGameTrade_DoTrade).
 -- Every write happens at the overworld checkpoint or inside the MainInBattleLoop hook.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
                  -- A13: the two halves of the `replace_rival_team` window. ONE window measured
@@ -203,9 +204,26 @@ function Client.new(p)
         return "", "map_" .. tostring(map)
     end
 
+    -- The last two party reads that DECODED, by frame: which keys were party members before a
+    -- given engine site fired. An evolution retires a key, and the only honest witness for
+    -- "which key" is a party read taken BEFORE the species was published -- a read in the same
+    -- frame as the site (validate/tick run after the hook) already shows the new species.
+    local party_reads = {}
+    local function remember_party(party)
+        local keys = {}
+        for _, m in ipairs(party) do keys[mon_key(m)] = true end
+        if party_reads[1] and party_reads[1].frame == self.frame then party_reads[1].keys = keys
+        else table.insert(party_reads, 1, { frame = self.frame, keys = keys }); party_reads[3] = nil end
+    end
+    local function party_keys_before(frame_no)
+        for _, r in ipairs(party_reads) do if r.frame < frame_no then return r.keys end end
+        return nil
+    end
+
     local function current_party()
         local party, why = reads.read_party()
         if not party then return nil, why end
+        remember_party(party)
         return party
     end
 
@@ -296,6 +314,7 @@ function Client.new(p)
             -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
             if reads.read_player_id() == 0 then
                 self.hello_sent = false
+                self.pending_change = nil -- an acquisition cannot outlive a reset/new save
                 -- WRAM clear: the held panel belongs to the session that just ended
                 if self.panel then self.panel:clear() end
                 -- ...and so does every identity alias: the record each pointed at is gone with
@@ -683,6 +702,20 @@ function Client.new(p)
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
                 if done then send("sync_retrieve_done", { key = cmd.key }); self:rescan_boxes()
+                elseif reason == "party full" and (cmd.full_retries or 0) < (cmd.full_budget or (#self.deferred + 1)) then
+                    -- Whiteout rebuild with a full party: the blackout HEALED the dead mons
+                    -- (HealParty runs before the blackout site), the server queues the
+                    -- rebuild's party_mon BEFORE the memorializes (state.py:2020-2049), and
+                    -- sync_retrieve_failed is final there (:341-362). So the withdraw must
+                    -- wait behind the memorializes that free a slot: to the TAIL, like the
+                    -- refused memorialize below, bounded by the queue length seen at the
+                    -- first refusal (every command behind it gets one turn per retry). A
+                    -- party that is genuinely full still fails with "party full".
+                    cmd.full_budget = cmd.full_budget or (#self.deferred + 1)
+                    cmd.full_retries = (cmd.full_retries or 0) + 1
+                    self.deferred[#self.deferred + 1] = cmd
+                    log("[SLink-gen1] party_mon " .. tostring(cmd.key) .. ": party full, retry "
+                        .. cmd.full_retries .. "/" .. cmd.full_budget .. " after the queue")
                 else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
                 local done, reason = nil, "no box module"
@@ -713,6 +746,30 @@ function Client.new(p)
         if not list or not key then return false end
         for _, m in ipairs(list) do if mon_key(m) == key then return true end end
         return false
+    end
+
+    -- The key an evolved mon HAD: same DVs and OT (key prefix "DDDD:OOOO:", reads.lua:185-188),
+    -- a different species, a PARTY member on the last read before the site fired, and no
+    -- longer anywhere in the party. Candidates come from that read, not from known_keys:
+    -- known_keys also holds the PC (hello/rescan), and a boxed mon that shares the party mon's
+    -- DVs and OT (the two starters of a duo run do) made the prefix ambiguous and the
+    -- migration was refused, leaving the link on the dead key (Codex cross-review, FIX-EVO-2).
+    -- Refuses (nil, why) rather than guessing when zero or several keys still answer.
+    -- Accepted limit: with no party read before the signal's frame (the script was started
+    -- during the animation, or the site fired on the client's first frame) the pool falls back
+    -- to known_keys and a boxed mon with the same DVs and OT makes it ambiguous again; reading
+    -- wEvoOldSpecies at the site would remove that case (queued: it needs a profile symbol).
+    local function evolved_from(party, new_key, sig_frame)
+        local prefix, found = new_key:sub(1, 10), nil
+        local pool = party_keys_before(sig_frame) or self.known_keys
+        for k in pairs(pool) do
+            if k ~= new_key and k:sub(1, 10) == prefix and not holds_key(party, k) then
+                if found then return nil, "ambiguous old key" end
+                found = k
+            end
+        end
+        if not found then return nil, "old key unknown" end
+        return found
     end
 
     local function party_from_snapshot(bytes)
@@ -799,7 +856,13 @@ function Client.new(p)
                 end
             end
         elseif k == "battle_end" then
+            -- EndOfBattle is after AddPartyMon/SendNewMonToBox returned. Settle the
+            -- acquisition before deciding no_catch, even if its final writes and this
+            -- hook drained in the same frame (pokered item_effects.asm:550-568).
+            self:settle_pending_change(true)
             local b = self.battle
+            local acquiring = self.pending_change and self.pending_change.kind == "acquire"
+                              and self.pending_change.in_battle
             -- M2-b witness: EndOfBattle is the terminal site. A wild battle that ends without a
             -- capture is a failed encounter on BOTH foundations -- running away included (the
             -- deadzone rule; PLAN §2.3). pureRGB's wBattleFunctionalFlags RUN bit is recorded
@@ -808,11 +871,10 @@ function Client.new(p)
             -- An in-battle acquisition that has not settled yet (the party can stay unreadable
             -- through the naming prompt and, on pureRGB, past EndOfBattle) is still a capture:
             -- whiteout_new on the pure lane sent no_catch a frame before the capture settled.
-            local pc = self.pending_change
-            if b and pc and pc.kind == "acquire" and pc.in_battle then b.captured = true end
+            if b and acquiring then b.captured = true end
             if b and b.demo then
                 log("[SLink-gen1] demonstration battle (type " .. tostring(b.demo) .. "): nothing resolved")
-            elseif b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
+            elseif b and b.wild and not b.captured and not acquiring and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
                 -- A Tower ghost without the Scope: the battle cannot be won or caught, so it
                 -- is not evidence of a failed encounter. `has_item` returns nil when the bag
                 -- cannot be read (reads.lua:200-207), and the safe reading of "cannot tell" is
@@ -853,8 +915,24 @@ function Client.new(p)
                 -- discriminator: Bill's Garden Pikachu is a wild capture with exactly $80
                 -- (PLAN §4 row 10); a capture is wIsInBattle == 1.
             else
-                self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle == 1,
-                                        to_box = (k == "capture_box"), area_id = area_id, map = pt.map,
+                -- Freshness witness (FIX-EVO-2, Codex cross-review): the record the engine is
+                -- about to write lands in ONE known slot -- the party slot wPartyCount named at
+                -- AddPartyMon entry (add_mon.asm:11-27 publish count and species before
+                -- AskName), or box slot 0 (SendNewMonToBox shifts the box and inserts at the
+                -- front, item_effects.asm:2649-2760). That slot's bytes at this instant are
+                -- whatever was there before: after a deposit's compaction (remove_mon.asm:59-107)
+                -- the old last record survives intact and, once its key has been retired by an
+                -- evolution, reads as an unknown mon of the right species the moment the count
+                -- is published. Only a record that DIFFERS from this snapshot is the catch.
+                local slot = (k == "capture_box") and 0 or (pt.party_count or 0)
+                local base, size
+                if k == "capture_box" then base, size = profile.ram.wBoxMons, d.box_struct_size
+                else base, size = profile.ram.wPartyMons + slot * d.party_struct_size, d.party_struct_size end
+                self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle ~= 0,
+                                        to_box = (k == "capture_box"),
+                                        area_id = (self.battle and self.battle.static and self.battle.area_id) or area_id,
+                                        map = pt.map, slot = slot, witness_base = base, witness_size = size,
+                                        witness = hex_of(io.read_range(base, size, "System Bus")),
                                         -- stamped now: the demo battle can end before this settles
                                         demo = (self.battle and self.battle.demo) or false }
             end
@@ -901,9 +979,9 @@ function Client.new(p)
             -- is a state test and not an age window.
             local pc0 = self.pending_change
             local trading = (self.trade_state and self.trade_state.kind == "apply")
-                            -- pureRGB NPC trade: the removal site already owns this mon's
-                            -- identity and the key_change accounts for it (row 25)
-                            or (pc0 and pc0.kind == "npc_trade" and pc0.readback_last_slot) or false
+                            -- an NPC trade owns this removal: vanilla's repinned npc_trade site
+                            -- (before RemovePokemon) and pureRGB's npc_trade_remove alike (row 25)
+                            or (pc0 and pc0.kind == "npc_trade") or false
             -- What separates a removal that finishes a MoveMon from a standalone one is WHERE
             -- THE MON IS, not how many frames ago the MoveMon fired: _MoveMon runs to completion
             -- before RemovePokemon is called, and both collections are in this point's snapshot.
@@ -962,15 +1040,50 @@ function Client.new(p)
                 self.pending_change = { kind = "rescan", frame = sig.frame }
             end
         elseif k == "evolve" then
+            -- Evolution_PartyMonLoop AFTER the species is published: `ld a,[wLoadedMonSpecies] /
+            -- ld [hl],a` rewrote wPartySpecies[wWhichPokemon] (evos_moves.asm:229-233 R/B,
+            -- :231-235 Y) and the struct copy landed before it (:178-204). Every path runs this
+            -- loop -- level-up (EndOfBattle -> predef EvolutionAfterBattle, end_of_battle.asm:42-45,
+            -- which enters at 0E:6D1C and never passes TryEvolvingMon at 0E:6D0E), stone, Rare
+            -- Candy and trade (TryEvolvingMon) -- and a cancelled evolution (B pressed,
+            -- `jp c, CancelledEvolution` at :135) leaves before this site, so nothing pends and
+            -- nothing needs a frame budget. The snapshot already holds the NEW record; the old
+            -- key is the known key with the same DVs and OT (both untouched by EvolveMon) that
+            -- is no longer in the party.
+            -- An NPC trade can evolve its appended recipient; its completion hook
+            -- owns that final identity, rather than a second overlapping migration.
+            if self.pending_change and self.pending_change.kind == "npc_trade" then return end
+            -- A SLINK trade evolves natively inside the apply; trade_done reports the final
+            -- key of the last slot and a migration beside it would be a lie (S-5).
+            if self.trade_state and self.trade_state.kind == "apply" then return end
             local party = party_from_snapshot(pt.party or {})
             local key, mon
-                if party then key, mon = key_at(party, pt.which) end
-            if key then self.pending_change = { kind = "evolution", frame = sig.frame, slot = pt.which, old_key = key, old_species = mon.species } end
+            if party then key, mon = key_at(party, pt.which) end
+            if key then
+                local old, why = evolved_from(party, key, sig.frame)
+                if old then
+                    -- A1 alias-until-ack (PLAN 5.2): BOTH keys stay known until key_change_ack /
+                    -- _rejected; the frozen record evidence and the ambiguity latch are what a
+                    -- rejected change is retired by (review cx-6aacc4f1 .. cx-71b0f866)
+                    self.known_keys[key] = true
+                    self.key_alias = { old_key = old, new_key = key, evidence = record_evidence(mon), since = sig.frame }
+                    observe_alias(self.key_alias, party)
+                    -- snapshot records carry name BYTES only (party_from_snapshot), so decode here
+                    send("key_change", { old_key = old, new_key = key, new_species = mon.species,
+                                         reason = "evolution", new_nickname = reads.decode_name(mon.nickname_bytes) })
+                else
+                    log("[SLink-gen1] evolution of slot " .. tostring(pt.which) .. " (" .. key .. "): " .. why)
+                end
+            end
+            self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "npc_trade" and not sites.npc_trade_remove then
-            -- vanilla: wWhichPokemon is final at InGameTrade_DoTrade+0 and the slot is stable
+            -- vanilla: the site sits after the selection, immediately before RemovePokemon
             local party = party_from_snapshot(pt.party or {})
             local key = party and key_at(party, pt.which)
-            if key then self.pending_change = { kind = "npc_trade", frame = sig.frame, slot = pt.which, old_key = key } end
+            if key then
+                self.pending_change = { kind = "npc_trade", frame = sig.frame,
+                                        count = #party, old_key = key }
+            end
         elseif k == "npc_trade_remove" then
             -- pureRGB (PLAN §4 row 25): the selection is final only at the RemovePokemon call,
             -- the party is compacted and the received mon is APPENDED: identity here, readback
@@ -983,7 +1096,28 @@ function Client.new(p)
             end
         elseif k == "npc_trade_done" then
             local pc = self.pending_change
-            if pc and pc.kind == "npc_trade" then pc.done, pc.frame = true, sig.frame end
+            if not pc or pc.kind ~= "npc_trade" then return end
+            if pc.readback_last_slot then
+                -- pureRGB: the readback settles it (settle_pending_change)
+                pc.done, pc.frame = true, sig.frame
+                return
+            end
+            local party = party_from_snapshot(pt.party or {})
+            local mon = party and #party == pc.count and party[#party] or nil
+            if not mon then
+                log("[SLink-gen1] NPC trade completion unreadable; key migration refused")
+                self.pending_change = nil
+                return
+            end
+            -- RemovePokemon compacts; AddPartyMon appends. The final slot, not
+            -- the selected slot, is the received mon (pokered in_game_trades.asm:232-239).
+            local key = mon_key(mon)
+            self.known_keys[key] = true
+            self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = sig.frame }
+            observe_alias(self.key_alias, party)
+            send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
+                                 reason = "npc_trade", new_nickname = reads.decode_name(mon.nickname_bytes) })
+            self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "transform" then
             -- A2: recorded synchronously by on_transform; the key change settles after the
             -- routine, the HP re-zero is queued there when the mon was dead
@@ -1001,19 +1135,46 @@ function Client.new(p)
     end
 
     -- A signal said the party/boxes changed; read the outcome once, when the engine is done.
-    function self:settle_pending_change()
+    function self:settle_pending_change(acquisition_complete)
         local pc = self.pending_change
-        if not pc or self.frame <= pc.frame then return end
-        if self.frame - pc.frame > Client.MAX_PENDING_FRAMES then self.pending_change = nil return end
+        if not pc or (self.frame <= pc.frame and not acquisition_complete) then return end
+        -- AskName runs BEFORE the record exists on both paths (pokered/pokeyellow
+        -- add_mon.asm:45-53; pokered item_effects.asm:2737-2743). Human input has
+        -- no deadline. This is one bounded pending slot, cleared on reset or the
+        -- next engine operation, not an accumulating queue needing a frame cap.
+        -- only npc_trade_done owns completion; on pureRGB it marks the readback (row 25) and
+        -- the KEY_CHANGE_REASON branch below settles it from the last slot
+        if pc.kind == "npc_trade" and not pc.readback_last_slot then return end
+        if pc.kind ~= "acquire" and self.frame - pc.frame > Client.MAX_PENDING_FRAMES then
+            self.pending_change = nil return
+        end
         local party = current_party()
         if not party then return end
         if pc.kind == "acquire" then
+            -- The catch is the record in the witnessed slot (on_signal above), and while the
+            -- player may still be on the naming screen only once those bytes have moved: a
+            -- stale record that merely became "unknown" is not one. Equality does not prove
+            -- the write did not happen -- a re-caught mon whose 44 bytes match the stale
+            -- record exactly (same species, DVs, OT, level, zero stat exp, moves/PP, HP; the
+            -- nickname is outside the struct) is real and rare -- so the veto is NOT
+            -- permanent: at battle_end (acquisition_complete) the engine has returned from
+            -- AddPartyMon, and the record in the slot is accepted on the readiness checks
+            -- alone (Codex cross-review of da2cf11, FIX-EVO-3).
+            if pc.witness and not acquisition_complete
+               and hex_of(io.read_range(pc.witness_base, pc.witness_size, "System Bus")) == pc.witness then
+                return -- the slot still holds what was there at the signal
+            end
             local found = nil
-            if pc.to_box then
-                local box = reads.read_active_box()
-                if box then for _, m in ipairs(box) do if not self.known_keys[mon_key(m)] then found = m end end end
-            else
-                for _, m in ipairs(party) do if not self.known_keys[mon_key(m)] then found = m end end
+            local list = pc.to_box and reads.read_active_box() or party
+            -- A1 keeps a changed mon's OLD key known until the server acknowledges the
+            -- key_change; for the acquisition witness that key is already retired (FIX-EVO-3:
+            -- a re-catch into the stale slot must be reported), so it does not count as known.
+            local alias_old = self.key_alias and self.key_alias.old_key
+            if list then
+                for _, m in ipairs(list) do
+                    local mk = mon_key(m)
+                    if (pc.slot == nil or m.slot == pc.slot) and (not self.known_keys[mk] or mk == alias_old) then found = m end
+                end
             end
             if not found then return end -- not written yet; try next frame
             -- add_mon.asm:58-243 writes the struct AFTER the AskName prompt (:45-52), in the
@@ -1022,7 +1183,7 @@ function Client.new(p)
             -- Level and stats are the last writes: require them, and the same key on two
             -- consecutive frames, before the mon is reported.
             local key = mon_key(found)
-            if found.level == 0 or (not pc.to_box and found.max_hp == 0) or pc.candidate ~= key then
+            if found.level == 0 or (not pc.to_box and found.max_hp == 0) or (not acquisition_complete and pc.candidate ~= key) then
                 pc.candidate = key
                 return
             end

@@ -1324,11 +1324,10 @@ def test_a_twin_present_at_the_change_itself_latches_ambiguity_before_any_reject
     world.step(60)
     old = codec.key(world.party()[0])
     world.bus[world.ram["wWhichPokemon"]] = 0
-    world.fire("evolve")
-    world.step()
     party = world.party()
-    party[0]["species"] = 0x09
+    party[0]["species"] = 0x09                  # the site fires after the species is published
     world.seed_party([dict(party[0], nick="ONE"), dict(party[1], nick="ONE")])
+    world.fire("evolve")
     world.step(2)
     kc = world.events("key_change")
     assert kc and kc[-1]["old_key"] == old and kc[-1]["new_key"] == codec.key(world.party()[1])

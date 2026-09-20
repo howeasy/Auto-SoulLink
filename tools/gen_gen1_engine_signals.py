@@ -127,11 +127,6 @@ SITES: dict[str, dict] = {
         symbol="SendNewMonToBox", off=0, cap=0, len=8, point=ACQUISITION + ["wBoxCount"], source=ITEMS,
         assert_="SendNewMonToBox:\n\tld de, wBoxCount\n\tld a, [de]\n\tinc a\n\tld [de], a",
         shape="11 {wBoxCount} 1A 3C 12"),
-    "evolve": _site(
-        symbol="TryEvolvingMon", off=0, cap=0, len=8, point=["wWhichPokemon", "wPartyCount"],
-        source="engine/pokemon/evos_moves.asm",
-        assert_="TryEvolvingMon:\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
-        shape="21 {wCanEvolveFlags} AF 77 FA {wWhichPokemon}"),
     "move_mon": _site(
         symbol="MoveMon", off=0, cap=0, len=8, point=STORAGE + ["wMoveMonType"], source="home/move_mon.asm",
         assert_="MoveMon::\n\thomecall_sf _MoveMon",
@@ -275,8 +270,12 @@ SITES: dict[str, dict] = {
         assert_="\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n"
                 "\tld a, [wCurPartySpecies]",
         shape="CD {WaitForSoundToFinish} FA {wCurPartySpecies}", prelude=(0x6D, "CD {RemovePokemon}")),
-    "evolve_species_store": _site(  # the final wPartySpecies store of an evolution
-        symbol="Evolution_PartyMonLoop.skipfix_end", off=0x3C, cap=0, len=8,
+    # The evolution site is the species-PUBLISH point, one byte past the final wPartySpecies
+    # store (`ld [hl],a` at +$3C): level-up evolutions enter at EvolutionAfterBattle and never
+    # pass TryEvolvingMon (pret evos_moves; Gen 1 RC final review 7616d9f), so the slot's
+    # record already holds the evolved species when the hook fires (capture_offset 1).
+    "evolve": _site(
+        symbol="Evolution_PartyMonLoop.skipfix_end", off=0x3C, cap=1, len=8,
         point=["wWhichPokemon", "wPartyCount", "wLoadedMonSpecies"], source="engine/pokemon/evos_moves.asm",
         assert_="\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n"
                 "\tjr .nextEvoEntry2",
@@ -288,9 +287,6 @@ SITES: dict[str, dict] = {
 # ld a, $FF` (14 bytes) before the DV store, so the three APEX anchors move by +14 while HL (the
 # DV pointer) and the points stay.
 OVERLAY = {
-    "evolve": {
-        "assert_": "TryEvolvingMon:: ; SLink overlay: exported for the native trade\n\tld hl, wCanEvolveFlags\n"
-                   "\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]"},
     "apex_preflight": {
         "off": 0x0F + 14,
         "assert_": ".setDVs\n\tld d, h ; SLink overlay: the DV pointer rides in de (a farcall takes hl)\n\tld e, l\n"

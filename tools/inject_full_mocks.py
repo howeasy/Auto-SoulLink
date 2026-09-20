@@ -143,19 +143,42 @@ def _is_gen1() -> bool:
     return GAME == "gen1"
 
 
-# (area, alice_capture, bob_capture); capture = (species, key, nickname, level, held_item)
-# held_item is always 0 — Gen 1 cartridges have no held-item slot.
+# EVERY species_id ON THE GEN 1 WIRE IS THE GAME'S INTERNAL INDEX, NOT THE DEX NUMBER
+# (internal 1 = Rhydon, 153 = Bulbasaur, 84 = Pikachu) -- that is what a cartridge sends
+# and what the adapter resolves. The cast below is written in dex numbers for
+# readability and converted here, key byte included: dex 25 sent as-is renders Gastly.
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "data", "games", "gen1_rby", "species_index.json"), encoding="utf-8") as _f:
+    _G1_INDEX = {int(k): v for k, v in json.load(_f)["national_to_index"].items()}
+
+
+def _g1(dex: int) -> int:
+    return _G1_INDEX[dex]
+
+
+def _sid(dex: int) -> int:
+    """A species for the active generation: the internal index on Gen 1, the dex elsewhere."""
+    return _g1(dex) if _is_gen1() else dex
+
+
+def _g1cap(dex: int, dvs_ot: str, nick: str, lv: int) -> tuple:
+    """capture = (species, key, nickname, level, held_item); the key is DVs:OTID:species
+    with the species byte the INTERNAL index. held_item is always 0 on Gen 1."""
+    return (_g1(dex), f"{dvs_ot}:{_g1(dex):02X}", nick, lv, 0)
+
+
+# (area, alice_capture, bob_capture)
 GEN1_PAIRS = [
-    ("route_1",         (25, "4A5B:30B8:19", "Sparky",  6, 0), (4,  "3C2D:7B0B:04", "Embo",   6, 0)),
-    ("route_2",         (16, "5B6C:30B8:10", "Pidge",   8, 0), (19, "2D3E:7B0B:13", "Rattie", 8, 0)),
-    ("viridian_forest", (13, "6C7D:30B8:0D", "Sting",   9, 0), (10, "1E2F:7B0B:0A", "Wiggle", 9, 0)),
-    ("route_3",         (21, "7D8E:30B8:15", "Sparrow",11, 0), (74, "0F1A:7B0B:4A", "Rocky", 11, 0)),
-    ("mt_moon_1f",      (41, "8E9F:30B8:29", "Vampy",  12, 0), (46, "9A0B:7B0B:2E", "Shroom",12, 0)),
-    ("route_4",         (27, "9F0A:30B8:1B", "Shrewd", 13, 0), (23, "8B1C:7B0B:17", "Slither",13, 0)),
+    ("route_1",         _g1cap(25, "4A5B:30B8", "Sparky",  6), _g1cap(4,  "3C2D:7B0B", "Embo",    6)),
+    ("route_2",         _g1cap(16, "5B6C:30B8", "Pidge",   8), _g1cap(19, "2D3E:7B0B", "Rattie",  8)),
+    ("viridian_forest", _g1cap(13, "6C7D:30B8", "Sting",   9), _g1cap(10, "1E2F:7B0B", "Wiggle",  9)),
+    ("route_3",         _g1cap(21, "7D8E:30B8", "Sparrow", 11), _g1cap(74, "0F1A:7B0B", "Rocky",  11)),
+    ("mt_moon_1f",      _g1cap(41, "8E9F:30B8", "Vampy",  12), _g1cap(46, "9A0B:7B0B", "Shroom", 12)),
+    ("route_4",         _g1cap(27, "9F0A:30B8", "Shrewd", 13), _g1cap(23, "8B1C:7B0B", "Slither", 13)),
 ]
 
-# Gen 1 move ids (pokered constants/move_constants.asm). Same slot meaning as MOVES.
-GEN1_MOVES = {
+# Gen 1 move ids (pokered constants/move_constants.asm), keyed by INTERNAL index.
+GEN1_MOVES = {_g1(dex): moves for dex, moves in {
     25: [84, 98, 86, 39],    # Pikachu: ThunderShock, Quick Attack, Thunder Wave, Tail Whip
     4:  [52, 10, 43, 108],   # Charmander: Ember, Scratch, Leer, Smokescreen
     16: [16, 33, 45, 98],    # Pidgey: Gust, Tackle, Sand-Attack, Quick Attack
@@ -168,16 +191,16 @@ GEN1_MOVES = {
     46: [10, 78, 147],       # Paras: Scratch, Stun Spore, Spore
     27: [10, 28, 111],       # Sandshrew: Scratch, Sand-Attack, Defense Curl
     23: [35, 40, 44],        # Ekans: Wrap, Poison Sting, Bite
-}
+}.items()}
 
 # A capture waiting on the other player. Alice has caught here; Bob has not been here.
 GEN1_PENDING_AREA = "route_9"
-GEN1_PENDING_A = (58, "AB12:30B8:3A", "Flame", 14, 0)
+GEN1_PENDING_A = _g1cap(58, "AB12:30B8", "Flame", 14)
 GEN1_DEAD_ZONE_AREA = "route_22"
-GEN1_DEAD_ZONE_BOB = (56, "7A8B:7B0B:38", "Mankey", 8, 0)
+GEN1_DEAD_ZONE_BOB = _g1cap(56, "7A8B:7B0B", "Mankey", 8)
 GEN1_BOXED_AREA = "route_5"
-GEN1_BOXED_A = (60, "6D7E:30B8:3C", "Bubbles", 10, 0)
-GEN1_BOXED_B = (54, "5E6F:7B0B:36", "Quack",   10, 0)
+GEN1_BOXED_A = _g1cap(60, "6D7E:30B8", "Bubbles", 10)
+GEN1_BOXED_B = _g1cap(54, "5E6F:7B0B", "Quack", 10)
 
 
 def _rom_type(player: str) -> str:
@@ -241,8 +264,8 @@ def _wild_foe() -> dict:
     """The mon the player is mid-battle against. Gen 1 has no abilities, so sending an
     ability_id would be a lie the enemy panel would happily render."""
     if _is_gen1():
-        return {"species_id": 10, "level": 11, "hp": 28, "maxHP": 32, "active": True,
-                "key": "1A2B:0000:0A", "status_cond": 0, "stat_stages": {},
+        return {"species_id": _g1(10), "level": 11, "hp": 28, "maxHP": 32, "active": True,
+                "key": f"1A2B:0000:{_g1(10):02X}", "status_cond": 0, "stat_stages": {},
                 "moves": [33, 81], "pp": [35, 40]}
     return {"species_id": 10, "level": 11, "hp": 28, "maxHP": 32, "active": True,
             "ability_id": ABILITIES[10], "key": "WILD_CATE", "status_cond": 0, "stat_stages": {},
@@ -306,8 +329,8 @@ async def main() -> None:
          "has_pokeballs": True, **({"ot_id": "7B0B"} if _is_gen1() else {})},
         # Tick events with party of 1 dummy so size > 0 and quarantine logic kicks in.
         # We'll set proper parties after all captures.
-        {"event": "tick", "player": "a", "has_pokeballs": True, "party": [{"key": ("0001:30B8:19" if _is_gen1() else "BOOT0001")}], "current_area_id": "starter"},
-        {"event": "tick", "player": "b", "has_pokeballs": True, "party": [{"key": ("0002:7B0B:04" if _is_gen1() else "BOOT0002")}], "current_area_id": "starter"},
+        {"event": "tick", "player": "a", "has_pokeballs": True, "party": [{"key": (f"0001:30B8:{_g1(25):02X}" if _is_gen1() else "BOOT0001")}], "current_area_id": "starter"},
+        {"event": "tick", "player": "b", "has_pokeballs": True, "party": [{"key": (f"0002:7B0B:{_g1(4):02X}" if _is_gen1() else "BOOT0002")}], "current_area_id": "starter"},
     ]
 
     print("Sending 6 paired captures + faint + shiny...")
@@ -434,10 +457,10 @@ async def main() -> None:
              "species_id": box_a[0], "held_item_id": box_a[4], "moves": _moves().get(box_a[0], [])},
             {"box": 0, "slot": 2, "key": p_key, "nickname": p_nick,
              "species_id": p_sid, "held_item_id": p_item, "moves": _moves().get(p_sid, [])},
-            {"box": 0, "slot": 1, "key": _stored("A1", "30B8", 133), "nickname": "Spare",
-             "species_id": 133, "held_item_id": 0, "moves": []},
-            {"box": 1, "slot": 4, "key": _stored("A2", "30B8", 63), "nickname": "Bench",
-             "species_id": 63, "held_item_id": 0, "moves": []},
+            {"box": 0, "slot": 1, "key": _stored("A1", "30B8", _sid(133)), "nickname": "Spare",
+             "species_id": _sid(133), "held_item_id": 0, "moves": []},
+            {"box": 1, "slot": 4, "key": _stored("A2", "30B8", _sid(63)), "nickname": "Bench",
+             "species_id": _sid(63), "held_item_id": 0, "moves": []},
         ],
     })
     events.append({
@@ -446,8 +469,8 @@ async def main() -> None:
         "pc_boxes": [
             {"box": 0, "slot": 0, "key": box_b[1], "nickname": box_b[2],
              "species_id": box_b[0], "held_item_id": box_b[4], "moves": _moves().get(box_b[0], [])},
-            {"box": 0, "slot": 1, "key": _stored("B1", "7B0B", 129), "nickname": "Reserve",
-             "species_id": 129, "held_item_id": 0, "moves": []},
+            {"box": 0, "slot": 1, "key": _stored("B1", "7B0B", _sid(129)), "nickname": "Reserve",
+             "species_id": _sid(129), "held_item_id": 0, "moves": []},
         ],
     })
 

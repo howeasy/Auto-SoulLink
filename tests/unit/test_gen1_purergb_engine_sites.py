@@ -44,13 +44,13 @@ def test_schema_and_kinds():
         (REPO / "data" / "purergb_sources.lock.json").read_text(encoding="utf-8"))["source"]["commit"]
     assert set(SIGNALS["titles"]) == set(TITLES)
     kinds = set(SIGNALS["titles"]["purered"]["sites"])
-    assert kinds == set(gen.SITES) and len(kinds) == 41
+    assert kinds == set(gen.SITES) and len(kinds) == 40
     assert kinds >= VANILLA_KINDS  # the 17 vanilla kinds survive under their names
     assert kinds >= {"trainer_staging", "transform", "transform_hp_hi", "transform_hp_lo", "apex_preflight", "apex_commit",
             "apex_recalc_call", "npc_trade_remove", "npc_trade_add", "npc_trade_done", "daycare_withdraw",
             "cable_trade_remove", "cable_trade_add", "cable_partial_save", "changebox_full_save",
             "capture_party_begin", "capture_party_end", "capture_box_begin", "capture_box_end",
-            "pc_deposit", "pc_withdraw", "pc_release", "evolve_species_store"}
+            "pc_deposit", "pc_withdraw", "pc_release", }
     for title in TITLES:
         assert set(SIGNALS["titles"][title]["sites"]) == kinds, title
 
@@ -101,7 +101,7 @@ def test_sites_the_plan_relies_on_are_where_it_says():
             ("cable_trade_remove", "TradeCenter_Trade.doTrade", 0x77, 0), ("starter_begin", "OaksLabMonChoiceMenu.continue", 0x23, 0),
             ("starter_end", "OaksLabMonChoiceMenu.continue", 0x26, 0), ("apex_preflight", "ItemUseMedicine.useApexChip", 0x0F, 0),
             ("transform_hp_hi", "ChangePartyPokemonSpecies", 0x4A, 0), ("transform_hp_lo", "ChangePartyPokemonSpecies", 0x4C, 0),
-            ("evolve_species_store", "Evolution_PartyMonLoop.skipfix_end", 0x3C, 0)):
+            ("evolve", "Evolution_PartyMonLoop.skipfix_end", 0x3C, 1)):
         assert (s[kind]["symbol"], s[kind]["anchor_offset"], s[kind]["capture_offset"]) == (symbol, off, cap), kind
     assert s["trainer_staging"]["expected_hex"].startswith("3E02EA")  # ld a,2 ; ld [wIsInBattle],a
     assert s["save_witness"]["expected_hex"].startswith("CD")  # call ClearTextBox, not the vanilla ld hl

@@ -92,6 +92,12 @@ def test_a_gen1_cartridge_reaches_the_new_client(title):
     assert _OLD_CLIENT not in loaded, f"{title} still loads the old client: {loaded}"
 
 
+def test_super_game_boy_mode_reaches_the_new_client():
+    """EmuHawk reports "SGB" for a GB cartridge with GbAsSgb on (opt-in); same ROM, same route."""
+    loaded = _run_launcher("slink.lua", "SGB", _rom("POKEMON RED"))
+    assert _NEW_CLIENT in loaded, f"SGB mode did not reach {_NEW_CLIENT}: {loaded}"
+
+
 def test_only_one_client_is_ever_loaded():
     """The route returns; it must not fall through into game_detect as well."""
     loaded = _run_launcher("slink.lua", "GBC", _rom("POKEMON YELLOW"))

@@ -56,6 +56,17 @@ def _selected_roms() -> tuple:
 ROMS = _selected_roms()
 
 
+def _red_blue_params() -> list:
+    """A Red/Blue-only gate stays collected on every lane (an empty parametrize is an unexplained
+    skip to the release runner) and skips with the lane-selection reason where the lane did not
+    name that cartridge. A skipif MARK, not pytest.skip() from a helper: the runner wants one
+    SKIPPED line per skip and pytest folds same-location/same-reason skips into one line."""
+    return [pytest.param(rom, marks=pytest.mark.skipif(
+                rom not in ROMS,
+                reason=f"{rom} is not one of this lane's cartridges (SLINK_GEN1_ROMS)"))
+            for rom in ("red", "blue")]
+
+
 @pytest.fixture(scope="module")
 def emuhawk():
     import gen1_playthrough as play
@@ -240,3 +251,82 @@ def test_apex_chip_contract_on_a_pure_cartridge(emuhawk):
     assert passed, f"APEX gate FAILED on purered/town: {text[-1500:]}"
     for line in _APEX_OK_LINES:
         assert f"[ok] {line}" in text, f"APEX gate did not report {line!r}:\n{text[-1500:]}"
+
+
+# Red and Blue only: on Yellow the starter is Pikachu, whose only damaging move (Thundershock)
+# is super-effective against Route 1's Pidgey and KOs it on the hunt's weakening turn before
+# the throw (three straight runs, 2026-09-20: 'unexpected no_catch (foe KO)'). A driver limit
+# of the shared hunt module, not the client: the Yellow client code path is identical.
+# Red/Blue only (master 64d9663/9a41d78): the gate's NAMING table carries the vanilla
+# DisplayNamingScreen anchors and Yellow's starter KOs the hunt's Pidgey. A pureRGB twin needs the
+# pure anchors + the lane facts in lua/tests/test_gen1_slow_name_gate.lua (recorded follow-up,
+# docs/purergb/CHANGELOG.md §7); the acquisition-without-a-frame-budget path it proves is shared
+# client code, exercised on the pure pairings by every capture scenario.
+@pytest.mark.parametrize("rom", _red_blue_params())
+def test_slow_name_capture_survives_2400_idle_frames(rom, emuhawk):
+    """FIX-ACQ PHYSICAL: production TX after 40 seconds on the nickname alphabet."""
+    from run_gb_gate import run_gate
+    passed, path, text = run_gate(
+        "lua/tests/test_gen1_slow_name_gate.lua", rom_key=rom,
+        target="battle", timeout=600, quiet=True,
+    )
+    assert passed, f"slow_name FAILED on {rom}; receipt {path}: {text[-2500:]}"
+    tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
+    captures = [msg for msg in tx if msg.get("event") == "capture"]
+    assert len(captures) == 1
+    assert not any(msg.get("event") == "no_catch" for msg in tx)
+    cap = captures[0]
+    assert cap["area_id"] == "route_1" and cap["in_box"] is False
+    assert cap["nickname"] == "AAA"
+    from tests.unit import protocol_schema as ps
+    assert ps.validate_event(cap) == []
+    receipt = re.search(
+        r"^SLOW_NAME_RECEIPT acquire_frame=(\d+) capture_frame=(\d+) gap=(\d+) "
+        r"hold=(\d+) captures=1 no_catch=0 name=AAA$", text, re.M,
+    )
+    assert receipt, "missing measured naming receipt"
+    acquired, captured, gap, hold = map(int, receipt.groups())
+    assert captured - acquired == gap and gap >= hold == 2400
+    begin = re.search(r"^NAMING_HOLD_BEGIN frame=(\d+) input_hits=(\d+)$", text, re.M)
+    end = re.search(r"^NAMING_HOLD_END frame=(\d+) frames=2400 input_hits=(\d+)$", text, re.M)
+    assert begin and end
+    assert int(end[1]) - int(begin[1]) == 2400 and int(end[2]) > int(begin[2])
+
+
+EVOLUTION_GATE = "lua/tests/test_gen1_evolution_gate.lua"
+# Red/Blue only: the forest walker decodes pret/pokered's maps; Yellow's forest differs
+
+
+@pytest.mark.parametrize("rom", _red_blue_params())
+def test_level_up_evolution_emits_one_key_change_from_the_after_battle_path(rom, emuhawk):
+    """FIX-EVO PHYSICAL: a Caterpie/Weedle caught in Viridian Forest grows to level 7 in a wild
+    battle and EndOfBattle evolves it (predef EvolutionAfterBattle, never TryEvolvingMon); the
+    production client reports exactly one key_change reason=evolution with the DV:OT prefix
+    kept, and no second capture. The catch's experience is staged by the gate (its header)."""
+    from run_gb_gate import run_gate
+    passed, path, text = run_gate(EVOLUTION_GATE, rom_key=rom, target="battle", timeout=1800, quiet=True)
+    assert passed, f"evolution gate FAILED on {rom}; receipt {path}: {text[-2500:]}"
+    tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
+    captures = [m for m in tx if m.get("event") == "capture"]
+    changes = [m for m in tx if m.get("event") == "key_change"]
+    assert len(captures) == 1 and len(changes) == 1
+    kc = changes[0]
+    from tests.unit import protocol_schema as ps
+    assert ps.validate_event(kc) == [] and ps.validate_event(captures[0]) == []
+    assert kc["reason"] == "evolution"
+    assert kc["old_key"] == captures[0]["key"] and kc["old_key"][:10] == kc["new_key"][:10]
+    assert codec.internal_to_natdex(kc["new_species"]) in (11, 14)           # Metapod / Kakuna
+    assert codec.internal_to_natdex(captures[0]["species_id"]) in (10, 13)   # Caterpie / Weedle
+    receipt = re.search(
+        r"^EVOLUTION_RECEIPT variant=levelup catch_frame=(\d+) levelup_frame=(\d+) evolve_signal_frame=(\d+) "
+        r"key_change_frame=(\d+) after_battle_hits=(\d+) try_hits=0 cancelled_hits=0 old=(\S+) new=(\S+) "
+        r"species=([0-9A-F]{2}) dex=(11|14) level=7 nick=\S+ encounters=\d+$", text, re.M)
+    assert receipt, "missing evolution receipt"
+    catch_f, level_f, evolve_f, change_f = map(int, receipt.groups()[:4])
+    assert catch_f < level_f <= evolve_f <= change_f and int(receipt[5]) >= 1
+    assert receipt[6] == kc["old_key"] and receipt[7] == kc["new_key"]
+    # an un-nicknamed catch is renamed to the evolved species by RenameEvolvedMon
+    assert kc["new_nickname"] in ("METAPOD", "KAKUNA")
+    assert not re.search(r"^HOOK TryEvolvingMon@", text, re.M)
+    assert re.search(r"^SIGNAL evolve@\d+ pc=(6ED5|6F86) which=\d+$", text, re.M)
+

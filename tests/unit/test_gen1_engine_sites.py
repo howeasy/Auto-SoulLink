@@ -91,3 +91,21 @@ def test_rc_sites_i_rely_on_are_where_the_plan_says():
     assert (rb["RemoveFaintedPlayerMon"]["bank"], rb["RemoveFaintedPlayerMon"]["addr"]) == (0x0F, 0x4741)
     assert (y["RemoveFaintedPlayerMon"]["bank"], y["RemoveFaintedPlayerMon"]["addr"]) == (0x0F, 0x475E)
     assert rb["DelayFrame"]["addr"] == 0x20AF and y["DelayFrame"]["addr"] == 0x1E64
+
+
+@pytest.mark.parametrize("title", sorted(DUMPS))
+def test_evolve_site_is_the_species_publish_not_the_try_evolving_entry(title):
+    """FIX-EVO: level-up evolutions run `predef EvolutionAfterBattle` (end_of_battle.asm:42-45),
+    which enters Evolution_PartyMonLoop 14 bytes past TryEvolvingMon and so never passed the old
+    entry hook. The site is the `ld l,e / ld h,d / jr .nextEvoEntry2` right after
+    `ld a,[wLoadedMonSpecies] / ld [hl],a / push hl` (evos_moves.asm:229-235 R/B, :231-237 Y):
+    every path publishes the new species there, a cancelled one never reaches it."""
+    prof = PROFILE[title]["rom"]
+    d = _load("engine_signals")["titles"][title]["sites"]["evolve"]
+    assert d["symbol"].startswith("Evolution_PartyMonLoop+")
+    assert d["bank"] == prof["Evolution_PartyMonLoop"]["bank"] == 0x0E
+    assert d["address"] == {"red": 0x6ED5, "blue": 0x6ED5, "yellow": 0x6F86}[title]
+    assert d["address"] != prof["TryEvolvingMon"]["addr"]
+    assert d["expected_hex"] == "6B621801" and d["capture_offset"] == 0
+    rom = _rom(title)
+    assert rom[d["rom_offset"] - 5:d["rom_offset"] + 4].hex().upper().endswith("CF77E56B621801"),         "ld a,[wLoadedMonSpecies] / ld [hl],a / push hl / ld l,e / ld h,d / jr"

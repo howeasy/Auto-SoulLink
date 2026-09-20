@@ -227,12 +227,18 @@ S.KINDS.daycare_withdraw = {
         return pt
     end,
 }
+-- Evolution_PartyMonLoop, AFTER `ld a,[wLoadedMonSpecies] / ld [hl],a` published the new
+-- species (pokered evos_moves.asm:229-233, pokeyellow :231-235): wWhichPokemon is the slot
+-- and the party snapshot already holds the evolved record. Level-up evolutions enter at
+-- EvolutionAfterBattle and never pass TryEvolvingMon; a cancelled one leaves before here.
 S.KINDS.evolve = {
     point = function(io, ram)
         return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
                  party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus") }
     end,
 }
+-- Vanilla: immediately before RemovePokemon, AFTER selection and the native animation
+-- (pokered in_game_trades.asm:139-145; pokeyellow :127-133).
 local function npc_trade_point(io, ram)
     return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
              give = io.read_u8(ram.wInGameTradeGiveMonSpecies, "System Bus"),
@@ -297,6 +303,15 @@ local function generic_point(site)
         return out
     end
 end
+
+-- Before ClearScreen, AFTER CopyDataToReceivedMon and CheckForTradeEvo:
+-- pokered in_game_trades.asm:149-151; pokeyellow :137-139. Capture here,
+-- not from a later poll: the recipient's final OT/name/evolution are now authoritative.
+S.KINDS.npc_trade_done = {
+    point = function(io, ram)
+        return { party = io.read_range(ram.wPartyCount, block_len(ram, "Party"), "System Bus") }
+    end,
+}
 
 -- profile: the title's table from profile.json (ram/rom/derived); sites: the title's
 -- `sites` table from engine_signals.json (kind -> site); on_fire: optional kind -> function(signal)

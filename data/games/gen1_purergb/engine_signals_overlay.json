@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "a19bb762d77668f4d609154df8251f09de0c3754b4823c8cffbf907a69a7ef27",
+ "sha256": "02ed3964dd63c546a6daaa7da0a343c77c7fec12aed55561f65b645adf2a0249",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -459,26 +459,11 @@
      "symbol": "DaycareGentlemanText.enoughMoney"
     },
     "evolve": {
-     "address": 21707,
-     "anchor_offset": 0,
-     "assert": "TryEvolvingMon:: ; SLink overlay: exported for the native trade\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
-     "bank": 44,
-     "capture_offset": 0,
-     "expected_hex": "21D3CCAF77FA92CF",
-     "point": [
-      "wWhichPokemon",
-      "wPartyCount"
-     ],
-     "rom_offset": 726219,
-     "source": "engine/pokemon/evos_moves.asm",
-     "symbol": "TryEvolvingMon"
-    },
-    "evolve_species_store": {
      "address": 22213,
      "anchor_offset": 60,
      "assert": "\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n\tjr .nextEvoEntry2",
      "bank": 44,
-     "capture_offset": 0,
+     "capture_offset": 1,
      "expected_hex": "77E56B6218012323",
      "point": [
       "wWhichPokemon",
@@ -1340,26 +1325,11 @@
      "symbol": "DaycareGentlemanText.enoughMoney"
     },
     "evolve": {
-     "address": 21707,
-     "anchor_offset": 0,
-     "assert": "TryEvolvingMon:: ; SLink overlay: exported for the native trade\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
-     "bank": 44,
-     "capture_offset": 0,
-     "expected_hex": "21D3CCAF77FA92CF",
-     "point": [
-      "wWhichPokemon",
-      "wPartyCount"
-     ],
-     "rom_offset": 726219,
-     "source": "engine/pokemon/evos_moves.asm",
-     "symbol": "TryEvolvingMon"
-    },
-    "evolve_species_store": {
      "address": 22213,
      "anchor_offset": 60,
      "assert": "\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n\tjr .nextEvoEntry2",
      "bank": 44,
-     "capture_offset": 0,
+     "capture_offset": 1,
      "expected_hex": "77E56B6218012323",
      "point": [
       "wWhichPokemon",
@@ -2221,26 +2191,11 @@
      "symbol": "DaycareGentlemanText.enoughMoney"
     },
     "evolve": {
-     "address": 21707,
-     "anchor_offset": 0,
-     "assert": "TryEvolvingMon:: ; SLink overlay: exported for the native trade\n\tld hl, wCanEvolveFlags\n\txor a\n\tld [hl], a\n\tld a, [wWhichPokemon]",
-     "bank": 44,
-     "capture_offset": 0,
-     "expected_hex": "21D3CCAF77FA92CF",
-     "point": [
-      "wWhichPokemon",
-      "wPartyCount"
-     ],
-     "rom_offset": 726219,
-     "source": "engine/pokemon/evos_moves.asm",
-     "symbol": "TryEvolvingMon"
-    },
-    "evolve_species_store": {
      "address": 22213,
      "anchor_offset": 60,
      "assert": "\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl\n\tld l, e\n\tld h, d\n\tjr .nextEvoEntry2",
      "bank": 44,
-     "capture_offset": 0,
+     "capture_offset": 1,
      "expected_hex": "77E56B6218012323",
      "point": [
       "wWhichPokemon",

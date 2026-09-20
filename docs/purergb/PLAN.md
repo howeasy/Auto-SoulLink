@@ -62,7 +62,7 @@ What is deliberately **not** gated by a human: intermediate commits inside a pha
 
 | Gate | Signed | Tree | Evidence |
 |---|---|---|---|
-| G0 | 2026-09-18 "G0 is merged. Just not tagged" | local master `bbcd037` (Gen 1 RC FF; not pushed, not tagged) | worktree rebased onto `bbcd037`; `git merge-base` = `bbcd037` |
+| G0 | 2026-09-18 "G0 is merged. Just not tagged" | local master `bbcd037` (Gen 1 RC FF; not pushed, not tagged) | worktree rebased onto `bbcd037`; `git merge-base` = `bbcd037` — **2026-09-20 note:** local master moved to `997613a` (the Gen 1 final-review fixes); merged into this branch. One of those findings applies to pureRGB too: level-up evolutions enter at `EvolutionAfterBattle` and never pass `TryEvolvingMon`, so the pure `evolve` site is repinned from `TryEvolvingMon+0` to the species-publish point (`Evolution_PartyMonLoop.skipfix_end+$3C`, capture offset 1 — the site the pack carried as `evolve_species_store`); 40 sites per title after the repin |
 | G1 | 2026-09-18 "Looks good from my side … Lets do what we can" | `2138c82` | `data/purergb_sources.lock.json`, `tools/build_purergb_syms.py` local build sha1 == `2e94d09c…`/`d419fe24…`/`fe4c63a6…`; `tests/unit/test_purergb_build.py` |
 | G2 | 2026-09-18 "Let's continue" | `d4a9ce4` (+`8821643`, `4d748be`) | `data/games/gen1_purergb/*` (41 sites × 3 titles byte-verified, 78 areas, 190-row species index, admission table); `tests/unit/test_gen1_purergb_*.py` green; vanilla pack byte-identical after regeneration |
 | G3a | 2026-09-18 (same ruling as G2; shared diff reviewed) | `355f047` + `7be4a39` | acknowledged `key_change` / `identity_lost` / MIXED GAMES / contract sha1; `slink-adapter-guard` clean + one independent review; Gen 3 suite then full suite green |
