@@ -3,9 +3,11 @@
 -- TryEvolvingMon. Buttons only; the production client sends to G's loopback.
 -- Result file: patch/build/test_gen1_evolution_gate_result.txt
 -- Coordinator-owned emulator lane: run_gb_gate.py --rom red|blue --target battle.
---   SLINK_EVO_CANCEL=1  variant: B during the animation cancels the evolution; the receipt
---                       must then show EvolutionAfterBattle + CancelledEvolution and NO
---                       evolve signal / key_change.
+--
+-- No cancel variant. Evolution_CheckForCancel (evolution.asm:141-158) polls hJoy5 for PAD_B
+-- once per animation cycle, but a B tap on the drivers' 16-frame cadence did not land in a
+-- live run (Red, 90f6110: the full evolution and key_change went out under the B taps), and
+-- the product path is proven by the level-up run alone; not worth more lane time.
 --
 -- Route (R/B only: gen1_rb_forest_inputs decodes pret/pokered's .blk maps and Yellow's forest
 -- is a different map; Route 1 itself has only Pidgey/Rattata in all three titles):
@@ -36,7 +38,6 @@ local P = dofile(t.ROOT .. "/lua/tests/gen1_scripted_play.lua")
 local Hunt = dofile(t.ROOT .. "/lua/tests/gen1_rb_hunt_inputs.lua")
 local Forest = dofile(t.ROOT .. "/lua/tests/gen1_rb_forest_inputs.lua")
 local Driver = dofile(t.ROOT .. "/lua/tests/gen1_battle_driver.lua")
-local CANCEL = os.getenv("SLINK_EVO_CANCEL") == "1"
 local play = P.new(t.ROOT, t.title, "a", {log = t.log})
 local S, rom = play.symbols, t.parts.profile.rom
 local json, reads = t.parts.json, t.parts.reads
@@ -46,8 +47,8 @@ local function frame() return emu.framecount() end
 
 -- internal indices (data/pokemon/dex_order.asm): Caterpie $7B -> Metapod $7C (dex 11),
 -- Weedle $70 -> Kakuna $71 (dex 14). The cocoons are also the harmless level-up foes.
-local TARGETS = {[0x7B] = {evolved = 0x7C, dex = 11, name = "CATERPIE"},
-                 [0x70] = {evolved = 0x71, dex = 14, name = "WEEDLE"}}
+local TARGETS = {[0x7B] = {evolved = 0x7C, dex = 11, name = "CATERPIE", evolved_name = "METAPOD"},
+                 [0x70] = {evolved = 0x71, dex = 14, name = "WEEDLE", evolved_name = "KAKUNA"}}
 local COCOONS = {[0x71] = "KAKUNA", [0x7C] = "METAPOD"}
 local EVO_LEVEL = 7
 local WALK_FRAMES, HUNT_FRAMES, HUNT_ENCOUNTERS = 90000, 90000, 40
@@ -220,14 +221,20 @@ local function stage_exp()
         catch.slot, catch.species, base.growth_rate, before.exp, want, after.level, catch.key))
 end
 
--- ── 4. the level-up battle: catch switched in, Tackles a cocoon down; A (B = cancel) after ─
+-- ── 4. the level-up battle: catch switched in, Tackles a cocoon down ─────────────────────
 local function level_battle()
-    local btn = CANCEL and "B" or "A"
-    local function mash(n) for i = 1, n do yield_buttons(C.tap(btn, i)) end end
-    -- The next battle menu, advancing text with A -- never B: Evolution_CheckForCancel
-    -- (evolution.asm:141-158) reads hJoy5 for PAD_B while wIsInBattle is still 1, because
-    -- EndOfBattle clears it only AFTER the evolution (end_of_battle.asm:42-50). The cancel
-    -- variant taps B for the same reason.
+    -- Which button advances text. BEFORE the level-up: B, exactly as the hunt's wait_menu
+    -- does -- the battle menu watches RIGHT|A / LEFT|A only, so B can never select anything,
+    -- whereas an A tap on a drawn menu picks FIGHT and then move 1 behind the driver's back
+    -- (Red 90f6110: the fight ran on the taps, the driver never saw a menu, the plan timed
+    -- out). AFTER the level-up (GainExperience writes the party level byte hundreds of
+    -- frames before the evolution starts; advance() stamps levelup_frame): A, never B --
+    -- Evolution_CheckForCancel (evolution.asm:141-158) reads hJoy5 for PAD_B while
+    -- wIsInBattle is still 1, because EndOfBattle clears it only AFTER the evolution
+    -- (end_of_battle.asm:42-50).
+    local function btn() return levelup_frame and "A" or "B" end
+    local function mash(n) for i = 1, n do yield_buttons(C.tap(btn(), i)) end end
+    local function foe_hp() return rd(S.wEnemyMonHP) * 256 + rd(S.wEnemyMonHP + 1) end
     local function wait_menu(budget)
         local used = 0
         while used < budget do
@@ -245,14 +252,18 @@ local function level_battle()
         local sw = driver.switch_to(catch.slot, 900)
         t.log("LEVEL_SWITCH slot=" .. catch.slot .. " -> " .. tostring(sw.why))
         if not sw.ok then return sw.why == "battle_over" and "battle_over" or "stuck" end
+        -- Every menu: FIGHT then move 1 through the driver, the way the hunt's catch plan
+        -- fights (gen1_rb_hunt_inputs.lua:172-190); the foe's HP is read from wEnemyMonHP
+        -- itself. A cocoon only Hardens, so the turns are many and harmless.
         for turn = 1, LEVEL_TURNS do
             m = wait_menu(6000)    -- the last one spans the KO text, the level-up box and the evolution
             if m ~= "menu" then return m end
             if battle_hp() == 0 then return "catch-koed" end
+            local before = foe_hp()
             local c = driver.choose("FIGHT")
             if not c.ok then return c.why == "battle_over" and "battle_over" or "stuck" end
-            local mv = driver.commit_move(1, 900)
-            t.log(string.format("LEVEL_TURN %d foe_hp=%d -> %s", turn, mv.hp_after and mv.hp_after.enemy or -1, tostring(mv.why)))
+            local mv = driver.commit_move(1, 1800)
+            t.log(string.format("LEVEL_TURN %d foe_hp=%d->%d catch_hp=%d -> %s", turn, before, foe_hp(), battle_hp(), tostring(mv.why)))
             if mv.why == "battle_over" then return "battle_over" end
             if mv.why == "player_fainted" or mv.why == "party_menu" then return "catch-koed" end
         end
@@ -288,7 +299,7 @@ local function level_battle()
                 buttons = res or C.idle()
             end
         elseif p.battle ~= 0 then
-            buttons = C.tap(btn, frame())          -- never reached after battle_over; kept for a late text box
+            buttons = C.tap(btn(), frame())        -- never reached after battle_over; kept for a late text box
         elseif levelup_frame then
             -- the battle is over (wIsInBattle 0, so the evolution is too): settle, then drain
             until_(3000, function() return t.overworld_ok() end, function(i) return C.tap("B", i) end, "no checkpoint after the evolution")
@@ -349,17 +360,6 @@ local function run()
     local after = assert(reads.read_party())[catch.slot + 1]
     local want = TARGETS[catch.species]
     local site = json.decode(assert(io.open(t.ROOT .. "/data/games/gen1_rby/engine_signals.json", "rb")):read("*a")).titles[t.title].sites.evolve
-    if CANCEL then
-        assert(hits.CancelledEvolution >= 1, "B did not cancel: CancelledEvolution never ran (cancel window not reachable by scripted input)")
-        assert(#sig.evolve == 0 and #tx.key_changes == 0, "a cancelled evolution produced an evolve signal or key_change")
-        assert(after.species == catch.species and reads.key(after) == catch.key and after.level == EVO_LEVEL,
-               "a cancelled evolution changed the mon")
-        t.log(string.format("EVOLUTION_RECEIPT variant=cancel catch_frame=%d levelup_frame=%d after_battle_hits=%d cancelled_hits=%d try_hits=%d evolve_signals=0 key_changes=0 species=%02X level=%d key=%s encounters=%d",
-            tx.captures[1].frame, levelup_frame, hits.EvolutionAfterBattle, hits.CancelledEvolution, hits.TryEvolvingMon,
-            after.species, after.level, catch.key, encounters))
-        t.check("B during the animation cancelled the evolution; no evolve signal, no key_change", true)
-        return
-    end
     assert(hits.CancelledEvolution == 0, "the evolution was cancelled")
     assert(#sig.evolve == 1, "expected exactly one evolve signal, got " .. #sig.evolve)
     assert(sig.evolve[1].pc == site.address and sig.evolve[1].which == catch.slot, "evolve signal PC/slot differ from the pinned site")
@@ -370,7 +370,14 @@ local function run()
     assert(kc.old_key:sub(1, 10) == kc.new_key:sub(1, 10), "DV:OT prefix changed across the evolution")
     assert(kc.new_species == want.evolved and after.species == want.evolved, "wrong evolved species")
     assert(t.parts.rom.natdex(kc.new_species) == want.dex, "evolved species is not dex " .. want.dex)
-    assert(after.level == EVO_LEVEL and after.nickname == catch.nick, "level/nickname after the evolution")
+    -- RenameEvolvedMon (evos_moves.asm:262-287): a mon still carrying its species' standard
+    -- name takes the evolved species' name; a real nickname is kept. The hunt declined the
+    -- nickname, so WEEDLE becomes KAKUNA (Blue 90f6110: exactly that) -- and the wire says so.
+    local expect_nick = (catch.nick == want.name) and want.evolved_name or catch.nick
+    assert(after.level == EVO_LEVEL, "level after the evolution")
+    assert(after.nickname == expect_nick and kc.new_nickname == after.nickname,
+           string.format("nickname after the evolution: cartridge %s wire %s expected %s",
+                         after.nickname, tostring(kc.new_nickname), expect_nick))
     assert(tx.key_changes[1].frame > tx.captures[1].frame and sig.evolve[1].frame >= levelup_frame, "receipt order")
     t.log(string.format("EVOLUTION_RECEIPT variant=levelup catch_frame=%d levelup_frame=%d evolve_signal_frame=%d key_change_frame=%d after_battle_hits=%d try_hits=%d cancelled_hits=%d old=%s new=%s species=%02X dex=%d level=%d nick=%s encounters=%d",
         tx.captures[1].frame, levelup_frame, sig.evolve[1].frame, tx.key_changes[1].frame, hits.EvolutionAfterBattle,

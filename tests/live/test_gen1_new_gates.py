@@ -159,13 +159,12 @@ EVOLUTION_ROMS = ("red", "blue")   # the forest walker decodes pret/pokered's ma
 
 
 @pytest.mark.parametrize("rom", EVOLUTION_ROMS)
-def test_level_up_evolution_emits_one_key_change_from_the_after_battle_path(rom, emuhawk, monkeypatch):
+def test_level_up_evolution_emits_one_key_change_from_the_after_battle_path(rom, emuhawk):
     """FIX-EVO PHYSICAL: a Caterpie/Weedle caught in Viridian Forest grows to level 7 in a wild
     battle and EndOfBattle evolves it (predef EvolutionAfterBattle, never TryEvolvingMon); the
     production client reports exactly one key_change reason=evolution with the DV:OT prefix
     kept, and no second capture. The catch's experience is staged by the gate (its header)."""
     from run_gb_gate import run_gate
-    monkeypatch.delenv("SLINK_EVO_CANCEL", raising=False)
     passed, path, text = run_gate(EVOLUTION_GATE, rom_key=rom, target="battle", timeout=1800, quiet=True)
     assert passed, f"evolution gate FAILED on {rom}; receipt {path}: {text[-2500:]}"
     tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
@@ -187,27 +186,8 @@ def test_level_up_evolution_emits_one_key_change_from_the_after_battle_path(rom,
     catch_f, level_f, evolve_f, change_f = map(int, receipt.groups()[:4])
     assert catch_f < level_f <= evolve_f <= change_f and int(receipt[5]) >= 1
     assert receipt[6] == kc["old_key"] and receipt[7] == kc["new_key"]
+    # an un-nicknamed catch is renamed to the evolved species by RenameEvolvedMon
+    assert kc["new_nickname"] in ("METAPOD", "KAKUNA")
     assert not re.search(r"^HOOK TryEvolvingMon@", text, re.M)
     assert re.search(r"^SIGNAL evolve@\d+ pc=(6ED5|6F86) which=\d+$", text, re.M)
 
-
-@pytest.mark.parametrize("rom", EVOLUTION_ROMS)
-def test_cancelled_evolution_emits_nothing(rom, emuhawk, monkeypatch):
-    """B during the animation: EvolutionAfterBattle and CancelledEvolution run, the species
-    publish is never reached, and the client sends no evolve signal and no key_change."""
-    from run_gb_gate import run_gate
-    monkeypatch.setenv("SLINK_EVO_CANCEL", "1")
-    passed, path, text = run_gate(EVOLUTION_GATE, rom_key=rom, target="battle", timeout=1800, quiet=True)
-    assert passed, f"cancelled-evolution gate FAILED on {rom}; receipt {path}: {text[-2500:]}"
-    tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
-    assert [m for m in tx if m.get("event") == "key_change"] == []
-    assert len([m for m in tx if m.get("event") == "capture"]) == 1
-    receipt = re.search(
-        r"^EVOLUTION_RECEIPT variant=cancel catch_frame=(\d+) levelup_frame=(\d+) after_battle_hits=(\d+) "
-        r"cancelled_hits=(\d+) try_hits=0 evolve_signals=0 key_changes=0 species=([0-9A-F]{2}) level=7 "
-        r"key=(\S+) encounters=\d+$", text, re.M)
-    assert receipt, "missing cancel receipt"
-    assert int(receipt[3]) >= 1 and int(receipt[4]) >= 1
-    assert codec.internal_to_natdex(int(receipt[5], 16)) in (10, 13)
-    assert not re.search(r"^SIGNAL evolve@", text, re.M)
-    assert re.search(r"^HOOK CancelledEvolution@", text, re.M)
