@@ -1,0 +1,28 @@
+Gen 1 release gate — 12 lanes
+
+[ .. ] unit
+[PASS] unit               3105 passed, 11 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (72s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         5 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     13 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (288s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   2 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (18s)
+[ .. ] duo-pairs
+[PASS] duo-pairs          18 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (802s)
+
+GATE PASSED — every lane ran and every lane passed.
