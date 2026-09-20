@@ -456,6 +456,8 @@ Read this section if you only play vanilla.
   This is the vanilla set the Gen 1 session requires to be green before the merged tree ever
   fast-forwards onto master; master `48883f8` (lint-only) merged after the run as `c95a664`,
   unit lane re-run green.
+- **Merged to master 2026-09-20** (owner: "merge with main"): local master fast-forwarded to
+  `0937f3d` by the Gen 1 session. Not pushed, not tagged, no release (owner's call, G6).
 
 ---
 
