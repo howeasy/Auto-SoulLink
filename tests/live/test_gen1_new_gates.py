@@ -152,3 +152,62 @@ def test_slow_name_capture_survives_2400_idle_frames(rom, emuhawk):
     end = re.search(r"^NAMING_HOLD_END frame=(\d+) frames=2400 input_hits=(\d+)$", text, re.M)
     assert begin and end
     assert int(end[1]) - int(begin[1]) == 2400 and int(end[2]) > int(begin[2])
+
+
+EVOLUTION_GATE = "lua/tests/test_gen1_evolution_gate.lua"
+EVOLUTION_ROMS = ("red", "blue")   # the forest walker decodes pret/pokered's maps; Yellow's forest differs
+
+
+@pytest.mark.parametrize("rom", EVOLUTION_ROMS)
+def test_level_up_evolution_emits_one_key_change_from_the_after_battle_path(rom, emuhawk, monkeypatch):
+    """FIX-EVO PHYSICAL: a Caterpie/Weedle caught in Viridian Forest grows to level 7 in a wild
+    battle and EndOfBattle evolves it (predef EvolutionAfterBattle, never TryEvolvingMon); the
+    production client reports exactly one key_change reason=evolution with the DV:OT prefix
+    kept, and no second capture. The catch's experience is staged by the gate (its header)."""
+    from run_gb_gate import run_gate
+    monkeypatch.delenv("SLINK_EVO_CANCEL", raising=False)
+    passed, path, text = run_gate(EVOLUTION_GATE, rom_key=rom, target="battle", timeout=1800, quiet=True)
+    assert passed, f"evolution gate FAILED on {rom}; receipt {path}: {text[-2500:]}"
+    tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
+    captures = [m for m in tx if m.get("event") == "capture"]
+    changes = [m for m in tx if m.get("event") == "key_change"]
+    assert len(captures) == 1 and len(changes) == 1
+    kc = changes[0]
+    from tests.unit import protocol_schema as ps
+    assert ps.validate_event(kc) == [] and ps.validate_event(captures[0]) == []
+    assert kc["reason"] == "evolution"
+    assert kc["old_key"] == captures[0]["key"] and kc["old_key"][:10] == kc["new_key"][:10]
+    assert codec.internal_to_natdex(kc["new_species"]) in (11, 14)           # Metapod / Kakuna
+    assert codec.internal_to_natdex(captures[0]["species_id"]) in (10, 13)   # Caterpie / Weedle
+    receipt = re.search(
+        r"^EVOLUTION_RECEIPT variant=levelup catch_frame=(\d+) levelup_frame=(\d+) evolve_signal_frame=(\d+) "
+        r"key_change_frame=(\d+) after_battle_hits=(\d+) try_hits=0 cancelled_hits=0 old=(\S+) new=(\S+) "
+        r"species=([0-9A-F]{2}) dex=(11|14) level=7 nick=\S+ encounters=\d+$", text, re.M)
+    assert receipt, "missing evolution receipt"
+    catch_f, level_f, evolve_f, change_f = map(int, receipt.groups()[:4])
+    assert catch_f < level_f <= evolve_f <= change_f and int(receipt[5]) >= 1
+    assert receipt[6] == kc["old_key"] and receipt[7] == kc["new_key"]
+    assert not re.search(r"^HOOK TryEvolvingMon@", text, re.M)
+    assert re.search(r"^SIGNAL evolve@\d+ pc=(6ED5|6F86) which=\d+$", text, re.M)
+
+
+@pytest.mark.parametrize("rom", EVOLUTION_ROMS)
+def test_cancelled_evolution_emits_nothing(rom, emuhawk, monkeypatch):
+    """B during the animation: EvolutionAfterBattle and CancelledEvolution run, the species
+    publish is never reached, and the client sends no evolve signal and no key_change."""
+    from run_gb_gate import run_gate
+    monkeypatch.setenv("SLINK_EVO_CANCEL", "1")
+    passed, path, text = run_gate(EVOLUTION_GATE, rom_key=rom, target="battle", timeout=1800, quiet=True)
+    assert passed, f"cancelled-evolution gate FAILED on {rom}; receipt {path}: {text[-2500:]}"
+    tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
+    assert [m for m in tx if m.get("event") == "key_change"] == []
+    assert len([m for m in tx if m.get("event") == "capture"]) == 1
+    receipt = re.search(
+        r"^EVOLUTION_RECEIPT variant=cancel catch_frame=(\d+) levelup_frame=(\d+) after_battle_hits=(\d+) "
+        r"cancelled_hits=(\d+) try_hits=0 evolve_signals=0 key_changes=0 species=([0-9A-F]{2}) level=7 "
+        r"key=(\S+) encounters=\d+$", text, re.M)
+    assert receipt, "missing cancel receipt"
+    assert int(receipt[3]) >= 1 and int(receipt[4]) >= 1
+    assert codec.internal_to_natdex(int(receipt[5], 16)) in (10, 13)
+    assert not re.search(r"^SIGNAL evolve@", text, re.M)
+    assert re.search(r"^HOOK CancelledEvolution@", text, re.M)
