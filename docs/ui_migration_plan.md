@@ -450,12 +450,12 @@ anything else produces a file its own allowlist rejects.
 3. **Preflight endpoint.** `GET /api/randomizer/status` → jar found, `shutil.which("java")`,
    and for each ROM `gen1_rom_scan.identify(rom)["clean"]`. Today a missing Java or a dirty
    dump costs up to twenty minutes inside `to_thread` to discover.
-4. **Server-side file picker.** `GET /api/browse?dir=…&ext=.gb,.gbc,.jar` returning entries,
-   rooted at the user's home and refusing traversal with the same `ntpath.splitdrive` guard
-   `064b57c` put in `handle_calc_files`. No upload, so the policy holds and the 1 MiB body
-   limit stays irrelevant. (If uploads are ever wanted: `client_max_size` is unset, aiohttp's
-   default is 1 MiB, a Gen 1 ROM is *exactly* 1 048 576 bytes, and the 413 surfaces to the
-   user as a `SyntaxError`.)
+4. **File picker.** ~~`GET /api/browse` directory listing~~ — superseded 2026-09-20: the
+   creator lists what is in the SLink folder (`GET /api/roms`, each file with the scanner's
+   verdict, the first two clean dumps preselected) and anything else comes in through the
+   browser's own file dialog (`POST /api/roms`, multipart streamed through
+   `request.multipart()`, which the 1 MiB `client_max_size` does not apply to; 64 MiB cap of
+   its own). Uploads land in `<repo>/roms/`, which .gitignore already refuses.
 5. **Progress.** Job id + `GET /api/randomizer/jobs/{id}` poll — **not** SSE, for the reason
    `_STATUS_HTML` documents. `prepare_pair` grows an optional `progress(stage)` callback
    (`"a"`, `"b"`, `"verify"`), three lines.

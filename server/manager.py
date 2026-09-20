@@ -15,6 +15,7 @@ Run dirs:  data/runs/<run_id>/links.json
 
 import argparse
 import asyncio
+import hashlib
 import html
 import json
 import logging
@@ -202,6 +203,12 @@ log = logging.getLogger("slink.manager")
 # ── Paths ───────────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 MANAGER_DIR  = os.path.join(PROJECT_ROOT, "data", "runs")
+# Where the run creator looks for clean ROMs, and where a ROM picked in the browser lands.
+# .gitignore already refuses every *.gb / *.gbc / *.gba anywhere in the repo.
+ROM_UPLOAD_DIR = os.path.join(PROJECT_ROOT, "roms")
+ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR)
+ROM_EXTS = (".gb", ".gbc")
+UPLOAD_MAX = 64 << 20
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
 # How long a freshly spawned server gets to die on startup (a taken port) before it counts as up.
@@ -753,8 +760,26 @@ class RunManager:
             # The pure family randomizes only on the SLink fork jar (upr_pipeline); the
             # page says which jar it found so a greyed pure ROM is explained.
             "jar_fork": bool(jar) and jar_is_fork(jar),
+            "roms": self._scan_roms(jar),
+            "roms_dir": PROJECT_ROOT,
             "current": run.get("randomizer") if run else None,
         }
+
+    @staticmethod
+    def _scan_roms(jar: str) -> list[dict]:
+        """Every .gb/.gbc in ROM_DIRS with the scanner's verdict (describe_rom)."""
+        from server.upr_pipeline import describe_rom, jar_is_fork
+        fork = bool(jar) and jar_is_fork(jar)
+        roms, seen = [], set()
+        for d in ROM_DIRS:
+            if not os.path.isdir(d):
+                continue
+            for name in sorted(os.listdir(d), key=str.lower):
+                path = os.path.join(d, name)
+                if name.lower().endswith(ROM_EXTS) and os.path.isfile(path) and path not in seen:
+                    seen.add(path)
+                    roms.append({"name": name, **describe_rom(path, fork)})
+        return roms
 
     def _augment_for_template(self, run: dict) -> dict:
         """Display strings for the rail: a short date, a filesystem-safe name, the game."""
@@ -1039,38 +1064,61 @@ class RunManager:
         sources = {p: q.get(f"rom_{p}", "").strip() for p in ("a", "b")}
         return web.json_response(preflight(jar, sources))
 
-    async def handle_browse(self, request: web.Request) -> web.Response:
-        """GET /api/browse?dir=&ext=.gb,.gbc — a directory listing for the ROM and jar
-        pickers. Paths are typed rather than uploaded because everything stays on the
-        machine running the Manager; this is the picker that saves the typing. Listing only,
-        rooted at the user's home and at the repository; nothing is read."""
-        home = os.path.realpath(os.path.expanduser("~"))
-        roots = [home, os.path.realpath(PROJECT_ROOT)]
-        raw = request.query.get("dir", "").strip() or home
-        target = os.path.realpath(raw)
-        if not any(target == r or target.startswith(r + os.sep) for r in roots):
-            return web.json_response({"ok": False, "error": "outside the browsable roots"}, status=403)
-        if not os.path.isdir(target):
-            return web.json_response({"ok": False, "error": "not a directory"}, status=404)
-        exts = tuple(e.strip().lower() for e in request.query.get("ext", "").split(",") if e.strip())
-        entries = []
+    async def handle_roms(self, request: web.Request) -> web.Response:
+        """GET /api/roms — every .gb/.gbc in the SLink folder (and its roms/), each with the
+        scanner's verdict, so the run creator can offer them instead of asking for paths.
+        Nothing is uploaded to anywhere: the Manager and the ROMs share a machine."""
+        from server.upr_pipeline import find_upr_jar
+        jar = request.query.get("jar", "").strip() or find_upr_jar() or ""
+        return web.json_response({"ok": True, "roms": self._scan_roms(jar), "dir": PROJECT_ROOT})
+
+    async def handle_rom_upload(self, request: web.Request) -> web.Response:
+        """POST /api/roms (multipart `file`) — a ROM chosen with the browser's own file
+        dialog lands in <repo>/roms/ (a jar lands as <repo>/PokeRandoZX.jar, where
+        find_upr_jar looks first) and the answer describes it like handle_roms would. A
+        same-named file that differs is kept: the upload gets a numbered name."""
+        from server.upr_pipeline import _sha1, describe_rom, find_upr_jar, jar_is_fork
+        if request.content_type != "multipart/form-data":
+            return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
+        reader = await request.multipart()
+        field = await reader.next()
+        while field is not None and field.name != "file":
+            field = await reader.next()
+        name = os.path.basename(field.filename or "") if field is not None else ""
+        ext = os.path.splitext(name)[1].lower()
+        if not name or ext not in ROM_EXTS + (".jar",):
+            return web.json_response({"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}, status=400)
+        name = re.sub(r"[^\w .()\[\]'&+,-]", "_", name)
+        if ext == ".jar":
+            dest_dir, name = PROJECT_ROOT, "PokeRandoZX.jar"
+        else:
+            dest_dir = ROM_UPLOAD_DIR
+        os.makedirs(dest_dir, exist_ok=True)
+        tmp = os.path.join(dest_dir, f".upload-{os.getpid()}.part")
+        size, h = 0, hashlib.sha1()
         try:
-            for name in sorted(os.listdir(target), key=str.lower):
-                if name.startswith("."):
-                    continue
-                path = os.path.join(target, name)
-                is_dir = os.path.isdir(path)
-                if not is_dir and exts and not name.lower().endswith(exts):
-                    continue
-                entries.append({"name": name, "path": path, "dir": is_dir})
-        except OSError as exc:
-            return web.json_response({"ok": False, "error": str(exc)}, status=403)
-        parent = os.path.dirname(target)
-        return web.json_response({
-            "ok": True, "dir": target, "roots": roots,
-            "parent": parent if any(parent == r or parent.startswith(r + os.sep) for r in roots) else None,
-            "entries": entries,
-        })
+            with open(tmp, "wb") as f:
+                while chunk := await field.read_chunk(1 << 20):
+                    size += len(chunk)
+                    if size > UPLOAD_MAX:
+                        raise web.HTTPRequestEntityTooLarge(max_size=UPLOAD_MAX, actual_size=size)
+                    h.update(chunk)
+                    f.write(chunk)
+            stem, n = os.path.splitext(name)[0], 1
+            dest = os.path.join(dest_dir, name)
+            while os.path.exists(dest) and _sha1(dest) != h.hexdigest():
+                n += 1
+                dest = os.path.join(dest_dir, f"{stem} ({n}){ext}")
+            os.replace(tmp, dest)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        if ext == ".jar":
+            return web.json_response({"ok": True, "path": dest, "kind": "jar", "jar_fork": jar_is_fork(dest)})
+        jar = find_upr_jar() or ""
+        return web.json_response({"ok": True, "path": dest, "kind": "rom",
+                                  "rom": {"name": os.path.basename(dest),
+                                          **describe_rom(dest, bool(jar) and jar_is_fork(jar))}})
 
     async def handle_rom_download(self, request: web.Request) -> web.Response:
         """GET /api/runs/{run_id}/rom/{player} — this player's randomized ROM, renamed
@@ -1444,7 +1492,8 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
     app.router.add_get("/api/randomizer/status",      manager.handle_randomizer_status)
-    app.router.add_get("/api/browse",                 manager.handle_browse)
+    app.router.add_get("/api/roms",                   manager.handle_roms)
+    app.router.add_post("/api/roms",                  manager.handle_rom_upload)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
 
     # Stream pin API

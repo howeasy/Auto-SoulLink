@@ -471,7 +471,8 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json` |
 | `/api/runs/{id}/rom/{player}` | GET | Download that player's randomized ROM as `slink_<run>_<player>.gb` |
 | `/api/randomizer/status` | GET | `?jar=&rom_a=&rom_b=` — jar found, Java on PATH, each ROM present and a clean dump |
-| `/api/browse` | GET | `?dir=&ext=` — directory listing rooted at the user's home and the repo, for the pickers; lists, never reads |
+| `/api/roms` | GET | `?jar=` — every `.gb`/`.gbc` in the SLink folder and its `roms/`, each with the scanner's verdict (clean / not a Gen 1 cartridge), for the run creator's pickers |
+| `/api/roms` | POST | multipart `file` — a ROM picked with the browser's file dialog lands in `roms/` (a `.jar` as `PokeRandoZX.jar`); a same-named different file gets a numbered name; 64 MiB cap |
 | `/api/stream/pin` | GET / POST | Which run the overlays show |
 | `/api/status`, `/api/attempts` | GET / POST | Proxied to the pinned run |
 | `/api/bot/{tail:.*}`, `/api/obs/{tail:.*}` | GET / POST | Relayed verbatim to the pinned run, so the Broadcast panels' own JS works from this origin |

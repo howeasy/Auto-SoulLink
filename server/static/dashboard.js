@@ -2,7 +2,8 @@
  *
  * Loaded by base.html with `defer` whenever a page has the sidebar. Refresh of the board
  * is owned by HTMX — #content polls every 2 s and swaps by idiomorph, which preserves
- * <img> identity (data-species) and <details open> state across swaps. This file handles:
+ * <img> identity; the idiomorph hook below keeps a resolved sprite's src and <details open>
+ * across swaps. This file handles:
  *
  *   • Sprite background removal (funnotbun chroma-key)
  *   • Mouse-interaction pause via htmx:beforeSwap
@@ -113,38 +114,7 @@ if (window._slinkDashInit) {
     if (document.hidden) endInteraction();
   });
   document.body.addEventListener('htmx:beforeSwap', function(ev) {
-    if (userInteracting) { ev.preventDefault(); return; }
-    // Pre-swap chroma-key: HTMX's polling refresh fetches a fresh HTML
-    // response, and idiomorph syncs every <img>'s src back to the original
-    // funnotbun URL (with green/blue background) — even on elements we've
-    // already chroma-keyed. The CSS visibility-hidden rule then hides the
-    // sprite for a frame until JS re-processes it, which reads as a flicker
-    // every 2 seconds.
-    //
-    // Fix: rewrite each funnotbun src in the incoming HTML to the cached
-    // transparent data URL we've already computed, and tag it
-    // `data-bg-removed="1"`. By the time idiomorph applies the morph the
-    // sprite already points at the transparent version, so there's no
-    // background to flash. HTMX exposes the modifiable response body on
-    // `event.detail.serverResponse` (xhr.responseText is read-only per spec
-    // — that's why earlier attempts to assign back to xhr did nothing).
-    try {
-      var html = ev.detail && ev.detail.serverResponse;
-      if (!html || html.indexOf('funnotbun') === -1) return;
-      var changed = false;
-      var rewritten = html.replace(
-        /<img\b([^>]*?)\bsrc=(["'])([^"']*funnotbun[^"']*)\2([^>]*)>/g,
-        function(match, before, q, src, after) {
-          if (!spriteCache[src]) return match;
-          changed = true;
-          // Drop any existing data-bg-removed in the before/after chunks
-          // so we don't end up with duplicates, then re-add it cleanly.
-          var clean = (before + after).replace(/\s*data-bg-removed=(["'])[^"']*\1/g, '');
-          return '<img' + clean + ' src=' + q + spriteCache[src] + q + ' data-bg-removed="1">';
-        },
-      );
-      if (changed) ev.detail.serverResponse = rewritten;
-    } catch (_) { /* fall back to post-swap chroma-key */ }
+    if (userInteracting) ev.preventDefault();
   });
 
   // Initial paint.
@@ -351,8 +321,28 @@ if (window._slinkDashInit) {
       if (attrName === 'open' && node && node.hasAttribute && node.hasAttribute('data-details-key')) {
         return false;
       }
+      // A sprite's src belongs to the client once the image has resolved: the onerror chain
+      // may have moved it to a fallback URL and the chroma-key to a data URL. The server
+      // re-sends the original every poll, and re-setting src reloads the image -- the blank
+      // frame between the two is the flicker. Attributes sync in the server's order and
+      // every adapter writes data-species before src, so when the species is unchanged
+      // the src (and the onerror-set style, and the chroma-key marker) stay put; a real
+      // species change still lands.
+      if (SPRITE_OWNED[attrName] && node && node.tagName === 'IMG' && node.dataset.species
+          && node.dataset.species === node._spriteFor) {
+        return false;
+      }
     };
   }
+  var SPRITE_OWNED = { src: 1, style: 1, 'data-bg-removed': 1 };
+  function stampSprites() {
+    document.querySelectorAll('img[data-species]').forEach(function(img) { img._spriteFor = img.dataset.species; });
+  }
+  stampSprites();
+  document.body.addEventListener('htmx:afterSettle', stampSprites);
+  // The open run is somewhere in a list that scrolls on its own; bring it into view.
+  var railActive = document.querySelector('.mk-rail-runs .mk-rail-item.active');
+  if (railActive && railActive.scrollIntoView) railActive.scrollIntoView({ block: 'nearest' });
   // The htmx-ext-morph extension loads `idiomorph-ext.min.js` which exposes
   // `Idiomorph` as a global. dashboard.html now loads idiomorph BEFORE
   // dashboard.js, but be defensive in case the order ever drifts: defer

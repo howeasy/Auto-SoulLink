@@ -82,6 +82,19 @@ body.mgr .launcher { min-height: 0; max-height: calc(100vh - 57px); }
 .mk-rail-brandtext b { color: var(--c-brand); font-size: var(--fs-md); letter-spacing: .04em; }
 .mk-rail-brandtext span { color: var(--c-dim); font-size: var(--fs-xs); }
 .mk-rail-sep { border: none; border-top: 1px solid var(--c-sep); margin: var(--space-2); }
+/* The runs scroll between the pinned top and the pinned destinations; the rail itself only
+   scrolls when a window is too short to hold both pinned parts. */
+.mk-rail-runs {
+  flex: 1 1 auto; min-height: calc(var(--scale-step) * 5); overflow-y: auto; scrollbar-width: thin;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  margin: 0 calc(var(--space-2) * -1); padding: 0 var(--space-2);
+}
+.mk-rail-fold { display: flex; flex-direction: column; gap: var(--space-1); }
+.mk-rail-fold summary { list-style: none; color: var(--c-dim); }
+.mk-rail-fold summary::-webkit-details-marker { display: none; }
+.mk-rail-fold summary::before { content: '▸'; font-size: var(--fs-sm); width: 1.05em; text-align: center; flex: none; }
+.mk-rail-fold[open] summary::before { content: '▾'; }
+.mk-rail-fold .mk-rail-item:not(summary) { padding-left: calc(var(--space-3) + 14px); }
 .mk-rail-item {
   text-decoration: none; box-sizing: border-box;
   display: flex; align-items: center; gap: var(--space-2); width: 100%;
@@ -365,7 +378,16 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-md); 
 .mk-group { display: flex; flex-direction: column; gap: var(--space-3); }
 .mk-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-md); }
 .mk-field span { color: var(--c-dim); }
-.mk-field input { padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 6px; background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: var(--fs-base); }
+.mk-field :is(input, select) { padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 6px; background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: var(--fs-base); min-width: 0; }
+.mk-field select { text-overflow: ellipsis; }
+/* a text field or select with its file-dialog button */
+.mk-filerow { display: flex; gap: var(--space-1); }
+.mk-filerow > :is(input, select) { flex: 1; }
+.mk-filerow > .mk-btn { flex: none; }
+.mk-btn.busy { opacity: .6; pointer-events: none; }
+/* the file input stays in the tab order (Enter / Space open the dialog); the label is the button */
+.mk-btn:has(> input[type=file]) { position: relative; }
+.mk-btn > input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); }
 .mk-field input.big { font-size: var(--fs-h1); }
 .mk-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--space-3); }
 .mk-opt { display: flex; flex-wrap: wrap; align-items: center; align-content: start; gap: var(--space-1) var(--space-2); padding: var(--space-3); border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card); font-size: var(--fs-md); cursor: pointer; }
@@ -509,7 +531,7 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-btn:active, .mk-gchip:active, .mk-tab:active { scale: .96; }
 .mk-btn:disabled:active { scale: 1; }
 .mk-btn, .mk-gchip, .mk-tab, .mk-rail-item { min-height: 40px; box-sizing: border-box; }
-.mk-btn:focus-visible, .mk-gchip:focus-visible, .mk-tab:focus-visible, .mk-rail-item:focus-visible, .mk-opt:focus-within {
+.mk-btn:focus-visible, .mk-btn:has(> input:focus-visible), .mk-gchip:focus-visible, .mk-tab:focus-visible, .mk-rail-item:focus-visible, .mk-opt:focus-within {
   outline: 2px solid var(--c-brand); outline-offset: 2px;
 }
 /* Concentric: a button inside a padded 8px/10px surface keeps its corners inside the parent's. */

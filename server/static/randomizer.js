@@ -3,8 +3,9 @@
  * `randomizerFields(form)` returns the state and methods the fields need; a component
  * spreads it into its own object. `form` is window.SLINK_RANDOMIZER: the options the
  * pipeline supports (upr_settings.OPTIONS — the same table its allowlist is computed
- * from, in display order with kind/choices/range), the jar found on this machine, and the
- * run's current pair when there is one. `rdraft.spec` is posted back as-is.
+ * from, in display order with kind/choices/range), the jar found on this machine, the ROMs
+ * found in the SLink folder, and the run's current pair when there is one. `rdraft.spec`
+ * is posted back as-is.
  *
  * `randomizePair(runId)` posts the draft to a run and resolves with the server's answer.
  * Every refusal names the setting or the file to fix, so the reason is surfaced verbatim.
@@ -23,7 +24,8 @@ function randomizerFields(form) {
       // same settings unless changed.
       spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
-    picker: { field: '', ext: '', dir: '', parent: null, entries: [] },
+    roms: form.roms || [],
+    uploading: '',
     groups() {
       var out = [], by = {};
       form.options.forEach(function (o) {
@@ -35,28 +37,53 @@ function randomizerFields(form) {
     resetSpec() { this.rdraft.spec = defaultSpec(form); },
     watchRandomizer() {
       var self = this;
+      this.autoPick();
       this.preflight();
       ['rdraft.jar', 'rdraft.rom_a', 'rdraft.rom_b'].forEach(function (k) {
         self.$watch(k, function () { self.preflight(); });
       });
+      // A different jar changes which pure ROMs are usable.
+      this.$watch('rdraft.jar', function () { self.scanRoms(); });
     },
     async preflight() {
       var q = new URLSearchParams({ jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b });
       try { this.pre = await (await fetch('/api/randomizer/status?' + q)).json(); } catch (_) { this.pre = null; }
     },
-    async browse(field, ext) {
-      this.picker.field = field; this.picker.ext = ext;
-      var cur = this.rdraft[field] || '';
-      var i = Math.max(cur.lastIndexOf('/'), cur.lastIndexOf('\\'));
-      await this.list(i > 0 ? cur.slice(0, i) : '');
+    async scanRoms() {
+      try {
+        var j = await (await fetch('/api/roms?' + new URLSearchParams({ jar: this.rdraft.jar }))).json();
+        if (j.ok) { this.roms = j.roms; this.autoPick(); }
+      } catch (_) { /* the list keeps what it had */ }
     },
-    async list(dir) {
-      var q = new URLSearchParams({ dir: dir || '', ext: this.picker.ext || '' });
-      var j = await (await fetch('/api/browse?' + q)).json();
-      if (!j.ok) { this.error = j.error; return; }
-      this.picker.dir = j.dir; this.picker.parent = j.parent; this.picker.entries = j.entries;
+    // Two clean dumps in the folder and nothing chosen yet: that is the pair. Set after the
+    // tick so the <option>s exist when x-model applies the value to the <select>.
+    autoPick() {
+      var self = this;
+      var clean = this.roms.filter(function (r) { return r.clean; });
+      if (!clean.length || this.rdraft.rom_a || this.rdraft.rom_b) return;
+      this.$nextTick(function () {
+        self.rdraft.rom_a = clean[0].path;
+        self.rdraft.rom_b = (clean[1] || clean[0]).path;
+      });
     },
-    pick(path) { this.rdraft[this.picker.field] = path; this.picker.field = ''; },
+    // The browser's own file dialog; the file lands in the SLink folder and is selected.
+    async upload(ev, field) {
+      var file = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      this.uploading = field; this.error = '';
+      try {
+        var body = new FormData(); body.append('file', file, file.name);
+        var j = await (await fetch('/api/roms', { method: 'POST', body: body })).json();
+        if (!j.ok) { this.error = j.error || 'Upload failed'; return; }
+        if (j.kind === 'jar') { this.rdraft.jar = j.path; }
+        else {
+          if (!this.roms.some(function (r) { return r.path === j.path; })) this.roms.push(j.rom);
+          this.rdraft[field] = j.path;
+        }
+      } catch (e) { this.error = String(e); }
+      finally { this.uploading = ''; }
+    },
     randomizeBody() {
       return { jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b, spec: this.rdraft.spec };
     },

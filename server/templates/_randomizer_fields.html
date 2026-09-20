@@ -1,11 +1,12 @@
 {#
   _randomizer_fields.html — the randomizer's inputs: every option in upr_settings.OPTIONS
   (rendered by group from rform.options — the table is the definition of what SLink
-  allows, so nothing is hand-listed here), the jar, the two clean ROMs with a picker, and
-  the preflight tags. Included inside an Alpine scope that carries the `randomizerFields()`
-  mixin (static/randomizer.js): `rform`, `rdraft`, `picker`, `pre`, `groups()`, `browse()`,
-  `list()`, `pick()`. Used by the run creator (the normal path) and by
-  /runs/{id}/randomizer (rebuilding a pair on an existing run).
+  allows, so nothing is hand-listed here), the two clean ROMs (found in the SLink folder,
+  or added through the browser's file dialog), the jar, and the preflight tags. Included
+  inside an Alpine scope that carries the `randomizerFields()` mixin (static/randomizer.js):
+  `rform`, `rdraft`, `roms`, `pre`, `groups()`, `scanRoms()`, `upload()`. Used by the run
+  creator (the normal path) and by /runs/{id}/randomizer (rebuilding a pair on an existing
+  run).
 #}
 <div class="mk-rgroups">
   <template x-for="g in groups()" :key="g.name">
@@ -47,28 +48,31 @@
 </div>
 <p class="mk-cap">Types, evolutions, movesets and base stats are never randomized: the species and type clauses have to mean the same thing on both cartridges. <button type="button" class="mk-linkbtn" @click="resetSpec()">Reset to defaults</button></p>
 
+{# The ROMs: whatever is in the SLink folder is offered as-is (found on load, again after
+   an upload); anything else comes in through the browser's own file dialog and lands in
+   <repo>/roms/. The jar is found by the pipeline; it can be replaced the same way. #}
 <div class="mk-optgrid">
+  <template x-for="pid in ['a', 'b']" :key="pid">
+    <label class="mk-field"><span x-text="'Player ' + pid.toUpperCase() + ' clean ROM'"></span>
+      <span class="mk-filerow">
+        <select x-model="rdraft['rom_' + pid]">
+          <option value="">— pick a ROM —</option>
+          <template x-for="r in roms" :key="r.path">
+            <option :value="r.path" :disabled="!r.clean" x-text="r.name + ' — ' + (r.clean ? r.title : (r.title || 'not a clean dump'))"></option>
+          </template>
+        </select>
+        <label class="mk-btn" :class="uploading === 'rom_' + pid ? 'busy' : ''"><input type="file" accept=".gb,.gbc" @change="upload($event, 'rom_' + pid)"><span x-text="uploading === 'rom_' + pid ? 'Adding…' : 'Add file…'"></span></label>
+      </span>
+    </label>
+  </template>
   <label class="mk-field"><span>Randomizer jar</span>
-    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.jar" placeholder="PokeRandoZX.jar" style="flex:1"><button type="button" class="mk-btn" @click="browse('jar', '.jar')">Browse</button></span></label>
-  <label class="mk-field"><span>Player A clean ROM</span>
-    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_a" placeholder="a clean Red / Blue / Yellow or PureRed / PureBlue / PureGreen dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_a', '.gb,.gbc')">Browse</button></span></label>
-  <label class="mk-field"><span>Player B clean ROM</span>
-    <span style="display:flex;gap:var(--space-1)"><input type="text" x-model="rdraft.rom_b" placeholder="a clean Red / Blue / Yellow or PureRed / PureBlue / PureGreen dump" style="flex:1"><button type="button" class="mk-btn" @click="browse('rom_b', '.gb,.gbc')">Browse</button></span></label>
+    <span class="mk-filerow">
+      <input type="text" x-model="rdraft.jar" placeholder="PokeRandoZX.jar — put it in the SLink folder, or pick it">
+      <label class="mk-btn" :class="uploading === 'jar' ? 'busy' : ''"><input type="file" accept=".jar" @change="upload($event, 'jar')"><span x-text="uploading === 'jar' ? 'Adding…' : 'Pick…'"></span></label>
+    </span>
+  </label>
 </div>
-
-<template x-if="picker.field">
-  <div class="mk-card" style="padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
-    <div style="display:flex;gap:var(--space-2);align-items:center"><code class="num" x-text="picker.dir" style="flex:1;overflow:hidden;text-overflow:ellipsis"></code>
-      <button type="button" class="mk-btn" :disabled="!picker.parent" @click="list(picker.parent)">Up</button>
-      <button type="button" class="mk-btn" @click="picker.field = ''">Close</button></div>
-    <div style="display:flex;flex-wrap:wrap;gap:var(--space-1);max-height:14em;overflow:auto">
-      <template x-for="e in picker.entries" :key="e.path">
-        <button type="button" class="mk-btn" @click="e.dir ? list(e.path) : pick(e.path)" x-text="(e.dir ? '\u{1F4C1} ' : '') + e.name"></button>
-      </template>
-      <span class="mk-sub" x-show="!picker.entries.length">nothing here</span>
-    </div>
-  </div>
-</template>
+<p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' ROM' : ' ROMs') + ' found in ' : 'No ROMs found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
 
 <div class="mk-preview-rules" x-show="pre">
   <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>

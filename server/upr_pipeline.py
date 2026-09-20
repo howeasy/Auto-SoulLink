@@ -40,6 +40,7 @@ import shutil
 import subprocess
 
 from server.adapters.gen1_rom_scan import (
+    GEN1_ROM_SIZE,
     RomScanError,
     evolution_graph,
     identify,
@@ -166,35 +167,45 @@ def find_upr_jar() -> str | None:
     return None
 
 
+def describe_rom(path: str, jar_fork: bool) -> dict:
+    """What one ROM file is, for a picker or a preflight: present, and a PINNED artifact
+    of a title the scanner knows -- a clean dump, or (pure family, A5) the byte-exact
+    SLink companion overlay, which is randomized as an overlay. `clean` is that pinned
+    verdict; the pure family needs the fork jar, and says so in `title` otherwise."""
+    info = {"path": path, "exists": bool(path) and os.path.isfile(path), "clean": None, "title": ""}
+    if not info["exists"]:
+        return info
+    try:
+        with open(path, "rb") as f:
+            rom = f.read()
+        if len(rom) != GEN1_ROM_SIZE:
+            info["clean"], info["title"] = False, "not a Gen 1 cartridge"
+            return info
+        ident = identify(rom)
+        if ident.get("foundation") == "gen1_purergb" and not jar_fork:
+            info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
+        elif ident.get("foundation") == "gen1_purergb":
+            info["clean"] = bool(ident.get("pinned", ident.get("clean")))
+            info["kind"] = ident.get("kind", "clean")
+            info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']}, {info['kind']})"
+        else:
+            info["clean"] = bool(ident.get("clean"))
+            info["kind"] = ident.get("kind", "clean")
+            info["title"] = ident.get("title") or ""
+    except Exception as exc:                                         # noqa: BLE001
+        info["clean"], info["title"] = False, f"unreadable: {exc}"
+    return info
+
+
 def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     """Everything that can be checked in milliseconds before anything is spent: is the
-    jar there, is Java on PATH, is each ROM present and a PINNED artifact of a title the
-    scanner knows -- a clean dump, or (pure family, A5) the byte-exact SLink companion
-    overlay, which is randomized as an overlay. randomize() checks the same things, but
-    600 s deep inside a worker. `roms[pid].clean` is that pinned verdict."""
-    from server.adapters.gen1_rom_scan import identify
+    jar there, is Java on PATH, is each ROM present and pinned (describe_rom).
+    randomize() checks the same things, but 600 s deep inside a worker."""
     out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
            "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
     out["jar_fork"] = out["jar_found"] and jar_is_fork(jar)
     for pid, path in sources.items():
-        info = {"path": path, "exists": bool(path) and os.path.isfile(path),
-                "clean": None, "title": ""}
-        if info["exists"]:
-            try:
-                with open(path, "rb") as f:
-                    ident = identify(f.read())
-                if ident.get("foundation") == "gen1_purergb" and not out["jar_fork"]:
-                    info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
-                elif ident.get("foundation") == "gen1_purergb":
-                    info["clean"] = bool(ident.get("pinned", ident.get("clean")))
-                    info["kind"] = ident.get("kind", "clean")
-                    info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']}, {info['kind']})"
-                else:
-                    info["clean"] = bool(ident.get("clean"))
-                    info["kind"] = ident.get("kind", "clean")
-                    info["title"] = ident.get("title") or ""
-            except Exception as exc:                                 # noqa: BLE001
-                info["clean"], info["title"] = False, f"unreadable: {exc}"
+        info = describe_rom(path, out["jar_fork"])
         out["roms"][pid] = info
         out["ok"] = out["ok"] and info["exists"] and bool(info["clean"])
     out["ok"] = out["ok"] and out["jar_found"] and out["java_found"]
