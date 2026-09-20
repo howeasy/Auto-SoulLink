@@ -39,6 +39,7 @@ import re
 import shutil
 import subprocess
 
+from server.adapters import variant_label
 from server.adapters.gen1_rom_scan import (
     GEN1_ROM_SIZE,
     RomScanError,
@@ -66,6 +67,22 @@ RANDOMIZE_TIMEOUT = 600
 # entry for the cartridge and a hand-added one would repack base stats, evolutions and
 # trainer AI on every save (docs/purergb/research/d1/FORK_BRIEF.md). With the stock jar the
 # family stays greyed with this message.
+# identify()'s `kind`, in the picker's words. The vanilla family has one pinned artifact
+# per title, the clean dump; the pure family has two, the pinned v2.7.6 build and the SLink
+# companion build (the native trade + START-menu panel linked in at source: README,
+# "Companion overlay"), and the fork randomizes either as itself. Anything else is a
+# cartridge that was already changed -- the randomizer starts only from a pinned one.
+KIND_WORDS = {
+    "clean": "clean dump",
+    "rand": "already modified, not a clean dump",
+}
+KIND_WORDS_PURE = {
+    "clean": "pinned pureRGB v2.7.6 build",
+    "overlay": "SLink companion build (native trade + START-menu panel)",
+    "rand": "already randomized",
+    "rand_overlay": "already randomized (companion build)",
+}
+
 PUREGB_RANDOMIZER_REFUSAL = (
     "pureRGB randomization needs SLink's UPR fork jar (4.6.1-slink1; build it with "
     "tools/build_upr_fork.py) — this jar is the stock 4.6.1 and has no pureRGB entry."
@@ -185,17 +202,16 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
         ident = identify(rom)
         # Which contract the cartridge belongs to: a pure pair and a vanilla pair are
         # different runs, and a run named up front admits one family only.
-        info["family"] = FAMILY_PURE if ident.get("foundation") == "gen1_purergb" else FAMILY_VANILLA
-        if ident.get("foundation") == "gen1_purergb" and not jar_fork:
+        pure = ident.get("foundation") == "gen1_purergb"
+        info["family"] = FAMILY_PURE if pure else FAMILY_VANILLA
+        info["kind"] = ident.get("kind", "clean")
+        info["clean"] = bool(ident.get("pinned", ident.get("clean")))
+        # `title` is what a person reads in the picker: the game, and which of the
+        # cartridges of that game this is, in plain words (KIND_WORDS).
+        words = KIND_WORDS_PURE if pure else KIND_WORDS
+        info["title"] = f"{variant_label(ident['variant'])} · {words.get(info['kind'], info['kind'])}"
+        if pure and not jar_fork:
             info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
-        elif ident.get("foundation") == "gen1_purergb":
-            info["clean"] = bool(ident.get("pinned", ident.get("clean")))
-            info["kind"] = ident.get("kind", "clean")
-            info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']}, {info['kind']})"
-        else:
-            info["clean"] = bool(ident.get("clean"))
-            info["kind"] = ident.get("kind", "clean")
-            info["title"] = ident.get("title") or ""
     except Exception as exc:                                         # noqa: BLE001
         info["clean"], info["title"] = False, f"unreadable: {exc}"
     return info

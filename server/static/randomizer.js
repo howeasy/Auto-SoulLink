@@ -61,11 +61,28 @@ function randomizerFields(form) {
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
     familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : ''; },
-    // Why a cartridge is greyed, in the option's own words.
+    // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
-      if (r.clean && this.family) return r.title + ' — ' + this.familyLabel(r.family) + ', this run is ' + this.familyLabel(this.family);
+      if (r.clean && this.family) return r.title + ' (' + this.familyLabel(r.family) + '; this run is ' + this.familyLabel(this.family) + ')';
       return r.title || 'not a clean dump';
+    },
+    // The list, grouped: what this run can take first, then the other family, then the rest.
+    romGroups() {
+      var self = this, groups = [];
+      function add(label, test) {
+        var rs = self.roms.filter(test);
+        if (rs.length) groups.push({ label: label, roms: rs });
+      }
+      if (this.family) {
+        add(this.familyLabel(this.family) + ' — this run', function (r) { return self.usable(r); });
+        add('other family', function (r) { return r.clean && !self.usable(r); });
+      } else {
+        add('pureRGB', function (r) { return r.clean && r.family === 'gen1_purergb'; });
+        add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
+      }
+      add('not usable', function (r) { return !r.clean; });
+      return groups;
     },
     // The creator's game chip changed: a pick of the wrong family goes, and the pair is
     // chosen again from what fits.
