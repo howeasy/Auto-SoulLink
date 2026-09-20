@@ -1228,6 +1228,63 @@ def test_a_same_key_innocent_sharing_only_the_moves_is_never_adopted(world):
     assert world.events("memorialize_done") == []
 
 
+def test_ambiguity_seen_at_the_change_is_latched_even_after_the_twin_situation_resolves(world):
+    """Review cx-1a22cbbd: A and an indistinguishable twin B are both present when the change is
+    captured (before the rejection); A is then edited so only B still matches the frozen
+    evidence. B must not become the sole match: refused, B untouched (real box module)."""
+    rng = random.Random(17)
+    world.seed_party([_mon(rng, 0x99, nick="ONE", dvs=0x1234, ot_id=0x1234),
+                      _mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    world.connect()
+    world.step(60)
+    old = codec.key(world.party()[0])
+    _apex_fire(world, 0, _dv_addr(world, 0))
+    world.step(2)
+    new = codec.key(world.party()[0])
+    party = world.party()
+    twin = dict(party[0], nick="ONE")           # B: same key, nickname and moves as A
+    world.seed_party([dict(party[0], nick="ONE"), twin])
+    world.reply({"cmd": "key_change_rejected", "old_key": old, "new_key": new, "reason": "collision"})
+    world.step()                                 # the rejection observes the twin: latched
+    assert world.client.retired_alias[old].ambiguous is True
+    a_edited = dict(party[0], nick="ONE")
+    a_edited["moves"] = [0x22, 0x21, 0x2D, 0x00]
+    world.seed_party([a_edited, twin])           # only B still matches the frozen evidence
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert world.events("memorialize_done") == []
+    assert any("indistinguishable" in line for line in world.logs)
+
+
+def test_ambiguity_seen_at_a_resolution_is_latched_when_the_real_record_leaves(world):
+    """Review cx-1a22cbbd: the twin appears after the rejection; a first retirement attempt sees
+    two matches (refused, latched); A then leaves the party; the next attempt must still refuse
+    rather than retire the surviving twin (real box module)."""
+    rng = random.Random(18)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    twin = dict(party[0], nick="ONE")
+    world.seed_party([dict(party[0], nick="ONE"), twin])
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": old})
+    world.step(2)
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert world.client.retired_alias[old].ambiguous is True
+    c_mon = _mon(rng, 0xB1, nick="SPARE", dvs=0x3333, ot_id=0x1234)
+    world.seed_party([twin, c_mon])              # A left; B is now the only record with the key
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old, old]
+    assert world.events("memorialize_done") == []
+
+
 def test_a_wram_clear_forgets_the_retirement_alias(world):
     """Review cx-e606e6a3 (plausible P1): after a reset the record the alias pointed at is gone;
     a reloaded pre-change save holds the old key again and the server's re-queued retirement

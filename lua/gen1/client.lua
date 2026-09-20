@@ -348,25 +348,38 @@ function Client.new(p)
     -- failure reply -- never re-identified by similarity: a partial match cannot tell "the
     -- same record after one edit" from "the record left and an unrelated one shares a field"
     -- (review cx-c63e4289). Documented residual: such a retirement needs manual resolution.
+    -- Ambiguity is LATCHED, never recomputed away: once two records have been seen carrying
+    -- the new key and matching the evidence (at the key_change capture, at the rejection, or at
+    -- any later resolution), the alias stays ambiguous even if one of them is later edited or
+    -- leaves the party: a shrinking candidate set must not authorise the retirement of the
+    -- survivor (review cx-1a22cbbd). Returns the sole matching record, or nil + reason.
+    local function observe_alias(a, party)
+        local slot, mon, n = nil, nil, 0
+        for _, m in ipairs(party) do
+            if mon_key(m) == a.new_key and matches_evidence(m, a.evidence) then
+                n = n + 1
+                slot, mon = m.slot, m
+            end
+        end
+        if n > 1 then a.ambiguous = true end
+        if a.ambiguous then return nil, nil, "ambiguous key (indistinguishable duplicate)" end
+        if n == 0 then return nil, nil, "retired record not found" end
+        return slot, mon
+    end
     -- The one identity resolver: dispatch (handle_command), battle writes and the deferred
     -- checkpoint all go through here. A key the server still tracks after a REJECTED
     -- key_change resolves to the record the cartridge physically holds: among the records
     -- carrying the new key, exactly one must match the evidence snapshotted when the change
-    -- was observed; none or several = refused as ambiguous (nothing is guessed).
+    -- was observed and no second one may ever have been seen; anything else = refused
+    -- (nothing is guessed).
     local function find_party_slot(key)
         local party = current_party()
         if not party then return nil end
         local r = self.retired_alias[key]
         if r then
-            local slot, mon
-            for _, m in ipairs(party) do
-                if mon_key(m) == r.new_key and matches_evidence(m, r.evidence) then
-                    if slot then return nil, nil, party, "ambiguous key (indistinguishable duplicate)" end
-                    slot, mon = m.slot, m
-                end
-            end
+            local slot, mon, why = observe_alias(r, party)
             if slot then return slot, mon, party end
-            return nil, nil, party, "retired record not found"
+            return nil, nil, party, why
         end
         local slot, mon
         for _, m in ipairs(party) do
@@ -441,7 +454,9 @@ function Client.new(p)
                 -- the cartridge cannot be rolled back (the DVs / species are already written), so
                 -- the retirement the server queues under the OLD key has to find the mon by
                 -- the key it physically holds now; cleared once its memorial lands
-                self.retired_alias[a.old_key] = { new_key = a.new_key, evidence = a.evidence }
+                self.retired_alias[a.old_key] = { new_key = a.new_key, evidence = a.evidence, ambiguous = a.ambiguous }
+                local party = current_party()
+                if party then observe_alias(self.retired_alias[a.old_key], party) end
                 self.key_alias = nil
             end
             log("[SLink-gen1] key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
@@ -1036,6 +1051,7 @@ function Client.new(p)
                 -- A1 alias-until-ack: BOTH keys stay known until key_change_ack/_rejected
                 self.known_keys[key] = true
                 self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = self.frame }
+                observe_alias(self.key_alias, party)   -- a twin present now latches ambiguity for good
                 send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
                                      reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname })
                 if pc.kind == "transform" and pc.old_hp == 0 then
