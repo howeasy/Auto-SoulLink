@@ -2068,7 +2068,7 @@ def _publish_species(w, slot, species, nick):
     """What the engine has done by the time the site runs: species byte and struct rewritten."""
     party = w.party()
     party[slot]["species"] = species
-    for i, m in enumerate(party):
+    for _i, m in enumerate(party):
         m["nick"] = m["nickname"]
     party[slot]["nick"] = nick
     w.seed_party(party)
@@ -2296,7 +2296,7 @@ def test_evolution_old_key_ignores_a_boxed_mon_with_the_same_prefix(world):
     _seed_active_box(w, [boxed])
     w.connect()                                                 # hello rescans the box: both known
     w.step(3)
-    assert codec.key(boxed) in [str(k) for k in w.client.known_keys.keys()]
+    assert codec.key(boxed) in [str(k) for k in w.client.known_keys]
     old = codec.key(bulba)
     _publish_species(w, 0, 0x09, "BULBA")                       # Ivysaur
     w.fire("evolve")
@@ -2325,7 +2325,7 @@ def test_evolution_old_key_is_the_vanished_one_of_two_same_prefix_party_mons():
     w.step()
     kc = w.events("key_change")
     assert len(kc) == 1 and kc[0]["old_key"] == keys[0] and kc[0]["new_key"] == codec.key(w.party()[0])
-    assert keys[1] in [str(k) for k in w.client.known_keys.keys()], "the sibling that did not evolve stays known"
+    assert keys[1] in [str(k) for k in w.client.known_keys], "the sibling that did not evolve stays known"
     w.assert_all_conform()
 
 
