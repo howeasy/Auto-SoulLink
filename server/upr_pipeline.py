@@ -48,6 +48,8 @@ from server.adapters.gen1_rom_scan import (
     scan_base_stats,
 )
 from server.upr_settings import (
+    FAMILY_PURE,
+    FAMILY_VANILLA,
     UprSettingsError,
     categories_enabled,
     forbidden_enabled,
@@ -91,7 +93,6 @@ def jar_is_fork(jar: str) -> bool:
 def family_of(sources: dict[str, str]) -> str:
     """The randomizer family the pair belongs to (upr_settings.FAMILY_*); a pure/vanilla
     mix is refused because the two would need different contracts and could not link."""
-    from server.upr_settings import FAMILY_PURE, FAMILY_VANILLA
     families = {}
     for pid, path in sources.items():
         with open(path, "rb") as f:
@@ -182,6 +183,9 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             info["clean"], info["title"] = False, "not a Gen 1 cartridge"
             return info
         ident = identify(rom)
+        # Which contract the cartridge belongs to: a pure pair and a vanilla pair are
+        # different runs, and a run named up front admits one family only.
+        info["family"] = FAMILY_PURE if ident.get("foundation") == "gen1_purergb" else FAMILY_VANILLA
         if ident.get("foundation") == "gen1_purergb" and not jar_fork:
             info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
         elif ident.get("foundation") == "gen1_purergb":

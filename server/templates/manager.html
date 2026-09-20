@@ -216,7 +216,13 @@
       ports: window.SLINK_NEXT_PORTS,
       draft: { name: '', game: '', randomize: false, opts: { battle_calc: true, pc_trade_npc: true } },
       busy: false, error: '', stage: '',
-      init() { this.watchRandomizer(); },
+      init() {
+        var self = this;
+        this.watchRandomizer();
+        // The randomizer takes the family the game chip names (rform.game_family).
+        this.setFamily(window.SLINK_RANDOMIZER.game_family[this.draft.game]);
+        this.$watch('draft.game', function (g) { self.setFamily(window.SLINK_RANDOMIZER.game_family[g]); });
+      },
       gameLabel(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).label || key; },
       gameMembers(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).members || []; },
       support(key) { return (form.support[this.draft.game] || {})[key] || { ok: true, why: '' }; },

@@ -150,6 +150,16 @@ async def test_roms_are_found_in_the_project_folder_with_a_verdict(manager_clien
     assert j["roms"][0]["clean"] is False and j["roms"][0]["title"] == "not a Gen 1 cartridge"
 
 
+def test_a_cartridge_says_which_family_it_belongs_to():
+    """The picker greys a pure dump on a vanilla run and the reverse; that needs the family
+    on every described cartridge, not only on a pair (family_of)."""
+    from server.upr_pipeline import describe_rom
+    red = os.path.join(os.path.dirname(__file__), "..", "..", "patch", "build", "gen1_red.gb")
+    if not os.path.exists(red):
+        pytest.skip("patch/build/gen1_red.gb not present")
+    assert describe_rom(red, False)["family"] == "gen1_rby"
+
+
 @pytest.mark.asyncio
 async def test_uploaded_rom_lands_in_roms_and_a_same_named_different_file_is_kept(manager_client, tmp_path, monkeypatch):
     from server import manager

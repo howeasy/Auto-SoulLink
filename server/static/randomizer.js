@@ -25,6 +25,9 @@ function randomizerFields(form) {
       spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
     roms: form.roms || [],
+    // The family this run takes (upr_settings.FAMILY_*): fixed on a run's page, follows the
+    // game chip in the creator (setFamily). null = any Gen 1 cartridge.
+    family: form.family || null,
     uploading: '',
     groups() {
       var out = [], by = {};
@@ -55,15 +58,35 @@ function randomizerFields(form) {
         if (j.ok) { this.roms = j.roms; this.autoPick(); }
       } catch (_) { /* the list keeps what it had */ }
     },
-    // Two clean dumps in the folder and nothing chosen yet: that is the pair. Set after the
+    // A cartridge this run can take: clean, and of its family when it names one.
+    usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : ''; },
+    // Why a cartridge is greyed, in the option's own words.
+    romNote(r) {
+      if (this.usable(r)) return r.title;
+      if (r.clean && this.family) return r.title + ' — ' + this.familyLabel(r.family) + ', this run is ' + this.familyLabel(this.family);
+      return r.title || 'not a clean dump';
+    },
+    // The creator's game chip changed: a pick of the wrong family goes, and the pair is
+    // chosen again from what fits.
+    setFamily(f) {
+      var self = this;
+      this.family = f || null;
+      ['rom_a', 'rom_b'].forEach(function (k) {
+        var r = self.roms.find(function (x) { return x.path === self.rdraft[k]; });
+        if (r && !self.usable(r)) self.rdraft[k] = '';
+      });
+      this.autoPick();
+    },
+    // Two usable dumps in the folder and nothing chosen yet: that is the pair. Set after the
     // tick so the <option>s exist when x-model applies the value to the <select>.
     autoPick() {
       var self = this;
-      var clean = this.roms.filter(function (r) { return r.clean; });
-      if (!clean.length || this.rdraft.rom_a || this.rdraft.rom_b) return;
       this.$nextTick(function () {
-        self.rdraft.rom_a = clean[0].path;
-        self.rdraft.rom_b = (clean[1] || clean[0]).path;
+        var ok = self.roms.filter(function (r) { return self.usable(r); });
+        if (!ok.length || self.rdraft.rom_a || self.rdraft.rom_b) return;
+        self.rdraft.rom_a = ok[0].path;
+        self.rdraft.rom_b = (ok[1] || ok[0]).path;
       });
     },
     // The browser's own file dialog; the file lands in the SLink folder and is selected.

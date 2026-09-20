@@ -58,7 +58,7 @@
         <select x-model="rdraft['rom_' + pid]">
           <option value="">— pick a ROM —</option>
           <template x-for="r in roms" :key="r.path">
-            <option :value="r.path" :disabled="!r.clean" x-text="r.name + ' — ' + (r.clean ? r.title : (r.title || 'not a clean dump'))"></option>
+            <option :value="r.path" :disabled="!usable(r)" x-text="r.name + ' — ' + romNote(r)"></option>
           </template>
         </select>
         <label class="mk-btn" :class="uploading === 'rom_' + pid ? 'busy' : ''"><input type="file" accept=".gb,.gbc" @change="upload($event, 'rom_' + pid)"><span x-text="uploading === 'rom_' + pid ? 'Adding…' : 'Add file…'"></span></label>
@@ -72,7 +72,7 @@
     </span>
   </label>
 </div>
-<p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' ROM' : ' ROMs') + ' found in ' : 'No ROMs found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
+<p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' cartridge' : ' cartridges') + ' found in ' : 'No cartridges found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-text="family ? ' — this run takes ' + familyLabel(family) + ' ones' : ''"></span><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
 
 <div class="mk-preview-rules" x-show="pre">
   <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>

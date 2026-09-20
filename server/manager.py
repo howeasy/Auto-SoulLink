@@ -76,6 +76,13 @@ GAMES = [
 ]
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
+# The randomizer contract a Gen 1 game names (upr_settings.FAMILY_*): a pure run takes pure
+# cartridges only, a vanilla run vanilla ones -- the two cannot link.
+GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb"}
+
+
+def _game_family(game: str | None) -> str | None:
+    return GAME_FAMILY.get(game or "")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -203,10 +210,27 @@ log = logging.getLogger("slink.manager")
 # ── Paths ───────────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 MANAGER_DIR  = os.path.join(PROJECT_ROOT, "data", "runs")
-# Where the run creator looks for clean ROMs, and where a ROM picked in the browser lands.
+# Where the run creator looks for cartridges: the SLink folder, roms/ (where a ROM picked
+# in the browser lands), patch/build/ (the companion builds) and the .cache/ folders the
+# pureRGB tooling builds the pinned pure cartridges and their overlays into -- a git
+# worktree has no .cache of its own, so it is looked for upward like find_upr_jar does.
 # .gitignore already refuses every *.gb / *.gbc / *.gba anywhere in the repo.
 ROM_UPLOAD_DIR = os.path.join(PROJECT_ROOT, "roms")
-ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR)
+
+
+def _cache_rom_dirs() -> list[str]:
+    out, d = [], os.path.normpath(PROJECT_ROOT)
+    for _ in range(6):
+        out += [c for sub in ("purergb", "purergb-overlay-staged")
+                if os.path.isdir(c := os.path.join(d, ".cache", sub))]
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return out
+
+
+ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
 ROM_EXTS = (".gb", ".gbc")
 UPLOAD_MAX = 64 << 20
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
@@ -765,6 +789,10 @@ class RunManager:
             "jar_fork": bool(jar) and jar_is_fork(jar),
             "roms": self._scan_roms(jar),
             "roms_dir": PROJECT_ROOT,
+            # Which cartridges this run can take: the family its game names (the creator
+            # follows the game chip through game_family instead).
+            "family": _game_family(run.get("game")) if run else None,
+            "game_family": GAME_FAMILY,
             "current": run.get("randomizer") if run else None,
         }
 
@@ -981,13 +1009,21 @@ class RunManager:
         # is by construction one the pipeline admits. The family (vanilla / pureRGB) comes
         # from the ROMs: a pure pair gets every tweak turned off (the fork offers none).
         spec, categories = body.get("spec"), body.get("categories")
+        family = FAMILY_VANILLA
+        if rom_a and rom_b and os.path.isfile(rom_a) and os.path.isfile(rom_b):
+            try:
+                family = family_of({"a": rom_a, "b": rom_b})
+            except Exception as exc:                      # noqa: BLE001
+                return web.json_response({"ok": False, "error": str(exc)}, status=400)
+            # A run named up front admits one family; a pair from the other would be
+            # refused at the first hello, so refuse it here, where it can be fixed.
+            wanted = _game_family(run.get("game"))
+            if wanted and wanted != family:
+                return web.json_response({"ok": False, "error": (
+                    f"this run is {GAME_LABELS[run['game']]}; these are "
+                    f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
+                    f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
         if (spec is not None or categories is not None) and not settings:
-            family = FAMILY_VANILLA
-            if rom_a and rom_b and os.path.isfile(rom_a) and os.path.isfile(rom_b):
-                try:
-                    family = family_of({"a": rom_a, "b": rom_b})
-                except Exception as exc:                      # noqa: BLE001
-                    return web.json_response({"ok": False, "error": str(exc)}, status=400)
             try:
                 if spec is not None:
                     if not isinstance(spec, dict):

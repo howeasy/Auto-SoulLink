@@ -107,6 +107,25 @@ async def test_a_pipeline_refusal_is_a_400_with_its_reason(manager_dir, tmp_path
 
 
 @pytest.mark.asyncio
+async def test_a_pure_run_refuses_a_vanilla_pair_before_spending_anything(manager_dir, monkeypatch):
+    """The run's game names the family its players will connect with; a pair from the
+    other family would be refused at the first hello, after the randomizer ran. Refuse it
+    here, by name, whatever the settings source."""
+    _roms()
+    mgr._update_run("run_test", game="gen1_purergb")
+    calls = []
+    monkeypatch.setattr(mgr, "_spawn_run", None, raising=False)
+    import server.upr_pipeline as pipeline
+    monkeypatch.setattr(pipeline, "prepare_pair", lambda *a, **k: calls.append(a))
+    for body in ({"jar": __file__, "settings": __file__, "rom_a": _RED, "rom_b": _BLUE},
+                 {"jar": __file__, "categories": ["wild"], "rom_a": _RED, "rom_b": _BLUE}):
+        status, out = await _post(body)
+        assert status == 400 and "PureRed" in out["error"] and "vanilla" in out["error"], out
+    assert not calls, "nothing was randomized"
+    assert not (manager_dir / "run_test" / "settings.rnqs").exists()
+
+
+@pytest.mark.asyncio
 async def test_a_spec_body_writes_the_settings_file_the_form_asked_for(manager_dir, monkeypatch):
     """The form posts its options, not a file; the manager writes settings.rnqs from them
     through the same builder the allowlist is computed from, then runs the pipeline on it."""
