@@ -174,9 +174,26 @@ function Client.new(p)
         return "", "map_" .. tostring(map)
     end
 
+    -- The last two party reads that DECODED, by frame: which keys were party members before a
+    -- given engine site fired. An evolution retires a key, and the only honest witness for
+    -- "which key" is a party read taken BEFORE the species was published -- a read in the same
+    -- frame as the site (validate/tick run after the hook) already shows the new species.
+    local party_reads = {}
+    local function remember_party(party)
+        local keys = {}
+        for _, m in ipairs(party) do keys[mon_key(m)] = true end
+        if party_reads[1] and party_reads[1].frame == self.frame then party_reads[1].keys = keys
+        else table.insert(party_reads, 1, { frame = self.frame, keys = keys }); party_reads[3] = nil end
+    end
+    local function party_keys_before(frame_no)
+        for _, r in ipairs(party_reads) do if r.frame < frame_no then return r.keys end end
+        return nil
+    end
+
     local function current_party()
         local party, why = reads.read_party()
         if not party then return nil, why end
+        remember_party(party)
         return party
     end
 
@@ -591,11 +608,16 @@ function Client.new(p)
     end
 
     -- The key an evolved mon HAD: same DVs and OT (key prefix "DDDD:OOOO:", reads.lua:185-188),
-    -- a different species, known to this client, and no longer anywhere in the party. Refuses
-    -- (nil, why) rather than guessing when zero or several known keys answer to the prefix.
-    local function evolved_from(party, new_key)
+    -- a different species, a PARTY member on the last read before the site fired, and no
+    -- longer anywhere in the party. Candidates come from that read, not from known_keys:
+    -- known_keys also holds the PC (hello/rescan), and a boxed mon that shares the party mon's
+    -- DVs and OT (the two starters of a duo run do) made the prefix ambiguous and the
+    -- migration was refused, leaving the link on the dead key (Codex cross-review, FIX-EVO-2).
+    -- Refuses (nil, why) rather than guessing when zero or several keys still answer.
+    local function evolved_from(party, new_key, sig_frame)
         local prefix, found = new_key:sub(1, 10), nil
-        for k in pairs(self.known_keys) do
+        local pool = party_keys_before(sig_frame) or self.known_keys
+        for k in pairs(pool) do
             if k ~= new_key and k:sub(1, 10) == prefix and not holds_key(party, k) then
                 if found then return nil, "ambiguous old key" end
                 found = k
@@ -727,10 +749,24 @@ function Client.new(p)
             elseif self.pending_change and self.pending_change.kind == "npc_trade" then
                 -- already tracking the trade; the key_change settles it
             else
+                -- Freshness witness (FIX-EVO-2, Codex cross-review): the record the engine is
+                -- about to write lands in ONE known slot -- the party slot wPartyCount named at
+                -- AddPartyMon entry (add_mon.asm:11-27 publish count and species before
+                -- AskName), or box slot 0 (SendNewMonToBox shifts the box and inserts at the
+                -- front, item_effects.asm:2649-2760). That slot's bytes at this instant are
+                -- whatever was there before: after a deposit's compaction (remove_mon.asm:59-107)
+                -- the old last record survives intact and, once its key has been retired by an
+                -- evolution, reads as an unknown mon of the right species the moment the count
+                -- is published. Only a record that DIFFERS from this snapshot is the catch.
+                local slot = (k == "capture_box") and 0 or (pt.party_count or 0)
+                local base, size
+                if k == "capture_box" then base, size = profile.ram.wBoxMons, d.box_struct_size
+                else base, size = profile.ram.wPartyMons + slot * d.party_struct_size, d.party_struct_size end
                 self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle ~= 0,
                                         to_box = (k == "capture_box"),
                                         area_id = (self.battle and self.battle.static and self.battle.area_id) or area_id,
-                                        map = pt.map,
+                                        map = pt.map, slot = slot, witness_base = base, witness_size = size,
+                                        witness = hex_of(io.read_range(base, size, "System Bus")),
                                         -- stamped now: the demo battle can end before this settles
                                         demo = (self.battle and self.battle.demo) or false }
             end
@@ -844,7 +880,7 @@ function Client.new(p)
             local key, mon
             if party then key, mon = key_at(party, pt.which) end
             if key then
-                local old, why = evolved_from(party, key)
+                local old, why = evolved_from(party, key, sig.frame)
                 if old then
                     self.known_keys[old], self.known_keys[key] = nil, true
                     -- snapshot records carry name BYTES only (party_from_snapshot), so decode here
@@ -902,12 +938,17 @@ function Client.new(p)
         local party = current_party()
         if not party then return end
         if pc.kind == "acquire" then
+            -- The catch is the record in the witnessed slot (on_signal above), and only once
+            -- those bytes have moved: a stale record that merely became "unknown" is not one.
+            if pc.witness and hex_of(io.read_range(pc.witness_base, pc.witness_size, "System Bus")) == pc.witness then
+                return -- the slot still holds what was there at the signal
+            end
             local found = nil
-            if pc.to_box then
-                local box = reads.read_active_box()
-                if box then for _, m in ipairs(box) do if not self.known_keys[mon_key(m)] then found = m end end end
-            else
-                for _, m in ipairs(party) do if not self.known_keys[mon_key(m)] then found = m end end
+            local list = pc.to_box and reads.read_active_box() or party
+            if list then
+                for _, m in ipairs(list) do
+                    if (pc.slot == nil or m.slot == pc.slot) and not self.known_keys[mon_key(m)] then found = m end
+                end
             end
             if not found then return end -- not written yet; try next frame
             -- add_mon.asm:58-243 writes the struct AFTER the AskName prompt (:45-52), in the

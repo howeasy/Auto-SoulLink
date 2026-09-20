@@ -2217,3 +2217,133 @@ def test_party_mon_into_a_genuinely_full_party_still_fails_after_a_bounded_reque
     assert w.events("sync_retrieve_done") == [] and len(w.client.deferred) == 0
     assert len(w.party()) == 6 and boxed in _active_box_keys(w)
     w.assert_all_conform()
+
+
+# ── FIX-EVO-2 (Codex cross-review of 7616d9f) ────────────────────────────────────────────
+
+@pytest.mark.parametrize("title", sorted(DUMPS))
+def test_stale_compacted_record_is_not_a_capture_once_its_key_has_been_retired(title):
+    """Six mons; deposit slot 0 -> _RemovePokemon compacts (remove_mon.asm:59-107) and leaves
+    the OLD physical slot-5 record intact; the mon now in slot 4 evolves and its old key is
+    retired; then the SAME species is caught into the free sixth slot: AddPartyMon publishes
+    count and species (add_mon.asm:11-27) BEFORE AskName, so the stale record passes the
+    list/struct species check with an unknown key, level 20 and full HP. It must never be
+    reported; the capture is the record that replaces it."""
+    w = World(title)
+    rng = random.Random(51)
+    species = (0x99, 0xB1, 0xA5, 0xB0, 0x54, 0x7B)              # ... slot 5 = Caterpie L20
+    mons = [_mon(rng, s, level=20, nick=f"M{i}") for i, s in enumerate(species)]
+    w.seed_party(mons)
+    w.set_map(0x0C)
+    w.give_poke_ball()
+    w.connect()
+    w.step(60)
+    r = w.ram
+    stale = codec.key(mons[5])
+    # Bill's PC deposit of slot 0: MoveMon, then the compaction. seed_party writes five records
+    # and leaves physical slot 5 exactly as it was -- which is what the engine's shift does.
+    w.bus[r["wMoveMonType"]], w.bus[r["wWhichPokemon"]] = 1, 0
+    w.fire("move_mon")
+    _seed_active_box(w, [_boxed(mons[0])])
+    w.seed_party(mons[1:])
+    w.step(3)
+    assert [codec.key(m) for m in w.party()] == [codec.key(m) for m in mons[1:]]
+    assert bytes(w.bus[r["wPartyMons"] + 5 * 44:r["wPartyMons"] + 6 * 44]) == codec.encode_party_mon(mons[5]), \
+        "the model must keep the stale record the compaction leaves behind"
+    # the mon now in slot 4 (the old slot 5) evolves: its key is retired
+    _publish_species(w, 4, 0x7C, "M5")                          # Metapod
+    w.fire("evolve")
+    w.step(2)
+    kc = w.events("key_change")
+    assert len(kc) == 1 and kc[0]["old_key"] == stale and kc[0]["new_key"] == codec.key(w.party()[4])
+    n = len(w.events("capture"))
+    # a wild Caterpie is caught: AddPartyMon entry, then what it publishes before AskName
+    w.in_battle(0x7B, 0x7B, 4)
+    w.fire("wild_begin")
+    w.step()
+    w.bus[r["wMonDataLocation"]], w.bus[r["wCurPartySpecies"]] = 0, 0x7B
+    w.fire("add_party_mon")                                     # wPartyCount reads 5 here
+    w.bus[r["wPartyCount"]] = 6
+    w.bus[r["wPartySpecies"] + 5], w.bus[r["wPartySpecies"] + 6] = 0x7B, 0xFF
+    w.bus[r["wPartyMonOT"] + 55:r["wPartyMonOT"] + 66] = codec.encode_name("RED")
+    w.step(600)                                                 # the player is on the naming screen
+    assert w.events("capture")[n:] == [], "the stale level-20 record was reported as the catch"
+    assert w.events("no_catch") == []
+    caught = _mon(rng, 0x7B, level=4, nick="CATER")
+    base = r["wPartyMons"] + 5 * 44
+    w.bus[base:base + 44] = codec.encode_party_mon(caught)
+    w.bus[r["wPartyMonNicks"] + 55:r["wPartyMonNicks"] + 66] = codec.encode_name("CATER")
+    w.step(3)
+    caps = w.events("capture")[n:]
+    assert len(caps) == 1 and caps[0]["key"] == codec.key(caught) and caps[0]["level"] == 4
+    assert caps[0]["nickname"] == "CATER" and caps[0]["area_id"] == "route_1"
+    w.bus[r["wIsInBattle"]] = 0
+    w.fire("battle_end")
+    w.step(3)
+    assert w.events("no_catch") == [] and len(w.events("capture")) == n + 1
+    w.assert_all_conform()
+
+
+def test_evolution_old_key_ignores_a_boxed_mon_with_the_same_prefix(world):
+    """known_keys holds the PC too. A boxed Charmander with the party Bulbasaur's DVs and OT
+    (the two starters of a duo run) must not make the old key ambiguous: the candidate pool is
+    the party as last read before the site fired."""
+    w = world
+    bulba = w.party()[0]
+    boxed = _box_mon(random.Random(61), 0xB0, level=6)
+    boxed["dvs"], boxed["ot_id"] = dict(bulba["dvs"]), bulba["ot_id"]
+    assert codec.key(boxed)[:10] == codec.key(bulba)[:10]
+    _seed_active_box(w, [boxed])
+    w.connect()                                                 # hello rescans the box: both known
+    w.step(3)
+    assert codec.key(boxed) in [str(k) for k in w.client.known_keys.keys()]
+    old = codec.key(bulba)
+    _publish_species(w, 0, 0x09, "BULBA")                       # Ivysaur
+    w.fire("evolve")
+    w.step()
+    kc = w.events("key_change")
+    assert len(kc) == 1, [ln for ln in w.logs if "evolution" in ln]
+    assert kc[0]["old_key"] == old and kc[0]["new_key"] == codec.key(w.party()[0]) and kc[0]["new_species"] == 0x09
+    assert [ln for ln in w.logs if "ambiguous old key" in ln] == []
+    w.assert_all_conform()
+
+
+def test_evolution_old_key_is_the_vanished_one_of_two_same_prefix_party_mons():
+    w = World("red")
+    rng = random.Random(62)
+    bulba, charm = _mon(rng, 0x99, level=16, nick="BULBA"), _mon(rng, 0xB0, level=16, nick="CHAR")
+    charm["dvs"], charm["ot_id"] = dict(bulba["dvs"]), bulba["ot_id"]
+    w.seed_party([bulba, charm])
+    w.set_map(0x0C)
+    w.give_poke_ball()
+    w.connect()
+    w.step(3)
+    keys = [codec.key(m) for m in w.party()]
+    assert keys[0][:10] == keys[1][:10]
+    _publish_species(w, 0, 0x09, "BULBA")
+    w.fire("evolve")
+    w.step()
+    kc = w.events("key_change")
+    assert len(kc) == 1 and kc[0]["old_key"] == keys[0] and kc[0]["new_key"] == codec.key(w.party()[0])
+    assert keys[1] in [str(k) for k in w.client.known_keys.keys()], "the sibling that did not evolve stays known"
+    w.assert_all_conform()
+
+
+def test_evolution_with_no_prior_party_member_is_refused_and_logged(world):
+    """A genuine zero-candidate case: the record in the slot was never a party member on any
+    read before the site fired. No guess, one log line, nothing on the wire."""
+    w = world
+    w.connect()
+    w.step(3)
+    stranger = _mon(random.Random(63), 0x09, level=16, nick="WHO")
+    party = w.party()
+    for m in party:
+        m["nick"] = m["nickname"]
+    party[1] = stranger
+    w.seed_party(party)                                         # no engine signal for this change
+    w.bus[w.ram["wWhichPokemon"]] = 1
+    w.fire("evolve")
+    w.step()
+    assert w.events("key_change") == []
+    assert [ln for ln in w.logs if "old key unknown" in ln], w.logs[-5:]
+    w.assert_all_conform()
