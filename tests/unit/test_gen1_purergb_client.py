@@ -1027,3 +1027,33 @@ def test_a_rand_client_boots_on_the_clean_pack_files_and_hellos_its_kind():
     w.set_map(0x0C)
     w.connect()
     assert w.events("hello")[0]["artifact_kind"] == "rand"
+
+
+def test_a_rejected_key_change_retires_the_mon_under_the_key_it_physically_holds(world):
+    """Review cx-6aacc4f1 #1: after `key_change_rejected` the server retires the pair under the
+    OLD key (it never migrated), but the cartridge already holds the NEW key -- the DVs were
+    written by the game before the client could ask. The retirement `memorialize`/`force_faint`
+    name the old key; the client must find the mon by the key it physically carries, and reply
+    with the key the server tracks."""
+    rng = random.Random(7)
+    world.seed_party([_mon(rng, 0x99, nick="ONE", dvs=0x1234, ot_id=0x1234),
+                      _mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    world.connect()
+    world.step(60)
+    old = codec.key(world.party()[0])
+    _apex_fire(world, 0, _dv_addr(world, 0))
+    world.step(2)
+    new = codec.key(world.party()[0])
+    assert new != old and new.startswith("FFFF:")
+    world.reply({"cmd": "key_change_rejected", "old_key": old, "new_key": new, "reason": "collision"})
+    world.step()
+    assert world.client.retired_alias[old] == new
+    seen = []
+    world.client.boxes = world.lua.table(memorialize=lambda self, key: (seen.append(key), True)[1])
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": old})
+    world.step()
+    assert seen == [new], "the memorial must target the key the cartridge holds"
+    assert [e["key"] for e in world.events("memorialize_done")] == [old], \
+        "the reply names the key the server tracks"
+    assert old not in world.client.retired_alias, "the alias is spent once the memorial lands"

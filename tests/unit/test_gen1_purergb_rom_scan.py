@@ -325,3 +325,17 @@ def test_preflight_and_content_check_accept_an_overlay_source(tmp_path):
         _check_content(str(src), str(out))
     with pytest.raises(UprPipelineError, match="not a clean dump"):
         _check_content(str(rand_src), str(out))
+
+
+def test_identify_refuses_a_pure_rom_whose_engine_site_changed(pure_rom):
+    """Review cx-6aacc4f1 #3: a randomized artifact is admitted by anchors; a pure ROM matching
+    NEITHER base kind's anchors has a code byte changed and must not be reported as `rand`
+    against the clean base (the pipeline would then contract a ROM the Lua gate refuses)."""
+    from server.adapters.gen1_rom_scan import RomScanError
+    title, clean = pure_rom
+    sites = json.loads((DATA / "engine_signals.json").read_text(encoding="utf-8"))
+    site = sites["titles"][title]["sites"]["add_party_mon"]
+    broken = bytearray(_randomized(clean, title))
+    broken[site["rom_offset"]] ^= 0xFF
+    with pytest.raises(RomScanError, match="modified engine site"):
+        identify(bytes(broken))

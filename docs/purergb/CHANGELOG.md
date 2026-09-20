@@ -17,8 +17,8 @@ is a second Gen 1 *foundation* on the Soul Link platform: `game_id gen1_purergb`
 **PureRed / PureBlue / PureGreen**, on the same rewritten Lua client, codec, server and harness
 as vanilla Red/Blue/Yellow. Every game fact is generated from the pinned source and verified
 against a byte-reproducible build; nothing is hand-typed and nothing vanilla was weakened —
-`data/games/gen1_rby/*` regenerates byte-identical apart from one deliberately added symbol
-(§4.3), and every vanilla release lane re-ran green.
+`data/games/gen1_rby/*` regenerates byte-identical apart from two deliberate additions to
+`profile.json` (§4.3), and every vanilla release lane re-ran green.
 
 Three deliverables sit on top of the rules:
 
@@ -376,8 +376,12 @@ Read this section if you only play vanilla.
   capture — all with vanilla duo receipts (18/18 on the `gen1_new` lane).
 
 ### 4.3 Vanilla data and packaging
-- `data/games/gen1_rby/profile.json` gained one RAM symbol per title, `wBattleMonSpeed`
-  (`0640660`); nothing else in the vanilla pack changed.
+- `data/games/gen1_rby/profile.json` gained, per title, a `derived` block (`ball_items`,
+  `opp_id_offset`, `bag_capacity`, `base_stats_stride`, `dex_count`, `species_count`,
+  `rival_trainer_ids` — the vanilla literals the client used to carry, now extracted from pret with
+  source asserts, `6dcad63`) and one RAM symbol, `wBattleMonSpeed` (`0640660`). Every value equals
+  the literal it replaced (`test_gen1_facts_tables.py`, `test_gen1_profile.py`); nothing else in
+  the vanilla pack changed.
 - `tools/make_release.py --with-patch` bundles the three pure UPS files beside the vanilla
   Red/Blue ones.
 - `tools/verify_gen1_release.py` has 19 lanes (7 new); a release verdict needs all of them.
@@ -404,6 +408,10 @@ Read this section if you only play vanilla.
 | 9 | duo bag oracle | the link oracle read the bag at vanilla's SRAM offset on a pure pairing | `codec.for_foundation` (`ac8a30d`) |
 | 10 | pure duos | drivers constructed without the lane facts silently used vanilla's (menus, whiteout map, reconnect OT) | facts handed to every constructor; oracles pairing-aware (`589a4b3`, `79a4e1f`, `20b2a60`, `35e05cf`) |
 | 11 | documentation sweep | `/patcher`'s pure rows carried `patched_md5` literals from an earlier overlay build, so the page would have refused its own output | md5s sourced from the admission tables; pinned by `test_patcher_routes.py` (`91bbea6`) |
+| 12 | final review (Codex, cx-6aacc4f1) | after `key_change_rejected` the server retires the pair under the OLD key while the cartridge already holds the NEW one, so the retirement `memorialize` found no mon ("key not in party") and the changed mon stayed alive | client `retired_alias`: retirement commands resolve to the physical key, replies keep the server's key; regression in `test_gen1_purergb_client.py` |
+| 13 | final review (Codex) | the dead-key re-queue guarded `force_faint` and `memorialize` with one combined pending check, so a queued memorial suppressed the faint (and vice versa) | the two obligations are deduplicated separately (`server/state.py`); regression in `test_state.py` |
+| 14 | final review (Codex) | `identify()` reported a modified pure ROM matching NEITHER anchor set as `rand` against the clean base, so the pipeline could contract a ROM the Lua gate refuses | neither anchor set → `RomScanError`; regression in `test_gen1_purergb_rom_scan.py` |
+| 15 | final review (Codex) | changelog/release notes said the vanilla profile changed by one symbol only; it also gained the `derived` block (`6dcad63`) | wording corrected (§1, §4.3, release notes) |
 
 ---
 

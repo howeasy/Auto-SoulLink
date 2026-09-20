@@ -2700,11 +2700,19 @@ class SoulLinkState:
 
         # A2: a transformation never revives.  The link was already buried under the old
         # key, so the death is owed again under the new one.
-        if entry is not None and entry.status != LinkStatus.ALIVE \
-                and not self._has_pending_command(player_id, new_key, *DEATH_COMMANDS, "memorialize"):
-            self.queued_commands[player_id].append({"cmd": "force_faint", "key": new_key})
-            self._queue_memorialize(player_id, new_key)
-            log.info(f"[{player_id}] key_change on a buried link — re-queued death for {new_key[:8]}")
+        # Two obligations, deduplicated separately (review cx-6aacc4f1 #2): a queued memorial
+        # must not suppress the faint and a queued faint must not suppress the memorial.
+        if entry is not None and entry.status != LinkStatus.ALIVE:
+            owed = []
+            if not self._has_pending_command(player_id, new_key, *DEATH_COMMANDS):
+                self.queued_commands[player_id].append({"cmd": "force_faint", "key": new_key})
+                owed.append("force_faint")
+            if not self._has_pending_command(player_id, new_key, "memorialize"):
+                self._queue_memorialize(player_id, new_key)
+                owed.append("memorialize")
+            if owed:
+                log.info(f"[{player_id}] key_change on a buried link — re-queued "
+                         f"{'+'.join(owed)} for {new_key[:8]}")
 
         self._save()
 

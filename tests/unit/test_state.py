@@ -5656,3 +5656,22 @@ def test_multiple_gifts_in_same_area_each_link(tmp_path, monkeypatch):
     assert len(gift_links) == 2
     # The real area was never locked by either gift.
     assert state.area_states.get("vermilion_city") != AreaStatus.LINKED
+
+
+def test_key_change_on_a_buried_link_owes_the_faint_even_when_a_memorial_is_already_queued(tmp_path, monkeypatch):
+    """Review cx-6aacc4f1 #2: the two obligations are deduplicated separately -- a queued
+    memorialize(old) must not suppress the re-queued force_faint(new), and vice versa."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link(a_key="AAAA:1111", b_key="BBBB:2222", status=LinkStatus.DEAD)
+    state._queue_memorialize("a", "AAAA:1111")
+    cmds = state.handle_event("a", {"event": "key_change", "old_key": "AAAA:1111", "new_key": "CCCC:1111"})
+    cmds += state.handle_event("a", {"event": "tick"})
+    assert has_cmd(cmds, "force_faint", "CCCC:1111"), "the faint is owed under the new key"
+    assert sum(1 for c in cmds if c.get("cmd") == "memorialize" and c.get("key") == "CCCC:1111") == 1
+
+    state2 = make_state_with_link(a_key="AAAA:1111", b_key="BBBB:2222", status=LinkStatus.DEAD)
+    state2.queued_commands["a"].append({"cmd": "force_faint", "key": "AAAA:1111"})
+    cmds2 = state2.handle_event("a", {"event": "key_change", "old_key": "AAAA:1111", "new_key": "CCCC:1111"})
+    cmds2 += state2.handle_event("a", {"event": "tick"})
+    assert sum(1 for c in cmds2 if c.get("cmd") == "force_faint" and c.get("key") == "CCCC:1111") == 1
+    assert has_cmd(cmds2, "memorialize", "CCCC:1111"), "the memorial is owed even with a faint queued"

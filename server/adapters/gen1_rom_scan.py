@@ -231,10 +231,19 @@ def identify(rom: bytes) -> dict:
     # write touches it, so a valid dex permutation there means a pure cartridge. The base
     # kind is then whichever pack's anchors hold (overlay first: its sites are the
     # relocated ones, so a clean ROM never matches them); a ROM matching neither has a
-    # code byte changed and is reported against the clean base, as before.
+    # code byte changed and is refused.
     pure_title = _purergb_title_for_modified(rom, title)
     if pure_title is not None:
-        base = "overlay" if pure_anchors_hold(rom, pure_title, "overlay") else "clean"
+        if pure_anchors_hold(rom, pure_title, "overlay"):
+            base = "overlay"
+        elif pure_anchors_hold(rom, pure_title, "clean"):
+            base = "clean"
+        else:
+            # a pure dex order but a changed code byte: not the fork's output of either base,
+            # and the Lua gate would refuse it -- so the pipeline must too (review cx-6aacc4f1 #3)
+            raise RomScanError(
+                f"pureRGB {pure_title} ROM with a modified engine site: neither the clean nor "
+                f"the overlay anchor set holds (sha1 {sha1})")
         clean_sha1 = next(k for k, v in _load_purergb_admission().items()
                           if v.get("title") == pure_title and v.get("kind") == base)
         return {

@@ -152,6 +152,10 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
+        -- old_key -> the physical key the cartridge now holds, for a key_change the server
+        -- REJECTED: its retirement commands (force_faint / memorialize) name the old key the
+        -- server still knows, the mon's bytes carry the new one (review cx-6aacc4f1 #1)
+        retired_alias = {},
         deferred = {}, pending_battle_writes = {},
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
@@ -390,7 +394,13 @@ function Client.new(p)
             -- U5: the server kills the pair itself (force_faint/memorialize follow); here the
             -- alias is dropped and the player is told why
             local a = self.key_alias
-            if a and a.old_key == cmd.old_key then self.key_alias = nil end
+            if a and a.old_key == cmd.old_key then
+                -- the cartridge cannot be rolled back (the DVs / species are already written), so
+                -- the retirement the server queues under the OLD key has to find the mon by
+                -- the key it physically holds now; cleared once its memorial lands
+                self.retired_alias[a.old_key] = a.new_key
+                self.key_alias = nil
+            end
             log("[SLink-gen1] key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
             hud.show("IDENTITY CHANGE REFUSED: " .. tostring(cmd.reason or "collision"), 255, 64, 64, 600)
         elseif c == "pending_keys" then
@@ -560,10 +570,13 @@ function Client.new(p)
         local safe, why = safety.check(ws_profile, io)
         if not safe then return end
         local cmd = table.remove(self.deferred, 1)
+        -- the key the cartridge holds for cmd.key (a rejected key_change leaves the server on
+        -- the old key); replies keep cmd.key, which is what the server tracks
+        local phys = self.retired_alias[cmd.key] or cmd.key
         local ok, err = pcall(function()
             writes:arm("overworld")
             if cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
-                local slot, _, _, why = find_party_slot(cmd.key)
+                local slot, _, _, why = find_party_slot(phys)
                 if slot then
                     writes:faint_party_slot(slot)
                 else
@@ -574,11 +587,11 @@ function Client.new(p)
                         .. (why or "key not in party") .. " " .. tostring(cmd.key))
                 end
             elseif cmd.cmd == "box_mon" then
-                local slot, mon = find_party_slot(cmd.key)
+                local slot, mon = find_party_slot(phys)
                 if slot then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
                 -- `x and f()` keeps only f's first value: bind both explicitly
                 local done, reason = nil, "no box module"
-                if self.boxes then done, reason = self.boxes:deposit(cmd.key) end
+                if self.boxes then done, reason = self.boxes:deposit(phys) end
                 if not done then send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
                 else self:rescan_boxes() end
             elseif cmd.cmd == "party_mon" then
@@ -592,8 +605,10 @@ function Client.new(p)
                 else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
                 local done, reason = nil, "no box module"
-                if self.boxes then done, reason = self.boxes:memorialize(cmd.key) end
-                if done then send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
+                if self.boxes then done, reason = self.boxes:memorialize(phys) end
+                if done then
+                    send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
+                    self.retired_alias[cmd.key] = nil
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
