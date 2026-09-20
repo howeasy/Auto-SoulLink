@@ -200,7 +200,8 @@ def identify(rom: bytes) -> dict:
     build (kind "clean", ``clean`` True) and the SLink companion overlay (kind "overlay",
     ``clean`` False, ``pinned`` True, ``clean_sha1`` = the clean base's). A pure sha1 in
     neither is a modified pure ROM (the UPR fork's output, A3): its base kind is named by
-    the pack anchors (kind "rand" / "rand_overlay", ``pinned`` False).
+    the pack anchors (kind "rand" / "rand_overlay", ``pinned`` False); a pure ROM matching
+    neither anchor set has a changed code byte and raises RomScanError.
 
     ``pinned`` is what the randomizer pipeline may start from: a byte-exact admitted
     artifact, clean or overlay (A5: the overlay is randomized as an overlay).

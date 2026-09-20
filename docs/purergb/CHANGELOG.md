@@ -380,8 +380,10 @@ Read this section if you only play vanilla.
   `opp_id_offset`, `bag_capacity`, `base_stats_stride`, `dex_count`, `species_count`,
   `rival_trainer_ids` — the vanilla literals the client used to carry, now extracted from pret with
   source asserts, `6dcad63`) and one RAM symbol, `wBattleMonSpeed` (`0640660`). Every value equals
-  the literal it replaced (`test_gen1_facts_tables.py`, `test_gen1_profile.py`); nothing else in
-  the vanilla pack changed.
+  the literal it replaced (`test_gen1_facts_tables.py`, `test_gen1_profile.py`). The vanilla pack
+  also gained `gifts.json` (the Red prize table, emitted by `gen_gen1_gifts.py` for both
+  foundations; read by the pure adapter and the area-map generator only — `gen1_rby/area_map.json`
+  is unchanged). Nothing else in the vanilla pack changed.
 - `tools/make_release.py --with-patch` bundles the three pure UPS files beside the vanilla
   Red/Blue ones.
 - `tools/verify_gen1_release.py` has 19 lanes (7 new); a release verdict needs all of them.
@@ -412,6 +414,10 @@ Read this section if you only play vanilla.
 | 13 | final review (Codex) | the dead-key re-queue guarded `force_faint` and `memorialize` with one combined pending check, so a queued memorial suppressed the faint (and vice versa) | the two obligations are deduplicated separately (`server/state.py`); regression in `test_state.py` |
 | 14 | final review (Codex) | `identify()` reported a modified pure ROM matching NEITHER anchor set as `rand` against the clean base, so the pipeline could contract a ROM the Lua gate refuses | neither anchor set → `RomScanError`; regression in `test_gen1_purergb_rom_scan.py` |
 | 15 | final review (Codex) | changelog/release notes said the vanilla profile changed by one symbol only; it also gained the `derived` block (`6dcad63`) | wording corrected (§1, §4.3, release notes) |
+| 16 | final review (Fable, limited context) | a clean Red beside a companion-patched Blue (kind `named`) was refused as MIXED artifact kinds — a vanilla regression for the optional patch | `named` counts as `clean` in the mixed-kind check (the patch is per cartridge, announced per player); regression in `test_state_key_change_ack.py` |
+| 17 | final review (Codex, round 2) | the retirement alias resolved only in the deferred path and by key alone: `force_faint` dispatch/battle writes never saw it, and a duplicate of the new key in the party made the memorial ambiguous; a WRAM clear left a stale alias | one alias-aware `find_party_slot` (dispatch, battle, deferred) with a validated slot locator; the box module takes the slot hint; the alias map is cleared on WRAM clear |
+| 18 | final review (Fable) | comments claimed a non-pinned pureRGB build "cannot take" the vanilla-header path; it can, and is then refused by the vanilla site verification | `run.lua`, `gen1_rom_scan.py` docstring, CHANGELOG §7 corrected |
+| 19 | final review (Codex, round 3) | the retirement locator was a party slot: after a swap the duplicate of the new key sat at the recorded slot and would have been retired instead; the pending `key_alias` survived a WRAM clear, so a late rejection could re-create a retirement from the previous session | the locator is record evidence (nickname bytes + move set) that a swap cannot forge, refused when none or several records match; WRAM clear drops the pending alias and pending change too; the committed run kind is the base kind |
 
 ---
 
@@ -446,8 +452,9 @@ Read this section if you only play vanilla.
   playthrough**; the four mid-game duo scenarios named in the plan (`transform_new`, `apex_new`,
   `npc_trade_new`, `daycare_new`) need routes past Route 1 and rest on the APEX live gates and
   model replays.
-- One pinned pureRGB version (v2.7.6); any other version — older or newer — is refused by sha1
-  and by anchors, never mis-profiled.
+- One pinned pureRGB version (v2.7.6); any other version — older or newer — is refused: its sha1
+  and anchors admit nothing, the vanilla-header fallback then fails the vanilla pack's engine-site
+  verification, so it is never booted against the wrong addresses.
 - CGB console mode only (DMG/SGB unsupported); pureRGB pairs only with pureRGB of the same
   artifact kind (clean↔overlay and vanilla↔pure are refused); Cable Club trades between a
   vanilla and a pure cartridge are not supportable.

@@ -264,15 +264,23 @@ function B.new(profile, reads, io)
         return true
     end
 
-    local function party_source(key)
+    -- `slot_hint` (0-based party slot, optional): a caller that has already located the record
+    -- (client.lua find_party_slot's validated retirement locator) names it, so a duplicate of
+    -- the same key elsewhere in the party is not an ambiguity; the record at the hint must
+    -- still carry `key` or the hint is ignored.
+    local function party_source(key, slot_hint)
         local raw, why = read_wram(party)
         if not raw then return nil, why end
         local list
         list, why = entries(raw, party, false)
         if not list then return nil, why end
         local slot
-        slot, why = find(list, key)
-        if why then return nil, why end
+        if slot_hint and list[slot_hint + 1] and list[slot_hint + 1].key == key then
+            slot = slot_hint + 1
+        else
+            slot, why = find(list, key)
+            if why then return nil, why end
+        end
         return {raw = raw, list = list, slot = slot}
     end
     local function all_box_matches(key, current)
@@ -293,11 +301,11 @@ function B.new(profile, reads, io)
         return found
     end
 
-    function self.box_mon(key)
+    function self.box_mon(key, slot_hint)
         local current, why = current_box()
         if not current then return nil, why end
         local source
-        source, why = party_source(key)
+        source, why = party_source(key, slot_hint)
         if not source then return nil, why end
         local existing
         existing, why = all_box_matches(key, current)
@@ -457,13 +465,13 @@ function B.new(profile, reads, io)
         return true
     end
 
-    function self.memorialize(key, colon_key)
-        -- Accept both boxes.memorialize(key) and client boxes:memorialize(key).
-        if type(key) == "table" then key = colon_key end
+    function self.memorialize(key, colon_key, slot_hint)
+        -- Accept both boxes.memorialize(key[, hint]) and client boxes:memorialize(key[, hint]).
+        if type(key) == "table" then key = colon_key else slot_hint = colon_key end
         local current, why = current_box()
         if not current then return nil, why end
         local source
-        source, why = party_source(key)
+        source, why = party_source(key, slot_hint)
         if not source then return nil, why end
         local memorial = box_count - 1 -- sBox12: ram/sram.asm:44-49
         if not source.slot then
@@ -520,7 +528,7 @@ function B.new(profile, reads, io)
     -- Client-facing command aliases. The caller must select the *matching*
     -- species' base-stat record before withdraw; a national-dex keyed table
     -- cannot safely be indexed by this command's opaque identity key.
-    function self:deposit(key) return self.box_mon(key) end
+    function self:deposit(key, slot_hint) return self.box_mon(key, slot_hint) end
     function self:withdraw(key, stats, base_stats, nickname)
         return self.party_mon(key, base_stats, nickname, stats)
     end

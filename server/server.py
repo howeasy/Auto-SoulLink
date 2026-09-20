@@ -499,7 +499,13 @@ class SLinkServer:
             if want and got and got != want:
                 return (f"Mixed games: slot {player_id.upper()} runs {got}, "
                         f"this run is committed to {want}")
-        if self.state.artifact_kind and artifact_kind != self.state.artifact_kind:
+        # A vanilla cartridge the launcher admitted by header ("named": the optional companion
+        # patch, a randomized vanilla dump) is a clean-layout artifact -- the patch is per
+        # cartridge and announced per player (`panel`), so a clean Red beside a patched Blue is
+        # the ordinary vanilla pairing, not a mixed one (review: Fable 2026-09-20 #1).
+        base = {"named": "clean"}
+        got, want = base.get(artifact_kind, artifact_kind), base.get(self.state.artifact_kind, self.state.artifact_kind)
+        if want and got != want:
             return (f"Mixed artifact kinds: slot {player_id.upper()} runs a "
                     f"{artifact_kind!r} ROM, this run is committed to {self.state.artifact_kind!r}")
         return ""
@@ -1689,7 +1695,9 @@ class SLinkServer:
                 _dirty = True
                 log.info(f"Committed ROM type '{rom}' for this run")
             if not self.state.artifact_kind:
-                self.state.artifact_kind = msg.get("artifact_kind") or "clean"
+                # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact
+                self.state.artifact_kind = {"named": "clean"}.get(
+                    msg.get("artifact_kind") or "clean", msg.get("artifact_kind") or "clean")
                 _dirty = True
                 # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
                 # follow the committed kind from here on (base adapter: no-op).

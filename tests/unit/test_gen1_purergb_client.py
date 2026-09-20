@@ -1029,15 +1029,10 @@ def test_a_rand_client_boots_on_the_clean_pack_files_and_hellos_its_kind():
     assert w.events("hello")[0]["artifact_kind"] == "rand"
 
 
-def test_a_rejected_key_change_retires_the_mon_under_the_key_it_physically_holds(world):
-    """Review cx-6aacc4f1 #1: after `key_change_rejected` the server retires the pair under the
-    OLD key (it never migrated), but the cartridge already holds the NEW key -- the DVs were
-    written by the game before the client could ask. The retirement `memorialize`/`force_faint`
-    name the old key; the client must find the mon by the key it physically carries, and reply
-    with the key the server tracks."""
+def _reject_apex_change(world, extra=()):
+    """Party: slot 0 (the APEX target) + extras; APEX fires, the server rejects the change."""
     rng = random.Random(7)
-    world.seed_party([_mon(rng, 0x99, nick="ONE", dvs=0x1234, ot_id=0x1234),
-                      _mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    world.seed_party([_mon(rng, 0x99, nick="ONE", dvs=0x1234, ot_id=0x1234), *extra])
     world.connect()
     world.step(60)
     old = codec.key(world.party()[0])
@@ -1047,13 +1042,129 @@ def test_a_rejected_key_change_retires_the_mon_under_the_key_it_physically_holds
     assert new != old and new.startswith("FFFF:")
     world.reply({"cmd": "key_change_rejected", "old_key": old, "new_key": new, "reason": "collision"})
     world.step()
-    assert world.client.retired_alias[old] == new
+    return old, new
+
+
+def test_a_rejected_key_change_retires_the_mon_under_the_key_it_physically_holds(world):
+    """Review cx-6aacc4f1 #1: after `key_change_rejected` the server retires the pair under the
+    OLD key (it never migrated), but the cartridge already holds the NEW key -- the DVs were
+    written by the game before the client could ask. The retirement `memorialize`/`force_faint`
+    name the old key; the client must find the mon by the key it physically carries, and reply
+    with the key the server tracks."""
+    rng = random.Random(8)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    assert world.client.retired_alias[old].new_key == new
+    assert world.client.retired_alias[old].evidence.nick[1] == codec.encode_name("ONE")[0]
     seen = []
-    world.client.boxes = world.lua.table(memorialize=lambda self, key: (seen.append(key), True)[1])
+    world.client.boxes = world.lua.table(memorialize=lambda self, key, hint: (seen.append((key, hint)), True)[1])
     world.overworld_safe()
     world.reply({"cmd": "memorialize", "key": old})
     world.step()
-    assert seen == [new], "the memorial must target the key the cartridge holds"
-    assert [e["key"] for e in world.events("memorialize_done")] == [old], \
-        "the reply names the key the server tracks"
+    assert seen == [(new, 0)], "the memorial targets the key the cartridge holds, at the validated slot"
+    assert [e["key"] for e in world.events("memorialize_done")] == [old],         "the reply names the key the server tracks"
     assert old not in world.client.retired_alias, "the alias is spent once the memorial lands"
+
+
+def test_a_rejected_change_is_retired_even_when_its_new_key_is_duplicated_in_the_party(world):
+    """Review cx-e606e6a3: the very collision that gets a change rejected can sit in the same
+    party. The validated slot locator (the record the change was observed in still carries the
+    new key) picks the changed mon; the duplicate is untouched; the box module gets the hint."""
+    rng = random.Random(9)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    # now make slot 1 a byte-for-byte duplicate key of the changed slot 0
+    party = world.party()
+    dup = dict(party[1], species=party[0]["species"], ot_id=party[0]["ot_id"], dvs=party[0]["dvs"], nick="DUPE")
+    world.seed_party([dict(party[0], nick="ONE"), dup])   # party() decodes structs only: keep A's nickname
+    assert codec.key(world.party()[1]) == new
+    seen = []
+    world.client.boxes = world.lua.table(memorialize=lambda self, key, hint: (seen.append((key, hint)), True)[1])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old})     # ordinary dispatch, not the deferred path
+    world.step(2)
+    ram = world.ram
+    hp0 = world.bus[ram["wPartyMon1HP"]] * 256 + world.bus[ram["wPartyMon1HP"] + 1]
+    hp1 = world.bus[ram["wPartyMon1HP"] + 44] * 256 + world.bus[ram["wPartyMon1HP"] + 45]
+    assert hp0 == 0, "the changed mon (slot 0) is fainted through the alias-aware dispatch"
+    assert hp1 == world.party()[1]["hp"] and hp1 > 0, "the duplicate (slot 1) is untouched"
+    world.reply({"cmd": "memorialize", "key": old})
+    world.step()
+    assert seen == [(new, 0)], "the memorial names the validated slot despite the duplicate key"
+
+
+def test_a_swapped_duplicate_cannot_steal_the_retirement(world):
+    """Review cx-e54e6719 (b): after the change, mon A (changed, slot 0) and mon B (a duplicate
+    of the new key) are SWAPPED in the party before the retirement arrives. A slot locator
+    would retire B; the record evidence (nickname + moves) still finds A at its new slot."""
+    rng = random.Random(11)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    dup = dict(party[1], species=party[0]["species"], ot_id=party[0]["ot_id"], dvs=party[0]["dvs"], nick="DUPE")
+    world.seed_party([dup, dict(party[0], nick="ONE")])   # B first, A (the changed record) now at slot 1
+    assert codec.key(world.party()[0]) == new and codec.key(world.party()[1]) == new
+    seen = []
+    world.client.boxes = world.lua.table(memorialize=lambda self, key, hint: (seen.append((key, hint)), True)[1])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old})
+    world.step(2)
+    ram = world.ram
+    hp0 = world.bus[ram["wPartyMon1HP"]] * 256 + world.bus[ram["wPartyMon1HP"] + 1]
+    hp1 = world.bus[ram["wPartyMon1HP"] + 44] * 256 + world.bus[ram["wPartyMon1HP"] + 45]
+    assert hp1 == 0, "the changed record (now slot 1) is the one fainted"
+    assert hp0 > 0, "the duplicate that took its old slot is untouched"
+    world.reply({"cmd": "memorialize", "key": old})
+    world.step()
+    assert seen == [(new, 1)], "the memorial follows the record, not the slot"
+
+
+def test_an_indistinguishable_duplicate_refuses_the_retirement_instead_of_guessing(world):
+    """Two records with the same key, nickname and moves cannot be told apart: nothing is
+    written and the memorial is reported failed (the pathological same-cartridge duplicate)."""
+    rng = random.Random(12)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    twin = dict(party[0], nick="ONE")           # identical record: key, nickname, moves
+    world.seed_party([dict(party[0], nick="ONE"), twin])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    ram = world.ram
+    for off in (0, 44):
+        assert world.bus[ram["wPartyMon1HP"] + off] * 256 + world.bus[ram["wPartyMon1HP"] + off + 1] > 0
+    assert any("indistinguishable" in line for line in world.logs)
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+
+
+def test_a_rejection_arriving_after_a_wram_clear_creates_no_retirement_alias(world):
+    """Review cx-e54e6719 (c): the pending alias belongs to the cartridge session that ended
+    with the WRAM clear; a rejection delivered afterwards must not re-create a retirement
+    from that session's record."""
+    rng = random.Random(13)
+    world.seed_party([_mon(rng, 0x99, nick="ONE", dvs=0x1234, ot_id=0x1234)])
+    world.connect()
+    world.step(60)
+    old = codec.key(world.party()[0])
+    _apex_fire(world, 0, _dv_addr(world, 0))
+    world.step(2)
+    new = codec.key(world.party()[0])
+    assert world.client.key_alias is not None
+    world.bus[world.ram["wPlayerID"]] = 0
+    world.bus[world.ram["wPlayerID"] + 1] = 0
+    world.bus[world.ram["wPartyCount"]] = 0
+    world.step(61)
+    assert world.client.key_alias is None
+    world.reply({"cmd": "key_change_rejected", "old_key": old, "new_key": new, "reason": "collision"})
+    world.step()
+    assert dict(world.client.retired_alias) == {}
+
+
+def test_a_wram_clear_forgets_the_retirement_alias(world):
+    """Review cx-e606e6a3 (plausible P1): after a reset the record the alias pointed at is gone;
+    a reloaded pre-change save holds the old key again and the server's re-queued retirement
+    names it directly, so a stale alias must not redirect it."""
+    old, _new = _reject_apex_change(world)
+    assert old in world.client.retired_alias
+    world.bus[world.ram["wPlayerID"]] = 0
+    world.bus[world.ram["wPlayerID"] + 1] = 0
+    world.bus[world.ram["wPartyCount"]] = 0
+    world.step(61)                              # the next validate sees the cleared WRAM
+    assert dict(world.client.retired_alias) == {}

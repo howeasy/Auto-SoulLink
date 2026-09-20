@@ -298,6 +298,14 @@ function Client.new(p)
                 self.hello_sent = false
                 -- WRAM clear: the held panel belongs to the session that just ended
                 if self.panel then self.panel:clear() end
+                -- ...and so does every identity alias: the record each pointed at is gone with
+                -- the WRAM, and a reloaded pre-change save holds the OLD key again, which the
+                -- server's re-queued retirement then names directly. The PENDING alias goes too,
+                -- so a rejection that arrives after the clear cannot re-create a retirement
+                -- from a record of the previous session (review cx-e54e6719 c).
+                self.retired_alias = {}
+                self.key_alias = nil
+                self.pending_change = nil
             end
             if self.invalid_streak >= Client.MAX_INVALID and self.writes_enabled then
                 -- pause, never drop: the queues survive (an unreadable party is a transient the
@@ -322,9 +330,39 @@ function Client.new(p)
     -- Inbound commands then have no way to tell which mon the server meant, so the resolver
     -- refuses rather than guesses -- the same fail-closed rule boxes.lua:121-130 already applies.
     -- Returns slot, mon, party, why; `why` is "ambiguous key" when more than one slot matches.
+    local function same_bytes(a, b)
+        if not a or not b or #a ~= #b then return false end
+        for i = 1, #a do if a[i] ~= b[i] then return false end end
+        return true
+    end
+    -- What tells the changed record apart from a duplicate of its (new) key: the fields a
+    -- key_change never touches and a party swap cannot forge -- nickname bytes and the move
+    -- set. A slot is NOT evidence (the player can reorder the party between the change and the
+    -- retirement, review cx-e54e6719).
+    local function record_evidence(m) return { nick = m.nickname_bytes, moves = m.moves } end
+    local function matches_evidence(m, e)
+        return same_bytes(m.nickname_bytes, e.nick) and same_bytes(m.moves, e.moves)
+    end
+    -- The one identity resolver: dispatch (handle_command), battle writes and the deferred
+    -- checkpoint all go through here. A key the server still tracks after a REJECTED
+    -- key_change resolves to the record the cartridge physically holds: among the records
+    -- carrying the new key, exactly one must match the evidence snapshotted when the change
+    -- was observed; none or several = refused as ambiguous (nothing is guessed).
     local function find_party_slot(key)
         local party = current_party()
         if not party then return nil end
+        local r = self.retired_alias[key]
+        if r then
+            local slot, mon
+            for _, m in ipairs(party) do
+                if mon_key(m) == r.new_key and matches_evidence(m, r.evidence) then
+                    if slot then return nil, nil, party, "ambiguous key (indistinguishable duplicate)" end
+                    slot, mon = m.slot, m
+                end
+            end
+            if slot then return slot, mon, party end
+            return nil, nil, party, "retired record not found"
+        end
         local slot, mon
         for _, m in ipairs(party) do
             if mon_key(m) == key then
@@ -398,7 +436,7 @@ function Client.new(p)
                 -- the cartridge cannot be rolled back (the DVs / species are already written), so
                 -- the retirement the server queues under the OLD key has to find the mon by
                 -- the key it physically holds now; cleared once its memorial lands
-                self.retired_alias[a.old_key] = a.new_key
+                self.retired_alias[a.old_key] = { new_key = a.new_key, evidence = a.evidence }
                 self.key_alias = nil
             end
             log("[SLink-gen1] key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
@@ -570,13 +608,16 @@ function Client.new(p)
         local safe, why = safety.check(ws_profile, io)
         if not safe then return end
         local cmd = table.remove(self.deferred, 1)
-        -- the key the cartridge holds for cmd.key (a rejected key_change leaves the server on
-        -- the old key); replies keep cmd.key, which is what the server tracks
-        local phys = self.retired_alias[cmd.key] or cmd.key
+        -- the key the cartridge holds for cmd.key and, for a retired alias, the validated slot:
+        -- the box module takes both so a duplicate of the new key elsewhere cannot block the
+        -- retirement; replies keep cmd.key, which is what the server tracks
+        local r = self.retired_alias[cmd.key]
+        local phys, hint = r and r.new_key or cmd.key, nil
+        if r then hint = find_party_slot(cmd.key) end
         local ok, err = pcall(function()
             writes:arm("overworld")
             if cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
-                local slot, _, _, why = find_party_slot(phys)
+                local slot, _, _, why = find_party_slot(cmd.key)
                 if slot then
                     writes:faint_party_slot(slot)
                 else
@@ -587,11 +628,11 @@ function Client.new(p)
                         .. (why or "key not in party") .. " " .. tostring(cmd.key))
                 end
             elseif cmd.cmd == "box_mon" then
-                local slot, mon = find_party_slot(phys)
+                local slot, mon = find_party_slot(cmd.key)
                 if slot then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
                 -- `x and f()` keeps only f's first value: bind both explicitly
                 local done, reason = nil, "no box module"
-                if self.boxes then done, reason = self.boxes:deposit(phys) end
+                if self.boxes then done, reason = self.boxes:deposit(phys, hint) end
                 if not done then send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
                 else self:rescan_boxes() end
             elseif cmd.cmd == "party_mon" then
@@ -605,7 +646,7 @@ function Client.new(p)
                 else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
                 local done, reason = nil, "no box module"
-                if self.boxes then done, reason = self.boxes:memorialize(phys) end
+                if self.boxes then done, reason = self.boxes:memorialize(phys, hint) end
                 if done then
                     send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
                     self.retired_alias[cmd.key] = nil
@@ -980,7 +1021,7 @@ function Client.new(p)
             if key ~= pc.old_key then
                 -- A1 alias-until-ack: BOTH keys stay known until key_change_ack/_rejected
                 self.known_keys[key] = true
-                self.key_alias = { old_key = pc.old_key, new_key = key, since = self.frame }
+                self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = self.frame }
                 send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
                                      reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname })
                 if pc.kind == "transform" and pc.old_hp == 0 then

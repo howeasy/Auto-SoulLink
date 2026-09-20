@@ -428,3 +428,36 @@ class TestContractSha1:
     def test_no_contract_still_admits_everyone(self, tmp_path):
         srv = SLinkServer(data_dir=str(tmp_path))
         assert srv._decide_admission("a", {"rom_sha1": "b" * 40})["state"] == "admitted"
+
+
+@pytest.mark.asyncio
+async def test_a_companion_patched_vanilla_cartridge_pairs_with_a_clean_one(tmp_path):
+    """Fable review 2026-09-20 #1: the optional Red/Blue companion patch boots as kind "named"
+    (no admission row); it is a clean-layout artifact announced per player, so a clean Red
+    beside a patched Blue is the ordinary vanilla pairing -- not MIXED artifact kinds. A pure
+    clean beside a pure overlay stays refused (the native trade is run-level)."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        reply = await send({"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
+                            "ot_id": "30B8", "has_pokeballs": True, "party": [], "artifact_kind": "clean"})
+        assert not _mixed(reply) and srv.state.artifact_kind == "clean"
+        reply = await send({"event": "hello", "player": "b", "rom_type": "blue", "trainer_name": "Bob",
+                            "ot_id": "7B0B", "has_pokeballs": True, "party": [], "artifact_kind": "named"})
+        assert not _mixed(reply), "a companion-patched vanilla cartridge is a clean-layout artifact"
+        assert not srv.state.identity_error.get("b")
+    finally:
+        await close()
+    srv2 = SLinkServer(data_dir=str(tmp_path / "second"))
+    send, close = await _session(srv2)
+    try:
+        await send({"event": "hello", "player": "a", "rom_type": "blue", "trainer_name": "Alice",
+                    "ot_id": "30B8", "has_pokeballs": True, "party": [], "artifact_kind": "named"})
+        reply = await send({"event": "hello", "player": "b", "rom_type": "red", "trainer_name": "Bob",
+                            "ot_id": "7B0B", "has_pokeballs": True, "party": [], "artifact_kind": "clean"})
+        assert not _mixed(reply), "order does not matter"
+    finally:
+        await close()
+    assert "Mixed artifact kinds" in SLinkServer._mixed_games_error(
+        type("S", (), {"state": type("T", (), {"rom_type": "PureRed", "artifact_kind": "clean"})()})(),
+        "b", "PureBlue", "overlay")
