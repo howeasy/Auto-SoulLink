@@ -332,3 +332,23 @@ NOT pushed (origin/master adf3362 is 352 commits behind local master, most of th
 release. pureRGB session notified (branches off 24fdb06; my writes frozen).
 OWNER NEXT: test a run from the main checkout (fixtures and ROM artifacts present there); then push master, tag, gh release.
 If the test run finds something, new commits go on top of master (tell the pureRGB session first).
+
+## FINAL REVIEW + MERGE (2026-09-20) -- owner: "Work directly with Codex thread 'Review RBY' to do a final review ... also send a limited context fable agent"
+Both reviewers said DO NOT SHIP at bbcd037. Everything found was in the Gen 1 client; nothing corrupted a save; SRAM/checksums/
+profile symbols verified sound against pret on R/B/Y. Fixed on the branch, each cross-reviewed by the other reviewer:
+- 64d9663 (Codex): slow naming lost the catch (AddPartyMon hook before AskName, 600-frame budget) -> no acquire budget; NPC
+  trade from a non-last slot (hook before DisplayPartyMenu; RemovePokemon then AddPartyMon) -> npc_trade repinned + npc_trade_done.
+- 7616d9f (Fable): level-up evolutions never hooked (EvolutionAfterBattle bypasses TryEvolvingMon) -> evolve at the species-publish
+  site 0E:6ED5/0E:6F86; whiteout rebuild deadlock with a full party -> bounded tail requeue of party_mon.
+- da2cf11 (Fable, from Codex cross-review): freshness witness on the slot about to be written; old key from the pre-signal party read.
+- 70b0cc8 (Fable, from Codex cross-review): the witness is a guard during naming, not a permanent veto (byte-identical re-catch).
+- be29c9d: lua/slink.lua routes 'SGB' (EmuHawk reports it with GbAsSgb on).
+Live proof: slow-name gate 9a41d78 (Red/Blue: 2400-frame naming hold, one capture, zero no_catch; Yellow = hunt-driver limit,
+Pikachu's Thundershock KOs the Pidgey), evolution gate d0b13dc/aa8a1df (Red/Blue: LEVEL_UP 7 -> EvolutionAfterBattle ->
+evolve@6ED5 -> key_change 70->71 KAKUNA; exp staged to L7-1 = instrument shortcut). Full runner: run 7 (aa8a1df) and run 8
+(0b59515) GATE PASSED, 12/12 lanes, duo-pairs 18/18 -- the first all-green runs of the RC. Docs c5822bc/3887e9f/5c97aa4.
+MERGED: local master = 5c97aa4 (FF of 15 commits over 79aa608). NOT pushed/tagged/released (owner tests a run first).
+pureRGB session notified (rebases onto 5c97aa4); my writes frozen.
+QUEUE: wEvoOldSpecies at the publish site (removes the script-initialization ambiguity; needs a profile symbol via the
+generator); native Cable Club trades unsupported/unprotected (refusal or warning); NPC-trade live receipt (no fixture near one);
+Yellow write-path duo evidence; MINORs from Fable: rescan_boxes per-frame cost, party_mon nickname re-encode, SameBoy core untested.
