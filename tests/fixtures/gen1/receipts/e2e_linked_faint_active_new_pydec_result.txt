@@ -1,0 +1,14 @@
+attempt 1 of 3
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=eaa8781d82bb33cc2a458766fc9b9d98d2ec36e86a35c4fb423efd6c9f861ca1 file=eaa8781d82bb33cc2a458766fc9b9d98d2ec36e86a35c4fb423efd6c9f861ca1 match=true saves=2
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=f819c12a483907705aee5e95e518e1b55238fac1eb32b33333a64b8e88edf517 file=f819c12a483907705aee5e95e518e1b55238fac1eb32b33333a64b8e88edf517 match=true saves=2
+server DEAD propagation precedes final MEMORIAL, cause=battle
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved living starter; linked key 497A:4190:24 absent from party/current box
+a Box 12 497A:4190:24 HP0000/status00; initialized checksums/terminators valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved living starter; linked key E189:AFB9:24 absent from party/current box
+b Box 12 E189:AFB9:24 HP0000/status00; initialized checksums/terminators valid
+D-6/W-2 server battle cause and ordered engine receipts valid
+PYDEC: PASS asserted scenario facts

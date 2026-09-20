@@ -1,0 +1,13 @@
+fix lane start 19:49:12 HEAD 64d9663
+link_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  link_new: PASS (attempt 1 of 3)
+species_clause_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  species_clause_new: PASS (attempt 1 of 8)
+trade_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  trade_new: PASS (attempt 1 of 3)
+linked_faint_active_new rc=0
+[duo] PYDEC: PASS asserted scenario facts
+  linked_faint_active_new: PASS (attempt 1 of 3)

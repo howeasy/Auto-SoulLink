@@ -1,8 +1,8 @@
 duo instance b scenario=link_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:65138 (non-blocking)…
-client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:65138
-[client] [SLink] TCP connected to 127.0.0.1:65138
+[client] [SLink] TCP connecting to 127.0.0.1:59731 (non-blocking)…
+client built: title=blue player=b rom=d7037c83 -> 127.0.0.1:59731
+[client] [SLink] TCP connected to 127.0.0.1:59731
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
@@ -16,52 +16,55 @@ booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
-phase pace-grass @924 (10,35) battle=0 party=1
+phase pace-grass @1981 (10,35) battle=0 party=1
 [hunt] encounter 1 at (10,35) mode=catch balls=1
-phase wild-intro @927 (10,35) battle=1 party=1
-[hunt] turn 1 foe hp 13/13 odds 0.36 dmax nil -> fight
-phase wild-fight @1693 (10,35) battle=1 party=1
-[hunt] turn 2 foe hp 7/13 odds 1.00 dmax 8 -> throw
-phase wild-throw @2553 (10,35) battle=1 party=1
-[hunt] threw ball index 0 -> timeout
+phase wild-intro @2051 (10,35) battle=1 party=1
+[hunt] turn 1 foe hp 17/17 odds 0.36 dmax nil -> fight
+phase wild-fight @2817 (10,35) battle=1 party=1
 heartbeat f=3600 party=1 connected=true
-PARTY_COUNT 1 -> 2 @4554
-PARTY_UNREADABLE @4560 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+[hunt] turn 2 foe hp 13/17 odds 0.47 dmax 5 -> fight
+[hunt] turn 3 foe hp 9/17 odds 0.71 dmax 5 -> fight
+[hunt] turn 4 foe hp 5/17 odds 1.00 dmax 5 -> throw
+phase wild-throw @4878 (10,35) battle=1 party=1
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @6335
+PARTY_UNREADABLE @6340 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":7,"in_box":false,"key":"2562:AFB9:24","level":2,"maxHP":13,"nickname":"PIDGEY","player":"b","seq":126,"species_id":36,"stats":{"level":2,"maxHP":13}}
-TX {"event":"safe","player":"b","seq":127}
-RX box_mon key=2562:AFB9:24
-PARTY_READABLE @5080  (count=2 species=B0 24 FF 00 00 00 00)
-[hunt] battle outcome battle_over receipts move1:player_move,throw:timeout
-phase wild-battle_over @5091 (10,35) battle=0 party=2
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":5,"in_box":false,"key":"4E24:AFB9:24","level":4,"maxHP":17,"nickname":"PIDGEY","player":"b","seq":186,"species_id":36,"stats":{"level":4,"maxHP":17}}
+TX {"event":"safe","player":"b","seq":187}
+RX box_mon key=4E24:AFB9:24
+PARTY_READABLE @6860  (count=2 species=B0 24 FF 00 00 00 00)
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @6872 (10,35) battle=0 party=2
 [hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @5092 (10,35) battle=0 party=2
-HUNT caught after 4169 frames, 1 encounter(s)
+phase caught @6873 (10,35) battle=0 party=2
+HUNT caught after 4893 frames, 1 encounter(s)
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=16
-MYKEY 1 2562:AFB9:24
-PARTY slot=1 key=2562:AFB9:24 species=36 level=2 hp=7
-CAUGHT 2562:AFB9:24
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=2
+MYKEY 1 4E24:AFB9:24
+PARTY slot=1 key=4E24:AFB9:24 species=36 level=4 hp=5
+CAUGHT 4E24:AFB9:24
 [client] [SLink-gen1] writes re-enabled after a live validation
-TX {"event":"stats_cache","key":"2562:AFB9:24","player":"b","seq":129,"stats":{"level":2,"maxHP":13}}
-PARTY_COUNT 2 -> 1 @5123
+TX {"event":"stats_cache","key":"4E24:AFB9:24","player":"b","seq":190,"stats":{"level":4,"maxHP":17}}
+PARTY_COUNT 2 -> 1 @6904
+heartbeat f=7200 party=1 connected=true
 RX play_sound
-RX msgbox text=RATTATA and PIDGEY linked!
-RX party_mon key=2562:AFB9:24
-TX {"event":"sync_retrieve_done","key":"2562:AFB9:24","player":"b","seq":140}
-PARTY_COUNT 1 -> 2 @5401
+RX msgbox text=PIDGEY and PIDGEY linked!
+RX party_mon key=4E24:AFB9:24
+TX {"event":"sync_retrieve_done","key":"4E24:AFB9:24","player":"b","seq":216}
+PARTY_COUNT 1 -> 2 @7651
 MYKEY 0 4519:AFB9:B0
-PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=16
-MYKEY 1 2562:AFB9:24
-PARTY slot=1 key=2562:AFB9:24 species=36 level=2 hp=7
+PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=2
+MYKEY 1 4E24:AFB9:24
+PARTY slot=1 key=4E24:AFB9:24 species=36 level=4 hp=5
 SEEN capture=1 box_mon=1 stats_cache=1 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
 SAVE_PHASE link_new save-open-start-menu
 SAVE_PHASE link_new save-close-foreign-menu
 SAVE_PHASE link_new save-select-save
 SAVE_PHASE link_new save-choose-save
 SAVE_PHASE link_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_link_new_b_1_witness.bin bytes=31592 saves=1 frame=5792
+SAVE_WITNESS_DUMP path=patch/build/e2e_link_new_b_1_witness.bin bytes=31592 saves=1 frame=8032
 SAVE_PHASE link_new save-await-close
 SAVE_PHASE link_new save-witnessed
-SAVE_WITNESS link_new frames=545
-RESULT: PASS (caught 2562:AFB9:24)
+SAVE_WITNESS link_new frames=535
+RESULT: PASS (caught 4E24:AFB9:24)

@@ -1,14 +1,14 @@
-attempt 1 of 2
+attempt 1 of 3
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=a site=71a46a75f6f3365cc8ed06bdc85e22ac0eda1f2d80c28baa6ceab1dcbaa18285 file=71a46a75f6f3365cc8ed06bdc85e22ac0eda1f2d80c28baa6ceab1dcbaa18285 match=true saves=1
+SAVE_WITNESS_SHA256 inst=a site=1f82edb51b5d4bda170c1aa07da051b75d734744df33a8a36a63d80fb862e922 file=1f82edb51b5d4bda170c1aa07da051b75d734744df33a8a36a63d80fb862e922 match=true saves=1
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=b site=edd72aaa5938253f1146e7caebc011a55e838fa092b5f6a2c211f3d481abe27d file=edd72aaa5938253f1146e7caebc011a55e838fa092b5f6a2c211f3d481abe27d match=true saves=1
+SAVE_WITNESS_SHA256 inst=b site=4ae840bf5ed405965f050223c87021451cab725f5b873e2609d5bdfd5176529a file=4ae840bf5ed405965f050223c87021451cab725f5b873e2609d5bdfd5176529a match=true saves=1
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
 BAG_BALLS baseline=1 final=0 inst=a
 a saved slot 0 starter 06C3:4190:99
-a saved slot 1 linked B167:4190:A5, no current-box duplicate
+a saved slot 1 linked C178:4190:24, no current-box duplicate
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
 BAG_BALLS baseline=1 final=0 inst=b
 b saved slot 0 starter 4519:AFB9:B0
-b saved slot 1 linked 2562:AFB9:24, no current-box duplicate
+b saved slot 1 linked 4E24:AFB9:24, no current-box duplicate
 PYDEC: PASS asserted scenario facts

@@ -1,0 +1,11 @@
+attempt 1 of 8
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=261ec31e3beace8ab0af8b02d33c6c0e7a53b96868ed0fb058c989a591ecbb7b file=261ec31e3beace8ab0af8b02d33c6c0e7a53b96868ed0fb058c989a591ecbb7b match=true saves=1
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=bfa769f4e02df2d189350626f66bb2401d50931d95e6faf09b674d631e06d118 file=bfa769f4e02df2d189350626f66bb2401d50931d95e6faf09b674d631e06d118 match=true saves=1
+D-4 reroll observed: 1 reroll(s) on species 165, events.json row present
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved starter + linked 688E:4190:A5, current box clear
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved starter + linked 3A6D:AFB9:24, current box clear
+PYDEC: PASS asserted scenario facts

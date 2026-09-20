@@ -1,0 +1,72 @@
+duo instance a scenario=species_clause_new game=gen1_new
+attempt 1 of 2
+[client] [SLink] TCP connecting to 127.0.0.1:55433 (non-blocking)…
+client built: title=red player=a rom=ea9bcae6 -> 127.0.0.1:55433
+[client] [SLink] TCP connected to 127.0.0.1:55433
+PARTY_COUNT nil -> 255 @1
+PARTY_COUNT 255 -> 0 @5
+PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
+PARTY_COUNT 0 -> 1 @641
+PARTY_READABLE @650  (count=1 species=99 FF 00 00 00 00 00)
+[client] [SLink-gen1] writes ENABLED
+TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":16784,"panel":false,"panel_abi":0,"party":[{"active":false,"blob_hex":"990013000016032D21
+RX resolved_areas
+RX config
+booted at frame 846 party=1 map=12 (10,35)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=19
+JITTER requested=0 applied=0 attempt=1
+phase pace-grass @2202 (10,35) battle=0 party=1
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @2256 (10,34) battle=1 party=1
+[hunt] turn 1 foe hp 14/14 odds 0.39 dmax nil -> fight
+phase wild-fight @3021 (10,34) battle=1 party=1
+[hunt] turn 2 foe hp 10/14 odds 0.58 dmax 5 -> fight
+heartbeat f=3600 party=1 connected=true
+[hunt] turn 3 foe hp 4/14 odds 1.00 dmax 8 -> throw
+phase wild-throw @4027 (10,34) battle=1 party=1
+[hunt] threw ball index 0 -> timeout
+PARTY_COUNT 1 -> 2 @6028
+PARTY_UNREADABLE @6030 species list and struct disagree (count=2 species=99 A5 FF 00 00 00 00)
+[client] [SLink-gen1] writes PAUSED: party unreadable
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":4,"in_box":false,"key":"688E:4190:A5","level":3,"maxHP":14,"nickname":"RATTATA","player":"a","seq":175,"species_id":165,"stats":{"level":3,"maxHP":14}}
+TX {"event":"safe","player":"a","seq":176}
+PARTY_READABLE @6550  (count=2 species=99 A5 FF 00 00 00 00)
+RX box_mon key=688E:4190:A5
+[hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
+phase wild-battle_over @6565 (10,34) battle=0 party=2
+[hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
+phase caught @6566 (10,34) battle=0 party=2
+HUNT caught after 4365 frames, 1 encounter(s)
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=13
+MYKEY 1 688E:4190:A5
+PARTY slot=1 key=688E:4190:A5 species=165 level=3 hp=4
+CAUGHT 688E:4190:A5
+PENDING_CAPTURE 688E:4190:A5 species=165 level=3
+[client] [SLink-gen1] writes re-enabled after a live validation
+TX {"event":"stats_cache","key":"688E:4190:A5","player":"a","seq":179,"stats":{"level":3,"maxHP":14}}
+PARTY_COUNT 2 -> 1 @6599
+heartbeat f=7200 party=1 connected=true
+heartbeat f=10800 party=1 connected=true
+heartbeat f=14400 party=1 connected=true
+RX play_sound
+RX msgbox text=RATTATA and PIDGEY linked!
+RX party_mon key=688E:4190:A5
+TX {"event":"sync_retrieve_done","key":"688E:4190:A5","player":"a","seq":527}
+PARTY_COUNT 1 -> 2 @17011
+MYKEY 0 06C3:4190:99
+PARTY slot=0 key=06C3:4190:99 species=153 level=5 hp=13
+MYKEY 1 688E:4190:A5
+PARTY slot=1 key=688E:4190:A5 species=165 level=3 hp=4
+SPECIES_CLAUSE {"box_mon":1,"capture":1,"force_faint":0,"key":"688E:4190:A5","party_mon":1,"player":"a","species":165,"sync_retrieve_done":1}
+SAVE_PHASE species_clause_new_a save-open-start-menu
+SAVE_PHASE species_clause_new_a save-close-foreign-menu
+SAVE_PHASE species_clause_new_a save-select-save
+SAVE_PHASE species_clause_new_a save-choose-save
+SAVE_PHASE species_clause_new_a save-confirm
+SAVE_WITNESS_DUMP path=patch/build/e2e_species_clause_new_a_1_witness.bin bytes=31592 saves=1 frame=17392
+SAVE_PHASE species_clause_new_a save-await-close
+SAVE_PHASE species_clause_new_a save-witnessed
+SAVE_WITNESS species_clause_new_a frames=532
+RESULT: PASS (A pending 688E:4190:A5)
