@@ -163,6 +163,10 @@ S.KINDS.remove_pokemon = {
         return pt
     end,
 }
+-- Evolution_PartyMonLoop, AFTER `ld a,[wLoadedMonSpecies] / ld [hl],a` published the new
+-- species (pokered evos_moves.asm:229-233, pokeyellow :231-235): wWhichPokemon is the slot
+-- and the party snapshot already holds the evolved record. Level-up evolutions enter at
+-- EvolutionAfterBattle and never pass TryEvolvingMon; a cancelled one leaves before here.
 S.KINDS.evolve = {
     point = function(io, ram)
         return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),

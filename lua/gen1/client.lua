@@ -13,7 +13,8 @@
 --
 -- Events are derived from engine signals, never from polling heuristics: a party change is
 -- only read after a site that legitimately changes the party fired (AddPartyMon,
--- SendNewMonToBox, MoveMon, RemovePokemon, TryEvolvingMon, InGameTrade_DoTrade).
+-- SendNewMonToBox, MoveMon, RemovePokemon, Evolution_PartyMonLoop's species publish,
+-- InGameTrade_DoTrade).
 -- Every write happens at the overworld checkpoint or inside the MainInBattleLoop hook.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
                  -- A13: the two halves of the `replace_rival_team` window. ONE window measured
@@ -545,6 +546,20 @@ function Client.new(p)
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
                 if done then send("sync_retrieve_done", { key = cmd.key }); self:rescan_boxes()
+                elseif reason == "party full" and (cmd.full_retries or 0) < (cmd.full_budget or (#self.deferred + 1)) then
+                    -- Whiteout rebuild with a full party: the blackout HEALED the dead mons
+                    -- (HealParty runs before the blackout site), the server queues the
+                    -- rebuild's party_mon BEFORE the memorializes (state.py:2020-2049), and
+                    -- sync_retrieve_failed is final there (:341-362). So the withdraw must
+                    -- wait behind the memorializes that free a slot: to the TAIL, like the
+                    -- refused memorialize below, bounded by the queue length seen at the
+                    -- first refusal (every command behind it gets one turn per retry). A
+                    -- party that is genuinely full still fails with "party full".
+                    cmd.full_budget = cmd.full_budget or (#self.deferred + 1)
+                    cmd.full_retries = (cmd.full_retries or 0) + 1
+                    self.deferred[#self.deferred + 1] = cmd
+                    log("[SLink-gen1] party_mon " .. tostring(cmd.key) .. ": party full, retry "
+                        .. cmd.full_retries .. "/" .. cmd.full_budget .. " after the queue")
                 else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
                 local done, reason = nil, "no box module"
@@ -573,6 +588,21 @@ function Client.new(p)
         if not list or not key then return false end
         for _, m in ipairs(list) do if mon_key(m) == key then return true end end
         return false
+    end
+
+    -- The key an evolved mon HAD: same DVs and OT (key prefix "DDDD:OOOO:", reads.lua:185-188),
+    -- a different species, known to this client, and no longer anywhere in the party. Refuses
+    -- (nil, why) rather than guessing when zero or several known keys answer to the prefix.
+    local function evolved_from(party, new_key)
+        local prefix, found = new_key:sub(1, 10), nil
+        for k in pairs(self.known_keys) do
+            if k ~= new_key and k:sub(1, 10) == prefix and not holds_key(party, k) then
+                if found then return nil, "ambiguous old key" end
+                found = k
+            end
+        end
+        if not found then return nil, "old key unknown" end
+        return found
     end
 
     local function party_from_snapshot(bytes)
@@ -794,13 +824,37 @@ function Client.new(p)
                 self.pending_change = { kind = "rescan", frame = sig.frame }
             end
         elseif k == "evolve" then
+            -- Evolution_PartyMonLoop AFTER the species is published: `ld a,[wLoadedMonSpecies] /
+            -- ld [hl],a` rewrote wPartySpecies[wWhichPokemon] (evos_moves.asm:229-233 R/B,
+            -- :231-235 Y) and the struct copy landed before it (:178-204). Every path runs this
+            -- loop -- level-up (EndOfBattle -> predef EvolutionAfterBattle, end_of_battle.asm:42-45,
+            -- which enters at 0E:6D1C and never passes TryEvolvingMon at 0E:6D0E), stone, Rare
+            -- Candy and trade (TryEvolvingMon) -- and a cancelled evolution (B pressed,
+            -- `jp c, CancelledEvolution` at :135) leaves before this site, so nothing pends and
+            -- nothing needs a frame budget. The snapshot already holds the NEW record; the old
+            -- key is the known key with the same DVs and OT (both untouched by EvolveMon) that
+            -- is no longer in the party.
             -- An NPC trade can evolve its appended recipient; its completion hook
             -- owns that final identity, rather than a second overlapping migration.
             if self.pending_change and self.pending_change.kind == "npc_trade" then return end
+            -- A SLINK trade evolves natively inside the apply; trade_done reports the final
+            -- key of the last slot and a migration beside it would be a lie (S-5).
+            if self.trade_state and self.trade_state.kind == "apply" then return end
             local party = party_from_snapshot(pt.party or {})
             local key, mon
-                if party then key, mon = key_at(party, pt.which) end
-            if key then self.pending_change = { kind = "evolution", frame = sig.frame, slot = pt.which, old_key = key, old_species = mon.species } end
+            if party then key, mon = key_at(party, pt.which) end
+            if key then
+                local old, why = evolved_from(party, key)
+                if old then
+                    self.known_keys[old], self.known_keys[key] = nil, true
+                    -- snapshot records carry name BYTES only (party_from_snapshot), so decode here
+                    send("key_change", { old_key = old, new_key = key, new_species = mon.species,
+                                         reason = "evolution", new_nickname = reads.decode_name(mon.nickname_bytes) })
+                else
+                    log("[SLink-gen1] evolution of slot " .. tostring(pt.which) .. " (" .. key .. "): " .. why)
+                end
+            end
+            self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "npc_trade" then
             local party = party_from_snapshot(pt.party or {})
             local key = party and key_at(party, pt.which)
@@ -885,19 +939,6 @@ function Client.new(p)
             if self.battle and not gift then self.battle.captured = true end
             self.resolved_areas[area_id] = true
             self.pending_change = { kind = "rescan", frame = self.frame }
-        elseif pc.kind == "evolution" then
-            local key, mon = key_at(party, pc.slot)
-            if not key then self.pending_change = nil return end
-            if key ~= pc.old_key then
-                self.known_keys[pc.old_key] = nil
-                self.known_keys[key] = true
-                send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                     reason = "evolution",
-                                     new_nickname = mon.nickname })
-                self.pending_change = nil
-            elseif self.frame - pc.frame > 300 then
-                self.pending_change = nil -- evolution cancelled
-            end
         elseif pc.kind == "rescan" then
             self:rescan_boxes()
             for _, m in ipairs(party) do self.known_keys[mon_key(m)] = true end

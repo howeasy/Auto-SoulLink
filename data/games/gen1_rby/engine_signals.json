@@ -88,12 +88,12 @@
      "symbol": "SendNewMonToBox"
     },
     "evolve": {
-     "address": 27918,
+     "address": 28373,
      "bank": 14,
      "capture_offset": 0,
-     "expected_hex": "21D3CCAF77FA",
-     "rom_offset": 240910,
-     "symbol": "TryEvolvingMon"
+     "expected_hex": "6B621801",
+     "rom_offset": 241365,
+     "symbol": "Evolution_PartyMonLoop+423"
     },
     "move_mon": {
      "address": 14952,
@@ -255,12 +255,12 @@
      "symbol": "SendNewMonToBox"
     },
     "evolve": {
-     "address": 27918,
+     "address": 28373,
      "bank": 14,
      "capture_offset": 0,
-     "expected_hex": "21D3CCAF77FA",
-     "rom_offset": 240910,
-     "symbol": "TryEvolvingMon"
+     "expected_hex": "6B621801",
+     "rom_offset": 241365,
+     "symbol": "Evolution_PartyMonLoop+423"
     },
     "move_mon": {
      "address": 14952,
@@ -422,12 +422,12 @@
      "symbol": "SendNewMonToBox"
     },
     "evolve": {
-     "address": 28088,
+     "address": 28550,
      "bank": 14,
      "capture_offset": 0,
-     "expected_hex": "21D3CCAF77FA",
-     "rom_offset": 241080,
-     "symbol": "TryEvolvingMon"
+     "expected_hex": "6B621801",
+     "rom_offset": 241542,
+     "symbol": "Evolution_PartyMonLoop+430"
     },
     "move_mon": {
      "address": 14937,

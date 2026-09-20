@@ -526,21 +526,6 @@ def test_pc_moves_come_from_the_movemon_signal_direction(world):
     world.assert_all_conform()
 
 
-def test_evolution_emits_key_change_with_reason(world):
-    world.connect()
-    old = codec.key(world.party()[0])
-    world.bus[world.ram["wWhichPokemon"]] = 0
-    world.fire("evolve")
-    world.step()
-    party = world.party()
-    party[0]["species"] = 0x09  # Ivysaur
-    world.seed_party(party)
-    world.step()
-    kc = world.events("key_change")
-    assert kc[-1]["old_key"] == old and kc[-1]["new_key"] == codec.key(world.party()[0])
-    assert kc[-1]["reason"] == "evolution" and kc[-1]["new_species"] == 0x09
-
-
 def test_save_witness_flushes_saveram(world):
     world.connect()
     world.fire("save_witness")
@@ -2053,3 +2038,182 @@ def test_npc_trade_declined_menu_emits_nothing(title, selection_frames):
     assert w.events("key_change") == []
     assert w.events("capture") == []
     assert w.events("party_to_box") == []
+
+
+# ── evolution: the species-publish site (FIX-EVO) ────────────────────────────────────────
+# Level-up evolutions enter Evolution_PartyMonLoop through `predef EvolutionAfterBattle`
+# (end_of_battle.asm:42-45 -> data/predef_pointers.asm:55 -> 0E:6D1C) and never pass
+# TryEvolvingMon (0E:6D0E), which only the stone/Rare Candy/trade callers use. The old entry
+# hook therefore never fired for the commonest evolution of a run, and when it did fire the
+# 300-frame budget sat BEFORE the animation. The hook is now the instant the new species is
+# published (`ld a,[wLoadedMonSpecies] / ld [hl],a`, evos_moves.asm:229-233 R/B, :231-235 Y):
+# the record is already rewritten, so there is nothing to wait for and nothing to cancel.
+
+_EVOLVE_SITE_OFFSET = {"red": 423, "blue": 423, "yellow": 430}   # Evolution_PartyMonLoop + n
+
+
+def _evolving_world(title, rng_seed=21):
+    w = World(title)
+    rng = random.Random(rng_seed)
+    w.seed_party([_mon(rng, 0x99, level=16, nick="BULBA"),       # Bulbasaur
+                  _mon(rng, 0x66, level=20, nick="EEVEE"),       # Eevee
+                  _mon(rng, 0xB0, level=16, nick="CHAR")])       # Charmander
+    w.set_map(0x0C)
+    w.give_poke_ball()
+    w.connect()
+    return w
+
+
+def _publish_species(w, slot, species, nick):
+    """What the engine has done by the time the site runs: species byte and struct rewritten."""
+    party = w.party()
+    party[slot]["species"] = species
+    for i, m in enumerate(party):
+        m["nick"] = m["nickname"]
+    party[slot]["nick"] = nick
+    w.seed_party(party)
+    w.bus[w.ram["wWhichPokemon"]] = slot
+
+
+@pytest.mark.parametrize("title", sorted(DUMPS))
+def test_level_up_evolution_key_change_from_the_species_publish_site(title):
+    w = _evolving_world(title)
+    old = codec.key(w.party()[0])
+    prof = PROFILE[title]["rom"]
+    _, pc = w.hooks["SLink-gen1-evolve"]
+    assert pc != prof["TryEvolvingMon"]["addr"], "a level-up evolution never enters TryEvolvingMon"
+    assert pc == prof["Evolution_PartyMonLoop"]["addr"] + _EVOLVE_SITE_OFFSET[title]
+    site = SITES[title]["sites"]["evolve"]
+    assert w.rom[site["rom_offset"]:site["rom_offset"] + 4] == bytes.fromhex("6B621801")
+    assert w.rom[site["rom_offset"] - 2:site["rom_offset"]] == bytes.fromhex("77E5"), \
+        "`ld [hl],a / push hl` -- the species byte is written immediately before the site"
+
+    _publish_species(w, 0, 0x09, "BULBA")            # Ivysaur, in place, after a battle
+    w.fire("evolve")
+    w.step()
+    kc = w.events("key_change")
+    assert len(kc) == 1, kc
+    assert kc[0]["old_key"] == old and kc[0]["new_key"] == codec.key(w.party()[0])
+    assert kc[0]["reason"] == "evolution" and kc[0]["new_species"] == 0x09
+    assert kc[0]["new_nickname"] == "BULBA"
+    assert w.events("capture") == [], "an evolved mon is not a fresh acquisition"
+    w.step(5)
+    assert len(w.events("key_change")) == 1 and w.client.pending_change is None
+    w.assert_all_conform()
+
+
+def test_stone_evolution_of_a_non_lead_slot_migrates_that_slot_only(world):
+    """ItemUseEvoStone -> TryEvolvingMon reaches the same loop; the slot is wWhichPokemon."""
+    w = _evolving_world("red")
+    keys = [codec.key(m) for m in w.party()]
+    _publish_species(w, 1, 0x69, "EEVEE")            # Vaporeon (Water Stone)
+    w.fire("evolve")
+    w.step()
+    kc = w.events("key_change")
+    assert len(kc) == 1
+    assert kc[0]["old_key"] == keys[1] and kc[0]["new_key"] == codec.key(w.party()[1])
+    assert kc[0]["new_species"] == 0x69 and kc[0]["reason"] == "evolution"
+    assert [codec.key(m) for m in w.party()][0::2] == keys[0::2], "the other slots are untouched"
+    w.assert_all_conform()
+
+
+@pytest.mark.parametrize("title", sorted(DUMPS))
+def test_cancelled_evolution_leaves_before_the_site_and_reports_nothing(title):
+    """B during the animation: `EvolveMon` returns carry and `jp c, CancelledEvolution`
+    (evos_moves.asm:135) leaves the loop iteration BEFORE the species publish, so the hook
+    cannot fire and no pending change exists to expire. Pinned in the ROM: the jp sits between
+    the loop start and the site, and its target is CancelledEvolution from the .sym file."""
+    rom = _rom(title)
+    prof = PROFILE[title]["rom"]
+    sym = (REPO / "data" / "pret" / {"red": "pokered.sym", "blue": "pokeblue.sym",
+                                      "yellow": "pokeyellow.sym"}[title]).read_text(encoding="utf-8")
+    m = re.search(r"^0e:([0-9a-f]{4}) CancelledEvolution$", sym, re.M)
+    assert m, "CancelledEvolution missing from the .sym"
+    target = int(m.group(1), 16)
+    loop = prof["Evolution_PartyMonLoop"]["flat"]
+    site = SITES[title]["sites"]["evolve"]["rom_offset"]
+    jp_c = bytes([0xDA, target & 0xFF, target >> 8])
+    at = rom.find(jp_c, loop, site)
+    assert loop < at < site, "the cancel branch must leave the loop before the species publish"
+
+    w = _evolving_world(title)
+    w.step(400)                                      # nothing fired, nothing pends, nothing expires
+    assert w.events("key_change") == [] and w.client.pending_change is None
+    w.assert_all_conform()
+
+
+def test_two_party_mons_evolving_in_one_loop_report_two_key_changes(world):
+    """Evolution_PartyMonLoop walks the whole party (evos_moves.asm:26-43): two eligible mons
+    publish twice, possibly inside one frame. Each migration resolves its own old key."""
+    w = _evolving_world("red")
+    keys = [codec.key(m) for m in w.party()]
+    _publish_species(w, 0, 0x09, "BULBA")            # Ivysaur
+    w.fire("evolve")
+    _publish_species(w, 2, 0xB2, "CHAR")             # Charmeleon, same frame
+    w.fire("evolve")
+    w.step()
+    kc = w.events("key_change")
+    assert [(c["old_key"], c["new_species"]) for c in kc] == [(keys[0], 0x09), (keys[2], 0xB2)]
+    assert [c["new_key"] for c in kc] == [codec.key(w.party()[0]), codec.key(w.party()[2])]
+    w.step(5)
+    assert len(w.events("key_change")) == 2 and w.client.pending_change is None
+    w.assert_all_conform()
+
+
+# ── whiteout rebuild with a full party (FIX-WO) ──────────────────────────────────────────
+
+def _six_dead_and_one_boxed(rng_seed=31):
+    """After a whiteout: HealParty ran before the blackout site, so the six dead linked mons
+    read as a full, healthy party; one alive linked half waits in the open box."""
+    w = World("red")
+    rng = random.Random(rng_seed)
+    dead = [_mon(rng, s, level=12, nick=f"DEAD{i}")
+            for i, s in enumerate((0x99, 0xB1, 0xA5, 0xB0, 0x54, 0x66))]
+    boxed = _box_mon(rng, 0x1D, level=9)             # Pinsir, base stats inline on R/B/Y
+    boxed["exp"] = 1000
+    w.seed_party(dead)
+    _seed_active_box(w, [boxed])
+    w.set_map(0x0C)
+    w.give_poke_ball()
+    w.connect()
+    w.step(60)                                       # writes ENABLED
+    return w, [codec.key(m) for m in dead], codec.key(boxed)
+
+
+def test_whiteout_rebuild_with_a_full_party_lets_the_memorializes_free_a_slot_first():
+    """state.py:2020-2049 queues the rebuild's `party_mon` BEFORE the memorializes, and
+    `sync_retrieve_failed` is final there (:341-362). With a full party the withdraw met
+    boxes.lua:433 "party full" first, failed for good, and the last memorialize then re-queued
+    itself forever ("last party mon", client.lua). The withdraw now waits at the tail behind
+    the memorializes that free the slots, bounded, so the whole queue drains."""
+    w, dead, boxed = _six_dead_and_one_boxed()
+    w.overworld_safe()
+    w.reply({"cmd": "party_mon", "key": boxed, "stats": {"level": 9, "maxHP": 30}},
+            *[{"cmd": "memorialize", "key": k} for k in dead])
+    for _ in range(20):
+        w.overworld_safe()
+        w.step()
+    assert [e["key"] for e in w.events("sync_retrieve_done")] == [boxed]
+    assert w.events("sync_retrieve_failed") == [], w.events("sync_retrieve_failed")
+    assert sorted(e["key"] for e in w.events("memorialize_done")) == sorted(dead)
+    assert w.events("memorialize_failed") == []
+    assert len(w.client.deferred) == 0, "nothing may stay queued forever"
+    assert [codec.key(m) for m in w.party()] == [boxed]
+    assert boxed not in _active_box_keys(w)
+    w.assert_all_conform()
+
+
+def test_party_mon_into_a_genuinely_full_party_still_fails_after_a_bounded_requeue():
+    """The bound: one turn per command queued behind it at the first refusal (here none), then
+    the honest answer. Never a silent loop."""
+    w, _, boxed = _six_dead_and_one_boxed(rng_seed=32)
+    w.overworld_safe()
+    w.reply({"cmd": "party_mon", "key": boxed, "stats": {"level": 9, "maxHP": 30}})
+    for _ in range(4):
+        w.overworld_safe()
+        w.step()
+    failed = w.events("sync_retrieve_failed")
+    assert [(e["key"], e["reason"]) for e in failed] == [(boxed, "party full")]
+    assert w.events("sync_retrieve_done") == [] and len(w.client.deferred) == 0
+    assert len(w.party()) == 6 and boxed in _active_box_keys(w)
+    w.assert_all_conform()
