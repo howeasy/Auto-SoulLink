@@ -3,6 +3,8 @@
 -- the observed/go handshake and intro frames precede that load. Unlike the
 -- non-native free-service gate, menu inputs must be supplied on clean boot frames.
 -- No CPU/register/cartridge writes; the only WRAM edit is a restored byte probe.
+-- With input.progression the SAME processes continue after the 1x/3x windows through the
+-- original game (joypad only, RAM/source observation) to the Viridian Cable Club receptionist.
 local ROOT=SLINK_ROOT or os.getenv("SLINK_ROOT")
 local JSON=dofile(ROOT.."/lua/json_codec.lua")
 local function read(path)
@@ -91,6 +93,161 @@ local function finish_if_requested()
         t.check("Manager-selected native free service ran the fresh bedroom",true);t.finish()
     end
 end
+-- ---------------------------------------------------------------------------------------
+-- Original-game progression (research receipt cx-fa4fad12). Yellow only in this experiment:
+-- no starter choice, Yellow/Yellow starter clause exempt. Every stage is RAM-reactive with a
+-- finite frame cap; inputs are ordinary joypad presses; nothing is written to WRAM/CPU/SRAM.
+-- pret pokeyellow: bedroom REDS_HOUSE_2F $26 stairs (7,1); REDS_HOUSE_1F $25 door (2,7)/(3,7);
+-- PALLET_TOWN $00 north edge trips Oak at wYCoord==1 (scripts/PalletTown.asm) -> OAKS_LAB $28;
+-- EVENT_GOT_STARTER bit 34, EVENT_BATTLED_RIVAL_IN_OAKS_LAB bit 35 (constants/event_constants.asm,
+-- identical in pokered; re-derived offline by tests/unit/test_gen1_native_selected_progression.py);
+-- lab exit (4,11)/(5,11); ROUTE_1 $0C; VIRIDIAN_CITY $01 Pokemon Center door (23,25) ->
+-- VIRIDIAN_POKECENTER $29 with the LINK_RECEPTIONIST object at (11,2) facing DOWN.
+-- The receptionist dispatch is the companion patch's SlinkReceptionist (host query), so no
+-- Pokedex/Parcel gate applies; the experiment ends at the receptionist_entered ACK.
+local prog=input.progression
+local MAP={HOUSE_2F=0x26,HOUSE_1F=0x25,PALLET=0x00,LAB=0x28,ROUTE_1=0x0C,VIRIDIAN=0x01,POKECENTER=0x29}
+local EVENT={GOT_STARTER=34,BATTLED_RIVAL=35}
+local PIKACHU=0x54
+local function r16(name)local a=assert(symbols[name]);return memory.read_u8(a,"System Bus")*256+memory.read_u8(a+1,"System Bus")end
+local function event_flag(bit)
+    local a=assert(symbols.wEventFlags)+math.floor(bit/8)
+    return memory.read_u8(a,"System Bus")&(1<<(bit%8))~=0
+end
+local function party()
+    local count=sym("wPartyCount")
+    return {count=count,species=count>0 and sym("wPartySpecies") or nil,
+        level=count>0 and sym("wPartyMon1Level") or nil,hp=count>0 and r16("wPartyMon1HP") or nil}
+end
+local function journal_entry_phase(status)
+    local file=status and status.journal_path and io.open(status.journal_path,"r");if not file then return nil end
+    local ok,doc=pcall(function()local text=file:read("*a");return JSON.decode(text)end);file:close()
+    if not ok or type(doc)~="table" then return nil end
+    local payload=doc.document and doc.document.payload
+    local entry=payload and payload.observation and payload.observation.receptionist_entry
+    return entry and entry.phase or nil
+end
+local P={index=0,stage=nil,stages=JSON.array(),done=false,outcome=nil,last=nil,still=0,axis="y",side=1,sidestep=0,
+    battles={wild=0,trainer=0},in_battle=false,trace=JSON.array(),samples=0,turned=0}
+local STAGES={
+    {name="bedroom",cap=1800,goal=function(m)return m~=MAP.HOUSE_2F end,target={7,1}},
+    {name="house",cap=1800,goal=function(m)return m==MAP.PALLET end,target={3,7}},
+    {name="oak",cap=9000,goal=function(m)return m==MAP.LAB end,target={10,1}},
+    {name="starter",cap=9000,goal=function()return event_flag(EVENT.GOT_STARTER) and sym("wPartyCount")>=1 end,wait=true},
+    {name="rival",cap=9000,goal=function()return event_flag(EVENT.BATTLED_RIVAL)end,target={4,11}},
+    {name="exit_lab",cap=3600,goal=function(m)return m==MAP.PALLET end,target={4,11}},
+    {name="route1",cap=6000,goal=function(m)return m==MAP.ROUTE_1 end,target={10,0}},
+    {name="viridian",cap=12000,goal=function(m)return m==MAP.VIRIDIAN end,target={10,0}},
+    {name="pokecenter",cap=9000,goal=function(m)return m==MAP.POKECENTER end,target={23,25}},
+    {name="receptionist",cap=6000,goal=function(_,status)return journal_entry_phase(status)=="acknowledged" end,target={11,3},talk=true},
+}
+-- Root may retarget a stage's waypoint or cap from the input receipt after a traced run
+-- (input.progression.targets[name] = {x,y}, .caps[name] = frames) without editing this gate.
+for _,spec in ipairs(STAGES)do
+    local over=prog and prog.targets and prog.targets[spec.name]
+    if over then spec.target={over[1],over[2]} end
+    local cap=prog and prog.caps and prog.caps[spec.name]
+    if cap then spec.cap=cap end
+end
+local function stage_begin(frame)
+    P.index=P.index+1;local spec=STAGES[P.index]
+    if not spec then P.stage=nil;return end
+    P.stage={spec=spec,began=frame,began_clock=clock(),moves=0,nudges=0,battles=0}
+    P.last=nil;P.still=0;P.sidestep=0;P.turned=0
+end
+local function stage_end(frame,how)
+    local s=P.stage
+    P.stages[#P.stages+1]={name=s.spec.name,frames=frame-s.began,seconds=clock()-s.began_clock,moves=s.moves,nudges=s.nudges,
+        battles=s.battles,how=how,map=sym("wCurMap"),x=sym("wXCoord"),y=sym("wYCoord")}
+end
+local function refuse(frame,reason)
+    stage_end(frame,"refused")
+    P.done=true;P.outcome="refused"
+    shot("refused");local ok,status=pcall(status_now)
+    publish("refused",{reason=reason,stage=P.stage.spec.name,frame=frame,stages=P.stages,party=party(),
+        battles=P.battles,trace=P.trace,map=sym("wCurMap"),x=sym("wXCoord"),y=sym("wYCoord"),
+        events={got_starter=event_flag(EVENT.GOT_STARTER),battled_rival=event_flag(EVENT.BATTLED_RIVAL)},
+        status=ok and status or tostring(status)})
+end
+local function press(keys)
+    local pressed={};for key,value in pairs(idle)do pressed[key]=keys[key]or value end
+    joypad.set(pressed)
+end
+local function walk(frame,target)
+    -- Goal-directed servo: hold the direction of the larger delta on the preferred axis; when the
+    -- position stops changing, alternate axes, then sidestep alternately left/right. Ledges and
+    -- walls are never modelled; the stage cap bounds any oscillation.
+    local x,y=sym("wXCoord"),sym("wYCoord")
+    local key=x..","..y
+    if key~=P.last then P.last=key;P.still=0;P.stage.moves=P.stage.moves+1 else P.still=P.still+1 end
+    local dx,dy=target[1]-x,target[2]-y
+    if P.sidestep>0 then
+        P.sidestep=P.sidestep-1;press({Left=P.side<0,Right=P.side>0});return
+    end
+    if P.still>0 and P.still%40==0 then
+        P.axis=P.axis=="y" and "x" or "y"
+        if P.still%80==0 then P.side=-P.side;P.sidestep=32 end
+    end
+    local axis=P.axis
+    if axis=="y" and dy==0 then axis="x" elseif axis=="x" and dx==0 then axis="y" end
+    if axis=="y" then press({Up=dy<0,Down=dy>0}) else press({Left=dx<0,Right=dx>0}) end
+end
+local function progress(frame,status)
+    if P.done then joypad.set(idle);return end
+    if not P.stage then
+        if P.index==0 then client.speedmode(prog.speed or 300);stage_begin(frame) else P.done=true;return end
+    end
+    local spec=P.stage.spec
+    local map=sym("wCurMap")
+    local mon=party()
+    -- Refusals: the starter must never faint (a Soul Link death), the party must stay ours.
+    if mon.count>=1 and mon.hp==0 then return refuse(frame,"starter fainted (HP 0)") end
+    if mon.count>=1 and mon.species~=PIKACHU then return refuse(frame,"party lead is not the Yellow starter") end
+    if frame-P.stage.began>=spec.cap then return refuse(frame,"stage cap exceeded: "..spec.name) end
+    if status and (status.phase~="free_service" or status.runtime.failed or not status.runtime.connected) then
+        return refuse(frame,"service lost during "..spec.name)
+    end
+    P.samples=P.samples+1
+    if P.samples%120==0 and #P.trace<400 then P.trace[#P.trace+1]={f=frame,m=map,x=sym("wXCoord"),y=sym("wYCoord"),s=spec.name}end
+    -- Battles (wild 1 / trainer 2): FIGHT with the first move by mashing A; nothing else is selected.
+    local battle=sym("wIsInBattle")
+    if battle~=0 then
+        if not P.in_battle then
+            P.in_battle=true;P.stage.battles=P.stage.battles+1
+            if battle==1 then P.battles.wild=P.battles.wild+1 else P.battles.trainer=P.battles.trainer+1 end
+        end
+        beat=beat+1;press({A=beat%16<2});return
+    end
+    P.in_battle=false
+    if spec.goal(map,status) then
+        stage_end(frame,"reached");stage_begin(frame)
+        if not P.stage then
+            P.done=true;P.outcome="arrived";shot("receptionist")
+            publish("arrived",{stages=P.stages,battles=P.battles,party=mon,frame=frame,trace=P.trace,
+                events={got_starter=event_flag(EVENT.GOT_STARTER),battled_rival=event_flag(EVENT.BATTLED_RIVAL)},
+                map=sym("wCurMap"),x=sym("wXCoord"),y=sym("wYCoord"),status=status_now()})
+        end
+        return
+    end
+    beat=beat+1
+    local held=sym("wJoyIgnore")~=0
+    if spec.wait or held then
+        -- Scripted dialogue: B advances text and answers NO (the Pikachu nickname prompt); it never
+        -- selects a menu item, so nothing but the story's own path can be taken here.
+        P.stage.nudges=P.stage.nudges+1;press({B=beat%16<2});return
+    end
+    local target=spec.target
+    local x,y=sym("wXCoord"),sym("wYCoord")
+    if spec.talk and x==target[1] and y==target[2] then
+        -- Face the receptionist (blocked tile: a short Up tap only turns), then talk with A.
+        if P.turned<12 then P.turned=P.turned+1;press({Up=true});return end
+        P.stage.nudges=P.stage.nudges+1;press({A=beat%16<2});return
+    end
+    if P.still>=48 and P.still%48<16 then P.stage.nudges=P.stage.nudges+1;press({B=beat%16<2});return end
+    walk(frame,target)
+end
+if prog then assert(t.variant=="yellow","the first progression experiment is Yellow only") end
+
 emu.yield=function()
     original_yield()
     assert(not read(input.directory.."/abort.json"),"paired native selected gate aborted")
@@ -138,6 +295,8 @@ emu.frameadvance=function()
             menu_inputs();frames_driven=frames_driven+1
             assert(frames_driven<20000,"normal New Game did not reach the held checkpoint")
         end
+    elseif prog and reported and not P.done then
+        progress(frame,status)
     else
         local buttons={};for key,value in pairs(idle)do buttons[key]=value end
         buttons.Right=frame-loop_started.frame<16;joypad.set(buttons)

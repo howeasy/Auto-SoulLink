@@ -180,8 +180,16 @@ async def test_manager_native_bundle_preflight_uses_the_exact_run_local_pair(tmp
 def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypatch):
     assert not verify()["failures"]
     assert "SLINK_CLIENT_STORAGE_ROOT" not in os.environ, "use the production LocalAppData journal path"
+    asyncio.run(selected_fresh_scenario(variants, monkeypatch))
 
-    async def scenario():
+
+async def selected_fresh_scenario(variants, monkeypatch, *, progression=None):
+    """The checked Manager-selected fresh bedroom smoke. With `progression` (a dict handed to the gate
+    as `input.progression`, plus `checks(document, runtime, ready, arrived, run_directory, client_run_root)`
+    and `timeout`), the SAME two emulator processes continue past the 1x/3x windows into the
+    original-game progression and the extra receipt is verified before finish; without it the
+    behaviour is byte-for-byte the bedroom smoke."""
+    if True:
         directory = Path(tempfile.mkdtemp(prefix="native-selected-fresh-", dir=ROOT / ".cache")).resolve()
         private = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
         private["Rewind"]["Enabled"] = False
@@ -201,18 +209,22 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
         completed = False
         performance_failures = []
 
-        async def wait(name, player, seconds):
-            file = directory / f"{name}-{player}.json"
+        async def wait_any(names, player, seconds):
             deadline = asyncio.get_running_loop().time() + seconds
             while asyncio.get_running_loop().time() < deadline:
-                if file.exists():
-                    return json.loads(file.read_text())
+                for name in names:
+                    file = directory / f"{name}-{player}.json"
+                    if file.exists():
+                        return name, json.loads(file.read_text())
                 for job in jobs:
                     if job.done():
                         passed, path, log = await job
-                        raise AssertionError(f"emulator exited before {name}: {passed} {path}\n{log}")
+                        raise AssertionError(f"emulator exited before {names}: {passed} {path}\n{log}")
                 await asyncio.sleep(0.02)
-            raise AssertionError(f"native-selected fresh gate timed out waiting for {name}-{player}")
+            raise AssertionError(f"native-selected fresh gate timed out waiting for {names}-{player}")
+
+        async def wait(name, player, seconds):
+            return (await wait_any((name,), player, seconds))[1]
 
         try:
             client, run, run_directory, session_id = await selected_manager(directory, variants, monkeypatch)
@@ -259,10 +271,12 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                 spec = directory / f"input-{player}.json"
                 publish(spec, {"directory": directory.as_posix(), "player": player,
                                "launcher": str(downloaded[player]["launcher"]),
-                               "phases": PHASES, "rom_sha1": downloaded[player]["bundle"]["rom_sha1"]})
+                               "phases": PHASES, "rom_sha1": downloaded[player]["bundle"]["rom_sha1"],
+                               **({"progression": progression["input"]} if progression else {})})
                 jobs.append(asyncio.create_task(asyncio.to_thread(
                     run_gate, script.relative_to(ROOT).as_posix(), rom_key=variant + "_companion",
-                    timeout=480, quiet=True, config_base=str(base_config), fixture_override=str(fixture),
+                    timeout=progression["timeout"] if progression else 480,
+                    quiet=True, config_base=str(base_config), fixture_override=str(fixture),
                     cartridge_override={"path": str(downloaded[player]["rom"]),
                                         "sha256": downloaded[player]["sha256"],
                                         "saveram_name": "candidate.SaveRAM"},
@@ -324,6 +338,17 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                     assert all(probe["injected"] and probe["restored"] for probe in phase["probes"])
                 assert status["runtime"]["pending_events"] == 0
             assert all(turn["error"] is None for turn in turns), "server error before client finish"
+            if progression:
+                # The same admitted processes continue: wait for each gate's arrival (or refusal)
+                # receipt, then the experiment's own checks run against the live runtime before finish.
+                arrived = {}
+                for player in ("a", "b"):
+                    outcome = await wait_any(("arrived", "refused"), player, progression["wait_seconds"])
+                    assert outcome[0] == "arrived", f"{player} refused: {json.dumps(outcome[1])[:2000]}"
+                    arrived[player] = outcome[1]
+                assert all(turn["error"] is None for turn in turns), "server error during the progression"
+                document = runtime.state().document()
+                progression["checks"](document, runtime, ready, arrived, run_directory, client_run_root)
             finish_requested_at = time.perf_counter()
             publish(directory / "finish.json", {"done": True})
             for job in jobs:
@@ -414,6 +439,7 @@ def test_manager_selected_native_pair_free_runs_fresh_bedroom(variants, monkeypa
                         and marker.read_text() == client_run_root.name == session_id), "client journal ownership changed"
                 if not completed:
                     shutil.copytree(client_run_root, directory / "client-journal-failure")
+                if progression and progression.get("keep_client_journals"):
+                    kept = directory / "client-journals"
+                    shutil.copytree(client_run_root, kept)
                 shutil.rmtree(client_run_root)
-
-    asyncio.run(scenario())
