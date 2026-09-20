@@ -352,3 +352,9 @@ pureRGB session notified (rebases onto 5c97aa4); my writes frozen.
 QUEUE: wEvoOldSpecies at the publish site (removes the script-initialization ambiguity; needs a profile symbol via the
 generator); native Cable Club trades unsupported/unprotected (refusal or warning); NPC-trade live receipt (no fixture near one);
 Yellow write-path duo evidence; MINORs from Fable: rescan_boxes per-frame cost, party_mon nickname re-encode, SameBoy core untested.
+
+## MERGED BOTH TO MASTER (2026-09-20 ~22:30Z) -- owner: "Work with PureRGB and merge both to main"
+Local master = 0937f3d: the Gen 1 RC (48883f8) plus the pureRGB integration branch (merge 8eed7e1 of 997613a, lint merge
+c95a664, receipt 0937f3d) -- its full runner GATE PASSED 19/19 (the 12 vanilla lanes identical to master's run 8: duo-pairs 18/18,
+slow-name + evolution gates Red/Blue; 7 pure lanes incl. duo-pairs-purergb 33/33). NOT pushed (origin/master adf3362 is 458
+commits behind), NOT tagged, no release -- owner's call. The pureRGB session owns lua/gen1/* and the Gen 1 tooling from here.
