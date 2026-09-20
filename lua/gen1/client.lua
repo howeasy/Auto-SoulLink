@@ -362,9 +362,19 @@ function Client.new(p)
             end
         end
         if n > 1 then a.ambiguous = true end
+        if n == 0 then a.lost = true end
         if a.ambiguous then return nil, nil, "ambiguous key (indistinguishable duplicate)" end
-        if n == 0 then return nil, nil, "retired record not found" end
+        if a.lost then return nil, nil, "retired record left the party" end
         return slot, mon
+    end
+    -- Continuity: a record carrying an aliased key leaving the party natively (PC deposit,
+    -- daycare, release, a trade) ends the alias's authority for good -- an identical record
+    -- withdrawn afterwards must not become "the" record (sequential replacement, review
+    -- cx-fc0d91b7). An unreadable departure is treated as the aliased record's (conservative).
+    local function alias_departure(key)
+        local function hit(a) if a and (key == nil or key == a.new_key) then a.lost = true end end
+        hit(self.key_alias)
+        for _, r in pairs(self.retired_alias) do hit(r) end
     end
     -- The one identity resolver: dispatch (handle_command), battle writes and the deferred
     -- checkpoint all go through here. A key the server still tracks after a REJECTED
@@ -454,7 +464,8 @@ function Client.new(p)
                 -- the cartridge cannot be rolled back (the DVs / species are already written), so
                 -- the retirement the server queues under the OLD key has to find the mon by
                 -- the key it physically holds now; cleared once its memorial lands
-                self.retired_alias[a.old_key] = { new_key = a.new_key, evidence = a.evidence, ambiguous = a.ambiguous }
+                self.retired_alias[a.old_key] = { new_key = a.new_key, evidence = a.evidence,
+                                                  ambiguous = a.ambiguous, lost = a.lost }
                 local party = current_party()
                 if party then observe_alias(self.retired_alias[a.old_key], party) end
                 self.key_alias = nil
@@ -860,6 +871,7 @@ function Client.new(p)
                 local party = party_from_snapshot(pt.party or {})
                 local key, mon
                 if party then key, mon = key_at(party, pt.which) end
+                if self.key_alias or next(self.retired_alias) then alias_departure(key) end
                 if key then
                     send("party_to_box", { key = key, stats = { level = mon.level, maxHP = mon.max_hp } })
                 end
@@ -904,6 +916,7 @@ function Client.new(p)
             local key
             if pt.from_box then key = box and key_at(box, pt.which)
             else key = party and key_at(party, pt.which) end
+            if not pt.from_box and (self.key_alias or next(self.retired_alias)) then alias_departure(key) end
             if not party or not box then
                 -- Both collections must DECODE before an absence can mean anything: a nil party
                 -- would make Bill's WITHDRAW look like a release, a nil box would make a deposit

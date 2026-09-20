@@ -1285,6 +1285,68 @@ def test_ambiguity_seen_at_a_resolution_is_latched_when_the_real_record_leaves(w
     assert world.events("memorialize_done") == []
 
 
+def test_depositing_the_changed_record_and_withdrawing_its_boxed_twin_is_refused(world):
+    """Review cx-fc0d91b7: A (changed, in the party) and an identical B in a box. A is
+    deposited (native MoveMon party->box), B withdrawn. No observation ever saw two candidates;
+    the departure itself must have ended the alias, so B is never retired (real box module)."""
+    rng = random.Random(19)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    a_rec = dict(party[0], nick="ONE")
+    twin = dict(party[0], nick="ONE")
+    world.seed_party([a_rec, dict(party[1], nick="TWO")])
+    world.bus[world.ram["wMoveMonType"]] = 1          # PARTY_TO_BOX
+    world.bus[world.ram["wWhichPokemon"]] = 0         # A is deposited
+    world.fire("move_mon")
+    world.step(2)
+    assert world.client.retired_alias[old].lost is True
+    world.seed_party([twin, dict(party[1], nick="TWO")])   # B withdrawn into A's old place
+    assert codec.key(world.party()[0]) == new
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert world.events("memorialize_done") == []
+    assert any("left the party" in line for line in world.logs)
+
+
+def test_a_twin_present_at_the_change_itself_latches_ambiguity_before_any_rejection(world):
+    """Review cx-fc0d91b7 test gap: a genuine capture-time latch. An evolution (no client
+    preflight) lands on a key an identical-evidence record already carries; the capture sees
+    two candidates; A is edited BEFORE the rejection arrives; the retirement is still refused."""
+    rng = random.Random(20)
+    a_rec = _mon(rng, 0x99, nick="ONE", dvs=0x1234, ot_id=0x1234)      # Bulbasaur
+    twin = dict(a_rec, species=0x09)                                    # Ivysaur, same DVs/OT/nick/moves
+    world.seed_party([a_rec, twin])
+    world.connect()
+    world.step(60)
+    old = codec.key(world.party()[0])
+    world.bus[world.ram["wWhichPokemon"]] = 0
+    world.fire("evolve")
+    world.step()
+    party = world.party()
+    party[0]["species"] = 0x09
+    world.seed_party([dict(party[0], nick="ONE"), dict(party[1], nick="ONE")])
+    world.step(2)
+    kc = world.events("key_change")
+    assert kc and kc[-1]["old_key"] == old and kc[-1]["new_key"] == codec.key(world.party()[1])
+    assert world.client.key_alias.ambiguous is True, "two candidates at the capture"
+    new = kc[-1]["new_key"]
+    edited = dict(world.party()[0], nick="ONE", moves=[0x22, 0x21, 0x2D, 0x00])
+    world.seed_party([edited, dict(party[1], nick="ONE")])
+    world.reply({"cmd": "key_change_rejected", "old_key": old, "new_key": new, "reason": "collision"})
+    world.step()
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert world.events("memorialize_done") == []
+
+
 def test_a_wram_clear_forgets_the_retirement_alias(world):
     """Review cx-e606e6a3 (plausible P1): after a reset the record the alias pointed at is gone;
     a reloaded pre-change save holds the old key again and the server's re-queued retirement
