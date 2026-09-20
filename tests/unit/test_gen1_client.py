@@ -446,8 +446,9 @@ def test_enemy_party_build_and_npc_trade_do_not_look_like_captures(world):
     world.step()
     rng = random.Random(4)
     party = world.party()
-    party[1] = _mon(rng, 0x2D, level=10, nick="JYNX")  # received mon lands in the same slot for this model
+    party[1] = _mon(rng, 0x2D, level=10, nick="JYNX")  # last-slot trade: append restores slot 1
     world.seed_party(party)
+    world.fire("npc_trade_done")
     world.step()
     kc = world.events("key_change")
     assert len(kc) == 1 and kc[0]["old_key"] == old and kc[0]["new_key"] == codec.key(world.party()[1])
@@ -1770,6 +1771,7 @@ def test_a_removal_inside_an_npc_trade_keeps_the_pending_key_change(world):
     party = world.party()
     party[1] = _mon(rng, 0x2D, level=10, nick="JYNX")
     world.seed_party(party)
+    world.fire("npc_trade_done")
     world.step()
     kc = world.events("key_change")
     assert len(kc) == 1 and kc[0]["old_key"] == old and kc[0]["reason"] == "npc_trade", kc
@@ -1908,3 +1910,146 @@ def test_an_undecodable_snapshot_classifies_nothing_and_says_which_half_was_miss
     world.step(3)                                # and it is not retried from a later snapshot
     assert [ln for ln in world.logs[nlog:] if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln] ==         [ln for ln in lines if "STORAGE_CLASSIFICATION_UNAVAILABLE" in ln]
     world.assert_all_conform()
+
+
+@pytest.mark.parametrize("title", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("boxed", [False, True])
+@pytest.mark.parametrize("end_same_frame", [False, True])
+def test_acquisition_survives_long_naming(title, boxed, end_same_frame):
+    """AskName precedes the record write in both native acquisition routines."""
+    w = World(title)
+    rng = random.Random(81)
+    mons = [_mon(rng, 0x99) for _ in range(6 if boxed else 1)]
+    w.seed_party(mons)
+    w.give_poke_ball()
+    w.set_map(12)
+    w.connect()
+    w.in_battle(0xA5, 0xA5, 5)
+    w.fire("battle_begin")
+    w.step()
+    w.fire("capture_box" if boxed else "add_party_mon")
+    w.step(2100)  # 35 seconds of user-controlled naming, after the entry signal
+    assert w.events("capture") == []
+    assert w.events("no_catch") == []
+    caught = _mon(rng, 0xA5, nick="NAMED")
+    if boxed:
+        r = w.ram
+        w.bus[r["wBoxCount"]] = 1
+        w.bus[r["wBoxSpecies"]:r["wBoxSpecies"] + 2] = bytes([0xA5, 0xFF])
+        blob = bytearray(codec.encode_party_mon(caught)[:33])
+        blob[3] = caught["level"]
+        w.bus[r["wBoxMons"]:r["wBoxMons"] + 33] = blob
+        w.bus[r["wBoxMonOT"]:r["wBoxMonOT"] + 11] = codec.encode_name("RED")
+        w.bus[r["wBoxMonNicks"]:r["wBoxMonNicks"] + 11] = codec.encode_name("NAMED")
+    else:
+        w.seed_party(mons + [caught])
+    if not end_same_frame:
+        w.step(3)
+    w.bus[w.ram["wIsInBattle"]] = 0
+    w.fire("battle_end")
+    w.step(3)
+    captures = w.events("capture")
+    assert len(captures) == 1
+    assert captures[0]["key"] == codec.key(caught)
+    assert captures[0]["in_box"] == boxed
+    assert captures[0]["area_id"] == "route_1"
+    assert w.events("no_catch") == []
+    w.assert_all_conform()
+
+
+@pytest.mark.parametrize("title", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("result", [1, 2])
+def test_uncaught_battle_still_reports_no_catch(title, result):
+    w = World(title)
+    w.seed_party([_mon(random.Random(82), 0x99)])
+    w.give_poke_ball()
+    w.set_map(12)
+    w.connect()
+    w.in_battle(0xA5, 0xA5, 5)
+    w.fire("battle_begin")
+    w.step(2100)
+    w.bus[w.ram["wBattleResult"]] = result
+    w.bus[w.ram["wIsInBattle"]] = 0
+    w.fire("battle_end")
+    w.step(3)
+    assert len(w.events("no_catch")) == 1
+    assert w.events("capture") == []
+
+
+# Native PCs from pinned pret InGameTrade_DoTrade: RB :99/:145/:151,
+# Yellow :90/:133/:139. Drive CPU positions rather than named hooks so
+# this test detects a hook accidentally moved back before DisplayPartyMenu.
+_NPC_PCS = {"red": (0x5C07, 0x5C74, 0x5C8A),
+            "blue": (0x5C07, 0x5C74, 0x5C8A),
+            "yellow": (0x5CA9, 0x5D0D, 0x5D1E)}
+
+
+def _npc_cpu_point(w, stage):
+    pc = _NPC_PCS[w.title][stage]
+    w.bus[w.ram["hLoadedROMBank"]] = 0x1C
+    w.regs["PC"] = pc
+    for fn, address in w.hooks.values():
+        if address == pc:
+            fn()
+
+
+@pytest.mark.parametrize("title", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("slot", [0, 1, 2])
+@pytest.mark.parametrize("selection_frames", [2, 420])
+def test_npc_trade_native_compaction_after_long_selection(title, slot, selection_frames):
+    w = World(title)
+    rng = random.Random(83)
+    mons = [_mon(rng, s) for s in (0x99, 0xB1, 0xA5)]
+    w.seed_party(mons)
+    w.connect()
+    # Stale wWhichPokemon at menu entry must not select the outgoing identity.
+    w.bus[w.ram["wWhichPokemon"]] = (slot + 1) % 3
+    _npc_cpu_point(w, 0)
+    w.step(selection_frames)
+    assert w.events("key_change") == []
+    w.bus[w.ram["wWhichPokemon"]] = slot
+    _npc_cpu_point(w, 1)  # actual selected slot, immediately before RemovePokemon
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0
+    w.fire("remove_pokemon")
+    survivors = mons[:slot] + mons[slot + 1:]
+    w.seed_party(survivors)
+    w.step(2)  # a frame can split remove and append
+    assert w.events("key_change") == []
+    w.bus[w.ram["wMonDataLocation"]] = 0x80
+    w.fire("add_party_mon")
+    incoming = _mon(rng, 0x2D, nick="LOLA")
+    w.seed_party(survivors + [incoming])
+    w.step(2)  # CopyDataToReceivedMon has not yet finalized the OT
+    assert w.events("key_change") == []
+    incoming["ot_id"] = 0x4567
+    w.seed_party(survivors + [incoming])
+    _npc_cpu_point(w, 2)  # after copy + optional native trade evolution
+    w.step(3)
+    changes = w.events("key_change")
+    assert len(changes) == 1
+    assert changes[0]["old_key"] == codec.key(mons[slot])
+    assert changes[0]["new_key"] == codec.key(incoming)
+    assert changes[0]["new_species"] == 0x2D
+    assert changes[0]["new_nickname"] == "LOLA"
+    assert w.events("capture") == []
+    assert w.events("party_to_box") == []
+    w.assert_all_conform()
+
+
+@pytest.mark.parametrize("title", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("selection_frames", [2, 420])
+def test_npc_trade_declined_menu_emits_nothing(title, selection_frames):
+    w = World(title)
+    rng = random.Random(84)
+    mons = [_mon(rng, s) for s in (0x99, 0xB1, 0xA5)]
+    w.seed_party(mons)
+    w.connect()
+    _npc_cpu_point(w, 0)
+    w.step(selection_frames)
+    # B returns via tradeFailed; neither mutation PC is executed. A later reorder
+    # is not a completed trade and must not migrate any identity.
+    w.seed_party(list(reversed(mons)))
+    w.step(3)
+    assert w.events("key_change") == []
+    assert w.events("capture") == []
+    assert w.events("party_to_box") == []

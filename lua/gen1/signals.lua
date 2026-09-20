@@ -169,12 +169,23 @@ S.KINDS.evolve = {
                  party = io.read_range(ram.wPartyCount, 404, "System Bus") }
     end,
 }
+-- Immediately before RemovePokemon, AFTER selection and the native animation:
+-- pokered in_game_trades.asm:139-145; pokeyellow :127-133.
 S.KINDS.npc_trade = {
     point = function(io, ram)
         return { which = io.read_u8(ram.wWhichPokemon, "System Bus"),
                  give = io.read_u8(ram.wInGameTradeGiveMonSpecies, "System Bus"),
                  receive = io.read_u8(ram.wInGameTradeReceiveMonSpecies, "System Bus"),
                  party = io.read_range(ram.wPartyCount, 404, "System Bus") }
+    end,
+}
+
+-- Before ClearScreen, AFTER CopyDataToReceivedMon and CheckForTradeEvo:
+-- pokered in_game_trades.asm:149-151; pokeyellow :137-139. Capture here,
+-- not from a later poll: the recipient's final OT/name/evolution are now authoritative.
+S.KINDS.npc_trade_done = {
+    point = function(io, ram)
+        return { party = io.read_range(ram.wPartyCount, 404, "System Bus") }
     end,
 }
 

@@ -265,6 +265,7 @@ function Client.new(p)
             -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
             if reads.read_player_id() == 0 then
                 self.hello_sent = false
+                self.pending_change = nil -- an acquisition cannot outlive a reset/new save
                 -- WRAM clear: the held panel belongs to the session that just ended
                 if self.panel then self.panel:clear() end
             end
@@ -649,10 +650,16 @@ function Client.new(p)
                 end
             end
         elseif k == "battle_end" then
+            -- EndOfBattle is after AddPartyMon/SendNewMonToBox returned. Settle the
+            -- acquisition before deciding no_catch, even if its final writes and this
+            -- hook drained in the same frame (pokered item_effects.asm:550-568).
+            self:settle_pending_change(true)
             local b = self.battle
+            local acquiring = self.pending_change and self.pending_change.kind == "acquire"
+                              and self.pending_change.in_battle
             if b and b.demo then
                 log("[SLink-gen1] demonstration battle (type " .. tostring(b.demo) .. "): nothing resolved")
-            elseif b and b.wild and not b.captured and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
+            elseif b and b.wild and not b.captured and not acquiring and not self.resolved_areas[b.area_id] and b.area_id ~= "" then
                 -- A Tower ghost without the Scope: the battle cannot be won or caught, so it
                 -- is not evidence of a failed encounter. `has_item` returns nil when the bag
                 -- cannot be read (reads.lua:200-207), and the safe reading of "cannot tell" is
@@ -691,7 +698,9 @@ function Client.new(p)
                 -- already tracking the trade; the key_change settles it
             else
                 self.pending_change = { kind = "acquire", frame = sig.frame, in_battle = pt.in_battle ~= 0,
-                                        to_box = (k == "capture_box"), area_id = area_id, map = pt.map,
+                                        to_box = (k == "capture_box"),
+                                        area_id = (self.battle and self.battle.static and self.battle.area_id) or area_id,
+                                        map = pt.map,
                                         -- stamped now: the demo battle can end before this settles
                                         demo = (self.battle and self.battle.demo) or false }
             end
@@ -726,7 +735,8 @@ function Client.new(p)
             -- hundred-odd frames later (:179-180 DelayFrames 100, :204 save, then
             -- trade_service.asm:106-113): only the APPLY state spans that gap, which is why this
             -- is a state test and not an age window.
-            local trading = self.trade_state and self.trade_state.kind == "apply"
+            local trading = (self.trade_state and self.trade_state.kind == "apply")
+                            or (self.pending_change and self.pending_change.kind == "npc_trade")
             -- What separates a removal that finishes a MoveMon from a standalone one is WHERE
             -- THE MON IS, not how many frames ago the MoveMon fired: _MoveMon runs to completion
             -- before RemovePokemon is called, and both collections are in this point's snapshot.
@@ -784,6 +794,9 @@ function Client.new(p)
                 self.pending_change = { kind = "rescan", frame = sig.frame }
             end
         elseif k == "evolve" then
+            -- An NPC trade can evolve its appended recipient; its completion hook
+            -- owns that final identity, rather than a second overlapping migration.
+            if self.pending_change and self.pending_change.kind == "npc_trade" then return end
             local party = party_from_snapshot(pt.party or {})
             local key, mon
                 if party then key, mon = key_at(party, pt.which) end
@@ -791,7 +804,27 @@ function Client.new(p)
         elseif k == "npc_trade" then
             local party = party_from_snapshot(pt.party or {})
             local key = party and key_at(party, pt.which)
-            if key then self.pending_change = { kind = "npc_trade", frame = sig.frame, slot = pt.which, old_key = key } end
+            if key then
+                self.pending_change = { kind = "npc_trade", frame = sig.frame,
+                                        count = #party, old_key = key }
+            end
+        elseif k == "npc_trade_done" then
+            local pc = self.pending_change
+            if not pc or pc.kind ~= "npc_trade" then return end
+            local party = party_from_snapshot(pt.party or {})
+            local mon = party and #party == pc.count and party[#party] or nil
+            if not mon then
+                log("[SLink-gen1] NPC trade completion unreadable; key migration refused")
+                self.pending_change = nil
+                return
+            end
+            -- RemovePokemon compacts; AddPartyMon appends. The final slot, not
+            -- the selected slot, is the received mon (pokered in_game_trades.asm:232-239).
+            local key = mon_key(mon)
+            self.known_keys[pc.old_key], self.known_keys[key] = nil, true
+            send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
+                                 reason = "npc_trade", new_nickname = reads.decode_name(mon.nickname_bytes) })
+            self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "save_witness" then
             if io.saveram then pcall(io.saveram) end
         elseif k == "starter_begin" or k == "starter_end" or k == "battle_loop_head" then
@@ -801,10 +834,17 @@ function Client.new(p)
     end
 
     -- A signal said the party/boxes changed; read the outcome once, when the engine is done.
-    function self:settle_pending_change()
+    function self:settle_pending_change(acquisition_complete)
         local pc = self.pending_change
-        if not pc or self.frame <= pc.frame then return end
-        if self.frame - pc.frame > Client.MAX_PENDING_FRAMES then self.pending_change = nil return end
+        if not pc or (self.frame <= pc.frame and not acquisition_complete) then return end
+        -- AskName runs BEFORE the record exists on both paths (pokered/pokeyellow
+        -- add_mon.asm:45-53; pokered item_effects.asm:2737-2743). Human input has
+        -- no deadline. This is one bounded pending slot, cleared on reset or the
+        -- next engine operation, not an accumulating queue needing a frame cap.
+        if pc.kind == "npc_trade" then return end -- only npc_trade_done owns completion
+        if pc.kind ~= "acquire" and self.frame - pc.frame > Client.MAX_PENDING_FRAMES then
+            self.pending_change = nil return
+        end
         local party = current_party()
         if not party then return end
         if pc.kind == "acquire" then
@@ -822,7 +862,7 @@ function Client.new(p)
             -- Level and stats are the last writes: require them, and the same key on two
             -- consecutive frames, before the mon is reported.
             local key = mon_key(found)
-            if found.level == 0 or (not pc.to_box and found.max_hp == 0) or pc.candidate ~= key then
+            if found.level == 0 or (not pc.to_box and found.max_hp == 0) or (not acquisition_complete and pc.candidate ~= key) then
                 pc.candidate = key
                 return
             end
@@ -845,18 +885,18 @@ function Client.new(p)
             if self.battle and not gift then self.battle.captured = true end
             self.resolved_areas[area_id] = true
             self.pending_change = { kind = "rescan", frame = self.frame }
-        elseif pc.kind == "evolution" or pc.kind == "npc_trade" then
+        elseif pc.kind == "evolution" then
             local key, mon = key_at(party, pc.slot)
             if not key then self.pending_change = nil return end
             if key ~= pc.old_key then
                 self.known_keys[pc.old_key] = nil
                 self.known_keys[key] = true
                 send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                     reason = pc.kind == "evolution" and "evolution" or "npc_trade",
+                                     reason = "evolution",
                                      new_nickname = mon.nickname })
                 self.pending_change = nil
             elseif self.frame - pc.frame > 300 then
-                self.pending_change = nil -- trade declined / evolution cancelled
+                self.pending_change = nil -- evolution cancelled
             end
         elseif pc.kind == "rescan" then
             self:rescan_boxes()

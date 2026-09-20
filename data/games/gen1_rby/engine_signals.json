@@ -104,12 +104,20 @@
      "symbol": "MoveMon"
     },
     "npc_trade": {
-     "address": 23559,
+     "address": 23668,
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "AFEA7DD03DEA",
-     "rom_offset": 465927,
-     "symbol": "InGameTrade_DoTrade"
+     "expected_hex": "CD1F393E80EA",
+     "rom_offset": 466036,
+     "symbol": "InGameTrade_DoTrade+109"
+    },
+    "npc_trade_done": {
+     "address": 23690,
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD0F19CDA25C",
+     "rom_offset": 466058,
+     "symbol": "InGameTrade_DoTrade+131"
     },
     "poison_faint": {
      "address": 18137,
@@ -263,12 +271,20 @@
      "symbol": "MoveMon"
     },
     "npc_trade": {
-     "address": 23559,
+     "address": 23668,
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "AFEA7DD03DEA",
-     "rom_offset": 465927,
-     "symbol": "InGameTrade_DoTrade"
+     "expected_hex": "CD1F393E80EA",
+     "rom_offset": 466036,
+     "symbol": "InGameTrade_DoTrade+109"
+    },
+    "npc_trade_done": {
+     "address": 23690,
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CD0F19CDA25C",
+     "rom_offset": 466058,
+     "symbol": "InGameTrade_DoTrade+131"
     },
     "poison_faint": {
      "address": 18137,
@@ -422,12 +438,20 @@
      "symbol": "MoveMon"
     },
     "npc_trade": {
-     "address": 23721,
+     "address": 23821,
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "AFEA7CD03DEA",
-     "rom_offset": 466089,
-     "symbol": "InGameTrade_DoTrade"
+     "expected_hex": "CD14393E80EA",
+     "rom_offset": 466189,
+     "symbol": "InGameTrade_DoTrade+100"
+    },
+    "npc_trade_done": {
+     "address": 23838,
+     "bank": 28,
+     "capture_offset": 0,
+     "expected_hex": "CDDD16CD365D",
+     "rom_offset": 466206,
+     "symbol": "InGameTrade_DoTrade+117"
     },
     "poison_faint": {
      "address": 17454,
