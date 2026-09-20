@@ -63,7 +63,9 @@ end
 -- core would otherwise error before the guard could refuse.
 do
     local sys_ok, sys = pcall(function() return emu.getsystemid() end)
-    if sys_ok and (sys == "GB" or sys == "GBC") then
+    -- "SGB" is what EmuHawk reports when GbAsSgb is on (Gambatte in Super Game Boy mode,
+    -- opt-in, off in the stock config); the cartridge is the same Gen 1 ROM.
+    if sys_ok and (sys == "GB" or sys == "GBC" or sys == "SGB") then
         local Entry = dofile(_dir .. "gen1/entry.lua")
         if Entry.detect_title(function(addr) return memory.read_u8(addr, "ROM") end) then
             dofile(_dir .. "gen1/run.lua")
