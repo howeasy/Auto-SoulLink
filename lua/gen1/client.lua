@@ -343,6 +343,11 @@ function Client.new(p)
     local function matches_evidence(m, e)
         return same_bytes(m.nickname_bytes, e.nick) and same_bytes(m.moves, e.moves)
     end
+    -- The evidence is FROZEN at the change. A record edited before its retirement lands (a TM
+    -- from the item menu, a rename) no longer matches and the retirement is refused with a
+    -- failure reply -- never re-identified by similarity: a partial match cannot tell "the
+    -- same record after one edit" from "the record left and an unrelated one shares a field"
+    -- (review cx-c63e4289). Documented residual: such a retirement needs manual resolution.
     -- The one identity resolver: dispatch (handle_command), battle writes and the deferred
     -- checkpoint all go through here. A key the server still tracks after a REJECTED
     -- key_change resolves to the record the cartridge physically holds: among the records
@@ -612,11 +617,20 @@ function Client.new(p)
         -- the box module takes both so a duplicate of the new key elsewhere cannot block the
         -- retirement; replies keep cmd.key, which is what the server tracks
         local r = self.retired_alias[cmd.key]
-        local phys, hint = r and r.new_key or cmd.key, nil
-        if r then hint = find_party_slot(cmd.key) end
+        local phys, hint, refused = r and r.new_key or cmd.key, nil, nil
+        if r then
+            local slot, _, _, why = find_party_slot(cmd.key)
+            -- evidence failure is TERMINAL for an aliased command: the box module's own key
+            -- lookup would find whichever record carries the duplicated key, so it is never
+            -- consulted without a positive match (review cx-4f2e28f8)
+            hint, refused = slot, (not slot) and (why or "retired record not found") or nil
+        end
         local ok, err = pcall(function()
             writes:arm("overworld")
-            if cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
+            if refused and (cmd.cmd == "box_mon" or cmd.cmd == "memorialize") then
+                log("[SLink-gen1] " .. cmd.cmd .. " refused for the retired key: " .. refused .. " " .. tostring(cmd.key))
+                send(cmd.cmd .. "_failed", { key = cmd.key, reason = refused })
+            elseif cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
                 local slot, _, _, why = find_party_slot(cmd.key)
                 if slot then
                     writes:faint_party_slot(slot)

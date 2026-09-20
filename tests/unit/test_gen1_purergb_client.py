@@ -1157,6 +1157,77 @@ def test_a_rejection_arriving_after_a_wram_clear_creates_no_retirement_alias(wor
     assert dict(world.client.retired_alias) == {}
 
 
+def test_a_retired_record_that_left_the_party_never_lets_a_same_key_innocent_be_buried(world):
+    """Review cx-4f2e28f8 (b): changed A is gone from the party (deposited), an unrelated B
+    carries the same key beside a spare C. The evidence finds no A; the REAL box module must not
+    be consulted by key (it would find B): memorialize_failed{old}, nothing written, B intact."""
+    rng = random.Random(14)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    b_mon = dict(party[1], species=party[0]["species"], ot_id=party[0]["ot_id"], dvs=party[0]["dvs"], nick="INNOCENT")
+    c_mon = _mon(rng, 0xB1, nick="SPARE", dvs=0x3333, ot_id=0x1234)
+    world.seed_party([b_mon, c_mon])            # A has left the party
+    assert codec.key(world.party()[0]) == new
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": old}, {"cmd": "box_mon", "key": old})
+    world.step(3)
+    after = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    assert after == before, "no party byte moved"
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert [e["key"] for e in world.events("box_mon_failed")] == [old]
+    assert world.events("memorialize_done") == []
+    assert old in world.client.retired_alias, "the alias is kept for a later, resolvable retirement"
+
+
+def test_an_edited_record_is_refused_not_re_identified_by_similarity(world):
+    """Review cx-c63e4289: evidence is frozen at the change. A's move set changes before the
+    retirement lands (a TM from the item menu) while a same-key duplicate keeps A's old moves
+    -- nothing may be adopted by similarity: no write, failure replies under the old key."""
+    rng = random.Random(15)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    dup = dict(party[1], species=party[0]["species"], ot_id=party[0]["ot_id"], dvs=party[0]["dvs"], nick="DUPE")
+    a_edited = dict(party[0], nick="ONE")
+    a_edited["moves"] = [0x22, 0x21, 0x2D, 0x00]     # a TM replaced move 1
+    world.seed_party([dup, a_edited])
+    world.step(2)
+    ev = world.client.retired_alias[old].evidence
+    assert ev.moves[1] != 0x22, "the evidence is frozen at the change"
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert world.events("memorialize_done") == []
+
+
+def test_a_same_key_innocent_sharing_only_the_moves_is_never_adopted(world):
+    """Review cx-c63e4289: A left the party; B carries A's key AND A's move set but its own
+    nickname. Similarity must not re-identify B as A: evidence unchanged, B untouched,
+    failure replies under the old key (the real box module)."""
+    rng = random.Random(16)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    b_mon = dict(party[1], species=party[0]["species"], ot_id=party[0]["ot_id"], dvs=party[0]["dvs"], nick="INNOCENT")
+    b_mon["moves"] = list(party[0]["moves"])
+    c_mon = _mon(rng, 0xB1, nick="SPARE", dvs=0x3333, ot_id=0x1234)
+    world.seed_party([b_mon, c_mon])
+    world.step(2)
+    assert codec.key(world.party()[0]) == new
+    ev_nick_first = world.client.retired_alias[old].evidence.nick[1]
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old}, {"cmd": "box_mon", "key": old})
+    world.step(4)
+    assert world.client.retired_alias[old].evidence.nick[1] == ev_nick_first == codec.encode_name("ONE")[0]
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert [e["key"] for e in world.events("box_mon_failed")] == [old]
+    assert world.events("memorialize_done") == []
+
+
 def test_a_wram_clear_forgets_the_retirement_alias(world):
     """Review cx-e606e6a3 (plausible P1): after a reset the record the alias pointed at is gone;
     a reloaded pre-change save holds the old key again and the server's re-queued retirement

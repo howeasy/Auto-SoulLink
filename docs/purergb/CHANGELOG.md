@@ -417,6 +417,7 @@ Read this section if you only play vanilla.
 | 16 | final review (Fable, limited context) | a clean Red beside a companion-patched Blue (kind `named`) was refused as MIXED artifact kinds — a vanilla regression for the optional patch | `named` counts as `clean` in the mixed-kind check (the patch is per cartridge, announced per player); regression in `test_state_key_change_ack.py` |
 | 17 | final review (Codex, round 2) | the retirement alias resolved only in the deferred path and by key alone: `force_faint` dispatch/battle writes never saw it, and a duplicate of the new key in the party made the memorial ambiguous; a WRAM clear left a stale alias | one alias-aware `find_party_slot` (dispatch, battle, deferred) with a validated slot locator; the box module takes the slot hint; the alias map is cleared on WRAM clear |
 | 18 | final review (Fable) | comments claimed a non-pinned pureRGB build "cannot take" the vanilla-header path; it can, and is then refused by the vanilla site verification | `run.lua`, `gen1_rom_scan.py` docstring, CHANGELOG §7 corrected |
+| 20 | final review (Codex, rounds 4–5) | an aliased retirement whose evidence match failed still reached the box module with a nil hint, whose key-only lookup could bury an innocent same-key record; a similarity-based refresh of the evidence (tried in round 4) could re-identify an innocent record as the retired one | evidence failure is terminal (`memorialize_failed` / `box_mon_failed`, nothing written) and the evidence is **frozen at the change** — never re-identified by similarity. Documented residual (§7): a retired record edited (TM, rename) or moved out of the party before its retirement lands is refused and needs manual resolution; the server treats the failure reply as best-effort complete, so it is not retried automatically |
 | 19 | final review (Codex, round 3) | the retirement locator was a party slot: after a swap the duplicate of the new key sat at the recorded slot and would have been retired instead; the pending `key_alias` survived a WRAM clear, so a late rejection could re-create a retirement from the previous session | the locator is record evidence (nickname bytes + move set) that a swap cannot forge, refused when none or several records match; WRAM clear drops the pending alias and pending change too; the committed run kind is the base kind |
 
 ---
@@ -463,6 +464,15 @@ Read this section if you only play vanilla.
 - The harness's RNG classes remain: one-ball fixtures miss ~10–15 % of throws, the rival AI's
   move choice varies; the runner retries within budgets, and `ball_gate_new` (cold boot) has one
   attempt by design.
+- **Retirement after a rejected `key_change` is best-effort.** The server rejects a `key_change` only
+  on a cross-player collision (the client's own preflight prevents same-cartridge ones), and then
+  retires the pair under the key it still tracks. The client locates the physically changed record
+  by frozen evidence (nickname bytes + move set at the change): if that record was edited (a TM from
+  the item menu, a rename) or left the party before the retirement landed, or an indistinguishable
+  duplicate exists, the client writes nothing and replies `memorialize_failed` / `box_mon_failed`
+  (the `force_faint` is dropped with a log line). The server treats those replies as best-effort
+  complete and does not retry; the mon then needs manual resolution. Nothing is ever fainted or
+  buried by guessing.
 - `SoulLinkState.load` rebuilds the adapter without `artifact_kind` (compensated in `server.py`);
   a rand↔clean pure pair is refused as MIXED GAMES (same-kind rule); receipts are scenario-keyed,
   so the same scenario must not run on two lanes at once.
