@@ -144,10 +144,15 @@
         <span class="mk-pop-anchor" @click.outside="launchers = false">
           <button class="mk-btn" @click="launchers = !launchers">Launchers ▾</button>
           <div class="mk-pop" x-show="launchers" x-cloak>
+            {% if run.randomizer %}
+            <span class="mk-cap">Randomized cartridges — the run admits no other</span>
+            <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/a">Player A · slink_{{ run.safe_name }}_a.gb</a>
+            <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/b">Player B · slink_{{ run.safe_name }}_b.gb</a>
+            {% endif %}
             <span class="mk-cap">BizHawk Lua launchers</span>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/a">Player A · slink_{{ run.safe_name }}_a.lua</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/b">Player B · slink_{{ run.safe_name }}_b.lua</a>
-            <span class="mk-cap">Load the save first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
+            <span class="mk-cap">Load the {% if run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
           </div>
         </span>
         {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run {{ run.name | e }}? The server stops; the data is kept.')">Archive</button>{% endif %}

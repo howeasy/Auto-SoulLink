@@ -684,7 +684,6 @@ class RunManager:
         return await self._render_shell(request, self._get(), None, page="new")
 
     async def _render_shell(self, request, runs, run, *, page):
-        from server.board import board_context
         status = await self._run_status(request, run) if run else None
         ctx = {
             "page_title":   "Soul Link",
@@ -706,22 +705,26 @@ class RunManager:
             "host":         (request.host or "127.0.0.1").split(":")[0] or "127.0.0.1",
         }
         if run:
-            ctx.update(board_context(status, run_name=run.get("name", ""),
-                                     poll_url=f"/runs/{run['run_id']}/board",
-                                     live=run.get("status") == "running",
-                                     launcher_url=f"/api/runs/{run['run_id']}/launcher/{{player}}"))
+            ctx.update(self._board_context(run, status))
         return aiohttp_jinja2.render_template("manager.html", request, ctx)
+
+    @staticmethod
+    def _board_context(run: dict, status: dict) -> dict:
+        """board_context for a Manager run: it polls its own board route, its launchers and
+        (once a pair is built) its randomized ROMs download from the Manager."""
+        from server.board import board_context
+        rid = run["run_id"]
+        return board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
+                             live=run.get("status") == "running",
+                             launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
+                             rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("randomizer") else "")
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
-        from server.board import board_context
         run = _find_run(_load_registry(), request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
-        ctx = board_context(await self._run_status(request, run), run_name=run.get("name", ""),
-                            poll_url=f"/runs/{run['run_id']}/board",
-                            live=run.get("status") == "running",
-                            launcher_url=f"/api/runs/{run['run_id']}/launcher/{{player}}")
+        ctx = self._board_context(run, await self._run_status(request, run))
         return aiohttp_jinja2.render_template("_board.html", request, ctx)
 
     async def _run_status(self, request: web.Request, run: dict) -> dict:
