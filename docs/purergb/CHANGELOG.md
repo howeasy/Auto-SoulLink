@@ -448,6 +448,14 @@ Read this section if you only play vanilla.
   scenario retry (one-ball fixtures, rival AI move choice) that re-ran green on the same cut;
   union on `13fdbdc` green for all 19 lanes and all 51 duo cases. Independent read-only review of
   the release-facing diff: no confirmed defects.
+- G6 runner, run 9 (2026-09-20, on the merge of local master `997613a` = the Gen 1 final-review
+  fixes, merge commit `8eed7e1`): **GATE PASSED, 19/19 lanes in one run** — unit 3687,
+  live-new-gates 19 (slow-name + evolution gates on Red AND Blue), inspect-purergb 16 (+4
+  lane-selection skips: those two vanilla gates), `duo-pairs` 18/18, `duo-pairs-purergb` 33/33,
+  every other live lane green (`tests/fixtures/gen1/receipts/release_runner_full_2026-09-20_run9_merge_8eed7e1_GATE_PASSED.log`).
+  This is the vanilla set the Gen 1 session requires to be green before the merged tree ever
+  fast-forwards onto master; master `48883f8` (lint-only) merged after the run as `c95a664`,
+  unit lane re-run green.
 
 ---
 

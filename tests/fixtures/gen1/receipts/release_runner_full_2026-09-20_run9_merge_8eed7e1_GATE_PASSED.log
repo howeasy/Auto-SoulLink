@@ -1,0 +1,42 @@
+Gen 1 release gate — 19 lanes
+
+[ .. ] unit
+[PASS] unit               3687 passed, 14 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (90s)
+[ .. ] rom-layout
+[PASS] rom-layout         exit 0  (0s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] profile-addresses
+[PASS] profile-addresses  exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (0s)
+[ .. ] profile-generated-purergb
+[PASS] profile-generated-purergb exit 0  (2s)
+[ .. ] statics-generated
+[PASS] statics-generated  exit 0  (0s)
+[ .. ] fixtures
+[PASS] fixtures           exit 0  (0s)
+[ .. ] patch-build
+[PASS] patch-build        exit 0  (0s)
+[ .. ] live-gates
+[PASS] live-gates         7 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (27s)
+[ .. ] live-new-gates
+[PASS] live-new-gates     19 passed, 1 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (349s)
+[ .. ] inspect-purergb
+[PASS] inspect-purergb    16 passed, 4 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (154s)
+[ .. ] apex-purergb
+[PASS] apex-purergb       1 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (11s)
+[ .. ] live-trade-gates
+[PASS] live-trade-gates   3 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (33s)
+[ .. ] inspect-purergb-overlay
+[PASS] inspect-purergb-overlay 6 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (19s)
+[ .. ] live-trade-gates-purergb
+[PASS] live-trade-gates-purergb 1 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (15s)
+[ .. ] apex-refusal-purergb
+[PASS] apex-refusal-purergb exit 0  (17s)
+[ .. ] duo-pairs
+[PASS] duo-pairs          18 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (625s)
+[ .. ] duo-pairs-purergb
+[PASS] duo-pairs-purergb  33 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (1559s)
+
+GATE PASSED — every lane ran and every lane passed.
