@@ -1,0 +1,10 @@
+[test_gen1_slow_name_gate] title=yellow rom=cc7d0326
+[test_gen1_slow_name_gate] booted at frame 871 (party=1, map=12)
+HUNT_PHASE pace-grass
+[hunt] encounter 1 at (10,35) mode=catch balls=1
+HUNT_PHASE wild-intro
+[hunt] turn 1 foe hp 16/16 odds 0.34 dmax nil -> fight
+HUNT_PHASE wild-fight
+TX {"area_id":"route_1","event":"no_catch","level":3,"player":"a","seq":67,"species_id":36}
+  [FAIL] slow naming physical route  — unexpected no_catch (foe KO / battle failed)
+RESULT: FAIL unexpected no_catch (foe KO / battle failed) (1 checks failed)

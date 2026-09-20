@@ -117,3 +117,38 @@ def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch)
     # a real L5 starter (add_mon.asm stores exp_for_level): 135 on Bulbasaur/Charmander's
     # curves, 125 on Pikachu's MEDIUM_FAST (data/pokemon/base_stats/pikachu.asm:13).
     assert mon["level"] == 5 and mon["exp"] == (125 if rom == "yellow" else 135)
+
+
+# Red and Blue only: on Yellow the starter is Pikachu, whose only damaging move (Thundershock)
+# is super-effective against Route 1's Pidgey and KOs it on the hunt's weakening turn before
+# the throw (three straight runs, 2026-09-20: 'unexpected no_catch (foe KO)'). A driver limit
+# of the shared hunt module, not the client: the Yellow client code path is identical.
+@pytest.mark.parametrize("rom", [r for r in ROMS if r != "yellow"])
+def test_slow_name_capture_survives_2400_idle_frames(rom, emuhawk):
+    """FIX-ACQ PHYSICAL: production TX after 40 seconds on the nickname alphabet."""
+    from run_gb_gate import run_gate
+    passed, path, text = run_gate(
+        "lua/tests/test_gen1_slow_name_gate.lua", rom_key=rom,
+        target="battle", timeout=600, quiet=True,
+    )
+    assert passed, f"slow_name FAILED on {rom}; receipt {path}: {text[-2500:]}"
+    tx = [json.loads(line[3:]) for line in text.splitlines() if line.startswith("TX ")]
+    captures = [msg for msg in tx if msg.get("event") == "capture"]
+    assert len(captures) == 1
+    assert not any(msg.get("event") == "no_catch" for msg in tx)
+    cap = captures[0]
+    assert cap["area_id"] == "route_1" and cap["in_box"] is False
+    assert cap["nickname"] == "AAA"
+    from tests.unit import protocol_schema as ps
+    assert ps.validate_event(cap) == []
+    receipt = re.search(
+        r"^SLOW_NAME_RECEIPT acquire_frame=(\d+) capture_frame=(\d+) gap=(\d+) "
+        r"hold=(\d+) captures=1 no_catch=0 name=AAA$", text, re.M,
+    )
+    assert receipt, "missing measured naming receipt"
+    acquired, captured, gap, hold = map(int, receipt.groups())
+    assert captured - acquired == gap and gap >= hold == 2400
+    begin = re.search(r"^NAMING_HOLD_BEGIN frame=(\d+) input_hits=(\d+)$", text, re.M)
+    end = re.search(r"^NAMING_HOLD_END frame=(\d+) frames=2400 input_hits=(\d+)$", text, re.M)
+    assert begin and end
+    assert int(end[1]) - int(begin[1]) == 2400 and int(end[2]) > int(begin[2])
