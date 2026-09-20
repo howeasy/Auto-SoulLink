@@ -417,6 +417,8 @@ Read this section if you only play vanilla.
 | 16 | final review (Fable, limited context) | a clean Red beside a companion-patched Blue (kind `named`) was refused as MIXED artifact kinds — a vanilla regression for the optional patch | `named` counts as `clean` in the mixed-kind check (the patch is per cartridge, announced per player); regression in `test_state_key_change_ack.py` |
 | 17 | final review (Codex, round 2) | the retirement alias resolved only in the deferred path and by key alone: `force_faint` dispatch/battle writes never saw it, and a duplicate of the new key in the party made the memorial ambiguous; a WRAM clear left a stale alias | one alias-aware `find_party_slot` (dispatch, battle, deferred) with a validated slot locator; the box module takes the slot hint; the alias map is cleared on WRAM clear |
 | 18 | final review (Fable) | comments claimed a non-pinned pureRGB build "cannot take" the vanilla-header path; it can, and is then refused by the vanilla site verification | `run.lua`, `gen1_rom_scan.py` docstring, CHANGELOG §7 corrected |
+| 24 | final review (Codex, round 9) | verdict: the wrong-target counterexample is closed; one conservative false-refusal window (same-species party swap sampled mid-transaction) is documented for the owner's acceptance | residual wording in §7 |
+| 23 | final review (Codex, round 8) | an unobserved edit interval (teach A a different move, then teach a same-key/same-nickname twin A's old set, all in the item menu) let the twin become the sole match | every alias is observed on every readable frame (pure pass, no refresh): the zero-match interval latches `lost` |
 | 22 | final review (Codex, round 7) | sequential replacement: deposit the changed record, withdraw an identical boxed twin — no observation ever sees two candidates, the twin becomes the sole match | any native departure of a record carrying the aliased key (MoveMon party→box/daycare, RemovePokemon) permanently invalidates the alias (`alias_departure`); a zero-match observation does too |
 | 21 | final review (Codex, round 6) | an indistinguishable twin seen at the change could become the sole evidence match once the real record was edited or left, and be retired | ambiguity is latched at capture, at rejection and at every resolution (`observe_alias`); the residual wording no longer claims rejections are cross-player only |
 | 20 | final review (Codex, rounds 4–5) | an aliased retirement whose evidence match failed still reached the box module with a nil hint, whose key-only lookup could bury an innocent same-key record; a similarity-based refresh of the evidence (tried in round 4) could re-identify an innocent record as the retired one | evidence failure is terminal (`memorialize_failed` / `box_mon_failed`, nothing written) and the evidence is **frozen at the change** — never re-identified by similarity. Documented residual (§7): a retired record edited (TM, rename) or moved out of the party before its retirement lands is refused and needs manual resolution; the server treats the failure reply as best-effort complete, so it is not retried automatically |
@@ -476,7 +478,15 @@ Read this section if you only play vanilla.
   every resolution; it never clears because a candidate disappeared), or a record carrying the
   key left the party natively while the alias was pending (deposit, daycare, release, trade — the
   alias is then permanently lost, so an identical record withdrawn later is never taken for it),
-  the client writes nothing and replies `memorialize_failed` / `box_mon_failed`
+  or the record stopped matching for even one readable frame (every alias is observed on every
+  readable frame; a zero-match observation is permanent — this includes a transient the engine
+  itself creates: a same-species party swap copies the structs before the nicknames, so a frame
+  sampled between the two copies can latch the refusal after a perfectly ordinary swap), the client
+  writes nothing and replies `memorialize_failed` / `box_mon_failed`. The evidence is captured at
+  the evolution site *after* the engine's own move-learn and default-nickname rewrite
+  (`evos_moves.asm`, the species-list store at `:296`), so an evolution does not invalidate its own
+  alias; if a future pin moved that capture earlier, a rejected evolution would be refused as the
+  common case, not the corner case
   (the `force_faint` is dropped with a log line). The server treats those replies as best-effort
   complete and does not retry; the mon then needs manual resolution. Nothing is ever fainted or
   buried by guessing.

@@ -1347,6 +1347,35 @@ def test_a_twin_present_at_the_change_itself_latches_ambiguity_before_any_reject
     assert world.events("memorialize_done") == []
 
 
+def test_an_unobserved_two_edit_swap_of_move_sets_never_transfers_the_retirement(world):
+    """Review cx-549fefdf: A and B share the key and the nickname, different moves. With the
+    checkpoint unsafe (item menu), A is taught a different move, frames pass, then B is taught
+    A's original set. The zero-match interval must be observed and latch `lost`, so B is never
+    the sole match when the checkpoint finally opens (real box module)."""
+    rng = random.Random(21)
+    old, new = _reject_apex_change(world, [_mon(rng, 0xB0, nick="TWO", dvs=0x2222, ot_id=0x1234)])
+    party = world.party()
+    a_moves = list(party[0]["moves"])
+    b_rec = dict(party[0], nick="ONE", moves=[0x22, 0x21, 0x2D, 0x00])   # same key + nickname, other moves
+    world.seed_party([dict(party[0], nick="ONE"), b_rec])
+    world.step(2)                                # both readable: A matches, B does not
+    assert not world.client.retired_alias[old].lost
+    a_edited = dict(party[0], nick="ONE", moves=[0x39, 0x21, 0x2D, 0x00])   # A taught a TM
+    world.seed_party([a_edited, b_rec])
+    world.step(3)                                # the zero-match interval is observed
+    assert world.client.retired_alias[old].lost is True
+    b_as_a = dict(b_rec, moves=a_moves)          # B taught A's original set
+    world.seed_party([a_edited, b_as_a])
+    world.step(2)
+    before = bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": old}, {"cmd": "memorialize", "key": old})
+    world.step(3)
+    assert bytes(world.bus[world.ram["wPartyCount"]:world.ram["wPartyCount"] + 404]) == before
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old]
+    assert world.events("memorialize_done") == []
+
+
 def test_a_wram_clear_forgets_the_retirement_alias(world):
     """Review cx-e606e6a3 (plausible P1): after a reset the record the alias pointed at is gone;
     a reloaded pre-change save holds the old key again and the server's re-queued retirement

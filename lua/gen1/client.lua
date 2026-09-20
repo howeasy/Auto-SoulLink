@@ -1516,6 +1516,17 @@ function Client.new(p)
         end
         self:rival_window_tick()
         self:settle_pending_change()
+        -- Every readable frame OBSERVES each alias (pure pass, no similarity, nothing refreshed):
+        -- an edit interval in which the changed record stops matching -- however briefly, e.g.
+        -- one TM taught to it and then its old move set taught to a twin, all inside the item
+        -- menu -- latches `lost` before the twin could ever be the sole match (review cx-549fefdf).
+        if self.key_alias or next(self.retired_alias) then
+            local party = current_party()
+            if party then
+                if self.key_alias then observe_alias(self.key_alias, party) end
+                for _, r in pairs(self.retired_alias) do observe_alias(r, party) end
+            end
+        end
         if connected and self.frame % Client.TICK_INTERVAL == 0 then self:send_tick("tick") end
         if self.pending_safe and connected then
             local battle = reads.read_battle()
