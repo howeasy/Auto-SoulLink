@@ -1,0 +1,24 @@
+# FR scripted play run 13 on playlib (f080da1), 2026-09-21, observer beside (vanilla FR US 1.0)
+phase leg-start frame=635 starter
+phase leg-done frame=5571 starter
+phase leg-start frame=5571 rival_battle
+phase leg-done frame=12134 rival_battle
+phase leg-start frame=12134 leave_lab_for_parcel
+phase at-lab-exit frame=12214 map=1027 sb1=(6,12) obj0=(6,12) facing=3
+phase outside frame=12355 map=768 at=(16,14)
+phase leg-done frame=12355 leave_lab_for_parcel
+phase leg-start frame=12355 parcel_fetch
+phase encounter frame=13043 #1 during step Left at (9,32)
+phase encounter-done frame=14674 #1 resolved at (9,32)
+phase encounter frame=15234 #2 during step Up at (16,16)
+phase encounter-done frame=17633 #2 resolved at (16,16)
+phase parcel-scene-done frame=19588 at=(4,3)
+phase leg-done frame=19588 parcel_fetch
+phase leg-start frame=19588 parcel_deliver
+RESULT: FAIL parcel_deliver (route1_north_to_south_edge): start tile (12,0) is not the path's from (12,1)
+## shadow
+STATUS frame=20435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=19557
+      3 kind=battle_begin
+      3 kind=battle_end
+      4 kind=map_load
+      1 kind=mon_given

@@ -192,6 +192,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 RR `faint` PHYSICAL: `docs/gen3/probes/shadow_rr_faint_2026-09-21.txt` — after the re-pin (8eb2717, CFRU cleareffectsonfaint completion 0x0909EED2) the observer records `faint` once per faint through the RR wild_faint leg (5 fires incl. the player faint witnessed by HP positive->0 and playerFaintCounter 0->1), callback == site. RR coverage now: battle_begin, battle_end, faint, whiteout, map_load, save.
 
+- 2026-09-21 P3 FR natural play run 13 (playlib): `docs/gen3/probes/shadow_fr_play_run13_2026-09-21.txt` — starter, rival battle, lab exit and the Viridian parcel fetch complete, two wild encounters on Route 1 handled mid-step by the shared walker; observer: battle_begin x3, battle_end x3, map_load x4, mon_given x1 (callback == site). Next stall: map-connection landing row (Route 1 -> Pallet Town lands on row 0).
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
