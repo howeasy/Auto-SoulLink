@@ -191,6 +191,28 @@ def test_a_flooded_wild_mapping_is_rejected_by_global_and_area_injectivity():
         assert any("not injective" in f for f in r["failures"]), (spec, r["failures"])
 
 
+def test_a_global_mapping_with_bounded_reuse_but_excess_repeats_is_reported():
+    """A per-destination bound (<=2 under block_legendaries) is necessary but not sufficient:
+    151 sources onto the 146-destination pool can legally reuse at most 5 destinations in
+    TOTAL (game1to1Encounters refills remainingRight exactly once, A:1215-1224). Pairing every
+    source onto half as many destinations keeps each destination's own reuse at 2 (passes the
+    old per-destination check) while the aggregate excess is roughly len(src)/2, far past 5
+    (cx-37fe2641 #2)."""
+    spec = _spec(wild="global")                          # wild_block_legendaries defaults True
+    chk = _walk(_clean(), spec)
+    live = [(t, sp) for t in chk.tables for _lv, sp in _live(chk, t) if not t["exempt"]]
+    src = sorted({chk.clean[sp] for _t, sp in live})
+    dest_pool = sorted(chk.f["ordinary"] - chk.f["legendary"] - {MAROWAK})[: (len(src) + 1) // 2]
+    assert len(dest_pool) < len(src) - 5                  # sanity: excess well past the legal budget of 5
+    m = {c: dest_pool[i % len(dest_pool)] for i, c in enumerate(src)}
+    out = bytearray(_clean())
+    for _t, sp in live:
+        out[sp] = m[chk.clean[sp]]
+    r = verify("purered", _clean(), bytes(out), spec=spec)
+    assert not r["ok"]
+    assert any("reused destinations in total" in f for f in r["failures"]), r["failures"]
+
+
 class TestValidity:
     @pytest.mark.parametrize("cats", CASES, ids=lambda c: "+".join(sorted(c)))
     def test_the_output_is_a_valid_game(self, randomized, cats):
@@ -363,6 +385,15 @@ class TestWild:
         r = _verify(randomized(self.AREA_SIMILAR), self.AREA_SIMILAR)
         assert r["ok"], "\n".join(r["failures"])
 
+    def test_area_similar_strength_rejects_an_off_strength_species(self, randomized):
+        """wild() never checked BST under restriction=similar (cx-37fe2641 #3): Gyarados
+        (0xB10DF, BST 480) replaced by Pidgey (BST 216) is nowhere near the window
+        pickWildPowerLvlReplacement (A:6980-7005) would have widened to."""
+        out = bytearray(randomized(self.AREA_SIMILAR))
+        out[0xB10DF] = 0x24                                   # PIDGEY
+        r = _verify(bytes(out), self.AREA_SIMILAR)
+        assert any("similar_strength band" in f and "0xB10DF" in f for f in r["failures"]), r["failures"]
+
     def test_area_catch_em_all_places_every_pool_species(self, randomized):
         """Fork patch 0005 (cx-73e80e05 #1): the per-area catch-em-all picker now draws from
         the area-banned-filtered pool on every branch, so a table can no longer receive the
@@ -411,6 +442,17 @@ class TestStatics:
         out[0x190AD] = MEWTWO                                 # a Weedle static (clean species WEEDLE, BST 175)
         r = _verify(bytes(out), spec)
         assert any("similar_strength band" in f and "0x190AD" in f for f in r["failures"]), r["failures"]
+
+    def test_a_static_left_as_the_original_species_is_reported(self, randomized):
+        """banSamePokemon=true (A:4269 passes it, A:7071 excludes `pk == current`) means a
+        similar_strength static can never legally stay the original species, even though its
+        own BST is trivially "in band" (cx-37fe2641 #4)."""
+        spec = _spec(statics="similar")
+        out = bytearray(randomized(spec))
+        out[0x190AD] = 0x70                                   # WEEDLE: the original species, put back
+        r = _verify(bytes(out), spec)
+        assert any("always excludes the original species" in f and "0x190AD" in f
+                   for f in r["failures"]), r["failures"]
 
 
 class TestStarters:
@@ -534,6 +576,50 @@ class TestTrainers:
         out[0x39589] = MEWTWO
         r = _verify(bytes(out), spec)
         assert any("similar_strength band" in f and "0x39589" in f for f in r["failures"]), r["failures"]
+
+    SIMILAR_FORCED = _spec(trainers="random", trainers_similar_strength=True, trainers_force_evolved=11)
+
+    def test_similar_strength_with_force_evolved_accepts_the_post_evolution_species(self, randomized):
+        """Randomizer.java:451-476 runs randomizeTrainerPokes (the selection this band
+        constrains) BEFORE forceFullyEvolvedTrainerPokes: a level-11 Rattata (BST 218, band
+        197-239) can legally select itself under similar_strength, and force_evolved=11 then
+        evolves that selection to Raticate (BST 373) -- band-checking the POST-evolution species
+        directly was a false reject (cx-37fe2641 #1); checking whether any ancestor-or-self is
+        in-band is not, and still fired 0 legitimate failures on this run."""
+        spec = self.SIMILAR_FORCED
+        r = _verify(randomized(spec), spec)
+        assert r["ok"], "\n".join(r["failures"])
+
+    def test_similar_strength_with_force_evolved_still_rejects_an_impossible_species(self, randomized):
+        spec = self.SIMILAR_FORCED
+        out = bytearray(randomized(spec))
+        out[0x39589] = MEWTWO                # no pre-evolution exists: no ancestor can be in-band either
+        r = _verify(bytes(out), spec)
+        assert any("similar_strength band" in f and "0x39589" in f for f in r["failures"]), r["failures"]
+
+    THEMED_SIMILAR = _spec(trainers="type_themed", trainers_similar_strength=True, trainers_block_legendaries=False)
+
+    def test_type_themed_with_similar_strength_is_a_valid_pool_draw(self, randomized):
+        """pickTrainerPokeReplacement narrows to the theme type BEFORE the BST window
+        (A:6892-6918 then :6925-6946), so type_themed + similar_strength combined still needs a
+        band check, not just the type-sharing one (cx-37fe2641 #3)."""
+        spec = self.THEMED_SIMILAR
+        r = _verify(randomized(spec), spec)
+        assert r["ok"], "\n".join(r["failures"])
+
+    def test_type_themed_with_similar_strength_rejects_an_off_strength_species(self, randomized):
+        """Filling a whole party with Mewtwo keeps shared_type() happy (every slot shares
+        Mewtwo's own type with itself) so the theme check can't mask this: the BST band still
+        must hold, and it won't for a party whose original members weren't all Mewtwo-tier."""
+        spec = self.THEMED_SIMILAR
+        chk = _walk(randomized(spec), spec)
+        out = bytearray(chk.out)
+        where, slots = next((w, s) for w, s in chk.parties if len(s) > 1
+                             and any(chk.f["bst"][chk.clean[sp]] < 400 for _lv, sp, _m in s))
+        for _lv, sp, _m in slots:
+            out[sp] = MEWTWO
+        r = _verify(bytes(out), spec)
+        assert any("similar_strength band" in f and where in f for f in r["failures"]), r["failures"]
 
     FORCE_EVOLVED_UNCHANGED = _spec(trainers_force_evolved=100)
 

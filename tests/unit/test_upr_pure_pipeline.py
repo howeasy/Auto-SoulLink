@@ -109,9 +109,11 @@ def test_global_with_an_ignored_restriction_is_refused_for_both_families():
         for family in (FAMILY_VANILLA, FAMILY_PURE):
             assert forbidden_enabled(parsed, family) == [
                 f"wild=global with wild_restriction={restriction} (UPR ignores that restriction under a global map)"]
-    for restriction in ("none", "similar"):
-        parsed = load(build_spec({"wild": "global", "wild_restriction": restriction, "fastest_text": False}))
-        assert forbidden_enabled(parsed, FAMILY_PURE) == []
+    parsed = load(build_spec({"wild": "global", "wild_restriction": "similar", "fastest_text": False}))
+    assert forbidden_enabled(parsed, FAMILY_PURE) == [
+        "wild=global with wild_restriction=similar (not verifiable: the global picker's pool shrinks across the whole map)"]
+    parsed = load(build_spec({"wild": "global", "wild_restriction": "none", "fastest_text": False}))
+    assert forbidden_enabled(parsed, FAMILY_PURE) == []
     parsed = load(build_spec({"wild": "area", "wild_restriction": "catch_em_all", "fastest_text": False}))
     assert forbidden_enabled(parsed, FAMILY_PURE) == []
 

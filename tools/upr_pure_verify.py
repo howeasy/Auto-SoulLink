@@ -199,6 +199,10 @@ def _facts() -> dict:
     types_doc = json.loads((FACTS / "types.json").read_text(encoding="utf-8"))
     name_to_type = {v: int(k) for k, v in types_doc["type_names"].items()}
     ordinary = {int(k) for k, v in species.items() if v["classification"] == "ordinary"}
+    pre_evos: dict[int, list[int]] = collections.defaultdict(list)
+    for k, targets in evos.items():
+        for t in targets:
+            pre_evos[t].append(int(k))
     return {
         "ordinary": ordinary,
         "opaque": {int(k) for k, v in species.items() if v["classification"] in OPAQUE_CLASSES},
@@ -207,6 +211,7 @@ def _facts() -> dict:
         "types": {int(k): set(v["types"] or ()) for k, v in species.items()},
         "legendary": {int(k) for k, v in species.items() if v["dex"] in LEGENDARY_DEX and int(k) in ordinary},
         "evos": {int(k): v for k, v in evos.items()},
+        "pre_evos": dict(pre_evos),
         "item_names": {int(k): v["name"] for k, v in items.items()},
         "moves": {m["id"] for m in moves},
         "trainers": trainers,
@@ -218,12 +223,23 @@ def _facts() -> dict:
 
 
 def _strength_band(bst: int, pool_bsts, max_rounds: int) -> tuple[int, int]:
-    """The expanding-BST-window loop pickWildPowerLvlReplacement / pickTrainerPokeReplacement
-    (A:6980-7005, 6925-6946, max_rounds=2) and pickStaticPowerLvlReplacement (A:7059-7082,
-    max_rounds=3) share: start at +-10% of ``bst``, widen by max(bst//20, 1) on each side per
-    round, stop once the accumulated candidate set reaches 3 members or after ``max_rounds``
-    widenings -- but never stop on an empty set (patch 0003 set the step floor so this always
-    terminates). Returns the (lo, hi) bounds the accepted draw was pooled from."""
+    """The expanding-BST-window loop pickWildPowerLvlReplacement (A:6980-7005: `while
+    (canPick.isEmpty() || (canPick.size() < 3 && expandRounds < 3))`),
+    pickStaticPowerLvlReplacement (A:7059-7082, same `< 3`) and the ``usePowerLevels`` branch of
+    pickTrainerPokeReplacement (A:6925-6946, `< 2`) share: start at +-10% of ``bst``, widen by
+    max(bst // 20, 1) on each side per scan, accepting the accumulated candidate set once it
+    reaches 3 members or after the loop's ``expandRounds`` cap is hit -- but never on an empty
+    set (patch 0003 set the step floor so this always terminates). ``max_rounds`` is that literal
+    cap (3 for wild/statics, 2 for trainers): the loop always scans once at the initial +-10%
+    band, then scans again after each widening while `expandRounds < max_rounds`, so trainers
+    (cap 2) uses at most ONE widened scan and wild/statics (cap 3) use at most TWO. Returns the
+    (lo, hi) bounds of the last scan that ran.
+
+    Approximation: Java's ``canPick`` counts Pokemon OBJECTS, so two species sharing one BST
+    are two candidates toward the "reach 3" stop; this counts distinct BST VALUES instead (a
+    Python ``set``), which can reach "3" with fewer species than Java would need and so accept
+    the same-or-narrower band Java did, never a wider one -- a known, unproven-safe
+    approximation, not a bug to chase further."""
     lo, hi = bst - bst // 10, bst + bst // 10
     step = max(bst // 20, 1)
     matched: set[int] = set()
@@ -236,6 +252,19 @@ def _strength_band(bst: int, pool_bsts, max_rounds: int) -> tuple[int, int]:
         hi += step
         rounds += 1
     return used_lo, used_hi
+
+
+def _ancestors_or_self(sp: int, pre_evos: dict) -> set[int]:
+    """Every species whose fullyEvolve (A:6794-6832: a forward-only walk to a terminal, no
+    backtracking) could end at ``sp`` -- ``sp``'s transitive pre-evolutions, plus ``sp`` itself
+    (fullyEvolve is a no-op on an already-fully-evolved pick)."""
+    reach, todo = {sp}, [sp]
+    while todo:
+        for p in pre_evos.get(todo.pop(), ()):
+            if p not in reach:
+                reach.add(p)
+                todo.append(p)
+    return reach
 
 
 def _ghost_site(title: str, ini: pathlib.Path) -> int | None:
@@ -411,6 +440,31 @@ class _Check:
                     for v, n in img.items():
                         if n > 1:
                             self.fail(f"wild: area map not injective in {t['name']}: {n} species -> {self.name(v)}")
+                if restriction == "similar":
+                    # pickWildPowerLvlReplacement(localAllowed, areaPk, false, usedPks, 100)
+                    # (A:1104): localAllowed is allowedPokes (block_legendaries-gated) minus
+                    # area.bannedPokemon, and usedPks is this table's running exclusion list --
+                    # neither is modeled below (approximation: the pool used here can only be a
+                    # SUPERSET of Java's true, smaller one, so this can reach 3 candidates in
+                    # fewer widenings than Java did and so compute a narrower band than Java's
+                    # true one -- a false reject is possible in principle, though not observed
+                    # against a real jar run; not "fixed" into an exact model per cx-37fe2641).
+                    # The shared BST-window (_strength_band, cap 3: initial scan + at most two
+                    # widened ones) is NOT modeled for wild=global -- game1to1Encounters'
+                    # pickWildPowerLvlReplacement there draws from remainingRight, which shrinks
+                    # across the WHOLE map (same mechanism as item 2's aggregate bound), so a
+                    # snapshot pool would be wrong by an unknown, seed-dependent amount as
+                    # remainingRight empties; left unchecked rather than asserting something
+                    # unproven
+                    pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("wild_block_legendaries") else set())
+                    pool_bsts = [self.f["bst"][p] for p in pool]
+                    for _t, _lv, sp in (x for x in live if x[0] is t):
+                        c, v = self.clean[sp], self.out[sp]
+                        lo, hi = _strength_band(self.f["bst"][c], pool_bsts, max_rounds=3)
+                        if not lo <= self.f["bst"][v] <= hi:
+                            self.fail(f"wild: {t['name']} slot 0x{sp:X} {self.name(v)} (BST {self.f['bst'][v]}) is "
+                                      f"outside the similar_strength band [{lo},{hi}] around {self.name(c)} "
+                                      f"(BST {self.f['bst'][c]})")
         elif mode == "global":
             m = collections.defaultdict(set)
             for t, _lv, sp in live:
@@ -433,13 +487,26 @@ class _Check:
             # exactly the 5 legendaries, so it refills once partway through: a destination can be
             # reused, but only across a refill, bounding any single destination's use count by
             # ceil(151/146) = 2
+            # A per-destination bound alone is necessary but not sufficient: 151 sources onto a
+            # 146-destination pool could otherwise pair 131 sources onto 74 destinations (57
+            # excess pairings, each reused only twice) and slip past a bound of 2. But exactly
+            # ONE refill ever happens (the first 146 draws exhaust remainingRight bijectively,
+            # using every one of its 146 members exactly once; the remaining 151-146=5 draws
+            # then reuse 5 of those same 146 a second time) -- so across the WHOLE map, at most
+            # (total - pool_size) destinations can be reused at all, once each
             total, pool_size = len(self.f["ordinary"]), len(self.f["ordinary"] - self.f["legendary"])
             max_reuse = 1 if not self.opt("wild_block_legendaries") else -(-total // pool_size)
+            excess_budget = 0 if not self.opt("wild_block_legendaries") else total - pool_size
             img = collections.Counter(next(iter(v)) for v in m.values() if len(v) == 1)
             for v, n in img.items():
                 if n > max_reuse:
                     self.fail(f"wild: global map not injective (block_legendaries allows at most "
                               f"{max_reuse} reuse): {n} species -> {self.name(v)}")
+            total_excess = sum(n - 1 for n in img.values() if n > 1)
+            if total_excess > excess_budget:
+                self.fail(f"wild: global map not injective (block_legendaries allows at most "
+                          f"{excess_budget} reused destinations in total, from the one refill): "
+                          f"{total_excess} excess pairings found")
             for t, _lv, sp in live:
                 if t["exempt"] and self.clean[sp] in m:
                     want = next(iter(m[self.clean[sp]]))
@@ -545,14 +612,20 @@ class _Check:
             # pickStaticPowerLvlReplacement(pokemonLeft, oldPK, true, limitBST) (A:4265-4269):
             # pokemonLeft is the full 151-species pool (limitMainGameLegendaries/limit600 are
             # never set by our specs, so limitBST is always false and the >=600 BST branch never
-            # triggers) -- the shared BST-window (_strength_band, max 3 widenings for statics)
+            # triggers) -- the shared BST-window (_strength_band, cap 3: initial scan + at most
+            # two widened ones). banSamePokemon=true (A:4269, A:7071) excludes the original
+            # species itself from canPick, so a static's replacement must always differ from it
             pool_bsts = [self.f["bst"][p] for p in self.f["ordinary"]]
             for o in live:
-                c_bst, v_bst = self.f["bst"][self.clean[o]], self.f["bst"][self.out[o]]
-                lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=3)
-                if not lo <= v_bst <= hi:
-                    self.fail(f"statics: @0x{o:X} {self.name(self.out[o])} (BST {v_bst}) is outside the "
-                              f"similar_strength band [{lo},{hi}] around {self.name(self.clean[o])} (BST {c_bst})")
+                c, v = self.clean[o], self.out[o]
+                if v == c:
+                    self.fail(f"statics: @0x{o:X} {self.name(v)} is unchanged; similar_strength "
+                              f"(banSamePokemon=true) always excludes the original species")
+                    continue
+                lo, hi = _strength_band(self.f["bst"][c], pool_bsts, max_rounds=3)
+                if not lo <= self.f["bst"][v] <= hi:
+                    self.fail(f"statics: @0x{o:X} {self.name(v)} (BST {self.f['bst'][v]}) is outside the "
+                              f"similar_strength band [{lo},{hi}] around {self.name(c)} (BST {self.f['bst'][c]})")
 
     # ── trainers ─────────────────────────────────────────────────────────────────────
     def trainers(self) -> None:
@@ -683,23 +756,45 @@ class _Check:
         if mode == "type_themed":
             for where, slots in self.parties:
                 self.shared_type("trainers", where, [sp for _lv, sp, _m in slots])
-        if self.opt("trainers_similar_strength") and mode == "random":
+        if self.opt("trainers_similar_strength") and mode in ("random", "type_themed"):
             # pickTrainerPokeReplacement(usePowerLevels=True) (A:6863-6978): cachedAllList is
             # noLegendaryList/mainPokemonList (A:1693-1694) -- the same block_legendaries-gated
-            # pool wild/statics use -- filtered further by a dynamic usedAsUniqueList/
-            # illegalIfEvolvedList that's empty here (elite-four-unique-pokemon and
-            # illegal-evolution-chain blocking aren't in scope), then the shared BST-window
-            # (_strength_band, max 2 widenings)
-            pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("trainers_block_legendaries") else set())
-            pool_bsts = [self.f["bst"][p] for p in pool]
+            # pool wild/statics use, first narrowed to the party's theme type under type_themed
+            # (A:6892-6918: pickFrom = cachedReplacementLists.get(type), itself built from
+            # pokemonOfType(type, noLegendaries)) -- filtered further by a dynamic
+            # usedAsUniqueList/illegalIfEvolvedList that's empty here (elite-four-unique-pokemon
+            # and illegal-evolution-chain blocking aren't in scope), then the shared BST-window
+            # (_strength_band, cap 2: initial scan + at most one widened one).
+            #
+            # Randomizer.java:451-476 runs randomizeTrainerPokes (the selection this band
+            # constrains) BEFORE forceFullyEvolvedTrainerPokes, so when this slot's level clears
+            # trainers_force_evolved, `out` may be the fully-evolved TERMINAL of whatever was
+            # selected (A:6794-6832), not the selection itself -- accept if any ancestor-or-self
+            # of `out` (a legal pre-force selection) falls in the band.
+            base_pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("trainers_block_legendaries") else set())
             for where, slots in self.parties:
-                for _lv, sp, _m in slots:
-                    c_bst, v_bst = self.f["bst"][self.clean[sp]], self.f["bst"][self.out[sp]]
-                    lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=2)
-                    if not lo <= v_bst <= hi:
-                        self.fail(f"trainers: {where} 0x{sp:X} {self.name(self.out[sp])} (BST {v_bst}) is outside "
-                                  f"the similar_strength band [{lo},{hi}] around {self.name(self.clean[sp])} "
-                                  f"(BST {c_bst})")
+                if mode == "type_themed":
+                    # the actual theme type isn't recorded anywhere observable; every party
+                    # member's true type is IN the party's shared-type intersection (already
+                    # required by shared_type() above), so trying each candidate in it is a
+                    # necessary, not stronger-than-proven, check
+                    outs = [self.out[s] for _lv, s, _m in slots]
+                    common = set.intersection(*(self.f["types"][o] for o in outs)) if outs else set()
+                    pools = [{p for p in base_pool if t in self.f["types"][p]} for t in common]
+                    if not pools:                    # shared_type() already reported the empty intersection
+                        continue
+                else:
+                    pools = [base_pool]
+                pool_bsts_by_pool = [[self.f["bst"][p] for p in pool] for pool in pools]
+                for lv, sp, mask in slots:
+                    c_bst, v = self.f["bst"][self.clean[sp]], self.out[sp]
+                    lvl = self.out[lv] & mask
+                    candidates = _ancestors_or_self(v, self.f["pre_evos"]) if (force and lvl >= force) else {v}
+                    if any(lo <= self.f["bst"][x] <= hi for pool_bsts in pool_bsts_by_pool
+                           for lo, hi in [_strength_band(c_bst, pool_bsts, max_rounds=2)] for x in candidates):
+                        continue
+                    self.fail(f"trainers: {where} 0x{sp:X} {self.name(v)} (BST {self.f['bst'][v]}) is outside "
+                              f"the similar_strength band around {self.name(self.clean[sp])} (BST {c_bst})")
         # "distributed" (pickTrainerPokeReplacement with usePlacementHistory) only refuses a
         # species whose count is >= 2x the mean over the species placed SO FAR, in a shuffled
         # trainer order. Every final multiset is reachable under that rule (place the most

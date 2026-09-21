@@ -601,6 +601,10 @@ def categories_enabled(parsed: dict) -> set[str]:
 # restriction: UPR's game1to1Encounters never reads type_themed / catch_em_all, so a file that
 # combines them would run as plain global while claiming more (review cx-73e80e05 #7).
 GLOBAL_IGNORED_RESTRICTIONS = ("type_themed", "catch_em_all")
+# wild=global + similar IS honoured by UPR, but its picker draws from a pool that shrinks across
+# the whole map, so no per-ROM oracle can bound a draw exactly (the verifier declines to model
+# it, cx-37fe2641 #3); the project claims every admitted option is verified or refused -> refused.
+GLOBAL_UNVERIFIABLE_RESTRICTIONS = ("similar",)
 
 
 def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
@@ -617,6 +621,9 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     if spec.get("wild") == "global" and spec.get("wild_restriction") in GLOBAL_IGNORED_RESTRICTIONS:
         bad.append(f"wild=global with wild_restriction={spec['wild_restriction']} "
                    f"(UPR ignores that restriction under a global map)")
+    if spec.get("wild") == "global" and spec.get("wild_restriction") in GLOBAL_UNVERIFIABLE_RESTRICTIONS:
+        bad.append(f"wild=global with wild_restriction={spec['wild_restriction']} "
+                   f"(not verifiable: the global picker's pool shrinks across the whole map)")
     if family == FAMILY_PURE and parsed.get("misc_tweaks"):
         bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
     if family == FAMILY_PURE:
