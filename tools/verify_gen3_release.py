@@ -38,7 +38,8 @@ ALLOWED_SKIPS = [
 LANES = [
     Lane("unit",
          [_PY, "-m", "pytest", "tests/unit", "-q", "-p", "no:randomly", "-rs",
-          "-k", "(gen3 or protocol_conformance or gen3_pins) and not purergb"],
+          "-k", "(gen3 or protocol_conformance or gen3_pins) and not purergb",
+          "--ignore=tests/unit/test_gen1_purergb_rom_content.py"],
          why="the Gen 3 source oracles, protocol conformance, and the pin inventory"),
     Lane("lua-parse", [_PY, "tools/lua_syntax_check.py"],
          why="every Lua file parses under the runtime the clients actually use"),

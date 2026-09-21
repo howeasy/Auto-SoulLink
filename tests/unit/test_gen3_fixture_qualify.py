@@ -181,3 +181,95 @@ def test_derive_b_rr_refuses():
     body = _build_image()
     _, manifest = fx.derive_b(body)
     assert isinstance(manifest, list)
+
+
+# --- boot-check / make-fr (card C2-6b): argument handling + the post-run verdict ---
+#
+# No emulator anywhere in here. The emulator lane is the coordinator's; what is falsifiable
+# without one is (a) the two subcommands' CLI surface and (b) boot_check_verdict, which is
+# the whole judgement the run's PASS/FAIL rests on.
+
+def _parse(argv):
+    return fx.build_parser().parse_args(argv)
+
+
+def test_boot_check_argument_handling():
+    args = _parse(["boot-check", "--rom", "patch/build/slink_RR.gba",
+                   "--fixture", "tests/fixtures/gen3/rr_town.sav", "--rr"])
+    assert (args.rom, args.fixture, args.rr) == (
+        "patch/build/slink_RR.gba", "tests/fixtures/gen3/rr_town.sav", True)
+    assert args.saveram_name is None and args.timeout > 0
+    assert args.func is fx.cmd_boot_check
+    assert _parse(["boot-check", "--rom", "r.gba", "--fixture", "f.sav"]).rr is False
+    assert _parse(["boot-check", "--rom", "r.gba", "--fixture", "f.sav",
+                   "--saveram-name", "Pokemon - FireRed Version (USA).SaveRAM"
+                   ]).saveram_name == "Pokemon - FireRed Version (USA).SaveRAM"
+    for missing in (["boot-check", "--rom", "r.gba"], ["boot-check", "--fixture", "f.sav"]):
+        with pytest.raises(SystemExit):
+            _parse(missing)
+
+
+def test_make_fr_argument_handling():
+    args = _parse(["make-fr", "--rom", "fr.gba", "--out",
+                   "tests/fixtures/gen3/firered_town.sav"])
+    assert (args.rom, args.out) == ("fr.gba", "tests/fixtures/gen3/firered_town.sav")
+    assert args.func is fx.cmd_make_fr
+    # make-fr is vanilla by construction: no --rr to get it wrong with.
+    with pytest.raises(SystemExit):
+        _parse(["make-fr", "--rom", "fr.gba", "--out", "o.sav", "--rr"])
+    with pytest.raises(SystemExit):
+        _parse(["make-fr", "--rom", "fr.gba"])
+
+
+def test_saveram_name_drops_the_extension_and_appends_nothing():
+    # BizHawk writes the optional RTC suffix itself; the seeded name must not carry one.
+    assert fx.saveram_name("patch/build/gen3_slink_RR.gba") == "gen3_slink_RR.SaveRAM"
+    assert fx.saveram_name("a/b/firered.gba") == "firered.SaveRAM"
+
+
+def _q(counter, party, ok=True, message="ok"):
+    return {"ok": ok, "message": message, "counter": counter,
+            "party": [{"species": s, "level": lv} for s, lv in party]}
+
+
+def test_boot_check_verdict_accepts_one_save_with_an_unchanged_party():
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5), (4, 7)]), _q(5, [(1, 5), (4, 7)]))
+    assert (ok, problems) == (True, [])
+
+
+def test_boot_check_verdict_refuses_a_counter_that_did_not_move():
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5)]), _q(4, [(1, 5)]))
+    assert not ok
+    assert "save counter 4 -> 4" in problems[0]
+
+
+def test_boot_check_verdict_refuses_more_than_one_save():
+    # Two saves is not the scenario being signed, and it means the driver did something else.
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5)]), _q(6, [(1, 5)]))
+    assert not ok and "expected exactly one in-game save" in problems[0]
+
+
+def test_boot_check_verdict_refuses_a_changed_party():
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5)]), _q(5, [(1, 6)]))
+    assert not ok and "party changed" in problems[0]
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5)]), _q(5, []))
+    assert not ok and "party changed" in problems[0]
+
+
+def test_boot_check_verdict_refuses_a_flushed_save_that_does_not_qualify():
+    ok, problems = fx.boot_check_verdict(
+        _q(4, [(1, 5)]), _q(5, [(1, 5)], ok=False, message="sector 3 missing"))
+    assert not ok
+    assert any("does not qualify" in p and "sector 3 missing" in p for p in problems)
+
+
+def test_boot_check_verdict_over_real_images():
+    """The synthetic pair, end to end through qualify_one rather than hand-built dicts:
+    the same save re-written with the counter bumped is a PASS, the untouched one a FAIL."""
+    mon = _mon(0xAABBCCDD, 0x1234, "RED", party=True)
+    before = fx.qualify_one(_build_image(party_mons=[mon], counter=4), rr=False)
+    after = fx.qualify_one(_build_image(party_mons=[mon], counter=5), rr=False)
+    assert before["ok"] and after["ok"]
+    assert fx.boot_check_verdict(before, after) == (True, [])
+    ok, problems = fx.boot_check_verdict(before, before)
+    assert not ok and problems

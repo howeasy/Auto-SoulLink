@@ -4,13 +4,17 @@
 Worker card gen3-P2-C2-6. No emulator, no ROM: everything here is bytes in,
 bytes out, checked with the independent codec (server/adapters/gen3_codec.py)
 which is itself derived from pret/pokefirered + docs/gen3/research/flash_save.md.
-``--boot-check`` (cold boot -> CONTINUE -> re-save -> reload) is NOT this
-tool's job -- it needs EmuHawk and is the coordinator's lane (PLAN §5.5).
+``boot-check`` and ``make-fr`` are the exception: they DO need EmuHawk (the
+coordinator's lane, PLAN §5.5) and launch it through tools/run_gate.py with a
+per-run SaveRAM directory and config copy, so no developer battery save is
+ever touched.
 
     python tools/gen3_fixtures.py import --src <SaveRAM> --out tests/fixtures/gen3/rr_town.sav --rr
     python tools/gen3_fixtures.py qualify tests/fixtures/gen3/*.sav
     python tools/gen3_fixtures.py qualify --rr tests/fixtures/gen3/rr_town.sav
     python tools/gen3_fixtures.py derive-b tests/fixtures/gen3/rr_town.sav tests/fixtures/gen3/rr_town_b.sav
+    python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_town.sav --rr
+    python tools/gen3_fixtures.py make-fr --rom "Pokemon - FireRed Version (USA).gba" --out tests/fixtures/gen3/firered_town.sav
 
 ``derive-b --rr`` always refuses (see RR_DERIVE_REFUSAL below): the codec's
 own ``party_from_save``/``boxes_from_save`` refuse ``rr=True`` because RR's
@@ -26,6 +30,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -299,8 +304,226 @@ def cmd_derive_b(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# boot-check / make-fr: the EMULATOR lane (PLAN §5.5)
+#
+# Model qualification above is necessary but not sufficient: usability is signed only by a
+# real cold boot -> CONTINUE -> re-save -> reload. These two subcommands drive that through
+# tools/run_gate.py, with a PER-RUN SaveRAM directory so a live BizHawk save file is never
+# touched and two runs cannot stamp on each other.
+# ---------------------------------------------------------------------------
 
-def main() -> int:
+BOOT_CHECK_LUA = "lua/tests/gen3_boot_check.lua"
+FR_NEWGAME_LUA = "lua/tests/gen3_fr_newgame_inputs.lua"
+RUN_DIR = Path(REPO) / "patch" / "build" / "gen3_fixture_runs"
+CHECKPOINTS = {False: Path(REPO) / "data/games/gen3_frlg/write_checkpoint.json",
+               True: Path(REPO) / "data/games/gen3_rr/write_checkpoint.json"}
+
+
+def saveram_name(rom_rel: str) -> str:
+    """The battery filename for a ROM BizHawk's gamedb does not know: the ROM's basename with
+    the extension dropped (tools/gen1_playthrough.py:save_name_for, the same rule measured on
+    this machine's SaveRAM directory, minus the underscore substitution that only matters for
+    the Game Boy builds). Nothing is stripped or appended here -- BizHawk writes the optional
+    16-byte RTC suffix itself, and `import` normalizes it back out (codec.split_rtc).
+
+    A cartridge that IS in the gamedb (a clean FR/LG dump) is filed under the gamedb name
+    instead, which no rule here can derive; `--saveram-name` overrides for that case and the
+    run fails loudly (erased battery / no flushed file) rather than silently booting NEW GAME.
+    """
+    return Path(rom_rel).stem + ".SaveRAM"
+
+
+def stage_rom(rom: str) -> str:
+    """Copy a ROM to a space-free path under patch/build and return it RELATIVE to the repo.
+
+    Launch rule shared with tools/run_gate.py and tools/e2e_duo.py: EmuHawk's CLI parser
+    breaks on absolute paths containing the "Google Drive" space, so the ROM argument has to
+    be a relative, space-free path from cwd = repo root.
+    """
+    src = Path(rom)
+    if not src.exists():
+        raise FileNotFoundError(f"ROM not found: {rom}")
+    rel = f"patch/build/gen3_{src.stem.replace(' ', '_')}{src.suffix}"
+    dst = Path(REPO) / rel
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime:
+        shutil.copyfile(src, dst)
+    return rel
+
+
+def write_gba_run_config(src: str, dst: str, saveram_dir: str) -> None:
+    """A per-run BizHawk config whose GBA Save RAM path points at `saveram_dir`.
+
+    The window/mute/RTC handling is gen1_playthrough.write_run_config's (reused, not copied);
+    only the GBA path entry is ours, because that function rewrites the GAME BOY Save RAM
+    entry and refuses when it finds none.
+    """
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    try:
+        from gen1_playthrough import write_run_config
+        write_run_config(src, dst)
+    except Exception:                       # unparseable config: a plain copy, same fallback
+        shutil.copyfile(src, dst)
+    os.makedirs(saveram_dir, exist_ok=True)
+    with open(dst, encoding="utf-8-sig") as f:
+        cfg = json.load(f)
+    entries = (cfg.get("PathEntries") or {}).get("Paths") or []
+    patched = [e for e in entries if e.get("Type") == "Save RAM" and e.get("System") == "GBA"]
+    if not patched:
+        raise RuntimeError(
+            f"no GBA 'Save RAM' PathEntries in {src} — BizHawk's config schema changed, and "
+            f"silently not redirecting would let this run read and overwrite the developer's "
+            f"own battery saves")
+    for entry in patched:
+        entry["Path"] = saveram_dir.replace("\\", "/")
+    with open(dst, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+
+def _flushed_saveram(run_dir: Path, seeded_name: str) -> Path | None:
+    """The battery file EmuHawk left behind. The seeded name first, then any other *.SaveRAM
+    in the per-run directory -- a gamedb-known cartridge is filed under the gamedb name, not
+    the one we seeded, and naming that file is more useful than claiming nothing was written.
+    """
+    exact = run_dir / seeded_name
+    if exact.exists():
+        return exact
+    others = sorted(p for p in run_dir.glob("*.SaveRAM"))
+    return others[0] if others else None
+
+
+def boot_check_verdict(before: dict, after: dict) -> tuple[bool, list[str]]:
+    """Compare the seeded fixture's `qualify_one` against the flushed save's.
+
+    The three claims PLAN §5.5 asks a boot check to sign, and nothing more:
+      * the reloaded save still qualifies (which is where "sector set complete" lives --
+        codec.qualify_flash refuses a slot with a missing/duplicate/torn sector);
+      * the save counter advanced by EXACTLY 1, i.e. the game performed one in-game save.
+        Hash inequality alone would not prove that, and a counter that jumped proves the run
+        saved more than once, which is not the scenario being signed;
+      * the party is unchanged -- same keys, in the same order. The boot check walks no
+        further than the START menu, so anything that moved means the run booted a different
+        save (or a NEW GAME) rather than the fixture.
+    """
+    problems: list[str] = []
+    if not after["ok"]:
+        problems.append(f"the flushed save does not qualify: {after['message']}")
+    if after["counter"] != before["counter"] + 1:
+        problems.append(f"save counter {before['counter']} -> {after['counter']}, "
+                        f"expected exactly one in-game save "
+                        f"({before['counter']} -> {before['counter'] + 1})")
+    keys_before = [(m["species"], m["level"]) for m in (before.get("party") or [])]
+    keys_after = [(m["species"], m["level"]) for m in (after.get("party") or [])]
+    if keys_before != keys_after:
+        problems.append(f"party changed: {keys_before} -> {keys_after}")
+    return not problems, problems
+
+
+def _launch(script: str, rom_rel: str, run_dir: Path, *, rr: bool, timeout: int,
+            extra_env: dict | None = None) -> tuple[bool, str]:
+    """Run one Lua driver on the run_gate mechanism with a per-run config + SaveRAM dir."""
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import run_gate
+
+    cfg = str(run_dir / "config.ini")
+    write_gba_run_config(run_gate.BIZHAWK_CONFIG, cfg, str(run_dir))
+    checkpoint = CHECKPOINTS[rr]
+    os.environ["SLINK_GEN3_CHECKPOINT"] = str(checkpoint)
+    os.environ["SLINK_GEN3_TITLE"] = "radical_red" if rr else "firered"
+    os.environ.update(extra_env or {})
+    # run_gate copies $SLINK_BIZHAWK_CONFIG into its own per-gate ini; pointing that module
+    # global at OUR prepared config is how the SaveRAM redirect reaches the emulator.
+    run_gate.BIZHAWK_CONFIG = cfg
+    passed, _path, text = run_gate.run_gate(script, rom=rom_rel, timeout=timeout)
+    return passed, text
+
+
+def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_override: str | None
+                 ) -> tuple[str, Path, str]:
+    """(rom_rel, run_dir, seeded battery filename). `seed=None` means COLD BOOT: the directory
+    is emptied so the ROM cannot find a stale save and reach CONTINUE instead of NEW GAME."""
+    rom_rel = stage_rom(rom)
+    run_dir = RUN_DIR / name
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+    run_dir.mkdir(parents=True)
+    battery = saveram_name_override or saveram_name(rom_rel)
+    if seed is not None:
+        (run_dir / battery).write_bytes(seed)
+    return rom_rel, run_dir, battery
+
+
+def cmd_boot_check(args: argparse.Namespace) -> int:
+    fixture = Path(args.fixture)
+    data = fixture.read_bytes()
+    before = qualify_one(data, rr=args.rr)
+    if not before["ok"]:
+        print(f"BOOT-CHECK FAIL {fixture}: the fixture itself does not qualify: "
+              f"{before['message']}", file=sys.stderr)
+        return 1
+    rom_rel, run_dir, battery = _prepare_run(
+        f"bootcheck_{fixture.stem}", args.rom,
+        seed=codec.split_rtc(data)[0], saveram_name_override=args.saveram_name)
+    print(f"seeded {run_dir / battery} from {fixture} (counter={before['counter']})")
+
+    passed, text = _launch(BOOT_CHECK_LUA, rom_rel, run_dir, rr=args.rr, timeout=args.timeout)
+    print(text.rstrip())
+    if not passed:
+        print(f"BOOT-CHECK FAIL {fixture}: the emulator driver did not report PASS",
+              file=sys.stderr)
+        return 1
+
+    flushed = _flushed_saveram(run_dir, battery)
+    if flushed is None:
+        print(f"BOOT-CHECK FAIL {fixture}: EmuHawk left no *.SaveRAM in {run_dir}",
+              file=sys.stderr)
+        return 1
+    if flushed.name != battery:
+        print(f"note: BizHawk filed the battery as {flushed.name!r}, not the seeded "
+              f"{battery!r} — pass --saveram-name {flushed.name!r} to seed it next time")
+    after = qualify_one(codec.split_rtc(flushed.read_bytes())[0], rr=args.rr)
+    ok, problems = boot_check_verdict(before, after)
+    for problem in problems:
+        print(f"  {problem}", file=sys.stderr)
+    print(f"BOOT-CHECK {'PASS' if ok else 'FAIL'} {fixture} counter={before['counter']}"
+          f"->{after['counter']} party={after.get('party')}")
+    return 0 if ok else 1
+
+
+def cmd_make_fr(args: argparse.Namespace) -> int:
+    rom_rel, run_dir, battery = _prepare_run(
+        "make_fr", args.rom, seed=None, saveram_name_override=args.saveram_name)
+    print(f"cold boot: {run_dir} is empty, battery will be {battery}")
+
+    passed, text = _launch(FR_NEWGAME_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout)
+    print(text.rstrip())
+    if not passed:
+        print("make-fr FAIL: scripted play did not reach its terminals; no fixture written",
+              file=sys.stderr)
+        return 1
+
+    flushed = _flushed_saveram(run_dir, battery)
+    if flushed is None:
+        print(f"make-fr FAIL: EmuHawk left no *.SaveRAM in {run_dir}", file=sys.stderr)
+        return 1
+    try:
+        body = import_savedata(flushed.read_bytes(), rr=False)   # vanilla: strict qualify
+    except (ValueError, OSError) as exc:
+        print(f"make-fr FAIL: candidate refused: {exc}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+    r = qualify_one(body, rr=False)
+    print(f"wrote {out} ({len(body)} bytes) sha256={sha256_hex(body)} slot={r['slot']} "
+          f"counter={r['counter']} trainer={r['trainer_name']!r}#{r['trainer_id']:08X} "
+          f"party={r['party']}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -322,7 +545,28 @@ def main() -> int:
     p_derive.add_argument("--rr", action="store_true")
     p_derive.set_defaults(func=cmd_derive_b)
 
-    args = ap.parse_args()
+    p_boot = sub.add_parser("boot-check",
+                            help="EMULATOR: cold boot -> CONTINUE -> re-save -> reload")
+    p_boot.add_argument("--rom", required=True, help="the .gba to boot (staged space-free)")
+    p_boot.add_argument("--fixture", required=True)
+    p_boot.add_argument("--rr", action="store_true")
+    p_boot.add_argument("--saveram-name", default=None,
+                        help="battery filename to seed, when BizHawk's gamedb names it")
+    p_boot.add_argument("--timeout", type=int, default=600)
+    p_boot.set_defaults(func=cmd_boot_check)
+
+    p_fr = sub.add_parser("make-fr", help="EMULATOR: scripted NEW GAME on FireRed -> fixture")
+    p_fr.add_argument("--rom", required=True)
+    p_fr.add_argument("--out", required=True)
+    p_fr.add_argument("--saveram-name", default=None)
+    p_fr.add_argument("--timeout", type=int, default=1800)
+    p_fr.set_defaults(func=cmd_make_fr)
+
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     return args.func(args)
 
 
