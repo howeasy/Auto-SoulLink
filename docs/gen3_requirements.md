@@ -198,7 +198,7 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 FR natural play run 14: `docs/gen3/probes/shadow_fr_play_run14_2026-09-21.txt` — parcel delivered; on Route 1 southbound the starter fainted and the player whited out: observer `faint` x1 and `whiteout` x1 (first natural faint/whiteout on vanilla FR), plus battle_begin x5, battle_end x5, map_load x4, mon_given x1. FR coverage: 6 kinds PHYSICAL. The shared walker refused to continue after the displacement (correct); whiteout recovery queued.
 
-- 2026-09-21 P3 reads == PYDEC, vanilla FR: `docs/gen3/probes/reads_pydec_fr_2026-09-21.txt` — the observer's reads.lua and gen3_codec.py decode the SAME dumped EWRAM bytes (party area + box 0, 30 records) identically on every field; a planted byte flip is detected. PHYSICAL for the R rows on FR (box records; party records pending a fixture with a party). RR dump probe died silently after reaching the field (instrument, queued).
+- 2026-09-21 P3 reads == PYDEC, vanilla FR: `docs/gen3/probes/reads_pydec_fr_2026-09-21.txt` — the observer's reads.lua and gen3_codec.py decode the SAME dumped EWRAM bytes (party area + box 0, 30 records) identically on every field; a planted byte flip is detected. WEAK: box 0 and the party are EMPTY on this fixture (all-zero records), so this proves the pipeline, not the decoders; the RR dump (real Treecko party) is the meaningful differential and its probe died after reaching the field (instrument, queued). RR dump probe died silently after reaching the field (instrument, queued).
 
 ### Old-client characterization (P1)
 
