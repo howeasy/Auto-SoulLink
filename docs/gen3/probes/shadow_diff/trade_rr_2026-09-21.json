@@ -1,0 +1,212 @@
+{
+  "passed": false,
+  "coverage": {
+    "battle_begin": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "battle_end": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "faint": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "capture_wild": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "mon_given": {
+      "wire": 2,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "pc_move": {
+      "wire": 2,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "whiteout": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "map_load": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "evolve_species_store": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "trade_done": {
+      "wire": 2,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "save": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "poison_faint": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "borrowed_party": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "nature_change": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    }
+  },
+  "deltas": [
+    {
+      "kind": "trade_done",
+      "key": "EBEF11DA:2BDDC8BF",
+      "sink": "a",
+      "t": 4128,
+      "frame": null,
+      "action": "",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "trade_done",
+        "key": "EBEF11DA:2BDDC8BF",
+        "reason": "A t=4128 (patch/build/shadow_wire/trade_a_old_client.shadowrun.jsonl:4128) reports new_key before subsequent departure/acquisition rows. The scenario cross-injects apply_trade and checks final partner key (lua/tests/duo/scenario_trade.lua:1-6,25-42). A silent OP_SET_PARTY_MON fallback emits completion immediately after posting the opcode (lua/clients/gen3_frlge_client.lua:2224-2231), bypassing TradeMons (docs/gen3_engine_sites.md:278-296,500-518). This is a plausible explanation, NOT a route-proven receipt; the normal scene would traverse TradeMons. Keep OPEN until route-tagged evidence distinguishes fallback from missing observer delivery.",
+        "owner": "OPEN (natural-play source needed: C3-7)"
+      }
+    },
+    {
+      "kind": "pc_move",
+      "key": "EBEF11DA:2BDDC8BF",
+      "sink": "a",
+      "t": 4134,
+      "frame": null,
+      "action": "deposit",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "pc_move",
+        "key": "EBEF11DA:2BDDC8BF",
+        "reason": "A t=4134 party_to_box becomes pc_move(action=deposit) (patch/build/shadow_wire/trade_a_old_client.shadowrun.jsonl:4134; tools/gen3_shadow_diff.py:31-38,128-131). This scenario commands a trade, not PC deposit (lua/tests/duo/scenario_trade.lua:17-31). The old client can report disappeared keys via its buffered party_to_box detector (lua/clients/gen3_frlge_client.lua:3712-3738,3834-3848); silent swap fallback at :2224-2231 is a candidate cause. Do not treat this as evidence of TryStorePartyMonInBox/SetPlacedMonData (docs/gen3_engine_sites.md:360-438). Exact execution route remains OPEN.",
+        "owner": "OPEN (natural-play source needed: C3-7)"
+      }
+    },
+    {
+      "kind": "mon_given",
+      "key": "EBEF11DA:2BD6C8BF",
+      "sink": "a",
+      "t": 4164,
+      "frame": null,
+      "action": "",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "mon_given",
+        "key": "EBEF11DA:2BD6C8BF",
+        "reason": "A t=4164 capture(gift=true) becomes mon_given (patch/build/shadow_wire/trade_a_old_client.shadowrun.jsonl:4164; tools/gen3_shadow_diff.py:122-124). It occurs after the scripted partner swap, not a requested gift (lua/tests/duo/scenario_trade.lua:17-42). The buffered gift classifier emits capture(gift=true) at lua/clients/gen3_frlge_client.lua:3887; a late silent swap can trigger identity polling without GiveMonToPlayer (fallback :2224-2231; engine site docs/gen3_engine_sites.md:158-186). This is an inferred classification artifact, not proven gift-hook coverage or a proven fallback route; retain OPEN.",
+        "owner": "OPEN (natural-play source needed: C3-7)"
+      }
+    },
+    {
+      "kind": "trade_done",
+      "key": "EBEF11DA:2BD6C8BF",
+      "sink": "b",
+      "t": 4138,
+      "frame": null,
+      "action": "",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "trade_done",
+        "key": "EBEF11DA:2BD6C8BF",
+        "reason": "B t=4138 (patch/build/shadow_wire/trade_b_old_client.shadowrun.jsonl:4138) reports completion before its departure/acquisition rows. Scenario lua/tests/duo/scenario_trade.lua:17-42 proves final partner-key replacement, not native scene execution. Silent OP_SET_PARTY_MON fallback emits completion before the opcode executes (lua/clients/gen3_frlge_client.lua:2224-2231); that bypasses the TradeMons site (docs/gen3_engine_sites.md:278-296). The normal scene should hit it, so fallback is only an inference pending a route-tagged receipt; retain OPEN.",
+        "owner": "OPEN (natural-play source needed: C3-7)"
+      }
+    },
+    {
+      "kind": "pc_move",
+      "key": "EBEF11DA:2BD6C8BF",
+      "sink": "b",
+      "t": 4146,
+      "frame": null,
+      "action": "deposit",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "pc_move",
+        "key": "EBEF11DA:2BD6C8BF",
+        "reason": "B t=4146 party_to_box becomes pc_move(action=deposit) (patch/build/shadow_wire/trade_b_old_client.shadowrun.jsonl:4146; tools/gen3_shadow_diff.py:31-38,128-131). No PC action is scripted (lua/tests/duo/scenario_trade.lua:17-42). Disappearance polling/buffer emission can produce this row (lua/clients/gen3_frlge_client.lua:3712-3738,3834-3848), including after a silent swap (:2224-2231), without the engine PC operation sites (docs/gen3_engine_sites.md:360-438). The wire trace alone does not prove the fallback; retain OPEN.",
+        "owner": "OPEN (natural-play source needed: C3-7)"
+      }
+    },
+    {
+      "kind": "mon_given",
+      "key": "EBEF11DA:2BDDC8BF",
+      "sink": "b",
+      "t": 4176,
+      "frame": null,
+      "action": "",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "mon_given",
+        "key": "EBEF11DA:2BDDC8BF",
+        "reason": "B t=4176 capture(gift=true) reduces to mon_given (patch/build/shadow_wire/trade_b_old_client.shadowrun.jsonl:4176; tools/gen3_shadow_diff.py:122-124). The scripted operation was partner-blob replacement (lua/tests/duo/scenario_trade.lua:17-42), not GiveMonToPlayer (docs/gen3_engine_sites.md:158-186). Old-client gift buffering can classify the new key this way (lua/clients/gen3_frlge_client.lua:3887), with silent swap fallback (:2224-2231) a plausible trigger. Exact route is unverified; retain OPEN rather than count a naturally acquired mon.",
+        "owner": "OPEN (natural-play source needed: C3-7)"
+      }
+    }
+  ],
+  "unused_ledger": [],
+  "timing_unavailable": 0,
+  "commanded_writes": []
+}

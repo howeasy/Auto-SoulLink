@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "faint",
+    "key": "EBEF11DA:2BDDC8BF",
+    "reason": "A capture t=558 (patch/build/shadow_wire/explode_a_old_client.shadowrun.jsonl:558) follows the direct overworld party-HP write in lua/tests/duo/scenario_explode.lua:34-43, not the Cmd_tryfaintmon site in docs/gen3_engine_sites.md:118-136. B's force_explode at explode_b_old_client.shadowrun.jsonl:55 is commanded_write, outside compared events (tools/gen3_shadow_diff.py:112-116). The scenario stops at outcome!=0 (scenario_explode.lua:90-106), before requiring the battle_end pin (docs/gen3_engine_sites.md:98-114). The later census confirms battle_end delivers on actual return (docs/gen3/probes/census_rr_battle_2026-09-21.txt:3-5); this explanation grants no coverage.",
+    "owner": "P3 explained (commanded/native path)"
+  }
+]
