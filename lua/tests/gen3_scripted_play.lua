@@ -63,6 +63,21 @@ local function mapid(cp) local g, n = G.map(cp); return g * 256 + n end
 -- collision=(word>>10)&3, blocked if nonzero; object_event tiles from data/maps/<map>/map.json
 -- also blocked; 4-directional BFS, shortest path. Every entry names the map, start, end tile.
 local PATHS = {
+    -- PalletTown/map.json coord_events: OakTriggerLeft @ (12,1), var VAR_MAP_SCENE_PALLET_TOWN_OAK
+    -- == 0 (true on a fresh save). Walking onto this TILE fires it (a coord_event, not a warp —
+    -- no press-into needed). This is the FIRST entry into the lab, not the door: on a fresh
+    -- save Oak is not in the lab and the starter balls are inert (PalletTown_ProfessorOaksLab/
+    -- scripts.inc:1219-1223 "Those are Poke Balls") until this trigger's scripted sequence
+    -- (data/maps/PalletTown/scripts.inc:181-217) leads the player in and warps them to
+    -- (6,12) with VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB=1. Path avoids (13,1)/(13,2)
+    -- (OakTriggerRight / SignLadyTrigger) entirely (checked cell-by-cell against the BFS output).
+    town_start_to_oak_trigger = {
+        map = "PalletTown", from = { 6, 9 }, to = { 12, 1 },
+        dirs = { "Right","Right","Right","Right","Right","Up","Up","Up","Up","Up","Up","Up",
+                 "Right","Up" },
+    },
+    -- Re-entry path for every LATER lab visit (parcel_deliver, route1_catch), once
+    -- FLAG_HIDE_OAK_IN_PALLET_TOWN is set and the door works normally again.
     -- PalletTown/map.json warp_events[2] = (16,13) MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB warp 0.
     -- Door tile (16,13) reads collision=1; the walkable approach is (16,14), one tile south.
     town_start_to_lab_door = {
@@ -71,10 +86,21 @@ local PATHS = {
     },
     -- PalletTown_ProfessorOaksLab/map.json warp_events[0] = (6,12), the lab's own landing tile
     -- (collision=0, walk-through). SquirtleBall object_event at (9,4) (collision=1, solid);
-    -- (9,5) one tile south is the interact-facing approach.
+    -- (9,5) one tile south is the interact-facing approach. Used by LATER visits that enter
+    -- via the door directly (the first visit's own scripted walk ends at (6,4), not (6,12) —
+    -- see lab_oak_scene_end_to_ball below).
     lab_entrance_to_ball = {
         map = "PalletTown_ProfessorOaksLab", from = { 6, 12 }, to = { 9, 5 },
         dirs = { "Up","Up","Up","Up","Up","Up","Up","Right","Right","Right" },
+    },
+    -- ONE-TIME: the ChooseStarterScene's own scripted player movement
+    -- (PalletTown_ProfessorOaksLab_Movement_PlayerEnter, scripts.inc:238-247: walk_up x8 from
+    -- the (6,12) landing tile) parks the player at (6,4), not (6,12) — computed from the
+    -- movement macro, the same "engine drives this walk" exception as mart_scene_end_to_exit.
+    -- Verified at runtime by follow()'s start-tile check like every other path.
+    lab_oak_scene_end_to_ball = {
+        map = "PalletTown_ProfessorOaksLab", from = { 6, 4 }, to = { 9, 5 },
+        dirs = { "Down","Right","Right","Right" },
     },
     -- coord_events RivalBattleTriggerLeft/Mid/Right @ y=8, x in {5,6,7}
     -- (PalletTown_ProfessorOaksLab/map.json).
@@ -246,17 +272,45 @@ LEGS[#LEGS + 1] = {
     name = "starter",
     exercises = { "mon_given", "map_load" },
     source = {
-        "data/maps/PalletTown/map.json (warp_events[2] -> lab door)",
+        "data/maps/PalletTown/map.json (coord_events OakTriggerLeft @ 12,1)",
+        "data/maps/PalletTown/scripts.inc:169-217 (OakTrigger: lockall, lead player to the lab, warp MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB 6 12)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:44-48,199-227 (OnFrame ChooseStarterScene: scripted Oak+player movement, ends VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB=2)",
         "data/maps/PalletTown_ProfessorOaksLab/map.json (object_events SquirtleBall @ 9,4)",
-        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1089,1106,1115 (ConfirmSquirtle, YES -> ChoseStarter)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1212-1223 (SquirtleBall: only ConfirmStarterChoice-reachable once scene==2, else \"Those are Poke Balls\")",
     },
     run = function(cp)
-        follow(cp, "town_start_to_lab_door", "starter")
-        if not enter_warp(cp, "Up", 20) then
-            G.shot("stuck")
-            G.finish(false, "starter: the lab door never fired a warp")
+        -- Walking onto (12,1) fires the coord_event; from here to landing in the lab at scene=2
+        -- is ENTIRELY scripted (lockall): Oak enters, leads the player north through the door,
+        -- an internal `warp` command lands them at (6,12) in the lab, and the lab's own
+        -- ON_FRAME ChooseStarterScene fires immediately (scene==1) — more scripted dialogue and
+        -- an applymovement walk that parks the player at (6,4). No joypad steering happens or
+        -- would do anything during this; only A to clear message boxes.
+        local town_map = mapid(cp)
+        follow(cp, "town_start_to_oak_trigger", "starter")
+        local reached_lab = false
+        for _ = 1, 6000 do
+            if mapid(cp) ~= town_map then reached_lab = true; break end
+            G.tap("A", 2, 10)
         end
-        follow(cp, "lab_entrance_to_ball", "starter")
+        if not reached_lab then
+            G.shot("stuck")
+            G.finish(false, "starter: Oak's intercept never warped the player into the lab")
+        end
+        G.phase("in-lab", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
+        local parked = false
+        for _ = 1, 6000 do
+            local x, y = G.pos(cp)
+            if x == 6 and y == 4 and G.pred_ok(cp, "script_context_status") then parked = true; break end
+            G.tap("A", 2, 10)
+        end
+        if not parked then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "starter: ChooseStarterScene never parked the player at (6,4); at (%d,%d)", G.pos(cp)))
+        end
+        G.phase("scene-done", "scene should be 2 now (VAR read not pinned; position+idle verified)")
+
+        follow(cp, "lab_oak_scene_end_to_ball", "starter")
         G.tap("Up", 2, 13)   -- face the (solid) ball tile without stepping onto it
         local got = false
         for _ = 1, 60 do
