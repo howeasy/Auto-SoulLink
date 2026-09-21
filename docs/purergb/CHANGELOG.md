@@ -426,6 +426,7 @@ Read this section if you only play vanilla.
 | 31 | randomizer validation (verifier) | `trainers=type_themed` crashes: `randomType()` draws a declared type no species carries | fork patch 0004: re-draw |
 | 32 | randomizer validation (Codex cx-73e80e05) | `wild=area + catch_em_all` could write the banned ghost into a fishing/Tower set (draw from `allPokes`, removal from `pickablePokemon`) | fork patch 0005: draw from the filtered pool |
 | 33 | randomizer validation (Codex cx-73e80e05) | `wild=global` + `type_themed` / `catch_em_all` accepted although UPR ignores the restriction | refused by name for both families; form greys it |
+| 34 | randomizer validation (Codex cx-37fe2641) | verifier holes: similar_strength+force_evolved compared the post-evolution BST; global reuse bounded per destination only; wild/themed similar bands unchecked; statics=similar allowed the original | stage-aware ancestor rule, aggregate reuse ≤ pool deficit, area/themed bands, self-exclusion (74 tests); `wild=global+similar` refused by name (not exactly modellable) |
 | 24 | final review (Codex, round 9) | verdict: the wrong-target counterexample is closed; one conservative false-refusal window (same-species party swap sampled mid-transaction) is documented for the owner's acceptance | residual wording in §7 |
 | 23 | final review (Codex, round 8) | an unobserved edit interval (teach A a different move, then teach a same-key/same-nickname twin A's old set, all in the item menu) let the twin become the sole match | every alias is observed on every readable frame (pure pass, no refresh): the zero-match interval latches `lost` |
 | 22 | final review (Codex, round 7) | sequential replacement: deposit the changed record, withdraw an identical boxed twin — no observation ever sees two candidates, the twin becomes the sole match | any native departure of a record carrying the aliased key (MoveMon party→box/daycare, RemovePokemon) permanently invalidates the alias (`alias_departure`); a zero-match observation does too |
@@ -532,7 +533,9 @@ refused by name:
   `force_evolved` gated on the threshold, the TM ban set (Transform/Struggle), `prefer_type`'s
   probability-1 bits (every Bug species learns Cut), and the missing matrix cells; "enabled ⇒ a
   byte changed" is a fixture expectation only where identity is impossible (starters and TMs can
-  legally redraw the originals).
+  legally redraw the originals). Final round (`cx-37fe2641`): four more verifier holes closed
+  (defect 34); `wild=global + similar` is refused by name because its picker's pool shrinks across
+  the whole map and no per-ROM oracle can bound a draw exactly.
 - **Not claimed**: `prefer_type` beyond its probability-1 bits (the rest is a probability, not
   a per-ROM assertion); `trainers_similar_strength` under `distributed` / `type_themed` pools (the
   band is modelled for `random` only); only PureRed is randomized in the unit tests (the other
