@@ -619,7 +619,7 @@ M.BOX_NAME_SIZE    = 9      -- BOX_NAME_LENGTH(8) + 1 terminator
 -- We only need index 0 (Growth substruct, contains species u16 at offset +0x00).
 M.SUBSTRUCT_ORDER = {
     --  0        1        2        3        4        5
-    {0,1,2,3},{0,1,3,2},{0,2,1,3},{0,2,3,1},{0,3,1,2},{0,3,2,1},
+    {0,1,2,3},{0,1,3,2},{0,2,1,3},{0,3,1,2},{0,2,3,1},{0,3,2,1},  -- rows 3/4 per pret src/pokemon.c SUBSTRUCT_CASE(3,0,3,1,2)/(4,0,2,3,1); were swapped (found by the P2 codec differential)
     --  6        7        8        9       10       11
     {1,0,2,3},{1,0,3,2},{2,0,1,3},{3,0,1,2},{2,0,3,1},{3,0,2,1},
     -- 12       13       14       15       16       17

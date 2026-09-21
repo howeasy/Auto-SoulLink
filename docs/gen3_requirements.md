@@ -168,6 +168,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P1 hook probe on FR clean + RR companion: `docs/gen3/probes/hooks_*_2026-09-21.txt` — PHYSICAL input to S-1 (callback-address contract), S-13 (params/register names), F-5/W (flash domain = SRAM 0x20000); a-return and b-interior OPEN.
 
+- 2026-09-21 P2 codec differential finding: `lua/memory_gba.lua:622` substruct permutation rows 3/4 were swapped vs pret `src/pokemon.c` `SUBSTRUCT_CASE(3,0,3,1,2)/(4,0,2,3,1)` (vanilla FRLG only, PID%24 in {3,4}: wrong moves/ability substruct; species unaffected). Fixed by the coordinator (two rows) with `tests/unit/test_gen3_lua_vs_codec.py` as the standing differential.
+
 ## Recorded limits
 
 - **Keyed sync-command re-issue window.** `SYNC_INFLIGHT_RECONCILES = 6` is a re-issue
