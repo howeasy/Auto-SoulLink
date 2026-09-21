@@ -156,7 +156,7 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | `battle_begin`/`battle_end` (S-2) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play`, `census_rr_battle` |
 | `faint` (S-3) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_faint` (re-pin 0x0909EED2) |
 | `capture_wild` (S-4) | ◐ (route1_catch leg: grass hunt fixed, run 17 pending) | ◐ (wild_catch leg: bag timing fixed, lane pending; candidate 0x0907DD80+8) | `rr_catch_gotcha png`, `census_rr_faint_v3b_catch` |
-| `pc_move` (S-5) | ◐ (viridian_pc leg; FR PC flow research cx-444537b2) | ◐ (deposit reached by hooks: `TryStorePartyMonInBox`; observer run pending) | `census_rr_pc_deposit` |
+| `pc_move` (S-5) | ◐ (viridian_pc leg being pinned from `research/fr_pc_flow_and_pc_move_sites.md`) | ◐ (deposit reached by hooks: `TryStorePartyMonInBox`; observer run pending) | `census_rr_pc_deposit` |
 | `whiteout` (S-6) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_play` |
 | `map_load` (S-7) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play` |
 | `evolve_species_store` (S-8) | OPEN (evolution leg needs a level-up plan) | OPEN | — |
@@ -165,7 +165,7 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | `poison_faint` (S-11) | OPEN | OPEN | — |
 | `borrowed_party`/`nature_change` (S-12, RR) | n/a | OPEN | — |
 | checkpoint negatives (W rows) | ◐ (idle + door states made: `slink_fr_overworld`/`slink_fr_door`; battle state from run 17) | ✓ | `checkpoint_rr_companion` |
-| overhead budget | · (not measured on FR) | ✓ | `overhead_rr_throttled`/`_unthrottled`, `wire_delta_rr_explode` |
+| overhead budget | ✓ (21 sites hooked: 59.7 fps throttled, hooks off 59.7; unthrottled 333 vs 766 fps with liveness hooks, the mGBA callback-path cost known from P1) | ✓ | `overhead_fr_*`, `overhead_rr_throttled`/`_unthrottled`, `wire_delta_rr_explode` |
 | `reads == PYDEC` (R rows) | ◐ (empty records only) | ✓ | `reads_pydec_fr`, `reads_pydec_rr` |
 
 LG clean and RR clean: no observer runs yet (no LG fixture; RR clean needs the clean base ROM staged) — both rows stay `·` and are listed for G3 as deferred artifacts, not signed.
