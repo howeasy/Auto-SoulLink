@@ -42,14 +42,27 @@ way (`tests/e2e/test_duo_gen1.py`).
 So the patch buys **zero additional rules**. What it buys is what the cartridge's screen can
 show: the panel, and a trade that happens with the game's own UI.
 
-## Why there is no sound
+## How sound is played (and why not from VBlank)
 
-Earlier builds (ABI 2) played SFX from the VBlank hook. That was removed, not deferred,
-and the capability byte says so — a client asks the bits what this build can do rather
-than inferring it from the ABI number.
+The request byte at mailbox `+7` carries a **semantic code** — 1 success, 2 failure,
+3 boo — and the capability byte advertises `SLINK_CAP_SFX` (`$01`; caps read `$03` with the
+panel). The code is consumed on the **main thread**: DelayFrame's tail jumps to the ROM0
+bridge (`$0001`, shared with the trade lease), which farcalls `SlinkForeground` in bank
+`$3F` when a request is pending or a lease is armed, and that calls `SlinkSfxService`
+(`slink.asm`). The service resolves the code against the audio bank loaded *at play time*
+(`wAudioROMBank` — sound ids are per bank, and a request held across a battle fade spans a
+bank change): success = `GET_ITEM_2 $89` (`LEVEL_UP $86` in the battle bank, which survives
+the low-health alarm), failure = `DENIED $A5` (`TINK $8C` in the battle bank, which has no
+buzzer), boo = `TINK $8C`. It **holds** the request while `wAudioFadeOutControl` is nonzero
+(PlaySound would drop it) and while CHAN5/6/8 are busy (the engine drops a higher id on a
+busy channel — the same test as `WaitForSoundToFinish`, with its low-health-alarm bypass),
+and after 120 held frames (mailbox `+12`, ROM-private) plays regardless. Unknown codes are
+consumed unplayed; `Init` zero-fills WRAM so a fresh cartridge never sees a stray request.
+The gate `lua/tests/test_gen1_patch_gate.lua` asserts the exact id that lands on CHAN5.
 
-Two failure modes, both measurable in the shipped ROM by disassembling `PlaySound`
-(`$23B1`):
+Earlier builds (ABI 2) played SFX from the VBlank hook. That was removed, and ABI 3 shipped
+panel-only until the main-thread path above existed. The two failure modes, both measurable
+in the shipped ROM by disassembling `PlaySound` (`$23B1`), are why the call is not in VBlank:
 
 * **Swallowed during fades.** `PlaySound` opens
   `ld a,[wAudioFadeOutControl] / and a / jr z,.noFadeOut` then
@@ -64,10 +77,8 @@ Two failure modes, both measurable in the shipped ROM by disassembling `PlaySoun
   routine — corrupting `wChannelSoundIDs` and stamping the SFX id into
   `wLastMusicSoundID`. Our hook **is** that VBlank, so no guard on our side can close it.
 
-Playing sound safely needs a main-thread dispatch point with its own displaced bytes and
-queue-drain timing. Until one exists and passes a full state matrix, this build ships
-without it. The request byte is still drained so a client leaves no stale state in the
-mailbox; it simply never becomes a sound.
+Both are closed by construction on the main thread: PlaySound is only ever entered from
+the bridge (never from an interrupt), and the fade case is held rather than dropped.
 
 ## Distribution
 

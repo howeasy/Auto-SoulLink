@@ -20,7 +20,7 @@ SOURCE = ROOT / "patch/gen1/src"
 RC_SOURCE = ROOT.parent / "gen1-rby-code-sweep-8d06e2/patch/gen1/src"
 TARGETS = ("red", "blue")
 SPAN_SYMBOLS = (
-    ("SlinkTradeService", "SlinkTradeServiceEnd", 0x4500, 294),
+    ("SlinkForeground", "SlinkTradeServiceEnd", 0x4500, 319),
     ("SlinkTradeApply", "SlinkTradeApplyEnd", 0x4800, 653),
     ("SlinkReceptionist", "SlinkReceptionistEnd", 0x4C00, 1252),
     ("SlinkTradeUIWaitReleased", "SlinkTradeUIEnd", 0x5400, 414),
@@ -75,10 +75,13 @@ def built() -> dict[str, bytes]:
     return {key: (BUILD / f"slink_{key}.gb").read_bytes() for key in TARGETS}
 
 
-def test_five_asm_files_are_byte_identical_to_rc_sources():
+def test_four_asm_files_are_byte_identical_to_rc_sources():
+    # trade_service.asm left the RC text on purpose: the DelayFrame bridge now farcalls
+    # SlinkForeground (SFX dispatch + the trade predicate moved into bank $3F), so it is
+    # covered by the byte pins below and the live gates instead of RC provenance.
     if not RC_SOURCE.is_dir():
         pytest.skip(f"RC source checkout absent: {RC_SOURCE}")
-    for name in ("native_trade.asm", "trade_service.asm", "trade_receptionist.asm",
+    for name in ("native_trade.asm", "trade_receptionist.asm",
                  "trade_ui.asm", "trade_prompt.asm"):
         # git's autocrlf rewrites the checkout's line endings; the assembler does not care
         assert (SOURCE / name).read_bytes().splitlines() == (RC_SOURCE / name).read_bytes().splitlines(), name
@@ -92,7 +95,7 @@ def test_clean_dump_contains_three_exact_before_patterns(key):
         0x20B7: manifest.TRADE_DELAY_BEFORE,
         0x29C3: manifest.TRADE_DISPATCH_BEFORE,
     }
-    assert len(expected[0x0001]) == len(manifest.TRADE_BRIDGE_AFTER) == 42
+    assert len(expected[0x0001]) == len(manifest.TRADE_BRIDGE_AFTER) == 32
     for offset, original in expected.items():
         assert data[offset:offset + len(original)] == original, (key, hex(offset))
     # pret/home/header.asm:3-38 declares unused RST8..RST30 vector bodies.
@@ -109,9 +112,10 @@ def test_defs_match_committed_red_and_blue_symbols_and_pret_tables():
         "SLINK_TRADE_BANK", "SLINK_YELLOW", "SLINK_TRADE_UI",
         "SLINK_TRADE_MUSIC_BANK", "SLINK_TRADE_MUSIC_ID",
         "SlinkDelayFrameHalt", "SlinkOverworldReturn", "SlinkOverworldLessReturn",
+        "SLINK_SFX_REQUEST",
     }
     definitions = re.findall(r"^DEF (\w+) EQU \$?([0-9A-Fa-f]+)\s*; ([^\n]+)", defs, re.M)
-    assert len(definitions) == 133
+    assert len(definitions) == 134
     values = {name: int(hex_value, 16) for name, hex_value, _citation in definitions}
     assert values["SLINK_TRADE_BANK"] == 0x3F
     assert values["SLINK_YELLOW"] == 0 and values["SLINK_TRADE_UI"] == 1
@@ -168,8 +172,10 @@ def test_linked_trade_symbols_sizes_bridge_and_dispatch(built):
     symbols = _symbols(BUILD / "slink.sym")
     image = (BUILD / "slink_stub.gb").read_bytes()
     assert symbols["SlinkDelayFrameBridge"] == (0, 1)
-    assert symbols["SlinkDelayFrameBridgeEnd"] == (0, 0x2B)
-    assert image[1:0x2B] == manifest.TRADE_BRIDGE_AFTER
+    assert symbols["SlinkDelayFrameBridgeEnd"] == (0, 0x21)
+    assert image[1:0x21] == manifest.TRADE_BRIDGE_AFTER
+    assert symbols["SlinkSfxService"][0] == 0x3F and symbols["SlinkSfxServiceEnd"][1] <= 0x4100
+    assert symbols["SlinkForeground"] == (0x3F, 0x4500)
     for start_name, end_name, start, length in SPAN_SYMBOLS:
         assert symbols[start_name] == (0x3F, start)
         assert symbols[end_name] == (0x3F, start + length)
@@ -192,7 +198,9 @@ def test_linked_trade_symbols_sizes_bridge_and_dispatch(built):
 def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
     pristine, patched = _clean(key), built[key]
     assert len(pristine) == len(patched) == 0x100000
-    assert patched[1:0x2B] == manifest.TRADE_BRIDGE_AFTER
+    assert patched[1:0x21] == manifest.TRADE_BRIDGE_AFTER
+    # the RST slots past the shorter bridge keep the clean ROM's rst $38 traps
+    assert patched[0x21:0x38] == pristine[0x21:0x38] == bytes(7) + bytes([0xFF]) + bytes(7) + bytes([0xFF]) + bytes(7)
     assert patched[0x20B7:0x20BA] == manifest.TRADE_DELAY_AFTER
     assert patched[0x29C3:0x29CD] == manifest.TRADE_DISPATCH_AFTER
     assert patched[0x0100:0x0150] == pristine[0x0100:0x0150]

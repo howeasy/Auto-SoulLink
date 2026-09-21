@@ -74,6 +74,7 @@ DEF YesNoChoiceBank EQU $00 ; data/pret/pokered.sym:860
 DEF SlinkDelayFrameHalt EQU $20B3 ; data/pret/pokered.sym:493
 DEF SlinkOverworldReturn EQU $0402 ; data/pret/pokered.sym:23; pret/home/overworld.asm:41-43
 DEF SlinkOverworldLessReturn EQU $0405 ; data/pret/pokered.sym:24; pret/home/overworld.asm:43-45
+DEF SLINK_SFX_REQUEST EQU $DEE9 ; patch/gen1/src/slink.asm:38-46 (mailbox +7); pret/ram/wram.asm free WRAM0 tail ($DEE2 + 7)
 ; slink_name_table derives its 256 glyph flags from pret/constants/charmap.asm:5-196.
 MACRO slink_name_table
  db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1

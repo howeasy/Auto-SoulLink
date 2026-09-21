@@ -206,7 +206,8 @@ def test_companion_timing_windows_are_the_same_frame_counts_on_both_lanes(lua):
     core does not scale them -- only the two per-cartridge addresses differ."""
     rb, pure = _dofile(lua, RB)["COMPANION"], _dofile(lua, PURE)["COMPANION"]
     for leaf in ("panel_stage_timeout", "panel_deadline", "query_frames", "offer_frames",
-                 "settle_frames", "apply_frames", "channel_sound_ids_addr"):
+                 "settle_frames", "apply_frames", "channel_sound_ids_addr",
+                 "audio_rom_bank_addr", "audio_fade_out_control_addr"):
         assert rb[leaf] == pure[leaf], leaf
     assert rb["speed_multiplier"] == 1 and pure["speed_multiplier"] == 2
     assert rb["playtime_frames_addr"] != pure["playtime_frames_addr"]
