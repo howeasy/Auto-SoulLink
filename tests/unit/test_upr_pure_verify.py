@@ -681,7 +681,7 @@ class TestTrainers:
         evos = chk.f["evos"]
         eevee, branches = 102, (103, 104, 105)
         for where, slots in chk.parties:
-            idx = chk.party_indices[where][0]
+            idx = chk.party_indices[where]
             for lv, sp, mask in slots:
                 if (clean[lv] & mask) < force:
                     continue
@@ -728,6 +728,51 @@ class TestTrainers:
         })
         r = verify("purered", _clean(), out, spec=spec)
         assert r["ok"], "\n".join(r["failures"])
+
+    def test_similar_strength_uses_the_aliased_records_final_writer_index(self):
+        """setTrainers (Gen1RomHandler.java:1477-1518) writes classes back in the SAME order
+        1..nclass to the SAME per-class offset as getTrainers assigns indices in: for an aliased
+        pointer, every class in the alias group writes the record in turn and only the LAST
+        one's bytes survive. class 50/54/55/56 alias the same RookieData record @0x3A017/18
+        (Eevee, level 17) at trainer indices 458/474/481/488 respectively -- 488 (class 56, the
+        highest id, visited last) is the one whose write actually lands in the ROM, not any of
+        the other three (cx-636b45dd #1). At seed 0, index 488 needs Vaporeon
+        ((0+488)%3=2); crediting index 474 instead ((0+474)%3=0=Flareon) is exactly the false
+        accept this closes."""
+        out = self._globally_consistent_eevee_rom(seed=0, force=11, overrides={})
+        r = verify("purered", _clean(), out, spec=self.EEVEE_ROM_WIDE)
+        assert r["ok"], "\n".join(r["failures"])              # control: consistently forced, must pass
+        assert out[0x3A018] == 0x69                            # VAPOREON, matching index 488 at seed 0
+        bad = bytearray(out)
+        bad[0x3A018] = 0x67                                    # FLAREON: only valid if credited to index 474, not 488
+        r = verify("purered", _clean(), bytes(bad), spec=self.EEVEE_ROM_WIDE)
+        assert not r["ok"]
+        assert any("EEVEE" in f and "at once" in f for f in r["failures"]), r["failures"]
+
+    UNCHANGED_FORCE1 = _spec(trainers_force_evolved=1)   # trainers stays "unchanged" (the default); no theme, no band
+
+    def test_force_evolved_alone_accepts_a_globally_consistent_forced_rom(self):
+        """The control for the fixture below: a ROM where every forced evolution (including
+        every natural Eevee) is consistent with one seed must pass under trainers=unchanged with
+        no similar_strength at all."""
+        out = self._globally_consistent_eevee_rom(seed=0, force=1, overrides={})
+        r = verify("purered", _clean(), out, spec=self.UNCHANGED_FORCE1)
+        assert r["ok"], "\n".join(r["failures"])
+
+    def test_force_evolved_alone_reconciles_branches_without_similar_strength(self):
+        """_trainer_modes used to return for trainers=unchanged before ever reaching branch
+        reconciliation, which ran only from the similar_strength helper -- but
+        forceFullyEvolvedTrainerPokes and its evolutionIndex formula (A:6826) are independent of
+        both trainers mode and trainers_similar_strength (cx-636b45dd #2). Trainer index 34
+        (0x3961B) and index 38 (0x3962E) are both natural clean Eevees; forcing both to Flareon
+        needs (S+34)%3==0 (S=2) and (S+38)%3==0 (S=1) at once -- impossible for any single seed."""
+        out = self._globally_consistent_eevee_rom(seed=0, force=1, overrides={
+            0x3961B: 0x67,                                   # FLAREON: trainer index 34
+            0x3962E: 0x67,                                   # FLAREON: trainer index 38 -- incompatible residue
+        })
+        r = verify("purered", _clean(), out, spec=self.UNCHANGED_FORCE1)
+        assert not r["ok"]
+        assert any("EEVEE" in f and "at once" in f for f in r["failures"]), r["failures"]
 
     THEMED_SIMILAR = _spec(trainers="type_themed", trainers_similar_strength=True, trainers_block_legendaries=False)
 

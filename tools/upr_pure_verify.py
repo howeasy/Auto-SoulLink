@@ -686,15 +686,22 @@ class _Check:
         # per (class, record) pair as classes are visited in order 1..nclass, REGARDLESS of
         # aliasing -- two aliased classes each re-walk the same bytes and each record gets its
         # own trainer index. class_start[cls] is the index of that class's record 0.
+        #
+        # But setTrainers (A:1477-1518) writes classes back in the SAME order 1..nclass, to the
+        # SAME per-class offset -- so for an aliased pointer, every class in the group writes the
+        # record in turn and only the LAST one's bytes survive in the ROM. The effective trainer
+        # index for an aliased record is therefore class_start[max(classes)] + idx, never any of
+        # the earlier (overwritten) aliases' indices (cx-636b45dd #1).
         class_start: dict[int, int] = {}
         running = 1
         for cls in range(1, nclass + 1):
             class_start[cls] = running
             running += counts[cls]
-        self.party_indices: dict[str, list[int]] = {}   # where -> every aliased class's trainer index
+        self.party_indices: dict[str, int] = {}          # where -> the FINAL WRITER's trainer index
         self.parties: list[tuple[str, list[tuple[int, int, int]]]] = []    # (where, [(lvl, species, mask)])
         for offs, classes in blocks.items():
             cls = classes[0]
+            final_writer = classes[-1]                    # blocks lists classes in ascending order
             frecs = facts["classes"][str(base + cls)]["records"]
             if len({counts[c] for c in classes}) != 1:
                 self.fail(f"trainers: aliased classes {classes} have different counts")
@@ -702,7 +709,7 @@ class _Check:
                 self.fail(f"trainers: class {cls} count {counts[cls]} != facts {len(frecs)}")
             for idx in range(counts[cls]):
                 where = f"class {cls} record {idx} @0x{offs:X}"
-                self.party_indices[where] = [class_start[c] + idx for c in classes]
+                self.party_indices[where] = class_start[final_writer] + idx
                 offs = self._trainer_record(cls, idx, offs, frecs[idx] if idx < len(frecs) else None)
         etm = e["ExtraTrainerMovesTableOffset"]
         glm = e["GymLeaderMovesTableOffset"] - 0x44
@@ -767,6 +774,8 @@ class _Check:
         if mode is None:
             return
         evos = self.f["evos"]
+        branch_parents = {p: tuple(targets) for p, targets in evos.items() if len(targets) > 1}
+        branch_reqs: dict[int, list[tuple[str, int]]] = collections.defaultdict(list)
         if force:
             for where, slots in self.parties:
                 for lv, sp, mask in slots:
@@ -790,9 +799,20 @@ class _Check:
                             if v not in reach:
                                 self.fail(f"trainers: {where} 0x{sp:X} {self.name(c)} -> {self.name(v)} is not an "
                                           f"evolution of it (trainers unchanged, force_evolved {force})")
+                            elif c in branch_parents and v in branch_parents[c]:
+                                # "unchanged" makes no substitution before forceFullyEvolvedTrainer
+                                # Pokes runs, so the pre-force selection is certainly `c` itself --
+                                # this pins a required branch for the ROM's one seed regardless of
+                                # trainers_similar_strength (cx-636b45dd #2)
+                                branch_reqs[c].append((where, v))
                     if lvl >= force and evos.get(v):
                         self.fail(f"trainers: {where} 0x{sp:X} {self.name(v)} at level {lvl} >= "
                                   f"{force} still evolves (force_evolved)")
+        if self.opt("trainers_similar_strength") and mode in ("random", "type_themed", "distributed"):
+            for p, reqs in self._trainer_similar_strength(force, branch_parents).items():
+                branch_reqs[p].extend(reqs)
+        if branch_reqs:
+            self._reconcile_branches(branch_reqs, branch_parents)
         if mode == "unchanged":
             return
         if self.opt("trainers_block_legendaries"):
@@ -802,8 +822,6 @@ class _Check:
         if mode == "type_themed":
             for where, slots in self.parties:
                 self.shared_type("trainers", where, [sp for _lv, sp, _m in slots])
-        if self.opt("trainers_similar_strength") and mode in ("random", "type_themed", "distributed"):
-            self._trainer_similar_strength(force)
         # "distributed" (pickTrainerPokeReplacement with usePlacementHistory) only refuses a
         # species whose count is >= 2x the mean over the species placed SO FAR, in a shuffled
         # trainer order. Every final multiset is reachable under that rule (place the most
@@ -812,7 +830,8 @@ class _Check:
         # property beyond pool membership exists to assert. (cx-758c671d #3) similar_strength's
         # own band (above) is unaffected by this and applies to distributed just like random.
 
-    def _trainer_similar_strength(self, force: int) -> None:
+    def _trainer_similar_strength(self, force: int, branch_parents: dict[int, tuple[int, ...]]
+                                   ) -> dict[int, list[tuple[str, int]]]:
         # pickTrainerPokeReplacement(usePowerLevels=True) (A:6863-6978): cachedAllList is
         # noLegendaryList/mainPokemonList (A:1693-1694) -- the same block_legendaries-gated pool
         # wild/statics use, first narrowed to the party's theme type under type_themed
@@ -840,16 +859,11 @@ class _Check:
         #
         # typeForTrainer is chosen ONCE per trainer (A:1836-1847), not per slot (cx-288123ae #2):
         # "some theme works for this slot" checked independently per slot is too permissive --
-        # the SAME theme must explain every slot in the party. And fullyEvolve's branch pick
-        # (Vaporeon/Jolteon/Flareon for Eevee, Gen 1's only split evolution) depends only on a
-        # random value drawn once per ROM and the trainer's own index (A:6795-6797, 6826:
-        # `evolutionIndex = (fullyEvolvedRandomSeed + trainerIndex) % branches.size()`), both
-        # constant across every TrainerPokemon of one Trainer -- so two slots that both need
-        # Eevee as their SOLE qualifying ancestor must resolve to the SAME branch (cx-288123ae
-        # #3): a party can realize at most one of Eevee's three evolutions.
+        # the SAME theme must explain every slot in the party. Every branch requirement this
+        # collects is merged into the caller's ROM-wide reconciliation (_reconcile_branches,
+        # cx-86594273 #2, cx-636b45dd #2) alongside whatever "trainers unchanged" forced directly.
         base_pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("trainers_block_legendaries") else set())
         evos, pre_evos = self.f["evos"], self.f["pre_evos"]
-        branch_parents = {p: tuple(targets) for p, targets in evos.items() if len(targets) > 1}
 
         def pool_for(theme: int | None, will_force: bool) -> set[int]:
             pool = base_pool if theme is None else {p for p in base_pool if theme in self.f["types"][p]}
@@ -860,14 +874,6 @@ class _Check:
             return pool
 
         mode = self.opt("trainers")
-        # ROM-wide branch reconciliation (cx-86594273 #2): evolutionIndex = (fullyEvolvedRandomSeed
-        # + trainerIndex) % branches.size() (A:6826) draws fullyEvolvedRandomSeed ONCE per ROM
-        # (A:6795-6797), so the branch a party needs isn't independent per trainer -- it's pinned
-        # to that ONE seed value via the trainer's own index. Each party that relies solely on a
-        # branching ancestor contributes a required residue (S + index) % branchCount for EVERY
-        # index this physical record could have been read under (see class_start/party_indices,
-        # >1 only for aliased classes); the whole ROM is legal only if some single S satisfies
-        # every party's requirement at once.
         branch_reqs: dict[int, list[tuple[str, int]]] = collections.defaultdict(list)  # parent -> [(where, branch)]
         for where, slots in self.parties:
             if mode == "type_themed":
@@ -925,15 +931,23 @@ class _Check:
                 break
             if party_failure:
                 self.fail(party_failure)
+        return branch_reqs
 
+    def _reconcile_branches(self, branch_reqs: dict[int, list[tuple[str, int]]],
+                             branch_parents: dict[int, tuple[int, ...]]) -> None:
+        # ROM-wide branch reconciliation (cx-86594273 #2): evolutionIndex = (fullyEvolvedRandomSeed
+        # + trainerIndex) % branches.size() (A:6826) draws fullyEvolvedRandomSeed ONCE per ROM
+        # (A:6795-6797), so the branch a party needs isn't independent per trainer -- it's pinned
+        # to that ONE seed value via the trainer's own index (party_indices: the FINAL WRITER's
+        # index for an aliased record, cx-636b45dd #1). Runs for every source of a forced split
+        # evolution (trainers=unchanged's direct reachability walk, or similar_strength's
+        # ancestor-crediting) regardless of trainer mode (cx-636b45dd #2) -- the whole ROM is
+        # legal only if some single S satisfies every one of these requirements at once.
         for p, reqs in branch_reqs.items():
             targets = branch_parents[p]
             n = len(targets)
-            # for each requirement, every seed value (mod n) that could satisfy it: some
-            # candidate trainer index (>1 only when aliased) reproducing the required position
             allowed = [(where, branch, {seed for seed in range(n)
-                                         if any((seed + i) % n == targets.index(branch)
-                                                for i in self.party_indices.get(where, [0]))})
+                                         if (seed + self.party_indices.get(where, 0)) % n == targets.index(branch)})
                        for where, branch in reqs]
             combined = set(range(n))
             for _w, _b, s in allowed:
@@ -942,11 +956,11 @@ class _Check:
                 conflict = next(((a, b) for i, a in enumerate(allowed) for b in allowed[i + 1:]
                                   if not (a[2] & b[2])), (allowed[0], allowed[-1]))
                 (w0, b0, _), (w1, b1, _) = conflict
-                self.fail(f"trainers: similar_strength needs {self.name(p)} to evolve into {self.name(b0)} "
-                          f"for {w0} (trainer index {self.party_indices.get(w0, ['?'])}) and {self.name(b1)} "
-                          f"for {w1} (trainer index {self.party_indices.get(w1, ['?'])}) at once -- "
-                          f"fullyEvolve's branch depends only on one seed drawn per ROM and the trainer's "
-                          f"own index (A:6795-6797, 6826), so no single seed satisfies both")
+                self.fail(f"trainers: {self.name(p)}'s evolution needs {self.name(b0)} for {w0} "
+                          f"(trainer index {self.party_indices.get(w0, '?')}) and {self.name(b1)} for {w1} "
+                          f"(trainer index {self.party_indices.get(w1, '?')}) at once -- fullyEvolve's branch "
+                          f"depends only on one seed drawn per ROM and the trainer's own index "
+                          f"(A:6795-6797, 6826), so no single seed satisfies both")
 
     # ── TMs ──────────────────────────────────────────────────────────────────────────
     def tms(self) -> None:
