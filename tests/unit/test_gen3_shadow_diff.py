@@ -46,7 +46,7 @@ def test_synthetic_pair_and_cli_pass(pair, capsys):
     wire, shadow = pair
     result = compare(reduce_wire(wire).events, reduce_shadow(shadow))
     assert result["passed"]
-    assert all(c["shadow"] == c["wire"] == 1 for c in result["coverage"].values())
+    assert all(c["shadow"] == c["wire"] >= 1 for c in result["coverage"].values())
     assert main(["--wire", str(wire), "--shadow", str(shadow), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["passed"]
 
@@ -71,7 +71,8 @@ def test_shadow_mutations_fail(pair, mutation):
 def test_uncovered_cannot_be_waived(pair):
     wire, shadow = pair
     old, new = reduce_wire(wire).events, reduce_shadow(shadow)
-    missing = new.pop()
+    missing = next(e for e in new if e.kind == "save")
+    new.remove(missing)
     ledger = [{"kind": missing.kind, "key": missing.key,
                "reason": "missing hook", "owner": "P3"}]
     result = compare(old, new, ledger)
@@ -171,3 +172,133 @@ def test_invalid_shadow_fails_cli(pair, capsys):
     shadow.write_text("SHADOW kind=faint key=x", encoding="utf-8")
     assert main(["--wire", str(wire), "--shadow", str(shadow), "--json"]) == 1
     assert "incomplete" in json.loads(capsys.readouterr().out)["error"]
+
+
+def shadow_lines(tmp_path, rows, window=0):
+    path = tmp_path / "shadow_a.log"
+    path.write_text("\n".join(
+        f"SHADOW t={i} frame={row.get('frame', 10)} "
+        + " ".join(f"{k}={v}" for k, v in row.items() if k != "frame")
+        for i, row in enumerate(rows, 1)), encoding="utf-8")
+    return reduce_shadow(path, window)
+
+
+def test_missing_and_empty_keys_are_preserved_and_liveness_dropped(tmp_path):
+    events = shadow_lines(tmp_path, [{"kind": "frame_control", "key": ""},
+                                     {"kind": "battle_begin", "key": ""},
+                                     {"kind": "map_load"}])
+    assert [(e.kind, e.key) for e in events] == [("battle_begin", "-"), ("map_load", "-")]
+    result = compare([], events)
+    assert result["coverage"]["battle_begin"]["status"] == "COVERED"
+    assert "frame_control" not in result["coverage"]
+
+
+def test_release_uses_pre_removal_key_and_reports_unmatched_begin(tmp_path):
+    events = shadow_lines(tmp_path, [{"kind": "pc_release_begin", "key": "old"},
+                                     {"kind": "pc_release"},
+                                     {"kind": "pc_release_begin", "key": "pending"}])
+    assert [e.identity() for e in events] == [("pc_move", "old", "release")]
+    assert events.diagnostics[0]["key"] == "pending"
+    assert events.diagnostics[0]["delta"] == "unmatched_begin"
+    assert any(d["delta"] == "unmatched_begin" for d in compare([], events)["deltas"])
+
+
+@pytest.mark.parametrize("raw,action", [("pc_deposit", "deposit"), ("pc_withdraw", "withdraw"),
+                                       ("pc_box_place", "place")])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_pc_alias_fold_is_one_to_one(tmp_path, raw, action, reverse):
+    rows = [{"kind": raw, "key": "k"}, {"kind": "pc_move", "key": "k", "action": action}]
+    if reverse:
+        rows.reverse()
+    events = shadow_lines(tmp_path, rows)
+    assert [e.identity() for e in events] == [("pc_move", "k", action)]
+    events = shadow_lines(tmp_path, rows + [rows[-1]])
+    assert len(events) == 2  # repeating the same site remains a duplicate
+
+
+def test_trade_pairs_changed_key_by_slot(tmp_path):
+    events = shadow_lines(tmp_path, [{"kind": "trade_begin", "key": "old", "slot": 2},
+                                     {"kind": "trade_done", "key": "new", "slot": 2}])
+    assert [e.identity() for e in events] == [("trade_done", "new", "")]
+    assert events.diagnostics == []
+
+
+def test_pairing_does_not_guess_ambiguous_release_or_cross_frames(tmp_path):
+    events = shadow_lines(tmp_path, [{"kind": "pc_release_begin", "key": "one"},
+                                     {"kind": "pc_release_begin", "key": "two"},
+                                     {"kind": "pc_release"}])
+    assert [(e.key, e.action) for e in events] == [("-", "release")]
+    assert len(events.diagnostics) == 3
+    events = shadow_lines(tmp_path, [{"kind": "trade_begin", "key": "old", "slot": 0},
+                                     {"kind": "trade_done", "key": "new", "slot": 0, "frame": 11}])
+    assert events.diagnostics[0]["delta"] == "unmatched_begin"
+
+
+def test_unknown_completion_still_counts_presence(tmp_path):
+    events = shadow_lines(tmp_path, [{"kind": "pc_release"}, {"kind": "poison_faint"}])
+    assert [(e.kind, e.key) for e in events] == [("pc_move", "-"), ("faint", "-")]
+    assert events[1].cause == "poison"
+    assert compare([], events)["coverage"]["pc_move"]["status"] == "COVERED"
+
+
+def test_poison_pair_becomes_faint_with_cause(tmp_path):
+    events = shadow_lines(tmp_path, [{"kind": "poison_hp_before", "key": "k", "hp": 1},
+                                     {"kind": "poison_faint", "key": "k", "hp": 0}])
+    assert [(e.kind, e.key, e.cause) for e in events] == [("faint", "k", "poison")]
+    assert compare([], events)["coverage"]["poison_faint"]["status"] == "COVERED"
+    assert not shadow_lines(tmp_path, [{"kind": "poison_hp_before", "key": "k", "hp": 0},
+                                       {"kind": "poison_faint", "key": "k", "hp": 0}])
+
+
+@pytest.mark.parametrize("first,second,result", [
+    ("mon_given", "capture_wild", "capture_wild"),
+    ("capture_wild", "mon_given", "capture_wild"),
+    ("trade_evolve_species_store", "evolve_species_store", "evolve_species_store"),
+    ("evolve_species_store", "trade_evolve_species_store", "evolve_species_store"),
+])
+def test_complementary_sites_fold_but_duplicates_do_not(tmp_path, first, second, result):
+    events = shadow_lines(tmp_path, [{"kind": first, "key": "k"}, {"kind": second, "key": "k"}])
+    assert [e.kind for e in events] == [result]
+    assert len(shadow_lines(tmp_path, [{"kind": first, "key": "k"},
+                                      {"kind": first, "key": "k"}])) == 2
+
+
+def test_folds_are_key_sink_and_window_bounded(tmp_path):
+    rows = [{"kind": "mon_given", "key": "k", "frame": 10},
+            {"kind": "capture_wild", "key": "k", "frame": 11}]
+    assert len(shadow_lines(tmp_path, rows)) == 2
+    assert len(shadow_lines(tmp_path, rows, window=1)) == 1
+    rows[1]["sink"] = "b"
+    assert len(shadow_lines(tmp_path, rows, window=1)) == 2
+    assert len(shadow_lines(tmp_path, [{"kind": "mon_given"}, {"kind": "capture_wild"}])) == 2
+
+
+def test_supplemental_and_shadow_only_cli(tmp_path, capsys):
+    path = tmp_path / "a.log"
+    path.write_text("SHADOW t=1 frame=1 kind=save key=\n"
+                    "SHADOW t=2 frame=2 kind=borrowed_party key=x\n"
+                    "SHADOW t=3 frame=3 kind=nature_change key=y\n", encoding="utf-8")
+    assert main(["--shadow", str(path), "--json"]) == 1  # partial coverage, not parse error
+    result = json.loads(capsys.readouterr().out)
+    assert "error" not in result and not result["wire_present"]
+    assert "borrowed_party" not in result["coverage"]
+    assert result["supplemental"]["borrowed_party"]["shadow"] == 1
+    assert result["supplemental"]["nature_change"]["shadow"] == 1
+    assert result["coverage"]["save"]["status"] == "COVERED"
+
+
+def test_current_physical_logs_parse_and_count_presence():
+    root = Path(__file__).resolve().parents[2] / "patch/build/shadow_wire"
+    paths = list(root.glob("*.shadow.log"))
+    if not paths:
+        pytest.skip("shadow captures not present in patch/build/shadow_wire")
+    for path in paths:
+        events = reduce_shadow(path)
+        result = compare([], events)
+        raw_kinds = {part.split("=", 1)[1] for line in path.read_text(encoding="utf-8").splitlines()
+                     if "SHADOW " in line for part in line.split() if part.startswith("kind=")}
+        for kind in raw_kinds & {"battle_begin", "battle_end", "whiteout", "map_load", "save", "mon_given"}:
+            # An acquired mon may be folded into capture_wild rather than mon_given.
+            if kind == "mon_given" and "capture_wild" in raw_kinds:
+                continue
+            assert result["coverage"][kind]["status"] == "COVERED", path

@@ -61,3 +61,65 @@ Unable to create process using '"C:\Users\howar\AppData\Local\Programs\Python\Py
 ```
 
 Coordinator must run all six combined commands above and check **zero unexplained deltas**, **zero unused entries**, and **14 UNCOVERED rows**. Expected exit 1 is coverage failure, not a parser error; an `error` field or a changed delta count requires investigation. No emulator, production-code edits, or commits on this card.
+
+## C3-11: raw-site normalization (supersedes historical coverage counts above)
+
+`tools/gen3_shadow_diff.py` now accepts all 23 raw site kinds, including missing or empty
+`key=` fields (normalized to `-`). `reduce_shadow()` remains list-compatible and carries
+`.diagnostics` for incomplete pairs. The CLI includes those as ledger-explainable delta
+candidates; an unmatched begin is not an event and earns no coverage. An unpaired completion
+with unknown identity remains visible, and release also reports an unmatched-completion delta.
+
+The vocabulary/pairing obligations come from `docs/gen3_engine_sites.md:138-216,360-522` and
+`docs/gen3/research/site_capture_points.md` (all-kind table and minimum point schema):
+
+- frame_control is dropped; it is liveness, not semantic coverage.
+- pc_release_begin + pc_release produces pc_move/release using the pre-removal key.
+- pc_deposit / pc_withdraw / pc_box_place become pc_move with deposit / withdraw / place.
+  A complementary raw pc_move with matching action (or missing action) folds one-to-one.
+  `place` is retained honestly: it is not relabelled deposit without origin evidence.
+- trade_begin pairs with trade_done by matching key, explicit begin.new_key, or a unique
+  same-slot pair; the completion keeps the received key. Begin-only is a diagnostic.
+- trade_evolve_species_store becomes evolve_species_store and folds a complementary species
+  site for the same key/window. Identical raw-site duplicates are never erased.
+- poison_hp_before pairs with poison_faint -> faint with cause=poison. When supplied, old_hp/hp
+  reject already-zero or nonzero-final pairs. Standalone poison_faint remains a visible faint
+  with cause=poison; missing prior evidence is not invented. Poison counts are also exposed in
+  the poison_faint coverage row. Explicit wire poison_faint uses the same semantic form.
+- capture_wild + mon_given folds to capture_wild for matching known key/window, in either order.
+  Unknown keys never establish an acquisition identity; both fires remain visible.
+- borrowed_party and nature_change pass through and are compared, but appear in `supplemental`,
+  not required coverage. This removes TWO rows from the prior 14-row table: **12 required rows**.
+  A poison-derived faint contributes to faint and poison_faint presence counts.
+
+The normalization window defaults to **0 frames** (same frame); `--pair-window N` changes it.
+Pairs never cross files or sinks. `--frame-bound` still controls wire-vs-shadow timing tolerance
+only, not normalization. Ambiguous release begins are not guessed; all candidates remain
+incomplete. A key `-` counts presence as requested for P3, but cannot magically match a wire
+mon key. COVERED is therefore presence evidence, not proof of identity correctness or P4
+semantic qualification. Paired raw-site rules do not replace artifact-specific success/side
+filters in the observer; the producer must supply those semantics.
+
+Shadow-only driver runs now parse without `--wire`:
+
+```powershell
+python tools/gen3_shadow_diff.py --shadow patch/build/shadow_wire/rr_play_battle_to_field.shadow.log --json
+```
+
+The result has `wire_present: false`. Observed normalized kinds become COVERED; missing kinds
+remain UNCOVERED and observed events remain extra-shadow deltas. It should still return exit1
+for incomplete/unexplained evidence; shadow-only mode is not a shortcut to PASS.
+
+Coordinator verification (not run by this worker; sandbox cannot launch Python):
+
+```powershell
+python -m pytest -q -p no:randomly tests/unit/test_gen3_shadow_diff.py
+ruff check tools/gen3_shadow_diff.py tests/unit/test_gen3_shadow_diff.py
+python tools/gen3_shadow_diff.py --shadow patch/build/shadow_wire/rr_play_battle_to_field.shadow.log --json
+```
+
+Tests include synthetic complementary pairs, duplicate retention, ambiguity, missing keys,
+window/sink boundaries, incomplete-pair diagnostics, supplemental kinds, shadow-only CLI, and
+parsing every locally present `patch/build/shadow_wire/*.shadow.log`. The physical-capture test
+skips explicitly when that local capture directory has no logs; synthetic tests do not depend
+on it. No new physical coverage receipt is claimed by this normalization change.
