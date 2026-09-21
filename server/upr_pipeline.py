@@ -78,7 +78,7 @@ KIND_WORDS = {
 }
 KIND_WORDS_PURE = {
     "clean": "pinned pureRGB v2.7.6 build",
-    "overlay": "SLink companion overlay (native trade + START-menu panel)",
+    "overlay": "SLink companion overlay (native trade, START-menu panel, native sounds)",
     "rand": "already randomized",
     "rand_overlay": "already randomized (companion overlay)",
 }
