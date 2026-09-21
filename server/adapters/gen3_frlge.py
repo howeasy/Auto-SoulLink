@@ -278,6 +278,13 @@ class Gen3Adapter(GameAdapter):
     def game_id(self) -> str:
         return "gen3_frlge"
 
+    @staticmethod
+    def pairing_kind(kind: str) -> str:
+        # The SLink-RR companion patch is applied per cartridge, exactly like Gen 1's
+        # "named": a companion RR and a clean RR are the same layout and pair. The
+        # committed kind stays "companion" -- only this comparison maps it.
+        return {"named": "clean", "companion": "clean"}.get(kind, kind)
+
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:

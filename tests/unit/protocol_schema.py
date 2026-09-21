@@ -23,7 +23,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                "version": "str", "client": "str", "badges": "int", "has_pokeballs": "bool",
                "trainer_name": "str", "pc_boxes": "list", "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
-               "artifact_kind": "str"}),
+               "artifact_kind": "str", "foundation": "str"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
                   "in_battle": "bool", "is_trainer_battle": "bool", "trainer_id": "int",
                   "opponent_name": "str", "opponent_class": "str", "enemy_party": "list",
