@@ -43,6 +43,7 @@
 --                                  is a Gen 3 fact, not a universal one.
 --   clear_dialogue(cp)             how THIS game dismisses a textbox holding the player still
 --   advance_scene(cp)              how THIS game advances one beat of a scripted scene
+--   menu_back(cp, gap)             how THIS game backs out of a menu, one press
 --   heal_map         the map id a whiteout warps the player to (enables whiteout recovery)
 --   max_encounters   absorbed battles per path (default 12)
 --   max_recoveries   whiteout restarts per leg (default 2)
@@ -353,13 +354,21 @@ function M.bind(H, opts)
                 if moved then return true end
                 -- A warp needs BOTH ids readable: "changed" is a statement about two maps.
                 if readable and start_map ~= nil and now ~= start_map then return true end
+                -- BATTLES REFUSED, AND ONE STARTED ANYWAY. With enc == false the caller said
+                -- it owns whatever battle happens here, so a step that ended inside one is
+                -- neither progress nor a stall -- it is the caller's answer. PHYSICAL (FR run
+                -- 17): the encounter fired during a Down step of the grass hunt, the step fell
+                -- through to tapping dialogue at a battle intro until its attempts ran out,
+                -- and the hunt reported "the grass loop stalled on Down" while the observer
+                -- was logging battle_begin.
+                if enc == false and P.in_battle(cp) then return false, "in_battle" end
                 -- A textbox or field script owns the player (Radical Red adds intro dialogue
                 -- where FireRed has none): clear it, then retry the SAME step.
                 P.clear_dialogue(cp)
                 if want then rebase() end
             end
         end
-        return false
+        return false, "stalled"
     end
 
     --- Follow a precomputed entry of the injected `paths` table. Returns as soon as the map
@@ -490,6 +499,45 @@ function M.bind(H, opts)
             end
         end
         return false
+    end
+
+    --- Leave a menu and get back to a field that HOLDS.
+    ---
+    --- Reaching the field is not the same as leaving the menu: on_field goes true while the
+    --- menu's own exit textbox is still up. PHYSICAL (RR lane r5b/r5c): the back-button loop
+    --- stopped on that early true, the lingering textbox ate the first press of the NEXT menu
+    --- open, and every press after it landed one place off -- the run's "withdraw" half
+    --- deposited a second mon instead of withdrawing the first. Two whole lane runs read as a
+    --- menu-order problem when they were a timing one.
+    ---
+    --- So: dismiss until the field appears, keep dismissing through the textbox, settle, and
+    --- then check the field is STILL there. The back button is the binding's (opts.menu_back);
+    --- the shape is not.
+    function P.leave_menu(cp, label, o)
+        o = o or {}
+        local back = opts.menu_back
+        if not back then
+            H.finish(false, "playlib: a menu needs leaving, but the binding supplied no "
+                         .. "opts.menu_back — which button backs out is a per-game fact")
+        end
+        local out = false
+        for _ = 1, (o.tries or 60) do
+            if P.on_field(cp) then out = true; break end
+            back(cp)
+        end
+        if not out then
+            H.shot("stuck")
+            H.finish(false, string.format(
+                "%s: never got back to the field from the menu", label))
+        end
+        for _ = 1, (o.flush or 5) do back(cp, o.flush_gap) end
+        H.idle(o.settle or 60)
+        if not P.on_field(cp) then
+            H.shot("stuck")
+            H.finish(false, string.format(
+                "%s: the field did not hold after leaving the menu — something is still open",
+                label))
+        end
     end
 
     -- ── savestates ──────────────────────────────────────────────────────────────────────────

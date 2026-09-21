@@ -172,6 +172,19 @@ local H = {
     end,
 
     party_count = function() return memory.read_u8(PARTY_COUNT_ADDR) end,
+    party_key = function(i)
+        local base = PARTY_BASE + i * MON_SIZE
+        return string.format("%08X:%08X", memory.read_u32_le(base + OFF_PID),
+                                          memory.read_u32_le(base + OFF_OTID))
+    end,
+    party_record = function(i)
+        local base = PARTY_BASE + i * MON_SIZE
+        local parts = {}
+        for w = 0, (MON_SIZE // 4) - 1 do
+            parts[#parts + 1] = string.format("%08X", memory.read_u32_le(base + w * 4))
+        end
+        return table.concat(parts)
+    end,
     load_state  = function(path) return (pcall(savestate.load, path)) end,
     save_state  = function(path) return (pcall(savestate.save, path)) end,
     register_frame_end = function(fn, name)
@@ -208,6 +221,10 @@ play = PL.bind(H, {
     -- scripted scene are per-game facts, same as opts.battle (Codex cx-bc675fa4).
     clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
     advance_scene  = function() G.tap("A", 2, 10) end,
+    -- Backing out of a menu, one press. playlib owns the RULE (dismiss until the field
+    -- appears, keep dismissing through the exit textbox, settle, re-check); the button and its
+    -- spacing are ours.
+    menu_back = function(_, gap) G.tap("B", 3, gap or 20) end,
     battle = function(cp, budget)
         if not play.mash_a(budget or 1200, function() return not H.in_battle(cp) end) then
             return false
@@ -216,42 +233,11 @@ play = PL.bind(H, {
     end,
 })
 
--- ── party records: the keyed PC oracle's raw material ──────────────────────────────────────
-
-local function slot_base(i) return PARTY_BASE + i * MON_SIZE end
-
---- "PID:OTID" for party slot `i` — the same identity key the duo harness uses to follow a mon
---- across party moves (lua/tests/duo/duo_main.lua:86-98). Unique in practice and, crucially,
---- SURVIVES the box round trip that RR's 58-byte CompressedPokemon does not preserve byte for
---- byte, which is why the oracle below compares keys for the travelling mon and bytes only for
---- the ones that stayed.
-local function slot_key(i)
-    return string.format("%08X:%08X", memory.read_u32_le(slot_base(i) + OFF_PID),
-                                      memory.read_u32_le(slot_base(i) + OFF_OTID))
-end
-
---- The whole 100-byte record of slot `i` as a hex string (25 little-endian words).
-local function slot_bytes(i)
-    local parts = {}
-    for w = 0, (MON_SIZE // 4) - 1 do
-        parts[#parts + 1] = string.format("%08X", memory.read_u32_le(slot_base(i) + w * 4))
-    end
-    return table.concat(parts)
-end
-
---- { n = party_count, keys = {key -> record hex}, order = {key, ...} }. Keyed, not indexed:
---- a deposit compacts the party, so slot numbers move and only keys are stable.
-local function party_snapshot()
-    local snap = { n = play.party_count(), keys = {}, order = {} }
-    for i = 0, snap.n - 1 do
-        local k = slot_key(i)
-        snap.keys[k] = slot_bytes(i)
-        snap.order[#snap.order + 1] = k
-    end
-    return snap
-end
-
-local function keylist(snap) return table.concat(snap.order, ",") end
+-- The keyed PC oracle's reasoning lives in playlib (party_snapshot / departed_key /
+-- survivors_intact); only these READS are RR's, and they are injected above as party_key and
+-- party_record. PID:OTID is the identity the duo harness follows a mon by
+-- (lua/tests/duo/duo_main.lua:86-98): plaintext, and it survives the box round trip that RR's
+-- 58-byte CompressedPokemon makes lossy for the record's bytes.
 
 -- ── movement primitives (bounded, RAM-verified, never route-asserting) ─────────────────────
 
@@ -653,7 +639,7 @@ LEGS[#LEGS + 1] = {
         -- back, with every other record byte-identical. A count that merely returns to where it
         -- started — deposit A then withdraw B, or release A and withdraw something else — FAILS
         -- here, which is the whole reason a count-only oracle was not good enough.
-        local before = party_snapshot()
+        local before = play.party_snapshot()
         if before.n < 2 then
             G.finish(false, string.format(
                 "pc_ops: the party holds %d mon — the oracle needs at least 2 (one to deposit, "
@@ -689,22 +675,12 @@ LEGS[#LEGS + 1] = {
         -- storage screen even after TryStorePartyMonInBox fired: gPlayerPartyCount is
         -- recomputed on exit. So every assertion in this leg is made on the FIELD, never in
         -- the menu, and "leave the PC" is part of the operation rather than tidying up after.
+        -- The leaving itself is playlib's leave_menu: on_field goes true while the PC's exit
+        -- textbox is still up, and stopping there shifts every press of the NEXT open by one
+        -- (PHYSICAL r5b/r5c -- the "withdraw" half deposited again). The rule is shared; the
+        -- button and the spacing are the binding's.
         local function leave_storage()
-            local out = false
-            for _ = 1, 60 do
-                if play.on_field(cp) then out = true; break end
-                G.tap("B", 3, 20)
-            end
-            if not out then
-                G.shot("stuck")
-                G.finish(false, "pc_ops: never got back to the field from the storage UI, so "
-                              .. "the party count cannot be trusted either way")
-            end
-            -- on_field holds while the PC's exit textbox ("See you later!") is still up
-            -- (PHYSICAL r5b/r5c: the next open's presses were shifted by one and the
-            -- "withdraw" half deposited again); keep pressing B through it, then settle.
-            for _ = 1, 5 do G.tap("B", 3, 27) end
-            G.idle(60)
+            play.leave_menu(cp, "pc_ops", { flush = 5, flush_gap = 27, settle = 60 })
         end
 
         -- DEPOSIT: Down, A picks Deposit (row 1 of Withdraw/Deposit/Move/Move Items/See Ya);
@@ -718,7 +694,7 @@ LEGS[#LEGS + 1] = {
                                                      -- pressed A, A after the slot popup)
         leave_storage()
 
-        local mid = party_snapshot()
+        local mid = play.party_snapshot()
         if mid.n ~= before.n - 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -733,7 +709,7 @@ LEGS[#LEGS + 1] = {
                 if gone then
                     G.finish(false, string.format(
                         "pc_ops: the deposit removed more than one record (%s and %s) from [%s]",
-                        gone, k, keylist(before)))
+                        gone, k, play.keylist(before)))
                 end
                 gone = k
             end
@@ -741,7 +717,7 @@ LEGS[#LEGS + 1] = {
         if not gone then
             G.finish(false, string.format(
                 "pc_ops: the count dropped but every key is still present ([%s] -> [%s]) -- "
-                .. "that is not a deposit", keylist(before), keylist(mid)))
+                .. "that is not a deposit", play.keylist(before), play.keylist(mid)))
         end
         G.phase("deposited", string.format("party %d -> %d, key %s left the party",
                                            before.n, mid.n, gone))
@@ -759,7 +735,7 @@ LEGS[#LEGS + 1] = {
         pc_press("A", 240)                           -- Withdraw
         leave_storage()
 
-        local after = party_snapshot()
+        local after = play.party_snapshot()
         if after.n ~= mid.n + 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -772,7 +748,7 @@ LEGS[#LEGS + 1] = {
             G.finish(false, string.format(
                 "pc_ops: the withdrawn mon is NOT the deposited one. Deposited %s; the party "
                 .. "now holds [%s]. A released-and-replaced mon, or a different box mon, is "
-                .. "not a round trip", gone, keylist(after)))
+                .. "not a round trip", gone, play.keylist(after)))
         end
         -- The travelling record may differ byte for byte (RR stores a 58-byte
         -- CompressedPokemon, so the round trip is lossy BY DESIGN); the ones that STAYED must
@@ -782,7 +758,7 @@ LEGS[#LEGS + 1] = {
                 if after.keys[k] == nil then
                     G.finish(false, string.format(
                         "pc_ops: record %s left the party during the round trip ([%s] -> [%s])",
-                        k, keylist(before), keylist(after)))
+                        k, play.keylist(before), play.keylist(after)))
                 end
                 if after.keys[k] ~= before.keys[k] then
                     G.finish(false, string.format(
@@ -847,6 +823,5 @@ return {
     boot_check = G,
     pace = pace,
     state_path = play.state_path,
-    party_snapshot = party_snapshot,
-    slot_key = slot_key,
+    party_snapshot = play.party_snapshot,
 }

@@ -41,7 +41,7 @@ function W.reset()
     W.on_move, W.on_a, W.on_frame = nil, nil, nil
     W.states, W.saved, W.objects, W.party = {}, {}, { { 3, 4, 0x02 } }, 1
     W.save_fails, W.map_reads, W.unreadable_after = nil, 0, nil
-    W.sliding, W.landed, W.cleared = false, nil, nil
+    W.sliding, W.landed, W.cleared, W.backs = false, nil, nil, 0
     W.map_unreadable, W.on_field = false, true
     W.reject_hook, W.no_observer, W.poll_raises, W.obs_status = nil, nil, nil, nil
     W.polls, W.unregistered, W.poll_fn = 0, nil, nil
@@ -191,6 +191,7 @@ def _bind(lua, paths_lua="nil", extra=""):
         f'PLAY_LAST = PL.bind(H, {{ paths = {paths_lua}, state_dir = "D:/states",\n'
         f'  clear_dialogue = function() for _ = 1, 4 do H.tap("A", 3, 13) end end,\n'
         f'  advance_scene = function() H.tap("A", 2, 10) end,\n'
+        f'  menu_back = function(_, gap) W.backs = (W.backs or 0) + 1; H.tap("B", 3, gap or 20) end,\n'
         f'  battle = function(cp, budget)\n'
         f'      return PLAY_LAST.mash_a(budget or 200,\n'
         f'                              function() return not H.in_battle(cp) end)\n'
@@ -310,9 +311,9 @@ def test_step_with_want_requires_the_exact_destination_tile(lua, world):
     went somewhere else, and continuing would be worse than stopping."""
     play = _bind(lua)
     lua.execute("W.on_move = function() W.x = W.x + 3 end")      # the world over-shoots
-    assert play.step(None, "Right", 100, True) is False
+    assert play.step(None, "Right", 100, True)[0] is False
     lua.execute("W.reset()")
-    assert play.step(None, "Right", 100, True) is True
+    assert play.step(None, "Right", 100, True) is True   # a bare true, no reason
 
 
 # ── mid-walk wild encounters (FR lane run 12) ────────────────────────────────────────────────
@@ -602,6 +603,7 @@ def _run_whiteout(lua, world, max_recoveries=2):
         f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42,\n'
         f'  clear_dialogue = function() for _ = 1, 4 do H.tap("A", 3, 13) end end,\n'
         f'  advance_scene = function() H.tap("A", 2, 10) end,\n'
+        f'  menu_back = function(_, gap) W.backs = (W.backs or 0) + 1; H.tap("B", 3, gap or 20) end,\n'
         f'  max_recoveries = {max_recoveries}, state_dir = "D:/states",\n'
         f'  battle = function(cp, budget)\n'
         f'      return PLAY.mash_a(budget or 200,\n'
@@ -653,6 +655,7 @@ def test_a_leg_with_no_recover_says_so_rather_than_looping(lua, world):
         f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42, state_dir = "D:/states",\n'
         f'  clear_dialogue = function() for _ = 1, 4 do H.tap("A", 3, 13) end end,\n'
         f'  advance_scene = function() H.tap("A", 2, 10) end,\n'
+        f'  menu_back = function(_, gap) W.backs = (W.backs or 0) + 1; H.tap("B", 3, gap or 20) end,\n'
         f'  battle = function(cp, budget)\n'
         f'      return PLAY.mash_a(budget or 200,\n'
         f'                         function() return not H.in_battle(cp) end)\n'
@@ -880,13 +883,13 @@ def test_an_unreadable_tile_is_not_a_step(lua, world):
             if f > 20 then W.map_unreadable = true; W.x, W.y = -1, -1 end
         end
     """)
-    assert play.step(None, "Right", 100, None, False) is False
+    assert play.step(None, "Right", 100, None, False)[0] is False
 
 
 def test_an_unreadable_map_is_not_a_warp_even_from_an_unknown_start(lua, world):
     play = _bind(lua)
     world.map_unreadable = True
-    assert play.step(None, "Right", None, None, False) is False
+    assert play.step(None, "Right", None, None, False)[0] is False
 
 
 def test_a_walk_that_ends_unreadable_is_refused(lua, world):
@@ -1108,3 +1111,73 @@ def test_enter_warp_clears_dialogue_with_the_bindings_button(lua, world):
         "function() local n = 0 for _, t in ipairs(W.seen_buttons) do"
         " if t.A then n = n + 1 end end return n end")()
     assert pressed == 0, "enter_warp pressed A behind the binding's back"
+
+
+# == leaving a menu (RR lane r5b/r5c/r5d) =====================================================
+
+
+def test_leaving_a_menu_keeps_dismissing_through_the_exit_textbox(lua, world):
+    """on_field goes true while the menu's exit textbox is still up. Stopping on that early
+    true left the textbox to eat the first press of the NEXT menu open, and every press after
+    it landed one place off -- two lane runs read as a menu-order bug that was really this."""
+    play = _bind(lua)
+    world.on_field = False
+    lua.execute("W.on_frame = function(f) if f >= 30 then W.on_field = true end end")
+    ok, log, err = world.guard(play.leave_menu, None, "pc", None)
+    assert ok, f"{err}\n{log}"
+    # the loop stops on the first on_field; the flush presses are the point
+    assert world.backs >= 6, f"only {world.backs} back presses: the textbox flush is missing"
+
+
+def test_leaving_a_menu_fails_when_the_field_never_appears(lua, world):
+    play = _bind(lua)
+    world.on_field = False
+    ok, log, _err = world.guard(play.leave_menu, None, "pc", None)
+    assert not ok
+    assert "never got back to the field from the menu" in log
+
+
+def test_leaving_a_menu_fails_when_the_field_does_not_hold(lua, world):
+    """A field that appears and then goes away again is not a field we left a menu into."""
+    play = _bind(lua)
+    lua.execute("""
+        W.on_field = true
+        W.on_frame = function(f) if f >= 20 then W.on_field = false end end
+    """)
+    ok, log, _err = world.guard(play.leave_menu, None, "pc", None)
+    assert not ok
+    assert "the field did not hold after leaving the menu" in log
+
+
+def test_the_back_button_is_the_bindings(lua, world):
+    play = lua.execute(
+        f'local PL = dofile("{_PLAYLIB}")\n'
+        f'return PL.bind(H, {{ state_dir = "D:/states" }})'          # no menu_back
+    )
+    ok, log, _err = world.guard(play.leave_menu, None, "pc", None)
+    assert not ok
+    assert "no opts.menu_back" in log
+
+
+def test_a_step_that_ends_in_a_battle_is_reported_as_such_not_as_a_stall(lua, world):
+    """With enc=false the caller owns whatever battle happens. PHYSICAL (FR run 17): the
+    encounter fired DURING a Down step of the grass hunt, the step fell through to tapping
+    dialogue at a battle intro until its attempts ran out, and the hunt reported a stall while
+    the observer was logging battle_begin -- eight begins against seven ends."""
+    play = _bind(lua)
+    lua.execute("W.on_move = function() W.in_battle = true end "
+                "W.blocked = false")
+    # the step lands AND a battle starts: landing wins, the hunt sees the battle next time round
+    assert play.step(None, "Right", 100, None, False) is True
+
+    world.reset()
+    lua.execute("W.blocked = true "
+                "W.on_frame = function(f) if f >= 14 then W.in_battle = true end end")
+    ok, why = play.step(None, "Right", 100, None, False)
+    assert ok is False
+    assert why == "in_battle", f"reported {why!r}, so the caller would call it a stall"
+
+    world.reset()
+    lua.execute("W.blocked = true")
+    ok, why = play.step(None, "Right", 100, None, False)
+    assert ok is False and why == "stalled"

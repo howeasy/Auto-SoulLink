@@ -423,6 +423,10 @@ play = PL.bind(H, {
     -- scripted scene are per-game facts, same as opts.battle (Codex cx-bc675fa4).
     clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
     advance_scene  = function() G.tap("A", 2, 10) end,
+    -- Backing out of a menu, one press. playlib owns the RULE (dismiss until the field
+    -- appears, keep dismissing through the exit textbox, settle, re-check); the button and its
+    -- spacing are ours.
+    menu_back = function(_, gap) G.tap("B", 3, gap or 20) end,
     battle = function(cp, budget)
         if not play.mash_a(budget or 1200, function() return not H.in_battle(cp) end) then
             return false
@@ -481,12 +485,21 @@ local function hunt_encounter(cp, label, cycles)
                 return true
             end
             -- enc = false: THIS leg owns the battle it is hunting for, so the walker must not
-            -- absorb it. A step that cannot move (the loop is a closed square on open grass)
-            -- is a real problem, so say so rather than spinning.
-            if not play.step(cp, dir, start_map, nil, false) then
+            -- absorb it. A step that ENDS IN a battle is the answer, not a stall -- the
+            -- encounter fires mid-step, before the top-of-loop check above can see it (FR run
+            -- 17 reported "the grass loop stalled on Down at (13,37)" while the observer was
+            -- logging battle_begin). Anything else that cannot move is a real problem.
+            local stepped, why = play.step(cp, dir, start_map, nil, false)
+            if not stepped and why == "in_battle" then
+                grass_step = ((grass_step - 2) % #GRASS_LOOP) + 1
+                G.phase("encounter-found", string.format("%s: cycle %d mid-step %s at %s",
+                                                         label, cycle, dir, play.at(cp)))
+                return true
+            end
+            if not stepped then
                 G.shot("stuck")
-                G.finish(false, string.format("%s: the grass loop stalled on %s at %s",
-                                              label, dir, play.at(cp)))
+                G.finish(false, string.format("%s: the grass loop stalled on %s at %s (%s)",
+                                              label, dir, play.at(cp), tostring(why)))
             end
         end
         if cycle % 8 == 0 then
@@ -580,20 +593,12 @@ end
 --- exit, not at the transfer (the R9 note's completion row; PHYSICAL on RR, where the census
 --- read party=3 throughout even after TryStorePartyMonInBox fired). So leaving the PC is part
 --- of the operation, and every assertion in these legs is made on the field afterwards.
+---
+--- The leaving itself is playlib's leave_menu: on_field goes true while the PC's "See you
+--- later!" textbox is still up, and stopping there shifts every press of the NEXT open by one
+--- (PHYSICAL, RR r5b/r5c -- it turned a withdraw into a second deposit).
 local function leave_storage(cp, label)
-    for _ = 1, 60 do
-        if play.on_field(cp) then break end
-        G.tap("B", 3, 20)
-    end
-    if not play.on_field(cp) then
-        G.shot("stuck")
-        G.finish(false, label .. ": never got back to the field from the PC, so the party "
-                     .. "count cannot be trusted either way")
-    end
-    if not play.wait_scene_settled(cp, 900) then
-        G.shot("stuck")
-        G.finish(false, label .. ": the field never settled after the PC")
-    end
+    play.leave_menu(cp, label, { flush = 5, flush_gap = 27, settle = 60 })
 end
 
 local LEGS = {}
@@ -1071,10 +1076,11 @@ LEGS[#LEGS + 1] = {
         -- There is no destination confirmation on this path (R9 note).
         G.tap("Up", 2, 13)
         open_storage_menu()
-        -- THE MENU REOPENS ON THE PREVIOUS OPTION (pret sPreviousBoxOption; PHYSICAL on the RR
-        -- lane r5b/r5c). A Deposit just preceded this, so the cursor is on row 1 and WITHDRAW
-        -- needs an explicit Up first -- pressing A here without it would deposit again.
-        pc_press("Up", PC_WAIT.cursor)
+        -- NO Up HERE. A re-opened PC starts the storage menu on ROW 0 (Withdraw), and an Up
+        -- would WRAP the cursor to See Ya and close it (PHYSICAL, RR lane r5d,
+        -- docs/gen3/probes/shadow_rr_play_r5d_pc_ops_2026-09-21.txt). The r5b/r5c
+        -- "double deposit" that looked like a remembered cursor was really leave_storage
+        -- returning early through the exit textbox; that is fixed above, not here.
         pc_press("A", PC_WAIT.menu)                                      -- WITHDRAW (row 0)
         pc_press("A", PC_WAIT.press)                                     -- box 0 slot 0 -> popup
         pc_press("A", PC_WAIT.commit)                                    -- WITHDRAW

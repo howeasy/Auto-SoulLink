@@ -575,7 +575,7 @@ def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
     """)
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
-    assert "never got back to the field from the storage UI" in log
+    assert "never got back to the field from the menu" in log
 
 
 # ── behaviour: wild_faint ────────────────────────────────────────────────────────────────────
