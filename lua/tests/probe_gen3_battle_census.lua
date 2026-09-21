@@ -100,9 +100,26 @@ if script and script ~= "" then
     end
     FRAMES = math.max(0, FRAMES - used)
 end
+-- SLINK_CENSUS_SAVE=<path>: save a state when the script ends (fixture maker: idle/door states);
+-- SLINK_CENSUS_SAVE_ON_BATTLE=<path>: save once in_battle first holds (a real in-battle state).
+SAVE_ON_BATTLE = os.getenv("SLINK_CENSUS_SAVE_ON_BATTLE")
+if SAVE_ON_BATTLE == "" then SAVE_ON_BATTLE = nil end
+do
+    local out = os.getenv("SLINK_CENSUS_SAVE")
+    if out and out ~= "" and script and script ~= "" then
+        local oks = pcall(savestate.save, out)
+        G.phase("saved", string.format("script-end state saved=%s -> %s", tostring(oks), out))
+    end
+end
 local walk_dir, walk_n = "Down", 0
 for i = 1, FRAMES do
-    if script and script ~= "" then G.advance(); goto continue end
+    if script and script ~= "" and not grass then G.advance(); goto continue end
+    if SAVE_ON_BATTLE and in_battle() then
+        G.idle(120)   -- let the intro settle so the state reloads INSIDE the battle
+        local oks = pcall(savestate.save, SAVE_ON_BATTLE)
+        G.phase("saved", string.format("in-battle state saved=%s -> %s", tostring(oks), SAVE_ON_BATTLE))
+        break
+    end
     if grass and not in_battle() and i > 60 then
         walk_n = walk_n + 1
         if walk_n % 24 == 0 then walk_dir = (walk_dir == "Down") and "Up" or "Down" end

@@ -147,6 +147,29 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | RR clean | S-1..S-11 (no native/mailbox kinds; no companion observations exist there) | same bound | `native_absent` (clean RR beside companion RR: native refused cleanly, storage via Lua fallback) plus the `gen3_rr` base run on the clean side of that pair | · |
 | RR companion | S-1..S-13 + N-1..N-8 | same bound | `gen3_rr` nine (PLAN §5.5): `faint_cmd`, `linked_faint_active`, `boxsync`, `trade`, `ghost`, `infopanel`, `explode`, `rival_swap`, `native_absent` | · |
 
+### X.1 — G3 coverage by kind (P3 shadow observer, PHYSICAL only; refreshed 2026-09-21 checkpoint 3)
+
+`✓` = observer SHADOW line for the kind in a natural-play or duo receipt, callback == site; `◐` = site pinned and hooked-reachable but not yet witnessed by the observer; `·` = no receipt; `OPEN` = no natural-play source in this phase (listed for the G3 signature).
+
+| kind (row) | FR clean | RR companion | receipt(s) |
+|---|---|---|---|
+| `battle_begin`/`battle_end` (S-2) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play`, `census_rr_battle` |
+| `faint` (S-3) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_faint` (re-pin 0x0909EED2) |
+| `capture_wild` (S-4) | ◐ (route1_catch leg: grass hunt fixed, run 17 pending) | ◐ (wild_catch leg: bag timing fixed, lane pending; candidate 0x0907DD80+8) | `rr_catch_gotcha png`, `census_rr_faint_v3b_catch` |
+| `pc_move` (S-5) | ◐ (viridian_pc leg; FR PC flow research cx-444537b2) | ◐ (deposit reached by hooks: `TryStorePartyMonInBox`; observer run pending) | `census_rr_pc_deposit` |
+| `whiteout` (S-6) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_play` |
+| `map_load` (S-7) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play` |
+| `evolve_species_store` (S-8) | OPEN (evolution leg needs a level-up plan) | OPEN | — |
+| `trade_done` (S-9) | OPEN (npc_trade leg not reached) | OPEN (native trade = duo `trade`, commanded) | — |
+| `save` (S-10) | ✓ (fixture boot-check re-save) | ✓ | `bootcheck_firered_town`, `shadow_rr_play` |
+| `poison_faint` (S-11) | OPEN | OPEN | — |
+| `borrowed_party`/`nature_change` (S-12, RR) | n/a | OPEN | — |
+| checkpoint negatives (W rows) | ◐ (idle + door states made: `slink_fr_overworld`/`slink_fr_door`; battle state from run 17) | ✓ | `checkpoint_rr_companion` |
+| overhead budget | · (not measured on FR) | ✓ | `overhead_rr_throttled`/`_unthrottled`, `wire_delta_rr_explode` |
+| `reads == PYDEC` (R rows) | ◐ (empty records only) | ✓ | `reads_pydec_fr`, `reads_pydec_rr` |
+
+LG clean and RR clean: no observer runs yet (no LG fixture; RR clean needs the clean base ROM staged) — both rows stay `·` and are listed for G3 as deferred artifacts, not signed.
+
 A required row that is OPEN/UNCOVERED blocks that artifact's cutover (§5.5). A receipt shared
 across artifacts needs an explicit equivalence proof (same bytes at the same offsets **and** the
 same reachability context), never bytes alone.
