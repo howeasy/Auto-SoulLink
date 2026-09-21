@@ -46,19 +46,32 @@ local function refuse(name)
     end
 end
 
-local WRITE_SINKS = { "write_u8", "write_u16_le", "write_u32_le", "write_bytes" }
+local WRITE_SINKS = { "write_u8", "write_u16", "write_u32", "write_bytes" }
 
--- M.build_io(mem): a read-only wrapper over a BizHawk-shaped memory table (real `memory` in
--- production, a fake table in tests). Reads (incl. ROM reads, which just pass a domain arg
--- through like any other read) forward unchanged; every write_* throws.
-function M.build_io(mem)
+-- M.build_io(mem, reg): a read-only io matching the CONTRACT lua/gen3/entry.lua documents
+-- (`deps.io`: read_u8/read_u16/read_u32(addr), read_bytes(addr, len), rom_read(off, len),
+-- framecount(), register(name)) -- no domain argument, unlike BizHawk's own `memory.*`. `mem`
+-- is a BizHawk-shaped memory table (real `memory` in production, a fake in tests) whose reads
+-- DO take a domain ("System Bus" for the bus reads, "ROM" for rom_read); `reg` is
+-- function(name) -> number, i.e. `emu.getregister` in production. Every read forwards
+-- unchanged; every write_* throws.
+function M.build_io(mem, reg)
     local io_ro = {
-        read_u8      = function(...) return mem.read_u8(...) end,
-        read_u16_le  = function(...) return mem.read_u16_le(...) end,
-        read_u32_le  = function(...) return mem.read_u32_le(...) end,
-        read_bytes   = function(...) return mem.read_bytes(...) end,
-        framecount   = function(...) return mem.framecount(...) end,
-        domains      = function(...) return mem.domains(...) end,
+        read_u8    = function(addr) return mem.read_u8(addr, "System Bus") end,
+        read_u16   = function(addr) return mem.read_u16_le(addr, "System Bus") end,
+        read_u32   = function(addr) return mem.read_u32_le(addr, "System Bus") end,
+        read_bytes = function(addr, len)
+            local out = {}
+            for i = 1, len do out[i] = mem.read_u8(addr + i - 1, "System Bus") end
+            return out
+        end,
+        rom_read = function(off, len)
+            local out = {}
+            for i = 1, len do out[i] = mem.read_u8(off + i - 1, "ROM") end
+            return out
+        end,
+        framecount = function() return mem.framecount() end,
+        register   = function(name) return reg(name) end,
     }
     for _, name in ipairs(WRITE_SINKS) do
         io_ro[name] = refuse(name)
@@ -74,8 +87,8 @@ end
 function M.build_ev(ev, prefix)
     local ids = {}
     local wrapped = {}
-    wrapped.on_bus_exec = function(fn, addr, name, domain)
-        local id = ev.on_bus_exec(fn, addr, prefix .. tostring(name), domain)
+    wrapped.on_bus_exec = function(fn, addr, name)
+        local id = ev.on_bus_exec(fn, addr, prefix .. tostring(name))
         ids[#ids + 1] = id
         return id
     end
@@ -126,19 +139,21 @@ function M.format_shadow_line(t, frame, kind, key, extra)
     return table.concat(buf, " ")
 end
 
--- M.make_signal_reader(signals): the ONE adapter over C3-1's parts.signals surface (contract,
--- per the card: `on_fire(kind, fn)` handlers, OR a `drain()` queue of {kind, key, frame,
--- callback_addr, raw_r15}). Prefers drain() (a catch-all needing no kind list up front); falls
--- back to on_fire("*", fn) queued into an equivalent drain. Returns poll(), called once per
--- frame, which returns the fires queued since the last call. If C3-1's real surface differs
--- when it lands, this is the only function that needs to change.
+-- M.make_signal_reader(signals): the ONE adapter over lua/gen3/signals.lua's real object
+-- (S.new returns `self` with COLON methods -- `function self:drain()` at signals.lua:150 --
+-- so it must be called as `signals:drain()`/`signals:on_fire(...)`, never with a dot, or the
+-- missing `self` argument breaks it at runtime). Prefers `drain()` (a catch-all queue, no
+-- kind list needed up front; this is the only method signals.lua actually ships). Falls back
+-- to an `on_fire(kind, fn)` method IF a future signals surface adds one, queued into an
+-- equivalent drain. Returns poll(), called once per frame, returning the fires queued since
+-- the last call. If the real surface changes again, this is the only function to fix.
 function M.make_signal_reader(signals)
     if type(signals.drain) == "function" then
-        return function() return signals.drain() end
+        return function() return signals:drain() end
     end
     if type(signals.on_fire) == "function" then
         local queued = {}
-        signals.on_fire("*", function(fire) queued[#queued + 1] = fire end)
+        signals:on_fire("*", function(fire) queued[#queued + 1] = fire end)
         return function()
             local out = queued
             queued = {}
@@ -151,33 +166,66 @@ end
 -- M.start(opts): the production bootstrap. Reads config from SLINK_SHADOW (a truthy flag, or a
 -- table of {pack, title, kind, player} overrides) and SLINK_DUO (for the result-log path and a
 -- player fallback); no-ops (returns nil) when SLINK_SHADOW is unset, so dofile'ing this file
--- costs nothing when shadow mode is off. `opts` lets a caller (or a test, via real BizHawk
--- globals already set on _G) override any field without touching the globals.
+-- costs nothing when shadow mode is off. `opts` lets a caller (or a test) inject the BizHawk
+-- globals (memory/event/emu/console/gameinfo/os.getenv) instead of reading them off _G.
 --
--- ponytail: title/pack/kind default to "firered"/"gen3_frlg"/"clean" when SLINK_SHADOW ships no
--- table — there is no title auto-probe here yet. Wire one in once lua/gen3/entry.lua exposes
--- its own detection (mirrors Entry.detect_title in lua/gen1/entry.lua); until then, drive
--- shadow runs with an explicit SLINK_SHADOW table on non-FR ROMs.
+-- pack/title/kind resolution: `Entry.admit` (PLAN §5.1), never a hard guess, UNLESS opts/
+-- SLINK_SHADOW names them explicitly. `gameinfo.getromhash()` supplies the hash path for free
+-- (BizHawk computes it, not Lua); the anchor path costs a few hundred `rom_read` bytes -- both
+-- are cheap. entry.lua deliberately ships no pure-Lua SHA-1 over the cartridge (its own note:
+-- minutes for a 32 MiB ROM), so this file doesn't add one either. If admission still can't
+-- decide (no gameinfo, e.g. under a fake test harness with no ROM), fall back to FR clean so a
+-- duo run never crashes for want of a title.
 function M.start(opts)
     opts = opts or {}
     -- SLINK_SHADOW is either a Lua global (bool/1, or a table of overrides — future e2e_duo
     -- wiring) or a process env var (run_gate.py --shadow, os.getenv per the self-location
     -- reference: a dofile'd chunk sees an inherited env var same as a --lua= top-level script).
+    local getenv = opts.getenv or os.getenv
     local shadow_cfg = opts.shadow
     if shadow_cfg == nil then shadow_cfg = _G.SLINK_SHADOW end
-    if shadow_cfg == nil then shadow_cfg = os.getenv("SLINK_SHADOW") end
+    if shadow_cfg == nil then shadow_cfg = getenv("SLINK_SHADOW") end
     if not shadow_cfg or shadow_cfg == "" then return nil end
     local cfg = type(shadow_cfg) == "table" and shadow_cfg or {}
     local duo = opts.duo or _G.SLINK_DUO
+
+    local mem_g      = opts.memory   or memory
+    local event_g    = opts.event    or event
+    local emu_g      = opts.emu      or emu
+    local console_g  = opts.console  or console
+    local gameinfo_g = opts.gameinfo or gameinfo
 
     local src = debug.getinfo(1, "S").source:match("@(.+[/\\])") or ""
     local lua_root = src:match("(.+[/\\])gen3[/\\]") or src
     local proj_root = lua_root:match("(.+[/\\])lua[/\\]") or (lua_root .. "../")
     package.path = lua_root .. "?.lua;" .. package.path
 
-    local pack   = opts.pack   or cfg.pack   or "gen3_frlg"
-    local title  = opts.title  or cfg.title  or "firered"
-    local kind   = opts.kind   or cfg.kind   or "clean"
+    local io_ro = M.build_io(mem_g, function(name) return emu_g.getregister(name) end)
+    local json = dofile(proj_root .. "lua/json_codec.lua")
+    local Entry = require("gen3.entry")
+
+    local pack, title, kind = opts.pack or cfg.pack, opts.title or cfg.title, opts.kind or cfg.kind
+    local admitted_by = "override"
+    if not (pack and title and kind) then
+        local rom_hash = ""
+        if gameinfo_g and gameinfo_g.getromhash then
+            local ok, h = pcall(gameinfo_g.getromhash)
+            if ok and h then rom_hash = h end
+        end
+        local ok_hc, header_code = pcall(Entry.header_code, io_ro.rom_read)
+        local admitted = Entry.admit({ root = proj_root, json = json, rom_hash = rom_hash,
+                                       rom_read = io_ro.rom_read,
+                                       header_code = ok_hc and header_code or "" })
+        if admitted then
+            pack, title, kind = pack or admitted.pack, title or admitted.title, kind or admitted.kind
+            admitted_by = admitted.admitted_by
+        else
+            admitted_by = "default"
+        end
+    end
+    pack  = pack  or "gen3_frlg"
+    title = title or "firered"
+    kind  = kind  or "clean"
     local player = opts.player or cfg.player or (duo and duo.player) or "a"
 
     local logf
@@ -186,39 +234,46 @@ function M.start(opts)
         logf = io.open(base .. ".shadow.log", "w")
     end
 
-    local ev_wrap = M.build_ev(event, "SLink-gen3-shadow-")
-    local io_ro = M.build_io(memory)
+    local ev_wrap = M.build_ev(event_g, "SLink-gen3-shadow-")
     local t = 0
     local function shadow_log(kind_, key_, extra)
         t = t + 1
-        local frame = emu and emu.framecount and emu.framecount() or 0
+        local frame = emu_g and emu_g.framecount and emu_g.framecount() or 0
         local line = M.format_shadow_line(t, frame, kind_, key_, extra)
-        if console and console.log then console.log(line) end
+        if console_g and console_g.log then console_g.log(line) end
         if logf then logf:write(line .. "\n"); logf:flush() end
         return line
     end
+    if console_g and console_g.log then
+        console_g.log(string.format("[shadow] admitted_by=%s pack=%s title=%s kind=%s",
+                                     admitted_by, pack, title, kind))
+    end
 
-    local Entry = require("gen3.entry")
     local deps = {
         root = proj_root, pack = pack, title = title, kind = kind, player = player,
         mode = "observer",
         io = io_ro,
         ev = { on_bus_exec = ev_wrap.on_bus_exec, unregister = ev_wrap.unregister },
         net = nil, hud = nil,
-        log = function(s) if console and console.log then console.log("[shadow] " .. tostring(s)) end end,
+        log = function(s) if console_g and console_g.log then console_g.log("[shadow] " .. tostring(s)) end end,
     }
     local _client_obs, parts = Entry.build(deps)
     local read_fires = M.make_signal_reader(assert(parts and parts.signals,
         "gen3 shadow observer: Entry.build(observer) returned no parts.signals"))
 
-    local state = { ev = ev_wrap, deps = deps, parts = parts, stubs = M.mutation_stubs() }
+    local state = { ev = ev_wrap, deps = deps, parts = parts, stubs = M.mutation_stubs(),
+                    admitted_by = admitted_by }
     function state.poll()
         for _, fire in ipairs(read_fires()) do
-            -- Forward EVERY scalar field of the fire (action for pc_move, species, etc.):
-            -- tools/gen3_shadow_diff.py needs them and the vocabulary belongs to signals.lua.
+            -- Forward EVERY OTHER scalar field of the fire (callback_address, raw_r15, cpsr,
+            -- sp, thumb, mode, action for pc_move, species, ...): tools/gen3_shadow_diff.py
+            -- needs them and the vocabulary belongs to signals.lua. `frame` is excluded: it is
+            -- already the line's own leading `frame=` field (same value, signals.lua's
+            -- io.framecount() at capture == this poll's read, since poll runs every frame).
             local fields, names = {}, {}
             for k, v in pairs(fire) do
-                if k ~= "kind" and k ~= "key" and type(v) ~= "table" and type(v) ~= "function" then
+                if k ~= "kind" and k ~= "key" and k ~= "frame"
+                   and type(v) ~= "table" and type(v) ~= "function" then
                     names[#names + 1] = k
                 end
             end

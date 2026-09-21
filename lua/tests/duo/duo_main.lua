@@ -111,7 +111,14 @@ if os.getenv("SLINK_SHADOW") then
     local okshd, shd = pcall(dofile, D.wt .. "/lua/gen3/shadow_run.lua")
     if okshd and shd then
         local okst, st = pcall(shd.start)
-        if okst and st then shadow = st; log("shadow observer started") else
+        if okst and st then
+            shadow = st
+            log("shadow observer started admitted_by=" .. tostring(st.admitted_by))
+            -- Drains + logs once per frame. A separate onframeend hook (not on_bus_exec, so
+            -- outside deps.ev's own id tracking) rather than a line in the scenario loop
+            -- below, so this stays inside the SLINK_SHADOW-only block.
+            event.onframeend(function() pcall(shadow.poll) end, "SLink-gen3-shadow-poll")
+        else
             log("shadow observer start failed: " .. tostring(st))
         end
     else
