@@ -43,15 +43,15 @@
             </div>
           </template>
           <template x-if="o.kind === 'bool'">
-            <label class="mk-opt" :class="!optOk(o) ? 'off-unavailable' : (rdraft.spec[o.key] ? 'on' : '')" :title="optOk(o) ? '' : PURE_WHY">
+            <label class="mk-opt" :class="!optOk(o) ? 'off-unavailable' : (rdraft.spec[o.key] ? 'on' : '')" :title="optWhy(o)">
               <input type="checkbox" x-model="rdraft.spec[o.key]" :disabled="!optOk(o)">
               <span x-text="o.label"></span>
-              <span class="mk-opt-why" x-show="!optOk(o)" x-text="PURE_WHY"></span>
+              <span class="mk-opt-why" x-show="!optOk(o)" x-text="optWhy(o)"></span>
             </label>
           </template>
           <template x-if="o.kind === 'int'">
-            <label class="mk-range" :class="optOk(o) ? '' : 'off-unavailable'" :title="optOk(o) ? '' : PURE_WHY">
-              <span class="mk-rlabel"><span x-text="o.label"></span><em class="mk-sub" x-show="o.help || !optOk(o)" x-text="optOk(o) ? o.help : PURE_WHY"></em></span>
+            <label class="mk-range" :class="optOk(o) ? '' : 'off-unavailable'" :title="optWhy(o)">
+              <span class="mk-rlabel"><span x-text="o.label"></span><em class="mk-sub" x-show="o.help || !optOk(o)" x-text="optOk(o) ? o.help : optWhy(o)"></em></span>
               <input type="range" :min="o.min" :max="o.max" step="1" x-model.number="rdraft.spec[o.key]" :disabled="!optOk(o)"
                      @dblclick="rdraft.spec[o.key] = o.default">
               <output class="num" :class="rdraft.spec[o.key] ? 'set' : ''"
