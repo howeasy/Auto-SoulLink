@@ -216,14 +216,7 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
  * they spend width, not height. */
 
 .mk-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); align-items: stretch; }
-.mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); position: relative; isolation: isolate; }
-/* the area's art across the top of the card, half strength, holding to the middle and
-   fading out under the body; a tall card (the trainer panel open) does not stretch it. The
-   head and the area line get a shadow of the page colour so they read on bright art. */
-.mk-nowcard::before { content: ""; position: absolute; inset: 0; max-height: 420px; z-index: -1; pointer-events: none;
-  background: var(--area-art, none) center / cover no-repeat; opacity: .5;
-  mask-image: linear-gradient(#000 55%, transparent); }
-.mk-nowcard .mk-now-head, .mk-nowcard .mk-now-line { text-shadow: 0 1px 3px var(--c-bg), 0 0 8px var(--c-bg); }
+.mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); }
 .mk-nowcard.online { border-left-color: var(--c-alive); }
 .mk-now-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--mk-pad) var(--mk-pad) var(--space-2); border-bottom: 1px solid var(--c-sep); }
 .mk-now-head .mk-side { width: 1.6em; height: 1.6em; display: grid; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--c-brand) 18%, transparent); font-size: var(--fs-base); }
@@ -235,6 +228,12 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-badge-pip { width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--c-edge); }
 .mk-badge-pip.on { background: var(--c-gold); border-color: var(--c-gold); }
 .mk-now-body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--mk-pad) var(--mk-pad); flex: 1; }
+/* the area line with the area's picture beside it: the whole painting, at full strength,
+   the size of a postcard -- the line's words stack on the left of it */
+.mk-now-where { display: flex; align-items: flex-start; gap: var(--space-3); }
+.mk-now-where .mk-now-line { flex: 1; min-width: 0; align-content: flex-start; }
+.mk-now-art { flex-shrink: 0; width: 132px; height: 132px; object-fit: cover; border-radius: 8px;
+  outline: 1px solid oklch(1 0 0 / .1); outline-offset: -1px; background: var(--c-sep); }
 .mk-now-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: var(--fs-md); color: var(--c-dim); }
 .mk-now-line b { color: var(--c-txt); font-weight: 600; font-size: var(--fs-lg); }
 
