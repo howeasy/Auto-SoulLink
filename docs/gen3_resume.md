@@ -35,24 +35,25 @@ Landed on the planning branch: C3-2 writes/safety (92081f4, Codex), C3-3 shadow 
 
 Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr --scenario <s> --lane shadow --wire-log` (flag, no path); logs land in `patch/build/e2e_<s>_{a,b}_result.shadow.log` (STATUS + SHADOW lines); differ: `python tools/gen3_shadow_diff.py ... --wire ... --shadow ... --ledger ...`.
 
-## In flight / uncommitted at compaction
+## In flight / uncommitted at wrap-up (2026-09-21, checkpoint 4)
 
-- HEAD 1712738 (PC census). UNCOMMITTED: playlib fix round 4 from worker ab9af09 (lua/tests/{playlib,gen3_scripted_play,gen3_rr_scripted_play,gen3_fr_newgame_inputs}.lua, tests/unit/{test_playlib,test_gen3_rr_scripted_play}.py) — standing gates green (213 Lua parse, 105 tests in the touched files, ruff; the 13 full-suite failures are the worktree environment: pret checkout/UPR jar/calc pages live at the repo root); Codex round-2 REVIEW cx-bc675fa4 in flight. Commit once Codex has no blockers.
-- Worker ab9af09 resumed on the pinned RR pc_ops recipe (message queued). FR play run 16 launched in the background (`patch/build/gen3_scripted_play_result.txt`, run dir fr_play16).
+- HEAD 0b42c4f, tree clean except whatever the two runners below leave. Worker ab9af09 (playlib/drivers) STOPPED with an empty diff; Codex headless persists: gen3-shadow running card C3-16 (cx-f4228e3f: tools/gen3_shadow_negatives.py + tests + docs/gen3/negatives_manifest.json, NEW files only) — gate + commit its output if it lands green, otherwise leave untracked and record; gen3-syms idle.
+- Emulator lane (background at wrap-up): FR in-battle state maker (parcel_deliver state -> lab arrow warp Down x9 -> Pallet -> Route 1, SLINK_CENSUS_SAVE_ON_BATTLE -> slink_fr_battle.State) followed by FR play run 18 on round 7 (receipts land as docs/gen3/probes/shadow_fr_play_run18_2026-09-21.{txt,shadow.log}; untracked until committed).
 
-## P3 physical state at checkpoint 3 (2026-09-21, after G3a)
+## P3 physical state at checkpoint 4
 
-- Coverage: FR 6 kinds PHYSICAL (map_load, mon_given, battle_begin, battle_end, whiteout, save — run 15 `shadow_fr_play_run15`), RR 6 kinds PHYSICAL (+ faint at the CFRU cleareffectsonfaint completion 0x0909EED2 `shadow_rr_faint`). capture_wild (RR 0x0907DD80+8) and pc_move: not yet witnessed live by the observer.
-- RR PC flow PINNED by exec hooks (`census_rr_pc_deposit_2026-09-21.txt`, 1712738): five A presses precede the storage menu; Deposit = Down,A; slot Down,A; Store A → TryStorePartyMonInBox 0x080930E4; party count byte updates only on storage exit. State `slink_pokecenter_full.State` (3 mons) made by `mkstate_gen3_rr_fill.lua`; `slink_prebattle_balls.State` for catch.
-- P3 exit items: checkpoint negatives PASS on RR (`checkpoint_rr_companion`), FR needs battle/door savestates; overhead PASS at real time, 0 semantic wire deltas (`overhead_rr_*`, `wire_delta_rr_explode`); reads == PYDEC PASS on the RR real party (`reads_pydec_rr`), FR weak (empty records).
-- Instruments: census script mode (SLINK_CENSUS_SCRIPT: buttons/waitN/shot, position-fed direction holds), `tools/gba_map.py` (ROM map parser + BFS PATHS), `tools/gen3_reads_pydec.py`, `probe_gen3_rr_bag.lua`.
+- Coverage (docs/gen3_requirements.md §X.1): FR 6 kinds ✓ (battle_begin/end, faint, whiteout, map_load, save, + mon_given); RR 6 + capture_wild ✓ + pc_deposit/pc_withdraw/pc_box_place ✓ (`shadow_rr_play_r5`, `shadow_rr_play_r5d_pc_ops`). RR lane: all 7 legs PASS with the observer. FR lane: starter..parcel_deliver PASS (run 17) with per-leg states slink_fr_<leg>.State; route1_catch fix (mid-step encounter) committed in round 7, run 18 pending.
+- Checkpoint negatives: RR PASS; FR (`checkpoint_fr_clean`): start_menu/dialog/save/fade/walking negatives PASS, idle POSITIVE refused because the parked-PC clause expects the BIOS wait — FR frame-end R15 sits in WaitForVBlank 0x080008AC-B4 (`census_fr_overworld`, System/Thumb; CallCallbacks+14 0x0800051E also seen; BIOS IRQ 0x1C x93). NEXT: extend the gen3_frlg write_checkpoint.json cpu clause (generator tools/gen_gen3_write_checkpoint.py, card C2-7 owner Codex) to the sourced FR range, re-run the probe with slink_fr_battle.State for the battle row.
+- Overhead: FR + RR PASS (stand-in budget; R10 notes production timing unverified). reads==PYDEC: RR real party PASS, FR empty records only (run 18 per-leg states now allow a real FR party dump).
+- Codex R9 (`research/fr_pc_flow_and_pc_move_sites.md`) and R10 (`research/g3_evidence_gap_audit.md` §5 = the exact G3 checklist DONE/PARTIAL/MISSING) are the G3 assembly inputs. MODEL receipt: `probes/model_p3_unit_2026-09-21.txt` (307 tests).
+- playlib is now the shared driver library (rounds 4-7 reviewed by Codex cx-67a6e199, cx-bc675fa4, cx-93926f12; all findings closed): H.* injection, injected battle/clear_dialogue/advance_scene/menu_back policies, leave_menu, wait_at, keyed party helpers, per-leg savestates.
 
 ## Next actions (in order)
 
-1. Reconcile Codex cx-bc675fa4 (playlib round 2), commit the round-4 diff; integrate the worker's RR pc_ops leg and run the RR lane (pc_ops + wild_catch with the bag timing fix) requiring `pc_move` and `capture_wild` SHADOW lines.
-2. FR run 16 result: route1_catch (hunt_encounter loop over four MB_TALL_GRASS tiles) → capture_wild on FR; then route1_faint, viridian_pc_deposit_withdraw (FR PC flow from pret: derive with the census script mode as on RR), save.
-3. FR checkpoint negatives: make FR battle/door savestates (the driver can save states per leg like the RR driver) and run `probe_gen3_checkpoint.lua` on FR.
-4. G3 evidence assembly: per-artifact coverage table into docs/gen3_requirements.md + PLAN §14.1 G3 row; uncovered kinds listed OPEN (evolve_species_store, trade_done, poison_faint, borrowed_party, nature_change, pc_release).
+1. Integrate run 18 + C3-16 outputs (gate, commit, receipts). If run 18 passes route1_catch: FR capture_wild ✓; then route1_faint needs whiteout recovery wired (worker's note: Pallet (6,9)->(12,1) = Right x5, Up x7, Right, Up; reset grass_step; check playerFaintCounter first).
+2. FR parked-PC clause (Codex C2-7 generator) from `census_fr_overworld`; re-run probe_gen3_checkpoint on FR with SLINK_CHECKPOINT_BATTLE_STATE=slink_fr_battle.State.
+3. FR reads==PYDEC with a real party (slink_fr_parcel_deliver.State); FR PC legs (viridian_pc_deposit_withdraw, pc_release) on the lane.
+4. G3 evidence assembly from R10 §5; per-branch negatives report from C3-16; then request the G3 signature with OPEN kinds listed (evolve_species_store, trade_done, poison_faint, borrowed_party/nature_change, pc_move_full_party, pc_release).
 5. Queued (unchanged): strict artifact_kind wire validation; SB1/SB2 base symbols; storage pointer canonical source; LG fixture; mailbox lifecycle (P5); shadow poll error handling; codec stale comment; older queue.
 
 ## Standing rules that bit this session
