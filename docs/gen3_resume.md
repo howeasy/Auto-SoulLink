@@ -37,21 +37,22 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 ## In flight / uncommitted at compaction
 
-- Nothing. HEAD 6bf2a74 (+ this note), tree clean. PAUSED 2026-09-21 at checkpoint 2. Codex R5 (cx-fe554e0e, RR faint body) is the only open peer task; C3-5/C3-7 workers idle with context.
+- HEAD 1712738 (PC census). UNCOMMITTED: playlib fix round 4 from worker ab9af09 (lua/tests/{playlib,gen3_scripted_play,gen3_rr_scripted_play,gen3_fr_newgame_inputs}.lua, tests/unit/{test_playlib,test_gen3_rr_scripted_play}.py) — standing gates green (213 Lua parse, 105 tests in the touched files, ruff; the 13 full-suite failures are the worktree environment: pret checkout/UPR jar/calc pages live at the repo root); Codex round-2 REVIEW cx-bc675fa4 in flight. Commit once Codex has no blockers.
+- Worker ab9af09 resumed on the pinned RR pc_ops recipe (message queued). FR play run 16 launched in the background (`patch/build/gen3_scripted_play_result.txt`, run dir fr_play16).
 
-## P3 physical state at checkpoint 2
+## P3 physical state at checkpoint 3 (2026-09-21, after G3a)
 
-- FR (vanilla US 1.0, observer beside `gen3_scripted_play.lua`): `map_load`, `mon_given` (starter), `battle_begin`, `battle_end` (rival battle) fired once each (`docs/gen3/probes/shadow_fr_play_run11_2026-09-21.txt`). Driver legs starter + rival_battle PASS; next stall: leave_lab_for_parcel (map never changed after the rival's scripted exit).
-- RR (companion, observer beside `gen3_rr_scripted_play.lua`, per-leg savestates): `battle_begin` x4, `battle_end` x5-6, `whiteout`, `map_load`, `save` fired; a REAL player faint (HP positive->0 in battle, playerFaintCounter 0->1) produced NO fire at the pinned faint site. Research: the battle-script command table is replaced (0x0903EF20 via 5 pool words); the 0x19 (tryfaintmon) and 0xF0 (givecaughtmon) pins are displaced (`rr_faint_repin.md`, `rr_opcode_table_audit.md`); census shows the 0x19 body never runs even on a faint while the 0x1B body runs per faint -> R5 resolves which body to pin. capture_wild candidate 0x0907DD88.
-- Blocked on fixtures: RR pc_ops needs a 2+ mon save (all RR savestates hold 1 mon; the game cannot deposit its last); RR wild_catch needs the CFRU bag UI input sequence pinned.
-- Differential (`docs/gen3/probes/shadow_diff/`): six RR duos, 0 unexplained, 0 unused ledger entries, 14 UNCOVERED each (pre-natural-play captures). Re-run the differ over the natural-play captures next (`patch/build/shadow_wire/{fr,rr}_play*.shadow.log` + wire logs are not captured for the drivers: they run without the server, so the differ's wire side is empty by design; coverage counts are what G3 needs).
+- Coverage: FR 6 kinds PHYSICAL (map_load, mon_given, battle_begin, battle_end, whiteout, save — run 15 `shadow_fr_play_run15`), RR 6 kinds PHYSICAL (+ faint at the CFRU cleareffectsonfaint completion 0x0909EED2 `shadow_rr_faint`). capture_wild (RR 0x0907DD80+8) and pc_move: not yet witnessed live by the observer.
+- RR PC flow PINNED by exec hooks (`census_rr_pc_deposit_2026-09-21.txt`, 1712738): five A presses precede the storage menu; Deposit = Down,A; slot Down,A; Store A → TryStorePartyMonInBox 0x080930E4; party count byte updates only on storage exit. State `slink_pokecenter_full.State` (3 mons) made by `mkstate_gen3_rr_fill.lua`; `slink_prebattle_balls.State` for catch.
+- P3 exit items: checkpoint negatives PASS on RR (`checkpoint_rr_companion`), FR needs battle/door savestates; overhead PASS at real time, 0 semantic wire deltas (`overhead_rr_*`, `wire_delta_rr_explode`); reads == PYDEC PASS on the RR real party (`reads_pydec_rr`), FR weak (empty records).
+- Instruments: census script mode (SLINK_CENSUS_SCRIPT: buttons/waitN/shot, position-fed direction holds), `tools/gba_map.py` (ROM map parser + BFS PATHS), `tools/gen3_reads_pydec.py`, `probe_gen3_rr_bag.lua`.
 
 ## Next actions (in order)
 
-1. Reconcile Codex R5 (cx-fe554e0e): run its census list during real RR faints (`probe_gen3_battle_census.lua`, `SLINK_CENSUS_ENCOUNTERS=1`, prebattle state); re-pin RR `faint` (and `capture_wild` per R4) in `data/games/gen3_rr/engine_signals.json` through the generator (`tools/gen_gen3_engine_signals.py` / `pin_gen3_site.py`), re-run the RR driver wild_faint leg and require a `faint` SHADOW line.
-2. FR driver: lab exit after the rival leg, then parcel fetch/deliver, Route 1 catch/faint, Viridian PC ops; each lane run adds kinds (worker aff570d has the context).
-3. Owner: a 2+ mon RR battery/savestate for pc_ops; decide whether pinning the CFRU bag UI (catch) is worth it or catch stays OPEN on RR for G3.
-4. G3 evidence assembly: per-artifact coverage table (FR: 4 kinds PHYSICAL; RR: 5 kinds PHYSICAL + faint/capture re-pin), checkpoint predicate negatives (P3 exit evidence), overhead budget both callback orders (not yet measured), `reads == PYDEC` on dumped bytes (not yet done) -> these three are the remaining P3 exit items besides coverage.
+1. Reconcile Codex cx-bc675fa4 (playlib round 2), commit the round-4 diff; integrate the worker's RR pc_ops leg and run the RR lane (pc_ops + wild_catch with the bag timing fix) requiring `pc_move` and `capture_wild` SHADOW lines.
+2. FR run 16 result: route1_catch (hunt_encounter loop over four MB_TALL_GRASS tiles) → capture_wild on FR; then route1_faint, viridian_pc_deposit_withdraw (FR PC flow from pret: derive with the census script mode as on RR), save.
+3. FR checkpoint negatives: make FR battle/door savestates (the driver can save states per leg like the RR driver) and run `probe_gen3_checkpoint.lua` on FR.
+4. G3 evidence assembly: per-artifact coverage table into docs/gen3_requirements.md + PLAN §14.1 G3 row; uncovered kinds listed OPEN (evolve_species_store, trade_done, poison_faint, borrowed_party, nature_change, pc_release).
 5. Queued (unchanged): strict artifact_kind wire validation; SB1/SB2 base symbols; storage pointer canonical source; LG fixture; mailbox lifecycle (P5); shadow poll error handling; codec stale comment; older queue.
 
 ## Standing rules that bit this session
