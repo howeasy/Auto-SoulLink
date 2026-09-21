@@ -186,6 +186,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 RR natural play: `docs/gen3/probes/shadow_rr_play_2026-09-21.txt` — with the observer beside `gen3_rr_scripted_play.lua`, PHYSICAL fires on RR companion: `battle_begin` x4, `battle_end` x5, `whiteout` x1, `map_load` x1, `save` x1 (positives for S-1 on those kinds, pending the differential). NEGATIVE: a real player faint (battler HP 0, outcome lost) produced no `faint` fire at the vanilla Cmd_tryfaintmon pin 0x080213C8 -> RR `faint` must be re-pinned to the CFRU battle-engine body (OPEN, P3). Driver defects (Codex cx-378ce251) queued to the authors; the fires stand.
 
+- 2026-09-21 P3 FR natural play run 11: `docs/gen3/probes/shadow_fr_play_run11_2026-09-21.txt` — vanilla FR, observer beside `gen3_scripted_play.lua`: `map_load` (lab entry), `mon_given` (the starter, party 0->1), `battle_begin` and `battle_end` (the rival battle, won) each fired exactly once with callback == site. PHYSICAL positives for S-1 on those FR kinds (differential pending). Next stall: the lab exit walk after the rival leaves (map never changed).
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

@@ -140,15 +140,24 @@ local PATHS = {
         dirs = { "Down","Right","Right","Right" },
     },
     -- coord_events RivalBattleTriggerLeft/Mid/Right @ y=8, x in {5,6,7}
-    -- (PalletTown_ProfessorOaksLab/map.json).
+    -- (PalletTown_ProfessorOaksLab/map.json). This BFS route from the ball's approach tile
+    -- (9,5) reaches x=7 before descending, so it always lands ON (7,8) = RivalBattleTriggerRight
+    -- (PHYSICAL run 9: confirmed — the walker stalled trying to step PAST (7,8), because landing
+    -- on the trigger tile itself already fires it: `lockall` in
+    -- scripts.inc:270-274, RivalBattleTriggerRight). The path therefore ends AT the trigger
+    -- tile, not past it -- one shorter than a plain BFS to (6,8) would be.
     ball_to_rival_row = {
-        map = "PalletTown_ProfessorOaksLab", from = { 9, 5 }, to = { 6, 8 },
-        dirs = { "Down","Down","Left","Left","Down","Left" },
+        map = "PalletTown_ProfessorOaksLab", from = { 9, 5 }, to = { 7, 8 },
+        dirs = { "Down","Down","Left","Left","Down" },
     },
     -- warp_events[0..2] = (5,12)/(6,12)/(7,12) -> PalletTown warp 2; walk-through, no press-in.
+    -- from=(7,8): the rival battle script never moves the PLAYER object coordinate-wise (only
+    -- Common_Movement_WalkInPlaceFasterUp -- in place -- and the post-battle
+    -- PlayerWatchRivalExitAfterBattle -- also in place, scripts.inc:283-284,540-545), so the
+    -- player is still standing on the trigger tile (7,8) once the whole scene releases.
     rival_row_to_lab_exit = {
-        map = "PalletTown_ProfessorOaksLab", from = { 6, 8 }, to = { 6, 12 },
-        dirs = { "Down","Down","Down","Down" },
+        map = "PalletTown_ProfessorOaksLab", from = { 7, 8 }, to = { 6, 12 },
+        dirs = { "Down","Down","Down","Down","Left" },
     },
     -- PROF_OAK object_event @ (6,3) (collision=1, solid); (6,4) is the approach.
     lab_entrance_to_oak = {
@@ -455,31 +464,57 @@ LEGS[#LEGS + 1] = {
     name = "rival_battle",
     exercises = { "battle_begin", "battle_end" },
     source = {
-        "data/maps/PalletTown_ProfessorOaksLab/map.json (coord_events RivalBattleTrigger* @ y=8)",
-        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:299-311 (RivalApproachForBattleSquirtle)",
+        "data/maps/PalletTown_ProfessorOaksLab/map.json (coord_events RivalBattleTriggerRight @ 7,8)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:270-333 (RivalBattleTriggerRight -> RivalBattle -> RivalApproachForBattleBulbasaur* -> trainerbattle_earlyrival, VAR_STARTER_MON==1 (Squirtle) branch, scripts.inc:299-301)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:441-444 (RivalBattleBulbasaur: trainerbattle_earlyrival ..., RIVAL_BATTLE_TUTORIAL, ...)",
+        "include/constants/battle.h:73-74 (RIVAL_BATTLE_TUTORIAL=3 includes bit0 RIVAL_BATTLE_HEAL_AFTER)",
+        "src/battle_setup.c:905-931 (CB2_EndTrainerBattle, TRAINER_BATTLE_EARLY_RIVAL: RIVAL_BATTLE_HEAL_AFTER set -> a LOSS heals the party and returns via CB2_ReturnToFieldContinueScriptPlayMapMusic, same as a win -- CB2_WhiteOut is only reached when that bit is clear, which it is not here -- so this battle cannot whiteout)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:467-481 (EndRivalBattle: unconditional HealPlayerParty + scripted rival exit, regardless of outcome)",
     },
     run = function(cp)
+        -- Landing ON (7,8) already fired the trigger (PATHS.ball_to_rival_row's own comment);
+        -- everything from here through the approach dialogue is scripted (`lockall`). A-only:
+        -- this is all still field/dialogue, never a menu that Start should touch.
         follow(cp, "ball_to_rival_row", "rival_battle")
-        local entered = false
-        for _ = 1, 1200 do
-            if in_battle(cp) then entered = true; break end
-            for _ = 1, 4 do G.tap("A", 3, 13) end
-        end
+        local entered = mash_a(250, function() return in_battle(cp) end)
         if not entered then
             G.shot("stuck")
-            G.finish(false, "rival_battle: never entered battle after the y=8 trigger row")
+            G.finish(false, "rival_battle: never entered battle after the trigger tile")
         end
         G.phase("battle-begin")
         -- gActionSelectionCursor resets to 0 (USE_MOVE) each battle
         -- (src/battle_controller_player.c); A,A is a pinned FIGHT->move-slot-1 selection, not a
         -- guess. What the rival does in response is not controlled — RISK stated in the header.
-        -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
-        local ended = mash_a(315, function() return not in_battle(cp) end)
+        -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up. A loss is
+        -- an acceptable outcome here (see source: RIVAL_BATTLE_HEAL_AFTER, no whiteout), so the
+        -- terminal is only in_battle clearing, not a win.
+        local ended = mash_a(1200, function() return not in_battle(cp) end)   -- PHYSICAL run 10: the fight was WON at ~315 taps but the end-of-battle text still needs presses
         if not ended then
             G.shot("stuck")
             G.finish(false, "rival_battle: in_battle never cleared within budget")
         end
         G.phase("battle-end")
+        -- Post-battle is scripted too (EndRivalBattle: HealPlayerParty, "go toughen up your
+        -- mon" message, the rival's own applymovement exit): A-only while any of that is still
+        -- running, then debounce script idle + field controls unlocked held 60 frames once it
+        -- looks done -- same shape and same PHYSICAL lesson as the starter leg's scene wait
+        -- (run 4-7: a single-frame idle read is not enough, it can flicker mid-scene).
+        local stable, settled = 0, false
+        for _ = 1, 6000 do
+            if G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked") then
+                stable = stable + 1
+                if stable >= 60 then settled = true; break end
+                G.advance()
+            else
+                stable = 0
+                G.tap("A", 2, 10)
+            end
+        end
+        if not settled then
+            G.shot("stuck")
+            G.finish(false, "rival_battle: post-battle scene never settled (idle+unlocked 60f)")
+        end
+        G.phase("rival-gone", string.format("at=(%d,%d)", G.pos(cp)))
     end,
 }
 
