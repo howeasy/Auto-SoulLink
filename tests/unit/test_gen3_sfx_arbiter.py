@@ -34,8 +34,10 @@ class Frame:
         self.played: list[tuple[str, int]] = []
 
     def run(self):
-        """Flush through the client's route rule (native only when patched and out of battle)."""
-        self.flush(lambda s: self.played.append(("MB.play_se" if self.native else "M.playSE", int(s))))
+        """Flush through the client's route rule: native only for a cue the caller marked native_ok
+        (the server's generic play_sound) AND when patched and out of battle."""
+        self.flush(lambda s, native_ok: self.played.append(
+            ("MB.play_se" if (native_ok and self.native) else "M.playSE", int(s))))
         return self.played
 
 
@@ -50,11 +52,39 @@ def test_terminal_batch_plays_only_game_over_direct_route():
 
 def test_terminal_batch_plays_only_game_over_native_route():
     f = Frame(native=True)
+    # [force_faint, play_sound 26, memorialize, game_over]: the server's 26 is native_ok, the
+    # client cues are not. GAME_OVER wins and, being a client cue, takes the Lua poke even with
+    # the patch present: a native sound queued behind the same-frame native memorialize would be
+    # pumped next frame before the memorialize poll and overwrite its ack (Codex cx-e8acc8bc).
     f.request(LINKED_KO)
+    f.request(GAME_OVER, True)   # the server's play_sound 26 (same id as SE_GAME_OVER by default)
     f.request(GAME_OVER)
-    f.request(GAME_OVER)
-    # Exactly one MB.play_se — the single-slot mailbox can no longer be clobbered by SE.
-    assert f.run() == [("MB.play_se", GAME_OVER)]
+    assert f.run() == [("M.playSE", GAME_OVER)]
+
+
+def test_generic_server_sound_alone_takes_the_native_route_when_allowed():
+    f = Frame(native=True)
+    f.request(5, True)
+    assert f.run() == [("MB.play_se", 5)]
+
+
+def test_client_cue_never_takes_the_native_route():
+    f = Frame(native=True)
+    f.request(LINKED_KO)
+    assert f.run() == [("M.playSE", LINKED_KO)]
+
+
+def test_winner_keeps_its_own_route_flag_not_the_losers():
+    f = Frame(native=True)
+    f.request(5, True)          # generic server sound, native-capable
+    f.request(LINKED_KO)        # outranks it; must NOT inherit native_ok
+    assert f.run() == [("M.playSE", LINKED_KO)]
+
+
+def test_only_the_server_play_sound_site_is_native_ok():
+    # Every other request() in the client carries no flag.
+    flagged = re.findall(r"M\.sfx\.request\([^)]*,\s*true\)", CLIENT_SRC)
+    assert flagged == ["M.sfx.request(c.sound, true)"]
 
 
 def test_linked_ko_outranks_generic_play_sound():
@@ -123,8 +153,8 @@ def test_client_has_no_direct_playse_calls_left():
 
 def test_client_flush_uses_the_documented_route_rule():
     assert re.search(
-        r"M\.sfx\.flush.*\n.*native_sfx_enabled and patch_present\(\) and not M\.isInBattle\(\)"
-        r" then MB\.play_se\(sound\)\n\s*else M\.playSE\(sound\) end",
+        r"M\.sfx\.flush.*\n.*native_ok and native_sfx_enabled and patch_present\(\) and not"
+        r" M\.isInBattle\(\) then MB\.play_se\(sound\)\n\s*else M\.playSE\(sound\) end",
         CLIENT_SRC,
     )
 
