@@ -57,7 +57,16 @@ The randomizer's cartridges are found, not typed (Phase 8 item 4; `GET/POST /api
 described in plain words with their family, and a run's game names the family it takes
 (`GAME_FAMILY`; `handle_randomize` refuses the other by name — a pure run had been built from
 vanilla dumps with nothing objecting). A randomized run offers its cartridges on the empty
-board and under *Launchers ▾*. Presets and `.rnqs` export/import: Phase 8 item 8.
+board and under *Launchers ▾*. Presets and `.rnqs` export/import: Phase 8 item 8. **Cartridges
+step (owner, 2026-09-20: "a Gen 1 run gets a Cartridges step always"):** `server/cartridges.py`
+(Codex "Gen1 UI", `0cbab0e`) is the one provisioning module — vanilla randomize→structural
+inject, pureRGB overlay→randomize, the contract binds the final sha1 — behind `POST
+/api/runs/{id}/cartridges`; `_cartridges.html` (picks, companion, Randomize) on the creator and
+on `/runs/{id}/cartridges` (the randomizer page grown up); the board and the Launchers menu
+offer the cartridges whenever the run made them. pure + companion + randomize needs the fork's
+overlay INI entries (A5), which the pureRGB session added the same day; the form reads
+preflight's `jar_entries` for the up-front reason. One area-id humanizer
+(`adapters.base.humanize_area_id`) replaced eight `.title()` sites ("Route8").
 
 ## Read this first
 

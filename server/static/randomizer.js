@@ -218,6 +218,14 @@ function randomizerFields(form) {
       if (this.pre && this.pre.roms && (this.pre.roms.a.clean === false || this.pre.roms.b.clean === false)) return 'A pick is not a pinned cartridge.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && !this.pre.java_found) return 'Randomizing needs Java on PATH.';
+      if (this.rdraft.randomize && this.rdraft.companion && this.companionOk().ok && this.family === 'gen1_purergb'
+          && this.pre && this.pre.jar_entries) {
+        // pure + companion + randomize is the overlay path: UPR needs an entry for the
+        // overlay build of each pick ("PureRed overlay (U)"; the fork's naming).
+        var entries = this.pre.jar_entries, missing = [];
+        [ra, rb].forEach(function (r) { if (r && r.variant && entries.indexOf(r.variant + ' overlay (U)') < 0) missing.push(r.variant); });
+        if (missing.length) return 'This jar has no entry for the companion overlay of ' + missing.join(' / ') + ': rebuild the SLink fork, randomize with the companion off, or keep the companion without randomizing.';
+      }
       return '';
     },
     // identify()'s kind, in the table's words.

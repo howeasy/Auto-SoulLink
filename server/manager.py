@@ -997,7 +997,7 @@ class RunManager:
 
     # ── Cartridges: what each player plays ────────────────────────────────────
 
-    async def handle_cartridges(self, request: web.Request) -> web.Response:
+    async def handle_cartridges(self, request: web.Request, *, implied_randomize: bool = False) -> web.Response:
         """POST /api/runs/{run_id}/cartridges — produce each player's cartridge from what
         was picked: the SLink companion on it when asked, randomized when asked
         (server/cartridges.py decides the order per family). Also answers the older
@@ -1038,7 +1038,8 @@ class RunManager:
         rom_a = str(body.get("rom_a", "")).strip()
         rom_b = str(body.get("rom_b", "")).strip()
         spec, categories = body.get("spec"), body.get("categories")
-        randomize = bool(body.get("randomize", spec is not None or categories is not None or bool(settings)))
+        randomize = bool(body.get("randomize", implied_randomize or spec is not None
+                                      or categories is not None or bool(settings)))
         companion = bool(body.get("companion", False))
         missing = [n for n, v in (("rom_a", rom_a), ("rom_b", rom_b)) if not v]
         if randomize:
@@ -1128,8 +1129,10 @@ class RunManager:
         return web.json_response({"ok": True, "cartridges": run["cartridges"],
                                   "randomizer": run.get("randomizer")})
 
-    # The older name: randomizing is what it did, and what it still implies.
-    handle_randomize = handle_cartridges
+    async def handle_randomize(self, request: web.Request) -> web.Response:
+        """POST /api/runs/{run_id}/randomize — the older name: randomizing is what it did,
+        and what it still implies."""
+        return await self.handle_cartridges(request, implied_randomize=True)
 
     async def handle_settings_export(self, request: web.Request) -> web.Response:
         """POST /api/randomizer/settings/export {spec, name?} — the form's settings as a UPR
@@ -1396,7 +1399,7 @@ class RunManager:
             "run": self._augment_for_template(run),
             "randomizer_json": _json_for_script(form),
         })
-        return aiohttp_jinja2.render_template("randomizer.html", request, ctx)
+        return aiohttp_jinja2.render_template("cartridges.html", request, ctx)
 
     def _run_or_404(self, request: web.Request) -> tuple[list[dict], dict]:
         runs = self._get()
