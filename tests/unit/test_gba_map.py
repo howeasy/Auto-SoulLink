@@ -27,10 +27,10 @@ _FR_ROM = "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba"
 _FR_SYM = os.path.join(_REPO, "data", "gen3", "pret", "pokefirered.sym")
 # The pret checkout lives in the REPO ROOT's cache (E:/Google Drive/SLink/.cache/pret/pokefirered),
 # not under a worktree: try the worktree first, then the root the worktree was made from.
+_ROOT_OF_WORKTREE = _REPO.split(os.sep + ".claude" + os.sep + "worktrees" + os.sep)[0] if (os.sep + ".claude" + os.sep + "worktrees" + os.sep) in _REPO else _REPO
 _DECOMP_CANDIDATES = [
     os.path.join(_REPO, ".cache", "pret", "pokefirered", "data", "maps"),
-    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(_REPO)))), ".cache", "pret", "pokefirered", "data", "maps")
-    if os.path.basename(os.path.dirname(os.path.dirname(_REPO))) == ".claude" else "",
+    os.path.join(_ROOT_OF_WORKTREE, ".cache", "pret", "pokefirered", "data", "maps"),
     os.path.join(os.environ.get("SLINK_PRET_CACHE", ""), "pokefirered", "data", "maps"),
 ]
 _DECOMP_MAPS = next((c for c in _DECOMP_CANDIDATES if c and os.path.isdir(c)), _DECOMP_CANDIDATES[0])
@@ -101,7 +101,12 @@ def test_fr_pallet_town_cross_checked_against_pret_decomp():
     rom = gba_map.load(_FR_ROM)
     m = rom.map(3, 0)
 
-    assert (m.width, m.height) == (int(decomp["width"]), int(decomp["height"]))
+    # map.json carries only the layout id; dimensions live in data/layouts/layouts.json
+    layouts_json = os.path.join(os.path.dirname(_DECOMP_MAPS), "layouts", "layouts.json")
+    with open(layouts_json, encoding="utf-8") as f:
+        layouts = {(lay.get("id") or lay.get("name")): lay for lay in json.load(f)["layouts"]}
+    lay = layouts[decomp["layout"]]
+    assert (m.width, m.height) == (int(lay["width"]), int(lay["height"]))
 
     decomp_warps = {
         (w["x"], w["y"], w["dest_map"], w["dest_warp_id"])
