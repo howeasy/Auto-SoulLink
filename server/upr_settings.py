@@ -605,6 +605,10 @@ GLOBAL_IGNORED_RESTRICTIONS = ("type_themed", "catch_em_all")
 # the whole map, so no per-ROM oracle can bound a draw exactly (the verifier declines to model
 # it, cx-37fe2641 #3); the project claims every admitted option is verified or refused -> refused.
 GLOBAL_UNVERIFIABLE_RESTRICTIONS = ("similar",)
+# trainers=distributed + similar_strength: the placement-history filter runs BEFORE the strength
+# band (AbstractRomHandler ~6882-6890), so the band a slot reaches depends on the whole draw
+# prefix -- no per-ROM oracle can bound a draw exactly (cx-636b45dd #3) -> refused by name
+# (see forbidden_enabled).
 
 
 def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
@@ -624,6 +628,9 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     if spec.get("wild") == "global" and spec.get("wild_restriction") in GLOBAL_UNVERIFIABLE_RESTRICTIONS:
         bad.append(f"wild=global with wild_restriction={spec['wild_restriction']} "
                    f"(not verifiable: the global picker's pool shrinks across the whole map)")
+    if spec.get("trainers") == "distributed" and spec.get("trainers_similar_strength"):
+        bad.append("trainers=distributed with trainers_similar_strength "
+                   "(not verifiable: the placement-history filter precedes the strength band)")
     if family == FAMILY_PURE and parsed.get("misc_tweaks"):
         bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
     if family == FAMILY_PURE:

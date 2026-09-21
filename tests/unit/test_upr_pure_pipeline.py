@@ -116,6 +116,13 @@ def test_global_with_an_ignored_restriction_is_refused_for_both_families():
     assert forbidden_enabled(parsed, FAMILY_PURE) == []
     parsed = load(build_spec({"wild": "area", "wild_restriction": "catch_em_all", "fastest_text": False}))
     assert forbidden_enabled(parsed, FAMILY_PURE) == []
+    parsed = load(build_spec({"trainers": "distributed", "trainers_similar_strength": True, "fastest_text": False}))
+    assert forbidden_enabled(parsed, FAMILY_VANILLA) == forbidden_enabled(parsed, FAMILY_PURE) == [
+        "trainers=distributed with trainers_similar_strength "
+        "(not verifiable: the placement-history filter precedes the strength band)"]
+    for trainers in ("random", "type_themed"):
+        parsed = load(build_spec({"trainers": trainers, "trainers_similar_strength": True, "fastest_text": False}))
+        assert forbidden_enabled(parsed, FAMILY_PURE) == []
 
 
 def test_the_write_domains_follow_the_whole_spec_not_the_six_modes():
