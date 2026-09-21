@@ -4,10 +4,27 @@
   allows, so nothing is hand-listed here), the two clean ROMs (found in the SLink folder,
   or added through the browser's file dialog), the jar, and the preflight tags. Included
   inside an Alpine scope that carries the `randomizerFields()` mixin (static/randomizer.js):
-  `rform`, `rdraft`, `roms`, `pre`, `groups()`, `scanRoms()`, `upload()`. Used by the run
-  creator (the normal path) and by /runs/{id}/randomizer (rebuilding a pair on an existing
-  run).
+  `rform`, `rdraft`, `roms`, `presets`, `pre`, `groups()`, `scanRoms()`, `upload()`, the
+  preset methods. Used by the run creator (the normal path) and by /runs/{id}/randomizer
+  (rebuilding a pair on an existing run).
 #}
+{# Presets: the whole spec by name, kept on this Manager. Export / Import speak UPR's own
+   .rnqs -- the file its GUI opens and a run keeps -- so two players can trade settings, and
+   a file built in the GUI is admitted through the pipeline's gates before it lands. #}
+<div class="mk-presets">
+  <select x-model="preset" @change="loadPreset(preset)" aria-label="Saved presets">
+    <option value="">— saved presets —</option>
+    <template x-for="p in presets" :key="p.name"><option :value="p.name" x-text="p.name"></option></template>
+  </select>
+  <input type="text" x-model="presetName" placeholder="preset name" aria-label="Preset name" @keydown.enter.prevent="savePreset()">
+  <button type="button" class="mk-btn" @click="savePreset()">Save</button>
+  <button type="button" class="mk-btn" :disabled="!preset" @click="deletePreset()">Delete</button>
+  <span class="mk-hdr-spacer"></span>
+  <button type="button" class="mk-btn" @click="exportSettings()" title="UPR's own settings file (.rnqs)">Export .rnqs</button>
+  <label class="mk-btn" title="A .rnqs from UPR's GUI or from another run"><input type="file" accept=".rnqs" @change="importSettings($event)"><span>Import .rnqs…</span></label>
+</div>
+<p class="mk-cap" x-show="presetNote" x-text="presetNote"></p>
+
 <div class="mk-rgroups">
   <template x-for="g in groups()" :key="g.name">
     <fieldset class="mk-rgroup">
@@ -77,7 +94,7 @@
   </label>
 </div>
 <p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' cartridge' : ' cartridges') + ' found in ' : 'No cartridges found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-text="family ? ' — this run takes ' + familyLabel(family) + ' ones' : ''"></span><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
-<p class="mk-cap">The randomizer starts only from a cartridge it can vouch for byte for byte: a <b>clean dump</b> of Red / Blue / Yellow, or for pureRGB the <b>pinned v2.7.6 build</b> — or its <b>SLink companion build</b>, the same cartridge with the native Cable Club trade and the START-menu SLINK panel linked in (<a href="/patcher">Tools → Patcher</a> makes one). Pick the companion build if you want those in-game; the randomized ROM keeps them. Anything already modified is listed but greyed.</p>
+<p class="mk-cap">The randomizer starts only from a cartridge it can vouch for byte for byte: a <b>clean dump</b> of Red / Blue / Yellow, or for pureRGB the <b>pinned v2.7.6 build</b> — or its <b>SLink companion overlay</b>, the same cartridge with the native Cable Club trade and the START-menu SLINK panel linked in (<a href="/patcher">Tools → Patcher</a> makes one). Pick the overlay if you want those in-game; the randomized ROM keeps them. Anything already modified is listed but greyed.</p>
 
 <div class="mk-preview-rules" x-show="pre">
   <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>

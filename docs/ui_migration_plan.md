@@ -464,6 +464,15 @@ anything else produces a file its own allowlist rejects.
    and finds the battery save. Wrong-file mixups are already caught by `rom_contract.json`.
 7. **A re-randomize path** — the form stays reachable when `current.randomizer` is set, and
    re-running rewrites `rom_contract.json` and the `randomizer` record together.
+8. **Presets, and the `.rnqs` back** *(2026-09-20)*. Named specs on the Manager
+   (`data/runs/presets.json`, `GET/POST /api/presets`, validated by `build_spec`). The
+   interchange file is UPR's own `.rnqs`, not a format of ours: `POST
+   /api/randomizer/settings/export` writes the bytes `randomize` would write for the spec,
+   `POST /api/randomizer/settings/import` admits a GUI-built or another run's file through
+   `upr_pipeline.admit_settings` — the version check, `forbidden_enabled` and the
+   `unexpected_settings` envelope lifted out of `prepare_pair`, so a file that randomizes
+   types is refused by name rather than read back as "unchanged" — and `GET
+   /api/runs/{id}/settings.rnqs` serves the file a pair was built with.
 
 Note `ALL_CATEGORIES` is hardcoded in three test files, duplicating `_CATEGORY_MODES`; make
 them import it.

@@ -69,8 +69,8 @@ RANDOMIZE_TIMEOUT = 600
 # family stays greyed with this message.
 # identify()'s `kind`, in the picker's words. The vanilla family has one pinned artifact
 # per title, the clean dump; the pure family has two, the pinned v2.7.6 build and the SLink
-# companion build (the native trade + START-menu panel linked in at source: README,
-# "Companion overlay"), and the fork randomizes either as itself. Anything else is a
+# companion overlay (the native trade + START-menu panel linked in at source: README,
+# "Companion overlay"), and the fork randomizes either as itself (A5). Anything else is a
 # cartridge that was already changed -- the randomizer starts only from a pinned one.
 KIND_WORDS = {
     "clean": "clean dump",
@@ -78,9 +78,9 @@ KIND_WORDS = {
 }
 KIND_WORDS_PURE = {
     "clean": "pinned pureRGB v2.7.6 build",
-    "overlay": "SLink companion build (native trade + START-menu panel)",
+    "overlay": "SLink companion overlay (native trade + START-menu panel)",
     "rand": "already randomized",
-    "rand_overlay": "already randomized (companion build)",
+    "rand_overlay": "already randomized (companion overlay)",
 }
 
 PUREGB_RANDOMIZER_REFUSAL = (
@@ -352,25 +352,13 @@ def _check_content(source_rom: str, output_rom: str) -> dict:
     return profile
 
 
-def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir: str,
-                 java: str = "java") -> dict:
-    """Randomize one ROM per player and prove the pair is usable.
-
-    ``sources`` maps player id -> clean ROM path; the two may be different titles (a Red/Blue
-    pairing is normal) but must use the SAME settings file.
-    """
-    if set(sources) != {"a", "b"}:
-        raise UprPipelineError(f"expected sources for players a and b, got {sorted(sources)}")
-
-    for path in sources.values():
-        if not os.path.isfile(path):
-            raise UprPipelineError(f"source ROM not found: {path}")
+def admit_settings(settings, family: str = FAMILY_VANILLA) -> dict:
+    """Read a .rnqs (a path or its bytes) and admit it, or say exactly why not. The same
+    three gates whether the file comes from a run about to randomize or from a player
+    importing what they built in UPR's GUI: its version, the named dangers, and the
+    allowlist. Returns the parse (load())."""
     try:
-        family = family_of(sources)
-    except RomScanError as exc:
-        raise UprPipelineError(f"source ROM could not be identified: {exc}") from exc
-    try:
-        declared = load(settings_path)
+        declared = load(settings)
     except UprSettingsError as exc:
         raise UprPipelineError(f"settings file unreadable: {exc}") from exc
     if not declared["version_matches"]:
@@ -390,6 +378,27 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         raise UprPipelineError(
             "these settings are outside the supported set — SLink only runs configurations "
             "it can itself produce: " + "; ".join(odd))
+    return declared
+
+
+def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir: str,
+                 java: str = "java") -> dict:
+    """Randomize one ROM per player and prove the pair is usable.
+
+    ``sources`` maps player id -> clean ROM path; the two may be different titles (a Red/Blue
+    pairing is normal) but must use the SAME settings file.
+    """
+    if set(sources) != {"a", "b"}:
+        raise UprPipelineError(f"expected sources for players a and b, got {sorted(sources)}")
+
+    for path in sources.values():
+        if not os.path.isfile(path):
+            raise UprPipelineError(f"source ROM not found: {path}")
+    try:
+        family = family_of(sources)
+    except RomScanError as exc:
+        raise UprPipelineError(f"source ROM could not be identified: {exc}") from exc
+    admit_settings(settings_path, family)
 
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}

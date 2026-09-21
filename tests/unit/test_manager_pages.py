@@ -150,6 +150,65 @@ async def test_roms_are_found_in_the_project_folder_with_a_verdict(manager_clien
     assert j["roms"][0]["clean"] is False and j["roms"][0]["title"] == "not a Gen 1 cartridge"
 
 
+@pytest.mark.asyncio
+async def test_presets_are_named_specs_the_randomizer_would_accept(manager_client, manager_dir):
+    """A preset is saved through the same builder the randomizer uses, so loading one can
+    never produce a spec the pipeline refuses; names are case-insensitive and replace."""
+    ok = await (await manager_client.post("/api/presets", json={"name": "Chaos", "spec": {"wild": "random"}})).json()
+    assert ok["ok"] and ok["preset"]["name"] == "Chaos"
+    bad = await manager_client.post("/api/presets", json={"name": "Bad", "spec": {"types": "random"}})
+    assert bad.status == 400 and "types" in (await bad.json())["error"]
+    assert (await manager_client.post("/api/presets", json={"name": "", "spec": {}})).status == 400
+    await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}})
+    j = await (await manager_client.get("/api/presets")).json()
+    assert [(p["name"], p["spec"]["wild"]) for p in j["presets"]] == [("chaos", "area")]
+    assert (manager_dir / "presets.json").exists()
+    assert (await manager_client.post("/api/presets/delete", json={"name": "CHAOS"})).status == 200
+    assert (await manager_client.post("/api/presets/delete", json={"name": "CHAOS"})).status == 404
+    assert (await (await manager_client.get("/api/presets")).json())["presets"] == []
+
+
+@pytest.mark.asyncio
+async def test_settings_export_and_import_are_upr_files_through_the_pipeline_gates(manager_client):
+    """Export writes the .rnqs the randomizer would write for the spec (UPR's GUI opens it);
+    import reads one back through admit_settings, so a GUI-built file that randomizes
+    types is refused by name instead of being silently read as 'unchanged'."""
+    from server.upr_settings import build_spec
+    spec = {"wild": "area", "wild_levels": 25, "trainers": "unchanged"}
+    resp = await manager_client.post("/api/randomizer/settings/export", json={"spec": spec, "name": "Hard mode!"})
+    assert resp.status == 200 and resp.headers["Content-Disposition"].endswith('"Hard_mode.rnqs"')
+    blob = await resp.read()
+    assert blob == build_spec(spec), "the same bytes handle_randomize writes"
+
+    async def imp(name, data):
+        form = aiohttp.FormData()
+        form.add_field("file", data, filename=name, content_type="application/octet-stream")
+        return await (await manager_client.post("/api/randomizer/settings/import", data=form)).json()
+
+    back = await imp("Hard_mode.rnqs", blob)
+    assert back["ok"] and back["spec"]["wild"] == "area" and back["spec"]["wild_levels"] == 25
+    assert "wild level curve +25%" in back["summary"]
+    forbidden = await imp("types.rnqs", _rnqs_with_types_randomized())
+    assert forbidden["ok"] is False and "types" in forbidden["error"]
+    garbage = await imp("x.rnqs", b"not a settings file")
+    assert garbage["ok"] is False and "unreadable" in garbage["error"]
+    assert (await manager_client.post("/api/randomizer/settings/export", json={"spec": {"bogus": 1}})).status == 400
+
+
+def _rnqs_with_types_randomized() -> bytes:
+    """A file UPR's GUI could produce that SLink must refuse: build the default file and
+    clear the types_UNCHANGED bit the way Settings.toString() lays it out."""
+    from server.upr_settings import FLAGS, build_spec, load
+    raw = bytearray(build_spec({}))
+    parsed = load(bytes(raw))
+    data = bytearray(parsed["data"])
+    i, bit = FLAGS["types_UNCHANGED"]
+    data[i] &= ~(1 << bit) & 0xFF
+    data[FLAGS["types_COMPLETELY_RANDOM"][0]] |= 1 << FLAGS["types_COMPLETELY_RANDOM"][1]
+    from server.upr_settings import _encode
+    return _encode(data, parsed["rom_name"])
+
+
 def test_a_cartridge_says_which_family_it_belongs_to():
     """The picker greys a pure dump on a vanilla run and the reverse; that needs the family
     on every described cartridge, not only on a pair (family_of)."""
@@ -186,6 +245,7 @@ async def test_uploaded_rom_lands_in_roms_and_a_same_named_different_file_is_kep
 async def test_rom_download_is_404_until_a_pair_exists(manager_client, manager_dir):
     run = _stopped_run(manager_dir)
     assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/a")).status == 404
+    assert (await manager_client.get(f"/api/runs/{run['run_id']}/settings.rnqs")).status == 404
     assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/c")).status == 400
 
 

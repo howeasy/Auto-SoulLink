@@ -4,8 +4,8 @@
  * spreads it into its own object. `form` is window.SLINK_RANDOMIZER: the options the
  * pipeline supports (upr_settings.OPTIONS — the same table its allowlist is computed
  * from, in display order with kind/choices/range), the jar found on this machine, the ROMs
- * found in the SLink folder, and the run's current pair when there is one. `rdraft.spec`
- * is posted back as-is.
+ * found in the SLink folder, the saved presets, and the run's current pair when there is
+ * one. `rdraft.spec` is posted back as-is.
  *
  * `randomizePair(runId)` posts the draft to a run and resolves with the server's answer.
  * Every refusal names the setting or the file to fix, so the reason is surfaced verbatim.
@@ -25,6 +25,10 @@ function randomizerFields(form) {
       spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
     roms: form.roms || [],
+    // Named specs kept on this Manager (/api/presets); `preset` is the one the list shows,
+    // `presetName` what Save writes.
+    presets: form.presets || [],
+    preset: '', presetName: '', presetNote: '',
     // The family this run takes (upr_settings.FAMILY_*): fixed on a run's page, follows the
     // game chip in the creator (setFamily). null = any Gen 1 cartridge.
     family: form.family || null,
@@ -38,91 +42,65 @@ function randomizerFields(form) {
       return out;
     },
     resetSpec() { this.rdraft.spec = defaultSpec(form); },
-    watchRandomizer() {
-      var self = this;
-      this.autoPick();
-      this.preflight();
-      ['rdraft.jar', 'rdraft.rom_a', 'rdraft.rom_b'].forEach(function (k) {
-        self.$watch(k, function () { self.preflight(); });
-      });
-      // A different jar changes which pure ROMs are usable.
-      this.$watch('rdraft.jar', function () { self.scanRoms(); });
+    // ── presets: the spec by name, on this Manager or as a file ────────────────────────
+    // Only known options land, over the defaults, so an older or hand-edited preset
+    // still loads; the server checks the same thing before it saves.
+    applySpec(spec) {
+      var known = defaultSpec(form);
+      Object.keys(spec || {}).forEach(function (k) { if (k in known) known[k] = spec[k]; });
+      this.rdraft.spec = known;
     },
-    async preflight() {
-      var q = new URLSearchParams({ jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b });
-      try { this.pre = await (await fetch('/api/randomizer/status?' + q)).json(); } catch (_) { this.pre = null; }
+    loadPreset(name) {
+      var p = this.presets.find(function (x) { return x.name === name; });
+      if (!p) return;
+      this.applySpec(p.spec); this.presetName = p.name; this.presetNote = 'Loaded "' + p.name + '"';
     },
-    async scanRoms() {
-      try {
-        var j = await (await fetch('/api/roms?' + new URLSearchParams({ jar: this.rdraft.jar }))).json();
-        if (j.ok) { this.roms = j.roms; this.autoPick(); }
-      } catch (_) { /* the list keeps what it had */ }
+    async savePreset() {
+      var name = this.presetName.trim();
+      if (!name) { this.presetNote = 'Give the preset a name.'; return; }
+      var res = await fetch('/api/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                             body: JSON.stringify({ name: name, spec: this.rdraft.spec }) });
+      var j = await res.json();
+      if (!j.ok) { this.presetNote = j.error || 'Save failed'; return; }
+      this.presets = this.presets.filter(function (x) { return x.name.toLowerCase() !== name.toLowerCase(); }).concat([j.preset])
+        .sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
+      this.preset = j.preset.name; this.presetNote = 'Saved "' + j.preset.name + '"';
     },
-    // A cartridge this run can take: clean, and of its family when it names one.
-    usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : ''; },
-    // The option's words: the cartridge, and why it is greyed when it is.
-    romNote(r) {
-      if (this.usable(r)) return r.title;
-      if (r.clean && this.family) return r.title + ' (' + this.familyLabel(r.family) + '; this run is ' + this.familyLabel(this.family) + ')';
-      return r.title || 'not a clean dump';
+    async deletePreset() {
+      var name = this.preset;
+      if (!name || !confirm('Delete preset "' + name + '"?')) return;
+      var j = await (await fetch('/api/presets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                          body: JSON.stringify({ name: name }) })).json();
+      if (!j.ok) { this.presetNote = j.error || 'Delete failed'; return; }
+      this.presets = this.presets.filter(function (x) { return x.name !== name; });
+      this.preset = ''; this.presetNote = 'Deleted "' + name + '"';
     },
-    // The list, grouped: what this run can take first, then the other family, then the rest.
-    romGroups() {
-      var self = this, groups = [];
-      function add(label, test) {
-        var rs = self.roms.filter(test);
-        if (rs.length) groups.push({ label: label, roms: rs });
-      }
-      if (this.family) {
-        add(this.familyLabel(this.family) + ' — this run', function (r) { return self.usable(r); });
-        add('other family', function (r) { return r.clean && !self.usable(r); });
-      } else {
-        add('pureRGB', function (r) { return r.clean && r.family === 'gen1_purergb'; });
-        add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
-      }
-      add('not usable', function (r) { return !r.clean; });
-      return groups;
+    // The file that leaves this machine is UPR's own: a .rnqs, which UPR's GUI opens and
+    // which is what a run keeps. Export builds it from the form; import admits one through
+    // the pipeline's gates and reads it back -- a refusal names what the file changes.
+    async exportSettings() {
+      var name = this.presetName.trim() || 'slink';
+      var res = await fetch('/api/randomizer/settings/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                                 body: JSON.stringify({ spec: this.rdraft.spec, name: name }) });
+      if (!res.ok) { var j = await res.json(); this.presetNote = j.error || 'Export failed'; return; }
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob()); a.download = name.replace(/[^\w-]+/g, '_') + '.rnqs';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      this.presetNote = "Exported " + a.download + " — UPR's own settings file; it opens in the randomizer's GUI too.";
     },
-    // The creator's game chip changed: a pick of the wrong family goes, and the pair is
-    // chosen again from what fits.
-    setFamily(f) {
-      var self = this;
-      this.family = f || null;
-      ['rom_a', 'rom_b'].forEach(function (k) {
-        var r = self.roms.find(function (x) { return x.path === self.rdraft[k]; });
-        if (r && !self.usable(r)) self.rdraft[k] = '';
-      });
-      this.autoPick();
-    },
-    // Two usable dumps in the folder and nothing chosen yet: that is the pair. Set after the
-    // tick so the <option>s exist when x-model applies the value to the <select>.
-    autoPick() {
-      var self = this;
-      this.$nextTick(function () {
-        var ok = self.roms.filter(function (r) { return self.usable(r); });
-        if (!ok.length || self.rdraft.rom_a || self.rdraft.rom_b) return;
-        self.rdraft.rom_a = ok[0].path;
-        self.rdraft.rom_b = (ok[1] || ok[0]).path;
-      });
-    },
-    // The browser's own file dialog; the file lands in the SLink folder and is selected.
-    async upload(ev, field) {
+    async importSettings(ev) {
       var file = ev.target.files && ev.target.files[0];
       ev.target.value = '';
       if (!file) return;
-      this.uploading = field; this.error = '';
       try {
         var body = new FormData(); body.append('file', file, file.name);
-        var j = await (await fetch('/api/roms', { method: 'POST', body: body })).json();
-        if (!j.ok) { this.error = j.error || 'Upload failed'; return; }
-        if (j.kind === 'jar') { this.rdraft.jar = j.path; }
-        else {
-          if (!this.roms.some(function (r) { return r.path === j.path; })) this.roms.push(j.rom);
-          this.rdraft[field] = j.path;
-        }
-      } catch (e) { this.error = String(e); }
-      finally { this.uploading = ''; }
+        var j = await (await fetch('/api/randomizer/settings/import', { method: 'POST', body: body })).json();
+        if (!j.ok) { this.presetNote = file.name + ': ' + (j.error || 'not admitted'); return; }
+        this.applySpec(j.spec);
+        this.presetName = file.name.replace(/\.rnqs$/i, '');
+        this.presetNote = 'Loaded ' + file.name + ' — ' + j.summary + '. Save keeps it on this Manager.';
+      } catch (e) { this.presetNote = 'Import failed: ' + e.message; }
     },
     randomizeBody() {
       return { jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b, spec: this.rdraft.spec };

@@ -381,6 +381,10 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-md); 
 .mk-field span { color: var(--c-dim); }
 .mk-field :is(input, select) { padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 6px; background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: var(--fs-base); min-width: 0; }
 .mk-field select { text-overflow: ellipsis; }
+/* the preset row: saved list, name, actions; wraps on a narrow page */
+.mk-presets { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.mk-presets :is(input, select) { padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 6px; background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: var(--fs-md); min-width: 0; min-height: 40px; box-sizing: border-box; }
+.mk-presets select { flex: 1 1 12em; } .mk-presets input[type=text] { flex: 1 1 10em; }
 /* a text field or select with its file-dialog button */
 .mk-filerow { display: flex; gap: var(--space-1); }
 .mk-filerow > :is(input, select) { flex: 1; }

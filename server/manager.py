@@ -305,6 +305,25 @@ def _save_registry(runs: list[dict]):
     atomic_write_json(REGISTRY_PATH, document)
 
 
+# ── Randomizer presets: a named spec, kept on this Manager beside the registry ────────
+def _presets_path() -> str:
+    return os.path.join(MANAGER_DIR, "presets.json")
+
+
+def _load_presets() -> list[dict]:
+    try:
+        with open(_presets_path(), encoding="utf-8") as f:
+            return [p for p in json.load(f).get("presets", []) if isinstance(p, dict) and p.get("name")]
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError) as exc:
+        raise RegistryError(f"presets.json is unreadable: {exc}") from exc
+
+
+def _save_presets(presets: list[dict]) -> None:
+    atomic_write_json(_presets_path(), {"presets": sorted(presets, key=lambda p: p["name"].lower())})
+
+
 def _update_run(run_id: str, **fields) -> dict | None:
     """Re-read, patch one run, save. Handlers that awaited between their read and their
     write (start: spawn; new: spawn) used to write a stale snapshot over whatever the
@@ -793,6 +812,7 @@ class RunManager:
             # follows the game chip through game_family instead).
             "family": _game_family(run.get("game")) if run else None,
             "game_family": GAME_FAMILY,
+            "presets": _load_presets(),
             "current": run.get("randomizer") if run else None,
         }
 
@@ -1093,6 +1113,107 @@ class RunManager:
         except OSError as exc:
             log.warning("could not write rom_contract.json for %s: %s", run_id, exc)
         return web.json_response({"ok": True, "randomizer": run["randomizer"]})
+
+    async def handle_settings_export(self, request: web.Request) -> web.Response:
+        """POST /api/randomizer/settings/export {spec, name?} — the form's settings as a UPR
+        .rnqs: the file UPR's own GUI opens, the same bytes handle_randomize would write
+        for this spec (upr_settings.build_spec)."""
+        from server.upr_settings import UprSettingsError, build_spec
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        spec = body.get("spec")
+        if not isinstance(spec, dict):
+            return web.json_response({"ok": False, "error": "spec is required"}, status=400)
+        try:
+            blob = build_spec(spec)
+        except UprSettingsError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        name = re.sub(r"[^\w-]+", "_", str(body.get("name") or "slink")).strip("_") or "slink"
+        return web.Response(body=blob, headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": f'attachment; filename="{name}.rnqs"',
+        })
+
+    async def handle_settings_import(self, request: web.Request) -> web.Response:
+        """POST /api/randomizer/settings/import (multipart `file`) — a .rnqs from UPR's GUI
+        or from another run, admitted by the pipeline's own gates (version, the named
+        dangers, the allowlist) and read back as the form's spec. A refusal names what the
+        file changes, because spec_from_parsed alone would drop it silently."""
+        from server.upr_pipeline import UprPipelineError, admit_settings
+        from server.upr_settings import spec_from_parsed, summarize
+        if request.content_type != "multipart/form-data":
+            return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
+        reader = await request.multipart()
+        field = await reader.next()
+        while field is not None and field.name != "file":
+            field = await reader.next()
+        if field is None:
+            return web.json_response({"ok": False, "error": "send the .rnqs as `file`"}, status=400)
+        raw = await field.read(decode=False)
+        if len(raw) > 64 << 10:
+            return web.json_response({"ok": False, "error": "not a settings file (too large)"}, status=400)
+        try:
+            parsed = admit_settings(raw)
+        except UprPipelineError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        spec = spec_from_parsed(parsed)
+        return web.json_response({"ok": True, "spec": spec, "summary": summarize(spec),
+                                  "rom_name": parsed.get("rom_name", "")})
+
+    async def handle_run_settings(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/settings.rnqs — the settings file the pair was built
+        with, as UPR's GUI would open it."""
+        run_id = request.match_info["run_id"]
+        run = _find_run(_load_registry(), run_id)
+        path = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")
+        if run is None or not run.get("randomizer") or not os.path.isfile(path):
+            return web.json_response({"ok": False, "error": "no randomized pair for this run"}, status=404)
+        safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
+        return web.FileResponse(path, headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": f'attachment; filename="slink_{safe_name}.rnqs"',
+        })
+
+    async def handle_presets(self, request: web.Request) -> web.Response:
+        """GET /api/presets — every saved randomizer preset: {name, spec, updated_at}."""
+        return web.json_response({"ok": True, "presets": _load_presets()})
+
+    async def handle_preset_save(self, request: web.Request) -> web.Response:
+        """POST /api/presets {name, spec} — save (or replace) a preset. The spec goes through
+        the same builder the randomizer uses, so a saved preset is one it will accept."""
+        from server.upr_settings import UprSettingsError, build_spec
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        name = str(body.get("name", "")).strip()[:60]
+        spec = body.get("spec")
+        if not name or not isinstance(spec, dict):
+            return web.json_response({"ok": False, "error": "name and spec are required"}, status=400)
+        try:
+            build_spec(spec)
+        except UprSettingsError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        presets = [p for p in _load_presets() if p["name"].lower() != name.lower()]
+        preset = {"name": name, "spec": spec, "updated_at": datetime.now(UTC).isoformat()}
+        _save_presets(presets + [preset])
+        return web.json_response({"ok": True, "preset": preset})
+
+    async def handle_preset_delete(self, request: web.Request) -> web.Response:
+        """POST /api/presets/delete {name}."""
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        name = str(body.get("name", "")).strip()
+        presets = _load_presets()
+        kept = [p for p in presets if p["name"].lower() != name.lower()]
+        if len(kept) == len(presets):
+            return web.json_response({"ok": False, "error": "no such preset"}, status=404)
+        _save_presets(kept)
+        return web.json_response({"ok": True})
 
     async def handle_randomizer_status(self, request: web.Request) -> web.Response:
         """GET /api/randomizer/status?jar=&rom_a=&rom_b= — the checks that cost
@@ -1531,6 +1652,12 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
     app.router.add_get("/api/randomizer/status",      manager.handle_randomizer_status)
+    app.router.add_post("/api/randomizer/settings/export", manager.handle_settings_export)
+    app.router.add_post("/api/randomizer/settings/import", manager.handle_settings_import)
+    app.router.add_get("/api/runs/{run_id}/settings.rnqs", manager.handle_run_settings)
+    app.router.add_get("/api/presets",                manager.handle_presets)
+    app.router.add_post("/api/presets",               manager.handle_preset_save)
+    app.router.add_post("/api/presets/delete",        manager.handle_preset_delete)
     app.router.add_get("/api/roms",                   manager.handle_roms)
     app.router.add_post("/api/roms",                  manager.handle_rom_upload)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
