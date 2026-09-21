@@ -50,12 +50,15 @@ _CITATION_ROOTS = ("docs/", "data/games/", "lua/", "src/", "patch/", "include/")
 
 # The savestates tools/mkstates.py produces (lua/tests/mkstate.lua kinds town|battle).
 _KNOWN_STATES = {
+    # tools/mkstates.py kinds town|battle, plus the ball-pocket fixture
+    # lua/tests/mkstate_gen3_rr_fill.lua (SLINK_GIVE_BALLS) produces.
+    "slink_prebattle_balls.State",
     "slink_prebattle.State", "slink_battle.State", "slink_actionmenu.State",
     "slink_movemenu.State", "slink_overworld.State", "slink_door.State",
-    "slink_pokecenter.State",
+    "slink_pokecenter.State", "slink_pokecenter_full.State",
 }
 
-_RUNNABLE = {"battle_to_field", "wild_faint", "door_warp", "pc_ops", "save"}
+_RUNNABLE = {"battle_to_field", "wild_faint", "wild_catch", "door_warp", "pc_ops", "save"}
 
 # RAM/coordinate/counter/predicate terminal helpers this driver actually uses.
 _TERMINAL_HELPERS = (
@@ -105,12 +108,28 @@ emu = {
 
 -- Rising-edge button counting: G.tap holds a button for 3 frames, so an edge count is a PRESS
 -- count, which is what a menu reacts to.
+local DXY = { Up = {0,-1}, Down = {0,1}, Left = {-1,0}, Right = {1,0} }
+
 joypad = {
     set = function(t)
         t = t or {}
         if t.A and not FAKE.a_down then FAKE.a = FAKE.a + 1 end
         if t.Down and not FAKE.d_down then FAKE.down = FAKE.down + 1 end
         FAKE.a_down, FAKE.d_down = t.A and true or false, t.Down and true or false
+        -- Movement, on the same 12-frame hold playlib step uses. FAKE.walls is a set of
+        -- "x,y" tiles that refuse entry, so a fake map can be a real obstacle course.
+        local dir
+        for _, d in ipairs({ "Up", "Down", "Left", "Right" }) do if t[d] then dir = d end end
+        if dir then
+            if FAKE.dir == dir then FAKE.held = FAKE.held + 1 else FAKE.dir, FAKE.held = dir, 1 end
+            if FAKE.held == 12 then
+                local x, y = FAKE.get_pos()
+                local nx, ny = x + DXY[dir][1], y + DXY[dir][2]
+                if not (FAKE.walls or {})[nx .. "," .. ny] then FAKE.set_pos(nx, ny) end
+            end
+        else
+            FAKE.dir, FAKE.held = nil, 0
+        end
         FAKE.buttons = t
     end,
     get = function() return {} end,
@@ -134,6 +153,7 @@ FAKE.BATTLE_MONS = 0x02023BE4
 FAKE.CTRL        = 0x03004FE0
 FAKE.ACTION_MENU = 0x0802E439
 FAKE.RESULTS     = 0x03004F90
+FAKE.BALLS       = 0x0203C354
 
 function FAKE.init(cp)
     FAKE.cp        = cp
@@ -149,6 +169,7 @@ end
 function FAKE.reset()
     FAKE.ram, FAKE.frame, FAKE.log = {}, 0, {}
     FAKE.a, FAKE.down, FAKE.on_frame = 0, 0, nil
+    FAKE.dir, FAKE.held, FAKE.walls = nil, 0, {}
     FAKE.a_down, FAKE.d_down = false, false
     FAKE.set_sb1(true)
     FAKE.set_map(3, 1)
@@ -167,12 +188,21 @@ end
 function FAKE.set_sb1(valid) FAKE.w32(FAKE.sb1ptr, valid and FAKE.sb1 or 0) end
 function FAKE.set_map(g, n) w8(FAKE.sb1 + 4, g); w8(FAKE.sb1 + 5, n) end
 function FAKE.set_pos(x, y) FAKE.w16(FAKE.sb1 + 0, x & 0xFFFF); FAKE.w16(FAKE.sb1 + 2, y & 0xFFFF) end
+function FAKE.get_pos()
+    return memory.read_s16_le(FAKE.sb1 + 0), memory.read_s16_le(FAKE.sb1 + 2)
+end
 function FAKE.set_menu(on) FAKE.w32(FAKE.CTRL, on and FAKE.ACTION_MENU or 0) end
 function FAKE.set_bmon(hp, maxhp)
     FAKE.w16(FAKE.BATTLE_MONS + 0x28, hp)
     FAKE.w16(FAKE.BATTLE_MONS + 0x2C, maxhp)
 end
 function FAKE.set_faints(n) w8(FAKE.RESULTS, n) end
+function FAKE.set_outcome(n) w8(0x02023E8A, n) end
+--- CFRU ball pocket slot 0: a raw ItemSlot {u16 itemId, u16 quantity}.
+function FAKE.set_balls(id, qty)
+    FAKE.w16(FAKE.BALLS, id)
+    FAKE.w16(FAKE.BALLS + 2, qty)
+end
 
 --- `list` is an array of {pid, otid, filler}; each becomes a 100-byte party record.
 function FAKE.set_party(list)
@@ -311,7 +341,7 @@ def test_open_legs_are_marked_carry_a_reason_and_have_no_run_body(legs):
             saw_open = True
             assert leg["open_reason"], f"leg {leg['name']!r} is open with no reason"
             assert leg["run"] is None, f"open leg {leg['name']!r} carries an uncallable run body"
-    assert saw_open, "expected wild_catch/pc_move_full_party to be open (unpinned RR bag)"
+    assert saw_open, "expected pc_move_full_party to be open (no full-party savestate)"
 
 
 def test_the_runnable_legs_are_the_ones_the_card_asked_for(legs):
@@ -347,36 +377,30 @@ def test_no_run_body_terminates_on_a_bare_frame_count():
         )
 
 
-def test_the_loop_loads_each_legs_own_state_and_checks_it_before_running():
-    """The first lane run walked door_warp straight out of wild_faint's leftovers and failed
-    with "map never changed from 1024". The fix is structural: load, then check, then run."""
-    loop = _SCRIPT_SRC.split("local reached, skipped")[1]
-    load_at = loop.index("savestate.load")
-    check_at = loop.index("leg.check")
-    run_at = loop.index("leg.run(cp)")
-    assert load_at < check_at < run_at, "the loop must load the state, then check it, then run"
-    assert "state_path(leg.state)" in loop
-
-
-def test_open_legs_are_not_counted_as_reached():
-    loop = _SCRIPT_SRC.split("local reached, skipped")[1]
-    assert loop.count("reached[#reached + 1]") == 1
-    assert loop.index("leg.run(cp)") < loop.index("reached[#reached + 1]")
-    assert "skipped[#skipped + 1]" in loop
-
-
-def test_shadow_start_and_poll_failures_are_fatal():
-    assert "shadow: observer start failed" in _SCRIPT_SRC
-    assert "shadow: poll failed" in _SCRIPT_SRC
-    # ...and the poll failure must be checked where it can still stop the run.
-    loop = _SCRIPT_SRC.split("local reached, skipped")[1]
-    assert "if shadow_err then" in loop
+def test_the_driver_owns_no_runner_of_its_own():
+    """The leg runner, the per-leg savestate load, the precondition check, the open-leg
+    reporting and the shadow block all live in lua/tests/playlib.lua now, and their BEHAVIOUR is
+    tested there (tests/unit/test_playlib.py) against a fake game rather than by scanning this
+    source. What this file still owns is the wiring: that the driver hands playlib the right
+    result path and lets it run the legs."""
+    assert 'dofile(WT .. "/lua/tests/playlib.lua")' in _SCRIPT_SRC
+    assert "play.main(LEGS, {" in _SCRIPT_SRC
+    for gone in ("local reached, skipped", "local function mash_a", "local function state_path",
+                 "local function in_battle", "local function on_field", "for i = from_idx"):
+        assert gone not in _SCRIPT_SRC, f"{gone} is playlib's job now, not the driver's"
 
 
 def test_the_driver_never_mashes_start_in_the_overworld():
     """G.mash pulses Start every 16 frames, which opens the START menu the moment a leg lands
     back on the field -- the reason this driver carries its own A-only mash."""
     assert "G.mash(" not in _SCRIPT_SRC
+
+
+def test_the_shared_runtime_is_bound_with_the_rr_game_facts():
+    """playlib knows nothing about any game: whatever it is not given, it cannot read."""
+    bind = _SCRIPT_SRC.split("PL.bind(G, {")[1].split("})")[0]
+    assert "party_count_addr = PARTY_COUNT_ADDR" in bind
+    assert "state_dir" in bind
 
 
 def test_duo_precedent_constants_are_labelled_as_such():
@@ -473,7 +497,7 @@ def _pc_scenario(lua, fake, after_withdraw: str):
     fake engine hands back -- which is where each negative below differs."""
     fake.set_battle(False)
     fake.set_overworld(True)
-    fake.set_pos(15, 7)                # already on the PC approach tile: no walking to model
+    fake.set_pos(11, 8)                # slink_pokecenter_full.State stands here
     lua.execute(f"""
         FAKE.set_party({_PARTY_ABC})
         FAKE.on_frame = function()
@@ -573,3 +597,109 @@ def test_wild_faint_will_not_call_it_a_faint_without_the_engines_own_counter(lua
     assert "RESULT: FAIL" in log
     assert "no witnessed player faint" in log
     assert "hp_zero=true" in log        # the HP transition WAS seen; the counter is what failed
+
+
+# -- behaviour: wild_catch (the pinned CFRU bag sequence) --------------------------------------
+
+
+def _catch_world(lua, fake, *, balls=5, throws_to_catch=1):
+    """A battle at the action menu with `balls` Poke Balls in CFRU's EWRAM pocket. The pinned
+    sequence sends exactly three A presses per throw (open BAG, select, use), so the fake
+    resolves a throw on every third one."""
+    fake.set_battle(True)
+    fake.set_overworld(False)
+    fake.set_menu(True)
+    fake.set_balls(4, balls)
+    fake.set_outcome(0)
+    lua.execute(f"""
+        FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xA0}} }})
+        FAKE.on_frame = function()
+            local throws = FAKE.a // 3
+            if throws >= {throws_to_catch} then
+                FAKE.set_menu(false)
+                FAKE.set_outcome(7)                       -- B_OUTCOME_CAUGHT
+                if FAKE.a >= {throws_to_catch} * 3 + 4 then
+                    FAKE.set_battle(false); FAKE.set_overworld(true)
+                    FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xA0}},
+                                     {{0xCAFE0002, 0x2222, 0xB0}} }})
+                end
+            end
+        end
+    """)
+
+
+def test_wild_catch_refuses_a_state_with_no_balls_in_the_pocket(lua, fake, legs):
+    """The fixture IS the precondition: opening the BAG with an empty ball pocket wanders
+    through a menu it cannot use and fails much later with something misleading."""
+    fake.set_battle(True)
+    fake.set_balls(0, 0)
+    why = _leg(legs, "wild_catch")["check"](lua.globals().FAKE.cp)
+    assert why is not None
+    assert "make the balls state first" in why
+    assert "slink_prebattle_balls.State" in why
+
+
+def test_wild_catch_accepts_a_pocket_holding_poke_balls(lua, fake, legs):
+    fake.set_balls(4, 5)
+    assert _leg(legs, "wild_catch")["check"](lua.globals().FAKE.cp) is None
+
+
+def test_wild_catch_passes_when_the_ball_lands_and_the_party_grows(lua, fake, legs):
+    _catch_world(lua, fake)
+    ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+    assert ok, f"{err}\n{log}"
+    assert "outcome=7, party 1 -> 2" in log
+
+
+def test_wild_catch_retries_with_the_next_ball_after_a_miss(lua, fake, legs):
+    """A miss returns to the action menu; the bound is the fixture ball count, not a frame
+    count, so the sequence simply runs again."""
+    _catch_world(lua, fake, balls=5, throws_to_catch=3)
+    ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+    assert ok, f"{err}\n{log}"
+    assert "throw 1: outcome=0, back at the menu" in log
+    assert "after 3 throw(s)" in log
+
+
+def test_wild_catch_fails_when_no_ball_ever_lands(lua, fake, legs):
+    _catch_world(lua, fake, balls=2, throws_to_catch=99)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "gBattleOutcome is 0, not 7" in log
+
+
+def test_wild_catch_fails_when_the_outcome_says_caught_but_the_party_did_not_grow(lua, fake, legs):
+    """B_OUTCOME_CAUGHT with room in the party and no new record means the mon did not actually
+    reach the party -- the acquisition site never ran, whatever the text said."""
+    _catch_world(lua, fake)
+    lua.execute("""
+        local inner = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            inner(f)
+            FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })     -- the party never grows
+        end
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok
+    assert "the party went 1 -> 1" in log
+
+
+def test_the_pokecenter_path_is_bfs_pinned_against_the_parsed_collision_grid(module):
+    """RR has no pret source, but its map headers parse, so this path is held to the same
+    standard as FireRed's: a BFS over the collision grid read out of the ROM, with the NPC
+    spawn tiles blocked. The grid is re-stated here so the path cannot drift away from it."""
+    rows = ["#.#############", "###########P###", "....###..##....", "....#######....",
+            "...............", "...............", "#..........##..", "...........##..",
+            "...............", "###############"]
+    npcs = {(2, 3), (4, 7), (7, 2), (8, 2), (10, 6), (12, 5)}
+    delta = {"Left": (-1, 0), "Right": (1, 0), "Up": (0, -1), "Down": (0, 1)}
+    path = module.PATHS["pokecenter_start_to_pc"]
+    x, y = path["from"][1], path["from"][2]
+    dirs = [path["dirs"][i] for i in range(1, len(path["dirs"]) + 1)]
+    for step in dirs:
+        x, y = x + delta[step][0], y + delta[step][1]
+        assert rows[y][x] == ".", f"step {step} walks into collision at ({x},{y})"
+        assert (x, y) not in npcs, f"step {step} walks into an NPC at ({x},{y})"
+    assert (x, y) == (path["to"][1], path["to"][2]) == (11, 2)
+    assert rows[y - 1][x] == "P", "the path does not end below the PC metatile"

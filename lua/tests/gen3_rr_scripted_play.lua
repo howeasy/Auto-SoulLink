@@ -26,25 +26,26 @@
 --     ran door_warp on whatever wild_faint left behind and failed with "map never changed from
 --     1024" — that is the bug this rule exists to kill), then validates the loaded situation
 --     with `check` before a single button is pressed.
---   * walking is minimal, bounded and RAM-verified: pacing in place for encounters, holding a
---     direction into a door, or walk_to()'s greedy axis-at-a-time approach, every step checked
---     against G.pos / G.map. No direction list is asserted to be a correct route.
+--   * walking is pacing in place for encounters, holding a direction into a door, or a
+--     BFS path over a collision grid parsed out of the ROM itself (see PATHS) -- every step
+--     verified by G.pos, every path refusing to start from the wrong tile.
 --   * terminals are RAM observables. Never a frame count, and never a one-sided one: a faint
 --     needs a positive-to-zero HP transition plus the engine's own faint counter, and a PC
 --     round trip needs the party record KEY back, not merely a count that returned to where it
 --     started.
 --
 -- WHAT IS NOT PINNED (each leg repeats its own; nothing is hidden):
---   * RR/CFRU menu navigation. No proven RR input sequence exists anywhere in lua/tests/duo/*
---     or lua/tests/test_live_*.lua for the battle BAG (searched 2026-09-21: the only bag work
---     in the tree is Gen 1's, lua/tests/duo/duo_gen1_main.lua) — so wild_catch is OPEN, not
---     mashed-and-hoped. The PC storage menu is likewise unpinned but IS attempted, because its
---     keyed oracle cannot pass on a wrong press.
---   * RR's Pokémon Center 1F tile layout. The FireRed approach tile (11,2) is WRONG on RR: the
---     first lane run stopped at (11,8)/(10,7) on map 1284. The default below is the coordinator's
---     screenshot estimate (15,7), approached facing Up — AN ESTIMATE, not a pin. It is verified
---     by walking there and interacting; when it is wrong the leg fails loudly and names
---     SLINK_RR_PC_TILE="x,y".
+--   * The battle BAG now IS pinned — Right, A, Right, Right, A, A from the action menu, with
+--     the balls read back from CFRU's own EWRAM pocket (docs/gen3/probes/
+--     census_rr_faint_v3b_catch_2026-09-21.txt, 2026-09-21). wild_catch was OPEN for exactly
+--     as long as that sequence did not exist; it is a run leg now.
+--   * The PC STORAGE menu is still unpinned. It is attempted anyway, because its keyed oracle
+--     cannot pass on a wrong press — unlike a count-only one.
+--   * NOT map geometry, any more. RR ships no pret source but its map headers parse, so the
+--     Pokémon Center walk is a BFS over the collision grid read out of the ROM (see PATHS),
+--     to the same standard as the FireRed driver's paths. The screenshot estimate that
+--     preceded it, and the SLINK_RR_PC_TILE knob that existed to correct it, are both gone:
+--     a guess with a knob on it is still a guess.
 --
 -- RESUME: SLINK_GEN3_PLAY_FROM=<leg name> skips every leg before it. Because each leg loads its
 -- own declared savestate, resuming is exact: there is no "assume the previous leg left the
@@ -53,11 +54,12 @@
 --
 -- Environment: SLINK_ROOT, SLINK_GEN3_CHECKPOINT, SLINK_GEN3_TITLE=radical_red (see
 -- gen3_boot_check.lua), SLINK_STATE (path or bare file name), SLINK_STATE_DIR (default
--- E:/Howard/Bizhawk/GBA/State), SLINK_GEN3_PLAY_FROM, SLINK_SHADOW, SLINK_RR_PC_TILE.
+-- E:/Howard/Bizhawk/GBA/State), SLINK_GEN3_PLAY_FROM, SLINK_SHADOW.
 
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via the gen3 fixture/gate tooling")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
+local PL = dofile(WT .. "/lua/tests/playlib.lua")
 
 -- ── RR RAM observables ─────────────────────────────────────────────────────────────────────
 -- PROFILE FACTS: these come from the radical_red profile (lua/games/gen3_frlge.lua:192-260 /
@@ -73,6 +75,12 @@ local MON_SIZE            = 100         -- vanilla 100-byte party record (lua/te
 local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
 local BM_HP, BM_MAXHP     = 0x28, 0x2C  -- struct BattlePokemon (lua/tests/duo/scenario_explode.lua:25-26)
 local B_OUTCOME_CAUGHT    = 7           -- pret include/constants/battle.h:82
+-- RR Poke Balls are NOT in the vanilla SaveBlock1 pocket: the CFRU expanded bag puts them
+-- at a fixed EWRAM base, 50 RAW ItemSlots of {u16 itemId, u16 quantity}
+-- (docs/gen3/research/rr_bag_layout.md; lua/games/gen3_frlge.lua:311-314 radical_red
+-- BALL_POCKET_ADDR / BALL_POCKET_ENC=false, i.e. no XOR key).
+local BALL_POCKET_ADDR    = 0x0203C354
+local ITEM_POKE_BALL      = 4
 
 -- DUO-PRECEDENT CONSTANTS, NOT PROFILE FACTS. These two live in no profile and no checkpoint:
 -- they are the values lua/tests/duo/scenario_explode.lua:27-28 and lua/tests/mkstate.lua:34-35
@@ -82,7 +90,6 @@ local B_OUTCOME_CAUGHT    = 7           -- pret include/constants/battle.h:82
 local CTRL_ADDR   = 0x03004FE0          -- gBattlerControllerFuncs[0]
 local ACTION_MENU = 0x0802E439          -- the action-select controller function
 
-local function party_count() return memory.read_u8(PARTY_COUNT_ADDR) end
 local function battle_outcome() return memory.read_u8(BATTLE_OUTCOME_ADDR) end
 local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR + FAINTS_OFF) end
 --- The PLAYER battler's HP. Battler 0 is the player side in singles; gBattleMons[0] is what the
@@ -90,23 +97,60 @@ local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR + FAINT
 local function player_bmon_hp() return memory.read_u16_le(BATTLE_MONS_ADDR + BM_HP) end
 local function player_bmon_maxhp() return memory.read_u16_le(BATTLE_MONS_ADDR + BM_MAXHP) end
 local function at_action_menu() return memory.read_u32_le(CTRL_ADDR) == ACTION_MENU end
-
---- POLARITY: the `in_battle` predicate is (gMain+1081 & 2) with expect=0
---- (data/games/gen3_rr/write_checkpoint.json radical_red.predicates.in_battle), so
---- G.pred_ok(cp,"in_battle") is TRUE when we are NOT in a battle. Wrapped once here so no leg
---- has to get that inversion right twice.
-local function in_battle(cp) return not G.pred_ok(cp, "in_battle") end
-local function on_field(cp)
-    return G.pred_ok(cp, "in_battle") and G.pred_ok(cp, "callback2")
+--- (itemId, quantity) of ball-pocket slot 0.
+local function ball_slot0()
+    return memory.read_u16_le(BALL_POCKET_ADDR), memory.read_u16_le(BALL_POCKET_ADDR + 2)
 end
 
---- The SaveBlock1 map id, or nil when the pointer is not yet a sane EWRAM address (G.map
---- returns -1,-1 then). nil is NOT a map: every caller must treat it as "unreadable".
-local function mapid(cp)
-    local g, n = G.map(cp)
-    if g < 0 or n < 0 then return nil end
-    return g * 256 + n
-end
+-- ── PATHS: parsed from the RR BINARY, never from a screenshot ─────────────────────────────────
+-- RR has no pret map source, but it does have map data, and that is not the same thing as
+-- having none: the headers parse. Pokemon Center 1F (group 5, map 4) was read straight out of
+-- patch/build/slink_RR.gba -- gMapGroups 0x083526A8 -> the group 5 / map 4 header 0x08350E30 ->
+-- layout 0x082D5990 (15x10) -> blocks 0x082D5864, with the tileset metatile attributes at
+-- 0x082AFFB4 / 0x082B4A50. The ONLY MB_PC (0x83) metatile on the map is (11,1), so the
+-- approach tile is (11,2) facing Up -- FireRed's tile after all.
+--
+-- The earlier greedy walk failed not because the target was wrong but because a greedy walker
+-- cannot see a wall: column 11 is collision at rows 6-7, and NPCs stand at (10,6) and (12,5).
+-- This is a BFS over the parsed collision grid with the NPC spawn tiles blocked, which is the
+-- same standard the FireRed driver holds its paths to.
+--
+--   collision rows 0-9   "#.#############" / "###########P###" / "....###..##...." /
+--                        "....#######...." / "..............." / "..............." /
+--                        "#..........##.." / "...........##.." / "..............." /
+--                        "###############"      (P = the PC metatile at (11,1))
+--   NPC spawn tiles      (2,3) (4,7) (7,2) (8,2) (10,6) (12,5)
+--
+-- REPRODUCE IT, do not trust this comment. tools/gba_map.py (card T2) is the shared parser
+-- that emits entries like this one from any FR-based ROM, and it re-derives every number above
+-- independently:
+--
+--   python tools/gba_map.py patch/build/slink_RR.gba --map 5.4 --bfs 11,8 11,2 --          --find-behaviour 0x83
+--   -> map 5.4: 15x10, 4 warps, 20 objects, 0 coords, 0 bg
+--      behaviour 0x83 tiles: [(11, 1)]
+--      bfs (11, 8) -> (11, 2): ['Left','Up','Left','Up','Up','Up','Right','Right','Up','Up']
+--
+-- tests/unit/test_gen3_rr_scripted_play.py re-walks the dirs below against the same grid, so
+-- the path cannot drift away from the map it came from.
+local PATHS = {
+    pokecenter_start_to_pc = {
+        map = "PokemonCenter_1F (group 5, map 4)",
+        from = { 11, 8 },            -- where slink_pokecenter_full.State stands
+        to = { 11, 2 },              -- the approach tile below the PC metatile (11,1)
+        dirs = { "Left", "Up", "Left", "Up", "Up", "Up", "Right", "Right", "Up", "Up" },
+    },
+}
+
+-- Bind the shared scripted-play runtime (lua/tests/playlib.lua): the in_battle polarity
+-- wrapper, on_field, the A-only mash, the nil-safe map id, state_path and the leg runner
+-- all live there now, with the Gen 3 helper module and the game facts injected.
+local play = PL.bind(G, {
+    paths            = PATHS,
+    party_count_addr = PARTY_COUNT_ADDR,
+    obj_events       = 0x02036E38,   -- gObjectEvents (RR keeps the vanilla address,
+                                     -- reference_rr_object_events)
+    state_dir        = "E:/Howard/Bizhawk/GBA/State",
+})
 
 -- ── party records: the keyed PC oracle's raw material ──────────────────────────────────────
 
@@ -134,7 +178,7 @@ end
 --- { n = party_count, keys = {key -> record hex}, order = {key, ...} }. Keyed, not indexed:
 --- a deposit compacts the party, so slot numbers move and only keys are stable.
 local function party_snapshot()
-    local snap = { n = party_count(), keys = {}, order = {} }
+    local snap = { n = play.party_count(), keys = {}, order = {} }
     for i = 0, snap.n - 1 do
         local k = slot_key(i)
         snap.keys[k] = slot_bytes(i)
@@ -165,46 +209,6 @@ local function pace(cp, frames, stop)
     return stop and stop() or false
 end
 
---- A-only mash on the 16-frame native-menu cadence (reference_bizhawk_gate_drivers), stopping
---- on `stop()`. Deliberately NOT G.mash: that one also pulses Start, which opens the START menu
---- once the field comes back — exactly where several legs end.
-local function mash_a(cp, taps, stop)
-    for _ = 1, taps do
-        if stop and stop() then return true end
-        G.tap("A", 3, 13)
-    end
-    return stop and stop() or false
-end
-
---- Greedy axis-at-a-time walk to a target tile, every step verified by G.pos. NOT a route: with
---- no RR map data there is nothing to BFS, so this closes the larger coordinate gap first, taps
---- A when a step does not move us (textbox), and sidesteps onto the other axis when it stays
---- blocked. Bounded; returns false rather than flailing.
--- ponytail: greedy, no pathfinder — upgrade to BFS only if RR map data ever becomes available.
-local function walk_to(cp, tx, ty, budget)
-    for _ = 1, (budget or 48) do
-        local x, y = G.pos(cp)
-        if x == tx and y == ty then return true end
-        local dir
-        if x < tx then dir = "Right" elseif x > tx then dir = "Left"
-        elseif y < ty then dir = "Down" else dir = "Up" end
-        for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
-        G.idle(4)
-        local nx, ny = G.pos(cp)
-        if nx == x and ny == y then
-            for _ = 1, 2 do G.tap("A", 3, 13) end     -- a textbox owns the field: clear it
-            local alt
-            if dir == "Right" or dir == "Left" then alt = (y < ty) and "Down" or "Up"
-            else alt = (x < tx) and "Right" or "Left" end
-            for _ = 1, 12 do joypad.set({ [alt] = true }); G.advance() end
-            G.idle(4)
-        end
-    end
-    joypad.set({})
-    local x, y = G.pos(cp)
-    return x == tx and y == ty
-end
-
 --- Hold `dir` into a door/edge until the SaveBlock1 map id changes, then wait for the field to
 --- settle. Returns ok, detail.
 ---
@@ -213,17 +217,17 @@ end
 --- one looks exactly like a warp. Treating that as success would let this leg pass while the
 --- engine was in the middle of nothing at all.
 local function hold_until_map_change(cp, dir, budget)
-    local from = mapid(cp)
+    local from = play.readable_mapid(cp)
     if from == nil then
         return false, "the SaveBlock1 map id is unreadable before the warp (G.map = -1,-1)"
     end
     for _ = 1, (budget or 30) do
-        if mapid(cp) ~= nil and mapid(cp) ~= from then break end
+        if play.readable_mapid(cp) ~= nil and play.readable_mapid(cp) ~= from then break end
         for _ = 1, 24 do joypad.set({ [dir] = true }); G.advance() end
-        if mapid(cp) == from then for _ = 1, 2 do G.tap("A", 3, 13) end end
+        if play.readable_mapid(cp) == from then for _ = 1, 2 do G.tap("A", 3, 13) end end
     end
     joypad.set({})
-    local to = mapid(cp)
+    local to = play.readable_mapid(cp)
     if to == nil then
         return false, string.format("the map id went unreadable and never came back (from %d)", from)
     end
@@ -232,20 +236,20 @@ local function hold_until_map_change(cp, dir, budget)
     end
     local settled = false
     for _ = 1, 900 do                       -- the warp fade must actually finish
-        if on_field(cp) and mapid(cp) ~= nil then settled = true; break end
+        if play.on_field(cp) and play.readable_mapid(cp) ~= nil then settled = true; break end
         G.advance()
     end
     if not settled then
         return false, string.format("map %d -> %d but the field never settled "
                                     .. "(in_battle=%s callback2_ok=%s)", from, to,
-                                    tostring(in_battle(cp)), tostring(G.pred_ok(cp, "callback2")))
+                                    tostring(play.in_battle(cp)), tostring(G.pred_ok(cp, "callback2")))
     end
     return true, string.format("map %d -> %d", from, to)
 end
 
 --- Leave whatever battle we are in (or return immediately if we are not in one).
 local function leave_battle(cp, taps)
-    return mash_a(cp, taps or 900, function() return on_field(cp) end)
+    return play.mash_a(taps or 900, function() return play.on_field(cp) end)
 end
 
 -- ── the legs ───────────────────────────────────────────────────────────────────────────────
@@ -258,16 +262,13 @@ end
 --   source       citations
 --   run(cp)      absent on an `open` leg, which the loop skips
 
-local PLAY_FROM = os.getenv("SLINK_GEN3_PLAY_FROM")
-if PLAY_FROM == "" then PLAY_FROM = nil end
-
 local LEGS = {}
 
 --- Shared precondition: on the walkable field with a readable map id.
 local function check_on_field(cp)
-    if in_battle(cp) then return "a battle is in progress" end
-    if not on_field(cp) then return "not on the walkable field (callback2 is not CB2_Overworld)" end
-    if mapid(cp) == nil then return "the SaveBlock1 map id is unreadable" end
+    if play.in_battle(cp) then return "a battle is in progress" end
+    if not play.on_field(cp) then return "not on the walkable field (callback2 is not CB2_Overworld)" end
+    if play.readable_mapid(cp) == nil then return "the SaveBlock1 map id is unreadable" end
     return nil
 end
 
@@ -287,7 +288,7 @@ LEGS[#LEGS + 1] = {
     -- starting already outside a battle would sail through every terminal below without the
     -- engine ever executing ReturnFromBattleToOverworld, and report PASS for nothing.
     check = function(cp)
-        if not in_battle(cp) then
+        if not play.in_battle(cp) then
             return "already on the field — this leg needs a battle in progress "
                 .. "(slink_prebattle.State), the transition out of it IS the artifact"
         end
@@ -298,11 +299,11 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, string.format(
                 "battle_to_field: the battle never ended (in_battle=%s callback2_ok=%s outcome=%d)",
-                tostring(in_battle(cp)), tostring(G.pred_ok(cp, "callback2")), battle_outcome()))
+                tostring(play.in_battle(cp)), tostring(G.pred_ok(cp, "callback2")), battle_outcome()))
         end
         local px, py = G.pos(cp)     -- G.pos returns TWO values; capture or a later arg eats them
         G.phase("field", string.format("map=%s at=(%d,%d) outcome=%d",
-                                       tostring(mapid(cp)), px, py, battle_outcome()))
+                                       tostring(play.readable_mapid(cp)), px, py, battle_outcome()))
     end,
 }
 
@@ -318,7 +319,7 @@ LEGS[#LEGS + 1] = {
         "lua/tests/duo/scenario_explode.lua:22-28,50-52 (gBattleMons[0] = the player battler; hp @ +0x28, maxHP @ +0x2C)",
     },
     check = function(cp)
-        if mapid(cp) == nil then return "the SaveBlock1 map id is unreadable" end
+        if play.readable_mapid(cp) == nil then return "the SaveBlock1 map id is unreadable" end
         return nil     -- prebattle is mid-encounter by construction; run() clears it first
     end,
     run = function(cp)
@@ -330,13 +331,13 @@ LEGS[#LEGS + 1] = {
         local ENCOUNTERS = 12
         local fainted = false
         for enc = 1, ENCOUNTERS do
-            if not pace(cp, 4000, function() return in_battle(cp) end) then
+            if not pace(cp, 4000, function() return play.in_battle(cp) end) then
                 G.shot("stuck")
                 local px, py = G.pos(cp)
                 G.finish(false, string.format(
                     "wild_faint: no wild encounter while pacing (cycle %d, map=%s at=(%d,%d)) — "
                     .. "SLINK_STATE must be a state standing in TALL GRASS",
-                    enc, tostring(mapid(cp)), px, py))
+                    enc, tostring(play.readable_mapid(cp)), px, py))
             end
             -- THE FAINT ORACLE. A zero HP read on its own proves nothing: gBattleMons is stale
             -- between battles and zero is also what an uninitialised struct reads. So require a
@@ -346,23 +347,23 @@ LEGS[#LEGS + 1] = {
             local saw_zero = false
             local turns = 0
             local function sample()
-                if not in_battle(cp) then return end
+                if not play.in_battle(cp) then return end
                 local hp, maxhp = player_bmon_hp(), player_bmon_maxhp()
                 if maxhp == 0 then return end        -- struct not loaded: not a reading
                 if hp > 0 then saw_positive = true
                 elseif saw_positive then saw_zero = true end
             end
-            while in_battle(cp) and turns < 40 do
+            while play.in_battle(cp) and turns < 40 do
                 turns = turns + 1
-                mash_a(cp, 60, function()
-                    sample(); return at_action_menu() or not in_battle(cp)
+                play.mash_a(60, function()
+                    sample(); return at_action_menu() or not play.in_battle(cp)
                 end)
-                if not in_battle(cp) then break end
+                if not play.in_battle(cp) then break end
                 G.tap("A", 3, 13)       -- FIGHT  (gActionSelectionCursor resets per battle)
                 G.tap("A", 3, 13)       -- move slot 1
                 for _ = 1, 120 do
                     sample()
-                    if at_action_menu() or not in_battle(cp) then break end
+                    if at_action_menu() or not play.in_battle(cp) then break end
                     G.tap("A", 3, 13)
                 end
             end
@@ -370,7 +371,7 @@ LEGS[#LEGS + 1] = {
                 G.shot("stuck")
                 G.finish(false, string.format(
                     "wild_faint: encounter %d never returned to the field (in_battle=%s)",
-                    enc, tostring(in_battle(cp))))
+                    enc, tostring(play.in_battle(cp))))
             end
             if saw_zero and player_faints() > faints_before then fainted = true; break end
             G.phase("survived", string.format(
@@ -389,29 +390,114 @@ LEGS[#LEGS + 1] = {
         end
         G.phase("fainted", string.format(
             "player battler went positive -> 0 HP in battle; playerFaintCounter %d -> %d; party=%d",
-            faints_before, player_faints(), party_count()))
+            faints_before, player_faints(), play.party_count()))
     end,
 }
 
--- ── leg: wild_catch (OPEN) ─────────────────────────────────────────────────────────────────
--- An open leg carries no run body: the loop logs `open_reason` and skips it, and it is NOT
--- counted as reached.
+-- ── leg: wild_catch ────────────────────────────────────────────────────────────────────────
+-- PINNED PHYSICALLY 2026-09-21, after a research round that started with this leg OPEN because
+-- no RR bag sequence existed anywhere in the tree. It does now.
 LEGS[#LEGS + 1] = {
     name = "wild_catch",
-    state = "slink_prebattle.State",
-    exercises = { "capture_wild" },
-    open = true,
-    open_reason = "no proven RR input sequence for the battle BAG exists: a search of "
-               .. "lua/tests/duo/* and lua/tests/test_live_*.lua (2026-09-21) found bag "
-               .. "navigation only for Gen 1 (lua/tests/duo/duo_gen1_main.lua), and CFRU "
-               .. "replaces the FireRed bag UI, so the FR driver's pinned Right->B_ACTION_USE_ITEM "
-               .. "toggle cannot be carried over. Terminal when it is pinned: "
-               .. "gBattleOutcome == 7 (B_OUTCOME_CAUGHT) at 0x02023E8A",
+    state = "slink_prebattle_balls.State",
+    exercises = { "capture_wild", "battle_end" },
     source = {
+        "docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt (INPUT PIN: at the action menu Right (BAG), A, Right, Right (Items -> Key Items -> Poke Balls), A (select), A (use); the throw resolved to Gotcha! ~900 frames later)",
+        "docs/gen3/research/rr_bag_layout.md (RR balls live at fixed EWRAM 0x0203C354, 50 raw ItemSlots of {u16 id, u16 qty}; Poke Ball is item 4 -- NOT the vanilla SaveBlock1 pocket, which is why the FR bag handling does not carry over)",
+        "lua/tests/mkstate_gen3_rr_fill.lua (SLINK_GIVE_BALLS writes that pocket; it produced slink_prebattle_balls.State)",
         "docs/gen3_engine_sites.md capture_wild row (rr PINNED 0802D824/+4, Cmd_givecaughtmon immediately after BL GiveMonToPlayer)",
-        "lua/games/gen3_frlge.lua:206 (radical_red BATTLE_OUTCOME_ADDR 0x02023E8A)",
-        "lua/tests/duo/duo_gen1_main.lua:243-246 (the ONLY bag-input precedent in the tree, and it is Gen 1)",
+        "lua/games/gen3_frlge.lua:206,311-314 (radical_red BATTLE_OUTCOME_ADDR 0x02023E8A; BALL_POCKET_ADDR 0x0203C354, BALL_POCKET_ENC=false)",
     },
+    -- The fixture IS the precondition. A run that opens the BAG with no balls in it wanders
+    -- through a menu it cannot use and fails 400 frames later with something misleading, so
+    -- read the pocket first and say the one useful thing instead.
+    check = function(cp)
+        local id, qty = ball_slot0()
+        if id ~= ITEM_POKE_BALL or qty == 0 then
+            return string.format(
+                "the RR ball pocket (0x%08X) slot 0 holds item %d x%d, not Poke Ball (id %d) "
+                .. "with qty > 0 -- make the balls state first: run "
+                .. "lua/tests/mkstate_gen3_rr_fill.lua with SLINK_GIVE_BALLS and save it as "
+                .. "slink_prebattle_balls.State", BALL_POCKET_ADDR, id, qty, ITEM_POKE_BALL)
+        end
+        return nil
+    end,
+    run = function(cp)
+        local before_party = play.party_count()
+        local _, balls = ball_slot0()
+        G.phase("balls", string.format("pocket slot 0 = Poke Ball x%d, party=%d",
+                                       balls, before_party))
+
+        if not play.in_battle(cp) then
+            if not pace(cp, 4000, function() return play.in_battle(cp) end) then
+                G.shot("stuck")
+                G.finish(false, "wild_catch: no wild encounter while pacing -- "
+                             .. "slink_prebattle_balls.State must be standing in TALL GRASS")
+            end
+        end
+
+        -- One throw per ball. A MISS returns to the action menu, so the whole sequence simply
+        -- runs again; the bound is the fixture ball count, never a frame count.
+        local throws = 0
+        for _ = 1, math.min(balls, 5) do
+            if not play.in_battle(cp) then break end
+            if not play.mash_a(200, function()
+                return at_action_menu() or not play.in_battle(cp)
+            end) then
+                G.shot("stuck")
+                G.finish(false, string.format(
+                    "wild_catch: the action menu never appeared (throw %d)", throws + 1))
+            end
+            if not play.in_battle(cp) then break end     -- it fled, or our mon fainted
+            throws = throws + 1
+            -- THE PINNED SEQUENCE (see the census receipt cited above). Each press is a
+            -- separate tap on the 16-frame native-menu cadence, never a held direction: the
+            -- pocket tabs advance one per press.
+            G.tap("Right", 3, 20)       -- action menu: FIGHT -> BAG
+            G.tap("A", 3, 20)           -- open the BAG
+            G.tap("Right", 3, 20)       -- pocket: Items -> Key Items
+            G.tap("Right", 3, 20)       -- pocket: Key Items -> Poke Balls
+            G.tap("A", 3, 20)           -- select the Poke Ball
+            G.tap("A", 3, 20)           -- use it
+            -- The throw animation plus the catch text ran ~900 frames on the receipt; a miss
+            -- comes back to the action menu instead.
+            play.mash_a(400, function()
+                return battle_outcome() ~= 0 or at_action_menu()
+            end)
+            if battle_outcome() == B_OUTCOME_CAUGHT then break end
+            G.phase("throw-missed", string.format("throw %d: outcome=%d, back at the menu",
+                                                  throws, battle_outcome()))
+        end
+
+        if battle_outcome() ~= B_OUTCOME_CAUGHT then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "wild_catch: %d throw(s) and gBattleOutcome is %d, not %d (B_OUTCOME_CAUGHT)",
+                throws, battle_outcome(), B_OUTCOME_CAUGHT))
+        end
+        -- Let the catch text finish before reading the party: the acquisition happens inside
+        -- Cmd_givecaughtmon, which runs while that text is still up.
+        play.mash_a(600, function() return play.on_field(cp) end)
+
+        local after_party = play.party_count()
+        if before_party < 6 then
+            if after_party ~= before_party + 1 then
+                G.shot("stuck")
+                G.finish(false, string.format(
+                    "wild_catch: outcome says caught but the party went %d -> %d; with room in "
+                    .. "the party the caught mon must land in it", before_party, after_party))
+            end
+            G.phase("caught", string.format("outcome=%d, party %d -> %d after %d throw(s)",
+                                            battle_outcome(), before_party, after_party, throws))
+        else
+            -- A full party sends the catch to a box (that is the pc_move site). There is no
+            -- decrypt-free box-count observable pinned for RR, so this branch is REPORTED, not
+            -- asserted -- see the pc_move_full_party leg.
+            G.phase("caught", string.format(
+                "outcome=%d with a full party (%d): the mon went to a box, which this leg "
+                .. "cannot read back", battle_outcome(), before_party))
+        end
+    end,
 }
 
 -- ── leg: pc_move_full_party (OPEN) ─────────────────────────────────────────────────────────
@@ -421,9 +507,11 @@ LEGS[#LEGS + 1] = {
     exercises = { "pc_move", "mon_given" },
     open = true,
     open_reason = "SendMonToPC (RR: the compressed-storage detour at 090B6E38) only runs on an "
-               .. "ACQUISITION that cannot fit in the party — a catch or a gift with six party "
-               .. "mons. It therefore inherits wild_catch's unpinned bag sequence, plus a "
-               .. "six-mon party this savestate family does not guarantee",
+               .. "ACQUISITION that cannot fit in the party — a catch or a gift with SIX party "
+               .. "mons. wild_catch now supplies the catch, but no savestate in the family "
+               .. "carries a full party, and RR 58-byte CompressedPokemon boxes have no "
+               .. "decrypt-free count observable pinned, so the result could not be read back "
+               .. "even if it fired",
     source = {
         "docs/gen3_engine_sites.md pc_move row (rr PINNED 090B6E9A/+6; entry/trampoline 08040B90 -> 090B6E38, CFRU compressed-PC acquisition)",
         "docs/gen3_engine_sites.md mon_given row (rr PINNED 0907D7F8/+8, RR replacement common POP at 0907D800; R0 = party(0)/PC(1)/failure(2))",
@@ -464,11 +552,11 @@ LEGS[#LEGS + 1] = {
 -- menu deposit does.
 LEGS[#LEGS + 1] = {
     name = "pc_ops",
-    state = "slink_pokecenter.State",
+    state = "slink_pokecenter_full.State",
     exercises = { "pc_deposit", "pc_box_place", "pc_withdraw" },
     source = {
-        "lua/tests/mkstate.lua:270-300 (slink_pokecenter.State is inside a map the companion patch recognises as a Pokémon Center 1F — it spawns its trade NPC there, which is how the state is verified)",
-        "docs/gen3/probes/shadow_rr_play_2026-09-21.txt (lane run: the player stands at (11,8) on map 1284; FireRed's (11,2) is NOT the RR PC tile)",
+        "lua/tests/mkstate.lua:270-300 (the pokecenter state family is captured inside a map the companion patch recognises as a Pokémon Center 1F — it spawns its trade NPC there, which is how the state is verified); slink_pokecenter_full.State stands at (11,8) with a party of 3",
+        "patch/build/slink_RR.gba parsed directly: gMapGroups 0x083526A8 -> group 5 map 4 header 0x08350E30 -> layout 0x082D5990 (15x10) -> blocks 0x082D5864, tileset attributes 0x082AFFB4 / 0x082B4A50; the only MB_PC (0x83) metatile is (11,1), approach (11,2)",
         "docs/gen3_engine_sites.md pc_deposit row (rr PINNED 0809315C/+8, TryStorePartyMonInBox +0x80 with R0==1)",
         "docs/gen3_engine_sites.md pc_box_place row (rr PINNED 08093018/+8; RR IN-PLACE wrapper, capture 08093020, SetBoxMonAt detours to 090B6CA4)",
         "docs/gen3_engine_sites.md pc_withdraw row (rr PINNED 08092FF2/+6; RR IN-PLACE, party sentinel 25 not vanilla 14)",
@@ -476,26 +564,10 @@ LEGS[#LEGS + 1] = {
     },
     check = check_on_field,
     run = function(cp)
-        -- The PC's approach tile. RR's Pokémon Center layout is NOT pinned (no map data
-        -- exists). The default is the coordinator's screenshot estimate — the PC terminals sit
-        -- right of the nurse's counter, roughly 4 right and 2 up from the (11,8) landing tile,
-        -- so (15,7) facing Up. AN ESTIMATE: it is verified by walking there and interacting,
-        -- and when it is wrong this leg says so instead of wandering.
-        local tx, ty = 15, 7
-        local want = os.getenv("SLINK_RR_PC_TILE")
-        if want and want ~= "" then
-            local a, b = want:match("^(%-?%d+),(%-?%d+)$")
-            if a then tx, ty = tonumber(a), tonumber(b) end
-        end
-        if not walk_to(cp, tx, ty, 48) then
-            G.shot("stuck")
-            local px, py = G.pos(cp)
-            G.finish(false, string.format(
-                "pc_ops: could not reach the PC approach tile (%d,%d); stopped at (%d,%d) on "
-                .. "map %s. RR's Pokemon Center layout is unpinned (the default is a screenshot "
-                .. "estimate) — set SLINK_RR_PC_TILE=\"x,y\"", tx, ty, px, py, tostring(mapid(cp))))
-        end
-        G.tap("Up", 2, 13)               -- face the (solid) PC counter without stepping onto it
+        -- BFS-pinned from the parsed map (see PATHS above), not a greedy walk toward a
+        -- screenshot estimate: follow() asserts the start tile and verifies every step.
+        play.follow(cp, "pokecenter_start_to_pc", "pc_ops")
+        G.tap("Up", 2, 13)               -- face the (solid) PC metatile without stepping onto it
 
         -- THE KEYED ORACLE. CFRU's storage menu rows are unpinned, so the presses are a bounded
         -- sweep (A, with a Down nudge every fourth attempt). None of that is trusted: the only
@@ -514,7 +586,7 @@ LEGS[#LEGS + 1] = {
         for i = 1, 120 do
             if i % 4 == 0 then G.tap("Down", 3, 13) end
             G.tap("A", 3, 20)
-            if party_count() < before.n then deposited = true; break end
+            if play.party_count() < before.n then deposited = true; break end
         end
         if not deposited then
             G.shot("stuck")
@@ -552,7 +624,7 @@ LEGS[#LEGS + 1] = {
         for i = 1, 120 do
             if i % 4 == 0 then G.tap("Down", 3, 13) end
             G.tap("A", 3, 20)
-            if party_count() > mid.n then withdrawn = true; break end
+            if play.party_count() > mid.n then withdrawn = true; break end
         end
         if not withdrawn then
             G.shot("stuck")
@@ -595,7 +667,7 @@ LEGS[#LEGS + 1] = {
         -- the next run a broken starting point.
         local out_ok = false
         for _ = 1, 40 do
-            if on_field(cp) then out_ok = true; break end
+            if play.on_field(cp) then out_ok = true; break end
             G.tap("B", 3, 20)
         end
         if not out_ok then
@@ -631,108 +703,32 @@ LEGS[#LEGS + 1] = {
 
 -- ── run ────────────────────────────────────────────────────────────────────────────────────
 
-local DEFAULT_STATE_DIR = "E:/Howard/Bizhawk/GBA/State"
-
---- SLINK_STATE may be an absolute path or a bare file name; a bare name resolves against
---- SLINK_STATE_DIR (the directory tools/mkstates.py writes into).
-local function state_path(name)
-    if not name or name == "" then return nil end
-    if name:find("[/\\]") then return name end
-    return (os.getenv("SLINK_STATE_DIR") or DEFAULT_STATE_DIR) .. "/" .. name
-end
-
 local function run()
-    G.open("gen3_rr_scripted_play")      -- patch/build/gen3_rr_scripted_play_result.txt
-    pcall(client.speedmode, 6399)
-    G.budget = 900000
-    local cp, title = G.checkpoint()
-    G.phase("start", "title=" .. tostring(title))
-
-    local from_idx = 1
-    if PLAY_FROM then
-        local found = false
-        for i, leg in ipairs(LEGS) do
-            if leg.name == PLAY_FROM then from_idx = i; found = true; break end
-        end
-        if not found then G.finish(false, "SLINK_GEN3_PLAY_FROM names no leg: " .. PLAY_FROM) end
-        G.phase("resume", "from=" .. PLAY_FROM)
-    end
-
-    -- P3 shadow observer beside this driver when SLINK_SHADOW is set (the same block as
-    -- lua/tests/gen3_scripted_play.lua and lua/tests/duo/duo_main.lua): read-only, SHADOW lines
-    -- land in patch/build/gen3_rr_scripted_play_result.shadow.log. A driver that ran the whole
-    -- play and silently observed NOTHING is worse than a failure, so every start and poll error
-    -- is fatal here rather than a logged shrug.
-    local shadow_err = nil
-    if os.getenv("SLINK_SHADOW") then
-        local okshd, shd = pcall(dofile, WT .. "/lua/gen3/shadow_run.lua")
-        if not okshd or not shd then
-            G.finish(false, "shadow: dofile of lua/gen3/shadow_run.lua failed: " .. tostring(shd))
-        end
-        local okst, st = pcall(shd.start, { duo = {
-            result = WT .. "/patch/build/gen3_rr_scripted_play_result.txt", player = "a" } })
-        if not okst or not st then
-            G.finish(false, "shadow: observer start failed: " .. tostring(st))
-        end
-        G.phase("shadow", "observer started admitted_by=" .. tostring(st.admitted_by))
-        event.onframeend(function()
-            if shadow_err then return end          -- report the FIRST error, then stop retrying
-            local ok, err = pcall(st.poll)
-            if not ok then shadow_err = tostring(err) end
-        end, "SLink-gen3-rr-shadow-poll")
-    end
-
-    -- SLINK_STATE overrides the FIRST leg's declared state only; every later leg loads its own.
-    local override = state_path(os.getenv("SLINK_STATE"))
-
-    local reached, skipped = {}, {}
-    for i = from_idx, #LEGS do
-        local leg = LEGS[i]
-        if leg.open then
-            G.phase("skip-open", leg.name .. ": " .. tostring(leg.open_reason))
-            skipped[#skipped + 1] = leg.name
-        else
-            -- PRECONDITION, ENFORCED. Load this leg's own state (never inherit the previous
-            -- leg's situation) and then check it before pressing anything.
-            local state = (i == from_idx and override) or state_path(leg.state)
-            if not pcall(savestate.load, state) then
-                G.finish(false, string.format("%s: savestate.load failed: %s", leg.name, state))
-            end
-            G.idle(30)
-            G.phase("leg-state", string.format("%s <- %s", leg.name, state))
-            local why = leg.check and leg.check(cp)
-            if why then
-                G.shot("stuck")
-                G.finish(false, string.format("%s: precondition failed after loading %s: %s",
-                                              leg.name, state, why))
-            end
-
-            G.phase("leg-start", leg.name)
-            leg.run(cp)
-            if shadow_err then
-                G.finish(false, "shadow: poll failed during " .. leg.name .. ": " .. shadow_err)
-            end
-            G.phase("leg-done", leg.name)
-            reached[#reached + 1] = leg.name
-        end
-    end
-
-    if shadow_err then G.finish(false, "shadow: poll failed: " .. shadow_err) end
-    G.finish(true, string.format("reached: %s | open (skipped): %s",
-                                 table.concat(reached, ","), table.concat(skipped, ",")))
+    play.main(LEGS, {
+        name   = "gen3_rr_scripted_play",   -- patch/build/gen3_rr_scripted_play_result.txt
+        budget = 900000,
+        -- No boot step: RR's maps are unmapped, so there is no walk from a fixture battery to
+        -- any of these situations. Every leg names the savestate the runner loads for it.
+        shadow = {
+            script = WT .. "/lua/gen3/shadow_run.lua",
+            result = WT .. "/patch/build/gen3_rr_scripted_play_result.txt",
+            name   = "SLink-gen3-rr-shadow-poll",
+        },
+    })
 end
 
 if (debug.getinfo(1, "S").source or "") == "main" then run() end
 
 return {
     LEGS = LEGS,
+    PATHS = PATHS,
+    play = play,
     -- The gen3_boot_check instance THIS module bound. `dofile` re-executes, so a second dofile
     -- would hand a caller a different M with its own frame budget; exporting ours is the only
     -- way an out-of-emulator harness can reset the budget the legs actually spend.
     boot_check = G,
-    walk_to = walk_to,
     pace = pace,
-    state_path = state_path,
+    state_path = play.state_path,
     hold_until_map_change = hold_until_map_change,
     party_snapshot = party_snapshot,
     slot_key = slot_key,

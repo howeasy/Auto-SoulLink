@@ -27,6 +27,11 @@
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via tools/gen3_fixtures.py")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")   -- helpers only; it does not self-run
+local PL = dofile(WT .. "/lua/tests/playlib.lua")
+-- The step walker and the press-into-warp come from the shared scripted-play runtime
+-- (lua/tests/playlib.lua); this script injects the same Gen 3 helper module the
+-- play drivers do. No PATHS table: the two walks below are inline direction lists.
+local play = PL.bind(G, { obj_events = 0x02036E38 })
 
 G.open("gen3_fr_newgame")
 pcall(client.speedmode, 6399)
@@ -87,54 +92,35 @@ end
 -- MOM's tile blocked. Every step is verified by the SaveBlock1 coordinates; a step that does
 -- not move the player is treated as a textbox (Radical Red adds intro dialogue on 2F and on
 -- the way down to 1F) and cleared with A before the step is retried.
-local function mapid() local g, n = G.map(cp); return g * 256 + n end
+local function mapid() return play.mapid(cp) end
 local start_map = mapid()
 G.phase("walk-out", string.format("map=%d", start_map))
 
-local DELTA = { Up = { 0, -1 }, Down = { 0, 1 }, Left = { -1, 0 }, Right = { 1, 0 } }
-local function step(dir)
-    local x, y = G.pos(cp)
-    local want_x, want_y = x + DELTA[dir][1], y + DELTA[dir][2]
-    for attempt = 1, 6 do
-        for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
-        G.idle(4)
-        local nx, ny = G.pos(cp)
-        if nx == want_x and ny == want_y then return true end
-        if mapid() ~= start_map then return true end     -- the warp tile took us
-        -- Not moved: a textbox or script owns the player. Clear it, then retry the step.
-        for _ = 1, 4 do G.tap("A", 3, 13) end
-        x, y = G.pos(cp)
-        want_x, want_y = x + DELTA[dir][1], y + DELTA[dir][2]
-    end
-    return false
-end
 -- FRLG stairs and doors are ARROW warps: the warp fires when the player presses INTO the
 -- warp tile from the adjacent walkable tile (2F stairs at (8-9,2-3) are collision, so the
 -- path ends at (10,2) and the exit is Left; the door row is entered by Down).
+--
+-- playlib.step with `want` set: each step must land EXACTLY one tile along the direction, not
+-- merely move. This walk is the one place where an unexpected displacement means the timed
+-- intro above went somewhere else entirely, so the stricter test is the right one. A step that
+-- does not move is treated as a textbox (Radical Red adds intro dialogue on 2F and on the way
+-- down to 1F) and cleared with A before the step is retried; a mid-step wild encounter is
+-- impossible indoors, so the walker's encounter absorber never fires here.
 local function leg(name, path, from_map, exit_dir)
     start_map = from_map
-    G.phase(name, string.format("map=%d from=(%d,%d)", start_map, G.pos(cp)))
+    G.phase(name, string.format("map=%d from=%s", start_map, play.at(cp)))
     for _, dir in ipairs(path) do
-        if not step(dir) then
+        if not play.step(cp, dir, start_map, true) then
             G.shot("stuck")
-            local px, py = G.pos(cp)   -- multi-return: capture first
-            G.finish(false, string.format("%s: step %s never moved the player at (%d,%d) map=%d; "
-                                       .. "see patch/build/gen3_stuck.png", name, dir, px, py, mapid()))
+            G.finish(false, string.format("%s: step %s never moved the player at %s map=%d; "
+                                       .. "see patch/build/gen3_stuck.png",
+                                          name, dir, play.at(cp), mapid()))
         end
     end
-    -- press into the warp, then wait for the map to change and the fade to settle
-    for _ = 1, 20 do
-        if mapid() ~= from_map then break end
-        for _ = 1, 16 do joypad.set({ [exit_dir] = true }); G.advance() end
-        if mapid() == from_map then for _ = 1, 2 do G.tap("A", 3, 13) end end   -- RR textbox
-    end
-    for _ = 1, 600 do
-        if mapid() ~= from_map and G.pred_ok(cp, "palette_fade_active") then G.idle(16); return end
-        G.advance()
-    end
+    if play.enter_warp(cp, exit_dir, 20) then return end
     G.shot("stuck")
-    G.finish(false, string.format("%s: end of path, pressed %s, but map is %d (from %d) at (%d,%d)",
-                                  name, exit_dir, mapid(), from_map, G.pos(cp)))
+    G.finish(false, string.format("%s: end of path, pressed %s, but map is %d (from %d) at %s",
+                                  name, exit_dir, mapid(), from_map, play.at(cp)))
 end
 
 -- Any intro textbox still open on 2F (RR) is cleared by the first stalled step.

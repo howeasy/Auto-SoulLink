@@ -43,6 +43,7 @@
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via the gen3 fixture/gate tooling")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
+local PL = dofile(WT .. "/lua/tests/playlib.lua")
 
 -- Plaintext (no decrypt needed) RAM observables pinned in lua/games/gen3_frlge.lua's `vanilla`
 -- profile table, cited per use below.
@@ -52,40 +53,12 @@ local BATTLE_OUTCOME_ADDR = 0x02023E8A  -- vanilla.BATTLE_OUTCOME_ADDR; B_OUTCOM
 local BATTLE_RESULTS_ADDR = 0x03004F90  -- vanilla.BATTLE_RESULTS_ADDR; playerFaintCounter @ +0
 local B_OUTCOME_CAUGHT = 7
 
-local function party_count() return memory.read_u8(PARTY_COUNT_ADDR) end
 local function battle_outcome() return memory.read_u8(BATTLE_OUTCOME_ADDR) end
 local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR) end
 
-local function mapid(cp) local g, n = G.map(cp); return g * 256 + n end
-
--- gObjectEvents = 0x02036E38 (pokefirered.sym:205), object 0 = player. currentCoords s16 x/y
--- at +0x10/+0x12 (include/global.fieldmap.h struct ObjectEvent), stored +7 (MAP_OFFSET);
--- facingDirection is the low nibble at +0x18 (1=down 2=up 3=left 4=right). Introduced run 8 to
--- cross-check the live object against SaveBlock1.pos when the two disagreed.
+-- gObjectEvents = 0x02036E38 (pokefirered.sym:205); playlib.obj_pos/obj_facing read it
+-- (object 0 = player, currentCoords +0x10/+0x12 stored +7, facing nibble at +0x18).
 local OBJ_EVENTS_ADDR = 0x02036E38
-local function obj0_pos()
-    return memory.read_s16_le(OBJ_EVENTS_ADDR + 0x10) - 7, memory.read_s16_le(OBJ_EVENTS_ADDR + 0x12) - 7
-end
-local function obj0_facing() return memory.read_u8(OBJ_EVENTS_ADDR + 0x18) >> 4 end
-
---- POLARITY (Codex review cx-378ce251): the `in_battle` predicate is gMain+1081 & 2 with
---- expect=0 (data/games/gen3_frlg/write_checkpoint.json firered.predicates.in_battle,
---- gen3_boot_check.lua:104-114 pred_ok compares (value&mask)==expect), so
---- G.pred_ok(cp,"in_battle") is TRUE when we are NOT in a battle. Wrapped once here (same shape
---- as lua/tests/gen3_rr_scripted_play.lua:74) so no leg touches the raw predicate directly.
-local function in_battle(cp) return not G.pred_ok(cp, "in_battle") end
-
---- A-only mash, for use INSIDE a battle: G.mash pulses Start every 16 frames
---- (gen3_boot_check.lua:212-221), which opens the START menu if it ever fires on the field —
---- exactly what the in_battle polarity bug caused (Codex cx-378ce251). Same shape as
---- lua/tests/gen3_rr_scripted_play.lua:104-110.
-local function mash_a(taps, stop)
-    for _ = 1, taps do
-        if stop and stop() then return true end
-        G.tap("A", 3, 13)
-    end
-    return stop and stop() or false
-end
 
 local function int(x) return math.floor(x) end
 
@@ -157,6 +130,11 @@ local PATHS = {
     -- scripts.inc:270-274, RivalBattleTriggerRight). The path therefore ends AT the trigger
     -- tile, not past it -- one shorter than a plain BFS to (6,8) would be.
     ball_to_rival_row = {
+        -- battles = false: landing on this path's LAST tile fires the rival trigger, so the
+        -- battle that follows belongs to the rival_battle leg's own oracle. The walker's
+        -- encounter absorber (playlib step/handle_encounter) would fight it first and leave
+        -- that leg with nothing to observe.
+        battles = false,
         map = "PalletTown_ProfessorOaksLab", from = { 9, 5 }, to = { 7, 8 },
         dirs = { "Down","Down","Left","Left","Down" },
     },
@@ -259,80 +237,14 @@ local PATHS = {
     },
 }
 
--- Follow a precomputed PATHS entry: one step per direction, each step verified by G.pos; a step
--- that doesn't move the player is treated as a textbox/script owning the field and cleared with
--- A before the SAME step is retried (bounded) — same recovery gen3_fr_newgame_inputs.lua's
--- step() uses, applied to a pinned path instead of a guessed one.
-local function follow(cp, path_name, label)
-    local p = assert(PATHS[path_name], "no PATHS entry " .. tostring(path_name))
-    local start_map = mapid(cp)
-    -- A precomputed path is only valid from ITS start tile: refuse loudly instead of walking
-    -- a wrong-offset route into collision (the first lane run stalled exactly that way).
-    local sx, sy = G.pos(cp)
-    if sx ~= p.from[1] or sy ~= p.from[2] then
-        G.shot("stuck")
-        G.finish(false, string.format("%s (%s): start tile (%d,%d) is not the path's from (%d,%d)",
-                                      label, path_name, sx, sy, p.from[1], p.from[2]))
-    end
-    for _, dir in ipairs(p.dirs) do
-        local x, y = G.pos(cp)
-        local moved = false
-        for attempt = 1, 6 do
-            for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
-            G.idle(4)
-            local nx, ny = G.pos(cp)
-            if nx ~= x or ny ~= y then moved = true; break end
-            if mapid(cp) ~= start_map then moved = true; break end
-            for _ = 1, 4 do G.tap("A", 3, 13) end
-        end
-        if not moved then
-            G.shot("stuck")
-            G.finish(false, string.format("%s (%s): step %s stalled at (%d,%d)",
-                                          label, path_name, dir, G.pos(cp)))
-        end
-        if mapid(cp) ~= start_map then return end
-    end
-end
-
--- Press `dir` repeatedly into an arrow-warp door until the map changes (bounded).
-local function enter_warp(cp, dir, budget)
-    local from_map = mapid(cp)
-    for _ = 1, (budget or 20) do
-        if mapid(cp) ~= from_map then break end
-        for _ = 1, 16 do joypad.set({ [dir] = true }); G.advance() end
-        if mapid(cp) == from_map then for _ = 1, 2 do G.tap("A", 3, 13) end end
-    end
-    for _ = 1, 600 do
-        if mapid(cp) ~= from_map and G.pred_ok(cp, "palette_fade_active") then G.idle(16); return true end
-        G.advance()
-    end
-    return false
-end
-
---- Wait through a scripted scene: A-only while script_context_status/field_controls_locked are
---- not both quiet, then require that quiet held for 60 CONSECUTIVE frames (no further input)
---- before trusting it — never a single read. PHYSICAL lesson, repeated across runs 4-7 (starter
---- scene) and 11 (rival battle): both predicates can read "done" for a frame or two mid-scene.
---- An optional `also()` predicate adds extra ground truth (e.g. a scene var, an object position).
-local function wait_scene_settled(cp, budget, also)
-    local stable = 0
-    for _ = 1, (budget or 6000) do
-        local quiet = G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked")
-        if quiet and also then quiet = also() end
-        if quiet then
-            stable = stable + 1
-            if stable >= 60 then return true end
-            G.advance()
-        else
-            stable = 0
-            G.tap("A", 2, 10)
-        end
-    end
-    return false
-end
-
-local PLAY_FROM = os.getenv("SLINK_GEN3_PLAY_FROM")
-if PLAY_FROM == "" then PLAY_FROM = nil end
+-- Every walker, scene wait, battle mash, object reader and the leg runner itself come from
+-- lua/tests/playlib.lua, which is game-agnostic: the Gen 3 helper module (G) and the game
+-- facts below are INJECTED, so Gen 1/Gen 2 drivers reuse the same runtime with their own.
+local play = PL.bind(G, {
+    paths            = PATHS,
+    obj_events       = OBJ_EVENTS_ADDR,
+    party_count_addr = PARTY_COUNT_ADDR,
+})
 
 local LEGS = {}
 
@@ -359,18 +271,18 @@ LEGS[#LEGS + 1] = {
         -- ON_FRAME ChooseStarterScene fires immediately (scene==1) — more scripted dialogue and
         -- an applymovement walk that parks the player at (6,4). No joypad steering happens or
         -- would do anything during this; only A to clear message boxes.
-        local town_map = mapid(cp)
-        follow(cp, "town_start_to_oak_trigger", "starter")
+        local town_map = play.mapid(cp)
+        play.follow(cp, "town_start_to_oak_trigger", "starter")
         local reached_lab = false
         for _ = 1, 6000 do
-            if mapid(cp) ~= town_map then reached_lab = true; break end
+            if play.mapid(cp) ~= town_map then reached_lab = true; break end
             G.tap("A", 2, 10)
         end
         if not reached_lab then
             G.shot("stuck")
             G.finish(false, "starter: Oak's intercept never warped the player into the lab")
         end
-        G.phase("in-lab", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
+        G.phase("in-lab", string.format("map=%d at=(%d,%d)", play.mapid(cp), G.pos(cp)))
         -- GROUND TRUTH, not position/idle guessing (PHYSICAL runs 4-7: position (6,4) + script
         -- idle + field controls unlocked was NOT sufficient — Oak was still talking). scripts.inc
         -- (ChooseStarterScene) only reaches `setvar VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB,
@@ -418,7 +330,7 @@ LEGS[#LEGS + 1] = {
             G.phase("pre-walk", string.format("obj0=(%d,%d) sb1=(%d,%d)", ox, oy, sx, sy))
             G.shot("prewalk")
         end
-        follow(cp, "lab_oak_scene_end_to_ball", "starter")   -- asserts the real (6,4), not assumed
+        play.follow(cp, "lab_oak_scene_end_to_ball", "starter")   -- asserts the real (6,4), not assumed
         do
             local ox = memory.read_s16_le(0x02036E38 + 0x10) - 7
             local oy = memory.read_s16_le(0x02036E38 + 0x12) - 7
@@ -450,13 +362,13 @@ LEGS[#LEGS + 1] = {
         local got = false
         for _ = 1, 40 do
             G.tap("A", 3, 20)
-            if party_count() > 0 then got = true; break end
+            if play.party_count() > 0 then got = true; break end
         end
         if not got then
             G.shot("stuck")
-            G.finish(false, "starter: party_count() never left 0 after interacting with the ball")
+            G.finish(false, "starter: gPlayerPartyCount never left 0 after interacting with the ball")
         end
-        G.phase("starter-got", "party=" .. party_count())
+        G.phase("starter-got", "party=" .. play.party_count())
 
         -- Phase 2: the trailing "received {mon} from OAK!" message/fanfare, the nickname
         -- Yes/No (Text_GiveNicknameToThisMon, scripts.inc:1129), and the rival's own dialogue
@@ -478,7 +390,7 @@ LEGS[#LEGS + 1] = {
             G.finish(false, "starter: trailing text/nickname-decline never went idle "
                          .. "(script_context_status)")
         end
-        G.phase("starter-idle", "party=" .. party_count())
+        G.phase("starter-idle", "party=" .. play.party_count())
     end,
 }
 
@@ -498,8 +410,8 @@ LEGS[#LEGS + 1] = {
         -- Landing ON (7,8) already fired the trigger (PATHS.ball_to_rival_row's own comment);
         -- everything from here through the approach dialogue is scripted (`lockall`). A-only:
         -- this is all still field/dialogue, never a menu that Start should touch.
-        follow(cp, "ball_to_rival_row", "rival_battle")
-        local entered = mash_a(250, function() return in_battle(cp) end)
+        play.follow(cp, "ball_to_rival_row", "rival_battle")
+        local entered = play.mash_a(250, function() return play.in_battle(cp) end)
         if not entered then
             G.shot("stuck")
             G.finish(false, "rival_battle: never entered battle after the trigger tile")
@@ -511,7 +423,7 @@ LEGS[#LEGS + 1] = {
         -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up. A loss is
         -- an acceptable outcome here (see source: RIVAL_BATTLE_HEAL_AFTER, no whiteout), so the
         -- terminal is only in_battle clearing, not a win.
-        local ended = mash_a(1200, function() return not in_battle(cp) end)   -- PHYSICAL run 10: the fight was WON at ~315 taps but the end-of-battle text still needs presses
+        local ended = play.mash_a(1200, function() return not play.in_battle(cp) end)   -- PHYSICAL run 10: the fight was WON at ~315 taps but the end-of-battle text still needs presses
         if not ended then
             G.shot("stuck")
             G.finish(false, "rival_battle: in_battle never cleared within budget")
@@ -521,7 +433,7 @@ LEGS[#LEGS + 1] = {
         -- mon" message, the rival's own applymovement exit): wait_scene_settled (A-only while
         -- busy, then idle+unlocked held 60 frames) -- same PHYSICAL lesson as the starter leg's
         -- scene wait (run 4-7: a single-frame idle read is not enough, it can flicker mid-scene).
-        if not wait_scene_settled(cp, 6000) then
+        if not play.wait_scene_settled(cp, 6000) then
             G.shot("stuck")
             G.finish(false, "rival_battle: post-battle scene never settled (idle+unlocked 60f)")
         end
@@ -538,17 +450,17 @@ LEGS[#LEGS + 1] = {
         "data/tilesets/secondary/lab/metatile_attributes.bin (metatiles 656-658 at 5..7,12: behavior 0x0 = MB_NORMAL, not a metatile-driven warp)",
     },
     run = function(cp)
-        local lab_map = mapid(cp)
-        follow(cp, "rival_row_to_lab_exit", "leave_lab_for_parcel")
+        local lab_map = play.mapid(cp)
+        play.follow(cp, "rival_row_to_lab_exit", "leave_lab_for_parcel")
         -- DIAGNOSTIC (run 11 stalled here: "map never changed from 1027" after landing on
         -- (6,12), a collision=0/MB_NORMAL tile — no arrow-warp metatile behavior, yet a plain
         -- walk-onto did not fire the warp). Log the live object vs SaveBlock1.pos before trying
         -- the fix, the same cross-check that caught the starter leg's stale-position bug.
         do
-            local ox, oy = obj0_pos()
+            local ox, oy = play.obj_pos()
             local sx, sy = G.pos(cp)   -- multi-return: capture first (a bare G.pos(cp) mid-list drops sy)
             G.phase("at-lab-exit", string.format(
-                "map=%d sb1=(%d,%d) obj0=(%d,%d) facing=%d", mapid(cp), sx, sy, ox, oy, obj0_facing()))
+                "map=%d sb1=(%d,%d) obj0=(%d,%d) facing=%d", play.mapid(cp), sx, sy, ox, oy, play.obj_facing()))
         end
         -- FIX: treat this door the same as every OTHER door in this file — a press INTO it,
         -- not a plain walk-onto. (leave_lab_for_parcel's collision-only investigation showed
@@ -557,14 +469,14 @@ LEGS[#LEGS + 1] = {
         -- landing on it via its last queued direction does not reliably trigger — same shape as
         -- every exterior door (16,13)/(36,19)/(26,26) elsewhere in this file, all driven by
         -- enter_warp, not require_map_change.)
-        if not enter_warp(cp, "Down", 20) then
-            local ox2, oy2 = obj0_pos()
+        if not play.enter_warp(cp, "Down", 20) then
+            local ox2, oy2 = play.obj_pos()
             G.shot("stuck")
             G.finish(false, string.format(
                 "leave_lab_for_parcel: the lab exit never fired a warp; obj0=(%d,%d) sb1=(%d,%d)",
                 ox2, oy2, G.pos(cp)))
         end
-        G.phase("outside", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
+        G.phase("outside", string.format("map=%d at=(%d,%d)", play.mapid(cp), G.pos(cp)))
     end,
 }
 
@@ -586,17 +498,17 @@ LEGS[#LEGS + 1] = {
         "data/maps/ViridianCity_Mart/scripts.inc:16-32 (ParcelScene, ON_FRAME-triggered)",
     },
     run = function(cp)
-        follow(cp, "lab_exit_to_route1_edge", "parcel_fetch")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: PalletTown->Route1 crossing never fired") end
-        follow(cp, "route1_south_to_north_edge", "parcel_fetch")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: Route1->ViridianCity crossing never fired") end
-        follow(cp, "route1_edge_to_mart_door", "parcel_fetch")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: the mart door never fired a warp") end
-        G.phase("in-mart", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
+        play.follow(cp, "lab_exit_to_route1_edge", "parcel_fetch")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: PalletTown->Route1 crossing never fired") end
+        play.follow(cp, "route1_south_to_north_edge", "parcel_fetch")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: Route1->ViridianCity crossing never fired") end
+        play.follow(cp, "route1_edge_to_mart_door", "parcel_fetch")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: the mart door never fired a warp") end
+        G.phase("in-mart", string.format("map=%d at=(%d,%d)", play.mapid(cp), G.pos(cp)))
         -- Let the ON_FRAME script run and clear its own message boxes with A; the scene owns
         -- player movement. wait_scene_settled: idle+unlocked debounced 60 frames, never a
         -- single read (same lesson as the starter/rival-battle scenes).
-        if not wait_scene_settled(cp, 3000) then
+        if not play.wait_scene_settled(cp, 3000) then
             G.shot("stuck")
             G.finish(false, "parcel_fetch: the mart's parcel scene never returned control")
         end
@@ -616,21 +528,21 @@ LEGS[#LEGS + 1] = {
         -- tile (walk_up x4 from the (4,7) entrance), not a BFS/observed tile — the one path
         -- entry in this file that isn't independently source-BFS'd, because the engine (not the
         -- player) drove that walk. Verified at runtime by G.pos same as every other step.
-        follow(cp, "mart_scene_end_to_exit", "parcel_deliver")
-        if not enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: the mart exit never fired a warp") end
-        follow(cp, "mart_door_to_route1_edge", "parcel_deliver")
-        if not enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: ViridianCity->Route1 crossing never fired") end
-        follow(cp, "route1_north_to_south_edge", "parcel_deliver")
-        if not enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: Route1->PalletTown crossing never fired") end
-        follow(cp, "route1_edge_to_lab_door", "parcel_deliver")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the lab door never fired a warp") end
-        follow(cp, "lab_entrance_to_oak", "parcel_deliver")
+        play.follow(cp, "mart_scene_end_to_exit", "parcel_deliver")
+        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: the mart exit never fired a warp") end
+        play.follow(cp, "mart_door_to_route1_edge", "parcel_deliver")
+        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: ViridianCity->Route1 crossing never fired") end
+        play.follow(cp, "route1_north_to_south_edge", "parcel_deliver")
+        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: Route1->PalletTown crossing never fired") end
+        play.follow(cp, "route1_edge_to_lab_door", "parcel_deliver")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the lab door never fired a warp") end
+        play.follow(cp, "lab_entrance_to_oak", "parcel_deliver")
         G.tap("Up", 2, 13)
         -- Talking to Oak with the parcel triggers the whole delivery + Pokedex + 5-balls
         -- cutscene (scripts.inc:600-660); long, almost entirely message boxes and NPC
         -- applymovement. wait_scene_settled: idle+unlocked debounced 60 frames, plus callback2
         -- back to CB2_Overworld, never a single read.
-        if not wait_scene_settled(cp, 6000, function() return G.pred_ok(cp, "callback2") end) then
+        if not play.wait_scene_settled(cp, 6000, function() return G.pred_ok(cp, "callback2") end) then
             G.shot("stuck")
             G.finish(false, "parcel_deliver: Oak's dex-scene never returned control")
         end
@@ -648,20 +560,20 @@ LEGS[#LEGS + 1] = {
         "src/battle_script_commands.c (BattleScript_SuccessBallThrow); include/constants/battle.h:82 (B_OUTCOME_CAUGHT=7)",
     },
     run = function(cp)
-        follow(cp, "oak_to_lab_exit", "route1_catch")
+        play.follow(cp, "oak_to_lab_exit", "route1_catch")
         -- Same door as leave_lab_for_parcel (5..7,12): a press INTO it, not a plain walk-onto.
-        if not enter_warp(cp, "Down", 20) then
+        if not play.enter_warp(cp, "Down", 20) then
             G.shot("stuck")
             G.finish(false, "route1_catch: the lab exit never fired a warp")
         end
-        follow(cp, "lab_exit_to_route1_edge", "route1_catch")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "route1_catch: PalletTown->Route1 crossing never fired") end
-        follow(cp, "route1_south_to_grass_spot", "route1_catch")
+        play.follow(cp, "lab_exit_to_route1_edge", "route1_catch")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "route1_catch: PalletTown->Route1 crossing never fired") end
+        play.follow(cp, "route1_south_to_grass_spot", "route1_catch")
         local caught = false
         for encounter = 1, 4 do
             local entered = false
             for _ = 1, 400 do
-                if in_battle(cp) then entered = true; break end
+                if play.in_battle(cp) then entered = true; break end
                 -- oscillate in the two-tile grass gap to keep triggering the per-step encounter
                 -- check without leaving the grass patch (Route1/map.json; the corridor is
                 -- exactly 2 tiles wide here)
@@ -677,7 +589,7 @@ LEGS[#LEGS + 1] = {
             G.tap("A", 3, 30)
             for _ = 1, 30 do G.tap("A", 3, 20) end   -- bag category/list/throw-confirm, mashed
             -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
-            local resolved = mash_a(160, function() return not in_battle(cp) end)
+            local resolved = play.mash_a(160, function() return not play.in_battle(cp) end)
             if resolved and battle_outcome() == B_OUTCOME_CAUGHT then
                 caught = true
                 break
@@ -707,7 +619,7 @@ LEGS[#LEGS + 1] = {
         for encounter = 1, 20 do
             local entered = false
             for _ = 1, 400 do
-                if in_battle(cp) then entered = true; break end
+                if play.in_battle(cp) then entered = true; break end
                 local dir = (G.spent % 2 == 0) and "Left" or "Right"
                 for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
             end
@@ -718,7 +630,7 @@ LEGS[#LEGS + 1] = {
             -- Keep attacking (RISK, see header) until this battle ends, then check the faint
             -- counter — a strong starter may just keep winning; bounded at 20 encounters.
             -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
-            mash_a(160, function() return not in_battle(cp) end)
+            play.mash_a(160, function() return not play.in_battle(cp) end)
             if player_faints() > before then fainted = true; break end
         end
         if not fainted then
@@ -740,43 +652,43 @@ LEGS[#LEGS + 1] = {
         "src/pokemon_storage_system.c (storage menu)",
     },
     run = function(cp)
-        follow(cp, "route1_grass_to_north_edge", "viridian_pc_deposit_withdraw")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: Route1->ViridianCity crossing never fired") end
-        follow(cp, "route1_edge_to_pokecenter_door", "viridian_pc_deposit_withdraw")
-        if not enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: the PokeCenter door never fired a warp") end
-        follow(cp, "pokecenter_entrance_to_pc", "viridian_pc_deposit_withdraw")
+        play.follow(cp, "route1_grass_to_north_edge", "viridian_pc_deposit_withdraw")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: Route1->ViridianCity crossing never fired") end
+        play.follow(cp, "route1_edge_to_pokecenter_door", "viridian_pc_deposit_withdraw")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: the PokeCenter door never fired a warp") end
+        play.follow(cp, "pokecenter_entrance_to_pc", "viridian_pc_deposit_withdraw")
         G.tap("Up", 2, 13)
-        local before = party_count()
+        local before = play.party_count()
         -- Storage menu navigation past "what do you want to do" is mashed (not pinned row-by-
         -- row); verified by party_count actually changing, never by the presses alone.
         local deposited = false
         for _ = 1, 60 do
             G.tap("A", 3, 20)
-            if party_count() < before then deposited = true; break end
+            if play.party_count() < before then deposited = true; break end
         end
         if not deposited then
             G.shot("stuck")
-            G.finish(false, string.format("viridian_pc: party_count() never dropped from %d (deposit)", before))
+            G.finish(false, string.format("viridian_pc: gPlayerPartyCount never dropped from %d (deposit)", before))
         end
-        G.phase("deposited", "party=" .. party_count())
-        local after_deposit = party_count()
+        G.phase("deposited", "party=" .. play.party_count())
+        local after_deposit = play.party_count()
         local withdrawn = false
         for _ = 1, 60 do
             G.tap("A", 3, 20)
-            if party_count() > after_deposit then withdrawn = true; break end
+            if play.party_count() > after_deposit then withdrawn = true; break end
         end
         if not withdrawn then
             G.shot("stuck")
-            G.finish(false, string.format("viridian_pc: party_count() never rose from %d (withdraw)", after_deposit))
+            G.finish(false, string.format("viridian_pc: gPlayerPartyCount never rose from %d (withdraw)", after_deposit))
         end
-        G.phase("withdrawn", "party=" .. party_count())
+        G.phase("withdrawn", "party=" .. play.party_count())
         -- Back out of the PC menu and confirm the field, debounced 60 frames -- never a single
         -- read (same lesson as every other scene end in this file).
         for _ = 1, 20 do
             if G.pred_ok(cp, "callback2") then break end
             G.tap("B", 3, 20)
         end
-        if not wait_scene_settled(cp, 900) then
+        if not play.wait_scene_settled(cp, 900) then
             G.shot("stuck")
             G.finish(false, "viridian_pc: never settled back into the field after the PC menu")
         end
@@ -849,69 +761,35 @@ LEGS[#LEGS + 1] = {
 -- ── run ──────────────────────────────────────────────────────────────────────────────────────
 
 local function run()
-    G.open("gen3_scripted_play")
-    pcall(client.speedmode, 6399)
-    G.budget = 900000
-    local cp, title = G.checkpoint()
-    G.phase("start", "title=" .. tostring(title))
-
-    -- The fixture's battery is seeded but the field pointer is not sane at cold boot until the
-    -- title screen -> CONTINUE has run (gen3_boot_check.lua run():300-320); a leg cannot read
-    -- G.pos/G.map before this.
-    if not G.boot_to_field(cp, 9000) then
-        G.shot("stuck")
-        local cb2 = G.pred(cp, "callback2")
-        G.finish(false, string.format("boot: never reached the field (callback2=%08X)", cb2))
-    end
-
-    -- P3 shadow observer beside this driver when SLINK_SHADOW is set (same block shape as
-    -- lua/tests/duo/duo_main.lua): read-only, logs to patch/build/gen3_scripted_play.shadow.log.
-    if os.getenv("SLINK_SHADOW") then
-        local okshd, shd = pcall(dofile, WT .. "/lua/gen3/shadow_run.lua")
-        if okshd and shd then
-            local okst, st = pcall(shd.start, { duo = {
-                result = WT .. "/patch/build/gen3_scripted_play_result.txt", player = "a" } })
-            if okst and st then
-                G.phase("shadow", "observer started admitted_by=" .. tostring(st.admitted_by))
-                event.onframeend(function() pcall(st.poll) end, "SLink-gen3-shadow-poll")
-            else
-                G.phase("shadow", "observer start failed: " .. tostring(st))
+    play.main(LEGS, {
+        name   = "gen3_scripted_play",      -- patch/build/gen3_scripted_play_result.txt
+        budget = 900000,
+        -- The fixture's battery is seeded but the field pointer is not sane at cold boot until
+        -- the title screen -> CONTINUE has run (gen3_boot_check.lua run():300-320); a leg cannot
+        -- read G.pos/G.map before this. It happens BEFORE the observer starts, deliberately: the
+        -- title screen's own map loads are not natural play.
+        boot = function(cp)
+            if not G.boot_to_field(cp, 9000) then
+                G.shot("stuck")
+                local cb2 = G.pred(cp, "callback2")
+                G.finish(false, string.format("boot: never reached the field (callback2=%08X)", cb2))
             end
-        else
-            G.phase("shadow", "shadow_run dofile failed: " .. tostring(shd))
-        end
-    end
-
-    local from_idx = 1
-    if PLAY_FROM then
-        for i, leg in ipairs(LEGS) do
-            if leg.name == PLAY_FROM then from_idx = i; break end
-        end
-        G.phase("resume", "from=" .. PLAY_FROM .. " (assumes that leg's save state is already loaded)")
-    end
-
-    local reached = {}
-    for i = from_idx, #LEGS do
-        local leg = LEGS[i]
-        if leg.open then
-            G.phase("skip-open", leg.name .. ": " .. tostring(leg.open_reason))
-        else
-            G.phase("leg-start", leg.name)
-            leg.run(cp)
-            G.phase("leg-done", leg.name)
-        end
-        reached[#reached + 1] = leg.name
-    end
-
-    G.finish(true, "reached: " .. table.concat(reached, ","))
+        end,
+        shadow = {
+            script = WT .. "/lua/gen3/shadow_run.lua",
+            result = WT .. "/patch/build/gen3_scripted_play_result.txt",
+            name   = "SLink-gen3-shadow-poll",
+        },
+    })
 end
 
 if (debug.getinfo(1, "S").source or "") == "main" then run() end
 
 return {
-    LEGS = LEGS, PATHS = PATHS, follow = follow,
+    LEGS = LEGS, PATHS = PATHS, play = play,
     -- test hooks (Codex review cx-378ce251): the in_battle polarity wrapper and the lab scene
     -- var address arithmetic, both independently checkable without an emulator.
-    in_battle = in_battle,
+    follow = play.follow,
+    in_battle = play.in_battle,
     LAB_SCENE_VAR_OFFSET = LAB_SCENE_VAR_OFFSET,
 }
