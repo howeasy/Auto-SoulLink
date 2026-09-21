@@ -16,13 +16,22 @@ local P = {}
 local MAILBOX = 0xDEE2
 local BEACON  = { 0x53, 0x4C, 0x4E, 0x4B }  -- 'SLNK', rewritten every VBlank
 local ABI     = MAILBOX + 4
+local SFX     = MAILBOX + 7                 -- SLINK_SFX_REQUEST: client -> patch, a semantic code
 local CAPS    = MAILBOX + 8                 -- SLINK_CAPS
 local STATE   = MAILBOX + 9                 -- SLINK_PANEL_STATE
 local PAGE    = MAILBOX + 10                -- patch -> client: page wanted
 local PAGES   = MAILBOX + 11                -- client -> patch: page count (0 reads as one)
-local OFF_ABI, OFF_CAPS, OFF_STATE, OFF_PAGE, OFF_PAGES = 4, 8, 9, 10, 11
+local OFF_ABI, OFF_SFX, OFF_CAPS, OFF_STATE, OFF_PAGE, OFF_PAGES = 4, 7, 8, 9, 10, 11
+local CAP_SFX   = 0x01                      -- SLINK_CAP_SFX: the main-thread SFX service is built in
 local CAP_PANEL = 0x02                      -- SLINK_CAP_PANEL
 local CLOSED, AWAIT, STAGED = 0, 1, 2
+-- slink.asm SlinkSfxService: what the request byte may carry. The ROM resolves the code to a
+-- sound id for the audio bank loaded at play time (ids are per bank), holds it through fades
+-- and busy channels, and zeroes the byte when it plays. Anything else is consumed unplayed.
+local SFX_SUCCESS, SFX_FAILURE, SFX_BOO = 1, 2, 3
+-- The server speaks Gen 3 SE numbers (docs/protocol.md play_sound); this is the Gen 1 binding.
+local SFX_CODE_FOR_GEN3_ID = { [25] = SFX_SUCCESS, [26] = SFX_FAILURE, [22] = SFX_BOO, [95] = SFX_SUCCESS }
+local SFX_QUEUE_MAX = 4                     -- a burst beyond this drops the OLDEST: the newest news wins
 
 local COLS, ROWS = 20, 18
 local TILES      = COLS * ROWS              -- 360, one whole page
@@ -33,8 +42,10 @@ local BLANK      = 0x7F
 -- reply that lands after it is held rather than painted over a revealed fallback.
 local DEADLINE = 60
 
-P.MAILBOX, P.CAPS, P.STATE, P.PAGE, P.PAGES = MAILBOX, CAPS, STATE, PAGE, PAGES
+P.MAILBOX, P.CAPS, P.STATE, P.PAGE, P.PAGES, P.SFX = MAILBOX, CAPS, STATE, PAGE, PAGES, SFX
 P.CLOSED, P.AWAIT, P.STAGED = CLOSED, AWAIT, STAGED
+P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO = SFX_SUCCESS, SFX_FAILURE, SFX_BOO
+P.SFX_CODE_FOR_GEN3_ID, P.SFX_QUEUE_MAX = SFX_CODE_FOR_GEN3_ID, SFX_QUEUE_MAX
 P.ROWS, P.COLS, P.MAX_PAGES, P.DEADLINE = ROWS, COLS, MAX_PAGES, DEADLINE
 
 --- ASCII -> Gen 1 tile id (memory_gb.lua:1555-1568, verbatim).
@@ -80,7 +91,7 @@ function P.new(profile, io, writes, sanitize)
     -- the mailbox and its ABI bytes, per cartridge build (module defaults = vanilla patch)
     local MAILBOX = profile.trade and profile.trade.mailbox or MAILBOX
     local ABI, CAPS, STATE = MAILBOX + OFF_ABI, MAILBOX + OFF_CAPS, MAILBOX + OFF_STATE
-    local PAGE, PAGES = MAILBOX + OFF_PAGE, MAILBOX + OFF_PAGES
+    local PAGE, PAGES, SFX = MAILBOX + OFF_PAGE, MAILBOX + OFF_PAGES, MAILBOX + OFF_SFX
     local tile_for = P.tile_for_charmap(profile.charmap)
 
     -- The only bytes this window may ever touch. write_bytes is expected to check the FULL
@@ -89,11 +100,12 @@ function P.new(profile, io, writes, sanitize)
         if type(addr) ~= "number" then return false end
         local last = addr + (n or 1) - 1
         if addr >= tilemap and last < tilemap + TILES then return true end
-        return (addr == STATE or addr == PAGES) and last == addr
+        return (addr == STATE or addr == PAGES or addr == SFX) and last == addr
     end
 
     -- `mailbox` is read by the harness (duo VBlank-counter probe) so it never hard-codes vanilla's.
-    local self = { pages = nil, tiles = nil, last_state = nil, await_frame = nil, armed = false, mailbox = MAILBOX }
+    local self = { pages = nil, tiles = nil, last_state = nil, await_frame = nil, armed = false, mailbox = MAILBOX,
+                   sfx_queue = {} }
 
     local function u8(addr)
         local v = io.read_u8(addr)
@@ -113,10 +125,48 @@ function P.new(profile, io, writes, sanitize)
 
     function self:abi() return u8(ABI) or 0 end
 
+    --- The Gen 1 code for a server `play_sound` id, or nil for ids Gen 1 has no sound for.
+    function self:sfx_code_for(sound_id) return SFX_CODE_FOR_GEN3_ID[sound_id] end
+
+    --- Does THIS cartridge play sound? Same beacon, the SFX bit of the same caps byte.
+    function self:sfx_present()
+        for i = 1, 4 do
+            if u8(MAILBOX + i - 1) ~= BEACON[i] then return false end
+        end
+        local caps = u8(CAPS)
+        return caps ~= nil and caps ~= 0xFF and (caps & CAP_SFX) ~= 0
+    end
+
+    --- Write one code to the request byte, through the armed window like every other
+    --- mailbox write, so the receipts log shows it. Only when the byte reads 0: the ROM
+    --- clears it when it plays, and overwriting a request it is still HOLDING (fade, busy
+    --- channel) would lose that one. Returns true when written.
+    local function post_sfx(code)
+        if u8(SFX) ~= 0 then return false end
+        writes:arm("panel", allow)
+        local ok, err = pcall(function() writes:write_bytes(SFX, { code }) end)
+        writes:disarm()
+        if not ok then error(err, 0) end
+        return true
+    end
+
+    --- Ask the cartridge to play a notification. `code` is one of P.SFX_*; a Gen 3 SE id
+    --- from a `play_sound` command is mapped through P.SFX_CODE_FOR_GEN3_ID by the caller.
+    --- Posted now if the request byte is free, else queued and drained by service().
+    function self:request_sfx(code)
+        if code ~= SFX_SUCCESS and code ~= SFX_FAILURE and code ~= SFX_BOO then return false end
+        if not self:sfx_present() then return false end
+        if #self.sfx_queue == 0 and post_sfx(code) then return true end
+        if #self.sfx_queue >= SFX_QUEUE_MAX then table.remove(self.sfx_queue, 1) end
+        self.sfx_queue[#self.sfx_queue + 1] = code
+        return true
+    end
+
     function self:awaiting() return u8(STATE) == AWAIT end
 
-    --- Forget the held rows (WRAM clear / rejected hello — the caller owns that policy).
-    function self:clear() self.pages, self.tiles = nil, nil end
+    --- Forget the held rows and any queued sounds (WRAM clear / rejected hello — the caller
+    --- owns that policy).
+    function self:clear() self.pages, self.tiles, self.sfx_queue = nil, nil, {} end
 
     --- Validate, sanitize and PRE-RENDER every page. Nothing is computed inside the armed
     --- window, and a rejected payload leaves the previous one untouched rather than half-held.
@@ -165,6 +215,14 @@ function P.new(profile, io, writes, sanitize)
 
     local function tick()
         local frame = io.framecount()
+        -- One queued sound per frame, only once the ROM has consumed the previous request.
+        if #self.sfx_queue > 0 then
+            if not self:sfx_present() then
+                self.sfx_queue = {}                       -- the cartridge changed under us
+            elseif post_sfx(self.sfx_queue[1]) then
+                table.remove(self.sfx_queue, 1)
+            end
+        end
         if not self:present() then
             -- Unpatched or gone: $DEEB is ordinary WRAM, so nothing it says is a transition.
             self.last_state, self.await_frame = nil, nil

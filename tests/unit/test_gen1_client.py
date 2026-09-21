@@ -1017,6 +1017,107 @@ def test_rows_arriving_past_the_deadline_are_held_for_the_next_open(world):
     assert world.bus[PANEL_STATE] == 2
 
 
+# ── native sound (slink.asm SlinkSfxService) ───────────────────────────────────────────────
+# The client writes a SEMANTIC code to mailbox +7 and the ROM plays the bank's sound for it on
+# the main thread; here the ROM is a bytearray, so "played" is modelled by clearing the byte.
+SFX_REQUEST, CAP_SFX_AND_PANEL = 0xDEE9, 0x03
+
+
+def _patch_sfx(world):
+    _patch_panel(world)
+    world.bus[PANEL_CAPS] = CAP_SFX_AND_PANEL
+
+
+def _sfx_writes(world):
+    return [v for a, v, d in world.writes if a == SFX_REQUEST and d == "System Bus"]
+
+
+def test_hello_reports_the_sfx_capability_per_cartridge(world):
+    _patch_panel(world)                   # panel-only caps ($02): a pre-sound ABI-3 build
+    world.connect()
+    assert world.events("hello")[0]["sfx"] is False
+    world.assert_all_conform()
+
+
+def test_play_sound_becomes_a_semantic_code_when_the_run_and_cartridge_allow_it(world):
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step()
+    assert world.events("hello")[0]["sfx"] is True
+    world.reply({"cmd": "play_sound", "sound": 25})        # SE_SUCCESS -> code 1
+    world.step()
+    assert world.bus[SFX_REQUEST] == 1 and _sfx_writes(world) == [1]
+    world.bus[SFX_REQUEST] = 0                             # the ROM played it
+    world.reply({"cmd": "play_sound", "sound": 26})        # SE_FAILURE -> code 2
+    world.step()
+    world.bus[SFX_REQUEST] = 0
+    world.reply({"cmd": "play_sound", "sound": 22})        # SE_BOO -> code 3
+    world.step()
+    world.bus[SFX_REQUEST] = 0
+    world.reply({"cmd": "play_sound", "sound": 95})        # SE_SHINY -> success (never sent for Gen 1)
+    world.step()
+    assert _sfx_writes(world) == [1, 2, 3, 1]
+    world.assert_all_conform()
+
+
+def test_play_sound_is_silent_without_the_run_option_or_the_capability(world):
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "play_sound", "sound": 25})        # config never said native_sounds
+    world.step()
+    assert _sfx_writes(world) == [] and world.bus[SFX_REQUEST] == 0
+    world.reply({"cmd": "config", "native_sounds": False})
+    world.reply({"cmd": "play_sound", "sound": 25})
+    world.step()
+    assert _sfx_writes(world) == []
+    world.bus[PANEL_CAPS] = 0x02                           # a panel-only cartridge
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.reply({"cmd": "play_sound", "sound": 25})
+    world.step()
+    assert _sfx_writes(world) == [], "no SFX capability bit, no write"
+    world.assert_all_conform()
+
+
+def test_an_unknown_sound_id_writes_nothing(world):
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.reply({"cmd": "play_sound", "sound": 16})        # SE_FAINT: Gen 3 client-local only
+    world.step()
+    assert _sfx_writes(world) == []
+
+
+def test_a_request_the_rom_is_still_holding_is_never_overwritten(world):
+    """The ROM clears +7 when it plays; while it HOLDS one (fade, busy channel) a second write
+    would lose the first, so the client queues and posts one per frame once the byte is free."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.reply({"cmd": "play_sound", "sound": 25}, {"cmd": "play_sound", "sound": 26})
+    world.step()
+    assert world.bus[SFX_REQUEST] == 1 and _sfx_writes(world) == [1]
+    world.step(3)
+    assert _sfx_writes(world) == [1], "still held by the ROM: nothing posted over it"
+    world.bus[SFX_REQUEST] = 0                             # the fade ended, the ROM played it
+    world.step()
+    assert world.bus[SFX_REQUEST] == 2 and _sfx_writes(world) == [1, 2]
+    # a burst deeper than the queue keeps the newest news
+    world.bus[SFX_REQUEST] = 0
+    world.reply(*[{"cmd": "play_sound", "sound": s} for s in (25, 26, 22, 25, 26, 22)])
+    world.step()
+    posted = _sfx_writes(world)[2:]
+    assert posted == [1]                                   # the first posts immediately
+    drained = []
+    for _ in range(6):
+        world.bus[SFX_REQUEST] = 0
+        world.step()
+        drained = _sfx_writes(world)[3:]
+    # queue cap 4, oldest dropped: of the five queued codes 2,3,1,2,3 the first 2 is lost
+    assert drained == [3, 1, 2, 3], drained
+    world.assert_all_conform()
+
+
 # ── the last client card: falsifying tests, written before the fixes ─────────────────────
 # Each case below is RED against HEAD and names, in its own assertions, exactly what the
 # implementer has to produce. Engine facts are pret pokered 405b624 / pokeyellow 0a08515.

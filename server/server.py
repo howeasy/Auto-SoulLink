@@ -1227,7 +1227,7 @@ class SLinkServer:
                 # the cartridge showed the run frozen at connect time for the rest of the
                 # session. Gen 3 never noticed: it leaves info_panel_width at 0, so its
                 # fallback answered True.
-                for carried in ("panel", "panel_abi"):
+                for carried in ("panel", "panel_abi", "sfx"):
                     if carried in prev_conn:
                         self.connected_players[player_id][carried] = prev_conn[carried]
                 if msg.get("event") == "hello":
@@ -1263,6 +1263,9 @@ class SLinkServer:
                     if "panel" in msg:
                         self.connected_players[player_id]["panel"] = bool(msg.get("panel"))
                         self.connected_players[player_id]["panel_abi"] = msg.get("panel_abi", 0)
+                    # Native SFX likewise: the caps bit of the same companion mailbox.
+                    if "sfx" in msg:
+                        self.connected_players[player_id]["sfx"] = bool(msg.get("sfx"))
                     # A relaunched client holds no rows, so "unchanged since last time" would
                     # leave its panel empty until the run's contents happened to move.
                     self._last_panel_sig[player_id] = None

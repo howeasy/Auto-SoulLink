@@ -87,6 +87,7 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 | `loc_name` | str | optional | yes | `player_area` (display) | `server.py:2849` |
 | `writes_enabled` | bool | optional | yes | **ignored by server** | — |
 | `panel` / `panel_abi` | bool / int | optional | no | per-cartridge native-panel capability; absent ⇒ adapter default (`info_panel_width()==0`) | `server.py:2483-2485`, `server.py:1781-1799` |
+| `sfx` | bool | optional | no | per-cartridge native-sound capability (Gen 1 companion mailbox caps bit 0); carried like `panel` | `server.py` hello handler |
 | `rom_content` | dict (adapter-defined) | required only under a `rom_contract.json` | no | admission fingerprint + per-player encounter tables | `server.py:1739-1758`, `server.py:2873-2874` |
 | `rom_sha1` | str (40 hex, any case) | SHOULD | no | compared to the contract's `rom_sha1` for this player when both exist; mismatch ⇒ rejected (§2.2 step 1) | `_decide_admission` |
 | `artifact_kind` | str (`clean` \| `overlay` \| `rand` \| `rand_overlay`) | optional, default `"clean"` | no | committed once per run beside `rom_type`; a later hello of another kind is refused (§2.2 step 1') | `_mixed_games_error` |
@@ -324,7 +325,7 @@ Every command is a JSON object with `cmd`. Fields are listed exhaustively. "Obli
 | `msgbox` | `text`, `fb?` (`"prompt"`), `r?,g?,b?,frames?` | immediate: native in-game box when safe, else centre prompt (`fb=="prompt"`) or HUD line | none | none | yes (display only) | `:897-900`, `try_native_box :705-719` | 17 sites in state.py (links, dead zones, shiny, trade texts) |
 | `gui_prompt` | `text`, `r,g,b,frames` | immediate: momentous overworld prompt (dupes/clause reroll); native box when safe else centre prompt | none | none | display only | `:973-979` | `state.py:1261,1465,1548,1669` |
 | `hud_show` | `text`, `r?,g?,b?,frames?` (⚠ WRONG SAVE variant: `color:[r,g,b]`, `duration`) | immediate HUD line | none | none | display only | `:971-972` | 14 sites in state.py + `:910-915` |
-| `play_sound` | `sound:int` (Gen 3 SE id: 25 SE_SUCCESS, 26 SE_FAILURE, 22 SE_BOO, 95 SE_SHINY) | immediate | none | none | yes | `:721-727` | `state.py:718,1177,1186,1259,1332-1333,1364,1385,1409,1463,1539-1540,1578-1579,1878,1884,2623` |
+| `play_sound` | `sound:int` (Gen 3 SE id: 25 SE_SUCCESS, 26 SE_FAILURE, 22 SE_BOO, 95 SE_SHINY). Gen 1 maps 25/95→1, 26→2, 22→3 and writes the code to the companion mailbox `+7` when `config.native_sounds` and the cartridge's `sfx` capability both hold (`lua/gen1/panel.lua request_sfx`; the ROM picks the per-bank sound) | immediate | none | none | yes | `:721-727`; gen1 `client.lua play_sound` | `state.py:718,1177,1186,1259,1332-1333,1364,1385,1409,1463,1539-1540,1578-1579,1878,1884,2623` |
 | `resolved_areas` | `areas:list[str]` | immediate: mark each area resolved locally; set the "seeded" flag (hello reply carries it even when empty) | none | none | no | `:989-998` | `state.py:1050-1068` |
 | `unresolve_area` | `area_id` | immediate: clear the local resolved mark so the encounter is available again | none | none | no | `:1021-1023` | `state.py:1200,1271,1321,1470,1555,1676,1798,1813` |
 | `config` | `overworld_presence, native_messages, native_sounds, battle_calc, pc_trade_npc : bool` | immediate; sent in every hello reply | none | none | no | `:999-1020` | `state.py:1076-1082` |
@@ -493,7 +494,7 @@ Things a non-Gen-3 client/adapter must neutralise on the wire, or that should be
 
 | # | Where | What | Impact on another generation | Mitigation today |
 |---|---|---|---|---|
-| 1 | `state.py:718,1177,1186,1259,1332,1364,1385,1409,1463,1539-1540,1578-1579,1878,1884,2623` | `play_sound` ids are Gen 3 SE numbers (25 success, 26 failure, 22 boo, 95 shiny) | meaningless on GB | client maps 22/25/26/95 to its own SFX; no adapter hook exists |
+| 1 | `state.py:718,1177,1186,1259,1332,1364,1385,1409,1463,1539-1540,1578-1579,1878,1884,2623` | `play_sound` ids are Gen 3 SE numbers (25 success, 26 failure, 22 boo, 95 shiny) | meaningless on GB | Gen 1 binds them in the client (`panel.lua SFX_CODE_FOR_GEN3_ID` → mailbox codes 1-3; the ROM owns the per-bank sound ids); Gen 2 has no binding |
 | 2 | `state.py:521` | `"OAK: Took you long enough..."` in the trade action-menu text when `overworld_presence` is off (assumes the RR PC trade NPC is Prof. Oak) | wrong speaker on other games | none; client may re-render |
 | 3 | `state.py:554`, `642` | `POKeMON` (FR charmap spelling) in msgbox text | cosmetic | route through the client's text sanitiser |
 | 4 | `state.py:1173,1327-1328` | `"Pokémon"` (non-ASCII é) fallback when `species_id` is 0 | HUD mangling on BizHawk | always send `species_id` |
