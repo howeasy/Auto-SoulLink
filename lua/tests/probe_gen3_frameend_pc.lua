@@ -35,6 +35,14 @@ local M = require("memory_gba")
 local game_detect = require("game_detect")
 local detected = game_detect.detect()
 M.applyProfile(detected.profile, detected.variant)
+-- Optional overworld savestate (the live gates load theirs the same way, e.g.
+-- test_live_partyevents.lua:17,45); without it the census samples the title screen only.
+local STATE = os.getenv("SLINK_STATE")
+if STATE and STATE ~= "" then
+    local ok_ss = pcall(savestate.load, STATE)
+    console.log("[census] savestate " .. STATE .. " -> " .. tostring(ok_ss))
+    emu.frameadvance()
+end
 local P = detected.profile
 log(string.format("[probe] variant=%s game_id=%s", tostring(detected.variant), tostring(detected.game_id)))
 
