@@ -155,7 +155,7 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 |---|---|---|---|
 | `battle_begin`/`battle_end` (S-2) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play`, `census_rr_battle` |
 | `faint` (S-3) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_faint` (re-pin 0x0909EED2) |
-| `capture_wild` (S-4) | ◐ (route1_catch leg: grass hunt fixed, run 17 pending) | ◐ (wild_catch leg: bag timing fixed, lane pending; candidate 0x0907DD80+8) | `rr_catch_gotcha png`, `census_rr_faint_v3b_catch` |
+| `capture_wild` (S-4) | ◐ (route1_catch leg: grass hunt fixed, run 17 pending) | ✓ (wild_catch: outcome 7, party 1->2, observer `capture_wild` at 0x0907DD88 callback == site) | `shadow_rr_play_r5` (+ `.shadow.log`), `census_rr_faint_v3b_catch` |
 | `pc_move` (S-5) | ◐ (viridian_pc leg being pinned from `research/fr_pc_flow_and_pc_move_sites.md`) | ◐ (deposit reached by hooks: `TryStorePartyMonInBox`; observer run pending) | `census_rr_pc_deposit` |
 | `whiteout` (S-6) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_play` |
 | `map_load` (S-7) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play` |
