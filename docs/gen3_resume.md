@@ -14,7 +14,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 |---|---|
 | G0 | SIGNED (PLAN §14.1) |
 | G1 | **evidence complete, not yet requested**: hook probe PASS on FR clean + RR companion (`docs/gen3/probes/hooks_*_2026-09-21.txt`), frame-end census (`census_rr_overworld_2026-09-21.txt`: R15 parked in BIOS `0x1C4`, System/ARM), flash domain = `SRAM` 0x20000, six RR duos PASS twice on the old client, golden transcripts committed (`tests/fixtures/gen3/wire/`, 796K, four gzipped), conformance suite 16 passed with the old-client characterization (items 1/14 documented as A19; 29/30 were checker over-assertions; 28 unevidenced). Ask the owner to sign G1 with those receipts. |
-| G2 | in progress: packs landed (below); remaining = C2-3c (RR detours), boot-check lane runs, a Haiku spot-check of three pinned sites, the generator report for the owner. |
+| G2 | in progress: all P2 packs landed (below, incl. C2-3c); remaining = boot-check lane runs (RR fixture; FR fixture via make-fr), a Haiku spot-check of three pinned sites, the generator report for the owner. |
 
 ## Landed this session (planning branch, in order)
 
@@ -30,7 +30,7 @@ Fixes found by the work: `lua/memory_gba.lua` permutation rows 3/4 swapped vs pr
 ## Next actions (in order)
 
 1. Ask the owner to sign **G1** (receipts above). Record in PLAN §14.1.
-3. Lane runs for G2: `python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_town.sav --rr` (RR), then `make-fr --rom "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba" --out tests/fixtures/gen3/firered_town.sav` (its four intro assumptions are †UNVERIFIED — pin them from `data/gen3/pret/pokefirered.sym`, which the worker did not find); then a `_b` derivation for RR via the now-pinned layout (`derive-b --rr` still refuses: update `tools/gen3_fixtures.py` to use `rr_party_from_save`/`rr_boxes_from_save`, C2-8 finding).
+2. Lane runs for G2: `python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_town.sav --rr` (RR), then `make-fr --rom "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba" --out tests/fixtures/gen3/firered_town.sav` (its four intro assumptions are †UNVERIFIED — pin them from `data/gen3/pret/pokefirered.sym`, which the worker did not find); then a `_b` derivation for RR via the now-pinned layout (`derive-b --rr` still refuses: update `tools/gen3_fixtures.py` to use `rr_party_from_save`/`rr_boxes_from_save`, C2-8 finding).
 3. Haiku spot-check of three pinned sites against `.sym` + ROM bytes; generator report → owner signs **G2**.
 4. Queued out-of-lease (add: RR overworld-poison is a no-op path — the per-artifact coverage table must mark `poison_faint` N/A for RR, not OPEN): `tools/mkstates.py:102` RTC wording; fold `ROM_SPECS` (pin_gen3_site.py) with gen_gen3_write_checkpoint.py's copy; `data/gen3/pret/README.md`; `docs/gen3/research/flash_save.md` §7 bullets superseded by `rr_save_layout.md`; `data/games/gen3_rr/profile.json` `GMAIN_ADDR` fillable (0x030030F0 verified); a "box the last mon" capture to evidence item 28; retire the census probe's two †UNVERIFIED notes (now verified).
 5. P3 (shadow observer) opens after G2 per PLAN §6/§14.
