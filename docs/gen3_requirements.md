@@ -170,6 +170,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P2 codec differential finding: `lua/memory_gba.lua:622` substruct permutation rows 3/4 were swapped vs pret `src/pokemon.c` `SUBSTRUCT_CASE(3,0,3,1,2)/(4,0,2,3,1)` (vanilla FRLG only, PID%24 in {3,4}: wrong moves/ability substruct; species unaffected). Fixed by the coordinator (two rows) with `tests/unit/test_gen3_lua_vs_codec.py` as the standing differential.
 
+- 2026-09-21 P1 baseline: the six RR duo scenarios (`faint`, `boxsync`, `trade`, `ghost`, `infopanel`, `explode`) re-run on the OLD client at cut 91c7025 with the wire-log tap: all PASS (attempt 1 of 1 each), 17,286 transcript lines captured; transcripts are provisional (t = seq) until C1-3b lands and the capture is repeated — characterization input to C-0 and D rows, not a Gen 3 verdict.
+
 ## Recorded limits
 
 - **Keyed sync-command re-issue window.** `SYNC_INFLIGHT_RECONCILES = 6` is a re-issue
