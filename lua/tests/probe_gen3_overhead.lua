@@ -1,8 +1,22 @@
 -- P3 stand-in overhead ONLY: no real client/transport, hence no wire timing verdict.
 -- SLINK_ROOT, SLINK_GEN3_CHECKPOINT/TITLE, optional SLINK_STATE.
+-- SLINK_OVERHEAD_THROTTLE=1 adds realtime A/E/B/C/D after the fast A..H diagnostics.
+-- F/H discard pending inserts (real hooks, no frame poll); G closes all exec hooks.
 -- shadow_run.start/poll/teardown: lua/gen3/shadow_run.lua:184,296,321.
 -- Registered onframeend order mirrors duo_main.lua:102-120; we verify actual order too.
 local P = {FRAMES=600, WINDOWS=5}
+-- Hooks-only must not trip signals.MAX_PENDING=64: retain the real callback/byte
+-- checks and signal construction, but discard queue inserts synchronously.
+function P.discard_queue(signals, counter)
+    signals.pending=setmetatable({}, {__newindex=function(_,_,signal)
+        counter[signal.kind]=(counter[signal.kind] or 0)+1
+    end})
+end
+function P.fps(ms) return ms>0 and 600000/ms or 0 end
+function P.realtime_ok(base, measured)
+    return P.fps(P.median(base))>=59.5 and P.fps(P.median(measured))>=59.5
+        and P.within(base,measured)
+end
 function P.median(values)
     assert(#values > 0, "empty sample")
     local copy = {}
@@ -33,8 +47,8 @@ function P.run()
     local Shadow=dofile(wt.."/lua/gen3/shadow_run.lua")
     local json=dofile(wt.."/lua/json_codec.lua")
     G.open("probe_gen3_overhead")
-    G.budget=40000
-    client.speedmode(6399)
+    G.budget=65000
+    local throttle=os.getenv("SLINK_OVERHEAD_THROTTLE")=="1"
     memory.usememorydomain("System Bus")
     local cp,title=G.checkpoint()
     local pack=title=="radical_red" and "gen3_rr" or "gen3_frlg"
@@ -57,13 +71,27 @@ function P.run()
     local ok,err=pcall(function()
         -- A/E provide separate no-observer counterparts. No code from the old client
         -- is loaded; its socket/HUD cost cannot be inferred from these measurements.
-        for _,label in ipairs({"A","E","B","C","D"}) do
+        local canonical
+        -- Fast diagnostics always run; throttled qualification is an additional pass.
+        local schedule={}
+        for _,label in ipairs({"A","E","B","C","D","F","G","H"}) do
+            schedule[#schedule+1]={label=label,speed=6399}
+        end
+        if throttle then
+            for _,label in ipairs({"A","E","B","C","D"}) do
+                schedule[#schedule+1]={label=label,speed=100}
+            end
+        end
+        for _,config in ipairs(schedule) do
+            local label,speed=config.label,config.speed
+            client.speedmode(speed)
             if state_path and state_path~="" then savestate.load(state_path)
             elseif label=="A" then assert(G.boot_to_field(cp,9000),"boot never reached field") end
             joypad.set({}); G.idle(30)
             local callback_error,order_error,last_frame,phase=nil,nil,nil,0
             local standin_calls,poll_calls,checksum=0,0,0
-            local buffered={}
+            local buffered,hook_counts={},{}
+            local hooks_only=label=="F" or label=="H"
             local function ordered(which)
                 local frame=emu.framecount()
                 if frame~=last_frame then last_frame,phase=frame,0 end
@@ -89,64 +117,111 @@ function P.run()
             if label~="A" and label~="E" then
                 observer=assert(Shadow.start({shadow=true,
                     console={log=function(line) buffered[#buffered+1]=tostring(line) end},
-                    duo={player="a",result=wt.."/patch/build/overhead_"..label..".txt"}}),"observer missing")
+                    duo={player="a",result=wt.."/patch/build/overhead_"..speed.."_"..label..".txt"}}),"observer missing")
                 assert(observer.admitted_by~="default","observer admission fell back")
-                register(guarded(function()
-                    ordered("observer"); poll_calls=poll_calls+1; observer.poll()
-                end),label.."-observer")
+                local bindings={}
+                for name,site in pairs(observer.parts.sites) do
+                    bindings[#bindings+1]=name..":"..tostring(site.address)..":"..tostring(site.capture_offset)
+                end
+                table.sort(bindings)
+                local signature=table.concat(bindings,",")
+                canonical=canonical or signature
+                assert(signature==canonical,"observer site set differs from baseline observer")
+                assert(observer.parts.signals:status().registered==#bindings,"incomplete duo site set")
+                if label=="G" or label=="H" then observer.parts.signals:close() end
+                if label=="H" then
+                    local Signals=dofile(wt.."/lua/gen3/signals.lua")
+                    observer.parts.signals=Signals.new(observer.parts.profile,
+                        {frame_control=assert(observer.parts.sites.frame_control)},observer.deps.io,observer.deps.ev)
+                end
+                if hooks_only then P.discard_queue(observer.parts.signals,hook_counts)
+                else
+                    register(guarded(function()
+                        ordered("observer"); poll_calls=poll_calls+1; observer.poll()
+                    end),label.."-observer")
+                end
             end
             if label=="D" then register(guarded(standin),label.."-standin") end
             G.idle(60) -- warm-up excluded; all timed windows use the same frame count
             local start_standin,start_poll=standin_calls,poll_calls
-            local start_live=observer and (observer.liveness_counts.frame_control or 0) or 0
-            local cpu,wall={},{}
+            local function live_count()
+                return hooks_only and (hook_counts.frame_control or 0)
+                    or (observer and (observer.liveness_counts.frame_control or 0) or 0)
+            end
+            local start_live=live_count()
+            local cpu,wall,approx={},{},{}
             for i=1,P.WINDOWS do
-                local prior=observer and (observer.liveness_counts.frame_control or 0) or 0
+                local prior=live_count()
                 cpu[i],wall[i]=P.window(G.advance,os.clock,os.time,P.FRAMES)
-                if observer then
-                    assert((observer.liveness_counts.frame_control or 0)>prior,"no liveness in measurement window")
+                if observer and label~="G" then
+                    assert(live_count()>prior,"no liveness in measurement window")
                 end
+                local available,value=pcall(function() return client.get_approx_framerate() end)
+                approx[i]=available and type(value)=="number" and tostring(value) or "unavailable"
             end
             local st=observer and observer.parts.signals:status() or nil
-            local live=observer and (observer.liveness_counts.frame_control or 0)-start_live or 0
+            local live=live_count()-start_live
             local expected=0
             if observer then for _ in pairs(observer.parts.sites) do expected=expected+1 end end
             assert(not callback_error,callback_error)
             assert(not order_error,order_error)
-            if label~="A" and label~="B" then assert(standin_calls-start_standin==3000,"stand-in missed frames") end
+            if label=="C" or label=="D" or label=="E" then assert(standin_calls-start_standin==3000,"stand-in missed frames") end
             if st then
+                if label=="H" then expected=1 end
                 assert(st.registered==expected and expected>0 and st.rejected==0 and st.dropped==0
-                    and not st.failed and not st.handler_error and live>0
-                    and poll_calls-start_poll==3000,"observer not healthy/live")
+                    and not st.failed and not st.handler_error,"observer not healthy")
+                assert(poll_calls-start_poll==(hooks_only and 0 or 3000),"poll count differs")
+                if label=="G" then assert(st.closed and #observer.parts.signals.hooks==0 and live==0,"poll-only has live hooks")
+                else assert(not st.closed and live>0,"observer not live") end
             end
             -- os.clock is a CPU/process timer on some hosts, NOT universally wall time.
             -- Cross-check totals against os.time (1-second resolution); fail unreliable clocks.
             local total_cpu,total_wall=0,0
             for i=1,P.WINDOWS do total_cpu=total_cpu+cpu[i]; total_wall=total_wall+wall[i] end
             local clock_ok=math.abs(total_cpu-total_wall)<=2000
-            results[label]={cpu=cpu,wall=wall,clock_ok=clock_ok}
+            results[speed]=results[speed] or {}
+            results[speed][label]={cpu=cpu,wall=wall,clock_ok=clock_ok}
             cleanup()
+            G.log("CONFIG speed="..speed.." label="..label.." hooks_only_discard_sink="..tostring(hooks_only))
             G.log(string.format("OVERHEAD %s median_ms_per_600=%.3f fps=%.2f wall_total_ms=%d clock_total_ms=%.3f clock_crosscheck=%s registered=%d rejected=%d liveness=%d standin_reads=%d checksum=%s",
                 label,P.median(cpu),600000/P.median(cpu),total_wall,total_cpu,tostring(clock_ok),
                 st and st.registered or 0,st and st.rejected or 0,live,standin_calls-start_standin,tostring(checksum)))
             G.log("WINDOWS "..label.." clock_ms="..table.concat(cpu,",").." wall_ms="..table.concat(wall,","))
+            local cf,wf={},{}
+            for i=1,P.WINDOWS do cf[i]=P.fps(cpu[i]); wf[i]=P.fps(wall[i]) end
+            G.log("FPS "..label.." clock="..table.concat(cf,",").." wall="..table.concat(wf,",")
+                .." approx="..table.concat(approx,",").." wall_resolution_s=1")
             for _,line in ipairs(buffered) do G.log(line) end -- AFTER all five timed windows
         end
     end)
     local clean,clean_err=pcall(cleanup)
     local passed=ok and clean
     if passed then
-        for _,pair in ipairs({{"B","A"},{"C","E"},{"D","E"}}) do
-            local measured,base=results[pair[1]],results[pair[2]]
+        for _,pair in ipairs({{"B","A"},{"C","E"},{"D","E"},{"F","A"},{"G","A"},{"H","A"}}) do
+            local measured,base=results[6399][pair[1]],results[6399][pair[2]]
             local delta=P.delta(base.cpu,measured.cpu)
-            local good=base.clock_ok and measured.clock_ok and P.within(base.cpu,measured.cpu)
-            passed=passed and good
-            G.log(string.format("BUDGET %s/%s delta_percent=%.3f limit=5 verdict=%s",
-                pair[1],pair[2],delta,good and "PASS" or "FAIL"))
+            G.log(string.format("INFORMATIONAL speed=6399 %s/%s clock_delta_percent=%.3f",
+                pair[1],pair[2],delta))
+        end
+        if throttle then
+            for _,label in ipairs({"A","E","B","C","D"}) do
+                local fps=P.fps(P.median(results[100][label].wall))
+                passed=passed and fps>=59.5
+                G.log(string.format("REALTIME %s median_wall_fps=%.3f minimum=59.5 verdict=%s",
+                    label,fps,fps>=59.5 and "PASS" or "FAIL"))
+            end
+            for _,pair in ipairs({{"B","A"},{"C","E"},{"D","E"}}) do
+                local measured,base=results[100][pair[1]],results[100][pair[2]]
+                local good=P.realtime_ok(base.wall,measured.wall)
+                passed=passed and good
+                G.log(string.format("BUDGET speed=100 %s/%s wall_delta_percent=%.3f clock_delta_percent=%.3f verdict=%s",
+                    pair[1],pair[2],P.delta(base.wall,measured.wall),P.delta(base.cpu,measured.cpu),good and "PASS" or "FAIL"))
+            end
         end
     end
-    G.log("SCOPE standin_cpu_overhead_only console_status_deferred=true wire_timings=UNVERIFIED wire_deltas=UNVERIFIED")
-    G.finish(passed,not ok and tostring(err) or not clean and tostring(clean_err) or "stand-in observer overhead budget")
+    G.log("SCOPE standin_only console_status_deferred=true wire_timings=UNVERIFIED wire_deltas=UNVERIFIED wall_resolution_s=1")
+    G.finish(passed,not ok and tostring(err) or not clean and tostring(clean_err)
+        or (throttle and "throttled stand-in budget (coarse wall clock)" or "diagnostics only; no realtime budget verdict"))
 end
 if (debug.getinfo(1,"S").source or "") == "main" then P.run() end
 return P

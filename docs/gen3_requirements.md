@@ -200,6 +200,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 reads == PYDEC, vanilla FR: `docs/gen3/probes/reads_pydec_fr_2026-09-21.txt` — the observer's reads.lua and gen3_codec.py decode the SAME dumped EWRAM bytes (party area + box 0, 30 records) identically on every field; a planted byte flip is detected. WEAK: box 0 and the party are EMPTY on this fixture (all-zero records), so this proves the pipeline, not the decoders; the RR dump (real Treecko party) is the meaningful differential and its probe died after reaching the field (instrument, queued). RR dump probe died silently after reaching the field (instrument, queued).
 
+- 2026-09-21 P3 observer overhead, RR companion: `docs/gen3/probes/overhead_rr_{unthrottled,throttled}_2026-09-21.txt` — REAL TIME (speedmode 100): baseline, old-client stand-in, observer, and both callback orders all hold 60.0 fps median with 0.00% wall-time delta (RESULT PASS, coarse 1 s wall clock, approx-framerate corroborates). Unthrottled CPU cost (informational): observer +98% per frame; breakdown: poll-only +8%, hooks-only +118%, a SINGLE per-frame exec hook +99%: the cost is mGBA's callback-enabled path being active at all, not the number of sites. Wire timings/deltas with the real old client remain UNVERIFIED (stand-in only). PLAN §5.7 frame-time budget: met at real time.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

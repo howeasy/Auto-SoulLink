@@ -54,3 +54,37 @@ def test_no_console_output_in_window_and_real_observer_wired():
     assert 'label=="E" or label=="C"' in SOURCE
     assert 'if label=="D" then register' in SOURCE
     assert "wire_deltas=UNVERIFIED" in SOURCE
+
+
+def test_realtime_gate_uses_fps_floor_and_wall_delta(module):
+    lua, probe = module
+    def samples(ms):
+        return lua.table_from([ms] * 5)
+    assert probe.realtime_ok(samples(10000), samples(10050))  # 59.70 fps
+    assert not probe.realtime_ok(samples(10000), samples(10100))  # 59.41 fps
+    assert not probe.realtime_ok(samples(9000), samples(10000))  # fps fine, >5% cost
+    assert not probe.realtime_ok(samples(10200), samples(10000))  # baseline misses floor
+    assert probe.fps(0) == 0  # unthrottled wall tick unavailable, never infinity
+
+
+def test_hooks_only_discard_sink_prevents_queue_overflow(module):
+    lua, probe = module
+    lua.execute("signals={pending={}}; counts={}")
+    g = lua.globals()
+    probe.discard_queue(g.signals, g.counts)
+    lua.execute("for i=1,3000 do signals.pending[#signals.pending+1]={kind='frame_control'} end")
+    assert len(g.signals.pending) == 0
+    assert g.counts.frame_control == 3000
+
+
+def test_breakdown_configuration_and_registration_contract():
+    assert 'os.getenv("SLINK_OVERHEAD_THROTTLE")=="1"' in SOURCE
+    assert '{"A","E","B","C","D","F","G","H"}' in SOURCE
+    assert 'label=="F" or label=="H"' in SOURCE
+    assert 'label=="G" or label=="H" then observer.parts.signals:close()' in SOURCE
+    assert '{frame_control=assert(observer.parts.sites.frame_control)}' in SOURCE
+    assert 'if hooks_only then P.discard_queue' in SOURCE
+    assert 'signature==canonical' in SOURCE
+    assert 'client.get_approx_framerate()' in SOURCE
+    assert 'P.realtime_ok(base.wall,measured.wall)' in SOURCE
+    assert 'INFORMATIONAL speed=6399' in SOURCE
