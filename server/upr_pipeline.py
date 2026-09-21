@@ -107,19 +107,34 @@ def jar_is_fork(jar: str) -> bool:
         return False
 
 
-def jar_entries(jar: str) -> set[str]:
-    """The Gen 1 INI section names a jar carries -- what it can randomize. The stock jar has
-    the vanilla four; the SLink fork adds the three clean pure titles and, since patch 0003,
-    the three companion-overlay builds (their header CRCs differ, so without their own entry
-    UPR finds nothing and dies reading base stats)."""
+def jar_entry_crcs(jar: str) -> dict[str, int | None]:
+    """Section name -> its CRCInHeader (None when the section has none) from the jar's Gen 1
+    INI. UPR selects an entry by exact header CRC first, so a section whose CRC no longer
+    matches the build it names (the overlay was rebuilt: patch 0006) is as good as absent."""
     import re
     import zipfile
     try:
         with zipfile.ZipFile(jar) as zf:
             text = zf.read("com/dabomstew/pkrandom/config/gen1_offsets.ini").decode("utf-8", "replace")
     except (OSError, KeyError, zipfile.BadZipFile):
-        return set()
-    return set(re.findall(r"^\[([^\]]+)\]", text, flags=re.MULTILINE))
+        return {}
+    out: dict[str, int | None] = {}
+    name = None
+    for line in text.splitlines():
+        if m := re.match(r"^\[([^\]]+)\]", line):
+            name = m[1]
+            out[name] = None
+        elif name and (m := re.match(r"^CRCInHeader=(0x[0-9A-Fa-f]+|\d+)", line.strip())):
+            out[name] = int(m[1], 0)
+    return out
+
+
+def jar_entries(jar: str) -> set[str]:
+    """The Gen 1 INI section names a jar carries -- what it can randomize. The stock jar has
+    the vanilla four; the SLink fork adds the three clean pure titles and, since patch 0003,
+    the three companion-overlay builds (their header CRCs differ, so without their own entry
+    UPR finds nothing and dies reading base stats)."""
+    return set(jar_entry_crcs(jar))
 
 
 def jar_entry_for(ident: dict) -> str | None:
@@ -131,10 +146,18 @@ def jar_entry_for(ident: dict) -> str | None:
 
 
 def jar_supports(jar: str, ident: dict) -> bool:
-    """True when the jar carries the entry this artifact randomizes under: a pure title
-    needs its clean or overlay section; anything else is the stock handler's business."""
+    """True when the jar carries the entry this artifact randomizes under, with the CRC of
+    THIS build: a pure title needs its clean or overlay section and that section's
+    CRCInHeader must equal the cartridge's header checksum (a stale section would let UPR
+    fall through to the generic header match); anything else is the stock handler's business."""
     entry = jar_entry_for(ident)
-    return True if entry is None else entry in jar_entries(jar)
+    if entry is None:
+        return True
+    crcs = jar_entry_crcs(jar)
+    if entry not in crcs:
+        return False
+    want = ident.get("header_checksum")
+    return want is None or crcs[entry] == want
 
 
 def family_of(sources: dict[str, str]) -> str:
@@ -314,8 +337,9 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
     if not jar_supports(jar, src_ident):
         raise UprPipelineError(
             f"this jar has no entry for the {src_ident.get('kind')} build of "
-            f"{src_ident.get('variant')} ({jar_entry_for(src_ident)}); rebuild the SLink fork "
-            f"(tools/build_upr_fork.py, patch/upr/0003) -- UPR would otherwise fail reading "
+            f"{src_ident.get('variant')} ({jar_entry_for(src_ident)}, header CRC "
+            f"{src_ident.get('header_checksum', 0):04X}); rebuild the SLink fork "
+            f"(tools/build_upr_fork.py, patch/upr) -- UPR would otherwise fail reading "
             f"base stats, or fall back to the vanilla entry")
 
     before = set(os.listdir(os.path.dirname(os.path.abspath(output_rom)) or "."))

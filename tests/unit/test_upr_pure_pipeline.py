@@ -295,6 +295,16 @@ def test_jar_entries_name_what_a_jar_can_randomize(tmp_path):
             "PureBlue overlay (U)", "PureGreen overlay (U)"} <= jar_entries(jar)
     with open(roms["a"], "rb") as f:
         assert jar_supports(jar, identify(f.read()))
+    # a section whose CRC belongs to an OLDER build of the same title is as good as absent
+    # (the overlay was rebuilt with the SFX service; patch 0006 regenerated the entries)
+    from server.upr_pipeline import jar_entry_crcs
+    assert jar_entry_crcs(jar)["PureRed (U)"] == 0x929B
+    stale = dict(clean, header_checksum=0xD3B7)
+    assert not jar_supports(jar, stale)
+    if os.path.exists(_OVERLAY["a"]):
+        with open(_OVERLAY["a"], "rb") as f:
+            ovl = identify(f.read())
+        assert jar_supports(jar, ovl) and jar_entry_crcs(jar)["PureRed overlay (U)"] == ovl["header_checksum"]
 
 
 def test_jar_is_fork_reads_the_entries_not_the_name(tmp_path):

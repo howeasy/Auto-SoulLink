@@ -1,0 +1,110 @@
+From b81f88b01e9519e46068cd637cc7f44908ae091e Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Sun, 20 Sep 2026 23:20:14 -0400
+Subject: [PATCH] slink: pure overlay entries regenerated for the SFX-service
+ overlay build (CRCs 1D9F/5761/557F, shifted offsets)
+
+---
+ .../pkrandom/config/gen1_offsets.ini          | 30 +++++++++----------
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+index 1510f6b..f9485cc 100755
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1426,8 +1426,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0xD3B7
+-CRC32=3287C8D9
++CRCInHeader=0x1D9F
++CRC32=DAD06B16
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1459,7 +1459,7 @@ GoodRodMonsOcean=0xDF40
+ SuperRodTableOffset=0xE766
+ MapNameTableOffset=0x70D85
+ MapBanks=0xC23B
+-MapAddresses=0x1A7
++MapAddresses=0x1AA
+ MoveDataOffset=0x3858D
+ MoveNamesOffset=0xB0000
+ ItemNamesOffset=0x430F
+@@ -1479,8 +1479,8 @@ OldRodOffsets=[0xDEF8, 0xDEFD]
+ PokemonMovesetsDataSize=0x9F4
+ TrainerDataClassCounts=[0, 12, 15, 19, 7, 10, 24, 10, 10, 15, 15, 9, 5, 11, 15, 9, 9, 15, 6, 6, 10, 9, 17, 9, 9, 3, 14, 4, 41, 10, 6, 3, 3, 3, 3, 3, 3, 3, 3, 7, 12, 9, 3, 24, 3, 3, 4, 7, 3, 2, 7, 6, 1, 2, 7, 7, 7]
+ NonDexSpecies=[0x1F, 0x32, 0x34, 0x38, 0x56, 0x5E, 0x73, 0x86, 0x92, 0xAC, 0xAE, 0xAF, 0xB5]
+-StarterOffsets1=[0x1C4EC, 0x1C8FF, 0x1C910, 0x13EA, 0x5A503, 0x5C13D]
+-StarterOffsets2=[0x1C4F0, 0x1C909, 0x1C8FC, 0x13EF, 0x5A509, 0x5C13E]
++StarterOffsets1=[0x1C4EC, 0x1C8FF, 0x1C910, 0x13ED, 0x5A503, 0x5C13D]
++StarterOffsets2=[0x1C4F0, 0x1C909, 0x1C8FC, 0x13F2, 0x5A509, 0x5C13E]
+ StarterOffsets3=[0x1C913, 0x1C906, 0x5C13F]
+ StaticPokemon{}={Species=[0x190AD], Level=[0x190A8]} // WEEDLE @ VIRIDIAN_CITY
+ StaticPokemon{}={Species=[0x59654], Level=[0x59659]} // SNORLAX @ ROUTE_12
+@@ -1508,8 +1508,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x0D7E
+-CRC32=E5E116CB
++CRCInHeader=0x5761
++CRC32=E5EAEBB4
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1541,7 +1541,7 @@ GoodRodMonsOcean=0xDF40
+ SuperRodTableOffset=0xE766
+ MapNameTableOffset=0x70D85
+ MapBanks=0xC23B
+-MapAddresses=0x1A7
++MapAddresses=0x1AA
+ MoveDataOffset=0x3858D
+ MoveNamesOffset=0xB0000
+ ItemNamesOffset=0x430F
+@@ -1561,8 +1561,8 @@ OldRodOffsets=[0xDEF8, 0xDEFD]
+ PokemonMovesetsDataSize=0x9F4
+ TrainerDataClassCounts=[0, 12, 15, 19, 7, 10, 24, 10, 10, 15, 15, 9, 5, 11, 15, 9, 9, 15, 6, 6, 10, 9, 17, 9, 9, 3, 14, 4, 41, 10, 6, 3, 3, 3, 3, 3, 3, 3, 3, 7, 12, 9, 3, 24, 3, 3, 4, 7, 3, 2, 7, 6, 1, 2, 7, 7, 7]
+ NonDexSpecies=[0x1F, 0x32, 0x34, 0x38, 0x56, 0x5E, 0x73, 0x86, 0x92, 0xAC, 0xAE, 0xAF, 0xB5]
+-StarterOffsets1=[0x1C4EC, 0x1C8FF, 0x1C910, 0x13EA, 0x5A503, 0x5C13D]
+-StarterOffsets2=[0x1C4F0, 0x1C909, 0x1C8FC, 0x13EF, 0x5A509, 0x5C13E]
++StarterOffsets1=[0x1C4EC, 0x1C8FF, 0x1C910, 0x13ED, 0x5A503, 0x5C13D]
++StarterOffsets2=[0x1C4F0, 0x1C909, 0x1C8FC, 0x13F2, 0x5A509, 0x5C13E]
+ StarterOffsets3=[0x1C913, 0x1C906, 0x5C13F]
+ StaticPokemon{}={Species=[0x190AD], Level=[0x190A8]} // WEEDLE @ VIRIDIAN_CITY
+ StaticPokemon{}={Species=[0x59654], Level=[0x59659]} // SNORLAX @ ROUTE_12
+@@ -1590,8 +1590,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x0B94
+-CRC32=EF1B8F04
++CRCInHeader=0x557F
++CRC32=2F4EEA8F
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1623,7 +1623,7 @@ GoodRodMonsOcean=0xDF40
+ SuperRodTableOffset=0xE766
+ MapNameTableOffset=0x70D85
+ MapBanks=0xC23B
+-MapAddresses=0x1A7
++MapAddresses=0x1AA
+ MoveDataOffset=0x3858D
+ MoveNamesOffset=0xB0000
+ ItemNamesOffset=0x430F
+@@ -1643,8 +1643,8 @@ OldRodOffsets=[0xDEF8, 0xDEFD]
+ PokemonMovesetsDataSize=0x9F4
+ TrainerDataClassCounts=[0, 12, 15, 19, 7, 10, 24, 10, 10, 15, 15, 9, 5, 11, 15, 9, 9, 15, 6, 6, 10, 9, 17, 9, 9, 3, 14, 4, 41, 10, 6, 3, 3, 3, 3, 3, 3, 3, 3, 7, 12, 9, 3, 24, 3, 3, 4, 7, 3, 2, 7, 6, 1, 2, 7, 7, 7]
+ NonDexSpecies=[0x1F, 0x32, 0x34, 0x38, 0x56, 0x5E, 0x73, 0x86, 0x92, 0xAC, 0xAE, 0xAF, 0xB5]
+-StarterOffsets1=[0x1C4EC, 0x1C8FF, 0x1C910, 0x13EA, 0x5A503, 0x5C13D]
+-StarterOffsets2=[0x1C4F0, 0x1C909, 0x1C8FC, 0x13EF, 0x5A509, 0x5C13E]
++StarterOffsets1=[0x1C4EC, 0x1C8FF, 0x1C910, 0x13ED, 0x5A503, 0x5C13D]
++StarterOffsets2=[0x1C4F0, 0x1C909, 0x1C8FC, 0x13F2, 0x5A509, 0x5C13E]
+ StarterOffsets3=[0x1C913, 0x1C906, 0x5C13F]
+ StaticPokemon{}={Species=[0x190AD], Level=[0x190A8]} // WEEDLE @ VIRIDIAN_CITY
+ StaticPokemon{}={Species=[0x59654], Level=[0x59659]} // SNORLAX @ ROUTE_12
+-- 
+2.54.0.windows.1
+
