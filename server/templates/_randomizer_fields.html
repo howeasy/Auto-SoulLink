@@ -35,9 +35,9 @@
               <div class="mk-rchips" role="radiogroup" :aria-label="o.label">
                 <template x-for="c in o.choices" :key="c.value">
                   <button type="button" class="mk-gchip" role="radio" :aria-checked="rdraft.spec[o.key] === c.value"
-                          :class="rdraft.spec[o.key] === c.value ? 'active' : ''" :disabled="!choiceOk(c)"
-                          :title="choiceOk(c) ? '' : PURE_WHY"
-                          @click="rdraft.spec[o.key] = c.value" x-text="c.label"></button>
+                          :class="rdraft.spec[o.key] === c.value ? 'active' : ''" :disabled="!choiceOk(o, c)"
+                          :title="choiceWhy(o, c)"
+                          @click="setChoice(o, c)" x-text="c.label"></button>
                 </template>
               </div>
             </div>
