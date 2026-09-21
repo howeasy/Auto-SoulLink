@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.pin_gen3_site import (  # noqa: E402
     ROM_SPECS,
+    decode_thumb_detour,
     find_offsets,
     load_rom,
     make_site,
@@ -545,7 +546,230 @@ def output_path(pack: str) -> Path:
     return ROOT / "data/games" / pack / "engine_signals.json"
 
 
+
+# RR-only binary bindings. All constants were independently checked in both ROMs.
+# Unlike vanilla reference_size, these are explicit ESTIMATES with boundary bytes.
+RR_BODIES = {
+    "mon_given": {
+        "rr": {
+            "origin": 134482708,
+            "target": 151508880,
+            "anchor_offset": 104,
+            "capture": 8,
+            "pattern": "00200E4B01351D7070BD0135062DE3D1",
+            "entry": "70B504001CF0FAFA20002BF0A1FE2000",
+            "extent": 168,
+            "boundary": "012313B51D220093",
+            "trampoline": "0049084791D70709"
+        },
+        "rr_companion": {
+            "origin": 134482708,
+            "target": 151508880,
+            "anchor_offset": 104,
+            "capture": 8,
+            "pattern": "00200E4B01351D7070BD0135062DE3D1",
+            "entry": "70B504001CF0FAFA20002BF0A1FE2000",
+            "extent": 168,
+            "boundary": "012313B51D220093",
+            "trampoline": "0049084791D70709"
+        }
+    },
+    "pc_move": {
+        "rr": {
+            "origin": 134482832,
+            "target": 151744056,
+            "anchor_offset": 98,
+            "capture": 6,
+            "pattern": "00F0EDF90120F8BD01351E2DD7D10134",
+            "entry": "F8B5204B0700204800F01AFA0006000E",
+            "extent": 172,
+            "boundary": "70B506000C001500",
+            "trampoline": "00490847396E0B09"
+        },
+        "rr_companion": {
+            "origin": 134482832,
+            "target": 151744056,
+            "anchor_offset": 98,
+            "capture": 6,
+            "pattern": "00F0EDF90120F8BD01351E2DD7D10134",
+            "entry": "F8B5204B0700204800F01AFA0006000E",
+            "extent": 172,
+            "boundary": "70B506000C001500",
+            "trampoline": "00490847396E0B09"
+        }
+    },
+    "pc_withdraw": {
+        "rr": {
+            "origin": None,
+            "target": 134819796,
+            "anchor_offset": 30,
+            "capture": 6,
+            "pattern": "642252F140FF12E0",
+            "entry": "F0B50006060E09060F0E192E12D10649",
+            "extent": 92,
+            "boundary": "00B50006000E0906"
+        },
+        "rr_companion": {
+            "origin": None,
+            "target": 134819796,
+            "anchor_offset": 30,
+            "capture": 6,
+            "pattern": "642252F140FF12E0",
+            "entry": "F0B50006060E09060F0E192E12D10649",
+            "extent": 92,
+            "boundary": "00B50006000E0906"
+        }
+    },
+    "pc_box_place": {
+        "rr": {
+            "origin": None,
+            "target": 134819796,
+            "anchor_offset": 68,
+            "capture": 8,
+            "pattern": "301C391CF8F7CAFDF0BC01BC0047",
+            "entry": "F0B50006060E09060F0E192E12D10649",
+            "extent": 92,
+            "boundary": "00B50006000E0906"
+        },
+        "rr_companion": {
+            "origin": None,
+            "target": 134819796,
+            "anchor_offset": 68,
+            "capture": 8,
+            "pattern": "301C391CF8F7CAFDF0BC01BC0047",
+            "entry": "F0B50006060E09060F0E192E12D10649",
+            "extent": 92,
+            "boundary": "00B50006000E0906"
+        }
+    }
+}
+RR_CONTRACTS = {
+    "mon_given": {
+        "replaces": "GiveMonToPlayer", "source_path": "src/catching.c#L600-L620",
+        "point": ["R0", "R4", "R5"],
+        "contract": "RR replacement common POP at 0907D800, before restoring registers. "
+                    "R0=party(0)/PC(1)/failure(2); R4=source mon. Party path has copied 100 bytes "
+                    "and stored gPlayerPartyCount; PC path returns here after SendMonToPC. "
+                    "R5 is a party count only on the party-success path. RR inline free-slot/forced-PC "
+                    "logic differs from current upstream helper: binary is authoritative. Correlate "
+                    "capture/gift caller before event emission; no event on failure.",
+        "extent": "Estimate end 0907D838: code finishes with branch at +86 back to POP +70, "
+                  "literal pool +88..A7, next routine begins MOVS then PUSH at +A8/+AA."},
+    "pc_move": {
+        "replaces": "SendMonToPC", "source_path": "src/pokemon_storage_system.c#L403-L435",
+        "point": ["R0", "R4", "R5", "R7"],
+        "contract": "RR compressed-PC acquisition common POP at 090B6EA0. R0=PC(1)/failure(2); "
+                    "R4=box and R5=slot only on success, R7=source mon. Compression call "
+                    "090B6E72 -> 090B6B78 completes before box/slot vars and return status. "
+                    "This is acquisition-to-storage, not a general user deposit event.",
+        "extent": "Estimate end 090B6EE4: final branch +82 returns to POP +68; "
+                  "literal pool +84..AB; following PUSH starts at +AC."},
+    "pc_withdraw": {
+        "replaces": "SetPlacedMonData", "source_path": "src/pokemon_storage_system.c#L220-L233",
+        "point": ["R6", "R7"],
+        "contract": "RR IN-PLACE modification, not an entry trampoline. Compare at 08092FDE "
+                    "uses party sentinel 25 (CMP R6,#19 hex), not vanilla 14. Capture at "
+                    "08092FF8 after the 100-byte party memcpy. R6=25, R7=destination slot. "
+                    "Moving-mon origin/caller distinguishes withdrawal from party rearrangement. "
+                    "Vanilla control flow: pret pokemon_storage_system_data.c:625-633.",
+        "extent": "Estimate inherited layout to 08093030 (+5C): code ends BX at +50, "
+                  "padding/literals +52..5B; next PurgeMonOrBoxMon prologue at +5C."},
+    "pc_box_place": {
+        "replaces": "SetPlacedMonData", "source_path": "src/pokemon_storage_system.c#L220-L233",
+        "point": ["R6", "R7"],
+        "contract": "RR IN-PLACE wrapper; capture 08093020 after BL 0808BBB4. Require R6<25 "
+                    "and R7<30 because party branch also reaches this POP. R6/R7 are destination "
+                    "box/slot. Callee SetBoxMonAt detours to 090B6CA4, compresses at 090B6CC2 "
+                    "then writes 58 bytes at 090B6CD6. Deduplicate against higher-level deposit. "
+                    "Vanilla wrapper source: pret pokemon_storage_system_data.c:625-633.",
+        "extent": "Estimate inherited layout to 08093030 (+5C): code ends BX at +50, "
+                  "padding/literals +52..5B; next PurgeMonOrBoxMon prologue at +5C."},
+}
+
+
+def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
+    kind = c["kind"]
+    if kind in ("poison_faint", "poison_hp_before"):
+        try:
+            detour = decode_thumb_detour(rom, 0x080A0618)
+            at = detour["target"] - 0x08000000
+            body = rom[at:at + 4].hex().upper()
+            reason = (f"DoPoisonFieldEffect detour -> {detour['target']:08X}, bytes {body}; "
+                      "MOVS R0,0 / BX LR: this admitted path has NO HP mutation or before/after pair"
+                      if detour["target"] == 0x090B20D4 and body == "00207047"
+                      else "poison disabled-body evidence differs; do not reuse vanilla tail")
+            return {"status": "UNVERIFIED", "reason": reason, "detour": detour,
+                    "reference_bytes": body}
+        except ValueError as exc:
+            return {"status": "UNVERIFIED", "reason": str(exc)}
+    if kind == "borrowed_party":
+        hits = find_offsets(rom, (0x02025564).to_bytes(4, "little"))
+        aligned = [0x08000000 + i for i in hits if i % 4 == 0]
+        return {"status": "UNVERIFIED", "reason":
+                f"backup literal 02025564: {len(hits)} matches, aligned={','.join(hex(x) for x in aligned) or 'none'}; "
+                "clean ROM has no aligned direct literal. Companion-only literal is patch data; "
+                "MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. "
+                "Indirect/synthesized addressing remains possible; no unique begin/restore pair established."}
+    if kind == "nature_change":
+        hits = find_offsets(rom, (0x02024284).to_bytes(4, "little"))
+        return {"status": "UNVERIFIED", "reason":
+                f"party-base 02024284 has {len(hits)} literal matches; no unique nature-special PID "
+                "write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search "
+                "did not provide an RR special address; a generic PID store is not sufficient attribution."}
+    if kind not in RR_BODIES:
+        return None
+    b, contract = RR_BODIES[kind][name], RR_CONTRACTS[kind]
+    target = b["target"]
+    detour = None
+    try:
+        if b["origin"] is not None:
+            detour = decode_thumb_detour(rom, b["origin"])
+            if detour["target"] != target:
+                raise ValueError("decoded detour target differs from reviewed body")
+            off = b["origin"] - 0x08000000
+            if rom[off:off + 8].hex().upper() != b["trampoline"]:
+                raise ValueError("trampoline/literal bytes differ")
+        flat = target - 0x08000000
+        if rom[flat:flat + 16].hex().upper() != b["entry"]:
+            raise ValueError("replacement/in-place entry anchor differs")
+        end = flat + b["extent"]
+        if rom[end:end + 8].hex().upper() != b["boundary"]:
+            raise ValueError("estimated body boundary anchor differs")
+        data = pattern_bytes(b["pattern"])
+        at = flat + b["anchor_offset"]
+        if find_offsets(rom, data) != [at]:
+            raise ValueError("replacement capture pattern is missing, ambiguous or at another offset")
+        if b["anchor_offset"] + max(len(data), b["capture"] + 2) > b["extent"]:
+            raise ValueError("capture exceeds estimated replacement extent")
+        site = make_site(rom, at, data, capture_offset=b["capture"],
+                         symbol=contract["replaces"], point=contract["point"])
+        site.update(source="cfru_detour" if detour else "cfru_inplace",
+                    source_url=CFRU + contract["source_path"], replaces=contract["replaces"],
+                    capture_contract=contract["contract"],
+                    context={"rom_offset": flat, "expected_hex": b["entry"]},
+                    rr_body={"address": target, "extent_estimate": b["extent"],
+                             "extent_evidence": contract["extent"],
+                             "entry_hex": b["entry"], "boundary_hex": b["boundary"]})
+        if detour:
+            site["detour"] = detour
+        if kind == "pc_box_place":
+            callee = decode_thumb_detour(rom, 0x0808BBB4)
+            entry = "70B5050090B00C001600182813D81D29"
+            if (callee["target"] != 0x090B6CA4
+                    or rom[0x10B6CA4:0x10B6CA4 + 16].hex().upper() != entry):
+                raise ValueError("compressed SetBoxMonAt callee binding differs")
+            site["callee_detour"] = dict(callee, entry_hex=entry)
+        return {"status": "PINNED", "site": site, "matches": [at]}
+    except ValueError as exc:
+        return {"status": "UNVERIFIED", "reason": str(exc)}
+
+
+
 def resolve(c: dict, name: str, rom: bytes) -> dict:
+    if name in ("rr", "rr_companion"):
+        specific = rr_resolution(c, name, rom)
+        if specific is not None:
+            return specific
     pattern = (c["patterns"] or {}).get(name, c["pattern"])
     binding = c.get("binding")
     if binding and name in SYMBOL_FILES:
@@ -650,9 +874,21 @@ def document(inventory: dict) -> str:
         "- docs/gen3/probes/census_rr_overworld_2026-09-21.txt:7-17 observes R15=000001C4, "
         "CPSR mode/T=31/0 and tasks 0806E811,0806E83D,08079E0D during 1800 idle frames. "
         "This is BIOS idle census, not evidence for any gameplay site in this inventory.",
-        "- mon_given is deliberately NOT pinned on RR: its vanilla return bytes survive, but "
-        "entry 08040B14 is detoured (0049084791D70709...). A unique dead tail is not a hook. "
-        "The same guard also excludes RR SendMonToPC, SetPlacedMonData and DoPoisonFieldEffect tails.",
+        "- RR GiveMonToPlayer/SendMonToPC now follow their decoded LDR/BX literals to "
+        "0907D790/090B6E38; their retained vanilla tails are NOT used. RR SetPlacedMonData "
+        "is modified IN PLACE (party sentinel 25, not 14), not entry-detoured. Its box-write "
+        "callee SetBoxMonAt detours 0808BBB4 -> 090B6CA4 and writes compressed records.",
+        "- RR DoPoisonFieldEffect detours 080A0618 -> 090B20D4, which is 00207047 "
+        "(MOVS R0,0; BX LR): no HP mutation exists on this admitted path. Both poison rows "
+        "stay un-emitted; their UNVERIFIED matrix label must not be read as an undiscovered "
+        f"vanilla-style store. Source map: [CFRU overworld.c:1934-2001]({CFRU}src/overworld.c#L1934-L2001) "
+        "has NO_POISON_IN_OW/POISON_1_HP_SURVIVAL branches; binary, not macro inference, settles this path.",
+        "- RR backup literal search: clean has only unaligned 095DE3E1; companion additionally "
+        "has patch literal 08379708. Party-base literal search has 906/910 matches respectively. "
+        "These are search receipts, not writer attribution. The memcpy sites at 0804C10C/0804C212 "
+        "sit in relocation/serialization code; they do not establish a unique borrowed-party begin/restore pair. "
+        f"[CFRU build_pokemon.c:745-755]({CFRU}src/build_pokemon.c#L745-L755) names "
+        "BackupPartyToTempTeam but supplies no verified RR binding for the requested special.",
         "- map_load covers only the normal CB2_LoadMap2 branch; Quest Log and other loaders remain OPEN. "
         "whiteout is a completion marker after healing, not an HP-at-faint capture. save requires R0=1/R5=0; "
         "RR flash extensions and final save witness ownership remain UNVERIFIED "
@@ -693,10 +929,22 @@ def document(inventory: dict) -> str:
                 lines.append(f"| {name} | data/gen3/pret/{SYMBOL_FILES[name]}:{fn['line']} "
                              f"{b['function']} | {fn['address']:08X} / {fn['size']:X} "
                              f"| +{b['anchor_offset'] + c['capture']:X} | {b['entries'][name]} |")
-            lines += ["", "RR entry checks use the FR entry bytes at the uniquely matched anchor minus "
-                      "the reviewed function-relative anchor offset; a mismatch is refused, never repinned. "
-                      "The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. "
-                      "frame_control retains its explicitly measured/patched artifact-specific control binding.", ""]
+            lines += ["", "Unless an RR-specific binding is described below, RR entry checks use the FR "
+                      "entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor "
+                      "offset; a mismatch is refused, never repinned. JSON reference_size is a vanilla bound, "
+                      "not a proved RR extent. frame_control retains its measured/patched artifact binding.", ""]
+        if c["kind"] in RR_BODIES:
+            contract = RR_CONTRACTS[c["kind"]]
+            lines += ["RR-specific capture contract:", "",
+                      f"[CFRU source map]({CFRU}{contract['source_path']}). {contract['contract']}",
+                      "Binary body, not upstream C, is authoritative. " + contract["extent"], "",
+                      "| Artifact | Entry/trampoline | Body entry bytes | Estimated extent | Boundary bytes |",
+                      "|---|---|---|---|---|"]
+            for name in ("rr", "rr_companion"):
+                b = RR_BODIES[c["kind"]][name]
+                entry = f"{b['origin']:08X} -> {b['target']:08X}" if b["origin"] else f"{b['target']:08X} in-place"
+                lines.append(f"| {name} | {entry} | {b['entry']} | {b['extent']:X} (estimate) | {b['boundary']} |")
+            lines.append("")
     lines += ["## Reproduce and falsify", "",
               "- python tools/gen_gen3_engine_signals.py --check (offline; all four pinned ROMs required).",
               "- python tools/pin_gen3_site.py HEX --rom fr --capture-offset 0 prints all matches and "
@@ -704,7 +952,8 @@ def document(inventory: dict) -> str:
               "- pytest tests/unit/test_gen3_engine_sites.py -q checks every emitted pin, exclusion, "
               "wrong ROM, ambiguous/odd matches and the retained RR-tail trap.",
               "", "## NOT VERIFIED", "",
-              "RR borrowed_party and nature_change remain UNVERIFIED; detoured RR tails remain excluded. "
+              "RR borrowed_party and nature_change remain UNVERIFIED. Poison's replacement is disabled; "
+              "its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. "
               "Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need "
               "separate evidence; the mutation sites here are not a claim of complete gameplay coverage. "
               "No emulator was run on this card. "

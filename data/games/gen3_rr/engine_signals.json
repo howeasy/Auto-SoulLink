@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "94970adbb1c2227939160951aa31d4ed5b7f0361ff77fd867ae378f624712d3a",
+  "sha256": "a5258da93e7184dec31cff402b8ed3c169848276e47e5113653be3553370fbe8",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -207,6 +207,80 @@
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1568-L1591",
               "symbol": "CB2_LoadMap2 normal completion branch"
             },
+            "mon_given": {
+              "address": 151508984,
+              "capture_contract": "RR replacement common POP at 0907D800, before restoring registers. R0=party(0)/PC(1)/failure(2); R4=source mon. Party path has copied 100 bytes and stored gPlayerPartyCount; PC path returns here after SendMonToPC. R5 is a party count only on the party-success path. RR inline free-slot/forced-PC logic differs from current upstream helper: binary is authoritative. Correlate capture/gift caller before event emission; no event on failure.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "70B504001CF0FAFA20002BF0A1FE2000",
+                "rom_offset": 17291152
+              },
+              "detour": {
+                "address": 134482708,
+                "instruction_hex": "00490847",
+                "literal_address": 134482712,
+                "literal_hex": "91D70709",
+                "literal_value": 151508881,
+                "register": 1,
+                "target": 151508880
+              },
+              "expected_hex": "00200E4B01351D7070BD0135062DE3D1",
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5"
+              ],
+              "replaces": "GiveMonToPlayer",
+              "rom_offset": 17291256,
+              "rr_body": {
+                "address": 151508880,
+                "boundary_hex": "012313B51D220093",
+                "entry_hex": "70B504001CF0FAFA20002BF0A1FE2000",
+                "extent_estimate": 168,
+                "extent_evidence": "Estimate end 0907D838: code finishes with branch at +86 back to POP +70, literal pool +88..A7, next routine begins MOVS then PUSH at +A8/+AA."
+              },
+              "source": "cfru_detour",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L600-L620",
+              "symbol": "GiveMonToPlayer"
+            },
+            "pc_box_place": {
+              "address": 134819864,
+              "callee_detour": {
+                "address": 134790068,
+                "entry_hex": "70B5050090B00C001600182813D81D29",
+                "instruction_hex": "004B1847",
+                "literal_address": 134790072,
+                "literal_hex": "A56C0B09",
+                "literal_value": 151743653,
+                "register": 3,
+                "target": 151743652
+              },
+              "capture_contract": "RR IN-PLACE wrapper; capture 08093020 after BL 0808BBB4. Require R6<25 and R7<30 because party branch also reaches this POP. R6/R7 are destination box/slot. Callee SetBoxMonAt detours to 090B6CA4, compresses at 090B6CC2 then writes 58 bytes at 090B6CD6. Deduplicate against higher-level deposit. Vanilla wrapper source: pret pokemon_storage_system_data.c:625-633.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E192E12D10649",
+                "rom_offset": 602068
+              },
+              "expected_hex": "301C391CF8F7CAFDF0BC01BC0047",
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "replaces": "SetPlacedMonData",
+              "rom_offset": 602136,
+              "rr_body": {
+                "address": 134819796,
+                "boundary_hex": "00B50006000E0906",
+                "entry_hex": "F0B50006060E09060F0E192E12D10649",
+                "extent_estimate": 92,
+                "extent_evidence": "Estimate inherited layout to 08093030 (+5C): code ends BX at +50, padding/literals +52..5B; next PurgeMonOrBoxMon prologue at +5C."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/pokemon_storage_system.c#L220-L233",
+              "symbol": "SetPlacedMonData"
+            },
             "pc_deposit": {
               "address": 134820188,
               "capture_contract": "TryStorePartyMonInBox called by Task_DepositMenu (tasks.c:1214); +0x80 common return with R0 bool, R6 box and R4 slot-in-high-byte on success. Requires R0==1. Moving-mon and party-selected branches converge; task compacts later (tasks.c:1232), so snapshot the actual transfer and do not assume final party slot numbering yet.",
@@ -235,6 +309,44 @@
               "rom_offset": 602460,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L658-L682",
               "symbol": "TryStorePartyMonInBox"
+            },
+            "pc_move": {
+              "address": 151744154,
+              "capture_contract": "RR compressed-PC acquisition common POP at 090B6EA0. R0=PC(1)/failure(2); R4=box and R5=slot only on success, R7=source mon. Compression call 090B6E72 -> 090B6B78 completes before box/slot vars and return status. This is acquisition-to-storage, not a general user deposit event.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F8B5204B0700204800F01AFA0006000E",
+                "rom_offset": 17526328
+              },
+              "detour": {
+                "address": 134482832,
+                "instruction_hex": "00490847",
+                "literal_address": 134482836,
+                "literal_hex": "396E0B09",
+                "literal_value": 151744057,
+                "register": 1,
+                "target": 151744056
+              },
+              "expected_hex": "00F0EDF90120F8BD01351E2DD7D10134",
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5",
+                "R7"
+              ],
+              "replaces": "SendMonToPC",
+              "rom_offset": 17526426,
+              "rr_body": {
+                "address": 151744056,
+                "boundary_hex": "70B506000C001500",
+                "entry_hex": "F8B5204B0700204800F01AFA0006000E",
+                "extent_estimate": 172,
+                "extent_evidence": "Estimate end 090B6EE4: final branch +82 returns to POP +68; literal pool +84..AB; following PUSH starts at +AC."
+              },
+              "source": "cfru_detour",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/pokemon_storage_system.c#L403-L435",
+              "symbol": "SendMonToPC"
             },
             "pc_release": {
               "address": 134820432,
@@ -290,6 +402,33 @@
               "rom_offset": 602648,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733",
               "symbol": "ReleaseMon"
+            },
+            "pc_withdraw": {
+              "address": 134819826,
+              "capture_contract": "RR IN-PLACE modification, not an entry trampoline. Compare at 08092FDE uses party sentinel 25 (CMP R6,#19 hex), not vanilla 14. Capture at 08092FF8 after the 100-byte party memcpy. R6=25, R7=destination slot. Moving-mon origin/caller distinguishes withdrawal from party rearrangement. Vanilla control flow: pret pokemon_storage_system_data.c:625-633.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E192E12D10649",
+                "rom_offset": 602068
+              },
+              "expected_hex": "642252F140FF12E0",
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "replaces": "SetPlacedMonData",
+              "rom_offset": 602098,
+              "rr_body": {
+                "address": 134819796,
+                "boundary_hex": "00B50006000E0906",
+                "entry_hex": "F0B50006060E09060F0E192E12D10649",
+                "extent_estimate": 92,
+                "extent_evidence": "Estimate inherited layout to 08093030 (+5C): code ends BX at +50, padding/literals +52..5B; next PurgeMonOrBoxMon prologue at +5C."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/pokemon_storage_system.c#L220-L233",
+              "symbol": "SetPlacedMonData"
             },
             "save": {
               "address": 135111580,
@@ -636,6 +775,80 @@
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1568-L1591",
               "symbol": "CB2_LoadMap2 normal completion branch"
             },
+            "mon_given": {
+              "address": 151508984,
+              "capture_contract": "RR replacement common POP at 0907D800, before restoring registers. R0=party(0)/PC(1)/failure(2); R4=source mon. Party path has copied 100 bytes and stored gPlayerPartyCount; PC path returns here after SendMonToPC. R5 is a party count only on the party-success path. RR inline free-slot/forced-PC logic differs from current upstream helper: binary is authoritative. Correlate capture/gift caller before event emission; no event on failure.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "70B504001CF0FAFA20002BF0A1FE2000",
+                "rom_offset": 17291152
+              },
+              "detour": {
+                "address": 134482708,
+                "instruction_hex": "00490847",
+                "literal_address": 134482712,
+                "literal_hex": "91D70709",
+                "literal_value": 151508881,
+                "register": 1,
+                "target": 151508880
+              },
+              "expected_hex": "00200E4B01351D7070BD0135062DE3D1",
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5"
+              ],
+              "replaces": "GiveMonToPlayer",
+              "rom_offset": 17291256,
+              "rr_body": {
+                "address": 151508880,
+                "boundary_hex": "012313B51D220093",
+                "entry_hex": "70B504001CF0FAFA20002BF0A1FE2000",
+                "extent_estimate": 168,
+                "extent_evidence": "Estimate end 0907D838: code finishes with branch at +86 back to POP +70, literal pool +88..A7, next routine begins MOVS then PUSH at +A8/+AA."
+              },
+              "source": "cfru_detour",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L600-L620",
+              "symbol": "GiveMonToPlayer"
+            },
+            "pc_box_place": {
+              "address": 134819864,
+              "callee_detour": {
+                "address": 134790068,
+                "entry_hex": "70B5050090B00C001600182813D81D29",
+                "instruction_hex": "004B1847",
+                "literal_address": 134790072,
+                "literal_hex": "A56C0B09",
+                "literal_value": 151743653,
+                "register": 3,
+                "target": 151743652
+              },
+              "capture_contract": "RR IN-PLACE wrapper; capture 08093020 after BL 0808BBB4. Require R6<25 and R7<30 because party branch also reaches this POP. R6/R7 are destination box/slot. Callee SetBoxMonAt detours to 090B6CA4, compresses at 090B6CC2 then writes 58 bytes at 090B6CD6. Deduplicate against higher-level deposit. Vanilla wrapper source: pret pokemon_storage_system_data.c:625-633.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E192E12D10649",
+                "rom_offset": 602068
+              },
+              "expected_hex": "301C391CF8F7CAFDF0BC01BC0047",
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "replaces": "SetPlacedMonData",
+              "rom_offset": 602136,
+              "rr_body": {
+                "address": 134819796,
+                "boundary_hex": "00B50006000E0906",
+                "entry_hex": "F0B50006060E09060F0E192E12D10649",
+                "extent_estimate": 92,
+                "extent_evidence": "Estimate inherited layout to 08093030 (+5C): code ends BX at +50, padding/literals +52..5B; next PurgeMonOrBoxMon prologue at +5C."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/pokemon_storage_system.c#L220-L233",
+              "symbol": "SetPlacedMonData"
+            },
             "pc_deposit": {
               "address": 134820188,
               "capture_contract": "TryStorePartyMonInBox called by Task_DepositMenu (tasks.c:1214); +0x80 common return with R0 bool, R6 box and R4 slot-in-high-byte on success. Requires R0==1. Moving-mon and party-selected branches converge; task compacts later (tasks.c:1232), so snapshot the actual transfer and do not assume final party slot numbering yet.",
@@ -664,6 +877,44 @@
               "rom_offset": 602460,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L658-L682",
               "symbol": "TryStorePartyMonInBox"
+            },
+            "pc_move": {
+              "address": 151744154,
+              "capture_contract": "RR compressed-PC acquisition common POP at 090B6EA0. R0=PC(1)/failure(2); R4=box and R5=slot only on success, R7=source mon. Compression call 090B6E72 -> 090B6B78 completes before box/slot vars and return status. This is acquisition-to-storage, not a general user deposit event.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F8B5204B0700204800F01AFA0006000E",
+                "rom_offset": 17526328
+              },
+              "detour": {
+                "address": 134482832,
+                "instruction_hex": "00490847",
+                "literal_address": 134482836,
+                "literal_hex": "396E0B09",
+                "literal_value": 151744057,
+                "register": 1,
+                "target": 151744056
+              },
+              "expected_hex": "00F0EDF90120F8BD01351E2DD7D10134",
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5",
+                "R7"
+              ],
+              "replaces": "SendMonToPC",
+              "rom_offset": 17526426,
+              "rr_body": {
+                "address": 151744056,
+                "boundary_hex": "70B506000C001500",
+                "entry_hex": "F8B5204B0700204800F01AFA0006000E",
+                "extent_estimate": 172,
+                "extent_evidence": "Estimate end 090B6EE4: final branch +82 returns to POP +68; literal pool +84..AB; following PUSH starts at +AC."
+              },
+              "source": "cfru_detour",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/pokemon_storage_system.c#L403-L435",
+              "symbol": "SendMonToPC"
             },
             "pc_release": {
               "address": 134820432,
@@ -719,6 +970,33 @@
               "rom_offset": 602648,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733",
               "symbol": "ReleaseMon"
+            },
+            "pc_withdraw": {
+              "address": 134819826,
+              "capture_contract": "RR IN-PLACE modification, not an entry trampoline. Compare at 08092FDE uses party sentinel 25 (CMP R6,#19 hex), not vanilla 14. Capture at 08092FF8 after the 100-byte party memcpy. R6=25, R7=destination slot. Moving-mon origin/caller distinguishes withdrawal from party rearrangement. Vanilla control flow: pret pokemon_storage_system_data.c:625-633.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E192E12D10649",
+                "rom_offset": 602068
+              },
+              "expected_hex": "642252F140FF12E0",
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "replaces": "SetPlacedMonData",
+              "rom_offset": 602098,
+              "rr_body": {
+                "address": 134819796,
+                "boundary_hex": "00B50006000E0906",
+                "entry_hex": "F0B50006060E09060F0E192E12D10649",
+                "extent_estimate": 92,
+                "extent_evidence": "Estimate inherited layout to 08093030 (+5C): code ends BX at +50, padding/literals +52..5B; next PurgeMonOrBoxMon prologue at +5C."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/pokemon_storage_system.c#L220-L233",
+              "symbol": "SetPlacedMonData"
             },
             "save": {
               "address": 135111580,

@@ -44,6 +44,30 @@ def parse_symbols(text: str) -> dict[str, dict]:
     return result
 
 
+def decode_thumb_detour(rom: bytes, address: int) -> dict:
+    """Decode exactly Thumb LDR literal; BX same low register, without guessing."""
+    offset = address - ROM_BASE
+    if address % 2 or not 0 <= offset <= len(rom) - 4:
+        raise ValueError("detour entry outside ROM or unaligned")
+    ldr = int.from_bytes(rom[offset:offset + 2], "little")
+    bx = int.from_bytes(rom[offset + 2:offset + 4], "little")
+    register = (ldr >> 8) & 7
+    if ldr & 0xF800 != 0x4800 or bx != 0x4700 | (register << 3):
+        raise ValueError("not a Thumb literal-load/BX-same-register detour")
+    literal = ((address + 4) & ~3) + (ldr & 255) * 4
+    flat = literal - ROM_BASE
+    if not 0 <= flat <= len(rom) - 4:
+        raise ValueError("detour literal outside ROM")
+    raw = int.from_bytes(rom[flat:flat + 4], "little")
+    target = raw & ~1
+    if not raw & 1 or not ROM_BASE <= target < ROM_BASE + len(rom):
+        raise ValueError("detour target not Thumb ROM code")
+    return {"address": address, "register": register, "literal_address": literal,
+            "literal_value": raw, "target": target,
+            "instruction_hex": rom[offset:offset + 4].hex().upper(),
+            "literal_hex": rom[flat:flat + 4].hex().upper()}
+
+
 def pattern_bytes(text: str) -> bytes:
     data = bytes.fromhex(text)
     if not 8 <= len(data) <= 16:

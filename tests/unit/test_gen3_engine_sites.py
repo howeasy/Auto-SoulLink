@@ -110,14 +110,36 @@ def test_leafgreen_uses_its_own_symbol_and_branch_bytes(roms):
     assert s["expected_hex"] != c["binding"]["anchors"]["fr"]
 
 
-def test_rr_retained_mon_given_tail_does_not_hide_entry_detour(roms):
+def test_rr_retained_mon_given_tail_is_replaced_by_verified_detour(roms):
     if "rr" not in roms:
         pytest.skip(f"ROM not present at {ROM_SPECS['rr'][3]}")
     candidate = next(c for c in gen.CANDIDATES if c["kind"] == "mon_given")
     assert len(find_offsets(roms["rr"], bytes.fromhex(candidate["pattern"]))) == 1
     result = gen.resolve(candidate, "rr", roms["rr"])
-    assert result["status"] == "UNVERIFIED"
-    assert "context" in result["reason"]
+    assert result["status"] == "PINNED"
+    assert result["site"]["source"] == "cfru_detour"
+    assert result["site"]["address"] != 0x08040B80
+
+
+@pytest.mark.parametrize("name", ("rr", "rr_companion"))
+def test_rr_body_pins_have_bound_estimates_and_decoded_trampolines(name):
+    from tools.pin_gen3_site import decode_thumb_detour
+
+    if not ROM_SPECS[name][3].is_file():
+        pytest.skip(f"ROM not present at {ROM_SPECS[name][3]}")
+    rom = load_rom(name)
+    for kind in ("mon_given", "pc_move", "pc_withdraw", "pc_box_place"):
+        c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        result = gen.resolve(c, name, rom)
+        assert result["status"] == "PINNED", result
+        site = result["site"]
+        body = site["rr_body"]
+        pc = site["address"] + site["capture_offset"]
+        assert body["address"] <= pc < body["address"] + body["extent_estimate"]
+        if site["source"] == "cfru_detour":
+            detour = decode_thumb_detour(rom, site["detour"]["address"])
+            assert detour["target"] == body["address"]
+        assert body["extent_evidence"]
 
 
 def test_wrong_anchor_and_thumb_bl_interior_refused():
@@ -142,3 +164,42 @@ def test_unique_odd_match_cannot_be_promoted():
     candidate = copy.deepcopy(gen.CANDIDATES[0])
     pattern = bytes.fromhex(candidate["patterns"]["fr"])
     assert gen.resolve(candidate, "fr", b"x" + pattern)["status"] == "UNVERIFIED"
+
+
+def test_detour_decoder_rejects_wrong_register_or_non_thumb_target():
+    from tools.pin_gen3_site import decode_thumb_detour
+
+    rom = bytearray(64)
+    rom[:8] = bytes.fromhex("0049084721000008")
+    assert decode_thumb_detour(rom, 0x08000000)["target"] == 0x08000020
+    rom[2:4] = bytes.fromhex("1047")
+    with pytest.raises(ValueError, match="same-register"):
+        decode_thumb_detour(rom, 0x08000000)
+    rom[2:4] = bytes.fromhex("0847")
+    rom[4] = 0x20
+    with pytest.raises(ValueError, match="not Thumb"):
+        decode_thumb_detour(rom, 0x08000000)
+
+
+def test_changed_detour_literal_cannot_repin_to_another_body(roms):
+    if "rr" not in roms:
+        pytest.skip(f"ROM not present at {ROM_SPECS['rr'][3]}")
+    rom = bytearray(roms["rr"])
+    rom[0x40B18:0x40B1C] = (0x090B6E39).to_bytes(4, "little")
+    c = next(c for c in gen.CANDIDATES if c["kind"] == "mon_given")
+    result = gen.resolve(c, "rr", rom)
+    assert result["status"] == "UNVERIFIED"
+    assert "target differs" in result["reason"]
+
+
+@pytest.mark.parametrize("name", ("rr", "rr_companion"))
+def test_disabled_rr_poison_is_not_a_fabricated_hp_site(name):
+    if not ROM_SPECS[name][3].is_file():
+        pytest.skip(f"ROM not present at {ROM_SPECS[name][3]}")
+    rom = load_rom(name)
+    for kind in ("poison_faint", "poison_hp_before"):
+        c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        result = gen.resolve(c, name, rom)
+        assert result["status"] == "UNVERIFIED"
+        assert "NO HP mutation" in result["reason"]
+        assert result["detour"]["target"] == 0x090B20D4
