@@ -417,6 +417,13 @@ Read this section if you only play vanilla.
 | 16 | final review (Fable, limited context) | a clean Red beside a companion-patched Blue (kind `named`) was refused as MIXED artifact kinds — a vanilla regression for the optional patch | `named` counts as `clean` in the mixed-kind check (the patch is per cartridge, announced per player); regression in `test_state_key_change_ack.py` |
 | 17 | final review (Codex, round 2) | the retirement alias resolved only in the deferred path and by key alone: `force_faint` dispatch/battle writes never saw it, and a duplicate of the new key in the party made the memorial ambiguous; a WRAM clear left a stale alias | one alias-aware `find_party_slot` (dispatch, battle, deferred) with a validated slot locator; the box module takes the slot hint; the alias map is cleared on WRAM clear |
 | 18 | final review (Fable) | comments claimed a non-pinned pureRGB build "cannot take" the vanilla-header path; it can, and is then refused by the vanilla site verification | `run.lua`, `gen1_rom_scan.py` docstring, CHANGELOG §7 corrected |
+| 25 | randomizer validation (Codex cx-795d1423) | `wild_restriction=similar` / `statics=similar` / `trainers_similar_strength` hang the jar (zero-BST sentinel as `current`, zero expansion step); `wild=global` NPE on the unmapped sentinel | fork patch 0003: step floor `max(BST/20,1)`, global map skips fixed slots |
+| 26 | randomizer validation (Codex cx-795d1423) | overlay sources fail outright: the jar carried only the clean header CRCs | overlay INI entries from the overlay `.sym`, symbol-relative starter sites, `jar_supports` refuses before Java |
+| 27 | randomizer validation (Codex cx-795d1423) | the pipeline's `subprocess.run` timeout never killed java (14 min hang) | `_run_bounded`: Popen + `taskkill /T`, bounded cleanup, typed refusal |
+| 28 | randomizer validation (Codex cx-795d1423) | `trainers_rival_starter` / `trainer_names` / `trainer_class_names` / `type_themed_gyms` silently did nothing on pure entries | refused by name; `option_form` `pure` flags; the form greys them (master `e64f90c`) |
+| 29 | randomizer validation (Codex cx-795d1423 / cx-758c671d) | write-domain audit gaps: field-item sites incl. key items / pure-only items, no catch-rate / level-curve / sanity domains, tier-5 opcode, only ever run for `wild`, never on a produced pair | `domains_for_spec` from the full spec, `UPR_GEN1_ALLOWED_ITEMS`, `guaranteed_catch_byte`; `prepare_pair` audits every pure pair |
+| 30 | randomizer validation (Codex cx-795d1423) | `prepare_pair` refused a valid pair randomized in starters/trainers/… only (identical content hash) | pair check on output sha1 |
+| 31 | randomizer validation (verifier) | `trainers=type_themed` crashes: `randomType()` draws a declared type no species carries | fork patch 0004: re-draw |
 | 24 | final review (Codex, round 9) | verdict: the wrong-target counterexample is closed; one conservative false-refusal window (same-species party swap sampled mid-transaction) is documented for the owner's acceptance | residual wording in §7 |
 | 23 | final review (Codex, round 8) | an unobserved edit interval (teach A a different move, then teach a same-key/same-nickname twin A's old set, all in the item menu) let the twin become the sole match | every alias is observed on every readable frame (pure pass, no refresh): the zero-match interval latches `lost` |
 | 22 | final review (Codex, round 7) | sequential replacement: deposit the changed record, withdraw an identical boxed twin — no observation ever sees two candidates, the twin becomes the sole match | any native departure of a record carrying the aliased key (MoveMon party→box/daycare, RemovePokemon) permanently invalidates the alias (`alias_departure`); a zero-match observation does too |
@@ -458,6 +465,63 @@ Read this section if you only play vanilla.
   unit lane re-run green.
 - **Merged to master 2026-09-20** (owner: "merge with main"): local master fast-forwarded to
   `0937f3d` by the Gen 1 session. Not pushed, not tagged, no release (owner's call, G6).
+
+### 6.1 Randomizer validation (2026-09-20, after the merge)
+
+The owner asked whether every randomizer function had been verified or whether some were
+native to pureRGB. The honest answer was: the fork was proven a **safe writer** (lossless
+baseline, wild-only write domain) but not a **correct randomizer** per option. Live Codex
+thread "Review PureRGB" ran three adversarial rounds (`cx-795d1423` 17 findings,
+`cx-758c671d` 8, `cx-73e80e05` final) while two Sonnet workers built the evidence; every
+load-bearing claim was reproduced against the jar before it was acted on.
+
+What is native to pureRGB and therefore off (not randomized): instant text (the only tweak
+with a pure equivalent); every other misc tweak is a code write and is refused for the pure
+family. Nothing else the form offers is native — it is either implemented and verified, or
+refused by name:
+
+- **Refused by name for the pure family** (the fork cannot honour them: `TrainerTaggingDisabled=1`,
+  no `CanChangeTrainerText`): `trainers_rival_starter`, `trainer_names`, `trainer_class_names`,
+  `trainers=type_themed_gyms`. `option_form()` rows/choices carry `pure` so the form disables
+  them; a selection that slips through ends in `admit_settings`'s named refusal — never a silent
+  coercion. `field_items_ban_bad` is a stock Gen 1 no-op (help text); `tm_compat` covers the 151
+  dex records, the 13 non-dex forms keep their own TM bytes (help text).
+- **Fork defects found and fixed at the root** (`patch/upr/0003`, `0004`; jar `4.6.1-slink1`
+  rebuilt, sha256 `d68df088…`): three settings HANG the jar (`wild_restriction=similar`,
+  `statics=similar`, `trainers_similar_strength` — the zero-stat opaque sentinel arrived as
+  `current` and the similar-strength search expanded by zero forever; java at 100 % CPU for
+  14+ min) → step floor `max(BST/20, 1)`; `wild=global` CRASHED (NPE on the unmapped sentinel)
+  → the global map skips the fixed slots; overlay sources FAILED outright (the jar knew only the
+  clean header CRCs) → `[Pure* overlay (U)]` entries generated from the overlay `.sym`
+  (CRCs D3B7/0D7E/0B94; starter sites symbol-relative because the overlay shifts bank 0);
+  `trainers=type_themed` CRASHED (`randomType()` drew the pure `ExtraTypes` no species carries →
+  `nextInt(0)`) → re-draw; HallOfFame `cp STARTER1/2` sites added to the starter offsets.
+- **Pipeline** (`server/upr_pipeline.py`): the jar run is bounded with a process-tree kill (the
+  old `subprocess.run` timeout never killed java); `prepare_pair` runs the T6 write-domain audit
+  on EVERY pure pair from the full spec (`domains_for_spec`: level curves, catch-rate tiers incl.
+  tier 5's guaranteed-catch opcode, TM sanity) and refuses a stray byte; the pair-differs check
+  compares output sha1s (the content hash covers wild/fishing/base stats only); `jar_entries` /
+  `jar_supports` refuse a source the jar has no entry for BEFORE Java; the field-item audit domain
+  is exactly UPR's `allowedItems` pool (re-derived from the fork source in a test) so pureRGB's
+  HYPER BALL / APEX CHIP pickups are never legal targets.
+- **Semantic verifier** (`tools/upr_pure_verify.py`, 56 tests, each mode with a hand-corrupted
+  negative twin): species domain and opaque slots, starter/static cross-site agreement, trainer
+  record grammars (`$FF/$FE/$FD`, custom-moveset ids, palette bits, terminators), wild
+  random/area/global mapping shape, catch_em_all, type_themed, legendary/ghost bans, the exact
+  level curve (`Math.round`), catch-rate tiers 1–5, starters two_evos, statics
+  random/matching/similar, trainers force_evolved / block_legendaries / type_themed, TM
+  keep_field / sanity / full (55 bits × 151), field-item shuffle multisets, unreachable-map
+  pickups fixed. "Evenly distributed" (trainers) and `random_even` (items) have **no
+  seed-independent property** under UPR's running-mean rule (every multiset is reachable), so
+  membership is asserted and the label is not a promise.
+- **Physical**: `tests/live/test_gen1_rand_gates.py` + `lua/tests/test_gen1_rand_lab_gate.lua`
+  — a randomized PureRed boots cold, and the starter it hands out, the rival's party and the
+  first Route 1 encounter equal the OUTPUT ROM's own tables (decoded through the fork's INI
+  offsets; receipt `patch/build/test_gen1_rand_lab_gate_result.txt`).
+- **Not claimed**: `tm_compat=prefer_type` has no statable guarantee and is unchecked;
+  `trainers_similar_strength` is proven to terminate and stay in the pool, no BST band is
+  asserted (the search has no bound); only PureRed is randomized in the unit tests (the other
+  five artifacts pass the clean-vs-clean control and the all-off lossless round trip).
 
 ---
 

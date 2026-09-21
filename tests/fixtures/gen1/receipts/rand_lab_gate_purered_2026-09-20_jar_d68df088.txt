@@ -1,0 +1,52 @@
+[test_gen1_rand_lab_gate] title=purered rom=86e05062
+ADMITTED title=purered pack=gen1_purergb kind=rand
+  [ok] admitted as a randomized pure cartridge (kind rand)  — rand
+TITLE_IDLE requested=0 applied=0
+[scripted] bedroom reached after 2471 frames
+  [ok] NEW GAME reached the bedroom  — 2471
+  phase lab: bedroom-row @2471
+  phase lab: bedroom-column @2487
+  phase lab: bedroom-to-stairs @2567
+  phase lab: house-clear-stairs @2615
+  phase lab: house-row @2697
+  phase lab: house-to-pallet @2777
+  phase lab: pallet-row @2857
+  phase lab: pallet-clear-house @2892
+  phase lab: pallet-row @2920
+  phase lab: pallet-to-oak @3003
+  phase lab: pallet-oak-dialogue @3084
+  phase lab: pallet-script-wait @3194
+  phase lab: pallet-oak-dialogue @3370
+  phase lab: pallet-script-wait @3638
+  phase lab: lab-to-starter @3930
+  phase lab: lab-clear-entry @4185
+  phase lab: lab-oak-speech-wait @4192
+  phase lab: lab-oak-choose-mon-speech @4193
+  phase lab: lab-text-exit @4981
+  phase lab: lab-to-starter @4997
+  phase lab: choose-growl-starter @5045
+  phase lab: decline-nickname @5508
+  phase lab: rival-walks-to-ball @5600
+  phase lab: rival-ball-movement @5604
+  phase lab: rival-chooses-starter @5704
+  phase lab: lab-clear-ball-row @5909
+  phase lab: lab-center-row @5925
+  phase lab: start-lab-rival @5973
+  phase lab: rival-challenge-dialogue @5989
+  phase lab: rival-battle-transition @6131
+  phase lab: rival-dialogue @6380
+  [ok] lab route reached the rival battle
+  [ok] first battle is lab Rival1  — 221
+  [ok] one starter in the party  — 1
+  [ok] enemy mon 1: species list agrees with its struct  — 1B vs 1B
+RAND_OBS {"ball_x":8,"battle":2,"enemy":[{"level":5,"list_species":27,"species":27}],"frame":6589,"opponent":221,"party_count":1,"rival_starter":77,"starter":154,"starter_level":5,"trainer_class":24,"trainer_no":1}
+RIVAL_BATTLE_OVER result=0 party_hp=16 @9809
+  phase lab: rival-battle-transition @9809
+  phase lab: rival-exit-dialogue @9869
+  phase lab: watch-rival-exit @10035
+  phase parcel: lab_exit @10234
+  phase parcel: pallet_north @10314
+  phase parcel: route_north @10652
+  phase parcel: wild-dialogue @10703
+RAND_WILD {"battle_type":0,"frame":11311,"level":3,"map":12,"opponent":0,"species":120,"species2":120,"x":10,"y":32}
+RESULT: PASS test_gen1_rand_lab_gate (0 checks failed)
