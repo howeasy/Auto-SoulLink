@@ -108,6 +108,9 @@ FIXED_KEYS: dict[str, str] = {
     "GoodRodPairCount": "4",
     "TrainerClassCount": "56",
     "TrainerRecordGrammars": "1",
+    # The reviewed producer: server/upr_pipeline.py refuses a jar whose pure sections carry an
+    # older revision (a pre-fix fork has the same version string and the same clean CRCs).
+    "SlinkForkRevision": "2",
     "TrainerTaggingDisabled": "1",
     "TradeTableSize": "10",
     "TradeNameLength": "11",

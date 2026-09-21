@@ -46,7 +46,7 @@ def _fork_jar() -> str:
     from tests.conftest import find_upr_jar
     jar = find_upr_jar()
     if not jar or not jar_is_fork(jar):
-        pytest.skip("the SLink fork jar (4.6.1-slink1) is not present — tools/build_upr_fork.py")
+        pytest.skip("the SLink fork jar (4.6.1-slink2) is not present — tools/build_upr_fork.py")
     return jar
 
 
@@ -275,7 +275,7 @@ def test_jar_entries_name_what_a_jar_can_randomize(tmp_path):
     old = tmp_path / "old.jar"
     with zipfile.ZipFile(old, "w") as zf:
         zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini",
-                    "[Red (U)]\nGame=POKEMON RED\n[PureRed (U)]\nGame=POKEMON RED\n")
+                    "[Red (U)]\nGame=POKEMON RED\n[PureRed (U)]\nGame=POKEMON RED\nSlinkForkRevision=2\n")
     assert jar_entries(str(old)) == {"Red (U)", "PureRed (U)"}
     clean = {"foundation": "gen1_purergb", "variant": "purered", "kind": "clean"}
     overlay = {"foundation": "gen1_purergb", "variant": "purered", "kind": "overlay"}
@@ -307,6 +307,34 @@ def test_jar_entries_name_what_a_jar_can_randomize(tmp_path):
         assert jar_supports(jar, ovl) and jar_entry_crcs(jar)["PureRed overlay (U)"] == ovl["header_checksum"]
 
 
+def test_a_pre_fix_fork_jar_is_refused_by_revision(tmp_path):
+    """Review cx-25b25db1: the historical fork (600b1cdb..., patches 0001/0002 only) carries the
+    pure entries, the same clean CRCs and -- until slink2 -- the same version string, but hangs on
+    similar-strength and crashes on global. Only the revision stamp tells it apart."""
+    import subprocess
+    import zipfile
+
+    from server.upr_pipeline import FORK_REVISION_REQUIRED, jar_fork_revision
+    old = tmp_path / "old.jar"
+    with zipfile.ZipFile(old, "w") as zf:
+        zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini",
+                    "[Red (U)]\nGame=POKEMON RED\n[PureRed (U)]\nGame=POKEMON RED\nCRCInHeader=0x929B\n")
+    assert jar_fork_revision(str(old)) == 0 and not jar_is_fork(str(old))
+    roms = _pure_roms()
+    with pytest.raises(UprPipelineError, match="fork revision"):
+        randomize(str(old), _settings(tmp_path, {"wild"}), roms["a"], str(tmp_path / "o.gbc"))
+    jar = _fork_jar()
+    assert jar_fork_revision(jar) >= FORK_REVISION_REQUIRED
+    # the genuine historical archive, when the fork checkout has it
+    src = os.path.join(_REPO, ".cache", "slink-upr")
+    if os.path.isdir(os.path.join(src, ".git")):
+        blob = subprocess.run(["git", "-C", src, "show", "d59f16b:PokeRandoZX.jar"], capture_output=True)
+        if blob.returncode == 0 and blob.stdout:
+            hist = tmp_path / "hist.jar"
+            hist.write_bytes(blob.stdout)
+            assert jar_fork_revision(str(hist)) == 0 and not jar_is_fork(str(hist))
+
+
 def test_jar_is_fork_reads_the_entries_not_the_name(tmp_path):
     import zipfile
     fake = tmp_path / "PokeRandoZX.jar"
@@ -315,6 +343,10 @@ def test_jar_is_fork_reads_the_entries_not_the_name(tmp_path):
     assert jar_is_fork(str(fake)) is False
     with zipfile.ZipFile(fake, "w") as zf:
         zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini", "[Red (U)]\n[PureRed (U)]\nLosslessMode=1\n")
+    assert jar_is_fork(str(fake)) is False           # the pure entry without the reviewed revision
+    with zipfile.ZipFile(fake, "w") as zf:
+        zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini",
+                    "[Red (U)]\n[PureRed (U)]\nLosslessMode=1\nSlinkForkRevision=2\n")
     assert jar_is_fork(str(fake)) is True
     assert jar_is_fork(str(tmp_path / "missing.jar")) is False
 
@@ -336,13 +368,13 @@ class TestAgainstTheForkJar:
         for pid, src in roms.items():
             out = str(tmp_path / f"{pid}.gbc")
             info = randomize(jar, _settings(tmp_path, set()), src, out)
-            assert info["version"] == "4.6.1-slink1"
+            assert info["version"] == "4.6.1-slink2"
             assert info["sha1"] == _sha1(src), f"{pid}: load->save changed bytes"
 
     def test_a_pair_is_produced_with_different_seeds_and_content(self, tmp_path):
         jar, roms = _fork_jar(), _pure_roms()
         res = prepare_pair(jar, _settings(tmp_path), roms, str(tmp_path / "out"))
-        assert res["upr_version"] == "4.6.1-slink1"
+        assert res["upr_version"] == "4.6.1-slink2"
         assert res["family"] == FAMILY_PURE
         assert set(res["categories"]) == ALL_CATEGORIES
         a, b = res["players"]["a"], res["players"]["b"]

@@ -1,0 +1,79 @@
+From d831e0f4f3c708f92335cb13d9c958075951c461 Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Sun, 20 Sep 2026 23:28:19 -0400
+Subject: [PATCH] slink: version 4.6.1-slink2; every pure section declares
+ SlinkForkRevision=2 (the reviewed producer: patches 0003..0006)
+
+---
+ src/com/dabomstew/pkrandom/Version.java            | 2 +-
+ src/com/dabomstew/pkrandom/config/gen1_offsets.ini | 6 ++++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/com/dabomstew/pkrandom/Version.java b/src/com/dabomstew/pkrandom/Version.java
+index fd4c601..0cb6a8a 100644
+--- a/src/com/dabomstew/pkrandom/Version.java
++++ b/src/com/dabomstew/pkrandom/Version.java
+@@ -29,7 +29,7 @@ import java.util.Map;
+ 
+ public class Version {
+     public static final int VERSION = 322; // Increment by 1 for new version. Updated for 4.6.1.
+-    public static final String VERSION_STRING = "4.6.1-slink1"; // slink fork of 4.6.1; VERSION stays 322 so settings files interoperate
++    public static final String VERSION_STRING = "4.6.1-slink2"; // slink fork of 4.6.1; VERSION stays 322 so settings files interoperate
+ 
+     public static final Map<Integer,String> oldVersions = setupVersionsMap();
+ 
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+index f9485cc..3779989 100755
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1195,6 +1195,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
++SlinkForkRevision=2
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1277,6 +1278,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
++SlinkForkRevision=2
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1359,6 +1361,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
++SlinkForkRevision=2
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1441,6 +1444,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
++SlinkForkRevision=2
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1523,6 +1527,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
++SlinkForkRevision=2
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1605,6 +1610,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
++SlinkForkRevision=2
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+-- 
+2.54.0.windows.1
+
