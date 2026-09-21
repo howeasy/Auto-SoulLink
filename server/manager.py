@@ -1095,8 +1095,8 @@ class RunManager:
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here
-        # is by construction one the pipeline admits. A pure pair gets every tweak turned
-        # off (the fork offers none).
+        # is by construction one the pipeline admits. A pure pair gets every code-patching
+        # tweak turned off (the fork offers only lower-case names, a data write).
         if randomize and not settings:
             try:
                 if spec is not None:

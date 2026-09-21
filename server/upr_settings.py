@@ -174,20 +174,26 @@ FLAGS: dict[str, tuple[int, int]] = {
     "pickupItems_UNCHANGED": (49, 1),
 }
 
-# MiscTweak bit values (MiscTweak.java). The whole set is a big-endian int at bytes 32-35.
+# MiscTweak bit values, in MiscTweak.java's declaration order (ZX 4.6.1; the fork keeps it).
+# The whole set is a big-endian int at bytes 32-35. The values are the file's, not a
+# menu order: an earlier table had eight of its twelve values wrong (LOWER_CASE_POKEMON_NAMES
+# at bit 1 = NERF_X_ACCURACY, FIX_CRIT_RATE at bit 10 = lower-case names, ...); only fastest
+# text (3), running shoes (4), PC potion (5) and Pikachu evolution (6) happened to be right.
+# An .rnqs SLink wrote before this fix carries the OLD bits: re-export it, never remap it.
 MISC_TWEAKS = {
-    "BAN_LUCKY_EGG": 1 << 0,
-    "LOWER_CASE_POKEMON_NAMES": 1 << 1,
-    "NATIONAL_DEX_AT_START": 1 << 2,
+    "BW_EXP_PATCH": 1 << 0,
+    "NERF_X_ACCURACY": 1 << 1,
+    "FIX_CRIT_RATE": 1 << 2,
     "FASTEST_TEXT": 1 << 3,
     "RUNNING_SHOES_INDOORS": 1 << 4,
     "RANDOMIZE_PC_POTION": 1 << 5,
     "ALLOW_PIKACHU_EVOLUTION": 1 << 6,
-    "FORCE_CHALLENGE_MODE": 1 << 7,
-    "BW_EXP_PATCH": 1 << 8,
-    "NERF_X_ACCURACY": 1 << 9,
-    "FIX_CRIT_RATE": 1 << 10,
-    "UPDATE_TYPE_EFFECTIVENESS": 1 << 11,
+    "NATIONAL_DEX_AT_START": 1 << 7,
+    "UPDATE_TYPE_EFFECTIVENESS": 1 << 8,
+    "FORCE_CHALLENGE_MODE": 1 << 9,
+    "LOWER_CASE_POKEMON_NAMES": 1 << 10,
+    "RANDOMIZE_CATCHING_TUTORIAL": 1 << 11,
+    "BAN_LUCKY_EGG": 1 << 12,
 }
 
 # A settings blob that changes nothing, byte by byte. Values are UPR's own field defaults
@@ -449,13 +455,17 @@ CHOICE_HELP: dict[tuple[str, str], str] = {
 _CATEGORY_MODES = ("wild", "starters", "statics", "trainers", "tms", "field_items")
 
 # Foundations the pipeline randomizes. The pure family (docs/purergb/PLAN.md §6 M5) runs on
-# the SLink fork's lossless entries, which offer NO misc tweak: every tweak is a code write
-# (fastest text is a C9 at TextDelayFunctionOffset; pureRGB has instant text natively), and
-# the fork's tweakForRom would silently drop one that was asked for, so a settings file for
-# the pure family must not ask.
+# the SLink fork's lossless entries, which offer ONE misc tweak: every other tweak is a code
+# write (fastest text is a C9 at TextDelayFunctionOffset; pureRGB has instant text natively),
+# and the fork's tweakForRom would silently drop one that was asked for, so a settings file
+# for the pure family must not ask.
 FAMILY_VANILLA = "gen1_rby"
 FAMILY_PURE = "gen1_purergb"
 FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
+# The tweaks a lossless entry honours (fork patch 0008, revision 3): lower-case names is a
+# DATA write over the 190-row species-name table, which the fork re-cases byte-for-byte in
+# place (never through its string path), so nothing else in the cartridge moves.
+PURE_ALLOWED_TWEAKS = ("lowercase_names",)
 # Options the fork cannot honour on a pure entry (review cx-795d1423 #4/#5): the pure INI rows
 # carry TrainerTaggingDisabled=1 (no gym/Elite/rival tags -- pureRGB renumbered every class
 # and the rival is name-substituted at runtime) and omit CanChangeTrainerText (the 56-entry
@@ -470,13 +480,15 @@ def misc_options() -> list[str]:
 
 
 def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
-    """``spec`` with the family's allowlist applied: the pure family has every tweak off."""
+    """``spec`` with the family's allowlist applied: the pure family has every tweak off
+    except PURE_ALLOWED_TWEAKS, which stay as given."""
     if family not in FAMILIES:
         raise UprSettingsError(f"unknown randomizer family {family!r}")
     out = dict(spec)
     if family == FAMILY_PURE:
         for key in misc_options():
-            out[key] = False              # a DEFAULT flip (fastest text defaults on); the
+            if key not in PURE_ALLOWED_TWEAKS:
+                out[key] = False          # a DEFAULT flip (fastest text defaults on); the
     return out                            # inert options are refused, never coerced
 
 
@@ -494,7 +506,7 @@ def option_form() -> list[dict]:
         row = {"key": key, "kind": opt["kind"], "group": opt["group"], "label": opt["label"],
                "default": opt["default"], "help": HELP.get(key, opt.get("help", "")),
                "note": opt.get("help", "") if key in HELP else "",
-               "pure": key not in PURE_INERT_BOOLS and "misc" not in opt}
+               "pure": key not in PURE_INERT_BOOLS and ("misc" not in opt or key in PURE_ALLOWED_TWEAKS)}
         if opt["kind"] == "choice":
             row["choices"] = [{"value": v, "label": lbl, "help": CHOICE_HELP.get((key, v), ""),
                                "pure": not (key == "trainers" and v in PURE_INERT_TRAINER_MODES)}
@@ -685,7 +697,7 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     Types and evolutions decide the type and species clauses; move and base-stat changes
     make every cached stat and damage figure wrong. These are the domains the project chose
     NOT to support, so finding one enabled is a refusal, not a warning. For the pure family
-    every misc tweak is forbidden too (see FAMILY_PURE).
+    every misc tweak but PURE_ALLOWED_TWEAKS is forbidden too (see FAMILY_PURE).
     """
     f = parsed["flags"]
     bad = []
@@ -699,9 +711,12 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     if spec.get("trainers") == "distributed" and spec.get("trainers_similar_strength"):
         bad.append("trainers=distributed with trainers_similar_strength "
                    "(not verifiable: the placement-history filter precedes the strength band)")
-    if family == FAMILY_PURE and parsed.get("misc_tweaks"):
-        bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
     if family == FAMILY_PURE:
+        allowed = {OPTIONS[k]["misc"] for k in PURE_ALLOWED_TWEAKS}
+        other = [n for n in parsed.get("misc_tweak_names") or [] if n not in allowed]
+        unnamed = parsed.get("misc_tweaks", 0) & ~sum(MISC_TWEAKS.values())
+        if other or unnamed:
+            bad.append("tweaks (" + ", ".join(other or ["unknown"]) + ")")
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")

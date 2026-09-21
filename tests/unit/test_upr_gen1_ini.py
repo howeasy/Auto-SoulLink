@@ -228,3 +228,12 @@ def test_non_dex_species_are_the_thirteen_opaque_ids():
                     reason="pinned pure / overlay ROMs not present")
 def test_the_committed_ini_is_what_the_generator_produces():
     assert gen.generate(pathlib.Path(_ROMS), pathlib.Path(_OVERLAY_ROMS)) == _INI.read_text(encoding="utf-8")
+
+
+def test_every_pure_section_declares_fork_revision_3():
+    """Fork patch 0008 (4.6.1-slink3): the lossless entries honour the lower-case-names tweak,
+    and server.upr_pipeline.FORK_REVISION_REQUIRED refuses the slink2 jar that would drop it."""
+    from server.upr_pipeline import FORK_REVISION_REQUIRED
+    assert gen.FIXED_KEYS["SlinkForkRevision"] == "3" and FORK_REVISION_REQUIRED == 3
+    for name, body in _sections().items():
+        assert "SlinkForkRevision=3" in body, name

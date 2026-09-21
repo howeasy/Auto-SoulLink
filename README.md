@@ -147,7 +147,7 @@ Everything lives on the **Manager** (`python -m server.manager`, port 8090): the
 
 **Where to read more.** `docs/purergb/CHANGELOG.md` (everything that shipped, by area, with the evidence and the known limits), `docs/REFERENCE.md` (the Gen 1 · pureRGB bullet), `docs/purergb/PLAN.md` (the plan and its gate ledger).
 
-**Randomized pairs.** The Manager's randomizer runs pureRGB through the SLink fork of UPR ZX 4.6.1 (`python tools/build_upr_fork.py --bootstrap` → `.cache/slink-upr/PokeRandoZX.jar`, `4.6.1-slink2` — the pipeline refuses an older fork revision): a lossless handler (an untouched pure ROM round-trips byte-identically), pure INI entries generated from the pinned symbols, and every code-patching tweak off (pureRGB has instant text natively). The run then admits only the two prepared cartridges (fingerprint + full sha1 from the contract).
+**Randomized pairs.** The Manager's randomizer runs pureRGB through the SLink fork of UPR ZX 4.6.1 (`python tools/build_upr_fork.py --bootstrap` → `.cache/slink-upr/PokeRandoZX.jar`, `4.6.1-slink3` — the pipeline refuses an older fork revision): a lossless handler (an untouched pure ROM round-trips byte-identically), pure INI entries generated from the pinned symbols, and every code-patching tweak off (pureRGB has instant text natively); one tweak is allowed, lower-case names, a data write the fork re-cases byte-for-byte over the name table. The run then admits only the two prepared cartridges (fingerprint + full sha1 from the contract).
 
 ## Companion Patch (Radical Red)
 

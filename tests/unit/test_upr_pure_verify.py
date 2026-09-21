@@ -1055,3 +1055,67 @@ class TestFieldItems:
         out[0xEC67] = TM_ITEM0
         r = _verify(bytes(out), self.RANDOM)
         assert any("0xEC67 TM05 (CD) sits in a map no connection or warp reaches" in f for f in r["failures"]), r["failures"]
+
+
+class TestNames:
+    """The lowercase_names tweak (fork patch 0008): the byte camel rule, and the verifier's
+    enabled-but-unchanged / disabled-but-changed twins, without Java."""
+
+    @staticmethod
+    def _enc(name: str) -> bytes:
+        glyph = {" ": 0x7F, "'": 0xE0, ".": 0xE8, "M": 0xEF, "F": 0xF5, "-": 0xE3}
+        out = bytearray()
+        for ch in name:
+            if "A" <= ch <= "Z":
+                out.append(0x80 + ord(ch) - 65)
+            elif "a" <= ch <= "z":
+                out.append(0xA0 + ord(ch) - 97)
+            elif ch in "\u2642\u2640":
+                out.append(0xEF if ch == "\u2642" else 0xF5)
+            else:
+                out.append(glyph[ch])
+        return bytes(out).ljust(10, b"\x50")
+
+    def test_the_byte_rule_mirrors_rom_functions_camel_case(self):
+        from tools.upr_pure_verify import camel_names
+        pairs = [("MR.MIME", "Mr.Mime"), ("FARFETCH'D", "Farfetch'd"), ("NIDORAN\u2640", "Nidoran\u2640"),
+                 ("THE MAW", "The Maw"), ("MISSINGNO.", "Missingno."), ("MEW", "Mew"), ("HO-OH", "Ho-Oh")]
+        table = b"".join(self._enc(a) for a, _b in pairs)
+        want = b"".join(self._enc(b) for _a, b in pairs)
+        assert camel_names(table, 10) == want
+        assert camel_names(want, 10) == want                     # idempotent
+        # the 'x ligature ($BB = 'd) continues a word: FARFETCH<'d> keeps its case
+        lig = self._enc("FARFETCH")[:8] + b"\xbb\x50"
+        assert camel_names(lig, 10) == self._enc("Farfetch")[:8] + b"\xbb\x50"
+
+    def test_the_clean_table_camel_cases_to_the_expected_rows(self):
+        from tools.upr_pure_verify import camel_names
+        from tools.upr_write_domain_diff import load_entry, name_table_bytes
+        r = name_table_bytes(load_entry("purered"))
+        out = camel_names(_clean()[r.start:r.stop], 10)
+        rows = {i + 1: out[i * 10:(i + 1) * 10] for i in range(190)}
+        assert rows[0x34] == self._enc("Magmar") and rows[0x86] == self._enc("The Maw")
+        assert rows[0xB5] == self._enc("Missingno.") and rows[0x0F] == self._enc("Nidoran\u2640")
+
+    def test_enabled_but_unchanged_and_disabled_but_changed_are_reported(self):
+        from tools.upr_pure_verify import camel_names
+        from tools.upr_write_domain_diff import load_entry, name_table_bytes
+        clean = _clean()
+        r = name_table_bytes(load_entry("purered"))
+        cased = bytearray(clean)
+        cased[r.start:r.stop] = camel_names(clean[r.start:r.stop], 10)
+        cased = bytes(cased)
+        on, off = _spec(lowercase_names=True), _spec()
+        assert domains_for_spec(on) == {"names"} and domains_for_spec(off) == set()
+        ok = verify("purered", clean, cased, spec=on)
+        assert ok["ok"] and ok["changed"]["names"] > 0, ok["failures"]
+        unchanged = verify("purered", clean, clean, spec=on)
+        assert any("names: enabled but nothing in its domain changed" in f for f in unchanged["failures"])
+        changed = verify("purered", clean, cased, spec=off)
+        assert any(f.startswith("names: disabled but") for f in changed["failures"])
+        assert any(f.startswith("audit:") for f in changed["failures"])
+        # one letter off the rule (Magmar's second letter left upper-case) is named by row
+        broken = bytearray(cased)
+        broken[r.start + 0x33 * 10 + 1] = 0x80                  # 'a' -> 'A'
+        bad = verify("purered", clean, bytes(broken), spec=on)
+        assert any(f.startswith("names: row 52 ") for f in bad["failures"]), bad["failures"]

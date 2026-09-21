@@ -76,9 +76,10 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     `SLT1` unchanged. RAM/SRAM placement is proven equal to the clean build, and a clean save
     loads on the overlay unchanged (A4 gate, `tests/unit/test_gen1_purergb_overlay.py`).
   - **Randomizer:** the SLink fork of UPR ZX 4.6.1 (`patch/upr/*.patch`, `tools/build_upr_fork.py`,
-    jar `4.6.1-slink2`, fork revision 2 required) with lossless load→save for pure entries, generated INI rows
+    jar `4.6.1-slink3`, fork revision 3 required) with lossless load→save for pure entries, generated INI rows
     (`tools/gen_upr_gen1_ini.py`), a write-domain audit (`tools/upr_write_domain_diff.py`) and
-    every code-patching tweak refused (`server/upr_settings.py` pure family).
+    every code-patching tweak refused (`server/upr_settings.py` pure family); one tweak allowed,
+    lower-case names (a data write over the species-name table, re-cased byte-for-byte in place).
   - **Evidence:** unit pins mirror the vanilla contract (`tests/unit/test_gen1_purergb_*.py`);
     live: inspect on all six pure cartridges (clean + overlay), APEX restore and APEX refusal
     gates, receptionist/menu-row/panel on the overlay, GBC FADE stress; duo: the vanilla

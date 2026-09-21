@@ -26,7 +26,7 @@ APPENDS ``.gbc`` to anything not already ending in it, so ``-o out.gb`` silently
 THE JAR IS NOT BUNDLED. UPR ZX is GPLv3 and redistributable, but the project policy is that
 players supply their own from the official releases, and SLink shells out to it as a
 separate process. Two jars are accepted: the stock 4.6.1 release (vanilla Red/Blue/Yellow
-only) and SLink's fork of it, ``4.6.1-slink2`` (built by tools/build_upr_fork.py from
+only) and SLink's fork of it, ``4.6.1-slink3`` (built by tools/build_upr_fork.py from
 .cache/slink-upr, docs/purergb/PLAN.md §6 M5), which is the only jar that may randomize the
 pureRGB family: its entries are lossless and field-scoped, the stock jar has no entry for
 those cartridges at all. The fork is recognised by the entries it carries, not by its name.
@@ -84,7 +84,7 @@ KIND_WORDS_PURE = {
 }
 
 PUREGB_RANDOMIZER_REFUSAL = (
-    "pureRGB randomization needs SLink's UPR fork jar (4.6.1-slink2, fork revision 2; build it with "
+    "pureRGB randomization needs SLink's UPR fork jar (4.6.1-slink3, fork revision 3; build it with "
     "tools/build_upr_fork.py) — this jar is the stock 4.6.1 and has no pureRGB entry."
 )
 FORK_JAR_MARKER = b"[PureRed (U)]"
@@ -92,12 +92,14 @@ _SEED_RE = re.compile(r"^Random Seed:\s*(\d+)\s*$")
 _SETTINGS_RE = re.compile(r"^Settings String:\s*(\S+)\s*$")
 _VERSION_RE = re.compile(r"^Randomizer Version:\s*(\S+)\s*$")
 
-SUPPORTED_UPR_VERSION = "4.6.1-slink2"        # the fork: every family
+SUPPORTED_UPR_VERSION = "4.6.1-slink3"        # the fork: every family
 # The fork revision the pure sections must declare (SlinkForkRevision=, emitted by
 # tools/gen_upr_gen1_ini.py). A pre-fix build of the fork carries the same clean CRCs and, until
 # slink2, the same version string; it hangs on the similar-strength modes and crashes on global
-# (review cx-25b25db1), so the cartridge CRC alone must never admit it.
-FORK_REVISION_REQUIRED = 2
+# (review cx-25b25db1), so the cartridge CRC alone must never admit it. Revision 3 (slink3)
+# is the first whose lossless entries honour the lower-case-names tweak; a slink2 jar would
+# silently drop it in tweakForRom, so it is refused the same way slink1 was.
+FORK_REVISION_REQUIRED = 3
 STOCK_UPR_VERSION = "4.6.1"                   # the release jar: the vanilla family only
 ACCEPTED_UPR_VERSIONS = (STOCK_UPR_VERSION, SUPPORTED_UPR_VERSION)
 

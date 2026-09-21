@@ -20,6 +20,8 @@ against the facts pack (data/games/gen1_purergb/) and the record grammars the RO
                  UPR's 49 placeable ids stays in that pool and a TM site stays a TM; every
                  other site (key items, HMs, pureRGB's own ids, unreachable maps) is fixed
     catch_rate   the +8 byte of the 151 dex records
+    names        the whole InternalPokemonCount-row species-name table equals camel_names()
+                 of the clean one (the lowercase_names tweak, fork revision 3), or is unchanged
     everywhere   audit() reports no stray byte; an enabled category changed something and a
                  disabled one changed nothing
 
@@ -82,10 +84,12 @@ from tools.upr_write_domain_diff import (  # noqa: E402
     field_item_bytes,
     guaranteed_catch_byte,
     load_entry,
+    name_table_bytes,
 )
 
 FACTS = REPO / "data" / "games" / "gen1_purergb"
-CATEGORIES = ("wild", "starters", "statics", "trainers", "tms", "tm_compat", "field_items", "catch_rate")
+CATEGORIES = ("wild", "starters", "statics", "trainers", "tms", "tm_compat", "field_items", "catch_rate",
+              "names")
 OPAQUE_CLASSES = {"form", "spirit", "missingno"}
 LEGENDARY_DEX = {144, 145, 146, 150, 151}          # Pokemon.legendaries, the Gen 1 members
 FIELD_MOVES = {15, 19, 57, 70, 148, 91, 100}       # Gen1Constants.fieldMoves (ROM move ids == UPR ids: 165 real moves)
@@ -312,6 +316,31 @@ def _ghost_site(title: str, ini: pathlib.Path) -> int | None:
     m = re.search(r"^\[" + re.escape(SECTION[title]) + r"\]\n(.*?)(?=^\[|\Z)", text, re.S | re.M)
     g = re.search(r"StaticPokemonGhostMarowak\{\}=\{Species=\[\s*(0x[0-9A-Fa-f]+|\d+)", m.group(1)) if m else None
     return int(g.group(1), 0) if g else None
+
+
+def camel_names(table: bytes, row: int) -> bytes:
+    """RomFunctions.camelCase as the fork's lossless byte transform (Gen1RomHandler.
+    applyCamelCaseNamesInPlace): per row, the first letter of each word keeps its case and
+    the rest of A-Z ($80-$99) drop to a-z (+$20); a-z, the 'x ligatures ($BB-$BF, $E4, $E5)
+    and the apostrophe ($E0) continue a word, anything else (space $7F, '.', the gender
+    glyphs) ends one; the row ends at the first $50 pad. MR.MIME -> Mr.Mime, FARFETCH'D ->
+    Farfetch'd, THE MAW -> The Maw, MISSINGNO. -> Missingno."""
+    out = bytearray(table)
+    for start in range(0, len(out), row):
+        docap = True
+        for j in range(start, start + row):
+            b = out[j]
+            if b == 0x50:
+                break
+            if 0x80 <= b <= 0x99:
+                if not docap:
+                    out[j] = b + 0x20
+                docap = False
+            elif 0xA0 <= b <= 0xB9 or 0xBB <= b <= 0xBF or b in (0xE0, 0xE4, 0xE5):
+                docap = False
+            else:
+                docap = True
+    return bytes(out)
 
 
 class _Check:
@@ -1044,6 +1073,18 @@ class _Check:
                 if self.out[t + n - 1] in learnt and not self.out[base + (n - 1) // 8] >> ((n - 1) % 8) & 1:
                     self.fail(f"tm_compat: dex {i + 1} learns move {self.out[t + n - 1]:02X} by level but cannot "
                               f"use TM{n:02d} (tm_sanity)")
+
+    # ── names ────────────────────────────────────────────────────────────────────────
+    def names(self) -> None:
+        tbl = name_table_bytes(self.e)
+        self.domain["names"].update(tbl)
+        clean, out = self.clean[tbl.start:tbl.stop], self.out[tbl.start:tbl.stop]
+        on = "names" in self.cats if self.spec is None else self.opt("lowercase_names")
+        want = camel_names(clean, self.e["PokemonNamesLength"]) if on else clean
+        if out != want:
+            i = next(i for i in range(len(out)) if out[i] != want[i])
+            self.fail(f"names: row {i // self.e['PokemonNamesLength'] + 1} 0x{tbl.start + i:X}: "
+                      f"{out[i]:02X}, camel rule gives {want[i]:02X}")
 
     # ── field items ──────────────────────────────────────────────────────────────────
     def field_items(self) -> None:

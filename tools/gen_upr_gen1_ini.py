@@ -110,7 +110,8 @@ FIXED_KEYS: dict[str, str] = {
     "TrainerRecordGrammars": "1",
     # The reviewed producer: server/upr_pipeline.py refuses a jar whose pure sections carry an
     # older revision (a pre-fix fork has the same version string and the same clean CRCs).
-    "SlinkForkRevision": "2",
+    # 3 = 4.6.1-slink3 (patch 0008): the lossless entries offer the lower-case-names tweak.
+    "SlinkForkRevision": "3",
     "TrainerTaggingDisabled": "1",
     "TradeTableSize": "10",
     "TradeNameLength": "11",
