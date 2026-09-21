@@ -7,11 +7,11 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 
 ## Sources and limitations
 
-- [Pinned pret source](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/) and [CFRU BPRE.ld](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/BPRE.ld). BPRE names are lookup seeds, not RR equivalence proof. Static symbols not present in that map stay unresolved.
+- [Pinned pret source](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/). Vanilla function addresses/sizes come independently from data/gen3/pret/pokefirered.sym and pokeleafgreen.sym, including LOCAL symbols. Their fixed SHA-256s and source/ROM identities are checked against provenance.json. [CFRU BPRE.ld](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/BPRE.ld) is only a cross-check, never the vanilla address authority.
 - Control address: patch/tools/build.py:63; parked codex/rr-foundation:docs/rr_reference/BIZHAWK_MGBA_CALLBACKS.md:150-170 (callback 0800051A, raw R15 0800051C). Artifact-specific control bytes are intentional.
-- Read-only Capstone 5.0.7 Thumb disassembly established FR capture boundaries and call targets; no disassembly/runtime dependency in regeneration. Transported matches are [INFERENCE] of the same local sequence, not proof of caller reachability. Runtime fields must come from each pack profile.
+- Read-only Capstone 5.0.7 Thumb disassembly established FR capture boundaries and call targets; no disassembly/runtime dependency in regeneration. FR and LG capture windows were independently read and checked. RR transported matches are [INFERENCE] of the same local sequence, not proof of script-table dispatch/caller reachability or unchanged interior code. Runtime fields must come from each pack profile.
 - docs/gen3/probes/census_rr_overworld_2026-09-21.txt:7-17 observes R15=000001C4, CPSR mode/T=31/0 and tasks 0806E811,0806E83D,08079E0D during 1800 idle frames. This is BIOS idle census, not evidence for any gameplay site in this inventory.
-- mon_given is deliberately NOT pinned on RR: its vanilla return bytes survive, but entry 08040B14 is detoured (0049084791D70709...). A unique dead tail is not a hook.
+- mon_given is deliberately NOT pinned on RR: its vanilla return bytes survive, but entry 08040B14 is detoured (0049084791D70709...). A unique dead tail is not a hook. The same guard also excludes RR SendMonToPC, SetPlacedMonData and DoPoisonFieldEffect tails.
 - map_load covers only the normal CB2_LoadMap2 branch; Quest Log and other loaders remain OPEN. whiteout is a completion marker after healing, not an HP-at-faint capture. save requires R0=1/R5=0; RR flash extensions and final save witness ownership remain UNVERIFIED (docs/gen3/research/flash_save.md:93-137).
 
 ## ROM identities
@@ -30,18 +30,26 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | frame_control | PINNED | PINNED | PINNED | PINNED |
 | battle_begin | PINNED | PINNED | PINNED | PINNED |
 | battle_end | PINNED | PINNED | PINNED | PINNED |
-| faint | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
-| capture_wild | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| faint | PINNED | PINNED | PINNED | PINNED |
+| capture_wild | PINNED | PINNED | PINNED | PINNED |
 | mon_given | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
-| pc_move | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| pc_move | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
 | whiteout | PINNED | PINNED | PINNED | PINNED |
 | map_load | PINNED | PINNED | PINNED | PINNED |
-| evolve_species_store | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
-| trade_done | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| evolve_species_store | PINNED | PINNED | PINNED | PINNED |
+| trade_done | PINNED | PINNED | PINNED | PINNED |
 | save | PINNED | PINNED | PINNED | PINNED |
-| poison_faint | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| poison_faint | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
 | borrowed_party | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
 | nature_change | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| pc_deposit | PINNED | PINNED | PINNED | PINNED |
+| pc_withdraw | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
+| pc_box_place | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
+| pc_release_begin | PINNED | PINNED | PINNED | PINNED |
+| pc_release | PINNED | PINNED | PINNED | PINNED |
+| trade_evolve_species_store | PINNED | PINNED | PINNED | PINNED |
+| trade_begin | PINNED | PINNED | PINNED | PINNED |
+| poison_hp_before | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
 
 ## Caller / mutation / result / cardinality / capture inventory
 
@@ -56,6 +64,15 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | PINNED | 0800051A / +0 / 51A | C046C046C046C046C046064C20680028 | SOURCE only; capture contract above |
 | rr_companion | PINNED | 0800051A / +0 / 51A | 78F329FDC046C046C046064C20680028 | SOURCE only; capture contract above |
 
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:946 CallCallbacks | 08000510 / 34 | +A | 10B5F4F001FE00280FD13BF1A9F90006 |
+| lg | data/gen3/pret/pokeleafgreen.sym:946 CallCallbacks | 08000510 / 34 | +A | 10B5F4F0EDFD00280FD13BF195F90006 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
 ### battle_begin — CB2_InitBattle
 
 [pret src/battle_main.c#L612-L646](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L612-L646). Callback selected by battle-start flow; resets/moves save blocks and allocates battle resources, then initializes normal/multi battle; void. Capture ENTRY before relocation, not an initialized party snapshot. One callback invocation; event dedupe/battle-type qualification remains the consumer's duty. Address corroboration: BR docs/rr_reference/GAME_HEAP_RESERVATION.md:48-49; first BL targets 0804C0A4.
@@ -66,6 +83,15 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | lg | PINNED | 0800FD9C / +0 / FD9C | 10B53CF081F91EF04BF924F007F8 | SOURCE only; capture contract above |
 | rr | PINNED | 0800FD9C / +0 / FD9C | 10B53CF081F91EF04BF924F007F8 | SOURCE only; capture contract above |
 | rr_companion | PINNED | 0800FD9C / +0 / FD9C | 10B53CF081F91EF04BF924F007F8 | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:1551 CB2_InitBattle | 0800FD9C / 86 | +0 | 10B53CF081F91EF04BF924F007F825F0 |
+| lg | data/gen3/pret/pokeleafgreen.sym:1551 CB2_InitBattle | 0800FD9C / 86 | +0 | 10B53CF081F91EF04BF924F007F825F0 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
 
 ### battle_end — ReturnFromBattleToOverworld
 
@@ -78,27 +104,54 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | PINNED | 08015BCC / +4 / 15BCC | 08488068EAF7B8FC70BC01BC | SOURCE only; capture contract above |
 | rr_companion | PINNED | 08015BCC / +4 / 15BCC | 08488068EAF7B8FC70BC01BC | SOURCE only; capture contract above |
 
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:1641 ReturnFromBattleToOverworld | 08015B58 / A8 | +78 | 70B5204E306802252840002806D11E4C |
+| lg | data/gen3/pret/pokeleafgreen.sym:1641 ReturnFromBattleToOverworld | 08015B58 / A8 | +78 | 70B5204E306802252840002806D11E4C |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
 ### faint — Cmd_tryfaintmon
 
-[pret src/battle_script_commands.c#L2831-L2905](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L2831-L2905). Battle script table index 0x19 (same source:339); filters absent/zero HP/side, changes script/hit markers, counts faint and adjusts friendship; void. Entry also handles non-faint control branch; capture must follow player-counter mutation with battler identity, not assume one invocation equals one faint.
+[pret src/battle_script_commands.c#L2831-L2905](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L2831-L2905). Battle opcode 0x19. At function +0x11C after the PLAYER counter increment/store (+0x11A); saturated counter skips the store but reaches this same point. Player-side, present-battler and HP-zero branches precede it. R7/R8 point at gActiveBattler. Snapshot battler/party identity now; consumer dedupes the faint transition; not every entry is a faint.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
-| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | static routine absent from inspected BPRE.ld; mutation instruction not pinned; bytes, if shown, are diagnostic only |
-| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | static routine absent from inspected BPRE.ld; mutation instruction not pinned; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | static routine absent from inspected BPRE.ld; mutation instruction not pinned; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | static routine absent from inspected BPRE.ld; mutation instruction not pinned; bytes, if shown, are diagnostic only |
+| fr | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
+| lg | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
+| rr | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
 
-### capture_wild — Cmd_givecaughtmon -> GiveMonToPlayer
+Function bounds and independently pinned entry anchors (vanilla):
 
-[pret src/battle_script_commands.c#L9617-L9645](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L9617-L9645). Battle script table index 0xF0 (source:554); calls GiveMonToPlayer and builds PC message/caught-species/nickname; void. Need post-call result and battle acquisition context. One script acquisition can traverse mon_given too; reducer must not duplicate it.
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:1735 Cmd_tryfaintmon | 080212AC / 2F4 | +11C | F0B54F464646C0B481B0184802689178 |
+| lg | data/gen3/pret/pokeleafgreen.sym:1735 Cmd_tryfaintmon | 080212AC / 2F4 | +11C | F0B54F464646C0B481B0184802689178 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### capture_wild — Cmd_givecaughtmon
+
+[pret src/battle_script_commands.c#L9617-L9645](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L9617-L9645). Battle opcode 0xF0; +0x28 is immediately AFTER BL GiveMonToPlayer (+0x24). R0 holds party/PC/failure result before shift. Destination has been assigned on success; read party/box identity using profile facts. Do not count failure as acquisition or emit twice with mon_given. This is acquired-mon placement, not a ball animation witness.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
-| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | static caller and post-BL address not pinned; generic mon_given cannot classify wild capture; bytes, if shown, are diagnostic only |
-| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | static caller and post-BL address not pinned; generic mon_given cannot classify wild capture; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | static caller and post-BL address not pinned; generic mon_given cannot classify wild capture; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | static caller and post-BL address not pinned; generic mon_given cannot classify wild capture; bytes, if shown, are diagnostic only |
+| fr | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0C1FF0006 | SOURCE only; capture contract above |
+| lg | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0ABFF0006 | SOURCE only; capture contract above |
+| rr | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0C1FF0006 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0C1FF0006 | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:1969 Cmd_givecaughtmon | 0802D800 / 15C | +28 | F0B54F464646C0B419488146194D2878 |
+| lg | data/gen3/pret/pokeleafgreen.sym:1969 Cmd_givecaughtmon | 0802D800 / 15C | +28 | F0B54F464646C0B419488146194D2878 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
 
 ### mon_given — GiveMonToPlayer common return
 
@@ -111,16 +164,34 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | UNVERIFIED | 40B80; no capture offset authorized | 301C00F005F80006000E70BC02BC0847 | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
 | rr_companion | UNVERIFIED | 40B80; no capture offset authorized | 301C00F005F80006000E70BC02BC0847 | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
 
-### pc_move — Task_MoveMon / Task_WithdrawMon / Task_DepositMenu / Task_ReleaseMon
+Function bounds and independently pinned entry anchors (vanilla):
 
-[pret src/pokemon_storage_system_tasks.c#L1076-L1310](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_tasks.c#L1076-L1310). Storage menu tasks repeatedly drive animation and moves. Deposit/withdraw/release and multi-move (pokemon_storage_system_misc.c:234) must be separate mutation/return sites; SendMonToPC is an acquisition helper, NOT all user PC operations. Cardinality: tasks repeat; emit only completed record transitions.
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2395 GiveMonToPlayer | 08040B14 / 7C | +76 | 70B5061C094C22680721FFF72DFC2268 |
+| lg | data/gen3/pret/pokeleafgreen.sym:2395 GiveMonToPlayer | 08040B14 / 7C | +76 | 70B5061C094C22680721FFF72DFC2268 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### pc_move — SendMonToPC
+
+[pret src/pokemon.c#L3708-L3740](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3708-L3740). SendMonToPC called by GiveMonToPlayer; +0xA0 common return before register restoration. R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); R5/R6 destination box/slot only valid on success; R8 source mon. This is acquisition-to-storage, not every PC menu operation.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
-| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | no source-built static symbols/copy-return anchors; multiple operations require separate sites; bytes, if shown, are diagnostic only |
-| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | no source-built static symbols/copy-return anchors; multiple operations require separate sites; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | no source-built static symbols/copy-return anchors; multiple operations require separate sites; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | no source-built static symbols/copy-return anchors; multiple operations require separate sites; bytes, if shown, are diagnostic only |
+| fr | PINNED | 08040C2C / +4 / 40C2C | BFD1022008BC9846F0BC02BC0847 | SOURCE only; capture contract above |
+| lg | PINNED | 08040C2C / +4 / 40C2C | BFD1022008BC9846F0BC02BC0847 | SOURCE only; capture contract above |
+| rr | UNVERIFIED | 40C2C; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | 40C2C; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2396 SendMonToPC | 08040B90 / AA | +A0 | F0B5474680B480461A482DF0E5FC0006 |
+| lg | data/gen3/pret/pokeleafgreen.sym:2396 SendMonToPC | 08040B90 / AA | +A0 | F0B5474680B480461A482DF0E5FC0006 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
 
 ### whiteout — CB2_WhiteOut completion branch
 
@@ -133,6 +204,15 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | PINNED | 080566F2 / +C / 566F2 | 00F087F90748FFF772FF0648A9F721FF | SOURCE only; capture contract above |
 | rr_companion | PINNED | 080566F2 / +C / 566F2 | 00F087F90748FFF772FF0648A9F721FF | SOURCE only; capture contract above |
 
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2975 CB2_WhiteOut | 080566A4 / 78 | +5A | 00B581B017498720C000091808780130 |
+| lg | data/gen3/pret/pokeleafgreen.sym:2975 CB2_WhiteOut | 080566A4 / 78 | +5A | 00B581B017498720C000091808780130 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
 ### map_load — CB2_LoadMap2 normal completion branch
 
 [pret src/overworld.c#L1568-L1591](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1568-L1591). CB2_LoadMap only schedules callbacks; its return is NOT completed load. Normal CB2_LoadMap2 calls DoMapLoadLoop, then restores field callbacks; Quest Log branch does something else. Capture BEFORE final SetMainCallback2 on normal branch. Other map/load/return paths remain uncovered. BPRE.ld:1074 gives dispatcher 0805671C; its savedCallback literal at 08056748 is 0805674D.
@@ -144,27 +224,54 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | PINNED | 0805676C / +C / 5676C | 00F04AF90348FFF735FF0348A9F7E4FE | SOURCE only; capture contract above |
 | rr_companion | PINNED | 0805676C / +C / 5676C | 00F04AF90348FFF735FF0348A9F7E4FE | SOURCE only; capture contract above |
 
-### evolve_species_store — Task_EvolutionScene / Task_TradeEvolutionScene
+Function bounds and independently pinned entry anchors (vanilla):
 
-[pret src/evolution_scene.c#L634-L790](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L634-L790). Tasks created by scene setup (source:293,509), species writes at :779 and :1213; CB2_EvolutionSceneUpdate only drives work. Capture AFTER each SetMonData species publish; ordinary/trade evolution and Shedinja (:559) need distinct coverage.
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2977 CB2_LoadMap2 | 0805674C / 3C | +2C | 00B5064800F084FBBCF0F8FF0006000E |
+| lg | data/gen3/pret/pokeleafgreen.sym:2977 CB2_LoadMap2 | 0805674C / 3C | +2C | 00B5064800F084FBBCF0E4FF0006000E |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### evolve_species_store — Task_EvolutionScene
+
+[pret src/evolution_scene.c#L764-L785](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L764-L785). Task_EvolutionScene EVOSTATE_SET_MON_EVOLVED; +0x492 immediately after SetMonData(MON_DATA_SPECIES), whose BL is +0x48E. R9=mon, R4=task. Stats/re-nickname/dex updates FOLLOW, so retain species publication then settle; do not call this final evolution completion. Cancellation bypasses this state.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
-| fr | UNVERIFIED | not resolved; no capture offset authorized | 00B538F723FA38F747FA34F765FBA1F7 | profile CB2 is a driver, not species-store site; task offsets/extra paths not pinned; bytes, if shown, are diagnostic only |
-| lg | UNVERIFIED | not resolved; no capture offset authorized | DFFEA8F731FF01BC00470000F0B55746 | profile CB2 is a driver, not species-store site; task offsets/extra paths not pinned; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | 00B538F723FA38F747FA34F765FBA1F7 | profile CB2 is a driver, not species-store site; task offsets/extra paths not pinned; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | 00B538F723FA38F747FA34F765FBA1F7 | profile CB2 is a driver, not species-store site; task offsets/extra paths not pinned; bytes, if shown, are diagnostic only |
+| fr | PINNED | 080CED66 / +8 / CED66 | 48460B2171F707FB48466FF784FB6189 | SOURCE only; capture contract above |
+| lg | PINNED | 080CED3A / +8 / CED3A | 48460B2171F71DFB48466FF79AFB6189 | SOURCE only; capture contract above |
+| rr | PINNED | 080CED66 / +8 / CED66 | 48460B2171F707FB48466FF784FB6189 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 080CED66 / +8 / CED66 | 48460B2171F707FB48466FF784FB6189 | SOURCE only; capture contract above |
 
-### trade_done — DoInGameTradeScene and native/link completion branches
+Function bounds and independently pinned entry anchors (vanilla):
 
-[pret src/trade_scene.c#L2774-L2789](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L2774-L2789). DoInGameTradeScene starts a task/fade and returns BEFORE trade; Task_InGameTrade switches to animation callback. Field returns at source:1800 and :2300 are candidates. Need actual record swap + evolution completion and NPC/link/SLink context; repeated animation frames must not produce repeated trade_done.
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:8402 Task_EvolutionScene | 080CE8DC / C60 | +492 | F0B557464E464546E0B486B00006070E |
+| lg | data/gen3/pret/pokeleafgreen.sym:8404 Task_EvolutionScene | 080CE8B0 / C60 | +492 | F0B557464E464546E0B486B00006070E |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### trade_done — TradeMons
+
+[pret src/trade_scene.c#L1054-L1084](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L1054-L1084). TradeMons +0xBE before stack restoration: BOTH party/enemy copies, friendship/mail/dex updates have finished. R7=received player mon, R9=player slot. NPC cable/wireless callers (:1776,:2276) and link caller (:2533) share this primitive, not distinct copies. This is RECORD-SWAP completion, NOT native scene/evolution completion; do not emit wire trade_done until that separate lifecycle is complete. Use trade_begin for old key.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
-| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | completion branches and record ownership not pinned; initializer is not completion; bytes, if shown, are diagnostic only |
-| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | completion branches and record ownership not pinned; initializer is not completion; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | completion branches and record ownership not pinned; initializer is not completion; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | completion branches and record ownership not pinned; initializer is not completion; bytes, if shown, are diagnostic only |
+| fr | PINNED | 080508C6 / +4 / 508C6 | FFF79BFF01B018BC9846A146F0BC01BC | SOURCE only; capture contract above |
+| lg | PINNED | 080508C6 / +4 / 508C6 | FFF79BFF01B018BC9846A146F0BC01BC | SOURCE only; capture contract above |
+| rr | PINNED | 080508C6 / +4 / 508C6 | FFF79BFF01B018BC9846A146F0BC01BC | SOURCE only; capture contract above |
+| rr_companion | PINNED | 080508C6 / +4 / 508C6 | FFF79BFF01B018BC9846A146F0BC01BC | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2810 TradeMons | 0805080C / E8 | +BE | F0B54F464646C0B481B00C1C0006000E |
+| lg | data/gen3/pret/pokeleafgreen.sym:2810 TradeMons | 0805080C / E8 | +BE | F0B54F464646C0B481B00C1C0006000E |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
 
 ### save — TrySavingData successful-return preparation
 
@@ -177,16 +284,34 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | PINNED | 080DA39C / +6 / DA39C | 02480480012030BC02BC084720540003 | SOURCE only; capture contract above |
 | rr_companion | PINNED | 080DA39C / +6 / DA39C | 02480480012030BC02BC084720540003 | SOURCE only; capture contract above |
 
-### poison_faint — DoPoisonFieldEffect / FaintFromFieldPoison
+Function bounds and independently pinned entry anchors (vanilla):
 
-[pret src/field_poison.c#L32-L118](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L32-L118). Field poison step mutates HP across party and returns FLDPSN_*; later task Task_TryFieldPoisonWhiteOut clears status/adjusts friendship and displays per-mon messages. Need zero-HP edge identity before cure/whiteout; UpdatePoisonStepCounter (BPRE.ld:1168) is not the per-mon HP write.
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:8717 TrySavingData | 080DA364 / 48 | +3E | 30B50006050E09480468012C09D1281C |
+| lg | data/gen3/pret/pokeleafgreen.sym:8719 TrySavingData | 080DA338 / 48 | +3E | 30B50006050E09480468012C09D1281C |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### poison_faint — DoPoisonFieldEffect
+
+[pret src/field_poison.c#L92-L118](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L92-L118). DoPoisonFieldEffect +0x4E immediately after SetMonData(HP) BL +0x4A. R4=current mon, [R13]=new HP. REQUIRE new HP==0 AND paired old HP>0; source also writes zero for already-fainted mons. Capture before later poison task clears status/whiteout heals (field_poison.c:32-81). One edge per actual newly fainted mon.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
-| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | static HP-store/caller site and one-per-mon filter not pinned; bytes, if shown, are diagnostic only |
-| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | static HP-store/caller site and one-per-mon filter not pinned; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | static HP-store/caller site and one-per-mon filter not pinned; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | static HP-store/caller site and one-per-mon filter not pinned; bytes, if shown, are diagnostic only |
+| fr | PINNED | 080A065E / +8 / A065E | 39216A469FF78BFE01376434013D002D | SOURCE only; capture contract above |
+| lg | PINNED | 080A0632 / +8 / A0632 | 39216A469FF7A1FE01376434013D002D | SOURCE only; capture contract above |
+| rr | UNVERIFIED | A065E; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | A065E; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6887 DoPoisonFieldEffect | 080A0618 / 82 | +4E | F0B581B0194C002700260525201C0521 |
+| lg | data/gen3/pret/pokeleafgreen.sym:6889 DoPoisonFieldEffect | 080A05EC / 82 | +4E | F0B581B0194C002700260525201C0521 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
 
 ### borrowed_party — RR backup/restore hooks
 
@@ -210,6 +335,166 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | rr | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
 | rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
 
+### pc_deposit — TryStorePartyMonInBox
+
+[pret src/pokemon_storage_system_data.c#L658-L682](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L658-L682). TryStorePartyMonInBox called by Task_DepositMenu (tasks.c:1214); +0x80 common return with R0 bool, R6 box and R4 slot-in-high-byte on success. Requires R0==1. Moving-mon and party-selected branches converge; task compacts later (tasks.c:1232), so snapshot the actual transfer and do not assume final party slot numbering yet.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 0809315C / +8 / 9315C | 012175F715F9012070BC02BC08470000 | SOURCE only; capture contract above |
+| lg | PINNED | 08093130 / +8 / 93130 | 012175F72BF9012070BC02BC08470000 | SOURCE only; capture contract above |
+| rr | PINNED | 0809315C / +8 / 9315C | 012175F715F9012070BC02BC08470000 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 0809315C / +8 / 9315C | 012175F715F9012070BC02BC08470000 | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6324 TryStorePartyMonInBox | 080930E4 / 90 | +80 | 70B50006060E301CF9F70CF80004040C |
+| lg | data/gen3/pret/pokeleafgreen.sym:6326 TryStorePartyMonInBox | 080930B8 / 90 | +80 | 70B50006060E301CF9F70CF80004040C |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### pc_withdraw — SetPlacedMonData
+
+[pret src/pokemon_storage_system_data.c#L625-L655](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L625-L655). SetPlacedMonData party branch: +0x24 after memcpy(gPlayerParty[position],movingMon,100), BEFORE branch to epilogue. R6=14, R7=party destination. Called by placement/shift paths; origin may be party rather than box. Correlate moving-mon origin/caller before emitting box_to_party. One record placement, not a whole animation or batch completion.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 08092FF2 / +6 / 92FF2 | 642252F140FF12E0 | SOURCE only; capture contract above |
+| lg | PINNED | 08092FC6 / +6 / 92FC6 | 642252F144FF12E0 | SOURCE only; capture contract above |
+| rr | UNVERIFIED | 92FF2; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | 92FF2; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6321 SetPlacedMonData | 08092FD4 / 5C | +24 | F0B50006060E09060F0E0E2E12D10649 |
+| lg | data/gen3/pret/pokeleafgreen.sym:6323 SetPlacedMonData | 08092FA8 / 5C | +24 | F0B50006060E09060F0E0E2E12D10649 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### pc_box_place — SetPlacedMonData
+
+[pret src/pokemon_storage_system_data.c#L625-L655](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L625-L655). SetPlacedMonData common epilogue +0x4C AFTER SetBoxMonAt call on box path. Party path also joins here; REQUIRE R6<14, valid R7<30. R6/R7 name destination; moving-mon origin identifies deposit versus box rearrange/shift. Do not duplicate pc_deposit.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 08093018 / +8 / 93018 | 301C391CF8F7CAFDF0BC01BC0047 | SOURCE only; capture contract above |
+| lg | PINNED | 08092FEC / +8 / 92FEC | 301C391CF8F7CAFDF0BC01BC0047 | SOURCE only; capture contract above |
+| rr | UNVERIFIED | 93018; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | 93018; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6321 SetPlacedMonData | 08092FD4 / 5C | +4C | F0B50006060E09060F0E0E2E12D10649 |
+| lg | data/gen3/pret/pokeleafgreen.sym:6323 SetPlacedMonData | 08092FA8 / 5C | +4C | F0B50006060E09060F0E0E2E12D10649 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### pc_release_begin — ReleaseMon
+
+[pret src/pokemon_storage_system_data.c#L716-L733](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733). ReleaseMon entry, called after permission/confirmation in Task_ReleaseMon (tasks.c:1302). Capture pre-removal identity and moving/party/box context via profile facts BEFORE purge. Pairs with pc_release; moving-mon release may only clear the carried flag.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 08093218 / +0 / 93218 | 00B5FDF757FF03490878002804D00020 | SOURCE only; capture contract above |
+| lg | PINNED | 080931EC / +0 / 931EC | 00B5FDF757FF03490878002804D00020 | SOURCE only; capture contract above |
+| rr | PINNED | 08093218 / +0 / 93218 | 00B5FDF757FF03490878002804D00020 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 08093218 / +0 / 93218 | 00B5FDF757FF03490878002804D00020 | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6328 ReleaseMon | 08093218 / 4C | +0 | 00B5FDF757FF03490878002804D00020 |
+| lg | data/gen3/pret/pokeleafgreen.sym:6330 ReleaseMon | 080931EC / 4C | +0 | 00B5FDF757FF03490878002804D00020 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### pc_release — ReleaseMon
+
+[pret src/pokemon_storage_system_data.c#L716-L733](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733). ReleaseMon +0x3E: after PurgeMonOrBoxMon (or moving flag clear), before display refresh. One confirmed release; resolve key from pc_release_begin snapshot, never from zeroed bytes. This must not be classified as party_to_box; party compaction may follow.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 08093250 / +6 / 93250 | 101CFFF7EDFE00F0DBFB01BC0047 | SOURCE only; capture contract above |
+| lg | PINNED | 08093224 / +6 / 93224 | 101CFFF7EDFE00F0DBFB01BC0047 | SOURCE only; capture contract above |
+| rr | PINNED | 08093250 / +6 / 93250 | 101CFFF7EDFE00F0DBFB01BC0047 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 08093250 / +6 / 93250 | 101CFFF7EDFE00F0DBFB01BC0047 | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6328 ReleaseMon | 08093218 / 4C | +3E | 00B5FDF757FF03490878002804D00020 |
+| lg | data/gen3/pret/pokeleafgreen.sym:6330 ReleaseMon | 080931EC / 4C | +3E | 00B5FDF757FF03490878002804D00020 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### trade_evolve_species_store — Task_TradeEvolutionScene
+
+[pret src/evolution_scene.c#L1206-L1219](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L1206-L1219). Task_TradeEvolutionScene T_EVOSTATE_SET_MON_EVOLVED; +0x3A0 after SetMonData species BL +0x39C. R8=mon, R4=task. Stats/name/dex follow. Correlate trade lease to suppress ordinary key_change during SLink apply.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 080CF8D4 / +8 / CF8D4 | 40460B2170F750FD40466EF7CDFD6189 | SOURCE only; capture contract above |
+| lg | PINNED | 080CF8A8 / +8 / CF8A8 | 40460B2170F766FD40466EF7E3FD6189 | SOURCE only; capture contract above |
+| rr | PINNED | 080CF8D4 / +8 / CF8D4 | 40460B2170F750FD40466EF7CDFD6189 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 080CF8D4 / +8 / CF8D4 | 40460B2170F750FD40466EF7CDFD6189 | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:8403 Task_TradeEvolutionScene | 080CF53C / B10 | +3A0 | F0B5474680B488B00006060E1C4DB000 |
+| lg | data/gen3/pret/pokeleafgreen.sym:8405 Task_TradeEvolutionScene | 080CF510 / B10 | +3A0 | F0B5474680B488B00006060E1C4DB000 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### trade_begin — TradeMons
+
+[pret src/trade_scene.c#L1054-L1084](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L1054-L1084). TradeMons entry captures player slot R0 and partner slot R1 plus pre-swap identities. Same primitive called by NPC cable/wireless animations (:1776,:2276) and link CB2_UpdateLinkTrade (:2533). Preserve caller/trade context; distinguish NPC and SLink.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 0805080C / +0 / 5080C | F0B54F464646C0B481B00C1C0006000E | SOURCE only; capture contract above |
+| lg | PINNED | 0805080C / +0 / 5080C | F0B54F464646C0B481B00C1C0006000E | SOURCE only; capture contract above |
+| rr | PINNED | 0805080C / +0 / 5080C | F0B54F464646C0B481B00C1C0006000E | SOURCE only; capture contract above |
+| rr_companion | PINNED | 0805080C / +0 / 5080C | F0B54F464646C0B481B00C1C0006000E | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2810 TradeMons | 0805080C / E8 | +0 | F0B54F464646C0B481B00C1C0006000E |
+| lg | data/gen3/pret/pokeleafgreen.sym:2810 TradeMons | 0805080C / E8 | +0 | F0B54F464646C0B481B00C1C0006000E |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
+### poison_hp_before — DoPoisonFieldEffect
+
+[pret src/field_poison.c#L92-L118](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L92-L118). DoPoisonFieldEffect +0x34 after GetMonData(HP), before stack store/decrement. R0=old HP, R4=mon pointer. Pair by pointer and ordered invocation/iteration with poison_faint, not merely frame; up to six iterations may occur in one frame.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 080A0648 / +4 / A0648 | 9FF7CEFA0090002803D00138 | SOURCE only; capture contract above |
+| lg | PINNED | 080A061C / +4 / A061C | 9FF7E4FA0090002803D00138 | SOURCE only; capture contract above |
+| rr | UNVERIFIED | A0648; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | A0648; no capture offset authorized | not established | enclosing entry context differs (possible detour/dead tail); bytes, if shown, are diagnostic only |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:6887 DoPoisonFieldEffect | 080A0618 / 82 | +34 | F0B581B0194C002700260525201C0521 |
+| lg | data/gen3/pret/pokeleafgreen.sym:6889 DoPoisonFieldEffect | 080A05EC / 82 | +34 | F0B581B0194C002700260525201C0521 |
+
+RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. frame_control retains its explicitly measured/patched artifact-specific control binding.
+
 ## Reproduce and falsify
 
 - python tools/gen_gen3_engine_signals.py --check (offline; all four pinned ROMs required).
@@ -218,4 +503,4 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 
 ## NOT VERIFIED
 
-Missing static/caller/mutation sites remain UNVERIFIED. No emulator was run on this card. PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. Do not infer that byte-match tests qualify faint/capture/PC/trade/evolution/poison, all map paths, RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.
+RR borrowed_party and nature_change remain UNVERIFIED; detoured RR tails remain excluded. Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need separate evidence; the mutation sites here are not a claim of complete gameplay coverage. No emulator was run on this card. PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. Do not infer that byte-match tests physically qualify faint/capture/PC/trade/evolution/poison, all map paths, RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.

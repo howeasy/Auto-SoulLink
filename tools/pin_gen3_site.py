@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,25 @@ ROM_SPECS = {
                      ROOT / "patch/build/slink_RR.gba",
                      "b7d1e0756fcc66575878affc8f7b95c45386bb1c"),
 }
+
+
+def parse_symbols(text: str) -> dict[str, dict]:
+    """Read local AND global nonempty ROM functions from agbcc's symbol output."""
+    result, ambiguous = {}, set()
+    for line, raw in enumerate(text.splitlines(), 1):
+        match = re.fullmatch(r"([0-9a-fA-F]{8})\s+[lg]\s+([0-9a-fA-F]{8})\s+(\S+)", raw.strip())
+        if not match:
+            continue
+        address, size, name = match.groups()
+        address, size = int(address, 16), int(size, 16)
+        if not ROM_BASE <= address < 0x0A000000 or not size:
+            continue
+        if name in result:
+            ambiguous.add(name)
+        result[name] = {"address": address, "size": size, "line": line}
+    for name in ambiguous:
+        del result[name]  # callers may not guess between same-named local symbols
+    return result
 
 
 def pattern_bytes(text: str) -> bytes:
@@ -89,6 +109,7 @@ def main() -> int:
     parser.add_argument("--capture-offset", type=lambda x: int(x, 0), default=0)
     parser.add_argument("--mode", choices=("thumb", "arm"), default="thumb")
     parser.add_argument("--symbol", default="candidate")
+    parser.add_argument("--symbol-file", type=Path, help="optional .sym to bounds-check --symbol")
     args = parser.parse_args()
     try:
         pattern = pattern_bytes(args.pattern)
@@ -102,13 +123,18 @@ def main() -> int:
             if len(offsets) == 1:
                 row["site"] = make_site(rom, offsets[0], pattern, capture_offset=args.capture_offset,
                                         mode=args.mode, symbol=args.symbol)
+                if args.symbol_file:
+                    symbol = parse_symbols(args.symbol_file.read_text())[args.symbol]
+                    pc = row["site"]["address"] + args.capture_offset
+                    if not symbol["address"] <= pc < symbol["address"] + symbol["size"]:
+                        raise ValueError("capture outside symbol function")
+                    row["site"]["function"] = symbol
             rows[item] = row
         print(json.dumps(rows, indent=2))
         return 0
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, KeyError) as exc:
         parser.exit(1, f"{exc}\n")
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

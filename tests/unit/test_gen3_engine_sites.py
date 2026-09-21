@@ -9,6 +9,33 @@ from tools import gen_gen3_engine_signals as gen
 from tools.pin_gen3_site import ROM_SPECS, find_offsets, load_rom, make_site, pattern_bytes
 
 
+def test_local_symbols_and_function_sizes_are_supported():
+    from tools.pin_gen3_site import parse_symbols
+
+    symbols = parse_symbols("080212ac l 000002f4 Cmd_tryfaintmon\n")
+    assert symbols["Cmd_tryfaintmon"] == {"address": 0x080212AC, "size": 0x2F4, "line": 1}
+
+
+def test_new_vanilla_sites_are_symbol_bounded_and_entry_checked():
+    for name in ("fr", "lg"):
+        path = ROM_SPECS[name][3]
+        if not path.is_file():
+            pytest.skip(f"ROM not present at {path}")
+        rom = load_rom(name)
+        for kind in ("faint", "capture_wild", "pc_deposit", "pc_withdraw", "pc_release",
+                     "evolve_species_store", "trade_evolve_species_store", "trade_done", "poison_faint"):
+            c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+            result = gen.resolve(c, name, rom)
+            assert result["status"] == "PINNED", (name, kind, result)
+            site = result["site"]
+            fn = site["function"]
+            assert 0 <= fn["capture_offset"] < fn["size"]
+            assert fn["capture_offset"] % 2 == 0
+            assert fn["address"] + fn["capture_offset"] == site["address"] + site["capture_offset"]
+            ctx = site["context"]
+            assert rom[ctx["rom_offset"]:ctx["rom_offset"] + len(ctx["expected_hex"]) // 2].hex().upper() == ctx["expected_hex"]
+
+
 @pytest.fixture(scope="module")
 def roms():
     return {name: load_rom(name) for name, spec in ROM_SPECS.items() if spec[3].is_file()}
@@ -50,10 +77,37 @@ def test_search_never_chooses_first_of_duplicate_hits():
 
 
 def test_unknown_semantic_kind_never_emitted_even_if_bytes_exist():
-    candidate = next(c for c in gen.CANDIDATES if c["kind"] == "evolve_species_store")
+    candidate = next(c for c in gen.CANDIDATES if c["kind"] == "nature_change")
     result = gen.resolve(candidate, "fr", bytes(0xD0000))
     assert result["status"] == "UNVERIFIED"
     assert "site" not in result
+
+
+def test_duplicate_local_symbol_name_is_not_guessed():
+    from tools.pin_gen3_site import parse_symbols
+
+    assert "local_fn" not in parse_symbols(
+        "08001000 l 00000020 local_fn\n08002000 l 00000020 local_fn\n")
+
+
+def test_capture_beyond_symbol_extent_is_refused(roms):
+    if "fr" not in roms:
+        pytest.skip(f"ROM not present at {ROM_SPECS['fr'][3]}")
+    c = copy.deepcopy(next(c for c in gen.CANDIDATES if c["kind"] == "faint"))
+    c["capture"] = 0x10000
+    result = gen.resolve(c, "fr", roms["fr"])
+    assert result["status"] == "UNVERIFIED"
+    assert "size" in result["reason"]
+
+
+def test_leafgreen_uses_its_own_symbol_and_branch_bytes(roms):
+    if "lg" not in roms:
+        pytest.skip(f"ROM not present at {ROM_SPECS['lg'][3]}")
+    c = next(c for c in gen.CANDIDATES if c["kind"] == "evolve_species_store")
+    s = gen.resolve(c, "lg", roms["lg"])["site"]
+    assert "pokeleafgreen.sym:" in s["function"]["symbol_source"]
+    assert s["expected_hex"] == c["binding"]["anchors"]["lg"]
+    assert s["expected_hex"] != c["binding"]["anchors"]["fr"]
 
 
 def test_rr_retained_mon_given_tail_does_not_hide_entry_detour(roms):

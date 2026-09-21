@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ from tools.pin_gen3_site import (  # noqa: E402
     find_offsets,
     load_rom,
     make_site,
+    parse_symbols,
     pattern_bytes,
 )
 
@@ -144,12 +146,410 @@ CANDIDATES = [
 ]
 
 
+
+# C2-3b: offsets are relative to independently resolved FR/LG function symbols.
+# Literal anchors were separately read and disassembled in BOTH admitted ROMs.
+BINDINGS = {
+    "frame_control": {
+        "function": "CallCallbacks",
+        "anchor_offset": 10,
+        "capture": 0,
+        "anchors": {
+            "fr": "3BF1A9F9000600280AD1064C20680028",
+            "lg": "3BF195F9000600280AD1064C20680028"
+        },
+        "entries": {
+            "fr": "10B5F4F001FE00280FD13BF1A9F90006",
+            "lg": "10B5F4F0EDFD00280FD13BF195F90006"
+        }
+    },
+    "battle_begin": {
+        "function": "CB2_InitBattle",
+        "anchor_offset": 0,
+        "capture": 0,
+        "anchors": {
+            "fr": "10B53CF081F91EF04BF924F007F8",
+            "lg": "10B53CF081F91EF04BF924F007F8"
+        },
+        "entries": {
+            "fr": "10B53CF081F91EF04BF924F007F825F0",
+            "lg": "10B53CF081F91EF04BF924F007F825F0"
+        }
+    },
+    "battle_end": {
+        "function": "ReturnFromBattleToOverworld",
+        "anchor_offset": 116,
+        "capture": 4,
+        "anchors": {
+            "fr": "08488068EAF7B8FC70BC01BC",
+            "lg": "08488068EAF7B8FC70BC01BC"
+        },
+        "entries": {
+            "fr": "70B5204E306802252840002806D11E4C",
+            "lg": "70B5204E306802252840002806D11E4C"
+        }
+    },
+    "mon_given": {
+        "function": "GiveMonToPlayer",
+        "anchor_offset": 108,
+        "capture": 10,
+        "anchors": {
+            "fr": "301C00F005F80006000E70BC02BC0847",
+            "lg": "301C00F005F80006000E70BC02BC0847"
+        },
+        "entries": {
+            "fr": "70B5061C094C22680721FFF72DFC2268",
+            "lg": "70B5061C094C22680721FFF72DFC2268"
+        }
+    },
+    "whiteout": {
+        "function": "CB2_WhiteOut",
+        "anchor_offset": 78,
+        "capture": 12,
+        "anchors": {
+            "fr": "00F087F90748FFF772FF0648A9F721FF",
+            "lg": "00F087F90748FFF772FF0648A9F721FF"
+        },
+        "entries": {
+            "fr": "00B581B017498720C000091808780130",
+            "lg": "00B581B017498720C000091808780130"
+        }
+    },
+    "map_load": {
+        "function": "CB2_LoadMap2",
+        "anchor_offset": 32,
+        "capture": 12,
+        "anchors": {
+            "fr": "00F04AF90348FFF735FF0348A9F7E4FE",
+            "lg": "00F04AF90348FFF735FF0348A9F7E4FE"
+        },
+        "entries": {
+            "fr": "00B5064800F084FBBCF0F8FF0006000E",
+            "lg": "00B5064800F084FBBCF0E4FF0006000E"
+        }
+    },
+    "save": {
+        "function": "TrySavingData",
+        "anchor_offset": 56,
+        "capture": 6,
+        "anchors": {
+            "fr": "02480480012030BC02BC084720540003",
+            "lg": "02480480012030BC02BC084720540003"
+        },
+        "entries": {
+            "fr": "30B50006050E09480468012C09D1281C",
+            "lg": "30B50006050E09480468012C09D1281C"
+        }
+    },
+    "faint": {
+        "function": "Cmd_tryfaintmon",
+        "anchor_offset": 280,
+        "capture": 4,
+        "anchors": {
+            "fr": "0130087038780CF02DFF2DE0C43B0202",
+            "lg": "0130087038780CF02DFF2DE0C43B0202"
+        },
+        "entries": {
+            "fr": "F0B54F464646C0B481B0184802689178",
+            "lg": "F0B54F464646C0B481B0184802689178"
+        }
+    },
+    "capture_wild": {
+        "function": "Cmd_givecaughtmon",
+        "anchor_offset": 36,
+        "capture": 4,
+        "anchors": {
+            "fr": "13F076F9000600285DD09EF0C1FF0006",
+            "lg": "13F076F9000600285DD09EF0ABFF0006"
+        },
+        "entries": {
+            "fr": "F0B54F464646C0B419488146194D2878",
+            "lg": "F0B54F464646C0B419488146194D2878"
+        }
+    },
+    "pc_move": {
+        "function": "SendMonToPC",
+        "anchor_offset": 156,
+        "capture": 4,
+        "anchors": {
+            "fr": "BFD1022008BC9846F0BC02BC0847",
+            "lg": "BFD1022008BC9846F0BC02BC0847"
+        },
+        "entries": {
+            "fr": "F0B5474680B480461A482DF0E5FC0006",
+            "lg": "F0B5474680B480461A482DF0E5FC0006"
+        }
+    },
+    "pc_deposit": {
+        "function": "TryStorePartyMonInBox",
+        "anchor_offset": 120,
+        "capture": 8,
+        "anchors": {
+            "fr": "012175F715F9012070BC02BC08470000",
+            "lg": "012175F72BF9012070BC02BC08470000"
+        },
+        "entries": {
+            "fr": "70B50006060E301CF9F70CF80004040C",
+            "lg": "70B50006060E301CF9F70CF80004040C"
+        }
+    },
+    "pc_withdraw": {
+        "function": "SetPlacedMonData",
+        "anchor_offset": 30,
+        "capture": 6,
+        "anchors": {
+            "fr": "642252F140FF12E0",
+            "lg": "642252F144FF12E0"
+        },
+        "entries": {
+            "fr": "F0B50006060E09060F0E0E2E12D10649",
+            "lg": "F0B50006060E09060F0E0E2E12D10649"
+        }
+    },
+    "pc_box_place": {
+        "function": "SetPlacedMonData",
+        "anchor_offset": 68,
+        "capture": 8,
+        "anchors": {
+            "fr": "301C391CF8F7CAFDF0BC01BC0047",
+            "lg": "301C391CF8F7CAFDF0BC01BC0047"
+        },
+        "entries": {
+            "fr": "F0B50006060E09060F0E0E2E12D10649",
+            "lg": "F0B50006060E09060F0E0E2E12D10649"
+        }
+    },
+    "pc_release_begin": {
+        "function": "ReleaseMon",
+        "anchor_offset": 0,
+        "capture": 0,
+        "anchors": {
+            "fr": "00B5FDF757FF03490878002804D00020",
+            "lg": "00B5FDF757FF03490878002804D00020"
+        },
+        "entries": {
+            "fr": "00B5FDF757FF03490878002804D00020",
+            "lg": "00B5FDF757FF03490878002804D00020"
+        }
+    },
+    "pc_release": {
+        "function": "ReleaseMon",
+        "anchor_offset": 56,
+        "capture": 6,
+        "anchors": {
+            "fr": "101CFFF7EDFE00F0DBFB01BC0047",
+            "lg": "101CFFF7EDFE00F0DBFB01BC0047"
+        },
+        "entries": {
+            "fr": "00B5FDF757FF03490878002804D00020",
+            "lg": "00B5FDF757FF03490878002804D00020"
+        }
+    },
+    "evolve_species_store": {
+        "function": "Task_EvolutionScene",
+        "anchor_offset": 1162,
+        "capture": 8,
+        "anchors": {
+            "fr": "48460B2171F707FB48466FF784FB6189",
+            "lg": "48460B2171F71DFB48466FF79AFB6189"
+        },
+        "entries": {
+            "fr": "F0B557464E464546E0B486B00006070E",
+            "lg": "F0B557464E464546E0B486B00006070E"
+        }
+    },
+    "trade_evolve_species_store": {
+        "function": "Task_TradeEvolutionScene",
+        "anchor_offset": 920,
+        "capture": 8,
+        "anchors": {
+            "fr": "40460B2170F750FD40466EF7CDFD6189",
+            "lg": "40460B2170F766FD40466EF7E3FD6189"
+        },
+        "entries": {
+            "fr": "F0B5474680B488B00006060E1C4DB000",
+            "lg": "F0B5474680B488B00006060E1C4DB000"
+        }
+    },
+    "trade_done": {
+        "function": "TradeMons",
+        "anchor_offset": 186,
+        "capture": 4,
+        "anchors": {
+            "fr": "FFF79BFF01B018BC9846A146F0BC01BC",
+            "lg": "FFF79BFF01B018BC9846A146F0BC01BC"
+        },
+        "entries": {
+            "fr": "F0B54F464646C0B481B00C1C0006000E",
+            "lg": "F0B54F464646C0B481B00C1C0006000E"
+        }
+    },
+    "poison_hp_before": {
+        "function": "DoPoisonFieldEffect",
+        "anchor_offset": 48,
+        "capture": 4,
+        "anchors": {
+            "fr": "9FF7CEFA0090002803D00138",
+            "lg": "9FF7E4FA0090002803D00138"
+        },
+        "entries": {
+            "fr": "F0B581B0194C002700260525201C0521",
+            "lg": "F0B581B0194C002700260525201C0521"
+        }
+    },
+    "poison_faint": {
+        "function": "DoPoisonFieldEffect",
+        "anchor_offset": 70,
+        "capture": 8,
+        "anchors": {
+            "fr": "39216A469FF78BFE01376434013D002D",
+            "lg": "39216A469FF7A1FE01376434013D002D"
+        },
+        "entries": {
+            "fr": "F0B581B0194C002700260525201C0521",
+            "lg": "F0B581B0194C002700260525201C0521"
+        }
+    },
+    "trade_begin": {
+        "function": "TradeMons",
+        "anchor_offset": 0,
+        "capture": 0,
+        "anchors": {
+            "fr": "F0B54F464646C0B481B00C1C0006000E",
+            "lg": "F0B54F464646C0B481B00C1C0006000E"
+        },
+        "entries": {
+            "fr": "F0B54F464646C0B481B00C1C0006000E",
+            "lg": "F0B54F464646C0B481B00C1C0006000E"
+        }
+    }
+}
+
+BOUND_CONTRACTS = {
+    "faint": ("src/battle_script_commands.c#L2831-L2905",
+        "Battle opcode 0x19. At function +0x11C after the PLAYER counter increment/store "
+        "(+0x11A); saturated counter skips the store but reaches this same point. Player-side, "
+        "present-battler and HP-zero branches precede it. R7/R8 point at gActiveBattler. "
+        "Snapshot battler/party identity now; consumer dedupes the faint transition; not every entry is a faint.",
+        ["R7", "R8", "R13"]),
+    "capture_wild": ("src/battle_script_commands.c#L9617-L9645",
+        "Battle opcode 0xF0; +0x28 is immediately AFTER BL GiveMonToPlayer (+0x24). "
+        "R0 holds party/PC/failure result before shift. Destination has been assigned on success; "
+        "read party/box identity using profile facts. Do not count failure as acquisition or emit twice "
+        "with mon_given. This is acquired-mon placement, not a ball animation witness.",
+        ["R0", "R5", "R8", "R9"]),
+    "pc_move": ("src/pokemon.c#L3708-L3740",
+        "SendMonToPC called by GiveMonToPlayer; +0xA0 common return before register restoration. "
+        "R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); R5/R6 destination box/slot only valid "
+        "on success; R8 source mon. This is acquisition-to-storage, not every PC menu operation.",
+        ["R0", "R5", "R6", "R8"]),
+    "pc_deposit": ("src/pokemon_storage_system_data.c#L658-L682",
+        "TryStorePartyMonInBox called by Task_DepositMenu (tasks.c:1214); +0x80 common "
+        "return with R0 bool, R6 box and R4 slot-in-high-byte on success. Requires R0==1. "
+        "Moving-mon and party-selected branches converge; task compacts later (tasks.c:1232), "
+        "so snapshot the actual transfer and do not assume final party slot numbering yet.",
+        ["R0", "R4", "R6"]),
+    "pc_withdraw": ("src/pokemon_storage_system_data.c#L625-L655",
+        "SetPlacedMonData party branch: +0x24 after memcpy(gPlayerParty[position],movingMon,100), "
+        "BEFORE branch to epilogue. R6=14, R7=party destination. Called by placement/shift paths; "
+        "origin may be party rather than box. Correlate moving-mon origin/caller before emitting box_to_party. "
+        "One record placement, not a whole animation or batch completion.",
+        ["R6", "R7"]),
+    "pc_box_place": ("src/pokemon_storage_system_data.c#L625-L655",
+        "SetPlacedMonData common epilogue +0x4C AFTER SetBoxMonAt call on box path. "
+        "Party path also joins here; REQUIRE R6<14, valid R7<30. R6/R7 name destination; "
+        "moving-mon origin identifies deposit versus box rearrange/shift. Do not duplicate pc_deposit.",
+        ["R6", "R7"]),
+    "pc_release_begin": ("src/pokemon_storage_system_data.c#L716-L733",
+        "ReleaseMon entry, called after permission/confirmation in Task_ReleaseMon (tasks.c:1302). "
+        "Capture pre-removal identity and moving/party/box context via profile facts BEFORE purge. "
+        "Pairs with pc_release; moving-mon release may only clear the carried flag.",
+        ["R13", "R14"]),
+    "pc_release": ("src/pokemon_storage_system_data.c#L716-L733",
+        "ReleaseMon +0x3E: after PurgeMonOrBoxMon (or moving flag clear), before display refresh. "
+        "One confirmed release; resolve key from pc_release_begin snapshot, never from zeroed bytes. "
+        "This must not be classified as party_to_box; party compaction may follow.",
+        ["R13"]),
+    "evolve_species_store": ("src/evolution_scene.c#L764-L785",
+        "Task_EvolutionScene EVOSTATE_SET_MON_EVOLVED; +0x492 immediately after "
+        "SetMonData(MON_DATA_SPECIES), whose BL is +0x48E. R9=mon, R4=task. "
+        "Stats/re-nickname/dex updates FOLLOW, so retain species publication then settle; "
+        "do not call this final evolution completion. Cancellation bypasses this state.",
+        ["R9", "R4"]),
+    "trade_evolve_species_store": ("src/evolution_scene.c#L1206-L1219",
+        "Task_TradeEvolutionScene T_EVOSTATE_SET_MON_EVOLVED; +0x3A0 after "
+        "SetMonData species BL +0x39C. R8=mon, R4=task. Stats/name/dex follow. "
+        "Correlate trade lease to suppress ordinary key_change during SLink apply.",
+        ["R8", "R4"]),
+    "trade_begin": ("src/trade_scene.c#L1054-L1084",
+        "TradeMons entry captures player slot R0 and partner slot R1 plus pre-swap identities. "
+        "Same primitive called by NPC cable/wireless animations (:1776,:2276) and link "
+        "CB2_UpdateLinkTrade (:2533). Preserve caller/trade context; distinguish NPC and SLink.",
+        ["R0", "R1", "R14"]),
+    "trade_done": ("src/trade_scene.c#L1054-L1084",
+        "TradeMons +0xBE before stack restoration: BOTH party/enemy copies, friendship/mail/dex "
+        "updates have finished. R7=received player mon, R9=player slot. NPC cable/wireless "
+        "callers (:1776,:2276) and link caller (:2533) share this primitive, not distinct copies. "
+        "This is RECORD-SWAP completion, NOT native scene/evolution completion; do not emit wire "
+        "trade_done until that separate lifecycle is complete. Use trade_begin for old key.",
+        ["R7", "R9", "R5"]),
+    "poison_hp_before": ("src/field_poison.c#L92-L118",
+        "DoPoisonFieldEffect +0x34 after GetMonData(HP), before stack store/decrement. "
+        "R0=old HP, R4=mon pointer. Pair by pointer and ordered invocation/iteration with "
+        "poison_faint, not merely frame; up to six iterations may occur in one frame.",
+        ["R0", "R4", "R5"]),
+    "poison_faint": ("src/field_poison.c#L92-L118",
+        "DoPoisonFieldEffect +0x4E immediately after SetMonData(HP) BL +0x4A. "
+        "R4=current mon, [R13]=new HP. REQUIRE new HP==0 AND paired old HP>0; source "
+        "also writes zero for already-fainted mons. Capture before later poison task clears "
+        "status/whiteout heals (field_poison.c:32-81). One edge per actual newly fainted mon.",
+        ["R4", "R13", "R5"]),
+}
+for _kind, (_source, _contract, _point) in BOUND_CONTRACTS.items():
+    _old = next((c for c in CANDIDATES if c["kind"] == _kind), None)
+    if _old is None:
+        _old = candidate(_kind, BINDINGS[_kind]["function"], _source, _contract)
+        CANDIDATES.append(_old)
+    _old.update(symbol=BINDINGS[_kind]["function"], source=_source,
+                inventory=_contract, point=_point, reason=None)
+for _c in CANDIDATES:
+    if _c["kind"] in BINDINGS:
+        _b = BINDINGS[_c["kind"]]
+        _c["binding"] = _b
+        _c["capture"] = _b["capture"]
+        _c["pattern"] = _b["anchors"]["fr"]
+        if _c["kind"] != "frame_control":
+            _c["context"] = (-_b["anchor_offset"], _b["entries"]["fr"])
+
+SYMBOL_FILES = {"fr": "pokefirered.sym", "lg": "pokeleafgreen.sym"}
+SYMBOL_HASHES = {
+    "fr": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0",
+    "lg": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae",
+}
+
+
+@lru_cache(maxsize=2)
+def symbol_table(name: str) -> dict:
+    path = ROOT / "data/gen3/pret" / SYMBOL_FILES[name]
+    raw = path.read_bytes()
+    provenance = json.loads((path.parent / "provenance.json").read_text())
+    if (hashlib.sha256(raw).hexdigest() != SYMBOL_HASHES[name]
+            or provenance["files"][path.name] != SYMBOL_HASHES[name]
+            or provenance["source"]["commit"] != PRET.split("/")[-2]
+            or provenance["roms"][path.name.replace(".sym", ".gba")] != ROM_SPECS[name][4]):
+        raise ValueError(f"{name}: symbol/build provenance mismatch")
+    return parse_symbols(raw.decode("utf-8"))
+
+
 def output_path(pack: str) -> Path:
     return ROOT / "data/games" / pack / "engine_signals.json"
 
 
 def resolve(c: dict, name: str, rom: bytes) -> dict:
     pattern = (c["patterns"] or {}).get(name, c["pattern"])
+    binding = c.get("binding")
+    if binding and name in SYMBOL_FILES:
+        pattern = binding["anchors"][name]
     diagnostic = {}
     if c["offset"] is not None:
         diagnostic = {"reference_offset": c["offset"],
@@ -162,8 +562,21 @@ def resolve(c: dict, name: str, rom: bytes) -> dict:
         return {"status": "UNVERIFIED", "reason": f"exact pattern has {len(offsets)} matches",
                 "matches": offsets, **diagnostic}
     offset = offsets[0]
-    if c["context"]:
-        delta, expected = c["context"]
+    fn = None
+    context = c["context"]
+    if binding:
+        vanilla = name in SYMBOL_FILES
+        reference = name if vanilla else "fr"
+        fn = symbol_table(reference)[binding["function"]]
+        delta = -binding["anchor_offset"]
+        if vanilla:
+            if offset != fn["address"] - 0x08000000 + binding["anchor_offset"]:
+                return {"status": "UNVERIFIED", "reason": "unique anchor is outside symbol location"}
+            context = (delta, binding["entries"][name])
+        if binding["anchor_offset"] + max(c["capture"] + 2, len(data)) > fn["size"]:
+            return {"status": "UNVERIFIED", "reason": "capture or anchor exceeds symbol size"}
+    if context:
+        delta, expected = context
         actual = rom[offset + delta:offset + delta + len(expected) // 2]
         if actual.hex().upper() != expected:
             return {"status": "UNVERIFIED", "reason": "enclosing entry context differs (possible detour/dead tail)",
@@ -173,9 +586,22 @@ def resolve(c: dict, name: str, rom: bytes) -> dict:
     except ValueError as exc:
         return {"status": "UNVERIFIED", "reason": str(exc), "matches": offsets, **diagnostic}
     site.update(source=PRET + c["source"], capture_contract=c["inventory"])
-    if c["context"]:
-        delta, expected = c["context"]
+    if context:
+        delta, expected = context
         site["context"] = {"rom_offset": offset + delta, "expected_hex": expected}
+    if fn:
+        info = {"symbol": binding["function"], "address": site["address"] - binding["anchor_offset"],
+                "capture_offset": binding["anchor_offset"] + c["capture"],
+                "anchor_offset": binding["anchor_offset"],
+                "symbol_source": f"data/gen3/pret/{SYMBOL_FILES[reference]}:{fn['line']}",
+                "symbols_sha256": SYMBOL_HASHES[reference]}
+        if name in SYMBOL_FILES:
+            info["size"] = fn["size"]
+            info["size_evidence"] = "verified_vanilla_symbol"
+        else:
+            info["reference_size"] = fn["size"]
+            info["size_evidence"] = "vanilla_reference_only"
+        site["function"] = info
     return {"status": "PINNED", "site": site, "matches": offsets}
 
 
@@ -210,19 +636,23 @@ def document(inventory: dict) -> str:
         "hook address=address+capture_offset. No bank translation. Compare callback address, not raw R15 "
         "(docs/gen3/research/pins.md:181-198). Companion is an artifact of radical_red, not another title.",
         "", "## Sources and limitations", "",
-        f"- [Pinned pret source]({PRET}) and [CFRU BPRE.ld]({CFRU}BPRE.ld). BPRE names are "
-        "lookup seeds, not RR equivalence proof. Static symbols not present in that map stay unresolved.",
+        f"- [Pinned pret source]({PRET}). Vanilla function addresses/sizes come independently from "
+        "data/gen3/pret/pokefirered.sym and pokeleafgreen.sym, including LOCAL symbols. "
+        "Their fixed SHA-256s and source/ROM identities are checked against provenance.json. "
+        f"[CFRU BPRE.ld]({CFRU}BPRE.ld) is only a cross-check, never the vanilla address authority.",
         "- Control address: patch/tools/build.py:63; parked "
         "codex/rr-foundation:docs/rr_reference/BIZHAWK_MGBA_CALLBACKS.md:150-170 "
         "(callback 0800051A, raw R15 0800051C). Artifact-specific control bytes are intentional.",
         "- Read-only Capstone 5.0.7 Thumb disassembly established FR capture boundaries and call targets; "
-        "no disassembly/runtime dependency in regeneration. Transported matches are [INFERENCE] of "
-        "the same local sequence, not proof of caller reachability. Runtime fields must come from each pack profile.",
+        "no disassembly/runtime dependency in regeneration. FR and LG capture windows were independently "
+        "read and checked. RR transported matches are [INFERENCE] of the same local sequence, not proof "
+        "of script-table dispatch/caller reachability or unchanged interior code. Runtime fields must come from each pack profile.",
         "- docs/gen3/probes/census_rr_overworld_2026-09-21.txt:7-17 observes R15=000001C4, "
         "CPSR mode/T=31/0 and tasks 0806E811,0806E83D,08079E0D during 1800 idle frames. "
         "This is BIOS idle census, not evidence for any gameplay site in this inventory.",
         "- mon_given is deliberately NOT pinned on RR: its vanilla return bytes survive, but "
-        "entry 08040B14 is detoured (0049084791D70709...). A unique dead tail is not a hook.",
+        "entry 08040B14 is detoured (0049084791D70709...). A unique dead tail is not a hook. "
+        "The same guard also excludes RR SendMonToPC, SetPlacedMonData and DoPoisonFieldEffect tails.",
         "- map_load covers only the normal CB2_LoadMap2 branch; Quest Log and other loaders remain OPEN. "
         "whiteout is a completion marker after healing, not an HP-at-faint capture. save requires R0=1/R5=0; "
         "RR flash extensions and final save witness ownership remain UNVERIFIED "
@@ -253,6 +683,20 @@ def document(inventory: dict) -> str:
                 lines.append(f"| {name} | UNVERIFIED | {where}; no capture offset authorized "
                              f"| {diagnostic} | {r['reason']}; bytes, if shown, are diagnostic only |")
         lines.append("")
+        if c.get("binding"):
+            b = c["binding"]
+            lines += ["Function bounds and independently pinned entry anchors (vanilla):", "",
+                      "| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |",
+                      "|---|---|---|---|---|"]
+            for name in ("fr", "lg"):
+                fn = symbol_table(name)[b["function"]]
+                lines.append(f"| {name} | data/gen3/pret/{SYMBOL_FILES[name]}:{fn['line']} "
+                             f"{b['function']} | {fn['address']:08X} / {fn['size']:X} "
+                             f"| +{b['anchor_offset'] + c['capture']:X} | {b['entries'][name]} |")
+            lines += ["", "RR entry checks use the FR entry bytes at the uniquely matched anchor minus "
+                      "the reviewed function-relative anchor offset; a mismatch is refused, never repinned. "
+                      "The JSON reference_size for RR is the vanilla function's bound, NOT a proved RR extent. "
+                      "frame_control retains its explicitly measured/patched artifact-specific control binding.", ""]
     lines += ["## Reproduce and falsify", "",
               "- python tools/gen_gen3_engine_signals.py --check (offline; all four pinned ROMs required).",
               "- python tools/pin_gen3_site.py HEX --rom fr --capture-offset 0 prints all matches and "
@@ -260,10 +704,13 @@ def document(inventory: dict) -> str:
               "- pytest tests/unit/test_gen3_engine_sites.py -q checks every emitted pin, exclusion, "
               "wrong ROM, ambiguous/odd matches and the retained RR-tail trap.",
               "", "## NOT VERIFIED", "",
-              "Missing static/caller/mutation sites remain UNVERIFIED. No emulator was run on this card. "
+              "RR borrowed_party and nature_change remain UNVERIFIED; detoured RR tails remain excluded. "
+              "Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need "
+              "separate evidence; the mutation sites here are not a claim of complete gameplay coverage. "
+              "No emulator was run on this card. "
               "PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, "
               "semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. "
-              "Do not infer that byte-match tests qualify faint/capture/PC/trade/evolution/poison, all map paths, "
+              "Do not infer that byte-match tests physically qualify faint/capture/PC/trade/evolution/poison, all map paths, "
               "RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.",
               ""]
     return "\n".join(lines)
