@@ -85,6 +85,13 @@ def _game_family(game: str | None) -> str | None:
     return GAME_FAMILY.get(game or "")
 
 
+def _rom_ext(run: dict) -> dict:
+    """Each player's cartridge extension as handed out (.gb until one is made): the download
+    labels name the file the player will load, and BizHawk picks the system by it."""
+    players = (run.get("cartridges") or {}).get("players") or {}
+    return {p: (os.path.splitext(players.get(p, {}).get("output", ""))[1].lower() or ".gb") for p in ("a", "b")}
+
+
 def _legacy_cartridges(run: dict) -> dict | None:
     """A run randomized before the Cartridges step recorded only `randomizer`: the same
     shape for the page, from what it has (the randomizer's outputs are the cartridges)."""
@@ -785,7 +792,8 @@ class RunManager:
                              live=run.get("status") == "running",
                              launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
                              rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
-                             roms_pinned=bool(run.get("randomizer")))
+                             roms_pinned=bool(run.get("randomizer")),
+                             rom_ext=_rom_ext(run))
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
@@ -868,6 +876,7 @@ class RunManager:
         r["safe_name"] = re.sub(r"[^\w-]", "_", run.get("name") or rid).strip("_") or rid
         r["game_label"] = GAME_LABELS.get(run.get("game") or "", "")
         r["gen1"] = (run.get("game") or "") in new_run_form()["gen1_games"]
+        r["rom_ext"] = _rom_ext(run)
         return r
 
     async def handle_list(self, request: web.Request) -> web.Response:
@@ -1332,9 +1341,12 @@ class RunManager:
         if not os.path.isfile(path):
             return web.json_response({"ok": False, "error": "ROM file is missing on disk"}, status=404)
         safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
+        # The cartridge keeps its own extension: BizHawk picks the system by it for a ROM
+        # its database does not know, and a pure cartridge named .gb runs in mono.
+        ext = os.path.splitext(recorded)[1].lower() if recorded else ".gb"
         return web.FileResponse(path, headers={
             "Content-Type": "application/octet-stream",
-            "Content-Disposition": f'attachment; filename="slink_{safe_name}_{player}.gb"',
+            "Content-Disposition": f'attachment; filename="slink_{safe_name}_{player}{ext}"',
         })
 
     # ── Stream pin ─────────────────────────────────────────────────────────────

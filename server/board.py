@@ -208,7 +208,7 @@ def phase(status: dict) -> tuple[str, str]:
 
 def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live: bool = True,
                   launcher_url: str = "/launcher/{player}", rom_url: str = "",
-                  roms_pinned: bool = False) -> dict:
+                  roms_pinned: bool = False, rom_ext: dict | None = None) -> dict:
     """Everything `_board.html` needs, from the payload alone -- so the run server and the
     Manager (which has only the payload, live or persisted) render the same board.
 
@@ -236,6 +236,8 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
         # so the run admits no other.
         "roms": {pid: rom_url.format(player=pid) for pid in PIDS} if rom_url else {},
         "roms_pinned": bool(rom_url) and roms_pinned,
+        # the download labels name the file as handed out (.gbc for Yellow and pureRGB)
+        "rom_ext": rom_ext or dict.fromkeys(PIDS, ".gb"),
         "concise_title": title or "Soul Link",
         # The damage calculator is pinned to modern mechanics: Radical Red only.
         "calc_preview": any(rt.endswith("_rr") for rt in rom_types),

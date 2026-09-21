@@ -190,8 +190,8 @@
             <ol class="mk-steps">
               {% if roms %}
               <li>This run made each player's cartridge{% if roms_pinned %} — it is randomized, and the run admits no other{% endif %}:
-                <a class="mk-btn" href="{{ roms.a }}">Player A · .gb</a>
-                <a class="mk-btn" href="{{ roms.b }}">Player B · .gb</a></li>
+                <a class="mk-btn" href="{{ roms.a }}">Player A · {{ rom_ext.a }}</a>
+                <a class="mk-btn" href="{{ roms.b }}">Player B · {{ rom_ext.b }}</a></li>
               {% endif %}
               <li>Download a launcher per player:
                 <a class="mk-btn" href="{{ launchers.a }}">Player A · .lua</a>

@@ -38,7 +38,7 @@
                       <td><span x-text="rform.cartridges.players[pid].source_title"></span><span class="mk-sub" x-text="' → ' + kindWords(rform.cartridges.players[pid].kind)"></span></td>
                       <td><code class="num" x-text="rform.cartridges.players[pid].rom_sha1.slice(0, 12)"></code></td>
                       <td x-show="rform.current"><code class="num" x-text="rform.current ? rform.current.players[pid].seed : ''"></code></td>
-                      <td><a class="mk-btn" :href="'/api/runs/' + runId + '/rom/' + pid" x-text="'slink_' + pid + '.gb'"></a></td>
+                      <td><a class="mk-btn" :href="'/api/runs/' + runId + '/rom/' + pid" x-text="'slink_' + pid + (rform.cartridges.players[pid].output.match(/\.[^.]+$/) || ['.gb'])[0]"></a></td>
                     </tr>
                   </template>
                 </tbody>
