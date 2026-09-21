@@ -55,6 +55,7 @@ local B_OUTCOME_CAUGHT = 7
 local PARTY_BASE          = 0x02024284  -- gPlayerParty (vanilla.PARTY_BASE)
 local MON_SIZE            = 100
 local OFF_HP, OFF_MAXHP   = 0x56, 0x58  -- lua/tests/duo/duo_main.lua:26-27
+local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
 
 -- WHERE A WHITEOUT PUTS YOU. pret src/overworld.c SetWarpDestinationToLastHealLocation warps to
 -- gSaveBlock1Ptr->lastHealLocation, which a new game seeds to the player's own house
@@ -361,6 +362,23 @@ local H = {
         return memory.read_u8(OBJ_EVENTS_ADDR + (i or 0) * 0x24 + 0x18) >> 4
     end,
     party_count = function() return memory.read_u8(PARTY_COUNT_ADDR) end,
+    -- Party IDENTITY, for playlib's keyed snapshot. PID:OTID is the same handle the duo
+    -- harness follows a mon by (lua/tests/duo/duo_main.lua:86-98); it is plaintext (both sit
+    -- outside the encrypted substructures) and it survives a box round trip, which the
+    -- record's bytes need not.
+    party_key = function(i)
+        local base = PARTY_BASE + i * MON_SIZE
+        return string.format("%08X:%08X", memory.read_u32_le(base + OFF_PID),
+                                          memory.read_u32_le(base + OFF_OTID))
+    end,
+    party_record = function(i)
+        local base = PARTY_BASE + i * MON_SIZE
+        local parts = {}
+        for w = 0, (MON_SIZE // 4) - 1 do
+            parts[#parts + 1] = string.format("%08X", memory.read_u32_le(base + w * 4))
+        end
+        return table.concat(parts)
+    end,
 
     load_state = function(path) return (pcall(savestate.load, path)) end,
     save_state = function(path) return (pcall(savestate.save, path)) end,
@@ -527,6 +545,55 @@ local function heal_at_nurse(cp, label)
     play.wait_scene_settled(cp, 1800)
     local hp, maxhp = slot0_hp()
     G.phase("healed", string.format("%s: slot0 %d/%d", label, hp, maxhp))
+end
+
+-- ── the vanilla PC flow, from source ────────────────────────────────────────────────────────
+-- docs/gen3/research/fr_pc_flow_and_pc_move_sites.md (Codex R9, cited to pret c75f352). The
+-- shape is the same one the RR census proved PHYSICALLY
+-- (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt), and the spacing below is that
+-- receipt's: ~120 frames between message presses, ~180 before a menu accepts input, ~240 for a
+-- commit to settle. Presses are DATA, not a sweep.
+--
+--   A #1 interact            "{PLAYER} booted up the PC."
+--   A #2 dismiss             "Which PC should be accessed?"  rows: 0 SOMEONE'S PC,
+--                            1 {PLAYER}'s PC, 2 PROF. OAK's PC, 3 LOG OFF  (four rows once the
+--                            Pokedex is obtained, which parcel_deliver did; cursor starts at 0)
+--   A #3 choose row 0        "Accessed Someone's PC."
+--   A #4 dismiss             "POKeMON Storage System opened."
+--   A #5 dismiss             Task_PCMainMenu, selection row 0
+--
+-- Storage menu: 0 WITHDRAW, 1 DEPOSIT, 2 MOVE, 3 MOVE ITEMS, 4 SEE YA!
+local PC_WAIT = { press = 120, menu = 180, commit = 240, cursor = 20 }
+
+local function pc_press(btn, wait)
+    G.tap(btn, 3, 13)
+    G.idle(wait or PC_WAIT.press)
+end
+
+--- Five A presses from the field to the storage main menu.
+local function open_storage_menu()
+    for _ = 1, 5 do pc_press("A", PC_WAIT.press) end
+    G.idle(PC_WAIT.menu - PC_WAIT.press)
+end
+
+--- THE PARTY COUNT IS A LIE WHILE THE PC IS OPEN. gPlayerPartyCount is recomputed on storage
+--- exit, not at the transfer (the R9 note's completion row; PHYSICAL on RR, where the census
+--- read party=3 throughout even after TryStorePartyMonInBox fired). So leaving the PC is part
+--- of the operation, and every assertion in these legs is made on the field afterwards.
+local function leave_storage(cp, label)
+    for _ = 1, 60 do
+        if play.on_field(cp) then break end
+        G.tap("B", 3, 20)
+    end
+    if not play.on_field(cp) then
+        G.shot("stuck")
+        G.finish(false, label .. ": never got back to the field from the PC, so the party "
+                     .. "count cannot be trusted either way")
+    end
+    if not play.wait_scene_settled(cp, 900) then
+        G.shot("stuck")
+        G.finish(false, label .. ": the field never settled after the PC")
+    end
 end
 
 local LEGS = {}
@@ -949,11 +1016,14 @@ LEGS[#LEGS + 1] = {
 -- ── leg: viridian_pc_deposit_withdraw ────────────────────────────────────────────────────────
 LEGS[#LEGS + 1] = {
     name = "viridian_pc_deposit_withdraw",
-    exercises = { "pc_move", "pc_deposit", "pc_withdraw" },
+    exercises = { "pc_deposit", "pc_box_place", "pc_withdraw" },
     source = {
-        "data/maps/ViridianCity/map.json (warp_events[0] -> PokemonCenter_1F)",
-        "include/constants/metatile_behaviors.h:94 (MB_PC); data/tilesets/primary/building/metatile_attributes.bin (ids 98/99); data/layouts/PokemonCenter_1F/map.bin (placed @ 11,1)",
-        "src/pokemon_storage_system.c (storage menu)",
+        "docs/gen3/research/fr_pc_flow_and_pc_move_sites.md (Codex R9: the five-A PC route, the four-row owner menu once the Pokedex is obtained, the storage menu order, and the STORE -> destination-box confirmation)",
+        "src/pokemon_storage_system_menu.c:37-43,263-308,343-358 (sMainMenuTexts order; DEPOSIT is row 1; the main menu refuses DEPOSIT when the party holds one mon)",
+        "src/pokemon_storage_system_data.c:1465-1478,1755-1772 (the selected-mon popup: STORE / SUMMARY / MARK / RELEASE / CANCEL)",
+        "src/pokemon_storage_system_tasks.c:996-1005,1189-1249 (STORE opens the box chooser; the A there is what calls TryStorePartyMonInBox)",
+        "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba parsed with tools/gba_map.py: ViridianCity (3.1) warp (26,26) -> map 5.4, whose only MB_PC (0x83) metatile is (11,1); bfs (7,8)->(11,2) = Up x4, Right x4, Up x2 with the four object-event tiles blocked",
+        "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt (the same flow observed hook by hook, and the source of the frame spacing)",
     },
     run = function(cp)
         play.follow(cp, "route1_grass_to_north_edge", "viridian_pc_deposit_withdraw")
@@ -961,41 +1031,133 @@ LEGS[#LEGS + 1] = {
         play.follow(cp, "route1_edge_to_pokecenter_door", "viridian_pc_deposit_withdraw")
         if not play.enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: the PokeCenter door never fired a warp") end
         play.follow(cp, "pokecenter_entrance_to_pc", "viridian_pc_deposit_withdraw")
+        G.tap("Up", 2, 13)               -- face the (solid) PC metatile at (11,1)
+
+        local before = play.party_snapshot()
+        if before.n < 2 then
+            G.finish(false, string.format(
+                "viridian_pc: the party holds %d mon. The storage main menu REFUSES DEPOSIT at "
+                .. "one (pokemon_storage_system_menu.c:289-308), and the oracle needs a second "
+                .. "record to prove the survivors were left alone", before.n))
+        end
+
+        -- DEPOSIT. Down, A picks DEPOSIT (row 1); deposit mode opens in the party area at slot
+        -- 0, so Down, A picks slot 1 and opens its popup; A takes STORE (row 0), which opens
+        -- "Deposit in which BOX?"; the LAST A commits box 0 and is what actually calls
+        -- TryStorePartyMonInBox. That final confirmation is the press an earlier RR lane run
+        -- was missing, and the reason its party count never moved.
+        open_storage_menu()
+        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.menu)    -- DEPOSIT
+        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.press)   -- party slot 1 -> popup
+        pc_press("A", PC_WAIT.press)                                     -- STORE -> box chooser
+        pc_press("A", PC_WAIT.commit)                                    -- box 0 -> TryStore...
+        leave_storage(cp, "viridian_pc")
+
+        local mid = play.party_snapshot()
+        if mid.n ~= before.n - 1 then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "viridian_pc: after the deposit and leaving the PC the party count is %d, not "
+                .. "%d. The pinned route is 5x A, Down+A, Down+A, A (STORE), A (box) -- the "
+                .. "last A is the destination-box confirmation, without which nothing is stored",
+                mid.n, before.n - 1))
+        end
+        local gone, why = play.departed_key(before, mid)
+        if not gone then G.finish(false, "viridian_pc: deposit: " .. why) end
+        G.phase("deposited", string.format("party %d -> %d, key %s left", before.n, mid.n, gone))
+
+        -- WITHDRAW. Row 0 is already selected on a fresh menu, so A takes WITHDRAW; entry is in
+        -- the BOX area at slot 0, A opens that record's popup, and A takes WITHDRAW (row 0).
+        -- There is no destination confirmation on this path (R9 note).
         G.tap("Up", 2, 13)
-        local before = play.party_count()
-        -- Storage menu navigation past "what do you want to do" is mashed (not pinned row-by-
-        -- row); verified by party_count actually changing, never by the presses alone.
-        local deposited = false
-        for _ = 1, 60 do
-            G.tap("A", 3, 20)
-            if play.party_count() < before then deposited = true; break end
-        end
-        if not deposited then
+        open_storage_menu()
+        -- THE MENU REOPENS ON THE PREVIOUS OPTION (pret sPreviousBoxOption; PHYSICAL on the RR
+        -- lane r5b/r5c). A Deposit just preceded this, so the cursor is on row 1 and WITHDRAW
+        -- needs an explicit Up first -- pressing A here without it would deposit again.
+        pc_press("Up", PC_WAIT.cursor)
+        pc_press("A", PC_WAIT.menu)                                      -- WITHDRAW (row 0)
+        pc_press("A", PC_WAIT.press)                                     -- box 0 slot 0 -> popup
+        pc_press("A", PC_WAIT.commit)                                    -- WITHDRAW
+        leave_storage(cp, "viridian_pc")
+
+        local after = play.party_snapshot()
+        if after.n ~= mid.n + 1 then
             G.shot("stuck")
-            G.finish(false, string.format("viridian_pc: gPlayerPartyCount never dropped from %d (deposit)", before))
+            G.finish(false, string.format(
+                "viridian_pc: after the withdraw the party count is %d, not %d", after.n, mid.n + 1))
         end
-        G.phase("deposited", "party=" .. play.party_count())
-        local after_deposit = play.party_count()
-        local withdrawn = false
-        for _ = 1, 60 do
-            G.tap("A", 3, 20)
-            if play.party_count() > after_deposit then withdrawn = true; break end
-        end
-        if not withdrawn then
+        if after.keys[gone] == nil then
             G.shot("stuck")
-            G.finish(false, string.format("viridian_pc: gPlayerPartyCount never rose from %d (withdraw)", after_deposit))
+            G.finish(false, string.format(
+                "viridian_pc: the withdrawn mon is NOT the deposited one. Deposited %s; the "
+                .. "party now holds [%s]. A count that merely returned to where it started is "
+                .. "not a round trip", gone, play.keylist(after)))
         end
-        G.phase("withdrawn", "party=" .. play.party_count())
-        -- Back out of the PC menu and confirm the field, debounced 60 frames -- never a single
-        -- read (same lesson as every other scene end in this file).
-        for _ = 1, 20 do
-            if G.pred_ok(cp, "callback2") then break end
-            G.tap("B", 3, 20)
-        end
-        if not play.wait_scene_settled(cp, 900) then
+        local ok, bad = play.survivors_intact(before, after, gone)
+        if not ok then
             G.shot("stuck")
-            G.finish(false, "viridian_pc: never settled back into the field after the PC menu")
+            G.finish(false, "viridian_pc: " .. bad .. " during the round trip")
         end
+        G.phase("withdrawn", string.format("party %d -> %d, key %s is back; %d survivors "
+                                           .. "byte-identical", mid.n, after.n, gone, before.n - 1))
+    end,
+}
+
+-- ── leg: pc_release ──────────────────────────────────────────────────────────────────────────
+-- Was OPEN for want of a pinned route; the R9 note supplies one. RELEASE is row 3 of the SAME
+-- selected-mon popup the deposit uses (STORE / SUMMARY / MARK / RELEASE / CANCEL), so the walk
+-- to it is the deposit's own route with three Downs instead of a STORE.
+LEGS[#LEGS + 1] = {
+    name = "pc_release",
+    exercises = { "pc_release_begin", "pc_release" },
+    source = {
+        "docs/gen3/research/fr_pc_flow_and_pc_move_sites.md (the selected-mon popup order and the release completion pair: pc_release_begin at ReleaseMon entry 0x08093218, pc_release at +0x3E = 0x08093256)",
+        "src/pokemon_storage_system_data.c:1755-1772 (popup rows); src/pokemon_storage_system_tasks.c:1255-1305 (Task_ReleaseMon calls ReleaseMon after the confirmation)",
+    },
+    run = function(cp)
+        -- The leg runs straight after the round trip, so the player is already at the PC.
+        G.tap("Up", 2, 13)
+        local before = play.party_snapshot()
+        if before.n < 2 then
+            G.finish(false, string.format(
+                "pc_release: the party holds %d mon; DEPOSIT mode (which is how the party-side "
+                .. "popup is reached) is refused at one", before.n))
+        end
+
+        open_storage_menu()
+        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.menu)    -- DEPOSIT (party area)
+        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.press)   -- party slot 1 -> popup
+        for _ = 1, 3 do pc_press("Down", PC_WAIT.cursor) end             -- STORE -> ... -> RELEASE
+        pc_press("A", PC_WAIT.press)                                     -- RELEASE
+        -- THE CONFIRMATION IS NOT PINNED. The note says Task_ReleaseMon runs "after
+        -- permission/confirmation" without giving the prompt's cursor or row count, so this is
+        -- the one press here that is a guess -- and it is why the terminal below is the party
+        -- itself and not any press succeeding.
+        pc_press("A", PC_WAIT.commit)
+        leave_storage(cp, "pc_release")
+
+        local after = play.party_snapshot()
+        if after.n ~= before.n - 1 then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "pc_release: the party count is %d, not %d. The RELEASE row is pinned; the "
+                .. "confirmation press after it is NOT (see this leg's comment) and is the "
+                .. "first thing to re-pin from a census of Task_ReleaseMon",
+                after.n, before.n - 1))
+        end
+        local gone, why = play.departed_key(before, after)
+        if not gone then G.finish(false, "pc_release: " .. why) end
+        local ok, bad = play.survivors_intact(before, after, gone)
+        if not ok then G.finish(false, "pc_release: " .. bad) end
+        -- WHAT THIS CANNOT PROVE, stated rather than glossed: that the mon was RELEASED and not
+        -- deposited. Telling those apart needs a box read, and vanilla FRLG has no decrypt-free
+        -- box observable pinned (the species lives inside the encrypted substructures) -- which
+        -- is exactly why this leg was OPEN before. The engine sites are what the observer is
+        -- here for: pc_release_begin and pc_release fire on this route and on no other.
+        G.phase("released", string.format(
+            "party %d -> %d, key %s gone (the observer's pc_release pair is the proof it was a "
+            .. "release and not a deposit; no box read exists to check from here)",
+            before.n, after.n, gone))
     end,
 }
 
@@ -1016,17 +1178,22 @@ LEGS[#LEGS + 1] = {
     end,
 }
 
--- ── leg: pc_release (OPEN) ───────────────────────────────────────────────────────────────────
+-- ── leg: pc_move_full_party (OPEN) ───────────────────────────────────────────────────────────
+-- pc_move is SendMonToPC, and SendMonToPC is acquisition-to-storage: GiveMonToPlayer falls back
+-- to it when the party is full (R9 note section B). It is NOT the storage menu's deposit, which
+-- is why viridian_pc_deposit_withdraw no longer claims it -- that leg exercises pc_deposit,
+-- pc_box_place and pc_withdraw, and claiming pc_move as well was simply wrong.
 LEGS[#LEGS + 1] = {
-    name = "pc_release",
-    exercises = { "pc_box_place", "pc_release_begin", "pc_release" },
+    name = "pc_move_full_party",
+    exercises = { "pc_move" },
     source = {
-        "src/pokemon_storage_system.c (release flow)",
-        "lua/games/gen3_frlge.lua:vanilla (no box-mon-count/species read pinned; species is inside the encrypted BoxPokemon substructure)",
+        "docs/gen3/research/fr_pc_flow_and_pc_move_sites.md section B (SendMonToPC is the full-party fallback of GiveMonToPlayer, not a deposit/withdraw/release classifier)",
+        "src/pokemon.c:3686-3740 (GiveMonToPlayer -> SendMonToPC)",
     },
     open = true,
-    open_reason = "release verification needs a PC-box read (species is encrypted; no decrypt-free box-count observable pinned for vanilla FRLG yet)",
-    run = function(cp) G.phase("pc_release", "OPEN: " .. LEGS[#LEGS].open_reason) end,
+    open_reason = "SendMonToPC only runs on an acquisition that cannot fit in the party, i.e. a "
+               .. "catch or gift with six party mons; this route reaches Viridian with far "
+               .. "fewer, and nothing here fills a party to six",
 }
 
 -- ── leg: gift_mon (OPEN) ─────────────────────────────────────────────────────────────────────

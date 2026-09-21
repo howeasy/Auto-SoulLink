@@ -39,12 +39,17 @@ _EVOLVE_OR_TRADE = {"evolve_species_store", "trade_done"}
 # A citation must point under one of these — same test as "is this an actual pret path". `lua/`
 # and `include/` cover the handful of legs that cite this repo's own pinned RAM addresses
 # (lua/games/gen3_frlge.lua) or pret's constants headers, alongside the map/source data.
-_CITATION_ROOTS = ("data/maps", "data/layouts", "src/", "data/", "lua/", "include/")
+# `docs/` covers the research notes and PHYSICAL receipts a pinned route is derived
+# from; `patch/` covers a fact parsed out of the staged ROM with tools/gba_map.py.
+_CITATION_ROOTS = ("data/maps", "data/layouts", "src/", "data/", "lua/", "include/",
+                   "docs/", "patch/")
 
 # Coordinate/map/counter/predicate terminal helpers gen3_scripted_play.lua actually uses.
 _TERMINAL_HELPERS = (
     "G.pos", "G.map", "mapid(", "G.pred_ok", "G.pred(", "G.save_counter", "party_count(",
     "wait_for_map_change", "G.mash", "G.flash_domain", "in_battle(", "mash_a(", "lab_scene_var(",
+    # the PC legs terminate on the KEYED party snapshot, read on the field after leaving the PC
+    "party_snapshot(", "departed_key(", "survivors_intact(", "slot0_hp(",
 )
 
 

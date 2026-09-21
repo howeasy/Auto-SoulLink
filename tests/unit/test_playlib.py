@@ -41,6 +41,7 @@ function W.reset()
     W.on_move, W.on_a, W.on_frame = nil, nil, nil
     W.states, W.saved, W.objects, W.party = {}, {}, { { 3, 4, 0x02 } }, 1
     W.save_fails, W.map_reads, W.unreadable_after = nil, 0, nil
+    W.sliding, W.landed, W.cleared = false, nil, nil
     W.map_unreadable, W.on_field = false, true
     W.reject_hook, W.no_observer, W.poll_raises, W.obs_status = nil, nil, nil, nil
     W.polls, W.unregistered, W.poll_fn = 0, nil, nil
@@ -93,6 +94,7 @@ H = {
         return W.map
     end,
     in_battle = function() return W.in_battle end,
+    moving = function() return W.sliding and true or false end,
     on_field  = function() return W.on_field ~= false and not W.in_battle end,
     scene_quiet = function()
         if W.preds.scene_quiet == nil then return true end
@@ -279,7 +281,7 @@ def test_follow_refuses_a_path_from_the_wrong_start_tile(lua, world):
     world.x, world.y = 5, 5
     ok, log, _err = world.guard(play.follow, None, "p", "test")
     assert not ok
-    assert "is not the path's from (0,0)" in log
+    assert "never came to rest on the path's from (0,0)" in log
 
 
 def test_a_stalled_step_is_retried_after_A_presses(lua, world):
@@ -1042,3 +1044,67 @@ def test_no_states_are_saved_when_the_run_does_not_ask_for_them(lua, world):
     legs = lua.execute('return { { name = "one", run = function() end } }')
     world.guard(lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
     assert len(world.saved) == 0
+
+
+# == Codex cx-93926f12 (final review of round 5) ==============================================
+
+
+def test_rest_is_not_claimed_while_the_map_is_unreadable(lua, world):
+    """H.pos reports (-1,-1) exactly when the SaveBlock pointer is unreadable, so a coordinate
+    comparison made without checking the map can "arrive" at a tile the game cannot report."""
+    play = _bind(lua)
+    world.map_unreadable = True
+    world.x, world.y = 4, 5
+    assert play.wait_at(None, 4, 5, 30) is False
+
+
+def test_rest_is_not_claimed_while_the_player_is_still_sliding(lua, world):
+    """The tile matches for the whole budget, but the binding says the sprite never stopped."""
+    play = _bind(lua)
+    world.x, world.y = 4, 5
+    world.sliding = True
+    assert play.wait_at(None, 4, 5, 30) is False
+
+
+def test_rest_is_not_claimed_when_the_budget_simply_runs_out(lua, world):
+    """The old version returned a bare coordinate match on exhaustion, which reported arrival
+    for a player who had only just got there -- or never had."""
+    play = _bind(lua)
+    lua.execute("W.on_frame = function(f) if f >= 28 then W.x, W.y = 4, 5 end end")
+    assert play.wait_at(None, 4, 5, 30) is False, "four stable samples were never taken"
+
+
+def test_rest_is_accepted_when_it_arrives_before_the_budget_ends(lua, world):
+    play = _bind(lua)
+    lua.execute("W.on_frame = function(f) if f >= 10 then W.x, W.y = 4, 5 end end")
+    assert play.wait_at(None, 4, 5, 60) is True
+
+
+def test_follow_waits_out_a_door_exit_animation_then_walks(lua, world):
+    """FR run 16: the leg began while the door-exit step was still in flight, one tile short."""
+    play = _bind(lua, '{ p = { from = { 0, 0 }, dirs = { "Right" }, to = { 1, 0 } } }')
+    world.x, world.y = 0, 1                       # mid-slide, one tile short
+    # the slide LANDS once, then the world behaves normally
+    lua.execute("W.on_frame = function(f)"
+                " if f >= 12 and not W.landed then W.x, W.y = 0, 0; W.landed = true end end")
+    ok, log, err = world.guard(play.follow, None, "p", "test")
+    assert ok, f"{err}\n{log}"
+    assert (world.x, world.y) == (1, 0)
+
+
+def test_enter_warp_clears_dialogue_with_the_bindings_button(lua, world):
+    """A library that presses A in a doorway only works on games where A is the dismiss
+    button."""
+    play = lua.execute(
+        f'local PL = dofile("{_PLAYLIB}")\n'
+        f'return PL.bind(H, {{ state_dir = "D:/states",\n'
+        f'  clear_dialogue = function() W.cleared = (W.cleared or 0) + 1;'
+        f' H.tap("Select", 3, 13) end }})'
+    )
+    ok, detail = play.enter_warp(None, "Up", 3)
+    assert not ok and "map never changed" in detail
+    assert world.cleared and world.cleared >= 1, "the injected dialogue policy was never used"
+    pressed = lua.eval(
+        "function() local n = 0 for _, t in ipairs(W.seen_buttons) do"
+        " if t.A then n = n + 1 end end return n end")()
+    assert pressed == 0, "enter_warp pressed A behind the binding's back"

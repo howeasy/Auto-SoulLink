@@ -27,6 +27,8 @@
 --   scene_quiet(cp) -> bool        field script idle AND player control unlocked
 --   obj_pos(i) -> x, y  /  obj_facing(i)     object-event readers (layout is the binding's)
 --   party_count() -> n
+--   party_key(i) -> string         a stable identity for party slot i (PID:OTID and the like)
+--   party_record(i) -> string      slot i's whole record, for "did the survivors move?"
 --   load_state(path) -> ok         savestates
 --   register_frame_end(fn, name) -> id | nil   /  unregister_frame_end(id)
 --   observer(result_path) -> st | nil, err     st.poll(), st.status() (status is REQUIRED)
@@ -104,6 +106,68 @@ function M.bind(H, opts)
     function P.in_battle(cp) return H.in_battle(cp) end
     function P.on_field(cp) return H.on_field(cp) end
 
+    -- ── the keyed party snapshot ────────────────────────────────────────────────────────────
+    -- A PC round trip cannot be judged by a count: deposit A then withdraw B restores the count
+    -- and is not a round trip, and a release followed by withdrawing something else restores it
+    -- too. What settles it is WHICH record left and whether the SAME one came back. The shape
+    -- of that argument is the same in every game; only the reads are per-game, so they are
+    -- injected (H.party_key, H.party_record) and the reasoning lives here.
+
+    --- { n, keys = { key -> record }, order = { key, ... } }. Keyed, not indexed: a deposit
+    --- compacts the party, so slot numbers move and only keys are stable.
+    function P.party_snapshot()
+        local count = need("party_count")()
+        local key = need("party_key")
+        local record = H.party_record
+        local snap = { n = count, keys = {}, order = {} }
+        for i = 0, count - 1 do
+            local k = key(i)
+            snap.keys[k] = record and record(i) or k
+            snap.order[#snap.order + 1] = k
+        end
+        return snap
+    end
+
+    function P.keylist(snap) return table.concat(snap.order, ",") end
+
+    --- The single key `before` had and `after` does not. Returns nil plus a reason when that is
+    --- not exactly one key — "several left" and "none left" are both wrong answers, and both
+    --- look like success to a count.
+    function P.departed_key(before, after)
+        local gone
+        for _, k in ipairs(before.order) do
+            if after.keys[k] == nil then
+                if gone then
+                    return nil, string.format("more than one record left the party (%s and %s)",
+                                              gone, k)
+                end
+                gone = k
+            end
+        end
+        if not gone then
+            return nil, string.format("no record left the party ([%s] -> [%s])",
+                                      P.keylist(before), P.keylist(after))
+        end
+        return gone
+    end
+
+    --- Every record OTHER than `moved_key` must still be there, byte for byte. The travelling
+    --- one is excluded on purpose: a box round trip can be lossy by design (RR stores a 58-byte
+    --- CompressedPokemon), so its KEY is what must survive, not its bytes.
+    function P.survivors_intact(before, after, moved_key)
+        for _, k in ipairs(before.order) do
+            if k ~= moved_key then
+                if after.keys[k] == nil then
+                    return false, string.format("record %s left the party too", k)
+                end
+                if after.keys[k] ~= before.keys[k] then
+                    return false, string.format("record %s is not byte-identical", k)
+                end
+            end
+        end
+        return true
+    end
+
     --- A-only mash. Deliberately not a helper that also pulses Start: on the field that opens
     --- the START menu, which is what the in_battle polarity bug turned into a lane failure.
     function P.mash_a(taps, stop)
@@ -170,8 +234,11 @@ function M.bind(H, opts)
     function P.wait_at(cp, x, y, budget)
         local stable = 0
         for _ = 1, (budget or 120) do
+            -- REST NEEDS READABLE EVIDENCE. H.pos reports (-1,-1) exactly when the SaveBlock
+            -- pointer is unreadable, so a coordinate comparison made without checking the map
+            -- can "arrive" at a tile the game cannot even report (Codex cx-93926f12).
             local px, py = H.pos(cp)
-            if px == x and py == y and not P.moving(cp) then
+            if P.map(cp) ~= nil and px == x and py == y and not P.moving(cp) then
                 stable = stable + 1
                 if stable >= 4 then return true end
             else
@@ -179,8 +246,9 @@ function M.bind(H, opts)
             end
             H.advance()
         end
-        local px, py = H.pos(cp)
-        return px == x and py == y
+        -- Budget exhausted. NOT rest: returning a bare coordinate match here would report
+        -- arrival for a player still sliding, or one whose position was never readable.
+        return false
     end
 
     local function new_budget()
@@ -312,7 +380,17 @@ function M.bind(H, opts)
         -- wait_at: FR run 16 died on a door-exit animation, not on a bad path).
         local sx, sy = H.pos(cp)
         if sx ~= p.from[1] or sy ~= p.from[2] then
-            P.wait_at(cp, p.from[1], p.from[2], 120)
+            -- The answer is USED: a wait that ran out of budget has not seen the player come
+            -- to rest, and walking a pinned path from a position nobody has confirmed is how
+            -- the door-exit bug turned into a wrong-offset walk in the first place.
+            if not P.wait_at(cp, p.from[1], p.from[2], 120) then
+                H.shot("stuck")
+                local nx, ny = H.pos(cp)
+                H.finish(false, string.format(
+                    "%s (%s): the player never came to rest on the path's from (%d,%d) — 120 "
+                    .. "frames after the leg began they read (%d,%d) on map %s",
+                    label, path_name, p.from[1], p.from[2], nx, ny, tostring(P.map(cp))))
+            end
             sx, sy = H.pos(cp)
         end
         if sx ~= p.from[1] or sy ~= p.from[2] then
@@ -361,7 +439,10 @@ function M.bind(H, opts)
             local now = P.map(cp)
             if now ~= nil and now ~= from then break end
             for _ = 1, 16 do H.press({ [dir] = true }) end
-            if same_map(P.map(cp), from) then for _ = 1, 2 do H.tap("A", 3, 13) end end
+            -- A textbox in the doorway is cleared by the BINDING's button, not by A: a
+            -- library that presses A here is a library that only works on games where A is
+            -- the dismiss button (Codex cx-93926f12).
+            if same_map(P.map(cp), from) then P.clear_dialogue(cp) end
         end
         local to = P.map(cp)
         if to == nil then
