@@ -202,6 +202,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 observer overhead, RR companion: `docs/gen3/probes/overhead_rr_{unthrottled,throttled}_2026-09-21.txt` — REAL TIME (speedmode 100): baseline, old-client stand-in, observer, and both callback orders all hold 60.0 fps median with 0.00% wall-time delta (RESULT PASS, coarse 1 s wall clock, approx-framerate corroborates). Unthrottled CPU cost (informational): observer +98% per frame; breakdown: poll-only +8%, hooks-only +118%, a SINGLE per-frame exec hook +99%: the cost is mGBA's callback-enabled path being active at all, not the number of sites. Wire timings/deltas with the real old client remain UNVERIFIED (stand-in only). PLAN §5.7 frame-time budget: met at real time.
 
+- 2026-09-21 P3 reads == PYDEC, RR companion: `docs/gen3/probes/reads_pydec_rr_2026-09-21.txt` — real party record (Treecko, key EBEF11DA:2BDDC8BF, level 6, hp 22) and box 0 dumped from EWRAM: reads.lua and gen3_codec.py agree on every field; planted flip detected. PHYSICAL for the R rows on RR (fixed-order record path + compressed box path). The probe's earlier silent death was a guessed artifact kind (clean vs companion); it now admits the kind from the ROM like the observer does.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
