@@ -1,4 +1,4 @@
-[test_gen1_patch_gate] title=blue rom=8921cd7e
+[test_gen1_patch_gate] title=blue rom=49c11f93
 [test_gen1_patch_gate] booted at frame 844 (party=1, map=40)
   [ok] 'SLNK' beacon is present at $DEE2  — got "SLNK"
   [ok] frame counter advances  — 803 -> 863 over 60 frames

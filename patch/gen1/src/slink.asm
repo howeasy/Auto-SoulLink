@@ -57,7 +57,8 @@ DEF SLINK_CAPS         EQU SLINK_MAILBOX + 8
 DEF SLINK_PANEL_STATE  EQU SLINK_MAILBOX + 9
 DEF SLINK_PANEL_PAGE   EQU SLINK_MAILBOX + 10
 DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 11
-;   +12    SFX hold counter, ROM-private (see SlinkSfxService)
+;   +12    SFX hold flag, ROM-private (see SlinkSfxService)
+;   +13    SFX hold start: the frame counter's low byte when the hold began
 
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
@@ -84,9 +85,16 @@ DEF Bankswitch         EQU $35D6
 ;   * RE-ENTRANCY. PlaySound is a main-thread routine. A VBlank landing inside it re-enters
 ;     the non-reentrant audio engine and corrupts wChannelSoundIDs; our hook IS that VBlank.
 ;
-; The dispatch therefore lives on the MAIN THREAD: the trade work's DelayFrame bridge
-; (trade_service.asm, ROM0 $0001) runs after every VBlank wait in every context and farcalls
-; SlinkForeground, which calls SlinkSfxService below. That routine owns the queue-drain
+; The dispatch therefore lives on the MAIN THREAD, at two sites that both call
+; SlinkSfxService below and are idempotent (the first to run consumes the request):
+;   * the trade work's DelayFrame bridge (trade_service.asm, ROM0 $0001), after every
+;     VBlank wait — the overworld, battles, animations, text;
+;   * a stub on Joypad (SlinkJoypadStub, ROM0 $3FBE), because a menu waiting for input
+;     never reaches DelayFrame: HandleMenuInput_ (home/window.asm .loop2) spins on
+;     JoypadLowSensitivity and hFrameCounter, and the START menu, the PC, the bag and the
+;     battle menu all sit in that loop. MEASURED: a request written with the START menu
+;     open was still pending 300 frames later on the bridge alone.
+; SlinkSfxService owns the queue-drain
 ; timing PlaySound lacks: it HOLDS the request while a fade is running (PlaySound would drop
 ; it), holds while the SFX channels are busy (engine_1.asm .sfxChannelLoop drops a higher id
 ; on a busy channel; the same CHAN5/6/8 test home/delay.asm WaitForSoundToFinish uses,
@@ -106,8 +114,13 @@ DEF Bankswitch         EQU $35D6
 
 ; Mailbox +12: how many frames the current request has been held. ROM-private; a client
 ; never writes it. Reserved in the layout so a later byte cannot collide with it.
-DEF SLINK_SFX_HOLD     EQU SLINK_MAILBOX + 12
-DEF SLINK_SFX_HOLD_MAX EQU 120          ; ~2 s: then play anyway, the engine decides
+DEF SLINK_SFX_HOLD     EQU SLINK_MAILBOX + 12   ; nonzero while a hold is in progress
+DEF SLINK_SFX_HOLD_AT  EQU SLINK_MAILBOX + 13   ; frame counter low byte when it began
+; Measured in FRAMES against the mailbox's own VBlank counter (+5), not in service calls:
+; the overworld runs both dispatch sites every frame and a menu runs one, so a call count
+; would mean different things in different places. GET_ITEM_2, the longest sound used,
+; owns CHAN5 for ~180 frames; a second request behind it must outlast that.
+DEF SLINK_SFX_HOLD_MAX EQU 240          ; ~4 s: then play anyway, the engine decides
 DEF SLINK_SFX_CODES    EQU 3            ; 1 success, 2 failure, 3 boo; others are dropped
 
 ; Audio engine facts, from data/pret/pokered.sym (Red and Blue identical).
@@ -199,6 +212,8 @@ SlinkSfxService::
 	jr nz, .hold
 
 .play
+	xor a
+	ld [SLINK_SFX_HOLD], a      ; whatever was held ends here
 	; Resolve the code for the audio bank loaded NOW, with PlaySound's own bank choice.
 	ld hl, .bank02
 	ld a, [wAudioROMBank]
@@ -219,7 +234,6 @@ SlinkSfxService::
 	; reached mid-fade) does not replay every frame until something else clears it.
 	xor a
 	ld [SLINK_SFX_REQUEST], a
-	ld [SLINK_SFX_HOLD], a
 	ld a, b
 	jp PlaySound
 
@@ -227,8 +241,17 @@ SlinkSfxService::
 	; ponytail: bounded hold — after SLINK_SFX_HOLD_MAX frames play regardless and let the
 	; engine's priority rule decide, rather than carrying a request forever.
 	ld hl, SLINK_SFX_HOLD
-	inc [hl]
 	ld a, [hl]
+	and a
+	jr nz, .holding
+	inc [hl]                    ; a hold begins: stamp the frame
+	ld a, [SLINK_MAILBOX + 5]
+	ld [SLINK_SFX_HOLD_AT], a
+	ret
+.holding
+	ld a, [SLINK_MAILBOX + 5]
+	ld hl, SLINK_SFX_HOLD_AT
+	sub [hl]                    ; frames held, modulo 256
 	cp SLINK_SFX_HOLD_MAX
 	jr nc, .play
 	ret
@@ -246,6 +269,37 @@ SlinkSfxService::
 SlinkSfxServiceEnd::
 ; The panel section is pinned at $4100; this one must stay below it.
 ASSERT SlinkSfxServiceEnd <= $4100
+
+
+; ── The Joypad site ──────────────────────────────────────────────────────────────────────
+; Joypad (home, $019A) is `homecall _Joypad`: bank 3 is mapped, `call _Joypad` ($01A4), then
+; the caller's bank comes back off the stack. The manifest redirects that one `call` here,
+; where _Joypad runs first and the SFX request is serviced after it, on the main thread, in
+; the menu loops the DelayFrame bridge never sees. Joypad's own `pop af` restores a and the
+; flags; _Joypad clobbers b/d/e itself, so callers rely on none of them, but bc/de/hl are
+; saved around our call anyway. Bankswitch restores bank 3 for the epilogue.
+; $3FBE..$3FD4: the free tail of ROM0 past the START-menu trampoline (manifest.py), zeros
+; in both pinned dumps; 66 bytes free, 23 used.
+DEF _Joypad EQU $4000               ; data/pret/pokered.sym 03:4000, mapped by Joypad's prologue
+
+SECTION "SLink Joypad stub", ROM0[$3FBE]
+SlinkJoypadStub::
+	call _Joypad
+	ld a, [SLINK_SFX_REQUEST]
+	and a
+	ret z
+	push bc
+	push de
+	push hl
+	ld b, $3F
+	ld hl, SlinkSfxService
+	call Bankswitch
+	pop hl
+	pop de
+	pop bc
+	ret
+SlinkJoypadStubEnd::
+ASSERT SlinkJoypadStubEnd <= $4000
 
 
 ; ── The SLINK panel ──────────────────────────────────────────────────────────────────────

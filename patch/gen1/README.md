@@ -46,19 +46,27 @@ show: the panel, and a trade that happens with the game's own UI.
 
 The request byte at mailbox `+7` carries a **semantic code** — 1 success, 2 failure,
 3 boo — and the capability byte advertises `SLINK_CAP_SFX` (`$01`; caps read `$03` with the
-panel). The code is consumed on the **main thread**: DelayFrame's tail jumps to the ROM0
-bridge (`$0001`, shared with the trade lease), which farcalls `SlinkForeground` in bank
-`$3F` when a request is pending or a lease is armed, and that calls `SlinkSfxService`
-(`slink.asm`). The service resolves the code against the audio bank loaded *at play time*
+panel). The code is consumed on the **main thread** at two idempotent sites: DelayFrame's
+tail jumps to the ROM0 bridge (`$0001`, shared with the trade lease), which farcalls
+`SlinkForeground` in bank `$3F` when a request is pending or a lease is armed; and
+`Joypad`'s `call _Joypad` (`$01A4`) is pointed at `SlinkJoypadStub` (`$3FBE`, the free ROM0
+tail), because a menu waiting for input spins in `HandleMenuInput_` on `JoypadLowSensitivity`
+and never reaches DelayFrame (measured: a request written with the START menu open sat
+unplayed for 300 frames on the bridge alone). Both call `SlinkSfxService` (`slink.asm`),
+which resolves the code against the audio bank loaded *at play time*
 (`wAudioROMBank` — sound ids are per bank, and a request held across a battle fade spans a
 bank change): success = `GET_ITEM_2 $89` (`LEVEL_UP $86` in the battle bank, which survives
 the low-health alarm), failure = `DENIED $A5` (`TINK $8C` in the battle bank, which has no
 buzzer), boo = `TINK $8C`. It **holds** the request while `wAudioFadeOutControl` is nonzero
 (PlaySound would drop it) and while CHAN5/6/8 are busy (the engine drops a higher id on a
 busy channel — the same test as `WaitForSoundToFinish`, with its low-health-alarm bypass),
-and after 120 held frames (mailbox `+12`, ROM-private) plays regardless. Unknown codes are
-consumed unplayed; `Init` zero-fills WRAM so a fresh cartridge never sees a stray request.
-The gate `lua/tests/test_gen1_patch_gate.lua` asserts the exact id that lands on CHAN5.
+and after 240 held **frames** (counted against the mailbox's own VBlank counter, stamped in
+`+12`/`+13`, ROM-private — GET_ITEM_2 alone owns CHAN5 for ~180) plays regardless. Unknown
+codes are consumed unplayed; `Init` zero-fills WRAM so a fresh cartridge never sees a stray
+request. `lua/tests/test_gen1_patch_gate.lua` asserts the exact id that lands on CHAN5 in
+the quiet overworld; `lua/tests/test_gen1_sfx_gate.lua` is the state matrix (client path,
+busy-channel hold, START menu, lab-door fade with its `$1F -> $02` bank change, a real wild
+battle's `$08` row, and a request held through the battle-end fade that plays in `$02`).
 
 Earlier builds (ABI 2) played SFX from the VBlank hook. That was removed, and ABI 3 shipped
 panel-only until the main-thread path above existed. The two failure modes, both measurable

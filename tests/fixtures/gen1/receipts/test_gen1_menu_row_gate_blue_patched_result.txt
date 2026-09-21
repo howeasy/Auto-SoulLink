@@ -1,4 +1,4 @@
-[test_gen1_menu_row_gate] title=blue rom=8921cd7e
+[test_gen1_menu_row_gate] title=blue rom=49c11f93
 [test_gen1_menu_row_gate] booted at frame 844 (party=1, map=40)
   [ok] the START menu opened  — no EXIT row on screen — every check below is meaningless if the menu is not up
 [menu] row  0 |····················|

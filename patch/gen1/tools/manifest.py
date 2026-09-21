@@ -158,9 +158,25 @@ TRADE_DELAY_BEFORE = bytes.fromhex("20fac9")
 TRADE_DELAY_AFTER = bytes.fromhex("c30100")  # jp SlinkDelayFrameBridge, linked 00:0001
 TRADE_DISPATCH_BEFORE = bytes.fromhex("21c5710601cdd6351809")
 TRADE_DISPATCH_AFTER = bytes.fromhex("21004c063fcdd6351812")
+# The Joypad site (slink.asm "SLink Joypad stub"): Joypad's `call _Joypad` ($01A4, inside
+# `homecall _Joypad` at $019A) is pointed at a 23-byte stub in the free ROM0 tail that runs
+# _Joypad and then the SFX service, so a menu waiting for input still plays the request.
+# Both spans read identically from the two pinned dumps.
+JOYPAD_CALL_SITE = 0x01A4
+JOYPAD_CALL_BEFORE = bytes.fromhex("cd0040")   # call _Joypad (03:4000)
+JOYPAD_STUB_ADDR = 0x3FBE
+JOYPAD_CALL_AFTER = bytes((0xCD, JOYPAD_STUB_ADDR & 0xFF, JOYPAD_STUB_ADDR >> 8))
+JOYPAD_STUB_BEFORE = bytes(23)
+JOYPAD_STUB_AFTER = bytes.fromhex(
+    "cd0040fae9dea7c8c5d5e5063f212f40cdd635e1d1c1c9"
+)
 MENU_PATCHES.extend([
     (0x0001, TRADE_BRIDGE_BEFORE, TRADE_BRIDGE_AFTER,
      "DelayFrame foreground service bridge in reserved RST padding"),
+    (JOYPAD_CALL_SITE, JOYPAD_CALL_BEFORE, JOYPAD_CALL_AFTER,
+     "Joypad's call _Joypad -> SlinkJoypadStub (menu-loop SFX service)"),
+    (JOYPAD_STUB_ADDR, JOYPAD_STUB_BEFORE, JOYPAD_STUB_AFTER,
+     "SlinkJoypadStub in the free ROM0 tail"),
     (0x20B7, TRADE_DELAY_BEFORE, TRADE_DELAY_AFTER,
      "DelayFrame tail -> SlinkDelayFrameBridge"),
     (0x29C3, TRADE_DISPATCH_BEFORE, TRADE_DISPATCH_AFTER,
