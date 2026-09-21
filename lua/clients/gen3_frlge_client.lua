@@ -4495,11 +4495,14 @@ local function on_frame_safe()
     -- Route: the server's generic play_sound keeps its pre-arbiter rule (native PlaySE via the
     -- companion patch when present and out of battle, else the Lua m4a SE1 poke); every
     -- client-side cue (KO, whiteout, game over, encounter, nuzlocke) stays on the Lua poke as
-    -- before. A native sound queued behind a same-frame native op (memorialize/deposit) would be
-    -- pumped next frame BEFORE that op's completion poll and overwrite its ack (mailbox.lua
-    -- post()/pump(), client pump at step 3 vs the pending_* consumers), so it is never widened.
+    -- before. Flushing at frame END means a native sound would queue BEHIND any native op this
+    -- frame posted (memorialize/deposit), and MB.pump() next frame runs before that op's
+    -- completion poll and would overwrite its ack (mailbox.lua post()/pump()). Before the
+    -- arbiter the sound posted first, during dispatch. So the native route is taken only while
+    -- the mailbox has NO outstanding work (MB.busy()); otherwise the sound takes the Lua poke.
     pcall(M.sfx.flush, function(sound, native_ok)
-        if native_ok and native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(sound)
+        if native_ok and native_sfx_enabled and patch_present() and not M.isInBattle()
+           and not MB.busy() then MB.play_se(sound)
         else M.playSE(sound) end
     end)
     -- HUD render is protected separately so a tick error never skips clearGraphics
