@@ -195,9 +195,10 @@ SlinkSfxService::
 	and a
 	jr nz, .hold
 
-	; Hold while an SFX still owns CHAN5/6/8 — the engine drops a higher id on a busy
+		; Hold while an SFX still owns CHAN5/6/8 — the engine drops a higher id on a busy
 	; channel — unless the low-health alarm has CHAN5 for the rest of the battle, in
-	; which case waiting would be forever (home/delay.asm WaitForSoundToFinish).
+	; which case waiting would be forever (home/delay.asm WaitForSoundToFinish); .play
+	; then substitutes the one id that channel accepts.
 	ld a, [wLowHealthAlarm]
 	and $80
 	jr nz, .play
@@ -230,6 +231,21 @@ SlinkSfxService::
 	ld b, 0
 	add hl, bc
 	ld b, [hl]
+	; While the low-health alarm owns CHAN5 it re-marks it with CRY_SFX_END ($86) and the
+	; engine rejects any higher id there (.sfxChannelLoop: play only if new <= current), so
+	; TINK and DENIED would be consumed into silence for the rest of the battle. The one id
+	; the marked channel accepts is $86 itself -- LEVEL_UP in the battle bank, which is how
+	; the vanilla level-up jingle plays through the alarm. Every code plays that then.
+	; Only meaningful in bank $08: the alarm is ticked from the Audio2 branch alone and
+	; battle end zeroes the flag (engine/battle/end_of_battle.asm .resetVariables).
+	ld a, [wAudioROMBank]
+	cp $08
+	jr nz, .resolved
+	ld a, [wLowHealthAlarm]
+	and $80
+	jr z, .resolved
+	ld b, SFX_LEVEL_UP
+.resolved
 	; Consumed before the call, so a request that PlaySound still drops (hold ceiling
 	; reached mid-fade) does not replay every frame until something else clears it.
 	xor a

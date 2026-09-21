@@ -168,6 +168,10 @@ function P.new(profile, io, writes, sanitize)
     --- owns that policy).
     function self:clear() self.pages, self.tiles, self.sfx_queue = nil, nil, {} end
 
+    --- Drop queued sounds only: the run switched native sounds off, so nothing accepted
+    --- under the old setting may still post after it.
+    function self:clear_sfx() self.sfx_queue = {} end
+
     --- Validate, sanitize and PRE-RENDER every page. Nothing is computed inside the armed
     --- window, and a rejected payload leaves the previous one untouched rather than half-held.
     function self:hold(rows)

@@ -1118,6 +1118,23 @@ def test_a_request_the_rom_is_still_holding_is_never_overwritten(world):
     world.assert_all_conform()
 
 
+def test_a_queued_request_does_not_post_after_native_sounds_is_switched_off(world):
+    """Codex review cx-5f7b86be: the option was checked only on admission, so a request queued
+    behind a held one would still post after `config.native_sounds=false`."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.reply({"cmd": "play_sound", "sound": 25}, {"cmd": "play_sound", "sound": 26})
+    world.step()
+    assert _sfx_writes(world) == [1]                       # the second is queued behind the held one
+    world.reply({"cmd": "config", "native_sounds": False})
+    world.step()
+    world.bus[SFX_REQUEST] = 0                             # the ROM played the first
+    world.step(3)
+    assert _sfx_writes(world) == [1], "the queued request was dropped with the option"
+    world.assert_all_conform()
+
+
 # ── the last client card: falsifying tests, written before the fixes ─────────────────────
 # Each case below is RED against HEAD and names, in its own assertions, exactly what the
 # implementer has to produce. Engine facts are pret pokered 405b624 / pokeyellow 0a08515.

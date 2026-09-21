@@ -254,6 +254,7 @@ return {
     channel_sound_ids_addr = 0xC026, -- SAME: pret ram/wram.asm wChannelSoundIDs (data/purergb/pokered.sym wChannelSoundIDs agrees)
     audio_rom_bank_addr    = 0xC0EF, -- SAME: pret ram/wram.asm wAudioROMBank ($02 overworld / $08 battle / $1F Audio3: which SFX header table the ids index; SlinkSfxService reads it)
     audio_fade_out_control_addr = 0xCFC7, -- SAME: pret ram/wram.asm wAudioFadeOutControl (nonzero while a music fade runs; SlinkSfxService holds the request until it clears)
+    low_health_alarm_flag_addr = 0xD083, -- DELTA: pret ram/wram.asm wLowHealthAlarm, bit 7 = the alarm owns CHAN5 (home/delay.asm WaitForSoundToFinish tests it; SlinkSfxService too)
     speed_multiplier       = 1, -- SAME: the vanilla companion patch runs at native DMG/CGB single speed
     panel_stage_timeout    = 90, -- SAME: patch/gen1/src/slink.asm SLINK_STAGE_TIMEOUT (patch/gen1/purergb/README.md "stage 90" is the same ABI)
     panel_deadline         = 60, -- SAME: lua/gen1/panel.lua DEADLINE (measured from the transition the client observed, tighter than the patch's own poll)

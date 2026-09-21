@@ -16,6 +16,9 @@
   battle fixture (Route 1 grass):
     E. a real wild battle (bank $08): success is LEVEL_UP $86, failure is TINK $8C — the
        battle-bank row, not the overworld one;
+    G. the low-health alarm (Growl until it arms): it re-marks CHAN5 with $86 every tick and
+       the engine rejects a higher id there, so every code plays LEVEL_UP through it — seen
+       on CHAN6, which the alarm never touches (Codex review cx-5f7b86be, finding 1);
     F. RUN, then a request written during the battle-end fade is held across the bank change
        and plays as the $02 row's GET_ITEM_2 $89 — the id it would NOT have been in $08.
 
@@ -36,6 +39,7 @@ local CHANNEL_SOUND_IDS = t.facts.COMPANION.channel_sound_ids_addr
 local CHAN5 = CHANNEL_SOUND_IDS + 4
 local AUDIO_ROM_BANK = t.facts.COMPANION.audio_rom_bank_addr
 local FADE = t.facts.COMPANION.audio_fade_out_control_addr
+local ALARM = t.facts.COMPANION.low_health_alarm_flag_addr   -- bit 7: the alarm owns CHAN5
 local CADENCE = t.facts.TUNING.input_cadence
 local MAP = t.facts.MAP
 local CAP_SFX = 0x01
@@ -250,8 +254,85 @@ elseif map == MAP.ROUTE_1 then
             fmt("played_at=%s CHAN5=$%02X channels %s", tostring(at2), id2 or 0, channels()))
     t.check("E: quiet again", wait_quiet(), channels())
 
-    -- ── F. RUN, then the battle-end fade: held in $08, played in $02 ─────────────────
+    -- ── G. the low-health alarm ──────────────────────────────────────────────────────
+    -- Fight with Growl (slot 2, never damages the foe) until wLowHealthAlarm arms; a stacked
+    -- Growl also shrinks the foe's hits, which is what keeps the starter alive down there.
     local menu_addr = Center.menu_symbols(t.ROOT, t.title)
+    local function fight_row() return row(281, 18):find("FIGHT", 1, true) ~= nil end
+    local function growl_row()
+        for r = 12, 17 do if row(r * 20, 20):find("GROWL", 1, true) then return true end end
+        return false
+    end
+    local armed, turns = false, 0
+    for f = 1, 14000 do
+        if at("wIsInBattle") == 0 then break end
+        if read(ALARM) & 0x80 ~= 0 then armed = true break end
+        local buttons = nil
+        if t.frame % CADENCE < 2 then
+            if at("wTextBoxID") == t.facts.MENU.BATTLE.template and fight_row() then
+                local mx = read(menu_addr.wTopMenuItemX)
+                if mx ~= t.facts.MENU.BATTLE.left_x then buttons = { Left = true }
+                elseif at("wCurrentMenuItem") ~= 0 then buttons = { Up = true }
+                else buttons = { A = true }; turns = turns + 1 end
+            elseif growl_row() and not fight_row() then
+                -- the move menu: wCurrentMenuItem is 1-based there (MoveSelectionMenu stores
+                -- wPlayerMoveListIndex + 1), and GROWL is the starter's slot 2
+                local i = at("wCurrentMenuItem")
+                if i < 2 then buttons = { Down = true }
+                elseif i == 2 then buttons = { A = true }
+                else buttons = { Up = true } end
+            else
+                buttons = { A = true }
+            end
+        end
+        step(buttons)
+    end
+    local hp = read(ram.wBattleMonHP) * 256 + read(ram.wBattleMonHP + 1)
+    t.check("G: the low-health alarm armed (Growl only, starter alive)", armed and hp > 0 and at("wIsInBattle") == 1,
+            fmt("alarm=$%02X hp=%d turns=%d in_battle=%d", read(ALARM), hp, turns, at("wIsInBattle")))
+    if armed then
+        -- Vanilla's flag stays set for the rest of the battle and CHAN5 stays marked; pureRGB
+        -- plays a BOUNDED run of tone pairs (wLowHealthTonePairs counts down), clears bit 7
+        -- when they end and releases CHAN5. Both are correct engines, so each request is
+        -- judged by the flag AT THE MOMENT IT IS WRITTEN: alarm on -> LEVEL_UP through it
+        -- (CHAN6 = $86, the channel the alarm never touches); alarm off -> the plain $08 row.
+        local function alarm_on() return read(ALARM) & 0x80 ~= 0 end
+        local function settle(limit)
+            for _ = 1, limit or 300 do
+                local free67 = read(CHANNEL_SOUND_IDS + 5) == 0 and read(CHANNEL_SOUND_IDS + 6) == 0
+                local free5 = alarm_on() or read(CHAN5) == 0
+                if free67 and free5 and read(SFX_REQUEST) == 0 and read(FADE) == 0 then return true end
+                step(nil)
+            end
+            return false
+        end
+        for _, code in ipairs({ 2, 3, 1 }) do
+            t.check(fmt("G: settled before code %d", code), settle(), channels())
+            local on = alarm_on()
+            write(SFX_REQUEST, code)
+            local consumed, ch5, ch6 = nil, nil, nil
+            for g = 1, 10 do
+                step(nil)
+                if read(SFX_REQUEST) == 0 then
+                    consumed, ch5, ch6 = g, read(CHAN5), read(CHANNEL_SOUND_IDS + 5) break
+                end
+            end
+            if on then
+                t.check(fmt("G: code %d with the alarm on plays LEVEL_UP through it (CHAN6 $86, CHAN5 $86)", code),
+                        consumed ~= nil and ch6 == 0x86 and ch5 == 0x86,
+                        fmt("consumed=%s CHAN5=$%02X CHAN6=$%02X channels %s alarm=$%02X",
+                            tostring(consumed), ch5 or 0, ch6 or 0, channels(), read(ALARM)))
+            else
+                local want = TABLE[0x08][code]
+                t.check(fmt("G: code %d with the alarm off (bounded alarm) plays the $08 row id $%02X", code, want),
+                        consumed ~= nil and ch5 == want,
+                        fmt("consumed=%s CHAN5=$%02X channels %s alarm=$%02X",
+                            tostring(consumed), ch5 or 0, channels(), read(ALARM)))
+            end
+        end
+    end
+
+    -- ── F. RUN, then the battle-end fade: held in $08, played in $02 ─────────────────
     local attempts = 0
     local function run_buttons()
         if at("wIsInBattle") == 0 then return nil end

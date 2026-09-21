@@ -1,4 +1,4 @@
-[test_gen1_patch_gate] title=purered rom=b53e8e9e
+[test_gen1_patch_gate] title=purered rom=feb19385
 [test_gen1_patch_gate] booted at frame 703 (party=1, map=40)
   [ok] 'SLNK' beacon is present at $DEE2  — got "SLNK"
   [ok] frame counter advances  — 664 -> 724 over 60 frames

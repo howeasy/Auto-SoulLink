@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "fc30e6032311c97ef8087297e64f88818d8a98c4d8b3ba91811b1a4bf08528b8"
+   "sha256": "e486bf33ed84318ffff1d3de07f14418f2cea069200afdab2a37aff4714ef0f1"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "80ab8d679ccb02d9f3082f5810f9dd59686cb957f63794bc06a02d5e396e2636"
+   "sha256": "ea5f69a67f120fbfebc8981bc39c7f4111e9effa7ed740615ad1a0329fc4af8e"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "ccb65e085329cb41fa883ef1870f2da47f8ea8d4522cc47c268bef62371b8010"
+   "sha256": "06012472cc7d337285707334791f23a798f567cf6166eccc183946be26bef6a9"
   }
  },
  "titles": {
@@ -600,7 +600,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "adb023dce433078161690b9f55a4ea7588b0863a",
+   "rom_sha1": "35cc27241b1eb3b2414dea87be2bc59ddb5edc64",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -629,7 +629,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21424DC738",
+      "expected_hex": "545D063F21524DC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -653,7 +653,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "213245063FC7C9",
+      "expected_hex": "214245063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -669,11 +669,11 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "213245063FC7C9",
+    "dispatch_hex": "214245063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
-     "addr": 16777,
+     "addr": 16793,
      "bank": 63
     }
    },
@@ -1260,7 +1260,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "f1124934faa55dd05e42b4ece4feb26c244448b2",
+   "rom_sha1": "09230f6eec7c9bb9952655be7a221728959e5ea4",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1289,7 +1289,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21424DC738",
+      "expected_hex": "545D063F21524DC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -1313,7 +1313,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "213245063FC7C9",
+      "expected_hex": "214245063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -1329,11 +1329,11 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "213245063FC7C9",
+    "dispatch_hex": "214245063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
-     "addr": 16777,
+     "addr": 16793,
      "bank": 63
     }
    },
@@ -1920,7 +1920,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "b53e8e9e7ea04c189dbe73c6064c995a0c245d2b",
+   "rom_sha1": "feb19385ced0f6dd6fac7cf7348f8914af7553c4",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1949,7 +1949,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21424DC738",
+      "expected_hex": "545D063F21524DC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -1973,7 +1973,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "213245063FC7C9",
+      "expected_hex": "214245063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -1989,11 +1989,11 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "213245063FC7C9",
+    "dispatch_hex": "214245063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
-     "addr": 16777,
+     "addr": 16793,
      "bank": 63
     }
    },

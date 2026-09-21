@@ -1,4 +1,4 @@
-[test_gen1_menu_row_gate] title=purered rom=b53e8e9e
+[test_gen1_menu_row_gate] title=purered rom=feb19385
 [test_gen1_menu_row_gate] booted at frame 703 (party=1, map=40)
   [ok] the START menu opened  — no EXIT row on screen — every check below is meaningless if the menu is not up
 [menu] row  0 |····················|

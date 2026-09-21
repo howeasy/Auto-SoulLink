@@ -165,6 +165,18 @@ SlinkSfxService::
 	ld b, 0
 	add hl, bc
 	ld b, [hl]
+	; While the low-health alarm owns CHAN5 it re-marks it with CRY_SFX_END and the engine
+	; rejects any higher id there, so TINK/DENIED would be consumed into silence; the one id
+	; that channel accepts is CRY_SFX_END itself = SFX_LEVEL_UP in the battle bank (the way
+	; the vanilla level-up jingle plays through the alarm). Battle end zeroes the flag.
+	ld a, [wAudioROMBank]
+	cp BANK(Audio2_PlaySound)
+	jr nz, .resolved
+	ld a, [wLowHealthTonePairs]
+	bit 7, a
+	jr z, .resolved
+	ld b, SFX_LEVEL_UP
+.resolved
 	; Consumed before the call, so a request PlaySound still drops (hold ceiling reached
 	; mid-fade) does not replay every frame until something else clears it.
 	xor a

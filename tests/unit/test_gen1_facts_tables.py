@@ -69,6 +69,7 @@ EXPECTED_DELTA = frozenset({
     "LAB_LOSS.growl_min_enemy_attack_mod",
     "COMPANION.playtime_frames_addr",
     "COMPANION.speed_multiplier",
+    "COMPANION.low_health_alarm_flag_addr",
     "BLACKOUT.after_center.map", "BLACKOUT.after_center.x", "BLACKOUT.after_center.y",
     "MENU.BAG.watched",
     "BANKS.apex_commit",
@@ -190,6 +191,7 @@ def test_only_the_expected_keys_differ(lua):
     ("CATCH.hunt_ball_max", 4, 5),
     ("MENU.START.max_minus_save", 3, 2),
     ("COMPANION.playtime_frames_addr", 0xDA44, 0xDA4D),
+    ("COMPANION.low_health_alarm_flag_addr", 0xD083, 0xCD69),
     ("COMPANION.speed_multiplier", 1, 2),
 ])
 def test_the_foundational_deltas(lua, key, vanilla, pure):

@@ -507,6 +507,8 @@ function Client.new(p)
             for _, k in ipairs(cmd.keys or {}) do self.pending_keys[k] = true end
         elseif c == "config" then
             self.config = cmd
+            -- a queued notification accepted under the old setting must not post after it
+            if cmd.native_sounds ~= true and self.panel then self.panel:clear_sfx() end
         elseif c == "game_over" then
             hud.set_game_over()
             self.game_over = true

@@ -59,8 +59,10 @@ bank change): success = `GET_ITEM_2 $89` (`LEVEL_UP $86` in the battle bank, whi
 the low-health alarm), failure = `DENIED $A5` (`TINK $8C` in the battle bank, which has no
 buzzer), boo = `TINK $8C`. It **holds** the request while `wAudioFadeOutControl` is nonzero
 (PlaySound would drop it) and while CHAN5/6/8 are busy (the engine drops a higher id on a
-busy channel — the same test as `WaitForSoundToFinish`, with its low-health-alarm bypass),
-and after 240 held **frames** (counted against the mailbox's own VBlank counter, stamped in
+busy channel — the same test as `WaitForSoundToFinish`, with its low-health-alarm bypass;
+while the alarm owns CHAN5 it re-marks it `$86` every tick and the engine rejects any higher
+id there, so every code plays LEVEL_UP (`$86`, the one id that channel accepts) until the
+alarm ends — the way the vanilla level-up jingle survives it), and after 240 held **frames** (counted against the mailbox's own VBlank counter, stamped in
 `+12`/`+13`, ROM-private — GET_ITEM_2 alone owns CHAN5 for ~180) plays regardless. Unknown
 codes are consumed unplayed; `Init` zero-fills WRAM so a fresh cartridge never sees a stray
 request. `lua/tests/test_gen1_patch_gate.lua` asserts the exact id that lands on CHAN5 in
