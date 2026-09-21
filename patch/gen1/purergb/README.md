@@ -10,8 +10,8 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
 
 | piece | where |
 |---|---|
-| sources (bank $3F + one ROM0 stub + the 12-byte WRAMX mailbox) | `overlay/` (copied to `engine/slink/` in the checkout) |
-| hook edits to the pinned checkout (14, verify-then-replace) | `tools/apply_purergb_overlay.py` |
+| sources (bank $3F + three ROM0 stubs + the 14-byte WRAMX mailbox) | `overlay/` (copied to `engine/slink/` in the checkout) |
+| hook edits to the pinned checkout (16, verify-then-replace) | `tools/apply_purergb_overlay.py` |
 | build + publish (fresh copy of `.cache/purergb` → apply → `make` → UPS/sym/map/provenance) | `tools/build_purergb_overlay.py` |
 | UPS artifacts (CRC-bound to the locked pure ROM) | `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
 | symbols, map, provenance | `data/purergb/*_slink.{sym,map}`, `data/purergb/overlay_provenance.json` |
@@ -25,6 +25,14 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   WRAMX bank-1 tail after "Current Box Data") and calls `TrackPlayTime` once. It saves,
   forces to 1 and restores `rWBK`: pureRGB's palette buffer loop runs with WRAM bank 2
   selected and interrupts enabled.
+* **Native sound** (`SlinkSfxService`, bank $3F): the same main-thread dispatch as the
+  vanilla patch (`patch/gen1/README.md`), reached from two ROM0 stubs in `slink_home.asm`:
+  DelayFrame's tail `ret` becomes `jp SlinkDelayFrameTail`, and `Joypad` gains a
+  `call SlinkJoypadSite` after its `homecall _Joypad` (menu loops never reach DelayFrame).
+  Every symbol is the linker's: `SFX_GET_ITEM_2`/`SFX_DENIED`/`SFX_TINK`/`SFX_LEVEL_UP`,
+  `BANK(Audio1_PlaySound)`/`BANK(Audio2_PlaySound)`, and the alarm predicate is
+  `wLowHealthTonePairs` bit 7 -- the WRAM0 byte pureRGB's own `WaitForSoundToFinish` tests
+  (`wLowHealthAlarm` is WRAMX here). `rWBK` is forced to 1 around the service.
 * **Foreground trade service** (`SlinkForeground` → `SlinkTradeService`): `farcall
   SlinkForeground` right after `rst _DelayFrame` at `OverworldLoop`, keeping the vanilla
   predicate (lease byte +10 == 1). The vanilla DelayFrame RST bridge cannot exist here.
@@ -51,8 +59,9 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
 
 ## ABI (unchanged from the vanilla patch, B5)
 
-Mailbox: +0..3 `SLNK`, +4 ABI 3, +5..6 frame counter, +7 SFX request (drained, never played),
-+8 caps (`$02` panel), +9 panel state, +10 page, +11 page count. Lease: `SLT1` v1 over the
+Mailbox: +0..3 `SLNK`, +4 ABI 3, +5..6 frame counter, +7 SFX request (a semantic code:
+1 success, 2 failure, 3 boo; played on the main thread and zeroed), +8 caps (`$03` panel + SFX),
++9 panel state, +10 page, +11 page count, +12/+13 ROM-private SFX hold flag and frame stamp. Lease: `SLT1` v1 over the
 first 16 bytes of `wSerialPartyMonsPatchList`, preimage at `wEnemyMons+44`, prompt name at
 `wEnemyMons+60`, the same states/generations/results and the same timings (QUERY 30, OFFER 180,
 stage 90, settle 20, apply 100 frames). What moved is carried by the profile `trade` block:

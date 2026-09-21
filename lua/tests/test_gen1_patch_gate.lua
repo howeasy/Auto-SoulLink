@@ -12,8 +12,10 @@
     3. it keeps advancing WITH A MENU OPEN — VBlank is an interrupt, so a hook there must
        fire even while the main loop is parked;
     4. the displaced call still happens — the patch must not have eaten TrackPlayTime;
-    5. the mailbox advertises what this build can do, and does NOT claim SFX;
-    6. the game is otherwise unharmed — the player can still walk.
+    5. the mailbox advertises what this build can do: panel AND SFX;
+    6. the game is otherwise unharmed — the player can still walk;
+    7. a semantic SFX request written to the mailbox becomes the right sound for the audio
+       bank that is loaded, on the main thread, and the byte is consumed by the play.
 
   TWO DELIBERATE CHANGES FROM THE PRE-REWRITE VERSION:
 
@@ -27,10 +29,11 @@
     proven instead by the A3 scenario's PANEL_COUNTER_IN_BATTLE marker, taken inside a real
     wild battle on a real fixture.
 
-  The SFX request byte below IS still written, and that is not the same thing. $DEE9 is the
+  The SFX request byte below IS written, and that is not the same thing. $DEE9 is the
   CLIENT'S OWN mailbox slot — the ABI under test, allocated by this patch, read by nobody
-  else. Writing it is exactly what a client does; the assertion is that the hook drains it
-  and that draining it reaches no audio code. Nothing in the game's own state is touched.
+  else. Writing it is exactly what a client does; the assertion is that the main-thread
+  service turns it into the expected sound id on CHAN5 and clears it. Nothing in the game's
+  own state is touched — the sound engine is asked through its own entry point, PlaySound.
 
   Run against the PATCHED build (patch/gen1/build/slink_red.gb), which the runner selects
   with --rom red_patched.
@@ -115,27 +118,33 @@ if not moved(x0, y0) then t.hold("Left", 30, function() return moved(x0, y0) end
 t.check("the player can still walk on the patched ROM", moved(x0, y0),
         fmt("(%d,%d) -> (%d,%d)", x0, y0, read(X), read(Y)))
 
--- 6. The mailbox advertises what this build can actually do — and does NOT claim SFX.
+-- 6. The mailbox advertises what this build can actually do — panel AND SFX.
 --
--- This build ships PANEL ONLY. The VBlank PlaySound path that ABI 2 added is not safe, and
--- the two reasons are both measurable in the shipped ROM (see the long note at the top of
--- patch/gen1/src/slink.asm): PlaySound returns without playing whenever a music fade is
--- running, and its `.noFadeOut` arm has a window where both guard bytes are clear, so a
--- VBlank landing there re-enters a non-reentrant audio routine. Our hook IS that VBlank.
---
--- So the assertions below are the inverse of what they used to be. The old ones fired from a
--- quiescent overworld and were structurally blind to both failures.
-local CHANNEL_SOUND_IDS = t.facts.COMPANION.channel_sound_ids_addr  -- wChannelSoundIDs; audio RAM the client never reads (SAME on both foundations, but sourced from the facts table like PLAYTIME_FRAMES rather than a second literal)
-local SFX_TINK = 0x8C               -- resolves identically in all three audio banks
+-- ABI 3 shipped panel-only: the ABI-2 build played sound from the VBlank hook, which drops
+-- requests during fades and re-enters PlaySound (patch/gen1/src/slink.asm has the note).
+-- The dispatch now runs on the MAIN THREAD, from the DelayFrame bridge, and holds the
+-- request while a fade runs or an SFX channel is busy. The request byte carries a
+-- SEMANTIC code (1 success, 2 failure, 3 boo) that the ROM resolves against the audio bank
+-- loaded at play time, because sound ids are per bank. So every assertion below names the
+-- exact id it expects on CHAN5 for the bank it observed — a known positive, not "something
+-- started playing".
+local CHANNEL_SOUND_IDS = t.facts.COMPANION.channel_sound_ids_addr  -- wChannelSoundIDs; audio RAM the client never reads (SAME on both foundations, sourced from the facts table like PLAYTIME_FRAMES)
+local AUDIO_ROM_BANK    = t.facts.COMPANION.audio_rom_bank_addr     -- wAudioROMBank: which header table the ids index
+local CHAN5 = CHANNEL_SOUND_IDS + 4
 local CAP_SFX, CAP_PANEL = 0x01, 0x02
+-- slink.asm SlinkSfxService table, per audio bank: (header address - SFX_Headers_N) / 3 from the .sym.
+local TABLE = {
+    [0x02] = { 0x89, 0xA5, 0x8C },   -- GET_ITEM_2, DENIED, TINK
+    [0x08] = { 0x86, 0x8C, 0x8C },   -- LEVEL_UP, TINK, TINK (no buzzer in the battle bank)
+    [0x1F] = { 0x89, 0xA5, 0x8C },   -- GET_ITEM_2, DENIED, TINK
+}
 
 t.check("ABI version byte is 3", read(ABI_BYTE) == 3, fmt("got %d", read(ABI_BYTE)))
 
--- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER. This build dropping SFX
--- while keeping ABI 3 is exactly the case that motivated the bits: a client reasoning
--- "ABI 3 therefore both" would drive an audio path that is not there.
-t.check("the capability byte does NOT advertise SFX", read(CAPS) & CAP_SFX == 0,
-        fmt("caps=0x%02X — this build must not claim an unsafe audio path", read(CAPS)))
+-- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER: ABI 3 once shipped without
+-- SFX and now ships with it, and a client must read the bit, not the number.
+t.check("the capability byte advertises SFX", read(CAPS) & CAP_SFX ~= 0,
+        fmt("caps=0x%02X — the main-thread sound path is present and must be claimed", read(CAPS)))
 t.check("the capability byte advertises the panel", read(CAPS) & CAP_PANEL ~= 0,
         fmt("caps=0x%02X", read(CAPS)))
 
@@ -144,6 +153,9 @@ t.check("the capability byte advertises the panel", read(CAPS) & CAP_PANEL ~= 0,
 t.check("the panel module sees the cartridge the gate does",
         t.parts.panel:present() == true and t.parts.panel:abi() == read(ABI_BYTE),
         fmt("present=%s abi=%d", tostring(t.parts.panel:present()), t.parts.panel:abi()))
+t.check("the panel module sees the SFX capability the gate does",
+        t.parts.panel.sfx_present ~= nil and t.parts.panel:sfx_present() == true,
+        "panel.lua must read SLINK_CAP_SFX from the same caps byte")
 
 -- The panel handshake byte must be CLOSED while the player is walking around. If it were
 -- not, a client would paint over the map.
@@ -154,26 +166,55 @@ local function sfx_channels()
     return fmt("%d/%d/%d/%d", read(CHANNEL_SOUND_IDS + 4), read(CHANNEL_SOUND_IDS + 5),
                read(CHANNEL_SOUND_IDS + 6), read(CHANNEL_SOUND_IDS + 7))
 end
-
--- The request byte is still DRAINED, so a client that writes one leaves no stale state.
-write(SFX_REQUEST, SFX_TINK)
-local consumed = false
-for _ = 1, 10 do
-    t.step(nil)
-    if read(SFX_REQUEST) == 0 then consumed = true break end
+-- Let whatever is playing (the CONTINUE menu's own press sound was still fading in the lab
+-- fixture) finish, so the service is not merely HOLDING when a case starts.
+local function wait_quiet(limit)
+    for _ = 1, limit or 300 do
+        if read(CHAN5) == 0 and read(CHANNEL_SOUND_IDS + 5) == 0 and read(CHANNEL_SOUND_IDS + 7) == 0 then return true end
+        t.step(nil)
+    end
+    return false
 end
-t.check("the SFX request byte is still consumed by the hook", consumed,
-        fmt("still %#04x after 10 frames", read(SFX_REQUEST)))
+-- Write a request, then watch up to `limit` frames for the byte to clear; report the first
+-- CHAN5 id seen after it cleared (the id the engine accepted), or nil.
+local function request(code, limit)
+    write(SFX_REQUEST, code)
+    local consumed_at, seen = nil, nil
+    for f = 1, limit or 10 do
+        t.step(nil)
+        if read(SFX_REQUEST) == 0 then
+            consumed_at = f
+            seen = read(CHAN5)
+            break
+        end
+    end
+    return consumed_at, seen
+end
 
--- ...and it must NOT reach the audio engine. This is the assertion that would have failed
--- against the ABI-2 build, and it is the one that matters: no reachable PlaySound means no
--- re-entrancy window to land in.
--- "Never starts" = no SFX channel that was silent becomes busy. A channel that was already
--- playing (the CONTINUE menu's own press sound, id 180, was still fading in the lab fixture)
--- is allowed to finish; string equality read that finishing as the hook playing something.
-local before = sfx_channels()
+-- The fixture's bank is a fact of where it stands (Oak's Lab is Audio3, $1F; Pallet Town is
+-- $02); the receipt names the row it proved rather than assuming one.
+local bank = read(AUDIO_ROM_BANK)
+local row = TABLE[bank]
+t.check("the audio bank is one the table has a row for", row ~= nil,
+        fmt("wAudioROMBank=$%02X (expected $02, $08 or $1F)", bank))
+row = row or TABLE[0x1F]
+
+t.check("the SFX channels went quiet before the requests", wait_quiet(),
+        fmt("CHAN5-8 still %s after 300 frames", sfx_channels()))
+
+-- (a) success: consumed within a few frames AND the row's success id is what CHAN5 plays.
+local at1, id1 = request(1)
+t.check("code 1 (success) is consumed by the main-thread service", at1 ~= nil,
+        fmt("still %#04x after 10 frames", read(SFX_REQUEST)))
+t.check(fmt("code 1 plays the bank $%02X success id $%02X on CHAN5", bank, row[1]), id1 == row[1],
+        fmt("CHAN5 read $%02X (channels %s) — the request reached PlaySound with the wrong id, or none",
+            id1 or 0, sfx_channels()))
+t.check("the SFX channels went quiet after code 1", wait_quiet(), sfx_channels())
+
+-- (b) an unknown code is consumed and starts nothing.
 local before_ids = { read(CHANNEL_SOUND_IDS + 4), read(CHANNEL_SOUND_IDS + 5),
                      read(CHANNEL_SOUND_IDS + 6), read(CHANNEL_SOUND_IDS + 7) }
+local at9 = request(9)
 local started = false
 for _ = 1, 30 do
     t.step(nil)
@@ -181,11 +222,18 @@ for _ = 1, 30 do
         if before_ids[i + 1] == 0 and read(CHANNEL_SOUND_IDS + 4 + i) ~= 0 then started = true end
     end
 end
-t.check("a drained SFX request never starts a sound", not started,
-        fmt("CHAN5-8 %s -> %s — the hook still reaches PlaySound", before, sfx_channels()))
+t.check("an unknown code is consumed without reaching the audio engine", at9 ~= nil and not started,
+        fmt("consumed=%s channels %s", tostring(at9 ~= nil), sfx_channels()))
 
--- 7. And the game still runs normally afterwards — a botched `call` from inside an interrupt
---    would corrupt the bank or the stack and the walk check below would hang or crash.
+-- (c) failure: the row's failure id (DENIED outside the battle bank).
+local at2, id2 = request(2)
+t.check(fmt("code 2 plays the bank $%02X failure id $%02X on CHAN5", bank, row[2]),
+        at2 ~= nil and id2 == row[2],
+        fmt("consumed=%s CHAN5 read $%02X (channels %s)", tostring(at2 ~= nil), id2 or 0, sfx_channels()))
+t.check("the SFX channels went quiet after code 2", wait_quiet(), sfx_channels())
+
+-- 7. And the game still runs normally afterwards — a botched farcall from the bridge would
+--    corrupt the bank or the stack and the walk check below would hang or crash.
 local x2, y2 = read(X), read(Y)
 t.hold("Left", 30, function() return moved(x2, y2) end)
 if not moved(x2, y2) then t.hold("Right", 30, function() return moved(x2, y2) end) end

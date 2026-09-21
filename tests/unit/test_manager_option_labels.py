@@ -28,7 +28,7 @@ def test_the_no_patch_generations_are_allowed_and_say_so(key):
     assert "no patch" in s["why"].lower(), s
 
 
-@pytest.mark.parametrize("key", ["overworld_presence", "native_messages", "native_sounds",
+@pytest.mark.parametrize("key", ["overworld_presence", "native_messages",
                                  "battle_calc", "pc_trade_npc"])
 def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
@@ -37,18 +37,23 @@ def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     assert option_support(key, RR)["ok"]
 
 
+def test_native_sounds_is_a_gen1_feature_now():
+    """The Red/Blue companion patch and the pureRGB overlay both play notifications on the
+    main thread (slink.asm SlinkSfxService); Yellow has no patch at all."""
+    assert option_support("native_sounds", GEN1)["ok"]
+    assert option_support("native_sounds", RR)["ok"]
+    assert option_support("native_sounds", ["purered", "pureblue"])["ok"]
+    # Yellow shares the family and has no patch: the toggle is allowed and the cartridge
+    # decides at hello (`sfx` capability), exactly as the panel does. The label says so.
+    assert "unpatched" in dict(OPTIONS)["native_sounds"][1].lower()
+
+
 def test_the_gender_clause_cannot_be_chosen_on_gen1():
     """Gen 1 has no gender at all, so the clause is not merely unlikely to fire — it
     cannot. Leaving it silently inert is how a player concludes the rules are broken."""
     s = option_support("gender_lock", GEN1)
     assert not s["ok"] and "never fire" in s["why"], s
     assert option_support("gender_lock", RR)["ok"]
-
-
-def test_the_sound_option_explains_why_gen1_has_none():
-    """Not just 'unsupported': the reason is a measured property of the audio engine, and
-    someone will ask."""
-    assert "re-enters a non-reentrant" in option_support("native_sounds", GEN1)["why"]
 
 
 def test_a_mixed_pair_takes_the_stricter_answer():

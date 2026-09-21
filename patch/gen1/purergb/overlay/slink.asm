@@ -1,6 +1,6 @@
-; slink.asm - mailbox, VBlank hook, overworld foreground hook and the SLINK panel.
-; Ported from patch/gen1/src/slink.asm (vanilla Red/Blue); see that file for the design notes
-; on the hook site, the silent SFX request and the panel's screen-ownership sequence.
+; slink.asm - mailbox, VBlank hook, overworld foreground hook, the SFX service and the SLINK
+; panel. Ported from patch/gen1/src/slink.asm (vanilla Red/Blue); see that file for the design
+; notes on the hook site, the main-thread SFX dispatch and the panel's screen-ownership sequence.
 
 DEF SLINK_ABI_VERSION  EQU 3
 DEF SLINK_CAP_SFX      EQU 1 << 0
@@ -14,7 +14,7 @@ DEF SLINK_PANEL_STAGED EQU 2
 ; How long to wait for the client to paint a screen before showing the fallback (~1.5 s).
 DEF SLINK_STAGE_TIMEOUT EQU 90
 
-; The 12-byte ABI-3 mailbox, linker-placed in the WRAMX bank-1 tail after "Current Box Data"
+; The 14-byte ABI-3 mailbox, linker-placed in the WRAMX bank-1 tail after "Current Box Data"
 ; ($DEEA; 22 bytes are free before the stack at $DF00). WRAM0 and HRAM have zero free bytes.
 SECTION "SLink Mailbox", WRAMX
 
@@ -22,12 +22,20 @@ wSlinkMailbox::
 wSlinkBeacon::       ds 4 ; +0..3  'SLNK', rewritten every VBlank
 wSlinkAbi::          db   ; +4     ABI version
 wSlinkFrameCounter:: dw   ; +5..6  16-bit frame counter
-wSlinkSfxRequest::   db   ; +7     SFX request: drained to 0, never played (see the vanilla notes)
+wSlinkSfxRequest::   db   ; +7     SFX request: a semantic code (1 success, 2 failure, 3 boo),
+                          ;        played by SlinkSfxService on the main thread and zeroed
 wSlinkCaps::         db   ; +8     capability bits
 wSlinkPanelState::   db   ; +9     panel state: CLOSED / AWAIT / STAGED
 wSlinkPanelPage::    db   ; +10    page wanted, ours to the client
 wSlinkPanelPages::   db   ; +11    page count, the client's to us (0 reads as one)
+wSlinkSfxHold::      db   ; +12    ROM-private: nonzero while a request is being held
+wSlinkSfxHoldAt::    db   ; +13    ROM-private: frame counter low byte when the hold began
 wSlinkMailboxEnd::
+
+; Bounded hold, in FRAMES of the mailbox's own counter (the vanilla note explains why not
+; in service calls): GET_ITEM_2 owns CHAN5 for ~180 frames and a request behind it must wait.
+DEF SLINK_SFX_HOLD_MAX EQU 240
+DEF SLINK_SFX_CODES    EQU 3
 
 
 SECTION "SLink Hook", ROMX
@@ -52,8 +60,8 @@ SlinkHook::
 	ld [wSlinkBeacon + 3], a
 	ld a, SLINK_ABI_VERSION
 	ld [wSlinkAbi], a
-	; Panel only: the VBlank PlaySound path is not safe (vanilla slink.asm), so SFX is not claimed.
-	ld a, SLINK_CAP_PANEL
+	; Panel and SFX: the SFX request is served on the main thread (SlinkSfxService), never here.
+	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX
 	ld [wSlinkCaps], a
 
 	; 16-bit little-endian frame counter; `inc [hl]` sets Z on wrap.
@@ -64,9 +72,8 @@ SlinkHook::
 	inc [hl]
 .noCarry
 
-	; SFX request: consumed so a client never sees stale state, deliberately never played.
-	xor a
-	ld [wSlinkSfxRequest], a
+	; The SFX request is NOT touched here: clearing it from VBlank would eat it before the
+	; main thread looked (the ABI-2 lesson in the vanilla notes: VBlank must never PlaySound).
 
 	pop af
 	ldh [rWBK], a
@@ -85,6 +92,127 @@ SlinkForeground::
 	dec a
 	ret nz
 	jp SlinkTradeService
+
+
+; ── Main-thread SFX dispatch ─────────────────────────────────────────────────────────────
+; Reached from two ROM0 sites in slink_home.asm, both idempotent (the first consumes it):
+; SlinkDelayFrameTail after every VBlank wait, and SlinkJoypadSite from Joypad, because a menu
+; waiting for input spins in HandleMenuInput_ on JoypadLowSensitivity and never reaches
+; DelayFrame. The vanilla slink.asm carries the full design note; the pureRGB deltas are:
+;   * every symbol is the linker's (no address literals), including the sound ids and the
+;     audio banks (BANK(Audio1_PlaySound) / BANK(Audio2_PlaySound));
+;   * the low-health alarm's "tones playing" flag is bit 7 of wLowHealthTonePairs (WRAM0),
+;     the byte pureRGB's own WaitForSoundToFinish tests (home/delay.asm), not wLowHealthAlarm
+;     (WRAMX);
+;   * the mailbox is WRAMX bank 1, so rWBK is saved, forced to 1 and restored around the
+;     whole service, exactly as SlinkHook does;
+;   * PlaySound is safe to call from bank $3F: DetermineAudioFunction keeps the caller's bank
+;     on the stack (home/audio.asm).
+; Clobbers a, bc, hl; the callers save them.
+SlinkSfxService::
+	ldh a, [rWBK]
+	push af
+	ld a, 1
+	ldh [rWBK], a
+	call .service
+	pop af
+	ldh [rWBK], a
+	ret
+
+.service
+	ld a, [wSlinkSfxRequest]
+	and a
+	ret z
+	cp SLINK_SFX_CODES + 1
+	jr nc, .drop                ; unknown code: consumed, never played
+
+	; Hold while a music fade runs: PlaySound would return without playing.
+	ld a, [wAudioFadeOutControl]
+	and a
+	jr nz, .hold
+
+	; Hold while an SFX still owns CHAN5/6/8 (the engine drops a higher id on a busy
+	; channel), unless the low-health alarm has CHAN5 for the rest of the battle.
+	ld a, [wLowHealthTonePairs]
+	bit 7, a
+	jr nz, .play
+	ld hl, wChannelSoundIDs + CHAN5
+	xor a
+	or [hl]
+	inc hl
+	or [hl]
+	inc hl
+	inc hl
+	or [hl]
+	jr nz, .hold
+
+.play
+	xor a
+	ld [wSlinkSfxHold], a       ; whatever was held ends here
+	; Resolve the code for the audio bank loaded NOW, with PlaySound's own bank choice.
+	ld hl, .bankAudio1
+	ld a, [wAudioROMBank]
+	cp BANK(Audio1_PlaySound)
+	jr z, .row
+	ld hl, .bankAudio2
+	cp BANK(Audio2_PlaySound)
+	jr z, .row
+	ld hl, .bankAudio3
+.row
+	ld a, [wSlinkSfxRequest]
+	dec a                       ; codes are 1-based
+	ld c, a
+	ld b, 0
+	add hl, bc
+	ld b, [hl]
+	; While the low-health alarm owns CHAN5 it re-marks it with CRY_SFX_END and the engine
+	; rejects any higher id there, so TINK/DENIED would be consumed into silence; the one id
+	; that channel accepts is CRY_SFX_END itself = SFX_LEVEL_UP in the battle bank (the way
+	; the vanilla level-up jingle plays through the alarm). Battle end zeroes the flag.
+	ld a, [wAudioROMBank]
+	cp BANK(Audio2_PlaySound)
+	jr nz, .resolved
+	ld a, [wLowHealthTonePairs]
+	bit 7, a
+	jr z, .resolved
+	ld b, SFX_LEVEL_UP
+.resolved
+	; Consumed before the call, so a request PlaySound still drops (hold ceiling reached
+	; mid-fade) does not replay every frame until something else clears it.
+	xor a
+	ld [wSlinkSfxRequest], a
+	ld a, b
+	jp PlaySound
+
+.hold
+	; ponytail: bounded hold -- after SLINK_SFX_HOLD_MAX frames play regardless and let the
+	; engine's priority rule decide, rather than carrying a request forever.
+	ld hl, wSlinkSfxHold
+	ld a, [hl]
+	and a
+	jr nz, .holding
+	inc [hl]                    ; a hold begins: stamp the frame
+	ld a, [wSlinkFrameCounter]
+	ld [wSlinkSfxHoldAt], a
+	ret
+.holding
+	ld a, [wSlinkFrameCounter]
+	ld hl, wSlinkSfxHoldAt
+	sub [hl]                    ; frames held, modulo 256
+	cp SLINK_SFX_HOLD_MAX
+	jr nc, .play
+	ret
+
+.drop
+	xor a
+	ld [wSlinkSfxRequest], a
+	ld [wSlinkSfxHold], a
+	ret
+
+;                   1 success       2 failure    3 boo
+.bankAudio1: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
+.bankAudio2: db SFX_LEVEL_UP,   SFX_TINK,    SFX_TINK   ; no buzzer in the battle bank
+.bankAudio3: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
 
 
 ; The SLINK panel. Opened from the START-menu row through SlinkStartMenuEntry (ROM0). The

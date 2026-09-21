@@ -42,7 +42,8 @@ DEF SLINK_ABI_VERSION  EQU 3
 ;   +0..3  'SLNK' beacon, rewritten every frame
 ;   +4     ABI version
 ;   +5..6  16-bit frame counter
-;   +7     SFX request: Lua writes a sound id, we play it and zero the byte
+;   +7     SFX request: Lua writes a SEMANTIC code (1 success, 2 failure, 3 boo); the
+;          main thread plays the matching sound for the current audio bank and zeroes it
 DEF SLINK_SFX_REQUEST  EQU SLINK_MAILBOX + 7
 ;   +8     capability bits, so a client asks WHAT this build can do rather than inferring
 ;          it from the ABI number -- which stops being true the moment one feature ships
@@ -56,6 +57,8 @@ DEF SLINK_CAPS         EQU SLINK_MAILBOX + 8
 DEF SLINK_PANEL_STATE  EQU SLINK_MAILBOX + 9
 DEF SLINK_PANEL_PAGE   EQU SLINK_MAILBOX + 10
 DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 11
+;   +12    SFX hold flag, ROM-private (see SlinkSfxService)
+;   +13    SFX hold start: the frame counter's low byte when the hold began
 
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
@@ -70,38 +73,72 @@ DEF TrackPlayTime      EQU $4DEE
 DEF TrackPlayTimeBank  EQU $06
 DEF Bankswitch         EQU $35D6
 
-; ── WHY THIS PATCH NO LONGER PLAYS SOUND ─────────────────────────────────────────────────
-; Gen 1 has NO RAM-writable sound trigger. `wNewSoundID` ($C0EE) looks like one and is not:
-; PlaySound takes the id in register `a` and uses that address only as internal scratch
-; (home/audio.asm:140-165), and nothing in the main loop polls it. So the id has to reach a
-; `call`, and VBlank was the obvious place — by the time VBlank reaches our hook it has
-; already switched to wAudioROMBank and run Audio1_UpdateMusic (home/vblank.asm:53-71).
+; ── HOW SOUND IS PLAYED (and why not from here) ─────────────────────────────────────────
+; Gen 1 has NO RAM-writable sound trigger: PlaySound ($23B1) takes the id in `a`, and
+; `wNewSoundID` is only its own scratch (home/audio.asm:140-200). So the id has to reach a
+; `call`, and the ABI-2 build made that call from THIS hook — the VBlank handler. Two
+; failures were measured in the shipped ROM and are the reason the call is not here:
 ;
-; Obvious, and wrong, for two reasons measured in the shipped ROM:
+;   * SWALLOWED DURING FADES. PlaySound's `.next` arm returns without playing whenever
+;     `wAudioFadeOutControl` is nonzero and `wNewSoundID` is zero — i.e. during every map
+;     change and battle start/end fade, exactly when capture, faint and whiteout fire.
+;   * RE-ENTRANCY. PlaySound is a main-thread routine. A VBlank landing inside it re-enters
+;     the non-reentrant audio engine and corrupts wChannelSoundIDs; our hook IS that VBlank.
 ;
-;   * SWALLOWED DURING FADES. PlaySound ($23B1) opens
-;         ld a,[wAudioFadeOutControl] / and a / jr z,.noFadeOut
-;         ld a,[wNewSoundID]          / and a / jr z,.done
-;     We pass the id in `a` and never set wNewSoundID, which is 0 in steady state — so
-;     during any fade the call returns without playing, and the request byte has already
-;     been cleared, so the event is simply lost. Fades run ~56-70 frames on map change and
-;     on battle start/end: precisely when capture, faint and whiteout fire.
+; The dispatch therefore lives on the MAIN THREAD, at two sites that both call
+; SlinkSfxService below and are idempotent (the first to run consumes the request):
+;   * the trade work's DelayFrame bridge (trade_service.asm, ROM0 $0001), after every
+;     VBlank wait — the overworld, battles, animations, text;
+;   * a stub on Joypad (SlinkJoypadStub, ROM0 $3FBE), because a menu waiting for input
+;     never reaches DelayFrame: HandleMenuInput_ (home/window.asm .loop2) spins on
+;     JoypadLowSensitivity and hFrameCounter, and the START menu, the PC, the bag and the
+;     battle menu all sit in that loop. MEASURED: a request written with the START menu
+;     open was still pending 300 frames later on the bridge alone.
+; SlinkSfxService owns the queue-drain
+; timing PlaySound lacks: it HOLDS the request while a fade is running (PlaySound would drop
+; it), holds while the SFX channels are busy (engine_1.asm .sfxChannelLoop drops a higher id
+; on a busy channel; the same CHAN5/6/8 test home/delay.asm WaitForSoundToFinish uses,
+; with the same low-health-alarm bypass), and after SLINK_SFX_HOLD_MAX frames plays anyway
+; and lets the engine's priority rule decide.
 ;
-;   * RE-ENTRANCY, in the ORDINARY case. `.noFadeOut` does `xor a / ld [wNewSoundID], a`
-;     and only calls the audio engine several instructions later. A VBlank landing anywhere
-;     in that window sees BOTH guard bytes clear, passes the guard, and re-enters a
-;     non-reentrant audio routine — corrupting wChannelSoundIDs and stamping our SFX id
-;     into wLastMusicSoundID. Our hook IS the VBlank handler, so we are the interrupt that
-;     lands there. No guard we can write on our side closes this: the window is inside
-;     PlaySound itself.
+; The request byte carries a SEMANTIC CODE, not a sound id. Sound ids are indices into each
+; audio bank's own header table (constants/music_constants.asm), so the same number names a
+; different sound in bank $02, $08 and $1F — and a request held across a battle fade spans a
+; bank change. SlinkSfxService resolves the code against wAudioROMBank at the moment it
+; plays, with the row PlaySound itself would pick (anything not $02/$08 is Audio3).
 ;
-; Playing sound safely needs a main-thread dispatch point with its own displaced bytes and
-; queue-drain timing. Until one exists and passes a full state matrix, this build ships
-; PANEL ONLY and says so in the capability byte, rather than shipping audio that is silently
-; dropped a fifth of the time and corrupts the music the rest.
-;
-; The request byte is still CONSUMED (cleared) so a client that writes one does not leave
-; stale state in the mailbox; it simply never becomes a sound.
+; This hook only STOPS clearing the byte (the ABI-3 panel-only build drained it every frame
+; so a client could never leave stale state; now the main thread clears it when it plays).
+; Init zero-fills WRAM0 at power-on and soft reset (home/init.asm:30-40), so a fresh
+; cartridge never sees a stray request.
+
+; Mailbox +12: how many frames the current request has been held. ROM-private; a client
+; never writes it. Reserved in the layout so a later byte cannot collide with it.
+DEF SLINK_SFX_HOLD     EQU SLINK_MAILBOX + 12   ; nonzero while a hold is in progress
+DEF SLINK_SFX_HOLD_AT  EQU SLINK_MAILBOX + 13   ; frame counter low byte when it began
+; Measured in FRAMES against the mailbox's own VBlank counter (+5), not in service calls:
+; the overworld runs both dispatch sites every frame and a menu runs one, so a call count
+; would mean different things in different places. GET_ITEM_2, the longest sound used,
+; owns CHAN5 for ~180 frames; a second request behind it must outlast that.
+DEF SLINK_SFX_HOLD_MAX EQU 240          ; ~4 s: then play anyway, the engine decides
+DEF SLINK_SFX_CODES    EQU 3            ; 1 success, 2 failure, 3 boo; others are dropped
+
+; Audio engine facts, from data/pret/pokered.sym (Red and Blue identical).
+DEF PlaySound            EQU $23B1     ; home/audio.asm:140; saves/restores the ROM bank itself
+DEF wAudioFadeOutControl EQU $CFC7     ; nonzero while a music fade runs (home/fade_audio.asm)
+DEF wChannelSoundIDs     EQU $C026     ; 8 bytes; CHAN5..CHAN8 are the SFX channels
+DEF CHAN5                EQU 4
+DEF wLowHealthAlarm      EQU $D083     ; bit 7 set = alarm owns CHAN5 (audio/low_health_alarm.asm)
+DEF wAudioROMBank        EQU $C0EF     ; $02 / $08 / $1F: which header table the ids index
+
+; Sound ids = (header address - SFX_Headers_N) / 3, from the .sym. The first three are the
+; same number in ALL THREE banks; DENIED exists in $02/$1F only (in $08 that index is a
+; battle sound), LEVEL_UP in $08 only — and equals CRY_SFX_END, so it still plays while
+; the low-health alarm marks CHAN5 (the alarm writes CRY_SFX_END there).
+DEF SFX_GET_ITEM_2 EQU $89
+DEF SFX_TINK       EQU $8C
+DEF SFX_DENIED     EQU $A5
+DEF SFX_LEVEL_UP   EQU $86
 
 SECTION "SLink Hook", ROMX[$4000], BANK[$3F]
 
@@ -118,11 +155,9 @@ SlinkHook::
 	ld [SLINK_MAILBOX + 3], a
 	ld a, SLINK_ABI_VERSION
 	ld [SLINK_MAILBOX + 4], a
-	; Panel only. See the SFX note at the top of this file: the VBlank PlaySound path is
-	; not safe, so the capability it would advertise is not claimed. A client reads this
-	; byte rather than inferring features from the ABI number, which is why dropping a
-	; feature does not need an ABI bump.
-	ld a, SLINK_CAP_PANEL
+	; Panel and SFX. A client reads this byte rather than inferring features from the ABI
+	; number, which is why adding SFX back (ABI 3 shipped panel-only) needs no ABI bump.
+	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX
 	ld [SLINK_CAPS], a
 
 	; 16-bit little-endian frame counter at +5. `inc [hl]` sets Z on wrap, so carry into
@@ -134,17 +169,153 @@ SlinkHook::
 	inc [hl]
 .noCarry
 
-	; ── SFX request: drained, never played ────────────────────────────────────────────
-	; Clearing it keeps the mailbox honest for a client that still writes one. There is
-	; deliberately NO call here — see the note at the top of this file.
-	xor a
-	ld [SLINK_SFX_REQUEST], a
+	; The SFX request is NOT touched here: it is the main thread's (SlinkSfxService) to
+	; consume, and clearing it from VBlank would eat it before that thread ever looked.
 
 	; Run the code the hook displaced, then hand control back to VBlank.
 	ld b, TrackPlayTimeBank
 	ld hl, TrackPlayTime
 	call Bankswitch
 	ret
+
+
+; ── Main-thread SFX dispatch ─────────────────────────────────────────────────────────────
+; Called by SlinkForeground (trade_service.asm) from the DelayFrame bridge, i.e. on the main
+; thread right after a VBlank wait, in every context. Clobbers a, bc, hl (the bridge saved
+; them). PlaySound preserves the rest and restores the ROM bank itself.
+SlinkSfxService::
+	ld a, [SLINK_SFX_REQUEST]
+	and a
+	ret z
+	cp SLINK_SFX_CODES + 1
+	jr nc, .drop                ; unknown code: consumed, never played
+
+	; Hold while a music fade runs: PlaySound would return without playing.
+	ld a, [wAudioFadeOutControl]
+	and a
+	jr nz, .hold
+
+		; Hold while an SFX still owns CHAN5/6/8 — the engine drops a higher id on a busy
+	; channel — unless the low-health alarm has CHAN5 for the rest of the battle, in
+	; which case waiting would be forever (home/delay.asm WaitForSoundToFinish); .play
+	; then substitutes the one id that channel accepts.
+	ld a, [wLowHealthAlarm]
+	and $80
+	jr nz, .play
+	ld hl, wChannelSoundIDs + CHAN5
+	xor a
+	or [hl]
+	inc hl
+	or [hl]
+	inc hl
+	inc hl
+	or [hl]
+	jr nz, .hold
+
+.play
+	xor a
+	ld [SLINK_SFX_HOLD], a      ; whatever was held ends here
+	; Resolve the code for the audio bank loaded NOW, with PlaySound's own bank choice.
+	ld hl, .bank02
+	ld a, [wAudioROMBank]
+	cp $02
+	jr z, .row
+	ld hl, .bank08
+	cp $08
+	jr z, .row
+	ld hl, .bank1F
+.row
+	ld a, [SLINK_SFX_REQUEST]
+	dec a                       ; codes are 1-based
+	ld c, a
+	ld b, 0
+	add hl, bc
+	ld b, [hl]
+	; While the low-health alarm owns CHAN5 it re-marks it with CRY_SFX_END ($86) and the
+	; engine rejects any higher id there (.sfxChannelLoop: play only if new <= current), so
+	; TINK and DENIED would be consumed into silence for the rest of the battle. The one id
+	; the marked channel accepts is $86 itself -- LEVEL_UP in the battle bank, which is how
+	; the vanilla level-up jingle plays through the alarm. Every code plays that then.
+	; Only meaningful in bank $08: the alarm is ticked from the Audio2 branch alone and
+	; battle end zeroes the flag (engine/battle/end_of_battle.asm .resetVariables).
+	ld a, [wAudioROMBank]
+	cp $08
+	jr nz, .resolved
+	ld a, [wLowHealthAlarm]
+	and $80
+	jr z, .resolved
+	ld b, SFX_LEVEL_UP
+.resolved
+	; Consumed before the call, so a request that PlaySound still drops (hold ceiling
+	; reached mid-fade) does not replay every frame until something else clears it.
+	xor a
+	ld [SLINK_SFX_REQUEST], a
+	ld a, b
+	jp PlaySound
+
+.hold
+	; ponytail: bounded hold — after SLINK_SFX_HOLD_MAX frames play regardless and let the
+	; engine's priority rule decide, rather than carrying a request forever.
+	ld hl, SLINK_SFX_HOLD
+	ld a, [hl]
+	and a
+	jr nz, .holding
+	inc [hl]                    ; a hold begins: stamp the frame
+	ld a, [SLINK_MAILBOX + 5]
+	ld [SLINK_SFX_HOLD_AT], a
+	ret
+.holding
+	ld a, [SLINK_MAILBOX + 5]
+	ld hl, SLINK_SFX_HOLD_AT
+	sub [hl]                    ; frames held, modulo 256
+	cp SLINK_SFX_HOLD_MAX
+	jr nc, .play
+	ret
+
+.drop
+	xor a
+	ld [SLINK_SFX_REQUEST], a
+	ld [SLINK_SFX_HOLD], a
+	ret
+
+;               1 success       2 failure    3 boo
+.bank02: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
+.bank08: db SFX_LEVEL_UP,   SFX_TINK,    SFX_TINK     ; no buzzer in the battle bank
+.bank1F: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
+SlinkSfxServiceEnd::
+; The panel section is pinned at $4100; this one must stay below it.
+ASSERT SlinkSfxServiceEnd <= $4100
+
+
+; ── The Joypad site ──────────────────────────────────────────────────────────────────────
+; Joypad (home, $019A) is `homecall _Joypad`: bank 3 is mapped, `call _Joypad` ($01A4), then
+; the caller's bank comes back off the stack. The manifest redirects that one `call` here,
+; where _Joypad runs first and the SFX request is serviced after it, on the main thread, in
+; the menu loops the DelayFrame bridge never sees. Joypad's own `pop af` restores a and the
+; flags; _Joypad clobbers b/d/e itself, so callers rely on none of them, but bc/de/hl are
+; saved around our call anyway. Bankswitch restores bank 3 for the epilogue.
+; $3FBE..$3FD4: the free tail of ROM0 past the START-menu trampoline (manifest.py), zeros
+; in both pinned dumps; 66 bytes free, 23 used.
+DEF _Joypad EQU $4000               ; data/pret/pokered.sym 03:4000, mapped by Joypad's prologue
+
+SECTION "SLink Joypad stub", ROM0[$3FBE]
+SlinkJoypadStub::
+	call _Joypad
+	ld a, [SLINK_SFX_REQUEST]
+	and a
+	ret z
+	push bc
+	push de
+	push hl
+	ld b, $3F
+	ld hl, SlinkSfxService
+	call Bankswitch
+	pop hl
+	pop de
+	pop bc
+	ret
+SlinkJoypadStubEnd::
+ASSERT SlinkJoypadStubEnd <= $4000
 
 
 ; ── The SLINK panel ──────────────────────────────────────────────────────────────────────

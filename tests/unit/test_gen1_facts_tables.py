@@ -69,6 +69,7 @@ EXPECTED_DELTA = frozenset({
     "LAB_LOSS.growl_min_enemy_attack_mod",
     "COMPANION.playtime_frames_addr",
     "COMPANION.speed_multiplier",
+    "COMPANION.low_health_alarm_flag_addr",
     "BLACKOUT.after_center.map", "BLACKOUT.after_center.x", "BLACKOUT.after_center.y",
     "MENU.BAG.watched",
     "BANKS.apex_commit",
@@ -190,6 +191,7 @@ def test_only_the_expected_keys_differ(lua):
     ("CATCH.hunt_ball_max", 4, 5),
     ("MENU.START.max_minus_save", 3, 2),
     ("COMPANION.playtime_frames_addr", 0xDA44, 0xDA4D),
+    ("COMPANION.low_health_alarm_flag_addr", 0xD083, 0xCD69),
     ("COMPANION.speed_multiplier", 1, 2),
 ])
 def test_the_foundational_deltas(lua, key, vanilla, pure):
@@ -206,7 +208,8 @@ def test_companion_timing_windows_are_the_same_frame_counts_on_both_lanes(lua):
     core does not scale them -- only the two per-cartridge addresses differ."""
     rb, pure = _dofile(lua, RB)["COMPANION"], _dofile(lua, PURE)["COMPANION"]
     for leaf in ("panel_stage_timeout", "panel_deadline", "query_frames", "offer_frames",
-                 "settle_frames", "apply_frames", "channel_sound_ids_addr"):
+                 "settle_frames", "apply_frames", "channel_sound_ids_addr",
+                 "audio_rom_bank_addr", "audio_fade_out_control_addr"):
         assert rb[leaf] == pure[leaf], leaf
     assert rb["speed_multiplier"] == 1 and pure["speed_multiplier"] == 2
     assert rb["playtime_frames_addr"] != pure["playtime_frames_addr"]

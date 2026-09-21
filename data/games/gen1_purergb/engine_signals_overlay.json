@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "02ed3964dd63c546a6daaa7da0a343c77c7fec12aed55561f65b645adf2a0249",
+ "sha256": "487aa48582532e9ca741fc02e6e9347cfbca9fad2adb35e61b475383d906c24d",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -44,10 +44,10 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "5528ac1f0afbb9beb05bb552d6657033408dd03b",
+   "rom_sha1": "35cc27241b1eb3b2414dea87be2bc59ddb5edc64",
    "sites": {
     "add_party_mon": {
-     "address": 13474,
+     "address": 13479,
      "anchor_offset": 0,
      "assert": "AddPartyMon::\n\tpush hl\n\tpush de\n\tpush bc\n\tfarcall _AddPartyMon",
      "bank": 0,
@@ -61,7 +61,7 @@
       "wCurMap",
       "wPartyCount"
      ],
-     "rom_offset": 13474,
+     "rom_offset": 13479,
      "source": "home/move_mon.asm",
      "symbol": "AddPartyMon"
     },
@@ -223,7 +223,7 @@
      "assert": ".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move from the move selection menu\n\tcall SaveScreenTilesToBuffer1\n\txor a\n\tld [wFirstMonsNotOutYet], a",
      "bank": 15,
      "capture_offset": 0,
-     "expected_hex": "CD6F33AFEA25D1FA",
+     "expected_hex": "CD7433AFEA25D1FA",
      "point": [
       "wPlayerMonNumber",
       "wBattleMonHP",
@@ -279,7 +279,7 @@
      "assert": "\trst _CopyData\n\tcall AddEnemyMonToPlayerParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wWhichPokemon], a",
      "bank": 1,
      "capture_offset": 0,
-     "expected_hex": "CDD334FA6BD13DEA92CF",
+     "expected_hex": "CDD834FA6BD13DEA92CF",
      "point": [
       "wWhichPokemon",
       "wTradedPlayerMonSpecies",
@@ -296,7 +296,7 @@
      "assert": "\tld [wTradedPlayerMonSpecies], a\n\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, [wTradingWhichEnemyMon]",
      "bank": 1,
      "capture_offset": 0,
-     "expected_hex": "CD9B34FA3ECD4FEA",
+     "expected_hex": "CDA034FA3ECD4FEA",
      "point": [
       "wWhichPokemon",
       "wTradedPlayerMonSpecies",
@@ -378,7 +378,7 @@
      "assert": "\tld [wMonDataLocation], a\n\tcall ClearSprites\n\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
      "bank": 3,
      "capture_offset": 0,
-     "expected_hex": "CDA234F1A7283221",
+     "expected_hex": "CDA734F1A7283221",
      "point": [
       "wIsInBattle",
       "wMonDataLocation",
@@ -408,7 +408,7 @@
      ],
      "prelude": {
       "address": 21509,
-      "expected_hex": "CDA234",
+      "expected_hex": "CDA734",
       "rom_offset": 54277
      },
      "rom_offset": 54280,
@@ -421,7 +421,7 @@
      "assert": "\tcall ChangeBoxData\n\tcall SaveGameData\n\tld a, SFX_SAVE\n\tcall PlaySoundWaitForCurrent",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CDB5783EB6CDAD33",
+     "expected_hex": "CDB5783EB6CDB233",
      "point": [
       "wSaveFileStatus",
       "wCurrentBoxNum"
@@ -436,7 +436,7 @@
      "assert": "\tld a, DAYCARE_TO_PARTY\n\tld [wMoveMonType], a\n\tcall MoveMon\n\tld a, [wDayCareMonSpecies]\n\tld [wCurPartySpecies], a",
      "bank": 21,
      "capture_offset": 0,
-     "expected_hex": "CDE434FA67DAEA91CF",
+     "expected_hex": "CDE934FA67DAEA91CF",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -480,12 +480,12 @@
      "symbol": "Evolution_PartyMonLoop.skipfix_end"
     },
     "move_mon": {
-     "address": 13540,
+     "address": 13545,
      "anchor_offset": 0,
      "assert": "MoveMon::\n\thomecall_sf _MoveMon",
      "bank": 0,
      "capture_offset": 0,
-     "expected_hex": "F0B8F53E03CDAB32",
+     "expected_hex": "F0B8F53E03CDB032",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -497,7 +497,7 @@
       "wBoxMonNicks",
       "wMoveMonType"
      ],
-     "rom_offset": 13540,
+     "rom_offset": 13545,
      "source": "home/move_mon.asm",
      "symbol": "MoveMon"
     },
@@ -524,7 +524,7 @@
      "assert": "\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CDA234CD0756CD3A",
+     "expected_hex": "CDA734CD0756CD3D",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -542,7 +542,7 @@
      "assert": "\tcall InGameTrade_CopyDataToReceivedMon\n\t;callfar InGameTrade_CheckForTradeEvo ; PureRGBnote: REMOVED: not needed\n\tcall ClearScreen\n\tcall InGameTrade_RestoreScreen",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD3A16CD95550603",
+     "expected_hex": "CD3D16CD95550603",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -559,7 +559,7 @@
      "assert": "\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, %10000000 ; prevent the player from naming the mon\n\tld [wMonDataLocation], a\n\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD9B343E80EA49CC",
+     "expected_hex": "CDA0343E80EA49CC",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -576,7 +576,7 @@
      "assert": "\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, wBoxNumString",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433213DCDFAA8",
+     "expected_hex": "CDB933213DCDFAA8",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -590,7 +590,7 @@
      ],
      "prelude": {
       "address": 17267,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836467
      },
      "rom_offset": 836470,
@@ -603,7 +603,7 @@
      "assert": "\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld a, [wCurPartySpecies]",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433FA91CFCD65",
+     "expected_hex": "CDB933FA91CFCD68",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -618,7 +618,7 @@
      ],
      "prelude": {
       "address": 17599,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836799
      },
      "rom_offset": 836802,
@@ -631,7 +631,7 @@
      "assert": "\tld a, 1\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, MonIsTakenOutText",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433212646CDCE",
+     "expected_hex": "CDB933212646CDCE",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -645,7 +645,7 @@
      ],
      "prelude": {
       "address": 17436,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836636
      },
      "rom_offset": 836639,
@@ -681,7 +681,7 @@
      "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
     },
     "remove_pokemon": {
-     "address": 13467,
+     "address": 13472,
      "anchor_offset": 0,
      "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
      "bank": 0,
@@ -698,7 +698,7 @@
       "wBoxMonNicks",
       "wRemoveMonFromBox"
      ],
-     "rom_offset": 13467,
+     "rom_offset": 13472,
      "source": "home/move_mon.asm",
      "symbol": "RemovePokemon"
     },
@@ -708,7 +708,7 @@
      "assert": ".save\n\tcall SaveGameData\n\tcall ClearTextBox\n\thlcoord 1, 14",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD5C2921B9C421FF",
+     "expected_hex": "CD612921B9C421FF",
      "point": [
       "wSaveFileStatus"
      ],
@@ -727,7 +727,7 @@
      "assert": "\txor a\n\tld [wIsAltPalettePkmnData], a\n\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
      "bank": 7,
      "capture_offset": 0,
-     "expected_hex": "CDA2342136D7CBDE",
+     "expected_hex": "CDA7342136D7CBDE",
      "point": [
       "wPartyCount",
       "wCurMap",
@@ -763,7 +763,7 @@
      ],
      "prelude": {
       "address": 18906,
-      "expected_hex": "CDA234",
+      "expected_hex": "CDA734",
       "rom_offset": 117210
      },
      "rom_offset": 117213,
@@ -802,7 +802,7 @@
      "assert": "ChangePartyPokemonSpecies::\n\tld a, [wCurPartySpecies]\n\tld [wCurSpecies], a\n\tcall GetMonHeader",
      "bank": 53,
      "capture_offset": 0,
-     "expected_hex": "FA91CFEAB5D0CDC113",
+     "expected_hex": "FA91CFEAB5D0CDC413",
      "point": [
       "wWhichPokemon",
       "wCurPartySpecies",
@@ -867,7 +867,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "bee43dc9c042427685942048b4f2539586e77398d98057e4acc298929d850e62"
+   "symbols_sha256": "e486bf33ed84318ffff1d3de07f14418f2cea069200afdab2a37aff4714ef0f1"
   },
   "puregreen": {
    "addresses": {
@@ -910,10 +910,10 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "87e11687660b41ef1c9e4405a0096d0fba8aba80",
+   "rom_sha1": "09230f6eec7c9bb9952655be7a221728959e5ea4",
    "sites": {
     "add_party_mon": {
-     "address": 13474,
+     "address": 13479,
      "anchor_offset": 0,
      "assert": "AddPartyMon::\n\tpush hl\n\tpush de\n\tpush bc\n\tfarcall _AddPartyMon",
      "bank": 0,
@@ -927,7 +927,7 @@
       "wCurMap",
       "wPartyCount"
      ],
-     "rom_offset": 13474,
+     "rom_offset": 13479,
      "source": "home/move_mon.asm",
      "symbol": "AddPartyMon"
     },
@@ -1089,7 +1089,7 @@
      "assert": ".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move from the move selection menu\n\tcall SaveScreenTilesToBuffer1\n\txor a\n\tld [wFirstMonsNotOutYet], a",
      "bank": 15,
      "capture_offset": 0,
-     "expected_hex": "CD6F33AFEA25D1FA",
+     "expected_hex": "CD7433AFEA25D1FA",
      "point": [
       "wPlayerMonNumber",
       "wBattleMonHP",
@@ -1145,7 +1145,7 @@
      "assert": "\trst _CopyData\n\tcall AddEnemyMonToPlayerParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wWhichPokemon], a",
      "bank": 1,
      "capture_offset": 0,
-     "expected_hex": "CDD334FA6BD13DEA92CF",
+     "expected_hex": "CDD834FA6BD13DEA92CF",
      "point": [
       "wWhichPokemon",
       "wTradedPlayerMonSpecies",
@@ -1162,7 +1162,7 @@
      "assert": "\tld [wTradedPlayerMonSpecies], a\n\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, [wTradingWhichEnemyMon]",
      "bank": 1,
      "capture_offset": 0,
-     "expected_hex": "CD9B34FA3ECD4FEA",
+     "expected_hex": "CDA034FA3ECD4FEA",
      "point": [
       "wWhichPokemon",
       "wTradedPlayerMonSpecies",
@@ -1244,7 +1244,7 @@
      "assert": "\tld [wMonDataLocation], a\n\tcall ClearSprites\n\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
      "bank": 3,
      "capture_offset": 0,
-     "expected_hex": "CDA234F1A7283221",
+     "expected_hex": "CDA734F1A7283221",
      "point": [
       "wIsInBattle",
       "wMonDataLocation",
@@ -1274,7 +1274,7 @@
      ],
      "prelude": {
       "address": 21509,
-      "expected_hex": "CDA234",
+      "expected_hex": "CDA734",
       "rom_offset": 54277
      },
      "rom_offset": 54280,
@@ -1287,7 +1287,7 @@
      "assert": "\tcall ChangeBoxData\n\tcall SaveGameData\n\tld a, SFX_SAVE\n\tcall PlaySoundWaitForCurrent",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CDB5783EB6CDAD33",
+     "expected_hex": "CDB5783EB6CDB233",
      "point": [
       "wSaveFileStatus",
       "wCurrentBoxNum"
@@ -1302,7 +1302,7 @@
      "assert": "\tld a, DAYCARE_TO_PARTY\n\tld [wMoveMonType], a\n\tcall MoveMon\n\tld a, [wDayCareMonSpecies]\n\tld [wCurPartySpecies], a",
      "bank": 21,
      "capture_offset": 0,
-     "expected_hex": "CDE434FA67DAEA91CF",
+     "expected_hex": "CDE934FA67DAEA91CF",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -1346,12 +1346,12 @@
      "symbol": "Evolution_PartyMonLoop.skipfix_end"
     },
     "move_mon": {
-     "address": 13540,
+     "address": 13545,
      "anchor_offset": 0,
      "assert": "MoveMon::\n\thomecall_sf _MoveMon",
      "bank": 0,
      "capture_offset": 0,
-     "expected_hex": "F0B8F53E03CDAB32",
+     "expected_hex": "F0B8F53E03CDB032",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -1363,7 +1363,7 @@
       "wBoxMonNicks",
       "wMoveMonType"
      ],
-     "rom_offset": 13540,
+     "rom_offset": 13545,
      "source": "home/move_mon.asm",
      "symbol": "MoveMon"
     },
@@ -1390,7 +1390,7 @@
      "assert": "\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CDA234CD0756CD3A",
+     "expected_hex": "CDA734CD0756CD3D",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -1408,7 +1408,7 @@
      "assert": "\tcall InGameTrade_CopyDataToReceivedMon\n\t;callfar InGameTrade_CheckForTradeEvo ; PureRGBnote: REMOVED: not needed\n\tcall ClearScreen\n\tcall InGameTrade_RestoreScreen",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD3A16CD95550603",
+     "expected_hex": "CD3D16CD95550603",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -1425,7 +1425,7 @@
      "assert": "\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, %10000000 ; prevent the player from naming the mon\n\tld [wMonDataLocation], a\n\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD9B343E80EA49CC",
+     "expected_hex": "CDA0343E80EA49CC",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -1442,7 +1442,7 @@
      "assert": "\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, wBoxNumString",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433213DCDFAA8",
+     "expected_hex": "CDB933213DCDFAA8",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -1456,7 +1456,7 @@
      ],
      "prelude": {
       "address": 17267,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836467
      },
      "rom_offset": 836470,
@@ -1469,7 +1469,7 @@
      "assert": "\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld a, [wCurPartySpecies]",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433FA91CFCD65",
+     "expected_hex": "CDB933FA91CFCD68",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -1484,7 +1484,7 @@
      ],
      "prelude": {
       "address": 17599,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836799
      },
      "rom_offset": 836802,
@@ -1497,7 +1497,7 @@
      "assert": "\tld a, 1\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, MonIsTakenOutText",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433212646CDCE",
+     "expected_hex": "CDB933212646CDCE",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -1511,7 +1511,7 @@
      ],
      "prelude": {
       "address": 17436,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836636
      },
      "rom_offset": 836639,
@@ -1547,7 +1547,7 @@
      "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
     },
     "remove_pokemon": {
-     "address": 13467,
+     "address": 13472,
      "anchor_offset": 0,
      "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
      "bank": 0,
@@ -1564,7 +1564,7 @@
       "wBoxMonNicks",
       "wRemoveMonFromBox"
      ],
-     "rom_offset": 13467,
+     "rom_offset": 13472,
      "source": "home/move_mon.asm",
      "symbol": "RemovePokemon"
     },
@@ -1574,7 +1574,7 @@
      "assert": ".save\n\tcall SaveGameData\n\tcall ClearTextBox\n\thlcoord 1, 14",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD5C2921B9C421FF",
+     "expected_hex": "CD612921B9C421FF",
      "point": [
       "wSaveFileStatus"
      ],
@@ -1593,7 +1593,7 @@
      "assert": "\txor a\n\tld [wIsAltPalettePkmnData], a\n\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
      "bank": 7,
      "capture_offset": 0,
-     "expected_hex": "CDA2342136D7CBDE",
+     "expected_hex": "CDA7342136D7CBDE",
      "point": [
       "wPartyCount",
       "wCurMap",
@@ -1629,7 +1629,7 @@
      ],
      "prelude": {
       "address": 18906,
-      "expected_hex": "CDA234",
+      "expected_hex": "CDA734",
       "rom_offset": 117210
      },
      "rom_offset": 117213,
@@ -1668,7 +1668,7 @@
      "assert": "ChangePartyPokemonSpecies::\n\tld a, [wCurPartySpecies]\n\tld [wCurSpecies], a\n\tcall GetMonHeader",
      "bank": 53,
      "capture_offset": 0,
-     "expected_hex": "FA91CFEAB5D0CDC113",
+     "expected_hex": "FA91CFEAB5D0CDC413",
      "point": [
       "wWhichPokemon",
       "wCurPartySpecies",
@@ -1733,7 +1733,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "6c4257096b2fc3f8799bb41f6f91e9d4e067b76f2194ab68e032a3b54a3c477d"
+   "symbols_sha256": "ea5f69a67f120fbfebc8981bc39c7f4111e9effa7ed740615ad1a0329fc4af8e"
   },
   "purered": {
    "addresses": {
@@ -1776,10 +1776,10 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "09ddffda29a9c24dbf69846209b5754fec242fea",
+   "rom_sha1": "feb19385ced0f6dd6fac7cf7348f8914af7553c4",
    "sites": {
     "add_party_mon": {
-     "address": 13474,
+     "address": 13479,
      "anchor_offset": 0,
      "assert": "AddPartyMon::\n\tpush hl\n\tpush de\n\tpush bc\n\tfarcall _AddPartyMon",
      "bank": 0,
@@ -1793,7 +1793,7 @@
       "wCurMap",
       "wPartyCount"
      ],
-     "rom_offset": 13474,
+     "rom_offset": 13479,
      "source": "home/move_mon.asm",
      "symbol": "AddPartyMon"
     },
@@ -1955,7 +1955,7 @@
      "assert": ".loopNoMoveSelected ; will loop to here in the case that the player didn't choose a move from the move selection menu\n\tcall SaveScreenTilesToBuffer1\n\txor a\n\tld [wFirstMonsNotOutYet], a",
      "bank": 15,
      "capture_offset": 0,
-     "expected_hex": "CD6F33AFEA25D1FA",
+     "expected_hex": "CD7433AFEA25D1FA",
      "point": [
       "wPlayerMonNumber",
       "wBattleMonHP",
@@ -2011,7 +2011,7 @@
      "assert": "\trst _CopyData\n\tcall AddEnemyMonToPlayerParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wWhichPokemon], a",
      "bank": 1,
      "capture_offset": 0,
-     "expected_hex": "CDD334FA6BD13DEA92CF",
+     "expected_hex": "CDD834FA6BD13DEA92CF",
      "point": [
       "wWhichPokemon",
       "wTradedPlayerMonSpecies",
@@ -2028,7 +2028,7 @@
      "assert": "\tld [wTradedPlayerMonSpecies], a\n\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, [wTradingWhichEnemyMon]",
      "bank": 1,
      "capture_offset": 0,
-     "expected_hex": "CD9B34FA3ECD4FEA",
+     "expected_hex": "CDA034FA3ECD4FEA",
      "point": [
       "wWhichPokemon",
       "wTradedPlayerMonSpecies",
@@ -2110,7 +2110,7 @@
      "assert": "\tld [wMonDataLocation], a\n\tcall ClearSprites\n\tcall AddPartyMon\n;;;;;;;;;; PureRGBnote: ADDED: when in bills garden, if a pikachu is caught, force it to have the nickname PIKABLU\n\tpop af\n\tand a\n\tjr z, .done",
      "bank": 3,
      "capture_offset": 0,
-     "expected_hex": "CDA234F1A7283221",
+     "expected_hex": "CDA734F1A7283221",
      "point": [
       "wIsInBattle",
       "wMonDataLocation",
@@ -2140,7 +2140,7 @@
      ],
      "prelude": {
       "address": 21509,
-      "expected_hex": "CDA234",
+      "expected_hex": "CDA734",
       "rom_offset": 54277
      },
      "rom_offset": 54280,
@@ -2153,7 +2153,7 @@
      "assert": "\tcall ChangeBoxData\n\tcall SaveGameData\n\tld a, SFX_SAVE\n\tcall PlaySoundWaitForCurrent",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CDB5783EB6CDAD33",
+     "expected_hex": "CDB5783EB6CDB233",
      "point": [
       "wSaveFileStatus",
       "wCurrentBoxNum"
@@ -2168,7 +2168,7 @@
      "assert": "\tld a, DAYCARE_TO_PARTY\n\tld [wMoveMonType], a\n\tcall MoveMon\n\tld a, [wDayCareMonSpecies]\n\tld [wCurPartySpecies], a",
      "bank": 21,
      "capture_offset": 0,
-     "expected_hex": "CDE434FA67DAEA91CF",
+     "expected_hex": "CDE934FA67DAEA91CF",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -2212,12 +2212,12 @@
      "symbol": "Evolution_PartyMonLoop.skipfix_end"
     },
     "move_mon": {
-     "address": 13540,
+     "address": 13545,
      "anchor_offset": 0,
      "assert": "MoveMon::\n\thomecall_sf _MoveMon",
      "bank": 0,
      "capture_offset": 0,
-     "expected_hex": "F0B8F53E03CDAB32",
+     "expected_hex": "F0B8F53E03CDB032",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -2229,7 +2229,7 @@
       "wBoxMonNicks",
       "wMoveMonType"
      ],
-     "rom_offset": 13540,
+     "rom_offset": 13545,
      "source": "home/move_mon.asm",
      "symbol": "MoveMon"
     },
@@ -2256,7 +2256,7 @@
      "assert": "\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CDA234CD0756CD3A",
+     "expected_hex": "CDA734CD0756CD3D",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -2274,7 +2274,7 @@
      "assert": "\tcall InGameTrade_CopyDataToReceivedMon\n\t;callfar InGameTrade_CheckForTradeEvo ; PureRGBnote: REMOVED: not needed\n\tcall ClearScreen\n\tcall InGameTrade_RestoreScreen",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD3A16CD95550603",
+     "expected_hex": "CD3D16CD95550603",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -2291,7 +2291,7 @@
      "assert": "\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tld a, %10000000 ; prevent the player from naming the mon\n\tld [wMonDataLocation], a\n\tcall AddPartyMon\n\tcall InGameTrade_CopyDataToReceivedMon",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD9B343E80EA49CC",
+     "expected_hex": "CDA0343E80EA49CC",
      "point": [
       "wWhichPokemon",
       "wInGameTradeGiveMonSpecies",
@@ -2308,7 +2308,7 @@
      "assert": "\txor a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, wBoxNumString",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433213DCDFAA8",
+     "expected_hex": "CDB933213DCDFAA8",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -2322,7 +2322,7 @@
      ],
      "prelude": {
       "address": 17267,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836467
      },
      "rom_offset": 836470,
@@ -2335,7 +2335,7 @@
      "assert": "\tinc a\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld a, [wCurPartySpecies]",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433FA91CFCD65",
+     "expected_hex": "CDB933FA91CFCD68",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -2350,7 +2350,7 @@
      ],
      "prelude": {
       "address": 17599,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836799
      },
      "rom_offset": 836802,
@@ -2363,7 +2363,7 @@
      "assert": "\tld a, 1\n\tld [wRemoveMonFromBox], a\n\tcall RemovePokemon\n\tcall WaitForSoundToFinish\n\tld hl, MonIsTakenOutText",
      "bank": 51,
      "capture_offset": 0,
-     "expected_hex": "CDB433212646CDCE",
+     "expected_hex": "CDB933212646CDCE",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -2377,7 +2377,7 @@
      ],
      "prelude": {
       "address": 17436,
-      "expected_hex": "CD9B34",
+      "expected_hex": "CDA034",
       "rom_offset": 836636
      },
      "rom_offset": 836639,
@@ -2413,7 +2413,7 @@
      "symbol": "ApplyOutOfBattlePoisonDamage.noBorrow"
     },
     "remove_pokemon": {
-     "address": 13467,
+     "address": 13472,
      "anchor_offset": 0,
      "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
      "bank": 0,
@@ -2430,7 +2430,7 @@
       "wBoxMonNicks",
       "wRemoveMonFromBox"
      ],
-     "rom_offset": 13467,
+     "rom_offset": 13472,
      "source": "home/move_mon.asm",
      "symbol": "RemovePokemon"
     },
@@ -2440,7 +2440,7 @@
      "assert": ".save\n\tcall SaveGameData\n\tcall ClearTextBox\n\thlcoord 1, 14",
      "bank": 28,
      "capture_offset": 0,
-     "expected_hex": "CD5C2921B9C421FF",
+     "expected_hex": "CD612921B9C421FF",
      "point": [
       "wSaveFileStatus"
      ],
@@ -2459,7 +2459,7 @@
      "assert": "\txor a\n\tld [wIsAltPalettePkmnData], a\n\tcall AddPartyMon\n\tld hl, wStatusFlags4\n\tset BIT_GOT_STARTER, [hl]\n\tcall OaksLabDisableAllJoypadExceptAorB",
      "bank": 7,
      "capture_offset": 0,
-     "expected_hex": "CDA2342136D7CBDE",
+     "expected_hex": "CDA7342136D7CBDE",
      "point": [
       "wPartyCount",
       "wCurMap",
@@ -2495,7 +2495,7 @@
      ],
      "prelude": {
       "address": 18906,
-      "expected_hex": "CDA234",
+      "expected_hex": "CDA734",
       "rom_offset": 117210
      },
      "rom_offset": 117213,
@@ -2534,7 +2534,7 @@
      "assert": "ChangePartyPokemonSpecies::\n\tld a, [wCurPartySpecies]\n\tld [wCurSpecies], a\n\tcall GetMonHeader",
      "bank": 53,
      "capture_offset": 0,
-     "expected_hex": "FA91CFEAB5D0CDC113",
+     "expected_hex": "FA91CFEAB5D0CDC413",
      "point": [
       "wWhichPokemon",
       "wCurPartySpecies",
@@ -2599,7 +2599,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "3023971ba8e85dcd76d8873d184e54e660de9ab36aee32e8fad48fff0c8b58d1"
+   "symbols_sha256": "06012472cc7d337285707334791f23a798f567cf6166eccc183946be26bef6a9"
   }
  }
 }

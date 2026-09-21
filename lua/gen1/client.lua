@@ -461,7 +461,17 @@ function Client.new(p)
             local r, g, b, f = hud_color(cmd)
             hud.show(cmd.text, r, g, b, f)
         elseif c == "play_sound" then
-            -- Gen 3 SE ids; the Gen 1 companion patch ships no sound path
+            -- Gen 3 SE ids on the wire (docs/protocol.md); the companion patch plays them
+            -- natively when the run asked for it (config.native_sounds) AND this cartridge
+            -- advertises the SFX capability (per cartridge, like the panel: caps bit 0).
+            local code = self.panel and self.panel:sfx_code_for(cmd.sound)
+            if code and self.config and self.config.native_sounds == true
+               and self.panel:sfx_present() then
+                self.panel:request_sfx(code)
+            elseif not self.sfx_unavailable_logged then
+                self.sfx_unavailable_logged = true
+                log("[SLink-gen1] play_sound: native sounds off or no SFX-capable patch on this cartridge")
+            end
         elseif c == "resolved_areas" then
             self.resolved_areas = {}
             for _, a in ipairs(cmd.areas or {}) do self.resolved_areas[a] = true end
@@ -497,6 +507,8 @@ function Client.new(p)
             for _, k in ipairs(cmd.keys or {}) do self.pending_keys[k] = true end
         elseif c == "config" then
             self.config = cmd
+            -- a queued notification accepted under the old setting must not post after it
+            if cmd.native_sounds ~= true and self.panel then self.panel:clear_sfx() end
         elseif c == "game_over" then
             hud.set_game_over()
             self.game_over = true
@@ -1411,6 +1423,7 @@ function Client.new(p)
             -- per CARTRIDGE, not per generation: only a patched one has the panel mailbox
             panel = self.panel and self.panel:present() or false,
             panel_abi = self.panel and self.panel:abi() or 0,
+            sfx = self.panel and self.panel:sfx_present() or false,
         })
         self.hello_sent = true
     end

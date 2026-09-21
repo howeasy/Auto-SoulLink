@@ -139,25 +139,44 @@ MENU_PATCHES = [
 ]
 
 # Trade spans, independently read from both pinned clean ROMs and the linked
-# trade-only image (trade_service.asm:33-65; trade_receptionist.asm:1-15).
+# trade-only image (trade_service.asm; trade_receptionist.asm:1-15).
 # The bridge occupies reserved RST padding declared in pret/home/header.asm:3-38.
-# Its exact 42-byte replacement is image[0x0001:0x002b] from rgblink; build.py
+# Its exact 32-byte replacement is image[0x0001:0x0021] from rgblink; build.py
 # rejects a future source change that would drift from this toolchain-free manifest.
+# The span is exactly the section's length and no wider: rgblink pads with 0x00 while
+# the clean ROM keeps 0xFF in every RST slot ($08, $10, ..., $30), so a wider slice
+# would silently rewrite the `rst $28` byte outside the section.
 TRADE_BRIDGE_BEFORE = bytes.fromhex(
     "00000000000000ff00000000000000ff00000000000000ff"
-    "00000000000000ff00000000000000ff0000"
+    "00000000000000ff"
 )
 TRADE_BRIDGE_AFTER = bytes.fromhex(
-    "c2b320f5c5d5e5f8082afe022804fe0520137efe04200e"
-    "fa12c53d2008063f210045cdd635e1d1c1f1c9"
+    "c2b320f5c5d5e5fae9dea72006fa12c53d2008"
+    "063f210045cdd635e1d1c1f1c9"
 )
 TRADE_DELAY_BEFORE = bytes.fromhex("20fac9")
 TRADE_DELAY_AFTER = bytes.fromhex("c30100")  # jp SlinkDelayFrameBridge, linked 00:0001
 TRADE_DISPATCH_BEFORE = bytes.fromhex("21c5710601cdd6351809")
 TRADE_DISPATCH_AFTER = bytes.fromhex("21004c063fcdd6351812")
+# The Joypad site (slink.asm "SLink Joypad stub"): Joypad's `call _Joypad` ($01A4, inside
+# `homecall _Joypad` at $019A) is pointed at a 23-byte stub in the free ROM0 tail that runs
+# _Joypad and then the SFX service, so a menu waiting for input still plays the request.
+# Both spans read identically from the two pinned dumps.
+JOYPAD_CALL_SITE = 0x01A4
+JOYPAD_CALL_BEFORE = bytes.fromhex("cd0040")   # call _Joypad (03:4000)
+JOYPAD_STUB_ADDR = 0x3FBE
+JOYPAD_CALL_AFTER = bytes((0xCD, JOYPAD_STUB_ADDR & 0xFF, JOYPAD_STUB_ADDR >> 8))
+JOYPAD_STUB_BEFORE = bytes(23)
+JOYPAD_STUB_AFTER = bytes.fromhex(
+    "cd0040fae9dea7c8c5d5e5063f212f40cdd635e1d1c1c9"
+)
 MENU_PATCHES.extend([
     (0x0001, TRADE_BRIDGE_BEFORE, TRADE_BRIDGE_AFTER,
      "DelayFrame foreground service bridge in reserved RST padding"),
+    (JOYPAD_CALL_SITE, JOYPAD_CALL_BEFORE, JOYPAD_CALL_AFTER,
+     "Joypad's call _Joypad -> SlinkJoypadStub (menu-loop SFX service)"),
+    (JOYPAD_STUB_ADDR, JOYPAD_STUB_BEFORE, JOYPAD_STUB_AFTER,
+     "SlinkJoypadStub in the free ROM0 tail"),
     (0x20B7, TRADE_DELAY_BEFORE, TRADE_DELAY_AFTER,
      "DelayFrame tail -> SlinkDelayFrameBridge"),
     (0x29C3, TRADE_DISPATCH_BEFORE, TRADE_DISPATCH_AFTER,

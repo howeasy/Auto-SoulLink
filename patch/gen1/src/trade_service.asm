@@ -30,6 +30,15 @@ ENDM
 
 ; Source-declared unused RST space. RST00, RST38 and every hardware interrupt
 ; entry remain intact. The builder rejects any source use of the other RSTs.
+;
+; Reached from DelayFrame's tail (`jp` in place of `jr nz,.halt / ret`) with the flags of
+; its `and a`: NZ means the VBlank has not happened yet and we go back to halt; Z means the
+; main thread is about to resume. That makes this the one main-thread, every-context,
+; once-per-frame point in the ROM, so both foreground services hang off it: the SFX
+; request (slink.asm SlinkSfxService) and the trade lease. ROM0 only decides WHETHER to
+; farcall; the predicates themselves live in bank $3F (SlinkForeground) where there is
+; room. The lease byte aliases tile bytes when no lease is held, so it is tested for the
+; exact armed value, not for nonzero.
 SECTION "SLink DelayFrame bridge", ROM0[$0001]
 SlinkDelayFrameBridge::
     jp nz, SlinkDelayFrameHalt
@@ -37,22 +46,15 @@ SlinkDelayFrameBridge::
     push bc
     push de
     push hl
-    ; Original DelayFrame caller, before the four saved register pairs.
-    ld hl, sp + 8
-    ld a, [hli]
-    cp LOW(SlinkOverworldReturn)
-    jr z, .lowMatches
-    cp LOW(SlinkOverworldLessReturn)
-    jr nz, .done
-.lowMatches
-    ld a, [hl]
-    cp HIGH(SlinkOverworldReturn)
-    jr nz, .done
+    ld a, [SLINK_SFX_REQUEST]
+    and a
+    jr nz, .go
     ld a, [SlinkOverlay + 10]
     dec a
     jr nz, .done
+.go
     ld b, SLINK_TRADE_BANK
-    ld hl, SlinkTradeService
+    ld hl, SlinkForeground
     call Bankswitch
 .done
     pop hl
@@ -65,6 +67,29 @@ ASSERT HIGH(SlinkOverworldReturn) == HIGH(SlinkOverworldLessReturn)
 ASSERT SlinkDelayFrameBridgeEnd <= $0038
 
 SECTION "SLink foreground trade service", ROMX[$4500], BANK[SLINK_TRADE_BANK]
+; Entered through Bankswitch from the bridge. Stack at this point, low to high: Bankswitch's
+; .Return (2) and its saved af (2), the bridge's `call Bankswitch` return (2), the bridge's
+; four saved pairs (8), then the address DelayFrame will return to — sp + 14.
+SlinkForeground::
+    call SlinkSfxService
+    ; The trade service runs only for the OverworldLoop / OverworldLoopLessDelay caller
+    ; and only while the lease's availability byte reads armed — the predicate the bridge
+    ; used to hold in ROM0, moved here verbatim with the deeper stack offset.
+    ld a, [SlinkOverlay + 10]
+    dec a
+    ret nz
+    ld hl, sp + 14
+    ld a, [hli]
+    cp LOW(SlinkOverworldReturn)
+    jr z, .lowMatches
+    cp LOW(SlinkOverworldLessReturn)
+    ret nz
+.lowMatches
+    ld a, [hl]
+    cp HIGH(SlinkOverworldReturn)
+    ret nz
+    jp SlinkTradeService
+
 SlinkTradeService::
     ; Check complete publication before treating tile bytes as a request.
     call .magic
