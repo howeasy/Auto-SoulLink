@@ -103,6 +103,22 @@ local okc, errc = pcall(dofile, D.wt .. "/lua/clients/gen3_frlge_client.lua")
 log("client dofile ok=" .. tostring(okc) .. (okc and "" or (" err=" .. tostring(errc))))
 if not okc then return finish(false, "client dofile error") end
 
+-- ── P3 shadow observer (SLINK_SHADOW only; PLAN §5.7) ──────────────────────────
+-- Loaded AFTER the production client, as the isolation contract requires. No-ops
+-- (returns nil) when SLINK_SHADOW is unset, so this costs nothing on ordinary duo runs.
+local shadow
+if os.getenv("SLINK_SHADOW") then
+    local okshd, shd = pcall(dofile, D.wt .. "/lua/gen3/shadow_run.lua")
+    if okshd and shd then
+        local okst, st = pcall(shd.start)
+        if okst and st then shadow = st; log("shadow observer started") else
+            log("shadow observer start failed: " .. tostring(st))
+        end
+    else
+        log("shadow_run dofile failed: " .. tostring(shd))
+    end
+end
+
 -- ── Scenario context ──────────────────────────────────────────────────────────
 local ctx = {
     player = D.player, duo = D, log = log,

@@ -63,7 +63,7 @@ def _has_verdict(path):
         return False
 
 
-def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
+def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False, shadow=False):
     """Run one gate. Returns (passed: bool, result_path: str|None, text: str)."""
     if not os.path.exists(EMUHAWK):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
@@ -81,6 +81,8 @@ def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
     if out_path and os.path.exists(out_path):
         os.remove(out_path)
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
+    if shadow:
+        env["SLINK_SHADOW"] = "1"
     cmd = [EMUHAWK, f"--config={cfg_rel}", f"--lua={script}", rom]
     if not quiet:
         print(f"[gate] {' '.join(cmd)}")
@@ -117,8 +119,10 @@ def main():
     ap.add_argument("script", help="path to the gate, relative to the repo root")
     ap.add_argument("--rom", default=DEFAULT_ROM)
     ap.add_argument("--timeout", type=int, default=240)
+    ap.add_argument("--shadow", action="store_true",
+                     help="export SLINK_SHADOW=1 to the EmuHawk process (PLAN §5.7 P3 observer)")
     args = ap.parse_args()
-    passed, path, text = run_gate(args.script, args.rom, args.timeout)
+    passed, path, text = run_gate(args.script, args.rom, args.timeout, shadow=args.shadow)
     if text and not passed:
         print("--- result ---")
         print(text[-3000:])
