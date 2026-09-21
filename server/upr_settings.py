@@ -597,6 +597,12 @@ def categories_enabled(parsed: dict) -> set[str]:
     return {cat for cat in _CATEGORY_MODES if spec[cat] != "unchanged"}
 
 
+# wild=global (one species map for the whole game) honours only the similar-strength
+# restriction: UPR's game1to1Encounters never reads type_themed / catch_em_all, so a file that
+# combines them would run as plain global while claiming more (review cx-73e80e05 #7).
+GLOBAL_IGNORED_RESTRICTIONS = ("type_themed", "catch_em_all")
+
+
 def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     """Settings that change data the Soul Link rules read. Any of these must reject a run.
 
@@ -607,10 +613,13 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     """
     f = parsed["flags"]
     bad = []
+    spec = spec_from_parsed(parsed)
+    if spec.get("wild") == "global" and spec.get("wild_restriction") in GLOBAL_IGNORED_RESTRICTIONS:
+        bad.append(f"wild=global with wild_restriction={spec['wild_restriction']} "
+                   f"(UPR ignores that restriction under a global map)")
     if family == FAMILY_PURE and parsed.get("misc_tweaks"):
         bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
     if family == FAMILY_PURE:
-        spec = spec_from_parsed(parsed)
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")

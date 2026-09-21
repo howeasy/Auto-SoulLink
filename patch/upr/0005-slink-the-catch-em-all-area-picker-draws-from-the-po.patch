@@ -1,0 +1,32 @@
+From a9fc5715859d9d30bc70720e0e19da0a2635d728 Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Sun, 20 Sep 2026 21:03:56 -0400
+Subject: [PATCH] slink: the catch-em-all area picker draws from the pool that
+ excludes the area's banned species (a fishing/Tower set could receive the
+ ghost it bans)
+
+---
+ .../dabomstew/pkrandom/romhandlers/AbstractRomHandler.java | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java
+index 4cc0912..f218a97 100755
+--- a/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java
+@@ -997,8 +997,11 @@ public abstract class AbstractRomHandler implements RomHandler {
+                         Pokemon pickedMN = tempPickable.get(picked);
+                         areaMap.put(areaPk, pickedMN);
+                     } else {
+-                        int picked = this.random.nextInt(allPokes.size());
+-                        Pokemon pickedMN = allPokes.get(picked);
++                        // SLink: draw from the pool that already excludes area.bannedPokemon
++                        // (the fishing/Tower ghost); drawing from allPokes could hand a set its
++                        // banned species while removing it from the wrong list.
++                        int picked = this.random.nextInt(pickablePokemon.size());
++                        Pokemon pickedMN = pickablePokemon.get(picked);
+                         areaMap.put(areaPk, pickedMN);
+                         pickablePokemon.remove(pickedMN);
+                         if (allPokes != pickablePokemon) {
+-- 
+2.54.0.windows.1
+

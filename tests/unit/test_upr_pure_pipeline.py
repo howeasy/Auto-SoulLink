@@ -102,6 +102,20 @@ def test_the_pure_family_refuses_what_the_fork_cannot_honour():
     assert forbidden_enabled(load(build_spec(default_spec(FAMILY_PURE))), FAMILY_PURE) == []
 
 
+def test_global_with_an_ignored_restriction_is_refused_for_both_families():
+    """Review cx-73e80e05 #7: game1to1Encounters reads only the similar-strength restriction."""
+    for restriction in ("type_themed", "catch_em_all"):
+        parsed = load(build_spec({"wild": "global", "wild_restriction": restriction, "fastest_text": False}))
+        for family in (FAMILY_VANILLA, FAMILY_PURE):
+            assert forbidden_enabled(parsed, family) == [
+                f"wild=global with wild_restriction={restriction} (UPR ignores that restriction under a global map)"]
+    for restriction in ("none", "similar"):
+        parsed = load(build_spec({"wild": "global", "wild_restriction": restriction, "fastest_text": False}))
+        assert forbidden_enabled(parsed, FAMILY_PURE) == []
+    parsed = load(build_spec({"wild": "area", "wild_restriction": "catch_em_all", "fastest_text": False}))
+    assert forbidden_enabled(parsed, FAMILY_PURE) == []
+
+
 def test_the_write_domains_follow_the_whole_spec_not_the_six_modes():
     """Review cx-795d1423 #11: a level curve or catch-rate tier with its parent mode unchanged
     still writes bytes; the audit domain has to come from every option."""
@@ -350,7 +364,8 @@ class TestAgainstTheForkJar:
         with open(out, "rb") as f:
             got = f.read()
         r = audit("purered", clean, got, set(cats))
-        assert r["changed"] > 0, f"{sorted(cats)} enabled but nothing changed"
+        if cats != {"starters"}:              # the original trio is a legal starters draw (cx-73e80e05 #8)
+            assert r["changed"] > 0, f"{sorted(cats)} enabled but nothing changed"
         assert r["stray"] == [], [f"0x{i:06X}: {clean[i]:02X}->{got[i]:02X}" for i in r["stray"][:12]]
 
     @pytest.mark.parametrize("extra", [
