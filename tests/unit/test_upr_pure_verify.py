@@ -659,15 +659,74 @@ class TestTrainers:
         r = _verify(bytes(out), spec)
         assert any("class 1 record 5" in f and "evolve into" in f for f in r["failures"]), r["failures"]
 
-    def test_similar_strength_accepts_a_party_realizing_one_eevee_branch(self, randomized):
-        """The same fixture with both slots crediting the SAME branch (fullyEvolve is
-        deterministic per trainer, so this is exactly what a real run could produce) must not
-        be rejected by the branch-consistency check."""
-        spec = self.SIMILAR_FORCED
-        out = bytearray(randomized(spec))
-        out[0x3959F] = 0x67                                  # FLAREON
-        out[0x395A0] = 0x67                                  # FLAREON: same branch as the other slot
-        r = _verify(bytes(out), spec)
+    EEVEE_ROM_WIDE = _spec(trainers="random", trainers_similar_strength=True, trainers_force_evolved=11,
+                           trainers_block_legendaries=False)
+
+    @staticmethod
+    def _globally_consistent_eevee_rom(seed: int, force: int, overrides: dict[int, int]) -> bytes:
+        """Force-evolves every trainer slot at or above ``force`` exactly as forceFullyEvolved
+        TrainerPokes would for ONE consistent seed (A:6795-6826): a non-branching chain walks to
+        its single terminal; a clean Eevee resolves via evolutionIndex = (seed + trainerIndex) %
+        3, using this fixture's own class/record -> trainer-index mapping (party_indices,
+        matching Gen1RomHandler.getTrainers's sequential per-(class,record) counter). This
+        avoids the ~300+ unrelated "still evolves" failures a from-clean, mostly-untouched ROM
+        would collect at a threshold this low, AND avoids depending on whatever real, unobserved
+        seed a live jar run would use elsewhere in the ROM (which is what made both a from-clean
+        and a from-jar-"unchanged" fixture unreliable here: the clean ROM has its own natural
+        Eevee elsewhere, which force-evolves for real even under trainers=unchanged). Applied
+        AFTER the general pass, ``overrides`` plants the specific fixture under test."""
+        clean = _clean()
+        chk = _walk(clean, _spec(trainers="unchanged"))
+        out = bytearray(clean)
+        evos = chk.f["evos"]
+        eevee, branches = 102, (103, 104, 105)
+        for where, slots in chk.parties:
+            idx = chk.party_indices[where][0]
+            for lv, sp, mask in slots:
+                if (clean[lv] & mask) < force:
+                    continue
+                c = clean[sp]
+                if c not in chk.f["ordinary"]:
+                    continue
+                if c == eevee:
+                    out[sp] = branches[(seed + idx) % 3]
+                else:
+                    v = c
+                    while len(evos.get(v, ())) == 1:
+                        v = evos[v][0]
+                    out[sp] = v
+        for sp, v in overrides.items():
+            out[sp] = v
+        return bytes(out)
+
+    def test_similar_strength_rejects_a_rom_wide_eevee_branch_conflict(self):
+        """evolutionIndex = (fullyEvolvedRandomSeed + trainerIndex) % branchCount (A:6826) draws
+        fullyEvolvedRandomSeed ONCE per ROM (A:6795-6797): trainer index 4 (Machop/Doduo/Krabby,
+        level 16) needing Flareon and index 6 (Growlithe/Slowpoke, level 17) ALSO needing Flareon
+        requires (S+4)%3 == (S+6)%3, which has no solution since 4 != 6 (mod 3) -- each party is
+        internally consistent alone, but the ROM as a whole is not (cx-86594273 #2). The seed
+        chosen for the rest of the ROM (0, arbitrary) is irrelevant to this pair, which is
+        self-contradictory for every possible seed."""
+        spec = self.EEVEE_ROM_WIDE
+        out = self._globally_consistent_eevee_rom(seed=0, force=11, overrides={
+            0x39596: 0x67, 0x39597: 0x67, 0x39598: 0x67,      # FLAREON: trainer index 4
+            0x3959F: 0x67, 0x395A0: 0x67,                     # FLAREON: trainer index 6 -- conflicts with index 4
+        })
+        r = verify("purered", _clean(), out, spec=spec)
+        assert not r["ok"]
+        assert any("EEVEE" in f and "at once" in f for f in r["failures"]), r["failures"]
+
+    def test_similar_strength_accepts_a_rom_wide_compatible_eevee_choice(self):
+        """Index 4 needing Flareon (branch position 0) and index 6 needing Vaporeon (position 2)
+        both hold for seed S=2: (2+4)%3=0, (2+6)%3=2 -- a real single-seed run could produce
+        exactly this, so it must not be rejected. Every other Eevee-derived pick in the ROM is
+        built consistent with this SAME seed, so nothing else can contradict it."""
+        spec = self.EEVEE_ROM_WIDE
+        out = self._globally_consistent_eevee_rom(seed=2, force=11, overrides={
+            0x39596: 0x67, 0x39597: 0x67, 0x39598: 0x67,      # FLAREON: trainer index 4, (2+4)%3=0
+            0x3959F: 0x69, 0x395A0: 0x69,                     # VAPOREON: trainer index 6, (2+6)%3=2
+        })
+        r = verify("purered", _clean(), out, spec=spec)
         assert r["ok"], "\n".join(r["failures"])
 
     THEMED_SIMILAR = _spec(trainers="type_themed", trainers_similar_strength=True, trainers_block_legendaries=False)
@@ -709,6 +768,29 @@ class TestTrainers:
         assert not r["ok"]
         assert any("similar_strength band" in f and ("0x395EB" in f or "0x395EC" in f)
                    for f in r["failures"]), r["failures"]
+
+    def test_similar_strength_counts_candidate_pokemon_not_distinct_bst_values(self, randomized):
+        """pickTrainerPokeReplacement's canPick has no per-object dedup (A:6925-6946): a scan
+        adds every matching Pokemon again, so "reach 3" counts objects, not distinct BST values.
+        Class 1 record 0 (Rattata/Pidgey/Sandshrew, 0x39589-0x3958B), Rock-themed: the initial
+        +-10% window around Sandshrew (BST 280) is [252,308], which already holds Geodude (270,
+        widened in for the other two slots), Kabuto (300) and Omanyte (300) -- three CANDIDATE
+        POKEMON although only two distinct BST values -- so Java locks the band there and never
+        widens to admit Rhyhorn (BST 315); counting distinct values undercounts to 2 and wrongly
+        widens to [238,322], which does admit it (cx-86594273 #1). This party is overwritten
+        wholesale (Geodude/Geodude/Kabuto-or-Rhyhorn) so its theme is exactly Rock, independent
+        of what the jar itself assigned there."""
+        spec = self.THEMED_SIMILAR
+        out = bytearray(randomized(spec))
+        out[0x39589] = 0xA9                                  # GEODUDE
+        out[0x3958A] = 0xA9                                  # GEODUDE
+        out[0x3958B] = 0x5A                                  # KABUTO: control, a legal Rock-strength pick
+        r = _verify(bytes(out), spec)
+        assert r["ok"], "\n".join(r["failures"])
+        bad = bytearray(out)
+        bad[0x3958B] = 0x12                                  # RHYHORN: BST 315, outside the locked [252,308] band
+        r = _verify(bytes(bad), spec)
+        assert any("similar_strength band" in f and "0x3958B" in f for f in r["failures"]), r["failures"]
 
     THEMED_SIMILAR_FORCED = _spec(trainers="type_themed", trainers_similar_strength=True,
                                    trainers_force_evolved=1, trainers_block_legendaries=False)

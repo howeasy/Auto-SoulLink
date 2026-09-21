@@ -222,33 +222,44 @@ def _facts() -> dict:
     }
 
 
-def _strength_band(bst: int, pool_bsts, max_rounds: int) -> tuple[int, int]:
-    """The expanding-BST-window loop pickWildPowerLvlReplacement (A:6980-7005: `while
-    (canPick.isEmpty() || (canPick.size() < 3 && expandRounds < 3))`),
-    pickStaticPowerLvlReplacement (A:7059-7082, same `< 3`) and the ``usePowerLevels`` branch of
-    pickTrainerPokeReplacement (A:6925-6946, `< 2`) share: start at +-10% of ``bst``, widen by
-    max(bst // 20, 1) on each side per scan, accepting the accumulated candidate set once it
-    reaches 3 members or after the loop's ``expandRounds`` cap is hit -- but never on an empty
-    set (patch 0003 set the step floor so this always terminates). ``max_rounds`` is that literal
-    cap (3 for wild/statics, 2 for trainers): the loop always scans once at the initial +-10%
-    band, then scans again after each widening while `expandRounds < max_rounds`, so trainers
-    (cap 2) uses at most ONE widened scan and wild/statics (cap 3) use at most TWO. Returns the
-    (lo, hi) bounds of the last scan that ran.
+def _strength_band(bst: int, pool_bsts, max_rounds: int, *, dedup: bool = True) -> tuple[int, int]:
+    """The expanding-BST-window loop three callers share, each with its own ``canPick`` list
+    and its own "reach 3 candidate Pokemon" stopping rule (never counted by distinct BST value
+    -- two species sharing one BST are two candidates, not one, cx-86594273 #1):
 
-    Approximation: Java's ``canPick`` counts Pokemon OBJECTS, so two species sharing one BST are
-    two separate candidates toward the "reach 3" stop; this counts distinct BST VALUES instead
-    (a Python ``set``), which can need MORE species than Java did to reach "3" distinct values
-    and so can delay stopping and WIDEN the band beyond Java's true one -- a known, unproven-safe
-    approximation (only ever wider, so only ever more permissive, never a false reject from this
-    alone), not a bug to chase further."""
+    * pickWildPowerLvlReplacement (A:6980-7005): `while (canPick.isEmpty() || (canPick.size()
+      < 3 && expandRounds < 3))`; each scan does `if (... && !canPick.contains(pk)) canPick.add`
+      -- a per-OBJECT dedup, so ``canPick.size()`` after a scan is exactly the count of distinct
+      species matched so far (``dedup=True``, cap 3: initial scan + at most two widened ones).
+      ``pokemonPool`` there is the per-table/per-encounter local pool, not modeled here beyond
+      the block_legendaries gate (see the wild=similar comment above).
+    * pickStaticPowerLvlReplacement (A:7059-7082): identical shape and the same per-object
+      `!canPick.contains(pk)` dedup (``dedup=True``, cap 3). ``pokemonPool`` there is
+      ``pokemonLeft``, which the caller shrinks by removing each static's chosen replacement as
+      it goes (A:4272) and excludes the record's own original species via ``banSamePokemon``
+      (A:4269, A:7071, modeled separately above) -- the "previously chosen" shrinkage across
+      static records is NOT modeled (same class of approximation as wild=global's aggregate
+      bound: the true pool at any one static depends on the unknown draw order of every static
+      before it in this run).
+    * pickTrainerPokeReplacement's ``usePowerLevels`` branch (A:6925-6946): `while
+      (canPick.isEmpty() || (canPick.size() < 3 && expandRounds < 2))`; each scan does
+      `canPick.add(pk)` with NO contains-check, rescanning the WHOLE (unshrinking) `pickFrom`
+      every round -- so a species matching both the initial and the widened band is counted
+      TWICE toward "reach 3" (``dedup=False``, cap 2: initial scan + at most one widened one).
+      This is what made a 2-widened-value fixture (two same-BST species, e.g. Kabuto/Omanyte at
+      300) undercount to "2 distinct values" and wrongly widen past a band Java had already
+      locked at the initial +-10% window.
+
+    Returns the (lo, hi) bounds of the last scan that ran."""
     lo, hi = bst - bst // 10, bst + bst // 10
     step = max(bst // 20, 1)
-    matched: set[int] = set()
+    count = 0
     rounds = 0
     used_lo, used_hi = lo, hi
-    while not matched or (len(matched) < 3 and rounds < max_rounds):
+    while count == 0 or (count < 3 and rounds < max_rounds):
         used_lo, used_hi = lo, hi
-        matched = {v for v in pool_bsts if lo <= v <= hi}
+        this_scan = sum(1 for v in pool_bsts if lo <= v <= hi)
+        count = this_scan if dedup else count + this_scan
         lo -= step
         hi += step
         rounds += 1
@@ -671,6 +682,16 @@ class _Check:
         got = {tuple(v) for v in blocks.values() if len(v) > 1}
         if want != got:
             self.fail(f"trainers: aliased class groups {sorted(got)} != facts {sorted(want)}")
+        # Gen1RomHandler.getTrainers (A:1396-1407): a global `index` counter increments once
+        # per (class, record) pair as classes are visited in order 1..nclass, REGARDLESS of
+        # aliasing -- two aliased classes each re-walk the same bytes and each record gets its
+        # own trainer index. class_start[cls] is the index of that class's record 0.
+        class_start: dict[int, int] = {}
+        running = 1
+        for cls in range(1, nclass + 1):
+            class_start[cls] = running
+            running += counts[cls]
+        self.party_indices: dict[str, list[int]] = {}   # where -> every aliased class's trainer index
         self.parties: list[tuple[str, list[tuple[int, int, int]]]] = []    # (where, [(lvl, species, mask)])
         for offs, classes in blocks.items():
             cls = classes[0]
@@ -680,6 +701,8 @@ class _Check:
             if counts[cls] != len(frecs):
                 self.fail(f"trainers: class {cls} count {counts[cls]} != facts {len(frecs)}")
             for idx in range(counts[cls]):
+                where = f"class {cls} record {idx} @0x{offs:X}"
+                self.party_indices[where] = [class_start[c] + idx for c in classes]
                 offs = self._trainer_record(cls, idx, offs, frecs[idx] if idx < len(frecs) else None)
         etm = e["ExtraTrainerMovesTableOffset"]
         glm = e["GymLeaderMovesTableOffset"] - 0x44
@@ -837,6 +860,15 @@ class _Check:
             return pool
 
         mode = self.opt("trainers")
+        # ROM-wide branch reconciliation (cx-86594273 #2): evolutionIndex = (fullyEvolvedRandomSeed
+        # + trainerIndex) % branches.size() (A:6826) draws fullyEvolvedRandomSeed ONCE per ROM
+        # (A:6795-6797), so the branch a party needs isn't independent per trainer -- it's pinned
+        # to that ONE seed value via the trainer's own index. Each party that relies solely on a
+        # branching ancestor contributes a required residue (S + index) % branchCount for EVERY
+        # index this physical record could have been read under (see class_start/party_indices,
+        # >1 only for aliased classes); the whole ROM is legal only if some single S satisfies
+        # every party's requirement at once.
+        branch_reqs: dict[int, list[tuple[str, int]]] = collections.defaultdict(list)  # parent -> [(where, branch)]
         for where, slots in self.parties:
             if mode == "type_themed":
                 # the actual theme type isn't recorded anywhere observable; every party member's
@@ -861,7 +893,7 @@ class _Check:
                     candidates = _ancestors_or_self(v, pre_evos) if will_force else {v}
                     pool = pool_for(theme, will_force)
                     pool_bsts = [self.f["bst"][p] for p in pool]
-                    lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=2)
+                    lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=2, dedup=False)
                     justifying = {x for x in candidates if x in pool and lo <= self.f["bst"][x] <= hi}
                     slot_data.append((sp, v, c_bst, justifying))
                 unjustified = [(sp, v, c_bst) for sp, v, c_bst, j in slot_data if not j]
@@ -888,9 +920,33 @@ class _Check:
                                      + " at once (fullyEvolve's branch is fixed per trainer, A:6826)")
                     continue
                 party_failure = None
+                for p, b in branch_used.items():
+                    branch_reqs[p].append((where, next(iter(b))))
                 break
             if party_failure:
                 self.fail(party_failure)
+
+        for p, reqs in branch_reqs.items():
+            targets = branch_parents[p]
+            n = len(targets)
+            # for each requirement, every seed value (mod n) that could satisfy it: some
+            # candidate trainer index (>1 only when aliased) reproducing the required position
+            allowed = [(where, branch, {seed for seed in range(n)
+                                         if any((seed + i) % n == targets.index(branch)
+                                                for i in self.party_indices.get(where, [0]))})
+                       for where, branch in reqs]
+            combined = set(range(n))
+            for _w, _b, s in allowed:
+                combined &= s
+            if not combined:
+                conflict = next(((a, b) for i, a in enumerate(allowed) for b in allowed[i + 1:]
+                                  if not (a[2] & b[2])), (allowed[0], allowed[-1]))
+                (w0, b0, _), (w1, b1, _) = conflict
+                self.fail(f"trainers: similar_strength needs {self.name(p)} to evolve into {self.name(b0)} "
+                          f"for {w0} (trainer index {self.party_indices.get(w0, ['?'])}) and {self.name(b1)} "
+                          f"for {w1} (trainer index {self.party_indices.get(w1, ['?'])}) at once -- "
+                          f"fullyEvolve's branch depends only on one seed drawn per ROM and the trainer's "
+                          f"own index (A:6795-6797, 6826), so no single seed satisfies both")
 
     # ── TMs ──────────────────────────────────────────────────────────────────────────
     def tms(self) -> None:
