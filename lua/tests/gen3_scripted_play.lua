@@ -66,9 +66,8 @@ local PATHS = {
     -- PalletTown/map.json warp_events[2] = (16,13) MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB warp 0.
     -- Door tile (16,13) reads collision=1; the walkable approach is (16,14), one tile south.
     town_start_to_lab_door = {
-        map = "PalletTown", from = { 6, 8 }, to = { 16, 14 },
-        dirs = { "Down","Down","Right","Right","Right","Right","Down","Down","Down","Down",
-                 "Right","Right","Right","Right","Right","Right" },
+        map = "PalletTown", from = { 6, 9 }, to = { 16, 14 },   -- (6,9): FRLG door exit walks one tile south of the door (PHYSICAL 2026-09-21)
+        dirs = { "Down", "Right", "Right", "Right", "Right", "Down", "Down", "Down", "Down", "Right", "Right", "Right", "Right", "Right", "Right" },
     },
     -- PalletTown_ProfessorOaksLab/map.json warp_events[0] = (6,12), the lab's own landing tile
     -- (collision=0, walk-through). SquirtleBall object_event at (9,4) (collision=1, solid);
@@ -121,11 +120,7 @@ local PATHS = {
     },
     route1_south_to_north_edge = {
         map = "Route1", from = { 12, 39 }, to = { 12, 1 },
-        dirs = { "Up","Up","Up","Up","Up","Up","Up","Left","Left","Left","Left","Up","Up","Up",
-                 "Up","Up","Right","Right","Right","Right","Up","Up","Up","Up","Up","Up","Left",
-                 "Left","Up","Up","Up","Up","Right","Right","Right","Right","Right","Right","Up",
-                 "Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Left",
-                 "Left","Left","Up","Left" },
+        dirs = { "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Left", "Left", "Up", "Up", "Up", "Up", "Up", "Right", "Right", "Right", "Right", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Up", "Up", "Up", "Up", "Right", "Right", "Right", "Right", "Right", "Right", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Left", "Up", "Left" },
     },
     route1_north_to_south_edge = {
         map = "Route1", from = { 12, 1 }, to = { 12, 39 },
@@ -156,10 +151,7 @@ local PATHS = {
     },
     mart_door_to_route1_edge = {
         map = "ViridianCity", from = { 36, 20 }, to = { 24, 39 },
-        dirs = { "Down","Down","Down","Down","Down","Down","Down","Down","Down","Left","Left",
-                 "Left","Left","Left","Left","Left","Left","Left","Left","Left","Left","Left",
-                 "Down","Down","Down","Down","Down","Down","Down","Down","Down","Down","Right",
-                 "Right" },
+        dirs = { "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Right", "Right" },
     },
     -- PokeCenter door (26,26) in ViridianCity/map.json; collision=1, approach (26,27)=0.
     route1_edge_to_pokecenter_door = {
@@ -192,6 +184,14 @@ local PATHS = {
 local function follow(cp, path_name, label)
     local p = assert(PATHS[path_name], "no PATHS entry " .. tostring(path_name))
     local start_map = mapid(cp)
+    -- A precomputed path is only valid from ITS start tile: refuse loudly instead of walking
+    -- a wrong-offset route into collision (the first lane run stalled exactly that way).
+    local sx, sy = G.pos(cp)
+    if sx ~= p.from[1] or sy ~= p.from[2] then
+        G.shot("stuck")
+        G.finish(false, string.format("%s (%s): start tile (%d,%d) is not the path's from (%d,%d)",
+                                      label, path_name, sx, sy, p.from[1], p.from[2]))
+    end
     for _, dir in ipairs(p.dirs) do
         local x, y = G.pos(cp)
         local moved = false
@@ -609,6 +609,24 @@ local function run()
         G.shot("stuck")
         local cb2 = G.pred(cp, "callback2")
         G.finish(false, string.format("boot: never reached the field (callback2=%08X)", cb2))
+    end
+
+    -- P3 shadow observer beside this driver when SLINK_SHADOW is set (same block shape as
+    -- lua/tests/duo/duo_main.lua): read-only, logs to patch/build/gen3_scripted_play.shadow.log.
+    if os.getenv("SLINK_SHADOW") then
+        local okshd, shd = pcall(dofile, WT .. "/lua/gen3/shadow_run.lua")
+        if okshd and shd then
+            local okst, st = pcall(shd.start, { duo = {
+                result = WT .. "/patch/build/gen3_scripted_play_result.txt", player = "a" } })
+            if okst and st then
+                G.phase("shadow", "observer started admitted_by=" .. tostring(st.admitted_by))
+                event.onframeend(function() pcall(st.poll) end, "SLink-gen3-shadow-poll")
+            else
+                G.phase("shadow", "observer start failed: " .. tostring(st))
+            end
+        else
+            G.phase("shadow", "shadow_run dofile failed: " .. tostring(shd))
+        end
     end
 
     local from_idx = 1

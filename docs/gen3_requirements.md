@@ -180,6 +180,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P2 RR `_b` fixture: `tests/fixtures/gen3/rr_town_b.sav` (sha256 `13da0f15…`) derived through the pinned RR chunk/extension mapping (Codex cx-288ff3e9; 20 unit tests incl. a 750-slot owned/foreign box population, RTC preservation, corrupted-chunk refusal) and boot-checked on the lane: counter 2→3, 14/14 sectors, identity `BB` #3559012160 distinct from A. F-6 RR `_b` half. `saveram_name()` now defaults to BizHawk's underscore→space rule; gamedb-known cartridges (vanilla FR) still need `--saveram-name`.
 
+- 2026-09-21 P3 first semantic fire, vanilla FR: `docs/gen3/probes/shadow_fr_play_2026-09-21.txt` — the shadow observer (lua/gen3/shadow_run.lua over the real Entry.build, admitted by hash) registered 21 sites, rejected 0, dropped 0, and `map_load` fired exactly once at frame 1058 as the scripted walk entered Oak's lab (callback_address == site 0x0805xxxx, raw_r15 = +2, thumb); frame_control counted 1789 over the run. PHYSICAL positive for S-1 on FR `map_load`; RR companion duos (six, all PASS with the observer) show 19 registered and only frame_control (reachability scan R2 in flight). The play leg itself failed by design of the game: the starter needs the Route 1 Oak intercept first (leg reorder queued).
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

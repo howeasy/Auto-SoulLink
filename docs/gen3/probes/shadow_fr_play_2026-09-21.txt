@@ -1,0 +1,14 @@
+# Shadow observer beside lua/tests/gen3_scripted_play.lua on vanilla FR US 1.0, 2026-09-21
+# fixture tests/fixtures/gen3/firered_town.sav; observer admitted by hash (gen3_frlg/firered/clean)
+## driver phases
+phase start frame=1 title=firered
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-start frame=635 starter
+RESULT: FAIL starter: party_count() never left 0 after interacting with the ball
+## shadow log
+STATUS frame=635 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=1058 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=1235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=589
+STATUS frame=1835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1189
+STATUS frame=2435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1789
