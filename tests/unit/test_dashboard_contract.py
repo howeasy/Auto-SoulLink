@@ -235,8 +235,6 @@ async def test_the_now_cards_sit_in_the_player_columns(dashboard):
     _, dom = dashboard
     cards = [n for n in dom.find_all("div") if "mk-nowcard" in _classes(n)]
     assert [c.get("style") for c in cards] == ["grid-column:1", "grid-column:3"]
-    # the area's picture beside each card's area line (server/area_art.py), named by the area
-    assert [c.find("img", **{"class": "mk-now-art"}).attrs["src"].startswith("/area-art/") for c in cards] == [True, True]
     assert all("online" in _classes(c) for c in cards), "both players are connected on the mock cast"
 
 

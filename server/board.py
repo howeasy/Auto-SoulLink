@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import re
 
-from server import area_art
-
 SECTION_LABELS = {
     "party": "In party",
     "pending": "Pending link",
@@ -179,9 +177,6 @@ def build_board(status: dict) -> dict:
                    for pid in PIDS},
         "active": {pid: active_key(players.get(pid, {})) for pid in PIDS},
         # "?" is what a player who never said hello reports as rom_type.
-        # whether something depicts the area (server/area_art.py): the card draws the tile only then
-        "art": {pid: area_art.source(players.get(pid, {}).get("current_area_display") or "") is not None
-                for pid in PIDS},
         "has_data": {pid: bool((players.get(pid, {}).get("rom_type") or "?") != "?"
                                or players.get(pid, {}).get("party_keys"))
                      for pid in PIDS},

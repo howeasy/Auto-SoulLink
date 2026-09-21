@@ -228,12 +228,6 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-badge-pip { width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--c-edge); }
 .mk-badge-pip.on { background: var(--c-gold); border-color: var(--c-gold); }
 .mk-now-body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--mk-pad) var(--mk-pad); flex: 1; }
-/* the area line with the area's picture beside it: the whole painting, at full strength,
-   the size of a postcard -- the line's words stack on the left of it */
-.mk-now-where { display: flex; align-items: flex-start; gap: var(--space-3); }
-.mk-now-where .mk-now-line { flex: 1; min-width: 0; align-content: flex-start; }
-.mk-now-art { flex-shrink: 0; width: 132px; height: 132px; object-fit: cover; border-radius: 8px;
-  outline: 1px solid oklch(1 0 0 / .1); outline-offset: -1px; background: var(--c-sep); }
 .mk-now-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: var(--fs-md); color: var(--c-dim); }
 .mk-now-line b { color: var(--c-txt); font-weight: 600; font-size: var(--fs-lg); }
 

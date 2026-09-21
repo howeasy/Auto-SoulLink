@@ -121,17 +121,12 @@
               </div>
               {% if board.has_data[pid] %}
                 <div class="mk-now-body">
-                  {# the area line, with the area's picture beside it (server/area_art.py: a 404 for a
-                     place nothing depicts, and the tile hides itself) #}
-                  <div class="mk-now-where">
-                    <div class="mk-now-line">
-                      <b>{{ p.current_area_display or 'unknown' }}</b>
-                      <span><span class="num">{{ p.ball_count }}</span> balls</span>
-                      <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
-                      {% if not p.connected and live %}<span class="mk-tag off">disconnected</span>{% endif %}
-                      {% if p.stale %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
-                    </div>
-                    {% if board.art[pid] %}<img class="mk-now-art" src="/area-art/{{ p.current_area_display | urlencode }}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">{% endif %}
+                  <div class="mk-now-line">
+                    <b>{{ p.current_area_display or 'unknown' }}</b>
+                    <span><span class="num">{{ p.ball_count }}</span> balls</span>
+                    <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
+                    {% if not p.connected and live %}<span class="mk-tag off">disconnected</span>{% endif %}
+                    {% if p.stale %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
                   </div>
                   {% set bs = p.battle_state %}
                   {% set mine = p.party_details[board.active[pid]] if board.active[pid] else none %}
