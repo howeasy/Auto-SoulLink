@@ -178,6 +178,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P2 FR fixture: `tests/fixtures/gen3/firered_town.sav` made by scripted NEW GAME with the walk-out PINNED from pret/pokefirered c75f352 (spawn `src/new_game.c:84` (6,6); warps from `data/maps/PalletTown_PlayersHouse_{2F,1F}/map.json`; path = BFS over `data/layouts/*/map.bin` collision bits; FRLG stairs/doors are arrow warps entered by a held press) — receipts `docs/gen3/probes/{makefr,bootcheck}_firered_town_2026-09-21.txt`: counter −1→1 then 1→2, 14/14 sectors, party empty (pre-starter). F-6 FR half. The intro legs stay timed (verified by outcome only). pret/pokefirered is now cloned at the pinned commit under `E:/Google Drive/SLink/.cache/pret/pokefirered`.
 
+- 2026-09-21 P2 RR `_b` fixture: `tests/fixtures/gen3/rr_town_b.sav` (sha256 `13da0f15…`) derived through the pinned RR chunk/extension mapping (Codex cx-288ff3e9; 20 unit tests incl. a 750-slot owned/foreign box population, RTC preservation, corrupted-chunk refusal) and boot-checked on the lane: counter 2→3, 14/14 sectors, identity `BB` #3559012160 distinct from A. F-6 RR `_b` half. `saveram_name()` now defaults to BizHawk's underscore→space rule; gamedb-known cartridges (vanilla FR) still need `--saveram-name`.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

@@ -12,17 +12,16 @@ ever touched.
     python tools/gen3_fixtures.py import --src <SaveRAM> --out tests/fixtures/gen3/rr_town.sav --rr
     python tools/gen3_fixtures.py qualify tests/fixtures/gen3/*.sav
     python tools/gen3_fixtures.py qualify --rr tests/fixtures/gen3/rr_town.sav
-    python tools/gen3_fixtures.py derive-b tests/fixtures/gen3/rr_town.sav tests/fixtures/gen3/rr_town_b.sav
+    python tools/gen3_fixtures.py derive-b --rr tests/fixtures/gen3/rr_town.sav <scratch>/rr_town_b.sav
     python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_town.sav --rr
     python tools/gen3_fixtures.py make-fr --rom "Pokemon - FireRed Version (USA).gba" --out tests/fixtures/gen3/firered_town.sav
 
-``derive-b --rr`` always refuses (see RR_DERIVE_REFUSAL below): the codec's
-own ``party_from_save``/``boxes_from_save`` refuse ``rr=True`` because RR's
-chunk table, CFRU parasite payload and box disk mapping are UNVERIFIED
-against the RR 4.1 binary (flash_save.md §3, §5.7, §7); rewriting sectors
-without that mapping risks corrupting the parasite bytes CFRU appends after
-the section checksum in ids 0/4/13. Vanilla FR/LG derive-b is fully
-implemented per flash_save.md §5.
+``derive-b --rr`` uses the pinned RR layout in rr_save_layout.md. It patches
+only player identity, owned party/box OT headers and affected chunk checksums;
+it never rebuilds a sector with write_sector (which would erase parasite data).
+The inactive rotating slot stays unchanged; extension sectors 30/31 are shared
+by both slots. Daycare/mail/history are not re-identified. Bootability remains
+the coordinator's separate cold-boot/re-save/reload check.
 """
 from __future__ import annotations
 
@@ -40,34 +39,11 @@ sys.path.insert(0, REPO)
 from server.adapters import gen3_codec as codec  # noqa: E402
 
 FIXTURES_DIR = Path(REPO) / "tests" / "fixtures" / "gen3"
-RR_PROFILE = Path(REPO) / "data" / "games" / "gen3_rr" / "profile.json"
 
-RR_PARTY_CITE = (
-    "docs/gen3/research/flash_save.md §3, §7: upstream CFRU's chunk table "
-    "and parasite mapping are not a qualified Radical Red 4.1 binary fact, "
-    "so the SB1 party offset used here is UNVERIFIED at the disk-chunk level "
-    "even though it is a real RAM/profile offset."
-)
-RR_DERIVE_REFUSAL = (
-    "refused: Radical Red distinct-OT derivation is UNVERIFIED and not "
-    "attempted. server/adapters/gen3_codec.py party_from_save/boxes_from_save "
-    "refuse rr=True (RR's chunk table, CFRU parasite payload in sections "
-    "0/4/13, and 25-box disk mapping are unpinned against the admitted RR "
-    "4.1 binary). Rewriting sectors without that mapping risks destroying "
-    "the parasite bytes CFRU appends after the section checksum. "
-    "See docs/gen3/research/flash_save.md §3, §5.7, §7."
-)
 
 
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def rr_party_offset() -> int:
-    """SB1_PARTY_BASE_OFFSET from the generated RR profile (a real RAM
-    offset; disk-chunk validity is UNVERIFIED, see RR_PARTY_CITE)."""
-    data = json.loads(RR_PROFILE.read_text(encoding="utf-8"))
-    return data["titles"]["radical_red"]["derived"]["SB1_PARTY_BASE_OFFSET"]
 
 
 # ---------------------------------------------------------------------------
@@ -132,22 +108,14 @@ def qualify_one(data: bytes, *, rr: bool) -> dict:
     if not ok:
         return result
     if rr:
-        offset = rr_party_offset()
-        sb1 = parsed["sb1"]
-        count = min(sb1[codec.SB1_PARTY_COUNT_OFFSET], codec.PARTY_CAPACITY)
-        party = []
-        for i in range(count):
-            start = offset + i * codec.PARTY_MON_SIZE
-            raw = sb1[start:start + codec.PARTY_MON_SIZE]
-            if len(raw) != codec.PARTY_MON_SIZE:
-                break
-            mon = codec.decode_party_mon(raw, rr=True)
-            party.append({"species": mon["species"], "level": mon["level"]})
-        result["party"] = party
-        result["party_unverified"] = RR_PARTY_CITE
-        result["boxes"] = None
-        result["boxes_note"] = ("not supported for RR: CFRU 25-box disk "
-                                 "layout UNVERIFIED, flash_save.md §3")
+        if parsed["sb1"][codec.SB1_PARTY_COUNT_OFFSET] > codec.PARTY_CAPACITY:
+            raise ValueError("RR party count exceeds six")
+        party = codec.rr_party_from_save(body)
+        boxes = codec.rr_boxes_from_save(body)
+        result["party"] = [{"species": m["species"], "level": m["level"]} for m in party]
+        result["boxes"] = sum(bool(m["species"]) for box in boxes for m in box)
+        result["boxes_note"] = ("RR layout pinned; extension sectors 30/31 have no checksum "
+                                "or generation counter (rr_save_layout.md §5, §7)")
     else:
         party = codec.party_from_save(body, rr=False)
         result["party"] = [{"species": m["species"], "level": m["level"]}
@@ -176,17 +144,15 @@ def cmd_qualify(args: argparse.Namespace) -> int:
         if not r["ok"]:
             exit_code = 1
             continue
+        print(f"  party: {r['party']}")
+        print(f"  boxes: {r['boxes']} occupied slots")
         if args.rr:
-            print(f"  party (UNVERIFIED, {r['party_unverified']}): {r['party']}")
-            print(f"  boxes: {r['boxes_note']}")
-        else:
-            print(f"  party: {r['party']}")
-            print(f"  boxes: {r['boxes']} occupied slots")
+            print(f"  note: {r['boxes_note']}")
     return exit_code
 
 
 # ---------------------------------------------------------------------------
-# derive-b (vanilla only; RR always refuses, see RR_DERIVE_REFUSAL)
+# derive-b (variant-specific layouts; RR preserves whole-sector spare bytes)
 # ---------------------------------------------------------------------------
 
 def _rekey_mon(raw: bytes, *, party: bool, old_tid: int, new_tid: int,
@@ -210,10 +176,12 @@ def _rekey_mon(raw: bytes, *, party: bool, old_tid: int, new_tid: int,
     return new_raw, new_raw != raw
 
 
-def derive_b(a_body: bytes) -> tuple[bytes, list[str]]:
-    """Vanilla distinct-OT derivation (flash_save.md §5). Returns
+def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
+    """Variant-specific distinct-OT derivation (flash_save.md §5). Returns
     (new_flash_body, manifest_lines); raises ValueError if the source does
     not qualify."""
+    if rr:
+        return _derive_b_rr(a_body)
     ok, msg = codec.qualify_flash(a_body)
     if not ok:
         raise ValueError(f"source fixture does not qualify: {msg}")
@@ -279,17 +247,112 @@ def derive_b(a_body: bytes) -> tuple[bytes, list[str]]:
     return bytes(new_body), manifest
 
 
+def _rr_write_spans(parsed: dict) -> list[tuple[int, int, int]]:
+    """(RAM start, RAM end, flash start), excluding parasite and sector tails.
+
+    gen3_codec.py:659-708 pins RR_CHUNK_TABLE, object bases and the two FF0
+    extension payloads. rr_save_layout.md:91-100 maps all 25 box bases.
+    """
+    bases = {"sb2": codec.RR_SAVEBLOCK2_ADDR, "sb1": codec.RR_SAVEBLOCK1_ADDR,
+             "storage": codec.RR_STORAGE_ADDR}
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    sectors = {s["id"]: s["index"]
+               for s in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]}
+    spans = []
+    for entry in codec.rr_slot_layout():
+        start = bases[entry["object"]] + entry["offset"]
+        spans.append((start, start + entry["size"], sectors[entry["id"]] * codec.SECTOR_SIZE))
+    for n, sector in enumerate(codec.RR_EXT_SECTORS):
+        start = codec.RR_EXT_ADDR + n * codec.CHUNK_SIZE_CFRU
+        spans.append((start, start + codec.CHUNK_SIZE_CFRU, sector * codec.SECTOR_SIZE))
+    return spans
+
+
+def _derive_b_rr(a_body: bytes) -> tuple[bytes, list[str]]:
+    """Patch the selected slot and shared extension, retaining all other bytes.
+
+    RR party is fixed-order/plaintext (codec:737-748); compressed box headers
+    retain OTID +4 and OT name +14 (codec:47-49,345-362). Never encode a whole
+    mon/sector: this preserves unknown fields, zero mon checksums, parasite
+    bytes, extension tails, inactive slot, HOF and any supplied RTC suffix.
+    """
+    report = qualify_one(a_body, rr=True)
+    if not report["ok"]:
+        raise ValueError(f"source fixture does not qualify: {report['message']}")
+    parsed = codec.parse_flash(a_body, cfru=True)
+    party, boxes = codec.rr_party_from_save(a_body), codec.rr_boxes_from_save(a_body)
+    old_name, old_tid = _trainer_identity(parsed["sb2"])
+    new_tid = old_tid ^ 0xFFFFFFFF
+    new_name = (old_name + "B") if len(old_name) < 7 else old_name[:6] + (
+        "C" if old_name.endswith("B") else "B")
+    encoded_name = codec.encode_name(new_name, codec.OT_NAME_LEN)
+    spans = _rr_write_spans(parsed)
+    patches: dict[int, int] = {}
+
+    def field(address: int, data: bytes) -> None:
+        for n, value in enumerate(data):
+            addr = address + n
+            hits = [start + addr - lo for lo, hi, start in spans if lo <= addr < hi]
+            if len(hits) != 1:
+                raise ValueError(f"RR identity byte 0x{addr:08X} has no unique flash mapping")
+            offset = hits[0]
+            if offset in patches and patches[offset] != value:
+                raise ValueError("conflicting RR identity fields")
+            patches[offset] = value
+
+    field(codec.RR_SAVEBLOCK2_ADDR + 0xA, new_tid.to_bytes(4, "little"))
+    field(codec.RR_SAVEBLOCK2_ADDR, encoded_name)
+    manifest = [f"sb2 playerTrainerId {old_tid:#010x} -> {new_tid:#010x}",
+                f"sb2 playerName {old_name!r} -> {new_name!r}",
+                f"selected slot={parsed['slot']} counter={parsed['counter']} unchanged; "
+                "inactive rotating slot preserved (retains original identity); extension is shared",
+                "daycare/mail/history and SaveBlock2.encryptionKey preserved; boot-check still required"]
+
+    def mon_fields(mon: dict, address: int, label: str) -> None:
+        if not mon["species"] or mon["ot_id"] != old_tid:
+            return  # empty or foreign/traded record: byte-for-byte provenance
+        field(address + 4, new_tid.to_bytes(4, "little"))
+        field(address + 0x14, encoded_name)
+        manifest.append(f"{label} RAM={address:#010x} OTID+0x04/OT-name+0x14 re-keyed; plaintext preserved")
+
+    for slot, mon in enumerate(party):
+        mon_fields(mon, codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET
+                   + slot * codec.PARTY_MON_SIZE, f"party[{slot}]")
+    for box, mons in enumerate(boxes):
+        for slot, mon in enumerate(mons):
+            mon_fields(mon, codec.RR_BOX_BASES[box] + slot * codec.COMPRESSED_MON_SIZE,
+                       f"box[{box}][{slot}]")
+
+    new_body = bytearray(a_body)
+    for offset, value in patches.items():
+        new_body[offset] = value
+    # Only affected rotating chunks have checksums; parasite and extension
+    # bytes are outside those sums (rr_save_layout.md:132-154; codec:419-426).
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    for sector in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]:
+        size = codec.RR_CHUNK_TABLE[sector["id"]][1]
+        start = sector["index"] * codec.SECTOR_SIZE
+        chunk = bytes(new_body[start:start + size])
+        if chunk != a_body[start:start + size]:
+            checksum = codec.sector_checksum(chunk, size)
+            off = start + codec.OFF_SECTOR_CHECKSUM
+            new_body[off:off + 2] = checksum.to_bytes(2, "little")
+            manifest.append(f"sector[{sector['index']}] id={sector['id']} chunk checksum recomputed")
+    result = bytes(new_body)
+    qualified = qualify_one(result, rr=True)
+    if not qualified["ok"]:
+        raise ValueError(f"derived save does not re-qualify: {qualified['message']}")
+    return result, manifest
+
+
 def cmd_derive_b(args: argparse.Namespace) -> int:
-    if args.rr:
-        print(RR_DERIVE_REFUSAL, file=sys.stderr)
-        return 1
-    a_body = codec.split_rtc(Path(args.a).read_bytes())[0]
     try:
-        b_body, manifest = derive_b(a_body)
-    except ValueError as exc:
+        a_body = codec.split_rtc(Path(args.a).read_bytes())[0]
+        b_body, manifest = derive_b(a_body, rr=args.rr)
+    except (ValueError, OSError) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 1
-    ok, msg = codec.qualify_flash(b_body)
+    ok, msg = codec.qualify_flash(b_body, cfru=args.rr)
     if not ok:
         print(f"refused: derived save does not re-qualify: {msg}", file=sys.stderr)
         return 1
@@ -321,16 +384,16 @@ CHECKPOINTS = {False: Path(REPO) / "data/games/gen3_frlg/write_checkpoint.json",
 
 def saveram_name(rom_rel: str) -> str:
     """The battery filename for a ROM BizHawk's gamedb does not know: the ROM's basename with
-    the extension dropped (tools/gen1_playthrough.py:save_name_for, the same rule measured on
-    this machine's SaveRAM directory, minus the underscore substitution that only matters for
-    the Game Boy builds). Nothing is stripped or appended here -- BizHawk writes the optional
-    16-byte RTC suffix itself, and `import` normalizes it back out (codec.split_rtc).
+    the extension dropped and underscores replaced by spaces. The coordinator's RR boot-check
+    on 2026-09-21 observed gen3_slink_RR.gba -> "gen3 slink RR.SaveRAM"; see also
+    tools/mkstates.py:117 for "slink RR.SaveRAM". BizHawk writes any optional 16-byte RTC
+    suffix itself, and `import` normalizes it back out (codec.split_rtc).
 
     A cartridge that IS in the gamedb (a clean FR/LG dump) is filed under the gamedb name
     instead, which no rule here can derive; `--saveram-name` overrides for that case and the
     run fails loudly (erased battery / no flushed file) rather than silently booting NEW GAME.
     """
-    return Path(rom_rel).stem + ".SaveRAM"
+    return Path(rom_rel).stem.replace("_", " ") + ".SaveRAM"
 
 
 def stage_rom(rom: str) -> str:

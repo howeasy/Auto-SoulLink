@@ -6,6 +6,7 @@ read tests/fixtures/gen3/*.sav directly.
 """
 
 import glob
+import hashlib
 import os
 import sys
 
@@ -172,15 +173,174 @@ def test_derive_b_changes_exactly_the_manifested_fields():
     assert mon_b["checksum_ok"] is True
 
 
-def test_derive_b_rr_refuses():
-    # derive_b() itself only implements vanilla; the --rr CLI refusal
-    # (cmd_derive_b) never calls it and always cites the UNVERIFIED reason.
-    assert "UNVERIFIED" in fx.RR_DERIVE_REFUSAL
-    assert "flash_save.md" in fx.RR_DERIVE_REFUSAL
-    # derive_b() applied to a vanilla-shaped image never silently claims RR.
-    body = _build_image()
-    _, manifest = fx.derive_b(body)
-    assert isinstance(manifest, list)
+@pytest.fixture(scope="module")
+def rr_source():
+    with open(os.path.join(FIXTURES_DIR, "rr_town.sav"), "rb") as f:
+        data = f.read()
+    assert hashlib.sha256(data).hexdigest() == (
+        "b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3")
+    return data
+
+
+def _rr_regions(image):
+    parsed = codec.parse_flash(image, cfru=True)
+    return parsed, {
+        codec.RR_SAVEBLOCK2_ADDR: bytearray(parsed["sb2"]),
+        codec.RR_SAVEBLOCK1_ADDR: bytearray(parsed["sb1"]),
+        codec.RR_STORAGE_ADDR: bytearray(parsed["storage"]),
+        codec.RR_EXT_ADDR: bytearray(b"".join(
+            image[s * codec.SECTOR_SIZE:s * codec.SECTOR_SIZE + codec.CHUNK_SIZE_CFRU]
+            for s in codec.RR_EXT_SECTORS)),
+    }
+
+
+def _rr_populate_all_boxes(image):
+    """Seed every box in the real image in memory; no derived fixture is written.
+
+    rr_save_layout.md:91-100 / codec:688-695: boxes span storage, SB1, SB2,
+    and the FF0-payload extension (including the sector-30/31 straddle).
+    """
+    parsed, regions = _rr_regions(image)
+    old_name, old_tid = fx._trainer_identity(parsed["sb2"])
+    foreign_tid = old_tid ^ 0x12345678
+    sb1 = regions[codec.RR_SAVEBLOCK1_ADDR]
+    # A foreign party member must retain its full provenance too.
+    mon = bytearray(sb1[codec.SB1_PARTY_OFFSET:codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE])
+    mon[0:4] = (0xABCD5678).to_bytes(4, "little")
+    mon[4:8] = foreign_tid.to_bytes(4, "little")
+    mon[0x14:0x1B] = codec.encode_name("FOREIGN", 7)
+    start = codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE
+    sb1[start:start + codec.PARTY_MON_SIZE] = mon
+    sb1[codec.SB1_PARTY_COUNT_OFFSET] = 2
+    for box, address in enumerate(codec.RR_BOX_BASES):
+        base = next(base for base, raw in regions.items()
+                    if base <= address and address + codec.RR_BOX_STRIDE <= base + len(raw))
+        for slot in range(codec.MONS_PER_BOX):
+            # Both party and compressed headers use OTID +4 / OT-name +14;
+            # growth starts at +1C in the packed 3A record (codec:344-362).
+            raw = bytearray(codec.COMPRESSED_MON_SIZE)
+            raw[0:4] = (0x1000 + box * 30 + slot).to_bytes(4, "little")
+            owned = slot % 2 == 0
+            raw[4:8] = (old_tid if owned else foreign_tid).to_bytes(4, "little")
+            raw[8:18] = codec.encode_name("BOXMON", 10)
+            raw[18:20] = b"\x02\x02"
+            raw[0x14:0x1B] = codec.encode_name(old_name if owned else "FOREIGN", 7)
+            raw[0x1C:0x1E] = (277).to_bytes(2, "little")
+            off = address - base + slot * codec.COMPRESSED_MON_SIZE
+            regions[base][off:off + codec.COMPRESSED_MON_SIZE] = raw
+    result = bytearray(image)
+    bases = {"sb2": codec.RR_SAVEBLOCK2_ADDR, "sb1": codec.RR_SAVEBLOCK1_ADDR,
+             "storage": codec.RR_STORAGE_ADDR}
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    for s in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]:
+        e = codec.rr_slot_layout()[s["id"]]
+        start = s["index"] * codec.SECTOR_SIZE
+        chunk = regions[bases[e["object"]]][e["offset"]:e["offset"] + e["size"]]
+        result[start:start + e["size"]] = chunk
+        checksum = codec.sector_checksum(bytes(chunk), e["size"])
+        result[start + codec.OFF_SECTOR_CHECKSUM:start + codec.OFF_SECTOR_CHECKSUM + 2] = \
+            checksum.to_bytes(2, "little")
+    for n, s in enumerate(codec.RR_EXT_SECTORS):
+        start = s * codec.SECTOR_SIZE
+        result[start:start + codec.CHUNK_SIZE_CFRU] = regions[codec.RR_EXT_ADDR][
+            n * codec.CHUNK_SIZE_CFRU:(n + 1) * codec.CHUNK_SIZE_CFRU]
+    return bytes(result)
+
+
+def _assert_rr_identity_only(before, after):
+    """Independent whole-image byte whitelist; preserves parasite/footer/RTC too."""
+    parsed = codec.parse_flash(before, cfru=True)
+    new = codec.parse_flash(after, cfru=True)
+    old_name, old_tid = fx._trainer_identity(parsed["sb2"])
+    new_name, new_tid = fx._trainer_identity(new["sb2"])
+    assert new_tid == old_tid ^ 0xFFFFFFFF and new_name != old_name
+    assert (new["slot"], new["counter"], new["rotation"]) == (
+        parsed["slot"], parsed["counter"], parsed["rotation"])
+    allowed_ram = set(range(codec.RR_SAVEBLOCK2_ADDR, codec.RR_SAVEBLOCK2_ADDR + 7))
+    allowed_ram.update(range(codec.RR_SAVEBLOCK2_ADDR + 0xA, codec.RR_SAVEBLOCK2_ADDR + 0xE))
+    addresses = [codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET + i * codec.PARTY_MON_SIZE
+                 for i in range(len(codec.rr_party_from_save(before)))]
+    addresses += [base + i * codec.COMPRESSED_MON_SIZE for base in codec.RR_BOX_BASES
+                  for i in range(codec.MONS_PER_BOX)]
+    old_mons = codec.rr_party_from_save(before) + [m for b in codec.rr_boxes_from_save(before) for m in b]
+    new_mons = codec.rr_party_from_save(after) + [m for b in codec.rr_boxes_from_save(after) for m in b]
+    owned_count = 0
+    for address, old, changed in zip(addresses, old_mons, new_mons, strict=True):
+        if old["species"] and old["ot_id"] == old_tid:
+            owned_count += 1
+            assert changed["ot_id"] == new_tid and changed["ot_name"] == new_name
+            excluded = {"ot_id", "ot_name", "ot_name_raw"}
+            assert {k: v for k, v in changed.items() if k not in excluded} == {
+                k: v for k, v in old.items() if k not in excluded}
+            allowed_ram.update(range(address + 4, address + 8))
+            allowed_ram.update(range(address + 0x14, address + 0x1B))
+        else:
+            assert changed == old
+    assert owned_count > 0  # real fixture has one owned party mon; boxes may be empty
+    allowed_file = set()
+    bases = {"sb2": codec.RR_SAVEBLOCK2_ADDR, "sb1": codec.RR_SAVEBLOCK1_ADDR,
+             "storage": codec.RR_STORAGE_ADDR}
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    for s in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]:
+        e = codec.rr_slot_layout()[s["id"]]
+        start = s["index"] * codec.SECTOR_SIZE
+        ram = bases[e["object"]] + e["offset"]
+        allowed_file.update(start + a - ram for a in allowed_ram if ram <= a < ram + e["size"])
+        allowed_file.update((start + codec.OFF_SECTOR_CHECKSUM, start + codec.OFF_SECTOR_CHECKSUM + 1))
+        assert codec.read_sector(after, s["index"], codec.rr_slot_layout())["checksum_ok"]
+    for n, s in enumerate(codec.RR_EXT_SECTORS):
+        ram = codec.RR_EXT_ADDR + n * codec.CHUNK_SIZE_CFRU
+        allowed_file.update(s * codec.SECTOR_SIZE + a - ram for a in allowed_ram
+                            if ram <= a < ram + codec.CHUNK_SIZE_CFRU)
+    assert len(before) == len(after)
+    assert all(a == b or i in allowed_file for i, (a, b) in enumerate(zip(before, after, strict=True)))
+    assert codec.qualify_flash(after, cfru=True) == (True, "ok")
+
+
+def test_derive_b_rr_real_fixture_rekeys_and_preserves_every_other_byte(rr_source):
+    result, manifest = fx.derive_b(rr_source, rr=True)
+    _assert_rr_identity_only(rr_source, result)
+    report = fx.qualify_one(result, rr=True)
+    assert report["ok"] and report["boxes"] == 0
+    assert "party[0]" in "\n".join(manifest)
+    assert "inactive rotating slot preserved" in "\n".join(manifest)
+
+
+def test_derive_b_rr_all_box_regions_and_foreign_party_are_preserved(rr_source):
+    source = _rr_populate_all_boxes(rr_source)
+    assert fx.qualify_one(source, rr=True)["boxes"] == 750
+    result, manifest = fx.derive_b(source, rr=True)
+    _assert_rr_identity_only(source, result)
+    assert sum(line.startswith("box[") for line in manifest) == 375
+    assert not any(line.startswith("party[1]") for line in manifest)
+    assert fx.qualify_one(result, rr=True)["boxes"] == 750
+
+
+def test_derive_b_rr_preserves_optional_rtc_suffix(rr_source):
+    source = rr_source + bytes(range(codec.RTC_SUFFIX_SIZE))
+    result, _ = fx.derive_b(source, rr=True)
+    _assert_rr_identity_only(source, result)
+    assert result[-codec.RTC_SUFFIX_SIZE:] == source[-codec.RTC_SUFFIX_SIZE:]
+
+
+def test_derive_b_rr_rejects_corrupted_chunk_checksum(rr_source):
+    image = bytearray(rr_source)
+    slot = codec.parse_flash(rr_source, cfru=True)["slot"]
+    offset = slot * codec.NUM_SECTORS_PER_SLOT * codec.SECTOR_SIZE + codec.OFF_SECTOR_CHECKSUM
+    image[offset] ^= 0xFF
+    with pytest.raises(ValueError, match="does not qualify"):
+        fx.derive_b(bytes(image), rr=True)
+
+
+def test_derive_b_rr_cli_routes_to_rr_qualification(rr_source, tmp_path, capsys):
+    source, target = tmp_path / "a.sav", tmp_path / "b.sav"
+    source.write_bytes(rr_source)
+    args = fx.build_parser().parse_args(["derive-b", "--rr", str(source), str(target)])
+    assert args.func(args) == 0
+    _assert_rr_identity_only(rr_source, target.read_bytes())
+    q = fx.build_parser().parse_args(["qualify", "--rr", str(target)])
+    assert q.func(q) == 0
+    assert "UNVERIFIED" not in capsys.readouterr().out
 
 
 # --- boot-check / make-fr (card C2-6b): argument handling + the post-run verdict ---
@@ -221,9 +381,9 @@ def test_make_fr_argument_handling():
         _parse(["make-fr", "--rom", "fr.gba"])
 
 
-def test_saveram_name_drops_the_extension_and_appends_nothing():
+def test_saveram_name_matches_observed_gba_underscore_normalization():
     # BizHawk writes the optional RTC suffix itself; the seeded name must not carry one.
-    assert fx.saveram_name("patch/build/gen3_slink_RR.gba") == "gen3_slink_RR.SaveRAM"
+    assert fx.saveram_name("patch/build/gen3_slink_RR.gba") == "gen3 slink RR.SaveRAM"
     assert fx.saveram_name("a/b/firered.gba") == "firered.SaveRAM"
 
 
