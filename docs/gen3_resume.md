@@ -14,7 +14,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 |---|---|
 | G0 | SIGNED (PLAN §14.1) |
 | G1 | **evidence complete, not yet requested**: hook probe PASS on FR clean + RR companion (`docs/gen3/probes/hooks_*_2026-09-21.txt`), frame-end census (`census_rr_overworld_2026-09-21.txt`: R15 parked in BIOS `0x1C4`, System/ARM), flash domain = `SRAM` 0x20000, six RR duos PASS twice on the old client, golden transcripts committed (`tests/fixtures/gen3/wire/`, 796K, four gzipped), conformance suite 16 passed with the old-client characterization (items 1/14 documented as A19; 29/30 were checker over-assertions; 28 unevidenced). Ask the owner to sign G1 with those receipts. |
-| G2 | **evidence complete, report in preparation** (`docs/gen3/G2_report_2026-09-21.md`, Sonnet worker): all P2 packs landed; RR boot-check PASS (aaf079d), FR fixture made + boot-checked (eedb93c), RR `_b` derived + boot-checked (c2a2f5d), Haiku spot-check PASS, quick runner 4/4 (478 unit). Ask the owner to sign G2 as pinned facts only once the report is committed. |
+| G2 | **evidence complete, report committed** (`docs/gen3/G2_report_2026-09-21.md`, 7e81a42): all P2 packs landed; RR boot-check PASS (aaf079d), FR fixture made + boot-checked (eedb93c), RR `_b` derived + boot-checked (c2a2f5d), Haiku spot-check PASS, quick runner 4/4 (478 unit). Ask the owner to sign G2 as pinned facts only once the report is committed. |
 
 ## Landed this session (planning branch, in order)
 
@@ -25,21 +25,21 @@ Fixes found by the work: `lua/memory_gba.lua` permutation rows 3/4 swapped vs pr
 
 ## Session 2 (2026-09-21, after compaction)
 
-- Relayed task from the pureRGB session (Codex cx-0921a375): old Gen 3 client sound cues were last-write-wins. Landed `f55c4d1`: `lua/sfx_arbiter.lua` + client `M.sfx` (GAME_OVER > whiteout > linked KO > generic, one flush per frame in `on_frame_safe`, deferred KO muted after game_over), 15 lupa tests, shipped by make_release. Old client is byte-identical to master 2629d36 → cherry-pick candidate for the owner. Codex REVIEW cx-e8acc8bc pending. Not verified: in-emulator native route (RR audio trace, lane item).
+- Relayed task from the pureRGB session (Codex cx-0921a375): old Gen 3 client sound cues were last-write-wins. Landed `f55c4d1`: `lua/sfx_arbiter.lua` + client `M.sfx` (GAME_OVER > whiteout > linked KO > generic, one flush per frame in `on_frame_safe`, deferred KO muted after game_over), 15 lupa tests, shipped by make_release. Old client is byte-identical to master 2629d36 → cherry-pick candidate for the owner. Codex REVIEW cx-e8acc8bc REJECTED round 1 (a client cue newly routed native could be queued behind a same-frame native memorialize and overwrite its ack on pump-before-poll); fixed in 16c1553/6428a46/a76103a (winner carries a native_ok flag; only the server play_sound site sets it; tie keeps native only if all allowed); round 2 cx-c26a5baa pending. Pre-existing pump-before-poll ack weakness (server play_sound beside native memorialize) queued for P5 native.lua. Not verified: in-emulator native route (RR audio trace, lane item).
 - Instrument findings: BizHawk names the battery with spaces for unknown ROMs (`gen3 slink RR.SaveRAM`, now the default) and by gamedb name for known ones (`Pokemon - FireRed Version (USA).SaveRAM`, needs `--saveram-name`); the flash counter appears ~950 frames before the 14-sector loop ends (~66 frames/sector), so `gen3_boot_check.lua` waits for 14/14 sectors (flushing at the counter yields a torn slot).
 - FR new-game script: walk-out PINNED from pret/pokefirered c75f352 (cloned to `E:/Google Drive/SLink/.cache/pret/pokefirered`): spawn (6,6) 2F, stairs (10,2) via Left arrow-warp, 1F door (4,8) via Down, town map 768; steps verified by SaveBlock1 coords; stalled steps clear textboxes with A (RR intro dialogue). Intro legs remain timed, verified by outcome. `firered_town.sav` is PRE-STARTER (empty party): scenarios needing a party need an extended script through the starter choice (queued).
 
 ## In flight / uncommitted at compaction
 
-- Sonnet worker writing `docs/gen3/G2_report_2026-09-21.md` (uncommitted until reviewed). Otherwise nothing. C2-3c landed (09add4e: RR 19 kinds PINNED per artifact; GiveMonToPlayer/SendMonToPC detours followed to their CFRU bodies; SetPlacedMonData edited in place; overworld poison is a verified no-op body on RR so its two rows are un-emitted by design; borrowed_party/nature_change UNVERIFIED with search receipts). `python tools/verify_gen3_release.py --quick`: all four fast lanes PASS (the unit lane now selects by file, never `-k`, because the fail-closed core counts deselection as not-run).
+- Nothing. C2-3c landed (09add4e: RR 19 kinds PINNED per artifact; GiveMonToPlayer/SendMonToPC detours followed to their CFRU bodies; SetPlacedMonData edited in place; overworld poison is a verified no-op body on RR so its two rows are un-emitted by design; borrowed_party/nature_change UNVERIFIED with search receipts). `python tools/verify_gen3_release.py --quick`: all four fast lanes PASS (the unit lane now selects by file, never `-k`, because the fail-closed core counts deselection as not-run).
 
 ## Next actions (in order)
 
 1. Owner signs **G1** (receipts in the gate table). Record in PLAN §14.1.
-2. Commit the G2 report after reading it; owner signs **G2** as pinned facts only. Record in PLAN §14.1.
-3. Reconcile Codex REVIEW cx-e8acc8bc of f55c4d1; ask the owner whether to cherry-pick f55c4d1 onto master (old client identical there).
+2. Owner signs **G2** as pinned facts only (report `docs/gen3/G2_report_2026-09-21.md`). Record in PLAN §14.1.
+3. Reconcile Codex round 2 cx-c26a5baa of f55c4d1..a76103a; ask the owner whether to cherry-pick f55c4d1 onto master (old client identical there).
 4. P3 (shadow observer) opens after G2 per PLAN §6/§14: cards C3-1..C3-5 + P3a.
-5. Queued out-of-lease: extended FR script through the starter (party for faint/boxsync); RR audio/frame trace of the native SE route; `server/adapters/gen3_codec.py:391-394` stale CFRU comment; RR overworld-poison `poison_faint` N/A in the coverage table; `tools/mkstates.py:102` RTC wording; fold `ROM_SPECS` duplicates; `data/gen3/pret/README.md`; `flash_save.md` §7 superseded rows; RR profile `GMAIN_ADDR`; "box the last mon" capture for item 28; retire census probe UNVERIFIED notes; borrowed_party/nature_change UNVERIFIED.
+5. Queued out-of-lease: mailbox pump-before-poll ack lifetime (P5 native.lua); extended FR script through the starter (party for faint/boxsync); RR audio/frame trace of the native SE route; `server/adapters/gen3_codec.py:391-394` stale CFRU comment; RR overworld-poison `poison_faint` N/A in the coverage table; `tools/mkstates.py:102` RTC wording; fold `ROM_SPECS` duplicates; `data/gen3/pret/README.md`; `flash_save.md` §7 superseded rows; RR profile `GMAIN_ADDR`; "box the last mon" capture for item 28; retire census probe UNVERIFIED notes; borrowed_party/nature_change UNVERIFIED.
 
 ## Standing rules that bit this session
 
