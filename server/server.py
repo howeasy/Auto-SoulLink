@@ -2474,10 +2474,13 @@ class SLinkServer:
         """Serve the calc: entry points wrapped in ``calc.html`` for the chrome, everything
         else verbatim (resolution in ``server.calc_files``, shared with the Manager)."""
         path = request.match_info.get('path', '')
+        if path.endswith('.html'):
+            # A managed run never renders the page itself: send it on before looking for
+            # the build, so an unbuilt calc redirects like a built one.
+            self._to_manager(request, "/runs/{id}/calc/" + path)
         abs_path = calc_files.resolve(path)
         if not path.endswith('.html'):
             return calc_files.file_response(abs_path)
-        self._to_manager(request, "/runs/{id}/calc/" + path)
         ctx = self._panel_ctx(request, panel="calc", label="Calc")
         ctx.update({
             "calc_body_html":  calc_files.page_body(abs_path),

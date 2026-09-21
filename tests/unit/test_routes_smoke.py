@@ -237,7 +237,7 @@ async def test_a_managed_run_redirects_its_pages_to_the_manager(tmp_path, path, 
     srv = SLinkServer(data_dir=str(tmp_path / "run"), run_id="r1", manager_port=8090)
     async with TestClient(TestServer(build_app(srv))) as client:
         resp = await client.get(path, allow_redirects=False)
-        assert resp.status == 302, path
+        assert resp.status == 302, path            # with or without a calc build (CI has none)
         assert resp.headers["Location"].endswith(f":8090{target}"), resp.headers["Location"]
         for kept in ("/memorial?_smoke=1", "/api/status", "/calc/css/main.css"):
             r = await client.get(kept, allow_redirects=False)

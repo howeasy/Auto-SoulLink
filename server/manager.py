@@ -1458,13 +1458,23 @@ class RunManager:
         the calc's own files are served verbatim. The bridge inside the page reads
         SLINK_API_BASE (= /runs/{id}) and so talks to that run through handle_run_api."""
         path = request.match_info.get("path", "") or "normal.html"
-        abs_path = calc_files.resolve(path)
         if not path.endswith(".html"):
-            return calc_files.file_response(abs_path)
+            return calc_files.file_response(calc_files.resolve(path))
         runs, run = self._run_or_404(request)
         ctx = self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
+        try:
+            abs_path = calc_files.resolve(path)
+        except web.HTTPNotFound:
+            # The entry points live in calc/dist, a build product: the page still wears
+            # the chrome and says what to run, rather than 404ing the whole run page.
+            abs_path = None
+            note = ("The calculator is not built on this machine: run <code>cd calc &amp;&amp; npm install "
+                    "&amp;&amp; npm run build</code> (docs/REFERENCE.md, Damage calculator) and reload.")
+            # a stopped run's reason comes first; the build note follows it
+            ctx["unavailable_html"] = note if ctx["available"] else ctx["unavailable_html"] + " " + note
+            ctx["available"] = False
         ctx.update({
-            "calc_body_html": calc_files.page_body(abs_path),
+            "calc_body_html": calc_files.page_body(abs_path) if abs_path else "",
             "calc_mode_label": calc_files.mode_label(path),
             "status_href": f"/runs/{run['run_id']}",
         })

@@ -364,6 +364,21 @@ async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, pat
 
 
 @pytest.mark.asyncio
+async def test_an_unbuilt_calc_is_a_page_that_says_so_not_a_404(manager_client, manager_dir, monkeypatch, tmp_path):
+    """calc/dist is a build product (gitignored): a machine without it -- CI -- still gets
+    the run's calc page in the chrome, with the build recipe, instead of a 404."""
+    from server import calc_files
+    monkeypatch.setattr(calc_files, "DIST_DIR", str(tmp_path / "no-dist"))
+    monkeypatch.setattr(calc_files, "SRC_DIR", str(tmp_path / "no-src"))
+    _stopped_run(manager_dir)
+    resp = await manager_client.get("/runs/run_1/calc/normal.html")
+    assert resp.status == 200
+    body = await resp.text()
+    assert "mk-rail" in body and "npm run build" in body
+    assert (await manager_client.get("/runs/run_1/calc/css/main.css")).status == 404, "the files themselves still 404"
+
+
+@pytest.mark.asyncio
 async def test_the_calc_files_are_served_from_both_paths(manager_client, manager_dir):
     _stopped_run(manager_dir)
     for path in ("/calc/css/main.css", "/runs/run_1/calc/css/main.css"):
