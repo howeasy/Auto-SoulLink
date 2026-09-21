@@ -1,0 +1,23 @@
+{#
+  _randomize.html — the Randomizer section's body: the switch, the jar / Java tags, and the
+  options (_randomizer_fields.html) that unfold under it. Acts on the picks in
+  _cartridges.html, so it follows that section on both pages; same Alpine scope.
+#}
+<label class="mk-opt described" :class="rdraft.randomize ? 'on' : ''">
+  <input type="checkbox" x-model="rdraft.randomize">
+  <span class="mk-opt-txt">
+    <span class="mk-opt-name">Randomize</span>
+    <span class="mk-opt-desc">One randomized cartridge per player, built from your own copy of Universal Pokémon Randomizer ZX — same settings, different seeds. The run then admits only those two cartridges. Your ROMs stay on this machine.</span>
+  </span>
+</label>
+<div class="mk-preview-rules" x-show="rdraft.randomize && pre">
+  <template x-if="pre">
+    <span class="mk-tag" :class="pre.jar_found && (pre.jar_fork || family !== 'gen1_purergb') ? 'on' : 'off'" x-text="pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
+  </template>
+  <template x-if="pre">
+    <span class="mk-tag" :class="pre.java_found ? 'on' : 'off'" x-text="pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
+  </template>
+</div>
+<div x-show="rdraft.randomize" style="display:flex;flex-direction:column;gap:var(--space-4)">
+  {% include "_randomizer_fields.html" %}
+</div>
