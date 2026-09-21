@@ -204,6 +204,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 reads == PYDEC, RR companion: `docs/gen3/probes/reads_pydec_rr_2026-09-21.txt` — real party record (Treecko, key EBEF11DA:2BDDC8BF, level 6, hp 22) and box 0 dumped from EWRAM: reads.lua and gen3_codec.py agree on every field; planted flip detected. PHYSICAL for the R rows on RR (fixed-order record path + compressed box path). The probe's earlier silent death was a guessed artifact kind (clean vs companion); it now admits the kind from the ROM like the observer does.
 
+- 2026-09-21 P3 wire deltas with the REAL old client, RR explode duo with vs without the observer: `docs/gen3/probes/wire_delta_rr_explode_2026-09-21.txt` — 0 semantic deltas; only periodic samples (tick, ghost_pos) differ by 1-2 records. Together with the throttled overhead receipt this closes the PLAN §5.7 overhead budget (frame time and wire behaviour) on RR companion.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
