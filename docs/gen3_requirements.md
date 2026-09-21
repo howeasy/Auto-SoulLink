@@ -206,6 +206,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 wire deltas with the REAL old client, RR explode duo with vs without the observer: `docs/gen3/probes/wire_delta_rr_explode_2026-09-21.txt` — 0 semantic deltas; only periodic samples (tick, ghost_pos) differ by 1-2 records. Together with the throttled overhead receipt this closes the PLAN §5.7 overhead budget (frame time and wire behaviour) on RR companion.
 
+- 2026-09-21 P3 FR natural play run 15: `docs/gen3/probes/shadow_fr_play_run15_2026-09-21.txt` — starter, rival, parcel fetch, Viridian heal (slot 0 14/23 -> 23/23 via the nurse), parcel delivered with five mid-walk encounters handled; observer: battle_begin x6, battle_end x6, map_load x8, mon_given x1. Next: the Route 1 catch leg (encounter search bound too tight).
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
