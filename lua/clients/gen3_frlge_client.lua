@@ -4499,7 +4499,9 @@ local function on_frame_safe()
     -- frame posted (memorialize/deposit), and MB.pump() next frame runs before that op's
     -- completion poll and would overwrite its ack (mailbox.lua post()/pump()). Before the
     -- arbiter the sound posted first, during dispatch. So the native route is taken only while
-    -- the mailbox has NO outstanding work (MB.busy()); otherwise the sound takes the Lua poke.
+    -- MB.busy() is false, i.e. no unconsumed opcode and an empty outbox. That is NOT a general
+    -- native-op-idle test: an op like OP_SHOW_MENU clears its opcode while still ST_BUSY
+    -- (handlers.c), which is the P5 native.lua lifecycle's problem, not this guard's.
     pcall(M.sfx.flush, function(sound, native_ok)
         if native_ok and native_sfx_enabled and patch_present() and not M.isInBattle()
            and not MB.busy() then MB.play_se(sound)
