@@ -179,10 +179,15 @@
           <div class="mk-card mk-firstrun">
             <b>Nothing on the board yet.</b>
             <ol class="mk-steps">
+              {% if roms %}
+              <li>This run is randomized — each player plays their own cartridge, and the run admits no other:
+                <a class="mk-btn" href="{{ roms.a }}">Player A · .gb</a>
+                <a class="mk-btn" href="{{ roms.b }}">Player B · .gb</a></li>
+              {% endif %}
               <li>Download a launcher per player:
                 <a class="mk-btn" href="{{ launchers.a }}">Player A · .lua</a>
                 <a class="mk-btn" href="{{ launchers.b }}">Player B · .lua</a></li>
-              <li>Each player loads their save in BizHawk, <b>then</b> the launcher in the Lua console. It finds the game and connects — the card above turns green.</li>
+              <li>Each player loads their {% if roms %}cartridge{% else %}save{% endif %} in BizHawk, <b>then</b> the launcher in the Lua console. It finds the game and connects — the card above turns green.</li>
               <li>The first catch both of you make in the same area starts the board.</li>
             </ol>
           </div>

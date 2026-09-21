@@ -42,7 +42,7 @@
                   </template>
                 </tbody>
               </table>
-              <p class="mk-sub" style="margin:var(--space-2) 0 0">UPR <span x-text="rform.current.upr_version"></span> · randomized: <span x-text="rform.current.summary || (rform.current.categories || []).join(', ') || 'nothing'"></span> · the run admits only these two cartridges. Building again replaces both.</p>
+              <p class="mk-sub" style="margin:var(--space-2) 0 0">UPR <span x-text="rform.current.upr_version"></span> · randomized: <span x-text="rform.current.summary || (rform.current.categories || []).join(', ') || 'nothing'"></span> · <a :href="'/api/runs/' + runId + '/settings.rnqs'">the settings file (.rnqs)</a> · the run admits only these two cartridges. Building again replaces both.</p>
             </div>
           </template>
 

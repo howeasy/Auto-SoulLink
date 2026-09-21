@@ -15,6 +15,7 @@ Run dirs:  data/runs/<run_id>/links.json
 
 import argparse
 import asyncio
+import hashlib
 import html
 import json
 import logging
@@ -75,6 +76,13 @@ GAMES = [
 ]
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
+# The randomizer contract a Gen 1 game names (upr_settings.FAMILY_*): a pure run takes pure
+# cartridges only, a vanilla run vanilla ones -- the two cannot link.
+GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb"}
+
+
+def _game_family(game: str | None) -> str | None:
+    return GAME_FAMILY.get(game or "")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -202,6 +210,29 @@ log = logging.getLogger("slink.manager")
 # ── Paths ───────────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 MANAGER_DIR  = os.path.join(PROJECT_ROOT, "data", "runs")
+# Where the run creator looks for cartridges: the SLink folder, roms/ (where a ROM picked
+# in the browser lands), patch/build/ (the companion builds) and the .cache/ folders the
+# pureRGB tooling builds the pinned pure cartridges and their overlays into -- a git
+# worktree has no .cache of its own, so it is looked for upward like find_upr_jar does.
+# .gitignore already refuses every *.gb / *.gbc / *.gba anywhere in the repo.
+ROM_UPLOAD_DIR = os.path.join(PROJECT_ROOT, "roms")
+
+
+def _cache_rom_dirs() -> list[str]:
+    out, d = [], os.path.normpath(PROJECT_ROOT)
+    for _ in range(6):
+        out += [c for sub in ("purergb", "purergb-overlay-staged")
+                if os.path.isdir(c := os.path.join(d, ".cache", sub))]
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return out
+
+
+ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
+ROM_EXTS = (".gb", ".gbc")
+UPLOAD_MAX = 64 << 20
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
 # How long a freshly spawned server gets to die on startup (a taken port) before it counts as up.
@@ -272,6 +303,25 @@ def _save_registry(runs: list[dict]):
     document = {"runs": runs}
     _registry_runs(document)
     atomic_write_json(REGISTRY_PATH, document)
+
+
+# ── Randomizer presets: a named spec, kept on this Manager beside the registry ────────
+def _presets_path() -> str:
+    return os.path.join(MANAGER_DIR, "presets.json")
+
+
+def _load_presets() -> list[dict]:
+    try:
+        with open(_presets_path(), encoding="utf-8") as f:
+            return [p for p in json.load(f).get("presets", []) if isinstance(p, dict) and p.get("name")]
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError) as exc:
+        raise RegistryError(f"presets.json is unreadable: {exc}") from exc
+
+
+def _save_presets(presets: list[dict]) -> None:
+    atomic_write_json(_presets_path(), {"presets": sorted(presets, key=lambda p: p["name"].lower())})
 
 
 def _update_run(run_id: str, **fields) -> dict | None:
@@ -677,7 +727,6 @@ class RunManager:
         return await self._render_shell(request, self._get(), None, page="new")
 
     async def _render_shell(self, request, runs, run, *, page):
-        from server.board import board_context
         status = await self._run_status(request, run) if run else None
         ctx = {
             "page_title":   "Soul Link",
@@ -699,22 +748,26 @@ class RunManager:
             "host":         (request.host or "127.0.0.1").split(":")[0] or "127.0.0.1",
         }
         if run:
-            ctx.update(board_context(status, run_name=run.get("name", ""),
-                                     poll_url=f"/runs/{run['run_id']}/board",
-                                     live=run.get("status") == "running",
-                                     launcher_url=f"/api/runs/{run['run_id']}/launcher/{{player}}"))
+            ctx.update(self._board_context(run, status))
         return aiohttp_jinja2.render_template("manager.html", request, ctx)
+
+    @staticmethod
+    def _board_context(run: dict, status: dict) -> dict:
+        """board_context for a Manager run: it polls its own board route, its launchers and
+        (once a pair is built) its randomized ROMs download from the Manager."""
+        from server.board import board_context
+        rid = run["run_id"]
+        return board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
+                             live=run.get("status") == "running",
+                             launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
+                             rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("randomizer") else "")
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
-        from server.board import board_context
         run = _find_run(_load_registry(), request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
-        ctx = board_context(await self._run_status(request, run), run_name=run.get("name", ""),
-                            poll_url=f"/runs/{run['run_id']}/board",
-                            live=run.get("status") == "running",
-                            launcher_url=f"/api/runs/{run['run_id']}/launcher/{{player}}")
+        ctx = self._board_context(run, await self._run_status(request, run))
         return aiohttp_jinja2.render_template("_board.html", request, ctx)
 
     async def _run_status(self, request: web.Request, run: dict) -> dict:
@@ -753,8 +806,31 @@ class RunManager:
             # The pure family randomizes only on the SLink fork jar (upr_pipeline); the
             # page says which jar it found so a greyed pure ROM is explained.
             "jar_fork": bool(jar) and jar_is_fork(jar),
+            "roms": self._scan_roms(jar),
+            "roms_dir": PROJECT_ROOT,
+            # Which cartridges this run can take: the family its game names (the creator
+            # follows the game chip through game_family instead).
+            "family": _game_family(run.get("game")) if run else None,
+            "game_family": GAME_FAMILY,
+            "presets": _load_presets(),
             "current": run.get("randomizer") if run else None,
         }
+
+    @staticmethod
+    def _scan_roms(jar: str) -> list[dict]:
+        """Every .gb/.gbc in ROM_DIRS with the scanner's verdict (describe_rom)."""
+        from server.upr_pipeline import describe_rom, jar_is_fork
+        fork = bool(jar) and jar_is_fork(jar)
+        roms, seen = [], set()
+        for d in ROM_DIRS:
+            if not os.path.isdir(d):
+                continue
+            for name in sorted(os.listdir(d), key=str.lower):
+                path = os.path.join(d, name)
+                if name.lower().endswith(ROM_EXTS) and os.path.isfile(path) and path not in seen:
+                    seen.add(path)
+                    roms.append({"name": name, **describe_rom(path, fork)})
+        return roms
 
     def _augment_for_template(self, run: dict) -> dict:
         """Display strings for the rail: a short date, a filesystem-safe name, the game."""
@@ -953,13 +1029,21 @@ class RunManager:
         # is by construction one the pipeline admits. The family (vanilla / pureRGB) comes
         # from the ROMs: a pure pair gets every tweak turned off (the fork offers none).
         spec, categories = body.get("spec"), body.get("categories")
+        family = FAMILY_VANILLA
+        if rom_a and rom_b and os.path.isfile(rom_a) and os.path.isfile(rom_b):
+            try:
+                family = family_of({"a": rom_a, "b": rom_b})
+            except Exception as exc:                      # noqa: BLE001
+                return web.json_response({"ok": False, "error": str(exc)}, status=400)
+            # A run named up front admits one family; a pair from the other would be
+            # refused at the first hello, so refuse it here, where it can be fixed.
+            wanted = _game_family(run.get("game"))
+            if wanted and wanted != family:
+                return web.json_response({"ok": False, "error": (
+                    f"this run is {GAME_LABELS[run['game']]}; these are "
+                    f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
+                    f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
         if (spec is not None or categories is not None) and not settings:
-            family = FAMILY_VANILLA
-            if rom_a and rom_b and os.path.isfile(rom_a) and os.path.isfile(rom_b):
-                try:
-                    family = family_of({"a": rom_a, "b": rom_b})
-                except Exception as exc:                      # noqa: BLE001
-                    return web.json_response({"ok": False, "error": str(exc)}, status=400)
             try:
                 if spec is not None:
                     if not isinstance(spec, dict):
@@ -1030,6 +1114,107 @@ class RunManager:
             log.warning("could not write rom_contract.json for %s: %s", run_id, exc)
         return web.json_response({"ok": True, "randomizer": run["randomizer"]})
 
+    async def handle_settings_export(self, request: web.Request) -> web.Response:
+        """POST /api/randomizer/settings/export {spec, name?} — the form's settings as a UPR
+        .rnqs: the file UPR's own GUI opens, the same bytes handle_randomize would write
+        for this spec (upr_settings.build_spec)."""
+        from server.upr_settings import UprSettingsError, build_spec
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        spec = body.get("spec")
+        if not isinstance(spec, dict):
+            return web.json_response({"ok": False, "error": "spec is required"}, status=400)
+        try:
+            blob = build_spec(spec)
+        except UprSettingsError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        name = re.sub(r"[^\w-]+", "_", str(body.get("name") or "slink")).strip("_") or "slink"
+        return web.Response(body=blob, headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": f'attachment; filename="{name}.rnqs"',
+        })
+
+    async def handle_settings_import(self, request: web.Request) -> web.Response:
+        """POST /api/randomizer/settings/import (multipart `file`) — a .rnqs from UPR's GUI
+        or from another run, admitted by the pipeline's own gates (version, the named
+        dangers, the allowlist) and read back as the form's spec. A refusal names what the
+        file changes, because spec_from_parsed alone would drop it silently."""
+        from server.upr_pipeline import UprPipelineError, admit_settings
+        from server.upr_settings import spec_from_parsed, summarize
+        if request.content_type != "multipart/form-data":
+            return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
+        reader = await request.multipart()
+        field = await reader.next()
+        while field is not None and field.name != "file":
+            field = await reader.next()
+        if field is None:
+            return web.json_response({"ok": False, "error": "send the .rnqs as `file`"}, status=400)
+        raw = await field.read(decode=False)
+        if len(raw) > 64 << 10:
+            return web.json_response({"ok": False, "error": "not a settings file (too large)"}, status=400)
+        try:
+            parsed = admit_settings(raw)
+        except UprPipelineError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        spec = spec_from_parsed(parsed)
+        return web.json_response({"ok": True, "spec": spec, "summary": summarize(spec),
+                                  "rom_name": parsed.get("rom_name", "")})
+
+    async def handle_run_settings(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/settings.rnqs — the settings file the pair was built
+        with, as UPR's GUI would open it."""
+        run_id = request.match_info["run_id"]
+        run = _find_run(_load_registry(), run_id)
+        path = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")
+        if run is None or not run.get("randomizer") or not os.path.isfile(path):
+            return web.json_response({"ok": False, "error": "no randomized pair for this run"}, status=404)
+        safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
+        return web.FileResponse(path, headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": f'attachment; filename="slink_{safe_name}.rnqs"',
+        })
+
+    async def handle_presets(self, request: web.Request) -> web.Response:
+        """GET /api/presets — every saved randomizer preset: {name, spec, updated_at}."""
+        return web.json_response({"ok": True, "presets": _load_presets()})
+
+    async def handle_preset_save(self, request: web.Request) -> web.Response:
+        """POST /api/presets {name, spec} — save (or replace) a preset. The spec goes through
+        the same builder the randomizer uses, so a saved preset is one it will accept."""
+        from server.upr_settings import UprSettingsError, build_spec
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        name = str(body.get("name", "")).strip()[:60]
+        spec = body.get("spec")
+        if not name or not isinstance(spec, dict):
+            return web.json_response({"ok": False, "error": "name and spec are required"}, status=400)
+        try:
+            build_spec(spec)
+        except UprSettingsError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        presets = [p for p in _load_presets() if p["name"].lower() != name.lower()]
+        preset = {"name": name, "spec": spec, "updated_at": datetime.now(UTC).isoformat()}
+        _save_presets(presets + [preset])
+        return web.json_response({"ok": True, "preset": preset})
+
+    async def handle_preset_delete(self, request: web.Request) -> web.Response:
+        """POST /api/presets/delete {name}."""
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        name = str(body.get("name", "")).strip()
+        presets = _load_presets()
+        kept = [p for p in presets if p["name"].lower() != name.lower()]
+        if len(kept) == len(presets):
+            return web.json_response({"ok": False, "error": "no such preset"}, status=404)
+        _save_presets(kept)
+        return web.json_response({"ok": True})
+
     async def handle_randomizer_status(self, request: web.Request) -> web.Response:
         """GET /api/randomizer/status?jar=&rom_a=&rom_b= — the checks that cost
         milliseconds, before the ones that cost minutes."""
@@ -1039,38 +1224,61 @@ class RunManager:
         sources = {p: q.get(f"rom_{p}", "").strip() for p in ("a", "b")}
         return web.json_response(preflight(jar, sources))
 
-    async def handle_browse(self, request: web.Request) -> web.Response:
-        """GET /api/browse?dir=&ext=.gb,.gbc — a directory listing for the ROM and jar
-        pickers. Paths are typed rather than uploaded because everything stays on the
-        machine running the Manager; this is the picker that saves the typing. Listing only,
-        rooted at the user's home and at the repository; nothing is read."""
-        home = os.path.realpath(os.path.expanduser("~"))
-        roots = [home, os.path.realpath(PROJECT_ROOT)]
-        raw = request.query.get("dir", "").strip() or home
-        target = os.path.realpath(raw)
-        if not any(target == r or target.startswith(r + os.sep) for r in roots):
-            return web.json_response({"ok": False, "error": "outside the browsable roots"}, status=403)
-        if not os.path.isdir(target):
-            return web.json_response({"ok": False, "error": "not a directory"}, status=404)
-        exts = tuple(e.strip().lower() for e in request.query.get("ext", "").split(",") if e.strip())
-        entries = []
+    async def handle_roms(self, request: web.Request) -> web.Response:
+        """GET /api/roms — every .gb/.gbc in the SLink folder (and its roms/), each with the
+        scanner's verdict, so the run creator can offer them instead of asking for paths.
+        Nothing is uploaded to anywhere: the Manager and the ROMs share a machine."""
+        from server.upr_pipeline import find_upr_jar
+        jar = request.query.get("jar", "").strip() or find_upr_jar() or ""
+        return web.json_response({"ok": True, "roms": self._scan_roms(jar), "dir": PROJECT_ROOT})
+
+    async def handle_rom_upload(self, request: web.Request) -> web.Response:
+        """POST /api/roms (multipart `file`) — a ROM chosen with the browser's own file
+        dialog lands in <repo>/roms/ (a jar lands as <repo>/PokeRandoZX.jar, where
+        find_upr_jar looks first) and the answer describes it like handle_roms would. A
+        same-named file that differs is kept: the upload gets a numbered name."""
+        from server.upr_pipeline import _sha1, describe_rom, find_upr_jar, jar_is_fork
+        if request.content_type != "multipart/form-data":
+            return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
+        reader = await request.multipart()
+        field = await reader.next()
+        while field is not None and field.name != "file":
+            field = await reader.next()
+        name = os.path.basename(field.filename or "") if field is not None else ""
+        ext = os.path.splitext(name)[1].lower()
+        if not name or ext not in ROM_EXTS + (".jar",):
+            return web.json_response({"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}, status=400)
+        name = re.sub(r"[^\w .()\[\]'&+,-]", "_", name)
+        if ext == ".jar":
+            dest_dir, name = PROJECT_ROOT, "PokeRandoZX.jar"
+        else:
+            dest_dir = ROM_UPLOAD_DIR
+        os.makedirs(dest_dir, exist_ok=True)
+        tmp = os.path.join(dest_dir, f".upload-{os.getpid()}.part")
+        size, h = 0, hashlib.sha1()
         try:
-            for name in sorted(os.listdir(target), key=str.lower):
-                if name.startswith("."):
-                    continue
-                path = os.path.join(target, name)
-                is_dir = os.path.isdir(path)
-                if not is_dir and exts and not name.lower().endswith(exts):
-                    continue
-                entries.append({"name": name, "path": path, "dir": is_dir})
-        except OSError as exc:
-            return web.json_response({"ok": False, "error": str(exc)}, status=403)
-        parent = os.path.dirname(target)
-        return web.json_response({
-            "ok": True, "dir": target, "roots": roots,
-            "parent": parent if any(parent == r or parent.startswith(r + os.sep) for r in roots) else None,
-            "entries": entries,
-        })
+            with open(tmp, "wb") as f:
+                while chunk := await field.read_chunk(1 << 20):
+                    size += len(chunk)
+                    if size > UPLOAD_MAX:
+                        raise web.HTTPRequestEntityTooLarge(max_size=UPLOAD_MAX, actual_size=size)
+                    h.update(chunk)
+                    f.write(chunk)
+            stem, n = os.path.splitext(name)[0], 1
+            dest = os.path.join(dest_dir, name)
+            while os.path.exists(dest) and _sha1(dest) != h.hexdigest():
+                n += 1
+                dest = os.path.join(dest_dir, f"{stem} ({n}){ext}")
+            os.replace(tmp, dest)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        if ext == ".jar":
+            return web.json_response({"ok": True, "path": dest, "kind": "jar", "jar_fork": jar_is_fork(dest)})
+        jar = find_upr_jar() or ""
+        return web.json_response({"ok": True, "path": dest, "kind": "rom",
+                                  "rom": {"name": os.path.basename(dest),
+                                          **describe_rom(dest, bool(jar) and jar_is_fork(jar))}})
 
     async def handle_rom_download(self, request: web.Request) -> web.Response:
         """GET /api/runs/{run_id}/rom/{player} — this player's randomized ROM, renamed
@@ -1444,7 +1652,14 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
     app.router.add_get("/api/randomizer/status",      manager.handle_randomizer_status)
-    app.router.add_get("/api/browse",                 manager.handle_browse)
+    app.router.add_post("/api/randomizer/settings/export", manager.handle_settings_export)
+    app.router.add_post("/api/randomizer/settings/import", manager.handle_settings_import)
+    app.router.add_get("/api/runs/{run_id}/settings.rnqs", manager.handle_run_settings)
+    app.router.add_get("/api/presets",                manager.handle_presets)
+    app.router.add_post("/api/presets",               manager.handle_preset_save)
+    app.router.add_post("/api/presets/delete",        manager.handle_preset_delete)
+    app.router.add_get("/api/roms",                   manager.handle_roms)
+    app.router.add_post("/api/roms",                  manager.handle_rom_upload)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
 
     # Stream pin API

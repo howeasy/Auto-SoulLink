@@ -234,8 +234,9 @@ class TestAgainstTheForkJar:
         jar, roms = _fork_jar(), _pure_roms()
         pre = preflight(jar, roms)
         assert pre["jar_fork"] is True
-        assert pre["roms"]["a"]["clean"] is True and "purered" in pre["roms"]["a"]["title"]
-        assert pre["roms"]["b"]["clean"] is True and "pureblue" in pre["roms"]["b"]["title"]
+        assert pre["roms"]["a"]["clean"] is True and pre["roms"]["a"]["title"].startswith("PureRed")
+        assert pre["roms"]["b"]["clean"] is True and pre["roms"]["b"]["title"].startswith("PureBlue")
+        assert "PureRed overlay (U)" in pre["jar_entries"]
         assert pre["ok"] is True
 
     def test_everything_off_is_byte_identical(self, tmp_path):

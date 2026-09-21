@@ -358,3 +358,17 @@ Local master = 0937f3d: the Gen 1 RC (48883f8) plus the pureRGB integration bran
 c95a664, receipt 0937f3d) -- its full runner GATE PASSED 19/19 (the 12 vanilla lanes identical to master's run 8: duo-pairs 18/18,
 slow-name + evolution gates Red/Blue; 7 pure lanes incl. duo-pairs-purergb 33/33). NOT pushed (origin/master adf3362 is 458
 commits behind), NOT tagged, no release -- owner's call. The pureRGB session owns lua/gen1/* and the Gen 1 tooling from here.
+
+## CLEANUP (2026-09-20 ~23:20Z) -- owner: "cleanup any leftover Gen1 branches, Github branches, etc.; validate no active work"
+No active Gen 1 work: no EmuHawk running, Codex/OMP peers idle, the only live Claude session on the repo is the pureRGB
+integration (its worktree recursing-hopper-86c382 and branch kept). Done: parked worktrees gen1-collab-bad73b,
+gen1-native-free-service (+WIP commit 3a2bbdf), gen1-runtime-performance (+WIP 25ba1ab), gen1-speed-gate removed (13 orphan
+.git/worktrees admin dirs deleted); 17 archive/<branch> tags for every unmerged Gen 1 branch (incl. archive/gen1/rc); the 7
+Gen 1 branches on GitHub deleted after their archive tags were pushed (origin now has 0 gen1 heads); merged branches
+claude/gen1-collab-* deleted; 1222 kept slink_duo_* scratch dirs removed from Temp.
+LEFT FOR THE OWNER (the git guard hook refuses force-deletes from a session): the 15 archived-but-unmerged local Gen 1 branch
+refs (tips preserved by the archive tags; list them with `git for-each-ref refs/heads/ | grep -i gen1`); the sweep worktree
+gen1-rby-code-sweep-8d06e2 (gen1/rc; hosts tools/agent_work_guard.py referenced by three hook entries in ~/.claude/settings.json
+and the sole checkpoint files -- remove the hook entries first, then remove the worktree and the gen1/rc ref); this worktree +
+branch claude/gen1-master-release-plan-6b4279 (merged; remove after this session). The OMP scratch worktree
+C:/Users/howar/.omp/wt/wt-20260917-184130-2273b05 (branch merged, clean) is OMP's to drop.

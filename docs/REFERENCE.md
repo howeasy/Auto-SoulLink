@@ -451,10 +451,10 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | Path | Method | Description |
 |---|---|---|
 | `/` | GET | The first running run's board, or the New-run form when there are no runs |
-| `/new` | GET | New-run form: game family, options greyed with reasons, preview |
-| `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers / archive / delete) and its board — live from the run's server, or what it persisted once stopped |
+| `/new` | GET | New-run form: game family, options greyed with reasons, preview; on a Gen 1 family, the randomizer — cartridges found in the SLink folder (grouped by family, the run's pair preselected), *Add file…*, presets, `.rnqs` export/import |
+| `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers — and, on a randomized run, the two cartridges / archive / delete) and its board — live from the run's server, or what it persisted once stopped. The rail's runs scroll on their own; archived runs fold under a count |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
-| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs. Randomizing is normally part of `/new` |
+| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs and the `.rnqs` they were built with. Randomizing is normally part of `/new` |
 | `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
 | `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
 | `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
@@ -468,10 +468,16 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
 | `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
 | `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |
-| `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json` |
+| `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json`. A run whose game names a family refuses a pair from the other (400, by name) |
 | `/api/runs/{id}/rom/{player}` | GET | Download that player's randomized ROM as `slink_<run>_<player>.gb` |
+| `/api/runs/{id}/settings.rnqs` | GET | The `.rnqs` the pair was built with, as UPR's GUI would open it |
+| `/api/randomizer/settings/export` | POST | `{spec, name?}` → a `.rnqs` (attachment): the same bytes `randomize` writes for that spec |
+| `/api/randomizer/settings/import` | POST | multipart `file` (a `.rnqs` from UPR's GUI or another run) → `{spec, summary}`, admitted by the pipeline's own gates (version, `forbidden_enabled`, `unexpected_settings`); a refusal names what the file changes |
+| `/api/presets` | GET / POST | Saved randomizer presets on this Manager (`data/runs/presets.json`): `[{name, spec, updated_at}]`; POST `{name, spec}` saves or replaces (case-insensitive), the spec validated by `build_spec` |
+| `/api/presets/delete` | POST | `{name}` |
 | `/api/randomizer/status` | GET | `?jar=&rom_a=&rom_b=` — jar found, Java on PATH, each ROM present and a clean dump |
-| `/api/browse` | GET | `?dir=&ext=` — directory listing rooted at the user's home and the repo, for the pickers; lists, never reads |
+| `/api/roms` | GET | `?jar=` — every `.gb`/`.gbc` in the SLink folder, `roms/`, `patch/build/` and the `.cache/purergb*` build folders, each with the scanner's verdict (clean / not a Gen 1 cartridge) and its family (`gen1_rby` / `gen1_purergb`), for the run creator's pickers |
+| `/api/roms` | POST | multipart `file` — a ROM picked with the browser's file dialog lands in `roms/` (a `.jar` as `PokeRandoZX.jar`); a same-named different file gets a numbered name; 64 MiB cap |
 | `/api/stream/pin` | GET / POST | Which run the overlays show |
 | `/api/status`, `/api/attempts` | GET / POST | Proxied to the pinned run |
 | `/api/bot/{tail:.*}`, `/api/obs/{tail:.*}` | GET / POST | Relayed verbatim to the pinned run, so the Broadcast panels' own JS works from this origin |

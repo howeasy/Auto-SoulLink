@@ -39,7 +39,9 @@ import re
 import shutil
 import subprocess
 
+from server.adapters import variant_label
 from server.adapters.gen1_rom_scan import (
+    GEN1_ROM_SIZE,
     RomScanError,
     evolution_graph,
     identify,
@@ -47,6 +49,8 @@ from server.adapters.gen1_rom_scan import (
     scan_base_stats,
 )
 from server.upr_settings import (
+    FAMILY_PURE,
+    FAMILY_VANILLA,
     UprSettingsError,
     categories_enabled,
     forbidden_enabled,
@@ -63,6 +67,22 @@ RANDOMIZE_TIMEOUT = 600
 # entry for the cartridge and a hand-added one would repack base stats, evolutions and
 # trainer AI on every save (docs/purergb/research/d1/FORK_BRIEF.md). With the stock jar the
 # family stays greyed with this message.
+# identify()'s `kind`, in the picker's words. The vanilla family has one pinned artifact
+# per title, the clean dump; the pure family has two, the pinned v2.7.6 build and the SLink
+# companion overlay (the native trade + START-menu panel linked in at source: README,
+# "Companion overlay"), and the fork randomizes either as itself (A5). Anything else is a
+# cartridge that was already changed -- the randomizer starts only from a pinned one.
+KIND_WORDS = {
+    "clean": "clean dump",
+    "rand": "already modified, not a clean dump",
+}
+KIND_WORDS_PURE = {
+    "clean": "pinned pureRGB v2.7.6 build",
+    "overlay": "SLink companion overlay (native trade + START-menu panel)",
+    "rand": "already randomized",
+    "rand_overlay": "already randomized (companion overlay)",
+}
+
 PUREGB_RANDOMIZER_REFUSAL = (
     "pureRGB randomization needs SLink's UPR fork jar (4.6.1-slink1; build it with "
     "tools/build_upr_fork.py) — this jar is the stock 4.6.1 and has no pureRGB entry."
@@ -120,7 +140,6 @@ def jar_supports(jar: str, ident: dict) -> bool:
 def family_of(sources: dict[str, str]) -> str:
     """The randomizer family the pair belongs to (upr_settings.FAMILY_*); a pure/vanilla
     mix is refused because the two would need different contracts and could not link."""
-    from server.upr_settings import FAMILY_PURE, FAMILY_VANILLA
     families = {}
     for pid, path in sources.items():
         with open(path, "rb") as f:
@@ -196,13 +215,42 @@ def find_upr_jar() -> str | None:
     return None
 
 
+def describe_rom(path: str, jar_fork: bool) -> dict:
+    """What one ROM file is, for a picker or a preflight: present, and a PINNED artifact
+    of a title the scanner knows -- a clean dump, or (pure family, A5) the byte-exact
+    SLink companion overlay, which is randomized as an overlay. `clean` is that pinned
+    verdict; the pure family needs the fork jar, and says so in `title` otherwise."""
+    info = {"path": path, "exists": bool(path) and os.path.isfile(path), "clean": None, "title": ""}
+    if not info["exists"]:
+        return info
+    try:
+        with open(path, "rb") as f:
+            rom = f.read()
+        if len(rom) != GEN1_ROM_SIZE:
+            info["clean"], info["title"] = False, "not a Gen 1 cartridge"
+            return info
+        ident = identify(rom)
+        # Which contract the cartridge belongs to: a pure pair and a vanilla pair are
+        # different runs, and a run named up front admits one family only.
+        pure = ident.get("foundation") == "gen1_purergb"
+        info["family"] = FAMILY_PURE if pure else FAMILY_VANILLA
+        info["kind"] = ident.get("kind", "clean")
+        info["clean"] = bool(ident.get("pinned", ident.get("clean")))
+        # `title` is what a person reads in the picker: the game, and which of the
+        # cartridges of that game this is, in plain words (KIND_WORDS).
+        words = KIND_WORDS_PURE if pure else KIND_WORDS
+        info["title"] = f"{variant_label(ident['variant'])} · {words.get(info['kind'], info['kind'])}"
+        if pure and not jar_fork:
+            info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
+    except Exception as exc:                                         # noqa: BLE001
+        info["clean"], info["title"] = False, f"unreadable: {exc}"
+    return info
+
+
 def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     """Everything that can be checked in milliseconds before anything is spent: is the
-    jar there, is Java on PATH, is each ROM present and a PINNED artifact of a title the
-    scanner knows -- a clean dump, or (pure family, A5) the byte-exact SLink companion
-    overlay, which is randomized as an overlay. randomize() checks the same things, but
-    600 s deep inside a worker. `roms[pid].clean` is that pinned verdict."""
-    from server.adapters.gen1_rom_scan import identify
+    jar there, is Java on PATH, is each ROM present and pinned (describe_rom).
+    randomize() checks the same things, but 600 s deep inside a worker."""
     out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
            "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
     out["jar_fork"] = out["jar_found"] and jar_is_fork(jar)
@@ -210,24 +258,7 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     # "<Variant> overlay (U)" entry here, before the button, instead of after a Java failure
     out["jar_entries"] = sorted(jar_entries(jar)) if out["jar_found"] else []
     for pid, path in sources.items():
-        info = {"path": path, "exists": bool(path) and os.path.isfile(path),
-                "clean": None, "title": ""}
-        if info["exists"]:
-            try:
-                with open(path, "rb") as f:
-                    ident = identify(f.read())
-                if ident.get("foundation") == "gen1_purergb" and not out["jar_fork"]:
-                    info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
-                elif ident.get("foundation") == "gen1_purergb":
-                    info["clean"] = bool(ident.get("pinned", ident.get("clean")))
-                    info["kind"] = ident.get("kind", "clean")
-                    info["title"] = f"{ident.get('title') or ''} (pureRGB {ident['variant']}, {info['kind']})"
-                else:
-                    info["clean"] = bool(ident.get("clean"))
-                    info["kind"] = ident.get("kind", "clean")
-                    info["title"] = ident.get("title") or ""
-            except Exception as exc:                                 # noqa: BLE001
-                info["clean"], info["title"] = False, f"unreadable: {exc}"
+        info = describe_rom(path, out["jar_fork"])
         out["roms"][pid] = info
         out["ok"] = out["ok"] and info["exists"] and bool(info["clean"])
     out["ok"] = out["ok"] and out["jar_found"] and out["java_found"]
@@ -399,25 +430,13 @@ def _audit_write_domain(source_rom: str, output_rom: str, spec: dict) -> dict:
     return {"changed": r["changed"], "categories": sorted(cats)}
 
 
-def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir: str,
-                 java: str = "java") -> dict:
-    """Randomize one ROM per player and prove the pair is usable.
-
-    ``sources`` maps player id -> clean ROM path; the two may be different titles (a Red/Blue
-    pairing is normal) but must use the SAME settings file.
-    """
-    if set(sources) != {"a", "b"}:
-        raise UprPipelineError(f"expected sources for players a and b, got {sorted(sources)}")
-
-    for path in sources.values():
-        if not os.path.isfile(path):
-            raise UprPipelineError(f"source ROM not found: {path}")
+def admit_settings(settings, family: str = FAMILY_VANILLA) -> dict:
+    """Read a .rnqs (a path or its bytes) and admit it, or say exactly why not. The same
+    three gates whether the file comes from a run about to randomize or from a player
+    importing what they built in UPR's GUI: its version, the named dangers, and the
+    allowlist. Returns the parse (load())."""
     try:
-        family = family_of(sources)
-    except RomScanError as exc:
-        raise UprPipelineError(f"source ROM could not be identified: {exc}") from exc
-    try:
-        declared = load(settings_path)
+        declared = load(settings)
     except UprSettingsError as exc:
         raise UprPipelineError(f"settings file unreadable: {exc}") from exc
     if not declared["version_matches"]:
@@ -437,6 +456,27 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         raise UprPipelineError(
             "these settings are outside the supported set — SLink only runs configurations "
             "it can itself produce: " + "; ".join(odd))
+    return declared
+
+
+def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir: str,
+                 java: str = "java") -> dict:
+    """Randomize one ROM per player and prove the pair is usable.
+
+    ``sources`` maps player id -> clean ROM path; the two may be different titles (a Red/Blue
+    pairing is normal) but must use the SAME settings file.
+    """
+    if set(sources) != {"a", "b"}:
+        raise UprPipelineError(f"expected sources for players a and b, got {sorted(sources)}")
+
+    for path in sources.values():
+        if not os.path.isfile(path):
+            raise UprPipelineError(f"source ROM not found: {path}")
+    try:
+        family = family_of(sources)
+    except RomScanError as exc:
+        raise UprPipelineError(f"source ROM could not be identified: {exc}") from exc
+    admit_settings(settings_path, family)
 
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}

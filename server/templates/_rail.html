@@ -22,15 +22,26 @@
     </a>
     {% endif %}
 
-    {% for group in ('running', 'stopped', 'archived') %}
-      {% for r in runs if r.status == group %}
-        <a class="mk-rail-item{% if run and r.run_id == run.run_id and page == 'run' and not panel %} active{% endif %}" href="{% if standalone %}/{% else %}/runs/{{ r.run_id }}{% endif %}" title="{{ r.game_label or 'game detected on connect' }}">
+    {# The runs are the one part of the rail that grows, so they scroll on their own between
+       the pinned top (brand, New run) and the pinned destinations. Running first, then
+       stopped; archived runs fold under a count, open only while one of them is open. #}
+    {% macro run_item(r) -%}
+        <a class="mk-rail-item{% if run and r.run_id == run.run_id and page == 'run' and not panel %} active{% endif %}" href="{% if standalone %}/{% else %}/runs/{{ r.run_id }}{% endif %}" title="{{ r.game_label or 'game detected on connect' }}{% if r.created_short %} · {{ r.created_short }}{% endif %}">
           <span class="mk-dot {{ r.status }}"></span>
           <span class="mk-rail-label">{{ r.name }}</span>
           {% if r.run_id == pinned_run_id %}<span class="mk-rail-pin" title="pinned for stream">◉</span>{% endif %}
         </a>
-      {% endfor %}
-    {% endfor %}
+    {%- endmacro %}
+    <nav class="mk-rail-runs" aria-label="Runs">
+    {% for group in ('running', 'stopped') %}{% for r in runs if r.status == group %}{{ run_item(r) }}{% endfor %}{% endfor %}
+    {% set archived = runs | selectattr('status', 'equalto', 'archived') | list %}
+    {% if archived %}
+      <details class="mk-rail-fold"{% if run and run.status == 'archived' %} open{% endif %}>
+        <summary class="mk-rail-item"><span class="mk-rail-label">Archived</span><span class="num mk-sub">{{ archived | length }}</span></summary>
+        {% for r in archived %}{{ run_item(r) }}{% endfor %}
+      </details>
+    {% endif %}
+    </nav>
 
     <hr class="mk-rail-sep">
 

@@ -3,7 +3,9 @@ own origin -- live from the run's server, or persisted for a stopped one."""
 from __future__ import annotations
 
 import json
+import os
 
+import aiohttp
 import pytest
 
 from server import manager
@@ -135,22 +137,115 @@ async def test_preflight_names_what_is_missing_without_spending_anything(manager
 
 
 @pytest.mark.asyncio
-async def test_browse_lists_only_inside_the_roots(manager_client, tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+async def test_roms_are_found_in_the_project_folder_with_a_verdict(manager_client, tmp_path, monkeypatch):
+    """The run creator offers what is in the SLink folder (and roms/) rather than asking
+    for paths; a file that is not a Gen 1 cartridge is listed, named, and not usable."""
+    from server import manager
     (tmp_path / "roms").mkdir()
-    (tmp_path / "roms" / "red.gb").write_bytes(b"x")
-    (tmp_path / "roms" / "notes.txt").write_bytes(b"x")
-    j = await (await manager_client.get("/api/browse", params={"dir": str(tmp_path / "roms"), "ext": ".gb,.gbc"})).json()
-    assert j["ok"] and [e["name"] for e in j["entries"]] == ["red.gb"], "only the asked-for extensions, plus directories"
-    outside = await manager_client.get("/api/browse", params={"dir": str(tmp_path.parent.parent)})
-    assert outside.status == 403
+    (tmp_path / "roms" / "crystal.gbc").write_bytes(b"x" * (2 << 20))
+    (tmp_path / "notes.txt").write_bytes(b"x")
+    monkeypatch.setattr(manager, "ROM_DIRS", (str(tmp_path), str(tmp_path / "roms")))
+    j = await (await manager_client.get("/api/roms")).json()
+    assert [r["name"] for r in j["roms"]] == ["crystal.gbc"]
+    assert j["roms"][0]["clean"] is False and j["roms"][0]["title"] == "not a Gen 1 cartridge"
+
+
+@pytest.mark.asyncio
+async def test_presets_are_named_specs_the_randomizer_would_accept(manager_client, manager_dir):
+    """A preset is saved through the same builder the randomizer uses, so loading one can
+    never produce a spec the pipeline refuses; names are case-insensitive and replace."""
+    ok = await (await manager_client.post("/api/presets", json={"name": "Chaos", "spec": {"wild": "random"}})).json()
+    assert ok["ok"] and ok["preset"]["name"] == "Chaos"
+    bad = await manager_client.post("/api/presets", json={"name": "Bad", "spec": {"types": "random"}})
+    assert bad.status == 400 and "types" in (await bad.json())["error"]
+    assert (await manager_client.post("/api/presets", json={"name": "", "spec": {}})).status == 400
+    await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}})
+    j = await (await manager_client.get("/api/presets")).json()
+    assert [(p["name"], p["spec"]["wild"]) for p in j["presets"]] == [("chaos", "area")]
+    assert (manager_dir / "presets.json").exists()
+    assert (await manager_client.post("/api/presets/delete", json={"name": "CHAOS"})).status == 200
+    assert (await manager_client.post("/api/presets/delete", json={"name": "CHAOS"})).status == 404
+    assert (await (await manager_client.get("/api/presets")).json())["presets"] == []
+
+
+@pytest.mark.asyncio
+async def test_settings_export_and_import_are_upr_files_through_the_pipeline_gates(manager_client):
+    """Export writes the .rnqs the randomizer would write for the spec (UPR's GUI opens it);
+    import reads one back through admit_settings, so a GUI-built file that randomizes
+    types is refused by name instead of being silently read as 'unchanged'."""
+    from server.upr_settings import build_spec
+    spec = {"wild": "area", "wild_levels": 25, "trainers": "unchanged"}
+    resp = await manager_client.post("/api/randomizer/settings/export", json={"spec": spec, "name": "Hard mode!"})
+    assert resp.status == 200 and resp.headers["Content-Disposition"].endswith('"Hard_mode.rnqs"')
+    blob = await resp.read()
+    assert blob == build_spec(spec), "the same bytes handle_randomize writes"
+
+    async def imp(name, data):
+        form = aiohttp.FormData()
+        form.add_field("file", data, filename=name, content_type="application/octet-stream")
+        return await (await manager_client.post("/api/randomizer/settings/import", data=form)).json()
+
+    back = await imp("Hard_mode.rnqs", blob)
+    assert back["ok"] and back["spec"]["wild"] == "area" and back["spec"]["wild_levels"] == 25
+    assert "wild level curve +25%" in back["summary"]
+    forbidden = await imp("types.rnqs", _rnqs_with_types_randomized())
+    assert forbidden["ok"] is False and "types" in forbidden["error"]
+    garbage = await imp("x.rnqs", b"not a settings file")
+    assert garbage["ok"] is False and "unreadable" in garbage["error"]
+    assert (await manager_client.post("/api/randomizer/settings/export", json={"spec": {"bogus": 1}})).status == 400
+
+
+def _rnqs_with_types_randomized() -> bytes:
+    """A file UPR's GUI could produce that SLink must refuse: build the default file and
+    clear the types_UNCHANGED bit the way Settings.toString() lays it out."""
+    from server.upr_settings import FLAGS, build_spec, load
+    raw = bytearray(build_spec({}))
+    parsed = load(bytes(raw))
+    data = bytearray(parsed["data"])
+    i, bit = FLAGS["types_UNCHANGED"]
+    data[i] &= ~(1 << bit) & 0xFF
+    data[FLAGS["types_COMPLETELY_RANDOM"][0]] |= 1 << FLAGS["types_COMPLETELY_RANDOM"][1]
+    from server.upr_settings import _encode
+    return _encode(data, parsed["rom_name"])
+
+
+def test_a_cartridge_says_which_family_it_belongs_to():
+    """The picker greys a pure dump on a vanilla run and the reverse; that needs the family
+    on every described cartridge, not only on a pair (family_of)."""
+    from server.upr_pipeline import describe_rom
+    red = os.path.join(os.path.dirname(__file__), "..", "..", "patch", "build", "gen1_red.gb")
+    if not os.path.exists(red):
+        pytest.skip("patch/build/gen1_red.gb not present")
+    assert describe_rom(red, False)["family"] == "gen1_rby"
+
+
+@pytest.mark.asyncio
+async def test_uploaded_rom_lands_in_roms_and_a_same_named_different_file_is_kept(manager_client, tmp_path, monkeypatch):
+    from server import manager
+    monkeypatch.setattr(manager, "ROM_UPLOAD_DIR", str(tmp_path / "roms"))
+    monkeypatch.setattr(manager, "ROM_DIRS", (str(tmp_path / "roms"),))
+
+    async def upload(name, data):
+        form = aiohttp.FormData()
+        form.add_field("file", data, filename=name, content_type="application/octet-stream")
+        return await (await manager_client.post("/api/roms", data=form)).json()
+
+    j = await upload("red.gb", b"a" * 16)
+    assert j["ok"] and j["kind"] == "rom" and j["path"] == str(tmp_path / "roms" / "red.gb")
+    assert (await upload("red.gb", b"a" * 16))["path"] == j["path"], "the same bytes again is the same file"
+    assert (await upload("red.gb", b"b" * 16))["path"] == str(tmp_path / "roms" / "red (2).gb"), "never overwrite a different file"
+    sneaky = (await upload("../red.gb", b"c" * 16))["path"]
+    assert os.path.dirname(sneaky) == str(tmp_path / "roms") and os.sep not in os.path.basename(sneaky), "stays in roms/"
+    assert (await upload("x.exe", b"MZ")) == {"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}
+    assert (await manager_client.post("/api/roms", data=b"file=x")).status == 400, "not multipart"
+    assert sorted(os.listdir(tmp_path / "roms")) == sorted(["red (2).gb", "red.gb", os.path.basename(sneaky)]), "no .part left behind"
 
 
 @pytest.mark.asyncio
 async def test_rom_download_is_404_until_a_pair_exists(manager_client, manager_dir):
     run = _stopped_run(manager_dir)
     assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/a")).status == 404
+    assert (await manager_client.get(f"/api/runs/{run['run_id']}/settings.rnqs")).status == 404
     assert (await manager_client.get(f"/api/runs/{run['run_id']}/rom/c")).status == 400
 
 

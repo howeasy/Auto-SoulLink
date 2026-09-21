@@ -48,6 +48,16 @@ Gen 1 release branch rebases onto it next — their conflicts are the three list
 Sequencing section. Two Gen 1-owned docstrings still name `html_render.
 status_icon_html` (`adapters/gen1_rby.py:476`, `adapters/gen3_frlge.py:326`) — tell that
 session; the decoder is now `templates/_macros.html::status_pill`.
+**Follow-ups (2026-09-20, on master):** sprites flickered every poll — idiomorph re-synced each
+`<img src>` from the server HTML, undoing the onerror fallback and the chroma-key; the
+idiomorph attribute hook in `dashboard.js` now leaves `src`/`style`/`data-bg-removed` alone
+while `data-species` is unchanged (the funnotbun-only regex patch is gone). The rail's runs
+scroll between the pinned top and the pinned destinations, archived runs fold under a count.
+The randomizer's cartridges are found, not typed (Phase 8 item 4; `GET/POST /api/roms`),
+described in plain words with their family, and a run's game names the family it takes
+(`GAME_FAMILY`; `handle_randomize` refuses the other by name — a pure run had been built from
+vanilla dumps with nothing objecting). A randomized run offers its cartridges on the empty
+board and under *Launchers ▾*. Presets and `.rnqs` export/import: Phase 8 item 8.
 
 ## Read this first
 
@@ -450,12 +460,12 @@ anything else produces a file its own allowlist rejects.
 3. **Preflight endpoint.** `GET /api/randomizer/status` → jar found, `shutil.which("java")`,
    and for each ROM `gen1_rom_scan.identify(rom)["clean"]`. Today a missing Java or a dirty
    dump costs up to twenty minutes inside `to_thread` to discover.
-4. **Server-side file picker.** `GET /api/browse?dir=…&ext=.gb,.gbc,.jar` returning entries,
-   rooted at the user's home and refusing traversal with the same `ntpath.splitdrive` guard
-   `064b57c` put in `handle_calc_files`. No upload, so the policy holds and the 1 MiB body
-   limit stays irrelevant. (If uploads are ever wanted: `client_max_size` is unset, aiohttp's
-   default is 1 MiB, a Gen 1 ROM is *exactly* 1 048 576 bytes, and the 413 surfaces to the
-   user as a `SyntaxError`.)
+4. **File picker.** ~~`GET /api/browse` directory listing~~ — superseded 2026-09-20: the
+   creator lists what is in the SLink folder (`GET /api/roms`, each file with the scanner's
+   verdict, the first two clean dumps preselected) and anything else comes in through the
+   browser's own file dialog (`POST /api/roms`, multipart streamed through
+   `request.multipart()`, which the 1 MiB `client_max_size` does not apply to; 64 MiB cap of
+   its own). Uploads land in `<repo>/roms/`, which .gitignore already refuses.
 5. **Progress.** Job id + `GET /api/randomizer/jobs/{id}` poll — **not** SSE, for the reason
    `_STATUS_HTML` documents. `prepare_pair` grows an optional `progress(stage)` callback
    (`"a"`, `"b"`, `"verify"`), three lines.
@@ -464,6 +474,15 @@ anything else produces a file its own allowlist rejects.
    and finds the battery save. Wrong-file mixups are already caught by `rom_contract.json`.
 7. **A re-randomize path** — the form stays reachable when `current.randomizer` is set, and
    re-running rewrites `rom_contract.json` and the `randomizer` record together.
+8. **Presets, and the `.rnqs` back** *(2026-09-20)*. Named specs on the Manager
+   (`data/runs/presets.json`, `GET/POST /api/presets`, validated by `build_spec`). The
+   interchange file is UPR's own `.rnqs`, not a format of ours: `POST
+   /api/randomizer/settings/export` writes the bytes `randomize` would write for the spec,
+   `POST /api/randomizer/settings/import` admits a GUI-built or another run's file through
+   `upr_pipeline.admit_settings` — the version check, `forbidden_enabled` and the
+   `unexpected_settings` envelope lifted out of `prepare_pair`, so a file that randomizes
+   types is refused by name rather than read back as "unchanged" — and `GET
+   /api/runs/{id}/settings.rnqs` serves the file a pair was built with.
 
 Note `ALL_CATEGORIES` is hardcoded in three test files, duplicating `_CATEGORY_MODES`; make
 them import it.
