@@ -2318,6 +2318,10 @@ class SLinkServer:
                     "capabilities": ui_capabilities(
                         self.adapter_for(pid),
                         str(self.connected_players.get(pid, {}).get("rom_type") or "")),
+                    # What THIS cartridge reported at hello (companion mailbox caps): the
+                    # START-menu panel and the native sound path. None until it says.
+                    "companion": {k: self.connected_players.get(pid, {}).get(k)
+                                  for k in ("panel", "sfx")},
                     "encounter_table": self._enc_table_for_status(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, ""),
                         pid,

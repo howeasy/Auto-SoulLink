@@ -235,7 +235,7 @@ function randomizerFields(form) {
       for (var i = 0; i < 2; i++) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
-          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD.' };
+          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD, without native sounds.' };
         }
       }
       return { ok: true, why: '' };
