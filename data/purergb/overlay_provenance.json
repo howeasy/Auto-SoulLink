@@ -94,11 +94,11 @@
     }
   },
   "symbols": {
-    "purered_slink.sym": "06012472cc7d337285707334791f23a798f567cf6166eccc183946be26bef6a9",
-    "purered_slink.map": "8b98cda52e3f550c0a7cf6b069a924f4a754b3d3568c98b7b4aa70950954c7c3",
-    "pureblue_slink.sym": "e486bf33ed84318ffff1d3de07f14418f2cea069200afdab2a37aff4714ef0f1",
-    "pureblue_slink.map": "90e0767822f582e7d4d952275cf730180fdbfe4a2696a962df6b1e1c16435f4c",
-    "puregreen_slink.sym": "ea5f69a67f120fbfebc8981bc39c7f4111e9effa7ed740615ad1a0329fc4af8e",
-    "puregreen_slink.map": "af10f4e4a17013416ec7e43008363f653030905b78afecafe521b2fee255e3d1"
+    "purered_slink.sym": "780ef975c119f8b494b65a2cf08610f0dc49da653c4c6b9ed2000aa4112e3d7d",
+    "purered_slink.map": "54caf5fffdbaa291e211a2d68616998d96757ce0c619b1e2e1c27830d277ccc4",
+    "pureblue_slink.sym": "4829608d39297e1576f22bf036b8ca052fc46d9921038fa6ca1f0ac6b0149c85",
+    "pureblue_slink.map": "6b087236cd316f20ba00e36e592a2fb1aa296658dd9bed269d1613caa8b41eb7",
+    "puregreen_slink.sym": "bcba6c1e992e6c30af2e201338f457d33b5a5f96f9fdb96c6d9e790bb86e844a",
+    "puregreen_slink.map": "9fd18eb489753b7d035130a79b942c8334fc1235c4ce7ea9485b34e7c174483c"
   }
 }

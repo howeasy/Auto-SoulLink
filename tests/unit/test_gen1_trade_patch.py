@@ -162,9 +162,12 @@ def test_defs_match_committed_red_and_blue_symbols_and_pret_tables():
 
 
 def test_text_include_matches_pret_sources():
+    pret_src = ROOT / ".cache/pret/pokered"
+    if not pret_src.is_dir():
+        pytest.skip(f"{pret_src} not present (set SLINK_PRET_SRC or clone pret/pokered there)")
     text = (SOURCE / "pret_text.inc").read_text(encoding="utf-8")
     for relative in ("constants/charmap.asm", "macros/const.asm", "macros/scripts/text.asm"):
-        upstream = (ROOT / ".cache/pret/pokered" / relative).read_text(encoding="utf-8")
+        upstream = (pret_src / relative).read_text(encoding="utf-8")
         assert upstream.rstrip("\n") in text
 
 

@@ -78,12 +78,35 @@ jobs:
           sys.exit(0 if ok else 1)
           PY
 
+      # Order-independent (multiset-of-lines) rather than `cmp`: rgblink has no documented
+      # tie-break for two symbols/sections that land on the same address, and it is free to
+      # print such ties in a different order on a different platform/libc even from
+      # byte-identical inputs (the ROM sha1 check above already proves the machine code is
+      # identical; ties were observed reordered here vs. a Windows-built reference with the
+      # same RGBDS version and pureRGB commit, never a missing/extra/changed line). A sorted
+      # comparison keeps the real guarantee — every fact in one file is in the other — without
+      # being fragile to that reordering.
       - name: Compare .sym/.map against the committed snapshot (fail on drift)
         run: |
-          for name in pokered pokeblue pokegreen; do
-            cmp "pureRGB/$name.sym" "data/purergb/$name.sym"
-            cmp "pureRGB/$name.map" "data/purergb/$name.map"
-          done
+          python3 - <<'PY'
+          import pathlib, sys
+
+          ok = True
+          for name in ("pokered", "pokeblue", "pokegreen"):
+              for ext in ("sym", "map"):
+                  fresh = pathlib.Path(f"pureRGB/{name}.{ext}").read_text().splitlines()
+                  committed = pathlib.Path(f"data/purergb/{name}.{ext}").read_text().splitlines()
+                  if sorted(fresh) != sorted(committed):
+                      ok = False
+                      print(f"{name}.{ext}: content differs (order-independent compare)")
+                      only_fresh = sorted(set(fresh) - set(committed))
+                      only_committed = sorted(set(committed) - set(fresh))
+                      for line in only_fresh[:10]:
+                          print(f"  only in fresh build:      {line}")
+                      for line in only_committed[:10]:
+                          print(f"  only in committed source: {line}")
+          sys.exit(0 if ok else 1)
+          PY
 
       - name: Upload build artifacts
         if: always()

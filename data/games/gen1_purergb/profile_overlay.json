@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "e486bf33ed84318ffff1d3de07f14418f2cea069200afdab2a37aff4714ef0f1"
+   "sha256": "4829608d39297e1576f22bf036b8ca052fc46d9921038fa6ca1f0ac6b0149c85"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "ea5f69a67f120fbfebc8981bc39c7f4111e9effa7ed740615ad1a0329fc4af8e"
+   "sha256": "bcba6c1e992e6c30af2e201338f457d33b5a5f96f9fdb96c6d9e790bb86e844a"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "06012472cc7d337285707334791f23a798f567cf6166eccc183946be26bef6a9"
+   "sha256": "780ef975c119f8b494b65a2cf08610f0dc49da653c4c6b9ed2000aa4112e3d7d"
   }
  },
  "titles": {

@@ -241,6 +241,12 @@ def test_run_gate_refuses_a_pure_key_whose_build_is_absent(monkeypatch, tmp_path
     how to get one (the branch a pure key takes before anything is staged or launched)."""
     import run_gb_gate
 
+    # The refusal under test is at ROM resolution, not at EmuHawk detection — stand in a file so
+    # the EmuHawk existence check (irrelevant here, and a dev-box-only artifact) does not shadow
+    # it on a clean checkout.
+    fake_emuhawk = tmp_path / "fake_emuhawk.exe"
+    fake_emuhawk.write_bytes(b"")
+    monkeypatch.setattr(run_gb_gate, "EMUHAWK", str(fake_emuhawk))
     monkeypatch.setattr(g1, "PURERGB_ROMS", str(tmp_path / "no-builds-here"))
     monkeypatch.setattr(g1, "REPO", str(tmp_path))
     monkeypatch.setattr(run_gb_gate, "REPO", str(tmp_path))

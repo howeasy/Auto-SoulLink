@@ -5,17 +5,17 @@
   "pokeblue.sym": {
    "commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
    "repo": "pokered",
-   "sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d"
+   "sha256": "07ba5779a8f35afef978f32e876a03bbf9c8b76482338b61d60c10a7bae471ac"
   },
   "pokered.sym": {
    "commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
    "repo": "pokered",
-   "sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9"
+   "sha256": "4dc25c1c467a947c2b0aa18628ddd048b4d1de50166a58e190db885e5577c33f"
   },
   "pokeyellow.sym": {
    "commit": "0a08515",
    "repo": "pokeyellow",
-   "sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4"
+   "sha256": "098e03d69e8aa4a22831830441b3dc6ffe3a38bb81301f0ddb8551bfce554647"
   }
  },
  "titles": {

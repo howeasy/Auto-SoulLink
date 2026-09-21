@@ -97,6 +97,7 @@ async def test_a_pipeline_refusal_is_a_400_with_its_reason(manager_dir, tmp_path
     Types decide the type clause, so settings that randomize them cannot be used -- and the
     caller has to be told which setting was the problem to be able to fix it.
     """
+    _roms()
     bad = tmp_path / "bad.rnqs"
     bad.write_bytes(build({"types_UNCHANGED": False}))
     status, body = await _post({
@@ -132,6 +133,7 @@ async def test_a_spec_body_writes_the_settings_file_the_form_asked_for(manager_d
     from server import upr_pipeline
     from server.upr_settings import load, spec_from_parsed
 
+    _roms()
     seen = {}
 
     def fake_prepare_pair(jar, settings, sources, out_dir, **kw):
