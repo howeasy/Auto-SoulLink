@@ -172,6 +172,10 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P1 baseline: the six RR duo scenarios (`faint`, `boxsync`, `trade`, `ghost`, `infopanel`, `explode`) re-run on the OLD client at cut 91c7025 with the wire-log tap: all PASS (attempt 1 of 1 each), 17,286 transcript lines captured; transcripts are provisional (t = seq) until C1-3b lands and the capture is repeated — characterization input to C-0 and D rows, not a Gen 3 verdict.
 
+- 2026-09-21 P2 boot-check on RR companion: `docs/gen3/probes/bootcheck_rr_town_2026-09-21.txt` — PHYSICAL: `tests/fixtures/gen3/rr_town.sav` cold boot → CONTINUE → START/SAVE, counter 2→3, 14/14 sectors of the new slot written, flushed battery re-qualifies with the party unchanged (F-6 RR half). Two instrument findings fixed on the way: BizHawk files the battery as `gen3 slink RR.SaveRAM` (underscores → spaces; seed under that name), and the counter appears ~950 frames before the sector loop ends under mGBA flash timing (~66 frames/sector), so the driver now waits for all 14 sectors instead of a fixed 600 frames — a flush at the counter alone yields a torn slot (11/14 sectors, status ERROR).
+
+- 2026-09-21 P2 independent spot-check (Haiku, read-only, before reading the site doc): FR rows `battle_end`/`capture_wild`/`save` resolve in `pokefirered.sym` at the pinned addresses and their bytes match the FR US 1.0 dump (sha1 `41cb23d8…`); RR rows `battle_end`/`mon_given`/`pc_move` bytes match the RR base (md5 `8529f3a4…`); `rom_offset == address - 0x08000000` on all six. Input to F-3/S rows; companion-kind bytes were not part of this check (pinned by the generator's own test on `bf8e94a0…`).
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

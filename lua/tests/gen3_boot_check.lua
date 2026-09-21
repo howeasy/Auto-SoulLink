@@ -156,6 +156,23 @@ function M.save_counter(domain)
     return best
 end
 
+--- How many signature-valid slot sectors (id < 14) carry save counter `ctr`. A finished
+--- full save has all 14; the counter appears in the first written sector long before the
+--- loop ends (PHYSICAL, RR companion 2026-09-21: ~66 frames per sector under the mGBA flash
+--- timing, so a 14-sector save spans ~950 frames after the counter first moves).
+function M.sectors_at(domain, ctr)
+    local n = 0
+    for s = 0, SECTORS - 1 do
+        local base = s * SECTOR_SIZE
+        if memory.read_u32_le(base + OFF_SIGNATURE, domain) == SIGNATURE
+           and memory.read_u32_le(base + OFF_COUNTER, domain) == ctr
+           and memory.read_u16_le(base + OFF_SIGNATURE - 8, domain) < 14 then
+            n = n + 1
+        end
+    end
+    return n
+end
+
 -- ── input, on a frame budget ────────────────────────────────────────────────────────────────
 
 M.spent, M.budget = 0, 200000
@@ -284,6 +301,18 @@ function M.save_via_menu(cp, domain, attempts)
         return false, before, after
     end
     M.phase("saved", string.format("counter=%d->%d", before, after))
+    -- The counter moving is NOT completion: wait for every sector of the new slot.
+    local done = M.sectors_at(domain, after)
+    for _ = 1, 6000 do
+        if done >= 14 then break end
+        M.advance()
+        if M.spent % 16 == 0 then done = M.sectors_at(domain, after) end
+    end
+    M.phase("slot-complete", string.format("sectors=%d/14", done))
+    if done < 14 then
+        M.shot("stuck")
+        return false, before, after
+    end
     for _ = 1, 600 do                  -- let the dialog close before the flush
         if not dialog() then break end
         M.advance()
