@@ -16,7 +16,7 @@ from server.data.items.gen1 import ITEM_NAMES
 from server.pokemon_data import species_name as national_species_name
 
 from . import gen1_codec
-from .base import GameAdapter, gb_status_token
+from .base import GameAdapter, gb_status_token, humanize_area_id
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_rby"
 
@@ -412,7 +412,7 @@ class Gen1Adapter(GameAdapter):
             location = _AREA_NAMES.get(_AREA_BY_MAP.get(map_id, ""), f"Map {map_id}")
             name = national_species_name(dex, False) if 1 <= dex <= 151 else f"#{dex}"
             return f"{location} — {name}"
-        return area_id.replace("_", " ").title()
+        return humanize_area_id(area_id)
 
     def to_national_dex(self, species_id: int) -> int:
         # codec table is generated from pret/data/pokemon/dex_order.asm:3-192.

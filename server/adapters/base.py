@@ -21,9 +21,25 @@ ISOLATION CONTRACT:
 import json
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 
 log = logging.getLogger(__name__)
+
+
+def humanize_area_id(area_id: str) -> str:
+    """The fallback display name for an area id nothing else names: words at every `_`,
+    at a lower->Upper or letter->digit seam ("Route21_North" -> "Route 21 North",
+    "route8" -> "Route 8"), each capitalised, floor tokens kept ("1F", "B2F")."""
+    words = []
+    for tok in area_id.replace("-", "_").split("_"):
+        if not tok:
+            continue
+        # a digit run only splits off at the END of a token: "route8" -> "Route 8", but
+        # a floor code stays whole: "b1f" -> "B1F"
+        tok = re.sub(r"(?<=[a-z])(?=[A-Z])|(?<=[a-z])(?=[0-9]+$)|(?<=[0-9])(?=[A-Z][a-z])", " ", tok)
+        words.extend(w if w.isupper() else w.title() for w in tok.split(" "))
+    return " ".join(words)
 
 
 def load_area_names_from_obj_map(json_path: str) -> "dict[str, str]":

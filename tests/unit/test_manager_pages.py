@@ -241,6 +241,90 @@ async def test_uploaded_rom_lands_in_roms_and_a_same_named_different_file_is_kep
     assert sorted(os.listdir(tmp_path / "roms")) == sorted(["red (2).gb", "red.gb", os.path.basename(sneaky)]), "no .part left behind"
 
 
+# ── the cartridges step, through the routes ───────────────────────────────────────────
+
+def _fake_provision(run_dir, sources, *, companion, randomize, jar=""):
+    """What server/cartridges.py returns (its own tests prove the real thing); the outputs
+    are written so the download can be read back."""
+    import hashlib
+    roms = os.path.join(run_dir, "roms")
+    os.makedirs(roms, exist_ok=True)
+    players = {}
+    for pid in ("a", "b"):
+        out = os.path.join(roms, f"{pid}.gb")
+        data = f"cartridge {pid} companion={companion} randomized={randomize is not None}".encode()
+        with open(out, "wb") as f:
+            f.write(data)
+        players[pid] = {"source": sources[pid], "source_title": "Red · clean dump", "output": out,
+                        "rom_sha1": hashlib.sha1(data).hexdigest(), "fingerprint": "fp" + pid,
+                        "kind": ("rand_" if randomize else "") + ("companion" if companion else ("" if randomize else "clean"))}
+    rnd = None
+    if randomize is not None:
+        rnd = {"upr_version": "4.6.1-slink1", "settings_sha256": "s" * 64, "categories": ["wild"],
+               "spec": {"wild": "random"}, "summary": "wild encounters random",
+               "players": {pid: {"seed": 7 if pid == "a" else 9, "sha1": "intermediate", "source_sha1": "src",
+                                 "content_hash": "c" + pid, "fingerprint": "fp" + pid} for pid in ("a", "b")}}
+    return {"family": "gen1_rby", "companion": companion, "randomizer": rnd, "players": players}
+
+
+@pytest.mark.asyncio
+async def test_the_cartridges_route_records_what_the_module_made_and_the_downloads_serve_it(manager_client, manager_dir, monkeypatch):
+    """The handler's contract with server/cartridges.py: provision() gets the picks and the
+    flags, the run records the result, the download reads the recorded output (not the
+    randomizer's old file name), and the board's first step offers the cartridges."""
+    from server import cartridges
+    run = _stopped_run(manager_dir)
+    seen = {}
+
+    def provision(run_dir, sources, **kw):
+        seen.update(kw, sources=sources, run_dir=run_dir)
+        return _fake_provision(run_dir, sources, **kw)
+
+    monkeypatch.setattr(cartridges, "provision", provision)
+    j = await (await manager_client.post(f"/api/runs/{run['run_id']}/cartridges",
+                                         json={"rom_a": "/a.gb", "rom_b": "/b.gb", "companion": True})).json()
+    assert j["ok"] and j["cartridges"]["players"]["a"]["kind"] == "companion" and j["randomizer"] is None
+    assert seen["companion"] is True and seen["randomize"] is None and seen["sources"] == {"a": "/a.gb", "b": "/b.gb"}
+    assert seen["run_dir"] == str(manager_dir / run["run_id"])
+    rec = manager._find_run(manager._load_registry(), run["run_id"])
+    assert rec["cartridges"]["players"]["b"]["output"].endswith("b.gb") and "randomizer" not in rec
+    dl = await manager_client.get(f"/api/runs/{run['run_id']}/rom/b")
+    assert dl.status == 200 and (await dl.read()) == b"cartridge b companion=True randomized=False"
+    assert dl.headers["Content-Disposition"] == 'attachment; filename="slink_Kanto_Duo_b.gb"'
+    board = await (await manager_client.get(f"/runs/{run['run_id']}")).text()
+    assert f"/api/runs/{run['run_id']}/rom/a" in board and "admits no other" not in board
+
+    # randomizing on top: the run's `randomizer` carries the FINAL sha1 and output per player
+    j = await (await manager_client.post(f"/api/runs/{run['run_id']}/cartridges",
+                                         json={"rom_a": "/a.gb", "rom_b": "/b.gb", "companion": True,
+                                               "randomize": True, "jar": "x", "categories": ["wild"]})).json()
+    assert j["ok"] and seen["randomize"] == {"settings_path": str(manager_dir / run["run_id"] / "settings.rnqs")}
+    a = j["randomizer"]["players"]["a"]
+    assert a["seed"] == "7" and a["rom_sha1"] == j["cartridges"]["players"]["a"]["rom_sha1"] != "intermediate"
+    assert a["output"] == j["cartridges"]["players"]["a"]["output"]
+    board = await (await manager_client.get(f"/runs/{run['run_id']}")).text()
+    assert "admits no other" in board
+    page = await (await manager_client.get(f"/runs/{run['run_id']}/cartridges")).text()
+    assert '"kind": "rand_companion"' in page and "randomizerPage(" in page
+
+
+@pytest.mark.asyncio
+async def test_a_run_randomized_before_the_cartridges_step_keeps_its_page_and_downloads(manager_client, manager_dir):
+    """Runs from before today recorded only `randomizer` (output roms/{p}_randomized.gbc)."""
+    run = _stopped_run(manager_dir)
+    roms = manager_dir / run["run_id"] / "roms"
+    roms.mkdir()
+    (roms / "a_randomized.gbc").write_bytes(b"old a")
+    manager._update_run(run["run_id"], randomizer={"upr_version": "4.6.1", "settings_sha256": "", "categories": [],
+                                                   "spec": {}, "summary": "nothing",
+                                                   "players": {"a": {"seed": "1", "rom_sha1": "aa", "output": str(roms / "a_randomized.gbc")},
+                                                               "b": {"seed": "2", "rom_sha1": "bb", "output": str(roms / "b_randomized.gbc")}}})
+    dl = await manager_client.get(f"/api/runs/{run['run_id']}/rom/a")
+    assert dl.status == 200 and (await dl.read()) == b"old a"
+    page = await (await manager_client.get(f"/runs/{run['run_id']}/cartridges")).text()
+    assert '"legacy": true' in page and '"source_title": "randomized cartridge"' in page
+
+
 @pytest.mark.asyncio
 async def test_rom_download_is_404_until_a_pair_exists(manager_client, manager_dir):
     run = _stopped_run(manager_dir)

@@ -451,10 +451,10 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | Path | Method | Description |
 |---|---|---|
 | `/` | GET | The first running run's board, or the New-run form when there are no runs |
-| `/new` | GET | New-run form: game family, options greyed with reasons, preview; on a Gen 1 family, the randomizer — cartridges found in the SLink folder (grouped by family, the run's pair preselected), *Add file…*, presets, `.rnqs` export/import |
+| `/new` | GET | New-run form: game family, options greyed with reasons, preview; on a Gen 1 family, the Cartridges step — cartridges found in the SLink folder (grouped by family, the run's pair preselected), *Add file…*, the SLink companion (greyed with the reason for Yellow), Randomize with its options, presets, `.rnqs` export/import |
 | `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers — and, on a randomized run, the two cartridges / archive / delete) and its board — live from the run's server, or what it persisted once stopped. The rail's runs scroll on their own; archived runs fold under a count |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
-| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs and the `.rnqs` they were built with. Randomizing is normally part of `/new` |
+| `/runs/{run_id}/cartridges` (also `/randomizer`) | GET | Gen 1 runs: the cartridges page — what each player plays (the picks, the SLink companion, Randomize and its options), the downloads, the `.rnqs` a randomized pair was built with. Preparing cartridges is normally part of `/new` |
 | `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
 | `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
 | `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
@@ -468,8 +468,9 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
 | `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
 | `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |
+| `/api/runs/{id}/cartridges` | POST | `{rom_a, rom_b, companion?, randomize?, jar?, spec? \| categories? \| settings?}` — makes each player's cartridge (`server/cartridges.py`): a copy, the SLink companion on it (vanilla: the UPS on a clean dump, or the structural injector after randomizing; pureRGB: the companion overlay, which the fork then randomizes as an overlay), randomized when asked. Outputs `roms/{a,b}.gb`; `rom_contract.json` only when randomized (the run then admits no other). Records `run.cartridges` (and `run.randomizer` when randomized) |
 | `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json`. A run whose game names a family refuses a pair from the other (400, by name) |
-| `/api/runs/{id}/rom/{player}` | GET | Download that player's randomized ROM as `slink_<run>_<player>.gb` |
+| `/api/runs/{id}/rom/{player}` | GET | Download that player's cartridge as the run made it, `slink_<run>_<player>.gb` |
 | `/api/runs/{id}/settings.rnqs` | GET | The `.rnqs` the pair was built with, as UPR's GUI would open it |
 | `/api/randomizer/settings/export` | POST | `{spec, name?}` → a `.rnqs` (attachment): the same bytes `randomize` writes for that spec |
 | `/api/randomizer/settings/import` | POST | multipart `file` (a `.rnqs` from UPR's GUI or another run) → `{spec, summary}`, admitted by the pipeline's own gates (version, `forbidden_enabled`, `unexpected_settings`); a refusal names what the file changes |

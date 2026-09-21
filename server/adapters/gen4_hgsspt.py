@@ -24,7 +24,7 @@ from server.pokemon_data import (
     type_name as _type_name,
 )
 
-from .base import GameAdapter
+from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
 
@@ -356,7 +356,7 @@ class Gen4Adapter(GameAdapter):
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]
-        return area_id.replace("_", " ").title()
+        return humanize_area_id(area_id)
 
     def encounter_table(self, area_id: str) -> dict | None:
         """Return wild encounter data for an area, or None if no data.

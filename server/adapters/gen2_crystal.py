@@ -13,7 +13,7 @@ import re
 
 from server.pokemon_data import base_form
 
-from .base import GameAdapter, gb_status_token, load_area_names_from_obj_map
+from .base import GameAdapter, gb_status_token, humanize_area_id, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
@@ -373,7 +373,7 @@ class Gen2CrystalAdapter(GameAdapter):
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]
-        return area_id.replace("_", " ").title()
+        return humanize_area_id(area_id)
 
     def to_national_dex(self, species_id: int) -> int:
         # Crystal uses sequential NatDex IDs 1-251

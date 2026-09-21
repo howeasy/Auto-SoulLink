@@ -26,7 +26,7 @@ from server.pokemon_data import (
     type_name as _type_name,
 )
 
-from .base import GameAdapter
+from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
 
@@ -569,7 +569,7 @@ class Gen3Adapter(GameAdapter):
                 return f"Gift \u2013 {self.area_display_name(bare)}"
             return "Gift"
         # Fallback: humanize the area_id
-        return area_id.replace("_", " ").title()
+        return humanize_area_id(area_id)
 
     def to_national_dex(self, species_id: int) -> int:
         return _to_national(species_id)

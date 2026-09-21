@@ -78,22 +78,14 @@
           </template>
 
           <section class="mk-zone" x-show="form.gen1_games.includes(draft.game)">
-            <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
-            <label class="mk-opt described" :class="draft.randomize ? 'on' : ''">
-              <input type="checkbox" x-model="draft.randomize">
-              <span class="mk-opt-txt">
-                <span class="mk-opt-name">Randomize</span>
-                <span class="mk-opt-desc">One randomized ROM per player, built from your own copy of Universal Pokémon Randomizer ZX and two clean dumps. The run then admits only those two cartridges. Your ROMs stay on this machine.</span>
-              </span>
-            </label>
-            <div x-show="draft.randomize" style="display:flex;flex-direction:column;gap:var(--space-4)">
-              {% include "_randomizer_fields.html" %}
-            </div>
+            <h2 class="mk-h2"><span>Cartridges</span><i></i><em>what each player plays — the run hands them out</em></h2>
+            {% include "_cartridges.html" %}
           </section>
 
           <div class="mk-form-actions">
-            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (draft.randomize && !(pre && pre.ok))" @click="create()" x-text="busy ? (stage || 'Creating…') : (draft.randomize ? 'Create and randomize' : 'Create run')"></button>
+            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
             <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
+            <span class="mk-sub" x-show="draft.name.trim() && gen1() && !cartsReady()" x-text="cartsWhy()"></span>
             <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
           </div>
         </div>
@@ -140,19 +132,19 @@
         {% if run.status != 'running' and run.status != 'archived' %}<button class="mk-btn primary" :disabled="busy" @click="act('start')">Start</button>{% endif %}
         {% if run.status == 'running' %}<button class="mk-btn" :disabled="busy" @click="act('stop')">Stop</button>{% endif %}
         {% if run.status == 'running' %}<button class="mk-btn{% if run.run_id == pinned_run_id %} active{% endif %}" :disabled="busy" @click="pin()">{% if run.run_id == pinned_run_id %}Pinned{% else %}Pin{% endif %}</button>{% endif %}
-        {% if run.gen1 %}<a class="mk-btn{% if run.randomizer %} active{% endif %}" href="/runs/{{ run.run_id }}/randomizer">Randomizer</a>{% endif %}
+        {% if run.gen1 %}<a class="mk-btn{% if run.cartridges or run.randomizer %} active{% endif %}" href="/runs/{{ run.run_id }}/cartridges">Cartridges</a>{% endif %}
         <span class="mk-pop-anchor" @click.outside="launchers = false">
           <button class="mk-btn" @click="launchers = !launchers">Launchers ▾</button>
           <div class="mk-pop" x-show="launchers" x-cloak>
-            {% if run.randomizer %}
-            <span class="mk-cap">Randomized cartridges — the run admits no other</span>
+            {% if run.cartridges or run.randomizer %}
+            <span class="mk-cap">Cartridges the run made{% if run.randomizer %} — randomized; the run admits no other{% elif run.cartridges and run.cartridges.companion %} — with the SLink companion{% endif %}</span>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/a">Player A · slink_{{ run.safe_name }}_a.gb</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/b">Player B · slink_{{ run.safe_name }}_b.gb</a>
             {% endif %}
             <span class="mk-cap">BizHawk Lua launchers</span>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/a">Player A · slink_{{ run.safe_name }}_a.lua</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/b">Player B · slink_{{ run.safe_name }}_b.lua</a>
-            <span class="mk-cap">Load the {% if run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
+            <span class="mk-cap">Load the {% if run.cartridges or run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
           </div>
         </span>
         {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run {{ run.name | e }}? The server stops; the data is kept.')">Archive</button>{% endif %}
@@ -214,7 +206,7 @@
     return Object.assign(randomizerFields(window.SLINK_RANDOMIZER), {
       form: form,
       ports: window.SLINK_NEXT_PORTS,
-      draft: { name: '', game: '', randomize: false, opts: { battle_calc: true, pc_trade_npc: true } },
+      draft: { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true } },
       busy: false, error: '', stage: '',
       init() {
         var self = this;
@@ -222,6 +214,11 @@
         // The randomizer takes the family the game chip names (rform.game_family).
         this.setFamily(window.SLINK_RANDOMIZER.game_family[this.draft.game]);
         this.$watch('draft.game', function (g) { self.setFamily(window.SLINK_RANDOMIZER.game_family[g]); });
+      },
+      gen1() { return form.gen1_games.includes(this.draft.game); },
+      createLabel() {
+        if (!this.gen1() || !this.rdraft.rom_a) return 'Create run';
+        return this.rdraft.randomize ? 'Create and randomize' : 'Create and prepare cartridges';
       },
       gameLabel(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).label || key; },
       gameMembers(key) { return (form.games.find(function (g) { return g.key === key; }) || {}).members || []; },
@@ -238,12 +235,12 @@
           if (!j.ok) { this.error = j.error || 'Create failed'; return; }
           var runId = j.run.run_id;
           if (j.start_error) { window.location.href = '/runs/' + runId + '?error=' + encodeURIComponent(j.start_error); return; }
-          if (this.draft.randomize) {
-            // The run exists either way; a refusal here lands on its randomizer page with
+          if (this.gen1() && this.rdraft.rom_a && this.rdraft.rom_b) {
+            // The run exists either way; a refusal here lands on its cartridges page with
             // the reason, rather than losing the run.
-            this.stage = 'Randomizing (a few seconds per ROM)…';
-            var r = await this.randomizePair(runId);
-            if (!r.ok) { window.location.href = '/runs/' + runId + '/randomizer?error=' + encodeURIComponent(r.error || 'Randomize failed'); return; }
+            this.stage = this.rdraft.randomize ? 'Randomizing (a few seconds per ROM)…' : 'Preparing cartridges…';
+            var r = await this.prepareCartridges(runId);
+            if (!r.ok) { window.location.href = '/runs/' + runId + '/cartridges?error=' + encodeURIComponent(r.error || 'Cartridges failed'); return; }
           }
           window.location.href = '/runs/' + runId;
         } catch (e) { this.error = String(e); }

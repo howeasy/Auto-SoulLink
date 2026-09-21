@@ -207,7 +207,8 @@ def phase(status: dict) -> tuple[str, str]:
 
 
 def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live: bool = True,
-                  launcher_url: str = "/launcher/{player}", rom_url: str = "") -> dict:
+                  launcher_url: str = "/launcher/{player}", rom_url: str = "",
+                  roms_pinned: bool = False) -> dict:
     """Everything `_board.html` needs, from the payload alone -- so the run server and the
     Manager (which has only the payload, live or persisted) render the same board.
 
@@ -230,9 +231,11 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
         "phase_label": label,
         # Where each player's BizHawk launcher downloads from; the empty board points at it.
         "launchers": {pid: launcher_url.format(player=pid) for pid in PIDS},
-        # A randomized run: where each player's cartridge downloads from (the run admits no
-        # other), so the empty board's first step is the ROM, not the launcher.
+        # A run that made its players' cartridges: where each downloads from, so the empty
+        # board's first step is the cartridge, not the launcher. `roms_pinned`: randomized,
+        # so the run admits no other.
         "roms": {pid: rom_url.format(player=pid) for pid in PIDS} if rom_url else {},
+        "roms_pinned": bool(rom_url) and roms_pinned,
         "concise_title": title or "Soul Link",
         # The damage calculator is pinned to modern mechanics: Radical Red only.
         "calc_preview": any(rt.endswith("_rr") for rt in rom_types),
