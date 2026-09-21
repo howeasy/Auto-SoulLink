@@ -281,61 +281,123 @@ def _area_tag(name: str) -> str:
 
 
 class _WireTap:
-    """`--wire-log`: a JSONL transcript of one connection's lines (card gen3-P1-C1-3).
+    """`--wire-log`: a JSONL transcript of one connection's lines (card gen3-P1-C1-3, C1-3b).
 
     Wraps the connection's StreamWriter, so every reply is captured where it is actually
     written and `_respond`'s seven call sites stay untouched; `c2s` is called once per
     inbound line, right after it parses. Nothing here is constructed unless --wire-log
     named a directory, so the flag's absence costs one `if` per connection and per line.
 
-    `t` is the protocol `seq` of the c2s line, and a reply carries the `t` of the request
-    it answers (the tap's own counter for a line with no seq) -- see
-    tests/fixtures/gen3/wire/README.md.
+    `t` is capture order: a per-FILE monotonic counter starting at 1, shared by every
+    direction and every connection that ever writes to that file (files outlive a single
+    connection -- see below) -- never the protocol's own `seq`, which restarts on
+    reconnect and only exists on c2s lines. A reply carries `req`, the `t` of the c2s line
+    it answers, when one is known. See tests/fixtures/gen3/wire/README.md.
+
+    Only a `msg["player"]` this tap validates the same way handle_client does two lines
+    later (`player in VALID_PLAYERS`) ever gets its own file: `wire_a.jsonl` / `wire_b.jsonl`.
+    Everything else -- an unrecognised id, a line that parsed as JSON but wasn't an object --
+    goes to one bounded sink, `wire_rejected.jsonl`, capped at `_REJECTED_CAP` lines and then
+    silently dropped. That caps this process at three open handles, ever, and they outlive
+    the connection that opened them by design: a reconnect's lines land in the same file,
+    which is why `_connect`/`_disconnect` meta records exist -- without them a reconnect
+    would be invisible in the transcript.
     """
+
+    _REJECTED_CAP = 200  # wire_rejected.jsonl: bounded, then dropped -- never unbounded disk use
+    _RAW_CAP = 1024       # a malformed (non-dict) line is recorded truncated to this many bytes
 
     def __init__(self, writer, dirpath: str, files: dict):
         self._writer = writer
         self._dir = dirpath
-        self._files = files  # player -> handle, shared by every connection in this process
-        self.player = "unknown"
-        self.t = 0
-        self._counter = 0
+        # key ("a" | "b" | "rejected") -> {"handle": file, "t": int, "lines": int}.
+        # Shared by every connection in this process, so a key's handle/counter persist
+        # across reconnects -- that is what makes `t` meaningful as capture order.
+        self._files = files
+        self.player: str | None = None  # set once a line names a valid player; sticky after that
+        self._last_t: int | None = None  # t of the last c2s record, for the next reply's `req`
+        self._connect_written = False
 
-    def __getattr__(self, name):  # drain / close / wait_closed / get_extra_info
+    def __getattr__(self, name):  # drain / wait_closed / get_extra_info
         return getattr(self._writer, name)
 
+    def close(self):
+        # Mirror the _connect this tap wrote on its first line with a _disconnect, in the
+        # same file, so a reconnect (a fresh _WireTap on the same shared `_files`) is visible
+        # as two bracketed spans rather than one unbroken stream.
+        if self._connect_written:
+            self._emit(self.player or "rejected", "meta", msg={"event": "_disconnect"})
+        return self._writer.close()
+
     def write(self, data: bytes):
-        self._record("s2c", self.t, data.decode("utf-8", errors="replace"))
+        # _respond always writes one json.dumps'd {"commands": [...]} line -- this parse is
+        # not expected to fail, but the tap must never crash the reply path over it.
+        try:
+            msg = json.loads(data.decode("utf-8", errors="replace"))
+        except ValueError:
+            msg = None
+        if msg is not None:
+            self._emit(self.player or "rejected", "s2c", msg=msg, req=self._last_t)
         self._writer.write(data)
 
-    def c2s(self, line: str, msg: dict):
-        if msg.get("player"):
-            self.player = msg["player"]
-        self._counter += 1
-        seq = msg.get("seq")
-        self.t = seq if isinstance(seq, int) and seq >= 0 else self._counter
-        self._record("c2s", self.t, line)
+    def c2s(self, line: str, msg) -> None:
+        """One inbound line, called right after handle_client's own `json.loads(line)`.
 
-    def _record(self, direction: str, t: int, line: str):
+        The wire protocol expects an object, but `json.loads` on a bare `42` or `[1, 2]` also
+        succeeds and hands back something with no `.get` -- that must never raise here, so a
+        non-dict `msg` is recorded as a malformed line (`raw`, truncated, `msg: null`) instead
+        of read like an event.
+        """
+        player = msg.get("player") if isinstance(msg, dict) else None
+        key = player if player in VALID_PLAYERS else "rejected"
+        if key != "rejected":
+            self.player = key
+        if not self._connect_written:
+            self._emit(key, "meta", msg={"event": "_connect"})
+            self._connect_written = True
+        if isinstance(msg, dict):
+            t = self._emit(key, "c2s", msg=msg)
+        else:
+            t = self._emit(key, "c2s", raw=line[:self._RAW_CAP])
+        if t is not None:
+            self._last_t = t
+
+    def _emit(self, key: str, direction: str, msg=None, raw=None, req=None):
+        """Write one record to `key`'s file. Returns the `t` it was given, or None if dropped.
+
+        A transcript is evidence, never a dependency: any failure here (disk full, bad DIR,
+        permissions, an unopenable file) is logged and dropped so the tap can never kill a
+        client (adapter-guard finding on b0e0538) -- same for the `wire_rejected.jsonl` cap.
+        """
         try:
-            msg = json.loads(line)
-        except ValueError:
-            return  # ponytail: a line that is not JSON is not protocol; the server logs it already
-        # A transcript is evidence, never a dependency: any I/O failure here (disk full, bad
-        # DIR, permissions) is logged and dropped so the tap can never kill a client
-        # (adapter-guard finding on b0e0538).
-        try:
-            handle = self._files.get(self.player)
-            if handle is None:
+            entry = self._files.get(key)
+            if entry is None:
                 os.makedirs(self._dir, exist_ok=True)
+                name = "wire_rejected.jsonl" if key == "rejected" else f"wire_{key}.jsonl"
                 # The handle outlives this call by design: it stays open for the process.
-                handle = self._files[self.player] = open(  # noqa: SIM115
-                    os.path.join(self._dir, f"wire_{self.player}.jsonl"), "w", encoding="utf-8")
-            # Field order is the wire's own: json.loads keeps it (3.7+) and dumps does not sort.
-            handle.write(json.dumps({"dir": direction, "t": t, "msg": msg}) + "\n")
-            handle.flush()
+                entry = self._files[key] = {
+                    "handle": open(os.path.join(self._dir, name), "w", encoding="utf-8"),  # noqa: SIM115
+                    "t": 0, "lines": 0,
+                }
+            if key == "rejected" and entry["lines"] >= self._REJECTED_CAP:
+                return None
+            entry["t"] += 1
+            t = entry["t"]
+            record = {"dir": direction, "t": t}
+            if req is not None:
+                record["req"] = req
+            if raw is not None:
+                record["raw"] = raw
+                record["msg"] = None
+            else:
+                record["msg"] = msg
+            entry["handle"].write(json.dumps(record) + "\n")
+            entry["handle"].flush()
+            entry["lines"] += 1
+            return t
         except Exception as exc:  # noqa: BLE001
-            log.warning(f"[wire-log] dropped {direction} line for {self.player}: {exc!r}")
+            log.warning(f"[wire-log] dropped {direction} line for {key}: {exc!r}")
+            return None
 
 
 class SLinkServer:

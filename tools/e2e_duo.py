@@ -1158,6 +1158,10 @@ class DuoRun:
         `tests/fixtures/gen3/wire/<scenario>_<player>_old_client.jsonl`, per that directory's
         README. Only a --wire-log run has anything to promote; the source is the server's own
         capture under the data dir, so this must run before the data dir is removed.
+
+        `wire_rejected.jsonl` (the tap's bounded sink for lines it could not attribute to a
+        real player) is server-side debug evidence, not a per-player transcript -- it is never
+        promoted here.
         """
         wire = self._wire_dir()
         if not wire or not os.path.isdir(wire):
@@ -1168,6 +1172,8 @@ class DuoRun:
             if not (name.startswith("wire_") and name.endswith(".jsonl")):
                 continue
             player = name[len("wire_"):-len(".jsonl")]
+            if player == "rejected":
+                continue
             dest = os.path.join(WIRE_FIXTURES,
                                 f"{self.scenario}_{player}_old_client.jsonl")
             shutil.copyfile(os.path.join(wire, name), dest)

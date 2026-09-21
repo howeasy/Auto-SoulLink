@@ -148,7 +148,7 @@ def _lines(wire_dir, player):
 
 
 @pytest.mark.asyncio
-async def test_every_line_lands_in_order_with_the_request_seq(wired):
+async def test_every_line_lands_in_capture_order_with_req_linking_the_reply(wired):
     port, wire_dir = wired
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     await _send(writer, reader, dict(HELLO_A, seq=1))
@@ -159,16 +159,30 @@ async def test_every_line_lands_in_order_with_the_request_seq(wired):
     await asyncio.sleep(0.05)
 
     rows = _lines(wire_dir, "a")
-    assert [(r["dir"], r["t"]) for r in rows] == [("c2s", 1), ("s2c", 1), ("c2s", 2), ("s2c", 2)]
-    assert rows[0]["msg"]["event"] == "hello"
+    # t is capture order for the file, not the protocol's own seq: a _connect meta record is
+    # first, then each c2s/s2c pair gets its own next number, and each reply's req points at
+    # the request it answers.
+    assert [(r["dir"], r["t"], r.get("req")) for r in rows] == [
+        ("meta", 1, None),
+        ("c2s", 2, None),
+        ("s2c", 3, 2),
+        ("c2s", 4, None),
+        ("s2c", 5, 4),
+        ("meta", 6, None),
+    ]
+    assert rows[0]["msg"] == {"event": "_connect"}
+    assert rows[-1]["msg"] == {"event": "_disconnect"}
+    assert rows[1]["msg"]["event"] == "hello"
     # Verbatim, field order included: no re-serialization beyond loads/dumps.
-    assert list(rows[0]["msg"]) == list(dict(HELLO_A, seq=1))
-    assert list(rows[1]["msg"]) == ["commands"]
-    assert isinstance(rows[1]["msg"]["commands"], list)
+    assert list(rows[1]["msg"]) == list(dict(HELLO_A, seq=1))
+    assert list(rows[2]["msg"]) == ["commands"]
+    assert isinstance(rows[2]["msg"]["commands"], list)
 
 
 @pytest.mark.asyncio
-async def test_a_line_with_no_seq_falls_back_to_the_taps_counter(wired):
+async def test_a_reconnect_shares_the_file_and_keeps_counting(wired):
+    """Same player, two connections: one file, an unbroken t sequence, a _disconnect/_connect
+    pair marking the boundary between them."""
     port, wire_dir = wired
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     await _send(writer, reader, dict(HELLO_A))  # no seq at all
@@ -176,8 +190,18 @@ async def test_a_line_with_no_seq_falls_back_to_the_taps_counter(wired):
     await writer.wait_closed()
     await asyncio.sleep(0.05)
 
+    reader2, writer2 = await asyncio.open_connection("127.0.0.1", port)
+    await _send(writer2, reader2, dict(HELLO_A))
+    writer2.close()
+    await writer2.wait_closed()
+    await asyncio.sleep(0.05)
+
     rows = _lines(wire_dir, "a")
-    assert [(r["dir"], r["t"]) for r in rows] == [("c2s", 1), ("s2c", 1)]
+    assert [(r["dir"], r["msg"].get("event") if r["dir"] == "meta" else None) for r in rows] == [
+        ("meta", "_connect"), ("c2s", None), ("s2c", None), ("meta", "_disconnect"),
+        ("meta", "_connect"), ("c2s", None), ("s2c", None), ("meta", "_disconnect"),
+    ]
+    assert [r["t"] for r in rows] == list(range(1, len(rows) + 1))  # one unbroken counter
 
 
 @pytest.mark.asyncio
@@ -220,3 +244,61 @@ def test_a_tap_io_failure_never_reaches_the_connection(tmp_path, monkeypatch):
     tap.c2s('{"event":"hello","player":"a","seq":1}', {"event": "hello", "player": "a", "seq": 1})
     tap.write(b'{"commands":[]}\n')
     assert w.sent == [b'{"commands":[]}\n']  # the reply still went out
+
+
+# ── review findings (card gen3-P1-C1-3b): unvalidated players, t semantics, malformed lines ──
+
+def _tap(tmp_path, files=None):
+    from server.server import _WireTap
+
+    class _Writer:
+        def write(self, data):
+            pass
+
+    return _WireTap(_Writer(), str(tmp_path / "wire"), files if files is not None else {})
+
+
+def test_an_unrecognised_player_id_goes_to_the_bounded_rejected_sink(tmp_path):
+    tap = _tap(tmp_path)
+    tap.c2s('{"event":"hello","player":"c"}', {"event": "hello", "player": "c"})
+    with open(tmp_path / "wire" / "wire_rejected.jsonl", encoding="utf-8") as f:
+        rows = [json.loads(line) for line in f]
+    assert [r["dir"] for r in rows] == ["meta", "c2s"]
+    assert rows[1]["msg"] == {"event": "hello", "player": "c"}
+    assert not os.path.exists(tmp_path / "wire" / "wire_c.jsonl")
+
+
+def test_the_rejected_sink_is_capped_then_dropped(tmp_path):
+    from server.server import _WireTap
+    tap = _tap(tmp_path)
+    for _ in range(_WireTap._REJECTED_CAP + 20):
+        tap.c2s('{"player":"nope"}', {"player": "nope"})
+    with open(tmp_path / "wire" / "wire_rejected.jsonl", encoding="utf-8") as f:
+        n = sum(1 for _ in f)
+    assert n == _WireTap._REJECTED_CAP
+
+
+def test_a_non_dict_line_is_recorded_raw_and_does_not_raise(tmp_path):
+    tap = _tap(tmp_path)
+    tap.c2s("[1, 2, 3]", [1, 2, 3])  # valid JSON, not protocol -- must not raise
+    with open(tmp_path / "wire" / "wire_rejected.jsonl", encoding="utf-8") as f:
+        rows = [json.loads(line) for line in f]
+    malformed = rows[1]
+    assert malformed["dir"] == "c2s"
+    assert malformed["raw"] == "[1, 2, 3]"
+    assert malformed["msg"] is None
+    # the following reply's req points at the malformed line's own t, not the previous one
+    tap.write(b'{"commands":[]}\n')
+    with open(tmp_path / "wire" / "wire_rejected.jsonl", encoding="utf-8") as f:
+        rows = [json.loads(line) for line in f]
+    assert rows[-1]["req"] == malformed["t"]
+
+
+def test_at_most_three_handles_ever_open(tmp_path):
+    tap = _tap(tmp_path)
+    tap.c2s('{"player":"a"}', {"player": "a"})
+    tap2 = _tap(tmp_path, files=tap._files)
+    tap2.c2s('{"player":"b"}', {"player": "b"})
+    tap3 = _tap(tmp_path, files=tap._files)
+    tap3.c2s('{"player":"?"}', {"player": "?"})
+    assert set(tap._files) == {"a", "b", "rejected"}

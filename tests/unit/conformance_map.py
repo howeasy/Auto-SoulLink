@@ -56,8 +56,11 @@ ITEMS: list[Item] = [
     Item("13", "resolved_areas + config booleans applied", "world"),
 
     # -- tick / snapshots (world reducer) --
+    # The 30-frame period is proven live (a transcript's `t` is capture order, not frames --
+    # see tests/fixtures/gen3/wire/README.md); the transcript checker below covers only the
+    # field-shape half of this item.
     Item("14", "tick is periodic (Gen 3: every 30 frames) with required fields", "world",
-         "check_tick_cadence"),
+         "check_tick_shape"),
     Item("15", "first tick of a wild battle has in_battle/enemy_party shape", "world",
          "check_battle_tick_shape"),
     Item("16", "trainer battle tick has is_trainer_battle/trainer_id or opponent fields",

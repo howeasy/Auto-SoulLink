@@ -174,15 +174,16 @@ def check_hello_shape(lines: list[dict]) -> set[str]:
     return violations
 
 
-def check_tick_cadence(lines: list[dict]) -> set[str]:
-    """Item 14: tick lines land every 30 frames and validate as a tick event."""
+def check_tick_shape(lines: list[dict]) -> set[str]:
+    """Item 14 (field-shape half only): every tick line validates as a tick event.
+
+    The 30-frame cadence half of item 14 is not transcript-checkable: a transcript's `t` is
+    capture order (tests/fixtures/gen3/wire/README.md), not a frame count, so it cannot tell
+    30 frames apart from any other gap. That half is proven live, against real frame numbers.
+    """
     ticks = [line for line in lines if line.get("dir") == "c2s" and line.get("msg", {}).get("event") == "tick"]
     for line in ticks:
         if validate_event(line["msg"]):
-            return {"14"}
-    frames = [line["t"] for line in ticks if isinstance(line.get("t"), int)]
-    for a, b in zip(frames, frames[1:], strict=False):
-        if b - a != 30:
             return {"14"}
     return set()
 
@@ -335,7 +336,7 @@ _CHECKERS = {
     "check_seq_monotonic": check_seq_monotonic,
     "check_hello_first": check_hello_first,
     "check_hello_shape": check_hello_shape,
-    "check_tick_cadence": check_tick_cadence,
+    "check_tick_shape": check_tick_shape,
     "check_battle_tick_shape": check_battle_tick_shape,
     "check_event_shapes_once_only": check_event_shapes_once_only,
     "check_keyed_replies": check_keyed_replies,
