@@ -733,9 +733,10 @@ local function dispatch_commands(cmds)
     end
     for _, c in ipairs(cmds) do
         if c.cmd == "play_sound" and c.sound then
-            -- Arbitrated: the route (native PlaySE vs Lua m4a poke) is chosen once at frame end
-            -- by sfx_flush, for the single winning cue.
-            M.sfx.request(c.sound)
+            -- Arbitrated: only the server's generic sound may take the native route (chosen at
+            -- flush); client-side cues stay on the Lua m4a poke as they always did, so no native
+            -- sound is ever queued behind a same-frame native op.
+            M.sfx.request(c.sound, true)
         elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
             if c.nickname and c.nickname ~= "" then
@@ -4490,13 +4491,15 @@ end
 local function on_frame_safe()
     local ok, err = pcall(on_frame)
     if not ok then console.log("[SLink-FRLGE] ERROR (handler kept alive): " .. tostring(err)) end
-    -- ONE sound cue per frame: every site requested through M.sfx, the arbiter picks the winner
-    -- and only now do we pick the route. Native PlaySE via the companion patch when it is present
-    -- and we are out of battle; the Lua m4a SE1 poke otherwise (unpatched ROMs, and in battle,
-    -- where a same-frame OP_SHOW_BATTLE_MESSAGE would clobber the single-slot mailbox).
-    -- At most one MB.play_se per frame, so the mailbox can no longer be clobbered by SE either.
-    pcall(M.sfx.flush, function(sound)
-        if native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(sound)
+    -- ONE sound cue per frame: every site requested through M.sfx, the arbiter picks the winner.
+    -- Route: the server's generic play_sound keeps its pre-arbiter rule (native PlaySE via the
+    -- companion patch when present and out of battle, else the Lua m4a SE1 poke); every
+    -- client-side cue (KO, whiteout, game over, encounter, nuzlocke) stays on the Lua poke as
+    -- before. A native sound queued behind a same-frame native op (memorialize/deposit) would be
+    -- pumped next frame BEFORE that op's completion poll and overwrite its ack (mailbox.lua
+    -- post()/pump(), client pump at step 3 vs the pending_* consumers), so it is never widened.
+    pcall(M.sfx.flush, function(sound, native_ok)
+        if native_ok and native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(sound)
         else M.playSE(sound) end
     end)
     -- HUD render is protected separately so a tick error never skips clearGraphics
