@@ -94,6 +94,7 @@ package.loaded["games.gen3_frlge"] = nil
 package.loaded["gen3_frlge_locations"] = nil
 package.loaded["hud"]               = nil
 package.loaded["mailbox"]           = nil
+package.loaded["sfx_arbiter"]       = nil
 package.loaded["peer_ghost_npc"]    = nil
 
 local M     = require("memory_gba")
@@ -375,6 +376,18 @@ end
 M.applyProfile(detected.profile, detected.variant)
 local rom_type        = detected.module.rom_type_for_variant(detected.variant)
 local IS_RR           = (detected.variant == "radical_red")  -- peer ghost is RR-only
+
+-- ── Sound cue arbiter ────────────────────────────────────────────────────────
+-- Every cue site requests through M.sfx and ONE winner is played at frame end (see
+-- sfx_arbiter.lua): both delivery routes are last-write-wins, so a terminal KO batch used to
+-- play whichever of KO/generic/game-over happened to be dispatched last. Ranks are built AFTER
+-- applyProfile because the RR profile overrides the SE ids. Hung on M rather than a new local:
+-- the main chunk is at Lua's 200-local ceiling.
+M.sfx = require("sfx_arbiter").new({
+    [M.SE_GAME_OVER] = 3,   -- run is over — outranks everything
+    [M.SE_BOO]       = 2,   -- whiteout
+    [M.SE_LINKED_KO] = 1,   -- a linked mon fainted
+})                          -- anything else (generic server play_sound) ranks 0
 local val_ok, val_err = M.validateROM()
 local writes_enabled  = val_ok
 -- Re-validated each frame when false (save may not be loaded at script start).
@@ -720,12 +733,9 @@ local function dispatch_commands(cmds)
     end
     for _, c in ipairs(cmds) do
         if c.cmd == "play_sound" and c.sound then
-            -- Native SE via the companion patch (PlaySE) when present — retires the fragile Lua m4a
-            -- SE1 RAM-poke (M.playSE / profile SE_SONG_HEADERS). Fallback keeps unpatched ROMs working.
-            -- IN BATTLE, use the Lua m4a path instead: a native in-battle notification (OP_SHOW_BATTLE_MESSAGE)
-            -- may be sent the same frame, and the single-slot mailbox would otherwise clobber one opcode.
-            if native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(c.sound)
-            else M.playSE(c.sound) end
+            -- Arbitrated: the route (native PlaySE vs Lua m4a poke) is chosen once at frame end
+            -- by sfx_flush, for the single winning cue.
+            M.sfx.request(c.sound)
         elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
             if c.nickname and c.nickname ~= "" then
@@ -767,7 +777,7 @@ local function dispatch_commands(cmds)
                                 pending_explosions[c.key] = {
                                     slot = slot, battler = battler, start_frame = frame_count,
                                 }
-                                M.playSE(M.SE_LINKED_KO)
+                                M.sfx.request(M.SE_LINKED_KO)
                                 show_fallback("!! " .. nick_label(c.key) .. " BOOM!", "hud", 255, 80, 80, 360)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_explode → menu skip coerced slot=%d battler=%d key=%s",
@@ -794,7 +804,7 @@ local function dispatch_commands(cmds)
                             M.forceFaint(slot)
                             _battle_hp_cache[c.key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                             force_fainted_keys[c.key] = true
-                            M.playSE(M.SE_LINKED_KO)
+                            M.sfx.request(M.SE_LINKED_KO)
                             console.log(string.format("[SLink-FRLGE]   ↳ DISPATCHED %s slot=%d key=%s in_battle=%s", c.cmd, slot, c.key, tostring(currently_in_battle)))
                             hud_show("!! " .. nick_label(c.key) .. " KO'd", 255, 80, 80, 360)
                         end
@@ -1024,7 +1034,7 @@ local function dispatch_commands(cmds)
             console.log("[SLink-FRLGE]   ↳ unresolve_area: "..c.area_id.." (species clause reroll)")
         elseif c.cmd == "game_over" then
             game_over_flag = true
-            if M.playSE then M.playSE(M.SE_GAME_OVER) end
+            M.sfx.request(M.SE_GAME_OVER)
             HUD.set_game_over()
             console.log("[SLink-FRLGE]   ↳ GAME OVER — SOUL LINK")
         elseif c.cmd == "rebuild_start" then
@@ -2566,7 +2576,10 @@ local function on_frame()
                         _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                         force_fainted_keys[key] = true
                         pending_battle_faints[key] = nil
-                        M.playSE(M.SE_LINKED_KO)
+                        -- Faint still applies, but the cue does not: this fires frames or minutes
+                        -- after the KO (on switch-out / battle end), so once the run is over the
+                        -- outcome cue has already played and a stray KO beep would contradict it.
+                        if not game_over_flag then M.sfx.request(M.SE_LINKED_KO) end
                         console.log(string.format("[SLink-FRLGE]   ↳ DEFERRED force_faint applied slot=%d key=%s", slot, key))
                         show_fallback("!! " .. nick_label(key) .. " KO!", "hud", 255, 80, 80, 360)
                     end
@@ -2728,7 +2741,7 @@ local function on_frame()
                 if not resolved_areas[area] then
                     local disp = area_display(area)
                     hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 240)
-                    M.playSE(M.SE_SUCCESS)
+                    M.sfx.request(M.SE_SUCCESS)
                 end
             else
                 -- Hello response hasn't arrived yet — defer HUD until resolved_areas seeds.
@@ -2847,7 +2860,7 @@ local function on_frame()
                 and not resolved_areas[battle_area_id] and not game_module.is_gift_area(battle_area_id) then
             local disp = area_display(battle_area_id)
             hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 360)
-            M.playSE(M.SE_SUCCESS)
+            M.sfx.request(M.SE_SUCCESS)
         end
     end
 
@@ -3811,7 +3824,7 @@ local function on_frame()
        and (real_faint_occurred or ev_outcome_loss)
        and not next(pending_faint_debounce) then
         ev_outcome_loss = false
-        M.playSE(M.SE_BOO)
+        M.sfx.request(M.SE_BOO)
         send({event="whiteout"}, "whiteout", true)
     end
 
@@ -4115,7 +4128,7 @@ local function on_frame()
         nuzlocke_active = true
         console.log("[SLink-FRLGE] nuzlocke ACTIVE (pokeballs in bag)")
         HUD.nuzlocke_start("Nuzlocke Start!")
-        if M.playSE then M.playSE(M.SE_NUZLOCKE_START) end
+        M.sfx.request(M.SE_NUZLOCKE_START)
     end
 
     -- ── safe ─────────────────────────────────────────────────────────────────
@@ -4477,6 +4490,15 @@ end
 local function on_frame_safe()
     local ok, err = pcall(on_frame)
     if not ok then console.log("[SLink-FRLGE] ERROR (handler kept alive): " .. tostring(err)) end
+    -- ONE sound cue per frame: every site requested through M.sfx, the arbiter picks the winner
+    -- and only now do we pick the route. Native PlaySE via the companion patch when it is present
+    -- and we are out of battle; the Lua m4a SE1 poke otherwise (unpatched ROMs, and in battle,
+    -- where a same-frame OP_SHOW_BATTLE_MESSAGE would clobber the single-slot mailbox).
+    -- At most one MB.play_se per frame, so the mailbox can no longer be clobbered by SE either.
+    pcall(M.sfx.flush, function(sound)
+        if native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(sound)
+        else M.playSE(sound) end
+    end)
     -- HUD render is protected separately so a tick error never skips clearGraphics
     -- (the surface must be cleared every render or stale HUD text never leaves the screen).
     local hok, herr = pcall(hud_render)

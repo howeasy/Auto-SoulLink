@@ -70,6 +70,7 @@ _LUA_ROOT = [
     "memory_gb.lua",
     "memory_gba.lua",
     "memory_nds.lua",
+    "sfx_arbiter.lua",
     "socket.lua",
     "json_codec.lua",
     # The Gen 1 client's closure: entry.lua dofiles both of these off the repo root.
