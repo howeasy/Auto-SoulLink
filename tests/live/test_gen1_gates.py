@@ -102,6 +102,37 @@ def test_gen1_companion_patch(rom, emuhawk):
                     f"result: {result_path}\n{text[-3000:]}")
 
 
+@pytest.mark.parametrize("rom", PATCH_ROMS)
+@pytest.mark.parametrize("target", ("town", "battle"))
+def test_gen1_sfx_matrix(rom, target, emuhawk):
+    """The native-sound state matrix (lua/tests/test_gen1_sfx_gate.lua): the cases the ABI-2
+    VBlank build got wrong, each asserting the exact id that lands on CHAN5.
+
+    town fixture (Oak's Lab, audio bank $1F): the shipped client's play_sound path; a second
+    request held while the first still owns CHAN5; the START menu (the Joypad site, since a
+    menu loop never reaches DelayFrame); the lab-door fade with its $1F -> $02 bank change.
+    battle fixture (Route 1 grass): a real wild battle in bank $08 (LEVEL_UP / TINK rows),
+    RUN, and a request held through the battle-end fade that plays in $02 as GET_ITEM_2 --
+    the id it would not have been in $08. Overlay cartridges join once their overlay carries
+    the service.
+    """
+    _skip_unless_ready(rom)
+    if target == "battle":
+        from run_gb_gate import PATCHED
+        base_key = PATCHED[rom][0]
+        if not os.path.exists(os.path.join(play.FIXTURES, f"{base_key}_battle.SaveRAM")):
+            pytest.skip("missing battle fixture -- `python tools/gen1_fixtures.py <rom> battle`")
+    passed, result_path, text = run_gate("lua/tests/test_gen1_sfx_gate.lua",
+                                         rom_key=rom, target=target,
+                                         timeout=600, quiet=True)
+    kept = os.path.join(REPO, "tests", "fixtures", "gen1", "receipts",
+                        f"test_gen1_sfx_gate_{rom}_{target}_result.txt")
+    with open(kept, "w", encoding="utf-8") as f:
+        f.write(text)
+    assert passed, (f"SFX matrix gate on {rom}/{target} did not PASS\n"
+                    f"result: {result_path}\n{text[-3000:]}")
+
+
 @pytest.mark.parametrize("rom", GATE_ROMS)
 def test_gen1_menu_row(rom, emuhawk):
     """The SLINK row the companion patch appends to the START menu, and the panel behind it.

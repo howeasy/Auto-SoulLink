@@ -100,7 +100,16 @@ def build(foundation: str = FOUNDATION) -> dict:
         if hi != 0xFF:
             raise SystemExit(f"{title}: hVBlankOccurred is not in HRAM")
         # halt; nop; ldh a,[hVBlankOccurred]; and a; jr nz,.halt (-7); ret
-        halt_hex = _slice(rom, a["DelayFrame.halt"], bytes((0x76, 0x00, 0xF0, lo, 0xA7, 0x20, 0xF9, 0xC9)),
+        # [overlay: the ret is `jp SlinkDelayFrameTail` -- the main-thread SFX site returns
+        # to DelayFrame's caller itself; the halt/resume geometry the checkpoint guards is unchanged]
+        if is_overlay:
+            tail_bank, tail_addr = syms["SlinkDelayFrameTail"]
+            if tail_bank != 0:
+                raise SystemExit(f"{title}: SlinkDelayFrameTail is not in ROM0")
+            halt_tail = bytes((0xC3, tail_addr & 0xFF, tail_addr >> 8))
+        else:
+            halt_tail = bytes((0xC9,))
+        halt_hex = _slice(rom, a["DelayFrame.halt"], bytes((0x76, 0x00, 0xF0, lo, 0xA7, 0x20, 0xF9)) + halt_tail,
                           f"{title}: DelayFrame.halt")
         # rst _DelayFrame; [overlay: farcall SlinkForeground = ld b,bank; ld hl,addr; rst _Bankswitch;]
         # callfar GBCSetCPU2xSpeed = ld hl,addr; ld b,bank; rst _Bankswitch

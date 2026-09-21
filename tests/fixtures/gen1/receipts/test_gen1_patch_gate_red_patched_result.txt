@@ -1,4 +1,4 @@
-[test_gen1_patch_gate] title=blue rom=669d8cc5
+[test_gen1_patch_gate] title=red rom=428741e1
 [test_gen1_patch_gate] booted at frame 844 (party=1, map=40)
   [ok] 'SLNK' beacon is present at $DEE2  — got "SLNK"
   [ok] frame counter advances  — 803 -> 863 over 60 frames
@@ -20,4 +20,4 @@
   [ok] code 2 plays the bank $1F failure id $A5 on CHAN5  — consumed=true CHAN5 read $A5 (channels 165/165/0/0)
   [ok] the SFX channels went quiet after code 2  — 0/0/0/0
   [ok] the player can still walk after the SFX hook fired  — (4,6) -> (5,6)
-RESULT: PASS title=blue counter=1364 map=40 (0 checks failed)
+RESULT: PASS title=red counter=1368 map=40 (0 checks failed)

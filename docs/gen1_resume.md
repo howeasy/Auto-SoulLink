@@ -5,6 +5,23 @@ is the authority on evidence; this note is the working state around it. Plan (ow
 v3.9): `C:\Users\howar\.claude\plans\system-reminder-you-are-operating-gleaming-pretzel.md`. The
 standing worker contract every card brief points at is `docs/agents/worker_card.md`.
 
+## Native sound (2026-09-21, session 57038e13) — DONE on the branch, reviewed
+
+Plan `C:/Users/howar/.claude/plans/splendid-stirring-toast.md` (owner-approved 2026-09-20).
+Commits `7d70678` (ROM: SlinkSfxService on the DelayFrame bridge, caps $03), `5533162` (client
+`play_sound` -> mailbox codes, Manager `native_sounds` on for Red/Blue), `c8edcd1` (state-matrix
+gate; the Joypad dispatch site for menu loops; frame-stamped 240-frame hold), `b35f378` (pureRGB
+overlay port, `native_sounds` on for pureRGB). Facts: mailbox `+7` = semantic code 1/2/3, the ROM
+resolves it per `wAudioROMBank` at play time (`$89/$A5/$8C` in `$02`/`$1F`, `$86/$8C/$8C` in
+`$08`), holds through fades and busy CHAN5/6/8, bounded at 240 frames (`+12`/`+13`). Two
+main-thread sites: the DelayFrame bridge and `Joypad` (menus never reach DelayFrame). Receipts:
+`tests/fixtures/gen1/receipts/test_gen1_sfx_gate_*` (Red/Blue/purered_overlay, town + battle),
+patch gate, menu-row and receptionist re-runs, duo `trade_new` PASS with `--native-sounds`.
+Codex REVIEW `cx-5f7b86be`: MAJOR (low-health alarm consumed TINK/DENIED into silence) + MINOR (queue outlived `native_sounds=false`) fixed in `dcf8cb4` with gate case G (alarm armed by Growl; vanilla persistent flag -> LEVEL_UP for every code, pureRGB bounded tone pairs -> plain row once it ends). HEAD `dcf8cb4`. Owner decides push/merge.
+pureRGB rebuild needs the toolchains at a space-free path (`C:/slink-tools`, see the commit) and
+the pinned checkout at `.cache/purergb-src` with the three clean `.gbc` copied beside it; run
+gates with `SLINK_PURERGB_ROMS=E:/Google Drive/SLink/.cache/purergb`.
+
 ## Where things are
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, branch

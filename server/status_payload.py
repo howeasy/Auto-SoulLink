@@ -51,6 +51,8 @@ def empty_status_payload() -> dict:
                     "mons_per_box": 0, "memorial_box_index": 0, "party_blob_size": 0,
                     "badges": [],
                 },
+                # What the cartridge reported at hello (panel, sound path): nothing yet.
+                "companion": {"panel": None, "sfx": None},
                 "encounter_table": None,
                 "trainer_panel_html": "",
             }

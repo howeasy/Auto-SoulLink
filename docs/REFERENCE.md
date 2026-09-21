@@ -917,6 +917,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Native memorialize (`MEMORIALIZE`) — dead pairs to the memorial box in one frame-hook pass | ✅ Working |
 | Native message box (overworld) + native in-battle message | ✅ Working (per-run `native_messages`, default off) |
 | Native sound (`PlaySE`) | ✅ Working (per-run `native_sounds`, default off) |
+| Native sound on Gen 1 Red/Blue (companion patch `SlinkSfxService`, main-thread, per-bank ids) | ✅ Working (same `native_sounds` toggle; pureRGB overlay pending) |
 | Bundled Battle Calc damage display + per-run kill switch | ✅ Working (`battle_calc`, default on) |
 | Pokémon-Center trade NPC (presence-off mode) | ⚠️ Spawn tile unverified in-game — see `PCNPC_TILE_X/Y` in `handlers.c` |
 | Rival team swap via native `SET_ENEMY_PARTY` | ✅ Working |

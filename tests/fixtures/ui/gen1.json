@@ -5,9 +5,9 @@
       "connected": true,
       "rom_type": "red",
       "last_event": "tick",
-      "last_seen": "04:20:21",
-      "last_seen_age": 0,
-      "last_seen_label": "0s ago",
+      "last_seen": "22:57:34",
+      "last_seen_age": 5,
+      "last_seen_label": "5s ago",
       "stale": false,
       "nuzlocke_active": true,
       "current_area": "route_3",
@@ -510,6 +510,10 @@
           "Earth Badge"
         ]
       },
+      "companion": {
+        "panel": null,
+        "sfx": null
+      },
       "encounter_table": {
         "Grass": [
           {
@@ -541,9 +545,9 @@
       "connected": true,
       "rom_type": "blue",
       "last_event": "tick",
-      "last_seen": "04:20:21",
-      "last_seen_age": 0,
-      "last_seen_label": "0s ago",
+      "last_seen": "22:57:34",
+      "last_seen_age": 5,
+      "last_seen_label": "5s ago",
       "stale": false,
       "nuzlocke_active": true,
       "current_area": "route_24",
@@ -1067,6 +1071,10 @@
           "Earth Badge"
         ]
       },
+      "companion": {
+        "panel": null,
+        "sfx": null
+      },
       "encounter_table": {
         "Grass": [
           {
@@ -1333,7 +1341,7 @@
   },
   "recent_events": [
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 24",
@@ -1341,7 +1349,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 3",
@@ -1349,7 +1357,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "force_faint",
       "text": "⚡ Wiggle force fainted!",
@@ -1357,7 +1365,7 @@
       "key": "1E2F:7B0B:7B"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "faint",
       "text": "Sting fainted!",
@@ -1365,7 +1373,7 @@
       "key": "6C7D:30B8:70"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Growlithe Lv14",
@@ -1373,7 +1381,7 @@
       "key": "AB12:30B8:21"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 9",
@@ -1381,7 +1389,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Bubbles × Quack on Route 5",
@@ -1389,7 +1397,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Quack × Bubbles on Route 5",
@@ -1397,7 +1405,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Psyduck Lv10",
@@ -1405,7 +1413,7 @@
       "key": "5E6F:7B0B:2F"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Poliwag Lv10",
@@ -1413,7 +1421,7 @@
       "key": "6D7E:30B8:47"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 5",
@@ -1421,7 +1429,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 5",
@@ -1429,7 +1437,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 22",
@@ -1437,7 +1445,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "dead_zone",
       "text": "☠ Dead zone: Route 22",
@@ -1445,7 +1453,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "dead_zone",
       "text": "☠ Dead zone: Route 22",
@@ -1453,7 +1461,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "no_catch",
       "text": "Missed catch at Route 22",
@@ -1461,7 +1469,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 22",
@@ -1469,7 +1477,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Shrewd × Slither on Route 4",
@@ -1477,7 +1485,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Slither × Shrewd on Route 4",
@@ -1485,7 +1493,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Ekans Lv13",
@@ -1493,7 +1501,7 @@
       "key": "8B1C:7B0B:6C"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Sandshrew Lv13",
@@ -1501,7 +1509,7 @@
       "key": "9F0A:30B8:60"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 4",
@@ -1509,7 +1517,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 4",
@@ -1517,7 +1525,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Vampy × Shroom on Mt Moon 1F",
@@ -1525,7 +1533,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Shroom × Vampy on Mt Moon 1F",
@@ -1533,7 +1541,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Paras Lv12",
@@ -1541,7 +1549,7 @@
       "key": "9A0B:7B0B:6D"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Zubat Lv12",
@@ -1549,7 +1557,7 @@
       "key": "8E9F:30B8:6B"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Mt Moon 1F",
@@ -1557,7 +1565,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Mt Moon 1F",
@@ -1565,7 +1573,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Sparrow × Rocky on Route 3",
@@ -1573,7 +1581,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Rocky × Sparrow on Route 3",
@@ -1581,7 +1589,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Geodude Lv11",
@@ -1589,7 +1597,7 @@
       "key": "0F1A:7B0B:A9"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Spearow Lv11",
@@ -1597,7 +1605,7 @@
       "key": "7D8E:30B8:05"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 3",
@@ -1605,7 +1613,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 3",
@@ -1613,7 +1621,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Sting × Wiggle on Viridian Forest",
@@ -1621,7 +1629,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Wiggle × Sting on Viridian Forest",
@@ -1629,7 +1637,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Caterpie Lv9",
@@ -1637,7 +1645,7 @@
       "key": "1E2F:7B0B:7B"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Weedle Lv9",
@@ -1645,7 +1653,7 @@
       "key": "6C7D:30B8:70"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Viridian Forest",
@@ -1653,7 +1661,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Viridian Forest",
@@ -1661,7 +1669,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Pidge × Rattie on Route 2",
@@ -1669,7 +1677,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Rattie × Pidge on Route 2",
@@ -1677,7 +1685,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Rattata Lv8",
@@ -1685,7 +1693,7 @@
       "key": "2D3E:7B0B:A5"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Pidgey Lv8",
@@ -1693,7 +1701,7 @@
       "key": "5B6C:30B8:24"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 2",
@@ -1701,7 +1709,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 2",
@@ -1709,7 +1717,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "linked",
       "text": "✓ Linked Sparky × Embo on Route 1",
@@ -1717,7 +1725,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "linked",
       "text": "✓ Linked Embo × Sparky on Route 1",
@@ -1725,7 +1733,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "capture",
       "text": "Caught Charmander Lv6",
@@ -1733,7 +1741,7 @@
       "key": "3C2D:7B0B:B0"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "capture",
       "text": "Caught Pikachu Lv6",
@@ -1741,7 +1749,7 @@
       "key": "4A5B:30B8:54"
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 1",
@@ -1749,7 +1757,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 1",
@@ -1757,7 +1765,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "b",
       "type": "hello",
       "text": "Connected (blue, 0 mons)",
@@ -1765,7 +1773,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:21",
+      "ts": "2026-09-20T22:57:34",
       "player": "a",
       "type": "hello",
       "text": "Connected (red, 0 mons)",
@@ -1775,7 +1783,7 @@
   ],
   "killfeed": [
     {
-      "killed_at": "2026-09-18T08:20:21.754960+00:00",
+      "killed_at": "2026-09-21T02:57:34.894942+00:00",
       "area_id": "viridian_forest",
       "area_display": "Viridian Forest",
       "cause": "battle",
@@ -1796,7 +1804,7 @@
       "status": "dead"
     },
     {
-      "killed_at": "2026-09-18T08:20:21.732431+00:00",
+      "killed_at": "2026-09-21T02:57:34.875433+00:00",
       "area_id": "route_22",
       "area_display": "Route 22",
       "cause": "dead_zone",

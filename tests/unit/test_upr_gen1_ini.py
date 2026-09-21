@@ -142,7 +142,8 @@ def test_the_three_overlay_builds_have_their_own_entries(overlay_entries):
                 assert a == b or ((a >> 14) in (0, 1, 3) and (a >> 14) == (b >> 14)), f"{title}.{k}: {a:#x} -> {b:#x}"
         assert ov["statics"] == clean["statics"]
     e = overlay_entries("purered")
-    assert e["CRCInHeader"] == 0xD3B7 and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
+    # header CRC of the native-sound overlay build (admission_overlay.json purered header_crc)
+    assert e["CRCInHeader"] == 0x1D9F and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
 
 
 def test_starter_sites_include_the_hall_of_fame_ball_hide_branch(overlay_entries):
@@ -154,7 +155,9 @@ def test_starter_sites_include_the_hall_of_fame_ball_hide_branch(overlay_entries
             assert 0x5A503 in e["StarterOffsets1"] and 0x5A509 in e["StarterOffsets2"]
             assert len(e["StarterOffsets1"]) == len(e["StarterOffsets2"]) == 6 and len(e["StarterOffsets3"]) == 3
     assert load_entry("purered", _INI)["StarterOffsets1"][3] == 0x13E4          # StarterToPartyID+3, clean
-    assert overlay_entries("purered")["StarterOffsets1"][3] == 0x13EA           # bank 0 shifted by 6 in the overlay
+    # bank 0 shifted by 9 in the overlay: OverworldLoop's 6-byte `farcall SlinkForeground`
+    # plus Joypad's 3-byte `call SlinkJoypadSite` (native sound), both before StarterToPartyID
+    assert overlay_entries("purered")["StarterOffsets1"][3] == 0x13ED
 
 
 def test_every_handler_key_is_present_or_deliberately_absent():

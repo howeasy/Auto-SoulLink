@@ -47,7 +47,7 @@ LOCK = json.loads((REPO / "data" / "purergb_sources.lock.json").read_text(encodi
 PROVENANCE = json.loads((SYMS / "overlay_provenance.json").read_text(encoding="utf-8"))
 ROM0_FREE_CLEAN = 1382  # docs/purergb/PLAN.md §11.2 A8: the Home tail at $3A9A
 MAILBOX = 0xDEEA
-MAILBOX_SIZE = 12
+MAILBOX_SIZE = 14  # ABI 3 + the two ROM-private SFX hold bytes (+12 flag, +13 frame stamp)
 OVERLAY_BANK = 0x3F
 
 SAVED_REGIONS = (("wPartyDataStart", "wPartyDataEnd"), ("wMainDataStart", "wMainDataEnd"),
@@ -150,7 +150,8 @@ def test_the_mailbox_symbols_are_the_abi_3_layout(title):
     assert over["wSlinkMailbox"] == (1, MAILBOX)
     assert over["wSlinkMailboxEnd"] == (1, MAILBOX + MAILBOX_SIZE)
     layout = {"wSlinkBeacon": 0, "wSlinkAbi": 4, "wSlinkFrameCounter": 5, "wSlinkSfxRequest": 7,
-              "wSlinkCaps": 8, "wSlinkPanelState": 9, "wSlinkPanelPage": 10, "wSlinkPanelPages": 11}
+              "wSlinkCaps": 8, "wSlinkPanelState": 9, "wSlinkPanelPage": 10, "wSlinkPanelPages": 11,
+              "wSlinkSfxHold": 12, "wSlinkSfxHoldAt": 13}
     assert {n: over[n][1] - MAILBOX for n in layout} == layout
     assert over["wBoxDataEnd"] == (1, MAILBOX)
     assert over["wStack"][1] - 0xFF >= MAILBOX + MAILBOX_SIZE  # never under the stack
@@ -295,6 +296,13 @@ def test_profile_trade_block_matches_the_overlay_symbols(title):
     assert over["SlinkStartMenuEntry"][0] == 0  # the dispatcher `jp hl`s with bank 4 mapped
     assert (a["apex_guard"]["bank"], a["apex_guard"]["addr"]) == over["ItemUseMedicine.setDVs"]
     assert a["vblank"]["bank"] == 0 and over["VBlank"][1] < a["vblank"]["addr"] < over["DelayFrame"][1]
+    # the two main-thread SFX sites: DelayFrame's tail `jp`s to the ROM0 stub, Joypad `call`s the other
+    assert (a["delay_frame_tail"]["bank"], a["delay_frame_tail"]["addr"]) == over["DelayFrame.halt"]
+    assert a["delay_frame_tail"]["expected_hex"].endswith(
+        f"C3{over['SlinkDelayFrameTail'][1] & 0xFF:02X}{over['SlinkDelayFrameTail'][1] >> 8:02X}")
+    assert (a["joypad"]["bank"], a["joypad"]["addr"]) == (0, over["Joypad"][1] + 15)
+    assert over["SlinkDelayFrameTail"][0] == 0 and over["SlinkJoypadSite"][0] == 0
+    assert over["SlinkSfxService"][0] == OVERLAY_BANK
     # the panel/service/receptionist entry points the Lua names are all in bank $3F
     for name in ("SlinkPanel", "SlinkHook", "SlinkForeground", "SlinkReceptionist", "SlinkTradeApply",
                  "SlinkPartnerPrompt", "SlinkApexGuard"):

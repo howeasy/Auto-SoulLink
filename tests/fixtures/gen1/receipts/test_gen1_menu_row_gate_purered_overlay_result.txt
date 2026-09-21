@@ -1,9 +1,9 @@
-[test_gen1_menu_row_gate] title=red rom=428741e1
-[test_gen1_menu_row_gate] booted at frame 844 (party=1, map=40)
+[test_gen1_menu_row_gate] title=purered rom=feb19385
+[test_gen1_menu_row_gate] booted at frame 703 (party=1, map=40)
   [ok] the START menu opened  — no EXIT row on screen — every check below is meaningless if the menu is not up
 [menu] row  0 |····················|
 [menu] row  1 |···········        ·|
-[menu] row  2 |··········· POK·MON·|
+[menu] row  2 |············POK·MON·|
 [menu] row  3 |···········        ·|
 [menu] row  4 |··········· ITEM   ·|
 [menu] row  5 |···········        ·|
@@ -24,7 +24,7 @@
   [ok] SLINK is two tile rows below EXIT  — SLINK on row 14, EXIT on row 12 (2 apart, expected 2)
   [ok] the menu box border runs beside the SLINK row  — tile at (10,14) is 0x7C — the box was not made taller
 [menu] Pokedex present=false -> 7 items, SLINK is index 6
-  [ok] wMaxMenuItem counts the extra row  — got 7, expected 7
+  [ok] wMaxMenuItem counts the extra row  — got 6, expected 6
   [ok] the cursor can be moved onto the SLINK row  — wCurrentMenuItem stopped at 6, wanted 6 — the home-bank wrap constants are separate from wMaxMenuItem and gate reachability
   [ok] the menu is up for the panel  — the START menu is not showing
   [ok] selecting SLINK opens the panel  — no SOUL LINK title and no mailbox transition — the dispatch trampoline did not reach bank $3F

@@ -51,18 +51,31 @@ function randomizerFields(form) {
     // carry `pure: false`): on a pure pick those are greyed, and a value already set is
     // returned to its default so the pipeline's named refusal never comes from the form.
     PURE_WHY: 'not available for pureRGB',
-    // Choices admission refuses under another choice (both families;
-    // upr_settings.GLOBAL_UNVERIFIABLE_RESTRICTIONS), greyed while the other choice holds.
-    // Under a global 1-to-1 wild map only restriction "none" stands: game1to1Encounters
-    // ignores type_themed / catch_em_all, and similar-strength is not verifiable there (the
-    // global picker's pool shrinks across the whole map).
-    DEPENDS: { wild_restriction: { on: 'wild', when: 'global', off: ['type_themed', 'catch_em_all', 'similar'],
-                                   why: 'not available under a global 1-to-1 map' } },
-    optOk(o) { return !(this.family === 'gen1_purergb' && o.pure === false); },
+    // What admission refuses under another choice (both families; upr_settings
+    // GLOBAL_UNVERIFIABLE_RESTRICTIONS / forbidden_enabled), greyed while that choice
+    // holds. `off` names a choice option's values; no `off` greys the whole option.
+    //  - under a global 1-to-1 wild map only restriction "none" stands: game1to1Encounters
+    //    ignores type_themed / catch_em_all, and similar-strength is not verifiable there
+    //    (the global picker's pool shrinks across the whole map);
+    //  - evenly distributed trainers + similar strength: the placement-history filter
+    //    precedes the strength band, so the band is not verifiable.
+    DEPENDS: {
+      wild_restriction: { on: 'wild', when: 'global', off: ['type_themed', 'catch_em_all', 'similar'],
+                          why: 'not available under a global 1-to-1 map' },
+      trainers_similar_strength: { on: 'trainers', when: 'distributed',
+                                   why: 'not available with evenly distributed trainer teams' },
+    },
+    optWhy(o) {
+      if (this.family === 'gen1_purergb' && o.pure === false) return this.PURE_WHY;
+      var d = this.DEPENDS[o.key];
+      if (d && !d.off && this.rdraft.spec[d.on] === d.when) return d.why;
+      return '';
+    },
+    optOk(o) { return !this.optWhy(o); },
     choiceWhy(o, c) {
       if (this.family === 'gen1_purergb' && c.pure === false) return this.PURE_WHY;
       var d = this.DEPENDS[o.key];
-      if (d && this.rdraft.spec[d.on] === d.when && d.off.indexOf(c.value) >= 0) return d.why;
+      if (d && d.off && this.rdraft.spec[d.on] === d.when && d.off.indexOf(c.value) >= 0) return d.why;
       return '';
     },
     choiceOk(o, c) { return !this.choiceWhy(o, c); },
@@ -235,7 +248,7 @@ function randomizerFields(form) {
       for (var i = 0; i < 2; i++) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
-          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD.' };
+          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD, without native sounds.' };
         }
       }
       return { ok: true, why: '' };

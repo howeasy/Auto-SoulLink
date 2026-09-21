@@ -45,6 +45,8 @@ from manifest import (  # noqa: E402
     HOOK_SITE,
     HOOK_TARGET,
     INJECT_OFFSET,
+    JOYPAD_STUB_ADDR,
+    JOYPAD_STUB_AFTER,
     MENU_PATCHES,
     PROTECTED_RANGE,
     ROMS,
@@ -72,12 +74,15 @@ def assemble() -> bytes:
                     obj, trade_obj], check=True)
     with open(out, "rb") as f:
         image = f.read()
-    # trade_service.asm:33-65 pins the 42-byte bridge in ROM0's reserved RST
-    # padding. inject.py has no assembler, so its manifest embeds the bytes;
-    # the build checks that this linked image still produces exactly those bytes.
-    bridge = image[0x0001:0x002B]
+    # trade_service.asm pins the 32-byte bridge in ROM0's reserved RST padding.
+    # inject.py has no assembler, so its manifest embeds the bytes; the build checks
+    # that this linked image still produces exactly those bytes.
+    bridge = image[0x0001:0x0001 + len(TRADE_BRIDGE_AFTER)]
     if bridge != TRADE_BRIDGE_AFTER:
         raise SystemExit("linked trade bridge drifted from manifest: " + bridge.hex())
+    stub = image[JOYPAD_STUB_ADDR:JOYPAD_STUB_ADDR + len(JOYPAD_STUB_AFTER)]
+    if stub != JOYPAD_STUB_AFTER:
+        raise SystemExit("linked Joypad stub drifted from manifest: " + stub.hex())
     start = INJECT_OFFSET
     if len(image) < start + BANK_SIZE:
         # rgblink emits only as many banks as it needs; the section is pinned to $3F, so a

@@ -100,6 +100,33 @@ async def dashboard(populated):
     return srv, parse(await resp.text())
 
 
+# ── the cartridge's companion on the player card ───────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_native_sound_is_a_capability_of_the_cartridge_not_of_the_run(populated):
+    """Native Sounds is a run option; whether it plays is the cartridge's (hello `sfx`,
+    like `panel`). With the option on, a cartridge without a sound path says so on its
+    card; with the option off nothing is said; a cartridge that has not said is not judged."""
+    srv, client = populated
+    srv.state.native_sounds = True
+    srv.connected_players.setdefault("a", {})["sfx"] = False
+    srv.connected_players.setdefault("b", {})["sfx"] = True
+    srv.connected_players["b"]["panel"] = True
+    text = await (await client.get("/")).text()
+    assert "no native sound on this cartridge" in text and text.count("native sound") >= 2
+    assert "SLINK panel" in text
+
+    srv.state.native_sounds = False
+    text = await (await client.get("/")).text()
+    assert "native sound" not in text, "the option is off: nothing to say"
+
+    srv.state.native_sounds = True
+    del srv.connected_players["a"]["sfx"]
+    del srv.connected_players["b"]["sfx"]
+    text = await (await client.get("/")).text()
+    assert "native sound" not in text, "a cartridge that has not reported is not judged"
+
+
 # ── the refresh loop ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

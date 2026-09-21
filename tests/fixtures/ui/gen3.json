@@ -5,9 +5,9 @@
       "connected": true,
       "rom_type": "firered_rr",
       "last_event": "tick",
-      "last_seen": "04:20:17",
-      "last_seen_age": 0,
-      "last_seen_label": "0s ago",
+      "last_seen": "22:57:23",
+      "last_seen_age": 5,
+      "last_seen_label": "5s ago",
       "stale": false,
       "nuzlocke_active": true,
       "current_area": "route_22",
@@ -554,6 +554,10 @@
           "Earth Badge"
         ]
       },
+      "companion": {
+        "panel": null,
+        "sfx": null
+      },
       "encounter_table": {
         "Day": [
           {
@@ -847,9 +851,9 @@
       "connected": true,
       "rom_type": "firered_rr",
       "last_event": "tick",
-      "last_seen": "04:20:17",
-      "last_seen_age": 0,
-      "last_seen_label": "0s ago",
+      "last_seen": "22:57:23",
+      "last_seen_age": 5,
+      "last_seen_label": "5s ago",
       "stale": false,
       "nuzlocke_active": true,
       "current_area": "cerulean_city",
@@ -1436,6 +1440,10 @@
           "Earth Badge"
         ]
       },
+      "companion": {
+        "panel": null,
+        "sfx": null
+      },
       "encounter_table": {
         "Surfing": [
           {
@@ -1557,7 +1565,7 @@
   "links": [
     {
       "area_id": "route1",
-      "area_display": "Route1",
+      "area_display": "Route 1",
       "a_key": "PIKA001",
       "a_nickname": "Sparky",
       "a_species": 25,
@@ -1580,7 +1588,7 @@
     },
     {
       "area_id": "route2",
-      "area_display": "Route2",
+      "area_display": "Route 2",
       "a_key": "PIDG002",
       "a_nickname": "Pidge",
       "a_species": 16,
@@ -1603,7 +1611,7 @@
     },
     {
       "area_id": "route3",
-      "area_display": "Route3",
+      "area_display": "Route 3",
       "a_key": "SPEA003",
       "a_nickname": "Sparrow",
       "a_species": 21,
@@ -1626,7 +1634,7 @@
     },
     {
       "area_id": "route4",
-      "area_display": "Route4",
+      "area_display": "Route 4",
       "a_key": "NIDO004",
       "a_nickname": "Nidi",
       "a_species": 29,
@@ -1649,7 +1657,7 @@
     },
     {
       "area_id": "route5",
-      "area_display": "Route5",
+      "area_display": "Route 5",
       "a_key": "SAND005",
       "a_nickname": "Shrewd",
       "a_species": 27,
@@ -1672,7 +1680,7 @@
     },
     {
       "area_id": "route6",
-      "area_display": "Route6",
+      "area_display": "Route 6",
       "a_key": "ODDI006",
       "a_nickname": "Smelly",
       "a_species": 43,
@@ -1695,7 +1703,7 @@
     },
     {
       "area_id": "route7",
-      "area_display": "Route7",
+      "area_display": "Route 7",
       "a_key": null,
       "a_nickname": "",
       "a_species": 0,
@@ -1718,7 +1726,7 @@
     },
     {
       "area_id": "route8",
-      "area_display": "Route8",
+      "area_display": "Route 8",
       "a_key": "POLI008",
       "a_nickname": "Bubbles",
       "a_species": 60,
@@ -1779,7 +1787,7 @@
   },
   "recent_events": [
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Cerulean City",
@@ -1787,7 +1795,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 22",
@@ -1795,7 +1803,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "force_faint",
       "text": "⚡ Rocky force fainted!",
@@ -1803,7 +1811,7 @@
       "key": "GEOD003"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "faint",
       "text": "Sparrow fainted!",
@@ -1811,7 +1819,7 @@
       "key": "SPEA003"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Growlithe Lv14",
@@ -1819,31 +1827,31 @@
       "key": "GROW009"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route9",
+      "text": "Entered Route 9",
       "area_id": "route9",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Bubbles × Quack on Route8",
+      "text": "✓ Linked Bubbles × Quack on Route 8",
       "area_id": "route8",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Quack × Bubbles on Route8",
+      "text": "✓ Linked Quack × Bubbles on Route 8",
       "area_id": "route8",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Psyduck Lv10",
@@ -1851,7 +1859,7 @@
       "key": "PSYD008"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Poliwag Lv10",
@@ -1859,79 +1867,79 @@
       "key": "POLI008"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route8",
+      "text": "Entered Route 8",
       "area_id": "route8",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route8",
+      "text": "Entered Route 8",
       "area_id": "route8",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route7",
+      "text": "Entered Route 7",
       "area_id": "route7",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "dead_zone",
-      "text": "☠ Dead zone: Route7",
+      "text": "☠ Dead zone: Route 7",
       "area_id": "route7",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "dead_zone",
-      "text": "☠ Dead zone: Route7",
+      "text": "☠ Dead zone: Route 7",
       "area_id": "route7",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "no_catch",
-      "text": "Missed catch at Route7",
+      "text": "Missed catch at Route 7",
       "area_id": "route7",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route7",
+      "text": "Entered Route 7",
       "area_id": "route7",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Smelly × Twig on Route6",
+      "text": "✓ Linked Smelly × Twig on Route 6",
       "area_id": "route6",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Twig × Smelly on Route6",
+      "text": "✓ Linked Twig × Smelly on Route 6",
       "area_id": "route6",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Bellsprout Lv13",
@@ -1939,7 +1947,7 @@
       "key": "BELL006"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Oddish Lv13",
@@ -1947,39 +1955,39 @@
       "key": "ODDI006"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route6",
+      "text": "Entered Route 6",
       "area_id": "route6",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route6",
+      "text": "Entered Route 6",
       "area_id": "route6",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Shrewd × Flick on Route5",
+      "text": "✓ Linked Shrewd × Flick on Route 5",
       "area_id": "route5",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Flick × Shrewd on Route5",
+      "text": "✓ Linked Flick × Shrewd on Route 5",
       "area_id": "route5",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Vulpix Lv12",
@@ -1987,7 +1995,7 @@
       "key": "VULP005"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Sandshrew Lv12",
@@ -1995,39 +2003,39 @@
       "key": "SAND005"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route5",
+      "text": "Entered Route 5",
       "area_id": "route5",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route5",
+      "text": "Entered Route 5",
       "area_id": "route5",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Nidi × Vampy on Route4",
+      "text": "✓ Linked Nidi × Vampy on Route 4",
       "area_id": "route4",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Vampy × Nidi on Route4",
+      "text": "✓ Linked Vampy × Nidi on Route 4",
       "area_id": "route4",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Zubat Lv11",
@@ -2035,7 +2043,7 @@
       "key": "ZUBA004"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Nidoran♀ Lv11",
@@ -2043,39 +2051,39 @@
       "key": "NIDO004"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route4",
+      "text": "Entered Route 4",
       "area_id": "route4",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route4",
+      "text": "Entered Route 4",
       "area_id": "route4",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Sparrow × Rocky on Route3",
+      "text": "✓ Linked Sparrow × Rocky on Route 3",
       "area_id": "route3",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Rocky × Sparrow on Route3",
+      "text": "✓ Linked Rocky × Sparrow on Route 3",
       "area_id": "route3",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Geodude Lv9",
@@ -2083,7 +2091,7 @@
       "key": "GEOD003"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Spearow Lv9",
@@ -2091,39 +2099,39 @@
       "key": "SPEA003"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route3",
+      "text": "Entered Route 3",
       "area_id": "route3",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route3",
+      "text": "Entered Route 3",
       "area_id": "route3",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Pidge × Rattie on Route2",
+      "text": "✓ Linked Pidge × Rattie on Route 2",
       "area_id": "route2",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Rattie × Pidge on Route2",
+      "text": "✓ Linked Rattie × Pidge on Route 2",
       "area_id": "route2",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Rattata Lv8",
@@ -2131,7 +2139,7 @@
       "key": "RATT002"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Pidgey Lv8",
@@ -2139,39 +2147,39 @@
       "key": "PIDG002"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route2",
+      "text": "Entered Route 2",
       "area_id": "route2",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route2",
+      "text": "Entered Route 2",
       "area_id": "route2",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Sparky × Embo on Route1",
+      "text": "✓ Linked Sparky × Embo on Route 1",
       "area_id": "route1",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Embo × Sparky on Route1",
+      "text": "✓ Linked Embo × Sparky on Route 1",
       "area_id": "route1",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "capture",
       "text": "Caught Charmander Lv6",
@@ -2179,7 +2187,7 @@
       "key": "CHAR001"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "capture",
       "text": "Caught Pikachu Lv6",
@@ -2187,23 +2195,23 @@
       "key": "PIKA001"
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "area_enter",
-      "text": "Entered Route1",
+      "text": "Entered Route 1",
       "area_id": "route1",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "area_enter",
-      "text": "Entered Route1",
+      "text": "Entered Route 1",
       "area_id": "route1",
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "b",
       "type": "hello",
       "text": "Connected (firered_rr, 0 mons)",
@@ -2211,7 +2219,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-18T04:20:17",
+      "ts": "2026-09-20T22:57:23",
       "player": "a",
       "type": "hello",
       "text": "Connected (firered_rr, 0 mons)",
@@ -2221,9 +2229,9 @@
   ],
   "killfeed": [
     {
-      "killed_at": "2026-09-18T08:20:17.130005+00:00",
+      "killed_at": "2026-09-21T02:57:23.344217+00:00",
       "area_id": "route3",
-      "area_display": "Route3",
+      "area_display": "Route 3",
       "cause": "battle",
       "killer": null,
       "initiating_player": "a",
@@ -2242,9 +2250,9 @@
       "status": "dead"
     },
     {
-      "killed_at": "2026-09-18T08:20:17.111456+00:00",
+      "killed_at": "2026-09-21T02:57:23.325713+00:00",
       "area_id": "route7",
-      "area_display": "Route7",
+      "area_display": "Route 7",
       "cause": "dead_zone",
       "killer": null,
       "initiating_player": "a",

@@ -245,6 +245,9 @@ return {
   COMPANION = {
     playtime_frames_addr   = 0xDA4D, -- DELTA: data/purergb/pokered.sym wPlayTimeFrames (vanilla $DA44; the overlay's linked WRAM0 layout shifts it 9 bytes)
     channel_sound_ids_addr = 0xC026, -- SAME: data/purergb/pokered.sym wChannelSoundIDs (unchanged from vanilla)
+    audio_rom_bank_addr    = 0xC0EF, -- SAME: data/purergb/pokered.sym wAudioROMBank ($02 overworld / $08 battle / $1F Audio3: which SFX header table the ids index; SlinkSfxService reads it)
+    audio_fade_out_control_addr = 0xCFC7, -- SAME: data/purergb/pokered.sym wAudioFadeOutControl (nonzero while a music fade runs; SlinkSfxService holds the request until it clears)
+    low_health_alarm_flag_addr = 0xCD69, -- DELTA: data/purergb/pokered.sym wLowHealthTonePairs (WRAM0), bit 7 = tones playing; pureRGB's WaitForSoundToFinish tests THIS byte, wLowHealthAlarm moved to WRAMX
     speed_multiplier       = 2, -- DELTA: PLAN A15 -- the overlay runs the overworld at 2x emulator speed (CGB double-speed); the ABI windows below are counted in FRAMES so the numbers themselves do not scale
     panel_stage_timeout    = 90, -- SAME: patch/gen1/purergb/README.md "ABI (unchanged from the vanilla patch, B5)"
     panel_deadline         = 60, -- SAME: lua/gen1/panel.lua DEADLINE (foundation-independent client constant)
