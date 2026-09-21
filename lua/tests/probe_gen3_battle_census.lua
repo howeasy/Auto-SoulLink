@@ -34,14 +34,25 @@ end
 G.phase("field", string.format("map=%d,%d", G.map(cp)))
 
 local list = assert(os.getenv("SLINK_CENSUS_FILE"), "SLINK_CENSUS_FILE unset")
+SNAP = nil
+do
+    local s = os.getenv("SLINK_CENSUS_SNAP")
+    if s and s ~= "" then SNAP = {}; for hex in s:gmatch("0x%x+") do SNAP[#SNAP + 1] = tonumber(hex) end end
+end
 local probes = {}
 for line in io.lines(list) do
     local name, hex = line:match("^(%S+)=(0x%x+)")
     if name then
-        local p = { name = name, addr = tonumber(hex), hits = 0 }
+        local p = { name = name, addr = tonumber(hex), hits = 0, snaps = {} }
         p.id = event.on_bus_exec(function(cb)
             p.hits = p.hits + 1
             if not p.first_cb then p.first_cb = cb; p.first_frame = emu.framecount() end
+            -- SLINK_CENSUS_SNAP="0xADDR,0xADDR": record those RAM bytes at every hit (first 40)
+            if SNAP and #p.snaps < 40 then
+                local vals = {}
+                for i, a in ipairs(SNAP) do vals[i] = memory.read_u8(a) end
+                p.snaps[#p.snaps + 1] = string.format("f%d:%s", emu.framecount(), table.concat(vals, "/"))
+            end
         end, p.addr, "SLink-census-" .. name)
         probes[#probes + 1] = p
     end
@@ -79,6 +90,7 @@ for _, p in ipairs(probes) do
         fired = fired + 1
         G.phase("count", string.format("%s addr=0x%08X hits=%d first_cb=0x%08X first_frame=%d",
                                        p.name, p.addr, p.hits, p.first_cb, p.first_frame))
+        if #p.snaps > 0 then G.phase("snaps", p.name .. " " .. table.concat(p.snaps, " ")) end
     else
         silent[#silent + 1] = p.name
     end

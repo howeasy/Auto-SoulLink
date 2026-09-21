@@ -42,19 +42,24 @@ while count < TARGET do
     if now ~= count + 1 then G.finish(false, string.format("party count %d -> %d after create", count, now)) end
     count = now
 end
--- SLINK_GIVE_BALLS=N: put N Poke Balls in bag pocket slot 0 (SaveBlock1 + 0x430, pret
--- include/global.h:780 bagPocket_PokeBalls; struct ItemSlot {u16 itemId; u16 quantity};
--- quantity is XORed with SaveBlock2.encryptionKey (global.h, u32 at SaveBlock2 + 0xF20) by the
--- bag code). A fixture write, so the RR driver's wild_catch leg has something to throw.
+-- SLINK_GIVE_BALLS=N: put N Poke Balls in the FIRST EMPTY slot of the RR ball pocket. RR keeps
+-- its bag in fixed EWRAM (radical_red profile BAG_IN_EWRAM=true, BALL_POCKET_ADDR=0x0203C354,
+-- BALL_POCKET_ENC=false, 50 slots: lua/games/gen3_frlge.lua:311-314; docs/gen3/research/
+-- rr_bag_layout.md: gBagPockets 0x0203988C -> ball base 0x0203C354, ItemSlot {u16 id; u16 qty},
+-- quantity raw). ITEM_POKE_BALL = 4. The vanilla SaveBlock1+0x430 pocket is NOT used by RR
+-- (PHYSICAL 2026-09-21: a write there never showed in the CFRU bag). Written with the bag CLOSED.
 local BALLS = tonumber(os.getenv("SLINK_GIVE_BALLS") or "") or 0
 if BALLS > 0 then
-    local sb1 = memory.read_u32_le(0x03005008)   -- gSaveBlock1Ptr (pokefirered.sym; RR profile SB1 pointer)
-    local sb2 = memory.read_u32_le(0x0300500C)   -- gSaveBlock2Ptr
-    local key = memory.read_u32_le(sb2 + 0xF20)
-    local slot = sb1 + 0x430
-    memory.write_u16_le(slot, 4)                              -- ITEM_POKE_BALL (items.h:8)
-    memory.write_u16_le(slot + 2, (BALLS ~ key) & 0xFFFF)     -- quantity ^ key (low 16 bits)
-    G.phase("balls", string.format("sb1=%08X sb2=%08X key=%08X wrote item=4 qty=%d at %08X", sb1, sb2, key, BALLS, slot))
+    local base = 0x0203C354
+    local slot = nil
+    for s = 0, 49 do
+        local id = memory.read_u16_le(base + s * 4)
+        if id == 4 or id == 0 then slot = base + s * 4; break end
+    end
+    assert(slot, "ball pocket full")
+    memory.write_u16_le(slot, 4)
+    memory.write_u16_le(slot + 2, BALLS)
+    G.phase("balls", string.format("wrote item=4 qty=%d at %08X (RR ball pocket)", BALLS, slot))
 end
 G.idle(60)
 local oks = pcall(savestate.save, OUT)
