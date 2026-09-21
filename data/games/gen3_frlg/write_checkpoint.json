@@ -1,0 +1,346 @@
+{
+  "firered": {
+    "anchors": {
+      "cb1_overworld": {
+        "address": 134571316,
+        "expected_hex": {
+          "clean": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+        },
+        "length": 66,
+        "rom_offset": 353588,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 134571444,
+        "expected_hex": {
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+        },
+        "length": 44,
+        "rom_offset": 353716,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 134219024,
+        "expected_hex": {
+          "clean": "3BF1A9F900060028"
+        },
+        "length": 8,
+        "rom_offset": 1306,
+        "symbol": "CallCallbacks"
+      },
+      "run_tasks": {
+        "address": 134706552,
+        "expected_hex": {
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003"
+        },
+        "length": 48,
+        "rom_offset": 488824,
+        "symbol": "RunTasks"
+      },
+      "try_saving_data": {
+        "address": 135111524,
+        "expected_hex": {
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+        },
+        "length": 72,
+        "rom_offset": 893796,
+        "symbol": "TrySavingData"
+      }
+    },
+    "cpu": {
+      "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
+      "mode": 31,
+      "observed_pc": 452,
+      "pc_max": 16383,
+      "pc_min": 0,
+      "thumb": 0
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352144,
+        "source": "pokefirered.sym",
+        "symbol": "gPokemonStoragePtr"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50352136,
+        "source": "pokefirered.sym",
+        "symbol": "gSaveBlock1Ptr"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50352140,
+        "source": "pokefirered.sym",
+        "symbol": "gSaveBlock2Ptr"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50344176,
+        "expect": 134571317,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50344176,
+        "expect": 134571445,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50335644,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50344176,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 50347904,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkCallback",
+        "width": 4
+      },
+      "link_transferring": {
+        "address": 50344164,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33782456,
+        "expect": 0,
+        "mask": 128,
+        "offset": 7,
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      },
+      "script_context_status": {
+        "address": 50335400,
+        "expect": 2,
+        "offset": 0,
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50345264,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      },
+      "wireless_comm_type": {
+        "address": 50347836,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gWirelessCommType",
+        "width": 1
+      }
+    },
+    "sym": "pokefirered.sym",
+    "tasks": {
+      "address": 50352272,
+      "allowed_overworld_tasks": {
+        "Task_RunPerStepCallback": 134670352,
+        "Task_RunTimeBasedEvents": 134670396,
+        "Task_WeatherMain": 134716940
+      },
+      "count": 16,
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "struct_size": 40,
+      "symbol": "gTasks"
+    },
+    "version": "gen3-overworld-v1"
+  },
+  "leafgreen": {
+    "anchors": {
+      "cb1_overworld": {
+        "address": 134571316,
+        "expected_hex": {
+          "clean": "10B5094C61680948814217D1BCF0A0FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+        },
+        "length": 66,
+        "rom_offset": 353588,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 134571444,
+        "expected_hex": {
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+        },
+        "length": 44,
+        "rom_offset": 353716,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 134219024,
+        "expected_hex": {
+          "clean": "3BF195F900060028"
+        },
+        "length": 8,
+        "rom_offset": 1306,
+        "symbol": "CallCallbacks"
+      },
+      "run_tasks": {
+        "address": 134706552,
+        "expected_hex": {
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF1F9FAA079FF28F5D130BC01BC0047000090500003"
+        },
+        "length": 48,
+        "rom_offset": 488824,
+        "symbol": "RunTasks"
+      },
+      "try_saving_data": {
+        "address": 135111480,
+        "expected_hex": {
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BFFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+        },
+        "length": 72,
+        "rom_offset": 893752,
+        "symbol": "TrySavingData"
+      }
+    },
+    "cpu": {
+      "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
+      "mode": 31,
+      "observed_pc": 452,
+      "pc_max": 16383,
+      "pc_min": 0,
+      "thumb": 0
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352144,
+        "source": "pokeleafgreen.sym",
+        "symbol": "gPokemonStoragePtr"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50352136,
+        "source": "pokeleafgreen.sym",
+        "symbol": "gSaveBlock1Ptr"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50352140,
+        "source": "pokeleafgreen.sym",
+        "symbol": "gSaveBlock2Ptr"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50344176,
+        "expect": 134571317,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50344176,
+        "expect": 134571445,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50335644,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50344176,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 50347904,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkCallback",
+        "width": 4
+      },
+      "link_transferring": {
+        "address": 50344164,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33782456,
+        "expect": 0,
+        "mask": 128,
+        "offset": 7,
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      },
+      "script_context_status": {
+        "address": 50335400,
+        "expect": 2,
+        "offset": 0,
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50345264,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      },
+      "wireless_comm_type": {
+        "address": 50347836,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gWirelessCommType",
+        "width": 1
+      }
+    },
+    "sym": "pokeleafgreen.sym",
+    "tasks": {
+      "address": 50352272,
+      "allowed_overworld_tasks": {
+        "Task_RunPerStepCallback": 134670352,
+        "Task_RunTimeBasedEvents": 134670396,
+        "Task_WeatherMain": 134716896
+      },
+      "count": 16,
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "struct_size": 40,
+      "symbol": "gTasks"
+    },
+    "version": "gen3-overworld-v1"
+  }
+}
