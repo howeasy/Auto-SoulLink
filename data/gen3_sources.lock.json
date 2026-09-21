@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "source": {
+    "url": "https://github.com/pret/pokefirered",
+    "commit": "c75f352304d529f6ba92d4f74b9cf8b5c3810788"
+  },
+  "agbcc": {
+    "url": "https://github.com/pret/agbcc",
+    "commit": "da598c1d918402c42c0c0d7128ba14567f3175e9"
+  },
+  "w64devkit_version": "2.10.0",
+  "make_variables": {"GAME_REVISION": "0", "MODERN": "0"},
+  "outputs": {
+    "pokefirered": {
+      "filename": "pokefirered.gba",
+      "game_version": "FIRERED",
+      "sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
+    },
+    "pokeleafgreen": {
+      "filename": "pokeleafgreen.gba",
+      "game_version": "LEAFGREEN",
+      "sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e"
+    }
+  }
+}
