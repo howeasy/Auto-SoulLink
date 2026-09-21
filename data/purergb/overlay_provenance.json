@@ -1,6 +1,6 @@
 {
   "schema": "purergb-overlay-provenance-v1",
-  "generated": "2026-09-21T02:33:17Z",
+  "generated": "2026-09-21T02:46:04Z",
   "source": {
     "url": "https://github.com/Vortyne/pureRGB",
     "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
@@ -14,8 +14,8 @@
     "sources": {
       "apex_guard.asm": "d22cfcc3100aa5ab8acf6f9f56bf499e1afdff91d2eca997a2542aa594826228",
       "native_trade.asm": "17d0339769e68c03e162b31b0a70d6062d53ac93e4ec68818873cfb052d80752",
-      "slink.asm": "bed48f9d3d4e0a6e33a152822d2d6f7056e73871680b06ef4c310b4ebf007f4f",
-      "slink_home.asm": "9c8b76b20343fe3da5943b5b1604ae161952f011b8db3430a0562f75b44f3351",
+      "slink.asm": "64d63edc06b8c5ac9d2fe2df4ef1dbf32878f161c5d53a62446a8f9cf4e8b4a9",
+      "slink_home.asm": "755caec77c975c45ff4451256cbb95916bc8141d86d9f27b6be62d0ca4482944",
       "slink_overlay.asm": "239a0f15c4ba14a62cf5e604079749c835c76179219373741ecb5d096a9229e7",
       "species_table.inc": "fdfa120e6ac32d70946585607fccff9f8b34d3822fa75ddacb795182a7670af7",
       "trade_prompt.asm": "00e7d8682c0c139bf9a4f9bd89c68bee5e14b9996cb2d4e30f5a6abd46800157",
