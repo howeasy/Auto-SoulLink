@@ -321,15 +321,21 @@ class _WireTap:
             msg = json.loads(line)
         except ValueError:
             return  # ponytail: a line that is not JSON is not protocol; the server logs it already
-        handle = self._files.get(self.player)
-        if handle is None:
-            os.makedirs(self._dir, exist_ok=True)
-            # The handle outlives this call by design: it stays open for the process.
-            handle = self._files[self.player] = open(  # noqa: SIM115
-                os.path.join(self._dir, f"wire_{self.player}.jsonl"), "w", encoding="utf-8")
-        # Field order is the wire's own: json.loads keeps it (3.7+) and dumps does not sort.
-        handle.write(json.dumps({"dir": direction, "t": t, "msg": msg}) + "\n")
-        handle.flush()
+        # A transcript is evidence, never a dependency: any I/O failure here (disk full, bad
+        # DIR, permissions) is logged and dropped so the tap can never kill a client
+        # (adapter-guard finding on b0e0538).
+        try:
+            handle = self._files.get(self.player)
+            if handle is None:
+                os.makedirs(self._dir, exist_ok=True)
+                # The handle outlives this call by design: it stays open for the process.
+                handle = self._files[self.player] = open(  # noqa: SIM115
+                    os.path.join(self._dir, f"wire_{self.player}.jsonl"), "w", encoding="utf-8")
+            # Field order is the wire's own: json.loads keeps it (3.7+) and dumps does not sort.
+            handle.write(json.dumps({"dir": direction, "t": t, "msg": msg}) + "\n")
+            handle.flush()
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped {direction} line for {self.player}: {exc!r}")
 
 
 class SLinkServer:

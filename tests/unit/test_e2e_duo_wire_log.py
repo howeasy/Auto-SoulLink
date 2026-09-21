@@ -196,3 +196,27 @@ async def test_no_wire_log_writes_nothing(tmp_path):
         tcp.close()
         await tcp.wait_closed()
     assert not os.path.isdir(tmp_path / "wire")
+
+
+def test_a_tap_io_failure_never_reaches_the_connection(tmp_path, monkeypatch):
+    """Adapter-guard finding on b0e0538: disk/permission failures inside the tap are logged and
+    dropped, never raised into handle_client (which would kill that client's task)."""
+    from server.server import _WireTap
+
+    class _Writer:
+        def __init__(self):
+            self.sent = []
+
+        def write(self, data):
+            self.sent.append(data)
+
+    w = _Writer()
+    tap = _WireTap(w, str(tmp_path / "nope"), {})
+
+    def _boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("builtins.open", _boom)
+    tap.c2s('{"event":"hello","player":"a","seq":1}', {"event": "hello", "player": "a", "seq": 1})
+    tap.write(b'{"commands":[]}\n')
+    assert w.sent == [b'{"commands":[]}\n']  # the reply still went out
