@@ -214,9 +214,17 @@ function M.start(opts)
     local state = { ev = ev_wrap, deps = deps, parts = parts, stubs = M.mutation_stubs() }
     function state.poll()
         for _, fire in ipairs(read_fires()) do
-            shadow_log(fire.kind, fire.key or fire.slot or fire.box or "", {
-                { "callback_addr", fire.callback_addr }, { "raw_r15", fire.raw_r15 },
-            })
+            -- Forward EVERY scalar field of the fire (action for pc_move, species, etc.):
+            -- tools/gen3_shadow_diff.py needs them and the vocabulary belongs to signals.lua.
+            local fields, names = {}, {}
+            for k, v in pairs(fire) do
+                if k ~= "kind" and k ~= "key" and type(v) ~= "table" and type(v) ~= "function" then
+                    names[#names + 1] = k
+                end
+            end
+            table.sort(names)
+            for _, k in ipairs(names) do fields[#fields + 1] = { k, fire[k] } end
+            shadow_log(fire.kind, fire.key or fire.slot or fire.box or "", fields)
         end
     end
     function state.teardown()
