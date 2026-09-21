@@ -184,6 +184,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 RR battle census: `docs/gen3/probes/census_rr_battle_2026-09-21.txt` — from `slink_prebattle.State` the pinned RR `battle_end` hook (0x08015BD0, inside ReturnFromBattleToOverworld) fired exactly once at frame 2484, the frame the function entry fired in the entry-hook run; exec hooks deliver at every tested ROM address on RR; `docs/gen3/research/rr_site_reachability.md` shows all pins reachable. PHYSICAL positive for S-1 on RR `battle_end`. The six RR duos observe only frame_control because they never reach the semantic sites (explode exits at the outcome byte; faint/boxsync/trade are commanded/native). Consequence for G3: RR coverage needs natural-play sources (scripted RR play), not re-pinning.
 
+- 2026-09-21 P3 RR natural play: `docs/gen3/probes/shadow_rr_play_2026-09-21.txt` — with the observer beside `gen3_rr_scripted_play.lua`, PHYSICAL fires on RR companion: `battle_begin` x4, `battle_end` x5, `whiteout` x1, `map_load` x1, `save` x1 (positives for S-1 on those kinds, pending the differential). NEGATIVE: a real player faint (battler HP 0, outcome lost) produced no `faint` fire at the vanilla Cmd_tryfaintmon pin 0x080213C8 -> RR `faint` must be re-pinned to the CFRU battle-engine body (OPEN, P3). Driver defects (Codex cx-378ce251) queued to the authors; the fires stand.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

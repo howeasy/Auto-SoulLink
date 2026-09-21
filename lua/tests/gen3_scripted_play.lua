@@ -275,8 +275,13 @@ LEGS[#LEGS + 1] = {
         "data/maps/PalletTown/map.json (coord_events OakTriggerLeft @ 12,1)",
         "data/maps/PalletTown/scripts.inc:169-217 (OakTrigger: lockall, lead player to the lab, warp MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB 6 12)",
         "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:44-48,199-227 (OnFrame ChooseStarterScene: scripted Oak+player movement, ends VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB=2)",
-        "data/maps/PalletTown_ProfessorOaksLab/map.json (object_events SquirtleBall @ 9,4)",
-        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1212-1223 (SquirtleBall: only ConfirmStarterChoice-reachable once scene==2, else \"Those are Poke Balls\")",
+        "data/maps/PalletTown_ProfessorOaksLab/map.json (object_events SquirtleBall @ 9,4; (9,5) one tile south is the only walkable approach — collision=1 at (9,4) itself, confirmed with the same PATHS/collision method as every door in this file)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1212-1223 (SquirtleBall: lock; faceplayer — the object turns to face the player, matching facing Up from (9,5) — only ConfirmStarterChoice-reachable once scene==2, else \"Those are Poke Balls\")",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1092-1096 (ConfirmSquirtle: msgbox ..., MSGBOX_YESNO)",
+        "src/script_menu.c:873 (ScriptMenu_YesNo -> DisplayYesNoMenuDefaultYes: every MSGBOX_YESNO in this file, including the nickname prompt, defaults to YES)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1115-1134 (ChoseStarter: givemon PLAYER_STARTER_SPECIES,5 at line 1122 fires before the nickname prompt at line 1129 -- Text_GiveNicknameToThisMon, MSGBOX_YESNO)",
+        "src/script_menu.c:887-913 (Task_YesNoMenu_HandleInput: MENU_B_PRESSED is handled identically to selecting NO -- gSpecialVar_Result=FALSE -- so B declines the nickname without opening the naming screen)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1140-1180 (RivalPicksStarter -> RivalWalksToX -> RivalTakesStarter: trailing rival dialogue, all plain `message`/`msgbox` with no further MSGBOX_YESNO)",
     },
     run = function(cp)
         -- Walking onto (12,1) fires the coord_event; from here to landing in the lab at scene=2
@@ -297,11 +302,25 @@ LEGS[#LEGS + 1] = {
             G.finish(false, "starter: Oak's intercept never warped the player into the lab")
         end
         G.phase("in-lab", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
-        local parked = false
-        for _ = 1, 6000 do
+        -- The scene is over only when the FIELD CONTROLS unlock (sLockFieldControls == 0, pack
+        -- predicate field_controls_locked): script_context_status goes idle between the scene's
+        -- own commands and misled run 4 (PHYSICAL: Oak still talking in gen3_stuck.png).
+        -- ...and even that unlocks transiently between the scene's own lock/release pairs
+        -- (run 5: same frames, Oak still talking). So DEBOUNCE: the whole condition must hold
+        -- for 90 consecutive frames with no input before the scene counts as over.
+        local parked, stable = false, 0
+        for _ = 1, 9000 do
             local x, y = G.pos(cp)
-            if x == 6 and y == 4 and G.pred_ok(cp, "script_context_status") then parked = true; break end
-            G.tap("A", 2, 10)
+            local quiet = x == 6 and y == 4 and G.pred_ok(cp, "script_context_status")
+                          and G.pred_ok(cp, "field_controls_locked")
+            if quiet then
+                stable = stable + 1
+                if stable >= 90 then parked = true; break end
+                G.advance()
+            else
+                stable = 0
+                G.tap("A", 2, 10)
+            end
         end
         if not parked then
             G.shot("stuck")
@@ -310,18 +329,53 @@ LEGS[#LEGS + 1] = {
         end
         G.phase("scene-done", "scene should be 2 now (VAR read not pinned; position+idle verified)")
 
-        follow(cp, "lab_oak_scene_end_to_ball", "starter")
-        G.tap("Up", 2, 13)   -- face the (solid) ball tile without stepping onto it
+        -- PHYSICAL (owner, 2026-09-21, patch/build/gen3_stuck.png): at the end of the scene the
+        -- player already stands directly below a ball; no walk, just face Up and press A.
+        -- (SaveBlock1 coords are not a reliable position during a scripted scene, so no
+        -- follow() here: the terminal below is party_count, not a tile.)
+        local bx, by = G.pos(cp)
+        G.phase("ball", string.format("at=(%d,%d) map=%d", bx, by, mapid(cp)))
+        follow(cp, "lab_oak_scene_end_to_ball", "starter")   -- (6,4) -> (9,5), below the middle ball
+        G.tap("Up", 2, 13)
+
+        -- Phase 1: A only, checked each tap, until givemon actually lands (party_count 0->1).
+        -- Every MSGBOX_YESNO up to and including "would you like Squirtle?" (ConfirmSquirtle,
+        -- scripts.inc:1092-1096) defaults to YES (src/script_menu.c:873), so plain A-mashing is
+        -- a pinned accept, not a guess -- and it can only ever accept the STARTER here, because
+        -- the nickname prompt (the only OTHER yes/no reachable from this script) cannot appear
+        -- before givemon fires (scripts.inc:1122 precedes 1129).
         local got = false
-        for _ = 1, 60 do
-            if party_count() > 0 then got = true; break end
+        for _ = 1, 40 do
             G.tap("A", 3, 20)
+            if party_count() > 0 then got = true; break end
         end
         if not got then
             G.shot("stuck")
             G.finish(false, "starter: party_count() never left 0 after interacting with the ball")
         end
         G.phase("starter-got", "party=" .. party_count())
+
+        -- Phase 2: the trailing "received {mon} from OAK!" message/fanfare, the nickname
+        -- Yes/No (Text_GiveNicknameToThisMon, scripts.inc:1129), and the rival's own dialogue
+        -- (scripts.inc:1140-1180) all run before script_context_status goes idle. A alone would
+        -- risk landing on the nickname box's default YES and opening the naming screen this
+        -- driver doesn't handle; B alone risks not dismissing a plain message (only A does).
+        -- Alternating A then B on every tap is safe both ways: a plain `message`/`waitmessage`
+        -- box only closes on A (B is a no-op there); the one Yes/No box left (nickname) treats
+        -- B identically to NO (src/script_menu.c:901-905, MENU_B_PRESSED -> FALSE) without
+        -- opening the keyboard -- so the exact frame the box appears doesn't need to be known.
+        local idle = false
+        for _ = 1, 40 do
+            if G.pred_ok(cp, "script_context_status") then idle = true; break end
+            G.tap("A", 3, 16)
+            G.tap("B", 3, 16)
+        end
+        if not idle then
+            G.shot("stuck")
+            G.finish(false, "starter: trailing text/nickname-decline never went idle "
+                         .. "(script_context_status)")
+        end
+        G.phase("starter-idle", "party=" .. party_count())
     end,
 }
 

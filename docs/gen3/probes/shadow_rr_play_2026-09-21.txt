@@ -1,0 +1,85 @@
+# RR natural-play driver beside the shadow observer, 2026-09-21 (lua/tests/gen3_rr_scripted_play.lua at 0ff9281, per-leg SLINK_GEN3_PLAY_FROM, observer admitted by hash)
+## leg battle_to_field
+phase start frame=1 title=radical_red
+phase state frame=980 loaded E:/Howard/Bizhawk/GBA/State/slink_prebattle.State
+phase shadow frame=1010 observer started admitted_by=hash
+phase resume frame=1010 from=battle_to_field state=E:/Howard/Bizhawk/GBA/State/slink_prebattle.State
+phase leg-start frame=1010 battle_to_field (state=slink_prebattle.State)
+phase field frame=2514 map=787 at=(7,33) outcome=1
+phase leg-done frame=2514 battle_to_field
+phase leg-start frame=2514 wild_faint (state=slink_prebattle.State)
+phase survived frame=4819 encounter 1 ended without a player faint (outcome=1)
+phase survived frame=6482 encounter 2 ended without a player faint (outcome=1)
+phase survived frame=8032 encounter 3 ended without a player faint (outcome=1)
+phase fainted frame=9854 player battler HP hit 0; party=1 outcome=2
+phase leg-done frame=9854 wild_faint
+phase skip-open frame=9854 wild_catch: no proven RR input sequence for the battle BAG exists: a search of lua/tests/duo/* and lua/tests/test_live_*.lua (2026-09-21) found bag navigation only for Gen 1 (lua/tests/duo/duo_gen1_main.lua), and CFRU replaces the FireRed bag UI, so the FR driver's pinned Right->B_ACTION_USE_ITEM toggle cannot be carried over. Terminal when it is pinned: gBattleOutcome == 7 (B_OUTCOME_CAUGHT) at 0x02023E8A
+phase skip-open frame=9854 pc_move_full_party: SendMonToPC (RR: the compressed-storage detour at 090B6E38) only runs on an ACQUISITION that cannot fit in the party — a catch or a gift with six party mons. It therefore inherits wild_catch's unpinned bag sequence, plus a six-mon party this savestate family does not guarantee
+phase leg-start frame=9854 door_warp (state=slink_door.State)
+RESULT: FAIL door_warp: map never changed from 1024 at (8,5) — SLINK_STATE must be slink_door.State (standing in front of a Pokémon Center door, facing north)
+### shadow
+SHADOW t=5 frame=6469 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=6 frame=6788 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=7010 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5555
+STATUS frame=7610 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6100
+SHADOW t=7 frame=8007 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=8210 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6666
+SHADOW t=8 frame=8242 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=8810 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7215
+STATUS frame=9410 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7747
+SHADOW t=9 frame=9719 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=10 frame=9846 kind=whiteout key= address=134571774 callback_address=134571774 cpsr=1073741887 mode=thumb raw_r15=134571776 sp=50363924 thumb=1
+STATUS frame=10010 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8319
+STATUS frame=10610 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8904
+STATUS frame=11210 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=9492
+## leg door_warp
+phase start frame=1 title=radical_red
+phase state frame=750 loaded E:/Howard/Bizhawk/GBA/State/slink_door.State
+phase shadow frame=780 observer started admitted_by=hash
+phase resume frame=780 from=door_warp state=E:/Howard/Bizhawk/GBA/State/slink_door.State
+phase leg-start frame=780 door_warp (state=slink_door.State)
+phase warped frame=892 map 769 -> 1284 at=(7,8)
+phase leg-done frame=892 door_warp
+phase leg-start frame=892 pc_ops (state=slink_pokecenter.State)
+RESULT: FAIL pc_ops: could not reach the PC approach tile (11,2); stopped at (10,7) on map 1284. RR's Pokemon Center layout is unpinned — set SLINK_RR_PC_TILE="x,y"
+### shadow
+STATUS frame=780 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=883 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=1380 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=557
+STATUS frame=1980 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1157
+STATUS frame=2580 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1757
+STATUS frame=3180 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2357
+STATUS frame=3780 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2957
+## leg pc_ops
+phase start frame=1 title=radical_red
+phase state frame=1470 loaded E:/Howard/Bizhawk/GBA/State/slink_pokecenter.State
+phase shadow frame=1500 observer started admitted_by=hash
+phase resume frame=1500 from=pc_ops state=E:/Howard/Bizhawk/GBA/State/slink_pokecenter.State
+phase leg-start frame=1500 pc_ops (state=slink_pokecenter.State)
+RESULT: FAIL pc_ops: could not reach the PC approach tile (11,2); stopped at (11,8) on map 1284. RR's Pokemon Center layout is unpinned — set SLINK_RR_PC_TILE="x,y"
+### shadow
+STATUS frame=1500 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=2100 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=596
+STATUS frame=2700 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1193
+STATUS frame=3300 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1790
+## leg save
+phase start frame=1 title=radical_red
+phase state frame=940 loaded E:/Howard/Bizhawk/GBA/State/slink_overworld.State
+phase shadow frame=970 observer started admitted_by=hash
+phase resume frame=970 from=save state=E:/Howard/Bizhawk/GBA/State/slink_overworld.State
+phase leg-start frame=970 save (state=slink_overworld.State)
+phase save-menu frame=970 counter=4
+phase save-dialog frame=1925 attempt=6
+phase saved frame=1972 counter=4->5
+phase slot-complete frame=2732 sectors=14/14
+phase saved frame=3332 counter 4 -> 5
+phase leg-done frame=3332 save
+RESULT: PASS reached: save
+### shadow
+STATUS frame=970 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1570 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=494
+STATUS frame=2170 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=796
+SHADOW t=1 frame=2766 kind=save key= address=135111586 callback_address=135111586 cpsr=536870975 mode=thumb raw_r15=135111588 sp=50363868 thumb=1
+STATUS frame=2770 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=798
+## conclusion
+PHYSICAL fires on RR companion from natural play: battle_begin x4, battle_end x5, whiteout x1 (player lost), map_load x1 (door warp 769->1284), save x1 (counter 4->5, 14/14). NEGATIVE: the player's battler HP hit 0 (outcome=2) and the pinned faint site 0x080213C8 (vanilla Cmd_tryfaintmon) stayed silent -> RR faint needs re-pinning to the CFRU battle-engine body (candidate: CFRU replaces the battle script command table). Driver bookkeeping defects per Codex cx-378ce251 (per-leg state not loaded, PC oracle unkeyed, faint witness weak) do not affect these fires.
