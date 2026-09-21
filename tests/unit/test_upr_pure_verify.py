@@ -394,6 +394,33 @@ class TestWild:
         r = _verify(bytes(out), self.AREA_SIMILAR)
         assert any("similar_strength band" in f and "0xB10DF" in f for f in r["failures"]), r["failures"]
 
+    RANDOM_SIMILAR = _spec(wild="random", wild_restriction="similar")
+
+    def test_random_similar_strength_is_a_valid_pool_draw(self, randomized):
+        """randomEncounters' usePowerLevels branch (A:854-893) calls the SAME
+        pickWildPowerLvlReplacement helper (and 3-scan loop) as area1to1EncountersImpl -- the
+        band check must run under wild=random too, not just wild=area (cx-201b85a7 #1)."""
+        r = _verify(randomized(self.RANDOM_SIMILAR), self.RANDOM_SIMILAR)
+        assert r["ok"], "\n".join(r["failures"])
+
+    def test_a_flooded_random_similar_mapping_is_reported(self):
+        """Replace every one of the 880 ordinary wild/fishing species bytes with Pidgey (opaque
+        slots and levels preserved): under wild=random with wild_restriction=similar this was
+        never checked at all (cx-201b85a7 #1) -- Gyarados (0xB10DF, BST 480) -> Pidgey (BST 216)
+        is nowhere near any window pickWildPowerLvlReplacement would have widened to."""
+        clean = _clean()
+        chk = _walk(clean, self.RANDOM_SIMILAR)
+        out = bytearray(clean)
+        PIDGEY = 0x24
+        for t in chk.tables:
+            for _lv, sp in t["slots"]:
+                if clean[sp] not in chk.f["opaque"]:
+                    out[sp] = PIDGEY
+        assert out[0xB10DF] == PIDGEY and clean[0xB10DF] == 0x16
+        r = verify("purered", clean, bytes(out), spec=self.RANDOM_SIMILAR)
+        assert not r["ok"]
+        assert any("similar_strength band" in f and "0xB10DF" in f for f in r["failures"]), r["failures"]
+
     def test_area_catch_em_all_places_every_pool_species(self, randomized):
         """Fork patch 0005 (cx-73e80e05 #1): the per-area catch-em-all picker now draws from
         the area-banned-filtered pool on every branch, so a table can no longer receive the
@@ -620,6 +647,52 @@ class TestTrainers:
             out[sp] = MEWTWO
         r = _verify(bytes(out), spec)
         assert any("similar_strength band" in f and where in f for f in r["failures"]), r["failures"]
+
+    THEMED_SIMILAR_FORCED = _spec(trainers="type_themed", trainers_similar_strength=True,
+                                   trainers_force_evolved=1, trainers_block_legendaries=False)
+
+    def test_type_themed_with_similar_strength_and_force_evolved_checks_ancestor_pool_membership(self, randomized):
+        """The ancestor's BST alone isn't enough (cx-201b85a7 #2): Gyarados's Water-only
+        pre-evolution Magikarp can have a plausible BST for a Caterpie-strength party, but
+        Magikarp was never a candidate for a Flying-themed pick to begin with -- the qualifying
+        ancestor must be an eligible member of the SAME theme pool, not just BST-adjacent."""
+        spec = self.THEMED_SIMILAR_FORCED
+        out = bytearray(randomized(spec))
+        out[0x395BB] = 0x16                                  # GYARADOS (Water/Flying)
+        out[0x395BC] = 0x97                                  # PIDGEOT (Normal/Flying): shares Flying with Gyarados
+        r = _verify(bytes(out), spec)
+        assert any("similar_strength band" in f and "0x395BB" in f for f in r["failures"]), r["failures"]
+
+    THEME_FORCE_POOL = _spec(trainers="type_themed", trainers_similar_strength=True, trainers_force_evolved=15)
+
+    def test_type_themed_similar_strength_excludes_wrong_type_evolvers_before_banding(self, randomized):
+        """AbstractRomHandler.java:1849-1858/1897-1898: a themed candidate whose forced
+        evolution would leave the theme is excluded from selection before the BST window runs,
+        which can WIDEN the effective band (a smaller candidate pool needs more widening to
+        reach 3). Spearow (Normal/Flying, BST 231) would keep an unfiltered Normal-strength-253
+        band at just [228,278]; excluding it (this ROM's Fearow is Fighting/Flying, losing
+        Normal) drops the count under 3 and widens to [216,290] -- wide enough for Goldeen (BST
+        285), whose forced Seaking evolution is a legal draw (cx-201b85a7 #3). This party
+        (class 3 record 7 @0x3961E) is overwritten wholesale so its theme is exactly Normal,
+        independent of whatever the jar itself assigned there."""
+        spec = self.THEME_FORCE_POOL
+        out = bytearray(randomized(spec))
+        out[0x3961F] = 0x65                                  # WIGGLYTUFF: Jigglypuff (level 15) force-evolved
+        out[0x39620] = 0x90                                  # PERSIAN: Meowth (in Nidoran-F's slot) force-evolved
+        out[0x39621] = 0x9E                                  # SEAKING: Goldeen (in Bulbasaur's slot) force-evolved
+        r = _verify(bytes(out), spec)
+        assert r["ok"], "\n".join(r["failures"])
+
+    def test_the_gyarados_pidgeot_fixture_still_fails_under_the_widened_pool(self, randomized):
+        """The exclusion only ever widens a band -- it can't manufacture room for Gyarados
+        (BST 480) around a Caterpie-strength (BST 175) party, and Magikarp is still not a
+        Flying-pool member regardless of how wide the window gets (cx-201b85a7 #2 stays closed)."""
+        spec = self.THEME_FORCE_POOL
+        out = bytearray(randomized(spec))
+        out[0x395BB] = 0x16                                  # GYARADOS
+        out[0x395BC] = 0x97                                  # PIDGEOT
+        r = _verify(bytes(out), spec)
+        assert any("similar_strength band" in f and "0x395BB" in f for f in r["failures"]), r["failures"]
 
     FORCE_EVOLVED_UNCHANGED = _spec(trainers_force_evolved=100)
 
