@@ -37,22 +37,22 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 ## In flight / uncommitted at compaction
 
-- Nothing. HEAD 15f6d02 (+ this note), tree clean, no worker running. PAUSED 2026-09-21 at the owner checkpoint. G3a SIGNED (dfbee86).
+- Nothing. HEAD 6bf2a74 (+ this note), tree clean. PAUSED 2026-09-21 at checkpoint 2. Codex R5 (cx-fe554e0e, RR faint body) is the only open peer task; C3-5/C3-7 workers idle with context.
 
-## P3 physical state at the stop
+## P3 physical state at checkpoint 2
 
-- RR companion: 6/6 duos PASS with the observer loaded (`patch/build/shadow_wire/*.shadow.log`, `*_old_client.shadowrun.jsonl`); 19 sites registered, rejected 0, dropped 0; ONLY `frame_control` ever fires. `docs/gen3/research/rr_site_reachability.md`: every pinned RR function keeps its vanilla callers, 19/19 byte pins hold; `probe_gen3_exec_addr.lua`: exec hooks deliver 900/900 at 0x08006B5C and 0x08077578 on RR. So the mechanism and the pins are fine; the open question is which functions RR actually executes on its battle path (CFRU may enter battles through its own bodies). ANSWERED by `docs/gen3/probes/census_rr_battle_2026-09-21.txt`: from `slink_prebattle.State` the pinned `battle_end` 0x08015BD0 fires once when the battle returns to the field; RR pins correct, hooks deliver at every tested address; the duos never reach the semantic sites, so RR needs natural-play sources (an RR scripted play), not re-pins. (119-hook census timed out; 16-19 hooks run fine.)
-- Vanilla FR: `docs/gen3/probes/shadow_fr_play_2026-09-21.txt`: 21 sites registered, `map_load` fired once entering Oak's lab (callback == site): first semantic PHYSICAL receipt. Scripted play (57fd38b) lane run 3: Oak intercept + lab scene complete (in-lab frame 2187, scene end 3975, map_load fired again), ball interaction still leaves party 0 -> next iteration drives the ConfirmStarterChoice yes/no + nickname prompts keyed on party_count.
-- Explained-differences input: `docs/gen3/research/shadow_explode_battle_end.md` (explode exits at the outcome byte before the battle_end pin; faint/boxsync are commanded/native paths; trade needs a route-tagged receipt).
-- Instrument fixes made today: observer file-only logging (per-fire console.log flooded the BizHawk log), liveness counts in STATUS, emu.framecount in the io, signals:drain() colon.
+- FR (vanilla US 1.0, observer beside `gen3_scripted_play.lua`): `map_load`, `mon_given` (starter), `battle_begin`, `battle_end` (rival battle) fired once each (`docs/gen3/probes/shadow_fr_play_run11_2026-09-21.txt`). Driver legs starter + rival_battle PASS; next stall: leave_lab_for_parcel (map never changed after the rival's scripted exit).
+- RR (companion, observer beside `gen3_rr_scripted_play.lua`, per-leg savestates): `battle_begin` x4, `battle_end` x5-6, `whiteout`, `map_load`, `save` fired; a REAL player faint (HP positive->0 in battle, playerFaintCounter 0->1) produced NO fire at the pinned faint site. Research: the battle-script command table is replaced (0x0903EF20 via 5 pool words); the 0x19 (tryfaintmon) and 0xF0 (givecaughtmon) pins are displaced (`rr_faint_repin.md`, `rr_opcode_table_audit.md`); census shows the 0x19 body never runs even on a faint while the 0x1B body runs per faint -> R5 resolves which body to pin. capture_wild candidate 0x0907DD88.
+- Blocked on fixtures: RR pc_ops needs a 2+ mon save (all RR savestates hold 1 mon; the game cannot deposit its last); RR wild_catch needs the CFRU bag UI input sequence pinned.
+- Differential (`docs/gen3/probes/shadow_diff/`): six RR duos, 0 unexplained, 0 unused ledger entries, 14 UNCOVERED each (pre-natural-play captures). Re-run the differ over the natural-play captures next (`patch/build/shadow_wire/{fr,rr}_play*.shadow.log` + wire logs are not captured for the drivers: they run without the server, so the differ's wire side is empty by design; coverage counts are what G3 needs).
 
 ## Next actions (in order)
 
-1. Resume C3-5: starter confirm prompts (Sonnet worker aff570d has the context), then lane run 4 with SLINK_SHADOW; then the remaining FR legs.
-2. New card: RR natural-play driver (an RR scripted play from `rr_town.sav` / `slink_prebattle.State`: battle to completion for battle_end + faint, catch, PC ops via the native menu, save) so the RR coverage rows can close; run beside the observer.
-3. Differential: `python tools/gen3_shadow_diff.py --wire <shadowrun.jsonl> --shadow <shadow.log> --ledger <json>` per scenario with a ledger built from the two research notes; per-artifact coverage table -> G3 evidence (expect UNCOVERED on RR until the census answers).
-4. Queued: strict artifact_kind wire validation; SB1/SB2 base symbols; canonical source of the storage pointer; LG fixture; FR play legs pc_release/gift/trade/evolution; mailbox pump-before-poll + ST_BUSY-after-clear lifecycle (P5 native.lua); shadow poll errors swallowed / final health assertion; codec:391-394 stale comment; the earlier queue items.
-5. Master e9faff0 (sfx range) NOT pushed; planning branch NOT pushed since 1847c7c.
+1. Reconcile Codex R5 (cx-fe554e0e): run its census list during real RR faints (`probe_gen3_battle_census.lua`, `SLINK_CENSUS_ENCOUNTERS=1`, prebattle state); re-pin RR `faint` (and `capture_wild` per R4) in `data/games/gen3_rr/engine_signals.json` through the generator (`tools/gen_gen3_engine_signals.py` / `pin_gen3_site.py`), re-run the RR driver wild_faint leg and require a `faint` SHADOW line.
+2. FR driver: lab exit after the rival leg, then parcel fetch/deliver, Route 1 catch/faint, Viridian PC ops; each lane run adds kinds (worker aff570d has the context).
+3. Owner: a 2+ mon RR battery/savestate for pc_ops; decide whether pinning the CFRU bag UI (catch) is worth it or catch stays OPEN on RR for G3.
+4. G3 evidence assembly: per-artifact coverage table (FR: 4 kinds PHYSICAL; RR: 5 kinds PHYSICAL + faint/capture re-pin), checkpoint predicate negatives (P3 exit evidence), overhead budget both callback orders (not yet measured), `reads == PYDEC` on dumped bytes (not yet done) -> these three are the remaining P3 exit items besides coverage.
+5. Queued (unchanged): strict artifact_kind wire validation; SB1/SB2 base symbols; storage pointer canonical source; LG fixture; mailbox lifecycle (P5); shadow poll error handling; codec stale comment; older queue.
 
 ## Standing rules that bit this session
 
