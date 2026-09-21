@@ -396,11 +396,16 @@ def test_the_driver_never_mashes_start_in_the_overworld():
     assert "G.mash(" not in _SCRIPT_SRC
 
 
-def test_the_shared_runtime_is_bound_with_the_rr_game_facts():
-    """playlib knows nothing about any game: whatever it is not given, it cannot read."""
-    bind = _SCRIPT_SRC.split("PL.bind(G, {")[1].split("})")[0]
-    assert "party_count_addr = PARTY_COUNT_ADDR" in bind
-    assert "state_dir" in bind
+def test_the_shared_runtime_is_bound_with_the_rr_host_and_game_facts():
+    """playlib holds no host call and no game fact (Codex cx-67a6e199): every one of these has
+    to be supplied here, or the library could not run at all."""
+    binding = _SCRIPT_SRC.split("local H = {")[1].split(chr(10) + "local play")[0]
+    for name in ("press", "map", "in_battle", "on_field", "scene_quiet", "party_count",
+                 "load_state", "register_frame_end", "unregister_frame_end", "observer"):
+        assert name + " " in binding or name + "=" in binding or name + " =" in binding, name
+    opts = _SCRIPT_SRC.split("play = PL.bind(H, {")[1].split(chr(10) + "})")[0]
+    assert "state_dir" in opts
+    assert "battle" in opts, "how RR fights is the binding's, not the library's"
 
 
 def test_duo_precedent_constants_are_labelled_as_such():
@@ -461,7 +466,7 @@ def test_a_warp_that_really_happens_is_accepted(lua, fake, module):
     lua.execute("""
         FAKE.on_frame = function(f) if f >= 100 then FAKE.set_map(5, 4) end end
     """)
-    ok, detail = module.hold_until_map_change(lua.globals().FAKE.cp, "Up", 30)
+    ok, detail = module.play.enter_warp(lua.globals().FAKE.cp, "Up", 30)
     assert ok, detail
     assert "769 -> 1284" in detail      # (3,1) -> (5,4)
 
@@ -472,7 +477,7 @@ def test_an_unreadable_map_pointer_is_not_a_map_change(lua, fake, module):
     was in the middle of nothing at all."""
     fake.set_sb1(False)
     fake.set_overworld(True)
-    ok, detail = module.hold_until_map_change(lua.globals().FAKE.cp, "Up", 30)
+    ok, detail = module.play.enter_warp(lua.globals().FAKE.cp, "Up", 30)
     assert not ok
     assert "unreadable" in detail
 
@@ -482,7 +487,7 @@ def test_a_map_change_that_never_settles_back_to_the_field_fails(lua, fake, modu
     lua.execute("""
         FAKE.on_frame = function(f) if f >= 100 then FAKE.set_map(5, 4) end end
     """)
-    ok, detail = module.hold_until_map_change(lua.globals().FAKE.cp, "Up", 30)
+    ok, detail = module.play.enter_warp(lua.globals().FAKE.cp, "Up", 30)
     assert not ok
     assert "never settled" in detail
 
@@ -501,10 +506,11 @@ def _pc_scenario(lua, fake, after_withdraw: str):
     lua.execute(f"""
         FAKE.set_party({_PARTY_ABC})
         FAKE.on_frame = function()
-            -- the pinned row walk spends 5 A presses on the deposit (A, A, Down, A, Down,
-            -- A, A) and 5 more on the withdraw (A, A, A, A, A)
-            if FAKE.a >= 10 then FAKE.set_party({after_withdraw})
-            elseif FAKE.a >= 5 then
+            -- the PHYSICAL flow (census_rr_pc_deposit_2026-09-21.txt): five A presses to
+            -- reach the storage menu, then Down+A, Down+A, A to deposit -- and the same five
+            -- again before the withdraw's three
+            if FAKE.a >= 16 then FAKE.set_party({after_withdraw})
+            elseif FAKE.a >= 8 then
                 FAKE.set_party({{ {{0xBBBB0002, 0x2222, 0xB0}}, {{0xCCCC0003, 0x3333, 0xC0}} }})
             end
         end
@@ -564,12 +570,12 @@ def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
         local inner = FAKE.on_frame
         FAKE.on_frame = function(f)
             inner(f)
-            if FAKE.a >= 10 then FAKE.set_overworld(false) end   -- the UI never closes
+            if FAKE.a >= 16 then FAKE.set_overworld(false) end   -- the UI never closes
         end
     """)
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
-    assert "never returned to the field" in log
+    assert "never got back to the field from the storage UI" in log
 
 
 # ── behaviour: wild_faint ────────────────────────────────────────────────────────────────────
@@ -722,3 +728,24 @@ def test_wild_catch_fails_when_the_bag_sequence_never_spends_a_ball(lua, fake, l
     assert not ok
     assert "ball not thrown on throw 1" in log
     assert "never reached USE" in log
+
+
+def test_the_frame_end_binding_reports_a_refused_registration(lua, module):
+    """`id or name` fabricated a handle whenever event.onframeend returned nil, which sailed
+    past playlib's "was it registered?" check and then handed a NAME to unregisterbyid
+    (Codex cx-bc675fa4). This drives the driver's OWN binding against both host shapes."""
+    reg = module.play.H.register_frame_end
+    lua.execute("event = { onframeend = function() return nil end }")
+    assert reg(lua.eval("function() end"), "poll") is None
+    lua.execute("event = { onframeend = function() error('no hooks left', 0) end }")
+    assert reg(lua.eval("function() end"), "poll") is None
+    lua.execute("event = { onframeend = function() return 77 end }")
+    assert reg(lua.eval("function() end"), "poll") == 77
+
+
+def test_the_binding_supplies_the_input_policies_and_a_savestate_writer(module):
+    """Which button clears a textbox, which advances a scene, and how a state is written are
+    per-game/per-host facts; playlib holds none of them."""
+    assert module.play.opts.clear_dialogue is not None
+    assert module.play.opts.advance_scene is not None
+    assert module.play.H.save_state is not None

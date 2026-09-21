@@ -289,3 +289,56 @@ def test_the_two_route1_crossings_are_exact_mirrors(module):
     south = module.PATHS["route1_north_to_south_edge"]["dirs"]
     assert len(south) == len(north) + 1, "the southbound path should be the northbound one + 1"
     assert south[1] == "Down", "the extra step is the one off the arrival row"
+
+
+# -- the grass hunt must RESUME the square, not restart it (Codex cx-bc675fa4) -----------------
+# An encounter interrupts the loop wherever it fires. Restarting at step 1 from there walks off
+# the band: interrupted at (13,37), a fresh "Right" goes to (14,37), which is not grass. The
+# loop is a cycle, so resuming at the step the player is standing on is the fix.
+
+_DELTA = {"Up": (0, -1), "Down": (0, 1), "Left": (-1, 0), "Right": (1, 0)}
+
+
+def _square(module):
+    loop = module.GRASS_LOOP
+    return [loop[i] for i in range(1, len(loop) + 1)]
+
+
+def test_the_grass_loop_is_a_closed_square_inside_the_band(module):
+    x, y = module.GRASS_ORIGIN[1], module.GRASS_ORIGIN[2]
+    assert (x, y) == (12, 37)
+    seen = [(x, y)]
+    for step in _square(module):
+        x, y = x + _DELTA[step][0], y + _DELTA[step][1]
+        seen.append((x, y))
+    assert seen[-1] == (12, 37), "the loop must close"
+    for tx, ty in seen:
+        assert tx in (12, 13) and ty in (37, 38), f"({tx},{ty}) leaves the pinned grass band"
+
+
+@pytest.mark.parametrize("interrupt_after", [1, 2, 3, 4])
+def test_resuming_the_loop_after_an_interruption_stays_in_the_band(module, interrupt_after):
+    """Two consecutive hunts, the first cut short at each edge of the square in turn. Resuming
+    at the step the player stands on keeps every tile inside the band; restarting at step 1
+    would not."""
+    loop = _square(module)
+    x, y = module.GRASS_ORIGIN[1], module.GRASS_ORIGIN[2]
+    step = 0
+    for _ in range(interrupt_after):                  # first hunt, interrupted
+        d = loop[step % len(loop)]
+        x, y = x + _DELTA[d][0], y + _DELTA[d][1]
+        step += 1
+    assert x in (12, 13) and y in (37, 38)
+    for _ in range(len(loop) * 2):                    # second hunt, resuming
+        d = loop[step % len(loop)]
+        x, y = x + _DELTA[d][0], y + _DELTA[d][1]
+        step += 1
+        assert x in (12, 13) and y in (37, 38), (
+            f"resuming after {interrupt_after} steps walked to ({x},{y}), off the grass band")
+
+
+def test_the_loop_cursor_persists_across_calls_in_the_source():
+    """The cursor has to outlive one hunt_encounter call, or "resume" means nothing."""
+    assert "\nlocal grass_step = 1" in _SCRIPT_SRC, "grass_step must be file-scoped"
+    body = _SCRIPT_SRC.split("local function hunt_encounter")[1].split("\nlocal ")[0]
+    assert "grass_step = ((grass_step - 2)" in body, "the cursor must rewind on an encounter"

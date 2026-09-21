@@ -39,73 +39,76 @@ function W.reset()
     W.log, W.seen_buttons, W.preds = {}, {}, {}
     W.blocked, W.in_battle, W.dir, W.held, W.a_down = false, false, nil, 0, false
     W.on_move, W.on_a, W.on_frame = nil, nil, nil
-    W.states = {}
+    W.states, W.saved, W.objects, W.party = {}, {}, { { 3, 4, 0x02 } }, 1
+    W.save_fails, W.map_reads, W.unreadable_after = nil, 0, nil
+    W.map_unreadable, W.on_field = false, true
+    W.reject_hook, W.no_observer, W.poll_raises, W.obs_status = nil, nil, nil, nil
+    W.polls, W.unregistered, W.poll_fn = 0, nil, nil
     -- every ad-hoc per-test flag, or a leftover leaks into the next test through the
     -- module-scoped runtime (it already hid one real failure)
-    W.fought, W.state_fails, W.why, W.ram, W.poll, W.opened = nil, nil, nil, nil, nil, nil
+    W.fought, W.state_fails, W.why, W.opened = nil, nil, nil, nil
 end
 function W.tail() return table.concat(W.log, "\n") end
 
-joypad = {
-    set = function(t)
-        t = t or {}
-        W.seen_buttons[#W.seen_buttons + 1] = t
-        local dir
-        for _, d in ipairs({ "Up", "Down", "Left", "Right" }) do if t[d] then dir = d end end
-        if dir then
-            if W.dir == dir then W.held = W.held + 1 else W.dir, W.held = dir, 1 end
-            if W.held == 12 and not W.blocked then
-                W.x, W.y = W.x + DXY[dir][1], W.y + DXY[dir][2]
-                if W.on_move then W.on_move() end
-            end
-        else
-            W.dir, W.held = nil, 0
-        end
-        if t.A and not W.a_down then
-            W.a = W.a + 1
-            if W.on_a then W.on_a() end
-        end
-        W.a_down = t.A and true or false
-    end,
-    get = function() return {} end,
-}
+function W.guard(fn, ...)
+    local args = table.pack(...)
+    local ok, err = pcall(function() return fn(table.unpack(args, 1, args.n)) end)
+    return ok, W.tail(), tostring(err)
+end
 
-memory = {
-    read_u8 = function(a) return (W.ram or {})[a] or 0 end,
-    read_u16_le = function(a) return (W.ram or {})[a] or 0 end,
-    read_u32_le = function(a) return (W.ram or {})[a] or 0 end,
-    read_s16_le = function(a) return (W.ram or {})[a] or 0 end,
-}
-client = { speedmode = function() end, screenshot = function() end, exit = function() end }
-savestate = {
-    load = function(path)
-        W.states[#W.states + 1] = path
-        if W.state_fails then return error("no such state", 0) end
-        return true
-    end,
-    save = function() return true end,
-}
-event = { onframeend = function(fn) W.poll = fn end }
-console = { log = function() end }
+--- One frame of held buttons, applied to the world: holding a direction for 12 frames moves a
+--- tile (the cadence playlib's step uses), and A presses are counted on their rising edge.
+function W.apply(t)
+    t = t or {}
+    W.seen_buttons[#W.seen_buttons + 1] = t
+    local dir
+    for _, d in ipairs({ "Up", "Down", "Left", "Right" }) do if t[d] then dir = d end end
+    if dir then
+        if W.dir == dir then W.held = W.held + 1 else W.dir, W.held = dir, 1 end
+        if W.held == 12 and not W.blocked then
+            W.x, W.y = W.x + DXY[dir][1], W.y + DXY[dir][2]
+            if W.on_move then W.on_move() end
+        end
+    else
+        W.dir, W.held = nil, 0
+    end
+    if t.A and not W.a_down then
+        W.a = W.a + 1
+        if W.on_a then W.on_a() end
+    end
+    W.a_down = t.A and true or false
+end
 
---- The injected helper table. playlib calls ONLY these names, never a Gen 3 symbol.
+--- The injected helper table. playlib calls ONLY these, never a host global and never a Gen 3
+--- symbol -- which is exactly why this fake can be a plain Lua table with no emulator behind it.
+--- The object layout below is DELIBERATELY not the GBA one (stride 3, no +7 coordinate bias,
+--- facing in the low nibble): a library that still knew Gen 3's would fail these.
 H = {
     pos = function() return W.x, W.y end,
-    map = function() return W.map // 256, W.map % 256 end,
-    -- A predicate is "quiet" (ok) unless a test says otherwise. in_battle has the real
-    -- polarity: pred_ok TRUE means NOT in a battle.
-    pred_ok = function(_, name)
-        if name == "in_battle" then return not W.in_battle end
-        if W.preds[name] == nil then return true end
-        return W.preds[name]
+    -- nil is "unreadable", and playlib must never read that as "changed"
+    map = function()
+        W.map_reads = (W.map_reads or 0) + 1
+        if W.unreadable_after and W.map_reads > W.unreadable_after then return nil end
+        if W.map_unreadable then return nil end
+        return W.map
+    end,
+    in_battle = function() return W.in_battle end,
+    on_field  = function() return W.on_field ~= false and not W.in_battle end,
+    scene_quiet = function()
+        if W.preds.scene_quiet == nil then return true end
+        return W.preds.scene_quiet
     end,
     advance = function()
         W.frame = W.frame + 1
         if W.on_frame then W.on_frame(W.frame) end
+        -- A registered frame-end callback RUNS, every frame, like the emulator's. A fake that
+        -- only stores it cannot tell a polled observer from an unpolled one (Codex cx-bc675fa4).
+        if W.poll_fn then W.poll_fn() end
     end,
-    idle = function(n) joypad.set({}); for _ = 1, n do H.advance() end end,
+    idle = function(n) H.press({}); for _ = 2, n do H.advance() end end,
+    press = function(buttons) W.apply(buttons); H.advance() end,
     tap = function(b, hold, gap)
-        for _ = 1, (hold or 3) do joypad.set({ [b] = true }); H.advance() end
+        for _ = 1, (hold or 3) do H.press({ [b] = true }) end
         H.idle(gap or 13)
     end,
     phase = function(n, d) W.log[#W.log + 1] = "phase " .. n .. " " .. tostring(d) end,
@@ -115,8 +118,44 @@ H = {
     end,
     shot = function() end,
     open = function(n) W.opened = n end,
-    checkpoint = function() return { predicates = {} }, "fakegame" end,
+    checkpoint = function() return { fake = true }, "fakegame" end,
+    set_budget = function(n) W.budget = n end,
+    -- A NON-GBA object layout: 3 bytes per object, no coordinate bias, facing in the low nibble.
+    obj_pos = function(i)
+        local o = W.objects[(i or 0) + 1]
+        return o[1], o[2]
+    end,
+    obj_facing = function(i) return W.objects[(i or 0) + 1][3] & 0x0F end,
+    party_count = function() return W.party end,
+    load_state = function(path)
+        W.states[#W.states + 1] = path
+        return not W.state_fails
+    end,
+    save_state = function(path)
+        W.saved[#W.saved + 1] = path
+        return not W.save_fails
+    end,
+    register_frame_end = function(fn, name)
+        if W.reject_hook then return nil end
+        W.poll_fn, W.hook_name = fn, name
+        return "hook-1"
+    end,
+    unregister_frame_end = function(id) W.unregistered = id; W.poll_fn = nil end,
+    observer = function(result)
+        W.observer_result = result
+        if W.no_observer then return nil, "the observer refused to start" end
+        return {
+            poll = function()
+                W.polls = (W.polls or 0) + 1
+                if W.poll_raises then error("poll blew up", 0) end
+            end,
+            status = function() return W.obs_status or { registered = 3 } end,
+            detail = "fake observer",
+        }
+    end,
 }
+
+H_OBSERVER_ORIG = H.observer
 
 function W.guard(fn, ...)
     local args = table.pack(...)
@@ -143,10 +182,18 @@ def world(lua):
 
 
 def _bind(lua, paths_lua="nil", extra=""):
+    """Bind playlib over the fake. The battle POLICY is part of the binding now -- playlib
+    refuses to guess how a game fights a battle it did not choose."""
     return lua.execute(
         f'local PL = dofile("{_PLAYLIB}")\n'
-        f"return PL.bind(H, {{ paths = {paths_lua}, obj_events = 0x02036E38,"
-        f" party_count_addr = 0x02024029, state_dir = \"D:/states\"{extra} }})"
+        f'PLAY_LAST = PL.bind(H, {{ paths = {paths_lua}, state_dir = "D:/states",\n'
+        f'  clear_dialogue = function() for _ = 1, 4 do H.tap("A", 3, 13) end end,\n'
+        f'  advance_scene = function() H.tap("A", 2, 10) end,\n'
+        f'  battle = function(cp, budget)\n'
+        f'      return PLAY_LAST.mash_a(budget or 200,\n'
+        f'                              function() return not H.in_battle(cp) end)\n'
+        f'  end{extra} }})\n'
+        f"return PLAY_LAST"
     )
 
 
@@ -171,14 +218,15 @@ def test_position_formatting_helpers_return_exactly_one_value(lua, world):
     ) == "(3,4) then more"
 
 
-def test_readable_mapid_distinguishes_unreadable_from_changed(lua, world):
+def test_an_unreadable_map_is_nil_not_a_sentinel_number(lua, world):
+    """The first cut folded "unreadable" into -257, which compares unequal to every real map
+    and so read as "the map changed" -- a warp oracle that cannot tell those apart reports
+    warps that never happened (Codex cx-67a6e199)."""
     play = _bind(lua)
     world.map = 1284
-    assert play.mapid(None) == 1284
-    assert play.readable_mapid(None) == 1284
-    world.map = -257          # H.map returning -1,-1
-    assert play.readable_mapid(None) is None
-    assert play.mapid(None) == -257
+    assert play.map(None) == 1284
+    world.map_unreadable = True
+    assert play.map(None) is None
 
 
 def test_in_battle_polarity(lua, world):
@@ -305,7 +353,7 @@ def test_an_encounter_that_displaces_the_player_fails_loudly(lua, world):
     """)
     ok, log, _err = world.guard(play.follow, None, "p", "test")
     assert not ok
-    assert "moved the player from (1,0) to (40,40)" in log
+    assert "displaced the player" in log
     assert "whiteout" in log
 
 
@@ -335,13 +383,16 @@ def test_a_path_can_opt_out_of_absorbing_battles(lua, world):
 def test_enter_warp_presses_into_the_door_until_the_map_changes(lua, world):
     play = _bind(lua)
     lua.execute("W.on_frame = function(f) if f >= 40 then W.map = 1284 end end")
-    assert play.enter_warp(None, "Up", 20) is True
+    ok, detail = play.enter_warp(None, "Up", 20)
+    assert ok, detail
     assert world.map == 1284
 
 
 def test_enter_warp_reports_failure_when_the_map_never_changes(lua, world):
     play = _bind(lua)
-    assert play.enter_warp(None, "Up", 3) is False
+    ok, detail = play.enter_warp(None, "Up", 3)
+    assert not ok
+    assert "map never changed" in detail
 
 
 # ── the debounced scene wait ─────────────────────────────────────────────────────────────────
@@ -352,12 +403,12 @@ def test_wait_scene_settled_requires_consecutive_quiet_frames(lua, world):
     can both read "done" for a frame or two mid-scene. A single read is not a settle."""
     play = _bind(lua)
     lua.execute("""
-        W.preds.script_context_status = false
+        W.preds.scene_quiet = false
         W.on_frame = function(f)
             -- quiet for 10 frames (a mid-scene flicker), busy again, then quiet for good
-            if f >= 5 and f < 15 then W.preds.script_context_status = true
-            elseif f < 60 then W.preds.script_context_status = false
-            else W.preds.script_context_status = true end
+            if f >= 5 and f < 15 then W.preds.scene_quiet = true
+            elseif f < 60 then W.preds.scene_quiet = false
+            else W.preds.scene_quiet = true end
         end
     """)
     assert play.wait_scene_settled(None, 6000, None, 30) is True
@@ -366,7 +417,7 @@ def test_wait_scene_settled_requires_consecutive_quiet_frames(lua, world):
 
 def test_wait_scene_settled_gives_up_within_its_budget(lua, world):
     play = _bind(lua)
-    lua.execute("W.preds.field_controls_locked = false")
+    lua.execute("W.preds.scene_quiet = false")
     assert play.wait_scene_settled(None, 50, None, 30) is False
 
 
@@ -469,7 +520,7 @@ def test_a_failed_precondition_stops_the_run_before_the_leg_body(lua, world):
 def test_a_savestate_that_will_not_load_stops_the_run(lua, world):
     lua.execute("W.state_fails = true")
     ok, log, _err = _run(lua, world)
-    assert "RESULT: FAIL three: savestate.load failed" in log
+    assert "RESULT: FAIL three: could not load the savestate" in log
 
 
 def test_the_boot_hook_runs_before_any_leg(lua, world):
@@ -492,11 +543,10 @@ def test_the_observer_is_only_started_when_slink_shadow_is_set(lua, world):
     assert src.index('os.getenv("SLINK_SHADOW")') < src.index("for i = from_idx, #LEGS do")
 
 
-def test_shadow_failures_are_fatal(lua, world):
-    body = _CODE.split('if o.shadow and os.getenv("SLINK_SHADOW")')[1]
-    assert 'H.finish(false, "shadow: dofile of "' in body
-    assert 'H.finish(false, "shadow: observer start failed: "' in body
-    assert "shadow: poll failed during " in _CODE
+def test_shadow_failures_are_fatal():
+    assert "shadow: the observer did not start" in _CODE
+    assert "shadow: poll failed" in _CODE
+    assert "shadow: the observer is unhealthy" in _CODE
 
 
 def test_playlib_never_reaches_for_a_gen3_symbol():
@@ -547,8 +597,14 @@ def _whiteout_world(lua, fake_faints=1):
 def _run_whiteout(lua, world, max_recoveries=2):
     play = lua.execute(
         f'local PL = dofile("{_PLAYLIB}")\n'
-        f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42,'
-        f' max_recoveries = {max_recoveries}, state_dir = "D:/states" }})\n'
+        f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42,\n'
+        f'  clear_dialogue = function() for _ = 1, 4 do H.tap("A", 3, 13) end end,\n'
+        f'  advance_scene = function() H.tap("A", 2, 10) end,\n'
+        f'  max_recoveries = {max_recoveries}, state_dir = "D:/states",\n'
+        f'  battle = function(cp, budget)\n'
+        f'      return PLAY.mash_a(budget or 200,\n'
+        f'                         function() return not H.in_battle(cp) end)\n'
+        f'  end }})\n'
         f"return PLAY"
     )
     legs = lua.execute(_WHITEOUT_LEGS)
@@ -592,7 +648,13 @@ def test_a_leg_with_no_recover_says_so_rather_than_looping(lua, world):
     _whiteout_world(lua, fake_faints=1)
     play = lua.execute(
         f'local PL = dofile("{_PLAYLIB}")\n'
-        f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42, state_dir = "D:/states" }})\n'
+        f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42, state_dir = "D:/states",\n'
+        f'  clear_dialogue = function() for _ = 1, 4 do H.tap("A", 3, 13) end end,\n'
+        f'  advance_scene = function() H.tap("A", 2, 10) end,\n'
+        f'  battle = function(cp, budget)\n'
+        f'      return PLAY.mash_a(budget or 200,\n'
+        f'                         function() return not H.in_battle(cp) end)\n'
+        f'  end }})\n'
         f"return PLAY"
     )
     legs = lua.execute("""
@@ -615,3 +677,368 @@ def test_finish_inside_a_leg_is_not_swallowed_by_the_recovery_pcall(lua, world):
         lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
     assert not ok
     assert "RESULT: FAIL a real failure" in log
+
+
+# == the Codex cx-67a6e199 findings, one test each ============================================
+
+
+def test_the_object_readers_are_the_bindings_not_the_librarys(lua, world):
+    """The fake's object layout is deliberately NOT the GBA one -- three fields per object, no
+    +7 coordinate bias, facing in the LOW nibble. A library that still knew gObjectEvents'
+    stride, bias and nibble would read rubbish here."""
+    play = _bind(lua)
+    lua.execute("W.objects = { {11, 22, 0x35}, {3, 4, 0x01} }")
+    assert play.obj_pos(0) == (11, 22)
+    assert play.obj_at(0) == "(11,22)"
+    assert play.obj_facing(0) == 5           # low nibble of 0x35, not the high one
+    assert play.obj_pos(1) == (3, 4)
+    for banned in ("0x24", "0x10", "0x12", "0x18", "- 7", ">> 4"):
+        assert banned not in _CODE, f"{banned} is a Gen 3 object-layout fact inside playlib"
+
+
+def test_playlib_calls_no_host_global(lua, world):
+    """The rejection in one line: a library that reaches for memory/joypad/savestate/event/
+    dofile is bound to one emulator, not to a game."""
+    for host in ("memory.", "joypad.", "client.", "event.", "savestate.", "dofile(", "emu."):
+        assert host not in _CODE, f"{host} is a host call inside playlib"
+
+
+def test_a_warp_is_refused_while_the_map_is_unreadable(lua, world):
+    play = _bind(lua)
+    world.map_unreadable = True
+    ok, detail = play.enter_warp(None, "Up", 5)
+    assert not ok
+    assert "unreadable before the warp" in detail
+
+
+def test_a_follow_is_refused_while_the_map_is_unreadable(lua, world):
+    play = _bind(lua, _PATHS)
+    world.map_unreadable = True
+    ok, log, _err = world.guard(play.follow, None, "p", "test")
+    assert not ok
+    assert "the map id is unreadable before the walk" in log
+
+
+def test_a_walk_that_ends_on_the_wrong_tile_fails(lua, world):
+    """Every step "succeeded" and the map never changed, but the player is not where the path
+    says it put them -- so the path was not walked, whatever the step count says."""
+    play = _bind(lua, '{ p = { from = { 0, 0 }, dirs = { "Right", "Right" }, to = { 9, 9 } } }')
+    ok, log, _err = world.guard(play.follow, None, "p", "test")
+    assert not ok
+    assert "the walk ended at (2,0), not the path's to (9,9)" in log
+
+
+def test_a_battle_that_only_changes_the_map_is_still_a_displacement(lua, world):
+    """(8,5) in a house is not (8,5) on a route. Comparing coordinates alone called this fine."""
+    play = _bind(lua, _PATHS)
+    lua.execute("""
+        W.on_move = function()
+            if W.x == 1 and W.y == 0 and not W.fought then W.in_battle = true end
+        end
+        W.on_a = function()
+            if W.in_battle and W.a >= 4 then
+                W.in_battle, W.fought = false, true
+                W.map = 999                 -- same tile, different map
+            end
+        end
+    """)
+    ok, log, _err = world.guard(play.follow, None, "p", "test")
+    assert not ok
+    assert "displaced the player" in log
+    assert "map 100 at (1,0) -> map 999" in log
+
+
+def test_a_direct_step_allocates_one_encounter_budget_for_the_whole_call(lua, world):
+    """A fresh {n=0} per encounter makes the bound meaningless: the count never reaches it.
+    One budget per step call means a tile that keeps jumping the player eventually says so."""
+    play = _bind(lua, extra=", max_encounters = 3")
+    lua.execute("""
+        W.blocked = true                      -- the step can never succeed
+        W.rearm = 0
+        -- a tile that jumps the player every single time they try to step off it
+        W.on_frame = function(f) if not W.in_battle and f >= W.rearm then W.in_battle = true end end
+        W.on_a = function()
+            if W.in_battle and W.a % 3 == 0 then
+                W.in_battle = false
+                W.rearm = W.frame + 20
+            end
+        end
+    """)
+    ok, log, _err = world.guard(play.step, None, "Right", 100, None, None)
+    assert not ok
+    assert "more than 3 wild encounters" in log
+
+
+def test_an_override_applies_to_the_first_runnable_leg_when_the_resume_target_is_open(lua, world):
+    """SLINK_STATE is the operator's, and it should not be silently dropped because the leg
+    they resumed at turns out to be an open one, nor because that leg declares no state."""
+    play = _bind(lua)
+    legs = lua.execute("""
+        RAN = {}
+        return {
+          { name = "skipme", open = true, open_reason = "not scripted" },
+          { name = "stateless", run = function() RAN[#RAN+1] = "stateless" end },
+          { name = "later", state = "s.State", run = function() RAN[#RAN+1] = "later" end },
+        }
+    """)
+    os.environ["SLINK_GEN3_PLAY_FROM"] = "skipme"
+    os.environ["SLINK_STATE"] = "Z:/override.State"
+    try:
+        ok, log, _err = world.guard(
+            lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+    finally:
+        os.environ.pop("SLINK_GEN3_PLAY_FROM")
+        os.environ.pop("SLINK_STATE")
+    # the override lands on `stateless` (which declares none) and is spent there
+    assert list(world.states.values()) == ["Z:/override.State", "D:/states/s.State"]
+    assert "RESULT: PASS reached: stateless,later | open (skipped): skipme" in log
+
+
+def test_a_frame_end_registration_that_is_refused_fails_the_run(lua, world):
+    """An observer nobody polls drains nothing, and a run that observed nothing while
+    reporting PASS is worse than a failure."""
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() end } }')
+    world.reject_hook = True
+    os.environ["SLINK_SHADOW"] = "1"
+    try:
+        ok, log, _err = world.guard(
+            lua.eval('function(p, L) return p.main(L,'
+                     ' { name = "fake", shadow = { result = "r.txt" } }) end'), play, legs)
+    finally:
+        os.environ.pop("SLINK_SHADOW")
+    assert "RESULT: FAIL" in log
+    assert "the frame-end poll could not be registered" in log
+
+
+def test_an_observer_that_reports_trouble_fails_the_run(lua, world):
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() end } }')
+    os.environ["SLINK_SHADOW"] = "1"
+    try:
+        for status, expected in (
+            ("{ registered = 3, failed = 'a hook blew up' }", "failed=a hook blew up"),
+            ("{ registered = 3, dropped = 7 }", "dropped=7"),
+            ("{ registered = 3, rejected = 2 }", "rejected=2"),
+            ("{ registered = 3, closed = true }", "the signal queue is closed"),
+            ("{ registered = 0 }", "registered=0"),
+        ):
+            world.reset()
+            lua.execute(f"W.obs_status = {status}")
+            ok, log, _err = world.guard(
+                lua.eval('function(p, L) return p.main(L,'
+                         ' { name = "fake", shadow = { result = "r.txt" } }) end'), play, legs)
+            assert "RESULT: FAIL" in log, status
+            assert expected in log, (status, log)
+    finally:
+        os.environ.pop("SLINK_SHADOW")
+
+
+def test_a_healthy_observer_is_polled_and_unregistered_at_the_end(lua, world):
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() H.idle(5) end } }')
+    os.environ["SLINK_SHADOW"] = "1"
+    try:
+        ok, log, _err = world.guard(
+            lua.eval('function(p, L) return p.main(L,'
+                     ' { name = "fake", shadow = { result = "r.txt" } }) end'), play, legs)
+    finally:
+        os.environ.pop("SLINK_SHADOW")
+    assert "RESULT: PASS" in log
+    assert world.observer_result == "r.txt"
+    assert world.unregistered == "hook-1", "the frame-end hook outlived the run"
+
+
+def test_the_resume_target_is_validated_before_the_boot(lua, world):
+    """A typo should not cost a cold boot first."""
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() end } }')
+    lua.execute("BOOTED = nil")
+    os.environ["SLINK_GEN3_PLAY_FROM"] = "nope"
+    try:
+        ok, log, _err = world.guard(
+            lua.eval('function(p, L) return p.main(L, { name = "fake",'
+                     ' boot = function() BOOTED = true end }) end'), play, legs)
+    finally:
+        os.environ.pop("SLINK_GEN3_PLAY_FROM")
+    assert "names no leg: nope" in log
+    assert lua.eval("BOOTED") is None, "the boot ran before the resume target was checked"
+
+
+# == Codex cx-bc675fa4, round 5 ===============================================================
+
+
+def test_an_unreadable_tile_is_not_a_step(lua, world):
+    """H.pos can report (-1,-1) exactly when the map id is unreadable, so a tile that merely
+    went unreadable would otherwise read as a move -- and then as progress along a path."""
+    play = _bind(lua)
+    lua.execute("""
+        W.blocked = true
+        W.on_frame = function(f)
+            if f > 20 then W.map_unreadable = true; W.x, W.y = -1, -1 end
+        end
+    """)
+    assert play.step(None, "Right", 100, None, False) is False
+
+
+def test_an_unreadable_map_is_not_a_warp_even_from_an_unknown_start(lua, world):
+    play = _bind(lua)
+    world.map_unreadable = True
+    assert play.step(None, "Right", None, None, False) is False
+
+
+def test_a_walk_that_ends_unreadable_is_refused(lua, world):
+    """The last guard on the path: a walk whose final map cannot be read cannot be said to have
+    ended anywhere. It is a defensive one -- a step only reports success on a readable map, so
+    the window is narrow -- which is exactly why it is worth pinning rather than trusting. The
+    fake goes unreadable after the FIRST map read, i.e. between follow's start check and its
+    end check."""
+    play = _bind(lua, '{ p = { from = { 0, 0 }, dirs = { }, to = { 0, 0 } } }')
+    world.unreadable_after = 1
+    ok, log, _err = world.guard(play.follow, None, "p", "test")
+    assert not ok
+    assert "the map id unreadable" in log
+
+
+def test_enter_warp_rechecks_the_field_after_its_settle(lua, world):
+    """The settle's own 16 frames are exactly when a second fade can take the field back."""
+    play = _bind(lua)
+    lua.execute("""
+        W.on_frame = function(f)
+            if f >= 40 then W.map = 1284 end
+            -- the field comes up, then a second fade pulls it away for a while
+            W.on_field = not (f >= 45 and f < 400)
+        end
+    """)
+    ok, detail = play.enter_warp(None, "Up", 20)
+    assert ok, detail
+    assert world.frame >= 400, "returned success from a read taken before the settle"
+
+
+def test_the_dialogue_and_scene_policies_are_the_bindings(lua, world):
+    """Which button dismisses a textbox is a per-game fact; a library that assumes A is a
+    library that only works on one game."""
+    play = lua.execute(
+        f'local PL = dofile("{_PLAYLIB}")\n'
+        f'return PL.bind(H, {{ paths = {_PATHS} }})'          # no policies at all
+    )
+    lua.execute("W.blocked = true")
+    ok, log, _err = world.guard(play.step, None, "Right", 100, None, False)
+    assert not ok
+    assert "no opts.clear_dialogue" in log
+
+    world.reset()
+    lua.execute("W.preds.scene_quiet = false")
+    ok, log, _err = world.guard(play.wait_scene_settled, None, 100, None, 5)
+    assert not ok
+    assert "no opts.advance_scene" in log
+
+
+def _shadow_run(lua, world, play, legs, opts='{ name = "fake", shadow = { result = "r.txt" } }'):
+    os.environ["SLINK_SHADOW"] = "1"
+    try:
+        return world.guard(
+            lua.eval(f'function(p, L) return p.main(L, {opts}) end'), play, legs)
+    finally:
+        os.environ.pop("SLINK_SHADOW")
+
+
+def test_the_observer_is_actually_polled_every_frame(lua, world):
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() H.idle(30) end } }')
+    ok, log, _err = _shadow_run(lua, world, play, legs)
+    assert "RESULT: PASS" in log
+    assert world.polls >= 30, f"the observer was polled {world.polls} times"
+
+
+def test_a_poll_that_raises_fails_the_run(lua, world):
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() H.idle(10) end } }')
+    world.poll_raises = True
+    ok, log, _err = _shadow_run(lua, world, play, legs)
+    assert "RESULT: FAIL" in log
+    assert "poll failed" in log
+
+
+def test_health_that_deteriorates_DURING_a_leg_fails_the_run(lua, world):
+    """Installing the bad status before startup would let the post-leg and pre-PASS checks be
+    deleted with the tests still green; this one only goes bad once the run is under way."""
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() H.idle(20) end } }')
+    lua.execute("""
+        W.obs_status = { registered = 3 }
+        W.on_frame = function(f)
+            if f > 10 then W.obs_status = { registered = 3, dropped = 5 } end
+        end
+    """)
+    ok, log, _err = _shadow_run(lua, world, play, legs)
+    assert "RESULT: FAIL" in log
+    assert "dropped=5" in log
+    assert "during one" in log, "the post-leg check is what should have caught this"
+
+
+def test_an_observer_with_no_status_is_refused(lua, world):
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() end } }')
+    lua.execute("""
+        H.observer = function(result)
+            return { poll = function() end }      -- no status()
+        end
+    """)
+    try:
+        ok, log, _err = _shadow_run(lua, world, play, legs)
+    finally:
+        lua.execute("H.observer = H_OBSERVER_ORIG")
+    assert "RESULT: FAIL" in log
+    assert "no status()" in log
+
+
+def test_the_frame_hook_is_removed_even_when_a_leg_fails(lua, world):
+    """A hook that outlives the run keeps polling a finished observer."""
+    play = _bind(lua)
+    legs = lua.execute(
+        'return { { name = "boom", run = function() H.finish(false, "leg blew up") end } }')
+    ok, log, _err = _shadow_run(lua, world, play, legs)
+    assert "RESULT: FAIL leg blew up" in log
+    assert world.unregistered == "hook-1", "the frame-end hook survived a failing leg"
+
+
+def test_a_binding_whose_registration_returns_nothing_fails_the_run(lua, world):
+    """`id or name` used to fabricate a handle here, which then went to unregisterbyid."""
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() end } }')
+    world.reject_hook = True
+    ok, log, _err = _shadow_run(lua, world, play, legs)
+    assert "the frame-end poll could not be registered" in log
+
+
+# -- the per-leg savestates --------------------------------------------------------------------
+
+
+def test_each_finished_leg_saves_exactly_one_named_state(lua, world):
+    play = _bind(lua)
+    legs = lua.execute(
+        'return { { name = "one", run = function() end },'
+        '         { name = "skipped", open = true, open_reason = "not scripted" },'
+        '         { name = "two", run = function() end } }')
+    world.guard(lua.eval('function(p, L) return p.main(L,'
+                         ' { name = "fake", save_states = "slink_fr_" }) end'), play, legs)
+    assert list(world.saved.values()) == ["D:/states/slink_fr_one.State",
+                                          "D:/states/slink_fr_two.State"]
+
+
+def test_a_failed_leg_saves_nothing(lua, world):
+    """A state written mid-failure is a trap: it looks like a checkpoint and is a wreck."""
+    play = _bind(lua)
+    legs = lua.execute(
+        'return { { name = "boom", run = function() H.finish(false, "nope") end } }')
+    world.guard(lua.eval('function(p, L) return p.main(L,'
+                         ' { name = "fake", save_states = "slink_fr_" }) end'), play, legs)
+    assert len(world.saved) == 0
+
+
+def test_no_states_are_saved_when_the_run_does_not_ask_for_them(lua, world):
+    play = _bind(lua)
+    legs = lua.execute('return { { name = "one", run = function() end } }')
+    world.guard(lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+    assert len(world.saved) == 0

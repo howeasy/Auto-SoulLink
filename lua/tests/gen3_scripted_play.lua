@@ -220,6 +220,8 @@ local PATHS = {
     -- wall). South wall (y=38,39) is open ONLY at x=12,13 (both tall-grass metatiles 10-13 in
     -- gTileset_General, data/tilesets/primary/general/metatile_attributes.bin low-byte 0x02 =
     -- MB_TALL_GRASS); grass at the entrance is unavoidable, not a choice.
+    -- Ends on (12,37), the top-left corner of GRASS_LOOP's four-tile square (all four read
+    -- MB_TALL_GRASS 0x02; see hunt_encounter).
     route1_south_to_grass_spot = {
         map = "Route1", from = { 12, 39 }, to = { 12, 37 }, dirs = { "Up","Up" },
     },
@@ -313,25 +315,178 @@ local PATHS = {
     },
 }
 
--- Every walker, scene wait, battle mash, object reader and the leg runner itself come from
--- lua/tests/playlib.lua, which is game-agnostic: the Gen 3 helper module (G) and the game
--- facts below are INJECTED, so Gen 1/Gen 2 drivers reuse the same runtime with their own.
-local play = PL.bind(G, {
-    paths            = PATHS,
-    obj_events       = OBJ_EVENTS_ADDR,
-    party_count_addr = PARTY_COUNT_ADDR,
-    heal_map         = HEAL_MAP,     -- enables playlib's whiteout recovery
-    max_recoveries   = 2,
+-- ── the Gen 3 binding ────────────────────────────────────────────────────────────────────────
+-- playlib holds no host call and no game fact: no memory, joypad, client, event, savestate or
+-- dofile appears in it (Codex review cx-67a6e199). Everything it needs arrives here, which is
+-- also what lets a Gen 1 or Gen 2 driver bind its own readers to the same runner.
+local H = {
+    -- frames, input and reporting: the Gen 3 helper module already is these
+    advance = G.advance, idle = G.idle, tap = G.tap, pos = G.pos,
+    phase = G.phase, finish = G.finish, shot = G.shot, open = G.open,
+    checkpoint = G.checkpoint,
+    press      = function(buttons) joypad.set(buttons); G.advance() end,
+    speed_max  = function() client.speedmode(6399) end,
+    set_budget = function(n) G.budget = n end,
+
+    -- MAP IDENTITY. nil when the SaveBlock1 pointer is not a sane EWRAM address, which is what
+    -- G.map's -1,-1 means (gen3_boot_check.lua:118-123). playlib compares map ids and must
+    -- never mistake "cannot read" for "changed".
+    map = function(cp)
+        local g, n = G.map(cp)
+        if g < 0 or n < 0 then return nil end
+        return g * 256 + n
+    end,
+
+    -- PREDICATE POLARITY, in one place. The `in_battle` row is a mask with expect=0 and
+    -- pred_ok compares (value & mask) == expect, so G.pred_ok(cp,"in_battle") is TRUE when we
+    -- are NOT in a battle (Codex cx-378ce251). The predicate NAMES are Gen 3's, which is why
+    -- they live here and not in the library.
+    in_battle   = function(cp) return not G.pred_ok(cp, "in_battle") end,
+    on_field    = function(cp)
+        return G.pred_ok(cp, "in_battle") and G.pred_ok(cp, "callback2")
+    end,
+    scene_quiet = function(cp)
+        return G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked")
+    end,
+
+    -- gObjectEvents = 0x02036E38 (pokefirered.sym:205), object 0 = the player, stride 0x24.
+    -- currentCoords are s16 x/y at +0x10/+0x12 stored +7 (MAP_OFFSET); facingDirection is the
+    -- HIGH nibble at +0x18 (pret include/global.fieldmap.h struct ObjectEvent). Introduced on
+    -- run 8 to cross-check the live object against SaveBlock1.pos when the two disagreed.
+    obj_pos = function(i)
+        local base = OBJ_EVENTS_ADDR + (i or 0) * 0x24
+        return memory.read_s16_le(base + 0x10) - 7, memory.read_s16_le(base + 0x12) - 7
+    end,
+    obj_facing = function(i)
+        return memory.read_u8(OBJ_EVENTS_ADDR + (i or 0) * 0x24 + 0x18) >> 4
+    end,
+    party_count = function() return memory.read_u8(PARTY_COUNT_ADDR) end,
+
+    load_state = function(path) return (pcall(savestate.load, path)) end,
+    save_state = function(path) return (pcall(savestate.save, path)) end,
+    register_frame_end = function(fn, name)
+        -- Return what the host returned, and NOTHING else. `id or name` fabricated a handle
+        -- whenever onframeend returned nil, which sailed past playlib's "was it registered?"
+        -- check and then handed a NAME to unregisterbyid (Codex cx-bc675fa4). An observer
+        -- nobody polls must fail the run, not look registered.
+        local ok, id = pcall(event.onframeend, fn, name)
+        if not ok then return nil end
+        return id
+    end,
+    unregister_frame_end = function(id) pcall(event.unregisterbyid, id) end,
+
+    -- The shadow observer, as a factory: playlib starts it, polls it and reads its HEALTH, but
+    -- never loads it (dofile is a host call too).
+    observer = function(result)
+        local ok, shd = pcall(dofile, WT .. "/lua/gen3/shadow_run.lua")
+        if not ok or not shd then return nil, "dofile lua/gen3/shadow_run.lua: " .. tostring(shd) end
+        local ok2, st = pcall(shd.start, { duo = { result = result, player = "a" } })
+        if not ok2 or not st then return nil, "shadow_run.start: " .. tostring(st) end
+        return {
+            poll   = st.poll,
+            status = function() return st.parts.signals:status() end,
+            detail = "admitted_by=" .. tostring(st.admitted_by),
+        }
+    end,
+}
+
+local play
+play = PL.bind(H, {
+    paths          = PATHS,
+    -- where the per-leg savestates below land
+    state_dir      = os.getenv("SLINK_GEN3_PLAY_STATES_DIR") or "E:/Howard/Bizhawk/GBA/State",
+    heal_map       = HEAL_MAP,
+    max_recoveries = 2,
+    -- HOW THIS GAME FIGHTS a battle it did not choose. gActionSelectionCursor resets to 0
+    -- (USE_MOVE) each battle (src/battle_controller_player.c), so A, A is a pinned
+    -- FIGHT -> move-slot-1 selection; A keeps advancing the text afterwards. That is a Gen 3
+    -- fact, so playlib refuses to assume it and takes it from here.
+    -- Input policy, not library policy: which button dismisses a textbox and which advances a
+    -- scripted scene are per-game facts, same as opts.battle (Codex cx-bc675fa4).
+    clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
+    advance_scene  = function() G.tap("A", 2, 10) end,
+    battle = function(cp, budget)
+        if not play.mash_a(budget or 1200, function() return not H.in_battle(cp) end) then
+            return false
+        end
+        return play.wait_scene_settled(cp, 1800)
+    end,
 })
+
+--- Hunt a wild encounter by walking a PINNED TALL-GRASS LOOP.
+---
+--- FR lane run 15: "route1_catch: no wild encounter after 1 grass cycles". The old search
+--- oscillated Left/Right from (12,37) with raw joypad holds and no verification -- and (11,37)
+--- is not grass, so half of every cycle was spent stepping out of the patch and back, or into
+--- a wall. A per-step encounter check only fires on a step ONTO a grass tile, so a search that
+--- leaves the grass is not searching.
+---
+--- All four tiles below read metatile behaviour 0x02 (MB_TALL_GRASS) on Route 1:
+---   python tools/gba_map.py "<FR>.gba" --map 3.19 --find-behaviour 0x02
+---   -> ... (12,35) (12,36) (12,37) (12,38) (12,39) (13,35) (13,36) (13,37) (13,38) (13,39) ...
+--- so the square (12,37) -> (13,37) -> (13,38) -> (12,38) -> back is four grass steps, each
+--- one a fresh encounter roll. Bounded by cycles, not frames, and every cycle is a phase line.
+local GRASS_LOOP = { "Right", "Down", "Left", "Up" }   -- from (12,37), staying in the band
+local GRASS_ORIGIN = { 12, 37 }
+-- WHERE THE LOOP IS, ACROSS CALLS. An encounter interrupts the square wherever it fires, and
+-- the next hunt used to restart at step 1 from THERE: interrupted at (13,37), the next Right
+-- walks to (14,37), which is not grass (Codex cx-bc675fa4). The loop is a cycle, so resuming at
+-- the step the player is actually standing on is the whole fix; the origin check below is the
+-- belt to that braces.
+local grass_step = 1
+
+local function hunt_encounter(cp, label, cycles)
+    local start_map = play.map(cp)
+    -- Re-anchor if we are not on one of the square's four tiles at all (a whiteout recovery or
+    -- a leg that walked here by another route).
+    local px, py = G.pos(cp)
+    local on_square = (px == 12 or px == 13) and (py == 37 or py == 38)
+    if not on_square then
+        if not play.wait_at(cp, GRASS_ORIGIN[1], GRASS_ORIGIN[2], 4) then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "%s: the grass hunt starts at %s, which is not on the pinned square "
+                .. "(12..13,37..38)", label, play.at(cp)))
+        end
+        grass_step = 1
+    end
+    for cycle = 1, (cycles or 40) do
+        for _ = 1, #GRASS_LOOP do
+            local dir = GRASS_LOOP[grass_step]
+            grass_step = (grass_step % #GRASS_LOOP) + 1
+            if play.in_battle(cp) then
+                -- Leave grass_step pointing at the step we did NOT take, so the next hunt
+                -- resumes the square instead of walking off its edge.
+                grass_step = ((grass_step - 2) % #GRASS_LOOP) + 1
+                G.phase("encounter-found", string.format("%s: cycle %d at %s",
+                                                         label, cycle, play.at(cp)))
+                return true
+            end
+            -- enc = false: THIS leg owns the battle it is hunting for, so the walker must not
+            -- absorb it. A step that cannot move (the loop is a closed square on open grass)
+            -- is a real problem, so say so rather than spinning.
+            if not play.step(cp, dir, start_map, nil, false) then
+                G.shot("stuck")
+                G.finish(false, string.format("%s: the grass loop stalled on %s at %s",
+                                              label, dir, play.at(cp)))
+            end
+        end
+        if cycle % 8 == 0 then
+            G.phase("hunting", string.format("%s: %d cycles, still no encounter at %s",
+                                             label, cycle, play.at(cp)))
+        end
+    end
+    return play.in_battle(cp)
+end
 
 --- Walk out of the house a whiteout put us in, back to Pallet Town's door-exit tile (6,9) --
 --- the tile every town path already starts from. Each leg's own `recover` continues from here.
 local function recover_to_pallet_town(cp)
-    if play.mapid(cp) ~= HEAL_MAP then
+    if play.map(cp) ~= HEAL_MAP then
         G.shot("stuck")
         G.finish(false, string.format(
             "whiteout recovery: expected the heal map %d, found %d at %s",
-            HEAL_MAP, play.mapid(cp), play.at(cp)))
+            HEAL_MAP, play.map(cp), play.at(cp)))
     end
     play.follow(cp, "heal_house_to_door", "whiteout-recovery")
     if not play.enter_warp(cp, "Down", 30) then
@@ -399,18 +554,18 @@ LEGS[#LEGS + 1] = {
         -- ON_FRAME ChooseStarterScene fires immediately (scene==1) — more scripted dialogue and
         -- an applymovement walk that parks the player at (6,4). No joypad steering happens or
         -- would do anything during this; only A to clear message boxes.
-        local town_map = play.mapid(cp)
+        local town_map = play.map(cp)
         play.follow(cp, "town_start_to_oak_trigger", "starter")
         local reached_lab = false
         for _ = 1, 6000 do
-            if play.mapid(cp) ~= town_map then reached_lab = true; break end
+            if play.map(cp) ~= town_map then reached_lab = true; break end
             G.tap("A", 2, 10)
         end
         if not reached_lab then
             G.shot("stuck")
             G.finish(false, "starter: Oak's intercept never warped the player into the lab")
         end
-        G.phase("in-lab", string.format("map=%d at=(%d,%d)", play.mapid(cp), G.pos(cp)))
+        G.phase("in-lab", play.where(cp))
         -- GROUND TRUTH, not position/idle guessing (PHYSICAL runs 4-7: position (6,4) + script
         -- idle + field controls unlocked was NOT sufficient — Oak was still talking). scripts.inc
         -- (ChooseStarterScene) only reaches `setvar VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB,
@@ -578,17 +733,17 @@ LEGS[#LEGS + 1] = {
         "data/tilesets/secondary/lab/metatile_attributes.bin (metatiles 656-658 at 5..7,12: behavior 0x0 = MB_NORMAL, not a metatile-driven warp)",
     },
     run = function(cp)
-        local lab_map = play.mapid(cp)
+        local lab_map = play.map(cp)
         play.follow(cp, "rival_row_to_lab_exit", "leave_lab_for_parcel")
         -- DIAGNOSTIC (run 11 stalled here: "map never changed from 1027" after landing on
         -- (6,12), a collision=0/MB_NORMAL tile — no arrow-warp metatile behavior, yet a plain
         -- walk-onto did not fire the warp). Log the live object vs SaveBlock1.pos before trying
         -- the fix, the same cross-check that caught the starter leg's stale-position bug.
         do
-            local ox, oy = play.obj_pos()
+            local ox, oy = play.obj_pos(0)
             local sx, sy = G.pos(cp)   -- multi-return: capture first (a bare G.pos(cp) mid-list drops sy)
             G.phase("at-lab-exit", string.format(
-                "map=%d sb1=(%d,%d) obj0=(%d,%d) facing=%d", play.mapid(cp), sx, sy, ox, oy, play.obj_facing()))
+                "map=%s sb1=(%d,%d) obj0=(%d,%d) facing=%d", tostring(play.map(cp)), sx, sy, ox, oy, play.obj_facing(0)))
         end
         -- FIX: treat this door the same as every OTHER door in this file — a press INTO it,
         -- not a plain walk-onto. (leave_lab_for_parcel's collision-only investigation showed
@@ -598,13 +753,13 @@ LEGS[#LEGS + 1] = {
         -- every exterior door (16,13)/(36,19)/(26,26) elsewhere in this file, all driven by
         -- enter_warp, not require_map_change.)
         if not play.enter_warp(cp, "Down", 20) then
-            local ox2, oy2 = play.obj_pos()
+            local ox2, oy2 = play.obj_pos(0)
             G.shot("stuck")
             G.finish(false, string.format(
                 "leave_lab_for_parcel: the lab exit never fired a warp; obj0=(%d,%d) sb1=(%d,%d)",
                 ox2, oy2, G.pos(cp)))
         end
-        G.phase("outside", string.format("map=%d at=(%d,%d)", play.mapid(cp), G.pos(cp)))
+        G.phase("outside", play.where(cp))
     end,
 }
 
@@ -632,7 +787,7 @@ LEGS[#LEGS + 1] = {
         if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: Route1->ViridianCity crossing never fired") end
         play.follow(cp, "route1_edge_to_mart_door", "parcel_fetch")
         if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: the mart door never fired a warp") end
-        G.phase("in-mart", string.format("map=%d at=(%d,%d)", play.mapid(cp), G.pos(cp)))
+        G.phase("in-mart", play.where(cp))
         -- Let the ON_FRAME script run and clear its own message boxes with A; the scene owns
         -- player movement. wait_scene_settled: idle+unlocked debounced 60 frames, never a
         -- single read (same lesson as the starter/rival-battle scenes).
@@ -731,18 +886,11 @@ LEGS[#LEGS + 1] = {
         play.follow(cp, "route1_south_to_grass_spot", "route1_catch")
         local caught = false
         for encounter = 1, 4 do
-            local entered = false
-            for _ = 1, 400 do
-                if play.in_battle(cp) then entered = true; break end
-                -- oscillate in the two-tile grass gap to keep triggering the per-step encounter
-                -- check without leaving the grass patch (Route1/map.json; the corridor is
-                -- exactly 2 tiles wide here)
-                local dir = (G.spent % 2 == 0) and "Left" or "Right"
-                for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
-            end
-            if not entered then
+            if not hunt_encounter(cp, "route1_catch", 40) then
                 G.shot("stuck")
-                G.finish(false, "route1_catch: no wild encounter after " .. encounter .. " grass cycles")
+                G.finish(false, string.format(
+                    "route1_catch: 40 cycles of the pinned grass loop produced no wild "
+                    .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
             end
             -- RISK (see header): BAG is pinned (Right, A); reaching POKE BALL inside it is not.
             G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG/USE_ITEM(1), pinned bit toggle
@@ -777,15 +925,11 @@ LEGS[#LEGS + 1] = {
         local before = player_faints()
         local fainted = false
         for encounter = 1, 20 do
-            local entered = false
-            for _ = 1, 400 do
-                if play.in_battle(cp) then entered = true; break end
-                local dir = (G.spent % 2 == 0) and "Left" or "Right"
-                for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
-            end
-            if not entered then
+            if not hunt_encounter(cp, "route1_faint", 40) then
                 G.shot("stuck")
-                G.finish(false, "route1_faint: no wild encounter after " .. encounter .. " grass cycles")
+                G.finish(false, string.format(
+                    "route1_faint: 40 cycles of the pinned grass loop produced no wild "
+                    .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
             end
             -- Keep attacking (RISK, see header) until this battle ends, then check the faint
             -- counter — a strong starter may just keep winning; bounded at 20 encounters.
@@ -924,6 +1068,13 @@ local function run()
     play.main(LEGS, {
         name   = "gen3_scripted_play",      -- patch/build/gen3_scripted_play_result.txt
         budget = 900000,
+        -- A savestate per FINISHED leg (slink_fr_<leg>.State). The FR checkpoint negatives
+        -- (lua/tests/probe_gen3_checkpoint.lua) need an in-battle-reachable state and a door
+        -- state, and tests/fixtures/gen3/firered_town.sav has party=0 -- no wild battle is
+        -- reachable from it, so this run is the only route there: the state at starter's
+        -- leg-done is one A press from the rival battle, and leave_lab_for_parcel's is the
+        -- lab door. A leg that FAILED saves nothing; a state written mid-failure is a trap.
+        save_states = "slink_fr_",
         -- The fixture's battery is seeded but the field pointer is not sane at cold boot until
         -- the title screen -> CONTINUE has run (gen3_boot_check.lua run():300-320); a leg cannot
         -- read G.pos/G.map before this. It happens BEFORE the observer starts, deliberately: the
@@ -947,6 +1098,7 @@ if (debug.getinfo(1, "S").source or "") == "main" then run() end
 
 return {
     LEGS = LEGS, PATHS = PATHS, play = play,
+    GRASS_LOOP = GRASS_LOOP, GRASS_ORIGIN = GRASS_ORIGIN,
     -- test hooks (Codex review cx-378ce251): the in_battle polarity wrapper and the lab scene
     -- var address arithmetic, both independently checkable without an emulator.
     follow = play.follow,

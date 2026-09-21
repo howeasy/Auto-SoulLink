@@ -1,86 +1,86 @@
--- playlib.lua — the scripted-play runtime every natural-play driver shares (card gen3-P3-C3-9).
+-- playlib.lua — the scripted-play runtime every natural-play driver shares (card gen3-P3-C3-9,
+-- rewritten for Codex review cx-67a6e199, which rejected the first cut as neither
+-- game-agnostic nor fail-closed).
 --
--- WHAT THIS IS. Three drivers (lua/tests/gen3_scripted_play.lua, gen3_rr_scripted_play.lua,
--- gen3_fr_newgame_inputs.lua) each grew their own copy of the same machinery: an ordered LEGS
--- runner, a step/follow walker, a press-into-warp, a debounced scene wait, an A-only battle
--- mash, the shadow-observer block, and the object-event readers. Every copy drifted, and the
--- drift cost lane runs — the in_battle polarity bug, the multi-return-in-format bug and the
--- "leg inherited the previous leg's situation" bug each had to be found and fixed more than
--- once. This module is the single definition of all of it.
+-- WHAT THIS IS. An ordered LEGS runner plus the walking, warping, scene-waiting and
+-- battle-absorbing machinery the drivers used to own private, drifting copies of. Every copy
+-- cost a lane run at least once: the in_battle polarity bug, the multi-return-in-format bug,
+-- the leg-inherits-the-previous-leg's-situation bug, the connection-arrival-row bug.
 --
--- WHAT THIS IS NOT. It knows nothing about any game. Gen 3's helper module
--- (lua/tests/gen3_boot_check.lua) stays exactly what it is — a Gen 3 helper — and playlib
--- never requires it: the driver INJECTS it, along with the handful of game facts below, so a
--- Gen 1 or Gen 2 driver can inject its own reader set and get the same runner for free.
+-- WHAT THIS IS NOT. It knows nothing about any game AND nothing about any host. There is no
+-- `memory`, `joypad`, `client`, `event`, `savestate` or `dofile` in this file: every host call
+-- and every game fact arrives through the injected `H` table, so a Gen 1 or Gen 2 driver binds
+-- its own and gets the same runner. A test can bind a fake and drive the whole thing with no
+-- emulator (tests/unit/test_playlib.py does exactly that).
 --
---   local PL   = dofile(WT .. "/lua/tests/playlib.lua")
---   local play = PL.bind(G, { paths = PATHS, obj_events = 0x02036E38,
---                             party_count_addr = 0x02024029, state_dir = "..." })
+-- THE INJECTED TABLE `H`. Required:
+--   pos(cp) -> x, y                the player's tile
+--   map(cp) -> id | nil            map identity, nil when UNREADABLE. nil is not a map: it is
+--                                  never equal to, and never different from, any other map.
+--   in_battle(cp) -> bool          semantic, already de-polarised by the binding
+--   on_field(cp) -> bool           walkable field, callbacks settled
+--   advance() / idle(n) / tap(btn, hold, gap)      frames and single presses
+--   press(buttons)                 one frame with these buttons held ({ Up = true })
+--   phase(name, detail) / finish(ok, msg) / shot(name) / open(name)      reporting
+--   checkpoint() -> cp, title      the profile the readers close over
+-- Optional, asserted only by the helper that needs one:
+--   scene_quiet(cp) -> bool        field script idle AND player control unlocked
+--   obj_pos(i) -> x, y  /  obj_facing(i)     object-event readers (layout is the binding's)
+--   party_count() -> n
+--   load_state(path) -> ok         savestates
+--   register_frame_end(fn, name) -> id | nil   /  unregister_frame_end(id)
+--   observer(result_path) -> st | nil, err     st.poll(), st.status() (status is REQUIRED)
+--   moving(cp) -> bool             true while the player sprite is mid-step, if the game can
+--                                  say; without it, arrival is judged by the tile holding still
+--   set_budget(n) / speed_max()
 --
--- THE INJECTED HELPER TABLE `H` (Gen 3 drivers pass gen3_boot_check's module; any table with
--- these names works). playlib calls only these, never a Gen 3 symbol:
---   H.pos(cp) -> x, y            player tile coordinates
---   H.map(cp) -> group, num      map identity, negative when unreadable
---   H.pred_ok(cp, name) -> bool  a named predicate from the checkpoint pack
---   H.advance() / H.idle(n) / H.tap(btn, hold, gap)      frame + input primitives
---   H.phase(name, detail) / H.finish(ok, msg) / H.shot(name) / H.open(name)   reporting
---   H.checkpoint() -> cp, title  the pack the predicates come from
---   H.budget                     the runaway frame cap H.advance() enforces
---
--- THE INJECTED GAME FACTS (`opts`), all optional — a helper that needs one it was not given
--- says so instead of reading a wrong address:
---   paths             the driver's precomputed PATHS table (for follow)
---   obj_events        the object-event array base (obj_pos / obj_facing)
---   party_count_addr  the party-count byte
---   state_dir         where bare savestate names resolve
---   heal_map          the map id a whiteout warps the player to (enables whiteout recovery)
---   max_recoveries    whiteout restarts allowed per leg (default 2)
---   battle            a game's own "fight this battle to its end" driver, if A-only is not it
+-- THE INJECTED `opts`:
+--   paths            the driver's precomputed PATHS table (for follow)
+--   battle(cp, budget) -> bool     how THIS game fights a battle it did not choose. Required
+--                                  before any walk can absorb an encounter: "mash A and hope"
+--                                  is a Gen 3 fact, not a universal one.
+--   clear_dialogue(cp)             how THIS game dismisses a textbox holding the player still
+--   advance_scene(cp)              how THIS game advances one beat of a scripted scene
+--   heal_map         the map id a whiteout warps the player to (enables whiteout recovery)
+--   max_encounters   absorbed battles per path (default 12)
+--   max_recoveries   whiteout restarts per leg (default 2)
+--   state_dir        where bare savestate names resolve
 --
 -- MULTI-RETURN SAFETY. `H.pos(cp)` returns TWO values, so using it anywhere but last in a
 -- string.format argument list silently drops every following argument and the format call
--- errors at run time (PHYSICAL: three lane runs lost to this on 2026-09-21; the lint that
--- catches it lives in tests/unit/test_gen3_scripted_play.py). Every formatting helper here
+-- errors at run time (PHYSICAL: three lane runs lost to this). Every formatting helper here
 -- (`at`, `where`, `obj_at`) returns ONE string, which is the fix rather than the warning.
 
 local M = {}
 
 local DELTA = { Up = { 0, -1 }, Down = { 0, 1 }, Left = { -1, 0 }, Right = { 1, 0 } }
 
---- os.getenv, with the empty string treated as unset (a runner passing an empty variable
---- through means "not set", not "a leg named """).
+--- os.getenv, with the empty string treated as unset. `os` is not a host API: it is Lua's own
+--- standard library, available wherever this runs.
 local function env(name)
     local v = os.getenv(name)
     if v == "" then return nil end
     return v
 end
 
---- Bind the injected helper table + game facts into a play instance. Every returned helper
---- takes `cp` explicitly, exactly as the drivers' own copies did — no hidden per-instance
---- state, so a leg closure behaves identically whether it is driven by the runner or called
---- directly by a test.
 function M.bind(H, opts)
     opts = opts or {}
     local P = { H = H, opts = opts }
 
+    local function need(name)
+        return assert(H[name], "playlib: the binding supplies no H." .. name)
+    end
+
     -- ── identity and formatting ─────────────────────────────────────────────────────────────
 
-    --- group*256+num, UNFILTERED: an unreadable map (H.map returning -1,-1) yields -257 here,
-    --- which compares unequal to every real map id. That is what the walkers want — "the map
-    --- id is no longer what it was" is the signal, and a mid-warp read is exactly that.
-    function P.mapid(cp)
-        local g, n = H.map(cp)
-        return g * 256 + n
-    end
+    --- The map id, or nil when the binding cannot read one. EVERY comparison in this file goes
+    --- through here. The first cut folded "unreadable" into a sentinel number, which compares
+    --- unequal to every real map and so read as "the map changed" — a warp oracle that cannot
+    --- tell those apart reports warps that never happened (Codex cx-67a6e199).
+    function P.map(cp) return H.map(cp) end
 
-    --- ...and the filtered form for callers that must DISTINGUISH "unreadable" from "changed":
-    --- nil when the SaveBlock pointer is not sane. A warp oracle that cannot tell those apart
-    --- reports a map change that never happened (Codex review cx-378ce251).
-    function P.readable_mapid(cp)
-        local g, n = H.map(cp)
-        if g < 0 or n < 0 then return nil end
-        return g * 256 + n
-    end
+    --- Same map, both readable. nil on either side is NOT sameness and NOT change.
+    local function same_map(a, b) return a ~= nil and b ~= nil and a == b end
 
     function P.at(cp)
         local x, y = H.pos(cp)
@@ -88,52 +88,24 @@ function M.bind(H, opts)
     end
 
     function P.where(cp)
-        return string.format("map=%d at=%s", P.mapid(cp), P.at(cp))
+        return string.format("map=%s at=%s", tostring(P.map(cp)), P.at(cp))
     end
 
-    -- ── object-event readers ────────────────────────────────────────────────────────────────
-    -- Object 0 is the player. currentCoords are s16 x/y at +0x10/+0x12 stored +7 (MAP_OFFSET),
-    -- facingDirection is the HIGH nibble at +0x18 (1=down 2=up 3=left 4=right) — pret
-    -- include/global.fieldmap.h struct ObjectEvent. Introduced on FR run 8 to cross-check the
-    -- live object against SaveBlock1.pos when the two disagreed.
-
-    local function obj_base()
-        return assert(opts.obj_events, "playlib: opts.obj_events was not injected")
-    end
-
-    function P.obj_pos(i)
-        local base = obj_base() + (i or 0) * 0x24
-        return memory.read_s16_le(base + 0x10) - 7, memory.read_s16_le(base + 0x12) - 7
-    end
-
-    function P.obj_facing(i)
-        return memory.read_u8(obj_base() + (i or 0) * 0x24 + 0x18) >> 4
-    end
-
+    function P.obj_pos(i) return need("obj_pos")(i) end
+    function P.obj_facing(i) return need("obj_facing")(i) end
     function P.obj_at(i)
         local x, y = P.obj_pos(i)
         return string.format("(%d,%d)", x, y)
     end
+    function P.party_count() return need("party_count")() end
 
     -- ── battle / field state ────────────────────────────────────────────────────────────────
 
-    --- POLARITY (Codex review cx-378ce251). The `in_battle` predicate row is a MASK plus an
-    --- expect of 0, and pred_ok compares (value & mask) == expect — so H.pred_ok(cp,"in_battle")
-    --- is TRUE when we are NOT in a battle. Wrapped here once, for every driver, because
-    --- reading it the other way is what let G.mash pulse Start on the field.
-    function P.in_battle(cp) return not H.pred_ok(cp, "in_battle") end
+    function P.in_battle(cp) return H.in_battle(cp) end
+    function P.on_field(cp) return H.on_field(cp) end
 
-    function P.on_field(cp)
-        return H.pred_ok(cp, "in_battle") and H.pred_ok(cp, "callback2")
-    end
-
-    function P.party_count()
-        return memory.read_u8(assert(opts.party_count_addr,
-                                     "playlib: opts.party_count_addr was not injected"))
-    end
-
-    --- A-only mash, for use INSIDE a battle and in menus. Deliberately NOT gen3_boot_check's
-    --- G.mash, which pulses Start every 16 frames: on the field that opens the START menu.
+    --- A-only mash. Deliberately not a helper that also pulses Start: on the field that opens
+    --- the START menu, which is what the in_battle polarity bug turned into a lane failure.
     function P.mash_a(taps, stop)
         for _ = 1, taps do
             if stop and stop() then return true end
@@ -142,89 +114,139 @@ function M.bind(H, opts)
         return stop and stop() or false
     end
 
-    -- ── walking ─────────────────────────────────────────────────────────────────────────────
-
-    --- Fight a battle that started on its own to its end, A-only, then wait out the post-battle
-    --- script. The default is the generic one: the action cursor resets to FIGHT each battle, so
-    --- A, A is move slot 1, and A keeps advancing the text afterwards. A game whose battles need
-    --- more injects `opts.battle`.
-    function P.fight_through(cp, budget)
-        if opts.battle then return opts.battle(cp) end
-        if not P.mash_a(budget or 1200, function() return not P.in_battle(cp) end) then
-            return false
+    --- Clear a textbox that is holding the player still. Which button does that is a per-game
+    --- fact, so the binding supplies it, exactly like opts.battle.
+    function P.clear_dialogue(cp)
+        local clear = opts.clear_dialogue
+        if not clear then
+            H.finish(false, "playlib: a step stalled on a textbox, but the binding supplied no "
+                         .. "opts.clear_dialogue — which button dismisses one is a per-game fact")
         end
-        return P.wait_scene_settled(cp, 1800)
+        return clear(cp)
     end
 
-    --- A wild encounter that starts MID-STEP is not a stalled step and must not be treated as
-    --- one: mashing A at a battle intro does nothing for the walk, and the path is still
-    --- perfectly good afterwards. PHYSICAL (FR lane run 12): "parcel_fetch
-    --- (route1_south_to_north_edge): step Left stalled at (9,32)" on a tall-grass tile whose
-    --- collision is 0 and whose BFS path is unambiguous — the stall WAS an encounter.
+    --- Advance a scripted scene by one beat.
+    function P.advance_scene(cp)
+        local adv = opts.advance_scene
+        if not adv then
+            H.finish(false, "playlib: a scripted scene needs advancing, but the binding supplied "
+                         .. "no opts.advance_scene")
+        end
+        return adv(cp)
+    end
+
+    --- Fight a battle that started on its own. The POLICY is the binding's: which buttons pick
+    --- a move, whether a menu must be waited for, what counts as over. playlib only knows that
+    --- a battle must end before a walk can continue, and refuses to guess.
+    function P.fight_through(cp, budget)
+        local fight = opts.battle
+        if not fight then
+            H.finish(false, "playlib: a wild battle interrupted a walk, but the binding "
+                         .. "supplied no opts.battle — how to fight is a per-game fact")
+        end
+        return fight(cp, budget or 1200)
+    end
+
+    -- ── walking ─────────────────────────────────────────────────────────────────────────────
+
+    --- Is the player mid-step? A binding that has no such signal says "unknown", and every
+    --- caller falls back to watching the position hold still instead.
+    function P.moving(cp)
+        if not H.moving then return false end
+        return H.moving(cp) and true or false
+    end
+
+    --- Wait, bounded, for the player to come to REST on (x, y).
     ---
-    --- So: fight it, then continue the SAME path from wherever the player stands. A battle does
-    --- not displace the player, so an unchanged position is required, not hoped for — the case
-    --- that violates it is a whiteout, which teleports the player to a Pokémon Center and makes
-    --- every remaining direction in the path meaningless. Bounded per path, and each encounter
-    --- is reported: these are natural battle_begin/battle_end/faint sources the observer wants.
-    function P.handle_encounter(cp, enc, dir)
-        enc = enc or { n = 0 }
+    --- A door or warp exit ANIMATES the player one tile: the map id and the callbacks settle
+    --- while the sprite is still sliding, so a position read taken the instant a leg starts can
+    --- be one tile short of where the engine is putting them. PHYSICAL (FR run 16):
+    --- leave_lab_for_parcel reported leg-done at frame 12326 and parcel_fetch immediately
+    --- refused with "start tile (16,13) is not the path's from (16,14)". The step was IN
+    --- FLIGHT, not wrong — run 15 passed the same walk only because nothing checked.
+    ---
+    --- Resting means the tile matches AND is still matching a few frames later (or the binding
+    --- says the object has stopped). A single equal read mid-slide is not arrival.
+    function P.wait_at(cp, x, y, budget)
+        local stable = 0
+        for _ = 1, (budget or 120) do
+            local px, py = H.pos(cp)
+            if px == x and py == y and not P.moving(cp) then
+                stable = stable + 1
+                if stable >= 4 then return true end
+            else
+                stable = 0
+            end
+            H.advance()
+        end
+        local px, py = H.pos(cp)
+        return px == x and py == y
+    end
+
+    local function new_budget()
+        return { n = 0, max = opts.max_encounters or 12 }
+    end
+
+    --- A wild encounter that starts MID-STEP is not a stalled step. PHYSICAL (FR lane run 12):
+    --- "step Left stalled at (9,32)" on a tall-grass tile whose collision is 0 — the stall WAS
+    --- an encounter. Fight it, then continue the same path from where the player stands.
+    ---
+    --- `before` is the (map, x, y) captured before the battle. A battle does not move the
+    --- player OR change the map; anything that did both-or-either is a displacement. The named
+    --- case is a whiteout, which the runner can recover from; everything else is fatal, because
+    --- nothing here can say what it was.
+    function P.handle_encounter(cp, enc, dir, before)
+        enc = enc or new_budget()
         local limit = enc.max or opts.max_encounters or 12
         enc.n = enc.n + 1
-        local ex, ey = H.pos(cp)
-        H.phase("encounter", string.format("#%d during step %s at (%d,%d)", enc.n, dir, ex, ey))
+        H.phase("encounter", string.format("#%d during step %s at %s", enc.n, dir, P.at(cp)))
         if enc.n > limit then
             H.shot("stuck")
             H.finish(false, string.format(
-                "more than %d wild encounters on one path (the last at (%d,%d)) — the walk is "
-                .. "not making progress through the grass", limit, ex, ey))
+                "more than %d wild encounters on one path (the last at %s) — the walk is not "
+                .. "making progress through the grass", limit, P.at(cp)))
         end
         if not P.fight_through(cp) then
             H.shot("stuck")
-            H.finish(false, string.format("encounter #%d never ended (at (%d,%d))", enc.n, ex, ey))
+            H.finish(false, string.format("encounter #%d never ended (at %s)", enc.n, P.at(cp)))
         end
+
         local nx, ny = H.pos(cp)
-        if nx ~= ex or ny ~= ey then
-            -- A WHITEOUT is a displacement we can name, and therefore one we can recover from:
-            -- the engine warps the player to their heal location. PHYSICAL (FR lane run 14):
-            -- encounter #2 at (12,26), the starter fainted, and the player woke at (8,5) on the
-            -- heal map -- the observer's first natural faint and whiteout, so the walk did its
-            -- job even though the path died.
-            --
-            -- Raised, not finished: only the RUNNER knows which leg was interrupted and how to
-            -- put the player back. Anything else that moves the player mid-battle is still
-            -- fatal, because nothing here can say what it was.
-            if opts.heal_map and P.mapid(cp) == opts.heal_map then
+        local nmap = P.map(cp)
+        local moved = (nx ~= before.x or ny ~= before.y)
+        -- A MAP change with identical coordinates is still a displacement: (8,5) in the house
+        -- is not (8,5) on Route 1, and comparing coordinates alone would have called it fine.
+        local warped = not same_map(nmap, before.map)
+        if moved or warped then
+            if opts.heal_map and nmap == opts.heal_map then
                 H.phase("whiteout", string.format(
-                    "encounter #%d: fainted at (%d,%d), woke on the heal map %d at (%d,%d)",
-                    enc.n, ex, ey, opts.heal_map, nx, ny))
-                error({ whiteout = true, map = P.mapid(cp), x = nx, y = ny,
-                        from_x = ex, from_y = ey }, 0)
+                    "encounter #%d: fainted on map %s at (%d,%d), woke on the heal map %s at %s",
+                    enc.n, tostring(before.map), before.x, before.y,
+                    tostring(opts.heal_map), P.at(cp)))
+                error({ whiteout = true, map = nmap, from_map = before.map,
+                        from_x = before.x, from_y = before.y }, 0)
             end
             H.shot("stuck")
             H.finish(false, string.format(
-                "encounter #%d moved the player from (%d,%d) to (%d,%d) — a battle must not "
-                .. "displace the player, and the destination is not the heal map, so this was "
+                "encounter #%d displaced the player: map %s at (%d,%d) -> map %s at %s. A "
+                .. "battle moves neither, and the destination is not the heal map, so this was "
                 .. "not a whiteout either; the rest of the path no longer applies",
-                enc.n, ex, ey, nx, ny))
+                enc.n, tostring(before.map), before.x, before.y, tostring(nmap), P.at(cp)))
         end
-        H.phase("encounter-done", string.format("#%d resolved at (%d,%d)", enc.n, nx, ny))
+        H.phase("encounter-done", string.format("#%d resolved at %s", enc.n, P.at(cp)))
     end
 
     --- One step in `dir`, verified against the position reader, bounded at 6 attempts.
     ---
-    --- A step that does not move the player is NOT a failure on the first try: a textbox or a
-    --- field script owns the player (Radical Red adds intro dialogue where FireRed has none),
-    --- so the recovery is A presses followed by a retry of the SAME step.
+    --- `want` chooses the success test: without it ANY movement counts (a ledge hop still made
+    --- progress along a BFS path), with it the step must land exactly one tile along `dir`.
+    --- A readable map change always counts: the tile we walked onto was a warp.
     ---
-    --- `want` chooses the success test. Without it, ANY movement counts (a ledge hop or a
-    --- forced step still made progress along a BFS path); with it, the step must land exactly
-    --- one tile along `dir` from where it started — the stricter form the new-game walk uses,
-    --- where an unexpected displacement means the intro went wrong. A map change always counts:
-    --- the warp tile took us.
-    --- `enc` is the per-path encounter budget ({ n = 0, max = N }); pass `false` to refuse to
-    --- absorb battles at all (a path whose own leg owns the battle that follows it).
+    --- `enc` is the encounter budget. Omitted, ONE is allocated for this call — not one per
+    --- encounter, which is what the first cut did, quietly making the bound meaningless.
+    --- `false` refuses to absorb battles at all (a path whose leg owns the battle after it).
     function P.step(cp, dir, start_map, want, enc)
+        if enc == nil then enc = new_budget() end
         local x, y
         local wx, wy
         local function rebase()
@@ -235,53 +257,69 @@ function M.bind(H, opts)
         local attempts = 0
         while attempts < 6 do
             attempts = attempts + 1
-            for _ = 1, 12 do joypad.set({ [dir] = true }); H.advance() end
+            for _ = 1, 12 do H.press({ [dir] = true }) end
             H.idle(4)
-            -- Judge the step BEFORE dealing with any battle: an encounter typically fires as
-            -- the player lands on the new tile, so the step has usually already succeeded and
-            -- re-walking it would put us one tile past the path.
+            -- Judge the step BEFORE dealing with a battle: an encounter fires as the player
+            -- lands, so the step has usually already succeeded and re-walking it would put us
+            -- one tile past the path.
+            -- UNREADABLE IS NEVER PROGRESS. H.pos can report (-1,-1) exactly when the map id
+            -- is unreadable, so a tile that merely went unreadable would otherwise read as a
+            -- move, and a readable map compared against a nil start would read as a warp
+            -- (Codex cx-bc675fa4). No judgement is made on an attempt we cannot read.
+            local now = P.map(cp)
             local nx, ny = H.pos(cp)
-            local moved
-            if want then moved = (nx == wx and ny == wy) else moved = (nx ~= x or ny ~= y) end
+            local readable = (now ~= nil)
+            local moved = false
+            if readable then
+                if want then moved = (nx == wx and ny == wy) else moved = (nx ~= x or ny ~= y) end
+            end
             if enc ~= false and P.in_battle(cp) then
-                -- An encounter is not a stalled attempt: fight it, then carry on.
-                P.handle_encounter(cp, enc, dir)
+                -- The displacement baseline is where the battle STARTED, which is where the
+                -- step just landed — not the tile we stepped off. A battle does not move the
+                -- player from where it found them; the step before it is allowed to.
+                P.handle_encounter(cp, enc, dir, { map = P.map(cp), x = nx, y = ny })
                 if moved then return true end
                 rebase()
                 attempts = attempts - 1
             else
                 if moved then return true end
-                if P.mapid(cp) ~= start_map then return true end
+                -- A warp needs BOTH ids readable: "changed" is a statement about two maps.
+                if readable and start_map ~= nil and now ~= start_map then return true end
                 -- A textbox or field script owns the player (Radical Red adds intro dialogue
                 -- where FireRed has none): clear it, then retry the SAME step.
-                for _ = 1, 4 do H.tap("A", 3, 13) end
+                P.clear_dialogue(cp)
                 if want then rebase() end
             end
         end
         return false
     end
 
-    --- Follow a precomputed entry of the injected `paths` table, one step per direction.
-    --- Returns as soon as the map changes (the path walked into a warp).
-    ---
-    --- A precomputed path is only valid FROM ITS START TILE: this refuses loudly rather than
-    --- walking a wrong-offset route into collision (the first FR lane run stalled exactly so).
+    --- Follow a precomputed entry of the injected `paths` table. Returns as soon as the map
+    --- changes (the path walked into a warp); otherwise the final tile MUST be the path's `to`
+    --- — a walk that ended somewhere else did not walk the path, however many steps it took.
     function P.follow(cp, path_name, label)
         local paths = assert(opts.paths, "playlib: opts.paths was not injected")
         local p = assert(paths[path_name], "no PATHS entry " .. tostring(path_name))
-        local start_map = P.mapid(cp)
-        -- One encounter budget PER PATH: a grass crossing may be interrupted several times, but
-        -- a walk that keeps being jumped is not making progress. `p.battles = false` opts a path
-        -- out entirely (its leg owns the battle that follows it).
-        -- NOT `x and false or y`: in Lua that evaluates to y, because `false` is falsy. An
-        -- opt-out has to be written out.
+        local start_map = P.map(cp)
+        if start_map == nil then
+            H.shot("stuck")
+            H.finish(false, string.format("%s (%s): the map id is unreadable before the walk",
+                                          label, path_name))
+        end
         local enc = { n = 0, max = p.max_encounters or opts.max_encounters or 12 }
         if p.battles == false then enc = false end
+        -- Give an in-flight step time to land before calling the start tile wrong (see
+        -- wait_at: FR run 16 died on a door-exit animation, not on a bad path).
         local sx, sy = H.pos(cp)
+        if sx ~= p.from[1] or sy ~= p.from[2] then
+            P.wait_at(cp, p.from[1], p.from[2], 120)
+            sx, sy = H.pos(cp)
+        end
         if sx ~= p.from[1] or sy ~= p.from[2] then
             H.shot("stuck")
             H.finish(false, string.format(
-                "%s (%s): start tile (%d,%d) is not the path's from (%d,%d)",
+                "%s (%s): start tile (%d,%d) is not the path's from (%d,%d), and 120 frames "
+                .. "were not enough for a step in flight to land there",
                 label, path_name, sx, sy, p.from[1], p.from[2]))
         end
         for _, dir in ipairs(p.dirs) do
@@ -290,53 +328,84 @@ function M.bind(H, opts)
                 H.finish(false, string.format("%s (%s): step %s stalled at %s",
                                               label, path_name, dir, P.at(cp)))
             end
-            if P.mapid(cp) ~= start_map then return end
+            local now = P.map(cp)
+            if now ~= nil and not same_map(now, start_map) then return end
+        end
+        if P.map(cp) == nil then
+            H.shot("stuck")
+            H.finish(false, string.format(
+                "%s (%s): the walk ended with the map id unreadable, so where it ended cannot "
+                .. "be said at all", label, path_name))
+        end
+        local ex, ey = H.pos(cp)
+        if p.to and (ex ~= p.to[1] or ey ~= p.to[2]) then
+            H.shot("stuck")
+            H.finish(false, string.format(
+                "%s (%s): the walk ended at (%d,%d), not the path's to (%d,%d)",
+                label, path_name, ex, ey, p.to[1], p.to[2]))
         end
     end
 
-    --- Press `dir` repeatedly into an arrow warp until the map changes, then wait out the fade.
-    --- FRLG stairs and doors are ARROW warps: the warp fires when the player presses INTO the
-    --- warp tile from the adjacent walkable tile, so this is a press, not a walk.
+    --- Press `dir` into a warp until the map changes, then wait for the field to settle.
+    --- Returns ok, detail.
+    ---
+    --- The single definition: the RR driver grew a stronger copy of this (valid before/after
+    --- ids plus a settle requirement) while the shared one still accepted the unreadable-map
+    --- sentinel as a change. This is the stronger one, and the copy is gone.
     function P.enter_warp(cp, dir, budget)
-        local from_map = P.mapid(cp)
-        for _ = 1, (budget or 20) do
-            if P.mapid(cp) ~= from_map then break end
-            for _ = 1, 16 do joypad.set({ [dir] = true }); H.advance() end
-            if P.mapid(cp) == from_map then for _ = 1, 2 do H.tap("A", 3, 13) end end
+        local from = P.map(cp)
+        if from == nil then
+            return false, "the map id is unreadable before the warp"
         end
-        for _ = 1, 600 do
-            if P.mapid(cp) ~= from_map and H.pred_ok(cp, "palette_fade_active") then
+        for _ = 1, (budget or 20) do
+            local now = P.map(cp)
+            if now ~= nil and now ~= from then break end
+            for _ = 1, 16 do H.press({ [dir] = true }) end
+            if same_map(P.map(cp), from) then for _ = 1, 2 do H.tap("A", 3, 13) end end
+        end
+        local to = P.map(cp)
+        if to == nil then
+            return false, string.format("the map id went unreadable and never came back "
+                                     .. "(from %s)", tostring(from))
+        end
+        if to == from then
+            return false, string.format("map never changed from %s", tostring(from))
+        end
+        for _ = 1, 900 do
+            if P.on_field(cp) and P.map(cp) ~= nil then
                 H.idle(16)
-                return true
+                -- Recheck AFTER the settle: those 16 frames are exactly when a second fade or
+                -- an on-entry script can take the field back, and returning success from the
+                -- read before them would be reporting the past (Codex cx-bc675fa4).
+                if P.on_field(cp) and P.map(cp) ~= nil then
+                    return true, string.format("map %s -> %s", tostring(from), tostring(P.map(cp)))
+                end
             end
             H.advance()
         end
-        return false
+        return false, string.format("map %s -> %s but the field never settled",
+                                    tostring(from), tostring(to))
     end
 
     -- ── scripted scenes ─────────────────────────────────────────────────────────────────────
 
-    --- Wait through a scripted scene: A-only while script_context_status/field_controls_locked
-    --- are not both quiet, then require that quiet to HOLD for `stable` consecutive frames (no
-    --- further input) before trusting it — never a single read.
-    ---
-    --- PHYSICAL lesson, repeated across FR runs 4-7 (starter scene) and 11 (rival battle): both
-    --- predicates can read "done" for a frame or two mid-scene. An optional `also()` predicate
-    --- adds extra ground truth (a scene var, an object position).
+    --- Wait through a scripted scene: A-only while the scene is busy, then require quiet to
+    --- HOLD for `stable` consecutive frames before trusting it — never a single read. PHYSICAL
+    --- lesson from FR runs 4-7 and 11: the quiet predicates flicker mid-scene.
     function P.wait_scene_settled(cp, budget, also, stable_frames)
-        local need = stable_frames or 60
+        local quiet_fn = need("scene_quiet")
+        local want = stable_frames or 60
         local stable = 0
         for _ = 1, (budget or 6000) do
-            local quiet = H.pred_ok(cp, "script_context_status")
-                      and H.pred_ok(cp, "field_controls_locked")
+            local quiet = quiet_fn(cp)
             if quiet and also then quiet = also() end
             if quiet then
                 stable = stable + 1
-                if stable >= need then return true end
+                if stable >= want then return true end
                 H.advance()
             else
                 stable = 0
-                H.tap("A", 2, 10)
+                P.advance_scene(cp)
             end
         end
         return false
@@ -344,8 +413,6 @@ function M.bind(H, opts)
 
     -- ── savestates ──────────────────────────────────────────────────────────────────────────
 
-    --- An absolute path passes through; a bare file name resolves against SLINK_STATE_DIR, or
-    --- the injected default.
     function P.state_path(name)
         if not name or name == "" then return nil end
         if name:find("[/\\]") then return name end
@@ -356,40 +423,21 @@ function M.bind(H, opts)
 
     -- ── the runner ──────────────────────────────────────────────────────────────────────────
 
-    --- Run an ordered LEGS table.
-    ---
-    --- Leg contract:
-    ---   name         unique; the resume key
-    ---   state        optional savestate the RUNNER loads before this leg — never inherited
-    ---                from whatever the previous leg happened to leave behind (that bug cost
-    ---                an RR lane run: door_warp walked out of wild_faint's leftovers)
-    ---   check(cp)    optional; nil when the situation is right, else the reason it is not
-    ---   open         true for a leg that is documented but not scripted; it is SKIPPED and
-    ---                reported separately, never counted as reached
-    ---   open_reason  why, for an open leg
-    ---   run(cp)      the leg body; absent on an open leg
-    ---
     --- Run one leg, recovering from a whiteout if the leg says how.
-    ---
-    --- A whiteout is the one interruption that is not a failure: the party is healed and the
-    --- player is standing somewhere known. A leg that supplies `recover(cp)` (walk from the
-    --- heal location back to where this leg starts) gets re-run -- `resume(cp)` if it has one,
-    --- because a leg whose opening is a one-time scripted scene cannot replay it, otherwise
-    --- `run(cp)`. Bounded, because a leg that keeps whiting out is not making progress.
     function P.run_leg(cp, leg, o)
         local limit = (o and o.max_recoveries) or opts.max_recoveries or 2
         for attempt = 0, limit do
             local body = (attempt > 0 and leg.resume) or leg.run
             local ok, err = pcall(body, cp)
             if ok then return end
-            -- Anything that is not our own whiteout signal -- including H.finish's abort --
+            -- Anything that is not our own whiteout signal — above all H.finish's abort —
             -- belongs to the caller, untouched.
             if type(err) ~= "table" or not err.whiteout then error(err, 0) end
             if not leg.recover then
                 H.shot("stuck")
                 H.finish(false, string.format(
-                    "%s: whited out at (%d,%d) and declares no recover() — it cannot be "
-                    .. "restarted from the heal location", leg.name, err.from_x, err.from_y))
+                    "%s: whited out on map %s at (%d,%d) and declares no recover()",
+                    leg.name, tostring(err.from_map), err.from_x, err.from_y))
             end
             if attempt >= limit then
                 H.shot("stuck")
@@ -404,22 +452,55 @@ function M.bind(H, opts)
         end
     end
 
-    --- `o` fields: name (result file base), budget, boot(cp), shadow = { script, result },
+    --- The observer's own health. A run that played the whole game and observed NOTHING is
+    --- worse than a failed one, and a swallowed pcall around poll() cannot tell the difference
+    --- (Codex cx-67a6e199). Every one of these states means the receipt is not evidence.
+    local function observer_trouble(st)
+        if not st then return nil end
+        if not st.status then
+            return "the observer exposes no status(), so its health cannot be read at all"
+        end
+        local ok, s = pcall(st.status)
+        if not ok or type(s) ~= "table" then
+            return "status() itself failed: " .. tostring(s)
+        end
+        if s.failed then return "failed=" .. tostring(s.failed) end
+        if s.handler_error then return "handler_error=" .. tostring(s.handler_error) end
+        if s.closed then return "the signal queue is closed" end
+        if (s.rejected or 0) > 0 then
+            return string.format("rejected=%d (a hook fired with a callback address that is "
+                              .. "not its site's)", s.rejected)
+        end
+        if (s.dropped or 0) > 0 then
+            return string.format("dropped=%d (the queue overflowed between drains, so fires "
+                              .. "were lost)", s.dropped)
+        end
+        if (s.registered or 0) < 1 then return "registered=0 (no site was hooked at all)" end
+        return nil
+    end
+
+    --- `o` fields: name, budget, boot(cp), shadow = { result, name },
+    --- save_states (a filename PREFIX: each finished leg is saved as <prefix><leg>.State),
+    --- save_states (a filename PREFIX: each finished leg is saved as <prefix><leg>.State),
     --- resume_env (default SLINK_GEN3_PLAY_FROM), state_env (default SLINK_STATE),
-    --- max_recoveries (default 2).
+    --- max_recoveries.
     ---
-    --- ORDER MATTERS AND IS PART OF THE CONTRACT: boot FIRST, then the observer, then the legs.
-    --- Starting the observer before a cold boot would attribute the title screen's own map
-    --- loads to natural play.
+    --- ORDER IS PART OF THE CONTRACT: validate the resume target, THEN boot, THEN start the
+    --- observer, THEN run the legs. Validating after the boot wastes a cold boot on a typo;
+    --- starting the observer before the boot attributes the title screen's own map loads to
+    --- natural play.
+    ---
+    --- STATE OWNERSHIP. `leg.state` is the leg's own declared starting point and the runner
+    --- loads it before every leg — never inherited from whatever the previous leg left behind.
+    --- An explicit SLINK_STATE is the OPERATOR's override and wins for the first leg that
+    --- actually runs, whether or not that leg declares a state of its own; if the resume target
+    --- is an open (skipped) leg, the override lands on the first runnable leg after it. It
+    --- applies exactly once.
     function P.main(LEGS, o)
         o = o or {}
         H.open(o.name)
-        pcall(client.speedmode, 6399)
-        if o.budget then H.budget = o.budget end
-        local cp, title = H.checkpoint()
-        H.phase("start", "title=" .. tostring(title))
-
-        if o.boot then o.boot(cp) end
+        if H.speed_max then pcall(H.speed_max) end
+        if o.budget and H.set_budget then H.set_budget(o.budget) end
 
         local resume_env = o.resume_env or "SLINK_GEN3_PLAY_FROM"
         local from_idx = 1
@@ -432,48 +513,66 @@ function M.bind(H, opts)
             if not found then
                 H.finish(false, resume_env .. " names no leg: " .. play_from)
             end
-            H.phase("resume", "from=" .. play_from)
         end
 
-        -- The shadow observer, read-only, beside the driver when SLINK_SHADOW is set (same
-        -- block shape as lua/tests/duo/duo_main.lua). A driver that ran the whole play and
-        -- silently observed NOTHING is worse than a failure, so a failed dofile, a failed
-        -- start and the FIRST poll error are all fatal rather than a logged shrug.
-        local shadow_err = nil
+        local cp, title = H.checkpoint()
+        H.phase("start", "title=" .. tostring(title))
+        if play_from then H.phase("resume", "from=" .. play_from) end
+
+        if o.boot then o.boot(cp) end
+
+        local shadow_err, observer, frame_hook = nil, nil, nil
         if o.shadow and os.getenv("SLINK_SHADOW") then
-            local okshd, shd = pcall(dofile, o.shadow.script)
-            if not okshd or not shd then
-                H.finish(false, "shadow: dofile of " .. tostring(o.shadow.script)
-                             .. " failed: " .. tostring(shd))
+            local make = need("observer")
+            local st, err = make(o.shadow.result)
+            if not st then
+                H.finish(false, "shadow: the observer did not start: " .. tostring(err))
             end
-            local okst, st = pcall(shd.start,
-                                   { duo = { result = o.shadow.result, player = "a" } })
-            if not okst or not st then
-                H.finish(false, "shadow: observer start failed: " .. tostring(st))
+            observer = st
+            local trouble = observer_trouble(st)
+            if trouble then
+                H.finish(false, "shadow: the observer is unhealthy at startup: " .. trouble)
             end
-            H.phase("shadow", "observer started admitted_by=" .. tostring(st.admitted_by))
-            event.onframeend(function()
+            frame_hook = need("register_frame_end")(function()
                 if shadow_err then return end       -- report the FIRST error, stop retrying
-                local ok, err = pcall(st.poll)
-                if not ok then shadow_err = tostring(err) end
+                local ok, err2 = pcall(st.poll)
+                if not ok then shadow_err = tostring(err2) end
             end, o.shadow.name or "SLink-play-shadow-poll")
+            if not frame_hook then
+                H.finish(false, "shadow: the frame-end poll could not be registered, so the "
+                             .. "observer would never drain")
+            end
+            H.phase("shadow", "observer started " .. tostring(st.detail or ""))
         end
 
-        -- An explicit state overrides the FIRST leg's declared one (an operator trying a
-        -- different capture); every later leg loads exactly what it declares.
-        local override = P.state_path(env(o.state_env or "SLINK_STATE"))
+        local function observer_ok(where)
+            if shadow_err then
+                H.finish(false, "shadow: poll failed" .. where .. ": " .. shadow_err)
+            end
+            local trouble = observer and observer_trouble(observer)
+            if trouble then
+                H.finish(false, "shadow: the observer is unhealthy" .. where .. ": " .. trouble)
+            end
+        end
 
+        local override = P.state_path(env(o.state_env or "SLINK_STATE"))
         local reached, skipped = {}, {}
+
+        -- Everything from here runs inside a pcall so the frame-end hook is ALWAYS removed:
+        -- a failing leg, a refused precondition and an unhealthy observer all raise, and a
+        -- hook that outlives the run keeps polling a finished observer (Codex cx-bc675fa4).
+        local function body()
         for i = from_idx, #LEGS do
             local leg = LEGS[i]
             if leg.open then
                 H.phase("skip-open", leg.name .. ": " .. tostring(leg.open_reason))
                 skipped[#skipped + 1] = leg.name
             else
-                if leg.state then
-                    local state = (i == from_idx and override) or P.state_path(leg.state)
-                    if not state or not pcall(savestate.load, state) then
-                        H.finish(false, string.format("%s: savestate.load failed: %s",
+                local state = override or P.state_path(leg.state)
+                override = nil                        -- the operator's override is used once
+                if state then
+                    if not need("load_state")(state) then
+                        H.finish(false, string.format("%s: could not load the savestate %s",
                                                       leg.name, tostring(state)))
                     end
                     H.idle(30)
@@ -486,17 +585,38 @@ function M.bind(H, opts)
                 end
                 H.phase("leg-start", leg.name)
                 P.run_leg(cp, leg, o)
-                if shadow_err then
-                    H.finish(false, "shadow: poll failed during " .. leg.name .. ": " .. shadow_err)
+                observer_ok(" during " .. leg.name)
+                -- SAVE AFTER A LEG THAT FINISHED, AND ONLY THEN. These states are the only
+                -- route to situations a fixture cannot reach: the FR checkpoint negatives need
+                -- an in-battle-reachable state and a door state, and the firered_town fixture
+                -- has party=0, so no wild battle exists from it. A leg that FAILED never gets
+                -- here, which is the point -- a state saved mid-failure would be a trap.
+                if o.save_states and H.save_state then
+                    local path = P.state_path(string.format("%s%s.State",
+                                                            o.save_states, leg.name))
+                    if path and H.save_state(path) then
+                        H.phase("leg-state-saved", string.format("%s -> %s", leg.name, path))
+                    else
+                        H.phase("leg-state-saved", string.format(
+                            "%s: could not write %s (continuing; the run is the artifact, the "
+                            .. "state is a convenience)", leg.name, tostring(path)))
+                    end
                 end
                 H.phase("leg-done", leg.name)
                 reached[#reached + 1] = leg.name
             end
         end
 
-        if shadow_err then H.finish(false, "shadow: poll failed: " .. shadow_err) end
+        observer_ok("")
         H.finish(true, string.format("reached: %s | open (skipped): %s",
                                      table.concat(reached, ","), table.concat(skipped, ",")))
+        end
+
+        local ok, err = pcall(body)
+        if frame_hook and H.unregister_frame_end then
+            pcall(H.unregister_frame_end, frame_hook)
+        end
+        if not ok then error(err, 0) end
     end
 
     return P

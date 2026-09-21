@@ -29,9 +29,29 @@ assert(WT, "SLINK_ROOT unset — launch via tools/gen3_fixtures.py")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")   -- helpers only; it does not self-run
 local PL = dofile(WT .. "/lua/tests/playlib.lua")
 -- The step walker and the press-into-warp come from the shared scripted-play runtime
--- (lua/tests/playlib.lua); this script injects the same Gen 3 helper module the
--- play drivers do. No PATHS table: the two walks below are inline direction lists.
-local play = PL.bind(G, { obj_events = 0x02036E38 })
+-- (lua/tests/playlib.lua). This script binds only what those two need: playlib holds no host
+-- call and no game fact of its own (Codex review cx-67a6e199), and a walk that never fights
+-- needs no battle policy, no observer and no savestates.
+local play = PL.bind({
+    advance = G.advance, idle = G.idle, tap = G.tap, pos = G.pos,
+    phase = G.phase, finish = G.finish, shot = G.shot, open = G.open,
+    checkpoint = G.checkpoint,
+    press = function(buttons) joypad.set(buttons); G.advance() end,
+    map = function(cp)
+        local g, n = G.map(cp)
+        if g < 0 or n < 0 then return nil end
+        return g * 256 + n
+    end,
+    in_battle = function(cp) return not G.pred_ok(cp, "in_battle") end,
+    on_field  = function(cp)
+        return G.pred_ok(cp, "in_battle") and G.pred_ok(cp, "callback2")
+    end,
+}, {
+    -- The stalled-step recovery this walk depends on: RR adds intro dialogue on 2F and on the
+    -- way down to 1F where FireRed has none.
+    clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
+    advance_scene  = function() G.tap("A", 2, 10) end,
+})
 
 G.open("gen3_fr_newgame")
 pcall(client.speedmode, 6399)
@@ -92,9 +112,9 @@ end
 -- MOM's tile blocked. Every step is verified by the SaveBlock1 coordinates; a step that does
 -- not move the player is treated as a textbox (Radical Red adds intro dialogue on 2F and on
 -- the way down to 1F) and cleared with A before the step is retried.
-local function mapid() return play.mapid(cp) end
+local function mapid() return play.map(cp) end
 local start_map = mapid()
-G.phase("walk-out", string.format("map=%d", start_map))
+G.phase("walk-out", string.format("map=%s", tostring(start_map)))
 
 -- FRLG stairs and doors are ARROW warps: the warp fires when the player presses INTO the
 -- warp tile from the adjacent walkable tile (2F stairs at (8-9,2-3) are collision, so the
@@ -108,26 +128,28 @@ G.phase("walk-out", string.format("map=%d", start_map))
 -- impossible indoors, so the walker's encounter absorber never fires here.
 local function leg(name, path, from_map, exit_dir)
     start_map = from_map
-    G.phase(name, string.format("map=%d from=%s", start_map, play.at(cp)))
+    G.phase(name, string.format("map=%s from=%s", tostring(start_map), play.at(cp)))
     for _, dir in ipairs(path) do
-        if not play.step(cp, dir, start_map, true) then
+        -- enc=false: this walk is indoors, where no wild battle can start, so the
+        -- walker must not carry an encounter policy it would never use.
+        if not play.step(cp, dir, start_map, true, false) then
             G.shot("stuck")
-            G.finish(false, string.format("%s: step %s never moved the player at %s map=%d; "
+            G.finish(false, string.format("%s: step %s never moved the player at %s map=%s; "
                                        .. "see patch/build/gen3_stuck.png",
-                                          name, dir, play.at(cp), mapid()))
+                                          name, dir, play.at(cp), tostring(mapid())))
         end
     end
     if play.enter_warp(cp, exit_dir, 20) then return end
     G.shot("stuck")
-    G.finish(false, string.format("%s: end of path, pressed %s, but map is %d (from %d) at %s",
-                                  name, exit_dir, mapid(), from_map, play.at(cp)))
+    G.finish(false, string.format("%s: end of path, pressed %s, but map is %s (from %s) at %s",
+                                  name, exit_dir, tostring(mapid()), tostring(from_map), play.at(cp)))
 end
 
 -- Any intro textbox still open on 2F (RR) is cleared by the first stalled step.
 leg("2F->1F", { "Right", "Up", "Up", "Right", "Right", "Right", "Up", "Up" }, mapid(), "Left")
 leg("1F->town", { "Down", "Down", "Down", "Down", "Down", "Down", "Left", "Left", "Left", "Left",
                   "Left", "Left" }, mapid(), "Down")
-G.phase("map-change", string.format("map=%d", mapid()))
+G.phase("map-change", string.format("map=%s", tostring(mapid())))
 
 -- Settle back into a quiet field before opening the menu.
 local settled = false
@@ -143,7 +165,7 @@ if not settled then
     G.shot("stuck")
     G.finish(false, "the warp into town never settled into a quiet field")
 end
-G.phase("outside", string.format("map=%d", mapid()))
+G.phase("outside", string.format("map=%s", tostring(mapid())))
 
 -- ── leg 7: the in-game save, same driver the boot check uses ────────────────────────────────
 local ok, before, after = G.save_via_menu(cp, domain)
@@ -155,4 +177,4 @@ end
 pcall(client.saveram)
 G.idle(60)
 G.phase("flushed")
-G.finish(true, string.format("map=%d counter %d -> %d", mapid(), before, after))
+G.finish(true, string.format("map=%s counter %d -> %d", tostring(mapid()), before, after))

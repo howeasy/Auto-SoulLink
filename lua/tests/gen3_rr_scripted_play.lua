@@ -142,15 +142,78 @@ local PATHS = {
     },
 }
 
--- Bind the shared scripted-play runtime (lua/tests/playlib.lua): the in_battle polarity
--- wrapper, on_field, the A-only mash, the nil-safe map id, state_path and the leg runner
--- all live there now, with the Gen 3 helper module and the game facts injected.
-local play = PL.bind(G, {
-    paths            = PATHS,
-    party_count_addr = PARTY_COUNT_ADDR,
-    obj_events       = 0x02036E38,   -- gObjectEvents (RR keeps the vanilla address,
-                                     -- reference_rr_object_events)
-    state_dir        = "E:/Howard/Bizhawk/GBA/State",
+-- ── the Gen 3 binding ────────────────────────────────────────────────────────────────────────
+-- playlib holds no host call and no game fact (Codex review cx-67a6e199): no memory, joypad,
+-- client, event, savestate or dofile appears in it. Everything it needs arrives here.
+local H = {
+    advance = G.advance, idle = G.idle, tap = G.tap, pos = G.pos,
+    phase = G.phase, finish = G.finish, shot = G.shot, open = G.open,
+    checkpoint = G.checkpoint,
+    press      = function(buttons) joypad.set(buttons); G.advance() end,
+    speed_max  = function() client.speedmode(6399) end,
+    set_budget = function(n) G.budget = n end,
+
+    -- nil when the SaveBlock1 pointer is not a sane EWRAM address (G.map's -1,-1): playlib
+    -- compares map ids and must never read "cannot read" as "changed".
+    map = function(cp)
+        local g, n = G.map(cp)
+        if g < 0 or n < 0 then return nil end
+        return g * 256 + n
+    end,
+
+    -- POLARITY: the in_battle row is a mask with expect=0, so G.pred_ok is TRUE when we are
+    -- NOT in a battle (data/games/gen3_rr/write_checkpoint.json radical_red.predicates).
+    in_battle   = function(cp) return not G.pred_ok(cp, "in_battle") end,
+    on_field    = function(cp)
+        return G.pred_ok(cp, "in_battle") and G.pred_ok(cp, "callback2")
+    end,
+    scene_quiet = function(cp)
+        return G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked")
+    end,
+
+    party_count = function() return memory.read_u8(PARTY_COUNT_ADDR) end,
+    load_state  = function(path) return (pcall(savestate.load, path)) end,
+    save_state  = function(path) return (pcall(savestate.save, path)) end,
+    register_frame_end = function(fn, name)
+        -- Return what the host returned, and NOTHING else. `id or name` fabricated a handle
+        -- whenever onframeend returned nil, which sailed past playlib's "was it registered?"
+        -- check and then handed a NAME to unregisterbyid (Codex cx-bc675fa4). An observer
+        -- nobody polls must fail the run, not look registered.
+        local ok, id = pcall(event.onframeend, fn, name)
+        if not ok then return nil end
+        return id
+    end,
+    unregister_frame_end = function(id) pcall(event.unregisterbyid, id) end,
+    observer = function(result)
+        local ok, shd = pcall(dofile, WT .. "/lua/gen3/shadow_run.lua")
+        if not ok or not shd then return nil, "dofile lua/gen3/shadow_run.lua: " .. tostring(shd) end
+        local ok2, st = pcall(shd.start, { duo = { result = result, player = "a" } })
+        if not ok2 or not st then return nil, "shadow_run.start: " .. tostring(st) end
+        return {
+            poll   = st.poll,
+            status = function() return st.parts.signals:status() end,
+            detail = "admitted_by=" .. tostring(st.admitted_by),
+        }
+    end,
+}
+
+local play
+play = PL.bind(H, {
+    paths     = PATHS,
+    state_dir = "E:/Howard/Bizhawk/GBA/State",
+    -- How RR fights a battle a walk did not choose: the action cursor resets to FIGHT, so A, A
+    -- is move slot 1 and A advances the text afterwards. A Gen 3 fact, injected rather than
+    -- assumed by the library.
+    -- Input policy, not library policy: which button dismisses a textbox and which advances a
+    -- scripted scene are per-game facts, same as opts.battle (Codex cx-bc675fa4).
+    clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
+    advance_scene  = function() G.tap("A", 2, 10) end,
+    battle = function(cp, budget)
+        if not play.mash_a(budget or 1200, function() return not H.in_battle(cp) end) then
+            return false
+        end
+        return play.wait_scene_settled(cp, 1800)
+    end,
 })
 
 -- ── party records: the keyed PC oracle's raw material ──────────────────────────────────────
@@ -210,44 +273,6 @@ local function pace(cp, frames, stop)
     return stop and stop() or false
 end
 
---- Hold `dir` into a door/edge until the SaveBlock1 map id changes, then wait for the field to
---- settle. Returns ok, detail.
----
---- BOTH map reads must be VALID. G.map returns -1,-1 whenever the SaveBlock1 pointer is not a
---- sane EWRAM address (mid-warp, mid-load), and an unreadable map compared against a readable
---- one looks exactly like a warp. Treating that as success would let this leg pass while the
---- engine was in the middle of nothing at all.
-local function hold_until_map_change(cp, dir, budget)
-    local from = play.readable_mapid(cp)
-    if from == nil then
-        return false, "the SaveBlock1 map id is unreadable before the warp (G.map = -1,-1)"
-    end
-    for _ = 1, (budget or 30) do
-        if play.readable_mapid(cp) ~= nil and play.readable_mapid(cp) ~= from then break end
-        for _ = 1, 24 do joypad.set({ [dir] = true }); G.advance() end
-        if play.readable_mapid(cp) == from then for _ = 1, 2 do G.tap("A", 3, 13) end end
-    end
-    joypad.set({})
-    local to = play.readable_mapid(cp)
-    if to == nil then
-        return false, string.format("the map id went unreadable and never came back (from %d)", from)
-    end
-    if to == from then
-        return false, string.format("map never changed from %d", from)
-    end
-    local settled = false
-    for _ = 1, 900 do                       -- the warp fade must actually finish
-        if play.on_field(cp) and play.readable_mapid(cp) ~= nil then settled = true; break end
-        G.advance()
-    end
-    if not settled then
-        return false, string.format("map %d -> %d but the field never settled "
-                                    .. "(in_battle=%s callback2_ok=%s)", from, to,
-                                    tostring(play.in_battle(cp)), tostring(G.pred_ok(cp, "callback2")))
-    end
-    return true, string.format("map %d -> %d", from, to)
-end
-
 --- Leave whatever battle we are in (or return immediately if we are not in one).
 local function leave_battle(cp, taps)
     return play.mash_a(taps or 900, function() return play.on_field(cp) end)
@@ -269,7 +294,7 @@ local LEGS = {}
 local function check_on_field(cp)
     if play.in_battle(cp) then return "a battle is in progress" end
     if not play.on_field(cp) then return "not on the walkable field (callback2 is not CB2_Overworld)" end
-    if play.readable_mapid(cp) == nil then return "the SaveBlock1 map id is unreadable" end
+    if play.map(cp) == nil then return "the SaveBlock1 map id is unreadable" end
     return nil
 end
 
@@ -304,7 +329,7 @@ LEGS[#LEGS + 1] = {
         end
         local px, py = G.pos(cp)     -- G.pos returns TWO values; capture or a later arg eats them
         G.phase("field", string.format("map=%s at=(%d,%d) outcome=%d",
-                                       tostring(play.readable_mapid(cp)), px, py, battle_outcome()))
+                                       tostring(play.map(cp)), px, py, battle_outcome()))
     end,
 }
 
@@ -320,7 +345,7 @@ LEGS[#LEGS + 1] = {
         "lua/tests/duo/scenario_explode.lua:22-28,50-52 (gBattleMons[0] = the player battler; hp @ +0x28, maxHP @ +0x2C)",
     },
     check = function(cp)
-        if play.readable_mapid(cp) == nil then return "the SaveBlock1 map id is unreadable" end
+        if play.map(cp) == nil then return "the SaveBlock1 map id is unreadable" end
         return nil     -- prebattle is mid-encounter by construction; run() clears it first
     end,
     run = function(cp)
@@ -338,7 +363,7 @@ LEGS[#LEGS + 1] = {
                 G.finish(false, string.format(
                     "wild_faint: no wild encounter while pacing (cycle %d, map=%s at=(%d,%d)) — "
                     .. "SLINK_STATE must be a state standing in TALL GRASS",
-                    enc, tostring(play.readable_mapid(cp)), px, py))
+                    enc, tostring(play.map(cp)), px, py))
             end
             -- THE FAINT ORACLE. A zero HP read on its own proves nothing: gBattleMons is stale
             -- between battles and zero is also what an uninitialised struct reads. So require a
@@ -466,15 +491,24 @@ LEGS[#LEGS + 1] = {
             -- the pocket on the very press that ends the sequence, so reading it afterwards
             -- races the thing it is meant to witness.
             local _, qty_before = ball_slot0()
-            -- THE PINNED SEQUENCE (see the census receipt cited above). Each press is a
-            -- separate tap on the 16-frame native-menu cadence, never a held direction: the
-            -- pocket tabs advance one per press.
-            G.tap("Right", 3, 20)       -- action menu: FIGHT -> BAG
-            G.tap("A", 3, 20)           -- open the BAG
-            G.tap("Right", 3, 20)       -- pocket: Items -> Key Items
-            G.tap("Right", 3, 20)       -- pocket: Key Items -> Poke Balls
-            G.tap("A", 3, 20)           -- select the Poke Ball
-            G.tap("A", 3, 20)           -- use it
+            -- THE PINNED SEQUENCE, WITH THE PROBE'S OWN TIMING. Buttons alone were not enough:
+            -- run 15 still reported "ball not thrown, pocket 5" with the presses right and a
+            -- flat ~16-frame cadence. The probe that PHYSICALLY threw a ball
+            -- (lua/tests/probe_gen3_rr_bag.lua, script
+            -- "menu,Right,wait16,A,wait90,Right,wait20,Right,wait20,A,wait30,A,wait900")
+            -- spaces them unevenly for a reason: CFRU's bag takes ~90 frames to open after the
+            -- A, and each pocket tab needs ~20 frames to settle. On a 16-frame cadence the two
+            -- Rights land during the fade and are eaten, so the cursor never leaves the ITEMS
+            -- pocket and the final A uses nothing.
+            --
+            -- Mirrored exactly: G.tap(btn, 3, 13) is the probe's own press (3 held + 13 idle),
+            -- and the idle after each is the probe's waitN.
+            G.tap("Right", 3, 13); G.idle(16)   -- action menu: FIGHT -> BAG
+            G.tap("A", 3, 13);     G.idle(90)   -- open the BAG (the slow one)
+            G.tap("Right", 3, 13); G.idle(20)   -- pocket: Items -> Key Items
+            G.tap("Right", 3, 13); G.idle(20)   -- pocket: Key Items -> Poke Balls
+            G.tap("A", 3, 13);     G.idle(30)   -- select the Poke Ball
+            G.tap("A", 3, 13)                   -- use it
             -- THE THROW WITNESS IS THE POCKET, NOT THE MENU. Lane run: all five throws were
             -- called misses at 170-frame spacing, which is this leg judging the result before
             -- the ball animation had even started — the action-select controller is still the
@@ -573,7 +607,7 @@ LEGS[#LEGS + 1] = {
     },
     check = check_on_field,
     run = function(cp)
-        local ok, detail = hold_until_map_change(cp, "Up", 30)
+        local ok, detail = play.enter_warp(cp, "Up", 30)
         if not ok then
             G.shot("stuck")
             local px, py = G.pos(cp)
@@ -602,6 +636,8 @@ LEGS[#LEGS + 1] = {
         "docs/gen3_engine_sites.md pc_deposit row (rr PINNED 0809315C/+8, TryStorePartyMonInBox +0x80 with R0==1)",
         "docs/gen3_engine_sites.md pc_box_place row (rr PINNED 08093018/+8; RR IN-PLACE wrapper, capture 08093020, SetBoxMonAt detours to 090B6CA4)",
         "docs/gen3_engine_sites.md pc_withdraw row (rr PINNED 08092FF2/+6; RR IN-PLACE, party sentinel 25 not vanilla 14)",
+        "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt (PHYSICAL: the five-A PC flow reaches Task_DepositMenu and TryStorePartyMonInBox; gPlayerPartyCount is NOT updated until the PC is closed)",
+        "docs/gen3/research/rr_pc_menu.md (RR keeps the vanilla five-option storage menu with title-case labels; the earlier all-caps string search was a false negative)",
         "lua/tests/duo/duo_main.lua:23-24 (PID/OTID offsets — the party record key this leg's oracle follows)",
     },
     check = check_on_field,
@@ -621,72 +657,75 @@ LEGS[#LEGS + 1] = {
         if before.n < 2 then
             G.finish(false, string.format(
                 "pc_ops: the party holds %d mon — the oracle needs at least 2 (one to deposit, "
-                .. "one to prove the others were left byte-identical)", before.n))
+                .. "one to prove the others were left byte-identical). "
+                .. "slink_pokecenter_full.State carries three", before.n))
         end
 
-        -- THE PINNED MENU WALK (pret, vanilla storage). The PC access script offers
-        -- SOMEONE'S/BILL'S PC as the first row and A takes it (pret src/pc.c); the storage menu
-        -- that opens is sStorageMenuOptions = { WITHDRAW, DEPOSIT, MOVE POKEMON, MOVE ITEMS,
-        -- SEE YA } in that order (pret src/pokemon_storage_system.c), so DEPOSIT is Down, A.
-        -- The deposit screen starts with the cursor on party slot 1; Down, A takes slot 2 (the
-        -- leg keeps slot 1, so the party it compares afterwards is the interesting one), and a
-        -- final A confirms DEPOSIT.
+        -- THE PINNED PC FLOW, FROM A PHYSICAL CENSUS.
+        -- docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt drove this exact sequence on the
+        -- RR companion and watched the engine reach it, hook by hook:
+        --   CreatePCMenu -> ShowPokemonStorageSystemPC -> Task_PCMainMenu -> EnterPokeStorage
+        --   -> Task_InitPokeStorage -> CB2_PokeStorage -> Task_DepositMenu
+        --   -> TryStorePartyMonInBox (1 hit)
+        -- docs/gen3/research/rr_pc_menu.md explains why the earlier "the labels are not in the
+        -- ROM" finding was wrong: the search was case-blind. RR keeps the vanilla five-option
+        -- table (sMainMenuTexts at ROM0x003CDA20) with TITLE-CASE labels -- Withdraw at
+        -- 0x001B5859, Deposit at 0x001B586C, Move at 0x001B587E -- and retains
+        -- ShowPokemonStorageSystemPC, EnterPokeStorage and Task_DepositMenu byte-for-byte.
         --
-        -- IS THAT ORDER STILL RR's? UNVERIFIED, and honestly so. A charset string search of the
-        -- ROM (FR charmap, server/adapters/gen3_codec.py FR_CHARMAP) finds the vanilla menu
-        -- text exactly where it should be in FireRed -- WITHDRAW 0x081B5859, DEPOSIT 0x081B586C,
-        -- MOVE 0x081B587E, consecutive -- and finds NONE of those words anywhere in
-        -- patch/build/slink_RR.gba. So RR either compresses, relocates or rewrites that text,
-        -- and the row order cannot be confirmed from strings. The pinned walk is tried FIRST
-        -- because it is the only grounded candidate; the bounded sweep that the previous lane
-        -- run used is kept as a documented fallback, so a lane run produces a real answer
-        -- either way. Neither is trusted: the keyed oracle below is the terminal.
-        local function deposit_pressed()
-            G.tap("A", 3, 20)            -- PC access -> SOMEONE'S PC (first row)
-            G.tap("A", 3, 20)            -- confirm, opening the storage menu
-            G.tap("Down", 3, 20)         -- WITHDRAW -> DEPOSIT
-            G.tap("A", 3, 20)            -- enter the deposit screen
-            G.tap("Down", 3, 20)         -- party slot 1 -> slot 2
-            G.tap("A", 3, 20)            -- pick it
-            G.tap("A", 3, 20)            -- DEPOSIT
+        -- FIVE A PRESSES reach the storage menu, not one: interact -> "booted up the PC" ->
+        -- the PC list -> row 0 (Someone's PC) -> "Accessed Someone's PC." -> "Pokemon Storage
+        -- System opened." The census timings are ~120 frames between them, 180 before the menu
+        -- settles; those are what this mirrors.
+        local function pc_press(btn, wait)
+            G.tap(btn, 3, 13)
+            G.idle(wait or 120)
         end
-        local deposited = false
-        deposit_pressed()
-        for _ = 1, 60 do
-            if play.party_count() < before.n then deposited = true; break end
-            G.advance()
+        local function open_storage_menu()
+            for _ = 1, 5 do pc_press("A", 120) end
+            G.idle(60)                  -- the census waited 180 in total before the menu
         end
-        if not deposited then
-            G.phase("deposit-pinned-missed", string.format(
-                "the pret-pinned row walk left the party at %d; falling back to the bounded "
-                .. "sweep (RR's menu text is absent from the ROM, so the order is unverified)",
-                play.party_count()))
-            for i = 1, 120 do
-                if i % 4 == 0 then G.tap("Down", 3, 13) end
-                G.tap("A", 3, 20)
-                if play.party_count() < before.n then deposited = true; break end
+        -- THE COUNT IS A LIE WHILE THE PC IS OPEN. The census read party=3 throughout the
+        -- storage screen even after TryStorePartyMonInBox fired: gPlayerPartyCount is
+        -- recomputed on exit. So every assertion in this leg is made on the FIELD, never in
+        -- the menu, and "leave the PC" is part of the operation rather than tidying up after.
+        local function leave_storage()
+            local out = false
+            for _ = 1, 60 do
+                if play.on_field(cp) then out = true; break end
+                G.tap("B", 3, 20)
             end
+            if not out then
+                G.shot("stuck")
+                G.finish(false, "pc_ops: never got back to the field from the storage UI, so "
+                              .. "the party count cannot be trusted either way")
+            end
+            G.idle(30)
         end
-        if not deposited then
-            G.shot("stuck")
-            G.finish(false, string.format(
-                "pc_ops: gPlayerPartyCount never dropped from %d. BOTH the pret-pinned row walk "
-                .. "(A, A, Down, A, Down, A, A) and the bounded sweep were tried; RR's storage "
-                .. "menu text is not in the ROM in the FR charset, so its row order is still "
-                .. "unpinned -- that is the thing to find next", before.n))
-        end
+
+        -- DEPOSIT: Down, A picks Deposit (row 1 of Withdraw/Deposit/Move/Move Items/See Ya);
+        -- Down, A picks the party mon after the lead; A confirms Store.
+        open_storage_menu()
+        pc_press("Down", 20); pc_press("A", 180)     -- Deposit -> EnterPokeStorage
+        pc_press("Down", 20); pc_press("A", 120)     -- party slot 1 -> its context menu
+        pc_press("A", 240)                           -- Store -> TryStorePartyMonInBox
+        leave_storage()
+
         local mid = party_snapshot()
         if mid.n ~= before.n - 1 then
+            G.shot("stuck")
             G.finish(false, string.format(
-                "pc_ops: deposit moved the party count %d -> %d; exactly -1 is required "
-                .. "(anything else is not one deposit)", before.n, mid.n))
+                "pc_ops: after the deposit and leaving the PC the party count is %d, not %d. "
+                .. "The pinned flow (5x A, Down+A, Down+A, A) reached TryStorePartyMonInBox in "
+                .. "the census; if it did not here, compare against "
+                .. "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt", mid.n, before.n - 1))
         end
         local gone = nil
         for _, k in ipairs(before.order) do
             if mid.keys[k] == nil then
                 if gone then
                     G.finish(false, string.format(
-                        "pc_ops: deposit removed more than one record (%s and %s) from [%s]",
+                        "pc_ops: the deposit removed more than one record (%s and %s) from [%s]",
                         gone, k, keylist(before)))
                 end
                 gone = k
@@ -694,52 +733,40 @@ LEGS[#LEGS + 1] = {
         end
         if not gone then
             G.finish(false, string.format(
-                "pc_ops: the party count dropped but every key is still present ([%s] -> [%s]) "
-                .. "— that is not a deposit", keylist(before), keylist(mid)))
+                "pc_ops: the count dropped but every key is still present ([%s] -> [%s]) -- "
+                .. "that is not a deposit", keylist(before), keylist(mid)))
         end
         G.phase("deposited", string.format("party %d -> %d, key %s left the party",
                                            before.n, mid.n, gone))
 
-        -- WITHDRAW is row 0 of the same menu, so the walk is A (PC), A (confirm), A (WITHDRAW),
-        -- then the box screen: A picks the highlighted record and A confirms WITHDRAW.
-        local withdrawn = false
-        G.tap("A", 3, 20)                -- PC access
-        G.tap("A", 3, 20)                -- SOMEONE'S PC
-        G.tap("A", 3, 20)                -- WITHDRAW (row 0)
-        G.tap("A", 3, 20)                -- take the highlighted box record
-        G.tap("A", 3, 20)                -- confirm
-        for _ = 1, 60 do
-            if play.party_count() > mid.n then withdrawn = true; break end
-            G.advance()
-        end
-        if not withdrawn then
-            G.phase("withdraw-pinned-missed", "the pinned row walk did not withdraw; sweeping")
-            for i = 1, 120 do
-                if i % 4 == 0 then G.tap("Down", 3, 13) end
-                G.tap("A", 3, 20)
-                if play.party_count() > mid.n then withdrawn = true; break end
-            end
-        end
-        if not withdrawn then
-            G.shot("stuck")
-            G.finish(false, string.format(
-                "pc_ops: gPlayerPartyCount never rose from %d (withdraw), with both the pinned "
-                .. "row walk and the sweep tried", mid.n))
-        end
+        -- WITHDRAW: the same menu with the cursor on row 0. NOT physically observed -- the
+        -- census's Task_WithdrawMon hook stayed silent because the run stopped after the
+        -- deposit -- so this half is the documented analogue of the pinned half, and its
+        -- terminal is the keyed oracle below rather than any press count.
+        G.tap("Up", 2, 13)                           -- face the PC again
+        open_storage_menu()
+        pc_press("A", 180)                           -- Withdraw (row 0, already selected)
+        pc_press("A", 120)                           -- box 0 slot 0 -> its context menu
+        pc_press("A", 240)                           -- Withdraw
+        leave_storage()
+
         local after = party_snapshot()
         if after.n ~= mid.n + 1 then
+            G.shot("stuck")
             G.finish(false, string.format(
-                "pc_ops: withdraw moved the party count %d -> %d; exactly +1 is required",
-                mid.n, after.n))
+                "pc_ops: after the withdraw the party count is %d, not %d. The withdraw half "
+                .. "is the UNOBSERVED analogue of the pinned deposit (see this leg's comment); "
+                .. "a census of Task_WithdrawMon is what would pin it", after.n, mid.n + 1))
         end
         if after.keys[gone] == nil then
+            G.shot("stuck")
             G.finish(false, string.format(
-                "pc_ops: the withdrawn mon is NOT the deposited one. Deposited %s; the party now "
-                .. "holds [%s]. A released-and-replaced mon, or withdrawing a different box mon, "
-                .. "is not a PC round trip", gone, keylist(after)))
+                "pc_ops: the withdrawn mon is NOT the deposited one. Deposited %s; the party "
+                .. "now holds [%s]. A released-and-replaced mon, or a different box mon, is "
+                .. "not a round trip", gone, keylist(after)))
         end
-        -- The travelling record itself may differ byte for byte (RR stores a 58-byte
-        -- CompressedPokemon, so the round trip is lossy by design); the ones that STAYED must
+        -- The travelling record may differ byte for byte (RR stores a 58-byte
+        -- CompressedPokemon, so the round trip is lossy BY DESIGN); the ones that STAYED must
         -- not have moved a single byte.
         for _, k in ipairs(before.order) do
             if k ~= gone then
@@ -755,21 +782,8 @@ LEGS[#LEGS + 1] = {
             end
         end
         G.phase("withdrawn", string.format("party %d -> %d, key %s is back; %d other records "
-                                           .. "byte-identical", mid.n, after.n, gone, before.n - 1))
-
-        -- Backing out is part of the leg, not an afterthought: a leg that leaves the storage UI
-        -- up has not returned the engine to the field, and saying nothing about it would hand
-        -- the next run a broken starting point.
-        local out_ok = false
-        for _ = 1, 40 do
-            if play.on_field(cp) then out_ok = true; break end
-            G.tap("B", 3, 20)
-        end
-        if not out_ok then
-            G.shot("stuck")
-            G.finish(false, "pc_ops: never returned to the field after the round trip "
-                         .. "(the storage UI is still up)")
-        end
+                                           .. "byte-identical", mid.n, after.n, gone,
+                                           before.n - 1))
     end,
 }
 
@@ -824,7 +838,6 @@ return {
     boot_check = G,
     pace = pace,
     state_path = play.state_path,
-    hold_until_map_change = hold_until_map_change,
     party_snapshot = party_snapshot,
     slot_key = slot_key,
 }
