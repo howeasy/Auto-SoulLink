@@ -166,6 +166,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P1 census on RR `slink_overworld.State`: `docs/gen3/probes/census_rr_overworld_2026-09-21.txt` (R15 parked at BIOS `0x1C4`, System/ARM, one idle task set) — PHYSICAL input to W-2 (checkpoint) and S-13 (register names).
 
+- 2026-09-21 P1 hook probe on FR clean + RR companion: `docs/gen3/probes/hooks_*_2026-09-21.txt` — PHYSICAL input to S-1 (callback-address contract), S-13 (params/register names), F-5/W (flash domain = SRAM 0x20000); a-return and b-interior OPEN.
+
 ## Recorded limits
 
 - **Keyed sync-command re-issue window.** `SYNC_INFLIGHT_RECONCILES = 6` is a re-issue
