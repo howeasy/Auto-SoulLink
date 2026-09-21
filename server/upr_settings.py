@@ -352,7 +352,9 @@ OPTIONS: dict[str, dict] = {
                   "choices": {"unchanged": ("Unchanged", ["tmCompat_UNCHANGED"]),
                               "random": ("Random", ["tmCompat_COMPLETELY_RANDOM"]),
                               "prefer_type": ("Random, prefer same type", ["tmCompat_RANDOM_PREFER_TYPE"]),
-                              "full": ("Everything learns everything", ["tmCompat_FULL"])}},
+                              "full": ("Everything learns everything", ["tmCompat_FULL"])},
+                  "help": "the 151 dex records; pureRGB's 13 non-dex forms/spirits keep their own "
+                          "TM bytes on every mode (review cx-795d1423 #7)"},
     "tm_sanity": {"kind": "bool", "group": "TMs", "label": "Level-up moves stay TM-compatible",
                   "default": False, "flag": "tmLevelUpMoveSanity"},
     "tm_keep_field": {"kind": "bool", "group": "TMs", "label": "Keep field-move TMs",
@@ -364,6 +366,7 @@ OPTIONS: dict[str, dict] = {
                                 "shuffle": ("Shuffled", ["fieldItems_SHUFFLE"]),
                                 "random_even": ("Random, evenly spread", ["fieldItems_RANDOM_EVEN"])}},
     "field_items_ban_bad": {"kind": "bool", "group": "Field items", "label": "No junk items",
+                            "help": "no effect on Gen 1: stock UPR has no bad-item list there (review cx-795d1423 #6)",
                             "default": False, "flag": "banBadRandomFieldItems"},
     # misc tweaks -- none of these touch species, types or evolutions
     "fastest_text": {"kind": "bool", "group": "Tweaks", "label": "Fastest text", "default": True, "misc": "FASTEST_TEXT"},
@@ -386,6 +389,13 @@ _CATEGORY_MODES = ("wild", "starters", "statics", "trainers", "tms", "field_item
 FAMILY_VANILLA = "gen1_rby"
 FAMILY_PURE = "gen1_purergb"
 FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
+# Options the fork cannot honour on a pure entry (review cx-795d1423 #4/#5): the pure INI rows
+# carry TrainerTaggingDisabled=1 (no gym/Elite/rival tags -- pureRGB renumbered every class
+# and the rival is name-substituted at runtime) and omit CanChangeTrainerText (the 56-entry
+# class-name table and the unique OT names are not the vanilla text model). Stock UPR skips
+# these silently; the pure family refuses them so nobody believes a setting that did nothing.
+PURE_INERT_BOOLS = ("trainers_rival_starter", "trainer_names", "trainer_class_names")
+PURE_INERT_TRAINER_MODES = ("type_themed_gyms",)
 
 
 def misc_options() -> list[str]:
@@ -400,6 +410,10 @@ def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
     if family == FAMILY_PURE:
         for key in misc_options():
             out[key] = False
+        for key in PURE_INERT_BOOLS:
+            out[key] = False
+        if out.get("trainers") in PURE_INERT_TRAINER_MODES:
+            out["trainers"] = "random"    # gyms-only theming degrades to plain random on pure
     return out
 
 
@@ -593,6 +607,11 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     bad = []
     if family == FAMILY_PURE and parsed.get("misc_tweaks"):
         bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
+    if family == FAMILY_PURE:
+        spec = spec_from_parsed(parsed)
+        bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
+        if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
+            bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")
     if not f.get("types_UNCHANGED"):
         bad.append("types")
     if not f.get("evolutions_UNCHANGED"):

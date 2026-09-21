@@ -14,6 +14,7 @@ import re
 
 import pytest
 
+import tools.upr_write_domain_diff as udd
 from tools import gen_upr_gen1_ini as gen
 from tools.upr_write_domain_diff import load_entry
 
@@ -21,7 +22,24 @@ _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__))
 _INI = pathlib.Path(_REPO, "data", "purergb", "upr_pure_entries.ini")
 _FORK = os.path.join(_REPO, ".cache", "slink-upr")
 _ROMS = os.path.join(_REPO, ".cache", "purergb")
+_OVERLAY_ROMS = os.path.join(_REPO, ".cache", "purergb-overlay")
 TITLES = ("purered", "pureblue", "puregreen")
+OVERLAY_SECTIONS = {t + "_overlay": f"{gen.TITLES[t]} overlay (U)" for t in TITLES}
+
+
+@pytest.fixture
+def overlay_entries(monkeypatch):
+    """load_entry() for the `<title>_overlay` sections (upr_write_domain_diff.SECTION may
+    not know them yet)."""
+    for key, section in OVERLAY_SECTIONS.items():
+        monkeypatch.setitem(udd.SECTION, key, section)
+    return lambda title: load_entry(title + "_overlay", _INI)
+
+
+def _flatten(v):
+    if isinstance(v, list) and v and isinstance(v[0], tuple):
+        return [o for sp, lv in v for o in sp + lv]
+    return v if isinstance(v, list) else [v]
 
 # Every key the fork's Gen1RomHandler reads through romEntry.getValue / hasValue /
 # arrayEntries / tweakFiles (grep of .cache/slink-upr at 4.6.1-slink1; the test below
@@ -80,8 +98,8 @@ DELIBERATELY_ABSENT = {
 def _sections() -> dict[str, str]:
     text = _INI.read_text(encoding="utf-8")
     out = {}
-    for m in re.finditer(r"^\[(\w+) \(U\)\]\n(.*?)(?=^\[|\Z)", text, re.S | re.M):
-        out[m.group(1).lower()] = m.group(2)
+    for m in re.finditer(r"^\[([\w ]+?) \(U\)\]\n(.*?)(?=^\[|\Z)", text, re.S | re.M):
+        out[m.group(1).lower().replace(" ", "_")] = m.group(2)
     return out
 
 
@@ -102,6 +120,41 @@ def test_all_three_titles_are_present_with_their_admitted_crcs():
         assert e["CRCInHeader"] == int(by_title[title]["header_crc"], 16)
         assert e["CRC32"] == by_title[title]["crc32"]
         assert e["LosslessMode"] == 1
+
+
+def test_the_three_overlay_builds_have_their_own_entries(overlay_entries):
+    """Review cx-795d1423 #3: the SLink companion overlay carries its own header CRC; without
+    an exact-CRC entry Gen1RomHandler's generic fallback would pick the VANILLA Red/Blue
+    offsets. Only symbol-backed offsets in the shifted banks (0/1/3) may differ from the
+    clean entry; RAM-independent keys and the statics are identical."""
+    adm = json.loads(pathlib.Path(_REPO, "data", "games", "gen1_purergb", "admission_overlay.json").read_text(encoding="utf-8"))
+    by_title = {v["title"]: v for v in adm.values() if v["kind"] == "overlay"}
+    assert set(_sections()) == set(TITLES) | set(OVERLAY_SECTIONS)
+    for title in TITLES:
+        clean, ov = load_entry(title, _INI), overlay_entries(title)
+        assert ov["CRCInHeader"] == int(by_title[title]["header_crc"], 16) != clean["CRCInHeader"]
+        assert ov["CRC32"] == by_title[title]["crc32"]
+        assert set(ov) == set(clean)
+        differing = {k for k in clean if clean[k] != ov[k]}
+        assert differing, "the overlay entry must carry its own (shifted) offsets"
+        for k in differing - {"CRCInHeader", "CRC32"}:
+            for a, b in zip(_flatten(clean[k]), _flatten(ov[k]), strict=True):
+                assert a == b or ((a >> 14) in (0, 1, 3) and (a >> 14) == (b >> 14)), f"{title}.{k}: {a:#x} -> {b:#x}"
+        assert ov["statics"] == clean["statics"]
+    e = overlay_entries("purered")
+    assert e["CRCInHeader"] == 0xD3B7 and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
+
+
+def test_starter_sites_include_the_hall_of_fame_ball_hide_branch(overlay_entries):
+    """Review cx-795d1423 #4: HallOfFame.asm compares wPlayerStarter against STARTER1/2 to
+    pick which of Oak's balls to hide postgame; a randomized starter needs those operands
+    rewritten too. Symbol-relative, so the overlay (bank 0 shifted) resolves them as well."""
+    for title in TITLES:
+        for e in (load_entry(title, _INI), overlay_entries(title)):
+            assert 0x5A503 in e["StarterOffsets1"] and 0x5A509 in e["StarterOffsets2"]
+            assert len(e["StarterOffsets1"]) == len(e["StarterOffsets2"]) == 6 and len(e["StarterOffsets3"]) == 3
+    assert load_entry("purered", _INI)["StarterOffsets1"][3] == 0x13E4          # StarterToPartyID+3, clean
+    assert overlay_entries("purered")["StarterOffsets1"][3] == 0x13EA           # bank 0 shifted by 6 in the overlay
 
 
 def test_every_handler_key_is_present_or_deliberately_absent():
@@ -167,7 +220,8 @@ def test_non_dex_species_are_the_thirteen_opaque_ids():
     assert e["MewStatsOffset"] == e["PokemonStatsOffset"] + 150 * 35
 
 
-@pytest.mark.skipif(not all(os.path.isfile(os.path.join(_ROMS, f"poke{t[4:]}.gbc")) for t in TITLES),
-                    reason="pinned pure ROMs not present")
+@pytest.mark.skipif(not all(os.path.isfile(os.path.join(d, f"poke{t[4:]}.gbc"))
+                            for d in (_ROMS, _OVERLAY_ROMS) for t in TITLES),
+                    reason="pinned pure / overlay ROMs not present")
 def test_the_committed_ini_is_what_the_generator_produces():
-    assert gen.generate(pathlib.Path(_ROMS)) == _INI.read_text(encoding="utf-8")
+    assert gen.generate(pathlib.Path(_ROMS), pathlib.Path(_OVERLAY_ROMS)) == _INI.read_text(encoding="utf-8")

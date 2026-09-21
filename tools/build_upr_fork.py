@@ -79,7 +79,7 @@ def bootstrap(src_root: pathlib.Path) -> None:
     if not patches:
         raise RuntimeError(f"no fork patches under {PATCHES}")
     subprocess.run(["git", "-C", str(src_root), "-c", "user.name=slink", "-c", "user.email=slink@local",
-                    "am", *patches], check=True)
+                    "am", "--keep-cr", *patches], check=True)
 
 
 def main() -> int:

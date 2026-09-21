@@ -20,13 +20,24 @@ Usable as a library too: ``allowlist(title, rom, categories)`` and ``audit(...)`
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import re
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 INI = REPO / "data" / "purergb" / "upr_pure_entries.ini"
-SECTION = {"purered": "PureRed (U)", "pureblue": "PureBlue (U)", "puregreen": "PureGreen (U)"}
+SECTION = {"purered": "PureRed (U)", "pureblue": "PureBlue (U)", "puregreen": "PureGreen (U)",
+           # the SLink companion-overlay builds: own header CRCs, bank 0/1/3 offsets shifted
+           "purered_overlay": "PureRed overlay (U)", "pureblue_overlay": "PureBlue overlay (U)",
+           "puregreen_overlay": "PureGreen overlay (U)"}
+
+
+def entry_key(ident: dict) -> str:
+    """The SECTION key for a scanner identity (server.adapters.gen1_rom_scan.identify): an
+    overlay artifact is judged by the overlay entry -- the clean offsets would report the
+    shifted starter sites and fishing tables as stray writes."""
+    return ident["variant"] + ("_overlay" if ident.get("kind") == "overlay" else "")
 
 
 def _int(v: str) -> int:
@@ -170,9 +181,60 @@ def field_item_bytes(rom: bytes, e: dict) -> set[int]:
     return out
 
 
+_FACTS = pathlib.Path(__file__).resolve().parents[1] / "data" / "games" / "gen1_purergb" / "items.json"
+
+
+def _rewritable_items() -> set[int]:
+    """Item ids the fork may put in a pickup: everything but key items and HMs (its own
+    eligible-item filter, Gen1RomHandler.randomizeFieldItems / shuffleFieldItems). A pickup
+    site holding anything else -- the Secret Key, an HM -- is never a legal write target,
+    so the audit must not allow it either (review cx-795d1423 #10)."""
+    items = json.loads(_FACTS.read_text(encoding="utf-8"))["items"]
+    return {int(k) for k, v in items.items()
+            if not v["key_item"] and not (v["tm_hm"] or "").startswith("HM")}
+
+
+def catch_rate_bytes(e: dict) -> set[int]:
+    """The catch-rate byte (+8) of the 151 dex records -- what a minimum catch-rate tier
+    rewrites. pureRGB keeps Mew inline as record 150; the non-dex records are untouched."""
+    size = e.get("BaseStatsEntrySize", 28)
+    return {e["PokemonStatsOffset"] + i * size + 8 for i in range(151)}
+
+
+DOMAINS = ("wild", "starters", "statics", "trainers", "tms", "tm_compat", "field_items", "catch_rate")
+
+
+def domains_for_spec(spec: dict) -> set[str]:
+    """The write domains a settings SPEC enables -- from every option, not just the six mode
+    choices: a level curve with its parent mode unchanged still rewrites level bytes, a
+    catch-rate tier rewrites base stats, TM sanity rewrites TM compatibility (#11)."""
+    g = spec.get
+    out: set[str] = set()
+    if g("wild", "unchanged") != "unchanged" or g("wild_levels", 0):
+        out.add("wild")
+    if g("wild_min_catch_rate", 0):
+        out.add("catch_rate")
+    if g("starters", "unchanged") != "unchanged":
+        out.add("starters")
+    if g("statics", "unchanged") != "unchanged" or g("static_levels", 0):
+        out.add("statics")
+    if (g("trainers", "unchanged") != "unchanged" or g("trainers_levels", 0)
+            or g("trainers_force_evolved", 0)):
+        out.add("trainers")
+    if g("tms", "unchanged") != "unchanged":
+        out.add("tms")
+    if g("tm_compat", "unchanged") != "unchanged" or g("tm_sanity", False):
+        out.add("tm_compat")
+    if g("field_items", "unchanged") != "unchanged":
+        out.add("field_items")
+    return out
+
+
 def allowlist(title: str, rom: bytes, categories: set[str], ini: pathlib.Path = INI) -> set[int]:
     e = load_entry(title, ini)
     out: set[int] = set()
+    if "catch_rate" in categories:
+        out |= catch_rate_bytes(e)
     if "wild" in categories:
         out |= wild_bytes(rom, e)
     if "starters" in categories:
@@ -192,7 +254,8 @@ def allowlist(title: str, rom: bytes, categories: set[str], ini: pathlib.Path = 
             base = e["PokemonStatsOffset"] + i * size
             out.update(range(base + 0x14, base + 0x14 + 7))
     if "field_items" in categories:
-        out |= field_item_bytes(rom, e)
+        legal = _rewritable_items()
+        out |= {o for o in field_item_bytes(rom, e) if rom[o] in legal}
     return out
 
 
@@ -208,8 +271,7 @@ def main() -> int:
     ap.add_argument("--clean", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--title", default="purered", choices=sorted(SECTION))
-    ap.add_argument("--enable", action="append", default=[],
-                    choices=["wild", "starters", "statics", "trainers", "tms", "tm_compat", "field_items"])
+    ap.add_argument("--enable", action="append", default=[], choices=list(DOMAINS))
     ap.add_argument("--ini", default=str(INI))
     args = ap.parse_args()
     clean, out = pathlib.Path(args.clean).read_bytes(), pathlib.Path(args.out).read_bytes()

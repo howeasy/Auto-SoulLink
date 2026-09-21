@@ -15,7 +15,8 @@ Usage:
     python tools/gen_upr_gen1_ini.py --fork .cache/slink-upr   # also splices it into the fork's gen1_offsets.ini
     python tools/gen_upr_gen1_ini.py --check         # exit 1 if the committed copy is stale
 
-ROMs are read from .cache/purergb/poke<title>.gbc (override with --roms DIR).
+ROMs are read from .cache/purergb/poke<title>.gbc (--roms DIR) and the overlay builds from
+.cache/purergb-overlay/poke<title>.gbc (--overlay-roms DIR).
 """
 from __future__ import annotations
 
@@ -35,6 +36,16 @@ FORK_END = "// ---- END slink pureRGB entries ----"
 
 TITLES = {"purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen"}
 GAME_NAME = {"purered": "POKEMON RED", "pureblue": "POKEMON BLUE", "puregreen": "POKEMON GREEN"}
+# One entry per (kind, title): the clean pureRGB builds and the SLink companion-overlay builds
+# (tools/gen1_foundation.py `purergb` / `purergb_overlay`). The overlay shifts code in banks
+# 0/1/3 and carries its own header CRC, so it needs its own entry or Gen1RomHandler's generic
+# header fallback would hand it the VANILLA Red/Blue offsets.
+KINDS = {
+    "clean": {"roms": REPO / ".cache" / "purergb", "sym": "poke{x}.sym",
+              "admission": "admission.json", "section": "{name} (U)"},
+    "overlay": {"roms": REPO / ".cache" / "purergb-overlay", "sym": "pure{x}_slink.sym",
+                "admission": "admission_overlay.json", "section": "{name} overlay (U)"},
+}
 
 # Symbol-backed scalar keys: INI key -> (.sym label, delta).
 SYMBOL_KEYS: dict[str, tuple[str, int]] = {
@@ -108,11 +119,17 @@ FIXED_KEYS: dict[str, str] = {
 }
 NON_DEX_CLASSES = ("spirit", "form", "missingno")
 STARTER_BYTES = (0xB0, 0xB1, 0x99)   # STARTER1/2/3 = CHARMANDER/SQUIRTLE/BULBASAUR EQUs, inlined
-# Gameplay-critical starter sites (W2): OaksLab pick logic + StarterToPartyID, plus StarterDexArray.
-STARTER_SITES = {
-    1: [0x1C4EC, 0x1C8FF, 0x1C910, 0x13E4],
-    2: [0x1C4F0, 0x1C909, 0x1C8FC, 0x13E9],
-    3: [0x1C913, 0x1C906],
+# Gameplay-critical starter sites (W2), symbol-relative so the overlay build (bank 0 shifts)
+# resolves them too: OaksLab pick logic + StarterToPartyID + the postgame ball-hide branch
+# (HallOfFame.asm `cp STARTER1` / `cp STARTER2`; review cx-795d1423 #4), plus StarterDexArray.
+STARTER_SITES: dict[int, list[tuple[str, int]]] = {
+    1: [("OaksLabChoseStarterScript", 4), ("OaksLabCharmanderPokeBallText", 5),
+        ("OaksLabBulbasaurPokeBallText", 2), ("StarterToPartyID", 3),
+        ("HallOfFameOakCongratulationsScript", 0x30)],
+    2: [("OaksLabChoseStarterScript", 8), ("OaksLabSquirtlePokeBallText", 5),
+        ("OaksLabCharmanderPokeBallText", 2), ("StarterToPartyID", 8),
+        ("HallOfFameOakCongratulationsScript", 0x36)],
+    3: [("OaksLabBulbasaurPokeBallText", 5), ("OaksLabSquirtlePokeBallText", 2)],
 }
 WCUROPPONENT, WCURENEMYLEVEL = b"\x59\xd0", b"\x2f\xd1"
 WENGAGEDCLASS, WENGAGEDSET = b"\x2d\xcd", b"\x2e\xcd"
@@ -221,7 +238,7 @@ def statics_for(rom: bytes, sym: dict[str, int], records: list[dict]) -> list[di
     return [merged[k] for k in order]
 
 
-def build_entry(title: str, rom: bytes, sym: dict[str, int], pack: dict) -> tuple[str, dict]:
+def build_entry(title: str, rom: bytes, sym: dict[str, int], pack: dict, kind: str = "clean") -> tuple[str, dict]:
     keys: dict[str, str] = {}
     keys["Game"] = GAME_NAME[title]
     for k in ("Version", "NonJapanese", "Type", "ExtraTableFile"):
@@ -249,7 +266,7 @@ def build_entry(title: str, rom: bytes, sym: dict[str, int], pack: dict) -> tupl
     keys["NonDexSpecies"] = "[" + ", ".join(f"0x{i:02X}" for i in nondex) + "]"
     # starters: every site must hold the expected EQU byte in this title
     for n, sites in STARTER_SITES.items():
-        sites = list(sites) + [sym["StarterDexArray"] + n - 1]
+        sites = [sym[label] + d for label, d in sites] + [sym["StarterDexArray"] + n - 1]
         for o in sites:
             if rom[o] != STARTER_BYTES[n - 1]:
                 raise SystemExit(f"{title}: starter{n} site 0x{o:X} holds 0x{rom[o]:02X}, not 0x{STARTER_BYTES[n-1]:02X}")
@@ -263,7 +280,7 @@ def build_entry(title: str, rom: bytes, sym: dict[str, int], pack: dict) -> tupl
             raise SystemExit(f"{title}: good rod table 0x{o:X} lacks the -1,-1 terminator after 4 pairs")
     statics = statics_for(rom, sym, pack["statics"]["records"])
     ghost = [s for s in statics if s["name"] == "RESTLESS_SOUL"]
-    lines = [f"[{TITLES[title]} (U)]"]
+    lines = ["[" + KINDS[kind]["section"].format(name=TITLES[title]) + "]"]
     for k, v in keys.items():
         lines.append(f"{k}={v}")
     for s in statics:
@@ -274,34 +291,38 @@ def build_entry(title: str, rom: bytes, sym: dict[str, int], pack: dict) -> tupl
     return "\n".join(lines) + "\n", keys
 
 
-def generate(rom_dir: pathlib.Path) -> str:
-    admission = json.loads((PACK / "admission.json").read_text(encoding="utf-8"))
-    by_title = {v["title"]: dict(v, sha1=k) for k, v in admission.items()}
+def generate(rom_dir: pathlib.Path, overlay_dir: pathlib.Path | None = None) -> str:
+    import hashlib
     pack = {
         "trainers": json.loads((PACK / "trainers.json").read_text(encoding="utf-8")),
         "statics": json.loads((PACK / "static_encounters.json").read_text(encoding="utf-8")),
         "species": json.loads((PACK / "species_index.json").read_text(encoding="utf-8"))["species"],
     }
-    sections, symbol_view = [], {}
-    for title in TITLES:
-        rom_path = rom_dir / f"poke{title[4:]}.gbc"
-        rom = rom_path.read_bytes()
-        import hashlib
-        if hashlib.sha1(rom).hexdigest() != by_title[title]["sha1"]:
-            raise SystemExit(f"{rom_path} is not the admitted clean {title} ROM")
-        sym = read_sym(SYMS / f"poke{title[4:]}.sym")
-        text, keys = build_entry(title, rom, sym, dict(pack, admission=by_title[title]))
-        sections.append(text)
-        symbol_view[title] = {k: keys[k] for k in list(SYMBOL_KEYS) + list(SYMBOL_ARRAY_KEYS)}
-    # the three builds share one layout except where bank $1D code shifts by a byte per
-    # title (HiddenItems* and MissingNo's immediates); report what differs, per title is right
-    differing = sorted(k for k in symbol_view["purered"]
-                       if len({v[k] for v in symbol_view.values()}) != 1)
-    print("title-specific symbol-backed keys: " + (", ".join(differing) or "none"), file=sys.stderr)
+    sections = []
+    for kind, spec in KINDS.items():
+        roms = {"clean": rom_dir, "overlay": overlay_dir or KINDS["overlay"]["roms"]}[kind]
+        admission = json.loads((PACK / spec["admission"]).read_text(encoding="utf-8"))
+        by_title = {v["title"]: dict(v, sha1=k) for k, v in admission.items()}
+        symbol_view = {}
+        for title in TITLES:
+            rom_path = roms / f"poke{title[4:]}.gbc"
+            rom = rom_path.read_bytes()
+            if hashlib.sha1(rom).hexdigest() != by_title[title]["sha1"]:
+                raise SystemExit(f"{rom_path} is not the admitted {kind} {title} ROM")
+            sym = read_sym(SYMS / spec["sym"].format(x=title[4:]))
+            text, keys = build_entry(title, rom, sym, dict(pack, admission=by_title[title]), kind)
+            sections.append(text)
+            symbol_view[title] = {k: keys[k] for k in list(SYMBOL_KEYS) + list(SYMBOL_ARRAY_KEYS)}
+        # the three builds share one layout except where bank $1D code shifts by a byte per
+        # title (HiddenItems* and MissingNo's immediates); report what differs, per title is right
+        differing = sorted(k for k in symbol_view["purered"]
+                           if len({v[k] for v in symbol_view.values()}) != 1)
+        print(f"{kind}: title-specific symbol-backed keys: " + (", ".join(differing) or "none"), file=sys.stderr)
     header = (
         "// pureRGB entries for the SLink fork of UPR ZX 4.6.1 (generated by tools/gen_upr_gen1_ini.py).\n"
         "// Symbol-backed offsets from data/purergb/*.sym; immediates located and verified per title.\n"
         "// LosslessMode=1: load->save is byte-identical with every setting off; writes are field-scoped.\n"
+        "// The `overlay` entries are the SLink companion-overlay builds (own header CRC, banks 0/1/3 shifted).\n"
     )
     return header + "\n" + "\n".join(sections)
 
@@ -322,12 +343,13 @@ def splice_into_fork(fork: pathlib.Path, text: str) -> pathlib.Path:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--roms", default=str(REPO / ".cache" / "purergb"))
+    ap.add_argument("--roms", default=str(KINDS["clean"]["roms"]))
+    ap.add_argument("--overlay-roms", default=str(KINDS["overlay"]["roms"]))
     ap.add_argument("--out", default=str(OUT))
     ap.add_argument("--fork", default=None, help="fork checkout; splice the entries into its gen1_offsets.ini")
     ap.add_argument("--check", action="store_true", help="fail if --out is not what would be generated")
     args = ap.parse_args()
-    text = generate(pathlib.Path(args.roms))
+    text = generate(pathlib.Path(args.roms), pathlib.Path(args.overlay_roms))
     out = pathlib.Path(args.out)
     if args.check:
         if not out.exists() or out.read_text(encoding="utf-8") != text:

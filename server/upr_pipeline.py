@@ -87,6 +87,36 @@ def jar_is_fork(jar: str) -> bool:
         return False
 
 
+def jar_entries(jar: str) -> set[str]:
+    """The Gen 1 INI section names a jar carries -- what it can randomize. The stock jar has
+    the vanilla four; the SLink fork adds the three clean pure titles and, since patch 0003,
+    the three companion-overlay builds (their header CRCs differ, so without their own entry
+    UPR finds nothing and dies reading base stats)."""
+    import re
+    import zipfile
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            text = zf.read("com/dabomstew/pkrandom/config/gen1_offsets.ini").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return set()
+    return set(re.findall(r"^\[([^\]]+)\]", text, flags=re.MULTILINE))
+
+
+def jar_entry_for(ident: dict) -> str | None:
+    """The INI section a scanned pure artifact needs (None for a non-pure identity)."""
+    if ident.get("foundation") != "gen1_purergb":
+        return None
+    from tools.upr_write_domain_diff import SECTION, entry_key
+    return SECTION.get(entry_key(ident))
+
+
+def jar_supports(jar: str, ident: dict) -> bool:
+    """True when the jar carries the entry this artifact randomizes under: a pure title
+    needs its clean or overlay section; anything else is the stock handler's business."""
+    entry = jar_entry_for(ident)
+    return True if entry is None else entry in jar_entries(jar)
+
+
 def family_of(sources: dict[str, str]) -> str:
     """The randomizer family the pair belongs to (upr_settings.FAMILY_*); a pure/vanilla
     mix is refused because the two would need different contracts and could not link."""
@@ -176,6 +206,9 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
            "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
     out["jar_fork"] = out["jar_found"] and jar_is_fork(jar)
+    # the sections the jar can randomize under -- the Cartridges form checks a pure pick's
+    # "<Variant> overlay (U)" entry here, before the button, instead of after a Java failure
+    out["jar_entries"] = sorted(jar_entries(jar)) if out["jar_found"] else []
     for pid, path in sources.items():
         info = {"path": path, "exists": bool(path) and os.path.isfile(path),
                 "clean": None, "title": ""}
@@ -201,6 +234,26 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     return out
 
 
+def _run_bounded(argv: list, timeout: int) -> subprocess.CompletedProcess:
+    """Run the jar with a hard bound. A randomizer that never terminates (review cx-795d1423
+    #1: the similar-strength search on a zero-stat sentinel) must not hang the Manager's
+    worker: on expiry the whole process tree is killed (java may have children; on Windows
+    Popen.kill() reaches only the direct child) and the run is refused as a timeout."""
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+        else:
+            proc.kill()
+        proc.communicate()
+        raise UprPipelineError(
+            f"UPR did not finish within {timeout} s and was killed -- these settings hang "
+            f"the randomizer on this cartridge; the run is refused") from None
+    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+
+
 def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
               java: str = "java", timeout: int = RANDOMIZE_TIMEOUT) -> dict:
     """Run UPR once. Returns the seed, effective settings and the artifact's identity."""
@@ -220,12 +273,17 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
         src_ident = identify(f.read())
     if src_ident.get("foundation") == "gen1_purergb" and not jar_is_fork(jar):
         raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
+    if not jar_supports(jar, src_ident):
+        raise UprPipelineError(
+            f"this jar has no entry for the {src_ident.get('kind')} build of "
+            f"{src_ident.get('variant')} ({jar_entry_for(src_ident)}); rebuild the SLink fork "
+            f"(tools/build_upr_fork.py, patch/upr/0003) -- UPR would otherwise fail reading "
+            f"base stats, or fall back to the vanilla entry")
 
     before = set(os.listdir(os.path.dirname(os.path.abspath(output_rom)) or "."))
-    proc = subprocess.run(
+    proc = _run_bounded(
         [java, "-jar", jar, "cli", "-s", settings_path, "-i", source_rom,
-         "-o", output_rom, "-l"],
-        capture_output=True, text=True, timeout=timeout)
+         "-o", output_rom, "-l"], timeout)
     if proc.returncode != 0:
         raise UprPipelineError(
             f"UPR exited {proc.returncode}: {(proc.stderr or proc.stdout).strip()[:400]}")
@@ -321,6 +379,26 @@ def _check_content(source_rom: str, output_rom: str) -> dict:
     return profile
 
 
+def _audit_write_domain(source_rom: str, output_rom: str, spec: dict) -> dict:
+    """T6 on the produced cartridge (docs/purergb/PLAN.md §6 M5): every byte the fork changed
+    must lie inside the write domain of the categories that were enabled. _check_content only
+    compares the rule-bearing tables; this is what proves the fork wrote NOTHING else -- a
+    handler that touched a code byte or an unlisted table would pass the content check."""
+    from tools.upr_write_domain_diff import audit, domains_for_spec, entry_key
+    with open(source_rom, "rb") as f:
+        clean = f.read()
+    with open(output_rom, "rb") as f:
+        out = f.read()
+    cats = domains_for_spec(spec)         # every option, not just the six mode choices
+    r = audit(entry_key(identify(clean)), clean, out, cats)
+    if r["stray"]:
+        shown = ", ".join(f"0x{i:06X}" for i in r["stray"][:8])
+        raise UprPipelineError(
+            f"the randomizer wrote {len(r['stray'])} byte(s) outside the write domain of "
+            f"{sorted(cats) or 'nothing'} (first: {shown}); the output is refused")
+    return {"changed": r["changed"], "categories": sorted(cats)}
+
+
 def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir: str,
                  java: str = "java") -> dict:
     """Randomize one ROM per player and prove the pair is usable.
@@ -378,6 +456,8 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         info["categories"] = sorted(categories_enabled(effective))
         info["spec"] = spec_from_parsed(effective)
         info["content_profile"] = _check_content(sources[player], info["output"])
+        if family == "gen1_purergb":              # upr_settings.FAMILY_PURE
+            info["write_domain"] = _audit_write_domain(sources[player], info["output"], info["spec"])
         results[player] = info
 
     if results["a"]["seed"] == results["b"]["seed"]:
@@ -398,10 +478,12 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         with open(results[player]["output"], "rb") as f:
             results[player]["fingerprint"] = fingerprint_rom(f.read())
         del results[player]["content_profile"]        # large; the hash is what is kept
-    if results["a"]["content_hash"] == results["b"]["content_hash"]:
+    # The produced BYTES must differ: content_hash covers only wild/fishing/base stats, so a
+    # pair randomized in starters or trainers alone hashes identically (review cx-795d1423 #9).
+    if results["a"]["sha1"] == results["b"]["sha1"]:
         raise UprPipelineError(
-            "both ROMs scanned to identical content despite different seeds — the "
-            "randomization did not take effect")
+            "both ROMs came out byte-identical despite different seeds — the randomization "
+            "did not take effect")
 
     if results["a"]["version"] != results["b"]["version"]:
         raise UprPipelineError(

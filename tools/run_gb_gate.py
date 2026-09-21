@@ -125,6 +125,10 @@ GENS = {
             "purered_overlay": ("purered", None, "gen1 purered overlay.SaveRAM"),
             "pureblue_overlay": ("pureblue", None, "gen1 pureblue overlay.SaveRAM"),
             "puregreen_overlay": ("puregreen", None, "gen1 puregreen overlay.SaveRAM"),
+            # A RANDOMIZED PureRed (tests/live/test_gen1_rand_gates.py): the UPR fork's output,
+            # copied under this path by the test itself, cold-booted (NEW GAME) and admitted by
+            # the pack anchors (kind rand) -- its sha1 is in no table by construction.
+            "purered_rand_cold": (None, "patch/build/gen1_purered_rand.gbc", "gen1 purered rand.SaveRAM"),
         },
     },
     "gen2": {
