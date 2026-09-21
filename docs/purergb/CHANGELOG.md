@@ -424,6 +424,8 @@ Read this section if you only play vanilla.
 | 29 | randomizer validation (Codex cx-795d1423 / cx-758c671d) | write-domain audit gaps: field-item sites incl. key items / pure-only items, no catch-rate / level-curve / sanity domains, tier-5 opcode, only ever run for `wild`, never on a produced pair | `domains_for_spec` from the full spec, `UPR_GEN1_ALLOWED_ITEMS`, `guaranteed_catch_byte`; `prepare_pair` audits every pure pair |
 | 30 | randomizer validation (Codex cx-795d1423) | `prepare_pair` refused a valid pair randomized in starters/trainers/… only (identical content hash) | pair check on output sha1 |
 | 31 | randomizer validation (verifier) | `trainers=type_themed` crashes: `randomType()` draws a declared type no species carries | fork patch 0004: re-draw |
+| 32 | randomizer validation (Codex cx-73e80e05) | `wild=area + catch_em_all` could write the banned ghost into a fishing/Tower set (draw from `allPokes`, removal from `pickablePokemon`) | fork patch 0005: draw from the filtered pool |
+| 33 | randomizer validation (Codex cx-73e80e05) | `wild=global` + `type_themed` / `catch_em_all` accepted although UPR ignores the restriction | refused by name for both families; form greys it |
 | 24 | final review (Codex, round 9) | verdict: the wrong-target counterexample is closed; one conservative false-refusal window (same-species party swap sampled mid-transaction) is documented for the owner's acceptance | residual wording in §7 |
 | 23 | final review (Codex, round 8) | an unobserved edit interval (teach A a different move, then teach a same-key/same-nickname twin A's old set, all in the item menu) let the twin become the sole match | every alias is observed on every readable frame (pure pass, no refresh): the zero-match interval latches `lost` |
 | 22 | final review (Codex, round 7) | sequential replacement: deposit the changed record, withdraw an identical boxed twin — no observation ever sees two candidates, the twin becomes the sole match | any native departure of a record carrying the aliased key (MoveMon party→box/daycare, RemovePokemon) permanently invalidates the alias (`alias_departure`); a zero-match observation does too |
@@ -518,10 +520,24 @@ refused by name:
   — a randomized PureRed boots cold, and the starter it hands out, the rival's party and the
   first Route 1 encounter equal the OUTPUT ROM's own tables (decoded through the fork's INI
   offsets; receipt `patch/build/test_gen1_rand_lab_gate_result.txt`).
-- **Not claimed**: `tm_compat=prefer_type` has no statable guarantee and is unchecked;
-  `trainers_similar_strength` is proven to terminate and stay in the pool, no BST band is
-  asserted (the search has no bound); only PureRed is randomized in the unit tests (the other
-  five artifacts pass the clean-vs-clean control and the all-off lossless round trip).
+- **Round 3 (`cx-73e80e05`, fact-check `cx-e196ce30`)**: one more fork defect at the root —
+  `wild=area + catch_em_all` drew from the unfiltered pool while removing from the filtered one,
+  so a fishing/Tower set could receive the ghost it bans (`patch/upr/0005`; RNG-equivalent to
+  stock for an area with no bans given identical incoming state, not a whole-run fixed-seed
+  guarantee once a banning set was processed). `wild=global` with `type_themed` / `catch_em_all`
+  is refused by name for both families (UPR's `game1to1Encounters` reads only the similar-strength
+  restriction) and the form greys it (master `8accbd9`). The verifier (67 tests) now asserts
+  global bijection (reuse ≤ 2 with legendaries blocked, from the pool-size pigeonhole), area
+  injectivity incl. `similar`, the similar-strength BST band from the exact Java expansion loop,
+  `force_evolved` gated on the threshold, the TM ban set (Transform/Struggle), `prefer_type`'s
+  probability-1 bits (every Bug species learns Cut), and the missing matrix cells; "enabled ⇒ a
+  byte changed" is a fixture expectation only where identity is impossible (starters and TMs can
+  legally redraw the originals).
+- **Not claimed**: `prefer_type` beyond its probability-1 bits (the rest is a probability, not
+  a per-ROM assertion); `trainers_similar_strength` under `distributed` / `type_themed` pools (the
+  band is modelled for `random` only); only PureRed is randomized in the unit tests (the other
+  five artifacts pass the clean-vs-clean control and the all-off lossless round trip); the fork's
+  `distributed` / `random_even` labels promise nothing seed-independent.
 
 ---
 
