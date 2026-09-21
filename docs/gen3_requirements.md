@@ -194,6 +194,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 FR natural play run 13 (playlib): `docs/gen3/probes/shadow_fr_play_run13_2026-09-21.txt` — starter, rival battle, lab exit and the Viridian parcel fetch complete, two wild encounters on Route 1 handled mid-step by the shared walker; observer: battle_begin x3, battle_end x3, map_load x4, mon_given x1 (callback == site). Next stall: map-connection landing row (Route 1 -> Pallet Town lands on row 0).
 
+- 2026-09-21 P3 checkpoint negatives, RR companion: `docs/gen3/probes/checkpoint_rr_companion_2026-09-21.txt` — the real `lua/gen3/safety.lua` predicate over the real pack, sampled at frame end: idle field 300/300 true (R15 0x1C4 BIOS park, CPSR System), walking 120/120 true, START menu 0/120 true, save dialog 0/120, save in progress 0/757 (partial new slot then 14/14), battle 0/120, palette fade 0/76; no write needed. PHYSICAL positive for W-2/W-3 on RR companion (liveness + every forbidden state false). FR/LG: needs savestates for the battle and door phases (queued; the battery fixture covers idle/menu/dialog/save).
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
