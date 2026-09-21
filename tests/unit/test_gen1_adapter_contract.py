@@ -353,3 +353,14 @@ def test_key_and_blob_validation_with_codec_random_records():
         assert not adapter.is_valid_mon_key(bad) and adapter.parse_ot_id(bad) == ""
     assert not adapter.validate_party_blob("zz")
     assert not adapter.validate_party_blob(bytes(65))
+
+
+def test_a_map_that_is_no_encounter_area_is_named_from_pret_not_map_n():
+    """The client reports a town without wild encounters, a gym or a house as `map_<id>`;
+    the board says its name (data/games/gen1_rby/map_names.json), not "Map 1"."""
+    adapter = get_adapter("gen1_rby", rom_type="red")
+    assert adapter.area_display_name("map_1") == "Viridian City"
+    assert adapter.area_display_name("map_41") == "Viridian Pokémon Center"
+    assert adapter.area_display_name("map_245") == "Lorelei's Room"
+    assert adapter.area_display_name("pallet_town") == "Pallet Town", "area_map.json still wins"
+    assert adapter.area_display_name("map_999") == "Map 999", "an id nothing names stays honest"
