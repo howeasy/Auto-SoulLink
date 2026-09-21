@@ -426,6 +426,9 @@ Read this section if you only play vanilla.
 | 31 | randomizer validation (verifier) | `trainers=type_themed` crashes: `randomType()` draws a declared type no species carries | fork patch 0004: re-draw |
 | 32 | randomizer validation (Codex cx-73e80e05) | `wild=area + catch_em_all` could write the banned ghost into a fishing/Tower set (draw from `allPokes`, removal from `pickablePokemon`) | fork patch 0005: draw from the filtered pool |
 | 33 | randomizer validation (Codex cx-73e80e05) | `wild=global` + `type_themed` / `catch_em_all` accepted although UPR ignores the restriction | refused by name for both families; form greys it |
+| 35 | randomizer validation (Codex cx-201b85a7 .. cx-636b45dd) | trainers similar-strength oracle: per-slot theme choice, distinct-BST counting, per-party (not ROM-wide) branch residue, any-alias ownership, force-only reconciliation skipped; distributed+similar not modellable | per-party model, object counting, ROM-wide residue over UPR's trainer index, final-writer alias, reconciliation for every forced split evolution; distributed+similar refused by name |
+| 36 | randomizer validation (master b35f378) | the overlay was rebuilt with the SFX service: staged overlay ROMs and the jar's overlay CRCs went stale | overlay re-staged from the UPS, fork patch 0006, `jar_supports` compares CRCInHeader |
+| 37 | randomizer validation (Codex cx-25b25db1) | a pre-fix fork jar (same version string, same clean CRCs) passed admission | fork patch 0007: `4.6.1-slink2` + `SlinkForkRevision=2`, `FORK_REVISION_REQUIRED` gate |
 | 34 | randomizer validation (Codex cx-37fe2641) | verifier holes: similar_strength+force_evolved compared the post-evolution BST; global reuse bounded per destination only; wild/themed similar bands unchecked; statics=similar allowed the original | stage-aware ancestor rule, aggregate reuse ≤ pool deficit, area/themed bands, self-exclusion (74 tests); `wild=global+similar` refused by name (not exactly modellable) |
 | 24 | final review (Codex, round 9) | verdict: the wrong-target counterexample is closed; one conservative false-refusal window (same-species party swap sampled mid-transaction) is documented for the owner's acceptance | residual wording in §7 |
 | 23 | final review (Codex, round 8) | an unobserved edit interval (teach A a different move, then teach a same-key/same-nickname twin A's old set, all in the item menu) let the twin become the sole match | every alias is observed on every readable frame (pure pass, no refresh): the zero-match interval latches `lost` |
@@ -535,7 +538,16 @@ refused by name:
   byte changed" is a fixture expectation only where identity is impossible (starters and TMs can
   legally redraw the originals). Final round (`cx-37fe2641`): four more verifier holes closed
   (defect 34); `wild=global + similar` is refused by name because its picker's pool shrinks across
-  the whole map and no per-ROM oracle can bound a draw exactly.
+  the whole map and no per-ROM oracle can bound a draw exactly. Rounds `cx-201b85a7` .. `cx-f1469e38`
+  (six more): the trainers similar-strength oracle rebuilt per PARTY (one theme per trainer, candidate
+  counting by Pokémon object, pre-selection exclusion of would-lose-type evolutions, a single split-
+  evolution branch per ROM by seed residue, aliased records owned by their final writer);
+  `trainers=distributed + similar_strength` refused by name (placement history precedes the band);
+  the overlay INI entries regenerated for the SFX-service overlay (patch 0006) with `jar_supports`
+  comparing `CRCInHeader`; and the fork REVISION qualified (patch 0007: `4.6.1-slink2`,
+  `SlinkForkRevision=2` in every pure section, `FORK_REVISION_REQUIRED`) so the historical pre-fix jar
+  is refused before Java. **Codex verdict `cx-f1469e38`: CLOSED within scope** — every option the
+  pure family admits is verified per mode (89 verifier tests) or refused by name.
 - **Not claimed**: `prefer_type` beyond its probability-1 bits (the rest is a probability, not
   a per-ROM assertion); `trainers_similar_strength` under `distributed` / `type_themed` pools (the
   band is modelled for `random` only); only PureRed is randomized in the unit tests (the other
