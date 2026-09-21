@@ -162,6 +162,10 @@ Yellow, `docs/gen1_requirements.md:154`); randomized FRLG admission / UPR for Ge
 `data/games/gen3_frlge/rr_*.json` into `gen3_rr/` (cosmetic); the parked `codex/rr-foundation`
 branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
+## Receipts (running)
+
+- 2026-09-21 P1 census on RR `slink_overworld.State`: `docs/gen3/probes/census_rr_overworld_2026-09-21.txt` (R15 parked at BIOS `0x1C4`, System/ARM, one idle task set) — PHYSICAL input to W-2 (checkpoint) and S-13 (register names).
+
 ## Recorded limits
 
 - **Keyed sync-command re-issue window.** `SYNC_INFLIGHT_RECONCILES = 6` is a re-issue
