@@ -159,6 +159,7 @@ function Client.new(p)
         retired_alias = {},
         deferred = {}, pending_battle_writes = {},
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
+        nuzlocke_announced = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
         trade = p.trade, trade_enabled = false, trade_state = nil,
         -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
@@ -182,6 +183,13 @@ function Client.new(p)
 
     -- ── reads → wire shapes ──────────────────────────────────────────────────────────
     local function mon_key(m) return reads.key(m) end
+
+    -- Gen 3 parity (nick_label, gen3_frlge_client.lua:476-477): a nickname when the caller
+    -- has one, else the key's short form -- shared by the local HUD moments below.
+    local function nick_label(key, nickname)
+        if nickname and nickname ~= "" then return nickname end
+        return key and key:sub(1, 8) or "?"
+    end
 
     local function party_entry(m, active_slot, stages)
         -- 66-byte blob: struct(44) + OT(11) + nick(11), what the adapter's party_blob_size says
@@ -252,6 +260,17 @@ function Client.new(p)
         local n = 0
         if bag then for _, it in ipairs(bag.items) do if BALL_ITEMS[it.id] then n = n + it.qty end end end
         return n
+    end
+
+    -- Gen 3 parity (gen3_frlge_client.lua:4112-4119): banner + SFX once, on the transition
+    -- INTO the run -- bag_received fires it directly, send_tick catches the ball-count edge
+    -- for anything that reaches the bag another way. Never at hello (send_hello below), which
+    -- can only ever observe a bag already stocked from a previous session.
+    local function announce_nuzlocke_start()
+        if self.nuzlocke_announced then return end
+        self.nuzlocke_announced = true
+        hud.nuzlocke_start("Nuzlocke Start!")
+        self:request_sfx_local(95) -- SE_SHINY, Gen 3's default SE_NUZLOCKE_START (memory_gba.lua:1963)
     end
 
     local function pc_boxes_wire()
@@ -425,6 +444,39 @@ function Client.new(p)
         return cmd.r, cmd.g, cmd.b, cmd.frames
     end
 
+    -- The one native-SFX gate (panel present + sfx-capable + config.native_sounds): a server
+    -- `play_sound` command and every LOCAL HUD moment (nuzlocke start, new encounter, game
+    -- over, whiteout) request through this. `gen3_id` is the Gen 3 SE id on the wire
+    -- (docs/protocol.md); panel:sfx_code_for maps it to this cartridge's semantic code.
+    function self:request_sfx_local(gen3_id)
+        local code = self.panel and self.panel:sfx_code_for(gen3_id)
+        -- An id with no Gen 1 mapping (panel.lua's SFX_CODE_FOR_GEN3_ID) is not "unavailable" --
+        -- it is simply not a sound this cartridge has (cx-6bedd222): fall through silently
+        -- rather than tripping sfx_unavailable_logged, which would then never fire for a real
+        -- unavailable case (sounds on, capable panel, but a mapped id) later in the run.
+        if not code then return end
+        if self.config and self.config.native_sounds == true and self.panel:sfx_present() then
+            -- Coalesce: commands in the SAME frame can land the identical semantic code -- a terminal linked faint queues force_faint + play_sound 26 to the loser,
+            -- then game_over's own local 26 lands in the same reply/frame (state.py:2884 with
+            -- :2103/:3202) -- and panel.lua:156-161 would otherwise queue both as if two
+            -- distinct cues were wanted. self.frame is set once at the top of frame_end, before
+            -- any command this frame is processed, so it is stable for the whole turn.
+            -- A per-frame SET, not the last code: 26 -> 25 -> 26 in one reply must still
+            -- post the failure once (cx-3987357f). Different codes in one frame stay distinct.
+            local seen = self.sfx_frame_codes
+            if not seen or seen.frame ~= self.frame then
+                seen = { frame = self.frame, codes = {} }
+                self.sfx_frame_codes = seen
+            end
+            if seen.codes[code] then return end
+            seen.codes[code] = true
+            self.panel:request_sfx(code)
+        elseif not self.sfx_unavailable_logged then
+            self.sfx_unavailable_logged = true
+            log("[SLink-gen1] play_sound: native sounds off or no SFX-capable patch on this cartridge")
+        end
+    end
+
     function self:handle_command(cmd)
         local c = cmd.cmd
         if c == "noop" then return end
@@ -434,7 +486,7 @@ function Client.new(p)
             if not party then
                 -- unreadable right now (AddPartyMon's AskName window): keep it; the checkpoint
                 -- re-finds the key (a server command is never resent)
-                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key }
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
                 self.known_keys[cmd.key] = true
                 return
             end
@@ -442,9 +494,9 @@ function Client.new(p)
             local battle = reads.read_battle()
             if battle.in_battle ~= 0 and battle.player_mon_number == slot then
                 -- active battler: only the loop head may write (W-2); queue for the hook
-                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = c, key = cmd.key }
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
             else
-                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key }
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
             end
             self.known_keys[cmd.key] = true
             return
@@ -461,17 +513,9 @@ function Client.new(p)
             local r, g, b, f = hud_color(cmd)
             hud.show(cmd.text, r, g, b, f)
         elseif c == "play_sound" then
-            -- Gen 3 SE ids on the wire (docs/protocol.md); the companion patch plays them
-            -- natively when the run asked for it (config.native_sounds) AND this cartridge
-            -- advertises the SFX capability (per cartridge, like the panel: caps bit 0).
-            local code = self.panel and self.panel:sfx_code_for(cmd.sound)
-            if code and self.config and self.config.native_sounds == true
-               and self.panel:sfx_present() then
-                self.panel:request_sfx(code)
-            elseif not self.sfx_unavailable_logged then
-                self.sfx_unavailable_logged = true
-                log("[SLink-gen1] play_sound: native sounds off or no SFX-capable patch on this cartridge")
-            end
+            -- Gen 3 SE ids on the wire (docs/protocol.md); request_sfx_local applies the same
+            -- native-SFX gate the local HUD moments below use.
+            self:request_sfx_local(cmd.sound)
         elseif c == "resolved_areas" then
             self.resolved_areas = {}
             for _, a in ipairs(cmd.areas or {}) do self.resolved_areas[a] = true end
@@ -510,6 +554,10 @@ function Client.new(p)
             -- a queued notification accepted under the old setting must not post after it
             if cmd.native_sounds ~= true and self.panel then self.panel:clear_sfx() end
         elseif c == "game_over" then
+            -- Gen 3 parity (gen3_frlge_client.lua:1026-1027): the server's game_over command
+            -- carries no play_sound of its own (server/state.py:2103, :3202) -- the client
+            -- supplies the cue locally, same as the whiteout detection below.
+            self:request_sfx_local(26) -- SE_FAILURE, Gen 3's default SE_GAME_OVER (memory_gba.lua:1964)
             hud.set_game_over()
             self.game_over = true
         elseif c == "rebuild_start" then
@@ -691,6 +739,15 @@ function Client.new(p)
                 local slot, _, _, why = find_party_slot(cmd.key)
                 if slot then
                     writes:faint_party_slot(slot)
+                    -- Gen 3 parity (gen3_frlge_client.lua:760-800): text only, never a local
+                    -- SFX -- but not for one uniform reason (cx-6bedd222). A terminal/linked
+                    -- battle faint's force_faint already carries a play_sound 26 to this player
+                    -- (state.py:2884); the whiteout-driven retire loop (state.py:2073) and the
+                    -- dead-key requeue after a buried key_change (state.py:2708) carry no sound
+                    -- at all -- the whiteout case gets its own local cue from announce_whiteout
+                    -- above instead, and the dead-key requeue is silent by design (a link
+                    -- already resolved, not a new event). One banner rule covers all three.
+                    hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360)
                 else
                     -- the mon left the party before the checkpoint (PC deposit), or a duplicate
                     -- arrived and the key no longer names one mon: no byte moves. The protocol
@@ -704,8 +761,13 @@ function Client.new(p)
                 -- `x and f()` keeps only f's first value: bind both explicitly
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:deposit(phys, hint) end
-                if not done then send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
-                else self:rescan_boxes() end
+                if not done then
+                    send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
+                    hud.show("X Box fail: " .. nick_label(cmd.key, mon and mon.nickname), 255, 80, 80, 240)
+                else
+                    self:rescan_boxes()
+                    hud.show("↓ " .. nick_label(cmd.key, mon and mon.nickname) .. " boxed", 100, 180, 255, 200)
+                end
             elseif cmd.cmd == "party_mon" then
                 -- the withdrawn mon's stats are rebuilt from the cartridge's own base stats
                 local species
@@ -713,7 +775,10 @@ function Client.new(p)
                 local base = species and self.rom and self.rom.base_stats_for(species) or nil
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
-                if done then send("sync_retrieve_done", { key = cmd.key }); self:rescan_boxes()
+                if done then
+                    send("sync_retrieve_done", { key = cmd.key })
+                    self:rescan_boxes()
+                    hud.show("↑ " .. nick_label(cmd.key, cmd.nickname) .. " unboxed", 100, 255, 160, 200)
                 elseif reason == "party full" and (cmd.full_retries or 0) < (cmd.full_budget or (#self.deferred + 1)) then
                     -- Whiteout rebuild with a full party: the blackout HEALED the dead mons
                     -- (HealParty runs before the blackout site), the server queues the
@@ -730,11 +795,13 @@ function Client.new(p)
                         .. cmd.full_retries .. "/" .. cmd.full_budget .. " after the queue")
                 else send("sync_retrieve_failed", { key = cmd.key, reason = reason or "withdraw refused" }) end
             elseif cmd.cmd == "memorialize" then
+                local _, mem_mon = find_party_slot(cmd.key)
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:memorialize(phys, hint) end
                 if done then
                     send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
                     self.retired_alias[cmd.key] = nil
+                    hud.show("† " .. nick_label(cmd.key, mem_mon and mem_mon.nickname) .. " buried", 255, 140, 40, 300)
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
@@ -742,7 +809,10 @@ function Client.new(p)
                     -- makes the memorial legal is itself queued behind this command; re-inserting
                     -- at the head starves it and the pair never recovers (A5)
                     self.deferred[#self.deferred + 1] = cmd
-                else send("memorialize_failed", { key = cmd.key, reason = reason or "memorial refused" }) end
+                else
+                    send("memorialize_failed", { key = cmd.key, reason = reason or "memorial refused" })
+                    hud.show("X Mem fail: " .. nick_label(cmd.key, mem_mon and mem_mon.nickname), 255, 80, 80, 300)
+                end
             end
             writes:disarm()
         end)
@@ -813,6 +883,16 @@ function Client.new(p)
         return out
     end
 
+    -- Gen 3 parity (gen3_frlge_client.lua:3804-3816): the client's OWN whiteout detection
+    -- gets a local cue -- the server's reply to `whiteout` (state.py _handle_whiteout) never
+    -- queues a play_sound, so there is nothing to double up with.
+    local function announce_whiteout()
+        if self.whiteout_sent then return end
+        self.whiteout_sent = true
+        self:request_sfx_local(22) -- SE_BOO
+        send("whiteout", {})
+    end
+
     local function emit_faint(party, slot, area_id, hook_hp_zero_slot)
         local key = key_at(party, slot)
         if not key then return end
@@ -823,16 +903,13 @@ function Client.new(p)
         for _, m in ipairs(party) do
             if m.slot ~= slot and m.slot ~= hook_hp_zero_slot and m.hp > 0 then alive = alive + 1 end
         end
-        if alive == 0 and not self.whiteout_sent then
-            self.whiteout_sent = true
-            send("whiteout", {})
-        end
+        if alive == 0 then announce_whiteout() end
     end
 
     function self:on_signal(sig)
         local k, pt = sig.kind, sig.point or {}
         local map_id = pt.map or reads.read_map().map
-        local area_id = select(1, area_of(map_id))
+        local area_id, area_disp_name = area_of(map_id)
         if k == "battle_begin" or k == "wild_begin" then
             -- A wild encounter never sets wCurOpponent (both foundations stage the species in
             -- wEnemyMonSpecies2, engine/battle/wild_encounters.asm), so wild_begin is the wild
@@ -864,6 +941,23 @@ function Client.new(p)
                             end
                             break
                         end
+                    end
+                    -- Gen 3 parity (gen3_frlge_client.lua:2840-2852): flag a wild encounter in
+                    -- an area this run hasn't resolved yet. self.battle.area_id already carries
+                    -- the static-encounter override above, matching the id no_catch/capture key
+                    -- off of; area_of() never returns a "gift_map_*" id (that prefix only exists
+                    -- for a settled non-battle acquisition), so no separate gift check is needed.
+                    -- Excluded like battle_end's own no_catch logic below (cx-6bedd222): a
+                    -- static/scripted encounter (self.battle.static) and a demonstration battle
+                    -- (self.battle.demo, Y-0) resolve nothing and are not the player's own
+                    -- encounter; a Tower ghost without the Silph Scope can be neither fought nor
+                    -- caught (the exact TOWER_MAPS/SILPH_SCOPE predicate used at battle_end).
+                    if self.has_pokeballs and self.seeded and self.battle.area_id ~= ""
+                       and not self.battle.static and not self.battle.demo
+                       and not (TOWER_MAPS[self.battle.map] and reads.has_item(SILPH_SCOPE) ~= true)
+                       and not self.resolved_areas[self.battle.area_id] then
+                        hud.show("** NEW ENCOUNTER **  " .. area_disp_name, 255, 220, 60, 360)
+                        self:request_sfx_local(25) -- SE_SUCCESS
                     end
                 end
             end
@@ -913,9 +1007,11 @@ function Client.new(p)
             local party = party_from_snapshot(pt.party or {})
             if party then emit_faint(party, pt.which, area_id, pt.which) end
         elseif k == "blackout" then
-            if not self.whiteout_sent then self.whiteout_sent = true; send("whiteout", {}) end
+            announce_whiteout()
         elseif k == "bag_received" then
+            local had_balls = self.has_pokeballs
             self.has_pokeballs = true
+            if not had_balls then announce_nuzlocke_start() end
         elseif k == "add_party_mon" or k == "capture_box" then
             local loc = pt.mon_location or 0
             if k == "add_party_mon" and loc % 16 ~= 0 then
@@ -1292,12 +1388,15 @@ function Client.new(p)
                     writes:arm("battle_loop_head")
                     if w.cmd == "force_explode" then writes:explode_active_battler(slot) else writes:faint_active_battler(slot) end
                     writes:disarm()
+                    -- Gen 3 parity (gen3_frlge_client.lua:760-800): same text-only banner as
+                    -- the bench-mon write in run_deferred above.
+                    hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360)
                 else
                     keep[#keep + 1] = w
                 end
             elseif slot then
                 -- switched out meanwhile: a bench write at the next checkpoint is enough
-                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key }
+                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
             end
         end
         self.pending_battle_writes = keep
@@ -1400,14 +1499,28 @@ function Client.new(p)
         local party, battle = snapshot_party()
         local map = reads.read_map()
         local area_id, loc = area_of(map.map)
+        local had_balls = self.has_pokeballs
         self.has_pokeballs = self.has_pokeballs or ball_count() > 0
+        -- A hello snapshot with balls already in the bag is a resume/reconnect, not the
+        -- moment of acquisition (gen3_frlge_client.lua:1921-1926): log only, no banner.
+        if not had_balls and self.has_pokeballs then
+            self.nuzlocke_announced = true
+            log("[SLink-gen1] nuzlocke ACTIVE (pokeballs already in bag at startup)")
+        end
         self:rescan_boxes()
         for _, e in ipairs(party or {}) do self.known_keys[e.key] = true end
         for _, e in ipairs(self.box_cache) do self.known_keys[e.key] = true end
         local rom_content
         if self.rom and self.rom.rom_content then
             local ok, result = pcall(self.rom.rom_content)
-            if ok then rom_content = result
+            if ok then
+                rom_content = result
+                -- What the area-entry banner below can see: the cartridge's OWN wild-data
+                -- table (rom.lua:147, keyed by map id, populated only where the wild rate is
+                -- nonzero). The server's gift-area list (server/adapters/gen1_rby.py's
+                -- _GIFT_AREAS) is not on the wire and is not a proxy for this: oaks_lab (map
+                -- 40) is a real, non-gift-prefixed area_id with no wild table (cx-6bedd222).
+                self.wild_maps = result.wild
             elseif not self.rom_content_error_logged then
                 log("[SLink-gen1] rom_content unavailable: " .. tostring(result))
                 self.rom_content_error_logged = true
@@ -1433,12 +1546,26 @@ function Client.new(p)
         if not party then return end
         local map = reads.read_map()
         local area_id, loc = area_of(map.map)
+        local in_battle = battle.in_battle ~= 0
         if self.last_area ~= nil and self.last_area ~= area_id then
             send("area_enter", { area_id = area_id, loc_name = loc })
+            -- Gen 3 parity (gen3_frlge_client.lua:2722-2735): flag entry into a map this
+            -- cartridge's OWN wild table (self.wild_maps, from rom.rom_content() at hello) says
+            -- can encounter something. "not gift_map_*" is not "not a gift area" (cx-6bedd222):
+            -- the server's gift-area list is server-side only, but a gift area has no wild
+            -- table either, so requiring one is the check the client can actually make.
+            -- Outside battle only: a map transition mid-trainer-battle must not banner.
+            if self.has_pokeballs and self.seeded and not in_battle and area_id ~= ""
+               and self.wild_maps and self.wild_maps[tostring(map.map)]
+               and not self.resolved_areas[area_id] then
+                hud.show("** NEW ENCOUNTER **  " .. loc, 255, 220, 60, 240)
+                self:request_sfx_local(25) -- SE_SUCCESS
+            end
         end
         self.last_area = area_id
+        local had_balls = self.has_pokeballs
         self.has_pokeballs = self.has_pokeballs or ball_count() > 0
-        local in_battle = battle.in_battle ~= 0
+        if not had_balls and self.has_pokeballs then announce_nuzlocke_start() end
         send(event or "tick", {
             party = party, has_pokeballs = self.has_pokeballs, ball_count = ball_count(),
             area_id = area_id, loc_name = loc, in_battle = in_battle,

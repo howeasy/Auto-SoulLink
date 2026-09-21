@@ -90,6 +90,7 @@ class World:
             set_game_over=lambda: self.hud.append(("game_over",)),
             set_rebuilding=lambda t: self.hud.append(("rebuilding", str(t))),
             clear_rebuilding=lambda: self.hud.append(("rebuild_done",)),
+            nuzlocke_start=lambda *a: self.hud.append(("nuzlocke_start",) + tuple(str(x) if isinstance(x, str) else x for x in a)),
         )
         Entry = L.eval(f'dofile("{ENTRY}")')
         deps = L.table(root=REPO.as_posix(), io=io, net=net, hud=hud, title=title, player=player,
@@ -1102,7 +1103,9 @@ def test_a_request_the_rom_is_still_holding_is_never_overwritten(world):
     world.bus[SFX_REQUEST] = 0                             # the fade ended, the ROM played it
     world.step()
     assert world.bus[SFX_REQUEST] == 2 and _sfx_writes(world) == [1, 2]
-    # a burst deeper than the queue keeps the newest news
+    # a burst in ONE frame is coalesced per semantic code before it reaches the queue
+    # (cx-3987357f); with only three codes the panel's overflow (SFX_QUEUE_MAX, newest
+    # wins) is now reachable only across frames -- panel.lua keeps it for that case
     world.bus[SFX_REQUEST] = 0
     world.reply(*[{"cmd": "play_sound", "sound": s} for s in (25, 26, 22, 25, 26, 22)])
     world.step()
@@ -1113,8 +1116,7 @@ def test_a_request_the_rom_is_still_holding_is_never_overwritten(world):
         world.bus[SFX_REQUEST] = 0
         world.step()
         drained = _sfx_writes(world)[3:]
-    # queue cap 4, oldest dropped: of the five queued codes 2,3,1,2,3 the first 2 is lost
-    assert drained == [3, 1, 2, 3], drained
+    assert drained == [2, 3], drained
     world.assert_all_conform()
 
 
@@ -1132,6 +1134,537 @@ def test_a_queued_request_does_not_post_after_native_sounds_is_switched_off(worl
     world.bus[SFX_REQUEST] = 0                             # the ROM played the first
     world.step(3)
     assert _sfx_writes(world) == [1], "the queued request was dropped with the option"
+    world.assert_all_conform()
+
+
+# ── local HUD/SFX moments (Gen 3 parity: gen3_frlge_client.lua's client-only cues) ────────
+
+def test_nuzlocke_banner_not_shown_at_a_hello_that_already_has_balls(world):
+    """gen3_frlge_client.lua:1921-1926: a hello snapshot with balls already in the bag is a
+    resume, not the moment of acquisition -- log only, no banner (the `world` fixture starts
+    with one Poke Ball already given)."""
+    world.connect()
+    assert world.events("hello")[0]["has_pokeballs"] is True
+    assert not any(h[0] == "nuzlocke_start" for h in world.hud)
+    assert any("nuzlocke ACTIVE (pokeballs already in bag at startup)" in ln for ln in world.logs)
+    world.assert_all_conform()
+
+
+def test_nuzlocke_banner_fires_once_on_the_first_bag_received():
+    world = World("red")
+    rng = random.Random(1)
+    world.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    world.set_map(0x0C)  # empty bag
+    world.connect()
+    assert world.events("hello")[0]["has_pokeballs"] is False
+    assert not any(h[0] == "nuzlocke_start" for h in world.hud)
+    world.give_poke_ball()
+    # signals.lua:31-39's filter: HL == wNumBagItems, carry set, wCurItem a ball
+    world.regs["H"], world.regs["L"] = world.ram["wNumBagItems"] // 256, world.ram["wNumBagItems"] % 256
+    world.regs["F"] = 0x10
+    world.bus[world.ram["wCurItem"]] = 0x04
+    world.fire("bag_received")
+    world.step()
+    starts = [h for h in world.hud if h[0] == "nuzlocke_start"]
+    assert len(starts) == 1 and starts[0][1] == "Nuzlocke Start!"
+    world.fire("bag_received")  # a second bag event must not repeat it
+    world.step()
+    assert len([h for h in world.hud if h[0] == "nuzlocke_start"]) == 1
+    world.assert_all_conform()
+
+
+def test_nuzlocke_start_requests_the_native_success_cue_when_available():
+    world = World("red")
+    rng = random.Random(1)
+    world.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    world.set_map(0x0C)
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step()
+    world.give_poke_ball()
+    world.regs["H"], world.regs["L"] = world.ram["wNumBagItems"] // 256, world.ram["wNumBagItems"] % 256
+    world.regs["F"] = 0x10
+    world.bus[world.ram["wCurItem"]] = 0x04
+    world.fire("bag_received")
+    world.step()
+    assert _sfx_writes(world) == [1], "SE_SHINY -> SFX_SUCCESS"
+
+
+def test_new_encounter_banner_on_wild_begin_in_an_unresolved_area(world):
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.step()
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.fire("wild_begin")
+    world.step()
+    shows = [h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]
+    assert len(shows) == 1
+    assert shows[0][1] == "** NEW ENCOUNTER **  Route 1"
+    assert shows[0][2:] == (255, 220, 60, 360)
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_withheld_without_balls_or_before_resolved_areas_is_seeded():
+    # no Poke Balls yet
+    w1 = World("red")
+    w1.seed_party([_mon(random.Random(1), 0x99, nick="BULBA")])
+    w1.set_map(0x0C)
+    w1.connect()
+    w1.reply({"cmd": "resolved_areas", "areas": []})
+    w1.step()
+    w1.in_battle(opponent=0xA5, species=0xA5, level=3)
+    w1.fire("wild_begin")
+    w1.step()
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in w1.hud), "no balls yet"
+
+    # resolved_areas never seeded from the server
+    w2 = World("red")
+    w2.seed_party([_mon(random.Random(1), 0x99, nick="BULBA")])
+    w2.set_map(0x0C)
+    w2.give_poke_ball()
+    w2.connect()
+    w2.in_battle(opponent=0xA5, species=0xA5, level=3)
+    w2.fire("wild_begin")
+    w2.step()
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in w2.hud), "unseeded"
+
+
+def test_new_encounter_banner_withheld_for_an_already_resolved_area(world):
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": ["route_1"]})
+    world.step()
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.fire("wild_begin")
+    world.step()
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud)
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_on_area_enter_via_tick(world):
+    world.connect()
+    world.step(30)  # first tick only establishes last_area; nil -> set sends no event
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.set_map(0x0D)  # Route 2
+    world.step(30)
+    shows = [h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]
+    assert len(shows) == 1
+    assert shows[0][1] == "** NEW ENCOUNTER **  Route 2"
+    assert shows[0][2:] == (255, 220, 60, 240)
+    assert [e["area_id"] for e in world.events("area_enter") if e["area_id"] == "route_2"] == ["route_2"]
+    world.assert_all_conform()
+
+
+def test_kod_banner_on_a_bench_force_faint_is_text_only(world):
+    """gen3_frlge_client.lua:760-800: the server already queues play_sound 26 to this player
+    in the same turn (state.py:2073/2884) -- no local SFX alongside the banner."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step(60)
+    key = codec.key(world.party()[1])
+    world.reply({"cmd": "force_faint", "key": key, "nickname": "PIDGEY"})
+    world.overworld_safe()
+    world.step()
+    kod = [h for h in world.hud if h[0] == "show" and "KO'd" in h[1]]
+    assert len(kod) == 1
+    assert kod[0][1] == "!! PIDGEY KO'd"
+    assert kod[0][2:] == (255, 80, 80, 360)
+    assert _sfx_writes(world) == [], "no local SFX for a KO"
+    world.assert_all_conform()
+
+
+def test_kod_banner_on_an_active_battler_force_faint(world):
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[0])
+    world.reply({"cmd": "force_faint", "key": key, "nickname": "BULBA"})
+    world.step(3)
+    world.fire("battle_loop_head")
+    kod = [h for h in world.hud if h[0] == "show" and "KO'd" in h[1]]
+    assert len(kod) == 1 and kod[0][1] == "!! BULBA KO'd"
+
+
+def test_game_over_command_plays_a_local_failure_cue(world):
+    """gen3_frlge_client.lua:1026-1027: the server's game_over command carries no play_sound
+    of its own (server/state.py:2103, :3202) -- the client supplies it locally. This is the
+    LONE case of the coalescing pair in test_terminal_linked_faint_batch_posts_the_failure_cue_
+    once below: game_over with no accompanying play_sound this frame still posts its cue."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True}, {"cmd": "game_over"})
+    world.step()
+    assert _sfx_writes(world) == [2], "SE_FAILURE -> code 2, Gen 3's default SE_GAME_OVER"
+    assert ("game_over",) in world.hud
+    world.assert_all_conform()
+
+
+def test_whiteout_plays_a_local_boo_cue_once(world):
+    """gen3_frlge_client.lua:3804-3816: the client's own whiteout detection gets a local cue --
+    the server's reply to `whiteout` never queues a play_sound (server/state.py _handle_whiteout)."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step()
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=1)
+    world.fire("wild_begin")
+    world.step()
+    party = world.party()
+    party[1]["hp"] = 0
+    world.seed_party(party)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=1)
+    world.fire("battle_faint")
+    world.step()
+    assert _sfx_writes(world) == [], "one mon down, party not wiped yet"
+    party = world.party()
+    party[0]["hp"] = 0
+    world.seed_party(party)
+    world.bus[world.ram["wPlayerMonNumber"]] = 0
+    world.fire("battle_faint")
+    world.step()
+    assert _sfx_writes(world) == [3], "SE_BOO -> code 3, once"
+    world.fire("blackout")
+    world.step()
+    assert _sfx_writes(world) == [3], "not repeated"
+    world.assert_all_conform()
+
+
+def test_box_mon_and_party_mon_show_boxed_and_unboxed_banners(world):
+    world.connect()
+    world.step(60)
+    key = codec.key(world.party()[0])  # BULBA
+    stats = {"level": world.party()[0]["level"], "maxHP": world.party()[0]["max_hp"]}
+    world.overworld_safe()
+    world.reply({"cmd": "box_mon", "key": key})
+    world.step(2)
+    boxed = [h for h in world.hud if h[0] == "show" and "boxed" in h[1]]
+    assert len(boxed) == 1
+    assert boxed[0][1] == "↓ BULBA boxed"
+    assert boxed[0][2:] == (100, 180, 255, 200)
+
+    world.reply({"cmd": "party_mon", "key": key, "stats": stats, "nickname": "BULBA"})
+    world.overworld_safe()
+    world.step(2)
+    unboxed = [h for h in world.hud if h[0] == "show" and "unboxed" in h[1]]
+    assert len(unboxed) == 1
+    assert unboxed[0][1] == "↑ BULBA unboxed"
+    assert unboxed[0][2:] == (100, 255, 160, 200)
+    world.assert_all_conform()
+
+
+def test_box_mon_failure_shows_the_fail_banner(world):
+    world.connect()
+    world.step(60)
+    world.reply({"cmd": "box_mon", "key": "0000:0000:99"})  # never in the party
+    world.overworld_safe()
+    world.step(2)
+    failed = [h for h in world.hud if h[0] == "show" and "Box fail" in h[1]]
+    assert len(failed) == 1
+    assert failed[0][1] == "X Box fail: 0000:000"
+    assert failed[0][2:] == (255, 80, 80, 240)
+    world.assert_all_conform()
+
+
+def test_memorialize_shows_the_buried_banner(world):
+    world.connect()
+    world.step(60)
+    pidgey_key = codec.key(world.party()[1])
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": pidgey_key})
+    world.step(2)
+    buried = [h for h in world.hud if h[0] == "show" and "buried" in h[1]]
+    assert len(buried) == 1
+    assert buried[0][1] == "† PIDGEY buried"
+    assert buried[0][2:] == (255, 140, 40, 300)
+    world.assert_all_conform()
+
+
+def test_memorialize_failure_shows_the_fail_banner(world):
+    world.connect()
+    world.step(60)
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": "0000:0000:99"})  # never in the party
+    world.step(2)
+    failed = [h for h in world.hud if h[0] == "show" and "Mem fail" in h[1]]
+    assert len(failed) == 1
+    assert failed[0][1] == "X Mem fail: 0000:000"
+    assert failed[0][2:] == (255, 80, 80, 300)
+    world.assert_all_conform()
+
+
+# ── local HUD/SFX moments: adversarial-review regressions (cx-6bedd222) ───────────────────
+
+def test_new_encounter_banner_withheld_for_a_static_encounter(world):
+    """A scripted encounter (Route 12's Snorlax) resolves nothing about the route's own wild
+    slot -- gen3_frlge_client.lua's own gate excludes it the same way."""
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.client.statics = world.lua.table_from({"23": world.lua.table_from([0x84])})  # SNORLAX
+    world.set_map(0x17)  # Route 12
+    world.step(30)
+    world.in_battle(opponent=0x84, species=0x84, level=30)
+    world.fire("wild_begin")
+    world.step()
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud)
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_withheld_for_a_demonstration_battle(world):
+    """Y-0: the old man's Weedle demo (BATTLE_TYPE_OLD_MAN) is not the player's own encounter."""
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.step()
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.bus[world.ram["wBattleType"]] = 1  # BATTLE_TYPE_OLD_MAN
+    world.fire("battle_begin")
+    world.step()
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud)
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_withheld_for_a_tower_ghost_without_the_scope(world):
+    r = world.ram
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.set_map(0x8F)  # Pokemon Tower 2F
+    world.step(30)
+    world.in_battle(opponent=0x5B, species=0x5B, level=20)
+    world.fire("wild_begin")
+    world.step()
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud), "no Scope: not a real encounter"
+    # control: WITH the Scope the same battle DOES flag a new encounter
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+    world.bus[r["wNumBagItems"]] = 1
+    world.bus[r["wBagItems"]], world.bus[r["wBagItems"] + 1] = 0x48, 1
+    world.bus[r["wBagItems"] + 2] = 0xFF
+    world.in_battle(opponent=0x5B, species=0x5B, level=21)
+    world.fire("wild_begin")
+    world.step()
+    assert any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud), "Scope in hand: a real encounter"
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_withheld_returning_to_a_gift_area_with_no_wild_table(world):
+    """cx-6bedd222: 'not gift_map_*' is not 'not a gift area' -- oaks_lab (map 40) is a real,
+    non-gift-prefixed area_id the server lists in _GIFT_AREAS, but the client can only see
+    that it has no wild table (self.wild_maps from rom.rom_content()), which is the same
+    reason it must not banner."""
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.step(30)
+    world.set_map(0x28)  # Oak's Lab
+    world.step(30)
+    assert [e["area_id"] for e in world.events("area_enter") if e["area_id"] == "oaks_lab"] == ["oaks_lab"]
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud)
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_on_area_enter_fires_once_not_again_while_staying(world):
+    world.connect()
+    world.step(30)  # first tick only establishes last_area; nil -> set sends no event
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.set_map(0x0D)  # Route 2: has a wild table
+    world.step(30)
+    shows = [h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]
+    assert len(shows) == 1
+    assert shows[0][1] == "** NEW ENCOUNTER **  Route 2"
+    assert shows[0][2:] == (255, 220, 60, 240)
+    world.step(60)  # staying put: no repeat
+    assert len([h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]) == 1
+    world.assert_all_conform()
+
+
+def test_new_encounter_banner_withheld_for_a_map_change_mid_battle(world):
+    world.connect()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.step(30)
+    world.in_battle(opponent=0xE1, species=0xB0, level=5)  # a trainer battle holds in_battle
+    world.step()
+    world.set_map(0x0D)  # Route 2, still "in battle" per wIsInBattle
+    world.step(30)
+    assert not any(h[0] == "show" and "NEW ENCOUNTER" in h[1] for h in world.hud)
+    world.assert_all_conform()
+
+
+def test_terminal_linked_faint_batch_posts_the_failure_cue_once(world):
+    """state.py's partner batch on the last living pair lands force_faint + play_sound 26 +
+    memorialize + game_over in ONE reply/frame; game_over's own local 26 must not double the
+    cue panel.lua already queued for the force_faint (cx-6bedd222)."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step(60)
+    key = codec.key(world.party()[1])
+    world.overworld_safe()
+    world.reply({"cmd": "force_faint", "key": key, "nickname": "PIDGEY"},
+                {"cmd": "play_sound", "sound": 26},
+                {"cmd": "memorialize", "key": key},
+                {"cmd": "game_over"})
+    world.step()
+    assert _sfx_writes(world) == [2], "one failure code, not two"
+    world.assert_all_conform()
+
+
+def test_same_frame_coalescing_is_a_set_not_the_last_code(world):
+    """cx-3987357f: 26 -> 25 -> 26 in one reply posts failure ONCE and success once; the
+    panel drains the queue as the ROM clears +7, so every distinct code still gets played."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step(60)
+    world.reply({"cmd": "play_sound", "sound": 26}, {"cmd": "play_sound", "sound": 25},
+                {"cmd": "play_sound", "sound": 26})
+    world.step()
+    world.bus[SFX_REQUEST] = 0                             # the ROM played the first
+    world.step(40)                                         # the panel posts the queued one
+    world.bus[SFX_REQUEST] = 0
+    world.step(40)
+    assert _sfx_writes(world) == [2, 1], "failure once, success once, nothing queued twice"
+    world.assert_all_conform()
+
+
+def test_the_same_code_one_frame_later_is_a_new_cue(world):
+    """The per-frame set must not swallow a genuine repeat on the next frame."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step(60)
+    world.reply({"cmd": "play_sound", "sound": 26})
+    world.step()
+    world.bus[SFX_REQUEST] = 0
+    world.reply({"cmd": "play_sound", "sound": 26})
+    world.step()
+    assert _sfx_writes(world) == [2, 2]
+    world.assert_all_conform()
+
+
+def test_kod_banner_keeps_the_nickname_after_switching_out_before_the_loop_head(world):
+    """cx-6bedd222: the active-battler-to-bench requeue in on_battle_loop_head dropped
+    `w.nickname`, so a mon switched out before the write landed showed a key prefix instead."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[0])
+    world.reply({"cmd": "force_faint", "key": key, "nickname": "BULBA"})
+    world.step()
+    # switched out before the loop head fires: find_party_slot's slot (0) no longer matches
+    # the new active slot, so the write is requeued to the bench instead of landing here
+    world.bus[world.ram["wPlayerMonNumber"]] = 1
+    world.fire("battle_loop_head")
+    world.overworld_safe()
+    world.step()
+    kod = [h for h in world.hud if h[0] == "show" and "KO'd" in h[1]]
+    assert len(kod) == 1 and kod[0][1] == "!! BULBA KO'd", kod
+    world.assert_all_conform()
+
+
+def test_an_unmapped_sound_id_does_not_trip_the_unavailable_log(world):
+    """cx-6bedd222: an id with no Gen 1 mapping must return early from request_sfx_local
+    rather than falling into the 'unavailable' branch -- otherwise a later GENUINE
+    unavailable case never logs, because the one-time flag was already spent on a non-event."""
+    _patch_sfx(world)
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.reply({"cmd": "play_sound", "sound": 16})  # SE_FAINT: no Gen 1 mapping
+    world.step()
+    assert not any("native sounds off or no SFX-capable patch" in ln for ln in world.logs)
+    world.bus[PANEL_CAPS] = 0x02  # now genuinely unavailable: no SFX capability bit
+    world.reply({"cmd": "play_sound", "sound": 25})
+    world.step()
+    assert any("native sounds off or no SFX-capable patch" in ln for ln in world.logs)
+    world.assert_all_conform()
+
+
+def test_nuzlocke_banner_fires_on_the_send_tick_ball_count_edge():
+    """The bag_received signal is the usual witness, but send_tick's own ball_count() edge
+    must independently catch the transition too (e.g. a path bag_received does not cover)."""
+    world = World("red")
+    rng = random.Random(1)
+    world.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    world.set_map(0x0C)
+    world.connect()
+    assert world.events("hello")[0]["has_pokeballs"] is False
+    world.give_poke_ball()  # balls land in the bag without firing bag_received
+    world.step(30)          # the next tick's ball_count() edge catches it
+    starts = [h for h in world.hud if h[0] == "nuzlocke_start"]
+    assert len(starts) == 1 and starts[0][1] == "Nuzlocke Start!"
+
+
+def test_nuzlocke_banner_does_not_repeat_on_a_reconnect_hello(world):
+    """A reconnect's second hello finds has_pokeballs already True -- not a fresh transition,
+    so it must not re-banner (the `world` fixture already starts with one Poke Ball)."""
+    world.connect()
+    world.step(60)
+    world.connected = False
+    world.step(2)
+    world.connected = True
+    world.step()
+    hellos = world.events("hello")
+    assert len(hellos) == 2 and hellos[1]["has_pokeballs"] is True
+    assert not any(h[0] == "nuzlocke_start" for h in world.hud)
+    world.assert_all_conform()
+
+
+def test_nuzlocke_announced_survives_a_soft_reset_and_does_not_refire():
+    """One run, one banner: home/init.asm zero-fills WRAM on a reset and CONTINUE reloads the
+    same save, but the latch is a client-session concept, not a save-file one -- it must not
+    reset with the WRAM clear (unlike hello_sent/pending_change/retired_alias, which do)."""
+    world = World("red")
+    rng = random.Random(1)
+    world.seed_party([_mon(rng, 0x99, nick="BULBA")])
+    world.set_map(0x0C)
+    world.connect()
+    world.give_poke_ball()
+    world.regs["H"], world.regs["L"] = world.ram["wNumBagItems"] // 256, world.ram["wNumBagItems"] % 256
+    world.regs["F"] = 0x10
+    world.bus[world.ram["wCurItem"]] = 0x04
+    world.fire("bag_received")
+    world.step()
+    assert len([h for h in world.hud if h[0] == "nuzlocke_start"]) == 1
+    assert world.client.nuzlocke_announced is True
+
+    saved = bytes(world.bus)
+    r = world.ram
+    for a in range(r["wPartyCount"], r["wPartyCount"] + 8):
+        world.bus[a] = 0
+    world.bus[r["wPlayerID"]] = world.bus[r["wPlayerID"] + 1] = 0
+    world.regs["PC"] = 0x1234
+    world.step(60)
+    world.bus[:] = saved  # CONTINUE reloaded the same save
+    world.overworld_safe()
+    world.step()
+    assert world.client.nuzlocke_announced is True, "the latch survives the WRAM clear"
+    world.fire("bag_received")  # a stray post-reload bag event must not re-fire it
+    world.step()
+    assert len([h for h in world.hud if h[0] == "nuzlocke_start"]) == 1
+
+
+def test_retired_alias_refusal_at_the_checkpoint_shows_no_failure_banner(world):
+    """The retired-alias refusal in run_deferred (a lost/ambiguous record) sends
+    box_mon_failed/memorialize_failed straight to the server -- unlike the box-module failure
+    paths above, it must not also show a HUD failure banner (cx-6bedd222 pin)."""
+    world.connect()
+    world.step(60)
+    old_key = "0000:0000:99"
+    new_key = codec.key(world.party()[0])
+    world.client.retired_alias[old_key] = world.lua.table_from({
+        "new_key": new_key,
+        "evidence": world.lua.table_from({
+            "nick": world.lua.table_from([0] * 11), "moves": world.lua.table_from([0] * 4),
+        }),
+    })
+    world.overworld_safe()
+    world.reply({"cmd": "memorialize", "key": old_key})
+    world.step(2)
+    assert [e["key"] for e in world.events("memorialize_failed")] == [old_key]
+    assert not any(h[0] == "show" and "Mem fail" in h[1] for h in world.hud)
     world.assert_all_conform()
 
 

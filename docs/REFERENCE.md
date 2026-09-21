@@ -925,6 +925,45 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Event-push ring (`EvRing`) — faint-settled, battle outcome, party-add, evolution | ✅ Producing; Lua consumers still use the proven polling (patch/ROADMAP.md §3-§4) |
 | Native explode/faint controller swap (`FORCE_FAINT` / `FORCE_MOVE_SLOT`) | ❌ Not used — softlocked in real play; the Lua Variant-3 RAM path is the single production mechanism (ROADMAP §2). Opcodes remain in the ROM, headless-gated. |
 
+Gen 1's HUD/sound is not purely a server-pushed overlay: `lua/gen1/client.lua` also raises its own
+local moments, mirroring the Gen 3 client's client-only cues (`gen3_frlge_client.lua`) rather than
+waiting on a command. A Nuzlocke-start banner fires once, on the first Poke Ball landing in the bag
+*during play* (the `bag_received` hook or a `send_tick` ball-count edge) — never at a hello that
+already finds one there, which only logs; the latch (`self.nuzlocke_announced`) is a client-session
+concept, not a save-file one, so it survives a WRAM-clearing soft reset and a CONTINUE reload rather
+than resetting with the other identity latches. A `** NEW ENCOUNTER **` banner fires on
+`area_enter`/`wild_begin` once the run has seeded `resolved_areas`, the area is unresolved, and the
+encounter is the player's own: a scripted/static encounter, a demonstration battle (Y-0) and a Tower
+ghost battle fought without the Silph Scope are excluded on `wild_begin` (the demo and ghost
+predicates are `battle_end`'s own; the static exclusion is the banner's alone — an uncaught static
+still resolves its own `static_<map>_<dex>` slot through `no_catch`). On plain map entry the "no gift area" half of that gate
+cannot be `area_id`-based — the server's gift-area list (`server/adapters/gen1_rby.py`'s
+`_GIFT_AREAS`) is not on the wire, and a gift area like Oak's Lab is a real, non-`gift_map_*`-prefixed
+`area_id` — so it instead requires the entered map to appear in `self.wild_maps`, the cartridge's own
+wild-data table read at hello (`rom.rom_content()`), and requires being outside battle (a map
+transition mid-trainer-battle must not banner). That table holds grass/surf records only: a
+fishing-only map (Pallet Town, Cerulean Gym, Vermilion Dock — both rates zero) gets no entry banner
+and is announced when the rod battle actually starts; the entry banner is a hint, not an oracle. A KO'd banner is always text-only, but not for one
+uniform reason: the server's `play_sound 26` rides alongside a terminal/linked-battle-faint
+`force_faint` (`server/state.py:2884`), so a local cue there would double it, while the
+whiteout-driven retire loop (`:2073`) and the dead-key requeue after a buried `key_change` (`:2708`)
+carry no sound of their own either — the whiteout case gets its own local cue from the client's own
+whiteout detection instead. `game_over` requests that same local cue, because neither of the server
+paths that queue it (`:2103`, `:3202`) pairs it with a `play_sound`; `request_sfx_local` keeps a per-frame
+set of the semantic codes already posted, so an identical code requested again in the same frame
+(that terminal-faint `play_sound 26` landing beside `game_over`'s own local 26, or a 26/25/26
+interleave) posts once while distinct codes stay distinct; the same code one frame later is a new
+cue. The deposit/withdraw/memorialize banners (boxed/unboxed/
+buried, and the box/memorial failure variants) land where the deferred queue observes the result —
+`lua/gen1/boxes.lua`'s return value — not where the command was received; the one exception is a
+retired-alias command the checkpoint itself refuses (a lost/ambiguous record), which answers the
+server with `..._failed` but shows no HUD banner, matching how that refusal already differs from an
+ordinary box-module failure. Every local cue shares the same native-SFX gate as a server `play_sound`
+command (`self:request_sfx_local`, `lua/gen1/panel.lua`'s `sfx_code_for`/`sfx_present`/
+`config.native_sounds`); an id with no Gen 1 mapping returns early rather than tripping the
+one-time "unavailable" log, and on an unpatched cartridge the banners still render while the sound is
+silently absent.
+
 ---
 
 ## Running Tests
