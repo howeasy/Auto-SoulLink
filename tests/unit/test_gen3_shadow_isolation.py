@@ -239,7 +239,12 @@ def test_full_bootstrap_logs_semantic_signals_with_monotonic_t(lua, M, tmp_path)
     assert state is not None
 
     state.poll()
-    shadow_lines = [ln for ln in logged if ln.startswith("SHADOW ")]
+    # SHADOW lines go to the FILE only: a per-fire console.log would push 60 lines/s into the
+    # BizHawk console for a per-frame site and starve the emulator (observed 2026-09-21).
+    assert not [ln for ln in logged if ln.startswith("SHADOW ")]
+    shadow_log_path = tmp_path / "duoA_result.shadow.log"
+    shadow_lines = [ln for ln in shadow_log_path.read_text(encoding="utf-8").splitlines()
+                    if ln.startswith("SHADOW ")]
     assert len(shadow_lines) == 2
     assert "kind=faint" in shadow_lines[0] and "key=AAAAAAAA:BBBBBBBB" in shadow_lines[0]
     assert "t=1 " in shadow_lines[0]
@@ -249,11 +254,10 @@ def test_full_bootstrap_logs_semantic_signals_with_monotonic_t(lua, M, tmp_path)
     # line's leading field; the fake fires above don't even carry one, but real signals do).
     assert shadow_lines[0].count("frame=") == 1
 
-    # the shadow log file (next to the duo result) got the same lines
-    shadow_log_path = tmp_path / "duoA_result.shadow.log"
-    assert shadow_log_path.exists()
+    # the file also carries STATUS lines (registration/rejection counters, never SHADOW lines)
     on_disk = shadow_log_path.read_text(encoding="utf-8").splitlines()
-    assert on_disk == shadow_lines
+    assert [ln for ln in on_disk if ln.startswith("SHADOW ")] == shadow_lines
+    # (STATUS lines need signals:status(); the fake Entry in this test has none, so none here)
 
     # a second poll (no new fires) does not re-log anything or reset t
     logged.clear()
@@ -383,10 +387,18 @@ def test_one_correctly_addressed_fire_logs_one_shadow_line_wrong_address_logs_no
     logged = []
     g = _biz_globals(lua, mem, ev, regs={"R15": 0x1000, "CPSR": 0x6000003F, "R13": 0x03007F00})
     g["console"] = lua.table(log=lambda s: logged.append(str(s)))
-    opts = lua.table(shadow=True, pack=pack, title=title, kind=kind, **g)
+    result_path = tmp_path / "duoA_result.txt"
+    result_path.write_text("", encoding="utf-8")
+    opts = lua.table(shadow=True, pack=pack, title=title, kind=kind,
+                     duo=lua.table(result=str(result_path).replace("\\", "/"), player="a"), **g)
     state = M.start(opts)
     assert state is not None
     assert state.admitted_by == "override"
+    shadow_log_path = tmp_path / "duoA_result.shadow.log"
+
+    def shadow_lines():
+        return [ln for ln in shadow_log_path.read_text(encoding="utf-8").splitlines()
+                if ln.startswith("SHADOW ")]
 
     site_kind = "save" if "save" in sites else next(iter(sorted(sites)))
     site = sites[site_kind]
@@ -394,18 +406,21 @@ def test_one_correctly_addressed_fire_logs_one_shadow_line_wrong_address_logs_no
     hook_addr = site["address"] + site.get("capture_offset", 0)
     fn = next(fn for (fn, addr, _name) in ev.registered.values() if addr == hook_addr)
 
-    logged.clear()
     fn(hook_addr)  # correct callback address: identity check passes, signal queues
     state.poll()
-    lines = [ln for ln in logged if ln.startswith("SHADOW ")]
+    lines = shadow_lines()
     assert len(lines) == 1
     assert f"kind={site_kind}" in lines[0]
     assert "callback_address=" in lines[0]
+    # never on the console (a per-frame site would starve the emulator)
+    assert not [ln for ln in logged if ln.startswith("SHADOW ")]
+    # the real Entry ships signals:status(), so the STATUS line is present here
+    on_disk = shadow_log_path.read_text(encoding="utf-8").splitlines()
+    assert any(ln.startswith("STATUS ") and "registered=" in ln for ln in on_disk)
 
-    logged.clear()
     fn(hook_addr + 4)  # wrong callback address: rejected inside signals.lua, never queued
     state.poll()
-    assert [ln for ln in logged if ln.startswith("SHADOW ")] == []
+    assert len(shadow_lines()) == 1
 
     state.teardown()
     assert sorted(ev.unregistered) == sorted(ev.registered.keys())

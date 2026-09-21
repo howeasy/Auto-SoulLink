@@ -246,7 +246,9 @@ function M.start(opts)
         t = t + 1
         local frame = emu_g and emu_g.framecount and emu_g.framecount() or 0
         local line = M.format_shadow_line(t, frame, kind_, key_, extra)
-        if console_g and console_g.log then console_g.log(line) end
+        -- FILE ONLY. Never console.log per fire: a per-frame site would push 60 lines/s into
+        -- the BizHawk console and starve the emulator (reference_bizhawk_gate_drivers;
+        -- observed on the RR shadow batch 2026-09-21).
         if logf then logf:write(line .. "\n"); logf:flush() end
         return line
     end
@@ -279,15 +281,25 @@ function M.start(opts)
             "STATUS frame=%d registered=%s rejected=%s dropped=%s pending=%s failed=%s handler_error=%s",
             frame, tostring(st.registered), tostring(st.rejected), tostring(st.dropped),
             tostring(st.pending), tostring(st.failed), tostring(st.handler_error))
+        for k, n in pairs(state.liveness_counts or {}) do
+            line = line .. " " .. tostring(k) .. "=" .. tostring(n)
+        end
         if console_g and console_g.log then console_g.log("[shadow] " .. line) end
         if logf then logf:write(line .. "\n"); logf:flush() end
     end
     status_line()
+    -- Liveness kinds fire EVERY frame (frame_control is the frame-end anchor): counted and
+    -- reported in the STATUS line, never written per fire (60 file writes/s otherwise).
+    local LIVENESS = { frame_control = true }
+    state.liveness_counts = {}
     local polls = 0
     function state.poll()
         polls = polls + 1
         if polls % 600 == 0 then status_line() end
         for _, fire in ipairs(read_fires()) do
+          if LIVENESS[fire.kind] then
+            state.liveness_counts[fire.kind] = (state.liveness_counts[fire.kind] or 0) + 1
+          else
             -- Forward EVERY OTHER scalar field of the fire (callback_address, raw_r15, cpsr,
             -- sp, thumb, mode, action for pc_move, species, ...): tools/gen3_shadow_diff.py
             -- needs them and the vocabulary belongs to signals.lua. `frame` is excluded: it is
@@ -303,6 +315,7 @@ function M.start(opts)
             table.sort(names)
             for _, k in ipairs(names) do fields[#fields + 1] = { k, fire[k] } end
             shadow_log(fire.kind, fire.key or fire.slot or fire.box or "", fields)
+          end
         end
     end
     function state.teardown()
