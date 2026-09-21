@@ -261,6 +261,45 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-wild[open] summary::before { content: '▾'; }
 .mk-wild-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); padding-top: var(--space-2); }
 .mk-wild-row { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+
+/* ── Upcoming Key Trainers (Radical Red; server.py builds the rows) ── a fold like Wild here,
+   one compact row per trainer that unfolds into the party, variants when the fight has them */
+.trainer-widget { font-size: var(--fs-md); color: var(--c-dim); }
+.trainer-widget > summary, .trainer-row > summary { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; list-style: none; }
+.trainer-widget > summary::-webkit-details-marker, .trainer-row > summary::-webkit-details-marker { display: none; }
+.trainer-widget > summary::before, .trainer-row > summary::before { content: '▸'; font-size: var(--fs-sm); color: var(--c-dim); }
+.trainer-widget[open] > summary::before, .trainer-row[open] > summary::before { content: '▾'; }
+.trainer-widget > summary .inline-ico { width: 1em; height: 1em; }
+.trainer-list { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-2); }
+.trainer-row { border-left: 2px solid color-mix(in srgb, var(--c-link) 35%, transparent); padding-left: var(--space-2); }
+.trainer-row.tr-state-past { opacity: .55; }
+.trainer-row.tr-state-current { border-left-color: var(--c-pend); }
+.trainer-row > summary { line-height: 1.4; flex-wrap: wrap; }
+.tr-sprite { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; flex-shrink: 0; }
+.tr-class { font-size: var(--fs-sm); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.tr-name { color: var(--c-txt); font-weight: 700; }
+.tr-size, .tr-cap { font-size: var(--fs-sm); white-space: nowrap; }
+.tr-fight-label, .tr-variant-count { font-size: var(--fs-sm); border-radius: 3px; padding: 0 5px; white-space: nowrap; }
+.tr-fight-label { background: color-mix(in srgb, var(--c-info) 22%, transparent); color: var(--c-info); }
+.tr-variant-count { background: color-mix(in srgb, var(--c-pend) 25%, transparent); color: var(--c-pend); }
+.tr-calc-btn, .tr-variant-calc { margin-left: auto; background: color-mix(in srgb, var(--c-pend) 18%, transparent); border: 1px solid color-mix(in srgb, var(--c-pend) 35%, transparent); color: var(--c-pend); border-radius: 4px; padding: 1px 6px; font: inherit; line-height: 1; cursor: pointer; flex-shrink: 0; }
+.tr-calc-btn:hover, .tr-variant-calc:hover { background: color-mix(in srgb, var(--c-pend) 35%, transparent); }
+.tr-party { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1) 0 var(--space-2) calc(32px + var(--space-2)); }
+.tr-party-row { font-size: var(--fs-sm); line-height: 1.4; padding: 2px 0; border-top: 1px dashed color-mix(in srgb, var(--c-dim) 30%, transparent); }
+.tr-party-row:first-child { border-top: 0; }
+.tr-mon-hdr { display: flex; align-items: baseline; gap: var(--space-2); }
+.tr-species { font-weight: 700; color: var(--c-txt); }
+.tr-lv-rule { color: var(--c-info); }
+.tr-mon-meta { color: color-mix(in srgb, var(--c-txt) 75%, var(--c-dim)); }
+.tr-ability { color: var(--c-link); }
+.tr-item { color: var(--c-pend); }
+.tr-nature { font-style: italic; }
+.tr-moves { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.tr-move { background: color-mix(in srgb, var(--c-dim) 18%, transparent); border-radius: 3px; padding: 0 5px; white-space: nowrap; }
+.tr-variants { display: flex; flex-direction: column; gap: var(--space-2); }
+.tr-variant { border-left: 2px solid color-mix(in srgb, var(--c-pend) 50%, transparent); padding-left: var(--space-2); }
+.tr-variant-hdr { display: flex; align-items: baseline; gap: var(--space-2); margin-bottom: 2px; }
+.tr-variant-label { color: var(--c-pend); font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .mk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: var(--fs-sm); letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
 .mk-tag.off { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
 .mk-tag.fight { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
