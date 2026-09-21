@@ -85,6 +85,19 @@ def _game_family(game: str | None) -> str | None:
     return GAME_FAMILY.get(game or "")
 
 
+def _legacy_cartridges(run: dict) -> dict | None:
+    """A run randomized before the Cartridges step recorded only `randomizer`: the same
+    shape for the page, from what it has (the randomizer's outputs are the cartridges)."""
+    rnd = run.get("randomizer")
+    if not rnd:
+        return None
+    return {"family": "", "companion": False, "randomizer": None, "legacy": True,
+            "players": {p: {"source": "", "source_title": "randomized cartridge",
+                            "output": v.get("output", ""), "rom_sha1": v.get("rom_sha1", ""),
+                            "fingerprint": "", "kind": "rand"}
+                        for p, v in (rnd.get("players") or {}).items()}}
+
+
 # The titles the SLink companion exists for (a UPS in patch/dist, a target in
 # server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
 COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen")
@@ -820,7 +833,7 @@ class RunManager:
             "game_family": GAME_FAMILY,
             "presets": _load_presets(),
             "current": run.get("randomizer") if run else None,
-            "cartridges": run.get("cartridges") if run else None,
+            "cartridges": (run.get("cartridges") or _legacy_cartridges(run)) if run else None,
             # The SLink companion exists for these titles (server/patcher.py TARGETS): the
             # form greys the checkbox, with the reason, for a pick outside them.
             "companion_titles": COMPANION_TITLES,
@@ -829,8 +842,7 @@ class RunManager:
     @staticmethod
     def _scan_roms(jar: str) -> list[dict]:
         """Every .gb/.gbc in ROM_DIRS with the scanner's verdict (describe_rom)."""
-        from server.upr_pipeline import describe_rom, jar_is_fork
-        fork = bool(jar) and jar_is_fork(jar)
+        from server.upr_pipeline import describe_rom
         roms, seen = [], set()
         for d in ROM_DIRS:
             if not os.path.isdir(d):
@@ -839,7 +851,7 @@ class RunManager:
                 path = os.path.join(d, name)
                 if name.lower().endswith(ROM_EXTS) and os.path.isfile(path) and path not in seen:
                     seen.add(path)
-                    roms.append({"name": name, **describe_rom(path, fork)})
+                    roms.append({"name": name, **describe_rom(path, True)})
         return roms
 
     def _augment_for_template(self, run: dict) -> dict:
@@ -1257,7 +1269,7 @@ class RunManager:
         dialog lands in <repo>/roms/ (a jar lands as <repo>/PokeRandoZX.jar, where
         find_upr_jar looks first) and the answer describes it like handle_roms would. A
         same-named file that differs is kept: the upload gets a numbered name."""
-        from server.upr_pipeline import _sha1, describe_rom, find_upr_jar, jar_is_fork
+        from server.upr_pipeline import _sha1, describe_rom, jar_is_fork
         if request.content_type != "multipart/form-data":
             return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
         reader = await request.multipart()
@@ -1295,10 +1307,8 @@ class RunManager:
                 os.remove(tmp)
         if ext == ".jar":
             return web.json_response({"ok": True, "path": dest, "kind": "jar", "jar_fork": jar_is_fork(dest)})
-        jar = find_upr_jar() or ""
         return web.json_response({"ok": True, "path": dest, "kind": "rom",
-                                  "rom": {"name": os.path.basename(dest),
-                                          **describe_rom(dest, bool(jar) and jar_is_fork(jar))}})
+                                  "rom": {"name": os.path.basename(dest), **describe_rom(dest, True)}})
 
     async def handle_rom_download(self, request: web.Request) -> web.Response:
         """GET /api/runs/{run_id}/rom/{player} — this player's cartridge as the run made

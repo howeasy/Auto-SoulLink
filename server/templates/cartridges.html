@@ -45,7 +45,7 @@
               </table>
               <p class="mk-sub" style="margin:var(--space-2) 0 0">
                 <template x-if="rform.current"><span>UPR <span x-text="rform.current.upr_version"></span> · randomized: <span x-text="rform.current.summary || (rform.current.categories || []).join(', ') || 'nothing'"></span> · <a :href="'/api/runs/' + runId + '/settings.rnqs'">the settings file (.rnqs)</a> · the run admits only these two cartridges. </span></template>
-                <template x-if="!rform.current"><span>Not randomized: the run admits any cartridge of its family, these are simply ready to hand out. </span></template>
+                <template x-if="!rform.current && !rform.cartridges.legacy"><span>Not randomized: the run admits any cartridge of its family, these are simply ready to hand out. </span></template>
                 Preparing again replaces both.</p>
             </div>
           </template>
@@ -73,8 +73,8 @@
         this.busy = true; this.error = '';
         try {
           var j = await this.prepareCartridges(runId);
-          if (!j.ok) { this.error = j.error || 'Randomize failed'; return; }
-          this.rform.current = j.randomizer;
+          if (!j.ok) { this.error = j.error || 'Preparing failed'; return; }
+          this.rform.cartridges = j.cartridges; this.rform.current = j.randomizer;
         } catch (e) { this.error = String(e); }
         finally { this.busy = false; }
       },

@@ -48,16 +48,17 @@
   </label>
 </div>
 
-<div class="mk-preview-rules" x-show="pre">
+<div class="mk-preview-rules">
+  {# the picks, as the list describes them (pinned is pinned whatever the jar) #}
   <template x-for="pid in ['a', 'b']" :key="pid">
-    <span class="mk-tag" :class="pre && pre.roms[pid] && pre.roms[pid].clean ? 'on' : 'off'"
-          x-text="pid.toUpperCase() + ': ' + (!pre || !pre.roms[pid] || !pre.roms[pid].exists ? 'no cartridge' : pre.roms[pid].clean ? pre.roms[pid].title : 'not a clean dump')"></span>
+    <span class="mk-tag" :class="pick(pid) && usable(pick(pid)) ? 'on' : 'off'"
+          x-text="pid.toUpperCase() + ': ' + (!pick(pid) ? 'no cartridge' : pick(pid).title)"></span>
   </template>
-  <template x-if="rdraft.randomize">
-    <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
+  <template x-if="rdraft.randomize && pre">
+    <span class="mk-tag" :class="pre.jar_found && (pre.jar_fork || family !== 'gen1_purergb') ? 'on' : 'off'" x-text="pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
   </template>
-  <template x-if="rdraft.randomize">
-    <span class="mk-tag" :class="pre && pre.java_found ? 'on' : 'off'" x-text="pre && pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
+  <template x-if="rdraft.randomize && pre">
+    <span class="mk-tag" :class="pre.java_found ? 'on' : 'off'" x-text="pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
   </template>
 </div>
 

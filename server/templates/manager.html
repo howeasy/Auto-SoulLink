@@ -83,9 +83,9 @@
           </section>
 
           <div class="mk-form-actions">
-            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || !cartsReady()" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
+            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
             <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
-            <span class="mk-sub" x-show="draft.name.trim() && !cartsReady()" x-text="cartsWhy()"></span>
+            <span class="mk-sub" x-show="draft.name.trim() && gen1() && !cartsReady()" x-text="cartsWhy()"></span>
             <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
           </div>
         </div>

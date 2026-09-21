@@ -215,9 +215,12 @@ function randomizerFields(form) {
       if (!a || !b) return 'Pick a cartridge for both players.';
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
-      if (this.pre && this.pre.roms && (this.pre.roms.a.clean === false || this.pre.roms.b.clean === false)) return 'A pick is not a pinned cartridge.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && !this.pre.java_found) return 'Randomizing needs Java on PATH.';
+      // pinned is pinned whatever the jar; the FORK is the randomizer's requirement for pure
+      if (this.rdraft.randomize && this.family === 'gen1_purergb' && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
+        return 'Randomizing pureRGB needs the SLink fork jar (4.6.1-slink1, tools/build_upr_fork.py); this jar is the stock 4.6.1.';
+      }
       if (this.rdraft.randomize && this.rdraft.companion && this.companionOk().ok && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {
         // pure + companion + randomize is the overlay path: UPR needs an entry for the
