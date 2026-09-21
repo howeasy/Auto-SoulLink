@@ -118,7 +118,7 @@ OPTIONS = {
     "rival_team_swap": ("Rival Swap", "Rival battles load your partner's exact team instead of the canned one."),
     "overworld_presence": ("Overworld Presence", "See your partner walking in your overworld as a live peer ghost."),
     "native_messages": ("Native Messages", "Notifications as native in-game text boxes instead of the Lua HUD overlay."),
-    "native_sounds": ("Native Sounds", "Notification sounds through the game's own audio engine (needs the companion patch or pureRGB overlay on that cartridge -- inert on an unpatched one)."),
+    "native_sounds": ("Native Sounds", "Notification sounds through the game's own audio engine (needs the companion patch or pureRGB overlay on that cartridge — inert on an unpatched one)."),
     "battle_calc": ("Battle Calc", "The bundled in-battle damage and type-effectiveness calculator."),
     "pc_trade_npc": ("PC Trade NPC", "A Pokémon-Center trade NPC, when Overworld Presence is off."),
 }
