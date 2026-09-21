@@ -1,0 +1,121 @@
+CONFIG speed=6399 label=A hooks_only_discard_sink=false
+OVERHEAD A median_ms_per_600=766.000 fps=783.29 wall_total_ms=4000 clock_total_ms=4020.000 clock_crosscheck=true registered=0 rejected=0 liveness=0 standin_reads=0 checksum=0
+WINDOWS A clock_ms=941.0,807.0,752.0,754.0,766.0 wall_ms=1000,0,1000,1000,1000
+FPS A clock=637.61955366631,743.49442379182,797.87234042553,795.75596816976,783.28981723238 wall=600.0,0,600.0,600.0,600.0 approx=653,739,798,802,789 wall_resolution_s=1
+CONFIG speed=6399 label=E hooks_only_discard_sink=false
+OVERHEAD E median_ms_per_600=910.000 fps=659.34 wall_total_ms=4000 clock_total_ms=4533.000 clock_crosscheck=true registered=0 rejected=0 liveness=0 standin_reads=3000 checksum=134571700
+WINDOWS E clock_ms=866.0,905.0,927.0,910.0,925.0 wall_ms=1000,1000,1000,0,1000
+FPS E clock=692.84064665127,662.98342541436,647.24919093851,659.34065934066,648.64864864865 wall=600.0,600.0,600.0,0,600.0 approx=696,659,653,660,646 wall_resolution_s=1
+CONFIG speed=6399 label=B hooks_only_discard_sink=false
+OVERHEAD B median_ms_per_600=1781.000 fps=336.89 wall_total_ms=9000 clock_total_ms=8964.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=0 checksum=0
+WINDOWS B clock_ms=1781.0,1772.0,1838.0,1817.0,1756.0 wall_ms=1000,2000,2000,2000,2000
+FPS B clock=336.88938798428,338.60045146727,326.44178454842,330.21463951568,341.68564920273 wall=600.0,300.0,300.0,300.0,300.0 approx=336,337,332,328,343 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+CONFIG speed=6399 label=C hooks_only_discard_sink=false
+OVERHEAD C median_ms_per_600=1858.000 fps=322.93 wall_total_ms=9000 clock_total_ms=9425.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=3000 checksum=134571700
+WINDOWS C clock_ms=1827.0,1914.0,1975.0,1851.0,1858.0 wall_ms=2000,2000,2000,1000,2000
+FPS C clock=328.40722495895,313.47962382445,303.79746835443,324.14910858995,322.92787944026 wall=300.0,300.0,300.0,600.0,300.0 approx=328,303,311,325,323 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+CONFIG speed=6399 label=D hooks_only_discard_sink=false
+OVERHEAD D median_ms_per_600=1849.000 fps=324.50 wall_total_ms=9000 clock_total_ms=9325.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=3000 checksum=134571700
+WINDOWS D clock_ms=1849.0,1868.0,1839.0,1842.0,1927.0 wall_ms=1000,2000,2000,2000,2000
+FPS D clock=324.49972958356,321.19914346895,326.26427406199,325.7328990228,311.36481577582 wall=600.0,300.0,300.0,300.0,300.0 approx=317,321,326,323,302 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+CONFIG speed=6399 label=F hooks_only_discard_sink=true
+OVERHEAD F median_ms_per_600=1797.000 fps=333.89 wall_total_ms=9000 clock_total_ms=8952.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=0 checksum=0
+WINDOWS F clock_ms=1825.0,1765.0,1761.0,1797.0,1804.0 wall_ms=2000,2000,2000,1000,2000
+FPS F clock=328.76712328767,339.9433427762,340.71550255537,333.8898163606,332.59423503326 wall=300.0,300.0,300.0,600.0,300.0 approx=321,342,340,328,325 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+CONFIG speed=6399 label=G hooks_only_discard_sink=false
+OVERHEAD G median_ms_per_600=855.000 fps=701.75 wall_total_ms=5000 clock_total_ms=4317.000 clock_crosscheck=true registered=21 rejected=0 liveness=0 standin_reads=0 checksum=0
+WINDOWS G clock_ms=896.0,874.0,842.0,855.0,850.0 wall_ms=1000,1000,1000,1000,1000
+FPS G clock=669.64285714286,686.49885583524,712.58907363421,701.75438596491,705.88235294118 wall=600.0,600.0,600.0,600.0,600.0 approx=660,683,718,705,707 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+CONFIG speed=6399 label=H hooks_only_discard_sink=true
+OVERHEAD H median_ms_per_600=1789.000 fps=335.38 wall_total_ms=9000 clock_total_ms=8974.000 clock_crosscheck=true registered=1 rejected=0 liveness=3000 standin_reads=0 checksum=0
+WINDOWS H clock_ms=1827.0,1811.0,1772.0,1775.0,1789.0 wall_ms=2000,2000,1000,2000,2000
+FPS H clock=328.40722495895,331.30866924351,338.60045146727,338.02816901408,335.38289547233 wall=300.0,300.0,600.0,300.0,300.0 approx=329,326,337,343,343 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+CONFIG speed=100 label=A hooks_only_discard_sink=false
+OVERHEAD A median_ms_per_600=10046.000 fps=59.73 wall_total_ms=51000 clock_total_ms=50228.000 clock_crosscheck=true registered=0 rejected=0 liveness=0 standin_reads=0 checksum=0
+WINDOWS A clock_ms=10045.0,10046.0,10045.0,10046.0,10046.0 wall_ms=10000,10000,11000,10000,10000
+FPS A clock=59.731209556993,59.725263786582,59.731209556994,59.725263786582,59.725263786582 wall=60.0,60.0,54.545454545455,60.0,60.0 approx=60,60,60,60,60 wall_resolution_s=1
+CONFIG speed=100 label=E hooks_only_discard_sink=false
+OVERHEAD E median_ms_per_600=10046.000 fps=59.73 wall_total_ms=50000 clock_total_ms=50228.000 clock_crosscheck=true registered=0 rejected=0 liveness=0 standin_reads=3000 checksum=134571700
+WINDOWS E clock_ms=10045.0,10046.0,10046.0,10045.0,10046.0 wall_ms=10000,10000,10000,10000,10000
+FPS E clock=59.731209556994,59.725263786582,59.725263786582,59.731209556993,59.725263786582 wall=60.0,60.0,60.0,60.0,60.0 approx=60,60,60,60,60 wall_resolution_s=1
+CONFIG speed=100 label=B hooks_only_discard_sink=false
+OVERHEAD B median_ms_per_600=10046.000 fps=59.73 wall_total_ms=50000 clock_total_ms=50228.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=0 checksum=0
+WINDOWS B clock_ms=10046.0,10045.0,10046.0,10045.0,10046.0 wall_ms=10000,10000,10000,10000,10000
+FPS B clock=59.725263786582,59.731209556994,59.725263786582,59.731209556994,59.725263786582 wall=60.0,60.0,60.0,60.0,60.0 approx=60,60,60,60,60 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+CONFIG speed=100 label=C hooks_only_discard_sink=false
+OVERHEAD C median_ms_per_600=10046.000 fps=59.73 wall_total_ms=50000 clock_total_ms=50228.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=3000 checksum=134571700
+WINDOWS C clock_ms=10046.0,10045.0,10046.0,10045.0,10046.0 wall_ms=10000,10000,10000,10000,10000
+FPS C clock=59.725263786582,59.731209556993,59.725263786582,59.731209556993,59.725263786582 wall=60.0,60.0,60.0,60.0,60.0 approx=60,60,60,60,60 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+CONFIG speed=100 label=D hooks_only_discard_sink=false
+OVERHEAD D median_ms_per_600=10046.000 fps=59.73 wall_total_ms=51000 clock_total_ms=50228.000 clock_crosscheck=true registered=21 rejected=0 liveness=3000 standin_reads=3000 checksum=134571700
+WINDOWS D clock_ms=10046.0,10046.0,10045.0,10045.0,10046.0 wall_ms=10000,10000,10000,10000,11000
+FPS D clock=59.725263786582,59.725263786582,59.731209556993,59.731209556993,59.725263786582 wall=60.0,60.0,60.0,60.0,54.545454545455 approx=60,60,60,60,60 wall_resolution_s=1
+[shadow] admitted_by=hash pack=gen3_frlg title=firered kind=clean
+[shadow] STATUS frame=845 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1445 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2045 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2645 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3245 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3845 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+INFORMATIONAL speed=6399 B/A clock_delta_percent=132.507
+INFORMATIONAL speed=6399 C/E clock_delta_percent=104.176
+INFORMATIONAL speed=6399 D/E clock_delta_percent=103.187
+INFORMATIONAL speed=6399 F/A clock_delta_percent=134.595
+INFORMATIONAL speed=6399 G/A clock_delta_percent=11.619
+INFORMATIONAL speed=6399 H/A clock_delta_percent=133.551
+REALTIME A median_wall_fps=60.000 minimum=59.5 verdict=PASS
+REALTIME E median_wall_fps=60.000 minimum=59.5 verdict=PASS
+REALTIME B median_wall_fps=60.000 minimum=59.5 verdict=PASS
+REALTIME C median_wall_fps=60.000 minimum=59.5 verdict=PASS
+REALTIME D median_wall_fps=60.000 minimum=59.5 verdict=PASS
+BUDGET speed=100 B/A wall_delta_percent=0.000 clock_delta_percent=0.000 verdict=PASS
+BUDGET speed=100 C/E wall_delta_percent=0.000 clock_delta_percent=0.000 verdict=PASS
+BUDGET speed=100 D/E wall_delta_percent=0.000 clock_delta_percent=0.000 verdict=PASS
+SCOPE standin_only console_status_deferred=true wire_timings=UNVERIFIED wire_deltas=UNVERIFIED wall_resolution_s=1
+RESULT: PASS throttled stand-in budget (coarse wall clock)
