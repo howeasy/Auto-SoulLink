@@ -127,6 +127,9 @@
   },
   "titles": {
     "radical_red": {
+      "_src": {
+        "derived.PARTY_CAPACITY": "lua/games/gen3_frlge.lua:424 (_detectRR partyCount limit)"
+      },
       "admitted": true,
       "derived": {
         "BAG_IN_EWRAM": true,
@@ -172,6 +175,7 @@
         "OUTCOME_CAUGHT": 7,
         "OUTCOME_RAN": 4,
         "OVERWORLD_MODE": "battle_outcome",
+        "PARTY_CAPACITY": 6,
         "PARTY_IN_SB1": false,
         "SB1_BALL_POCKET_COUNT": 50,
         "SB1_FLAGS_OFFSET": 3808,

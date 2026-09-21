@@ -46,13 +46,24 @@
       "variant": "emerald"
     },
     "firered": {
+      "_src": {
+        "derived.BOXES_PER_STORE": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:7 (TOTAL_BOXES_COUNT)",
+        "derived.BOX_DATA_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:44-48; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:105-108 (u32 alignment)",
+        "derived.MONS_PER_BOX": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)",
+        "derived.PARTY_CAPACITY": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/global.h:78 (PARTY_SIZE)",
+        "ram.POKEMON_STORAGE_BASE": "data/gen3/pret/pokefirered.sym:173 (gPokemonStorage; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
+      },
       "admitted": true,
       "derived": {
         "BASESTATS_ENTRY_SIZE": 28,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "BOXES_PER_STORE": 14,
+        "BOX_DATA_OFFSET": 4,
         "GMAIN_CB2_OFFSET": 4,
+        "MONS_PER_BOX": 30,
         "OVERWORLD_MODE": "gmain_flags",
+        "PARTY_CAPACITY": 6,
         "SB1_BALL_POCKET_COUNT": 13,
         "SB1_BALL_POCKET_OFFSET": 1072,
         "SB1_FLAGS_OFFSET": 3808,
@@ -74,6 +85,7 @@
         "LOCKED_MOVES_ADDR": 33701304,
         "PARTY_BASE": 33702532,
         "PARTY_COUNT_ADDR": 33701929,
+        "POKEMON_STORAGE_BASE": 33723156,
         "PSP_PTR_ADDR": 50352144,
         "SB1_PTR_ADDR": 50352136,
         "SB2_PTR_ADDR": 50352140,
@@ -155,13 +167,24 @@
       "variant": "ap"
     },
     "leafgreen": {
+      "_src": {
+        "derived.BOXES_PER_STORE": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:7 (TOTAL_BOXES_COUNT)",
+        "derived.BOX_DATA_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:44-48; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:105-108 (u32 alignment)",
+        "derived.MONS_PER_BOX": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)",
+        "derived.PARTY_CAPACITY": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/global.h:78 (PARTY_SIZE)",
+        "ram.POKEMON_STORAGE_BASE": "data/gen3/pret/pokeleafgreen.sym:173 (gPokemonStorage; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
+      },
       "admitted": true,
       "derived": {
         "BASESTATS_ENTRY_SIZE": 28,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "BOXES_PER_STORE": 14,
+        "BOX_DATA_OFFSET": 4,
         "GMAIN_CB2_OFFSET": 4,
+        "MONS_PER_BOX": 30,
         "OVERWORLD_MODE": "gmain_flags",
+        "PARTY_CAPACITY": 6,
         "SB1_BALL_POCKET_COUNT": 13,
         "SB1_BALL_POCKET_OFFSET": 1072,
         "SB1_FLAGS_OFFSET": 3808,
@@ -183,6 +206,7 @@
         "LOCKED_MOVES_ADDR": 33701304,
         "PARTY_BASE": 33702532,
         "PARTY_COUNT_ADDR": 33701929,
+        "POKEMON_STORAGE_BASE": 33723156,
         "PSP_PTR_ADDR": 50352144,
         "SB1_PTR_ADDR": 50352136,
         "SB2_PTR_ADDR": 50352140,

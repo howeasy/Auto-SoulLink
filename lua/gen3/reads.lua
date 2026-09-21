@@ -26,6 +26,15 @@ R.NAME_EOS = 0xFF               -- charmap.txt: '$' = FF
 R.PARTY_CAPACITY = 6            -- PARTY_SIZE
 R.MONS_PER_BOX = 30             -- IN_BOX_COUNT
 
+-- Vanilla FR/LG relocate their save blocks on every load: SetSaveBlocksPointers
+-- (pret/pokefirered src/load_save.c:68-78 at the pinned commit c75f3523) computes
+--     offset = Random() & ((SAVEBLOCK_MOVE_RANGE - 1) & ~3)     -- :75
+-- with SAVEBLOCK_MOVE_RANGE 128 (:15), i.e. a 4-byte-aligned offset in [0, 124], and adds it
+-- to gSaveBlock2Ptr, gSaveBlock1Ptr AND gPokemonStoragePtr alike. The DMA pads that make the
+-- slack are declared right there (:29, :32, :35). So a static base is never a live address:
+-- the pointer is dereferenced on every read and the base is only a SANITY BOUND.
+R.SAVEBLOCK_MOVE_RANGE = 128
+
 -- src/pokemon.c GetSubstruct: entry [personality % 24] gives the POSITION of the
 -- Growth / Attacks / EVs / Misc substruct inside the 48-byte secure block (0-based).
 R.SUBSTRUCT_ORDER = {
@@ -155,7 +164,10 @@ function R.callable(v)
     return t == "function" or t == "userdata" or t == "table"
 end
 
-function R.new(profile, io)
+-- `pointers` is the pack's write_checkpoint `pointers` block (Entry.build passes
+-- parts.write_checkpoint.pointers), so the pointer symbols arrive as data like every other
+-- address. When it is absent the equivalent profile.ram symbol is used instead.
+function R.new(profile, io, pointers)
     assert(type(profile) == "table" and type(profile.ram) == "table"
            and type(profile.derived) == "table", "Gen 3 title profile required")
     assert(type(io) == "table" and R.callable(io.read_u8) and R.callable(io.read_u32)
@@ -256,17 +268,43 @@ function R.new(profile, io)
     -- (lua/memory_gba.lua:651): PERSONALITY:OTID, upper-case hex, eight digits each.
     function r.key(mon) return string.format("%08X:%08X", mon.personality, mon.ot_id) end
 
-    -- SaveBlock pointers. gSaveBlock1Ptr/gSaveBlock2Ptr are relocated by the engine, so the
-    -- pointer is dereferenced on every call and never cached across frames.
-    local function deref(name)
-        local addr = a[name]
-        if not addr then return nil, "profile has no " .. name end
+    -- SaveBlock / storage pointers. SetSaveBlocksPointers relocates all three on every load,
+    -- so each is dereferenced on the call and never cached across frames.
+    --   symbol    the write_checkpoint pointers key (gSaveBlock1Ptr, ...)
+    --   ram_key   the equivalent profile.ram symbol, used when the pack ships no pointers
+    --   base      optional static base for the cross-check; nil = null + alignment only
+    local move_range = d.SAVEBLOCK_MOVE_RANGE or R.SAVEBLOCK_MOVE_RANGE
+    local max_offset = move_range - 4        -- Random() & ((RANGE - 1) & ~3)
+    local function pointer_address(symbol, ram_key)
+        local entry = pointers and pointers[symbol]
+        if entry and entry.address then return entry.address end
+        return a[ram_key]
+    end
+    local function deref(symbol, ram_key, base)
+        local addr = pointer_address(symbol, ram_key)
+        if not addr then
+            return nil, "neither write_checkpoint.pointers." .. symbol
+                        .. " nor profile.ram." .. ram_key .. " names the pointer"
+        end
         local ptr = io.read_u32(addr)
-        if not ptr or ptr == 0 then return nil, name .. " is null" end
+        if not ptr or ptr == 0 then return nil, symbol .. " is null" end
+        if ptr % 4 ~= 0 then return nil, symbol .. " is not word aligned" end
+        if base then
+            local offset = ptr - base
+            if offset < 0 or offset > max_offset then
+                return nil, symbol .. " is outside the relocation window of its base"
+            end
+        end
         return ptr
     end
-    function r.read_sb1() return deref("SB1_PTR_ADDR") end
-    function r.read_sb2() return deref("SB2_PTR_ADDR") end
+    r.deref = deref
+    -- †The pack names no static base for SaveBlock1/2, so these get the null + alignment
+    -- check only; add SB1_BASE/SB2_BASE to profile.ram to bound them the way storage is.
+    function r.read_sb1() return deref("gSaveBlock1Ptr", "SB1_PTR_ADDR", a.SB1_BASE) end
+    function r.read_sb2() return deref("gSaveBlock2Ptr", "SB2_PTR_ADDR", a.SB2_BASE) end
+    function r.read_storage()
+        return deref("gPokemonStoragePtr", "PSP_PTR_ADDR", a.POKEMON_STORAGE_BASE)
+    end
 
     local function party_base()
         if d.PARTY_IN_SB1 then
@@ -300,7 +338,8 @@ function R.new(profile, io)
 
     -- One PC box, by zero-based index. RR keeps 25 boxes of 30 CFRU-compressed records at
     -- the scattered EWRAM bases in derived.CFRU_BOX_BASES; vanilla FRLG keeps 14 boxes of
-    -- 80-byte records inside gPokemonStorage, whose base the pack does not name yet.
+    -- 80-byte records inside gPokemonStorage, which SetSaveBlocksPointers RELOCATES, so its
+    -- live address is gPokemonStoragePtr and ram.POKEMON_STORAGE_BASE is only the bound.
     function r.read_box(index)
         if type(index) ~= "number" or index ~= math.floor(index) or index < 0 then
             return nil, "box index must be a non-negative integer"
@@ -315,15 +354,13 @@ function R.new(profile, io)
             if not base then return nil, "box index outside profile" end
             stride, compressed = d.COMPRESSED_MON_SIZE or R.COMPRESSED_MON_SIZE, true
         else
-            if not a.POKEMON_STORAGE_BASE then
-                return nil, "profile has no ram.POKEMON_STORAGE_BASE"
-            end
             if not d.BOX_DATA_OFFSET then
                 return nil, "profile has no derived.BOX_DATA_OFFSET"
             end
             if index >= (d.BOXES_PER_STORE or 0) then return nil, "box index outside profile" end
-            base = a.POKEMON_STORAGE_BASE + d.BOX_DATA_OFFSET
-                   + index * mons_per_box * R.BOX_MON_SIZE
+            local storage, why = r.read_storage()
+            if not storage then return nil, why end
+            base = storage + d.BOX_DATA_OFFSET + index * mons_per_box * R.BOX_MON_SIZE
             stride, compressed = R.BOX_MON_SIZE, false
         end
         local raw = io.read_bytes(base, mons_per_box * stride)

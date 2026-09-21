@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate the Gen 3 packs' profile.json from today's only source of addresses.
+"""Generate the Gen 3 packs' profile.json from Lua literals and pinned pret facts.
 
-The single source is the literal address database in `lua/games/gen3_frlge.lua`
+The primary source is the literal address database in `lua/games/gen3_frlge.lua`
 (`GEN3.profiles.vanilla` / `.ap` / `.radical_red` and the additive
 `GEN3.profiles.emerald`).  Nothing here re-types an address: the tables are parsed
 out of the Lua text by a small strict parser for the subset those tables use
@@ -37,6 +37,19 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 SRC = "lua/games/gen3_frlge.lua"
 MAILBOX_SRC = "lua/mailbox.lua"
 GHOST_SRC = "lua/peer_ghost_npc.lua"
+PRET_PIN = "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788"
+STORAGE_HEADER = f"{PRET_PIN}:include/pokemon_storage_system.h"
+
+# Pinned C layout facts, independent of the optional local pret checkout.
+# boxes follows u8 currentBox, but BoxPokemon begins with u32 personality:
+# ARM alignment inserts three padding bytes (the header's 0x0001 comment is wrong).
+FRLG_DERIVED = {
+    "BOX_DATA_OFFSET": (4, f"{STORAGE_HEADER}:44-48; "
+                         f"{PRET_PIN}:include/pokemon.h:105-108 (u32 alignment)"),
+    "BOXES_PER_STORE": (14, f"{STORAGE_HEADER}:7 (TOTAL_BOXES_COUNT)"),
+    "MONS_PER_BOX": (5 * 6, f"{STORAGE_HEADER}:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)"),
+    "PARTY_CAPACITY": (6, f"{PRET_PIN}:include/constants/global.h:78 (PARTY_SIZE)"),
+}
 
 SCHEMA = "gen3-profile-v1"
 
@@ -311,7 +324,38 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
         "source": source,
         "titles": {t: _title(profiles[k], t, k, adm) for t, k, adm in PACKS[pack]},
     }
+    if pack == "gen3_frlg":
+        for title in ("firered", "leafgreen"):
+            entry = out["titles"][title]
+            path = f"data/gen3/pret/poke{title}.sym"
+            text = (REPO / path).read_text(encoding="utf-8")
+            matches = list(re.finditer(
+                r"^([0-9a-fA-F]{8})\s+g\s+[0-9a-fA-F]+\s+gPokemonStorage$", text, re.M))
+            if len(matches) != 1:
+                sys.exit(f"gen_gen3_profile: {path} must name exactly one gPokemonStorage")
+            match = matches[0]
+            entry["ram"]["POKEMON_STORAGE_BASE"] = int(match[1], 16)
+            entry["_src"] = {
+                "ram.POKEMON_STORAGE_BASE":
+                    f"{path}:{_line_of(text, match.start())} (gPokemonStorage; {PRET_PIN})",
+            }
+            for name, (value, where) in FRLG_DERIVED.items():
+                entry["derived"][name] = value
+                entry["_src"][f"derived.{name}"] = where
     if pack == "gen3_rr":
+        # The existing RR detector explicitly rejects party counts above this limit.
+        text = (REPO / SRC).read_text(encoding="utf-8")
+        detector = re.search(r"^local function _detectRR\(\)(.*?)^end", text, re.M | re.S)
+        match = re.search(r"^    if partyCount > (\d+) then return false end$",
+                          detector[1] if detector else "", re.M)
+        if not match:
+            sys.exit(f"gen_gen3_profile: {SRC} no longer carries the RR party capacity check")
+        entry = out["titles"]["radical_red"]
+        entry["derived"]["PARTY_CAPACITY"] = int(match[1])
+        entry["_src"] = {
+            "derived.PARTY_CAPACITY":
+                f"{SRC}:{_line_of(text, detector.start(1) + match.start())} (_detectRR partyCount limit)",
+        }
         out["native"] = native_block()
     return out
 

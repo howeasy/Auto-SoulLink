@@ -235,7 +235,9 @@ function Entry.build(deps)
     local write_checkpoint = load_json(json, root .. "/" .. files.checkpoint)[title]
 
     local io_ = assert(deps.io, "deps.io required")
-    local reads = Reads.new(profile, io_)
+    -- The pointer symbols (gSaveBlock1Ptr / gSaveBlock2Ptr / gPokemonStoragePtr) live in the
+    -- checkpoint pack, so reads gets them as data rather than naming an address itself.
+    local reads = Reads.new(profile, io_, write_checkpoint and write_checkpoint.pointers)
     local signals = Signals.new(profile, sites, io_, assert(deps.ev, "deps.ev required"),
                                 deps.on_fire)
     -- The checkpoint predicate is a sibling card (lua/gen3/safety.lua, P3 C3-2); bind it

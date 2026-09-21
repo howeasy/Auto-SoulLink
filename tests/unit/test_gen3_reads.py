@@ -164,13 +164,84 @@ def test_rr_read_box_refuses_an_index_outside_the_pack():
     assert box is None and "non-negative" in str(why)
 
 
-def test_vanilla_read_box_refuses_because_the_pack_names_no_storage_base():
-    """FRLG's gPokemonStorage base is NOT in data/games/gen3_frlg/profile.json today, so the
-    read refuses by name instead of inventing an address."""
+# SetSaveBlocksPointers (pret/pokefirered src/load_save.c:68-78 at c75f3523) relocates
+# gSaveBlock1Ptr / gSaveBlock2Ptr / gPokemonStoragePtr together by
+# `Random() & ((SAVEBLOCK_MOVE_RANGE - 1) & ~3)` with SAVEBLOCK_MOVE_RANGE 128 (:15), so the
+# live offset from the static base is 4-byte aligned and in [0, 124].
+RELOC_OFFSETS = (0, 4, 64, 124)
+
+
+def storage_pointer_address(world):
+    """The pointer symbol as the pack ships it — from write_checkpoint, which is what
+    Entry.build hands to reads."""
+    pointers = lua_to_py(world.parts.write_checkpoint.pointers)
+    return pointers["gPokemonStoragePtr"]["address"]
+
+
+def place_box(world, offset, box_index=0, records=None):
+    """Relocate gPokemonStorage by `offset` and put `records` in box `box_index`."""
+    ram, derived = world.profile["ram"], world.profile["derived"]
+    live = ram["POKEMON_STORAGE_BASE"] + offset
+    world.poke(storage_pointer_address(world), live.to_bytes(4, "little"))
+    if records is not None:
+        start = (live + derived["BOX_DATA_OFFSET"]
+                 + box_index * derived["MONS_PER_BOX"] * codec.BOX_MON_SIZE)
+        world.poke(start, b"".join(records))
+    return live
+
+
+def test_the_storage_pointer_symbol_agrees_across_the_two_packs_that_ship_it():
+    """write_checkpoint.pointers.gPokemonStoragePtr and profile.ram.PSP_PTR_ADDR are the same
+    symbol; if they ever drift, reads would bind whichever it happened to prefer."""
     world = World(pack="gen3_frlg", title="firered")
-    box, why = world.parts.reads.read_box(0)
-    assert box is None
-    assert "POKEMON_STORAGE_BASE" in str(why)
+    assert storage_pointer_address(world) == world.profile["ram"]["PSP_PTR_ADDR"]
+
+
+def test_vanilla_read_box_follows_the_relocated_storage_pointer():
+    """The static base is NEVER read: the records sit at base+offset and read_box finds them
+    only because it dereferences gPokemonStoragePtr on the call."""
+    world = World(pack="gen3_frlg", title="firered")
+    rng = random.Random(7)
+    mon = codec.decode_party_mon(rr_party_bytes()[1][:codec.PARTY_MON_SIZE], rr=True)
+    records = []
+    for _slot in range(codec.MONS_PER_BOX):
+        mon["personality"] = rng.randrange(1 << 32)
+        records.append(codec.encode_box_mon(mon, rr=False))
+
+    for offset in RELOC_OFFSETS:
+        place_box(world, offset, box_index=3, records=records)
+        box = lua_to_py(world.parts.reads.read_box(3))
+        assert len(box) == codec.MONS_PER_BOX
+        for slot, raw in enumerate(records):
+            expected = codec.decode_box_mon(raw)
+            assert expected["checksum_ok"] is True
+            assert box[slot]["box_index"] == 3 and box[slot]["slot"] == slot
+            assert_same_mon(box[slot], expected)
+
+
+def test_a_storage_pointer_outside_the_relocation_window_is_refused():
+    world = World(pack="gen3_frlg", title="firered")
+    base = world.profile["ram"]["POKEMON_STORAGE_BASE"]
+    for bad, reason in ((base + 128, "relocation window"),   # one step past the range
+                        (base + 0x1000, "relocation window"),
+                        (base - 4, "relocation window"),
+                        (base + 2, "word aligned"),          # Random() & ~3 cannot do this
+                        (0, "null")):
+        world.poke(storage_pointer_address(world), bad.to_bytes(4, "little"))
+        box, why = world.parts.reads.read_box(0)
+        assert box is None, f"pointer {bad:#010x} should be refused"
+        assert reason in str(why), why
+    # and the last accepted offset still works, so the bound is not off by one
+    place_box(world, 124)
+    assert lua_to_py(world.parts.reads.read_box(0)) != []
+
+
+def test_vanilla_read_box_refuses_an_index_outside_the_pack():
+    world = World(pack="gen3_frlg", title="firered")
+    place_box(world, 0)
+    boxes = world.profile["derived"]["BOXES_PER_STORE"]
+    box, why = world.parts.reads.read_box(boxes)
+    assert box is None and "outside profile" in str(why)
 
 
 def test_saveblock_pointers_are_dereferenced_every_call():
@@ -185,10 +256,13 @@ def test_saveblock_pointers_are_dereferenced_every_call():
     assert int(world.parts.reads.read_sb1()) == 0x02026000
 
 
-def test_a_null_saveblock_pointer_is_refused():
+def test_a_null_or_unaligned_saveblock_pointer_is_refused():
     world = World(pack="gen3_frlg", title="firered")
     ptr, why = world.parts.reads.read_sb1()
     assert ptr is None and "null" in str(why)
+    world.poke(world.profile["ram"]["SB1_PTR_ADDR"], (0x02025736).to_bytes(4, "little"))
+    ptr, why = world.parts.reads.read_sb1()
+    assert ptr is None and "word aligned" in str(why)
 
 
 def test_read_party_refuses_a_count_above_capacity():

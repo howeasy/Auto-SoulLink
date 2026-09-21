@@ -1,4 +1,4 @@
-"""The Gen 3 packs' profile.json must be exactly today's Lua literals, nothing else.
+"""The Gen 3 packs' profile.json preserves Lua literals and pinned pret additions.
 
 The generator is the only thing allowed to type a Gen 3 address, so every assertion here
 re-derives the expected value from the Lua sources with its own regexes (no Lua runtime,
@@ -104,6 +104,55 @@ def test_rr_storage_flags() -> None:
     derived = _title("radical_red")["derived"]
     assert derived["PARTY_IN_SB1"] is False
     assert derived["CFRU_NO_ENCRYPT"] is True
+
+
+@pytest.mark.parametrize("name", ["firered", "leafgreen"])
+def test_vanilla_storage_and_party_facts(name: str) -> None:
+    title = _title(name)
+    pin = "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788"
+    header = f"{pin}:include/pokemon_storage_system.h"
+    path = f"data/gen3/pret/poke{name}.sym"
+    lines = (REPO / path).read_text(encoding="utf-8").splitlines()
+    storage = [(i, line.split()) for i, line in enumerate(lines, 1)
+               if line.split()[-1:] == ["gPokemonStorage"]]
+    assert len(storage) == 1
+    line, fields = storage[0]
+    assert title["ram"]["POKEMON_STORAGE_BASE"] == int(fields[0], 16) == 0x02029314
+    # Offset 4 accounts for u32 alignment, despite the header's stale 0x0001 comment.
+    expected = {"BOX_DATA_OFFSET": 4, "BOXES_PER_STORE": 14,
+                "MONS_PER_BOX": 30, "PARTY_CAPACITY": 6}
+    for key, value in expected.items():
+        assert title["derived"][key] == value
+    assert title["_src"] == {
+        "ram.POKEMON_STORAGE_BASE": f"{path}:{line} (gPokemonStorage; {pin})",
+        "derived.BOX_DATA_OFFSET": f"{header}:44-48; "
+                                   f"{pin}:include/pokemon.h:105-108 (u32 alignment)",
+        "derived.BOXES_PER_STORE": f"{header}:7 (TOTAL_BOXES_COUNT)",
+        "derived.MONS_PER_BOX": f"{header}:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)",
+        "derived.PARTY_CAPACITY": f"{pin}:include/constants/global.h:78 (PARTY_SIZE)",
+    }
+
+
+def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
+    title = _title("radical_red")
+    text = SRC.read_text(encoding="utf-8")
+    start = text.index("local function _detectRR()")
+    match = re.search(r"if partyCount > (\d+) then return false end", text[start:])
+    assert match
+    line = text.count("\n", 0, start + match.start()) + 1
+    assert title["derived"]["PARTY_CAPACITY"] == int(match[1]) == 6
+    assert title["_src"] == {
+        "derived.PARTY_CAPACITY":
+            f"lua/games/gen3_frlge.lua:{line} (_detectRR partyCount limit)",
+    }
+
+
+@pytest.mark.parametrize("name", ["firered_ap", "emerald"])
+def test_pret_additions_do_not_admit_unverified_titles(name: str) -> None:
+    title = _title(name)
+    assert "_src" not in title
+    assert "BOX_DATA_OFFSET" not in title["derived"]
+    assert "PARTY_CAPACITY" not in title["derived"]
 
 
 def test_thumb_addresses_are_kept_verbatim_and_marked() -> None:
