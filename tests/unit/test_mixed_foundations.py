@@ -205,6 +205,72 @@ async def test_a_hello_that_declares_a_contradictory_foundation_is_refused(tmp_p
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("bad", [{}, {"rom_type": ""}, {"rom_type": None},
+                                 {"rom_type": 3}, {"rom_type": ["firered"]}])
+async def test_a_hello_without_a_usable_rom_type_cannot_slip_past_the_foundation_lock(
+        tmp_path, bad):
+    """Codex cx-a66ab55a F1: the lock is DERIVED from rom_type, so no rom_type is no entry.
+
+    The hole: a falsey rom_type skipped both the routing gate and the pairing check, so a
+    hello with a valid identity reached `state.handle_event` on a run committed to another
+    foundation -- and, worse, cleared a standing pairing rejection on its way through.
+    """
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", RR)))
+        # Slot b is refused first, so the retry below has a standing rejection to clear.
+        assert _refused(await send(_hello("b", FR)))
+        standing = srv.state.identity_error["b"]
+        before = _snapshot(srv)
+
+        reply = await send(_hello("b", bad, panel=True, sfx=True))
+        assert any("UNKNOWN ROM" in c.get("text", "") for c in reply["commands"]), reply
+        assert standing and srv.state.identity_error.get("b"), \
+            "an invalid retry cleared the standing pairing rejection"
+        assert "b" in srv._rom_type_rejected
+        assert _snapshot(srv) == before, "a hello with no usable rom_type changed the run"
+        assert not srv.connected_players["b"].get("panel")
+        assert not srv.connected_players["b"].get("sfx")
+        # And nothing was dispatched: slot b never got an identity or a trainer name.
+        assert "b" not in srv.state.player_identity
+    finally:
+        await close()
+    # Fail-closed for a direct caller too, not only through the socket.
+    assert "Missing rom_type" in srv._mixed_games_error("b", bad.get("rom_type", ""), "clean")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["", None, False, 0, [], {}, "gen3_frlg", "gen1_rby"])
+async def test_a_present_foundation_must_be_the_derived_string(tmp_path, bad):
+    """Codex cx-a66ab55a F2: absent is not empty. A key that is there is an assertion."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        before = _snapshot(srv)
+        reply = await send(_hello("a", RR, foundation=bad, panel=True))
+        assert _refused(reply), (bad, reply)
+        assert "Foundation mismatch" in srv.state.identity_error["a"]
+        assert _snapshot(srv) == before, "a refused foundation claim changed the run"
+        assert not srv.state.rom_type and not srv.connected_players["a"].get("panel")
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_the_matching_and_the_omitted_foundation_are_both_accepted(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", RR, foundation="gen3_rr")))
+        assert srv.state.rom_type == "firered_rr"
+        assert not _refused(await send(_hello("b", RR_CLEAN)))   # key omitted entirely
+        assert not srv.state.identity_error
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
 async def test_an_absent_foundation_is_derived_so_an_old_client_still_connects(tmp_path):
     """P4 coexistence: today's RR client sends no `foundation`."""
     srv = SLinkServer(data_dir=str(tmp_path))
