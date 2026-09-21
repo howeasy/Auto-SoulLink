@@ -234,7 +234,10 @@ async def test_battle_is_on_the_player_card_and_marked_on_the_half(dashboard):
 async def test_the_now_cards_sit_in_the_player_columns(dashboard):
     _, dom = dashboard
     cards = [n for n in dom.find_all("div") if "mk-nowcard" in _classes(n)]
-    assert [c.get("style") for c in cards] == ["grid-column:1", "grid-column:3"]
+    styles = [c.get("style") for c in cards]
+    assert [s.split(";")[0] for s in styles] == ["grid-column:1", "grid-column:3"]
+    # the area's art behind each card (server/area_art.py), named by the area
+    assert all("--area-art:url('/area-art/" in s for s in styles), styles
     assert all("online" in _classes(c) for c in cards), "both players are connected on the mock cast"
 
 

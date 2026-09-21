@@ -4793,6 +4793,8 @@ def build_app(srv):
         return {"sidebar_html": srv._build_sidebar_html(request, "tools"), "body_class": "board mgr",
                 "mgr": True, "is_stream": False, "hide_chrome": False}
     setup_patcher_routes(app, _patcher_chrome)
+    from server.area_art import setup_area_art_routes
+    setup_area_art_routes(app)          # the art behind a player card
     return app
 
 

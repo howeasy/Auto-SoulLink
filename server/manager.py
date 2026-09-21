@@ -1771,6 +1771,8 @@ async def main(host: str, port: int):
         return {"sidebar_html": rail, "body_class": "board mgr",
                 "mgr": True, "is_stream": False, "hide_chrome": False}
     setup_patcher_routes(app, _patcher_chrome)
+    from server.area_art import setup_area_art_routes
+    setup_area_art_routes(app)          # the art behind a player card, for the boards here
 
     # Lifecycle: shared aiohttp ClientSession for proxy requests
     async def _startup(app: web.Application) -> None:

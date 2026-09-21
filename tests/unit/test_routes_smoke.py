@@ -155,7 +155,7 @@ async def test_macro_smoke_harness_renders_its_mock_cast(client):
 # the live router above, which is the right way to cover new ones -- and exactly the wrong way to
 # notice that collapsing nine pages into three quietly dropped sixty parametrized tests. Change
 # this number on purpose, in the same commit that changes the router.
-EXPECTED_GET_ROUTES = 69
+EXPECTED_GET_ROUTES = 70
 
 
 def test_route_count_changes_are_deliberate():

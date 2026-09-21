@@ -105,7 +105,8 @@
         <h2 class="mk-h2"><span>Now</span><i></i></h2>
         <div class="mk-now">
           {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
-            <div class="mk-card mk-nowcard {{ 'online' if p.connected else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
+            {# the area's art behind the card (server/area_art.py), when the player is somewhere #}
+            <div class="mk-card mk-nowcard {{ 'online' if p.connected else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}{% if board.has_data[pid] and p.current_area_display %};--area-art:url('/area-art/{{ p.current_area_display | urlencode }}'){% endif %}">
               <div class="mk-now-head">
                 <span class="mk-side">{{ pid | upper }}</span>
                 <span class="mk-now-name">

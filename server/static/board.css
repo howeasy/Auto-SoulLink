@@ -216,7 +216,12 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
  * they spend width, not height. */
 
 .mk-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); align-items: stretch; }
-.mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); }
+.mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); position: relative; isolation: isolate; }
+/* the area's art: a faint band across the top of the card, fading out under the body so the
+   text stays readable; a tall card (the trainer panel open) does not stretch it */
+.mk-nowcard::before { content: ""; position: absolute; inset: 0; max-height: 360px; z-index: -1; pointer-events: none;
+  background: var(--area-art, none) center / cover no-repeat; opacity: .3;
+  mask-image: linear-gradient(#000 30%, transparent 95%); }
 .mk-nowcard.online { border-left-color: var(--c-alive); }
 .mk-now-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--mk-pad) var(--mk-pad) var(--space-2); border-bottom: 1px solid var(--c-sep); }
 .mk-now-head .mk-side { width: 1.6em; height: 1.6em; display: grid; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--c-brand) 18%, transparent); font-size: var(--fs-base); }
