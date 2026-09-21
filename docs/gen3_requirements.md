@@ -190,6 +190,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 RR faint capture + catch pin: `docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt` — the CFRU cleanup-completion point 0x0909EED2 fires once per faint with gActiveBattler = the fainted battler (player faint: 0, counter 0->1), so RR `faint` re-pins there (side = gActiveBattler parity); the vanilla Cmd_tryfaintmon pin is dead on RR (replaced command table). RR catch input sequence pinned physically (Right, A, Right, Right, A, A from the action menu -> "Zigzagoon was caught!"), balls via the EWRAM pocket 0x0203C354.
 
+- 2026-09-21 P3 RR `faint` PHYSICAL: `docs/gen3/probes/shadow_rr_faint_2026-09-21.txt` — after the re-pin (8eb2717, CFRU cleareffectsonfaint completion 0x0909EED2) the observer records `faint` once per faint through the RR wild_faint leg (5 fires incl. the player faint witnessed by HP positive->0 and playerFaintCounter 0->1), callback == site. RR coverage now: battle_begin, battle_end, faint, whiteout, map_load, save.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
