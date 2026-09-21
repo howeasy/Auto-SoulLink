@@ -55,7 +55,9 @@ local WRITE_SINKS = { "write_u8", "write_u16", "write_u32", "write_bytes" }
 -- DO take a domain ("System Bus" for the bus reads, "ROM" for rom_read); `reg` is
 -- function(name) -> number, i.e. `emu.getregister` in production. Every read forwards
 -- unchanged; every write_* throws.
-function M.build_io(mem, reg)
+function M.build_io(mem, reg, framecount)
+    -- `framecount` is emu.framecount in production (memory.* has no frame counter: PHYSICAL,
+    -- RR explode duo 2026-09-21, the first fire died here); a fake mem may carry its own.
     local io_ro = {
         read_u8    = function(addr) return mem.read_u8(addr, "System Bus") end,
         read_u16   = function(addr) return mem.read_u16_le(addr, "System Bus") end,
@@ -70,7 +72,10 @@ function M.build_io(mem, reg)
             for i = 1, len do out[i] = mem.read_u8(off + i - 1, "ROM") end
             return out
         end,
-        framecount = function() return mem.framecount() end,
+        framecount = function()
+            if framecount then return framecount() end
+            return mem.framecount()
+        end,
         register   = function(name) return reg(name) end,
     }
     for _, name in ipairs(WRITE_SINKS) do
@@ -200,7 +205,8 @@ function M.start(opts)
     local proj_root = lua_root:match("(.+[/\\])lua[/\\]") or (lua_root .. "../")
     package.path = lua_root .. "?.lua;" .. package.path
 
-    local io_ro = M.build_io(mem_g, function(name) return emu_g.getregister(name) end)
+    local io_ro = M.build_io(mem_g, function(name) return emu_g.getregister(name) end,
+                             function() return emu_g.framecount() end)
     local json = dofile(proj_root .. "lua/json_codec.lua")
     local Entry = require("gen3.entry")
 
@@ -263,7 +269,24 @@ function M.start(opts)
 
     local state = { ev = ev_wrap, deps = deps, parts = parts, stubs = M.mutation_stubs(),
                     admitted_by = admitted_by }
+    -- A STATUS line (not a SHADOW line: the differ ignores it) at start and every 600 frames,
+    -- so a run with zero fires can be told apart from a run whose hooks never registered.
+    local function status_line()
+        local ok, st = pcall(function() return parts.signals:status() end)
+        if not ok or type(st) ~= "table" then return end
+        local frame = emu_g and emu_g.framecount and emu_g.framecount() or 0
+        local line = string.format(
+            "STATUS frame=%d registered=%s rejected=%s dropped=%s pending=%s failed=%s handler_error=%s",
+            frame, tostring(st.registered), tostring(st.rejected), tostring(st.dropped),
+            tostring(st.pending), tostring(st.failed), tostring(st.handler_error))
+        if console_g and console_g.log then console_g.log("[shadow] " .. line) end
+        if logf then logf:write(line .. "\n"); logf:flush() end
+    end
+    status_line()
+    local polls = 0
     function state.poll()
+        polls = polls + 1
+        if polls % 600 == 0 then status_line() end
         for _, fire in ipairs(read_fires()) do
             -- Forward EVERY OTHER scalar field of the fire (callback_address, raw_r15, cpsr,
             -- sp, thumb, mode, action for pc_move, species, ...): tools/gen3_shadow_diff.py
