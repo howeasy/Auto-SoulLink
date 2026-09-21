@@ -26,7 +26,7 @@ Three deliverables sit on top of the rules:
 |---|---|---|
 | Rules on pureRGB | encounter linking, dead zones, faint propagation, party/PC sync, memorials, whiteout, evolution/transform/APEX identity, Explode Mode, rival swap | `lua/gen1/*`, `server/adapters/gen1_purergb.py`, `data/games/gen1_purergb/` |
 | Companion overlay | native Cable Club trade, START-menu SLINK panel, ROM-level APEX collision guard — as **source sections** linked into the pureRGB build | `patch/gen1/purergb/`, `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
-| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink1`) |
+| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink2`, patches 0001–0007) |
 
 ---
 
@@ -492,8 +492,7 @@ refused by name:
   them; a selection that slips through ends in `admit_settings`'s named refusal — never a silent
   coercion. `field_items_ban_bad` is a stock Gen 1 no-op (help text); `tm_compat` covers the 151
   dex records, the 13 non-dex forms keep their own TM bytes (help text).
-- **Fork defects found and fixed at the root** (`patch/upr/0003`, `0004`; jar `4.6.1-slink1`
-  rebuilt, sha256 `d68df088…`): three settings HANG the jar (`wild_restriction=similar`,
+- **Fork defects found and fixed at the root** (`patch/upr/0003`, `0004`; jar rebuilt, sha256 `d68df088…`, later `4.6.1-slink2` `20769502…`): three settings HANG the jar (`wild_restriction=similar`,
   `statics=similar`, `trainers_similar_strength` — the zero-stat opaque sentinel arrived as
   `current` and the similar-strength search expanded by zero forever; java at 100 % CPU for
   14+ min) → step floor `max(BST/20, 1)`; `wild=global` CRASHED (NPE on the unmapped sentinel)
