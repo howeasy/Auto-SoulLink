@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "bee43dc9c042427685942048b4f2539586e77398d98057e4acc298929d850e62"
+   "sha256": "fc30e6032311c97ef8087297e64f88818d8a98c4d8b3ba91811b1a4bf08528b8"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "6c4257096b2fc3f8799bb41f6f91e9d4e067b76f2194ab68e032a3b54a3c477d"
+   "sha256": "80ab8d679ccb02d9f3082f5810f9dd59686cb957f63794bc06a02d5e396e2636"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "3023971ba8e85dcd76d8873d184e54e660de9ab36aee32e8fad48fff0c8b58d1"
+   "sha256": "ccb65e085329cb41fa883ef1870f2da47f8ea8d4522cc47c268bef62371b8010"
   }
  },
  "titles": {
@@ -240,9 +240,9 @@
    "repo": "purergb",
    "rom": {
     "AddEnemyMonToPlayerParty": {
-     "addr": 13523,
+     "addr": 13528,
      "bank": 0,
-     "flat": 13523
+     "flat": 13528
     },
     "AddItemToInventory_.done": {
      "addr": 20564,
@@ -250,9 +250,9 @@
      "flat": 53332
     },
     "AddPartyMon": {
-     "addr": 13474,
+     "addr": 13479,
      "bank": 0,
-     "flat": 13474
+     "flat": 13479
     },
     "ApplyOutOfBattlePoisonDamage": {
      "addr": 18165,
@@ -280,14 +280,14 @@
      "flat": 473296
     },
     "CalcStat": {
-     "addr": 13507,
+     "addr": 13512,
      "bank": 0,
-     "flat": 13507
+     "flat": 13512
     },
     "CalcStats": {
-     "addr": 13487,
+     "addr": 13492,
      "bank": 0,
-     "flat": 13487
+     "flat": 13492
     },
     "ChangeBox": {
      "addr": 30990,
@@ -295,14 +295,14 @@
      "flat": 473358
     },
     "DelayFrame": {
-     "addr": 7804,
+     "addr": 7807,
      "bank": 0,
-     "flat": 7804
+     "flat": 7807
     },
     "DelayFrame.halt": {
-     "addr": 7827,
+     "addr": 7830,
      "bank": 0,
-     "flat": 7827
+     "flat": 7830
     },
     "DisplayBattleMenu": {
      "addr": 20348,
@@ -310,9 +310,9 @@
      "flat": 249724
     },
     "DisplayPartyMenu": {
-     "addr": 4739,
+     "addr": 4742,
      "bank": 0,
-     "flat": 4739
+     "flat": 4742
     },
     "EmptyAllSRAMBoxes": {
      "addr": 31216,
@@ -325,9 +325,9 @@
      "flat": 951549
     },
     "EnterMap": {
-     "addr": 919,
+     "addr": 922,
      "bank": 0,
-     "flat": 919
+     "flat": 922
     },
     "EvolutionAfterBattle": {
      "addr": 21721,
@@ -390,9 +390,9 @@
      "flat": 464076
     },
     "Init": {
-     "addr": 7446,
+     "addr": 7449,
      "bank": 0,
-     "flat": 7446
+     "flat": 7449
     },
     "InitBattleCommon": {
      "addr": 28378,
@@ -420,9 +420,9 @@
      "flat": 407
     },
     "LoadMapHeader": {
-     "addr": 3925,
+     "addr": 3928,
      "bank": 0,
-     "flat": 3925
+     "flat": 3928
     },
     "MainInBattleLoop": {
      "addr": 16973,
@@ -470,14 +470,14 @@
      "flat": 735466
     },
     "OverworldLoop": {
-     "addr": 982,
+     "addr": 985,
      "bank": 0,
-     "flat": 982
+     "flat": 985
     },
     "OverworldLoopLessDelay": {
-     "addr": 989,
+     "addr": 992,
      "bank": 0,
-     "flat": 989
+     "flat": 992
     },
     "PokedexOrder": {
      "addr": 20821,
@@ -490,14 +490,14 @@
      "flat": 247757
     },
     "RemoveItemFromInventory": {
-     "addr": 10771,
+     "addr": 10776,
      "bank": 0,
-     "flat": 10771
+     "flat": 10776
     },
     "RemovePokemon": {
-     "addr": 13467,
+     "addr": 13472,
      "bank": 0,
-     "flat": 13467
+     "flat": 13472
     },
     "ResetStatusAndHalveMoneyOnBlackout": {
      "addr": 16560,
@@ -540,9 +540,9 @@
      "flat": 58713
     },
     "SoftReset": {
-     "addr": 7437,
+     "addr": 7440,
      "bank": 0,
-     "flat": 7437
+     "flat": 7440
     },
     "SpecialEnterMap": {
      "addr": 23165,
@@ -600,7 +600,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "5528ac1f0afbb9beb05bb552d6657033408dd03b",
+   "rom_sha1": "adb023dce433078161690b9f55a4ea7588b0863a",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -629,39 +629,51 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21C14CC738",
+      "expected_hex": "545D063F21424DC738",
       "flat": 56131
      },
-     "foreground": {
-      "addr": 982,
+     "delay_frame_tail": {
+      "addr": 7830,
       "bank": 0,
-      "expected_hex": "D7063F213B40C7",
-      "flat": 982
+      "expected_hex": "7600F0D6A720F9C3B03A",
+      "flat": 7830
+     },
+     "foreground": {
+      "addr": 985,
+      "bank": 0,
+      "expected_hex": "D7063F213740C7",
+      "flat": 985
+     },
+     "joypad": {
+      "addr": 422,
+      "bank": 0,
+      "expected_hex": "CDC23AC9",
+      "flat": 422
      },
      "receptionist": {
-      "addr": 12898,
+      "addr": 12903,
       "bank": 0,
-      "expected_hex": "21B144063FC7C9",
-      "flat": 12898
+      "expected_hex": "213245063FC7C9",
+      "flat": 12903
      },
      "start_menu_row": {
-      "addr": 10713,
+      "addr": 10718,
       "bank": 0,
-      "expected_hex": "A23A",
-      "flat": 10713
+      "expected_hex": "A73A",
+      "flat": 10718
      },
      "vblank": {
-      "addr": 7781,
+      "addr": 7784,
       "bank": 0,
       "expected_hex": "063F210040C7",
-      "flat": 7781
+      "flat": 7784
      }
     },
-    "dispatch_hex": "21B144063FC7C9",
+    "dispatch_hex": "213245063FC7C9",
     "mailbox": 57066,
-    "receptionist_hook": 12898,
+    "receptionist_hook": 12903,
     "service": {
-     "addr": 16648,
+     "addr": 16777,
      "bank": 63
     }
    },
@@ -888,9 +900,9 @@
    "repo": "purergb",
    "rom": {
     "AddEnemyMonToPlayerParty": {
-     "addr": 13523,
+     "addr": 13528,
      "bank": 0,
-     "flat": 13523
+     "flat": 13528
     },
     "AddItemToInventory_.done": {
      "addr": 20564,
@@ -898,9 +910,9 @@
      "flat": 53332
     },
     "AddPartyMon": {
-     "addr": 13474,
+     "addr": 13479,
      "bank": 0,
-     "flat": 13474
+     "flat": 13479
     },
     "ApplyOutOfBattlePoisonDamage": {
      "addr": 18165,
@@ -928,14 +940,14 @@
      "flat": 473296
     },
     "CalcStat": {
-     "addr": 13507,
+     "addr": 13512,
      "bank": 0,
-     "flat": 13507
+     "flat": 13512
     },
     "CalcStats": {
-     "addr": 13487,
+     "addr": 13492,
      "bank": 0,
-     "flat": 13487
+     "flat": 13492
     },
     "ChangeBox": {
      "addr": 30990,
@@ -943,14 +955,14 @@
      "flat": 473358
     },
     "DelayFrame": {
-     "addr": 7804,
+     "addr": 7807,
      "bank": 0,
-     "flat": 7804
+     "flat": 7807
     },
     "DelayFrame.halt": {
-     "addr": 7827,
+     "addr": 7830,
      "bank": 0,
-     "flat": 7827
+     "flat": 7830
     },
     "DisplayBattleMenu": {
      "addr": 20348,
@@ -958,9 +970,9 @@
      "flat": 249724
     },
     "DisplayPartyMenu": {
-     "addr": 4739,
+     "addr": 4742,
      "bank": 0,
-     "flat": 4739
+     "flat": 4742
     },
     "EmptyAllSRAMBoxes": {
      "addr": 31216,
@@ -973,9 +985,9 @@
      "flat": 951549
     },
     "EnterMap": {
-     "addr": 919,
+     "addr": 922,
      "bank": 0,
-     "flat": 919
+     "flat": 922
     },
     "EvolutionAfterBattle": {
      "addr": 21721,
@@ -1038,9 +1050,9 @@
      "flat": 464076
     },
     "Init": {
-     "addr": 7446,
+     "addr": 7449,
      "bank": 0,
-     "flat": 7446
+     "flat": 7449
     },
     "InitBattleCommon": {
      "addr": 28378,
@@ -1068,9 +1080,9 @@
      "flat": 407
     },
     "LoadMapHeader": {
-     "addr": 3925,
+     "addr": 3928,
      "bank": 0,
-     "flat": 3925
+     "flat": 3928
     },
     "MainInBattleLoop": {
      "addr": 16973,
@@ -1118,14 +1130,14 @@
      "flat": 735466
     },
     "OverworldLoop": {
-     "addr": 982,
+     "addr": 985,
      "bank": 0,
-     "flat": 982
+     "flat": 985
     },
     "OverworldLoopLessDelay": {
-     "addr": 989,
+     "addr": 992,
      "bank": 0,
-     "flat": 989
+     "flat": 992
     },
     "PokedexOrder": {
      "addr": 20821,
@@ -1138,14 +1150,14 @@
      "flat": 247757
     },
     "RemoveItemFromInventory": {
-     "addr": 10771,
+     "addr": 10776,
      "bank": 0,
-     "flat": 10771
+     "flat": 10776
     },
     "RemovePokemon": {
-     "addr": 13467,
+     "addr": 13472,
      "bank": 0,
-     "flat": 13467
+     "flat": 13472
     },
     "ResetStatusAndHalveMoneyOnBlackout": {
      "addr": 16560,
@@ -1188,9 +1200,9 @@
      "flat": 58713
     },
     "SoftReset": {
-     "addr": 7437,
+     "addr": 7440,
      "bank": 0,
-     "flat": 7437
+     "flat": 7440
     },
     "SpecialEnterMap": {
      "addr": 23165,
@@ -1248,7 +1260,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "87e11687660b41ef1c9e4405a0096d0fba8aba80",
+   "rom_sha1": "f1124934faa55dd05e42b4ece4feb26c244448b2",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1277,39 +1289,51 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21C14CC738",
+      "expected_hex": "545D063F21424DC738",
       "flat": 56131
      },
-     "foreground": {
-      "addr": 982,
+     "delay_frame_tail": {
+      "addr": 7830,
       "bank": 0,
-      "expected_hex": "D7063F213B40C7",
-      "flat": 982
+      "expected_hex": "7600F0D6A720F9C3B03A",
+      "flat": 7830
+     },
+     "foreground": {
+      "addr": 985,
+      "bank": 0,
+      "expected_hex": "D7063F213740C7",
+      "flat": 985
+     },
+     "joypad": {
+      "addr": 422,
+      "bank": 0,
+      "expected_hex": "CDC23AC9",
+      "flat": 422
      },
      "receptionist": {
-      "addr": 12898,
+      "addr": 12903,
       "bank": 0,
-      "expected_hex": "21B144063FC7C9",
-      "flat": 12898
+      "expected_hex": "213245063FC7C9",
+      "flat": 12903
      },
      "start_menu_row": {
-      "addr": 10713,
+      "addr": 10718,
       "bank": 0,
-      "expected_hex": "A23A",
-      "flat": 10713
+      "expected_hex": "A73A",
+      "flat": 10718
      },
      "vblank": {
-      "addr": 7781,
+      "addr": 7784,
       "bank": 0,
       "expected_hex": "063F210040C7",
-      "flat": 7781
+      "flat": 7784
      }
     },
-    "dispatch_hex": "21B144063FC7C9",
+    "dispatch_hex": "213245063FC7C9",
     "mailbox": 57066,
-    "receptionist_hook": 12898,
+    "receptionist_hook": 12903,
     "service": {
-     "addr": 16648,
+     "addr": 16777,
      "bank": 63
     }
    },
@@ -1536,9 +1560,9 @@
    "repo": "purergb",
    "rom": {
     "AddEnemyMonToPlayerParty": {
-     "addr": 13523,
+     "addr": 13528,
      "bank": 0,
-     "flat": 13523
+     "flat": 13528
     },
     "AddItemToInventory_.done": {
      "addr": 20564,
@@ -1546,9 +1570,9 @@
      "flat": 53332
     },
     "AddPartyMon": {
-     "addr": 13474,
+     "addr": 13479,
      "bank": 0,
-     "flat": 13474
+     "flat": 13479
     },
     "ApplyOutOfBattlePoisonDamage": {
      "addr": 18165,
@@ -1576,14 +1600,14 @@
      "flat": 473296
     },
     "CalcStat": {
-     "addr": 13507,
+     "addr": 13512,
      "bank": 0,
-     "flat": 13507
+     "flat": 13512
     },
     "CalcStats": {
-     "addr": 13487,
+     "addr": 13492,
      "bank": 0,
-     "flat": 13487
+     "flat": 13492
     },
     "ChangeBox": {
      "addr": 30990,
@@ -1591,14 +1615,14 @@
      "flat": 473358
     },
     "DelayFrame": {
-     "addr": 7804,
+     "addr": 7807,
      "bank": 0,
-     "flat": 7804
+     "flat": 7807
     },
     "DelayFrame.halt": {
-     "addr": 7827,
+     "addr": 7830,
      "bank": 0,
-     "flat": 7827
+     "flat": 7830
     },
     "DisplayBattleMenu": {
      "addr": 20348,
@@ -1606,9 +1630,9 @@
      "flat": 249724
     },
     "DisplayPartyMenu": {
-     "addr": 4739,
+     "addr": 4742,
      "bank": 0,
-     "flat": 4739
+     "flat": 4742
     },
     "EmptyAllSRAMBoxes": {
      "addr": 31216,
@@ -1621,9 +1645,9 @@
      "flat": 951549
     },
     "EnterMap": {
-     "addr": 919,
+     "addr": 922,
      "bank": 0,
-     "flat": 919
+     "flat": 922
     },
     "EvolutionAfterBattle": {
      "addr": 21721,
@@ -1686,9 +1710,9 @@
      "flat": 464076
     },
     "Init": {
-     "addr": 7446,
+     "addr": 7449,
      "bank": 0,
-     "flat": 7446
+     "flat": 7449
     },
     "InitBattleCommon": {
      "addr": 28378,
@@ -1716,9 +1740,9 @@
      "flat": 407
     },
     "LoadMapHeader": {
-     "addr": 3925,
+     "addr": 3928,
      "bank": 0,
-     "flat": 3925
+     "flat": 3928
     },
     "MainInBattleLoop": {
      "addr": 16973,
@@ -1766,14 +1790,14 @@
      "flat": 735466
     },
     "OverworldLoop": {
-     "addr": 982,
+     "addr": 985,
      "bank": 0,
-     "flat": 982
+     "flat": 985
     },
     "OverworldLoopLessDelay": {
-     "addr": 989,
+     "addr": 992,
      "bank": 0,
-     "flat": 989
+     "flat": 992
     },
     "PokedexOrder": {
      "addr": 20821,
@@ -1786,14 +1810,14 @@
      "flat": 247757
     },
     "RemoveItemFromInventory": {
-     "addr": 10771,
+     "addr": 10776,
      "bank": 0,
-     "flat": 10771
+     "flat": 10776
     },
     "RemovePokemon": {
-     "addr": 13467,
+     "addr": 13472,
      "bank": 0,
-     "flat": 13467
+     "flat": 13472
     },
     "ResetStatusAndHalveMoneyOnBlackout": {
      "addr": 16560,
@@ -1836,9 +1860,9 @@
      "flat": 58713
     },
     "SoftReset": {
-     "addr": 7437,
+     "addr": 7440,
      "bank": 0,
-     "flat": 7437
+     "flat": 7440
     },
     "SpecialEnterMap": {
      "addr": 23165,
@@ -1896,7 +1920,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "09ddffda29a9c24dbf69846209b5754fec242fea",
+   "rom_sha1": "b53e8e9e7ea04c189dbe73c6064c995a0c245d2b",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1925,39 +1949,51 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21C14CC738",
+      "expected_hex": "545D063F21424DC738",
       "flat": 56131
      },
-     "foreground": {
-      "addr": 982,
+     "delay_frame_tail": {
+      "addr": 7830,
       "bank": 0,
-      "expected_hex": "D7063F213B40C7",
-      "flat": 982
+      "expected_hex": "7600F0D6A720F9C3B03A",
+      "flat": 7830
+     },
+     "foreground": {
+      "addr": 985,
+      "bank": 0,
+      "expected_hex": "D7063F213740C7",
+      "flat": 985
+     },
+     "joypad": {
+      "addr": 422,
+      "bank": 0,
+      "expected_hex": "CDC23AC9",
+      "flat": 422
      },
      "receptionist": {
-      "addr": 12898,
+      "addr": 12903,
       "bank": 0,
-      "expected_hex": "21B144063FC7C9",
-      "flat": 12898
+      "expected_hex": "213245063FC7C9",
+      "flat": 12903
      },
      "start_menu_row": {
-      "addr": 10713,
+      "addr": 10718,
       "bank": 0,
-      "expected_hex": "A23A",
-      "flat": 10713
+      "expected_hex": "A73A",
+      "flat": 10718
      },
      "vblank": {
-      "addr": 7781,
+      "addr": 7784,
       "bank": 0,
       "expected_hex": "063F210040C7",
-      "flat": 7781
+      "flat": 7784
      }
     },
-    "dispatch_hex": "21B144063FC7C9",
+    "dispatch_hex": "213245063FC7C9",
     "mailbox": 57066,
-    "receptionist_hook": 12898,
+    "receptionist_hook": 12903,
     "service": {
-     "addr": 16648,
+     "addr": 16777,
      "bank": 63
     }
    },

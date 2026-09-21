@@ -1,0 +1,23 @@
+[test_gen1_patch_gate] title=purered rom=b53e8e9e
+[test_gen1_patch_gate] booted at frame 703 (party=1, map=40)
+  [ok] 'SLNK' beacon is present at $DEE2  — got "SLNK"
+  [ok] frame counter advances  — 664 -> 724 over 60 frames
+  [ok] frame counter advances with the START menu open  — 765 -> 825
+  [ok] the displaced TrackPlayTime still runs (play clock advances)  — the hook must chain to what it replaced, not replace it
+  [ok] the player can still walk on the patched ROM  — (5,6) -> (4,6)
+  [ok] ABI version byte is 3  — got 3
+  [ok] the capability byte advertises SFX  — caps=0x03 — the main-thread sound path is present and must be claimed
+  [ok] the capability byte advertises the panel  — caps=0x03
+  [ok] the panel module sees the cartridge the gate does  — present=true abi=3
+  [ok] the panel module sees the SFX capability the gate does  — panel.lua must read SLINK_CAP_SFX from the same caps byte
+  [ok] the panel handshake is closed outside the panel  — panel state is 0 in the overworld
+  [ok] the audio bank is one the table has a row for  — wAudioROMBank=$1F (expected $02, $08 or $1F)
+  [ok] the SFX channels went quiet before the requests  — CHAN5-8 still 0/0/0/0 after 300 frames
+  [ok] code 1 (success) is consumed by the main-thread service  — still 0000 after 10 frames
+  [ok] code 1 plays the bank $1F success id $89 on CHAN5  — CHAN5 read $89 (channels 137/137/137/0) — the request reached PlaySound with the wrong id, or none
+  [ok] the SFX channels went quiet after code 1  — 0/0/0/0
+  [ok] an unknown code is consumed without reaching the audio engine  — consumed=true channels 0/0/0/0
+  [ok] code 2 plays the bank $1F failure id $A5 on CHAN5  — consumed=true CHAN5 read $A5 (channels 165/165/0/0)
+  [ok] the SFX channels went quiet after code 2  — 0/0/0/0
+  [ok] the player can still walk after the SFX hook fired  — (4,6) -> (5,6)
+RESULT: PASS title=purered counter=1204 map=40 (0 checks failed)

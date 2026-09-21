@@ -37,13 +37,15 @@ def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     assert option_support(key, RR)["ok"]
 
 
-def test_native_sounds_is_a_gen1_red_blue_feature_now():
-    """The Red/Blue companion patch plays notifications on the main thread (slink.asm
-    SlinkSfxService); the pureRGB overlay does not carry that service yet and says so."""
+def test_native_sounds_is_a_gen1_feature_now():
+    """The Red/Blue companion patch and the pureRGB overlay both play notifications on the
+    main thread (slink.asm SlinkSfxService); Yellow has no patch at all."""
     assert option_support("native_sounds", GEN1)["ok"]
     assert option_support("native_sounds", RR)["ok"]
-    pure = option_support("native_sounds", ["purered", "pureblue"])
-    assert not pure["ok"] and "overlay" in pure["why"], pure
+    assert option_support("native_sounds", ["purered", "pureblue"])["ok"]
+    # Yellow shares the family and has no patch: the toggle is allowed and the cartridge
+    # decides at hello (`sfx` capability), exactly as the panel does. The label says so.
+    assert "unpatched" in dict(OPTIONS)["native_sounds"][1].lower()
 
 
 def test_the_gender_clause_cannot_be_chosen_on_gen1():

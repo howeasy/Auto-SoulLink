@@ -84,6 +84,13 @@ EDITS: list[tuple[str, str, str]] = [
      "\tdecoord 12, 15\n\tjr nz, .next1\n\tdecoord 12, 13\n",
      "\tdecoord 12, 17 ; SLink overlay: the menu is one row taller\n\tjr nz, .next1\n"
      "\tdecoord 12, 15 ; SLink overlay: the menu is one row taller\n"),
+    ("home/vblank.asm",
+     "\tldh a, [hVBlankOccurred]\n\tand a\n\tjr nz, .halt\n\tret\n",
+     "\tldh a, [hVBlankOccurred]\n\tand a\n\tjr nz, .halt\n"
+     "\tjp SlinkDelayFrameTail ; SLink overlay: main-thread SFX service, returns to the caller\n"),
+    ("home/joypad.asm",
+     "\thomecall _Joypad\n\tret\n",
+     "\thomecall _Joypad\n\tcall SlinkJoypadSite ; SLink overlay: SFX service for the menu loops\n\tret\n"),
     ("home/overworld.asm",
      "OverworldLoop::\n\trst _DelayFrame\nOverworldLoopLessDelay::\n",
      "OverworldLoop::\n\trst _DelayFrame\n"

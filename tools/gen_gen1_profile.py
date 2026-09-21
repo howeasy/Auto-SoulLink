@@ -316,6 +316,10 @@ OVERLAY_ANCHORS = {
     "vblank": (None, 0, "06 {bank:SlinkHook} 21 {SlinkHook} C7"),
     # OverworldLoop:: rst _DelayFrame / farcall SlinkForeground
     "foreground": ("OverworldLoop", 0, "D7 06 {bank:SlinkForeground} 21 {SlinkForeground} C7"),
+    # DelayFrame.halt: halt / nop / ldh a,[hVBlankOccurred] / and a / jr nz,.halt / jp SlinkDelayFrameTail
+    "delay_frame_tail": ("DelayFrame.halt", 0, "76 00 F0 D6 A7 20 F9 C3 {SlinkDelayFrameTail}"),
+    # Joypad:: homecall _Joypad (15 bytes: pureRGB's homecall uses `call SetCurBank`) / call SlinkJoypadSite / ret
+    "joypad": ("Joypad", 15, "CD {SlinkJoypadSite} C9"),
     # StartMenuJumpTable row 7 (appended after CloseTextDisplay)
     "start_menu_row": ("StartMenuJumpTable", 14, "{SlinkStartMenuEntry}"),
     # ItemUseMedicine.setDVs: ld d,h / ld e,l / farcall SlinkApexGuard / jr c, .alreadyUsedApex
@@ -354,8 +358,8 @@ def _overlay_trade(foundation: str, title: str, syms: dict) -> dict:
             sys.exit(f"gen_gen1_profile: {title}: {name} anchor at {bank:02X}:{addr:04X} is "
                      f"{rom[flat:flat + len(want)].hex().upper()}, expected {want.hex().upper()}")
         anchors[name] = {"bank": bank, "addr": addr, "flat": flat, "expected_hex": want.hex().upper()}
-    if syms["wSlinkMailboxEnd"][1] - syms["wSlinkMailbox"][1] != 12:
-        sys.exit(f"gen_gen1_profile: {title}: the SLink mailbox is not 12 bytes")
+    if syms["wSlinkMailboxEnd"][1] - syms["wSlinkMailbox"][1] != 14:
+        sys.exit(f"gen_gen1_profile: {title}: the SLink mailbox is not 14 bytes")
     svc_bank, svc_addr = syms["SlinkTradeService"]
     return {
         "abi": 3,
