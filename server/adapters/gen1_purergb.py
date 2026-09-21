@@ -31,6 +31,7 @@ from pathlib import Path
 from server.pokemon_data import species_name as national_species_name
 
 from . import gen1_codec
+from .base import humanize_area_id
 from .gen1_rby import Gen1Adapter
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_purergb"
@@ -297,7 +298,7 @@ class Gen1PureRGBAdapter(Gen1Adapter):
             # this pack's static list ever names, map 107) — never "unknown".
             name = "MISSINGNO." if dex == 0 else national_species_name(dex, False)
             return f"{location} — {name}"
-        return area_id.replace("_", " ").title()
+        return humanize_area_id(area_id)
 
     def to_national_dex(self, species_id: int) -> int:
         entry = self._species.get(species_id)

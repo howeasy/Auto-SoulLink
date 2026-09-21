@@ -4,7 +4,7 @@
   is the run creator, which randomizes as part of creating; this page is for doing it
   again (new settings, new dumps) and for downloading the ROMs later.
 #}
-{% block title %}Randomizer — {{ run.name }} — Soul Link{% endblock %}
+{% block title %}Cartridges — {{ run.name }} — Soul Link{% endblock %}
 
 {% block head_extra %}
   <link rel="stylesheet" href="/static/board.css">
@@ -19,38 +19,43 @@
   <main class="mk-main mk-body-root">
     <header class="mk-runhdr">
       <h1 class="mk-runname">{{ run.name }}</h1>
-      <span class="mk-meta">· randomizer</span>
+      <span class="mk-meta">· cartridges</span>
       <span class="mk-hdr-spacer"></span>
       <a class="mk-btn" href="/runs/{{ run.run_id }}">Back to the board</a>
     </header>
     <div class="mk-page">
       <section class="mk-zone" id="randomizer" x-data='randomizerPage({{ run.run_id | tojson }})'>
-        <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
+        <h2 class="mk-h2"><span>Cartridges</span><i></i><em>what each player plays — the run hands them out</em></h2>
         <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-          <template x-if="rform.current">
+          <template x-if="rform.cartridges">
             <div>
               <table class="mk-tbl">
-                <thead><tr><th>Player</th><th>Seed</th><th>ROM SHA1</th><th>Download</th></tr></thead>
+                <thead><tr><th>Player</th><th>Cartridge</th><th>SHA1</th><th x-show="rform.current">Seed</th><th>Download</th></tr></thead>
                 <tbody>
                   <template x-for="pid in ['a', 'b']" :key="pid">
                     <tr>
                       <td x-text="pid.toUpperCase()"></td>
-                      <td><code class="num" x-text="rform.current.players[pid].seed"></code></td>
-                      <td><code class="num" x-text="rform.current.players[pid].rom_sha1.slice(0, 12)"></code></td>
+                      <td><span x-text="rform.cartridges.players[pid].source_title"></span><span class="mk-sub" x-text="' → ' + kindWords(rform.cartridges.players[pid].kind)"></span></td>
+                      <td><code class="num" x-text="rform.cartridges.players[pid].rom_sha1.slice(0, 12)"></code></td>
+                      <td x-show="rform.current"><code class="num" x-text="rform.current ? rform.current.players[pid].seed : ''"></code></td>
                       <td><a class="mk-btn" :href="'/api/runs/' + runId + '/rom/' + pid" x-text="'slink_' + pid + '.gb'"></a></td>
                     </tr>
                   </template>
                 </tbody>
               </table>
-              <p class="mk-sub" style="margin:var(--space-2) 0 0">UPR <span x-text="rform.current.upr_version"></span> · randomized: <span x-text="rform.current.summary || (rform.current.categories || []).join(', ') || 'nothing'"></span> · <a :href="'/api/runs/' + runId + '/settings.rnqs'">the settings file (.rnqs)</a> · the run admits only these two cartridges. Building again replaces both.</p>
+              <p class="mk-sub" style="margin:var(--space-2) 0 0">
+                <template x-if="rform.current"><span>UPR <span x-text="rform.current.upr_version"></span> · randomized: <span x-text="rform.current.summary || (rform.current.categories || []).join(', ') || 'nothing'"></span> · <a :href="'/api/runs/' + runId + '/settings.rnqs'">the settings file (.rnqs)</a> · the run admits only these two cartridges. </span></template>
+                <template x-if="!rform.current"><span>Not randomized: the run admits any cartridge of its family, these are simply ready to hand out. </span></template>
+                Preparing again replaces both.</p>
             </div>
           </template>
 
-          {% include "_randomizer_fields.html" %}
+          {% include "_cartridges.html" %}
 
           <div class="mk-form-actions">
-            <button class="mk-btn primary" :disabled="busy || !(pre && pre.ok)" @click="build()" x-text="busy ? 'Building (a few seconds per ROM)' : (rform.current ? 'Build a new pair' : 'Build the pair')"></button>
+            <button class="mk-btn primary" :disabled="busy || !cartsReady() || !rdraft.rom_a" @click="build()" x-text="busy ? (rdraft.randomize ? 'Building (a few seconds per ROM)' : 'Preparing…') : (rform.cartridges ? 'Prepare again' : 'Prepare the cartridges')"></button>
             <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+            <span class="mk-sub" x-show="!busy && !error && !cartsReady()" x-text="cartsWhy()"></span>
             <span class="mk-cap">Your randomizer, your ROMs. Nothing leaves this machine.</span>
           </div>
         </div>
@@ -67,7 +72,7 @@
       async build() {
         this.busy = true; this.error = '';
         try {
-          var j = await this.randomizePair(runId);
+          var j = await this.prepareCartridges(runId);
           if (!j.ok) { this.error = j.error || 'Randomize failed'; return; }
           this.rform.current = j.randomizer;
         } catch (e) { this.error = String(e); }

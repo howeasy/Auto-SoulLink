@@ -1147,6 +1147,16 @@ class TestAreaDisplayNameOverrides:
     def test_humanize_single_word(self, vanilla):
         assert vanilla.area_display_name("testplace") == "Testplace"
 
+    def test_humanize_splits_a_route_number_and_keeps_a_floor_code(self, vanilla):
+        """The board showed "Route8": `.title()` never separates a number from its word.
+        One humanizer (adapters.base.humanize_area_id) serves every adapter, state.py's
+        HUD line and the Twitch bot."""
+        from server.adapters.base import humanize_area_id
+        assert vanilla.area_display_name("route8") == "Route 8"
+        assert humanize_area_id("Route21_North") == "Route 21 North"
+        assert humanize_area_id("rocket_hideout_b4f") == "Rocket Hideout B4F"
+        assert humanize_area_id("PalletTown_PlayersHouse_1F") == "Pallet Town Players House 1F"
+
     def test_gift_prefix_with_rom_map_entry(self, vanilla):
         # gift_10_11 → "Gift – Celadon City" (if celadon city is at group=10, num=11)
         name = vanilla.area_display_name("gift_10_11")

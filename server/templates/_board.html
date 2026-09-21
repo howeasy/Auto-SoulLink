@@ -180,7 +180,7 @@
             <b>Nothing on the board yet.</b>
             <ol class="mk-steps">
               {% if roms %}
-              <li>This run is randomized — each player plays their own cartridge, and the run admits no other:
+              <li>This run made each player's cartridge{% if roms_pinned %} — it is randomized, and the run admits no other{% endif %}:
                 <a class="mk-btn" href="{{ roms.a }}">Player A · .gb</a>
                 <a class="mk-btn" href="{{ roms.b }}">Player B · .gb</a></li>
               {% endif %}

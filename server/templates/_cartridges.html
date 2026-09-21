@@ -1,0 +1,66 @@
+{#
+  _cartridges.html — a Gen 1 run's cartridges: what each player plays. The two picks
+  (whatever is in the SLink folder, found on load and again after an upload; anything else
+  through the browser's own file dialog, landing in <repo>/roms/), the SLink companion, and
+  Randomize — whose options (_randomizer_fields.html) unfold below it. Included inside an
+  Alpine scope that carries the `randomizerFields()` mixin (static/randomizer.js): `rform`,
+  `rdraft`, `roms`, `pre`, `usable()`, `romGroups()`, `romNote()`, `companionOk()`,
+  `cartsReady()`, `scanRoms()`, `upload()`. Used by the run creator and by
+  /runs/{id}/cartridges. What the server does with the picks is server/cartridges.py.
+#}
+<div class="mk-optgrid">
+  <template x-for="pid in ['a', 'b']" :key="pid">
+    <label class="mk-field"><span x-text="'Player ' + pid.toUpperCase() + ' cartridge'"></span>
+      <span class="mk-filerow">
+        <select x-model="rdraft['rom_' + pid]">
+          <option value="">— pick a cartridge —</option>
+          <template x-for="g in romGroups()" :key="g.label">
+            <optgroup :label="g.label">
+              <template x-for="r in g.roms" :key="r.path">
+                <option :value="r.path" :disabled="!usable(r)" x-text="romNote(r) + ' — ' + r.name"></option>
+              </template>
+            </optgroup>
+          </template>
+        </select>
+        <label class="mk-btn" :class="uploading === 'rom_' + pid ? 'busy' : ''"><input type="file" accept=".gb,.gbc" @change="upload($event, 'rom_' + pid)"><span x-text="uploading === 'rom_' + pid ? 'Adding…' : 'Add file…'"></span></label>
+      </span>
+    </label>
+  </template>
+</div>
+<p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' cartridge' : ' cartridges') + ' found in ' : 'No cartridges found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-text="family ? ' — this run takes ' + familyLabel(family) + ' ones' : ''"></span><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
+<p class="mk-cap">The run starts only from a cartridge it can vouch for byte for byte: a <b>clean dump</b> of Red / Blue / Yellow, or for pureRGB the <b>pinned v2.7.6 build</b> — or its <b>SLink companion overlay</b>, the same cartridge with the companion already linked in. Anything already modified is listed but greyed. Each player then downloads the cartridge the run made from the board or the Launchers menu.</p>
+
+<div class="mk-optgrid">
+  <label class="mk-opt described" :class="!companionOk().ok ? 'off-unavailable' : (rdraft.companion ? 'on' : '')">
+    <input type="checkbox" x-model="rdraft.companion" :disabled="!companionOk().ok">
+    <span class="mk-opt-txt">
+      <span class="mk-opt-name">SLink companion</span>
+      <span class="mk-opt-desc">The native Cable Club trade and the START-menu SLINK panel, patched into each cartridge (a pureRGB pick becomes its companion overlay). Optional: without it the Lua HUD does the same job on screen.</span>
+      <span class="mk-opt-why" x-show="!companionOk().ok" x-text="companionOk().why"></span>
+    </span>
+  </label>
+  <label class="mk-opt described" :class="rdraft.randomize ? 'on' : ''">
+    <input type="checkbox" x-model="rdraft.randomize">
+    <span class="mk-opt-txt">
+      <span class="mk-opt-name">Randomize</span>
+      <span class="mk-opt-desc">One randomized cartridge per player, built from your own copy of Universal Pokémon Randomizer ZX — same settings, different seeds. The run then admits only those two cartridges. Your ROMs stay on this machine.</span>
+    </span>
+  </label>
+</div>
+
+<div class="mk-preview-rules" x-show="pre">
+  <template x-for="pid in ['a', 'b']" :key="pid">
+    <span class="mk-tag" :class="pre && pre.roms[pid] && pre.roms[pid].clean ? 'on' : 'off'"
+          x-text="pid.toUpperCase() + ': ' + (!pre || !pre.roms[pid] || !pre.roms[pid].exists ? 'no cartridge' : pre.roms[pid].clean ? pre.roms[pid].title : 'not a clean dump')"></span>
+  </template>
+  <template x-if="rdraft.randomize">
+    <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
+  </template>
+  <template x-if="rdraft.randomize">
+    <span class="mk-tag" :class="pre && pre.java_found ? 'on' : 'off'" x-text="pre && pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
+  </template>
+</div>
+
+<div x-show="rdraft.randomize" style="display:flex;flex-direction:column;gap:var(--space-4)">
+  {% include "_randomizer_fields.html" %}
+</div>

@@ -105,7 +105,8 @@ def _area_display(area_id: str) -> str:
         return ""
     if area_id.startswith("_bonus_"):
         return "Bonus Pair"
-    return area_id.replace("_", " ").title()
+    from server.adapters.base import humanize_area_id
+    return humanize_area_id(area_id)
 
 
 def _format_cause(cause: str) -> str:

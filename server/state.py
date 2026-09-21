@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
 
-from server.adapters.base import GameRulesAdapter
+from server.adapters.base import GameRulesAdapter, humanize_area_id
 from server.pokemon_data import _parse_pid_otid_key, pid_otid_shiny
 
 log = logging.getLogger(__name__)
@@ -1725,7 +1725,7 @@ class SoulLinkState:
                 AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A,
                 player=player_id, reason="first_capture")
             # Notify partner that a new link opportunity is available.
-            disp = area_id.replace("_", " ").title()
+            disp = humanize_area_id(area_id)
             nick = mon.nickname or self.adapter.species_name(mon.species)
             label = nick or disp
             self.queued_commands[partner].append({

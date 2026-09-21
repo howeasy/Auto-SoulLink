@@ -1,12 +1,10 @@
 {#
-  _randomizer_fields.html — the randomizer's inputs: every option in upr_settings.OPTIONS
-  (rendered by group from rform.options — the table is the definition of what SLink
-  allows, so nothing is hand-listed here), the two clean ROMs (found in the SLink folder,
-  or added through the browser's file dialog), the jar, and the preflight tags. Included
-  inside an Alpine scope that carries the `randomizerFields()` mixin (static/randomizer.js):
-  `rform`, `rdraft`, `roms`, `presets`, `pre`, `groups()`, `scanRoms()`, `upload()`, the
-  preset methods. Used by the run creator (the normal path) and by /runs/{id}/randomizer
-  (rebuilding a pair on an existing run).
+  _randomizer_fields.html — the randomizer's inputs: the presets row, every option in
+  upr_settings.OPTIONS (rendered by group from rform.options — the table is the definition
+  of what SLink allows, so nothing is hand-listed here), and the jar. Unfolds under
+  Randomize in _cartridges.html, whose Alpine scope carries the `randomizerFields()` mixin
+  (static/randomizer.js): `rform`, `rdraft`, `presets`, `groups()`, `upload()`, the preset
+  and .rnqs methods.
 #}
 {# Presets: the whole spec by name, kept on this Manager. Export / Import speak UPR's own
    .rnqs -- the file its GUI opens and a run keeps -- so two players can trade settings, and
@@ -65,42 +63,12 @@
 </div>
 <p class="mk-cap">Types, evolutions, movesets and base stats are never randomized: the species and type clauses have to mean the same thing on both cartridges. <button type="button" class="mk-linkbtn" @click="resetSpec()">Reset to defaults</button></p>
 
-{# The ROMs: whatever is in the SLink folder is offered as-is (found on load, again after
-   an upload); anything else comes in through the browser's own file dialog and lands in
-   <repo>/roms/. The jar is found by the pipeline; it can be replaced the same way. #}
+{# The jar is found by the pipeline (find_upr_jar); it can be replaced the same way. #}
 <div class="mk-optgrid">
-  <template x-for="pid in ['a', 'b']" :key="pid">
-    <label class="mk-field"><span x-text="'Player ' + pid.toUpperCase() + ' cartridge'"></span>
-      <span class="mk-filerow">
-        <select x-model="rdraft['rom_' + pid]">
-          <option value="">— pick a cartridge —</option>
-          <template x-for="g in romGroups()" :key="g.label">
-            <optgroup :label="g.label">
-              <template x-for="r in g.roms" :key="r.path">
-                <option :value="r.path" :disabled="!usable(r)" x-text="romNote(r) + ' — ' + r.name"></option>
-              </template>
-            </optgroup>
-          </template>
-        </select>
-        <label class="mk-btn" :class="uploading === 'rom_' + pid ? 'busy' : ''"><input type="file" accept=".gb,.gbc" @change="upload($event, 'rom_' + pid)"><span x-text="uploading === 'rom_' + pid ? 'Adding…' : 'Add file…'"></span></label>
-      </span>
-    </label>
-  </template>
   <label class="mk-field"><span>Randomizer jar</span>
     <span class="mk-filerow">
       <input type="text" x-model="rdraft.jar" placeholder="PokeRandoZX.jar — put it in the SLink folder, or pick it">
       <label class="mk-btn" :class="uploading === 'jar' ? 'busy' : ''"><input type="file" accept=".jar" @change="upload($event, 'jar')"><span x-text="uploading === 'jar' ? 'Adding…' : 'Pick…'"></span></label>
     </span>
   </label>
-</div>
-<p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' cartridge' : ' cartridges') + ' found in ' : 'No cartridges found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-text="family ? ' — this run takes ' + familyLabel(family) + ' ones' : ''"></span><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
-<p class="mk-cap">The randomizer starts only from a cartridge it can vouch for byte for byte: a <b>clean dump</b> of Red / Blue / Yellow, or for pureRGB the <b>pinned v2.7.6 build</b> — or its <b>SLink companion overlay</b>, the same cartridge with the native Cable Club trade and the START-menu SLINK panel linked in (<a href="/patcher">Tools → Patcher</a> makes one). Pick the overlay if you want those in-game; the randomized ROM keeps them. Anything already modified is listed but greyed.</p>
-
-<div class="mk-preview-rules" x-show="pre">
-  <span class="mk-tag" :class="pre && pre.jar_found ? 'on' : 'off'" x-text="pre && pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
-  <span class="mk-tag" :class="pre && pre.java_found ? 'on' : 'off'" x-text="pre && pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
-  <template x-for="pid in ['a', 'b']" :key="pid">
-    <span class="mk-tag" :class="pre && pre.roms[pid] && pre.roms[pid].clean ? 'on' : 'off'"
-          x-text="pid.toUpperCase() + ': ' + (!pre || !pre.roms[pid] || !pre.roms[pid].exists ? 'no ROM' : pre.roms[pid].clean ? 'clean ' + pre.roms[pid].title : 'not a clean dump')"></span>
-  </template>
 </div>

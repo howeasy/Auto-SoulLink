@@ -209,7 +209,8 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
         # `title` is what a person reads in the picker: the game, and which of the
         # cartridges of that game this is, in plain words (KIND_WORDS).
         words = KIND_WORDS_PURE if pure else KIND_WORDS
-        info["title"] = f"{variant_label(ident['variant'])} · {words.get(info['kind'], info['kind'])}"
+        info["variant"] = variant_label(ident["variant"])
+        info["title"] = f"{info['variant']} · {words.get(info['kind'], info['kind'])}"
         if pure and not jar_fork:
             info["clean"], info["title"] = False, PUREGB_RANDOMIZER_REFUSAL
     except Exception as exc:                                         # noqa: BLE001

@@ -84,6 +84,11 @@ GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_
 def _game_family(game: str | None) -> str | None:
     return GAME_FAMILY.get(game or "")
 
+
+# The titles the SLink companion exists for (a UPS in patch/dist, a target in
+# server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
+COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen")
+
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
 # different. Keyed by game_id, with a "_rr" suffix for the Radical Red build of Gen 3.
@@ -754,13 +759,14 @@ class RunManager:
     @staticmethod
     def _board_context(run: dict, status: dict) -> dict:
         """board_context for a Manager run: it polls its own board route, its launchers and
-        (once a pair is built) its randomized ROMs download from the Manager."""
+        (once it has made them) its cartridges download from the Manager."""
         from server.board import board_context
         rid = run["run_id"]
         return board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
                              live=run.get("status") == "running",
                              launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
-                             rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("randomizer") else "")
+                             rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
+                             roms_pinned=bool(run.get("randomizer")))
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
@@ -814,6 +820,10 @@ class RunManager:
             "game_family": GAME_FAMILY,
             "presets": _load_presets(),
             "current": run.get("randomizer") if run else None,
+            "cartridges": run.get("cartridges") if run else None,
+            # The SLink companion exists for these titles (server/patcher.py TARGETS): the
+            # form greys the checkbox, with the reason, for a pick outside them.
+            "companion_titles": COMPANION_TITLES,
         }
 
     @staticmethod
@@ -985,19 +995,22 @@ class RunManager:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    # ── Randomized ROM pairs ───────────────────────────────────────────────────
+    # ── Cartridges: what each player plays ────────────────────────────────────
 
-    async def handle_randomize(self, request: web.Request) -> web.Response:
-        """POST /api/runs/{run_id}/randomize — build this run's pair of randomized ROMs.
+    async def handle_cartridges(self, request: web.Request) -> web.Response:
+        """POST /api/runs/{run_id}/cartridges — produce each player's cartridge from what
+        was picked: the SLink companion on it when asked, randomized when asked
+        (server/cartridges.py decides the order per family). Also answers the older
+        /api/runs/{run_id}/randomize, where randomizing is implied.
 
-        Everything the players need to trust the pair is decided here and recorded on the
-        run: the settings file's hash, both seeds, both final ROM hashes and the scanned
-        content hashes. None of it is recoverable from the ROMs afterwards -- UPR's CLI has
-        no seed flag and writes the seed only to its log -- so if this step does not capture
-        it, nothing can.
+        Body: {rom_a, rom_b, companion?: bool, randomize?: bool, jar?, and for randomizing
+        one of spec (upr_settings.OPTIONS) | categories | settings (a .rnqs path)}.
 
-        Runs in a thread: the pipeline shells out to java twice and would otherwise block
-        the manager's event loop for several seconds.
+        Everything the players need to trust a randomized pair is recorded on the run: the
+        settings file's hash, both seeds, both final ROM hashes and the scanned content
+        hashes. None of it is recoverable from the ROMs afterwards -- UPR's CLI has no seed
+        flag and writes the seed only to its log -- so if this step does not capture it,
+        nothing can. Runs in a thread: the pipeline shells out to java twice.
         """
         run_id = request.match_info["run_id"]
         runs = _load_registry()
@@ -1009,7 +1022,8 @@ class RunManager:
         except Exception:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
-        from server.upr_pipeline import UprPipelineError, family_of, find_upr_jar, prepare_pair
+        from server import cartridges
+        from server.upr_pipeline import family_of, find_upr_jar
         from server.upr_settings import (
             FAMILY_PURE,
             FAMILY_VANILLA,
@@ -1023,27 +1037,39 @@ class RunManager:
         settings = str(body.get("settings", "")).strip()
         rom_a = str(body.get("rom_a", "")).strip()
         rom_b = str(body.get("rom_b", "")).strip()
-        # Either a settings file the user built in UPR's GUI, the form's spec (every option
-        # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
-        # two go through the SAME builder the allowlist is computed from, so a file made here
-        # is by construction one the pipeline admits. The family (vanilla / pureRGB) comes
-        # from the ROMs: a pure pair gets every tweak turned off (the fork offers none).
         spec, categories = body.get("spec"), body.get("categories")
+        randomize = bool(body.get("randomize", spec is not None or categories is not None or bool(settings)))
+        companion = bool(body.get("companion", False))
+        missing = [n for n, v in (("rom_a", rom_a), ("rom_b", rom_b)) if not v]
+        if randomize:
+            missing += [n for n, v in (("jar", jar),) if not v]
+            if spec is None and categories is None and not settings:
+                missing.append("settings")
+        if missing:
+            return web.json_response(
+                {"ok": False, "error": f"missing: {', '.join(missing)}"}, status=400)
+
+        # The family (vanilla / pureRGB) comes from the ROMs. A run named up front admits
+        # one family; a pair from the other would be refused at the first hello, so refuse
+        # it here, where it can be fixed.
         family = FAMILY_VANILLA
-        if rom_a and rom_b and os.path.isfile(rom_a) and os.path.isfile(rom_b):
+        if os.path.isfile(rom_a) and os.path.isfile(rom_b):
             try:
                 family = family_of({"a": rom_a, "b": rom_b})
             except Exception as exc:                      # noqa: BLE001
                 return web.json_response({"ok": False, "error": str(exc)}, status=400)
-            # A run named up front admits one family; a pair from the other would be
-            # refused at the first hello, so refuse it here, where it can be fixed.
             wanted = _game_family(run.get("game"))
             if wanted and wanted != family:
                 return web.json_response({"ok": False, "error": (
                     f"this run is {GAME_LABELS[run['game']]}; these are "
                     f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
                     f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
-        if (spec is not None or categories is not None) and not settings:
+        # Either a settings file the user built in UPR's GUI, the form's spec (every option
+        # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
+        # two go through the SAME builder the allowlist is computed from, so a file made here
+        # is by construction one the pipeline admits. A pure pair gets every tweak turned
+        # off (the fork offers none).
+        if randomize and not settings:
             try:
                 if spec is not None:
                     if not isinstance(spec, dict):
@@ -1058,61 +1084,52 @@ class RunManager:
             os.makedirs(os.path.dirname(settings), exist_ok=True)
             with open(settings, "wb") as f:
                 f.write(blob)
-        missing = [n for n, v in (("jar", jar), ("settings", settings),
-                                  ("rom_a", rom_a), ("rom_b", rom_b)) if not v]
-        if missing:
-            return web.json_response(
-                {"ok": False, "error": f"missing: {', '.join(missing)}"}, status=400)
 
-        out_dir = os.path.join(MANAGER_DIR, run_id, "roms")
+        run_dir = os.path.join(MANAGER_DIR, run_id)
         try:
             result = await asyncio.to_thread(
-                prepare_pair, jar, settings, {"a": rom_a, "b": rom_b}, out_dir)
-        except UprPipelineError as exc:
+                cartridges.provision, run_dir, {"a": rom_a, "b": rom_b}, companion=companion,
+                randomize={"settings_path": settings} if randomize else None, jar=jar)
+        except cartridges.CartridgeError as exc:
             # A refusal is the feature, not a crash: say exactly what was wrong so the user
             # can fix the settings or the ROMs rather than guessing.
-            log.warning("randomize %s refused: %s", run_id, exc)
+            log.warning("cartridges %s refused: %s", run_id, exc)
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
         except Exception as exc:                      # noqa: BLE001
-            log.exception("randomize %s failed", run_id)
+            log.exception("cartridges %s failed", run_id)
             return web.json_response({"ok": False, "error": f"unexpected: {exc}"}, status=500)
 
-        run["randomizer"] = {
-            "upr_version": result["upr_version"],
-            "settings_sha256": result["settings_sha256"],
-            "categories": result["categories"],
-            "spec": result["spec"],
-            "summary": result["summary"],
-            "created_at": datetime.now(UTC).isoformat(),
-            "players": {
-                p: {"seed": str(v["seed"]),      # 48-bit; a string so no JS float rounds it
-                    "rom_sha1": v["sha1"],
-                    "source_sha1": v["source_sha1"],
-                    "content_hash": v["content_hash"],
-                    "output": v["output"]}
-                for p, v in result["players"].items()
-            },
-        }
+        now = datetime.now(UTC).isoformat()
+        run["cartridges"] = {**result, "created_at": now}
+        rnd = result.get("randomizer")
+        if rnd:
+            # The pair as the run records it (the shape the randomizer page and the older
+            # callers read): the FINAL cartridge's path and sha1 per player.
+            run["randomizer"] = {
+                "upr_version": rnd["upr_version"],
+                "settings_sha256": rnd["settings_sha256"],
+                "categories": rnd["categories"],
+                "spec": rnd["spec"],
+                "summary": rnd["summary"],
+                "created_at": now,
+                "players": {
+                    p: {"seed": str(v["seed"]),      # 48-bit; a string so no JS float rounds it
+                        "rom_sha1": result["players"][p]["rom_sha1"],
+                        "source_sha1": v["source_sha1"],
+                        "content_hash": v["content_hash"],
+                        "output": result["players"][p]["output"]}
+                    for p, v in rnd["players"].items()
+                },
+            }
+        else:
+            run.pop("randomizer", None)
         _save_registry(runs)
         _write_run_meta(run)
-        # The server process learns about the contract through the run directory, which is
-        # the only thing the two already share (--data-dir). Written as its own file rather
-        # than folded into links.json so a run that is reset or rolled back keeps the
-        # contract: the ROMs did not change just because the links did.
-        contract = {
-            "upr_version": result["upr_version"],
-            "settings_sha256": result["settings_sha256"],
-            "categories": result["categories"],
-            "players": {p: {"fingerprint": v["fingerprint"], "seed": str(v["seed"]),
-                            "rom_sha1": v["sha1"]}
-                        for p, v in result["players"].items()},
-        }
-        try:
-            with open(os.path.join(MANAGER_DIR, run_id, "rom_contract.json"), "w") as f:
-                json.dump(contract, f, indent=2)
-        except OSError as exc:
-            log.warning("could not write rom_contract.json for %s: %s", run_id, exc)
-        return web.json_response({"ok": True, "randomizer": run["randomizer"]})
+        return web.json_response({"ok": True, "cartridges": run["cartridges"],
+                                  "randomizer": run.get("randomizer")})
+
+    # The older name: randomizing is what it did, and what it still implies.
+    handle_randomize = handle_cartridges
 
     async def handle_settings_export(self, request: web.Request) -> web.Response:
         """POST /api/randomizer/settings/export {spec, name?} — the form's settings as a UPR
@@ -1281,15 +1298,18 @@ class RunManager:
                                           **describe_rom(dest, bool(jar) and jar_is_fork(jar))}})
 
     async def handle_rom_download(self, request: web.Request) -> web.Response:
-        """GET /api/runs/{run_id}/rom/{player} — this player's randomized ROM, renamed
-        .gb on the way out so BizHawk picks the DMG core and finds the battery save."""
+        """GET /api/runs/{run_id}/rom/{player} — this player's cartridge as the run made
+        it (companion / randomized / both), named slink_<run>_<player>.gb: .gb so BizHawk
+        picks the DMG core and finds the battery save."""
         run_id, player = request.match_info["run_id"], request.match_info["player"]
         if player not in ("a", "b"):
             return web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
         run = _find_run(_load_registry(), run_id)
-        if run is None or not run.get("randomizer"):
-            return web.json_response({"ok": False, "error": "no randomized pair for this run"}, status=404)
-        path = os.path.join(MANAGER_DIR, run_id, "roms", f"{player}_randomized.gbc")
+        recorded = ((run or {}).get("cartridges") or {}).get("players", {}).get(player, {}).get("output")
+        if run is None or not (recorded or run.get("randomizer")):
+            return web.json_response({"ok": False, "error": "no cartridges for this run"}, status=404)
+        # Runs from before the cartridges step recorded only the randomizer's own output.
+        path = recorded or os.path.join(MANAGER_DIR, run_id, "roms", f"{player}_randomized.gbc")
         if not os.path.isfile(path):
             return web.json_response({"ok": False, "error": "ROM file is missing on disk"}, status=404)
         safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
@@ -1357,18 +1377,19 @@ class RunManager:
                        ("OBS", "/broadcast/obs", False)]
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
-    async def handle_randomizer_page(self, request: web.Request) -> web.Response:
-        """GET /runs/{run_id}/randomizer — the randomized-pair builder for a Gen 1 run."""
+    async def handle_cartridges_page(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/cartridges (and the older /randomizer) — a Gen 1 run's
+        cartridges: what each player plays, the companion, the randomizer, the downloads."""
         runs = self._get()
         run = _find_run(runs, request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
         form = self._randomizer_form(run)
         if form is None:
-            raise web.HTTPNotFound(text="Randomized pairs are built for Gen 1 runs only")
+            raise web.HTTPNotFound(text="Cartridges are prepared for Gen 1 runs only")
         ctx = self._rail_ctx(request, runs, page="run")
         ctx.update({
-            "page_title": f"Randomizer — {run.get('name', '')}",
+            "page_title": f"Cartridges — {run.get('name', '')}",
             "theme": resolve_theme(request),
             "is_stream": False, "hide_chrome": False,
             "body_class": "board mgr",
@@ -1641,7 +1662,8 @@ async def main(host: str, port: int):
     app.router.add_get("/new",                        manager.handle_new_page)
     app.router.add_get("/runs/{run_id}",              manager.handle_run_page)
     app.router.add_get("/runs/{run_id}/board",        manager.handle_run_board)
-    app.router.add_get("/runs/{run_id}/randomizer",   manager.handle_randomizer_page)
+    app.router.add_get("/runs/{run_id}/cartridges",   manager.handle_cartridges_page)
+    app.router.add_get("/runs/{run_id}/randomizer",   manager.handle_cartridges_page)
     app.router.add_get("/api/runs",                   manager.handle_list)
     app.router.add_post("/api/runs/new",              manager.handle_new)
     app.router.add_post("/api/runs/{run_id}/start",   manager.handle_start)
@@ -1649,6 +1671,7 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
     app.router.add_get("/api/randomizer/status",      manager.handle_randomizer_status)

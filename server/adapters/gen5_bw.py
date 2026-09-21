@@ -30,7 +30,7 @@ from server.pokemon_data import (
     type_name as _type_name,
 )
 
-from .base import GameAdapter
+from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
 
@@ -244,7 +244,7 @@ class Gen5Adapter(GameAdapter):
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]
-        return area_id.replace("_", " ").title()
+        return humanize_area_id(area_id)
 
     def to_national_dex(self, species_id: int) -> int:
         # Gen 5 species IDs are already NatDex (1-649). CFRU form variants
