@@ -48,3 +48,10 @@
 | rr_clean_root_build | `E:/Google Drive/SLink/patch/build/rr_clean.gba` | `964f951a0fdaf209e4ea1344883ef0d557bb3a80` | `8529f3a45d32bce4da637976fcf269d4` | 33554432 | build.py:90 base md5 8529f3a4... -> MATCH |
 
 LeafGreen: no dump found under E:/Howard or E:/Google Drive/SLink (depth 3) -> owner item for G0.
+
+## G0 addendum (2026-09-21)
+
+| Artifact | sha1 | md5 | Note |
+|---|---|---|---|
+| `E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba` | `574fa542ffebb14be69902d1d36f1ec0a4afd71e` | `612ca9473451fa42b51d1711031ed5f6` | MATCH pret leafgreen.sha1 (US 1.0) |
+| `patch/build/slink_RR.gba` rebuilt from `patch/dist/SLink-RR.ups` over the verified base via `patch/tools/make_ups.py ups_apply` | `b7d1e0756fcc66575878affc8f7b95c45386bb1c` | `bf8e94a01c0aee0aa7eb37c7333329af` | MISMATCH vs `server/patcher.py:72` |

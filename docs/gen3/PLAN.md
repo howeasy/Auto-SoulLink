@@ -299,7 +299,7 @@ Parallelism summary: P1 ∥ P2 (lane vs no-lane); P2 has five concurrent no-lane
 
 | Gate | Signed | Tree | Evidence |
 |---|---|---|---|
-| G0 | awaiting owner | | |
+| G0 | 2026-09-21 (owner answers to the four G0 questions: agbcc git pin; rebuild the companion from SLink-RR.ups and pin it; LeafGreen dump "Dropped in root"; keep the two-reviewer G6 precedent). Defaults taken without objection: `codex/rr-foundation` → archive tag (pending the tag itself, owner authority); Manager AP/Emerald rows labelled "not admitted by the SLink client yet" (P4) | planning branch `f40f93a` + this commit | `docs/gen3_requirements.md` Pins table (twice-verified pins; FR/LG dumps match pret sha1s; installed BizHawk hashes == rr-foundation pins); `docs/gen3/research/{pins,flash_save,pins_inventory}.md`; companion artifact rebuilt from the shipped UPS = md5 `bf8e94a0…` (patcher/README pin corrected) |
 | G1 | | | |
 | G2 | | | |
 | G3 | | | |
