@@ -68,8 +68,41 @@ local f0 = emu.framecount()
 -- FIGHT/move 1 (A) so the player eventually faints (the wild_faint leg needed <= 4 encounters).
 local grass = os.getenv("SLINK_CENSUS_ENCOUNTERS") == "1"
 local function in_battle() return not G.pred_ok(cp, "in_battle") end
+-- SLINK_CENSUS_SCRIPT="Up,wait20,A,wait60,...": replay a fixed input script (same syntax as
+-- probe_gen3_rr_bag.lua: button names, waitN) INSTEAD of the battle-entry inputs, then idle
+-- the remaining frames. Lets one run show which hooked bodies execute during a menu flow.
+local script = os.getenv("SLINK_CENSUS_SCRIPT")
+if script and script ~= "" then
+    local used, shots = 0, 0
+    for raw in script:gmatch("[^,]+") do
+        local s = raw:match("^%s*(.-)%s*$")
+        local n = s:match("^wait(%d+)$")
+        if n then G.idle(tonumber(n)); used = used + tonumber(n)
+        elseif s == "shot" then     -- runtime-state confirmation only (never geometry)
+            shots = (shots or 0) + 1
+            pcall(client.screenshot, WT .. string.format("/patch/build/gen3_census_%02d.png", shots))
+        elseif s == "Up" or s == "Down" or s == "Left" or s == "Right" then
+            -- a 3-frame tap only TURNS when the player faces another way (PHYSICAL 2026-09-21:
+            -- the first Right/Up of the PC walk were turns and the walk ended a tile short), so
+            -- hold the direction until the tile changes (bounded: a wall just bumps).
+            local x0, y0 = G.pos(cp)
+            for _ = 1, 48 do
+                joypad.set({ [s] = true }); G.advance(); used = used + 1
+                local x1, y1 = G.pos(cp)
+                if x1 ~= x0 or y1 ~= y0 then break end
+            end
+            joypad.set({}); G.idle(20); used = used + 20
+        else for _ = 1, 3 do joypad.set({ [s] = true }); G.advance() end; G.idle(13); used = used + 16 end
+        local px, py = G.pos(cp)
+        local mg, mn = G.map(cp)
+        G.phase("script", string.format("%s frame=%d party=%d pos=(%d,%d) map=%d,%d facing=%d", s, emu.framecount(),
+            memory.read_u8(0x02024029), px, py, mg, mn, memory.read_u8(0x02036E38 + 0x18) >> 4))
+    end
+    FRAMES = math.max(0, FRAMES - used)
+end
 local walk_dir, walk_n = "Down", 0
 for i = 1, FRAMES do
+    if script and script ~= "" then G.advance(); goto continue end
     if grass and not in_battle() and i > 60 then
         walk_n = walk_n + 1
         if walk_n % 24 == 0 then walk_dir = (walk_dir == "Down") and "Up" or "Down" end
@@ -78,6 +111,7 @@ for i = 1, FRAMES do
     elseif i % 2 == 0 then joypad.set({ A = true })
     else joypad.set({}) end
     G.advance()
+    ::continue::
 end
 joypad.set({})
 local mg, mn = G.map(cp)   -- two returns: capture first, or the next format arg is dropped
