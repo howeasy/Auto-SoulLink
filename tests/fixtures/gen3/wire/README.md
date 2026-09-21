@@ -65,3 +65,13 @@ dropped) -- never promoted to a golden transcript by `tools/e2e_duo.py --wire-lo
   exactly the documented disagreements (`docs/protocol.md` Appendix A / `conformance_map.py`
   `disagreement` field) and nothing else; a `gen3_new` transcript must pass every
   transcript-checkable item with zero violations.
+
+## Sizes and compression
+
+A scenario with dense `ghost_pos` traffic (20-30 Hz) or a long trade wait balloons: the P1
+capture ran ghost_a/ghost_b to ~1.06 MB/615 KB and trade_a/trade_b to ~1.10 MB each (six
+scenarios x 2 players, ~4.4 MB total). The loader (`_load_transcript` in
+`test_protocol_conformance.py`) reads `<name>.jsonl.gz` transparently (same JSONL inside, gzip
+on top), so any file over ~200 KB should be committed gzip-compressed; the four above are the
+only ones from P1 that cross that line today. Files under ~200 KB (boxsync, explode, faint,
+infopanel) are small enough to commit as plain `.jsonl` -- gzip would only cost readability.

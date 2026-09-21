@@ -23,6 +23,7 @@ timing that a wire-only recording cannot show, so only a subset of items carries
 from __future__ import annotations
 
 import glob
+import gzip
 import json
 import os
 import re
@@ -85,13 +86,22 @@ _KNOWN_SOURCES = ("old_client", "gen3_new")
 # three documented disagreements are transcript-visible; everything else must be clean on
 # both sources.
 EXPECTED_VIOLATIONS = {
-    "old_client": frozenset({"28"}),  # box_mon_failed never sent (A2)
+    # "1"/"14": the old client's hand JSON encoder emits {} for an empty Lua table
+    # (enemy_party/pc_boxes on tick) instead of [] -- see conformance_map.py items "1"/"14"
+    # for the evidence and why it is harmless. Item "28" (box_mon_failed never sent, A2) is
+    # a real, documented disagreement (conformance_map.py, source-cited) but none of P1's six
+    # scenarios captures the last-party-mon refusal that would put it on the wire, so it is
+    # left out here rather than declared evidenced by a transcript that doesn't show it.
+    "old_client": frozenset({"1", "14"}),
     "gen3_new": frozenset(),
 }
 
 
 def _source_for(path: str) -> str:
-    name = os.path.splitext(os.path.basename(path))[0]
+    name = os.path.basename(path)
+    if name.endswith(".jsonl.gz"):
+        name = name[: -len(".gz")]
+    name = os.path.splitext(name)[0]
     for source in _KNOWN_SOURCES:
         if name.endswith("_" + source):
             return source
@@ -99,8 +109,10 @@ def _source_for(path: str) -> str:
 
 
 def _load_transcript(path: str) -> list[dict]:
+    """A .jsonl.gz path is read transparently (README.md: gzip anything over ~200 KB)."""
     lines = []
-    with open(path, encoding="utf-8") as f:
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as f:
         for lineno, raw in enumerate(f, 1):
             raw = raw.strip()
             if not raw:
@@ -112,7 +124,8 @@ def _load_transcript(path: str) -> list[dict]:
     return lines
 
 
-_TRANSCRIPTS = sorted(glob.glob(os.path.join(_WIRE_DIR, "*.jsonl")))
+_TRANSCRIPTS = sorted(glob.glob(os.path.join(_WIRE_DIR, "*.jsonl")) +
+                      glob.glob(os.path.join(_WIRE_DIR, "*.jsonl.gz")))
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +259,47 @@ def check_event_shapes_once_only(lines: list[dict]) -> set[str]:
     return violations
 
 
+def _traded_keys(lines: list[dict]) -> set[str]:
+    """The "two traded keys" of docs/protocol.md item 42 (§9, "Prompts and trade"): the
+    pre-trade key of the incoming mon, recovered from `apply_trade`'s `blob_hex` (its first
+    8 bytes are the PID and OT, each little-endian -- byte-reversing them to the wire's
+    `PID:OT` hex form reproduces the key exactly, matched against real transcripts), plus
+    whatever `trade_done` reads back as `new_key`. Item 42 requires the client to discard
+    queued sync commands for these -- `check_keyed_replies` must not demand a reply to one.
+    """
+    keys: set[str] = set()
+    for line in lines:
+        msg = line.get("msg", {})
+        if line.get("dir") == "s2c":
+            for cmd in msg.get("commands", []):
+                if cmd.get("cmd") == "apply_trade":
+                    blob = cmd.get("blob_hex", "")
+                    if len(blob) >= 16:
+                        pid = bytes.fromhex(blob[0:8])[::-1].hex().upper()
+                        ot = bytes.fromhex(blob[8:16])[::-1].hex().upper()
+                        keys.add(f"{pid}:{ot}")
+        elif line.get("dir") == "c2s" and msg.get("event") == "trade_done" and msg.get("new_key"):
+            keys.add(msg["new_key"])
+    return keys
+
+
+def _had_safe_opportunity(c2s_lines: list[dict], after_t) -> bool:
+    """True once the transcript shows a `tick`/`safe` with `in_battle` falsy after `after_t`
+    -- proof the client reached the safe, out-of-battle frame that item 31 (docs/protocol.md,
+    "Party/box sync") gates deferred `party_mon`/`memorialize` execution on. Without one, the
+    transcript simply ended (E2E scenario disconnect, or the client still mid-battle) before
+    the client had any chance to run the deferred command -- not evidence of a bug (PLAN
+    §5.6: transcripts are never a complete oracle).
+    """
+    for entry in c2s_lines:
+        if entry.get("t", 0) <= after_t:
+            continue
+        msg = entry.get("msg", {})
+        if msg.get("event") in ("tick", "safe") and not msg.get("in_battle"):
+            return True
+    return False
+
+
 def check_keyed_replies(lines: list[dict]) -> set[str]:
     """Items 28/29/30: box_mon/party_mon/memorialize each get exactly one keyed reply.
 
@@ -255,15 +309,25 @@ def check_keyed_replies(lines: list[dict]) -> set[str]:
     prove must fail is `box_mon` on a key that is (at that point in the transcript) the
     client's only party mon -- item 28 requires a refusal there, so a missing
     `box_mon_failed` is a provable violation.
+
+    party_mon/memorialize are deferred, safe-state-only commands (item 31); a captured
+    session that disconnects (or stays in battle) before the client reaches a safe frame
+    proves nothing either way, so a missing reply is only a violation once `_had_safe_
+    opportunity` shows the client had a real chance to answer and didn't. A *duplicate*
+    reply is always a violation -- that is direct positive evidence, no opportunity needed.
+    A `party_mon` for one of `_traded_keys` is item 42's discard case, never a violation.
     """
     violations = set()
-    c2s = [entry["msg"] for entry in lines if entry.get("dir") == "c2s"]
+    c2s_lines = [entry for entry in lines if entry.get("dir") == "c2s"]
+    c2s = [entry["msg"] for entry in c2s_lines]
+    traded = _traded_keys(lines)
     party_keys: set[str] = set()
     for line in lines:
         msg = line.get("msg", {})
         if line.get("dir") == "c2s" and msg.get("event") in ("hello", "tick", "safe") and "party" in msg:
             party_keys = {p["key"] for p in msg["party"] if "key" in p}
         elif line.get("dir") == "s2c":
+            cmd_t = line.get("t", 0)
             for cmd in msg.get("commands", []):
                 if validate_command(cmd):
                     continue
@@ -273,14 +337,16 @@ def check_keyed_replies(lines: list[dict]) -> set[str]:
                     if not failed:
                         violations |= {"28"}
                 elif cmd.get("cmd") == "party_mon":
+                    if key in traded:
+                        continue
                     replies = [m for m in c2s if m.get("event") in ("sync_retrieve_done", "sync_retrieve_failed")
                                and m.get("key") == key]
-                    if len(replies) != 1:
+                    if len(replies) > 1 or (not replies and _had_safe_opportunity(c2s_lines, cmd_t)):
                         violations |= {"29"}
                 elif cmd.get("cmd") == "memorialize":
                     replies = [m for m in c2s if m.get("event") in ("memorialize_done", "memorialize_failed")
                                and m.get("key") == key]
-                    if len(replies) != 1:
+                    if len(replies) > 1 or (not replies and _had_safe_opportunity(c2s_lines, cmd_t)):
                         violations |= {"30"}
     return violations
 
@@ -369,13 +435,33 @@ else:
             found |= checker(lines)
 
         unexpected = found - expected
-        missing_expected = expected - found
         assert not unexpected, (
             f"{os.path.basename(path)} ({source}): violates item(s) {sorted(unexpected)} that "
             f"are not among this source's documented disagreements {sorted(expected)}"
         )
-        assert not missing_expected, (
-            f"{os.path.basename(path)} ({source}): expected to reproduce disagreement item(s) "
-            f"{sorted(missing_expected)} (conformance_map.py) but did not -- characterization "
-            f"drifted, update the source transcript or the expected_violations set"
+
+    def test_old_client_transcripts_together_reproduce_every_disagreement():
+        """The *union* of every old_client transcript must still hit each of that source's
+        EXPECTED_VIOLATIONS -- catches characterization drift (a documented disagreement that
+        no longer reproduces anywhere) without demanding any single scenario reproduce every
+        disagreement. A disagreement gated on a specific game state (e.g. item 28's box_mon
+        refusal, which needs a capture where the target key is the client's *only* party mon)
+        may simply not be exercised by a given scenario; P1's six scenarios never leave a
+        player with one party mon, so item 28 is not (yet) in EXPECTED_VIOLATIONS -- it stays
+        documented in conformance_map.py from the source citation alone until a dedicated
+        capture evidences it here.
+        """
+        old_paths = [p for p in _TRANSCRIPTS if _source_for(p) == "old_client"]
+        if not old_paths:
+            pytest.skip("no old_client transcripts")
+        found: set[str] = set()
+        for path in old_paths:
+            lines = _load_transcript(path)
+            for checker in set(_ITEM_CHECKERS.values()):
+                found |= checker(lines)
+        missing = EXPECTED_VIOLATIONS["old_client"] - found
+        assert not missing, (
+            f"old_client disagreement(s) {sorted(missing)} (conformance_map.py) no longer "
+            f"reproduce in any transcript -- characterization drifted, update the source "
+            f"transcripts or EXPECTED_VIOLATIONS"
         )

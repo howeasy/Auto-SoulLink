@@ -35,7 +35,12 @@ LAYERS = {"transport", "world", "transcript", "live"}
 
 ITEMS: list[Item] = [
     # -- Transport (connector tests) --
-    Item("1", "one JSON object per line, envelope fields", "transport", "check_line_shape"),
+    Item("1", "one JSON object per line, envelope fields", "transport", "check_line_shape",
+         disagreement="old client's hand JSON encoder emits {} for an empty Lua table "
+                       "(tick.enemy_party/tick.pc_boxes) instead of []; harmless, server "
+                       "treats {} as falsy-empty (server.py:1858-1860 dict iteration is a "
+                       "no-op, :1876-1877 `bs.get(\"enemy_party\") or []`)",
+         resolution="new client always sends [] for an empty list, never {}"),
     Item("2", "seq starts at 1, +1 per event across reconnects", "transport", "check_seq_monotonic"),
     Item("3", "nothing sent while disconnected, no buffering", "transport"),
     Item("4", "first line after connect/reconnect is hello", "transport", "check_hello_first"),
@@ -60,7 +65,10 @@ ITEMS: list[Item] = [
     # see tests/fixtures/gen3/wire/README.md); the transcript checker below covers only the
     # field-shape half of this item.
     Item("14", "tick is periodic (Gen 3: every 30 frames) with required fields", "world",
-         "check_tick_shape"),
+         "check_tick_shape",
+         disagreement="same {} vs [] encoder bug as item 1, on tick's enemy_party/pc_boxes "
+                       "when the Lua table is empty (12 of 12 old-client transcripts)",
+         resolution="new client always sends [] for an empty list, never {}"),
     Item("15", "first tick of a wild battle has in_battle/enemy_party shape", "world",
          "check_battle_tick_shape"),
     Item("16", "trainer battle tick has is_trainer_battle/trainer_id or opponent fields",

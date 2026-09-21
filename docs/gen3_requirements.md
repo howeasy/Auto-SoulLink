@@ -172,6 +172,73 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P1 baseline: the six RR duo scenarios (`faint`, `boxsync`, `trade`, `ghost`, `infopanel`, `explode`) re-run on the OLD client at cut 91c7025 with the wire-log tap: all PASS (attempt 1 of 1 each), 17,286 transcript lines captured; transcripts are provisional (t = seq) until C1-3b lands and the capture is repeated — characterization input to C-0 and D rows, not a Gen 3 verdict.
 
+### Old-client characterization (P1)
+
+`tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
+transcripts (C1-3b format, six scenarios x 2 players). Every item the transcript-level
+checkers flagged, with the evidence and the resolution now encoded in `conformance_map.py`:
+
+- **Items 1 and 14** (`check_line_shape`, `check_tick_shape`) — flagged on every one of the 12
+  transcripts. The old client's hand JSON encoder emits `{}` for an empty Lua table on
+  `tick.enemy_party`/`tick.pc_boxes` instead of `[]`
+  (`tests/fixtures/gen3/wire/infopanel_a_old_client.jsonl:2`, e.g. `"enemy_party": {}` outside
+  battle). **Genuine deviation, harmless** — `server/server.py:1858-1860` iterates
+  `msg["pc_boxes"]` (zero iterations either way when empty) and `server/server.py:1876-1877`
+  reads it back through `bs.get("enemy_party") or []`, which folds a falsy `{}` to `[]`; no
+  code path was found that distinguishes `{}` from `[]` while the value is empty. Encoded as
+  the `disagreement`/`resolution` pair on conformance_map items `"1"`/`"14"`; resolution for
+  the new client is "always send `[]`". Not yet a row in `docs/protocol.md` Appendix A
+  (out of this card's lease) — flagged as a follow-up below.
+
+- **Item 29** (`check_keyed_replies`, `party_mon`) — flagged in `boxsync_{a,b}` and
+  `trade_{a,b}`. Two different causes, both **checker over-assertions (fixed)**:
+  - `trade_a_old_client.jsonl` t=4185: the server issues `party_mon` for key
+    `EBEF11DA:2BD6C8BF`. That key is exactly the pre-trade key of the incoming mon —
+    recoverable from the `apply_trade` command's `blob_hex` at t=157 (first 8 bytes are
+    PID+OT, each little-endian; byte-reversed they reproduce the key) — so it is one of
+    protocol.md item 42's ("Prompts and trade") "two traded keys", for which the client is
+    *required* to discard queued sync commands, not answer them. `check_keyed_replies` now
+    computes `_traded_keys()` from `apply_trade`/`trade_done` and skips the reply requirement
+    for a `party_mon` on one of them.
+  - `boxsync_a_old_client.jsonl` t=501: the server issues `party_mon` for key
+    `32A55077:2BDDC8BF` and the connection's very next record (t=502) is `_disconnect` — no
+    trailing `tick`/`safe` at all. `party_mon` is a deferred, safe-state-only command (item
+    31); the capture simply ended before the client had any frame to act on it, which proves
+    nothing about whether it would have replied. `check_keyed_replies` now only counts a
+    missing reply as a violation once `_had_safe_opportunity()` finds a later `tick`/`safe`
+    with `in_battle` false for that player (a duplicate reply is still always a violation,
+    since that is positive evidence rather than an absence).
+
+- **Item 30** (`check_keyed_replies`, `memorialize`) — flagged in `explode_{a,b}` and
+  `faint_{a,b}`. **Same checker over-assertion as boxsync's item 29, confirmed by the client
+  source**: `explode_b_old_client.jsonl` t=29 issues `memorialize`, and every `tick` through
+  the disconnect at t=62 still reads `in_battle: true` — the client never reaches the safe,
+  out-of-battle frame that `exec_memorialize`
+  (`lua/clients/gen3_frlge_client.lua:1781` `local function exec_memorialize(key)`) requires
+  before it runs; its native path (`lua/clients/gen3_frlge_client.lua:1799-1815`, the
+  companion-patch `OP_MEMORIALIZE`) is additionally async (`memorialize_finish` at
+  `:1751-1775` lands the ack on a later poll). The capture ends mid-battle-end sequence
+  before any of that can happen. Same `_had_safe_opportunity()` gate as item 29 resolves it.
+
+- **Item 28** (`box_mon_failed`, A2) stays a real, source-cited disagreement in
+  `conformance_map.py` but is **not** in `EXPECTED_VIOLATIONS["old_client"]`: none of P1's six
+  scenarios ever drives `box_mon` on a key that is, at that moment, the target player's only
+  party mon (checked directly: both `boxsync_{a,b}` `box_mon` calls target a party of three).
+  Declaring it evidenced here would be an unevidenced claim; a dedicated "box the last mon"
+  capture is needed to put it on the wire. `test_old_client_transcripts_together_reproduce_
+  every_disagreement` (new; asserts the union of all old_client transcripts covers
+  `EXPECTED_VIOLATIONS`, replacing a too-strict per-file check that demanded every scenario
+  reproduce every disagreement) will start failing the day a scenario like that gets added
+  without also updating `EXPECTED_VIOLATIONS` — that is the intended drift catch.
+
+Follow-up (outside this card's lease): `docs/protocol.md` Appendix A has no row yet for the
+`{}`-vs-`[]` empty-list encoding (items 1/14) — the existing rows stop at A18; add one
+(`docs/protocol.md`, not touched by this card).
+
+Fixture sizes and the `.jsonl.gz` recommendation are in
+`tests/fixtures/gen3/wire/README.md` ("Sizes and compression"); total for the 12
+`*_old_client.jsonl` captures is 4,632,435 bytes (~4.4 MiB).
+
 ## Recorded limits
 
 - **Keyed sync-command re-issue window.** `SYNC_INFLIGHT_RECONCILES = 6` is a re-issue
