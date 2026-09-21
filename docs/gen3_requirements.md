@@ -17,14 +17,14 @@ what each one is missing. This ledger is populated phase by phase against `docs/
 
 | What | Value |
 |---|---|
-| pret/pokefirered commit | `[TBD at G0]` (`docs/gen3/PLAN.md` §6 P0 exit evidence) |
-| devkitARM / toolchain version | `[TBD at G0]` |
-| FR US 1.0 sha1 | `[TBD at G0]` |
-| LG US 1.0 sha1 | `[TBD at G0]` |
-| RR 4.1 base md5 | `8529f3a45d32bce4da637976fcf269d4` (`patch/tools/build.py:90`, `server/patcher.py:71`) |
-| Companion patched md5 | `8dcffce7659be02474dfa0f876639f8a` (`server/patcher.py:72`) |
-| BizHawk 2.11.1 mGBA + installed `EmuHawk.exe`/`mgba.dll` sha256 | `[TBD from tools/gen3_pins.py]` |
-| CFRU `BPRE.ld` revision | `[TBD at G0]` |
+| pret/pokefirered commit | `c75f352304d529f6ba92d4f74b9cf8b5c3810788` (master 2026-08-04; `.sym`/`.map` are Makefile targets) + pret/agbcc `da598c1d918402c42c0c0d7128ba14567f3175e9` (`docs/gen3/research/pins.md` §1-2; cross-checked) — **proposed for G0** |
+| devkitARM / toolchain version | agbcc (git-pinned above) is the default toolchain; devkitARM is only `make modern` and is NOT reproducibly pinnable (rolling pacman) → P2 uses agbcc, else the committed-`.sym/.map`-with-provenance fallback (`pins.md` §2) — **owner decision at G0** |
+| FR US 1.0 sha1 | `41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc` (pret `firered.sha1`); local dump `E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba` MATCHES (`pins_inventory.md` addendum). Rev 1 (`dd5945db…`) exists locally and is NOT admitted |
+| LG US 1.0 sha1 | `574fa542ffebb14be69902d1d36f1ec0a4afd71e` (pret `leafgreen.sha1`); **no local dump found** — owner places it before P2 fixtures |
+| RR 4.1 base md5 | `8529f3a45d32bce4da637976fcf269d4`, sha1 `964f951a0fdaf209e4ea1344883ef0d557bb3a80` (`patch/tools/build.py:90`, `server/patcher.py:71`; local base and root `rr_clean.gba` both MATCH). The "4.1" label is taken from in-tree names, not a signed statement |
+| Companion patched md5 | `8dcffce7659be02474dfa0f876639f8a` (`server/patcher.py:72`, shipped `patch/dist/SLink-RR.ups` sha256 `3baf0100…`); **root `patch/build/slink_RR.gba` is md5 `bf8e94a0…` (Jul 25 build, MISMATCH)** → the admitted companion artifact is whatever P5 rebuilds; until then live gates must name the exact file they ran — **owner decision at G0** |
+| BizHawk 2.11.1 mGBA + installed `EmuHawk.exe`/`mgba.dll` sha256 | tag `2.11.1` = `bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5`, mGBA submodule `94b1578f8545d8ad17bb4036dba908612d5731e2`; installed `EmuHawk.exe` `f8cdb935…`, `dll/mgba.dll` `ba398a56…`, `dll/BizHawk.Emulation.Cores.dll` `444bc157…` (`tools/gen3_pins.py`; identical to the `codex/rr-foundation` pins). Issue #3801 fixed by `9463267…`, an ancestor of 2.11.1 |
+| CFRU `BPRE.ld` revision | Skeli789/Complete-Fire-Red-Upgrade `b637a27898b14e25dd24d0f69a3e302f0069deb8` (2025-01-24; flat vanilla-symbol→address linker script). RR ↔ CFRU relationship: community sources only; "RR has no public source" = negative evidence (`pins.md` §3, §5) |
 | Wire contract | `docs/protocol.md` |
 | Engine sites | `docs/gen3_engine_sites.md` + `data/games/gen3_{frlg,rr}/engine_signals.json` |
 
