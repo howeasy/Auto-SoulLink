@@ -30,7 +30,14 @@ function A.new(ranks)
     function self.request(sound, native_ok)
         if sound == nil then return end
         local rank = ranks[sound] or 0
-        if best == nil or rank > best_rank then best, best_rank, best_native = sound, rank, native_ok and true or false end
+        if best == nil or rank > best_rank then
+            best, best_rank, best_native = sound, rank, native_ok and true or false
+        elseif rank == best_rank then
+            -- Tie: the first sound stays, but the native route survives only if EVERY tied
+            -- request allowed it (the server's play_sound 26 beside the client's game_over cue
+            -- must not put the cue on the mailbox).
+            best_native = best_native and (native_ok and true or false)
+        end
     end
     function self.flush(sink)
         local s, n = best, best_native
