@@ -52,8 +52,18 @@ local FRAMES = tonumber(os.getenv("SLINK_PROBE_FRAMES") or "") or 1800
 local f0 = emu.framecount()
 -- explode scenario entry: Down held 60 frames (into the trainer's line of sight), then A every
 -- other frame until the budget ends (lua/tests/duo/scenario_explode.lua).
+-- SLINK_CENSUS_ENCOUNTERS=1: after each battle returns to the field, walk Down/Up in the
+-- tall grass the prebattle state stands in until the next encounter, and keep fighting with
+-- FIGHT/move 1 (A) so the player eventually faints (the wild_faint leg needed <= 4 encounters).
+local grass = os.getenv("SLINK_CENSUS_ENCOUNTERS") == "1"
+local function in_battle() return not G.pred_ok(cp, "in_battle") end
+local walk_dir, walk_n = "Down", 0
 for i = 1, FRAMES do
-    if i <= 60 then joypad.set({ Down = true })
+    if grass and not in_battle() and i > 60 then
+        walk_n = walk_n + 1
+        if walk_n % 24 == 0 then walk_dir = (walk_dir == "Down") and "Up" or "Down" end
+        if walk_n % 24 < 12 then joypad.set({ [walk_dir] = true }) else joypad.set({ A = (i % 2 == 0) }) end
+    elseif i <= 60 then joypad.set({ Down = true })
     elseif i % 2 == 0 then joypad.set({ A = true })
     else joypad.set({}) end
     G.advance()

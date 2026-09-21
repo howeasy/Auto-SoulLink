@@ -44,7 +44,7 @@ _CITATION_ROOTS = ("data/maps", "data/layouts", "src/", "data/", "lua/", "includ
 # Coordinate/map/counter/predicate terminal helpers gen3_scripted_play.lua actually uses.
 _TERMINAL_HELPERS = (
     "G.pos", "G.map", "mapid(", "G.pred_ok", "G.pred(", "G.save_counter", "party_count(",
-    "wait_for_map_change", "G.mash", "G.flash_domain",
+    "wait_for_map_change", "G.mash", "G.flash_domain", "in_battle(", "mash_a(", "lab_scene_var(",
 )
 
 
@@ -55,9 +55,13 @@ def lua():
 
 
 @pytest.fixture(scope="module")
-def legs(lua):
+def module(lua):
     os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
-    module = lua.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    return lua.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+
+
+@pytest.fixture(scope="module")
+def legs(module):
     return module.LEGS
 
 
@@ -155,3 +159,51 @@ def test_no_run_body_terminates_on_a_bare_frame_count():
             "a non-open leg's run body has no coordinate/map/counter/predicate terminal helper:\n"
             + body
         )
+
+
+# ── polarity + address-arithmetic regressions (Codex review cx-378ce251) ───────────────────────
+
+
+def test_lab_scene_var_offset_arithmetic(module):
+    """VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB=0x4055 (pret include/constants/vars.h:137),
+    SaveBlock1.vars[] at SB1+0x1000 (pret include/global.h:791), each entry a u16 -> byte offset
+    0x1000 + (0x4055-0x4000)*2 == 0x10AA (the coordinator's arithmetic, checked independently)."""
+    assert module.LAB_SCENE_VAR_OFFSET == 0x10AA
+
+
+@pytest.fixture
+def stubbed_module():
+    """A SEPARATE runtime (not the shared `lua`/`module` fixtures, which never stub `memory`)
+    with just enough of the BizHawk `memory` API to exercise `in_battle(cp)` for real: a plain
+    dict-backed byte store, keyed by absolute address."""
+    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    store: dict[int, int] = {}
+
+    def read_u8(addr, _domain=None):
+        return store.get(int(addr), 0)
+
+    runtime.globals().memory = runtime.table(
+        read_u8=read_u8, read_u16_le=read_u8, read_u32_le=read_u8,
+    )
+    mod = runtime.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    return mod, store, runtime
+
+
+def test_in_battle_polarity_wrapper(stubbed_module):
+    """The pack row (data/games/gen3_frlg/write_checkpoint.json firered.predicates.in_battle) is
+    expect=0, mask=2: G.pred_ok(cp,"in_battle") is TRUE exactly when the raw byte reads
+    expect-equal, and that means NOT in a battle (Codex cx-378ce251). A fake pred whose raw byte
+    equals `expect` must therefore make the wrapper read False (not in_battle); flipping the
+    masked bit must make it read True (in_battle)."""
+    module, store, runtime = stubbed_module
+    address, offset, mask, expect = 0x02020000, 1081, 2, 0
+    cp = runtime.table(predicates=runtime.table(
+        in_battle=runtime.table(address=address, offset=offset, mask=mask, expect=expect, width=1),
+    ))
+
+    store[address + offset] = expect  # raw == expect -> pred_ok True -> NOT in battle
+    assert module.in_battle(cp) is False
+
+    store[address + offset] = mask  # masked bit set, raw != expect -> pred_ok False -> in battle
+    assert module.in_battle(cp) is True

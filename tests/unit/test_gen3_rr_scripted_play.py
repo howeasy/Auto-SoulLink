@@ -1,12 +1,18 @@
-"""gen3_rr_scripted_play.lua's LEGS table (card gen3-P3-C3-7).
+"""gen3_rr_scripted_play.lua: LEGS shape + fake-RAM behaviour (card gen3-P3-C3-7).
 
-Pure-Lua checks through lupa: no emulator, no ROM. The script's top level only builds LEGS
-(every leg's closure stays uncalled), so it loads with SLINK_ROOT set and the BizHawk globals
-stubbed as CALLABLE TABLES -- `type(gui.x)` is "userdata" in EmuHawk, so a plain function stub
-would be the wrong shape and a plain table would not be callable
-(reference_bizhawk_api_userdata). This checks the table's SHAPE -- per-leg site kinds,
-citations, declared savestate, no frame-count terminal -- which is exactly what a BizHawk gate
-cannot check before it burns emulator minutes.
+Two kinds of check, both through lupa, neither needing an emulator or a ROM:
+
+* SHAPE -- site kinds, citations, the savestate each leg declares, no frame-count terminal.
+* BEHAVIOUR -- each leg's `run`/`check` closure driven against a FAKE RAM whose contents change
+  as frames advance and buttons are pressed. This is where the oracles are actually falsified:
+  a leg that "passes" on a fake where the engine did the WRONG thing (withdrew a different mon,
+  never left the battle, reported a map change that was really an unreadable pointer) is a leg
+  whose oracle is decorative. Each negative test below is one such wrong-engine fake.
+
+BizHawk globals are stubbed as CALLABLE TABLES: `type(gui.x)` is "userdata" in EmuHawk, so a
+plain function stub is the wrong shape and a plain table is not callable
+(reference_bizhawk_api_userdata). `client.exit` raises, which is how G.finish's "RESULT: FAIL"
+becomes an observable outcome here instead of falling through.
 """
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ import pytest
 from lupa import LuaRuntime
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+_LUA_REPO = _REPO.replace("\\", "/")
 _SCRIPT = os.path.join(_REPO, "lua", "tests", "gen3_rr_scripted_play.lua")
 with open(_SCRIPT, encoding="utf-8") as _f:
     _SCRIPT_SRC = _f.read()
@@ -48,24 +55,150 @@ _KNOWN_STATES = {
     "slink_pokecenter.State",
 }
 
+_RUNNABLE = {"battle_to_field", "wild_faint", "door_warp", "pc_ops", "save"}
+
 # RAM/coordinate/counter/predicate terminal helpers this driver actually uses.
 _TERMINAL_HELPERS = (
     "G.pos", "G.map", "mapid(", "G.pred_ok", "G.pred(", "in_battle(", "on_field(",
-    "party_count(", "player_bmon_hp(", "at_action_menu(", "battle_outcome(",
-    "hold_until_map_change(", "walk_to(", "G.save_via_menu", "G.flash_domain",
+    "party_count(", "player_bmon_hp(", "player_faints(", "party_snapshot(",
+    "at_action_menu(", "battle_outcome(", "hold_until_map_change(", "walk_to(",
+    "G.save_via_menu", "G.flash_domain",
 )
 
-_BIZHAWK_GLOBALS = (
-    "memory", "joypad", "emu", "client", "event", "savestate", "gui", "console",
-    "movie", "bizstring",
-)
+_BIZHAWK_GLOBALS = ("gui", "movie", "bizstring", "input", "mainmemory")
+
+# ── the fake machine ─────────────────────────────────────────────────────────────────────────
+# A byte-addressed RAM table plus a frame clock. `FAKE.on_frame(frame)` is the ENGINE: every
+# test installs one, and that function is the only thing that decides what the game "did".
+_HARNESS = r"""
+FAKE = { ram = {}, frame = 0, log = {}, on_frame = nil, a = 0, down = 0, buttons = {} }
+
+local function r8(a) return FAKE.ram[a] or 0 end
+local function w8(a, v) FAKE.ram[a] = v & 0xFF end
+
+function FAKE.w8(a, v) w8(a, v) end
+function FAKE.w16(a, v) w8(a, v); w8(a + 1, v >> 8) end
+function FAKE.w32(a, v) FAKE.w16(a, v & 0xFFFF); FAKE.w16(a + 2, (v >> 16) & 0xFFFF) end
+
+memory = {
+    read_u8      = function(a) return r8(a) end,
+    read_u16_le  = function(a) return r8(a) | (r8(a + 1) << 8) end,
+    read_u32_le  = function(a) return r8(a) | (r8(a + 1) << 8) | (r8(a + 2) << 16)
+                                  | (r8(a + 3) << 24) end,
+    read_s16_le  = function(a)
+        local v = r8(a) | (r8(a + 1) << 8)
+        if v >= 0x8000 then v = v - 0x10000 end
+        return v
+    end,
+    write_u8 = function(a, v) w8(a, v) end,
+    getmemorydomainlist = function() return {} end,
+    getmemorydomainsize = function() return 0 end,
+}
+
+emu = {
+    frameadvance = function()
+        FAKE.frame = FAKE.frame + 1
+        if FAKE.on_frame then FAKE.on_frame(FAKE.frame) end
+    end,
+    framecount = function() return FAKE.frame end,
+}
+
+-- Rising-edge button counting: G.tap holds a button for 3 frames, so an edge count is a PRESS
+-- count, which is what a menu reacts to.
+joypad = {
+    set = function(t)
+        t = t or {}
+        if t.A and not FAKE.a_down then FAKE.a = FAKE.a + 1 end
+        if t.Down and not FAKE.d_down then FAKE.down = FAKE.down + 1 end
+        FAKE.a_down, FAKE.d_down = t.A and true or false, t.Down and true or false
+        FAKE.buttons = t
+    end,
+    get = function() return {} end,
+}
+
+console = { log = function(s) FAKE.log[#FAKE.log + 1] = tostring(s) end }
+client = {
+    exit = function() error("SLINK_EXIT", 0) end,   -- G.finish must ABORT, not fall through
+    exitCode = function() end,
+    screenshot = function() end,
+    speedmode = function() end,
+    saveram = function() end,
+}
+savestate = { load = function() return true end, save = function() return true end }
+event = { onframeend = function() end, on_bus_exec = function() end }
+
+-- Profile facts, re-declared here so the fake writes where the driver reads.
+FAKE.PARTY_COUNT = 0x02024029
+FAKE.PARTY_BASE  = 0x02024284
+FAKE.BATTLE_MONS = 0x02023BE4
+FAKE.CTRL        = 0x03004FE0
+FAKE.ACTION_MENU = 0x0802E439
+FAKE.RESULTS     = 0x03004F90
+
+function FAKE.init(cp)
+    FAKE.cp        = cp
+    FAKE.gmain     = cp.predicates.callback2.address
+    FAKE.cb2_off   = cp.predicates.callback2.offset
+    FAKE.cb2_ok    = cp.predicates.callback2.expect
+    FAKE.ib_off    = cp.predicates.in_battle.offset
+    FAKE.ib_mask   = cp.predicates.in_battle.mask
+    FAKE.sb1ptr    = cp.pointers.gSaveBlock1Ptr.address
+    FAKE.sb1       = 0x02025734
+end
+
+function FAKE.reset()
+    FAKE.ram, FAKE.frame, FAKE.log = {}, 0, {}
+    FAKE.a, FAKE.down, FAKE.on_frame = 0, 0, nil
+    FAKE.a_down, FAKE.d_down = false, false
+    FAKE.set_sb1(true)
+    FAKE.set_map(3, 1)
+    FAKE.set_pos(15, 7)
+end
+
+function FAKE.set_battle(on)
+    local a = FAKE.gmain + FAKE.ib_off
+    local v = r8(a) & ~FAKE.ib_mask
+    if on then v = v | FAKE.ib_mask end
+    w8(a, v)
+end
+function FAKE.set_overworld(on)
+    FAKE.w32(FAKE.gmain + FAKE.cb2_off, on and FAKE.cb2_ok or 0x08001234)
+end
+function FAKE.set_sb1(valid) FAKE.w32(FAKE.sb1ptr, valid and FAKE.sb1 or 0) end
+function FAKE.set_map(g, n) w8(FAKE.sb1 + 4, g); w8(FAKE.sb1 + 5, n) end
+function FAKE.set_pos(x, y) FAKE.w16(FAKE.sb1 + 0, x & 0xFFFF); FAKE.w16(FAKE.sb1 + 2, y & 0xFFFF) end
+function FAKE.set_menu(on) FAKE.w32(FAKE.CTRL, on and FAKE.ACTION_MENU or 0) end
+function FAKE.set_bmon(hp, maxhp)
+    FAKE.w16(FAKE.BATTLE_MONS + 0x28, hp)
+    FAKE.w16(FAKE.BATTLE_MONS + 0x2C, maxhp)
+end
+function FAKE.set_faints(n) w8(FAKE.RESULTS, n) end
+
+--- `list` is an array of {pid, otid, filler}; each becomes a 100-byte party record.
+function FAKE.set_party(list)
+    w8(FAKE.PARTY_COUNT, #list)
+    for i, m in ipairs(list) do
+        local base = FAKE.PARTY_BASE + (i - 1) * 100
+        for w = 0, 24 do FAKE.w32(base + w * 4, 0) end
+        FAKE.w32(base + 0, m[1])
+        FAKE.w32(base + 4, m[2])
+        FAKE.w32(base + 8, m[3] or 0)
+    end
+end
+
+--- Run one leg closure, capturing its log. `ok` is false both for a real Lua error and for
+--- G.finish's abort; the log says which, and every assertion below reads the log.
+function FAKE.run_leg(fn)
+    FAKE.log = {}
+    local ok, err = pcall(fn, FAKE.cp)
+    return ok, table.concat(FAKE.log, "\n"), tostring(err)
+end
+"""
 
 
 @pytest.fixture(scope="module")
 def lua():
     runtime = LuaRuntime(unpack_returned_tuples=True)
-    # Callable tables, not functions: EmuHawk exposes these as userdata, and a stub that is
-    # merely a table blows up the moment module-scope code calls one.
     runtime.execute(
         "\n".join(
             f"{name} = setmetatable({{}}, {{ __index = function(t, k)"
@@ -74,18 +207,36 @@ def lua():
             for name in _BIZHAWK_GLOBALS
         )
     )
+    runtime.execute(_HARNESS)
     return runtime
 
 
 @pytest.fixture(scope="module")
 def module(lua):
-    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
-    return lua.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    os.environ.setdefault("SLINK_ROOT", _LUA_REPO)
+    os.environ["SLINK_GEN3_CHECKPOINT"] = f"{_LUA_REPO}/data/games/gen3_rr/write_checkpoint.json"
+    os.environ["SLINK_GEN3_TITLE"] = "radical_red"
+    mod = lua.execute(f'return dofile("{_LUA_REPO}/lua/tests/gen3_rr_scripted_play.lua")')
+    # The REAL RR checkpoint drives the fake, so every predicate address/mask/expectation
+    # exercised below is the one the lane uses.
+    cp = mod.boot_check.checkpoint()[0]   # checkpoint() returns (cp, title_key)
+    lua.globals().FAKE.init(cp)
+    return mod
 
 
 @pytest.fixture(scope="module")
 def legs(module):
     return module.LEGS
+
+
+@pytest.fixture
+def fake(lua, module):
+    """A reset machine, plus a zeroed frame budget on the driver's own boot_check instance."""
+    f = lua.globals().FAKE
+    f.reset()
+    module.boot_check.spent = 0
+    module.boot_check.budget = 400000
+    return f
 
 
 def _py_list(lua_table):
@@ -97,9 +248,17 @@ def _each(legs):
         yield legs[i]
 
 
+def _leg(legs, name):
+    for leg in _each(legs):
+        if leg["name"] == name:
+            return leg
+    raise AssertionError(f"no leg named {name!r}")
+
+
+# ── shape ────────────────────────────────────────────────────────────────────────────────────
+
+
 def test_the_script_loads_without_running_any_leg(legs):
-    """dofile must not touch memory/emu/joypad at module scope; the stubs above would let it,
-    so the real guard is that LEGS is built and nothing was executed."""
     assert len(legs) >= 7
 
 
@@ -125,13 +284,10 @@ def test_required_site_kinds_are_covered_somewhere_in_the_union(legs):
     covered = set()
     for leg in _each(legs):
         covered |= set(_py_list(leg["exercises"]))
-    missing = _REQUIRED_COVERAGE - covered
-    assert not missing, f"no leg (open or not) exercises {missing}"
+    assert not _REQUIRED_COVERAGE - covered, f"no leg exercises {_REQUIRED_COVERAGE - covered}"
 
 
 def test_every_leg_declares_the_savestate_it_starts_from(legs):
-    """RR has no pret map data, so a leg is startable only from a savestate; SLINK_GEN3_PLAY_FROM
-    is useless unless each leg says which one."""
     for leg in _each(legs):
         state = leg["state"]
         assert state, f"leg {leg['name']!r} declares no savestate"
@@ -140,21 +296,26 @@ def test_every_leg_declares_the_savestate_it_starts_from(legs):
         )
 
 
-def test_open_legs_are_marked_and_give_a_reason(legs):
+def test_every_runnable_leg_has_a_precondition_check(legs):
+    """A leg that does not validate the situation it was handed cannot enforce a precondition,
+    however faithfully the loop loads its state."""
+    for leg in _each(legs):
+        if not leg["open"]:
+            assert leg["check"] is not None, f"leg {leg['name']!r} has no check()"
+
+
+def test_open_legs_are_marked_carry_a_reason_and_have_no_run_body(legs):
     saw_open = False
     for leg in _each(legs):
         if leg["open"]:
             saw_open = True
             assert leg["open_reason"], f"leg {leg['name']!r} is open with no reason"
-            assert leg["run"] is None, (
-                f"open leg {leg['name']!r} carries a run body the loop never calls"
-            )
+            assert leg["run"] is None, f"open leg {leg['name']!r} carries an uncallable run body"
     assert saw_open, "expected wild_catch/pc_move_full_party to be open (unpinned RR bag)"
 
 
 def test_the_runnable_legs_are_the_ones_the_card_asked_for(legs):
-    runnable = {leg["name"] for leg in _each(legs) if not leg["open"]}
-    assert runnable == {"battle_to_field", "wild_faint", "door_warp", "pc_ops", "save"}
+    assert {leg["name"] for leg in _each(legs) if not leg["open"]} == _RUNNABLE
     for leg in _each(legs):
         if not leg["open"]:
             assert leg["run"] is not None, f"leg {leg['name']!r} has no run body"
@@ -168,26 +329,48 @@ def test_leg_names_are_unique(legs):
 def test_state_path_resolves_bare_names_and_passes_absolute_ones_through(module):
     fn = module.state_path
     assert fn("slink_door.State").endswith("/slink_door.State")
-    assert fn("slink_door.State") != "slink_door.State"          # a dir was prepended
+    assert fn("slink_door.State") != "slink_door.State"          # a directory was prepended
     assert fn("E:/x/slink_door.State") == "E:/x/slink_door.State"
     assert fn("") is None
     assert fn(None) is None
 
-
-# -- source-level check: no run body ends on a bare frame count -------------------------------
-# A frame BUDGET (a bounded `for` that polls a RAM observable every iteration) is fine and used
-# throughout; what is disallowed is a leg whose ONLY stop condition is "N frames elapsed".
 
 _RUN_BODY_RE = re.compile(r"run = function\(cp\)(.*?)\n    end,", re.DOTALL)
 
 
 def test_no_run_body_terminates_on_a_bare_frame_count():
     bodies = _RUN_BODY_RE.findall(_SCRIPT_SRC)
-    assert len(bodies) == 5, f"expected one run body per runnable leg, found {len(bodies)}"
+    assert len(bodies) == len(_RUNNABLE), f"expected one run body per runnable leg, got {len(bodies)}"
     for body in bodies:
         assert any(h in body for h in _TERMINAL_HELPERS), (
             "a leg's run body has no RAM/coordinate/counter/predicate terminal helper:\n" + body
         )
+
+
+def test_the_loop_loads_each_legs_own_state_and_checks_it_before_running():
+    """The first lane run walked door_warp straight out of wild_faint's leftovers and failed
+    with "map never changed from 1024". The fix is structural: load, then check, then run."""
+    loop = _SCRIPT_SRC.split("local reached, skipped")[1]
+    load_at = loop.index("savestate.load")
+    check_at = loop.index("leg.check")
+    run_at = loop.index("leg.run(cp)")
+    assert load_at < check_at < run_at, "the loop must load the state, then check it, then run"
+    assert "state_path(leg.state)" in loop
+
+
+def test_open_legs_are_not_counted_as_reached():
+    loop = _SCRIPT_SRC.split("local reached, skipped")[1]
+    assert loop.count("reached[#reached + 1]") == 1
+    assert loop.index("leg.run(cp)") < loop.index("reached[#reached + 1]")
+    assert "skipped[#skipped + 1]" in loop
+
+
+def test_shadow_start_and_poll_failures_are_fatal():
+    assert "shadow: observer start failed" in _SCRIPT_SRC
+    assert "shadow: poll failed" in _SCRIPT_SRC
+    # ...and the poll failure must be checked where it can still stop the run.
+    loop = _SCRIPT_SRC.split("local reached, skipped")[1]
+    assert "if shadow_err then" in loop
 
 
 def test_the_driver_never_mashes_start_in_the_overworld():
@@ -196,6 +379,197 @@ def test_the_driver_never_mashes_start_in_the_overworld():
     assert "G.mash(" not in _SCRIPT_SRC
 
 
+def test_duo_precedent_constants_are_labelled_as_such():
+    """CTRL_ADDR/ACTION_MENU live in no profile and no checkpoint; a reader must not mistake
+    them for pinned facts."""
+    head = _SCRIPT_SRC.split("local function party_count")[0]
+    assert "DUO-PRECEDENT CONSTANTS, NOT PROFILE FACTS" in head
+    assert "scenario_explode.lua:27-28" in head
+
+
 def test_the_shadow_observer_writes_the_rr_result_file():
     assert "gen3_rr_scripted_play_result.txt" in _SCRIPT_SRC
     assert "lua/gen3/shadow_run.lua" in _SCRIPT_SRC
+
+
+# ── behaviour: battle_to_field ───────────────────────────────────────────────────────────────
+
+
+def test_battle_to_field_passes_on_a_real_battle_to_field_transition(lua, fake, legs):
+    fake.set_battle(True)
+    fake.set_overworld(False)
+    lua.execute("""
+        FAKE.on_frame = function(f)
+            if f >= 200 then FAKE.set_battle(false); FAKE.set_overworld(true) end
+        end
+    """)
+    leg = _leg(legs, "battle_to_field")
+    assert leg["check"](lua.globals().FAKE.cp) is None
+    ok, log, err = lua.globals().FAKE.run_leg(leg["run"])
+    assert ok, f"{err}\n{log}"
+    assert "phase field" in log
+
+
+def test_battle_to_field_refuses_to_start_when_already_on_the_field(lua, fake, legs):
+    """Starting outside a battle would sail through every terminal without the engine ever
+    executing ReturnFromBattleToOverworld -- a PASS for nothing."""
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    why = _leg(legs, "battle_to_field")["check"](lua.globals().FAKE.cp)
+    assert why is not None
+    assert "already on the field" in why
+
+
+def test_battle_to_field_fails_when_the_battle_never_ends(lua, fake, legs):
+    fake.set_battle(True)
+    fake.set_overworld(False)          # no on_frame: the engine never leaves the battle
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "battle_to_field")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "the battle never ended" in log
+
+
+# ── behaviour: hold_until_map_change ─────────────────────────────────────────────────────────
+
+
+def test_a_warp_that_really_happens_is_accepted(lua, fake, module):
+    fake.set_overworld(True)
+    lua.execute("""
+        FAKE.on_frame = function(f) if f >= 100 then FAKE.set_map(5, 4) end end
+    """)
+    ok, detail = module.hold_until_map_change(lua.globals().FAKE.cp, "Up", 30)
+    assert ok, detail
+    assert "769 -> 1284" in detail      # (3,1) -> (5,4)
+
+
+def test_an_unreadable_map_pointer_is_not_a_map_change(lua, fake, module):
+    """G.map returns -1,-1 whenever the SaveBlock1 pointer is not sane. Comparing that against
+    a readable id looks exactly like a warp; accepting it would pass this leg while the engine
+    was in the middle of nothing at all."""
+    fake.set_sb1(False)
+    fake.set_overworld(True)
+    ok, detail = module.hold_until_map_change(lua.globals().FAKE.cp, "Up", 30)
+    assert not ok
+    assert "unreadable" in detail
+
+
+def test_a_map_change_that_never_settles_back_to_the_field_fails(lua, fake, module):
+    fake.set_overworld(False)          # the fade never finishes
+    lua.execute("""
+        FAKE.on_frame = function(f) if f >= 100 then FAKE.set_map(5, 4) end end
+    """)
+    ok, detail = module.hold_until_map_change(lua.globals().FAKE.cp, "Up", 30)
+    assert not ok
+    assert "never settled" in detail
+
+
+# ── behaviour: pc_ops keyed oracle ───────────────────────────────────────────────────────────
+
+_PARTY_ABC = "{ {0xAAAA0001, 0x1111, 0xA0}, {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0} }"
+
+
+def _pc_scenario(lua, fake, after_withdraw: str):
+    """Deposit at 5 A-presses, withdraw at 12. `after_withdraw` is the Lua party literal the
+    fake engine hands back -- which is where each negative below differs."""
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    fake.set_pos(15, 7)                # already on the PC approach tile: no walking to model
+    lua.execute(f"""
+        FAKE.set_party({_PARTY_ABC})
+        FAKE.on_frame = function()
+            if FAKE.a >= 12 then FAKE.set_party({after_withdraw})
+            elseif FAKE.a >= 5 then
+                FAKE.set_party({{ {{0xBBBB0002, 0x2222, 0xB0}}, {{0xCCCC0003, 0x3333, 0xC0}} }})
+            end
+        end
+    """)
+
+
+def test_pc_ops_accepts_a_real_round_trip_even_though_the_record_is_lossy(lua, fake, legs):
+    """RR stores a 58-byte CompressedPokemon, so the travelling record legitimately comes back
+    with different bytes; its KEY must survive, and the records that stayed must not move."""
+    _pc_scenario(lua, fake,
+                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xAAAA0001, 0x1111, 0xDEAD} }")
+    ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert ok, f"{err}\n{log}"
+    assert "AAAA0001:00001111 left the party" in log
+    assert "is back" in log
+
+
+def test_pc_ops_fails_when_a_different_mon_comes_back(lua, fake, legs):
+    """Deposit A, withdraw B: the count returns to 3, which a count-only oracle would accept."""
+    _pc_scenario(lua, fake,
+                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xBBBB0002, 0x2222, 0xB0} }")
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "withdrawn mon is NOT the deposited one" in log
+
+
+def test_pc_ops_fails_when_the_deposited_mon_was_released_and_another_withdrawn(lua, fake, legs):
+    """A released-and-replaced mon also restores the count. It is not a round trip."""
+    _pc_scenario(lua, fake,
+                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xEEEE0009, 0x9999, 0xE0} }")
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "withdrawn mon is NOT the deposited one" in log
+
+
+def test_pc_ops_fails_when_a_bystander_record_changed(lua, fake, legs):
+    _pc_scenario(lua, fake,
+                 "{ {0xBBBB0002, 0x2222, 0xBEEF}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xAAAA0001, 0x1111, 0xA0} }")
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "is not byte-identical after the round trip" in log
+
+
+def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
+    """The final return to the field is an assertion, not a courtesy: leaving the UI up hands
+    the next leg a broken starting point."""
+    _pc_scenario(lua, fake,
+                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xAAAA0001, 0x1111, 0xDEAD} }")
+    lua.execute("""
+        local inner = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            inner(f)
+            if FAKE.a >= 12 then FAKE.set_overworld(false) end   -- the UI never closes
+        end
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "never returned to the field" in log
+
+
+# ── behaviour: wild_faint ────────────────────────────────────────────────────────────────────
+
+
+def test_wild_faint_will_not_call_it_a_faint_without_the_engines_own_counter(lua, fake, legs):
+    """The player battler goes positive -> 0 HP every encounter, but gBattleResults's
+    playerFaintCounter never moves -- exactly what a host-side HP poke looks like. The leg must
+    refuse it rather than report a faint the engine never processed."""
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    fake.set_faints(0)
+    lua.execute("""
+        FAKE.on_frame = function(f)
+            local t = f % 800
+            if t < 300 then
+                FAKE.set_battle(false); FAKE.set_overworld(true)
+                FAKE.set_menu(false); FAKE.set_bmon(0, 0)
+            else
+                FAKE.set_battle(true); FAKE.set_overworld(false); FAKE.set_menu(true)
+                if t < 600 then FAKE.set_bmon(20, 20) else FAKE.set_bmon(0, 20) end
+            end
+        end
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_faint")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "no witnessed player faint" in log
+    assert "hp_zero=true" in log        # the HP transition WAS seen; the counter is what failed

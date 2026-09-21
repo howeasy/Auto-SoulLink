@@ -1,0 +1,22 @@
+# FR scripted play run 9, 2026-09-21 (vanilla FR US 1.0 sha1 41cb23d8..., observer beside)
+phase start frame=1 title=firered
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-start frame=635 starter
+phase in-lab frame=2187 map=1027 at=(6,12)
+phase scene-done frame=4034 var=2, idle+unlocked held 60f
+phase pre-walk frame=4034 obj0=(6,4) sb1=(6,4)
+phase post-walk frame=4098 obj0=(9,5) sb1=(9,5)
+phase facing frame=4130 dir=2 (2=up)
+phase starter-got frame=4659 party=1
+phase starter-idle frame=5571 party=1
+phase leg-done frame=5571 starter
+phase leg-start frame=5571 rival_battle
+RESULT: FAIL rival_battle (ball_to_rival_row): step Left stalled at (7,8)
+## shadow
+STATUS frame=4235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3588
+SHADOW t=2 frame=4640 kind=mon_given key= address=134482826 callback_address=134482826 cpsr=1073741887 mode=thumb raw_r15=134482828 sp=50363812 thumb=1
+STATUS frame=4835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4186
+STATUS frame=5435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4786
+STATUS frame=6035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5386
+SHADOW t=3 frame=6091 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1

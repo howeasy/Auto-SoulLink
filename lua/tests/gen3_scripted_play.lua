@@ -58,6 +58,43 @@ local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR) end
 
 local function mapid(cp) local g, n = G.map(cp); return g * 256 + n end
 
+--- POLARITY (Codex review cx-378ce251): the `in_battle` predicate is gMain+1081 & 2 with
+--- expect=0 (data/games/gen3_frlg/write_checkpoint.json firered.predicates.in_battle,
+--- gen3_boot_check.lua:104-114 pred_ok compares (value&mask)==expect), so
+--- G.pred_ok(cp,"in_battle") is TRUE when we are NOT in a battle. Wrapped once here (same shape
+--- as lua/tests/gen3_rr_scripted_play.lua:74) so no leg touches the raw predicate directly.
+local function in_battle(cp) return not G.pred_ok(cp, "in_battle") end
+
+--- A-only mash, for use INSIDE a battle: G.mash pulses Start every 16 frames
+--- (gen3_boot_check.lua:212-221), which opens the START menu if it ever fires on the field —
+--- exactly what the in_battle polarity bug caused (Codex cx-378ce251). Same shape as
+--- lua/tests/gen3_rr_scripted_play.lua:104-110.
+local function mash_a(taps, stop)
+    for _ = 1, taps do
+        if stop and stop() then return true end
+        G.tap("A", 3, 13)
+    end
+    return stop and stop() or false
+end
+
+local function int(x) return math.floor(x) end
+
+-- VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB (pret include/constants/vars.h:137) = 0x4055.
+-- SaveBlock1.vars[] lives at SB1+0x1000 (pret include/global.h:791), each entry a u16, so this
+-- var's byte offset from SaveBlock1 is 0x1000 + (0x4055-0x4000)*2.
+local SB1_VARS_OFFSET = 0x1000
+local VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB = 0x4055
+local LAB_SCENE_VAR_OFFSET = SB1_VARS_OFFSET + (VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB - 0x4000) * 2
+
+--- The lab scene var, read through cp.pointers.gSaveBlock1Ptr the way G.map/G.pos do
+--- (gen3_boot_check.lua:118-123): -1 while the pointer is not yet a sane EWRAM address.
+local function lab_scene_var(cp)
+    local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
+    local sb1 = memory.read_u32_le(int(ptr.address))
+    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return -1 end
+    return memory.read_u16_le(sb1 + LAB_SCENE_VAR_OFFSET)
+end
+
 -- ── PATHS: every direction list below, OFFLINE-BFS-computed ────────────────────────────────────
 -- Tool: a Python BFS (scratchpad, not checked in) over data/layouts/<map>/map.bin: block u16,
 -- collision=(word>>10)&3, blocked if nonzero; object_event tiles from data/maps/<map>/map.json
@@ -302,41 +339,75 @@ LEGS[#LEGS + 1] = {
             G.finish(false, "starter: Oak's intercept never warped the player into the lab")
         end
         G.phase("in-lab", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
-        -- The scene is over only when the FIELD CONTROLS unlock (sLockFieldControls == 0, pack
-        -- predicate field_controls_locked): script_context_status goes idle between the scene's
-        -- own commands and misled run 4 (PHYSICAL: Oak still talking in gen3_stuck.png).
-        -- ...and even that unlocks transiently between the scene's own lock/release pairs
-        -- (run 5: same frames, Oak still talking). So DEBOUNCE: the whole condition must hold
-        -- for 90 consecutive frames with no input before the scene counts as over.
-        local parked, stable = false, 0
-        for _ = 1, 9000 do
-            local x, y = G.pos(cp)
-            local quiet = x == 6 and y == 4 and G.pred_ok(cp, "script_context_status")
-                          and G.pred_ok(cp, "field_controls_locked")
-            if quiet then
-                stable = stable + 1
-                if stable >= 90 then parked = true; break end
-                G.advance()
-            else
-                stable = 0
-                G.tap("A", 2, 10)
-            end
+        -- GROUND TRUTH, not position/idle guessing (PHYSICAL runs 4-7: position (6,4) + script
+        -- idle + field controls unlocked was NOT sufficient — Oak was still talking). scripts.inc
+        -- (ChooseStarterScene) only reaches `setvar VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB,
+        -- 2` at the very end, line 225, right before `releaseall`. A-only: this is entirely a
+        -- scripted cutscene (lockall), so Start must never fire here (see the mash_a comment).
+        local scene_done = false
+        for _ = 1, 6000 do
+            if lab_scene_var(cp) == 2 then scene_done = true; break end
+            G.tap("A", 2, 10)
         end
-        if not parked then
+        if not scene_done then
             G.shot("stuck")
             G.finish(false, string.format(
-                "starter: ChooseStarterScene never parked the player at (6,4); at (%d,%d)", G.pos(cp)))
+                "starter: lab scene var never reached 2 (last=%d) at (%d,%d)",
+                lab_scene_var(cp), G.pos(cp)))
         end
-        G.phase("scene-done", "scene should be 2 now (VAR read not pinned; position+idle verified)")
+        -- The var can read 2 a frame or two before `releaseall` actually restores control
+        -- (PHYSICAL risk noted by the coordinator); debounce script idle + field controls
+        -- unlocked held for 60 consecutive frames, no further input, before trusting it.
+        local stable, settled = 0, false
+        for _ = 1, 900 do
+            if G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked") then
+                stable = stable + 1
+                if stable >= 60 then settled = true; break end
+            else
+                stable = 0
+            end
+            G.advance()
+        end
+        if not settled then
+            G.shot("stuck")
+            G.finish(false, "starter: scene var==2 but idle+unlocked never held 60 frames")
+        end
+        G.phase("scene-done", "var=2, idle+unlocked held 60f")
 
-        -- PHYSICAL (owner, 2026-09-21, patch/build/gen3_stuck.png): at the end of the scene the
-        -- player already stands directly below a ball; no walk, just face Up and press A.
-        -- (SaveBlock1 coords are not a reliable position during a scripted scene, so no
-        -- follow() here: the terminal below is party_count, not a tile.)
-        local bx, by = G.pos(cp)
-        G.phase("ball", string.format("at=(%d,%d) map=%d", bx, by, mapid(cp)))
-        follow(cp, "lab_oak_scene_end_to_ball", "starter")   -- (6,4) -> (9,5), below the middle ball
-        G.tap("Up", 2, 13)
+        -- DIAGNOSTIC (run 8): the live player OBJECT coords vs SaveBlock1.pos, and a screenshot,
+        -- because after the scripted scene the screen showed the player beside Oak while
+        -- SaveBlock1.pos claimed the walk to (9,5) succeeded. gObjectEvents = 0x02036E38
+        -- (pokefirered.sym:205), object 0 = player, currentCoords s16 x/y at +0x10/+0x12
+        -- (include/global.fieldmap.h struct ObjectEvent), stored +7 (MAP_OFFSET).
+        do
+            local ox = memory.read_s16_le(0x02036E38 + 0x10) - 7
+            local oy = memory.read_s16_le(0x02036E38 + 0x12) - 7
+            local sx, sy = G.pos(cp)
+            G.phase("pre-walk", string.format("obj0=(%d,%d) sb1=(%d,%d)", ox, oy, sx, sy))
+            G.shot("prewalk")
+        end
+        follow(cp, "lab_oak_scene_end_to_ball", "starter")   -- asserts the real (6,4), not assumed
+        do
+            local ox = memory.read_s16_le(0x02036E38 + 0x10) - 7
+            local oy = memory.read_s16_le(0x02036E38 + 0x12) - 7
+            local sx, sy = G.pos(cp)
+            G.phase("post-walk", string.format("obj0=(%d,%d) sb1=(%d,%d)", ox, oy, sx, sy))
+            G.shot("postwalk")
+        end
+        do
+            -- Face the ball and PROVE the facing: ObjectEvent.facingDirection is the low nibble
+            -- at +0x18 (include/global.fieldmap.h: u8 movementDirection:4 / facingDirection:4);
+            -- 1=down 2=up 3=left 4=right. Hold Up until it reads 2 (the ball object is solid,
+            -- so Up can only turn, never step).
+            local function facing() return memory.read_u8(0x02036E38 + 0x18) >> 4 end
+            for _ = 1, 4 do
+                if facing() == 2 then break end
+                for _ = 1, 8 do joypad.set({ Up = true }); G.advance() end
+                G.idle(8)
+            end
+            G.phase("facing", string.format("dir=%d (2=up)", facing()))
+            G.shot("facing")
+        end
 
         -- Phase 1: A only, checked each tap, until givemon actually lands (party_count 0->1).
         -- Every MSGBOX_YESNO up to and including "would you like Squirtle?" (ConfirmSquirtle,
@@ -391,7 +462,7 @@ LEGS[#LEGS + 1] = {
         follow(cp, "ball_to_rival_row", "rival_battle")
         local entered = false
         for _ = 1, 1200 do
-            if G.pred_ok(cp, "in_battle") then entered = true; break end
+            if in_battle(cp) then entered = true; break end
             for _ = 1, 4 do G.tap("A", 3, 13) end
         end
         if not entered then
@@ -402,7 +473,8 @@ LEGS[#LEGS + 1] = {
         -- gActionSelectionCursor resets to 0 (USE_MOVE) each battle
         -- (src/battle_controller_player.c); A,A is a pinned FIGHT->move-slot-1 selection, not a
         -- guess. What the rival does in response is not controlled — RISK stated in the header.
-        local ended = G.mash(6000, function() return not G.pred_ok(cp, "in_battle") end)
+        -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
+        local ended = mash_a(315, function() return not in_battle(cp) end)
         if not ended then
             G.shot("stuck")
             G.finish(false, "rival_battle: in_battle never cleared within budget")
@@ -524,7 +596,7 @@ LEGS[#LEGS + 1] = {
         for encounter = 1, 4 do
             local entered = false
             for _ = 1, 400 do
-                if G.pred_ok(cp, "in_battle") then entered = true; break end
+                if in_battle(cp) then entered = true; break end
                 -- oscillate in the two-tile grass gap to keep triggering the per-step encounter
                 -- check without leaving the grass patch (Route1/map.json; the corridor is
                 -- exactly 2 tiles wide here)
@@ -539,7 +611,8 @@ LEGS[#LEGS + 1] = {
             G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG/USE_ITEM(1), pinned bit toggle
             G.tap("A", 3, 30)
             for _ = 1, 30 do G.tap("A", 3, 20) end   -- bag category/list/throw-confirm, mashed
-            local resolved = G.mash(3000, function() return not G.pred_ok(cp, "in_battle") end)
+            -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
+            local resolved = mash_a(160, function() return not in_battle(cp) end)
             if resolved and battle_outcome() == B_OUTCOME_CAUGHT then
                 caught = true
                 break
@@ -569,7 +642,7 @@ LEGS[#LEGS + 1] = {
         for encounter = 1, 20 do
             local entered = false
             for _ = 1, 400 do
-                if G.pred_ok(cp, "in_battle") then entered = true; break end
+                if in_battle(cp) then entered = true; break end
                 local dir = (G.spent % 2 == 0) and "Left" or "Right"
                 for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
             end
@@ -579,7 +652,8 @@ LEGS[#LEGS + 1] = {
             end
             -- Keep attacking (RISK, see header) until this battle ends, then check the faint
             -- counter — a strong starter may just keep winning; bounded at 20 encounters.
-            G.mash(3000, function() return not G.pred_ok(cp, "in_battle") end)
+            -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
+            mash_a(160, function() return not in_battle(cp) end)
             if player_faints() > before then fainted = true; break end
         end
         if not fainted then
@@ -763,4 +837,10 @@ end
 
 if (debug.getinfo(1, "S").source or "") == "main" then run() end
 
-return { LEGS = LEGS, PATHS = PATHS, follow = follow }
+return {
+    LEGS = LEGS, PATHS = PATHS, follow = follow,
+    -- test hooks (Codex review cx-378ce251): the in_battle polarity wrapper and the lab scene
+    -- var address arithmetic, both independently checkable without an emulator.
+    in_battle = in_battle,
+    LAB_SCENE_VAR_OFFSET = LAB_SCENE_VAR_OFFSET,
+}

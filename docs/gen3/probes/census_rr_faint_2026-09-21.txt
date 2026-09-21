@@ -1,0 +1,16 @@
+# RR faint census, 2026-09-21: slink_prebattle.State, grass re-encounters, 12000 frames, 11 hooks (Codex cx-7038bda9 candidates)
+fired: BattleMainCB2 9027; HandleAction_RunBattleScript 5565 (first 1285); RR_opcode1B_cleanup 0x0909E968 14 (first 2358); RunBattleScriptCommands_PopCallbacksStack 807; ReturnFromBattleToOverworld 7 (7 battles returned to the field)
+silent: RunBattleScriptCommands 0x08015C74, old Cmd_tryfaintmon 0x080212AC, old faint pin 0x080213C8, RR_atk19_tryfaintmon 0x0909E5BC, RR_atk19_capture 0x0909E6EC, RR_atk19_store 0x0909E8C4
+reading: the replaced table at 0x0903EF20 IS live (its 0x1B entry runs 14x = per faint of either side), but the faint path on RR does not execute the 0x19 entry (vanilla tryfaintmon is called every attack turn in vanilla, so 0 hits in 7 battles is not chance). Next: identify which table entries run at a faint (batch census over the RR table targets around a faint, or CFRU source: which opcode CFRU's battle scripts use for the faint check) and re-pin faint at a body with a battler-id observable (gBattlerFainted).
+phase start frame=1 title=radical_red
+phase state frame=980 loaded E:/Howard/Bizhawk/GBA/State/slink_prebattle.State
+phase field frame=1010 map=3,19
+phase registered frame=1010 11 functions
+phase walked frame=13010 map=3,19 in_battle=2
+phase count frame=13010 BattleMainCB2 addr=0x08011100 hits=9027 first_cb=0x08011100 first_frame=1010
+phase count frame=13010 HandleAction_RunBattleScript addr=0x0801D030 hits=5565 first_cb=0x0801D030 first_frame=1285
+phase count frame=13010 RR_opcode1B_cleanup addr=0x0909E968 hits=14 first_cb=0x0909E968 first_frame=2358
+phase count frame=13010 RunBattleScriptCommands_PopCallbacksStack addr=0x08015C00 hits=807 first_cb=0x08015C00 first_frame=2370
+phase count frame=13010 ReturnFromBattleToOverworld addr=0x08015B58 hits=7 first_cb=0x08015B58 first_frame=2484
+phase silent frame=13010 RunBattleScriptCommands,RR_atk19_store,old_Cmd_tryfaintmon,RR_atk19_capture,RR_atk19_tryfaintmon,old_faint_pin
+RESULT: PASS 5 of 11 hooked functions fired over 12000 frames
