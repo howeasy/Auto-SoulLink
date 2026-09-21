@@ -52,8 +52,30 @@ local BATTLE_OUTCOME_ADDR = 0x02023E8A  -- vanilla.BATTLE_OUTCOME_ADDR; B_OUTCOM
                                          -- (pret include/constants/battle.h:82)
 local BATTLE_RESULTS_ADDR = 0x03004F90  -- vanilla.BATTLE_RESULTS_ADDR; playerFaintCounter @ +0
 local B_OUTCOME_CAUGHT = 7
+local PARTY_BASE          = 0x02024284  -- gPlayerParty (vanilla.PARTY_BASE)
+local MON_SIZE            = 100
+local OFF_HP, OFF_MAXHP   = 0x56, 0x58  -- lua/tests/duo/duo_main.lua:26-27
+
+-- WHERE A WHITEOUT PUTS YOU. pret src/overworld.c SetWarpDestinationToLastHealLocation warps to
+-- gSaveBlock1Ptr->lastHealLocation, which a new game seeds to the player's own house
+-- (src/new_game.c). Identified from the ROM rather than assumed -- map 4.0 is the only 13x10
+-- map whose single object event stands at (8,4) (MOM) with the front door at (4,8)/(5,8) and
+-- the stairs at (10,2), exactly the geometry lua/tests/gen3_fr_newgame_inputs.lua walks:
+--
+--   python tools/gba_map.py "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" --map 4.0
+--   -> map 4.0: 13x10, 4 warps, 1 objects, 0 coords, 1 bg     objects [(8,4)]
+--
+-- PHYSICAL confirmation (FR lane run 14): the whiteout left the player at (8,5) -- the tile
+-- directly below MOM, which is where FRLG stands you up after she heals your party.
+local HEAL_MAP = 4 * 256 + 0            -- MAP_PALLET_TOWN_PLAYERS_HOUSE_1F
 
 local function battle_outcome() return memory.read_u8(BATTLE_OUTCOME_ADDR) end
+
+--- Slot 0's current and maximum HP -- the heal terminal. Plaintext, like every other reader
+--- here (the HP fields sit outside the encrypted substructures).
+local function slot0_hp()
+    return memory.read_u16_le(PARTY_BASE + OFF_HP), memory.read_u16_le(PARTY_BASE + OFF_MAXHP)
+end
 local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR) end
 
 -- gObjectEvents = 0x02036E38 (pokefirered.sym:205); playlib.obj_pos/obj_facing read it
@@ -249,6 +271,37 @@ local PATHS = {
     mart_scene_end_to_exit = {
         map = "Mart", from = { 4, 3 }, to = { 4, 7 }, dirs = { "Down","Down","Down","Down" },
     },
+    -- WHITEOUT RECOVERY. From where Mom stands you up (8,5) to the house's own front door
+    -- row; the door tiles (4,8)/(5,8) are warps, so the exit is a press-into Down from (4,8),
+    -- the same shape gen3_fr_newgame_inputs.lua's 1F->town leg uses.
+    --   python tools/gba_map.py "<FR>.gba" --map 4.0 --bfs 8,5 4,8
+    --   -> ['Down','Down','Down','Left','Left','Left','Left']
+    heal_house_to_door = {
+        map = "PalletTown_PlayersHouse_1F", from = { 8, 5 }, to = { 4, 8 },
+        dirs = { "Down","Down","Down","Left","Left","Left","Left" },
+    },
+    -- VIRIDIAN HEAL DETOUR (prevention, so the southbound Route 1 walk starts at full HP).
+    --   python tools/gba_map.py "<FR>.gba" --map 3.1 --bfs 36,20 26,27
+    --   python tools/gba_map.py "<FR>.gba" --map 3.1 --bfs 26,27 24,39
+    mart_door_to_pokecenter_door = {
+        map = "ViridianCity", from = { 36, 20 }, to = { 26, 27 },
+        dirs = { "Down","Down","Down","Down","Down","Down","Down","Left","Left","Left","Left",
+                 "Left","Left","Left","Left","Left","Left" },
+    },
+    pokecenter_door_to_route1_edge = {
+        map = "ViridianCity", from = { 26, 27 }, to = { 24, 39 },
+        dirs = { "Down","Down","Left","Left","Left","Left","Down","Down","Down","Down","Down",
+                 "Down","Down","Down","Down","Down","Right","Right" },
+    },
+    -- The nurse (object 1, graphics 64) stands at (7,2) behind a counter row whose metatiles
+    -- read behaviour 0x80 = MB_COUNTER at (5..9,3) (pret include/constants/metatile_behaviors.h;
+    -- FRLG's value, not Emerald's 0x6B) -- an interaction passes THROUGH a counter to the
+    -- object behind it, so the talking tile is (7,4), one below the counter, facing Up.
+    --   python tools/gba_map.py "<FR>.gba" --map 5.4 --bfs 7,8 7,4  -> ['Up','Up','Up','Up']
+    pokecenter_entrance_to_nurse = {
+        map = "PokemonCenter_1F", from = { 7, 8 }, to = { 7, 4 },
+        dirs = { "Up","Up","Up","Up" },
+    },
     -- PokemonCenter_1F's own warp_events[1] = (7,8) (used entering from ViridianCity warp 1).
     -- PC counter metatile (MB_PC=0x83, pret include/constants/metatile_behaviors.h:94) found at
     -- gTileset_Building metatile ids 98/99 (data/tilesets/primary/building/metatile_attributes.bin
@@ -267,7 +320,59 @@ local play = PL.bind(G, {
     paths            = PATHS,
     obj_events       = OBJ_EVENTS_ADDR,
     party_count_addr = PARTY_COUNT_ADDR,
+    heal_map         = HEAL_MAP,     -- enables playlib's whiteout recovery
+    max_recoveries   = 2,
 })
+
+--- Walk out of the house a whiteout put us in, back to Pallet Town's door-exit tile (6,9) --
+--- the tile every town path already starts from. Each leg's own `recover` continues from here.
+local function recover_to_pallet_town(cp)
+    if play.mapid(cp) ~= HEAL_MAP then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "whiteout recovery: expected the heal map %d, found %d at %s",
+            HEAL_MAP, play.mapid(cp), play.at(cp)))
+    end
+    play.follow(cp, "heal_house_to_door", "whiteout-recovery")
+    if not play.enter_warp(cp, "Down", 30) then
+        G.finish(false, "whiteout recovery: the house's front door never fired a warp")
+    end
+    local x, y = G.pos(cp)
+    if x ~= 6 or y ~= 9 then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "whiteout recovery: leaving the house landed at (%d,%d), not Pallet Town's (6,9)",
+            x, y))
+    end
+    G.phase("recovered", "back outside at " .. play.at(cp))
+end
+
+--- Heal at a Poke Center counter: walk to the talking tile, face the nurse, A through her
+--- dialogue, and require slot 0 to come back at FULL HP. The terminal is the party, never the
+--- number of presses (pret src/pokemon_center.c heals via the standard script; the counter
+--- metatile behaviour that lets the interaction reach her is cited on the PATHS entry).
+local function heal_at_nurse(cp, label)
+    play.follow(cp, "pokecenter_entrance_to_nurse", label)
+    G.tap("Up", 2, 13)
+    local hp0, max0 = slot0_hp()
+    G.phase("heal-start", string.format("%s: slot0 %d/%d", label, hp0, max0))
+    local healed = false
+    for _ = 1, 120 do
+        local hp, maxhp = slot0_hp()
+        if maxhp > 0 and hp == maxhp then healed = true; break end
+        G.tap("A", 3, 20)
+    end
+    if not healed then
+        G.shot("stuck")
+        local hp, maxhp = slot0_hp()
+        G.finish(false, string.format("%s: the nurse never restored slot 0 (%d/%d)",
+                                      label, hp, maxhp))
+    end
+    -- The "we hope to see you again" bow is scripted; let it finish before walking off.
+    play.wait_scene_settled(cp, 1800)
+    local hp, maxhp = slot0_hp()
+    G.phase("healed", string.format("%s: slot0 %d/%d", label, hp, maxhp))
+end
 
 local LEGS = {}
 
@@ -546,6 +651,16 @@ LEGS[#LEGS + 1] = {
     source = {
         "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:600-660 (DeliveredOaksParcel -> dex scene -> ReceivedFivePokeBalls)",
     },
+    -- The whole leg from Pallet Town onwards, shared by run() and resume(): after a whiteout
+    -- the parcel is still in the bag and Oak is still waiting, so the ONLY thing a restart has
+    -- to redo is the walk from the town to the lab.
+    deliver_from_town = function(cp)
+        play.follow(cp, "town_start_to_lab_door", "parcel_deliver")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the lab door never fired a warp") end
+        play.follow(cp, "lab_entrance_to_oak", "parcel_deliver")
+    end,
+    -- playlib calls recover() after a whiteout, then resume() instead of run().
+    recover = function(cp) recover_to_pallet_town(cp) end,
     run = function(cp)
         -- mart_scene_end_to_exit's start (4,3) is the ApproachCounter movement's computed end
         -- tile (walk_up x4 from the (4,7) entrance), not a BFS/observed tile — the one path
@@ -553,7 +668,16 @@ LEGS[#LEGS + 1] = {
         -- player) drove that walk. Verified at runtime by G.pos same as every other step.
         play.follow(cp, "mart_scene_end_to_exit", "parcel_deliver")
         if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: the mart exit never fired a warp") end
-        play.follow(cp, "mart_door_to_route1_edge", "parcel_deliver")
+
+        -- HEAL FIRST (FR lane run 14: the starter fainted in the Route 1 grass on the way home
+        -- and the player whited out). A full party is the cheap prevention; playlib's whiteout
+        -- recovery below is the expensive cure, and both now exist.
+        play.follow(cp, "mart_door_to_pokecenter_door", "parcel_deliver")
+        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the PokeCenter door never fired a warp") end
+        heal_at_nurse(cp, "parcel_deliver")
+        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: the PokeCenter exit never fired a warp") end
+        play.follow(cp, "pokecenter_door_to_route1_edge", "parcel_deliver")
+
         if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: ViridianCity->Route1 crossing never fired") end
         play.follow(cp, "route1_north_to_south_edge", "parcel_deliver")
         if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: Route1->PalletTown crossing never fired") end
@@ -572,6 +696,19 @@ LEGS[#LEGS + 1] = {
         G.phase("balls-received", "assumed from the scene completing (no bag read available)")
     end,
 }
+-- resume() reuses the leg's own tail. Written after the table literal because it needs the leg
+-- back: a whiteout restart begins at Pallet Town (6,9), not inside the Viridian mart.
+LEGS[#LEGS].resume = function(cp)
+    local leg = nil
+    for _, l in ipairs(LEGS) do if l.name == "parcel_deliver" then leg = l end end
+    leg.deliver_from_town(cp)
+    G.tap("Up", 2, 13)
+    if not play.wait_scene_settled(cp, 6000, function() return G.pred_ok(cp, "callback2") end) then
+        G.shot("stuck")
+        G.finish(false, "parcel_deliver (resume): Oak's dex-scene never returned control")
+    end
+    G.phase("balls-received", "after a whiteout restart")
+end
 
 -- ── leg: route1_catch (capture_wild) ─────────────────────────────────────────────────────────
 LEGS[#LEGS + 1] = {

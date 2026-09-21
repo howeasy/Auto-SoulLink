@@ -501,7 +501,9 @@ def _pc_scenario(lua, fake, after_withdraw: str):
     lua.execute(f"""
         FAKE.set_party({_PARTY_ABC})
         FAKE.on_frame = function()
-            if FAKE.a >= 12 then FAKE.set_party({after_withdraw})
+            -- the pinned row walk spends 5 A presses on the deposit (A, A, Down, A, Down,
+            -- A, A) and 5 more on the withdraw (A, A, A, A, A)
+            if FAKE.a >= 10 then FAKE.set_party({after_withdraw})
             elseif FAKE.a >= 5 then
                 FAKE.set_party({{ {{0xBBBB0002, 0x2222, 0xB0}}, {{0xCCCC0003, 0x3333, 0xC0}} }})
             end
@@ -562,7 +564,7 @@ def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
         local inner = FAKE.on_frame
         FAKE.on_frame = function(f)
             inner(f)
-            if FAKE.a >= 12 then FAKE.set_overworld(false) end   -- the UI never closes
+            if FAKE.a >= 10 then FAKE.set_overworld(false) end   -- the UI never closes
         end
     """)
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])

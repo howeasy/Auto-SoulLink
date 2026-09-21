@@ -505,3 +505,113 @@ def test_playlib_never_reaches_for_a_gen3_symbol():
     for forbidden in ("gen3_boot_check", "gSaveBlock1", "0x0202", "0x0203", "G.mash(",
                       "SLINK_GEN3_CHECKPOINT"):
         assert forbidden not in _CODE, f"{forbidden} appears in playlib CODE (comments are fine)"
+
+
+# -- whiteout: the one displacement that is recoverable (FR lane run 14) ----------------------
+
+
+_WHITEOUT_LEGS = """
+RAN, RECOVERED = {}, 0
+LEGS = {
+  { name = "walker",
+    recover = function() RECOVERED = RECOVERED + 1; W.map = 100; W.x, W.y = 0, 0 end,
+    run = function(cp) RAN[#RAN+1] = "run"; PLAY.follow(cp, "p", "walker") end },
+}
+return LEGS
+"""
+
+
+def _whiteout_world(lua, fake_faints=1):
+    """The walker meets a wild battle on its second tile; `fake_faints` of those battles end in
+    a whiteout (the player wakes on map 42), the rest are ordinary wins."""
+    lua.execute(f"""
+        W.faints_left = {fake_faints}
+        W.on_move = function()
+            if W.x == 1 and W.y == 0 and not W.fighting then
+                W.in_battle, W.fighting = true, true
+            end
+        end
+        W.on_a = function()
+            if W.in_battle and W.a % 4 == 0 then
+                W.in_battle, W.fighting = false, false
+                if W.faints_left > 0 then
+                    W.faints_left = W.faints_left - 1
+                    W.map = 42                 -- the heal map
+                    W.x, W.y = 8, 5
+                end
+            end
+        end
+    """)
+
+
+def _run_whiteout(lua, world, max_recoveries=2):
+    play = lua.execute(
+        f'local PL = dofile("{_PLAYLIB}")\n'
+        f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42,'
+        f' max_recoveries = {max_recoveries}, state_dir = "D:/states" }})\n'
+        f"return PLAY"
+    )
+    legs = lua.execute(_WHITEOUT_LEGS)
+    return world.guard(
+        lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+
+
+def test_a_whiteout_restarts_the_leg_instead_of_failing_it(lua, world):
+    """PHYSICAL (FR run 14): the starter fainted in the Route 1 grass and the player woke in
+    their house. The observer got its first natural faint AND whiteout out of it, so the walk
+    was doing its job -- what was missing was a way to carry on afterwards."""
+    _whiteout_world(lua, fake_faints=1)
+    ok, log, _err = _run_whiteout(lua, world)
+    assert "phase whiteout " in log
+    assert "phase whiteout-recover walker: attempt 1 of 2" in log
+    assert lua.eval("RECOVERED") == 1
+    assert lua.eval("#RAN") == 2, "the leg should have been run again after recovery"
+    assert "RESULT: PASS reached: walker" in log
+
+
+def test_a_leg_that_keeps_whiting_out_is_bounded(lua, world):
+    _whiteout_world(lua, fake_faints=9)
+    ok, log, _err = _run_whiteout(lua, world, max_recoveries=2)
+    assert "RESULT: FAIL walker: whited out 3 times (limit 2)" in log
+
+
+def test_a_displacement_that_is_not_a_whiteout_is_still_fatal(lua, world):
+    """Only a displacement that lands on the heal map has a name. Anything else moved the
+    player for a reason nothing here can state, so the path is simply gone."""
+    _whiteout_world(lua, fake_faints=1)
+    lua.execute("W.on_a = function()"
+                " if W.in_battle and W.a % 4 == 0 then"
+                "   W.in_battle, W.fighting = false, false; W.map = 77; W.x, W.y = 8, 5 end end")
+    ok, log, _err = _run_whiteout(lua, world)
+    assert "RESULT: FAIL" in log
+    assert "not the heal map" in log
+    assert "not a whiteout either" in log
+
+
+def test_a_leg_with_no_recover_says_so_rather_than_looping(lua, world):
+    _whiteout_world(lua, fake_faints=1)
+    play = lua.execute(
+        f'local PL = dofile("{_PLAYLIB}")\n'
+        f'PLAY = PL.bind(H, {{ paths = {_PATHS}, heal_map = 42, state_dir = "D:/states" }})\n'
+        f"return PLAY"
+    )
+    legs = lua.execute("""
+        LEGS = { { name = "walker", run = function(cp) PLAY.follow(cp, "p", "walker") end } }
+        return LEGS
+    """)
+    ok, log, _err = world.guard(
+        lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+    assert "declares no recover()" in log
+
+
+def test_finish_inside_a_leg_is_not_swallowed_by_the_recovery_pcall(lua, world):
+    """run_leg pcalls the leg body; everything that is not the whiteout signal -- above all
+    H.finish's own abort -- has to come straight back out."""
+    play = _bind(lua)
+    legs = lua.execute("""
+        return { { name = "boom", run = function() H.finish(false, "a real failure") end } }
+    """)
+    ok, log, _err = world.guard(
+        lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+    assert not ok
+    assert "RESULT: FAIL a real failure" in log

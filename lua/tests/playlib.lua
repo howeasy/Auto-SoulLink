@@ -33,6 +33,9 @@
 --   obj_events        the object-event array base (obj_pos / obj_facing)
 --   party_count_addr  the party-count byte
 --   state_dir         where bare savestate names resolve
+--   heal_map          the map id a whiteout warps the player to (enables whiteout recovery)
+--   max_recoveries    whiteout restarts allowed per leg (default 2)
+--   battle            a game's own "fight this battle to its end" driver, if A-only is not it
 --
 -- MULTI-RETURN SAFETY. `H.pos(cp)` returns TWO values, so using it anywhere but last in a
 -- string.format argument list silently drops every following argument and the format call
@@ -182,11 +185,28 @@ function M.bind(H, opts)
         end
         local nx, ny = H.pos(cp)
         if nx ~= ex or ny ~= ey then
+            -- A WHITEOUT is a displacement we can name, and therefore one we can recover from:
+            -- the engine warps the player to their heal location. PHYSICAL (FR lane run 14):
+            -- encounter #2 at (12,26), the starter fainted, and the player woke at (8,5) on the
+            -- heal map -- the observer's first natural faint and whiteout, so the walk did its
+            -- job even though the path died.
+            --
+            -- Raised, not finished: only the RUNNER knows which leg was interrupted and how to
+            -- put the player back. Anything else that moves the player mid-battle is still
+            -- fatal, because nothing here can say what it was.
+            if opts.heal_map and P.mapid(cp) == opts.heal_map then
+                H.phase("whiteout", string.format(
+                    "encounter #%d: fainted at (%d,%d), woke on the heal map %d at (%d,%d)",
+                    enc.n, ex, ey, opts.heal_map, nx, ny))
+                error({ whiteout = true, map = P.mapid(cp), x = nx, y = ny,
+                        from_x = ex, from_y = ey }, 0)
+            end
             H.shot("stuck")
             H.finish(false, string.format(
                 "encounter #%d moved the player from (%d,%d) to (%d,%d) — a battle must not "
-                .. "displace the player, so this was a whiteout (or a scripted warp) and the "
-                .. "rest of the path no longer applies", enc.n, ex, ey, nx, ny))
+                .. "displace the player, and the destination is not the heal map, so this was "
+                .. "not a whiteout either; the rest of the path no longer applies",
+                enc.n, ex, ey, nx, ny))
         end
         H.phase("encounter-done", string.format("#%d resolved at (%d,%d)", enc.n, nx, ny))
     end
@@ -349,8 +369,44 @@ function M.bind(H, opts)
     ---   open_reason  why, for an open leg
     ---   run(cp)      the leg body; absent on an open leg
     ---
+    --- Run one leg, recovering from a whiteout if the leg says how.
+    ---
+    --- A whiteout is the one interruption that is not a failure: the party is healed and the
+    --- player is standing somewhere known. A leg that supplies `recover(cp)` (walk from the
+    --- heal location back to where this leg starts) gets re-run -- `resume(cp)` if it has one,
+    --- because a leg whose opening is a one-time scripted scene cannot replay it, otherwise
+    --- `run(cp)`. Bounded, because a leg that keeps whiting out is not making progress.
+    function P.run_leg(cp, leg, o)
+        local limit = (o and o.max_recoveries) or opts.max_recoveries or 2
+        for attempt = 0, limit do
+            local body = (attempt > 0 and leg.resume) or leg.run
+            local ok, err = pcall(body, cp)
+            if ok then return end
+            -- Anything that is not our own whiteout signal -- including H.finish's abort --
+            -- belongs to the caller, untouched.
+            if type(err) ~= "table" or not err.whiteout then error(err, 0) end
+            if not leg.recover then
+                H.shot("stuck")
+                H.finish(false, string.format(
+                    "%s: whited out at (%d,%d) and declares no recover() — it cannot be "
+                    .. "restarted from the heal location", leg.name, err.from_x, err.from_y))
+            end
+            if attempt >= limit then
+                H.shot("stuck")
+                H.finish(false, string.format(
+                    "%s: whited out %d times (limit %d); the party is losing every trip",
+                    leg.name, attempt + 1, limit))
+            end
+            H.phase("whiteout-recover", string.format("%s: attempt %d of %d",
+                                                      leg.name, attempt + 1, limit))
+            leg.recover(cp)
+            H.phase("whiteout-recovered", string.format("%s restarts at %s", leg.name, P.at(cp)))
+        end
+    end
+
     --- `o` fields: name (result file base), budget, boot(cp), shadow = { script, result },
-    --- resume_env (default SLINK_GEN3_PLAY_FROM), state_env (default SLINK_STATE).
+    --- resume_env (default SLINK_GEN3_PLAY_FROM), state_env (default SLINK_STATE),
+    --- max_recoveries (default 2).
     ---
     --- ORDER MATTERS AND IS PART OF THE CONTRACT: boot FIRST, then the observer, then the legs.
     --- Starting the observer before a cold boot would attribute the title screen's own map
@@ -429,7 +485,7 @@ function M.bind(H, opts)
                     H.finish(false, string.format("%s: precondition failed: %s", leg.name, why))
                 end
                 H.phase("leg-start", leg.name)
-                leg.run(cp)
+                P.run_leg(cp, leg, o)
                 if shadow_err then
                     H.finish(false, "shadow: poll failed during " .. leg.name .. ": " .. shadow_err)
                 end

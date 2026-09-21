@@ -442,14 +442,25 @@ LEGS[#LEGS + 1] = {
         local throws = 0
         for _ = 1, math.min(balls, 5) do
             if not play.in_battle(cp) then break end
-            if not play.mash_a(200, function()
-                return at_action_menu() or not play.in_battle(cp)
-            end) then
-                G.shot("stuck")
-                G.finish(false, string.format(
-                    "wild_catch: the action menu never appeared (throw %d)", throws + 1))
+            -- WAIT FOR THE ACTION MENU ITSELF. The lane pressed the bag sequence into the
+            -- battle INTRO (slink_prebattle_balls.State is captured mid-intro) and reported
+            -- "ball not thrown, pocket still 5": the old condition was "menu OR not in battle",
+            -- and the second half let the sequence fire while no menu was up. Only the menu
+            -- means the menu.
+            local menu = false
+            for _ = 1, 300 do
+                if at_action_menu() then menu = true; break end
+                if not play.in_battle(cp) then break end
+                G.tap("A", 3, 13)
             end
             if not play.in_battle(cp) then break end     -- it fled, or our mon fainted
+            if not menu then
+                G.shot("stuck")
+                G.finish(false, string.format(
+                    "wild_catch: the action menu never appeared (throw %d); CTRL reads 0x%08X, "
+                    .. "not the action-select controller 0x%08X",
+                    throws + 1, memory.read_u32_le(CTRL_ADDR), ACTION_MENU))
+            end
             throws = throws + 1
             -- The pocket baseline is taken BEFORE a single button is pressed: the ball leaves
             -- the pocket on the very press that ends the sequence, so reading it afterwards
@@ -613,18 +624,56 @@ LEGS[#LEGS + 1] = {
                 .. "one to prove the others were left byte-identical)", before.n))
         end
 
+        -- THE PINNED MENU WALK (pret, vanilla storage). The PC access script offers
+        -- SOMEONE'S/BILL'S PC as the first row and A takes it (pret src/pc.c); the storage menu
+        -- that opens is sStorageMenuOptions = { WITHDRAW, DEPOSIT, MOVE POKEMON, MOVE ITEMS,
+        -- SEE YA } in that order (pret src/pokemon_storage_system.c), so DEPOSIT is Down, A.
+        -- The deposit screen starts with the cursor on party slot 1; Down, A takes slot 2 (the
+        -- leg keeps slot 1, so the party it compares afterwards is the interesting one), and a
+        -- final A confirms DEPOSIT.
+        --
+        -- IS THAT ORDER STILL RR's? UNVERIFIED, and honestly so. A charset string search of the
+        -- ROM (FR charmap, server/adapters/gen3_codec.py FR_CHARMAP) finds the vanilla menu
+        -- text exactly where it should be in FireRed -- WITHDRAW 0x081B5859, DEPOSIT 0x081B586C,
+        -- MOVE 0x081B587E, consecutive -- and finds NONE of those words anywhere in
+        -- patch/build/slink_RR.gba. So RR either compresses, relocates or rewrites that text,
+        -- and the row order cannot be confirmed from strings. The pinned walk is tried FIRST
+        -- because it is the only grounded candidate; the bounded sweep that the previous lane
+        -- run used is kept as a documented fallback, so a lane run produces a real answer
+        -- either way. Neither is trusted: the keyed oracle below is the terminal.
+        local function deposit_pressed()
+            G.tap("A", 3, 20)            -- PC access -> SOMEONE'S PC (first row)
+            G.tap("A", 3, 20)            -- confirm, opening the storage menu
+            G.tap("Down", 3, 20)         -- WITHDRAW -> DEPOSIT
+            G.tap("A", 3, 20)            -- enter the deposit screen
+            G.tap("Down", 3, 20)         -- party slot 1 -> slot 2
+            G.tap("A", 3, 20)            -- pick it
+            G.tap("A", 3, 20)            -- DEPOSIT
+        end
         local deposited = false
-        for i = 1, 120 do
-            if i % 4 == 0 then G.tap("Down", 3, 13) end
-            G.tap("A", 3, 20)
+        deposit_pressed()
+        for _ = 1, 60 do
             if play.party_count() < before.n then deposited = true; break end
+            G.advance()
+        end
+        if not deposited then
+            G.phase("deposit-pinned-missed", string.format(
+                "the pret-pinned row walk left the party at %d; falling back to the bounded "
+                .. "sweep (RR's menu text is absent from the ROM, so the order is unverified)",
+                play.party_count()))
+            for i = 1, 120 do
+                if i % 4 == 0 then G.tap("Down", 3, 13) end
+                G.tap("A", 3, 20)
+                if play.party_count() < before.n then deposited = true; break end
+            end
         end
         if not deposited then
             G.shot("stuck")
             G.finish(false, string.format(
-                "pc_ops: gPlayerPartyCount never dropped from %d — the CFRU storage rows are "
-                .. "unpinned (see this leg's comment) and the sweep did not find DEPOSIT",
-                before.n))
+                "pc_ops: gPlayerPartyCount never dropped from %d. BOTH the pret-pinned row walk "
+                .. "(A, A, Down, A, Down, A, A) and the bounded sweep were tried; RR's storage "
+                .. "menu text is not in the ROM in the FR charset, so its row order is still "
+                .. "unpinned -- that is the thing to find next", before.n))
         end
         local mid = party_snapshot()
         if mid.n ~= before.n - 1 then
@@ -651,16 +700,31 @@ LEGS[#LEGS + 1] = {
         G.phase("deposited", string.format("party %d -> %d, key %s left the party",
                                            before.n, mid.n, gone))
 
+        -- WITHDRAW is row 0 of the same menu, so the walk is A (PC), A (confirm), A (WITHDRAW),
+        -- then the box screen: A picks the highlighted record and A confirms WITHDRAW.
         local withdrawn = false
-        for i = 1, 120 do
-            if i % 4 == 0 then G.tap("Down", 3, 13) end
-            G.tap("A", 3, 20)
+        G.tap("A", 3, 20)                -- PC access
+        G.tap("A", 3, 20)                -- SOMEONE'S PC
+        G.tap("A", 3, 20)                -- WITHDRAW (row 0)
+        G.tap("A", 3, 20)                -- take the highlighted box record
+        G.tap("A", 3, 20)                -- confirm
+        for _ = 1, 60 do
             if play.party_count() > mid.n then withdrawn = true; break end
+            G.advance()
+        end
+        if not withdrawn then
+            G.phase("withdraw-pinned-missed", "the pinned row walk did not withdraw; sweeping")
+            for i = 1, 120 do
+                if i % 4 == 0 then G.tap("Down", 3, 13) end
+                G.tap("A", 3, 20)
+                if play.party_count() > mid.n then withdrawn = true; break end
+            end
         end
         if not withdrawn then
             G.shot("stuck")
             G.finish(false, string.format(
-                "pc_ops: gPlayerPartyCount never rose from %d (withdraw)", mid.n))
+                "pc_ops: gPlayerPartyCount never rose from %d (withdraw), with both the pinned "
+                .. "row walk and the sweep tried", mid.n))
         end
         local after = party_snapshot()
         if after.n ~= mid.n + 1 then
