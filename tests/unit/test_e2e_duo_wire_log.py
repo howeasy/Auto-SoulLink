@@ -302,3 +302,183 @@ def test_at_most_three_handles_ever_open(tmp_path):
     tap3 = _tap(tmp_path, files=tap._files)
     tap3.c2s('{"player":"?"}', {"player": "?"})
     assert set(tap._files) == {"a", "b", "rejected"}
+
+
+async def _raw_send(writer, reader, line):
+    writer.write((line + "\n").encode("utf-8"))
+    await writer.drain()
+    return json.loads(await asyncio.wait_for(reader.readline(), 3))
+
+
+async def _close_socket(writer):
+    writer.close()
+    await writer.wait_closed()
+    await asyncio.sleep(0.05)
+
+
+@pytest.mark.asyncio
+async def test_valid_request_invalid_json_noop_attribution(wired):
+    port, directory = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        await _send(writer, reader, HELLO_A)
+        assert await _raw_send(writer, reader, "{broken") == {"commands": [{"cmd": "noop"}]}
+        raw = _lines(directory, "rejected")[-1]
+        reply = _lines(directory, "a")[-1]
+        assert raw["raw"] == "{broken"
+        assert reply["req"] == {"sink": "rejected", "t": raw["t"]}
+        assert reply["conn"] == raw["conn"]
+    finally:
+        await _close_socket(writer)
+
+
+@pytest.mark.asyncio
+async def test_valid_a_rejected_player_reply(wired):
+    port, directory = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        await _send(writer, reader, HELLO_A)
+        assert await _send(writer, reader, {"player": "unknown"}) == {"commands": [{"cmd": "noop"}]}
+        rejected = _lines(directory, "rejected")[-1]
+        reply = _lines(directory, "a")[-1]
+        assert reply["req"] == {"sink": "rejected", "t": rejected["t"]}
+        assert reply["conn"] == rejected["conn"]
+    finally:
+        await _close_socket(writer)
+
+
+@pytest.mark.asyncio
+async def test_rejected_first_valid_a_disconnect(wired):
+    port, directory = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        await _send(writer, reader, {"player": "unknown"})
+        await _send(writer, reader, HELLO_A)
+    finally:
+        await _close_socket(writer)
+    rejected, accepted = _lines(directory, "rejected"), _lines(directory, "a")
+    assert rejected[0]["msg"] == {"event": "_connect"}
+    assert accepted[-1]["msg"] == {"event": "_disconnect"}
+    assert {r["conn"] for r in rejected + accepted} == {rejected[0]["conn"]}
+    assert sum(r["dir"] == "meta" for r in rejected + accepted) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["write", "guard"])
+async def test_failed_c2s_write_successful_reply_has_req_null(wired, monkeypatch, failure):
+    from server.server import _WireTap
+
+    port, directory = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        await _send(writer, reader, HELLO_A)
+        original = _WireTap._emit
+
+        class BrokenHandle:
+            def write(self, data):
+                raise OSError("injected c2s write failure")
+
+        def fail_request(self, key, direction, **kwargs):
+            if direction == "c2s":
+                if failure == "guard":
+                    raise OSError("injected c2s failure")
+                entry = self._files[key]
+                handle = entry["handle"]
+                entry["handle"] = BrokenHandle()
+                try:
+                    return original(self, key, direction, **kwargs)
+                finally:
+                    entry["handle"] = handle
+            return original(self, key, direction, **kwargs)
+
+        monkeypatch.setattr(_WireTap, "_emit", fail_request)
+        assert "commands" in await _send(writer, reader, HELLO_A)
+        assert _lines(directory, "a")[-1]["req"] is None
+    finally:
+        await _close_socket(writer)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("msg", [{"player": []}, {"player": {}}, {}, {"player": None}, [], 42, None])
+async def test_list_dict_players_and_non_object_json_through_handle_client(wired, msg):
+    port, directory = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        assert await _send(writer, reader, msg) == {"commands": [{"cmd": "noop"}]}
+        rows = _lines(directory, "rejected")
+        assert rows[1]["dir"] == "c2s"
+        assert rows[1]["msg"] == (msg if isinstance(msg, dict) else None)
+        if not isinstance(msg, dict):
+            assert rows[1]["raw"] == json.dumps(msg)
+        assert rows[2]["req"] == rows[1]["t"]
+        assert "commands" in await _send(writer, reader, HELLO_A)
+    finally:
+        await _close_socket(writer)
+
+
+@pytest.mark.asyncio
+async def test_overlapping_same_player_interleaved_requests_reversed_close(wired):
+    port, directory = wired
+    reader1, writer1 = await asyncio.open_connection("127.0.0.1", port)
+    reader2, writer2 = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        for reader, writer in [(reader1, writer1), (reader2, writer2),
+                               (reader1, writer1), (reader2, writer2)]:
+            await _send(writer, reader, HELLO_A)
+    finally:
+        await _close_socket(writer2)
+        await _close_socket(writer1)
+    rows = _lines(directory, "a")
+    connects = [r["conn"] for r in rows if r["msg"] == {"event": "_connect"}]
+    disconnects = [r["conn"] for r in rows if r["msg"] == {"event": "_disconnect"}]
+    assert len(set(connects)) == 2
+    assert disconnects == connects[::-1]
+    assert [r["conn"] for r in rows if r["dir"] == "c2s"] == connects * 2
+    assert [r["t"] for r in rows] == list(range(1, len(rows) + 1))
+    for row in rows:
+        if row["dir"] == "s2c":
+            request = rows[row["req"] - 1]
+            assert request["dir"] == "c2s"
+            assert request["conn"] == row["conn"]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_write_failure_still_closes_writer(wired, monkeypatch):
+    from server.server import _WireTap
+
+    original = _WireTap._emit
+    closed = asyncio.Event()
+
+    def fail_disconnect(self, key, direction, **kwargs):
+        if kwargs.get("msg") == {"event": "_disconnect"}:
+            # Observe the real server-side transport after close() returns.
+            asyncio.get_running_loop().call_soon(check_closed, self._writer)
+            raise OSError("injected disconnect failure")
+        return original(self, key, direction, **kwargs)
+
+    def check_closed(writer):
+        if writer.is_closing():
+            closed.set()
+
+    monkeypatch.setattr(_WireTap, "_emit", fail_disconnect)
+    port, _ = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        await _send(writer, reader, HELLO_A)
+    finally:
+        await _close_socket(writer)
+    await asyncio.wait_for(closed.wait(), 3)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("line", ["é" * 800, "€" * 800, "😀" * 800])
+async def test_multibyte_raw_truncation_at_most_1024_bytes(wired, line):
+    port, directory = wired
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        assert await _raw_send(writer, reader, line) == {"commands": [{"cmd": "noop"}]}
+        raw = _lines(directory, "rejected")[1]["raw"]
+        assert 1021 <= len(raw.encode("utf-8")) <= 1024
+        assert line.startswith(raw)
+    finally:
+        await _close_socket(writer)

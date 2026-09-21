@@ -291,11 +291,12 @@ class _WireTap:
     `t` is capture order: a per-FILE monotonic counter starting at 1, shared by every
     direction and every connection that ever writes to that file (files outlive a single
     connection -- see below) -- never the protocol's own `seq`, which restarts on
-    reconnect and only exists on c2s lines. A reply carries `req`, the `t` of the c2s line
-    it answers, when one is known. See tests/fixtures/gen3/wire/README.md.
+    reconnect and only exists on c2s lines. A reply carries `req`, the local `t` or a
+    cross-sink {sink, t} reference, or null. Every record carries a process-wide `conn` id.
+    See tests/fixtures/gen3/wire/README.md.
 
-    Only a `msg["player"]` this tap validates the same way handle_client does two lines
-    later (`player in VALID_PLAYERS`) ever gets its own file: `wire_a.jsonl` / `wire_b.jsonl`.
+    Only a string `msg["player"]` in VALID_PLAYERS gets its own file:
+    `wire_a.jsonl` / `wire_b.jsonl`.
     Everything else -- an unrecognised id, a line that parsed as JSON but wasn't an object --
     goes to one bounded sink, `wire_rejected.jsonl`, capped at `_REJECTED_CAP` lines and then
     silently dropped. That caps this process at three open handles, ever, and they outlive
@@ -306,6 +307,7 @@ class _WireTap:
 
     _REJECTED_CAP = 200  # wire_rejected.jsonl: bounded, then dropped -- never unbounded disk use
     _RAW_CAP = 1024       # a malformed (non-dict) line is recorded truncated to this many bytes
+    _next_conn = 0
 
     def __init__(self, writer, dirpath: str, files: dict):
         self._writer = writer
@@ -315,18 +317,21 @@ class _WireTap:
         # across reconnects -- that is what makes `t` meaningful as capture order.
         self._files = files
         self.player: str | None = None  # set once a line names a valid player; sticky after that
-        self._last_t: int | None = None  # t of the last c2s record, for the next reply's `req`
+        _WireTap._next_conn += 1
+        self.conn = _WireTap._next_conn
+        self._request: tuple[str, int] | None = None
+        self._last_sink: str | None = None
         self._connect_written = False
 
     def __getattr__(self, name):  # drain / wait_closed / get_extra_info
         return getattr(self._writer, name)
 
     def close(self):
-        # Mirror the _connect this tap wrote on its first line with a _disconnect, in the
-        # same file, so a reconnect (a fresh _WireTap on the same shared `_files`) is visible
-        # as two bracketed spans rather than one unbroken stream.
-        if self._connect_written:
-            self._emit(self.player or "rejected", "meta", msg={"event": "_disconnect"})
+        try:
+            if self._last_sink is not None:
+                self._emit(self._last_sink, "meta", msg={"event": "_disconnect"})
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped disconnect: {exc!r}")
         return self._writer.close()
 
     def write(self, data: bytes):
@@ -334,10 +339,15 @@ class _WireTap:
         # not expected to fail, but the tap must never crash the reply path over it.
         try:
             msg = json.loads(data.decode("utf-8", errors="replace"))
-        except ValueError:
-            msg = None
-        if msg is not None:
-            self._emit(self.player or "rejected", "s2c", msg=msg, req=self._last_t)
+            key = self.player or "rejected"
+            req = None
+            if self._request is not None:
+                sink, t = self._request
+                req = t if sink == key else {"sink": sink, "t": t}
+            self._emit(key, "s2c", msg=msg, req=req)
+        except Exception as exc:  # noqa: BLE001
+            self._request = None
+            log.warning(f"[wire-log] dropped reply: {exc!r}")
         self._writer.write(data)
 
     def c2s(self, line: str, msg) -> None:
@@ -348,19 +358,33 @@ class _WireTap:
         non-dict `msg` is recorded as a malformed line (`raw`, truncated, `msg: null`) instead
         of read like an event.
         """
-        player = msg.get("player") if isinstance(msg, dict) else None
-        key = player if player in VALID_PLAYERS else "rejected"
-        if key != "rejected":
-            self.player = key
-        if not self._connect_written:
-            self._emit(key, "meta", msg={"event": "_connect"})
-            self._connect_written = True
-        if isinstance(msg, dict):
+        self._request = None
+        try:
+            if not isinstance(msg, dict):
+                self.c2s_raw(line)
+                return
+            player = msg.get("player")
+            key = player if isinstance(player, str) and player in VALID_PLAYERS else "rejected"
+            if key != "rejected":
+                self.player = key
             t = self._emit(key, "c2s", msg=msg)
-        else:
-            t = self._emit(key, "c2s", raw=line[:self._RAW_CAP])
-        if t is not None:
-            self._last_t = t
+            if t is not None:
+                self._request = (key, t)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped request: {exc!r}")
+
+    def c2s_raw(self, line: str) -> None:
+        self._request = None
+        try:
+            raw = line.encode("utf-8")[:self._RAW_CAP].decode("utf-8", errors="replace")
+            # A replacement for a partial final codepoint can expand beyond the byte cap.
+            while len(raw.encode("utf-8")) > self._RAW_CAP:
+                raw = raw[:-1]
+            t = self._emit("rejected", "c2s", raw=raw)
+            if t is not None:
+                self._request = ("rejected", t)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped raw request: {exc!r}")
 
     def _emit(self, key: str, direction: str, msg=None, raw=None, req=None):
         """Write one record to `key`'s file. Returns the `t` it was given, or None if dropped.
@@ -370,6 +394,10 @@ class _WireTap:
         client (adapter-guard finding on b0e0538) -- same for the `wire_rejected.jsonl` cap.
         """
         try:
+            if not self._connect_written and direction != "meta":
+                if self._emit(key, "meta", msg={"event": "_connect"}) is None:
+                    return None
+                self._connect_written = True
             entry = self._files.get(key)
             if entry is None:
                 os.makedirs(self._dir, exist_ok=True)
@@ -383,8 +411,8 @@ class _WireTap:
                 return None
             entry["t"] += 1
             t = entry["t"]
-            record = {"dir": direction, "t": t}
-            if req is not None:
+            record = {"dir": direction, "t": t, "conn": self.conn}
+            if direction == "s2c":
                 record["req"] = req
             if raw is not None:
                 record["raw"] = raw
@@ -394,8 +422,10 @@ class _WireTap:
             entry["handle"].write(json.dumps(record) + "\n")
             entry["handle"].flush()
             entry["lines"] += 1
+            self._last_sink = key
             return t
         except Exception as exc:  # noqa: BLE001
+            self._request = None
             log.warning(f"[wire-log] dropped {direction} line for {key}: {exc!r}")
             return None
 
@@ -1322,10 +1352,15 @@ class SLinkServer:
                     msg = json.loads(line)
                 except json.JSONDecodeError as e:
                     log.warning(f"Bad JSON from {peer}: {e}")
+                    if self._wire_log:
+                        writer.c2s_raw(line)
                     await self._respond(writer, [{"cmd": "noop"}])
                     continue
                 if self._wire_log:
                     writer.c2s(line, msg)
+                    if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
+                        await self._respond(writer, [{"cmd": "noop"}])
+                        continue
 
                 player_id = msg.get("player", "")
                 if player_id not in VALID_PLAYERS:
