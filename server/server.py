@@ -430,6 +430,14 @@ class _WireTap:
             return None
 
 
+# `foundation` is OPTIONAL on the wire, and "absent" is not "empty": a hello that omits
+# the key gets the derived foundation, a hello that sends `null`/`""`/`0` is asserting
+# something and asserting it wrong. A default of None could not tell those apart (json
+# null decodes to None), so the absent case gets a sentinel of its own. Module level, not
+# a class attribute: `_mixed_games_error` is also called unbound on a stub self.
+_FOUNDATION_ABSENT = object()
+
+
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
                  run_name: str = "", tcp_port: int = 0,
@@ -644,7 +652,7 @@ class SLinkServer:
             self._rom_contract_mtime = mtime
 
     def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str,
-                           foundation: str = "") -> str:
+                           foundation: object = _FOUNDATION_ABSENT) -> str:
         """Why this hello cannot join the committed run, or "" when it can.
 
         The run is locked to one FOUNDATION and to one pairing kind. A foundation is a
@@ -654,25 +662,35 @@ class SLinkServer:
 
         The foundation is DERIVED from the rom_type; the hello's own `foundation` is
         optional and may only agree (absent ⇒ derived, so an old client still connects).
-        An unrecognized rom_type is refused rather than absorbed into whichever adapter
-        happens to be installed. Both kind normalizations are pure CLASS lookups on the
-        two foundations' adapters -- no candidate adapter is installed to answer a hello
-        that may be refused, and nothing here mutates the run.
+        Both kind normalizations are pure CLASS lookups on the two foundations' adapters --
+        no candidate adapter is installed to answer a hello that may be refused, and
+        nothing here mutates the run.
+
+        FAIL-CLOSED on every input, for the socket caller and for any direct one: the
+        derivation IS the lock, so a rom_type that is missing, empty or not a routable
+        string is refused rather than skipped. Skipping it let a hello with no rom_type
+        past the lock entirely and on into `state.handle_event` (Codex cx-a66ab55a F1).
         """
         from server.adapters import (
             GameRulesAdapter,
             adapter_class_for_rom_type,
             foundation_for_rom_type,
         )
-        got = foundation_for_rom_type(rom_type) if rom_type else ""
-        if rom_type and not got:
+        if not isinstance(rom_type, str) or not rom_type:
+            return (f"Missing rom_type for slot {player_id.upper()}: a hello must name the "
+                    f"cartridge it is running (got {rom_type!r})")
+        got = foundation_for_rom_type(rom_type)
+        if not got:
             return (f"Unknown rom_type {rom_type!r} for slot {player_id.upper()}: "
                     f"not a game this server routes")
-        if foundation and got and foundation != got:
+        if foundation is not _FOUNDATION_ABSENT and foundation != got:
             return (f"Foundation mismatch: slot {player_id.upper()} declares "
                     f"{foundation!r}, but its ROM type {rom_type!r} is {got!r}")
+        if not isinstance(artifact_kind, str) or not artifact_kind:
+            return (f"Bad artifact_kind for slot {player_id.upper()}: expected a string "
+                    f"(got {artifact_kind!r})")
         want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
-        if want and got and got != want:
+        if want and got != want:
             return (f"Mixed games: slot {player_id.upper()} runs {got}, "
                     f"this run is committed to {want}")
 
@@ -685,7 +703,7 @@ class SLinkServer:
             return (cls or GameRulesAdapter).pairing_kind(kind)
 
         got_kind = _kind(rom_type, artifact_kind)
-        want_kind = _kind(self.state.rom_type, self.state.artifact_kind)
+        want_kind = _kind(self.state.rom_type or "", self.state.artifact_kind or "")
         if want_kind and got_kind != want_kind:
             return (f"Mixed artifact kinds: slot {player_id.upper()} runs a "
                     f"{artifact_kind!r} ROM, this run is committed to {self.state.artifact_kind!r}")
@@ -1429,10 +1447,16 @@ class SLinkServer:
                     # hello the way an identity mismatch is refused: the client sees a HUD
                     # line, the dashboard sees identity_error, and nothing else gets through
                     # until a hello with a rom_type we route.
+                    # A MISSING rom_type is refused for the same reason (Codex cx-a66ab55a
+                    # F1): the run's foundation lock is DERIVED from it, so a hello with no
+                    # rom_type used to skip the lock entirely and be dispatched into the
+                    # committed run. Every shipped client sends one; a hello without one is
+                    # not an old client, it is a malformed one.
                     from server.adapters import game_id_for_rom_type
                     _rt = msg.get("rom_type", "")
-                    if _rt and not game_id_for_rom_type(_rt):
-                        err = f"Unknown rom_type {_rt!r} for slot {player_id.upper()}: not a game this server routes"
+                    if not isinstance(_rt, str) or not _rt or not game_id_for_rom_type(_rt):
+                        err = (f"Unknown rom_type {_rt!r} for slot {player_id.upper()}: "
+                               f"not a game this server routes")
                         log.warning(f"[{player_id}] REJECTED: {err}")
                         self.state.identity_error[player_id] = err
                         self._rom_type_rejected.add(player_id)
@@ -1454,9 +1478,12 @@ class SLinkServer:
                     # capabilities and, on an uncommitted run, swapped the adapter under it.
                     # A refused hello must leave the run exactly as it found it, so the only
                     # thing that precedes this check is the check that the rom_type routes.
-                    _mixed = self._mixed_games_error(player_id, msg.get("rom_type", ""),
-                                                     msg.get("artifact_kind") or "clean",
-                                                     msg.get("foundation") or "")
+                    # `foundation` absent ⇒ derived; PRESENT ⇒ it must agree, and `null`/""/0
+                    # are present (Codex cx-a66ab55a F2), so the key's presence is what is
+                    # passed through, never a falsey-coerced value.
+                    _mixed = self._mixed_games_error(
+                        player_id, _rt, msg.get("artifact_kind") or "clean",
+                        msg.get("foundation", _FOUNDATION_ABSENT))
                     if _mixed:
                         log.warning(f"[{player_id}] REJECTED: {_mixed}")
                         self.state.identity_error[player_id] = _mixed
