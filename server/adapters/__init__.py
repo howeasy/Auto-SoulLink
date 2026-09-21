@@ -101,6 +101,42 @@ def game_id_for_rom_type(rom_type: str) -> str | None:
     return _ROM_TYPE_TO_GAME_ID.get(rom_type)
 
 
+# ROM-type string → PAIRING FOUNDATION, where a game_id is too coarse to pair on.
+# A foundation is a data pack + memory layout, not a class: Radical Red and vanilla
+# FireRed share `Gen3Adapter` but share no layout, so a clean FR must not pair with a
+# clean RR. Everything absent here derives its foundation from its game_id, which is
+# already fine-grained enough (the Gen 1 packs differ by game_id: gen1_rby vs
+# gen1_purergb). Adding a Gen 3 ROM variant: add it here too (docs/gen3/PLAN.md §5.1).
+_ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
+    "firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_frlg",
+    "firered_ap": "gen3_frlg", "leafgreen_ap": "gen3_frlg",
+    "firered_rr": "gen3_rr",
+}
+
+
+def foundation_for_rom_type(rom_type: str) -> str | None:
+    """Derive the pairing foundation for a ROM type, or None when unrecognized.
+
+    DERIVED, never trusted: a hello may carry `foundation`, and it is only allowed to
+    agree with this. An unknown rom_type answers None so the caller refuses it instead
+    of silently reusing whichever adapter is already installed.
+    """
+    game_id = _ROM_TYPE_TO_GAME_ID.get(rom_type)
+    if game_id is None:
+        return None
+    return _ROM_TYPE_TO_FOUNDATION.get(rom_type, game_id)
+
+
+def adapter_class_for_rom_type(rom_type: str) -> type[GameAdapter] | None:
+    """The registered adapter CLASS for a ROM type, without instantiating it.
+
+    For pure class-level lookups (`pairing_kind`) on a hello that may still be refused:
+    no candidate adapter is installed to answer the question. None when unrecognized.
+    """
+    game_id = _ROM_TYPE_TO_GAME_ID.get(rom_type)
+    return _REGISTRY.get(game_id) if game_id else None
+
+
 def variant_label(rom_type: str) -> str:
     """Human-readable label for a ROM type. Falls back to the rom_type itself."""
     return _VARIANT_LABEL.get(rom_type, rom_type)

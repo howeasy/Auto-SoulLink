@@ -643,24 +643,50 @@ class SLinkServer:
             self._rom_contract = self._load_rom_contract()
             self._rom_contract_mtime = mtime
 
-    def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str) -> str:
-        """Why this hello cannot join the committed run, or "" when it can: the run is
-        locked to one game_id (variants of one game -- Red beside Blue -- still pair) and
-        to one artifact kind (hello `artifact_kind`, default "clean")."""
-        from server.adapters import game_id_for_rom_type
-        if self.state.rom_type and rom_type:
-            want = game_id_for_rom_type(self.state.rom_type)
-            got = game_id_for_rom_type(rom_type)
-            if want and got and got != want:
-                return (f"Mixed games: slot {player_id.upper()} runs {got}, "
-                        f"this run is committed to {want}")
+    def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str,
+                           foundation: str = "") -> str:
+        """Why this hello cannot join the committed run, or "" when it can.
+
+        The run is locked to one FOUNDATION and to one pairing kind. A foundation is a
+        pack, not a game_id: Radical Red and vanilla FireRed share `Gen3Adapter`, so a
+        game_id comparison paired a clean FR with a clean RR (docs/gen3/PLAN.md §5.1).
+        Variants of one foundation -- Red beside Blue, FireRed beside LeafGreen -- pair.
+
+        The foundation is DERIVED from the rom_type; the hello's own `foundation` is
+        optional and may only agree (absent ⇒ derived, so an old client still connects).
+        An unrecognized rom_type is refused rather than absorbed into whichever adapter
+        happens to be installed. Both kind normalizations are pure CLASS lookups on the
+        two foundations' adapters -- no candidate adapter is installed to answer a hello
+        that may be refused, and nothing here mutates the run.
+        """
+        from server.adapters import (
+            GameRulesAdapter,
+            adapter_class_for_rom_type,
+            foundation_for_rom_type,
+        )
+        got = foundation_for_rom_type(rom_type) if rom_type else ""
+        if rom_type and not got:
+            return (f"Unknown rom_type {rom_type!r} for slot {player_id.upper()}: "
+                    f"not a game this server routes")
+        if foundation and got and foundation != got:
+            return (f"Foundation mismatch: slot {player_id.upper()} declares "
+                    f"{foundation!r}, but its ROM type {rom_type!r} is {got!r}")
+        want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
+        if want and got and got != want:
+            return (f"Mixed games: slot {player_id.upper()} runs {got}, "
+                    f"this run is committed to {want}")
+
         # A vanilla cartridge the launcher admitted by header ("named": the optional companion
         # patch, a randomized vanilla dump) is a clean-layout artifact -- the patch is per
         # cartridge and announced per player (`panel`), so a clean Red beside a patched Blue is
         # the ordinary vanilla pairing, not a mixed one (review: Fable 2026-09-20 #1).
-        base = {"named": "clean"}
-        got, want = base.get(artifact_kind, artifact_kind), base.get(self.state.artifact_kind, self.state.artifact_kind)
-        if want and got != want:
+        def _kind(rt: str, kind: str) -> str:
+            cls = adapter_class_for_rom_type(rt) if rt else None
+            return (cls or GameRulesAdapter).pairing_kind(kind)
+
+        got_kind = _kind(rom_type, artifact_kind)
+        want_kind = _kind(self.state.rom_type, self.state.artifact_kind)
+        if want_kind and got_kind != want_kind:
             return (f"Mixed artifact kinds: slot {player_id.upper()} runs a "
                     f"{artifact_kind!r} ROM, this run is committed to {self.state.artifact_kind!r}")
         return ""
@@ -1416,6 +1442,31 @@ class SLinkServer:
                         }])
                         self._notify_sse()
                         continue
+                    # A recognised hello for ANOTHER foundation, or another artifact kind of
+                    # the same foundation, is refused rather than ignored (PLAN A3 / §4 row
+                    # 31): the two cartridges would share one rules run with different
+                    # species, type and area domains -- or, for mixed kinds, a run-level
+                    # native capability that only one side has.
+                    #
+                    # THIS RUNS FIRST (docs/gen3/PLAN.md §5.1). It used to run last, after the
+                    # per-cartridge capability updates below and after the adapter reselection:
+                    # a hello that was about to be refused had already rewritten the run's
+                    # capabilities and, on an uncommitted run, swapped the adapter under it.
+                    # A refused hello must leave the run exactly as it found it, so the only
+                    # thing that precedes this check is the check that the rom_type routes.
+                    _mixed = self._mixed_games_error(player_id, msg.get("rom_type", ""),
+                                                     msg.get("artifact_kind") or "clean",
+                                                     msg.get("foundation") or "")
+                    if _mixed:
+                        log.warning(f"[{player_id}] REJECTED: {_mixed}")
+                        self.state.identity_error[player_id] = _mixed
+                        self._rom_type_rejected.add(player_id)
+                        await self._respond(writer, [{
+                            "cmd": "hud_show", "text": "[x] MIXED GAMES",
+                            "color": [255, 0, 0], "duration": 600,
+                        }])
+                        self._notify_sse()
+                        continue
                     if player_id in self._rom_type_rejected:
                         # The identity gate in state.py only clears its own errors; this one
                         # is ours to clear, and only a routable hello gets this far.
@@ -1459,23 +1510,6 @@ class SLinkServer:
                     elif rom_type and rom_type != self.state.rom_type:
                         log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
                                     f"run already locked to {self.state.rom_type!r}")
-                    # A recognised hello for ANOTHER game, or another artifact kind of the
-                    # same game, is refused rather than ignored (PLAN A3 / §4 row 31): the
-                    # two cartridges would share one rules run with different species,
-                    # type and area domains -- or, for mixed kinds, a run-level native
-                    # capability that only one side has.
-                    _mixed = self._mixed_games_error(player_id, rom_type,
-                                                     msg.get("artifact_kind") or "clean")
-                    if _mixed:
-                        log.warning(f"[{player_id}] REJECTED: {_mixed}")
-                        self.state.identity_error[player_id] = _mixed
-                        self._rom_type_rejected.add(player_id)
-                        await self._respond(writer, [{
-                            "cmd": "hud_show", "text": "[x] MIXED GAMES",
-                            "color": [255, 0, 0], "duration": 600,
-                        }])
-                        self._notify_sse()
-                        continue
                 # Hello-first. A connection has proved nothing until it has said hello, so
                 # nothing else on it is listened to. Without this a cartridge whose hello was
                 # lost still had its ticks reconciled into whichever slot it named, and a

@@ -305,6 +305,23 @@ class GameRulesAdapter(ABC):
         """
         return None
 
+    @staticmethod
+    def pairing_kind(kind: str) -> str:
+        """Normalize a declared `artifact_kind` for the PAIRING comparison only.
+
+        `_mixed_games_error` asks each foundation's adapter CLASS whether two declared
+        kinds describe the same artifact layout, so this is a pure lookup: static, no
+        instance, no candidate adapter installed to answer a hello that may be refused.
+        The COMMITTED kind is untouched -- `set_artifact_kind` still receives what the
+        client declared.
+
+        Default is today's rule: a companion-patched vanilla cartridge ("named") is a
+        clean-layout artifact, so it pairs with a clean one. A game whose patch is
+        likewise per cartridge overrides this; pureRGB does not (its overlay is a
+        run-level capability, so clean and overlay must never mix).
+        """
+        return {"named": "clean"}.get(kind, kind)
+
     def native_trade_ui(self) -> bool:
         """Whether the cartridge itself drives the trade menus.
 
