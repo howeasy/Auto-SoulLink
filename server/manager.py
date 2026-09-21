@@ -140,7 +140,7 @@ OPTION_SUPPORT = {
     "native_messages": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
     "native_sounds": {"all": False, "why": "Radical Red only.",
                       "gen1_rby": {"ok": False, "why": "The Gen 1 companion patch ships without audio: its only hook re-enters a non-reentrant sound routine."},
-                      "gen1_purergb": {"ok": False, "why": "The pureRGB source overlay (M3) is not built yet, and ships without audio like the Gen 1 companion patch."},
+                      "gen1_purergb": {"ok": False, "why": "The pureRGB companion overlay keeps the Gen 1 patch's ABI: its sound request is drained, never played (the only hook re-enters a non-reentrant sound routine)."},
                       "gen3_frlge_rr": {"ok": True}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
