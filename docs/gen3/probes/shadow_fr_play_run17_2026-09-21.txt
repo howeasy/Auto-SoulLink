@@ -1,0 +1,49 @@
+phase start frame=1 title=firered
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-start frame=635 starter
+phase in-lab frame=2187 map=1027 at=(6,12)
+phase scene-done frame=4034 var=2, idle+unlocked held 60f
+phase pre-walk frame=4034 obj0=(6,4) sb1=(6,4)
+phase post-walk frame=4098 obj0=(9,5) sb1=(9,5)
+phase facing frame=4130 dir=2 (2=up)
+phase starter-got frame=4659 party=1
+phase starter-idle frame=5571 party=1
+phase leg-state-saved frame=5571 starter -> E:/Howard/Bizhawk/GBA/State/slink_fr_starter.State
+phase leg-done frame=5571 starter
+phase leg-start frame=5571 rival_battle
+phase battle-begin frame=6067
+phase battle-end frame=11667
+phase rival-gone frame=12134 at=(7,8)
+phase leg-state-saved frame=12134 rival_battle -> E:/Howard/Bizhawk/GBA/State/slink_fr_rival_battle.State
+phase leg-done frame=12134 rival_battle
+phase leg-start frame=12134 leave_lab_for_parcel
+phase at-lab-exit frame=12214 map=1027 sb1=(6,12) obj0=(6,12) facing=3
+phase outside frame=12310 map=768 at=(16,13)
+phase leg-state-saved frame=12310 leave_lab_for_parcel -> E:/Howard/Bizhawk/GBA/State/slink_fr_leave_lab_for_parcel.State
+phase leg-done frame=12310 leave_lab_for_parcel
+phase leg-start frame=12310 parcel_fetch
+phase encounter frame=13062 #1 during step Left at (9,32)
+phase encounter-done frame=15397 #1 resolved at (9,32)
+phase encounter frame=15957 #2 during step Up at (16,16)
+phase encounter-done frame=18676 #2 resolved at (16,16)
+phase in-mart frame=19771 map=1283 at=(4,7)
+phase parcel-scene-done frame=20658 at=(4,3)
+phase leg-state-saved frame=20658 parcel_fetch -> E:/Howard/Bizhawk/GBA/State/slink_fr_parcel_fetch.State
+phase leg-done frame=20658 parcel_fetch
+phase leg-start frame=20658 parcel_deliver
+phase heal-start frame=21487 parcel_deliver: slot0 14/23
+phase healed frame=22644 parcel_deliver: slot0 23/23
+phase encounter frame=23907 #1 during step Down at (16,15)
+phase encounter-done frame=26290 #1 resolved at (16,15)
+phase encounter frame=26850 #2 during step Down at (8,32)
+phase encounter-done frame=28977 #2 resolved at (8,32)
+phase encounter frame=29121 #3 during step Right at (8,35)
+phase encounter-done frame=31012 #3 resolved at (8,35)
+phase encounter frame=31220 #4 during step Down at (12,38)
+phase encounter-done frame=33363 #4 resolved at (12,38)
+phase balls-received frame=34020 assumed from the scene completing (no bag read available)
+phase leg-state-saved frame=34020 parcel_deliver -> E:/Howard/Bizhawk/GBA/State/slink_fr_parcel_deliver.State
+phase leg-done frame=34020 parcel_deliver
+phase leg-start frame=34020 route1_catch
+RESULT: FAIL route1_catch: the grass loop stalled on Down at (13,37)
