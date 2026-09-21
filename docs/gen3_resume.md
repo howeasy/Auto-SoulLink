@@ -37,16 +37,22 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 ## In flight / uncommitted at compaction
 
-- C3-5 scripted play (Sonnet rework: boot via CONTINUE, BFS-precomputed paths, pinned legs through parcel/balls/catch/faint/PC ops) — untracked lua/tests/gen3_scripted_play.lua + tests/unit/test_gen3_scripted_play.py.
-- Shadow runs of boxsync/trade/ghost/infopanel/faint with --wire-log (coordinator lane).
-- Codex research cx-bab5e874 (expected kinds per RR duo; queue-flooding risk from frame_control vs S.MAX_PENDING 64).
+- Nothing. HEAD afba0d0, tree clean, no worker running. STOPPED 2026-09-21 for an owner check-in.
+
+## P3 physical state at the stop
+
+- RR companion: 6/6 duos PASS with the observer loaded (`patch/build/shadow_wire/*.shadow.log`, `*_old_client.shadowrun.jsonl`); 19 sites registered, rejected 0, dropped 0; ONLY `frame_control` ever fires. `docs/gen3/research/rr_site_reachability.md`: every pinned RR function keeps its vanilla callers, 19/19 byte pins hold; `probe_gen3_exec_addr.lua`: exec hooks deliver 900/900 at 0x08006B5C and 0x08077578 on RR. So the mechanism and the pins are fine; the open question is which functions RR actually executes on its battle path (CFRU may enter battles through its own bodies). Instrument queued: `probe_gen3_battle_census.lua` with a SMALL list (119 hooks timed out at 400 s).
+- Vanilla FR: `docs/gen3/probes/shadow_fr_play_2026-09-21.txt`: 21 sites registered, `map_load` fired once entering Oak's lab (callback == site): first semantic PHYSICAL receipt. Scripted play (57fd38b) now routes the starter through the Oak intercept; not yet re-run.
+- Explained-differences input: `docs/gen3/research/shadow_explode_battle_end.md` (explode exits at the outcome byte before the battle_end pin; faint/boxsync are commanded/native paths; trade needs a route-tagged receipt).
+- Instrument fixes made today: observer file-only logging (per-fire console.log flooded the BizHawk log), liveness counts in STATUS, emu.framecount in the io, signals:drain() colon.
 
 ## Next actions (in order)
 
-1. Owner signs **G3a** (evidence in the P3/P3a section). P3 continues: (dispatched already) per PLAN §14 row P3 — C3-1 `lua/gen3/{entry,reads,signals}.lua` + tests (Opus); C3-2 `lua/gen3/{writes,safety}.lua` + tests (Codex DELEGATE); C3-3 `lua/gen3/shadow_run.lua` + isolation test + `duo_main.lua` `SLINK_SHADOW` + `run_gate.py` flag (Sonnet); C3-4 `tools/gen3_shadow_diff.py` + mutation tests (Codex, second worktree); C3-5 `lua/tests/gen3_scripted_play.lua` (Sonnet). **P3a** in parallel: C3a-1 pairing change (Opus, shared `server/` files: guard + Codex REVIEW). Phase worktree off the planning branch; worker cards in the checkpoint before dispatch.
-2. Lane, serialized, once C3-x land: shadow beside the old client on FR, RR clean, RR companion (LG has no fixture yet) for scripted play + six RR duos; forbidden-state controls; overhead budget both callback orders. Gen 1 lanes after any shared touch.
-3. Queued out-of-lease: extended FR script through the starter (party for faint/boxsync) and an LG fixture; RR audio/frame trace of the native SE route; mailbox pump-before-poll ack lifetime + ST_BUSY-after-clear ops (P5 native.lua); `server/adapters/gen3_codec.py:391-394` stale CFRU comment; `poison_faint` N/A for RR in the coverage table; `tools/mkstates.py:102` RTC wording; fold `ROM_SPECS` duplicates; `data/gen3/pret/README.md`; `flash_save.md` §7 superseded rows; RR profile `GMAIN_ADDR`; "box the last mon" capture for item 28; retire census probe UNVERIFIED notes; borrowed_party/nature_change UNVERIFIED.
-4. Master is at e9faff0 locally (pureRGB merges + the sfx range); NOT pushed — owner authority.
+1. Owner check-in: sign **G3a** (P3a evidence: guard PASS x2, Codex ACCEPT cx-1b5fe474, Gen 1 lanes link/trade/reconnect/pc_ops PASS, 257 unit) and decide on the RR battle census instrument.
+2. Lane (one at a time, coordinator): (a) `gen3_scripted_play.lua` at 57fd38b with the FR fixture + SLINK_SHADOW (via `gen3_fixtures._prepare_run/_launch`, saveram name `Pokemon - FireRed Version (USA).SaveRAM`); (b) RR battle census with <= ~20 hooks from `patch/build/census_addrs.txt` (regenerate from the .sym) and `SLINK_STATE=E:/Howard/Bizhawk/GBA/State/slink_overworld.State`.
+3. Differential: `python tools/gen3_shadow_diff.py --wire <shadowrun.jsonl> --shadow <shadow.log> --ledger <json>` per scenario with a ledger built from the two research notes; per-artifact coverage table -> G3 evidence (expect UNCOVERED on RR until the census answers).
+4. Queued: strict artifact_kind wire validation; SB1/SB2 base symbols; canonical source of the storage pointer; LG fixture; FR play legs pc_release/gift/trade/evolution; mailbox pump-before-poll + ST_BUSY-after-clear lifecycle (P5 native.lua); shadow poll errors swallowed / final health assertion; codec:391-394 stale comment; the earlier queue items.
+5. Master e9faff0 (sfx range) NOT pushed; planning branch NOT pushed since 1847c7c.
 
 ## Standing rules that bit this session
 
