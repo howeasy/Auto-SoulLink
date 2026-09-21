@@ -188,6 +188,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 FR natural play run 11: `docs/gen3/probes/shadow_fr_play_run11_2026-09-21.txt` — vanilla FR, observer beside `gen3_scripted_play.lua`: `map_load` (lab entry), `mon_given` (the starter, party 0->1), `battle_begin` and `battle_end` (the rival battle, won) each fired exactly once with callback == site. PHYSICAL positives for S-1 on those FR kinds (differential pending). Next stall: the lab exit walk after the rival leaves (map never changed).
 
+- 2026-09-21 P3 RR faint capture + catch pin: `docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt` — the CFRU cleanup-completion point 0x0909EED2 fires once per faint with gActiveBattler = the fainted battler (player faint: 0, counter 0->1), so RR `faint` re-pins there (side = gActiveBattler parity); the vanilla Cmd_tryfaintmon pin is dead on RR (replaced command table). RR catch input sequence pinned physically (Right, A, Right, Right, A, A from the action menu -> "Zigzagoon was caught!"), balls via the EWRAM pocket 0x0203C354.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`
