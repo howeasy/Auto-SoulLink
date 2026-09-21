@@ -178,9 +178,11 @@ def test_rr_kinds_count_and_old_faint_address_absent_from_pack(name):
     document = json.loads(gen.output_path(ROM_SPECS[name][0]).read_text())
     row = document["titles"][ROM_SPECS[name][1]]["artifacts"][ROM_SPECS[name][2]]
     assert len(row["sites"]) == 19
-    addresses = {site["address"] for site in row["sites"].values()}
-    assert 0x080213C8 not in addresses
-    assert 0x0802D828 not in addresses
+    # compare EFFECTIVE hook addresses (address + capture_offset): the dead vanilla captures were
+    # 0x080213C8 (tryfaintmon) and 0x0802D824 + 4 = 0x0802D828 (givecaughtmon) -- Codex cx-92870c43
+    effective = {site["address"] + (site.get("capture_offset") or 0) for site in row["sites"].values()}
+    assert 0x080213C8 not in effective
+    assert 0x0802D828 not in effective
     assert row["sites"]["faint"]["address"] == 0x0909EED2
     assert row["sites"]["capture_wild"]["address"] == 0x0907DD80
 

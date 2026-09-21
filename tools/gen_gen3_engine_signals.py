@@ -716,7 +716,7 @@ RR_CONTRACTS = {
         "point": ["R0", "R4"],
         "contract": "RR selects a replacement battle-script command table at 0903EF20; opcode 0xF0 "
                     "dispatches to the RR atkF0_givecaughtmon replacement (entry 0907DD44), not the "
-                    "dead vanilla Cmd_givecaughtmon (capture 0802D82C DEAD on RR, "
+                    "dead vanilla Cmd_givecaughtmon (capture 0802D824+4 = 0802D828 DEAD on RR, "
                     "docs/gen3/research/rr_opcode_table_audit.md R4). Capture at 0907DD88, immediately "
                     "after the BL to the already-pinned RR GiveMonToPlayer body 0907D790 (BL at "
                     "0907DD84): R0 = placement result (0 party / 1 box / failure codes), R4 = caught "

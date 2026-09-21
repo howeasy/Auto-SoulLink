@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "5d5883158433c9b4b01347470c9af6b440def51bcc6e617a3d5ff3c29caf70dd",
+  "sha256": "4ad186adbc7fc27f9818d344276bd9478018b87d954280a09f48db8fb2140c3c",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -70,7 +70,7 @@
             },
             "capture_wild": {
               "address": 151510400,
-              "capture_contract": "RR selects a replacement battle-script command table at 0903EF20; opcode 0xF0 dispatches to the RR atkF0_givecaughtmon replacement (entry 0907DD44), not the dead vanilla Cmd_givecaughtmon (capture 0802D82C DEAD on RR, docs/gen3/research/rr_opcode_table_audit.md R4). Capture at 0907DD88, immediately after the BL to the already-pinned RR GiveMonToPlayer body 0907D790 (BL at 0907DD84): R0 = placement result (0 party / 1 box / failure codes), R4 = caught mon pointer (docs/gen3/research/rr_opcode_table_audit.md R4 decode). Pinned by bytes here; live delivery has NOT yet been observed with the observer running, though the RR catch input sequence (Right, A, Right, Right, A, A at the action menu, ball pocket fixture 0x0203C354) is now pinned (docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt) so a driver can exercise it. Do not count failure as acquisition or double-emit with mon_given: the reducer must filter on R0's result before treating any hit as a catch, since failures and duplicate GiveMonToPlayer/mon_given helper observations are not themselves acquisitions.",
+              "capture_contract": "RR selects a replacement battle-script command table at 0903EF20; opcode 0xF0 dispatches to the RR atkF0_givecaughtmon replacement (entry 0907DD44), not the dead vanilla Cmd_givecaughtmon (capture 0802D824+4 = 0802D828 DEAD on RR, docs/gen3/research/rr_opcode_table_audit.md R4). Capture at 0907DD88, immediately after the BL to the already-pinned RR GiveMonToPlayer body 0907D790 (BL at 0907DD84): R0 = placement result (0 party / 1 box / failure codes), R4 = caught mon pointer (docs/gen3/research/rr_opcode_table_audit.md R4 decode). Pinned by bytes here; live delivery has NOT yet been observed with the observer running, though the RR catch input sequence (Right, A, Right, Right, A, A at the action menu, ball pocket fixture 0x0203C354) is now pinned (docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt) so a driver can exercise it. Do not count failure as acquisition or double-emit with mon_given: the reducer must filter on R0's result before treating any hit as a catch, since failures and duplicate GiveMonToPlayer/mon_given helper observations are not themselves acquisitions.",
               "capture_offset": 8,
               "context": {
                 "expected_hex": "F8B5FFF73FFF040010F0ACF9002816D0",
@@ -634,7 +634,7 @@
             },
             "capture_wild": {
               "address": 151510400,
-              "capture_contract": "RR selects a replacement battle-script command table at 0903EF20; opcode 0xF0 dispatches to the RR atkF0_givecaughtmon replacement (entry 0907DD44), not the dead vanilla Cmd_givecaughtmon (capture 0802D82C DEAD on RR, docs/gen3/research/rr_opcode_table_audit.md R4). Capture at 0907DD88, immediately after the BL to the already-pinned RR GiveMonToPlayer body 0907D790 (BL at 0907DD84): R0 = placement result (0 party / 1 box / failure codes), R4 = caught mon pointer (docs/gen3/research/rr_opcode_table_audit.md R4 decode). Pinned by bytes here; live delivery has NOT yet been observed with the observer running, though the RR catch input sequence (Right, A, Right, Right, A, A at the action menu, ball pocket fixture 0x0203C354) is now pinned (docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt) so a driver can exercise it. Do not count failure as acquisition or double-emit with mon_given: the reducer must filter on R0's result before treating any hit as a catch, since failures and duplicate GiveMonToPlayer/mon_given helper observations are not themselves acquisitions.",
+              "capture_contract": "RR selects a replacement battle-script command table at 0903EF20; opcode 0xF0 dispatches to the RR atkF0_givecaughtmon replacement (entry 0907DD44), not the dead vanilla Cmd_givecaughtmon (capture 0802D824+4 = 0802D828 DEAD on RR, docs/gen3/research/rr_opcode_table_audit.md R4). Capture at 0907DD88, immediately after the BL to the already-pinned RR GiveMonToPlayer body 0907D790 (BL at 0907DD84): R0 = placement result (0 party / 1 box / failure codes), R4 = caught mon pointer (docs/gen3/research/rr_opcode_table_audit.md R4 decode). Pinned by bytes here; live delivery has NOT yet been observed with the observer running, though the RR catch input sequence (Right, A, Right, Right, A, A at the action menu, ball pocket fixture 0x0203C354) is now pinned (docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt) so a driver can exercise it. Do not count failure as acquisition or double-emit with mon_given: the reducer must filter on R0's result before treating any hit as a catch, since failures and duplicate GiveMonToPlayer/mon_given helper observations are not themselves acquisitions.",
               "capture_offset": 8,
               "context": {
                 "expected_hex": "F8B5FFF73FFF040010F0ACF9002816D0",
