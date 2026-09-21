@@ -266,7 +266,7 @@ function randomizerFields(form) {
       if (this.rdraft.randomize && this.pre && !this.pre.java_found) return 'Randomizing needs Java on PATH.';
       // pinned is pinned whatever the jar; the FORK is the randomizer's requirement for pure
       if (this.rdraft.randomize && this.family === 'gen1_purergb' && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
-        return 'Randomizing pureRGB needs the SLink fork jar (4.6.1-slink1, tools/build_upr_fork.py); this jar is the stock 4.6.1.';
+        return 'Randomizing pureRGB needs the current SLink fork jar (tools/build_upr_fork.py); this jar is the stock 4.6.1 or an older fork.';
       }
       if (this.rdraft.randomize && this.rdraft.companion && this.companionOk().ok && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {
