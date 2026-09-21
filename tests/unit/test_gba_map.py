@@ -120,6 +120,84 @@ def test_fr_pallet_town_cross_checked_against_pret_decomp():
     assert rom_objects == decomp_objects
 
 
+def test_fr_connections_pallet_route1_viridian():
+    """MapHeader.connections (card gen3-P3-C3-14 follow-up, +0x0C -- PHYSICALLY VERIFIED here:
+    +0x08, as the card's own text named, decodes to a non-ROM pointer on this binary)."""
+    _require_rom(_FR_ROM)
+    rom = gba_map.load(_FR_ROM)
+    pallet, route1, viridian = rom.map(3, 0), rom.map(3, 19), rom.map(3, 1)
+
+    def by_dir(m):
+        return {c.direction: (c.offset, c.map_group, c.map_num) for c in m.connections}
+
+    pallet_c = by_dir(pallet)
+    assert pallet_c["up"] == (0, 3, 19)          # -> Route1
+
+    route1_c = by_dir(route1)
+    assert route1_c["down"] == (0, 3, 0)         # -> PalletTown
+    assert route1_c["up"] == (-12, 3, 1)         # -> ViridianCity
+
+    viridian_c = by_dir(viridian)
+    assert viridian_c["down"] == (12, 3, 19)     # -> Route1
+
+
+def test_fr_arrival_pallet_route1_pair():
+    """The two facts the card states outright: Pallet(12,1) up lands on Route1(12,39); Route1
+    (12,39) down lands on Pallet(12,0). Both are cross-map connection ARRIVALS, not one-tile-in
+    guesses -- the rule lua/tests/gen3_scripted_play.lua's PATHS comments learned the hard way
+    (run 13: "start tile (12,0) is not the path's from (12,1)")."""
+    _require_rom(_FR_ROM)
+    rom = gba_map.load(_FR_ROM)
+    pallet, route1 = rom.map(3, 0), rom.map(3, 19)
+
+    assert gba_map.arrival("up", pallet, 12) == (3, 19, 12, 39)
+    assert gba_map.arrival("down", route1, 12) == (3, 0, 12, 0)
+
+
+def test_fr_arrival_route1_viridian_pair():
+    """The Route1<->ViridianCity crossing lua/tests/gen3_scripted_play.lua's PATHS also rely on
+    (route1_north_to_south_edge's from={12,0}, route1_edge_to_mart_door's to={36,20} via
+    ViridianCity(24,39))."""
+    _require_rom(_FR_ROM)
+    rom = gba_map.load(_FR_ROM)
+    route1, viridian = rom.map(3, 19), rom.map(3, 1)
+
+    # Leaving Route1's north edge at x=12 lands on ViridianCity's south row (y=height-1=39).
+    assert gba_map.arrival("up", route1, 12) == (3, 1, 24, 39)
+    # Leaving ViridianCity's south edge at x=24 lands on Route1's north row (y=0).
+    assert gba_map.arrival("down", viridian, 24) == (3, 19, 12, 0)
+
+
+def test_arrival_returns_none_without_a_matching_connection():
+    m = gba_map.Map(width=3, height=3, collision=[[0] * 3] * 3, behaviour=[[0] * 3] * 3)
+    assert gba_map.arrival("left", m, 0) is None
+
+
+def test_fr_connections_cross_checked_against_pret_decomp():
+    _require_rom(_FR_ROM)
+    for name, group, num in (("PalletTown", 3, 0), ("Route1", 3, 19), ("ViridianCity", 3, 1)):
+        map_json = os.path.join(_DECOMP_MAPS, name, "map.json")
+        if not os.path.exists(map_json):
+            pytest.skip(f"pret decomp checkout not present: {map_json}")
+        with open(map_json, encoding="utf-8") as f:
+            decomp = json.load(f)
+        rom = gba_map.load(_FR_ROM)
+        m = rom.map(group, num)
+        # map.json spells the direction and names the destination map, not its (group, num);
+        # compare direction+offset (what arrival() actually uses), count only for the target.
+        decomp_by_dir = {c["direction"]: c["offset"] for c in decomp.get("connections") or []}
+        rom_by_dir = {c.direction: c.offset for c in m.connections}
+        assert rom_by_dir == decomp_by_dir, name
+
+
+def test_cli_connections_flag(capsys):
+    _require_rom(_FR_ROM)
+    rc = gba_map.main([_FR_ROM, "--map", "3.0", "--connections"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "connection up: offset=0 -> 3.19" in out
+
+
 def test_lua_paths_entry_matches_driver_format():
     entry = gba_map.Map.lua_paths_entry(
         "town_start_to_lab_door", "PalletTown", (6, 9), (16, 14), ["Down", "Right"],

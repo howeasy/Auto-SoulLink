@@ -94,6 +94,67 @@ class BgEvent:
     script_or_item: int
 
 
+# struct MapConnection direction byte (pret include/global.fieldmap.h) -> our string name.
+CONNECTION_DIRECTIONS = {1: "down", 2: "up", 3: "left", 4: "right"}
+
+
+@dataclass
+class Connection:
+    """One MapHeader.connections entry (pret include/global.fieldmap.h struct MapConnection),
+    plus the destination map's own width/height (a cheap extra header read at parse time) so
+    `arrival()` can place the player on the destination's edge row/column without a second
+    Rom lookup.
+
+    direction is named from THIS map's edge the connection sits on -- "up" means this map's
+    TOP edge leads to `map_group`.`map_num` (verified against the real FR US 1.0 ROM,
+    tools/gba_map.py --connections: PalletTown(3.0) has (direction=up, offset=0) -> Route1
+    (3.19), Route1 has (direction=up, offset=-12) -> ViridianCity(3.1) and
+    (direction=down, offset=0) -> PalletTown(3.0), ViridianCity has (direction=down,
+    offset=12) -> Route1(3.19) -- exactly the offsets already cited in
+    lua/tests/gen3_scripted_play.lua's PATHS comments).
+    """
+    direction: str
+    offset: int
+    map_group: int
+    map_num: int
+    dest_width: int
+    dest_height: int
+
+
+def arrival(direction: str, from_map: Map, x: int):
+    """Where crossing `from_map`'s `direction` edge at coordinate `x` lands.
+
+    Returns (dest_group, dest_num, x_dest, y_dest), or None if `from_map` has no connection in
+    that direction.
+
+    THE RULE (re-derived from the real ROM's own connection offsets, since no pret decomp
+    checkout is present in this worktree to cite a source line -- physically verified above,
+    and it reproduces every offset the driver's PATHS comments already had independently):
+    crossing a map connection does NOT land one tile inside the destination -- it lands ON
+    the destination's edge row/column. Leaving through this map's "up"/"down" edge lands on
+    the destination's opposite row (its bottom row y=height-1 for "up", its top row y=0 for
+    "down"); "left"/"right" is the same rule on columns. The coordinate along the shared edge
+    translates via `other = this - offset` (matches the "this_x = other_x + offset" convention
+    lua/tests/gen3_scripted_play.lua already cited, verified both ways: PalletTown(12,1) up
+    offset=0 -> Route1 x=12,y=39 [height-1]; Route1(12,39) down offset=0 -> PalletTown x=12,
+    y=0; Route1 up offset=-12 -> ViridianCity x=Route1_x+12; ViridianCity down offset=12 ->
+    Route1 x=ViridianCity_x-12).
+    """
+    conn = next((c for c in from_map.connections if c.direction == direction), None)
+    if conn is None:
+        return None
+    other = x - conn.offset
+    if direction == "up":
+        return conn.map_group, conn.map_num, other, conn.dest_height - 1
+    if direction == "down":
+        return conn.map_group, conn.map_num, other, 0
+    if direction == "left":
+        return conn.map_group, conn.map_num, conn.dest_width - 1, other
+    if direction == "right":
+        return conn.map_group, conn.map_num, 0, other
+    raise ValueError(f"unknown connection direction {direction!r}")
+
+
 @dataclass
 class Map:
     width: int
@@ -104,6 +165,7 @@ class Map:
     objects: list = field(default_factory=list)
     coords: list = field(default_factory=list)
     bg: list = field(default_factory=list)
+    connections: list = field(default_factory=list)
 
     def find_behaviour(self, behaviour: int) -> list:
         return [
@@ -195,12 +257,28 @@ class Rom:
     def _ptr(self, addr: int) -> int:
         return self._u32(addr)
 
-    def map(self, group: int, num: int) -> Map:
+    def _header_ptr(self, group: int, num: int) -> int:
         group_ptr = self._ptr(self.groups_addr + group * 4)
-        header_ptr = self._ptr(group_ptr + num * 4)
+        return self._ptr(group_ptr + num * 4)
+
+    def _map_dims(self, group: int, num: int) -> tuple:
+        """Just width/height, for Connection.dest_* -- far cheaper than a full Map() (no
+        block/attribute walk)."""
+        layout_ptr = self._ptr(self._header_ptr(group, num) + 0x00)
+        return self._s32(layout_ptr + 0x00), self._s32(layout_ptr + 0x04)
+
+    def map(self, group: int, num: int) -> Map:
+        header_ptr = self._header_ptr(group, num)
 
         layout_ptr = self._ptr(header_ptr + 0x00)
         events_ptr = self._ptr(header_ptr + 0x04)
+        # MapHeader.connections* -- offset 0x0C, PHYSICALLY VERIFIED against the FR US 1.0
+        # ROM here (no pret decomp checkout present in this worktree to cite a source line):
+        # header_ptr+0x0C for PalletTown(3.0) decodes to {count=2, [(dir=up,off=0)->3.19,
+        # (dir=down,off=0)->3.39]}, and Route1(3.19)/ViridianCity(3.1) decode to exactly the
+        # offsets lua/tests/gen3_scripted_play.lua's PATHS comments already cited independently
+        # (up=-12/down=0 and down=12) -- +0x08 there decodes to garbage (a non-ROM pointer).
+        connections_ptr = self._ptr(header_ptr + 0x0C)
 
         width = self._s32(layout_ptr + 0x00)
         height = self._s32(layout_ptr + 0x04)
@@ -292,6 +370,25 @@ class Rom:
                     )
                 )
 
+        if connections_ptr:
+            count = self._s32(connections_ptr + 0x00)
+            arr_ptr = self._ptr(connections_ptr + 0x04)
+            if count > 0 and arr_ptr:
+                for i in range(count):
+                    base = arr_ptr + i * 12  # struct MapConnection, 12 bytes
+                    direction = CONNECTION_DIRECTIONS.get(self._u8(base + 0x00))
+                    offset = self._s32(base + 0x04)
+                    dest_group = self._u8(base + 0x08)
+                    dest_num = self._u8(base + 0x09)
+                    if direction is None:
+                        continue  # an unknown direction byte is not a connection worth trusting
+                    dest_width, dest_height = self._map_dims(dest_group, dest_num)
+                    result.connections.append(Connection(
+                        direction=direction, offset=offset,
+                        map_group=dest_group, map_num=dest_num,
+                        dest_width=dest_width, dest_height=dest_height,
+                    ))
+
         return result
 
 
@@ -331,6 +428,7 @@ def main(argv=None) -> int:
     parser.add_argument("--find-behaviour", type=lambda s: int(s, 0))
     parser.add_argument("--bfs", nargs=2, metavar=("SRC", "DST"))
     parser.add_argument("--dump", action="store_true")
+    parser.add_argument("--connections", action="store_true")
     args = parser.parse_args(argv)
 
     rom = load(args.rom, groups_addr=args.groups_addr, sym_path=args.sym)
@@ -339,8 +437,16 @@ def main(argv=None) -> int:
 
     print(
         f"map {group}.{num}: {m.width}x{m.height}, {len(m.warps)} warps, "
-        f"{len(m.objects)} objects, {len(m.coords)} coords, {len(m.bg)} bg"
+        f"{len(m.objects)} objects, {len(m.coords)} coords, {len(m.bg)} bg, "
+        f"{len(m.connections)} connections"
     )
+
+    if args.connections:
+        for c in m.connections:
+            print(
+                f"connection {c.direction}: offset={c.offset} -> {c.map_group}.{c.map_num} "
+                f"({c.dest_width}x{c.dest_height})"
+            )
 
     if args.find_behaviour is not None:
         tiles = m.find_behaviour(args.find_behaviour)
