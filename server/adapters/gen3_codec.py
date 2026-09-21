@@ -18,13 +18,13 @@ string so that ``encode(decode(x)) == x`` byte-for-byte on real records.
 Base URL for every citation:
 https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/
 
-†UNVERIFIED items (each also carries an inline marker):
-  * ``CFRU_CHUNK_SIZE`` / ``CHUNK_SIZE_CFRU`` flash geometry is *upstream
-    CFRU*, not a qualified Radical Red 4.1 binary fact.
-  * CFRU parasite payload, repurposed physical sectors 30/31 and custom
-    signatures are NOT modelled here.
-  * RR SaveBlock1/PokemonStorage disk placement is unknown, so the
-    save-level party/box extractors refuse ``rr=True``.
+The Radical Red 4.1 layout at the end of this module is no longer upstream
+CFRU hearsay: ``RR_CHUNK_TABLE`` and the box/parasite/extension addresses were
+read out of the admitted RR ROM and cross-checked against a real RR battery
+save (``docs/gen3/research/rr_save_layout.md``).  What that note still lists as
+†UNVERIFIED -- no fixture carries a boxed mon, and the extension sectors 30/31
+are unauthenticated and not slot-rotated -- is carried as a docstring caveat on
+``rr_boxes_from_save`` and as a refusal when 30/31 are erased.
 """
 
 from __future__ import annotations
@@ -545,8 +545,12 @@ def parse_flash(image: bytes, cfru: bool = False) -> dict:
             continue
         entry = layout[sector["id"]]
         start = entry["offset"]
+        # Slice from the sector body, not from sector["data"]: a CFRU chunk is
+        # 0xFF0 bytes, longer than the vanilla 0xF80 data area, and truncating
+        # it would silently drop 0x70 bytes per section.  Identical for vanilla.
+        chunk_start = (base + i) * SECTOR_SIZE
         blocks[entry["object"]][start:start + entry["size"]] = \
-            sector["data"][:entry["size"]]
+            body[chunk_start:chunk_start + entry["size"]]
     return {
         "slot": slot, "counter": counter, "status": status,
         "status_name": STATUS_NAMES.get(status, str(status)),
@@ -603,12 +607,11 @@ SB1_PARTY_OFFSET = 0x38
 PARTY_CAPACITY = 6
 
 _RR_SAVE_REFUSAL = (
-    "Radical Red / CFRU save extraction is NOT IMPLEMENTED: the 25 CFRU boxes "
-    "live in four non-contiguous EWRAM regions (lua/games/gen3_frlge.lua:"
-    "260-303) and their mapping into disk chunks is UNVERIFIED, as are RR's "
-    "chunk table, parasite payload and repurposed sectors 30/31 "
-    "(docs/gen3/research/flash_save.md §3). RAM-address agreement is not a "
-    "disk layout."
+    "the vanilla FR/LG extractors do not handle Radical Red: RR's chunk table "
+    "is CFRU's 0xFF0 one and its 25 boxes live in four non-contiguous EWRAM "
+    "regions (docs/gen3/research/flash_save.md §3 called this UNVERIFIED; it "
+    "is now pinned in docs/gen3/research/rr_save_layout.md). Use "
+    "rr_party_from_save() / rr_boxes_from_save() instead."
 )
 
 
@@ -637,4 +640,134 @@ def boxes_from_save(image: bytes, rr: bool = False) -> list[list[dict]]:
             start = BOX_DATA_OFFSET + (box * MONS_PER_BOX + slot) * BOX_MON_SIZE
             slots.append(decode_box_mon(storage[start:start + BOX_MON_SIZE]))
         boxes.append(slots)
+    return boxes
+
+
+# ---------------------------------------------------------------------------
+# Radical Red 4.1 save layout.
+#
+# Everything below is read out of the admitted RR ROM (and cross-checked
+# against a real RR battery save) by gen3-P2-C2-8; the receipts, the verbatim
+# tables and the remaining †UNVERIFIED list are in
+# docs/gen3/research/rr_save_layout.md.  ROM file offsets are quoted; the GBA
+# address is 0x08000000 + offset.  Both `Pokemon - Radical Red.gba` and
+# `patch/build/slink_RR.gba` carry these tables byte-identically.
+# ---------------------------------------------------------------------------
+
+# ROM 0x1148BF0 (0x09148BF0): 14 entries of {u16 object-relative offset,
+# u16 size}.  Verbatim, in section-id order.  rr_save_layout.md §1.
+RR_CHUNK_TABLE = (
+    (0x0000, 0x0F24),                                    # id 0   SaveBlock2
+    (0x0000, 0x0FF0), (0x0FF0, 0x0FF0),                  # id 1-2 SaveBlock1
+    (0x1FE0, 0x0FF0), (0x2FD0, 0x0D98),                  # id 3-4 SaveBlock1
+    (0x0000, 0x0FF0), (0x0FF0, 0x0FF0), (0x1FE0, 0x0FF0),
+    (0x2FD0, 0x0FF0), (0x3FC0, 0x0FF0), (0x4FB0, 0x0FF0),
+    (0x5FA0, 0x0FF0), (0x6F90, 0x0FF0), (0x7F80, 0x0450),  # id 5-13 storage
+)
+
+# Literal pool at ROM 0x4C08C.  rr_save_layout.md §2.
+RR_SAVEBLOCK2_ADDR = 0x02024588
+RR_SAVEBLOCK1_ADDR = 0x0202552C
+RR_STORAGE_ADDR = 0x02029314
+# Literal pools at ROM 0x10B8C98 / 0x10B8DEC.  The extension is the contiguous
+# range written verbatim into PHYSICAL sectors 30 and 31 (0xFF0 each, zeroed
+# buffer, NO section footer, NO checksum, NO signature).  rr_save_layout.md §4-5.
+RR_PARASITE_ADDR = 0x0203B174
+RR_PARASITE_SIZE = 0x0EC4
+RR_EXT_ADDR = 0x0203C038
+RR_EXT_SECTORS = (30, 31)
+RR_EXT_SIZE = len(RR_EXT_SECTORS) * CHUNK_SIZE_CFRU
+# Parasite piece per section id, from the dispatcher at ROM 0x10B8D30; each
+# piece runs from the chunk size to 0x0FEF and is NOT checksummed.
+RR_PARASITE_PIECES = {0: 0x00CC, 4: 0x0258, 13: 0x0BA0}
+
+RR_BOXES_PER_STORE = 25
+RR_BOX_STRIDE = MONS_PER_BOX * COMPRESSED_MON_SIZE   # 0x6CC
+# ROM 0x1148930 (0x09148930): the 25 live box addresses, byte-identical to
+# data/games/gen3_rr/profile.json CFRU_BOX_BASES.
+RR_BOX_BASES = (
+    0x02029318, 0x020299E4, 0x0202A0B0, 0x0202A77C, 0x0202AE48,
+    0x0202B514, 0x0202BBE0, 0x0202C2AC, 0x0202C978, 0x0202D044,
+    0x0202D710, 0x0202DDDC, 0x0202E4A8, 0x0202EB74, 0x0202F240,
+    0x0202F90C, 0x0202FFD8, 0x020306A4, 0x02030D70,   # 1-19: storage +0x0004
+    0x0203CB44, 0x0203D210, 0x0203D8DC,               # 20-22: sectors 30/31
+    0x02027434, 0x02027B00,                           # 23-24: SaveBlock1
+    0x02024638,                                       # 25:    SaveBlock2
+)
+
+_RR_EXT_ERASED = (
+    "physical sectors 30/31 are erased (all 0xFF): Radical Red keeps boxes "
+    "20-22 there, so this image cannot yield a complete 25-box read "
+    "(docs/gen3/research/rr_save_layout.md §5)."
+)
+
+
+def rr_slot_layout() -> list[dict]:
+    """RR's 14 sections.  Identical to ``slot_layout(CHUNK_SIZE_CFRU)``; this
+    name exists so callers do not have to know that RR == the CFRU macro."""
+    return slot_layout(CHUNK_SIZE_CFRU)
+
+
+def _rr_regions(image: bytes) -> list[tuple[int, bytes]]:
+    """The save as (RAM base, bytes) spans: the three reconstructed save
+    objects plus the unauthenticated extension.  rr_save_layout.md §2, §5."""
+    body, _ = split_rtc(image)
+    parsed = parse_flash(image, cfru=True)
+    ext = b"".join(
+        body[s * SECTOR_SIZE:s * SECTOR_SIZE + CHUNK_SIZE_CFRU]
+        for s in RR_EXT_SECTORS)
+    if ext.count(0xFF) == len(ext):
+        raise ValueError(_RR_EXT_ERASED)
+    return [
+        (RR_SAVEBLOCK2_ADDR, parsed["sb2"]),
+        (RR_SAVEBLOCK1_ADDR, parsed["sb1"]),
+        (RR_STORAGE_ADDR, parsed["storage"]),
+        (RR_EXT_ADDR, ext),
+    ]
+
+
+def _rr_read(regions: list[tuple[int, bytes]], addr: int, size: int) -> bytes:
+    for base, blob in regions:
+        if base <= addr and addr + size <= base + len(blob):
+            return blob[addr - base:addr - base + size]
+    raise ValueError(
+        f"RAM 0x{addr:08X}+0x{size:X} is not inside any saved RR region")
+
+
+def rr_party_from_save(image: bytes) -> list[dict]:
+    """Decode the saved party out of a Radical Red flash image.
+
+    RR keeps the vanilla SaveBlock1 party shadow -- count at +0x34, 100-byte
+    records at +0x38 -- but with CFRU's unencrypted, fixed-order substructs
+    and a zero BoxPokemon checksum.  rr_save_layout.md §6."""
+    sb1 = parse_flash(image, cfru=True)["sb1"]
+    count = min(sb1[SB1_PARTY_COUNT_OFFSET], PARTY_CAPACITY)
+    return [decode_party_mon(
+        sb1[SB1_PARTY_OFFSET + slot * PARTY_MON_SIZE:
+            SB1_PARTY_OFFSET + (slot + 1) * PARTY_MON_SIZE], rr=True)
+        for slot in range(count)]
+
+
+def rr_boxes_from_save(image: bytes) -> list[list[dict]]:
+    """Decode all 25 x 30 boxed mons out of a Radical Red flash image.
+
+    25 boxes of 30 compressed 0x3A records do not fit PokemonStorage, so RR
+    scatters them: 1-19 at storage+0x0004, 20-22 into the extension written to
+    physical sectors 30/31, 23-24 into SaveBlock1 and 25 into SaveBlock2
+    (rr_save_layout.md §3).  Box 20 straddles the 30->31 boundary, which is why
+    the extension is read as one contiguous blob.
+
+    †UNVERIFIED caveat (rr_save_layout.md §7): the extension carries no
+    signature, checksum or counter and is NOT part of the rotating two-slot
+    scheme, so boxes 20-22 always come from the most recent write even when the
+    rotating slot recovered was the older one.  An erased extension raises."""
+    regions = _rr_regions(image)
+    boxes = []
+    for base in RR_BOX_BASES:
+        raw = _rr_read(regions, base, RR_BOX_STRIDE)
+        boxes.append([
+            decode_box_mon(expand_compressed_box_mon(
+                raw[slot * COMPRESSED_MON_SIZE:
+                    (slot + 1) * COMPRESSED_MON_SIZE]), rr=True)
+            for slot in range(MONS_PER_BOX)])
     return boxes
