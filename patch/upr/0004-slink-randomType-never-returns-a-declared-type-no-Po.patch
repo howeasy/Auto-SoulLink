@@ -1,0 +1,30 @@
+From 502b13dca32432459ec0e771f4676a5f246f421c Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Sun, 20 Sep 2026 20:51:48 -0400
+Subject: [PATCH] slink: randomType() never returns a declared type no Pokemon
+ carries (type-themed trainers on pureRGB's ExtraTypes drew an empty pool)
+
+---
+ .../dabomstew/pkrandom/romhandlers/AbstractRomHandler.java   | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java
+index b01ee6d..4cc0912 100755
+--- a/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/AbstractRomHandler.java
+@@ -407,8 +407,11 @@ public abstract class AbstractRomHandler implements RomHandler {
+ 
+     @Override
+     public Type randomType() {
++        // SLink: a type the entry declares (ExtraTypes) but no Pokemon carries -- pureRGB's
++        // TYPELESS/CRYSTAL/BONEMERANG/TRI/FLOATING/MAGMA -- would hand type-themed trainer
++        // randomization an empty pool (pickTrainerPokeReplacement: nextInt(0)); draw again.
+         Type t = Type.randomType(this.random);
+-        while (!typeInGame(t)) {
++        while (!typeInGame(t) || pokemonOfType(t, false).isEmpty()) {
+             t = Type.randomType(this.random);
+         }
+         return t;
+-- 
+2.54.0.windows.1
+
