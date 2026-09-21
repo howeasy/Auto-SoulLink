@@ -146,7 +146,12 @@ OPTION_SUPPORT = {
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
                     "gen3_frlge_rr": {"ok": True}},
-    "pc_trade_npc": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
+    # `always`: the cartridge trades this way whether or not the switch is on -- the form
+    # shows the row greyed AND checked, so it does not read as "no trade NPC here".
+    "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
+                     "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
+                     "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
+                     "gen3_frlge_rr": {"ok": True}},
 }
 
 
@@ -193,7 +198,8 @@ def option_support(key: str, rom_types: list[str]) -> dict:
         specific = rule.get(gid + ("_rr" if rt.endswith("_rr") else "")) or rule.get(gid)
         decided = specific["ok"] if specific else rule["all"]
         if not decided:
-            return {"ok": False, "why": (specific or {}).get("why") or rule.get("why", "")}
+            return {"ok": False, "why": (specific or {}).get("why") or rule.get("why", ""),
+                    "always": bool((specific or {}).get("always"))}
         if specific and specific.get("why") and not why:
             why = specific["why"]
     return {"ok": ok, "why": why}

@@ -42,7 +42,7 @@ async def test_no_runs_lands_on_the_new_run_form(manager_client):
     body = await resp.text()
     assert "window.SLINK_FORM" in body and "Create run" in body
     start = body.index("window.SLINK_FORM = ") + len("window.SLINK_FORM = ")
-    form = json.loads(body[start:body.index(";", start)])
+    form = json.loads(body[start:body.index(";" + chr(10), start)])   # the statement ends the line
     assert "Red · Blue · Yellow" in [g["label"] for g in form["games"]], "the game families are the form's first question"
 
 
@@ -50,7 +50,7 @@ async def test_no_runs_lands_on_the_new_run_form(manager_client):
 async def test_the_form_carries_the_option_table_the_server_computed(manager_client):
     body = await (await manager_client.get("/new")).text()
     start = body.index("window.SLINK_FORM = ") + len("window.SLINK_FORM = ")
-    form = json.loads(body[start:body.index(";", start)])
+    form = json.loads(body[start:body.index(";" + chr(10), start)])   # the statement ends the line
     assert form["support"]["gen1"]["gender_lock"]["ok"] is False
     assert form["support"][""]["battle_calc"]["ok"] is True
     assert "gen1" in form["gen1_games"] and "gen3_rr" not in form["gen1_games"]

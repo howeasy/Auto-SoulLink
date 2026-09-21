@@ -37,6 +37,17 @@ def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     assert option_support(key, RR)["ok"]
 
 
+def test_the_pc_trade_npc_row_says_gen1_trades_at_the_receptionist():
+    """Greyed is right (only the Gen 3 client reads the switch), "Radical Red only" was
+    not: Gen 1 trades at the Cable Club receptionist, always. The row says so and shows
+    as on, so it does not read as "no trade NPC here"."""
+    for pair in (GEN1, ["purered", "pureblue"]):
+        s = option_support("pc_trade_npc", pair)
+        assert not s["ok"] and s["always"] is True and "receptionist" in s["why"], s
+    assert option_support("pc_trade_npc", ["crystal", "crystal"])["always"] is False
+    assert "Radical Red only" not in option_support("pc_trade_npc", GEN1)["why"]
+
+
 def test_native_sounds_is_a_gen1_feature_now():
     """The Red/Blue companion patch and the pureRGB overlay both play notifications on the
     main thread (slink.asm SlinkSfxService); Yellow has no patch at all."""

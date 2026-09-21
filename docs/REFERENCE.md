@@ -1305,7 +1305,7 @@ python -m server.server --help
 # --native-messages     show SLink notifications via the patch's native message box / in-battle text instead of the Lua HUD (RR + patch; default off)
 # --native-sounds       play SLink notification sounds via the patch's native PlaySE (RR + patch; default off)
 # --no-battle-calc      hide the bundled Battle Calc damage display (RR + patch; shown by default)
-# --no-pc-trade-npc     disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)
+# --no-pc-trade-npc     disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off; Gen 1 trades at the Cable Club receptionist, which has no switch)
 # --verbose             enable DEBUG-level logging to file and console (default: INFO only)
 ```
 

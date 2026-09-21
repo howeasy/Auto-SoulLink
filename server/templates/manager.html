@@ -65,7 +65,8 @@
               <div class="mk-optgrid">
                 <template x-for="key in group.keys" :key="key">
                   <label class="mk-opt described" :class="!support(key).ok ? 'off-unavailable' : (draft.opts[key] ? 'on' : '')">
-                    <input type="checkbox" x-model="draft.opts[key]" :disabled="!support(key).ok">
+                    {# a greyed row that is ALWAYS on for this game shows as checked #}
+                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok">
                     <span class="mk-opt-txt">
                       <span class="mk-opt-name" x-text="form.options[key].label"></span>
                       <span class="mk-opt-desc" x-text="form.options[key].desc"></span>
