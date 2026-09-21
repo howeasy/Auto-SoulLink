@@ -25,17 +25,15 @@ Fixes found by the work: `lua/memory_gba.lua` permutation rows 3/4 swapped vs pr
 
 ## In flight / uncommitted at compaction
 
-- **C2-3c** (Codex live, cx-198dc659): RR detour resolution for the 8 excluded site rows. Its in-progress edit to `tests/unit/test_gen3_engine_sites.py` is in the tree UNCOMMITTED and makes the Gen 3 unit lane fail 3 tests until the generator/JSON side lands. When Codex reports: run ruff + `pytest tests/unit/test_gen3_engine_sites.py` + `gen_gen3_engine_signals.py --check`, commit, record the outcome.
-- Nothing else is dirty.
+- Nothing. C2-3c landed (09add4e: RR 19 kinds PINNED per artifact; GiveMonToPlayer/SendMonToPC detours followed to their CFRU bodies; SetPlacedMonData edited in place; overworld poison is a verified no-op body on RR so its two rows are un-emitted by design; borrowed_party/nature_change UNVERIFIED with search receipts). `python tools/verify_gen3_release.py --quick`: all four fast lanes PASS (the unit lane now selects by file, never `-k`, because the fail-closed core counts deselection as not-run).
 
 ## Next actions (in order)
 
-1. Reconcile C2-3c; commit; `python tools/verify_gen3_release.py --quick` must be all PASS (the unit lane selector now excludes the pureRGB collection-time skip).
-2. Ask the owner to sign **G1** (receipts above). Record in PLAN §14.1.
+1. Ask the owner to sign **G1** (receipts above). Record in PLAN §14.1.
 3. Lane runs for G2: `python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_town.sav --rr` (RR), then `make-fr --rom "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba" --out tests/fixtures/gen3/firered_town.sav` (its four intro assumptions are †UNVERIFIED — pin them from `data/gen3/pret/pokefirered.sym`, which the worker did not find); then a `_b` derivation for RR via the now-pinned layout (`derive-b --rr` still refuses: update `tools/gen3_fixtures.py` to use `rr_party_from_save`/`rr_boxes_from_save`, C2-8 finding).
-4. Haiku spot-check of three pinned sites against `.sym` + ROM bytes; generator report → owner signs **G2**.
-5. Queued out-of-lease: `tools/mkstates.py:102` RTC wording; fold `ROM_SPECS` (pin_gen3_site.py) with gen_gen3_write_checkpoint.py's copy; `data/gen3/pret/README.md`; `docs/gen3/research/flash_save.md` §7 bullets superseded by `rr_save_layout.md`; `data/games/gen3_rr/profile.json` `GMAIN_ADDR` fillable (0x030030F0 verified); a "box the last mon" capture to evidence item 28; retire the census probe's two †UNVERIFIED notes (now verified).
-6. P3 (shadow observer) opens after G2 per PLAN §6/§14.
+3. Haiku spot-check of three pinned sites against `.sym` + ROM bytes; generator report → owner signs **G2**.
+4. Queued out-of-lease (add: RR overworld-poison is a no-op path — the per-artifact coverage table must mark `poison_faint` N/A for RR, not OPEN): `tools/mkstates.py:102` RTC wording; fold `ROM_SPECS` (pin_gen3_site.py) with gen_gen3_write_checkpoint.py's copy; `data/gen3/pret/README.md`; `docs/gen3/research/flash_save.md` §7 bullets superseded by `rr_save_layout.md`; `data/games/gen3_rr/profile.json` `GMAIN_ADDR` fillable (0x030030F0 verified); a "box the last mon" capture to evidence item 28; retire the census probe's two †UNVERIFIED notes (now verified).
+5. P3 (shadow observer) opens after G2 per PLAN §6/§14.
 
 ## Standing rules that bit this session
 

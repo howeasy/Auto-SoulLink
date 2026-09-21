@@ -14,6 +14,7 @@ nonzero on its own.
 from __future__ import annotations
 
 import os
+import pathlib
 import subprocess  # noqa: F401  (re-exported for symmetry with verify_gen1_release.py)
 import sys
 
@@ -35,11 +36,19 @@ ALLOWED_SKIPS = [
      "unexcused here, same as Gen 1's"),
 ]
 
+_UNIT_FILES = [
+    *pathlib.Path("tests/unit").glob("test_gen3_*.py"),
+    pathlib.Path("tests/unit/test_protocol_conformance.py"),
+    pathlib.Path("tests/unit/test_e2e_duo_wire_log.py"),
+    pathlib.Path("tests/unit/test_verify_gen3_release_lanes.py"),
+]
+
 LANES = [
+    # Select by FILE, never by -k: the fail-closed core counts every deselected test as
+    # "did not run", so a -k selector can never produce a passing lane.
     Lane("unit",
-         [_PY, "-m", "pytest", "tests/unit", "-q", "-p", "no:randomly", "-rs",
-          "-k", "(gen3 or protocol_conformance or gen3_pins) and not purergb",
-          "--ignore=tests/unit/test_gen1_purergb_rom_content.py"],
+         [_PY, "-m", "pytest", "-q", "-p", "no:randomly", "-rs",
+          *sorted(str(x).replace("\\", "/") for x in _UNIT_FILES)],
          why="the Gen 3 source oracles, protocol conformance, and the pin inventory"),
     Lane("lua-parse", [_PY, "tools/lua_syntax_check.py"],
          why="every Lua file parses under the runtime the clients actually use"),
