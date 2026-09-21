@@ -51,15 +51,29 @@ function randomizerFields(form) {
     // carry `pure: false`): on a pure pick those are greyed, and a value already set is
     // returned to its default so the pipeline's named refusal never comes from the form.
     PURE_WHY: 'not available for pureRGB',
+    // Choices UPR ignores under another choice -- admission refuses them (both families),
+    // so they are greyed while the other choice holds: under a global 1-to-1 wild map,
+    // game1to1Encounters reads only the similar-strength restriction.
+    DEPENDS: { wild_restriction: { on: 'wild', when: 'global', off: ['type_themed', 'catch_em_all'],
+                                   why: 'ignored by UPR under a global 1-to-1 map' } },
     optOk(o) { return !(this.family === 'gen1_purergb' && o.pure === false); },
-    choiceOk(c) { return !(this.family === 'gen1_purergb' && c.pure === false); },
+    choiceWhy(o, c) {
+      if (this.family === 'gen1_purergb' && c.pure === false) return this.PURE_WHY;
+      var d = this.DEPENDS[o.key];
+      if (d && this.rdraft.spec[d.on] === d.when && d.off.indexOf(c.value) >= 0) return d.why;
+      return '';
+    },
+    choiceOk(o, c) { return !this.choiceWhy(o, c); },
+    setChoice(o, c) { this.rdraft.spec[o.key] = c.value; this.settleSpecForFamily(); },
+    // A value that is not allowed any more -- by the family or by another choice -- goes
+    // back to its default, so the refusal never comes from the form.
     settleSpecForFamily() {
       var self = this;
       form.options.forEach(function (o) {
         if (!self.optOk(o)) { self.rdraft.spec[o.key] = o.default; return; }
         if (o.kind === 'choice') {
           var cur = o.choices.find(function (c) { return c.value === self.rdraft.spec[o.key]; });
-          if (cur && !self.choiceOk(cur)) self.rdraft.spec[o.key] = o.default;
+          if (cur && !self.choiceOk(o, cur)) self.rdraft.spec[o.key] = o.default;
         }
       });
     },
