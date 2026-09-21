@@ -1,0 +1,79 @@
+# Pins and expected base-1.0 ROM hashes: data/gen3_sources.lock.json.
+# agbcc installation follows the pinned pret instructions:
+# https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/INSTALL.md
+name: gen3-syms
+
+"on":
+  workflow_dispatch:
+  push:
+    paths:
+      - data/gen3_sources.lock.json
+      - tools/build_pret_gba_syms.py
+      - tools/_build_tools_bootstrap.py
+      - .github/workflows/gen3-syms.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout SLink
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make gcc g++ binutils-arm-none-eabi libpng-dev zlib1g-dev bash perl git python3
+
+      # The driver resets both clones to their lock SHAs and verifies HEAD,
+      # builds/installs agbcc, then builds each base ROM and its .sym/.map.
+      # Publication requires BOTH ROM SHA-1s to match; ROMs stay in .cache.
+      - name: Build and verify pinned FRLG symbols
+        run: python3 tools/build_pret_gba_syms.py --timeout-minutes 40
+
+      - name: Record package versions and runner image in provenance
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          packages = [
+              "make", "gcc", "g++", "binutils-arm-none-eabi", "libpng-dev",
+              "zlib1g-dev", "bash", "perl", "git", "python3",
+          ]
+          status = subprocess.check_output(["dpkg", "-s", *packages], text=True)
+          print(status, end="")
+          path = pathlib.Path("data/gen3/pret/provenance.json")
+          record = json.loads(path.read_text(encoding="utf-8"))
+          record["toolchain"]["dpkg_status"] = status
+          record["runner"] = {
+              "label": "ubuntu-latest",
+              "image_os": os.environ["ImageOS"],
+              "image_version": os.environ["ImageVersion"],
+              "workflow_sha": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+          }
+          path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+          PY
+          python3 tools/build_pret_gba_syms.py --check
+
+      # Success-only upload with an explicit allow-list: never upload ROMs.
+      - name: Upload verified symbols and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: gen3-pret-syms
+          if-no-files-found: error
+          path: |
+            data/gen3/pret/pokefirered.sym
+            data/gen3/pret/pokefirered.map
+            data/gen3/pret/pokeleafgreen.sym
+            data/gen3/pret/pokeleafgreen.map
+            data/gen3/pret/provenance.json
