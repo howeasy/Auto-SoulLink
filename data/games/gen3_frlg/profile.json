@@ -1,0 +1,224 @@
+{
+  "generator": "tools/gen_gen3_profile.py",
+  "pack": "gen3_frlg",
+  "schema": "gen3-profile-v1",
+  "source": {
+    "file": "lua/games/gen3_frlge.lua",
+    "git_head": "134f007b2b3e1131f90965936326e4511725cc9b",
+    "sha256": "29dec5cd12bbd5b666c10d309e505a34fea3ab17ad56c180a038c6e465342a47"
+  },
+  "titles": {
+    "emerald": {
+      "admitted": false,
+      "derived": {
+        "BASESTATS_ENTRY_SIZE": 28,
+        "OUTCOME_CAUGHT": 7,
+        "OUTCOME_RAN": 4,
+        "OVERWORLD_MODE": "gmain_flags",
+        "SB1_BALL_POCKET_COUNT": 16,
+        "SB1_BALL_POCKET_OFFSET": 1616,
+        "SB1_FLAGS_OFFSET": 4720,
+        "SB2_ENC_KEY_OFFSET": 172
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33701996,
+        "BATTLER_PARTY_INDEXES_ADDR": 33701998,
+        "BATTLE_MAIN_FUNC_ADDR": 50355460,
+        "BATTLE_MONS_ADDR": 33702020,
+        "BATTLE_OUTCOME_ADDR": 33702714,
+        "BATTLE_TYPE_ADDR": 33697772,
+        "ENEMY_BASE": 33703748,
+        "ENEMY_COUNT_ADDR": 33703146,
+        "GMAIN_ADDR": 50340544,
+        "PARTY_BASE": 33703148,
+        "PARTY_COUNT_ADDR": 33703145,
+        "PSP_PTR_ADDR": 50355604,
+        "SB1_PTR_ADDR": 50355596,
+        "SB2_PTR_ADDR": 50355600,
+        "TRAINER_OPPONENT_ADDR": 33786826
+      },
+      "rom": {
+        "BASESTATS_ADDR": 137495500,
+        "RETURN_FROM_BATTLE_ADDR": null,
+        "SE_SONG_HEADERS": {}
+      },
+      "rom_thumb": [],
+      "variant": "emerald"
+    },
+    "firered": {
+      "admitted": true,
+      "derived": {
+        "BASESTATS_ENTRY_SIZE": 28,
+        "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
+        "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "GMAIN_CB2_OFFSET": 4,
+        "OVERWORLD_MODE": "gmain_flags",
+        "SB1_BALL_POCKET_COUNT": 13,
+        "SB1_BALL_POCKET_OFFSET": 1072,
+        "SB1_FLAGS_OFFSET": 3808,
+        "SB1_VARS_OFFSET": 4096,
+        "SB2_ENC_KEY_OFFSET": 3872,
+        "TASK_STRUCT_SIZE": 40
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33700812,
+        "BATTLER_PARTY_INDEXES_ADDR": 33700814,
+        "BATTLE_MAIN_FUNC_ADDR": 50352004,
+        "BATTLE_MONS_ADDR": 33700836,
+        "BATTLE_OUTCOME_ADDR": 33701514,
+        "BATTLE_RESULTS_ADDR": 50352016,
+        "BATTLE_TYPE_ADDR": 33696588,
+        "ENEMY_BASE": 33701932,
+        "ENEMY_COUNT_ADDR": 33701930,
+        "GMAIN_ADDR": 50344176,
+        "LOCKED_MOVES_ADDR": 33701304,
+        "PARTY_BASE": 33702532,
+        "PARTY_COUNT_ADDR": 33701929,
+        "PSP_PTR_ADDR": 50352144,
+        "SB1_PTR_ADDR": 50352136,
+        "SB2_PTR_ADDR": 50352140,
+        "SPECIAL_VAR_BOX_ID_ADDR": 33779926,
+        "SPECIAL_VAR_BOX_POS_ADDR": 33779928,
+        "TASKS_BASE_ADDR": 50352272
+      },
+      "rom": {
+        "BASESTATS_ADDR": 136660868,
+        "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
+        "CB2_EVOLUTION_LOAD_ADDR": 135061737,
+        "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063341,
+        "POST_BATTLE_WRITER_TASKS": [
+          134414905
+        ],
+        "RETURN_FROM_BATTLE_ADDR": 134306649,
+        "SE_SONG_HEADERS": {
+          "16": 141252996,
+          "17": 141253076,
+          "22": 141253340,
+          "25": 141253552,
+          "26": 141253600,
+          "95": 141258352
+        }
+      },
+      "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+      "rom_thumb": [
+        "CB2_EVOLUTION_BEGIN_ADDR",
+        "CB2_EVOLUTION_LOAD_ADDR",
+        "CB2_EVOLUTION_UPDATE_ADDR",
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
+        "POST_BATTLE_WRITER_TASKS",
+        "RETURN_FROM_BATTLE_ADDR"
+      ],
+      "variant": "vanilla"
+    },
+    "firered_ap": {
+      "admitted": false,
+      "derived": {
+        "BASESTATS_ENTRY_SIZE": 28,
+        "OVERWORLD_MODE": "gmain_038",
+        "SB1_BALL_POCKET_COUNT": 13,
+        "SB1_BALL_POCKET_OFFSET": 1664,
+        "SB1_FLAGS_OFFSET": 4400,
+        "SB1_VARS_OFFSET": 4688,
+        "SB2_ENC_KEY_OFFSET": 3884
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33700832,
+        "BATTLER_PARTY_INDEXES_ADDR": 33700834,
+        "BATTLE_MAIN_FUNC_ADDR": 50351828,
+        "BATTLE_MONS_ADDR": 33700856,
+        "BATTLE_OUTCOME_ADDR": 33701534,
+        "BATTLE_TYPE_ADDR": 33696608,
+        "ENEMY_BASE": 33701952,
+        "ENEMY_COUNT_ADDR": 33701950,
+        "GMAIN_ADDR": 50344000,
+        "LOCKED_MOVES_ADDR": 33701324,
+        "PARTY_BASE": 33702552,
+        "PARTY_COUNT_ADDR": 33701949,
+        "PSP_PTR_ADDR": 50351968,
+        "SB1_PTR_ADDR": 50351960,
+        "SB2_PTR_ADDR": 50351964
+      },
+      "rom": {
+        "BASESTATS_ADDR": 136667980,
+        "RETURN_FROM_BATTLE_ADDR": null,
+        "SE_SONG_HEADERS": {
+          "16": 141410128,
+          "17": 141410208,
+          "22": 141410472,
+          "25": 141410684,
+          "26": 141410732,
+          "95": 141415484
+        }
+      },
+      "rom_thumb": [],
+      "variant": "ap"
+    },
+    "leafgreen": {
+      "admitted": true,
+      "derived": {
+        "BASESTATS_ENTRY_SIZE": 28,
+        "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
+        "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "GMAIN_CB2_OFFSET": 4,
+        "OVERWORLD_MODE": "gmain_flags",
+        "SB1_BALL_POCKET_COUNT": 13,
+        "SB1_BALL_POCKET_OFFSET": 1072,
+        "SB1_FLAGS_OFFSET": 3808,
+        "SB1_VARS_OFFSET": 4096,
+        "SB2_ENC_KEY_OFFSET": 3872,
+        "TASK_STRUCT_SIZE": 40
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33700812,
+        "BATTLER_PARTY_INDEXES_ADDR": 33700814,
+        "BATTLE_MAIN_FUNC_ADDR": 50352004,
+        "BATTLE_MONS_ADDR": 33700836,
+        "BATTLE_OUTCOME_ADDR": 33701514,
+        "BATTLE_RESULTS_ADDR": 50352016,
+        "BATTLE_TYPE_ADDR": 33696588,
+        "ENEMY_BASE": 33701932,
+        "ENEMY_COUNT_ADDR": 33701930,
+        "GMAIN_ADDR": 50344176,
+        "LOCKED_MOVES_ADDR": 33701304,
+        "PARTY_BASE": 33702532,
+        "PARTY_COUNT_ADDR": 33701929,
+        "PSP_PTR_ADDR": 50352144,
+        "SB1_PTR_ADDR": 50352136,
+        "SB2_PTR_ADDR": 50352140,
+        "SPECIAL_VAR_BOX_ID_ADDR": 33779926,
+        "SPECIAL_VAR_BOX_POS_ADDR": 33779928,
+        "TASKS_BASE_ADDR": 50352272
+      },
+      "rom": {
+        "BASESTATS_ADDR": 136660868,
+        "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
+        "CB2_EVOLUTION_LOAD_ADDR": 135061737,
+        "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063341,
+        "POST_BATTLE_WRITER_TASKS": [
+          134414905
+        ],
+        "RETURN_FROM_BATTLE_ADDR": 134306649,
+        "SE_SONG_HEADERS": {
+          "16": 141252996,
+          "17": 141253076,
+          "22": 141253340,
+          "25": 141253552,
+          "26": 141253600,
+          "95": 141258352
+        }
+      },
+      "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
+      "rom_thumb": [
+        "CB2_EVOLUTION_BEGIN_ADDR",
+        "CB2_EVOLUTION_LOAD_ADDR",
+        "CB2_EVOLUTION_UPDATE_ADDR",
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
+        "POST_BATTLE_WRITER_TASKS",
+        "RETURN_FROM_BATTLE_ADDR"
+      ],
+      "variant": "vanilla"
+    }
+  }
+}
