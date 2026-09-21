@@ -80,6 +80,11 @@ function randomizerFields(form) {
     },
     choiceOk(o, c) { return !this.choiceWhy(o, c); },
     setChoice(o, c) { this.rdraft.spec[o.key] = c.value; this.settleSpecForFamily(); },
+    // what the chosen chip means, written out under the row (the tooltip needs a hover)
+    chosenHelp(o) {
+      var c = o.choices.find(function (x) { return x.value === this.rdraft.spec[o.key]; }, this);
+      return (c && c.help) || '';
+    },
     // A value that is not allowed any more -- by the family or by another choice -- goes
     // back to its default, so the refusal never comes from the form.
     settleSpecForFamily() {

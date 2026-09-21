@@ -426,6 +426,9 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-rgroup .mk-opt { padding: var(--space-2) var(--space-3); min-height: 40px; box-sizing: border-box; }
 .mk-rlabel { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: baseline; font-size: var(--fs-md); color: var(--c-dim); }
 .mk-rlabel em { font-style: normal; }
+/* a choice row's chosen meaning, and the note that qualifies a row */
+.mk-rhelp { font-size: var(--fs-sm); color: var(--c-dim); line-height: 1.45; text-wrap: pretty; }
+.mk-rhelp.note { color: var(--c-pend); }
 .mk-rchoice { display: flex; flex-direction: column; gap: var(--space-2); }
 .mk-rchips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .mk-rchips .mk-gchip { padding: var(--space-1) var(--space-3); min-height: 36px; }
