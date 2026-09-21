@@ -164,10 +164,33 @@ local PATHS = {
         dirs = { "Left","Left","Left","Left","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up",
                  "Up","Up","Up" },
     },
+    -- CONNECTION ARRIVAL ROW, the rule the lane taught us (run 13: "parcel_deliver
+    -- (route1_north_to_south_edge): start tile (12,0) is not the path's from (12,1)").
+    -- Crossing a map CONNECTION does not land you one tile inside the destination: you arrive
+    -- ON its edge row. Walking off map A's BOTTOM edge into A's `down` connection lands at the
+    -- destination's y=0; walking off A's TOP edge into its `up` connection lands at the
+    -- destination's y=height-1. The x is the destination's own, via the connection offset.
+    --
+    -- Both directions were always in play; only the y=height-1 one happened to match, because
+    -- Route 1 is 40 tall and the old from-tile said 39. The y=0 side was wrong in two entries
+    -- and cost a lane run.
+    --
+    -- tools/gba_map.py does not read the connections list yet (it parses layouts/warps/objects
+    -- /coords/bg), so the RULE above is cited from pret data/maps/<Map>/map.json "connections"
+    -- (direction + offset per entry) rather than re-derived here; what the tool DID verify is
+    -- every tile these paths walk over, against the real ROM:
+    --
+    --   python tools/gba_map.py "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" \
+    --          --map 3.19 --bfs 12,0 12,39        (Route 1     = 3.19, 24x40, 0 warps)
+    --   python tools/gba_map.py "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" \
+    --          --map 3.0  --bfs 12,0 16,14        (Pallet Town = 3.0,  24x20, 3 warps)
+    --
+    -- Each returned exactly the old direction list with ONE extra leading Down -- i.e. the
+    -- routes were right all along and only their start tile was off by the arrival row.
     route1_edge_to_lab_door = {
-        map = "PalletTown", from = { 12, 1 }, to = { 16, 14 },
+        map = "PalletTown", from = { 12, 0 }, to = { 16, 14 },   -- arrives from Route 1's down connection
         dirs = { "Down","Down","Down","Down","Down","Down","Down","Down","Down","Down","Down",
-                 "Down","Down","Right","Right","Right","Right" },
+                 "Down","Down","Down","Right","Right","Right","Right" },
     },
     -- Route1/map.json connections: down->PalletTown offset=0 (own x); up->ViridianCity offset=-12
     -- under the "this_x = other_x + offset" convention pret uses (verified empirically: crossing
@@ -183,8 +206,8 @@ local PATHS = {
         dirs = { "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Left", "Left", "Up", "Up", "Up", "Up", "Up", "Right", "Right", "Right", "Right", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Up", "Up", "Up", "Up", "Right", "Right", "Right", "Right", "Right", "Right", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Left", "Up", "Left" },
     },
     route1_north_to_south_edge = {
-        map = "Route1", from = { 12, 1 }, to = { 12, 39 },
-        dirs = { "Down","Down","Down","Right","Right","Right","Right","Down","Down","Down","Down",
+        map = "Route1", from = { 12, 0 }, to = { 12, 39 },   -- arrives from Viridian's down connection
+        dirs = { "Down","Down","Down","Down","Right","Right","Right","Right","Down","Down","Down","Down",
                  "Down","Down","Down","Down","Down","Down","Down","Down","Down","Down","Down",
                  "Left","Left","Left","Left","Left","Left","Down","Down","Down","Down","Down",
                  "Right","Right","Down","Down","Down","Down","Down","Down","Left","Left","Left",

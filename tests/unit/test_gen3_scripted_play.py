@@ -254,3 +254,38 @@ def test_no_multi_return_call_mid_format_arguments(rel):
                     bad.append((name, " ".join(call[:80].split())))
                 k = body.find(name, k + 1)
     assert not bad, bad
+
+
+# -- connection arrivals (FR lane run 13) ------------------------------------------------------
+# Crossing a map CONNECTION lands the player ON the destination's edge row, not one tile inside
+# it: y=0 when walking off a map's bottom edge, y=height-1 when walking off its top. Two paths
+# said y=1 and cost a lane run ("route1_north_to_south_edge: start tile (12,0) is not the path's
+# from (12,1)"). This needs no ROM -- it is the rule itself, guarded.
+
+ARRIVAL_ROW = {
+    # path -> the row the player arrives on, having crossed a connection to get there
+    "route1_north_to_south_edge": 0,    # Viridian City's down connection -> Route 1 top row
+    "route1_edge_to_lab_door": 0,       # Route 1's down connection -> Pallet Town top row
+    "route1_south_to_north_edge": 39,   # Pallet Town's up connection -> Route 1 bottom row
+    "route1_south_to_grass_spot": 39,   # same arrival
+    "route1_edge_to_mart_door": 39,     # Route 1's up connection -> Viridian City bottom row
+    "route1_edge_to_pokecenter_door": 39,
+}
+
+
+def test_connection_arrival_paths_start_on_the_destination_edge_row(module):
+    for name, row in ARRIVAL_ROW.items():
+        entry = module.PATHS[name]
+        assert entry["from"][2] == row, (
+            f"{name} starts at y={entry['from'][2]}, but crossing a connection to get there "
+            f"lands the player on row {row}"
+        )
+
+
+def test_the_two_route1_crossings_are_exact_mirrors(module):
+    """Each pair walks the same corridor in opposite directions, so their step counts must
+    match -- the y=0 fix added one Down to each, not a whole new route."""
+    north = module.PATHS["route1_south_to_north_edge"]["dirs"]
+    south = module.PATHS["route1_north_to_south_edge"]["dirs"]
+    assert len(south) == len(north) + 1, "the southbound path should be the northbound one + 1"
+    assert south[1] == "Down", "the extra step is the one off the arrival row"

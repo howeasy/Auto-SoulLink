@@ -125,19 +125,20 @@ end
 -- that emits entries like this one from any FR-based ROM, and it re-derives every number above
 -- independently:
 --
---   python tools/gba_map.py patch/build/slink_RR.gba --map 5.4 --bfs 11,8 11,2 --          --find-behaviour 0x83
+--   python tools/gba_map.py patch/build/slink_RR.gba --map 5.4 --bfs 7,8 11,2 --find-behaviour 0x83
 --   -> map 5.4: 15x10, 4 warps, 20 objects, 0 coords, 0 bg
 --      behaviour 0x83 tiles: [(11, 1)]
---      bfs (11, 8) -> (11, 2): ['Left','Up','Left','Up','Up','Up','Right','Right','Up','Up']
+--      bfs (7, 8) -> (11, 2): ['Up','Up','Up','Up','Right','Right','Right','Right','Up','Up']
 --
 -- tests/unit/test_gen3_rr_scripted_play.py re-walks the dirs below against the same grid, so
 -- the path cannot drift away from the map it came from.
 local PATHS = {
     pokecenter_start_to_pc = {
         map = "PokemonCenter_1F (group 5, map 4)",
-        from = { 11, 8 },            -- where slink_pokecenter_full.State stands
+        from = { 7, 8 },             -- where slink_pokecenter_full.State stands (the PLAIN
+                                     -- slink_pokecenter.State is at (11,8), after its own walk)
         to = { 11, 2 },              -- the approach tile below the PC metatile (11,1)
-        dirs = { "Left", "Up", "Left", "Up", "Up", "Up", "Right", "Right", "Up", "Up" },
+        dirs = { "Up", "Up", "Up", "Up", "Right", "Right", "Right", "Right", "Up", "Up" },
     },
 }
 
@@ -450,6 +451,10 @@ LEGS[#LEGS + 1] = {
             end
             if not play.in_battle(cp) then break end     -- it fled, or our mon fainted
             throws = throws + 1
+            -- The pocket baseline is taken BEFORE a single button is pressed: the ball leaves
+            -- the pocket on the very press that ends the sequence, so reading it afterwards
+            -- races the thing it is meant to witness.
+            local _, qty_before = ball_slot0()
             -- THE PINNED SEQUENCE (see the census receipt cited above). Each press is a
             -- separate tap on the 16-frame native-menu cadence, never a held direction: the
             -- pocket tabs advance one per press.
@@ -459,14 +464,40 @@ LEGS[#LEGS + 1] = {
             G.tap("Right", 3, 20)       -- pocket: Key Items -> Poke Balls
             G.tap("A", 3, 20)           -- select the Poke Ball
             G.tap("A", 3, 20)           -- use it
-            -- The throw animation plus the catch text ran ~900 frames on the receipt; a miss
-            -- comes back to the action menu instead.
-            play.mash_a(400, function()
+            -- THE THROW WITNESS IS THE POCKET, NOT THE MENU. Lane run: all five throws were
+            -- called misses at 170-frame spacing, which is this leg judging the result before
+            -- the ball animation had even started — the action-select controller is still the
+            -- last thing written, so "the menu is back" reads true immediately. The physical
+            -- probe needed ~900 frames after the second A to reach "Gotcha!".
+            --
+            -- A thrown ball is SPENT: the quantity at slot 0 decrements. That is an engine
+            -- fact rather than a timing guess, so wait for it FIRST and only then judge.
+            local thrown = false
+            for _ = 1, 300 do
+                local _, q = ball_slot0()
+                if q < qty_before then thrown = true; break end
+                G.advance()
+            end
+            if not thrown then
+                G.shot("stuck")
+                G.finish(false, string.format(
+                    "wild_catch: ball not thrown on throw %d — the pocket still holds %d, so "
+                    .. "the pinned bag sequence never reached USE", throws, qty_before))
+            end
+            -- The ball is in the air now. A catch ends the battle (outcome ~= 0); a miss hands
+            -- control back to the action menu, and that only counts once the ball is gone.
+            play.mash_a(1200, function()
                 return battle_outcome() ~= 0 or at_action_menu()
             end)
-            if battle_outcome() == B_OUTCOME_CAUGHT then break end
-            G.phase("throw-missed", string.format("throw %d: outcome=%d, back at the menu",
-                                                  throws, battle_outcome()))
+            local _, qty_after = ball_slot0()
+            if battle_outcome() == B_OUTCOME_CAUGHT then
+                G.phase("throw-caught", string.format("throw %d: outcome=%d balls %d -> %d",
+                                                      throws, battle_outcome(), qty_before, qty_after))
+                break
+            end
+            G.phase("throw-missed", string.format(
+                "throw %d: outcome=%d balls %d -> %d, back at the menu",
+                throws, battle_outcome(), qty_before, qty_after))
         end
 
         if battle_outcome() ~= B_OUTCOME_CAUGHT then

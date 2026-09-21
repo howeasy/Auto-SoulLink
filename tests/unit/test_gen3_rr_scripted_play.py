@@ -497,7 +497,7 @@ def _pc_scenario(lua, fake, after_withdraw: str):
     fake engine hands back -- which is where each negative below differs."""
     fake.set_battle(False)
     fake.set_overworld(True)
-    fake.set_pos(11, 8)                # slink_pokecenter_full.State stands here
+    fake.set_pos(7, 8)                 # slink_pokecenter_full.State stands here
     lua.execute(f"""
         FAKE.set_party({_PARTY_ABC})
         FAKE.on_frame = function()
@@ -614,7 +614,10 @@ def _catch_world(lua, fake, *, balls=5, throws_to_catch=1):
     lua.execute(f"""
         FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xA0}} }})
         FAKE.on_frame = function()
+            -- The pinned sequence spends exactly three A presses per throw, and a THROWN ball
+            -- leaves the pocket -- which is the witness the leg waits on.
             local throws = FAKE.a // 3
+            FAKE.set_balls(4, math.max({balls} - throws, 0))
             if throws >= {throws_to_catch} then
                 FAKE.set_menu(false)
                 FAKE.set_outcome(7)                       -- B_OUTCOME_CAUGHT
@@ -657,7 +660,8 @@ def test_wild_catch_retries_with_the_next_ball_after_a_miss(lua, fake, legs):
     _catch_world(lua, fake, balls=5, throws_to_catch=3)
     ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
     assert ok, f"{err}\n{log}"
-    assert "throw 1: outcome=0, back at the menu" in log
+    assert "throw 1: outcome=0 balls 5 -> 4, back at the menu" in log
+    assert "throw 3: outcome=7 balls 3 -> 2" in log   # the pocket is the witness
     assert "after 3 throw(s)" in log
 
 
@@ -703,3 +707,16 @@ def test_the_pokecenter_path_is_bfs_pinned_against_the_parsed_collision_grid(mod
         assert (x, y) not in npcs, f"step {step} walks into an NPC at ({x},{y})"
     assert (x, y) == (path["to"][1], path["to"][2]) == (11, 2)
     assert rows[y - 1][x] == "P", "the path does not end below the PC metatile"
+
+
+def test_wild_catch_fails_when_the_bag_sequence_never_spends_a_ball(lua, fake, legs):
+    """The lane called all five throws misses at 170-frame spacing -- it was judging the result
+    before the ball animation had started. The pocket quantity is the witness: if no ball left
+    the bag, the sequence never reached USE, and saying THAT is worth more than five fake
+    misses."""
+    _catch_world(lua, fake)
+    lua.execute("FAKE.on_frame = function() FAKE.set_balls(4, 5) end")   # the pocket never moves
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok
+    assert "ball not thrown on throw 1" in log
+    assert "never reached USE" in log
