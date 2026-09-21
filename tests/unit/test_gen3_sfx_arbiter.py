@@ -87,6 +87,111 @@ def test_only_the_server_play_sound_site_is_native_ok():
     assert flagged == ["M.sfx.request(c.sound, true)"]
 
 
+# ── mailbox ordering (Codex cx-c26a5baa finding 1) ──────────────────────────────────────────
+# The real lua/mailbox.lua over a byte-array `memory` stub. The companion hook is simulated by
+# hand: it consumes the opcode and writes the ack (patch/src/handlers.c:559-564 shape).
+
+MAILBOX = (REPO / "lua" / "mailbox.lua").as_posix()
+LUA_DIR = (REPO / "lua").as_posix()
+
+
+class Mailbox:
+    """mailbox.lua + memory stub + the client's flush sink (patched, out of battle)."""
+
+    def __init__(self):
+        self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        self.lua.execute(
+            f'package.path = "{LUA_DIR}/?.lua;" .. package.path\n'
+            "local mem = {}\n"
+            "memory = {\n"
+            "  read_u8 = function(a) return mem[a] or 0 end,\n"
+            "  write_u8 = function(a, v) mem[a] = v % 256 end,\n"
+            "  read_u16_le = function(a) return (mem[a] or 0) + 256 * (mem[a+1] or 0) end,\n"
+            "  write_u16_le = function(a, v) mem[a] = v % 256; mem[a+1] = (v // 256) % 256 end,\n"
+            "  read_u32_le = function(a) return (mem[a] or 0) + 256 * (mem[a+1] or 0)"
+            " + 65536 * (mem[a+2] or 0) + 16777216 * (mem[a+3] or 0) end,\n"
+            "  write_u32_le = function(a, v) for i = 0, 3 do mem[a+i] = (v >> (8*i)) % 256 end end,\n"
+            "}\n"
+            "console = { log = function() end }\n"
+            f'MB = dofile("{MAILBOX}")\n'
+            'ARB = dofile("' + ARBITER + '").new({})\n'
+            "played = {}\n"
+            "function flush(native_ok_ctx)\n"
+            "  ARB.flush(function(sound, native_ok)\n"
+            "    if native_ok and not MB.busy() then MB.play_se(sound); played[#played+1] = 'MB'\n"
+            "    else played[#played+1] = 'LUA' end\n"
+            "  end)\n"
+            "end\n"
+            # the hook: consume the opcode, ack the seq with ST_OK (handlers.c shape)
+            "function hook_consume()\n"
+            "  local base = MB.BASE\n"
+            "  local opc = memory.read_u16_le(base + 6)\n"                      # O_OPCODE
+            "  if opc == 0 then return false end\n"
+            "  memory.write_u16_le(base + 10, MB.ST_OK)\n"                      # O_STATUS
+            "  memory.write_u16_le(base + 12, memory.read_u16_le(base + 8))\n"  # O_ACKSEQ = O_SEQ
+            "  memory.write_u16_le(base + 6, 0)\n"
+            "  return true\n"
+            "end\n"
+        )
+        # sanity: the offsets above must be mailbox.lua's own (one multi-assignment line)
+        m = re.search(r"local (O_SIG[^=]*)=\s*([0-9, ]+)", MAILBOX_SRC)
+        assert m, "mailbox.lua offset line not found"
+        offs = dict(zip([n.strip() for n in m.group(1).split(",")],
+                        [int(v) for v in m.group(2).split(",")], strict=True))
+        assert (offs["O_OPCODE"], offs["O_SEQ"], offs["O_STATUS"], offs["O_ACKSEQ"]) == (6, 8, 10, 12)
+
+    def g(self, expr):
+        return self.lua.eval(expr)
+
+
+MAILBOX_SRC = (REPO / "lua" / "mailbox.lua").read_text(encoding="utf-8", errors="replace")
+
+
+def test_deferred_server_sound_never_queues_behind_a_native_op():
+    """Frame N: response [play_sound, memorialize]. The client posts the native memorialize during
+    on_frame; the sound flushes at frame end. Frame N+1: MB.pump() runs BEFORE the memorialize
+    poll. The memorialize receipt must survive (pre-arbiter the sound posted FIRST, so it did)."""
+    m = Mailbox()
+    m.lua.execute("seq_mem = MB.send(MB.OP_MEMORIALIZE or 26, {1, 2})")   # the native op
+    assert m.g("MB.busy()") is True
+    m.lua.execute("ARB.request(7, true)")                                   # server play_sound
+    m.lua.execute("flush()")
+    assert list(m.g("played").values()) == ["LUA"]                         # not queued behind it
+    assert m.g("hook_consume()") is True                                    # patch completes it
+    m.lua.execute("MB.pump()")                                              # frame N+1, before poll
+    assert m.g("MB.poll(seq_mem)")[0] == m.g("MB.ST_OK")                    # receipt intact
+    assert m.g("MB.busy()") is False
+
+
+def test_control_a_sound_queued_behind_the_op_does_lose_the_receipt():
+    """The failure the rule prevents (a76103a's flush did this): queue the sound behind the
+    outstanding op; the pump next frame posts it before the poll and the op's ack is gone."""
+    m = Mailbox()
+    m.lua.execute("seq_mem = MB.send(MB.OP_MEMORIALIZE or 26, {1, 2}); MB.play_se(7)")  # queued
+    assert m.g("hook_consume()") is True                                    # memorialize completes
+    m.lua.execute("MB.pump()")                                              # posts the sound...
+    assert m.g("MB.poll(seq_mem)") is None                                  # ...and the receipt is lost
+
+
+def test_server_sound_takes_native_route_when_mailbox_is_idle():
+    m = Mailbox()
+    m.lua.execute("ARB.request(7, true)")
+    m.lua.execute("flush()")
+    assert list(m.g("played").values()) == ["MB"]
+    assert m.g("MB.busy()") is True                                         # our own opcode, pending
+    assert m.g("hook_consume()") is True
+    assert m.g("MB.busy()") is False
+
+
+def test_queued_outbox_counts_as_busy():
+    m = Mailbox()
+    m.lua.execute("s1 = MB.send(3, {}); s2 = MB.send(4, {})")               # second one queues
+    assert m.g("hook_consume()") is True                                    # slot free, outbox has s2
+    assert m.g("MB.busy()") is True
+    m.lua.execute("ARB.request(7, true); flush()")
+    assert list(m.g("played").values()) == ["LUA"]
+
+
 def test_linked_ko_outranks_generic_play_sound():
     f = Frame()
     f.request(LINKED_KO)
@@ -154,7 +259,8 @@ def test_client_has_no_direct_playse_calls_left():
 def test_client_flush_uses_the_documented_route_rule():
     assert re.search(
         r"M\.sfx\.flush.*\n.*native_ok and native_sfx_enabled and patch_present\(\) and not"
-        r" M\.isInBattle\(\) then MB\.play_se\(sound\)\n\s*else M\.playSE\(sound\) end",
+        r" M\.isInBattle\(\)\n\s*and not MB\.busy\(\) then MB\.play_se\(sound\)\n\s*else"
+        r" M\.playSE\(sound\) end",
         CLIENT_SRC,
     )
 

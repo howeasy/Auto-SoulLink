@@ -511,6 +511,15 @@ function MB.send(opcode, args)
     return seq
 end
 
+-- True while the mailbox has outstanding work: an opcode the hook has not consumed yet, or
+-- queued ops waiting for the slot. A caller that would only queue BEHIND that work (a sound
+-- cue at frame end) must take another route: post() rewrites O_STATUS/O_ACKSEQ, so a queued
+-- op pumped before the previous op's MB.poll() destroys that op's completion receipt, and the
+-- client's MB.pump() runs before its pending_* consumers.
+function MB.busy()
+    return #outbox > 0 or not slot_free()
+end
+
 -- Drain one queued op per frame once the hook has consumed the previous one. Call once per
 -- frame from the client's on_frame.
 function MB.pump()
