@@ -700,7 +700,11 @@ LEGS[#LEGS + 1] = {
                 G.finish(false, "pc_ops: never got back to the field from the storage UI, so "
                               .. "the party count cannot be trusted either way")
             end
-            G.idle(30)
+            -- on_field holds while the PC's exit textbox ("See you later!") is still up
+            -- (PHYSICAL r5b/r5c: the next open's presses were shifted by one and the
+            -- "withdraw" half deposited again); keep pressing B through it, then settle.
+            for _ = 1, 5 do G.tap("B", 3, 27) end
+            G.idle(60)
         end
 
         -- DEPOSIT: Down, A picks Deposit (row 1 of Withdraw/Deposit/Move/Move Items/See Ya);
@@ -708,7 +712,10 @@ LEGS[#LEGS + 1] = {
         open_storage_menu()
         pc_press("Down", 20); pc_press("A", 180)     -- Deposit -> EnterPokeStorage
         pc_press("Down", 20); pc_press("A", 120)     -- party slot 1 -> its context menu
-        pc_press("A", 240)                           -- Store -> TryStorePartyMonInBox
+        pc_press("A", 120)                           -- Store -> "Deposit in which BOX?" chooser
+        pc_press("A", 240)                           -- commit box 0 -> TryStorePartyMonInBox
+                                                     -- (R9: STORE opens the chooser; the census
+                                                     -- pressed A, A after the slot popup)
         leave_storage()
 
         local mid = party_snapshot()
@@ -745,7 +752,9 @@ LEGS[#LEGS + 1] = {
         -- terminal is the keyed oracle below rather than any press count.
         G.tap("Up", 2, 13)                           -- face the PC again
         open_storage_menu()
-        pc_press("A", 180)                           -- Withdraw (row 0, already selected)
+        pc_press("A", 180)                           -- Withdraw (row 0: PHYSICAL census_pc7,
+                                                     -- the menu reopens on row 0; an Up wraps
+                                                     -- the cursor to See Ya)
         pc_press("A", 120)                           -- box 0 slot 0 -> its context menu
         pc_press("A", 240)                           -- Withdraw
         leave_storage()
