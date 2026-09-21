@@ -207,3 +207,50 @@ def test_in_battle_polarity_wrapper(stubbed_module):
 
     store[address + offset] = mask  # masked bit set, raw != expect -> pred_ok False -> in battle
     assert module.in_battle(cp) is True
+
+
+# ── lint: a Lua multi-return call (G.pos/G.map/obj0_pos) inside a string.format argument list
+# must be LAST, or every following argument is dropped ("bad argument #N to format": PHYSICAL,
+# three lane runs lost to this on 2026-09-21).
+MULTI_RETURN = ("G.pos(cp)", "G.map(cp)", "obj0_pos()")
+
+
+def _format_arg_lists(src: str):
+    i = 0
+    while True:
+        i = src.find("string.format(", i)
+        if i < 0:
+            return
+        depth, j = 0, i + len("string.format")
+        while j < len(src):
+            if src[j] == "(":
+                depth += 1
+            elif src[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        yield src[i:j + 1]
+        i = j
+
+
+@pytest.mark.parametrize("rel", [
+    "lua/tests/gen3_scripted_play.lua", "lua/tests/gen3_rr_scripted_play.lua",
+    "lua/tests/probe_gen3_battle_census.lua", "lua/tests/probe_gen3_exec_addr.lua",
+    "lua/tests/probe_gen3_rr_bag.lua", "lua/tests/mkstate_gen3_rr_fill.lua",
+    "lua/tests/gen3_fr_newgame_inputs.lua", "lua/tests/gen3_boot_check.lua",
+])
+def test_no_multi_return_call_mid_format_arguments(rel):
+    with open(os.path.join(_REPO, rel), encoding="utf-8") as fh:
+        src = fh.read()
+    bad = []
+    for call in _format_arg_lists(src):
+        body = call[len("string.format("):-1]
+        for name in MULTI_RETURN:
+            k = body.find(name)
+            while k >= 0:
+                rest = body[k + len(name):].lstrip()
+                if rest.startswith(","):
+                    bad.append((name, " ".join(call[:80].split())))
+                k = body.find(name, k + 1)
+    assert not bad, bad

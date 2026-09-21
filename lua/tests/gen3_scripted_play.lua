@@ -58,6 +58,16 @@ local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR) end
 
 local function mapid(cp) local g, n = G.map(cp); return g * 256 + n end
 
+-- gObjectEvents = 0x02036E38 (pokefirered.sym:205), object 0 = player. currentCoords s16 x/y
+-- at +0x10/+0x12 (include/global.fieldmap.h struct ObjectEvent), stored +7 (MAP_OFFSET);
+-- facingDirection is the low nibble at +0x18 (1=down 2=up 3=left 4=right). Introduced run 8 to
+-- cross-check the live object against SaveBlock1.pos when the two disagreed.
+local OBJ_EVENTS_ADDR = 0x02036E38
+local function obj0_pos()
+    return memory.read_s16_le(OBJ_EVENTS_ADDR + 0x10) - 7, memory.read_s16_le(OBJ_EVENTS_ADDR + 0x12) - 7
+end
+local function obj0_facing() return memory.read_u8(OBJ_EVENTS_ADDR + 0x18) >> 4 end
+
 --- POLARITY (Codex review cx-378ce251): the `in_battle` predicate is gMain+1081 & 2 with
 --- expect=0 (data/games/gen3_frlg/write_checkpoint.json firered.predicates.in_battle,
 --- gen3_boot_check.lua:104-114 pred_ok compares (value&mask)==expect), so
@@ -299,13 +309,26 @@ local function enter_warp(cp, dir, budget)
     return false
 end
 
-local function require_map_change(cp, from_map, label)
-    for _ = 1, 900 do
-        if mapid(cp) ~= from_map then G.idle(16); return end
-        G.advance()
+--- Wait through a scripted scene: A-only while script_context_status/field_controls_locked are
+--- not both quiet, then require that quiet held for 60 CONSECUTIVE frames (no further input)
+--- before trusting it — never a single read. PHYSICAL lesson, repeated across runs 4-7 (starter
+--- scene) and 11 (rival battle): both predicates can read "done" for a frame or two mid-scene.
+--- An optional `also()` predicate adds extra ground truth (e.g. a scene var, an object position).
+local function wait_scene_settled(cp, budget, also)
+    local stable = 0
+    for _ = 1, (budget or 6000) do
+        local quiet = G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked")
+        if quiet and also then quiet = also() end
+        if quiet then
+            stable = stable + 1
+            if stable >= 60 then return true end
+            G.advance()
+        else
+            stable = 0
+            G.tap("A", 2, 10)
+        end
     end
-    G.shot("stuck")
-    G.finish(false, label .. ": map never changed from " .. from_map)
+    return false
 end
 
 local PLAY_FROM = os.getenv("SLINK_GEN3_PLAY_FROM")
@@ -495,22 +518,10 @@ LEGS[#LEGS + 1] = {
         end
         G.phase("battle-end")
         -- Post-battle is scripted too (EndRivalBattle: HealPlayerParty, "go toughen up your
-        -- mon" message, the rival's own applymovement exit): A-only while any of that is still
-        -- running, then debounce script idle + field controls unlocked held 60 frames once it
-        -- looks done -- same shape and same PHYSICAL lesson as the starter leg's scene wait
-        -- (run 4-7: a single-frame idle read is not enough, it can flicker mid-scene).
-        local stable, settled = 0, false
-        for _ = 1, 6000 do
-            if G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked") then
-                stable = stable + 1
-                if stable >= 60 then settled = true; break end
-                G.advance()
-            else
-                stable = 0
-                G.tap("A", 2, 10)
-            end
-        end
-        if not settled then
+        -- mon" message, the rival's own applymovement exit): wait_scene_settled (A-only while
+        -- busy, then idle+unlocked held 60 frames) -- same PHYSICAL lesson as the starter leg's
+        -- scene wait (run 4-7: a single-frame idle read is not enough, it can flicker mid-scene).
+        if not wait_scene_settled(cp, 6000) then
             G.shot("stuck")
             G.finish(false, "rival_battle: post-battle scene never settled (idle+unlocked 60f)")
         end
@@ -522,11 +533,37 @@ LEGS[#LEGS + 1] = {
 LEGS[#LEGS + 1] = {
     name = "leave_lab_for_parcel",
     exercises = { "map_load" },
-    source = { "data/maps/PalletTown_ProfessorOaksLab/map.json (warp_events -> PalletTown warp 2)" },
+    source = {
+        "data/maps/PalletTown_ProfessorOaksLab/map.json (warp_events[0..2] @ 5..7,12 -> PalletTown warp 2)",
+        "data/tilesets/secondary/lab/metatile_attributes.bin (metatiles 656-658 at 5..7,12: behavior 0x0 = MB_NORMAL, not a metatile-driven warp)",
+    },
     run = function(cp)
         local lab_map = mapid(cp)
         follow(cp, "rival_row_to_lab_exit", "leave_lab_for_parcel")
-        require_map_change(cp, lab_map, "leave_lab_for_parcel")
+        -- DIAGNOSTIC (run 11 stalled here: "map never changed from 1027" after landing on
+        -- (6,12), a collision=0/MB_NORMAL tile — no arrow-warp metatile behavior, yet a plain
+        -- walk-onto did not fire the warp). Log the live object vs SaveBlock1.pos before trying
+        -- the fix, the same cross-check that caught the starter leg's stale-position bug.
+        do
+            local ox, oy = obj0_pos()
+            local sx, sy = G.pos(cp)   -- multi-return: capture first (a bare G.pos(cp) mid-list drops sy)
+            G.phase("at-lab-exit", string.format(
+                "map=%d sb1=(%d,%d) obj0=(%d,%d) facing=%d", mapid(cp), sx, sy, ox, oy, obj0_facing()))
+        end
+        -- FIX: treat this door the same as every OTHER door in this file — a press INTO it,
+        -- not a plain walk-onto. (leave_lab_for_parcel's collision-only investigation showed
+        -- MB_NORMAL, not an arrow-warp metatile, but the coordinate-warp check still appears to
+        -- require the player's MOVEMENT to be a step onto/through the tile, which `follow()`
+        -- landing on it via its last queued direction does not reliably trigger — same shape as
+        -- every exterior door (16,13)/(36,19)/(26,26) elsewhere in this file, all driven by
+        -- enter_warp, not require_map_change.)
+        if not enter_warp(cp, "Down", 20) then
+            local ox2, oy2 = obj0_pos()
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "leave_lab_for_parcel: the lab exit never fired a warp; obj0=(%d,%d) sb1=(%d,%d)",
+                ox2, oy2, G.pos(cp)))
+        end
         G.phase("outside", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
     end,
 }
@@ -557,13 +594,9 @@ LEGS[#LEGS + 1] = {
         if not enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: the mart door never fired a warp") end
         G.phase("in-mart", string.format("map=%d at=(%d,%d)", mapid(cp), G.pos(cp)))
         -- Let the ON_FRAME script run and clear its own message boxes with A; the scene owns
-        -- player movement, this loop only advances dialogue.
-        local settled = false
-        for _ = 1, 3000 do
-            if G.pred_ok(cp, "script_context_status") then settled = true; break end
-            G.tap("A", 2, 10)
-        end
-        if not settled then
+        -- player movement. wait_scene_settled: idle+unlocked debounced 60 frames, never a
+        -- single read (same lesson as the starter/rival-battle scenes).
+        if not wait_scene_settled(cp, 3000) then
             G.shot("stuck")
             G.finish(false, "parcel_fetch: the mart's parcel scene never returned control")
         end
@@ -595,15 +628,9 @@ LEGS[#LEGS + 1] = {
         G.tap("Up", 2, 13)
         -- Talking to Oak with the parcel triggers the whole delivery + Pokedex + 5-balls
         -- cutscene (scripts.inc:600-660); long, almost entirely message boxes and NPC
-        -- applymovement. Bounded mash, verified by the engine handing control back.
-        local settled = false
-        for _ = 1, 6000 do
-            if G.pred_ok(cp, "callback2") and G.pred_ok(cp, "script_context_status") then
-                settled = true; break
-            end
-            G.tap("A", 2, 10)
-        end
-        if not settled then
+        -- applymovement. wait_scene_settled: idle+unlocked debounced 60 frames, plus callback2
+        -- back to CB2_Overworld, never a single read.
+        if not wait_scene_settled(cp, 6000, function() return G.pred_ok(cp, "callback2") end) then
             G.shot("stuck")
             G.finish(false, "parcel_deliver: Oak's dex-scene never returned control")
         end
@@ -621,9 +648,12 @@ LEGS[#LEGS + 1] = {
         "src/battle_script_commands.c (BattleScript_SuccessBallThrow); include/constants/battle.h:82 (B_OUTCOME_CAUGHT=7)",
     },
     run = function(cp)
-        local lab_map = mapid(cp)
         follow(cp, "oak_to_lab_exit", "route1_catch")
-        require_map_change(cp, lab_map, "route1_catch")
+        -- Same door as leave_lab_for_parcel (5..7,12): a press INTO it, not a plain walk-onto.
+        if not enter_warp(cp, "Down", 20) then
+            G.shot("stuck")
+            G.finish(false, "route1_catch: the lab exit never fired a warp")
+        end
         follow(cp, "lab_exit_to_route1_edge", "route1_catch")
         if not enter_warp(cp, "Up", 30) then G.finish(false, "route1_catch: PalletTown->Route1 crossing never fired") end
         follow(cp, "route1_south_to_grass_spot", "route1_catch")
@@ -740,9 +770,15 @@ LEGS[#LEGS + 1] = {
             G.finish(false, string.format("viridian_pc: party_count() never rose from %d (withdraw)", after_deposit))
         end
         G.phase("withdrawn", "party=" .. party_count())
+        -- Back out of the PC menu and confirm the field, debounced 60 frames -- never a single
+        -- read (same lesson as every other scene end in this file).
         for _ = 1, 20 do
             if G.pred_ok(cp, "callback2") then break end
             G.tap("B", 3, 20)
+        end
+        if not wait_scene_settled(cp, 900) then
+            G.shot("stuck")
+            G.finish(false, "viridian_pc: never settled back into the field after the PC menu")
         end
     end,
 }

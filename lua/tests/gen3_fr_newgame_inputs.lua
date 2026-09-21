@@ -117,8 +117,9 @@ local function leg(name, path, from_map, exit_dir)
     for _, dir in ipairs(path) do
         if not step(dir) then
             G.shot("stuck")
+            local px, py = G.pos(cp)   -- multi-return: capture first
             G.finish(false, string.format("%s: step %s never moved the player at (%d,%d) map=%d; "
-                                       .. "see patch/build/gen3_stuck.png", name, dir, G.pos(cp), mapid()))
+                                       .. "see patch/build/gen3_stuck.png", name, dir, px, py, mapid()))
         end
     end
     -- press into the warp, then wait for the map to change and the fade to settle

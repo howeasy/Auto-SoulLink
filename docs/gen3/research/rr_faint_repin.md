@@ -128,3 +128,113 @@ Run the function-start census from slink_prebattle.State with the real wild_fain
 * No full RR function-size symbol exists here. Do not use the next embedded pool or arbitrary next push as a proven boundary. Candidate capture 0x130 is within the traced body; entry reaches its counter branch and tail returns to the join (ROM ranges above).
 * No claim of byte-for-byte identity between the whole RR body and upstream CFRU. Source names/semantics are corroborative; binary dispatch and branch evidence are authoritative for this ROM. Shell network access failed and web fetched the exact pinned general_bs_commands.c instead; no downloaded source file was written.
 * Outside lease: re-audit other battle-opcode site bindings against **0x0903EF20**, not the surviving vanilla table. Do not infer any particular other opcode is wrong without reading its selected target. Amend rr_site_reachability.md's blanket active-caller inference; no edits made to it or the packs.
+
+## R5 follow-up: the missing route is extended opcode FF/23 (2026-09-21)
+
+This section supersedes any inference above that opcode 0x19 is the sole RR player-faint source. It does not retract the verified table binding or byte decoding. New physical evidence: `docs/gen3/probes/census_rr_faint_2026-09-21.txt:1-15` records 0x1B entry 14 hits, 0x19 entry/interior/store zero, and active script runners over seven returns. **14 entry hits are not proof of 14 distinct faints or one entry per faint**: the cleanup routine is a re-entered state machine (source below). Companion MD5 rechecked: bf8e94a01c0aee0aa7eb37c7333329af.
+
+### Entry address versus actual execution
+
+ROM 0x0109E5BC still begins `F0B5C44C23685E789B7885B0C24D002B`: ordinary Thumb `push {r4-r7,lr}`, then literal load and field reads. Table pointer 0x0909E5BD means entry **0x0909E5BC**, not entry+4 or a location after a pool. The earlier runner instructions load the table entry and call it indirectly; they do not add an entry offset (ROM 0x00015C74..0x00015C9F; previous dispatcher table). This proves the selected address if opcode 19 executes, not that any observed battle script uses opcode 19. No evidence supports blindly moving the hook a halfword forward to fix the zero count. Delivery at adjacent extended-ROM cleanup body 0x0909E968 weakens a blanket 0x09-region callback-failure hypothesis, but cannot prove delivery at every individual address (census :2-3).
+
+### Pinned upstream bytecode and RR secondary dispatch
+
+Pinned source fetched directly over HTTPS in memory from `Skeli789/Complete-Fire-Red-Upgrade` revision b637a27898b14e25dd24d0f69a3e302f0069deb8 (no downloaded files):
+
+* [battle_script_macros.s:296-312](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/battle_script_macros.s#L296-L312): `faintpokemon` remains opcode **19**; animation **1A**, cleanup **1B**.
+* [battle_script_macros.s:1630-1633](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/battle_script_macros.s#L1630-L1633): `faintpokemonaftermove` emits **FF 23 00 00**. This is extended-table dispatch, **not callasm**; callasm is F8 at :1405-1408.
+* [assembly/battle_scripts/general_attack_battle_scripts.s:1983-1994](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/assembly/battle_scripts/general_attack_battle_scripts.s#L1983-L1994): EerieSpell's damage path ends in prefaint effects, faintpokemonaftermove, move end. Lines 155-166 show an attacker-specific opcode19 check followed by FF23. These two mechanisms coexist; not every attack must enter 19.
+* [src/new_bs_commands.c:127-135,1150-1184](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/new_bs_commands.c#L1150-L1184): `atkFF_callsecondarytable` selects the extension; **atkFF23_faintpokemonaftermove** establishes the target battler and updates the player/opponent faint counter on qualified HP-zero paths.
+
+Binary resolution (all offsets directly read):
+
+| Link | ROM offset | Word / decoded effect |
+|---|---|---|
+| primary table FF slot, 0903EF20 + FF*4 | **0103F31C** | **19D90A09**, target **090AD919**, executable **090AD918** |
+| FF dispatch's secondary-table literal | **010AD934** | **20F30309** = **0903F320** |
+| secondary slot 23, 0903F320 + 23*4 | **0103F3AC** | **E5EE0A09**, target **090AEEE5**, executable **090AEEE4** |
+| replacement native FF23 entry | **010AEEE4** | **F0B58A4B1A788A4987B08A4D04939300** |
+
+FF dispatch at 090AD918 loads script-pointer variable via pool 010AD930=02023D74, increments that pointer by one (to the subopcode), loads the original script's byte+1, scales by four and indexes the secondary table (halfwords at 090AD91C..090AD928: `681A 1C51 6019 7852 4B03 0092 58D3`). It calls the selected pointer via BL at 090AD92A. Thus FF/23 is a concrete alternate native faint function with a binary-resolved RR address, not speculation about callnative or a BPRE.ld guessed replacement.
+
+**[INFERENCE, strong SOURCE/BINARY; LIVE still OPEN]** FF23 explains the observed ordinary target-faint counter changes without entering 19. The exact bytecode stream of the observed battles was not captured; confirm FF23 entry plus the interior below during a real faint before claiming that physical causal chain closed.
+
+### Better semantic candidate: FF23 post-player-counter join
+
+The RR FF23 body has its own player-counter commit. Literal at ROM **010AF140=03004F90** is gBattleResults; **010AF118=02023BC4** is gActiveBattler (same RAM symbols as R3). Decoded halfwords:
+
+```text
+090AEF9A 4A69    ldr r2,[pc,...]    ; gBattleResults
+090AEF9C 6023    str r3,[r4]        ; player-fainted hit marker
+090AEF9E 7813    ldrb r3,[r2]       ; player counter
+090AEFA0 2BFF    cmp r3,#255
+090AEFA2 D000    beq 090AEFA6       ; saturated path
+090AEFA4 E0AB    b   090AF0FE
+090AEFA6 7828    ldrb r0,[r5]       ; COMMON POST-COUNTER CAPTURE
+...
+090AF0FE 3301    adds r3,#1
+090AF100 7013    strb r3,[r2]
+090AF102 E750    b   090AEFA6
+```
+
+Proposed **additional** source, not a claim all opcode19 special cases disappear:
+
+```text
+address = 0x090AEFA6
+capture_offset = 0
+rom_offset = 0x010AEFA6
+expected_hex = 2878664B00F0F9FF2878059B3E6800F0
+entry_address = 0x090AEEE4
+entry_expected_hex = F0B58A4B1A788A4987B08A4D04939300
+function_relative_capture = 0xC2
+mode = thumb
+```
+
+R5 points at gActiveBattler at this join; read RAM 0x02023BC4 for identity, not the not-yet-loaded R0. Keep present-battler/side qualification and identity deduplication. This matches the earlier counter-commit semantics more closely than waiting for all cleanup effects; verify counter saturation and opponent exclusion physically. Raw counter-store-only candidate is **0x090AF100**, but it misses saturation.
+
+### Evaluate opcode1B cleanup as a second, later witness
+
+Its primary-table slot ROM **0103EF8C** selects **0909E969 -> 0909E968**. [src/general_bs_commands.c:1392-1433](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/general_bs_commands.c#L1392-L1433) derives the active battler from the script argument and processes cleanup stages; [lines 1694-1698](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/general_bs_commands.c#L1694-L1698) reset its state and advance the script after completion. Entry can recur while buffers/effects are pending; **do not emit faint on every entry or assume 14 hits = one per faint**.
+
+Binary identity assignment occurs at **0909E980:7033**, `strb r3,[r6]`; R6 is loaded at E97C from pool **0109EC58=02023BC4**. At entry, gActiveBattler may still name another operation; sample after this assignment, or at completion. gBattlerFainted=02023D6D (`data/gen3/pret/pokefirered.sym:100`) is not interchangeable for every script argument. Upstream faint scripts select attacker/target, while scripting-bank variants explicitly copy to FAINTED_BANK ([assembly/battle_scripts/fainting_battle_scripts.s:23-28,44-49,60-67](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/assembly/battle_scripts/fainting_battle_scripts.s#L60-L67)). These RAM names are symbol/binary evidence; they are not currently explicit gActiveBattler/gBattlerFainted fields in the RR generated profile. Integration needs a pinned field rather than a literal in production signals.
+
+Candidate **after full cleanup's state reset and script advance**, not generic function return:
+
+```text
+0909EEC2 6823    ldr r3,[r4]
+0909EEC4 33D0    adds r3,#0xD0
+0909EEC6 701A    strb r2,[r3]       ; faintEffectsState reset
+0909EEC8 697B    ldr r3,[r7,#20]   ; saved script-pointer-variable address
+0909EECA 681B    ldr r3,[r3]
+0909EECC 697A    ldr r2,[r7,#20]
+0909EECE 3302    adds r3,#2
+0909EED0 6013    str r3,[r2]       ; command complete, cursor advanced
+0909EED2 E6BC    b epilogue        ; CAPTURE after store
+```
+
+Record: address **0909EEC2**, capture_offset **16**, rom_offset **0109EEC2**. Use **32 bytes** if runtime validation must cover the effective hook; for the requested exact 16-byte capture slice instead choose **address=0909EED2**, offset=0, rom_offset=0109EED2, expected_hex=**BCE638E00302C5510708E95107084A3D**. Entry anchor at 0909E968 is **F0B5BA4B8BB002AF7B611B685878D4F7**; entry-relative capture is **0x56A**. This is a manually decoded candidate, LIVE OPEN. Some of the 16-byte slice following the branch is adjacent code/pool data; it is an integrity anchor, not sixteen bytes of sequentially executed instructions.
+
+Filter the sampled active battler through its position/side: gBattlerPositions=02023BD6 (`pokefirered.sym:81`), not merely battler index==0, and preserve RR tag/borrowed-party policy. Resolve current party index using the already-profiled BATTLER_PARTY_INDEXES_ADDR (`lua/games/gen3_frlge.lua:209`). Cleanup is later than faint commitment and can include abilities/form changes; it is a fallback/lifecycle witness with explicit semantics, not automatically an equivalent replacement for counter-commit capture.
+
+### Revised discriminating census: 10 starts plus separate interiors
+
+| Even function start | Identity / source |
+|---|---|
+| 090AD918 | primary FF secondary-table dispatcher, table FF slot ROM0103F31C |
+| **090AEEE4** | **atkFF23_faintpokemonaftermove**, secondary23 slot ROM0103F3AC |
+| 0909E5BC | original opcode19 target, compare special-case activity |
+| 0909E968 | opcode1B cleanup, established physical positive control |
+| **080215A0** | opcode1A animation; RR slot ROM0103EF88 = 080215A1; sym:1736 |
+| 08018F90 | vanilla HandleFaintedMonActions **trampoline**, sym:1682 |
+| **09093044** | RR HandleFaintedMonActions replacement: ROM00018F90 bytes `0048004745300909` load/bx target09093045; entry ROM01093044 bytes `8022F0B5BE4B85B002931B68134000D0` |
+| 0801D030 | known-live HandleAction_RunBattleScript dispatcher |
+| 08015C00 | known-live PopCallbacksStack dispatcher |
+| 08015B58 | battle-return control |
+
+The HandleFaintedMonActions upstream implementation is in pinned `src/end_turn.c:2081` onward. Its RR address above is derived from the binary trampoline, not assigned from source ordering. Separately sample **090AEFA6** (FF23 common commit), **090AF100** (counter store), **0909E982** (cleanup after battler assignment), **0909EED2** (cleanup complete), and old19 capture **0909E6EC**. Track player/opponent identity, script cursor/opcode, HP, counter before/after, and occurrence order; do not combine these interiors into a purported function-start list.
+
+### Remaining unknowns and evidence correction
+
+The plausible contradiction is now resolved at SOURCE/BINARY level: RR has two faint-command mechanisms, and the extended FF23 body independently commits the counter. It is NOT yet resolved by a physical FF23 fire. Opcode19 remains meaningful for other attacker/scripted faint paths; do not delete it merely because seven ordinary battles missed it. The source macro encoding contradicts the suggestion that FF always means generic callasm: FF is secondary dispatch, F8 is callasm (pinned macro lines above).
+
+This follow-up used direct pinned raw-source HTTP reads for line numbers; earlier web-rendered/raw cache views returned different line positions for the same URL. The URLs and **direct-fetch line ranges in this R5 section** are the current citation basis. No source downloads were saved. No tests/emulator/Python or commits were run, and no file beyond this appended note was edited.
