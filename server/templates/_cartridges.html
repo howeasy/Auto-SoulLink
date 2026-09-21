@@ -12,12 +12,15 @@
   <template x-for="pid in ['a', 'b']" :key="pid">
     <label class="mk-field"><span x-text="'Player ' + pid.toUpperCase() + ' cartridge'"></span>
       <span class="mk-filerow">
+        {# :selected on each option, not only x-model on the select: the options are
+           rendered by nested templates, after the value is set, and a <select> shows its
+           placeholder until an option claims the value #}
         <select x-model="rdraft['rom_' + pid]">
-          <option value="">— pick a cartridge —</option>
+          <option value="" :selected="!rdraft['rom_' + pid]">— pick a cartridge —</option>
           <template x-for="g in romGroups()" :key="g.label">
             <optgroup :label="g.label">
               <template x-for="r in g.roms" :key="r.path">
-                <option :value="r.path" :disabled="!usable(r)" x-text="romNote(r) + ' — ' + r.name"></option>
+                <option :value="r.path" :selected="rdraft['rom_' + pid] === r.path" :disabled="!usable(r)" x-text="romNote(r) + ' — ' + r.name"></option>
               </template>
             </optgroup>
           </template>
