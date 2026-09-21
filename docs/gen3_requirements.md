@@ -182,6 +182,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 first semantic fire, vanilla FR: `docs/gen3/probes/shadow_fr_play_2026-09-21.txt` — the shadow observer (lua/gen3/shadow_run.lua over the real Entry.build, admitted by hash) registered 21 sites, rejected 0, dropped 0, and `map_load` fired exactly once at frame 1058 as the scripted walk entered Oak's lab (callback_address == site 0x0805xxxx, raw_r15 = +2, thumb); frame_control counted 1789 over the run. PHYSICAL positive for S-1 on FR `map_load`; RR companion duos (six, all PASS with the observer) show 19 registered and only frame_control (reachability scan R2 in flight). The play leg itself failed by design of the game: the starter needs the Route 1 Oak intercept first (leg reorder queued).
 
+- 2026-09-21 P3 RR battle census: `docs/gen3/probes/census_rr_battle_2026-09-21.txt` — from `slink_prebattle.State` the pinned RR `battle_end` hook (0x08015BD0, inside ReturnFromBattleToOverworld) fired exactly once at frame 2484, the frame the function entry fired in the entry-hook run; exec hooks deliver at every tested ROM address on RR; `docs/gen3/research/rr_site_reachability.md` shows all pins reachable. PHYSICAL positive for S-1 on RR `battle_end`. The six RR duos observe only frame_control because they never reach the semantic sites (explode exits at the outcome byte; faint/boxsync/trade are commanded/native). Consequence for G3: RR coverage needs natural-play sources (scripted RR play), not re-pinning.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

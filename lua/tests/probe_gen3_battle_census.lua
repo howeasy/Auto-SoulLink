@@ -59,7 +59,8 @@ for i = 1, FRAMES do
     G.advance()
 end
 joypad.set({})
-G.phase("walked", string.format("map=%d,%d in_battle=%s", G.map(cp), tostring(G.pred(cp, "in_battle"))))
+local mg, mn = G.map(cp)   -- two returns: capture first, or the next format arg is dropped
+G.phase("walked", string.format("map=%d,%d in_battle=%s", mg, mn, tostring(G.pred(cp, "in_battle"))))
 
 table.sort(probes, function(a, b) return (a.first_frame or 1e12) < (b.first_frame or 1e12) end)
 local fired, silent = 0, {}
