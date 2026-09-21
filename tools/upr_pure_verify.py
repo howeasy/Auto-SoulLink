@@ -270,11 +270,16 @@ def _ancestors_or_self(sp: int, pre_evos: dict) -> set[int]:
 
 def _terminal_evolutions(sp: int, evos: dict) -> set[int]:
     """Every terminal fullyEvolve (A:6794-6832) could reach from ``sp`` by walking every
-    evolutionsFrom edge (branch-exhaustive: Gen 1's only branch is Eevee, and without the
-    seed-selected branch fullyEvolve actually used, treating every branch as reachable is the
-    side that cannot manufacture a NEW false accept -- it can only under-exclude a candidate
-    Java's real run happened to exclude, same direction as every other pool approximation
-    here). A cyclic guard mirrors Java's ``seenMons`` check."""
+    evolutionsFrom edge (branch-exhaustive: Gen 1's only branch is Eevee). Used alone, for a
+    single slot's own evolvesIntoTheWrongType exclusion, treating every branch as reachable
+    cannot under-INCLUDE a candidate Java's real run excluded -- it can only keep something
+    Java's real (seed-selected) branch would also have kept eligible, same direction as every
+    other pool approximation here. It is NOT safe on its own once more than one slot in a party
+    can each be credited via a *different* branch of the SAME split ancestor: fullyEvolve picks
+    one branch per trainer (A:6826), so `_trainer_similar_strength`'s branch-consistency check
+    is what actually closes that gap (cx-288123ae #3) -- this function only supplies the
+    candidate terminals, it doesn't by itself rule out crediting two branches at once. A cyclic
+    guard mirrors Java's ``seenMons`` check."""
     terms: set[int] = set()
 
     def walk(p: int, seen: frozenset[int]) -> None:
@@ -774,71 +779,118 @@ class _Check:
         if mode == "type_themed":
             for where, slots in self.parties:
                 self.shared_type("trainers", where, [sp for _lv, sp, _m in slots])
-        if self.opt("trainers_similar_strength") and mode in ("random", "type_themed"):
-            # pickTrainerPokeReplacement(usePowerLevels=True) (A:6863-6978): cachedAllList is
-            # noLegendaryList/mainPokemonList (A:1693-1694) -- the same block_legendaries-gated
-            # pool wild/statics use, first narrowed to the party's theme type under type_themed
-            # (A:6892-6918: pickFrom = cachedReplacementLists.get(type), itself built from
-            # pokemonOfType(type, noLegendaries)) -- filtered further by a dynamic
-            # usedAsUniqueList/illegalIfEvolvedList that's empty here (elite-four-unique-pokemon
-            # and illegal-evolution-chain blocking aren't in scope), then the shared BST-window
-            # (_strength_band, cap 2: initial scan + at most one widened one).
-            #
-            # Randomizer.java:451-476 runs randomizeTrainerPokes (the selection this band
-            # constrains) BEFORE forceFullyEvolvedTrainerPokes, so when this slot's level clears
-            # trainers_force_evolved, `out` may be the fully-evolved TERMINAL of whatever was
-            # selected (A:6794-6832), not the selection itself -- accept if any ancestor-or-self
-            # of `out` (a legal pre-force selection) falls in the band. That ancestor must also
-            # be an ELIGIBLE member of the pool it's credited against (cx-201b85a7 #2): a
-            # species can be near the right BST while belonging to the wrong theme pool
-            # entirely (or none), which a BST-only check can't catch.
-            #
-            # Under type_themed, a themed candidate that would force-evolve OUT of the theme is
-            # excluded from selection before the window ever runs (evolvesIntoTheWrongType,
-            # A:1849-1858, added to bannedList only when willForceEvolve for THIS slot,
-            # A:1897-1898) -- with a fallback to the unfiltered pool if that leaves nothing
-            # (A:6920-6923, `withoutBannedPokemon` is only used `if (!isEmpty())`).
-            base_pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("trainers_block_legendaries") else set())
-            evos = self.f["evos"]
-            for where, slots in self.parties:
-                if mode == "type_themed":
-                    # the actual theme type isn't recorded anywhere observable; every party
-                    # member's true type is IN the party's shared-type intersection (already
-                    # required by shared_type() above), so trying each candidate in it is a
-                    # necessary, not stronger-than-proven, check
-                    outs = [self.out[s] for _lv, s, _m in slots]
-                    common = set.intersection(*(self.f["types"][o] for o in outs)) if outs else set()
-                    themes: list[int | None] = sorted(common)
-                    if not themes:                    # shared_type() already reported the empty intersection
-                        continue
-                else:
-                    themes = [None]
-                for lv, sp, mask in slots:
-                    c_bst, v = self.f["bst"][self.clean[sp]], self.out[sp]
-                    lvl = self.out[lv] & mask
-                    will_force = bool(force) and lvl >= force
-                    candidates = _ancestors_or_self(v, self.f["pre_evos"]) if will_force else {v}
-                    ok = False
-                    for theme in themes:
-                        pool = base_pool if theme is None else {p for p in base_pool if theme in self.f["types"][p]}
-                        if will_force and theme is not None:
-                            filtered = {p for p in pool if _terminal_evolutions(p, evos) & pool}
-                            if filtered:
-                                pool = filtered
-                        pool_bsts = [self.f["bst"][p] for p in pool]
-                        lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=2)
-                        if any(x in pool and lo <= self.f["bst"][x] <= hi for x in candidates):
-                            ok = True
-                            break
-                    if not ok:
-                        self.fail(f"trainers: {where} 0x{sp:X} {self.name(v)} (BST {self.f['bst'][v]}) is outside "
-                                  f"the similar_strength band around {self.name(self.clean[sp])} (BST {c_bst})")
+        if self.opt("trainers_similar_strength") and mode in ("random", "type_themed", "distributed"):
+            self._trainer_similar_strength(force)
         # "distributed" (pickTrainerPokeReplacement with usePlacementHistory) only refuses a
         # species whose count is >= 2x the mean over the species placed SO FAR, in a shuffled
         # trainer order. Every final multiset is reachable under that rule (place the most
         # frequent species first, then the next: the k-th copy of the j-th species needs
         # (j-2)(k-1) < 2*sum of the larger counts, which holds), so no seed-independent
-        # property beyond pool membership exists to assert. (cx-758c671d #3)
+        # property beyond pool membership exists to assert. (cx-758c671d #3) similar_strength's
+        # own band (above) is unaffected by this and applies to distributed just like random.
+
+    def _trainer_similar_strength(self, force: int) -> None:
+        # pickTrainerPokeReplacement(usePowerLevels=True) (A:6863-6978): cachedAllList is
+        # noLegendaryList/mainPokemonList (A:1693-1694) -- the same block_legendaries-gated pool
+        # wild/statics use, first narrowed to the party's theme type under type_themed
+        # (A:6892-6918: pickFrom = cachedReplacementLists.get(type), itself built from
+        # pokemonOfType(type, noLegendaries)); "distributed" and "random" never set a type, so
+        # they always use the theme-less pool (A:6892 `type != null` is false either way).
+        # Filtered further by a dynamic usedAsUniqueList/illegalIfEvolvedList that's empty here
+        # (elite-four-unique-pokemon and illegal-evolution-chain blocking aren't in scope), then
+        # the shared BST-window (_strength_band, cap 2: initial scan + at most one widened one).
+        #
+        # Randomizer.java:451-476 runs randomizeTrainerPokes (the selection this band
+        # constrains) BEFORE forceFullyEvolvedTrainerPokes, so when this slot's level clears
+        # trainers_force_evolved, `out` may be the fully-evolved TERMINAL of whatever was
+        # selected (A:6794-6832), not the selection itself -- accept if any ancestor-or-self of
+        # `out` (a legal pre-force selection) falls in the band. That ancestor must also be an
+        # ELIGIBLE member of the pool it's credited against (cx-201b85a7 #2): a species can be
+        # near the right BST while belonging to the wrong theme pool entirely (or none), which a
+        # BST-only check can't catch.
+        #
+        # Under type_themed, a themed candidate that would force-evolve OUT of the theme is
+        # excluded from selection before the window ever runs (evolvesIntoTheWrongType,
+        # A:1849-1858, added to bannedList only when willForceEvolve for THIS slot, A:1897-1898)
+        # -- with a fallback to the unfiltered pool if that leaves nothing (A:6920-6923,
+        # `withoutBannedPokemon` is only used `if (!isEmpty())`).
+        #
+        # typeForTrainer is chosen ONCE per trainer (A:1836-1847), not per slot (cx-288123ae #2):
+        # "some theme works for this slot" checked independently per slot is too permissive --
+        # the SAME theme must explain every slot in the party. And fullyEvolve's branch pick
+        # (Vaporeon/Jolteon/Flareon for Eevee, Gen 1's only split evolution) depends only on a
+        # random value drawn once per ROM and the trainer's own index (A:6795-6797, 6826:
+        # `evolutionIndex = (fullyEvolvedRandomSeed + trainerIndex) % branches.size()`), both
+        # constant across every TrainerPokemon of one Trainer -- so two slots that both need
+        # Eevee as their SOLE qualifying ancestor must resolve to the SAME branch (cx-288123ae
+        # #3): a party can realize at most one of Eevee's three evolutions.
+        base_pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("trainers_block_legendaries") else set())
+        evos, pre_evos = self.f["evos"], self.f["pre_evos"]
+        branch_parents = {p: tuple(targets) for p, targets in evos.items() if len(targets) > 1}
+
+        def pool_for(theme: int | None, will_force: bool) -> set[int]:
+            pool = base_pool if theme is None else {p for p in base_pool if theme in self.f["types"][p]}
+            if will_force and theme is not None:
+                filtered = {p for p in pool if _terminal_evolutions(p, evos) & pool}
+                if filtered:
+                    pool = filtered
+            return pool
+
+        mode = self.opt("trainers")
+        for where, slots in self.parties:
+            if mode == "type_themed":
+                # the actual theme type isn't recorded anywhere observable; every party member's
+                # true type is IN the party's shared-type intersection (already required by
+                # shared_type() above), so trying each candidate in it is a necessary, not
+                # stronger-than-proven, check
+                outs = [self.out[s] for _lv, s, _m in slots]
+                common = set.intersection(*(self.f["types"][o] for o in outs)) if outs else set()
+                themes: list[int | None] = sorted(common)
+                if not themes:                        # shared_type() already reported the empty intersection
+                    continue
+            else:
+                themes = [None]
+
+            party_failure: str | None = None
+            for theme in themes:
+                slot_data = []                        # (sp, v, v_bst, justifying) per slot
+                for lv, sp, mask in slots:
+                    c_bst, v = self.f["bst"][self.clean[sp]], self.out[sp]
+                    lvl = self.out[lv] & mask
+                    will_force = bool(force) and lvl >= force
+                    candidates = _ancestors_or_self(v, pre_evos) if will_force else {v}
+                    pool = pool_for(theme, will_force)
+                    pool_bsts = [self.f["bst"][p] for p in pool]
+                    lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=2)
+                    justifying = {x for x in candidates if x in pool and lo <= self.f["bst"][x] <= hi}
+                    slot_data.append((sp, v, c_bst, justifying))
+                unjustified = [(sp, v, c_bst) for sp, v, c_bst, j in slot_data if not j]
+                if unjustified:
+                    sp, v, c_bst = unjustified[0]
+                    party_failure = (f"trainers: {where} 0x{sp:X} {self.name(v)} (BST {self.f['bst'][v]}) is "
+                                     f"outside the similar_strength band around {self.name(self.clean[sp])} "
+                                     f"(BST {c_bst})")
+                    continue
+                # every slot has a justifying candidate under this theme -- check that any
+                # branching ancestor relied on exclusively resolves to one branch throughout
+                branch_used: dict[int, set[int]] = collections.defaultdict(set)
+                for _sp, v, _c_bst, justifying in slot_data:
+                    for p, targets in branch_parents.items():
+                        if justifying == {p}:
+                            branch = next((t for t in targets if t in _ancestors_or_self(v, pre_evos)), None)
+                            if branch is not None:
+                                branch_used[p].add(branch)
+                split = {p: b for p, b in branch_used.items() if len(b) > 1}
+                if split:
+                    p, b = next(iter(split.items()))
+                    party_failure = (f"trainers: {where} similar_strength needs {self.name(p)} to evolve into "
+                                     + " AND ".join(self.name(x) for x in sorted(b))
+                                     + " at once (fullyEvolve's branch is fixed per trainer, A:6826)")
+                    continue
+                party_failure = None
+                break
+            if party_failure:
+                self.fail(party_failure)
 
     # ── TMs ──────────────────────────────────────────────────────────────────────────
     def tms(self) -> None:

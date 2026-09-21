@@ -529,6 +529,25 @@ class TestTrainers:
         r = _verify(bytes(out), self.DISTRIBUTED)
         assert any("TORCHED (1F) is not randomizable" in f and where in f for f in r["failures"]), r["failures"]
 
+    DISTRIBUTED_SIMILAR = _spec(trainers="distributed", trainers_similar_strength=True,
+                                 trainers_block_legendaries=False)
+
+    def test_distributed_with_similar_strength_is_a_valid_pool_draw(self, randomized):
+        """pickTrainerPokeReplacement builds the BST-window candidates (A:6925-6960) before the
+        usePlacementHistory filter narrows pickFrom further (A:6882-6891) -- "distributed"
+        never authorizes an out-of-band pick, it only adds a further restriction on top
+        (cx-288123ae #1)."""
+        spec = self.DISTRIBUTED_SIMILAR
+        r = _verify(randomized(spec), spec)
+        assert r["ok"], "\n".join(r["failures"])
+
+    def test_distributed_with_similar_strength_rejects_an_off_strength_species(self, randomized):
+        spec = self.DISTRIBUTED_SIMILAR
+        out = bytearray(randomized(spec))
+        out[0x39589] = MEWTWO
+        r = _verify(bytes(out), spec)
+        assert any("similar_strength band" in f and "0x39589" in f for f in r["failures"]), r["failures"]
+
     def test_type_themed_parties_share_a_type(self, randomized):
         """Fork patch 0004: randomType() used to draw the pure ExtraTypes (GAS/WOOD/ABNORMAL/
         TRI/WIND/SOUND) no species carries -> empty pool -> nextInt(0) crash."""
@@ -624,6 +643,33 @@ class TestTrainers:
         r = _verify(bytes(out), spec)
         assert any("similar_strength band" in f and "0x39589" in f for f in r["failures"]), r["failures"]
 
+    def test_similar_strength_rejects_a_party_needing_two_eevee_branches(self, randomized):
+        """fullyEvolve's branch pick depends only on a value drawn once per ROM and the
+        trainer's own index (A:6795-6797, 6826: `evolutionIndex = (fullyEvolvedRandomSeed +
+        trainerIndex) % branches.size()`), both constant across every Pokemon of one trainer --
+        a party can realize at most one of Eevee's three evolutions (cx-288123ae #3). Growlithe/
+        Slowpoke (class 1 record 5, BST 280/275, level 17) each only fit their own band
+        ([252,308]/[248,302]) via Eevee (BST 280) as the SOLE qualifying ancestor; crediting two
+        different branches (Flareon/Jolteon, BST 430 each) for the same trainer at once is not
+        a single realizable draw."""
+        spec = self.SIMILAR_FORCED
+        out = bytearray(randomized(spec))
+        out[0x3959F] = 0x67                                  # FLAREON
+        out[0x395A0] = 0x68                                  # JOLTEON
+        r = _verify(bytes(out), spec)
+        assert any("class 1 record 5" in f and "evolve into" in f for f in r["failures"]), r["failures"]
+
+    def test_similar_strength_accepts_a_party_realizing_one_eevee_branch(self, randomized):
+        """The same fixture with both slots crediting the SAME branch (fullyEvolve is
+        deterministic per trainer, so this is exactly what a real run could produce) must not
+        be rejected by the branch-consistency check."""
+        spec = self.SIMILAR_FORCED
+        out = bytearray(randomized(spec))
+        out[0x3959F] = 0x67                                  # FLAREON
+        out[0x395A0] = 0x67                                  # FLAREON: same branch as the other slot
+        r = _verify(bytes(out), spec)
+        assert r["ok"], "\n".join(r["failures"])
+
     THEMED_SIMILAR = _spec(trainers="type_themed", trainers_similar_strength=True, trainers_block_legendaries=False)
 
     def test_type_themed_with_similar_strength_is_a_valid_pool_draw(self, randomized):
@@ -647,6 +693,22 @@ class TestTrainers:
             out[sp] = MEWTWO
         r = _verify(bytes(out), spec)
         assert any("similar_strength band" in f and where in f for f in r["failures"]), r["failures"]
+
+    def test_type_themed_with_similar_strength_requires_one_theme_for_the_whole_party(self, randomized):
+        """typeForTrainer is chosen ONCE per trainer (A:1836-1847), not independently per slot:
+        a party where each slot only passes under a DIFFERENT theme is not a legal draw, even
+        though every slot individually looks fine in isolation (cx-288123ae #2). Butterfree/
+        Paras (class 2 record 10, 0x395EB/0x395EC) both share Water and Psychic with Slowbro/
+        Slowpoke, but Slowbro (BST 400) only fits Water's band [305,409] and Slowpoke (BST 275)
+        only fits Psychic's band [204,276] -- no single theme explains both slots at once."""
+        spec = self.THEMED_SIMILAR
+        out = bytearray(randomized(spec))
+        out[0x395EB] = 0x08                                  # SLOWBRO
+        out[0x395EC] = 0x25                                  # SLOWPOKE
+        r = _verify(bytes(out), spec)
+        assert not r["ok"]
+        assert any("similar_strength band" in f and ("0x395EB" in f or "0x395EC" in f)
+                   for f in r["failures"]), r["failures"]
 
     THEMED_SIMILAR_FORCED = _spec(trainers="type_themed", trainers_similar_strength=True,
                                    trainers_force_evolved=1, trainers_block_legendaries=False)
