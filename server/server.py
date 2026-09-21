@@ -280,6 +280,58 @@ def _area_tag(name: str) -> str:
     return re.sub(r"[^0-9A-Za-z]", "", name or "").upper()[:4]
 
 
+class _WireTap:
+    """`--wire-log`: a JSONL transcript of one connection's lines (card gen3-P1-C1-3).
+
+    Wraps the connection's StreamWriter, so every reply is captured where it is actually
+    written and `_respond`'s seven call sites stay untouched; `c2s` is called once per
+    inbound line, right after it parses. Nothing here is constructed unless --wire-log
+    named a directory, so the flag's absence costs one `if` per connection and per line.
+
+    `t` is the protocol `seq` of the c2s line, and a reply carries the `t` of the request
+    it answers (the tap's own counter for a line with no seq) -- see
+    tests/fixtures/gen3/wire/README.md.
+    """
+
+    def __init__(self, writer, dirpath: str, files: dict):
+        self._writer = writer
+        self._dir = dirpath
+        self._files = files  # player -> handle, shared by every connection in this process
+        self.player = "unknown"
+        self.t = 0
+        self._counter = 0
+
+    def __getattr__(self, name):  # drain / close / wait_closed / get_extra_info
+        return getattr(self._writer, name)
+
+    def write(self, data: bytes):
+        self._record("s2c", self.t, data.decode("utf-8", errors="replace"))
+        self._writer.write(data)
+
+    def c2s(self, line: str, msg: dict):
+        if msg.get("player"):
+            self.player = msg["player"]
+        self._counter += 1
+        seq = msg.get("seq")
+        self.t = seq if isinstance(seq, int) and seq >= 0 else self._counter
+        self._record("c2s", self.t, line)
+
+    def _record(self, direction: str, t: int, line: str):
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            return  # ponytail: a line that is not JSON is not protocol; the server logs it already
+        handle = self._files.get(self.player)
+        if handle is None:
+            os.makedirs(self._dir, exist_ok=True)
+            # The handle outlives this call by design: it stays open for the process.
+            handle = self._files[self.player] = open(  # noqa: SIM115
+                os.path.join(self._dir, f"wire_{self.player}.jsonl"), "w", encoding="utf-8")
+        # Field order is the wire's own: json.loads keeps it (3.7+) and dumps does not sort.
+        handle.write(json.dumps({"dir": direction, "t": t, "msg": msg}) + "\n")
+        handle.flush()
+
+
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
                  run_name: str = "", tcp_port: int = 0,
@@ -288,7 +340,12 @@ class SLinkServer:
                  type_lock: bool = False, explode_mode: bool = False,
                  rival_team_swap: bool = False, overworld_presence: bool = False,
                  native_messages: bool = False, native_sounds: bool = False,
-                 battle_calc: bool = True, pc_trade_npc: bool = True):
+                 battle_calc: bool = True, pc_trade_npc: bool = True,
+                 wire_log: str = None):
+        # --wire-log DIR: capture every line of every connection (card gen3-P1-C1-3).
+        # None (the default) means no _WireTap is ever built and nothing changes.
+        self._wire_log = wire_log
+        self._wire_files: dict = {}
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1160,6 +1217,8 @@ class SLinkServer:
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
+        if self._wire_log:
+            writer = _WireTap(writer, self._wire_log, self._wire_files)
         player_id_for_conn: str | None = None
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
@@ -1197,6 +1256,8 @@ class SLinkServer:
                     log.warning(f"Bad JSON from {peer}: {e}")
                     await self._respond(writer, [{"cmd": "noop"}])
                     continue
+                if self._wire_log:
+                    writer.c2s(line, msg)
 
                 player_id = msg.get("player", "")
                 if player_id not in VALID_PLAYERS:
@@ -4800,7 +4861,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                rival_team_swap: bool = False, overworld_presence: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
-               manager_port: int = 0, verbose: bool = False):
+               manager_port: int = 0, verbose: bool = False,
+               wire_log: str = None):
     _configure_logging(data_dir, verbose)
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
@@ -4818,7 +4880,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       native_messages=native_messages,
                       native_sounds=native_sounds,
                       battle_calc=battle_calc,
-                      pc_trade_npc=pc_trade_npc)
+                      pc_trade_npc=pc_trade_npc,
+                      wire_log=wire_log)
 
     # TCP game server.
     # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's
@@ -4904,6 +4967,8 @@ if __name__ == "__main__":
         help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
+    parser.add_argument("--wire-log",     default=None, metavar="DIR",
+                        help="Capture every TCP line to DIR/wire_<player>.jsonl (debug/characterization)")
     args = parser.parse_args()
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
                      run_name=args.run_name,
@@ -4917,4 +4982,5 @@ if __name__ == "__main__":
                      battle_calc=args.battle_calc,
                      pc_trade_npc=args.pc_trade_npc,
                      manager_port=args.manager_port,
-                     verbose=args.verbose))
+                     verbose=args.verbose,
+                     wire_log=args.wire_log))

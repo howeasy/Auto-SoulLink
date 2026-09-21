@@ -39,6 +39,8 @@ BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
 SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
 ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
+# Where --wire-log parks a run's golden transcripts (tests/fixtures/gen3/wire/README.md).
+WIRE_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3", "wire")
 WT_FWD = REPO.replace("\\", "/")
 
 # Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
@@ -1132,12 +1134,49 @@ class DuoRun:
         process = getattr(self, "emu_by_inst", {}).get(inst)
         return bool(process) and process.poll() is not None
 
-    def start_server(self):
+    def _wire_dir(self):
+        """This run's server-side wire-log directory, or None when --wire-log is absent."""
+        if not getattr(self.args, "wire_log", False):
+            return None
+        return os.path.join(self.data_dir, "wire")
+
+    def server_cmd(self):
+        """The server subprocess's argv. Byte-identical to the old literal without --wire-log."""
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+        wire = self._wire_dir()
+        if wire:
+            cmd += ["--wire-log", wire]
+        return cmd
+
+    def collect_wire_logs(self):
+        """Promote this run's wire log to the golden-transcript path, and name what landed.
+
+        `tests/fixtures/gen3/wire/<scenario>_<player>_old_client.jsonl`, per that directory's
+        README. Only a --wire-log run has anything to promote; the source is the server's own
+        capture under the data dir, so this must run before the data dir is removed.
+        """
+        wire = self._wire_dir()
+        if not wire or not os.path.isdir(wire):
+            return []
+        os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        landed = []
+        for name in sorted(os.listdir(wire)):
+            if not (name.startswith("wire_") and name.endswith(".jsonl")):
+                continue
+            player = name[len("wire_"):-len(".jsonl")]
+            dest = os.path.join(WIRE_FIXTURES,
+                                f"{self.scenario}_{player}_old_client.jsonl")
+            shutil.copyfile(os.path.join(wire, name), dest)
+            print(f"[duo] wire log: {dest}")
+            landed.append(dest)
+        return landed
+
+    def start_server(self):
+        cmd = self.server_cmd()
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
             # The handle is the server subprocess's stdout and must outlive this call —
@@ -3827,6 +3866,7 @@ class DuoRun:
             for path in (gf, gf + ".chord"):
                 if os.path.exists(path):
                     os.remove(path)
+        self.collect_wire_logs()  # the source lives under the data dir; copy before it goes
         if passed and not self.args.keep_data:
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
@@ -4359,6 +4399,9 @@ def main():
                     help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg")
     ap.add_argument("--server-flags", nargs="*", default=[],
                     help="extra flags for server.server")
+    ap.add_argument("--wire-log", action="store_true",
+                    help="capture every c2s/s2c line to "
+                         "tests/fixtures/gen3/wire/<scenario>_<player>_old_client.jsonl")
     ap.add_argument("--list", action="store_true",
                     help="print the scenarios --scenario all would run for --game, then exit")
     args = ap.parse_args()
