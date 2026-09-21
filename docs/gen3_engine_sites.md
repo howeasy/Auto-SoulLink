@@ -123,8 +123,8 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 |---|---|---|---|---|
 | fr | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
 | lg | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
-| rr | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
-| rr_companion | PINNED | 080213C4 / +4 / 213C4 | 0130087038780CF02DFF2DE0C43B0202 | SOURCE only; capture contract above |
+| rr | PINNED | 0909EED2 / +0 / 109EED2 | BCE638E00302C5510708E95107084A3D | SOURCE only; capture contract above |
+| rr_companion | PINNED | 0909EED2 / +0 / 109EED2 | BCE638E00302C5510708E95107084A3D | SOURCE only; capture contract above |
 
 Function bounds and independently pinned entry anchors (vanilla):
 
@@ -135,6 +135,16 @@ Function bounds and independently pinned entry anchors (vanilla):
 
 Unless an RR-specific binding is described below, RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. JSON reference_size is a vanilla bound, not a proved RR extent. frame_control retains its measured/patched artifact binding.
 
+RR-specific capture contract:
+
+[CFRU source map](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/general_bs_commands.c#L1392-L1433). RR selects a replacement battle-script command table at 0903EF20 (five pool words replaced): opcode 0x19 dispatches to atk19_tryfaintmon 0909E5BC, but the physical census shows no fire there. The live once-per-faint witness is CFRU atk1B_cleareffectsonfaint completion, at its state-reset/script-cursor-advance epilogue (entry 0909E968, capture 0909EED2): fires once per faint (census v3b, 10/10 faints). Fainted battler = gActiveBattler (0x02023BC4, pokefirered.sym:77) at this hit (validated by census v3b: 1 on the nine wild faints, 0 on the player faint). Player side = gBattlerPositions[gActiveBattler] (0x02023BD6, pokefirered.sym:81) & 1 == 0 (B_SIDE_PLAYER); party slot = gBattlerPartyIndexes[gActiveBattler] (0x02023BCE, pokefirered.sym:80), then the mon key PID:OTID from that party record — do NOT use gActiveBattler parity directly as the side test. gBattleResults.playerFaintCounter 0x03004F90 also went 0->1 on the player-faint hit as a cross-check. docs/gen3/research/rr_faint_repin.md R5 and docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt pin this; the old vanilla Cmd_tryfaintmon capture 080213C8 is DEAD on RR (opcode table replaced, docs/gen3/research/rr_opcode_table_audit.md R4).
+Binary body, not upstream C, is authoritative. Capture pattern ends at entry+0x56A+16=0x57A; boundary bytes checked immediately after the capture slice, not a proved whole-function size.
+
+| Artifact | Entry/trampoline | Body entry bytes | Estimated extent | Boundary bytes |
+|---|---|---|---|---|
+| rr | 0909E968 in-place | F0B5BA4B8BB002AF7B611B685878D4F7 | 57A (estimate) | 0202C94E0408C43F |
+| rr_companion | 0909E968 in-place | F0B5BA4B8BB002AF7B611B685878D4F7 | 57A (estimate) | 0202C94E0408C43F |
+
 ### capture_wild — Cmd_givecaughtmon
 
 [pret src/battle_script_commands.c#L9617-L9645](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L9617-L9645). Battle opcode 0xF0; +0x28 is immediately AFTER BL GiveMonToPlayer (+0x24). R0 holds party/PC/failure result before shift. Destination has been assigned on success; read party/box identity using profile facts. Do not count failure as acquisition or emit twice with mon_given. This is acquired-mon placement, not a ball animation witness.
@@ -143,8 +153,8 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 |---|---|---|---|---|
 | fr | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0C1FF0006 | SOURCE only; capture contract above |
 | lg | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0ABFF0006 | SOURCE only; capture contract above |
-| rr | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0C1FF0006 | SOURCE only; capture contract above |
-| rr_companion | PINNED | 0802D824 / +4 / 2D824 | 13F076F9000600285DD09EF0C1FF0006 | SOURCE only; capture contract above |
+| rr | PINNED | 0907DD80 / +8 / 107DD80 | 5A532000FFF704FD374E002822D0374B | SOURCE only; capture contract above |
+| rr_companion | PINNED | 0907DD80 / +8 / 107DD80 | 5A532000FFF704FD374E002822D0374B | SOURCE only; capture contract above |
 
 Function bounds and independently pinned entry anchors (vanilla):
 
@@ -154,6 +164,16 @@ Function bounds and independently pinned entry anchors (vanilla):
 | lg | data/gen3/pret/pokeleafgreen.sym:1969 Cmd_givecaughtmon | 0802D800 / 15C | +28 | F0B54F464646C0B419488146194D2878 |
 
 Unless an RR-specific binding is described below, RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. JSON reference_size is a vanilla bound, not a proved RR extent. frame_control retains its measured/patched artifact binding.
+
+RR-specific capture contract:
+
+[CFRU source map](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L614-L656). RR selects a replacement battle-script command table at 0903EF20; opcode 0xF0 dispatches to the RR atkF0_givecaughtmon replacement (entry 0907DD44), not the dead vanilla Cmd_givecaughtmon (capture 0802D82C DEAD on RR, docs/gen3/research/rr_opcode_table_audit.md R4). Capture at 0907DD88, immediately after the BL to the already-pinned RR GiveMonToPlayer body 0907D790 (BL at 0907DD84): R0 = placement result (0 party / 1 box / failure codes), R4 = caught mon pointer (docs/gen3/research/rr_opcode_table_audit.md R4 decode). Pinned by bytes here; live delivery has NOT yet been observed with the observer running, though the RR catch input sequence (Right, A, Right, Right, A, A at the action menu, ball pocket fixture 0x0203C354) is now pinned (docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt) so a driver can exercise it. Do not count failure as acquisition or double-emit with mon_given: the reducer must filter on R0's result before treating any hit as a catch, since failures and duplicate GiveMonToPlayer/mon_given helper observations are not themselves acquisitions.
+Binary body, not upstream C, is authoritative. Capture pattern ends at entry+0x3C+16=0x4C; boundary bytes checked immediately after the capture slice, not a proved whole-function size.
+
+| Artifact | Entry/trampoline | Body entry bytes | Estimated extent | Boundary bytes |
+|---|---|---|---|---|
+| rr | 0907DD44 in-place | F8B5FFF73FFF040010F0ACF9002816D0 | 4C (estimate) | 00F082FB364D374B |
+| rr_companion | 0907DD44 in-place | F8B5FFF73FFF040010F0ACF9002816D0 | 4C (estimate) | 00F082FB364D374B |
 
 ### mon_given — GiveMonToPlayer common return
 

@@ -128,7 +128,7 @@ def test_rr_body_pins_have_bound_estimates_and_decoded_trampolines(name):
     if not ROM_SPECS[name][3].is_file():
         pytest.skip(f"ROM not present at {ROM_SPECS[name][3]}")
     rom = load_rom(name)
-    for kind in ("mon_given", "pc_move", "pc_withdraw", "pc_box_place"):
+    for kind in ("mon_given", "pc_move", "pc_withdraw", "pc_box_place", "faint", "capture_wild"):
         c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
         result = gen.resolve(c, name, rom)
         assert result["status"] == "PINNED", result
@@ -140,6 +140,49 @@ def test_rr_body_pins_have_bound_estimates_and_decoded_trampolines(name):
             detour = decode_thumb_detour(rom, site["detour"]["address"])
             assert detour["target"] == body["address"]
         assert body["extent_evidence"]
+
+
+@pytest.mark.parametrize("name", ("rr", "rr_companion"))
+def test_rr_faint_and_capture_wild_repinned_off_the_replaced_opcode_table(name):
+    """RR selects a replacement battle-script command table at 0x0903EF20; the vanilla
+    Cmd_tryfaintmon/Cmd_givecaughtmon command bodies are dead on the selected dispatch
+    (docs/gen3/research/rr_opcode_table_audit.md R4). The re-pinned rows must land on the
+    live CFRU replacement bodies, not the old dead vanilla addresses."""
+    if not ROM_SPECS[name][3].is_file():
+        pytest.skip(f"ROM not present at {ROM_SPECS[name][3]}")
+    rom = load_rom(name)
+
+    faint = next(c for c in gen.CANDIDATES if c["kind"] == "faint")
+    result = gen.resolve(faint, name, rom)
+    assert result["status"] == "PINNED", result
+    site = result["site"]
+    assert site["address"] == 0x0909EED2
+    assert site["capture_offset"] == 0
+    assert site["rom_offset"] == 0x0109EED2
+    assert site["expected_hex"] == "BCE638E00302C5510708E95107084A3D"
+    assert site["address"] != 0x080213C8  # old vanilla capture is dead on the selected table
+
+    capture_wild = next(c for c in gen.CANDIDATES if c["kind"] == "capture_wild")
+    result = gen.resolve(capture_wild, name, rom)
+    assert result["status"] == "PINNED", result
+    site = result["site"]
+    assert site["address"] == 0x0907DD80
+    assert site["capture_offset"] == 8
+    assert site["rom_offset"] == 0x0107DD80
+    assert site["expected_hex"] == "5A532000FFF704FD374E002822D0374B"
+    assert site["address"] != 0x0802D828  # old vanilla capture is dead on the selected table
+
+
+@pytest.mark.parametrize("name", ("rr", "rr_companion"))
+def test_rr_kinds_count_and_old_faint_address_absent_from_pack(name):
+    document = json.loads(gen.output_path(ROM_SPECS[name][0]).read_text())
+    row = document["titles"][ROM_SPECS[name][1]]["artifacts"][ROM_SPECS[name][2]]
+    assert len(row["sites"]) == 19
+    addresses = {site["address"] for site in row["sites"].values()}
+    assert 0x080213C8 not in addresses
+    assert 0x0802D828 not in addresses
+    assert row["sites"]["faint"]["address"] == 0x0909EED2
+    assert row["sites"]["capture_wild"]["address"] == 0x0907DD80
 
 
 def test_wrong_anchor_and_thumb_bl_interior_refused():
