@@ -20,7 +20,6 @@ Usable as a library too: ``allowlist(title, rom, categories)`` and ``audit(...)`
 from __future__ import annotations
 
 import argparse
-import json
 import pathlib
 import re
 import sys
@@ -181,17 +180,40 @@ def field_item_bytes(rom: bytes, e: dict) -> set[int]:
     return out
 
 
-_FACTS = pathlib.Path(__file__).resolve().parents[1] / "data" / "games" / "gen1_purergb" / "items.json"
+
+
+# UPR's Gen 1 item pool, exactly as Gen1Constants.setupAllowedItems builds it (the fork keeps
+# vanilla's list): ids 1..250 minus the banned singles (townMap 5, bicycle 6, ?????? 7,
+# safariBall 8, pokedex 9, oldAmber 31, cardKey 48, ppUpGlitch 50, coin 59, ssTicket 63,
+# goldTeeth 64), the banned ranges (badges 21+8, fossils/keys 41+5, coinCase 69+10, unused
+# 84+112 = 84..195) and the HMs 196..200; TMs 201..250 are the TM pool. The writer only ever
+# touches a pickup whose CURRENT item is in this pool (randomizeFieldItems/shuffleFieldItems
+# test isAllowed on the existing item), so a site holding anything else -- a key item, an HM,
+# but also pureRGB's own ids that vanilla banned (HYPER BALL 5, ... 8, 23, APEX CHIP 50, 59)
+# -- is never a legal write target and the audit must not allow it (review cx-795d1423 #10,
+# cx-758c671d #5). tests/unit/test_upr_pure_pipeline.py re-derives this from the fork source.
+_UPR_BANNED = ({5, 6, 7, 8, 9, 31, 48, 50, 59, 63, 64} | set(range(21, 29)) | set(range(41, 46))
+               | set(range(69, 79)) | set(range(84, 196)) | set(range(196, 201)))
+UPR_GEN1_ALLOWED_ITEMS = frozenset(set(range(1, 251)) - _UPR_BANNED)
 
 
 def _rewritable_items() -> set[int]:
-    """Item ids the fork may put in a pickup: everything but key items and HMs (its own
-    eligible-item filter, Gen1RomHandler.randomizeFieldItems / shuffleFieldItems). A pickup
-    site holding anything else -- the Secret Key, an HM -- is never a legal write target,
-    so the audit must not allow it either (review cx-795d1423 #10)."""
-    items = json.loads(_FACTS.read_text(encoding="utf-8"))["items"]
-    return {int(k) for k, v in items.items()
-            if not v["key_item"] and not (v["tm_hm"] or "").startswith("HM")}
+    return set(UPR_GEN1_ALLOWED_ITEMS)
+
+
+GUARANTEED_CATCH_PREFIX = bytes.fromhex("CF7EFE01")   # Gen1Constants.guaranteedCatchPrefix
+
+
+def guaranteed_catch_byte(rom: bytes) -> int | None:
+    """Catch-rate tier 5 also makes every ball a Master Ball: the fork turns the `jp z,
+    .captured` after `cp MASTER_BALL` into `jp` (CA -> C3) at the byte after the prefix
+    (Gen1RomHandler.enableGuaranteedPokemonCatching; 0xD1E9 in all six pure ROMs). That one
+    code byte is part of the catch_rate write domain (review cx-758c671d #1)."""
+    i = rom.find(GUARANTEED_CATCH_PREFIX)
+    if i < 0 or rom.find(GUARANTEED_CATCH_PREFIX, i + 1) >= 0:
+        return None                       # absent or ambiguous: nothing is allowed
+    at = i + len(GUARANTEED_CATCH_PREFIX)
+    return at if rom[at] == 0xCA else None
 
 
 def catch_rate_bytes(e: dict) -> set[int]:
@@ -235,6 +257,8 @@ def allowlist(title: str, rom: bytes, categories: set[str], ini: pathlib.Path = 
     out: set[int] = set()
     if "catch_rate" in categories:
         out |= catch_rate_bytes(e)
+        if (gc := guaranteed_catch_byte(rom)) is not None:
+            out.add(gc)
     if "wild" in categories:
         out |= wild_bytes(rom, e)
     if "starters" in categories:

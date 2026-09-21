@@ -274,11 +274,17 @@ def _run_bounded(argv: list, timeout: int) -> subprocess.CompletedProcess:
     try:
         out, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
-        else:
-            proc.kill()
-        proc.communicate()
+        # the cleanup is bounded too (review cx-758c671d #7): a kill that stalls or a
+        # descendant that keeps the pipes open must not turn a refusal into a hang
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                               capture_output=True, timeout=15)
+            else:
+                proc.kill()
+            proc.communicate(timeout=15)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
         raise UprPipelineError(
             f"UPR did not finish within {timeout} s and was killed -- these settings hang "
             f"the randomizer on this cartridge; the run is refused") from None

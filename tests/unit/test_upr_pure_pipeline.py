@@ -79,15 +79,22 @@ def test_the_pure_family_turns_every_tweak_off():
 
 def test_the_pure_family_refuses_what_the_fork_cannot_honour():
     """Review cx-795d1423 #4/#5: TrainerTaggingDisabled=1 and no CanChangeTrainerText on the
-    pure INI rows make these settings no-ops in stock UPR; the family refuses them instead."""
-    from server.upr_settings import PURE_INERT_BOOLS
+    pure INI rows make these settings no-ops in stock UPR; the family refuses them by name.
+    Never coerced (cx-758c671d #2): family_spec leaves an explicit selection alone so the
+    Manager's build path (family_spec -> build_spec -> prepare_pair -> admit_settings) ends
+    in the named refusal, and option_form marks what the pure form must disable."""
+    from server.upr_settings import PURE_INERT_BOOLS, option_form
     for key in PURE_INERT_BOOLS:
-        assert family_spec({key: True}, FAMILY_PURE)[key] is False
-        assert family_spec({key: True}, FAMILY_VANILLA)[key] is True
+        assert family_spec({key: True}, FAMILY_PURE)[key] is True
         parsed = load(build_spec({key: True, "fastest_text": False}))
         assert forbidden_enabled(parsed, FAMILY_VANILLA) == []
         assert forbidden_enabled(parsed, FAMILY_PURE) == [f"{key} (not implemented for pureRGB entries)"]
-    assert family_spec({"trainers": "type_themed_gyms"}, FAMILY_PURE)["trainers"] == "random"
+    rows = {r["key"]: r for r in option_form()}
+    assert all(rows[k]["pure"] is False for k in PURE_INERT_BOOLS)
+    assert rows["fastest_text"]["pure"] is False and rows["wild"]["pure"] is True
+    gyms = next(c for c in rows["trainers"]["choices"] if c["value"] == "type_themed_gyms")
+    assert gyms["pure"] is False and all(c["pure"] for c in rows["wild"]["choices"])
+    assert family_spec({"trainers": "type_themed_gyms"}, FAMILY_PURE)["trainers"] == "type_themed_gyms"
     parsed = load(build_spec({"trainers": "type_themed_gyms", "fastest_text": False}))
     assert forbidden_enabled(parsed, FAMILY_VANILLA) == []
     assert forbidden_enabled(parsed, FAMILY_PURE) == [
@@ -108,6 +115,57 @@ def test_the_write_domains_follow_the_whole_spec_not_the_six_modes():
     assert domains_for_spec({**off, "trainers_force_evolved": 30}) == {"trainers"}
     assert domains_for_spec({**off, "tm_sanity": True}) == {"tm_compat"}
     assert domains_for_spec(default_spec(FAMILY_PURE)) == {"wild", "starters", "trainers"}
+
+
+def test_the_field_item_domain_is_exactly_uprs_allowed_pool():
+    """Review cx-758c671d #5: the writer touches only pickups whose current item passes
+    Gen1Constants.allowedItems (vanilla's list, kept by the fork), so pureRGB's HYPER BALL
+    (5, vanilla's banned TOWN MAP) is not a legal target either. The constant is re-derived
+    from the fork source when it is checked out."""
+    import re
+
+    from tools.upr_write_domain_diff import UPR_GEN1_ALLOWED_ITEMS, audit
+    assert 5 not in UPR_GEN1_ALLOWED_ITEMS and 0x14 in UPR_GEN1_ALLOWED_ITEMS
+    assert 201 in UPR_GEN1_ALLOWED_ITEMS and 196 not in UPR_GEN1_ALLOWED_ITEMS
+    src = os.path.join(_REPO, ".cache", "slink-upr", "src", "com", "dabomstew", "pkrandom", "constants")
+    if os.path.isdir(src):
+        with open(os.path.join(src, "Gen1Items.java"), encoding="utf-8") as f:
+            names = {m[1]: int(m[2]) for m in re.finditer(r"int (\w+) = (\d+);", f.read())}
+        with open(os.path.join(src, "Gen1Constants.java"), encoding="utf-8") as f:
+            java = f.read()
+        body = java[java.index("setupAllowedItems() {"):java.index("return allowedItems;")]
+        allowed = set(range(1, names["tm50"] + 1))
+        for m in re.finditer(r"banSingles\(([^)]*)\)", body):
+            allowed -= {names[n.strip().split(".")[-1]] for n in m[1].split(",")}
+        for m in re.finditer(r"banRange\((\w+\.)?(\w+), (\d+)\)", body):
+            start = names.get(m[2], {"hmsStartIndex": names["hm01"]}.get(m[2]))
+            length = int(m[3]) if m[3] != "hmCount" else 5
+            allowed -= set(range(start, start + length))
+        allowed -= set(range(names["hm01"], names["hm01"] + 5))
+        assert allowed == set(UPR_GEN1_ALLOWED_ITEMS)
+    roms = _pure_roms()
+    with open(roms["a"], "rb") as f:
+        clean = f.read()
+    assert clean[0x46206] == 0x05                        # a HYPER BALL pickup
+    out = bytearray(clean)
+    out[0x46206] = 0x14
+    assert audit("purered", clean, bytes(out), {"field_items"})["stray"] == [0x46206]
+
+
+def test_catch_rate_tier_5_owns_the_guaranteed_catch_opcode():
+    """Review cx-758c671d #1: tier 5 also turns `jp z,.captured` into `jp` (CA -> C3 after
+    CF 7E FE 01, 0xD1E9); that byte belongs to the catch_rate domain and nothing else does."""
+    from tools.upr_write_domain_diff import audit, guaranteed_catch_byte
+    roms = _pure_roms()
+    with open(roms["a"], "rb") as f:
+        clean = f.read()
+    assert guaranteed_catch_byte(clean) == 0xD1E9 and clean[0xD1E9] == 0xCA
+    out = bytearray(clean)
+    out[0xD1E9] = 0xC3
+    assert audit("purered", clean, bytes(out), {"catch_rate"})["stray"] == []
+    assert audit("purered", clean, bytes(out), {"wild"})["stray"] == [0xD1E9]
+    out[0xD1EA] ^= 0xFF                                  # the neighbour is still code
+    assert audit("purered", clean, bytes(out), {"catch_rate"})["stray"] == [0xD1EA]
 
 
 def test_the_field_item_domain_never_covers_a_key_item_site():
@@ -296,9 +354,9 @@ class TestAgainstTheForkJar:
         assert r["stray"] == [], [f"0x{i:06X}: {clean[i]:02X}->{got[i]:02X}" for i in r["stray"][:12]]
 
     @pytest.mark.parametrize("extra", [
-        {"wild_levels": 25}, {"wild_min_catch_rate": 3}, {"static_levels": -10},
+        {"wild_levels": 25}, {"wild_min_catch_rate": 3}, {"wild_min_catch_rate": 5}, {"static_levels": -10},
         {"trainers_levels": 10}, {"trainers_force_evolved": 30}, {"tm_sanity": True},
-    ], ids=lambda d: next(iter(d)))
+    ], ids=lambda d: "=".join(str(x) for x in next(iter(d.items()))))
     def test_a_sub_option_alone_writes_only_its_own_domain(self, tmp_path, extra):
         """#11: each modifier with its parent mode unchanged, through the spec-derived domains."""
         from tools.upr_write_domain_diff import audit, domains_for_spec
@@ -355,7 +413,9 @@ class TestAgainstTheForkJar:
             info = real(jar, settings, src, out, **kw)
             with open(out, "r+b") as f:
                 f.seek(0x150)                        # _Start: a code byte no category owns
-                f.write(bytes([f.read(1)[0] ^ 0xFF]))
+                byte = f.read(1)[0]
+                f.seek(0x150)
+                f.write(bytes([byte ^ 0xFF]))
             return info
         monkeypatch.setattr(upr_pipeline, "randomize", stray)
         with pytest.raises(UprPipelineError, match="outside the write domain"):

@@ -409,12 +409,8 @@ def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
     out = dict(spec)
     if family == FAMILY_PURE:
         for key in misc_options():
-            out[key] = False
-        for key in PURE_INERT_BOOLS:
-            out[key] = False
-        if out.get("trainers") in PURE_INERT_TRAINER_MODES:
-            out["trainers"] = "random"    # gyms-only theming degrades to plain random on pure
-    return out
+            out[key] = False              # a DEFAULT flip (fastest text defaults on); the
+    return out                            # inert options are refused, never coerced
 
 
 def default_spec(family: str = FAMILY_VANILLA) -> dict:
@@ -422,13 +418,19 @@ def default_spec(family: str = FAMILY_VANILLA) -> dict:
 
 
 def option_form() -> list[dict]:
-    """The table as the form renders it: JSON-safe, in display order, no encoders."""
+    """The table as the form renders it: JSON-safe, in display order, no encoders. `pure` on
+    a row / a choice says whether the pure family can honour it (the form disables what it
+    cannot; a selection that slips through is refused by name, never coerced -- review
+    cx-758c671d #2)."""
     out = []
     for key, opt in OPTIONS.items():
         row = {"key": key, "kind": opt["kind"], "group": opt["group"], "label": opt["label"],
-               "default": opt["default"], "help": opt.get("help", "")}
+               "default": opt["default"], "help": opt.get("help", ""),
+               "pure": key not in PURE_INERT_BOOLS and "misc" not in opt}
         if opt["kind"] == "choice":
-            row["choices"] = [{"value": v, "label": lbl} for v, (lbl, _f) in opt["choices"].items()]
+            row["choices"] = [{"value": v, "label": lbl,
+                               "pure": not (key == "trainers" and v in PURE_INERT_TRAINER_MODES)}
+                              for v, (lbl, _f) in opt["choices"].items()]
         elif opt["kind"] == "int":
             row.update(min=opt["min"], max=opt["max"], unit=opt.get("unit", ""))
         out.append(row)
