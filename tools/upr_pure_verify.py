@@ -93,6 +93,21 @@ REQUIRED_FIELD_TMS = {3, 4, 8, 10, 12, 14, 16, 19, 20, 22, 25, 26, 30, 40, 43, 4
 CATCH_TIERS = {1: (75, 37), 2: (128, 64), 3: (200, 100), 4: (255, 255)}   # changeCatchRates (ordinary, legendary)
 TOWER_MAPS = range(0x90, 0x95)                     # Gen1Constants.towerMapsStart/EndIndex
 TM_ITEM0 = 201                                     # Gen1Items.tm01; TMs 201..250
+BANNED_TM_MOVES = {144, 165}     # Transform (Gen1Constants.java:64-65 bannedLevelupMoves, folded into
+                                  # randomizeTMMoves' `banned` via getMovesBannedFromLevelup, A:4476/4497)
+                                  # and Struggle (GlobalConstants.java:38 bannedRandomMoves[struggle]=true,
+                                  # A:4493-4497) -- both excluded from TM selection unconditionally
+EARLY_REQUIRED_HM = 15           # Cut: Gen1Constants.earlyRequiredHMs (the only entry) -- the move
+                                  # getMoveCompatibilityProbability (A:4623-4640) treats as "required early"
+HM01_BIT = 50                    # HM01 is compat flag 51 of 55 (1-based) = bit 50 (0-based); HM01 is
+                                  # always Cut (the HM bytes are unchanged, see same("tms","HM move",...))
+WARN_UNCHANGED = {"starters"}    # starters draws 3 without duplicates among themselves (A:4019-4028)
+                                  # but never excludes the ORIGINAL trio -- drawing the same 3 back is a
+                                  # legal outcome, not a bug (cx-73e80e05 #6). Every other category's
+                                  # write domain is tens to hundreds of bytes (wild ~190+ slots, trainers'
+                                  # every party, tms' 50 slots, ...) or is explicitly self-avoiding (wild=
+                                  # global rerolls on a self-match, A:1207-1211), so a fully-unchanged run
+                                  # there means the writer didn't run, not an unlucky draw
 
 
 def _upr_field_pool() -> set[int]:
@@ -181,6 +196,8 @@ def _facts() -> dict:
     moves = json.loads((FACTS / "moves.json").read_text(encoding="utf-8"))["moves"]
     trainers = json.loads((FACTS / "trainers.json").read_text(encoding="utf-8"))
     evos = json.loads((FACTS / "evolutions.json").read_text(encoding="utf-8"))["evolutions"]
+    types_doc = json.loads((FACTS / "types.json").read_text(encoding="utf-8"))
+    name_to_type = {v: int(k) for k, v in types_doc["type_names"].items()}
     ordinary = {int(k) for k, v in species.items() if v["classification"] == "ordinary"}
     return {
         "ordinary": ordinary,
@@ -193,7 +210,32 @@ def _facts() -> dict:
         "item_names": {int(k): v["name"] for k, v in items.items()},
         "moves": {m["id"] for m in moves},
         "trainers": trainers,
+        # bstForPowerLevels (Gen1Pokemon.java:134-136): hp+attack+defense+special+speed, no Shedinja
+        # exception in Gen 1 -- exactly the 5 base_stats fields the facts pack already carries
+        "bst": {int(k): sum(v["stats"].values()) for k, v in species.items() if v["stats"]},
+        "move_types": {m["id"]: name_to_type[m["type"]] for m in moves if m["type"] in name_to_type},
     }
+
+
+def _strength_band(bst: int, pool_bsts, max_rounds: int) -> tuple[int, int]:
+    """The expanding-BST-window loop pickWildPowerLvlReplacement / pickTrainerPokeReplacement
+    (A:6980-7005, 6925-6946, max_rounds=2) and pickStaticPowerLvlReplacement (A:7059-7082,
+    max_rounds=3) share: start at +-10% of ``bst``, widen by max(bst//20, 1) on each side per
+    round, stop once the accumulated candidate set reaches 3 members or after ``max_rounds``
+    widenings -- but never stop on an empty set (patch 0003 set the step floor so this always
+    terminates). Returns the (lo, hi) bounds the accepted draw was pooled from."""
+    lo, hi = bst - bst // 10, bst + bst // 10
+    step = max(bst // 20, 1)
+    matched: set[int] = set()
+    rounds = 0
+    used_lo, used_hi = lo, hi
+    while not matched or (len(matched) < 3 and rounds < max_rounds):
+        used_lo, used_hi = lo, hi
+        matched = {v for v in pool_bsts if lo <= v <= hi}
+        lo -= step
+        hi += step
+        rounds += 1
+    return used_lo, used_hi
 
 
 def _ghost_site(title: str, ini: pathlib.Path) -> int | None:
@@ -217,6 +259,7 @@ class _Check:
         self.ghost_site = _ghost_site(title, ini)
         self.f = _facts()
         self.fails: list[str] = []
+        self.warnings: list[str] = []
         self.domain: dict[str, set[int]] = {c: set() for c in CATEGORIES}
 
     # ── primitives ───────────────────────────────────────────────────────────────────
@@ -360,7 +403,10 @@ class _Check:
                     if len(outs) > 1:
                         self.fail(f"wild: area 1-to-1 broken in {t['name']}: {self.name(c)} -> "
                                   + ", ".join(self.name(v) for v in sorted(outs)))
-                if restriction in ("none", "type_themed"):
+                # restriction=similar (A:1096-1110): pickWildPowerLvlReplacement is called with
+                # this table's `usedPks` history and excludes every entry in it, so it too is
+                # per-table injective, same as none/type_themed
+                if restriction in ("none", "type_themed", "similar"):
                     img = collections.Counter(next(iter(v)) for v in m.values() if len(v) == 1)
                     for v, n in img.items():
                         if n > 1:
@@ -374,6 +420,26 @@ class _Check:
                 if len(outs) > 1:
                     self.fail(f"wild: global 1-to-1 broken: {self.name(c)} -> "
                               + ", ".join(self.name(v) for v in sorted(outs)))
+            # game1to1Encounters (A:1162-1225): remainingLeft is every species, remainingRight is
+            # the destination pool (all species, or non-legendaries under block_legendaries); each
+            # draw removes one from each and refills remainingRight from a fresh copy of the pool
+            # when it empties. Gen 1 bans nothing for wild encounters (bannedForWildEncounters is
+            # the AbstractRomHandler default, empty -- Gen1RomHandler doesn't override it, and Gen 1
+            # has no alt formes so getBannedFormesForPlayerPokemon/getAbilityDependentFormes/
+            # getIrregularFormes are all empty too), so with legendaries allowed remainingLeft and
+            # remainingRight are the SAME 151-species list: they hit zero together, no refill ever
+            # happens, and the map is a genuine bijection (max 1 use per destination). With
+            # legendaries blocked remainingRight (146) is smaller than remainingLeft (151) by
+            # exactly the 5 legendaries, so it refills once partway through: a destination can be
+            # reused, but only across a refill, bounding any single destination's use count by
+            # ceil(151/146) = 2
+            total, pool_size = len(self.f["ordinary"]), len(self.f["ordinary"] - self.f["legendary"])
+            max_reuse = 1 if not self.opt("wild_block_legendaries") else -(-total // pool_size)
+            img = collections.Counter(next(iter(v)) for v in m.values() if len(v) == 1)
+            for v, n in img.items():
+                if n > max_reuse:
+                    self.fail(f"wild: global map not injective (block_legendaries allows at most "
+                              f"{max_reuse} reuse): {n} species -> {self.name(v)}")
             for t, _lv, sp in live:
                 if t["exempt"] and self.clean[sp] in m:
                     want = next(iter(m[self.clean[sp]]))
@@ -475,6 +541,18 @@ class _Check:
                 c, v = self.clean[o], self.out[o]
                 if (c in self.f["legendary"]) != (v in self.f["legendary"]):
                     self.fail(f"statics: matching broken @0x{o:X}: {self.name(c)} -> {self.name(v)}")
+        elif mode == "similar":
+            # pickStaticPowerLvlReplacement(pokemonLeft, oldPK, true, limitBST) (A:4265-4269):
+            # pokemonLeft is the full 151-species pool (limitMainGameLegendaries/limit600 are
+            # never set by our specs, so limitBST is always false and the >=600 BST branch never
+            # triggers) -- the shared BST-window (_strength_band, max 3 widenings for statics)
+            pool_bsts = [self.f["bst"][p] for p in self.f["ordinary"]]
+            for o in live:
+                c_bst, v_bst = self.f["bst"][self.clean[o]], self.f["bst"][self.out[o]]
+                lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=3)
+                if not lo <= v_bst <= hi:
+                    self.fail(f"statics: @0x{o:X} {self.name(self.out[o])} (BST {v_bst}) is outside the "
+                              f"similar_strength band [{lo},{hi}] around {self.name(self.clean[o])} (BST {c_bst})")
 
     # ── trainers ─────────────────────────────────────────────────────────────────────
     def trainers(self) -> None:
@@ -574,18 +652,27 @@ class _Check:
             for where, slots in self.parties:
                 for lv, sp, mask in slots:
                     c, v = self.clean[sp], self.out[sp]
-                    if mode == "unchanged":                 # forceFullyEvolvedTrainerPokes walks evolutionsFrom
-                        reach, todo = {c}, [c]
-                        while todo:
-                            for n in evos.get(todo.pop(), []):
-                                if n not in reach:
-                                    reach.add(n)
-                                    todo.append(n)
-                        if v not in reach:
-                            self.fail(f"trainers: {where} 0x{sp:X} {self.name(c)} -> {self.name(v)} is not an "
-                                      f"evolution of it (trainers unchanged, force_evolved {force})")
-                    if (self.out[lv] & mask) >= force and evos.get(v):
-                        self.fail(f"trainers: {where} 0x{sp:X} {self.name(v)} at level {self.out[lv] & mask} >= "
+                    lvl = self.out[lv] & mask
+                    if mode == "unchanged":
+                        # forceFullyEvolvedTrainerPokes (A:2069-2089) only touches a slot when
+                        # tp.level >= minLevel; below that, the species must be byte-identical
+                        # (nothing else in "unchanged" trainers touches it)
+                        if lvl < force:
+                            if v != c:
+                                self.fail(f"trainers: {where} 0x{sp:X} {self.name(c)} -> {self.name(v)} changed "
+                                          f"below the force_evolved threshold {force} (level {lvl})")
+                        else:                                # walks evolutionsFrom (fullyEvolve)
+                            reach, todo = {c}, [c]
+                            while todo:
+                                for n in evos.get(todo.pop(), []):
+                                    if n not in reach:
+                                        reach.add(n)
+                                        todo.append(n)
+                            if v not in reach:
+                                self.fail(f"trainers: {where} 0x{sp:X} {self.name(c)} -> {self.name(v)} is not an "
+                                          f"evolution of it (trainers unchanged, force_evolved {force})")
+                    if lvl >= force and evos.get(v):
+                        self.fail(f"trainers: {where} 0x{sp:X} {self.name(v)} at level {lvl} >= "
                                   f"{force} still evolves (force_evolved)")
         if mode == "unchanged":
             return
@@ -596,6 +683,23 @@ class _Check:
         if mode == "type_themed":
             for where, slots in self.parties:
                 self.shared_type("trainers", where, [sp for _lv, sp, _m in slots])
+        if self.opt("trainers_similar_strength") and mode == "random":
+            # pickTrainerPokeReplacement(usePowerLevels=True) (A:6863-6978): cachedAllList is
+            # noLegendaryList/mainPokemonList (A:1693-1694) -- the same block_legendaries-gated
+            # pool wild/statics use -- filtered further by a dynamic usedAsUniqueList/
+            # illegalIfEvolvedList that's empty here (elite-four-unique-pokemon and
+            # illegal-evolution-chain blocking aren't in scope), then the shared BST-window
+            # (_strength_band, max 2 widenings)
+            pool = self.f["ordinary"] - (self.f["legendary"] if self.opt("trainers_block_legendaries") else set())
+            pool_bsts = [self.f["bst"][p] for p in pool]
+            for where, slots in self.parties:
+                for _lv, sp, _m in slots:
+                    c_bst, v_bst = self.f["bst"][self.clean[sp]], self.f["bst"][self.out[sp]]
+                    lo, hi = _strength_band(c_bst, pool_bsts, max_rounds=2)
+                    if not lo <= v_bst <= hi:
+                        self.fail(f"trainers: {where} 0x{sp:X} {self.name(self.out[sp])} (BST {v_bst}) is outside "
+                                  f"the similar_strength band [{lo},{hi}] around {self.name(self.clean[sp])} "
+                                  f"(BST {c_bst})")
         # "distributed" (pickTrainerPokeReplacement with usePlacementHistory) only refuses a
         # species whose count is >= 2x the mean over the species placed SO FAR, in a shuffled
         # trainer order. Every final multiset is reachable under that rule (place the most
@@ -612,6 +716,9 @@ class _Check:
         for i, m in enumerate(tm):
             if m not in self.f["moves"]:
                 self.fail(f"tms: TM{i + 1:02d} @0x{t + i:X} = {m:02X} is not a move id")
+            elif m in BANNED_TM_MOVES:
+                self.fail(f"tms: TM{i + 1:02d} @0x{t + i:X} = {m:02X} is Transform/Struggle, banned from "
+                          f"random TM selection")
         dupes = sorted({m for m in tm if tm.count(m) > 1})
         if dupes:
             self.fail(f"tms: duplicate TM moves {[f'{m:02X}' for m in dupes]}")
@@ -661,6 +768,16 @@ class _Check:
                               f"on mode full")
             elif compat_mode == "unchanged" and not sanity:
                 self.same("tm_compat", f"dex {i + 1} compat byte", range(base, base + 7))
+            elif compat_mode == "prefer_type":
+                # getMoveCompatibilityProbability (A:4623-4640): preferSameType gives a 0.9
+                # chance for a same-type move, then requiredEarlyOn multiplies by 1.8 capped at
+                # 1.0 -- 0.9*1.8=1.62->1.0 is the ONLY combination that reaches certainty, and
+                # Cut is the only move in Gen1Constants.earlyRequiredHMs, so any species sharing
+                # Cut's type is guaranteed to learn HM01
+                if (self.f["move_types"][EARLY_REQUIRED_HM] in self.f["types"][by_dex[i + 1]]
+                        and not self.out[base + HM01_BIT // 8] >> (HM01_BIT % 8) & 1):
+                    self.fail(f"tm_compat: dex {i + 1} shares Cut's type and must learn HM01 "
+                              f"(probability 1) under prefer_type")
             if not sanity:
                 continue
             if compat_mode == "unchanged":       # ensureTMCompatSanity only SETS bits
@@ -735,7 +852,10 @@ class _Check:
         changed = {cat: sum(self.clean[o] != self.out[o] for o in dom) for cat, dom in self.domain.items()}
         for cat in CATEGORIES:
             if cat in self.cats and changed[cat] == 0:
-                self.fail(f"{cat}: enabled but nothing in its domain changed")
+                if cat in WARN_UNCHANGED:
+                    self.warnings.append(f"{cat}: enabled but nothing changed (a legal outcome for this mode)")
+                else:
+                    self.fail(f"{cat}: enabled but nothing in its domain changed")
             elif cat not in self.cats and changed[cat]:
                 first = sorted(o for o in self.domain[cat] if self.clean[o] != self.out[o])[:5]
                 self.fail(f"{cat}: disabled but {changed[cat]} byte(s) changed, first "
@@ -744,7 +864,7 @@ class _Check:
         if stray:
             self.fail(f"audit: {len(stray)} stray byte(s) outside the enabled domains, first "
                       + ", ".join(f"0x{o:X}: {self.clean[o]:02X}->{self.out[o]:02X}" for o in stray[:5]))
-        return {"ok": not self.fails, "failures": self.fails, "changed": changed}
+        return {"ok": not self.fails, "failures": self.fails, "warnings": self.warnings, "changed": changed}
 
 
 def verify(title: str, clean_bytes: bytes, out_bytes: bytes, categories=None, *,
