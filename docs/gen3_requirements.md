@@ -196,6 +196,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P3 checkpoint negatives, RR companion: `docs/gen3/probes/checkpoint_rr_companion_2026-09-21.txt` — the real `lua/gen3/safety.lua` predicate over the real pack, sampled at frame end: idle field 300/300 true (R15 0x1C4 BIOS park, CPSR System), walking 120/120 true, START menu 0/120 true, save dialog 0/120, save in progress 0/757 (partial new slot then 14/14), battle 0/120, palette fade 0/76; no write needed. PHYSICAL positive for W-2/W-3 on RR companion (liveness + every forbidden state false). FR/LG: needs savestates for the battle and door phases (queued; the battery fixture covers idle/menu/dialog/save).
 
+- 2026-09-21 P3 FR natural play run 14: `docs/gen3/probes/shadow_fr_play_run14_2026-09-21.txt` — parcel delivered; on Route 1 southbound the starter fainted and the player whited out: observer `faint` x1 and `whiteout` x1 (first natural faint/whiteout on vanilla FR), plus battle_begin x5, battle_end x5, map_load x4, mon_given x1. FR coverage: 6 kinds PHYSICAL. The shared walker refused to continue after the displacement (correct); whiteout recovery queued.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

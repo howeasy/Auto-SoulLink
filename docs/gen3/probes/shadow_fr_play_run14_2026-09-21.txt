@@ -1,0 +1,29 @@
+# FR scripted play run 14 (8b1ba92), 2026-09-21, vanilla FR US 1.0, observer beside
+phase leg-start frame=635 starter
+phase leg-done frame=5571 starter
+phase leg-start frame=5571 rival_battle
+phase leg-done frame=12134 rival_battle
+phase leg-start frame=12134 leave_lab_for_parcel
+phase leg-done frame=12355 leave_lab_for_parcel
+phase leg-start frame=12355 parcel_fetch
+phase encounter frame=13043 #1 during step Left at (9,32)
+phase encounter-done frame=14674 #1 resolved at (9,32)
+phase encounter frame=15234 #2 during step Up at (16,16)
+phase encounter-done frame=17633 #2 resolved at (16,16)
+phase parcel-scene-done frame=19588 at=(4,3)
+phase leg-done frame=19588 parcel_fetch
+phase leg-start frame=19588 parcel_deliver
+phase encounter frame=20792 #1 during step Down at (16,10)
+phase encounter-done frame=23559 #1 resolved at (16,10)
+phase encounter frame=24039 #2 during step Down at (12,26)
+RESULT: FAIL encounter #2 moved the player from (12,26) to (8,5) — a battle must not displace the player, so this was a whiteout (or a scripted warp) and the rest of the path no longer applies
+## shadow
+STATUS frame=27035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=26038
+      5 kind=battle_begin
+      5 kind=battle_end
+      1 kind=faint
+      4 kind=map_load
+      1 kind=mon_given
+      1 kind=whiteout
+SHADOW t=15 frame=24843 kind=faint key= address=134353864 callback_address=134353864 cpsr=63 mode=thumb raw_r15=134353866 sp=50363868 thumb=1
+SHADOW t=17 frame=25652 kind=whiteout key= address=134571774 callback_address=134571774 cpsr=1610612799 mode=thumb raw_r15=134571776 sp=50363924 thumb=1
