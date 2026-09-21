@@ -47,6 +47,22 @@ function randomizerFields(form) {
       return out;
     },
     resetSpec() { this.rdraft.spec = defaultSpec(form); },
+    // The pure family's entries do not implement every option (option_form rows / choices
+    // carry `pure: false`): on a pure pick those are greyed, and a value already set is
+    // returned to its default so the pipeline's named refusal never comes from the form.
+    PURE_WHY: 'not available for pureRGB',
+    optOk(o) { return !(this.family === 'gen1_purergb' && o.pure === false); },
+    choiceOk(c) { return !(this.family === 'gen1_purergb' && c.pure === false); },
+    settleSpecForFamily() {
+      var self = this;
+      form.options.forEach(function (o) {
+        if (!self.optOk(o)) { self.rdraft.spec[o.key] = o.default; return; }
+        if (o.kind === 'choice') {
+          var cur = o.choices.find(function (c) { return c.value === self.rdraft.spec[o.key]; });
+          if (cur && !self.choiceOk(cur)) self.rdraft.spec[o.key] = o.default;
+        }
+      });
+    },
     // ── presets: the spec by name, on this Manager or as a file ────────────────────────
     // Only known options land, over the defaults, so an older or hand-edited preset
     // still loads; the server checks the same thing before it saves.
@@ -54,6 +70,7 @@ function randomizerFields(form) {
       var known = defaultSpec(form);
       Object.keys(spec || {}).forEach(function (k) { if (k in known) known[k] = spec[k]; });
       this.rdraft.spec = known;
+      this.settleSpecForFamily();
     },
     loadPreset(name) {
       var p = this.presets.find(function (x) { return x.name === name; });
@@ -158,6 +175,7 @@ function randomizerFields(form) {
     setFamily(f) {
       var self = this;
       this.family = f || null;
+      this.settleSpecForFamily();
       ['rom_a', 'rom_b'].forEach(function (k) {
         var r = self.roms.find(function (x) { return x.path === self.rdraft[k]; });
         if (r && !self.usable(r)) self.rdraft[k] = '';

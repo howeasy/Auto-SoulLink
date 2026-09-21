@@ -35,22 +35,24 @@
               <div class="mk-rchips" role="radiogroup" :aria-label="o.label">
                 <template x-for="c in o.choices" :key="c.value">
                   <button type="button" class="mk-gchip" role="radio" :aria-checked="rdraft.spec[o.key] === c.value"
-                          :class="rdraft.spec[o.key] === c.value ? 'active' : ''"
+                          :class="rdraft.spec[o.key] === c.value ? 'active' : ''" :disabled="!choiceOk(c)"
+                          :title="choiceOk(c) ? '' : PURE_WHY"
                           @click="rdraft.spec[o.key] = c.value" x-text="c.label"></button>
                 </template>
               </div>
             </div>
           </template>
           <template x-if="o.kind === 'bool'">
-            <label class="mk-opt" :class="rdraft.spec[o.key] ? 'on' : ''">
-              <input type="checkbox" x-model="rdraft.spec[o.key]">
+            <label class="mk-opt" :class="!optOk(o) ? 'off-unavailable' : (rdraft.spec[o.key] ? 'on' : '')" :title="optOk(o) ? '' : PURE_WHY">
+              <input type="checkbox" x-model="rdraft.spec[o.key]" :disabled="!optOk(o)">
               <span x-text="o.label"></span>
+              <span class="mk-opt-why" x-show="!optOk(o)" x-text="PURE_WHY"></span>
             </label>
           </template>
           <template x-if="o.kind === 'int'">
-            <label class="mk-range">
-              <span class="mk-rlabel"><span x-text="o.label"></span><em class="mk-sub" x-show="o.help" x-text="o.help"></em></span>
-              <input type="range" :min="o.min" :max="o.max" step="1" x-model.number="rdraft.spec[o.key]"
+            <label class="mk-range" :class="optOk(o) ? '' : 'off-unavailable'" :title="optOk(o) ? '' : PURE_WHY">
+              <span class="mk-rlabel"><span x-text="o.label"></span><em class="mk-sub" x-show="o.help || !optOk(o)" x-text="optOk(o) ? o.help : PURE_WHY"></em></span>
+              <input type="range" :min="o.min" :max="o.max" step="1" x-model.number="rdraft.spec[o.key]" :disabled="!optOk(o)"
                      @dblclick="rdraft.spec[o.key] = o.default">
               <output class="num" :class="rdraft.spec[o.key] ? 'set' : ''"
                       x-text="(o.unit && rdraft.spec[o.key] > 0 ? '+' : '') + rdraft.spec[o.key] + (o.unit || '')"></output>

@@ -68,7 +68,7 @@
   function randomizerPage(runId) {
     return Object.assign(randomizerFields(window.SLINK_RANDOMIZER), {
       runId: runId, busy: false, error: new URLSearchParams(window.location.search).get('error') || '',
-      init() { this.watchRandomizer(); },
+      init() { this.settleSpecForFamily(); this.watchRandomizer(); },
       async build() {
         this.busy = true; this.error = '';
         try {
