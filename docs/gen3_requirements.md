@@ -176,6 +176,8 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 
 - 2026-09-21 P2 independent spot-check (Haiku, read-only, before reading the site doc): FR rows `battle_end`/`capture_wild`/`save` resolve in `pokefirered.sym` at the pinned addresses and their bytes match the FR US 1.0 dump (sha1 `41cb23d8…`); RR rows `battle_end`/`mon_given`/`pc_move` bytes match the RR base (md5 `8529f3a4…`); `rom_offset == address - 0x08000000` on all six. Input to F-3/S rows; companion-kind bytes were not part of this check (pinned by the generator's own test on `bf8e94a0…`).
 
+- 2026-09-21 P2 FR fixture: `tests/fixtures/gen3/firered_town.sav` made by scripted NEW GAME with the walk-out PINNED from pret/pokefirered c75f352 (spawn `src/new_game.c:84` (6,6); warps from `data/maps/PalletTown_PlayersHouse_{2F,1F}/map.json`; path = BFS over `data/layouts/*/map.bin` collision bits; FRLG stairs/doors are arrow warps entered by a held press) — receipts `docs/gen3/probes/{makefr,bootcheck}_firered_town_2026-09-21.txt`: counter −1→1 then 1→2, 14/14 sectors, party empty (pre-starter). F-6 FR half. The intro legs stay timed (verified by outcome only). pret/pokefirered is now cloned at the pinned commit under `E:/Google Drive/SLink/.cache/pret/pokefirered`.
+
 ### Old-client characterization (P1)
 
 `tests/unit/test_protocol_conformance.py` replayed against the twelve `*_old_client.jsonl`

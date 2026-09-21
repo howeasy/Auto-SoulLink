@@ -1,0 +1,10 @@
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=1
+phase field frame=635 map=(3,0)
+phase save-menu frame=635 counter=1
+phase save-dialog frame=1205 attempt=4
+phase saved frame=1684 counter=1->2
+phase slot-complete frame=1937 sectors=14/14
+phase flushed frame=2597
+RESULT: PASS counter 1 -> 2

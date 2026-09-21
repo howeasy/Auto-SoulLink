@@ -122,6 +122,15 @@ function M.map(cp)
     return memory.read_u8(sb1 + 0x04), memory.read_u8(sb1 + 0x05)
 end
 
+--- The player's map coordinates: SaveBlock1 begins with `struct Coords16 pos` (pret
+--- pokefirered c75f352 include/global.h:761). -1,-1 while the pointer is not sane.
+function M.pos(cp)
+    local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
+    local sb1 = memory.read_u32_le(int(ptr.address))
+    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return -1, -1 end
+    return memory.read_s16_le(sb1 + 0x00), memory.read_s16_le(sb1 + 0x02)
+end
+
 -- ── the flash domain and its save counter ───────────────────────────────────────────────────
 
 --- The memory domain BizHawk backs the battery file with, or nil. Bound at run time from

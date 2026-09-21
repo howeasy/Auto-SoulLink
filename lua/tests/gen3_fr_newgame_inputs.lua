@@ -12,20 +12,16 @@
 --   SLINK_GEN3_FR_INTRO      frames of A/Start mashing before the player-name menu (2700)
 --   SLINK_GEN3_FR_NAME_GAP   frames between the player-name and rival-name menus (1500)
 --
--- ┌── †UNVERIFIED ────────────────────────────────────────────────────────────────────────────┐
--- │ EVERY INPUT IN THE INTRO LEGS IS A GUESS. pret/pokefirered is NOT in the local pret cache │
--- │ (E:/Google Drive/SLink/.cache/pret/ holds pokered/pokeyellow/pokecrystal/pokegold/        │
--- │ pokeheartgold/pokeplatinum only) and this tree ships no pokefirered.sym, so neither the   │
--- │ naming screen's callback nor its menu geometry can be pinned. Specifically UNVERIFIED:    │
--- │   †1  "A on the gender prompt selects BOY" (the default row).                             │
--- │   †2  "the player-name screen is a preset list whose first row below the cursor is a      │
--- │        canned name, so Down+A accepts a preset and never opens the keyboard."             │
--- │   †3  "the rival-name screen has the same shape, so Down+A accepts a preset there too."   │
--- │   †4  the FRAME COUNTS that place legs †2/†3 — there is no engine signal here to key off, │
--- │        so the two menus are reached by elapsed frames. Retune with the env vars above.    │
--- │ Everything AFTER the intro is signalled, not timed: the walk out is keyed to the          │
--- │ SaveBlock1 map id and the save to the flash sector counter, so a mistuned intro fails     │
--- │ loudly on a budget rather than writing a fixture from the wrong game state.               │
+-- ┌── Intro legs: TIMED, verified PHYSICALLY 2026-09-21 ─────────────────────────────────────┐
+-- │ The intro legs (copyright, Oak, gender, two naming screens) are placed by elapsed frames  │
+-- │ and their menu geometry is not pinned from source; they were VERIFIED by outcome on FR   │
+-- │ US 1.0 (docs/gen3/probes/makefr_firered_town_2026-09-21.txt): the run reached the field  │
+-- │ on 2F at (6,6) with a male sprite (†1 BOY) and a preset name (trainer "JONN", †2/†3),    │
+-- │ twice with the default frame counts (†4). A mistuned intro still fails loudly: the walk   │
+-- │ out is keyed to SaveBlock1 coordinates/map id and the save to the flash sector counter.   │
+-- │ The walk out (leg 6) is PINNED from pret/pokefirered c75f352 map data, see below.         │
+-- │ Radical Red is NOT driven by this script (its fixture is an imported real save); its      │
+-- │ extra intro textboxes on 2F / on the way to 1F are what the stalled-step A presses absorb. │
 -- └───────────────────────────────────────────────────────────────────────────────────────────┘
 
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
@@ -83,39 +79,68 @@ if not G.boot_to_field(cp, 9000) then
 end
 
 -- ── leg 6: out of the bedroom, down the stairs, out the front door into Pallet Town ─────────
--- SIGNALLED, not timed: two map changes (bedroom -> ground floor -> town), read from the
--- SaveBlock1 pointer chain the way lua/memory_gba.lua:1109-1114 does. Sweeping sideways when
--- southward progress stalls is mkstate.lua's door drill (lua/tests/mkstate.lua, the town kind)
--- with the direction flipped: stairs and the front door are each one specific column.
+-- PINNED from pret/pokefirered c75f352 (the .sym source): NEW GAME spawns on
+-- MAP_PALLET_TOWN_PLAYERS_HOUSE_2F at (6,6) (src/new_game.c:84); the 2F stairs warp is (10,2)
+-- -> 1F warp 2 at (10,2) (data/maps/PalletTown_PlayersHouse_2F/map.json); the 1F front door is
+-- (4,8)/(5,8) -> PALLET_TOWN warp 0 at (6,7), MOM stands at (8,4) (PlayersHouse_1F/map.json).
+-- Each leg is the BFS over the layout collision bits (data/layouts/*/map.bin, bits 10-11) with
+-- MOM's tile blocked. Every step is verified by the SaveBlock1 coordinates; a step that does
+-- not move the player is treated as a textbox (Radical Red adds intro dialogue on 2F and on
+-- the way down to 1F) and cleared with A before the step is retried.
 local function mapid() local g, n = G.map(cp); return g * 256 + n end
 local start_map = mapid()
 G.phase("walk-out", string.format("map=%d", start_map))
 
-local seen, count = { [start_map] = true }, 1
-local left, amp = true, 1
-for _ = 1, 40 do
-    if count >= 3 then break end       -- bedroom, ground floor, town
-    local was = mapid()
-    for _ = 1, 8 do G.tap("Down", 12, 2) end   -- a direction must be HELD to walk, not tapped
-    local now = mapid()
-    if now ~= was then
-        if not seen[now] then seen[now] = true; count = count + 1 end
-        G.phase("map-change", string.format("map=%d->%d (%d seen)", was, now, count))
-        amp = 1
-    else
-        for _ = 1, 3 * amp do G.tap(left and "Left" or "Right", 12, 2) end
-        left = not left
-        amp = amp + 1
+local DELTA = { Up = { 0, -1 }, Down = { 0, 1 }, Left = { -1, 0 }, Right = { 1, 0 } }
+local function step(dir)
+    local x, y = G.pos(cp)
+    local want_x, want_y = x + DELTA[dir][1], y + DELTA[dir][2]
+    for attempt = 1, 6 do
+        for _ = 1, 12 do joypad.set({ [dir] = true }); G.advance() end
+        G.idle(4)
+        local nx, ny = G.pos(cp)
+        if nx == want_x and ny == want_y then return true end
+        if mapid() ~= start_map then return true end     -- the warp tile took us
+        -- Not moved: a textbox or script owns the player. Clear it, then retry the step.
+        for _ = 1, 4 do G.tap("A", 3, 13) end
+        x, y = G.pos(cp)
+        want_x, want_y = x + DELTA[dir][1], y + DELTA[dir][2]
     end
+    return false
+end
+-- FRLG stairs and doors are ARROW warps: the warp fires when the player presses INTO the
+-- warp tile from the adjacent walkable tile (2F stairs at (8-9,2-3) are collision, so the
+-- path ends at (10,2) and the exit is Left; the door row is entered by Down).
+local function leg(name, path, from_map, exit_dir)
+    start_map = from_map
+    G.phase(name, string.format("map=%d from=(%d,%d)", start_map, G.pos(cp)))
+    for _, dir in ipairs(path) do
+        if not step(dir) then
+            G.shot("stuck")
+            G.finish(false, string.format("%s: step %s never moved the player at (%d,%d) map=%d; "
+                                       .. "see patch/build/gen3_stuck.png", name, dir, G.pos(cp), mapid()))
+        end
+    end
+    -- press into the warp, then wait for the map to change and the fade to settle
+    for _ = 1, 20 do
+        if mapid() ~= from_map then break end
+        for _ = 1, 16 do joypad.set({ [exit_dir] = true }); G.advance() end
+        if mapid() == from_map then for _ = 1, 2 do G.tap("A", 3, 13) end end   -- RR textbox
+    end
+    for _ = 1, 600 do
+        if mapid() ~= from_map and G.pred_ok(cp, "palette_fade_active") then G.idle(16); return end
+        G.advance()
+    end
+    G.shot("stuck")
+    G.finish(false, string.format("%s: end of path, pressed %s, but map is %d (from %d) at (%d,%d)",
+                                  name, exit_dir, mapid(), from_map, G.pos(cp)))
 end
 
-if count < 3 then
-    G.shot("stuck")
-    G.finish(false, string.format("never walked out of the house: %d maps seen, last=%d. The "
-                               .. "fixture must be made OUTSIDE, on encounter-free town ground "
-                               .. "(tools/mkstates.py's `town` rule). See "
-                               .. "patch/build/gen3_stuck.png", count, mapid()))
-end
+-- Any intro textbox still open on 2F (RR) is cleared by the first stalled step.
+leg("2F->1F", { "Right", "Up", "Up", "Right", "Right", "Right", "Up", "Up" }, mapid(), "Left")
+leg("1F->town", { "Down", "Down", "Down", "Down", "Down", "Down", "Left", "Left", "Left", "Left",
+                  "Left", "Left" }, mapid(), "Down")
+G.phase("map-change", string.format("map=%d", mapid()))
 
 -- Settle back into a quiet field before opening the menu.
 local settled = false

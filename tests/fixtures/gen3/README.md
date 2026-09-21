@@ -130,3 +130,7 @@ LeafGreen (which has no scripted driver):
    recomputed; see the manifest it prints).
 6. Both fixtures still need `boot-check` above before they are trusted as
    more than model-qualified bytes.
+
+## firered_town.sav (2026-09-21)
+
+Vanilla FireRed US 1.0 (sha1 `41cb23d8…`), produced by `tools/gen3_fixtures.py make-fr` (`lua/tests/gen3_fr_newgame_inputs.lua`): cold boot → NEW GAME → intro → the pinned walk 2F (6,6) → stairs (10,2) → 1F → door (4,8) → Pallet Town (map 768) → START/SAVE. sha256 `dde9360296ea69d0373f993f7cab35cee49d2803ed78d410145bc478182a3ae5`, slot 1, counter 1, trainer `JONN` #99DE0D8A, **party empty (pre-starter)**. Boot-checked (`docs/gen3/probes/bootcheck_firered_town_2026-09-21.txt`, counter 1→2, 14/14 sectors). BizHawk files its battery under the gamedb name `Pokemon - FireRed Version (USA).SaveRAM`, so seed with `--saveram-name` accordingly. Scenarios that need a party (faint, boxsync) need an extended script through the starter choice; queued.

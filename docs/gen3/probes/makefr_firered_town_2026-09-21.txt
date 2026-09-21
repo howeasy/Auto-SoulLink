@@ -1,0 +1,18 @@
+phase start frame=1 title=firered
+phase domain frame=1 SRAM (erased battery, cold boot)
+phase intro frame=1 frames=2700
+phase name-player frame=2701 †UNVERIFIED Down+A = first preset name
+phase name-gap frame=2787 frames=1500
+phase name-rival frame=4287 †UNVERIFIED Down+A = first preset name
+phase field frame=5306 map=(4,1)
+phase walk-out frame=5306 map=1025
+phase 2F->1F frame=5306 map=1025 from=(6,6)
+phase 1F->town frame=5498 map=1024 from=(10,2)
+phase map-change frame=5877 map=768
+phase outside frame=5877 map=768
+phase save-menu frame=5877 counter=-1
+phase save-dialog frame=6447 attempt=4
+phase saved frame=6686 counter=-1->1
+phase slot-complete frame=6929 sectors=14/14
+phase flushed frame=7589
+RESULT: PASS map=768 counter -1 -> 1
