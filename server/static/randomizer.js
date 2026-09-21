@@ -51,11 +51,13 @@ function randomizerFields(form) {
     // carry `pure: false`): on a pure pick those are greyed, and a value already set is
     // returned to its default so the pipeline's named refusal never comes from the form.
     PURE_WHY: 'not available for pureRGB',
-    // Choices UPR ignores under another choice -- admission refuses them (both families),
-    // so they are greyed while the other choice holds: under a global 1-to-1 wild map,
-    // game1to1Encounters reads only the similar-strength restriction.
-    DEPENDS: { wild_restriction: { on: 'wild', when: 'global', off: ['type_themed', 'catch_em_all'],
-                                   why: 'ignored by UPR under a global 1-to-1 map' } },
+    // Choices admission refuses under another choice (both families;
+    // upr_settings.GLOBAL_UNVERIFIABLE_RESTRICTIONS), greyed while the other choice holds.
+    // Under a global 1-to-1 wild map only restriction "none" stands: game1to1Encounters
+    // ignores type_themed / catch_em_all, and similar-strength is not verifiable there (the
+    // global picker's pool shrinks across the whole map).
+    DEPENDS: { wild_restriction: { on: 'wild', when: 'global', off: ['type_themed', 'catch_em_all', 'similar'],
+                                   why: 'not available under a global 1-to-1 map' } },
     optOk(o) { return !(this.family === 'gen1_purergb' && o.pure === false); },
     choiceWhy(o, c) {
       if (this.family === 'gen1_purergb' && c.pure === false) return this.PURE_WHY;
