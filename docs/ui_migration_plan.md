@@ -48,6 +48,16 @@ Gen 1 release branch rebases onto it next — their conflicts are the three list
 Sequencing section. Two Gen 1-owned docstrings still name `html_render.
 status_icon_html` (`adapters/gen1_rby.py:476`, `adapters/gen3_frlge.py:326`) — tell that
 session; the decoder is now `templates/_macros.html::status_pill`.
+**Follow-ups (2026-09-20, on master):** sprites flickered every poll — idiomorph re-synced each
+`<img src>` from the server HTML, undoing the onerror fallback and the chroma-key; the
+idiomorph attribute hook in `dashboard.js` now leaves `src`/`style`/`data-bg-removed` alone
+while `data-species` is unchanged (the funnotbun-only regex patch is gone). The rail's runs
+scroll between the pinned top and the pinned destinations, archived runs fold under a count.
+The randomizer's cartridges are found, not typed (Phase 8 item 4; `GET/POST /api/roms`),
+described in plain words with their family, and a run's game names the family it takes
+(`GAME_FAMILY`; `handle_randomize` refuses the other by name — a pure run had been built from
+vanilla dumps with nothing objecting). A randomized run offers its cartridges on the empty
+board and under *Launchers ▾*. Presets and `.rnqs` export/import: Phase 8 item 8.
 
 ## Read this first
 

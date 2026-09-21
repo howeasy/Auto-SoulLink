@@ -451,10 +451,10 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | Path | Method | Description |
 |---|---|---|
 | `/` | GET | The first running run's board, or the New-run form when there are no runs |
-| `/new` | GET | New-run form: game family, options greyed with reasons, preview |
-| `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers / archive / delete) and its board — live from the run's server, or what it persisted once stopped |
+| `/new` | GET | New-run form: game family, options greyed with reasons, preview; on a Gen 1 family, the randomizer — cartridges found in the SLink folder (grouped by family, the run's pair preselected), *Add file…*, presets, `.rnqs` export/import |
+| `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers — and, on a randomized run, the two cartridges / archive / delete) and its board — live from the run's server, or what it persisted once stopped. The rail's runs scroll on their own; archived runs fold under a count |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
-| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs. Randomizing is normally part of `/new` |
+| `/runs/{run_id}/randomizer` | GET | Gen 1 runs: the randomizer — rebuild the pair, download the ROMs and the `.rnqs` they were built with. Randomizing is normally part of `/new` |
 | `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
 | `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
 | `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
