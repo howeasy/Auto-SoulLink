@@ -41,7 +41,12 @@ RAM_SYMBOLS = (
     "sPlayerData", "sCurMapData", "sPokemonData", "sChecksum", "sCheckValue1", "sCheckValue2",
     "sBackupChecksum", "sBackupCheckValue1", "sBackupCheckValue2", "sOptions", "hROMBank",
     "wSavedAtLeastOnce", "wSaveFileExists",
+    "wCurBattleMon", "wOtherTrainerClass", "wOtherTrainerID",
     "hJoyDown", "hJoyPressed", "hJoyReleased",
+)
+STAT_STAGE_FIELDS = (
+    ("ATTACK", "Atk"), ("DEFENSE", "Def"), ("SPEED", "Spd"),
+    ("SP_ATTACK", "SAtk"), ("SP_DEFENSE", "SDef"), ("ACCURACY", "Acc"), ("EVASION", "Eva"),
 )
 
 
@@ -142,6 +147,7 @@ def _constants(ctx) -> tuple[dict, dict, dict]:
         "constants/map_data_constants.asm", "data/wild/fish.asm", "engine/overworld/wildmons.asm",
         "ram/wram.asm", "ram/sram.asm", "macros/ram.asm", "data/pokemon/base_stats.asm",
         "constants/misc_constants.asm", "engine/menus/save.asm",
+        "constants/ram_constants.asm", "engine/battle/effect_commands.asm",
     )
     source = {path: ctx.read_source(path) for path in paths}
     battle, pokemon, data = [source[f"constants/{name}_constants.asm"]
@@ -151,6 +157,22 @@ def _constants(ctx) -> tuple[dict, dict, dict]:
     values = {key: stats[key] for key in ("NUM_STATS", "NUM_EXP_STATS", "NUM_BATTLE_STATS")}
     values.update({key: species[key] for key in ("NUM_POKEMON", "EGG")})
     values["NUM_MOVES"] = _literal(battle, "NUM_MOVES")
+    for key in ("BASE_STAT_LEVEL", "MAX_STAT_LEVEL"):
+        values[key] = _literal(battle, key)
+    stages = _definitions(_block(battle, "const ATTACK", "DEF NUM_LEVEL_STATS", prefix="const_def"), {})
+    for key in (*[name for name, _suffix in STAT_STAGE_FIELDS], "ABILITY", "NUM_LEVEL_STATS"):
+        values[key] = stages[key]
+    battle_classes = _definitions(_block(battle, "const WILD_BATTLE", "const TRAINER_BATTLE",
+                                         prefix="const_def"), {})
+    for key in ("WILD_BATTLE", "TRAINER_BATTLE"):
+        values[key] = battle_classes[key]
+    result_flags = _definitions(_block(battle, "const WIN", "DEF BATTLERESULT_BITMASK",
+                                       prefix="const_def"), {})
+    values["BATTLERESULT_BITMASK"] = result_flags["BATTLERESULT_BITMASK"]
+    badges = _definitions(_block(source["constants/ram_constants.asm"], "const ZEPHYRBADGE",
+                                 "DEF NUM_BADGES", prefix="const_def"), {})
+    for key in ("NUM_JOHTO_BADGES", "NUM_KANTO_BADGES", "NUM_BADGES"):
+        values[key] = badges[key]
     for key in ("NAME_LENGTH", "MON_NAME_LENGTH", "PLAYER_NAME_LENGTH", "BOX_NAME_LENGTH"):
         values[key] = _literal(source["constants/text_constants.asm"], key)
     items = source["constants/item_constants.asm"]
@@ -257,11 +279,64 @@ def _check_save_spans(ctx, title: str, source: dict) -> None:
             raise ValueError(f"backup checksum source span missing: {name}")
 
 
+def _stat_stage_minimum(ctx, constants: dict, source: dict) -> int:
+    """Verify native stage storage and derive the engine's lower bound.
+
+    C/G battle_constants.asm:35-46 names seven stages plus ABILITY. C wram.asm:
+    454-472 / G:942-960 declare seven named bytes followed by one unnamed byte.
+    The lower bound has no upstream constant: StatDown's decrement refuses zero,
+    and its sharp-lowering path increments zero back to one (C effect_commands:
+    4339-4349; G:4306-4316). This is a derived source fact, not a live-state grant.
+    """
+    if ([constants[name] for name, _suffix in STAT_STAGE_FIELDS] != list(range(7))
+            or constants["ABILITY"] != 7 or constants["NUM_LEVEL_STATS"] != 8
+            or not 1 <= constants["BASE_STAT_LEVEL"] <= constants["MAX_STAT_LEVEL"] <= 255):
+        raise ValueError("unsupported stat-stage index or range contract")
+
+    def instructions(text):
+        return [re.sub(r"\s+", " ", line.split(";", 1)[0].strip())
+                for line in text.splitlines() if line.split(";", 1)[0].strip()]
+
+    wram = source["ram/wram.asm"]
+    for side, following in (("Player", "wEnemyStatLevels"), ("Enemy", "wEnemyTurnsTaken")):
+        name = f"w{side}StatLevels"
+        base, end = ctx.symbol(name), ctx.symbol(following)
+        if base.bank != end.bank or end.address - base.address != constants["NUM_LEVEL_STATS"]:
+            raise ValueError(f"stat-stage array geometry disagrees: {name}")
+        block = _block(wram, name + "::", following + "::")
+        expected = [name + "::"]
+        for index, suffix in STAT_STAGE_FIELDS:
+            field = f"w{side}{suffix}Level"
+            symbol = ctx.symbol(field)
+            if symbol.bank != base.bank or symbol.address - base.address != constants[index]:
+                raise ValueError(f"stat-stage symbol/index mismatch: {field}")
+            expected.append(field + ":: db")
+        if instructions(block)[:-1] != [*expected, "ds 1"]:
+            raise ValueError(f"stat-stage seven-byte plus unnamed-byte declaration differs: {name}")
+    declarations = "\n".join(instructions(wram))
+    for name in ("wCurBattleMon", "wOtherTrainerClass", "wOtherTrainerID"):
+        if not re.search(rf"(?m)^{name}::\s*db\s*$", declarations):
+            raise ValueError(f"ancillary byte declaration missing: {name}")
+    effects = source["engine/battle/effect_commands.asm"]
+    lower = "\n".join(instructions(_block(effects, "BattleCommand_StatDown:", r"\.ComputerMiss:")))
+    if ("ld b, [hl]\ndec b\njp z, .CantLower" not in lower
+            or "ld a, [wLoweredStat]\nand $f0\njr z, .ComputerMiss\ndec b\njr nz, .ComputerMiss\ninc b" not in lower):
+        raise ValueError("stat-stage minimum lacks the native decrement/refusal/sharp-clamp proof")
+    upper = "\n".join(instructions(_block(effects, "RaiseStat:", r"\.got_num_stages")))
+    if "ld b, [hl]\ninc b\nld a, MAX_STAT_LEVEL\ncp b\njp c, .cant_raise_stat" not in upper:
+        raise ValueError("stat-stage maximum lacks its native bound check")
+    return 1
+
+
 def build(title: str, root: Path = ROOT) -> dict:
     ctx = load_context(title, root=root)
     constants, source_files, source = _constants(ctx)
     _check_save_spans(ctx, title, source)
+    stat_stage_min = _stat_stage_minimum(ctx, constants, source)
     names = set(RAM_SYMBOLS)
+    for side in ("Player", "Enemy"):
+        names.add(f"w{side}StatLevels")
+        names.update(f"w{side}{suffix}Level" for _index, suffix in STAT_STAGE_FIELDS)
     # Crystal's contiguous backup differs from Gold/Silver's split save regions.
     names.update(("sBackupGameData", "sBackupGameDataEnd", "sBackupPlayerData",
                   "sBackupCurMapData", "sBackupPokemonData") if title == "crystal" else
@@ -343,6 +418,7 @@ def build(title: str, root: Path = ROOT) -> dict:
         "num_boxes": constants["NUM_BOXES"], "sram_box_stride": stride,
         "sram_box_banks": sorted({box["bank"] for box in boxes}),
         "active_box_flat": active_flat, "active_box_copy_length": active_copy_length,
+        "stat_stage_min": stat_stage_min,
         "species_count": constants["NUM_POKEMON"], "egg_species": constants["EGG"],
         "base_stats_stride": constants["BASE_DATA_SIZE"], "base_tmhm_offset": constants["BASE_TMHM"],
         "num_grassmon": constants["NUM_GRASSMON"], "num_watermon": constants["NUM_WATERMON"],

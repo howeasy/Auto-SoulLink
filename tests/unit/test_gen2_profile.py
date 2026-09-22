@@ -151,3 +151,95 @@ def test_flat_box_facts_refuse_outside_storage_banks_and_split_active_span(monke
     monkeypatch.setattr(generator, "load_context", lambda *args, **kwargs: replace(context, symbols=symbols))
     with pytest.raises(ValueError):
         generator.build("crystal")
+
+
+@pytest.mark.parametrize("title,player,enemy,current,trainer,trainer_id,flags", [
+    ("crystal", 0xC6CC, 0xC6D4, 0xD0D4, 0xD22F, 0xD231, 0xC0),
+    ("gold", 0xCBAA, 0xCBB2, 0xCFC6, 0xD118, 0xD11B, 0x80),
+    ("silver", 0xCBAA, 0xCBB2, 0xCFC6, 0xD118, 0xD11B, 0x80),
+])
+def test_ancillary_facts_bind_seven_named_stage_bytes_inside_eight_byte_arrays(
+    title, player, enemy, current, trainer, trainer_id, flags,
+):
+    from tools.gen_gen2_profile import build
+
+    profile = build(title)
+    row = profile["titles"][title]
+    constants, ram, banks = row["constants"], row["ram"], row["ram_bank"]
+    assert ram["wCurBattleMon"] == current
+    assert banks["wCurBattleMon"] == (1 if title == "crystal" else 0)
+    assert (ram["wOtherTrainerClass"], ram["wOtherTrainerID"]) == (trainer, trainer_id)
+    assert banks["wOtherTrainerClass"] == banks["wOtherTrainerID"] == 1
+    names = ("ATTACK", "DEFENSE", "SPEED", "SP_ATTACK", "SP_DEFENSE", "ACCURACY", "EVASION")
+    assert [constants[name] for name in names] == list(range(7))
+    assert constants["ABILITY"] == 7 and constants["NUM_LEVEL_STATS"] == 8
+    for side, start in (("Player", player), ("Enemy", enemy)):
+        assert ram[f"w{side}StatLevels"] == start
+        for offset, suffix in enumerate(("Atk", "Def", "Spd", "SAtk", "SDef", "Acc", "Eva")):
+            name = f"w{side}{suffix}Level"
+            assert ram[name] == start + offset and banks[name] == 0
+        assert f"w{side}AbilityLevel" not in ram  # Eighth byte has no such source symbol.
+    assert enemy - player == constants["NUM_LEVEL_STATS"]
+    assert constants["BASE_STAT_LEVEL"] == 7 and constants["MAX_STAT_LEVEL"] == 13
+    assert row["derived"]["stat_stage_min"] == 1
+    assert "MIN_STAT_LEVEL" not in constants  # Derived from engine control, not an upstream constant.
+    assert constants["NUM_JOHTO_BADGES"] == constants["NUM_KANTO_BADGES"] == 8
+    assert constants["NUM_BADGES"] == 16
+    assert constants["BATTLERESULT_BITMASK"] == flags
+    assert (constants["WILD_BATTLE"], constants["TRAINER_BATTLE"]) == (1, 2)
+    assert "engine/battle/effect_commands.asm" in row["constant_sources"]
+    assert "constants/ram_constants.asm" in row["constant_sources"]
+    assert profile["write_authority"] == "NONE"
+
+
+@pytest.mark.parametrize("name", ["wCurBattleMon", "wOtherTrainerID", "wEnemyEvaLevel"])
+def test_ancillary_source_symbols_are_required_without_defaults(monkeypatch, name):
+    from tools import gen_gen2_profile as generator
+
+    context = generator.load_context("crystal")
+    symbols = dict(context.symbols)
+    del symbols[name]
+    monkeypatch.setattr(generator, "load_context", lambda *args, **kwargs: replace(context, symbols=symbols))
+    with pytest.raises(ValueError, match="required symbol"):
+        generator.build("crystal")
+
+
+def test_stage_symbol_offset_cannot_disagree_with_named_index(monkeypatch):
+    from tools import gen_gen2_profile as generator
+    from tools.rgbds_symbols import Symbol
+
+    context = generator.load_context("crystal")
+    symbols = dict(context.symbols)
+    original = symbols["wPlayerSDefLevel"]
+    symbols["wPlayerSDefLevel"] = Symbol(original.bank, original.address + 1)
+    monkeypatch.setattr(generator, "load_context", lambda *args, **kwargs: replace(context, symbols=symbols))
+    with pytest.raises(ValueError, match="stat.stage"):
+        generator.build("crystal")
+
+
+@pytest.mark.parametrize("fault", ["seven_instead_of_eight", "lower_bound_branch", "sharp_clamp", "stage_padding"])
+def test_ancillary_stage_facts_require_their_exact_source_contract(monkeypatch, fault):
+    from tools import gen_gen2_profile as generator
+
+    context = generator.load_context("gold")
+
+    class ChangedSource:
+        def __getattr__(self, name):
+            return getattr(context, name)
+
+        def read_source(self, relative):
+            text = context.read_source(relative)
+            if fault == "seven_instead_of_eight" and relative == "constants/battle_constants.asm":
+                return text.replace("DEF NUM_LEVEL_STATS EQU const_value", "DEF NUM_LEVEL_STATS EQU const_value - 1")
+            if relative == "engine/battle/effect_commands.asm":
+                if fault == "lower_bound_branch":
+                    return text.replace("\tjp z, .CantLower", "\tjp c, .CantLower")
+                if fault == "sharp_clamp":
+                    return text.replace("\tjr nz, .ComputerMiss\n\tinc b", "\tjr nz, .ComputerMiss\n\tdec b")
+            if fault == "stage_padding" and relative == "ram/wram.asm":
+                return text.replace("wPlayerEvaLevel::  db\n\tds 1", "wPlayerEvaLevel::  db\n\tds 2")
+            return text
+
+    monkeypatch.setattr(generator, "load_context", lambda *args, **kwargs: ChangedSource())
+    with pytest.raises(ValueError, match="stat.stage"):
+        generator.build("gold")

@@ -133,6 +133,7 @@ local function wire_stages(raw)
 end
 
 function Client.new(p)
+    local HelloSession = assert(p.hello_session, "shared hello_session factory required")
     local reads, signals_mod, writes, safety = p.reads, p.signals, p.writes, p.safety
     local net, json, hud, io = p.net, p.json, p.hud, p.io
     local profile, sites, ws_profile, area_map = p.profile, p.sites, p.write_checkpoint, p.area_map
@@ -176,8 +177,9 @@ function Client.new(p)
         self.seq = self.seq + 1
         local msg = fields or {}
         msg.event, msg.player, msg.seq = event, self.player, self.seq
-        net.send(json.encode(msg))
-        return true
+        -- connector.send queues successfully with no return value. Explicit false
+        -- from an injected transport is refusal, not a successful hello.
+        return net.send(json.encode(msg)) ~= false
     end
     self.send = send
 
@@ -314,6 +316,18 @@ function Client.new(p)
         return true
     end
 
+    -- The scheduler sees only this opaque key. Save identity and the optional
+    -- pureRGB version stamp are Gen 1 facts, not neutral scheduling defaults.
+    local function hello_identity()
+        local id = reads.read_player_id()
+        if type(id) ~= "number" or id % 1 ~= 0 or id < 0 or id > 65535 then
+            return nil, "player identity unavailable"
+        end
+        local version = reads.read_game_internal_version()
+        return table.concat({tostring(self.player), self.foundation, self.artifact_kind,
+                             tostring(self.rom_sha1), tostring(id), tostring(version)}, "|")
+    end
+
     function self:validate()
         local ok, why = game_is_live()
         if ok then
@@ -332,10 +346,8 @@ function Client.new(p)
             -- new session for the server — CONTINUE re-hellos the same save (a reconnect),
             -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
             if reads.read_player_id() == 0 then
-                self.hello_sent = false
+                self.hello_session:invalidate("save_reset")
                 self.pending_change = nil -- an acquisition cannot outlive a reset/new save
-                -- WRAM clear: the held panel belongs to the session that just ended
-                if self.panel then self.panel:clear() end
                 -- ...and so does every identity alias: the record each pointed at is gone with
                 -- the WRAM, and a reloaded pre-change save holds the OLD key again, which the
                 -- server's re-queued retirement then names directly. The PENDING alias goes too,
@@ -1495,8 +1507,12 @@ function Client.new(p)
     end
 
     -- ── hello / tick ─────────────────────────────────────────────────────────────────
-    function self:send_hello()
+    function self:send_hello(expected_identity)
+        if expected_identity == nil or hello_identity() ~= expected_identity then
+            return false, "hello identity changed or unavailable"
+        end
         local party, battle = snapshot_party()
+        if not party then return false, "hello party snapshot unavailable" end
         local map = reads.read_map()
         local area_id, loc = area_of(map.map)
         local had_balls = self.has_pokeballs
@@ -1526,7 +1542,7 @@ function Client.new(p)
                 self.rom_content_error_logged = true
             end
         end
-        send("hello", {
+        local payload = {
             rom_type = self.rom_type, foundation = self.foundation, artifact_kind = self.artifact_kind,
             party = party or arr({}), ot_id = reads.read_player_id(),
             trainer_name = reads.read_player_name(), has_pokeballs = self.has_pokeballs,
@@ -1537,9 +1553,47 @@ function Client.new(p)
             panel = self.panel and self.panel:present() or false,
             panel_abi = self.panel and self.panel:abi() or 0,
             sfx = self.panel and self.panel:sfx_present() or false,
-        })
-        self.hello_sent = true
+        }
+        if hello_identity() ~= expected_identity then return false, "hello identity changed during snapshot" end
+        return send("hello", payload)
     end
+
+    self.hello_session = HelloSession.new({
+        connected = function() return net.connected() end,
+        identity = hello_identity,
+        ready = function(identity)
+            local live, why = game_is_live()
+            if not live then return false, why end
+            local battle = reads.read_battle()
+            if not battle or (battle.in_battle ~= 0 and battle.in_battle ~= 1 and battle.in_battle ~= 2) then
+                return false, "battle state unavailable"
+            end
+            -- MainMenu can already contain a save. A checkpoint or a running
+            -- battle is still required before this game sends its first hello.
+            if battle.in_battle == 0 and not safety.check(ws_profile, io) then
+                return false, "waiting for Gen 1 checkpoint or battle"
+            end
+            local want, have = d.game_internal_version, reads.read_game_internal_version()
+            if want ~= nil and have ~= want then
+                if not self.version_hold_logged then
+                    log("[SLink-gen1] hello held: wGameInternalVersion " .. tostring(have) .. " != " .. tostring(want))
+                    self.version_hold_logged = true
+                end
+                return false, "save version unavailable or mismatched"
+            end
+            return hello_identity() == identity, "identity changed while checking readiness"
+        end,
+        send = function(identity) return self:send_hello(identity) end,
+        retry_delay = function() return 1 end, -- existing Gen 1 next-frame retry policy
+        on_invalidate = function(reason)
+            self.hello_sent = false
+            if self.panel then self.panel:clear() end
+            if reason == "identity_changed" then
+                self.pending_change, self.key_alias, self.retired_alias = nil, nil, {}
+            end
+        end,
+        on_error = function(stage, why) log("[SLink-gen1] hello " .. stage .. ": " .. tostring(why)) end,
+    })
 
     function self:send_tick(event)
         local party, battle = snapshot_party()
@@ -1785,32 +1839,17 @@ function Client.new(p)
             local pok, perr = self.panel:service()
             if not pok then log("[SLink-gen1] panel: " .. tostring(perr)) end
         end
-        net.pump()
-        local connected = net.connected()
-        -- hello only once the player is IN the game: the main menu already holds the save
-        -- (MainMenu -> TryLoadSaveFile before the CONTINUE/NEW GAME choice) and a cleared WRAM
-        -- holds nothing, so "party readable" is not enough — require the overworld checkpoint
-        -- or a running battle (a reconnect mid-battle must not wait for it to end)
-        if not connected then
-            self.hello_sent = false
-            if self.panel then self.panel:clear() end  -- rows outlive neither the link nor the save
+        local pumped, pump_error = pcall(net.pump)
+        local connected = false
+        if pumped then
+            connected = self.hello_session:step(self.frame)
+        else
+            self.hello_session:invalidate("transport_error")
+            log("[SLink-gen1] transport pump: " .. tostring(pump_error))
         end
-        if connected and not self.hello_sent and game_is_live()
-           and (reads.read_battle().in_battle ~= 0 or safety.check(ws_profile, io)) then
-            -- pureRGB: the updater saves BEFORE stamping wGameInternalVersion, so a save whose
-            -- stamp differs from the pack's pinned version is not live yet (hard hold, no hello)
-            local want, have = d.game_internal_version, reads.read_game_internal_version()
-            if want and have ~= nil and have ~= want then
-                if not self.version_hold_logged then
-                    log("[SLink-gen1] hello held: wGameInternalVersion " .. have .. " != " .. want)
-                    self.version_hold_logged = true
-                end
-            else
-                self:send_hello()
-            end
-        end
-        connected = connected and self.hello_sent
+        self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
+        connected = connected and self.hello_session:status().ready
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end

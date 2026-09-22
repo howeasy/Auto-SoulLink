@@ -300,6 +300,266 @@ function R.new(profile, io, decode_name)
         return read_box(box.bank,box.addr,index,"backing_sram_box",c.BOX_LENGTH)
     end
 
+    local function raw_observation(result)
+        result.evidence, result.snapshot_qualified = "RAW_RAM_ONLY", false
+        return result
+    end
+
+    local function geometry(base_symbol, fields)
+        local base, bank = a[base_symbol], profile.ram_bank[base_symbol]
+        if not integer(base,0xC000,0xDFFF) or not integer(bank,0,7) then
+            return nil,"missing/invalid WRAM symbol " .. base_symbol
+        end
+        for name,offset_value in pairs(fields) do
+            if a[name] ~= base+offset_value or profile.ram_bank[name] ~= bank then
+                return nil,"symbol geometry disagrees: " .. name
+            end
+        end
+        return true
+    end
+
+    function r.read_player()
+        -- C ram/wram.asm:2994-2996; G:2399-2401. Trainer Card prints the ID
+        -- as a two-byte number (C trainer_card.asm:241-243; G:239-241).
+        -- PrintNum's .word loads the first byte as high: C engine/math/print_num.asm:48-53;
+        -- G home/print_num.asm:48-53. NAME_LENGTH is the allocation, not the input-screen limit.
+        local valid,why = geometry("wPlayerID",{wPlayerName=2})
+        if not valid then return nil,why end
+        local bytes
+        bytes,why = wram("wPlayerID",2+c.NAME_LENGTH)
+        if not bytes then return nil,why end
+        local result
+        result,why = names({ot_id=be16(bytes,0),identity_qualified=false},slice(bytes,2,c.NAME_LENGTH))
+        if not result then return nil,why end
+        result.name_raw_hex,result.player_name = result.ot_raw_hex,result.ot_name
+        result.ot_raw_hex,result.ot_name = nil,nil
+        result.raw_hex = hex(bytes)
+        return raw_observation(result)
+    end
+
+    function r.read_map()
+        -- C ram/wram.asm:3400-3403; G:2744-2747. The source stores Y before X.
+        local valid,why = geometry("wMapGroup",{wMapNumber=1,wYCoord=2,wXCoord=3})
+        if not valid then return nil,why end
+        local bytes
+        bytes,why = wram("wMapGroup",4)
+        if not bytes then return nil,why end
+        return raw_observation({group=bytes[1],number=bytes[2],y=bytes[3],x=bytes[4],raw_hex=hex(bytes)})
+    end
+
+    local pockets = {
+        items={count="wNumItems",data="wItems",constant="MAX_ITEMS",derived="bag_capacity",capacity=20,width=2},
+        balls={count="wNumBalls",data="wBalls",constant="MAX_BALLS",derived="ball_capacity",capacity=12,width=2},
+        key_items={count="wNumKeyItems",data="wKeyItems",constant="MAX_KEY_ITEMS",derived="key_item_capacity",capacity=25,width=1},
+    }
+    function r.read_pocket(pocket)
+        -- C ram/wram.asm:3109-3118; G:2507-2516. Ordinary/ball pockets contain
+        -- (id,quantity) entries; key items contain IDs only; each count-based list
+        -- has an FF terminator. Both engine/items/items.asm:158-232,316-330,404-415
+        -- preserve separate stacks and limit quantities to MAX_ITEM_STACK.
+        if c.MAX_ITEM_STACK ~= 99 then return nil,"unsupported/missing MAX_ITEM_STACK" end
+        if pocket == "tmhm" then
+            if c.NUM_TM_HM ~= 57 then return nil,"unsupported/missing NUM_TM_HM" end
+            local valid,why = geometry("wTMsHMs",{wNumItems=c.NUM_TM_HM})
+            if not valid then return nil,why end
+            local bytes
+            bytes,why = wram("wTMsHMs",c.NUM_TM_HM)
+            if not bytes then return nil,why end
+            for _,quantity in ipairs(bytes) do
+                if quantity > c.MAX_ITEM_STACK then return nil,"TM/HM quantity exceeds source bound" end
+            end
+            -- Indices are TM/HM ordinals, not item IDs; no guessed item-id arithmetic.
+            return raw_observation({quantities=bytes,raw_hex=hex(bytes)})
+        end
+        local p = pockets[pocket]
+        if not p then return nil,"unknown bag pocket" end
+        if c[p.constant] ~= p.capacity or d[p.derived] ~= p.capacity then
+            return nil,"unsupported/missing pocket capacity " .. p.constant
+        end
+        local fields = {}; fields[p.data] = 1
+        local valid,why = geometry(p.count,fields)
+        if not valid then return nil,why end
+        local bytes
+        bytes,why = wram(p.count,2+p.capacity*p.width)
+        if not bytes then return nil,why end
+        local count = bytes[1]
+        if count > p.capacity then return nil,"pocket count exceeds capacity" end
+        if bytes[2+count*p.width] ~= 255 then return nil,"missing pocket terminator" end
+        local result = {count=count,entries={},raw_hex=hex(bytes)}
+        for slot = 0,count-1 do
+            local offset = 2+slot*p.width
+            local id = bytes[offset]
+            if not integer(id,1,254) then return nil,"invalid occupied pocket item id" end
+            local entry = {slot=slot,id=id}
+            if p.width == 2 then
+                local quantity = bytes[offset+1]
+                if not integer(quantity,1,c.MAX_ITEM_STACK) then return nil,"invalid occupied pocket quantity" end
+                entry.quantity = quantity
+            end
+            result.entries[#result.entries+1] = entry
+        end
+        return raw_observation(result)
+    end
+
+    function r.read_bag()
+        local result = {}
+        for _,pocket in ipairs({"items","balls","key_items","tmhm"}) do
+            local value,why = r.read_pocket(pocket)
+            if not value then return nil,pocket .. ": " .. why end
+            result[pocket] = value
+        end
+        return raw_observation(result)
+    end
+
+    function r.read_badges()
+        -- C ram/wram.asm:3106-3107 and constants/ram_constants.asm:261-284;
+        -- G ram/wram.asm:2504-2505 and constants/ram_constants.asm:250-273.
+        if c.NUM_JOHTO_BADGES ~= 8 or c.NUM_KANTO_BADGES ~= 8 then
+            return nil,"unsupported/missing badge-count facts"
+        end
+        local valid,why = geometry("wJohtoBadges",{wKantoBadges=1})
+        if not valid then return nil,why end
+        local bytes
+        bytes,why = wram("wJohtoBadges",2)
+        if not bytes then return nil,why end
+        return raw_observation({johto=bytes[1],kanto=bytes[2],raw_hex=hex(bytes)})
+    end
+
+    local function byte_symbol(name)
+        local bytes,why = wram(name,1)
+        if not bytes then return nil,why end
+        return bytes[1]
+    end
+
+    local function masked(value,mask)
+        local result,place = 0,1
+        for _ = 1,8 do
+            if value%2 == 1 and mask%2 == 1 then result = result+place end
+            value,mask,place = math.floor(value/2),math.floor(mask/2),place*2
+        end
+        return result
+    end
+
+    function r.read_battle()
+        -- C ram/wram.asm:2720-2739; G:2186-2207. These bytes describe raw
+        -- context, not a qualified running battle. In particular LOSE is transient.
+        local flags = profile.title == "crystal" and 192 or 128
+        if c.WILD_BATTLE ~= 1 or c.TRAINER_BATTLE ~= 2 or c.BATTLERESULT_BITMASK ~= flags then
+            return nil,"unsupported/missing battle-context facts"
+        end
+        local mode,why = byte_symbol("wBattleMode")
+        if mode == nil then return nil,why end
+        if mode ~= 0 and mode ~= c.WILD_BATTLE and mode ~= c.TRAINER_BATTLE then
+            return nil,"battle mode outside source enumeration"
+        end
+        local battle_type,result
+        battle_type,why = byte_symbol("wBattleType")
+        if battle_type == nil then return nil,why end
+        result,why = byte_symbol("wBattleResult")
+        if result == nil then return nil,why end
+        -- BATTLERESULT_BITMASK contains flags to REMOVE, not result-code bits:
+        -- C constants/battle_constants.asm:261-269; G:259-266.
+        local observed = {mode=mode,battle_type=battle_type,result_raw=result,
+            result_code=masked(result,255-c.BATTLERESULT_BITMASK),battle_qualified=false}
+        if mode ~= 0 then
+            observed.active_slot,why = byte_symbol("wCurBattleMon")
+            if observed.active_slot == nil then return nil,why end
+            if observed.active_slot >= c.PARTY_LENGTH then return nil,"active battle slot outside party capacity" end
+            if mode == c.TRAINER_BATTLE then
+                local class,id
+                class,why = byte_symbol("wOtherTrainerClass")
+                if class == nil then return nil,why end
+                id,why = byte_symbol("wOtherTrainerID")
+                if id == nil then return nil,why end
+                observed.trainer = {class_raw=class,id_raw=id}
+            end
+        end
+        local after
+        after,why = byte_symbol("wBattleMode")
+        if after == nil then return nil,why end
+        if after ~= mode then return nil,"battle mode changed during read" end
+        return raw_observation(observed)
+    end
+
+    function r.read_battle_mon(side)
+        local prefix = side == "player" and "wBattleMon" or side == "enemy" and "wEnemyMon"
+        if not prefix then return nil,"battle side must be player or enemy" end
+        -- battle_struct is 32 bytes but is NOT box_struct. C macros/ram.asm:79-100;
+        -- G:76-97. Offsets come from the selected generated member symbols.
+        local fields,offset = {},0
+        for _,field in ipairs({{"Species",1},{"Item",1},{"Moves",c.NUM_MOVES},{"DVs",2},
+            {"PP",c.NUM_MOVES},{"Happiness",1},{"Level",1},{"Status",2},{"HP",2},{"MaxHP",2},
+            {"Attack",2},{"Defense",2},{"Speed",2},{"SpclAtk",2},{"SpclDef",2},{"Type1",1},{"Type2",1}}) do
+            fields[prefix .. field[1]] = offset
+            offset = offset+field[2]
+        end
+        fields[prefix .. "StructEnd"] = offset
+        local valid,why = geometry(prefix,fields)
+        if not valid then return nil,why end
+        local bytes
+        bytes,why = wram(prefix,offset)
+        if not bytes then return nil,why end
+        local function at(field) return a[prefix .. field]-a[prefix] end
+        local function value(field) return bytes[at(field)+1] end
+        local function word(field) return be16(bytes,at(field)) end
+        if not integer(value("Species"),1,c.NUM_POKEMON) then return nil,"invalid battle-view species" end
+        if not integer(value("Level"),1,MAX_LEVEL) then return nil,"battle-view level outside source bounds" end
+        local dv = word("DVs")
+        local attack,defense,speed,special = math.floor(dv/4096),math.floor(dv/256)%16,math.floor(dv/16)%16,dv%16
+        local mon = {species_id=value("Species"),held_item=value("Item"),
+            moves=slice(bytes,at("Moves"),c.NUM_MOVES),pp_raw=slice(bytes,at("PP"),c.NUM_MOVES),
+            pp={},pp_ups={},dv_word=dv,dvs={attack=attack,defense=defense,speed=speed,special=special,
+                hp=(attack%2)*8+(defense%2)*4+(speed%2)*2+special%2},
+            happiness=value("Happiness"),level=value("Level"),status=value("Status"),
+            status_aux_raw=bytes[at("Status")+2],hp=word("HP"),max_hp=word("MaxHP"),
+            stats={attack=word("Attack"),defense=word("Defense"),speed=word("Speed"),
+                   special_attack=word("SpclAtk"),special_defense=word("SpclDef")},
+            types_raw={value("Type1"),value("Type2")},raw_hex=hex(bytes),
+            battle_qualified=false,identity_qualified=false}
+        for i,packed in ipairs(mon.pp_raw) do mon.pp[i],mon.pp_ups[i] = packed%64,math.floor(packed/64) end
+        local nickname
+        nickname,why = wram(prefix .. "Nickname",c.MON_NAME_LENGTH)
+        if not nickname then return nil,why end
+        mon,why = names(mon,nil,nickname)
+        if not mon then return nil,why end
+        return raw_observation(mon)
+    end
+
+    function r.read_stat_stages(side)
+        local prefix = side == "player" and "wPlayer" or side == "enemy" and "wEnemy"
+        if not prefix then return nil,"stat-stage side must be player or enemy" end
+        -- Both battle_constants.asm:10-11,35-46 define neutral 7, max 13 and
+        -- eight allocated levels; WRAM names seven then ds1 (C:454-472, G:942-960).
+        -- StatDown refuses decrement to zero/clamps sharp drops to one:
+        -- C effect_commands.asm:4339-4349; G:4306-4316. The producer proves min=1.
+        if c.BASE_STAT_LEVEL ~= 7 or c.MAX_STAT_LEVEL ~= 13 or c.NUM_LEVEL_STATS ~= 8
+            or d.stat_stage_min ~= 1 then return nil,"unsupported/missing stat-stage facts" end
+        local symbols = {"Atk","Def","Spd","SAtk","SDef","Acc","Eva"}
+        local indices = {"ATTACK","DEFENSE","SPEED","SP_ATTACK","SP_DEFENSE","ACCURACY","EVASION"}
+        local fields = {}
+        for index,suffix in ipairs(symbols) do
+            if c[indices[index]] ~= index-1 then return nil,"generated stat-stage order disagrees" end
+            fields[prefix .. suffix .. "Level"] = c[indices[index]]
+        end
+        local valid,why = geometry(prefix .. "StatLevels",fields)
+        if not valid then return nil,why end
+        local bytes
+        bytes,why = wram(prefix .. "StatLevels",c.NUM_LEVEL_STATS)
+        if not bytes then return nil,why end
+        local wire = {}
+        for index = 1,#symbols do
+            if not integer(bytes[index],d.stat_stage_min,c.MAX_STAT_LEVEL) then
+                return nil,"named stat-stage value outside source bounds"
+            end
+            -- docs/protocol.md §4.1 requires seven entries, 0..12 with neutral 6.
+            wire[index] = bytes[index]-c.BASE_STAT_LEVEL+6
+        end
+        return raw_observation({raw=bytes,wire=wire,unused_raw=bytes[c.NUM_LEVEL_STATS],
+            raw_hex=hex(bytes),battle_qualified=false})
+    end
+
+    function r.read_admission_facts()
+
     function r.read_admission_facts()
         local saved,why = wram("wSavedAtLeastOnce",1)
         if not saved then return nil,why end

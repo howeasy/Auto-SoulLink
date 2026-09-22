@@ -22,17 +22,6 @@ local S = { MAX_PENDING = 64 }
 -- †UNVERIFIED exact casing/braces across BizHawk versions: compared after stripping braces,
 -- case-insensitively, so any spelling of the all-zero GUID is refused.
 S.NULL_GUID = "00000000-0000-0000-0000-000000000000"
-local function is_null_guid(id)
-    if type(id) ~= "string" then return false end
-    return id:gsub("[{}]", ""):lower() == S.NULL_GUID
-end
-
-local function hex_of(bytes)
-    local out = {}
-    for i = 1, #bytes do out[i] = string.format("%02X", bytes[i]) end
-    return table.concat(out)
-end
-
 -- kind -> { filter = function(io, ram, d) -> bool, point = function(io, ram, d) -> table }
 -- `filter` drops hits that are not the event (e.g. AddItemToInventory_.done fires for every
 -- item; only a Poke Ball class item with the carry flag set is `bag_received`).
@@ -316,86 +305,67 @@ S.KINDS.npc_trade_done = {
 -- profile: the title's table from profile.json (ram/rom/derived); sites: the title's
 -- `sites` table from engine_signals.json (kind -> site); on_fire: optional kind -> function(signal)
 -- run synchronously inside the hook (for writes that must land at that exact instant).
-function S.new(profile, sites, io, on_fire)
-    local ram = assert(profile.ram, "profile.ram required")
-    local d = profile.derived or {}
-    local self = { pending = {}, hooks = {}, failure = nil, closed = false, handler_error = nil,
-                   registered = 0 }
-    on_fire = on_fire or {}
-
-    -- Load-time anchor: every site's bytes must be in the ROM where the JSON says.
-    local bad = {}
-    for kind, site in pairs(sites) do
-        local n = #site.expected_hex / 2
-        if hex_of(io.read_range(site.rom_offset, n, "ROM")) ~= site.expected_hex then
-            bad[#bad + 1] = kind
+function S.bind(dependencies)
+    local registry = assert(dependencies.registry, "injected hook registry required")
+    local gb = assert(dependencies.gb_binding, "injected GB hook binding required")
+    local owner = assert(dependencies.owner, "explicit Gen 1 hook owner required")
+    local factory = {KINDS=S.KINDS,MAX_PENDING=S.MAX_PENDING,NULL_GUID=S.NULL_GUID}
+    function factory.new(profile,sites,io,on_fire)
+        -- A duplicate-owner failure has no handles of its own. Do not let a
+        -- constructor retry replace the only exposed cleanup authority for an
+        -- earlier partial registration whose unregister operation failed.
+        if factory.failed_service then
+            local status=factory.failed_service:status()
+            assert(status.closed and #status.cleanup_errors == 0,
+                   "outstanding failed hook cleanup; close factory.failed_service before retry")
         end
+        local ram = assert(profile.ram,"profile.ram required")
+        local d = profile.derived or {}
+        on_fire = on_fire or {}
+        local binding = gb.new(io,{bus_domain="System Bus",rom_domain="ROM",bank_domain="System Bus",
+                                   bank_address=ram.hLoadedROMBank,pc_register="PC",sp_register="SP"})
+        local kinds, descriptors = {}, {}
+        for kind in pairs(sites) do kinds[#kinds+1]=kind end
+        table.sort(kinds)
+        for _,kind in ipairs(kinds) do
+            local descriptor = {}
+            for key,value in pairs(sites[kind]) do descriptor[key]=value end
+            descriptor.id,descriptor.capture_offset = kind,descriptor.capture_offset or 0
+            descriptors[#descriptors+1] = descriptor
+        end
+        local service,why,failed = registry.new({
+            owner=owner,max_pending=factory.MAX_PENDING,sites=descriptors,
+            validate=function(site) return binding:validate(site) end,
+            name_for_site=function(site) return "SLink-gen1-"..site.id end,
+            register=function(site,callback,name) return binding:register(site,callback,name) end,
+            unregister=function(handle) return binding:unregister(handle) end,
+            valid_handle=function(handle) return binding:valid_handle(handle) end,
+            capture=function(site)
+                local context=binding:context(site)
+                if not context then return nil end
+                local spec=S.KINDS[site.id] or {point=generic_point(site)}
+                if spec.filter and not spec.filter(io,ram,d) then return nil end
+                return {kind=site.id,frame=context.frame,pc=context.pc,bank=context.bank,sp=context.sp,
+                        point=spec.point and spec.point(io,ram,d) or nil}
+            end,
+            on_event=function(signal)
+                if on_fire[signal.kind] then
+                    local ok,err=pcall(on_fire[signal.kind],signal)
+                    if not ok then error(signal.kind..": "..tostring(err),0) end
+                end
+            end,
+        })
+        if not service then
+            factory.failed_service=failed -- explicit cleanup retry if unregister itself failed
+            error(why,0)
+        end
+        factory.failed_service=nil
+        return service
     end
-    if #bad > 0 then
-        table.sort(bad)
-        error("engine sites differ from the ROM: " .. table.concat(bad, ", "), 0)
-    end
-
-    local function fire(kind, site)
-        if self.closed or self.failure then return end
-        if site.bank > 0 and io.read_u8(ram.hLoadedROMBank, "System Bus") ~= site.bank then return end
-        local spec = S.KINDS[kind] or { point = generic_point(site) }
-        if spec.filter and not spec.filter(io, ram, d) then return end
-        local pc = site.address + (site.capture_offset or 0)
-        local ok, why = pcall(function()
-            assert(io.register("PC") == pc, kind .. ": callback PC differs")
-            local n = #site.expected_hex / 2
-            assert(hex_of(io.read_range(site.address, n, "System Bus")) == site.expected_hex,
-                   kind .. ": bank/bytes differ at fire time")
-            assert(#self.pending < S.MAX_PENDING, "engine signal buffer full; client stopped draining")
-            local frame = io.framecount()
-            local signal = {
-                kind = kind, frame = frame, pc = pc, bank = site.bank, sp = io.register("SP"),
-                point = spec.point and spec.point(io, ram, d) or nil,
-            }
-            self.pending[#self.pending + 1] = signal
-            if on_fire[kind] then
-                local hok, herr = pcall(on_fire[kind], signal)
-                if not hok then self.handler_error = kind .. ": " .. tostring(herr) end
-            end
-        end)
-        if not ok then self.failure = tostring(why) end
-    end
-
-    local expected = 0
-    for kind, site in pairs(sites) do
-        expected = expected + 1
-        local pc = site.address + (site.capture_offset or 0)
-        local id = io.on_bus_exec(function() fire(kind, site) end, pc, "SLink-gen1-" .. kind, "System Bus")
-        assert(id and not is_null_guid(id), "engine signal registration failed: " .. kind)
-        self.hooks[#self.hooks + 1] = id
-        self.registered = self.registered + 1
-    end
-    assert(self.registered == expected, "engine signal registration incomplete: "
-           .. self.registered .. " of " .. expected)
-
-    -- Hand the queued signals to the caller in arrival order and start a fresh queue.
-    function self:drain()
-        local out = self.pending
-        self.pending = {}
-        return out
-    end
-
-    function self:status()
-        return { failed = self.failure, pending = #self.pending, closed = self.closed,
-                 handler_error = self.handler_error }
-    end
-
-    function self:close()
-        self.closed = true
-        for _, id in ipairs(self.hooks) do io.unregister(id) end
-        self.hooks = {}
-    end
-
-    return self
+    return factory
 end
 
--- Production io over the BizHawk globals; the client passes S.new(profile, sites, S.bizhawk_io()).
+-- Production io over the BizHawk globals; composition injects the shared modules with S.bind.
 function S.bizhawk_io()
     return {
         read_u8 = function(addr, domain) return memory.read_u8(addr, domain) end,

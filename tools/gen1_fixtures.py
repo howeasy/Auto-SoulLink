@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +36,11 @@ sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
 from server.adapters import gen1_codec as codec, gen1_rom_scan as scan  # noqa: E402
+
+if __package__:
+    from . import fixture_qualification as fixture_runner
+else:
+    import fixture_qualification as fixture_runner
 
 GATE = "lua/tests/test_gen1_scripted_gate.lua"
 CHAINS = {"town": "lab,save", "battle": "lab,parcel,route1,save", "town_ot2": "lab,save"}
@@ -157,39 +163,103 @@ def qualify(sram: bytes, rom: bytes, notes: list[str] | None = None) -> list[str
     return problems
 
 
-def qualify_all() -> int:
-    """One line per committed fixture; exit 1 if any of them is REFUSED.
+def _qualification_case(path: Path) -> fixture_runner.FixtureCase:
+    title = path.stem.split("_")[0]
+    rom = DUMP.get(title)
+    artifacts = {"fixture": path, "rom": Path(REPO) / rom if rom else None,
+                 "qualification_source": Path(__file__), "codec_source": Path(codec.__file__),
+                 "rom_reader_source": Path(scan.__file__), "orchestration_source": Path(fixture_runner.__file__),
+                 "rom_symbols": Path(scan._SYMS_PATH)}
+    # identify() consults pureRGB identity/anchor facts before the vanilla path,
+    # even for R/B/Y. Bind the actual scanner dependencies, not just its .py file.
+    for name in ("admission", "profile", "engine_signals", "write_checkpoint"):
+        for suffix in ("", "_overlay"):
+            key = name + suffix
+            artifacts["purergb_" + key] = Path(scan._PUREGB_DATA) / f"{key}.json"
+    return fixture_runner.FixtureCase(path.stem, artifacts,
+        {"family": "gen1", "title": title, "oracle": "independent Python codec and ROM scanner"})
 
-    OK       -- qualify() found nothing wrong: these bytes are a real, consistent save.
-    LEGACY   -- the only problem is the old harness' exp-0 artefact AND the fixture is
-                named in LEGACY, i.e. it is a known un-regenerated file rather than a
-                regression in the codec or the dump.
-    REFUSED  -- anything else, including a missing dump: the fixture cannot be trusted.
+
+@contextmanager
+def _oracle_source_snapshot(artifacts):
+    """Bind the independent scanner to the source bytes captured for this attempt.
+
+    Its normal lazy caches can predate an audit. Replace them only for the callback
+    and restore them even on failure; never consult mutable files behind a receipt.
     """
-    refused = 0
-    for name in sorted(os.listdir(FIXTURES)):
-        if not name.endswith(".SaveRAM"):
-            continue
-        stem = name[:-len(".SaveRAM")]
-        rom_rel = DUMP.get(stem.split("_")[0])
-        if rom_rel is None or not os.path.exists(os.path.join(REPO, rom_rel)):
-            print(f"{stem}: NO-ROM")
-            refused += 1
-            continue
-        with open(os.path.join(FIXTURES, name), "rb") as f:
-            sram = f.read()
-        with open(os.path.join(REPO, rom_rel), "rb") as f:
-            rom = f.read()
-        problems = qualify(sram, rom)
-        if not problems:
-            party = codec.decode_party(sram[codec.SRAM_LAYOUT["sPartyData"]:codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["size"]])
-            print(f"{stem}: OK party={[(m['species'], m['level'], m['exp']) for m in party]}")
-        elif stem in LEGACY and is_legacy_artefact(problems):
-            print(f"{stem}: LEGACY {'; '.join(problems)}")
+    previous = scan._SYMS_CACHE, scan._PUREGB_ADMISSION_CACHE, scan._PUREGB_PACK_CACHE
+    try:
+        scan._SYMS_CACHE = json.loads(artifacts["rom_symbols"])
+        admission = json.loads(artifacts["purergb_admission"])
+        admission.update(json.loads(artifacts["purergb_admission_overlay"]))
+        scan._PUREGB_ADMISSION_CACHE = admission
+        scan._PUREGB_PACK_CACHE = {
+            name + suffix + ".json": json.loads(artifacts["purergb_" + name + suffix])
+            for name in ("profile", "engine_signals", "write_checkpoint") for suffix in ("", "_overlay")
+        }
+        yield
+    finally:
+        scan._SYMS_CACHE, scan._PUREGB_ADMISSION_CACHE, scan._PUREGB_PACK_CACHE = previous
+
+
+def _qualification_stage(context: fixture_runner.StageContext) -> fixture_runner.StageReceipt:
+    sram, rom = context.artifacts["fixture"], context.artifacts["rom"]
+    notes: list[str] = []
+    with _oracle_source_snapshot(context.artifacts):
+        problems = qualify(sram, rom, notes)
+    evidence = {"oracle": "gen1_fixtures.qualify"}
+    if problems:
+        if context.fixture in LEGACY and is_legacy_artefact(problems):
+            evidence["disposition"] = "LEGACY"
+        return fixture_runner.StageReceipt(context.stage, context.fingerprint, "FAIL",
+                                            tuple(problems), tuple(notes), evidence)
+    party = codec.decode_party(sram[codec.SRAM_LAYOUT["sPartyData"]:
+                                   codec.SRAM_LAYOUT["sPartyData"] + codec.PARTY_LAYOUT["size"]])
+    evidence["summary"] = f"party={[(m['species'], m['level'], m['exp']) for m in party]}"
+    return fixture_runner.StageReceipt(context.stage, context.fingerprint, "PASS",
+                                        notes=tuple(notes), evidence=evidence)
+
+
+def qualification_report(*, scope: str = "static", stage_callbacks=None) -> dict:
+    """Bind Gen 1's unchanged oracle to shared enumeration/provenance/orchestration.
+
+    Static success does not establish a boot or re-save witness. Full qualification
+    requires injected boot/resave/post_oracle callbacks; there are no emulator
+    defaults and the independent Python oracle cannot be overridden by this seam.
+    """
+    callbacks = {"qualify": _qualification_stage}
+    if stage_callbacks:
+        if set(stage_callbacks) - {"boot", "resave", "post_oracle"}:
+            raise ValueError("only game boot/resave/post_oracle callbacks may be injected")
+        callbacks.update(stage_callbacks)
+    try:
+        paths = fixture_runner.enumerate_fixtures(Path(FIXTURES), suffix=".SaveRAM", max_fixtures=64)
+    except ValueError as exc:
+        report = fixture_runner.qualify_fixtures([], callbacks, scope=scope)
+        report["errors"] = [str(exc)]
+        return report
+    return fixture_runner.qualify_fixtures((_qualification_case(path) for path in paths), callbacks, scope=scope)
+
+
+def qualify_all() -> int:
+    """Print the static audit; missing inputs/empty inventories/legacy bytes refuse.
+
+    The report binds actual fixture, cartridge and oracle-source bytes. Its OK
+    means only the existing static oracle passed, never full boot qualification.
+    """
+    report = qualification_report()
+    for row in report["fixtures"]:
+        name = row["name"]
+        if row.get("missing_artifact") == "rom":
+            print(f"{name}: NO-ROM")
+        elif row["passed"]:
+            print(f"{name}: OK {row['stages'][0]['evidence']['summary']}")
         else:
-            print(f"{stem}: REFUSED {'; '.join(problems)}")
-            refused += 1
-    return 1 if refused else 0
+            legacy = any(stage.get("evidence", {}).get("disposition") == "LEGACY" for stage in row["stages"])
+            print(f"{name}: {'LEGACY' if legacy else 'REFUSED'} {'; '.join(row['problems'])}")
+    for problem in report["errors"]:
+        print(f"fixtures: REFUSED {problem}")
+    return 0 if report["passed"] else 1
 
 
 def main() -> int:

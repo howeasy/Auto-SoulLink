@@ -5,7 +5,9 @@ without it), the System Bus is a dict, registers/frame are set per test. No BizH
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import pathlib
 
 import lupa
@@ -21,10 +23,12 @@ SIGNALS_LUA = (REPO / "lua" / "gen1" / "signals.lua").as_posix()
 
 
 def _rom(title: str) -> bytes:
-    path = REPO / "patch" / "build" / DUMPS[title]
+    path = pathlib.Path(os.environ.get("SLINK_GEN1_ROM_DIR", REPO / "patch" / "build")) / DUMPS[title]
     if not path.exists():
         pytest.skip(f"{path.name} not present — copy the clean dump into patch/build/")
-    return path.read_bytes()
+    raw = path.read_bytes()
+    assert hashlib.sha1(raw).hexdigest() == PROFILE[title]["rom_sha1"], "signal tests require the pinned clean ROM"
+    return raw
 
 
 class Harness:
@@ -39,15 +43,18 @@ class Harness:
         self.frame = 1000
         self.hooks: dict[int, tuple] = {}
         self.next_id = 1
-        self.unregistered: list[int] = []
+        self.unregistered: list[int | str] = []
         profile = self.lua.eval("function(j) return j end")(self.lua.table_from(PROFILE[title], recursive=True))
         sites = self.lua.table_from(SITES[title]["sites"], recursive=True)
         io = self.lua.table(
             read_u8=self._read_u8, read_range=self._read_range, on_bus_exec=self._on_bus_exec,
-            unregister=lambda i: self.unregistered.append(int(i)),
+            unregister=lambda handle: self.unregistered.append(handle),
             framecount=lambda: self.frame, register=lambda name: self.regs[str(name)],
         )
-        self.S = self.lua.eval(f'dofile("{SIGNALS_LUA}")')
+        source = self.lua.eval(f'dofile("{SIGNALS_LUA}")')
+        registry = self.lua.eval("dofile")((REPO / "lua/hook_registry.lua").as_posix())
+        binding = self.lua.eval("dofile")((REPO / "lua/gb_hook_binding.lua").as_posix())
+        self.S = source.bind(self.lua.table(registry=registry, gb_binding=binding, owner="SLink-gen1"))
         self._profile, self._sites, self._io = profile, sites, io
 
     def start(self):
@@ -232,9 +239,44 @@ def test_an_all_zero_guid_registration_is_refused_and_registrations_are_counted(
     h._io.on_bus_exec = on_bus_exec
     with pytest.raises(lupa.LuaError, match="engine signal registration failed"):
         h.start()
+    assert h.unregistered == ["hook-1"]  # Partial constructor owns and cleans this handle.
     good = Harness("red")
     good.start()
     assert good.svc.registered == len(SITES["red"]["sites"])
+
+
+def test_constructor_retry_preserves_quarantined_cleanup_without_caller_caching_reference():
+    h = Harness("red")
+    state = {"calls": 0, "can_remove": False, "removed": []}
+
+    def register(_fn, _addr, _name, _domain):
+        state["calls"] += 1
+        return h.S.NULL_GUID if state["calls"] == 2 else f"owned-{state['calls']}"
+
+    def unregister(handle):
+        if not state["can_remove"]:
+            return False
+        state["removed"].append(handle)
+        return True
+
+    h._io.on_bus_exec, h._io.unregister = register, unregister
+    with pytest.raises(lupa.LuaError, match="cleanup failed"):
+        h.start()
+    assert h.S.failed_service.status(h.S.failed_service).registered == 1
+    with pytest.raises(lupa.LuaError, match="cleanup|owner"):
+        h.start()
+    # No copy of the original failed service is retained outside the factory.
+    # It must still expose the sole handle capable of cleaning owned-1.
+    assert h.S.failed_service.status(h.S.failed_service).registered == 1
+    assert len(h.S.failed_service.status(h.S.failed_service).cleanup_errors) == 1
+    assert state["calls"] == 2
+    state["can_remove"] = True
+    assert h.S.failed_service.close(h.S.failed_service) is True
+    assert state["removed"] == ["owned-1"]
+    h.start()
+    assert h.S.failed_service is None
+    assert h.svc.registered == len(SITES["red"]["sites"])
+    h.svc.close(h.svc)
 
 
 def test_the_bag_snapshot_length_is_derived_not_a_literal():

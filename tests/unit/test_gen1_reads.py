@@ -7,12 +7,13 @@ import re
 from pathlib import Path
 
 import pytest
-from lupa.lua54 import LuaRuntime
+from lupa.lua54 import LuaError, LuaRuntime
 
 from server.adapters import gen1_codec as oracle
 
 ROOT = Path(__file__).resolve().parents[2]
 READS = ROOT / "lua" / "gen1" / "reads.lua"
+SCANNER = ROOT / "lua" / "token_scanner.lua"
 JSON = ROOT / "lua" / "json_codec.lua"
 PROFILE = ROOT / "data" / "games" / "gen1_rby" / "profile.json"
 
@@ -49,7 +50,7 @@ def _runtime(title: str, memory: bytearray | None = None):
                       "read_u8=function(addr) return u(addr) end,"
                       "read_range=function(addr,n) return range(addr,n) end} end")
     io = make_io(lambda addr: memory[addr], read_range)
-    reader = module.new(profile, io)
+    reader = module.new(profile, io, load(SCANNER.as_posix()))
     return rt, profile, module, reader, memory
 
 
@@ -338,7 +339,7 @@ def _pure_runtime(title="purered"):
                       "read_range=function(addr,n) return range(addr,n) end} end")
     io = make_io(lambda addr: memory[addr],
                  lambda addr, n: rt.table_from(list(memory[addr:addr + n])))
-    return rt, profile, module, module.new(profile, io), memory
+    return rt, profile, module, module.new(profile, io, load(SCANNER.as_posix())), memory
 
 
 def test_pure_bag_capacity_comes_from_derived_not_from_symbol_arithmetic():
@@ -398,3 +399,50 @@ def test_the_pack_charmap_drives_decode_name_when_present():
     vrt, _, vmodule, vr, _ = _runtime("red")
     assert vr.decode_name(vrt.table_from([0x9E, 0x50])) == "["
     assert vmodule.charmap(None).glyphs[0x9E] == "["
+
+
+@pytest.mark.parametrize("stream", [
+    "{0x80, 0x50, false}",  # A terminator does not excuse malformed field bytes.
+    "{[1]=0x80, [3]=0x81}",
+    "{[1]=0x80, extra=0x81}",
+    "{0x80, 256}",
+])
+def test_malformed_name_stream_refuses_without_partial_text(stream):
+    rt, _, _, reader, _ = _runtime("red")
+    result = reader.decode_name(rt.eval(stream))
+    assert isinstance(result, tuple) and result[0] is None and isinstance(result[1], str)
+
+
+def test_collection_propagates_invalid_name_after_terminator():
+    rt, _, _, reader, _ = _runtime("red")
+    raw = _bytes(rt, _block(20, True, 1, random.Random(882)))
+    raw[oracle.BOX_LAYOUT["ot_names"] + 1] = 0x50
+    raw[oracle.BOX_LAYOUT["ot_names"] + 2] = False
+    result = reader.box_from_snapshot(raw)
+    assert isinstance(result, tuple) and result[0] is None and "name" in result[1]
+
+
+def test_scanner_dependency_is_required_without_implicit_loading():
+    rt, profile, module, _, _ = _runtime("red")
+    io = rt.eval("{read_u8=function() error('IO must not run') end, "
+                 "read_range=function() error('IO must not run') end}")
+    with pytest.raises(LuaError, match="Scanner required"):
+        module.new(profile, io)
+
+
+@pytest.mark.parametrize("title", ["purered", "pureblue", "puregreen"])
+def test_pure_name_bytes_still_match_independent_python_oracle(title):
+    rt, _, _, reader, _ = _pure_runtime(title)
+    layout = oracle.for_foundation("gen1_purergb")
+    for value in range(256):
+        raw = bytes([value, 0x50, 0xff])
+        assert reader.decode_name(_bytes(rt, raw)) == layout.decode_name(raw)
+
+
+def test_gen1_alias_codes_and_unknown_spelling_remain_game_owned():
+    rt, profile, module, _, _ = _runtime("red")
+    profile.charmap = rt.eval('{terminator=0x50,glyphs={[1]="alias",[2]="alias",[0x50]="@"}}')
+    io = rt.eval("{read_u8=function() return 0 end, read_range=function() return {} end}")
+    reader = module.new(profile, io, rt.eval("dofile")(SCANNER.as_posix()))
+    assert reader.charmap.codes["alias"] == 1
+    assert reader.decode_name(rt.table_from([1, 2, 9, 0x50])) == "aliasalias<$09>"

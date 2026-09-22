@@ -120,7 +120,11 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         # The Gen 1 client, reached via slink_gen1.lua -> gen1/run.lua -> gen1/entry.lua,
         # and via slink.lua's own Gen 1 route (dofile("gen1/entry.lua") for detect_title).
         "lua/gen1/entry.lua", "lua/gen1/client.lua", "lua/json_codec.lua",
-        "lua/gen1_write_safety.lua", "lua/connector.lua", "lua/hud.lua",
+        "lua/gen1_write_safety.lua", "lua/write_permit.lua", "lua/connector.lua", "lua/hud.lua",
+        "lua/gb_checkpoint.lua", "lua/token_scanner.lua",
+        "lua/admission.lua",
+        "lua/hook_registry.lua", "lua/gb_hook_binding.lua",
+        "lua/hello_session.lua", "lua/reply_dispatch.lua",
         "data/games/gen1_rby/profile.json",
         # Only reachable once the closure is rooted at the launchers, not run.lua alone.
         "lua/game_detect.lua",

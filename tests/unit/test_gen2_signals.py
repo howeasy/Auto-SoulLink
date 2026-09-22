@@ -1,0 +1,496 @@
+"""Explicit MODEL-only hook probes; no emulator or physical qualification."""
+
+import json
+from pathlib import Path
+
+import pytest
+from lupa.lua54 import LuaRuntime
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class World:
+    def __init__(self, title="crystal"):
+        self.lua = LuaRuntime(unpack_returned_tuples=True)
+        self.title = title
+        self.profile = self.read_pack("profile")
+        self.pack = self.read_pack("engine_signals")
+        self.sites = self.pack["titles"][title]["sites"]
+        self.p = self.profile["titles"][title]
+        self.memory, self.rom, self.callbacks, self.removed = {}, {}, {}, []
+        self.reg = {"PC": 0, "SP": 0xC020 if title == "crystal" else 0xDF20,
+                    "AF": 0, "BC": 0, "DE": 0, "HL": 0}
+        self.bank, self.shadow, self.wram_bank, self.sram_bank = 0, 0, 1, 1
+        self.generation, self.operation, self.frame, self.held = 1, "operation-1", 1, True
+        self.fields = {name: row for site in self.sites.values() for name, row in site["point_symbols"].items()}
+        self.stack = self.read_pack("write_checkpoint")["titles"][title]["primary"]["caller_stack"]
+        for site in self.sites.values():
+            for offset, value in enumerate(bytes.fromhex(site["expected_hex"])):
+                self.rom[site["rom_offset"] + offset] = value
+            script = site["guards"].get("script_context")
+            if script:
+                flat = script["bank"] * 0x4000 + script["addr"] - 0x4000
+                for offset, value in enumerate(bytes.fromhex(script["expected_hex"])):
+                    self.rom[flat + offset] = value
+        self.party([self.mon()])
+        self.box([])
+        self.field("wCurPartyMon", 0)
+        self.field("wCurBattleMon", 0)
+        self.field("wCurPartySpecies", 25)
+        self.field("wBattleType", 0)
+        self.field("wCurBox", 0)
+        self.field("wMapGroup", 24)
+        self.field("wMapNumber", 3)
+        self.module = self.lua.eval("dofile")((ROOT / "lua/gen2/signals.lua").as_posix())
+        self.registry = self.lua.eval("dofile")((ROOT / "lua/hook_registry.lua").as_posix())
+        self.gb = self.lua.eval("dofile")((ROOT / "lua/gb_hook_binding.lua").as_posix())
+        reads_module = self.lua.eval("dofile")((ROOT / "lua/gen2/reads.lua").as_posix())
+        self.io = self.lua.table(
+            model_only=True, cart_ram_linear=True,
+            read_u8=self.read, read_range=lambda a, n, d: self.lua.table_from([self.read(a + i, d) for i in range(n)]),
+            register=lambda name: self.reg.get(name), framecount=lambda: self.frame,
+            on_bus_exec=self.register, unregister=self.unregister, bank_valid=self.bank_valid,
+            stack_valid=lambda sp, n: self.stack["minimum_sp"] <= sp and sp + n <= self.stack["exclusive_stack_end"],
+            domain_size=lambda domain: 0x8000 if domain == "CartRAM" else 0x200000,
+        )
+        self.io = self.lua.eval("""function(py)
+            local io={model_only=true,cart_ram_linear=true}
+            for _,name in ipairs({'read_u8','read_range','register','framecount','on_bus_exec',
+                                  'unregister','bank_valid','stack_valid','domain_size'}) do
+                local fn=py[name]
+                io[name]=function(...) return fn(...) end
+            end
+            return io
+        end""")(self.io)
+        self.reads = reads_module.new(self.lua.table_from(self.p, recursive=True), self.io)
+        assert not isinstance(self.reads, tuple), self.reads
+        self.authority = self.lua.table(
+            kind="MODEL_PROBE", allow_model_registration=True,
+            capture=lambda: self.lua.table(generation=self.generation, operation=self.operation),
+            valid=lambda stamp: self.held and stamp.generation == self.generation and stamp.operation == self.operation,
+        )
+
+    def read_pack(self, name):
+        return json.loads((ROOT / f"data/games/gen2_{self.title}/{name}.json").read_text())
+
+    def options(self):
+        return self.lua.table(
+            title=self.title, profile=self.lua.table_from(self.profile, recursive=True),
+            pack=self.lua.table_from(self.pack, recursive=True), io=self.io,
+            Registry=self.registry, GB=self.gb, reads=self.reads, authority=self.authority,
+            areas=self.lua.table_from(self.read_pack("area_map"), recursive=True),
+            encounters=self.lua.table_from(self.read_pack("encounter_tables"), recursive=True),
+            owner="gen2-model-test", max_pending=64,
+        )
+
+    def bind(self):
+        result = self.module.new_model(self.options())
+        if isinstance(result, tuple):
+            assert result[0] is not None, result[1]
+            return result[0]
+        return result
+
+    def register(self, callback, address, name, domain):
+        self.callbacks[name] = (callback, address)
+        return name
+
+    def unregister(self, handle):
+        self.removed.append(handle)
+        self.callbacks.pop(handle)
+        return True
+
+    def bank_valid(self, bank, address, size):
+        if address < 0x4000:
+            return bank == 0 and address + size <= 0x4000
+        if address < 0x8000:
+            return bank == self.bank and address + size <= 0x8000
+        if 0xC000 <= address < 0xD000:
+            return bank == 0 and address + size <= 0xD000
+        if 0xD000 <= address < 0xE000:
+            return bank == self.wram_bank and address + size <= 0xE000
+        if 0xA000 <= address < 0xC000:
+            return bank == self.sram_bank and address + size <= 0xC000
+        return bank == 0 and address >= 0xFF80 and address + size <= 0xFFFF
+
+    def read(self, address, domain):
+        if domain == "ROM":
+            return self.rom.get(address, 0)
+        if domain == "System Bus" and address < 0x8000:
+            flat = address if address < 0x4000 else self.bank * 0x4000 + address - 0x4000
+            return self.rom.get(flat, 0)
+        if domain == "System Bus" and address == self.p["ram"]["hROMBank"]:
+            return self.shadow
+        return self.memory.get((domain, address), 0)
+
+    def field(self, name, value, width=1):
+        address = self.fields[name]["addr"] if name in self.fields else self.p["ram"][name]
+        for offset in range(width):
+            self.memory["System Bus", address + offset] = value >> (8 * offset) & 255
+
+    @staticmethod
+    def mon(species=25, ot=0x1234, dvs=0x2AAA, nickname=0x81, hp=30):
+        return {"species": species, "ot": ot, "dvs": dvs, "nickname": nickname, "hp": hp}
+
+    def collection(self, mons, capacity, stride):
+        record_start = capacity + 2
+        ot_start = record_start + capacity * stride
+        nick_start = ot_start + capacity * 11
+        raw = bytearray(nick_start + capacity * 11)
+        raw[0] = len(mons)
+        raw[len(mons) + 1] = 255
+        for i, mon in enumerate(mons):
+            raw[i + 1] = mon["species"]
+            start = record_start + i * stride
+            raw[start] = mon["species"]
+            raw[start + 6:start + 8] = mon["ot"].to_bytes(2, "big")
+            raw[start + 21:start + 23] = mon["dvs"].to_bytes(2, "big")
+            raw[start + 31] = 20
+            if stride == 48:
+                raw[start + 34:start + 36] = mon["hp"].to_bytes(2, "big")
+                raw[start + 36:start + 38] = (50).to_bytes(2, "big")
+            raw[ot_start + i * 11:ot_start + i * 11 + 2] = bytes([0x80, 0x50])
+            raw[nick_start + i * 11:nick_start + i * 11 + 2] = bytes([mon["nickname"], 0x50])
+        return raw
+
+    def party(self, mons):
+        for offset, value in enumerate(self.collection(mons, 6, 48)):
+            self.memory["System Bus", self.p["ram"]["wPartyCount"] + offset] = value
+
+    def box(self, mons):
+        for offset, value in enumerate(self.collection(mons, 20, 32)):
+            self.memory["CartRAM", self.p["derived"]["active_box_flat"] + offset] = value
+
+    def fire(self, site_id, *, wrong_pc=False, wrong_shadow=False, wrong_mapping=False):
+        site = self.sites[site_id]
+        self.reg["PC"] = site["addr"] + int(wrong_pc)
+        self.bank, self.shadow = site["bank"], site["bank"] + int(wrong_shadow)
+        if wrong_mapping:
+            self.bank += 1
+        callbacks = [callback for callback, address in self.callbacks.values() if address == site["addr"]]
+        assert callbacks
+        for callback in callbacks:
+            callback()
+
+    def set_guards(self, site_id):
+        guards = self.sites[site_id]["guards"]
+        for register, value in guards.get("registers", {}).items():
+            self.reg[register] = value
+        for field in guards.get("memory_equals", []):
+            self.field(field["symbol"], field["value"], field["width"])
+        for field in guards.get("stack_words_equals", []):
+            address = self.reg["SP"] + field["sp_offset"]
+            self.memory["System Bus", address] = field["value"] & 255
+            self.memory["System Bus", address + 1] = field["value"] >> 8
+        for flag, value in guards.get("flags", {}).items():
+            mask = {"Z": 0x80, "C": 0x10}[flag]
+            self.reg["AF"] = self.reg["AF"] & ~mask | (mask if value else 0)
+
+    @staticmethod
+    def events(binder):
+        batches = binder.drain(binder)
+        return [event for batch in batches.values() for event in batch.events.values()]
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_source_candidate_cannot_register_production_hooks(title):
+    world = World(title)
+    options = world.options()
+    options.runtime_qualification = world.lua.table(qualified=True, allow_candidate=True)
+    service, reason = world.module.new(options)
+    assert service is None and "qualification" in reason.lower()
+    assert world.callbacks == {}
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_model_party_capture_waits_for_final_name_and_consumes_once(title):
+    world = World(title)
+    binder = world.bind()
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+    world.fire("capture_party")
+    assert not any(event.kind == "capture" for event in world.events(binder))
+    world.party([world.mon(nickname=0x82)])
+    world.fire("capture_party_finalized")
+    captures = [event for event in world.events(binder) if event.kind == "capture"]
+    assert len(captures) == 1
+    event = captures[0]
+    assert event.mon.key == "2AAA:1234:19" and event.mon.nickname_raw_hex.startswith("8250")
+    assert event.evidence_level == "MODEL" and event.runtime_authorized is False
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+
+
+@pytest.mark.parametrize("boundary", ["failure", "cancel", "reset", "reload", "source_change"])
+def test_failed_cancelled_or_reset_operation_cannot_reuse_capture_latch(boundary):
+    world = World()
+    binder = world.bind()
+    world.fire("capture_party")
+    binder.boundary(binder, boundary)
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+
+
+def test_roamer_classifier_decorates_one_capture_and_does_not_double_consume():
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(species=243)])
+    world.field("wCurPartySpecies", 243)
+    world.field("wBattleType", 5)
+    world.fire("capture_party")
+    world.events(binder)
+    world.fire("capture_party_finalized")
+    events = world.events(binder)
+    captures = [event for event in events if event.kind == "capture"]
+    assert len(captures) == 1 and captures[0].area_id == "legend_243"
+    assert captures[0].acquisition == "roamer"
+    assert "roamer_party_finalized" in list(captures[0].classifications.values())
+
+
+def test_hatch_slot_latch_allows_source_ot_finalization_but_not_another_mon():
+    world = World()
+    binder = world.bind()
+    world.fire("hatch_species")
+    world.events(binder)
+    world.party([world.mon(ot=0x5678, nickname=0x83)])
+    world.fire("hatch_finalized")
+    event = world.events(binder)[0]
+    assert event.kind == "capture" and event.area_id == "gift_daycare"
+    assert event.mon.key == "2AAA:5678:19"
+
+
+@pytest.mark.parametrize("fault", ["pc", "shadow", "mapped_bank", "wram", "generation", "identity", "hold"])
+def test_wrong_execution_or_stale_identity_never_publishes_capture(fault):
+    world = World()
+    binder = world.bind()
+    world.fire("capture_party")
+    world.events(binder)
+    if fault == "wram":
+        world.wram_bank = 2
+    elif fault == "generation":
+        world.generation += 1
+    elif fault == "identity":
+        world.party([world.mon(dvs=0x3AAA)])
+    elif fault == "hold":
+        world.held = False
+    world.fire("capture_party_finalized", wrong_pc=fault == "pc", wrong_shadow=fault == "shadow",
+               wrong_mapping=fault == "mapped_bank")
+    assert not any(event.kind == "capture" for event in world.events(binder))
+
+
+@pytest.mark.parametrize("fault", ["kind", "instruction", "bytes", "title", "authority", "prior", "script_bytes"])
+def test_all_site_validation_precedes_model_registration(fault):
+    world = World()
+    if fault == "kind":
+        world.sites["capture_party"]["kind"] = "SCRIPT_BYTECODE"
+    elif fault == "instruction":
+        world.sites["capture_party"]["instructions"] = ["special HealParty"]
+    elif fault == "bytes":
+        world.sites["capture_party"]["expected_hex"] = "00"
+    elif fault == "title":
+        world.pack["source"]["artifact"] = "pokegold"
+    elif fault == "authority":
+        world.authority.allow_model_registration = False
+    elif fault == "prior":
+        world.sites["capture_party_finalized"]["guards"] = {}
+    else:
+        world.sites["whiteout_before_heal"]["guards"]["script_context"]["expected_hex"] = "00"
+    result = world.module.new_model(world.options())
+    assert isinstance(result, tuple) and result[0] is None
+    assert world.callbacks == {}
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_box_capture_and_contest_box_require_a_real_prior_insertion(title):
+    world = World(title)
+    binder = world.bind()
+    world.box([world.mon()])
+    world.fire("contest_box_finalized")
+    assert world.events(binder) == []  # The capacity-refusal path reaches this same RET.
+    world.fire("contest_box_inserted")
+    world.box([world.mon(nickname=0x84)])
+    world.fire("contest_box_finalized")
+    event = world.events(binder)[0]
+    assert event.kind == "capture" and event.destination == "box"
+    assert event.area_id == "national_park_contest" and event.mon.nickname_raw_hex.startswith("8450")
+    world.operation = "ordinary-box"
+    world.fire("capture_box")
+    world.events(binder)
+    world.fire("capture_box_finalized")
+    event = world.events(binder)[0]
+    assert event.destination == "box" and event.area_id == "route_29"
+
+
+@pytest.mark.parametrize("fault", [None, "special_index", "script_pos", "caller", "stack_bounds", "live_hp"])
+def test_whiteout_is_cpu_dispatch_with_complete_preheal_guards(fault):
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(hp=0)])
+    world.set_guards("whiteout_before_heal")
+    if fault == "special_index":
+        world.reg["DE"] += 1
+    elif fault == "script_pos":
+        world.field("wScriptPos", 0, 2)
+    elif fault == "caller":
+        world.memory["System Bus", world.reg["SP"]] ^= 1
+    elif fault == "stack_bounds":
+        world.reg["SP"] = world.stack["exclusive_stack_end"] - 1
+    elif fault == "live_hp":
+        world.party([world.mon(hp=1)])
+    world.fire("whiteout_before_heal")
+    events = world.events(binder)
+    if fault is None:
+        assert len(events) == 1 and events[0].kind == "whiteout"
+        assert events[0].party.mons[1].hp == 0 and events[0].runtime_authorized is False
+    else:
+        assert events == []
+
+
+def test_actual_bank_mapping_refuses_even_when_wrong_bank_bytes_match():
+    world = World()
+    binder = world.bind()
+    world.fire("capture_party")
+    site = world.sites["capture_party_finalized"]
+    wrong_flat = (site["bank"] + 1) * 0x4000 + site["addr"] - 0x4000
+    for offset, value in enumerate(bytes.fromhex(site["expected_hex"])):
+        world.rom[wrong_flat + offset] = value
+    world.fire("capture_party_finalized", wrong_mapping=True)
+    assert world.events(binder) == []
+    assert "actual mapped ROM bank" in binder.status(binder).failed
+
+
+def test_changed_hatch_slot_permanently_retires_the_prior_attempt():
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(), world.mon(species=172)])
+    world.fire("hatch_species")
+    world.field("wCurPartyMon", 1)
+    world.fire("hatch_finalized")
+    assert world.events(binder) == []
+    world.field("wCurPartyMon", 0)
+    world.fire("hatch_finalized")
+    assert world.events(binder) == []
+
+
+def test_unimplemented_gift_context_is_explicit_and_close_uses_shared_lifecycle():
+    world = World()
+    binder = world.bind()
+    world.fire("gift_begin")
+    assert world.events(binder) == []
+    assert "OPEN" in binder.status(binder).refusals.gift_begin
+    count = len(world.callbacks)
+    assert binder.close(binder) is True
+    assert len(world.removed) == count and not world.callbacks
+
+
+def test_scripted_static_with_normal_battle_type_is_not_guessed_as_wild():
+    world = World()
+    binder = world.bind()
+    world.field("wBattleScriptFlags", 128)
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+    assert "scripted/static" in binder.status(binder).failed
+
+
+def test_duplicate_insertion_and_duplicate_key_are_fail_closed():
+    world = World()
+    binder = world.bind()
+    world.fire("capture_party")
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+    assert "duplicate acquisition start" in binder.status(binder).failed
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(), world.mon()])
+    world.fire("capture_party")
+    assert world.events(binder) == []
+    assert "ambiguous receiver identity" in binder.status(binder).failed
+
+
+@pytest.mark.parametrize("site", ["soft_reset", "new_game", "continue_confirmed", "battle_end"])
+def test_native_lifecycle_sites_discard_pending_acquisition(site):
+    world = World()
+    binder = world.bind()
+    world.fire("capture_party")
+    world.fire(site)
+    world.events(binder)
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+    assert binder.status(binder).pending_acquisitions == 0
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("action", ["deposit", "withdraw", "release_party", "release_box", "npc_trade"])
+def test_pc_and_npc_completion_correlate_full_identity_through_compaction(title, action):
+    world = World(title)
+    binder = world.bind()
+    outgoing = world.mon(species=25)
+    survivor = world.mon(species=172, dvs=0x3AAA)
+    boxed = world.mon(species=133, dvs=0x4AAA)
+    received = world.mon(species=66, ot=0x5678, dvs=0xABCD, nickname=0x84)
+    if action in {"deposit", "release_party", "npc_trade"}:
+        world.party([outgoing, survivor])
+        world.box([boxed])
+        world.field("wCurPartyMon", 0)
+    else:
+        world.party([survivor])
+        world.box([boxed, outgoing])
+        world.field("wCurPartyMon", 1)
+    start = "npc_trade_begin" if action == "npc_trade" else "pc_" + action + "_begin"
+    final = "npc_trade_finalized" if action == "npc_trade" else "pc_" + action + "_complete"
+    world.fire(start)
+    assert world.events(binder) == []
+    if action == "deposit":
+        world.party([survivor])
+        world.box([boxed, outgoing])
+    elif action == "withdraw":
+        world.party([survivor, outgoing])
+        world.box([boxed])
+    elif action == "release_party":
+        world.party([survivor])
+    elif action == "release_box":
+        world.box([boxed])
+    else:
+        world.party([survivor, received])
+        # Native trade restores the outgoing index. Receiver is last, not index0.
+        world.field("wCurPartyMon", 0)
+    world.fire(final)
+    event = world.events(binder)[0]
+    assert event.old_key == "2AAA:1234:19"
+    assert event.kind == {"deposit": "party_to_box", "withdraw": "box_to_party",
+                          "release_party": "pc_release", "release_box": "pc_release",
+                          "npc_trade": "key_change"}[action]
+    assert event.mon.key == ("ABCD:5678:42" if action == "npc_trade" else "2AAA:1234:19")
+    assert event.runtime_authorized is False
+    world.fire(final)
+    assert world.events(binder) == []
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_change_box_matches_requested_destination_without_claiming_durability(title):
+    world = World(title)
+    binder = world.bind()
+    world.reg["DE"] = 2
+    world.fire("change_box_begin")
+    world.field("wCurBox", 2)
+    world.box([world.mon(species=133)])
+    world.fire("change_box_loaded")
+    event = world.events(binder)[0]
+    assert (event.kind, event.old_box, event.new_box) == ("box_change", 0, 2)
+    assert event.persistence == "OPEN" and event.runtime_authorized is False
+
+
+def test_pc_failure_or_ambiguous_identity_cannot_publish_completion():
+    world = World()
+    binder = world.bind()
+    world.fire("pc_deposit_begin")
+    world.fire("pc_deposit_complete")  # No successful copy or compaction happened.
+    assert world.events(binder) == []
+    assert "topology" in binder.status(binder).failed
+    world = World()
+    binder = world.bind()
+    world.box([world.mon()])  # Same FULL key exists in both collections.
+    world.fire("pc_deposit_begin")
+    assert world.events(binder) == []
+    assert "ambiguous across party/active box" in binder.status(binder).failed

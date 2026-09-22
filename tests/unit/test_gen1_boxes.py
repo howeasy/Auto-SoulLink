@@ -114,6 +114,7 @@ def _runtime(title, wram, cart):
     profile = json_module.decode((ROOT / "data/games/gen1_rby/profile.json").read_text(
         encoding="utf-8"))["titles"][title]
     reads_module = load((ROOT / "lua/gen1/reads.lua").as_posix())
+    scanner_module = load((ROOT / "lua/token_scanner.lua").as_posix())
     writes_module = load((ROOT / "lua/gen1/writes.lua").as_posix())
     boxes_module = load((ROOT / "lua/gen1/boxes.lua").as_posix())
     calls = {"wram": [], "cart": []}
@@ -126,7 +127,8 @@ def _runtime(title, wram, cart):
         assert domain == "System Bus" and 0 <= addr < len(wram)
         wram[addr] = value
 
-    gate = writes_module.new(profile, rt.table_from({"write_u8": write_u8}))
+    permit = load((ROOT / "lua/write_permit.lua").as_posix())
+    gate = writes_module.new(profile, rt.table_from({"write_u8": write_u8}), permit)
 
     def write_cart(offset, blob):
         data = bytes(blob[i] for i in range(1, len(blob) + 1))
@@ -146,7 +148,7 @@ def _runtime(title, wram, cart):
                            "read_u8=function(a) return u(a) end,"
                            "read_range=function(a,n) return range(a,n) end} end")
     read_io = make_read_io(lambda addr: wram[addr], read_range)
-    reader = reads_module.new(profile, read_io)
+    reader = reads_module.new(profile, read_io, scanner_module)
     make_box_io = rt.eval("function(range, cart, w, wc, gate) return {"
                           "read_range=function(a,n) return range(a,n) end,"
                           "read_cart=function(o) return cart(o) end,"

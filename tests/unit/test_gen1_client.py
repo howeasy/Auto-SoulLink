@@ -84,6 +84,7 @@ class World:
             send=lambda line: self.sent.append(json.loads(str(line))),
             receive=lambda: self.replies.pop(0) if self.replies else None,
         )
+        self.io, self.net = io, net
         hud = L.table(
             show=lambda *a: self.hud.append(("show",) + tuple(str(x) if isinstance(x, str) else x for x in a)),
             prompt=lambda *a: self.hud.append(("prompt",) + tuple(str(x) if isinstance(x, str) else x for x in a)),
@@ -3119,3 +3120,134 @@ def test_a_battle_begin_with_no_opponent_stages_nothing(world):
     world.fire("battle_begin")
     world.step()
     assert world.client.battle is None and world.events("trainer_battle_start") == []
+
+
+def _hello_model_rom(title):
+    """Only pinned code/checkpoint slices, for MODEL scheduling controls, not a ROM receipt."""
+    image = bytearray(0x100000)
+    for site in SITES[title]["sites"].values():
+        for anchor in (site, site.get("prelude")):
+            if anchor:
+                raw = bytes.fromhex(anchor["expected_hex"])
+                start = anchor["rom_offset"]
+                image[start:start + len(raw)] = raw
+    checkpoint = WS[title]["write_safe"]
+    if "expected_hex" in checkpoint:
+        anchors = {checkpoint[key]: bytes.fromhex(value)
+                   for key, value in checkpoint["expected_hex"].items()}
+    else:
+        # SM83 JP/CALL and the vanilla DelayFrame loop; these only establish the
+        # injected checkpoint predicate for this scheduling model, not ROM evidence.
+        def transfer(opcode, target):
+            return bytes((opcode, target & 255, target >> 8))
+        low = checkpoint["vblank_flag"] & 255
+        anchors = {
+            checkpoint["irq_vector"]: transfer(0xC3, checkpoint["vblank_entry"]),
+            checkpoint["delay_frame"]: bytes((0x3E, 1, 0xE0, low, 0x76, 0xF0, low, 0xA7)),
+            checkpoint["overworld_loop"]: transfer(0xCD, checkpoint["delay_frame"]),
+            checkpoint["overworld_loop_less_delay"]: transfer(0xCD, checkpoint["delay_frame"]),
+        }
+    for start, raw in anchors.items():
+        image[start:start + len(raw)] = raw
+    return bytes(image)
+
+
+def _hello_model_world(monkeypatch):
+    monkeypatch.setitem(globals(), "_rom", _hello_model_rom)
+    world = World("red")
+    world.seed_party([_mon(random.Random(81), 0x99, nick="BULBA")])
+    world.set_map(0x0C)
+    return world
+
+
+def test_model_hello_refuses_failed_queue_then_retries_through_actual_entry(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    send = world.net.send
+    world.net.send = lambda _line: False
+    world.connect()
+    assert world.events("hello") == []
+    assert world.client.hello_sent is False
+    world.net.send = send
+    world.step()
+    assert len(world.events("hello")) == 1 and world.client.hello_sent is True
+
+
+def test_model_hello_identity_change_rehellos_and_clears_old_identity_aliases(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    world.connect()
+    world.client.retired_alias.old = world.lua.table()
+    world.client.key_alias = world.lua.table()
+    world.bus[world.ram["wPlayerID"]:world.ram["wPlayerID"] + 2] = b"\x43\x21"
+    world.step()
+    assert [packet["ot_id"] for packet in world.events("hello")] == [0x1234, 0x4321]
+    assert len(world.client.retired_alias) == 0 and world.client.key_alias is None
+
+
+def test_model_hello_missing_required_save_version_stays_held(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    world.parts.profile.derived.game_internal_version = 7
+    world.connect()
+    assert world.events("hello") == [] and world.client.hello_sent is False
+
+
+def test_model_hello_late_unreadable_party_does_not_send_an_empty_snapshot(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    original = world._read_u8
+    count_reads = 0
+
+    def read(address, domain=None):
+        nonlocal count_reads
+        if int(address) == world.ram["wPartyCount"] and domain != "ROM":
+            count_reads += 1
+            if count_reads == 2:
+                return 255
+        return original(address, domain)
+
+    monkeypatch.setattr(world, "_read_u8", read)
+    world.io.read_u8 = read
+    world.connect()
+    assert world.events("hello") == [] and world.client.hello_sent is False
+    world.step()
+    assert len(world.events("hello")) == 1
+
+
+def test_model_hello_changed_identity_during_payload_build_is_not_queued(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    original = world._read_u8
+    changed = False
+
+    def read(address, domain=None):
+        nonlocal changed
+        result = original(address, domain)
+        if not changed and int(address) == world.ram["wPlayerName"] and domain != "ROM":
+            changed = True
+            world.bus[world.ram["wPlayerID"]:world.ram["wPlayerID"] + 2] = b"\x43\x21"
+        return result
+
+    monkeypatch.setattr(world, "_read_u8", read)
+    world.io.read_u8 = read
+    world.connect()
+    assert world.events("hello") == [] and world.client.hello_sent is False
+    world.step()
+    assert [packet["ot_id"] for packet in world.events("hello")] == [0x4321]
+
+
+def test_model_hello_menu_hold_reconnect_battle_and_reset_remain_supported(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    world.regs["PC"] = 0x1234
+    world.connect()
+    assert world.events("hello") == []
+    world.overworld_safe()
+    world.step()
+    assert len(world.events("hello")) == 1
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.regs["PC"] = 0x1234
+    world.connected = False
+    world.step()
+    world.connected = True
+    world.step()
+    assert len(world.events("hello")) == 2
+    assert world.events("hello")[-1]["in_battle"] is True
+    world.client.hello_session.invalidate(world.client.hello_session, "save_reset")
+    world.step()
+    assert len(world.events("hello")) == 3

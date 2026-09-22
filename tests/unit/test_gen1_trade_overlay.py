@@ -31,7 +31,8 @@ class Fake:
         profile = self.lua.table_from(PROFILES[title], recursive=True)
         write_io = self.lua.table_from({"write_u8": self._write_u8})
         self.write_module = self.lua.eval("dofile")((ROOT / "lua/gen1/writes.lua").as_posix())
-        self.writer = self.write_module.new(profile, write_io)
+        permit = self.lua.eval("dofile")((ROOT / "lua/write_permit.lua").as_posix())
+        self.writer = self.write_module.new(profile, write_io, permit)
         make_reader = self.lua.eval("function(u,r) return {"
                                     "read_u8=function(a) return u(a) end,"
                                     "read_range=function(a,n) return r(a,n) end} end")

@@ -296,7 +296,9 @@ def _admit(entry, **kw):
     got = E.admit(lua.table_from(args))
     if isinstance(got, tuple):
         return None, got[1]
-    return dict(got.items()), None
+    # Admission decisions are immutable proxies; traverse their public Lua pairs.
+    copy_fields = lua.eval("function(value) local out={} for k,v in pairs(value) do out[k]=v end return out end")
+    return dict(copy_fields(got).items()), None
 
 
 @pytest.mark.parametrize("size", [0, 3, 55, 56, 63, 64, 65, 200, 1000])
@@ -310,16 +312,17 @@ def test_the_pure_lua_sha1_matches_hashlib(entry, size):
 @pytest.mark.parametrize("title", ["purered", "pureblue", "puregreen"])
 def test_a_pure_sha1_selects_the_pure_pack_even_though_the_header_says_red(entry, title):
     sha = next(s for s, r in ADMISSION.items() if r["title"] == title)
-    got, why = _admit(entry, rom_sha1=sha.upper(), header="POKEMON RED")  # BizHawk uppercases
+    got, why = _admit(entry, rom_sha1=sha.upper(), header="POKEMON RED", rom_bytes=_real_rom("clean", title))
     assert why is None, why
     assert got["pack"] == "gen1_purergb" and got["title"] == title and got["kind"] == "clean"
     assert got["rom_type"] == {"purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen"}[title]
-    assert got["rom_sha1"] == sha and got["rehashed"] is False
+    assert got["rom_sha1"] == sha and got["rehashed"] is True
 
 
 @pytest.mark.parametrize("title", ["red", "blue", "yellow"])
 def test_a_vanilla_sha1_selects_the_vanilla_pack(entry, title):
-    got, why = _admit(entry, rom_sha1=RBY_PROFILE[title]["rom_sha1"].upper(), header="POKEMON " + title.upper())
+    got, why = _admit(entry, rom_sha1=RBY_PROFILE[title]["rom_sha1"].upper(), header="POKEMON " + title.upper(),
+                      rom_bytes=_real_rom("vanilla", title))
     assert why is None, why
     assert got["pack"] == "gen1_rby" and got["title"] == title and got["rom_type"] == title.capitalize()
 
@@ -331,17 +334,14 @@ def test_a_red_header_with_an_unknown_sha1_is_refused_with_the_pure_reason(entry
     assert "pureRGB" in why and "POKEMON RED" in why and "0" * 40 in why
 
 
-def test_indatabase_forces_a_lua_rehash_of_the_rom_domain(entry):
-    """BizHawk substitutes its database hash when it knows the ROM; the bytes decide."""
+def test_reported_hash_never_replaces_actual_bytes_regardless_of_database_flag(entry):
+    """The shared admission mechanism always hashes the bytes, even for known reports."""
     image = bytes(random.Random(7).randrange(256) for _ in range(4096))
     real = hashlib.sha1(image).hexdigest()
     vanilla = RBY_PROFILE["red"]["rom_sha1"]
-    # without the flag the (wrong) reported hash is trusted and admits vanilla Red
-    got, _ = _admit(entry, rom_sha1=vanilla, indatabase=False, header="POKEMON RED", rom_bytes=image)
-    assert got["pack"] == "gen1_rby" and got["rehashed"] is False
-    # with it the bytes are hashed, the database hash ignored, and this image admits nothing
-    got, why = _admit(entry, rom_sha1=vanilla, indatabase=True, header="POKEMON RED", rom_bytes=image)
-    assert got is None and real in why
+    for indatabase in (False, True):
+        got, why = _admit(entry, rom_sha1=vanilla, indatabase=indatabase, header="POKEMON RED", rom_bytes=image)
+        assert got is None and real in why
 
 
 def test_an_unknown_reported_hash_is_rehashed_before_refusing(entry):
@@ -454,6 +454,8 @@ def test_a_dxxx_write_is_refused_while_the_wram_bank_is_outside_0_1(world):
         w.write_bytes(w, world.ram["wPartyMon1HP"], world.lua.table(0, 0))
     assert world.writes == []
     world.regs["WRAM BANK"] = 0
+    assert w.armed is None
+    w.arm(w, "overworld")
     w.write_bytes(w, world.ram["wPartyMon1HP"], world.lua.table(0, 0))
     assert len(world.writes) == 2
     w.disarm(w)
@@ -803,6 +805,9 @@ def _signals_harness(on_bus_exec_override=None):
                    on_bus_exec=on_bus_exec, unregister=lambda i: None, framecount=lambda: 1,
                    register=lambda name: regs[str(name)])
     S = lua.eval(f'dofile("{SIGNALS}")')
+    registry = lua.eval("dofile")((REPO / "lua/hook_registry.lua").as_posix())
+    gb_binding = lua.eval("dofile")((REPO / "lua/gb_hook_binding.lua").as_posix())
+    S = S.bind(lua.table(registry=registry, gb_binding=gb_binding, owner="SLink-gen1"))
     profile = lua.table_from(PROFILE[TITLE], recursive=True)
     sites = lua.table_from(SITES[TITLE]["sites"], recursive=True)
     return lua, S, profile, sites, io, bus, regs, hooks
@@ -952,9 +957,11 @@ def _real_rom(kind: str, title: str = TITLE) -> bytes:
     sys.path.insert(0, str(REPO / "patch" / "tools"))
     import gen1_foundation as F
     if kind == "vanilla":
-        path = REPO / "Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb"
+        title = title if title in {"red", "blue", "yellow"} else "red"
+        extension = "gbc" if title == "yellow" else "gb"
+        path = REPO / "patch" / "build" / f"gen1_{title}.{extension}"
         if not path.is_file():
-            pytest.skip("vanilla Red dump not at the repo root")
+            pytest.skip(f"clean {title} dump not at {path}")
         return path.read_bytes()
     try:
         clean = F.rom_path("purergb", title).read_bytes()

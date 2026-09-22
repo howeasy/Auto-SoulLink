@@ -436,3 +436,218 @@ def test_source_receipt_for_layout_egg_pp_and_storage_is_independent_of_codec():
         assert 'SRAM $02\n\t"Boxes 1-7"\nSRAM $03\n\t"Boxes 8-14"' in layout
     lua = READS.read_text(encoding="utf-8")
     assert "write_u8" not in lua and "memory." not in lua and "require(" not in lua
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_player_and_map_fields_are_raw_readback_not_session_admission(title):
+    world = World(title, name_decoder=lambda _raw: "PLAYER")
+    a = world.profile["ram"]
+    world.bus[a["wPlayerID"]:a["wPlayerID"] + 13] = b"\x12\x34" + OT
+    player = py(world.reader.read_player())
+    assert player["ot_id"] == 0x1234 and player["name_raw_hex"] == OT.hex()
+    assert player["player_name"] == "PLAYER" and player["identity_qualified"] is False
+    assert player["snapshot_qualified"] is False
+    world.bus[a["wMapGroup"]:a["wMapGroup"] + 4] = bytes([24, 3, 17, 29])
+    location = py(world.reader.read_map())
+    assert (location["group"], location["number"], location["x"], location["y"]) == (24, 3, 29, 17)
+    assert location["snapshot_qualified"] is False
+
+
+def _put_pockets(world):
+    a = world.profile["ram"]
+    # Duplicate ordinary stacks remain separate; the Ball pocket is independently read.
+    world.bus[a["wNumItems"]:a["wNumItems"] + 6] = bytes([2, 20, 99, 20, 1, 255])
+    world.bus[a["wNumBalls"]:a["wNumBalls"] + 6] = bytes([2, 4, 5, 1, 2, 255])
+    world.bus[a["wNumKeyItems"]:a["wNumKeyItems"] + 4] = bytes([2, 7, 54, 255])
+    world.bus[a["wTMsHMs"]] = 99
+    world.bus[a["wTMsHMs"] + 56] = 1
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_pockets_preserve_stack_records_key_ids_and_tmhm_ordinals(title):
+    world = World(title)
+    _put_pockets(world)
+    bag = py(world.reader.read_bag())
+    assert bag["items"]["entries"] == [{"slot": 0, "id": 20, "quantity": 99},
+                                        {"slot": 1, "id": 20, "quantity": 1}]
+    assert bag["balls"]["entries"] == [{"slot": 0, "id": 4, "quantity": 5},
+                                        {"slot": 1, "id": 1, "quantity": 2}]
+    assert bag["key_items"]["entries"] == [{"slot": 0, "id": 7}, {"slot": 1, "id": 54}]
+    assert len(bag["tmhm"]["quantities"]) == 57
+    assert bag["tmhm"]["quantities"][0] == 99 and bag["tmhm"]["quantities"][-1] == 1
+    assert bag["snapshot_qualified"] is False
+
+
+@pytest.mark.parametrize("pocket,symbol,offset,value,message", [
+    ("items", "wNumItems", 0, 21, "capacity"),
+    ("balls", "wNumBalls", 5, 0, "terminator"),
+    ("items", "wNumItems", 1, 0, "item id"),
+    ("balls", "wNumBalls", 2, 0, "quantity"),
+    ("balls", "wNumBalls", 2, 100, "quantity"),
+    ("key_items", "wNumKeyItems", 1, 255, "item id"),
+    ("tmhm", "wTMsHMs", 1, 100, "quantity"),
+])
+def test_corrupt_pocket_never_becomes_an_empty_success(pocket, symbol, offset, value, message):
+    world = World()
+    _put_pockets(world)
+    world.bus[world.profile["ram"][symbol] + offset] = value
+    error(world.reader.read_pocket(pocket), message)
+
+
+def test_ancillary_methods_refuse_missing_symbols_decoder_failures_and_wrong_banks():
+    world = World(name_decoder=lambda _raw: None)
+    error(world.reader.read_player(), "decoder unavailable")
+    world = World()
+    world.lua_profile.ram.wMapNumber = None
+    error(world.reader.read_map(), "geometry")
+    world.lua_profile.ram.wPlayerID = None
+    error(world.reader.read_player(), "wPlayerID")
+    world = World()
+    world.bank_answers = [True, False]
+    error(world.reader.read_map(), "bank changed")
+    world.bank_ok = False
+    error(world.reader.read_pocket("items"), "bank unavailable")
+
+
+def battle_vector():
+    data = bytearray(32)
+    data[:8] = bytes([25, 146, 1, 33, 166, 237, 0xAB, 0xCD])
+    data[8:16] = bytes([0, 65, 130, 255, 200, 51, 0x88, 0x7F])
+    data[16:30] = struct.pack(">7H", 0x0123, 0x0456, 0x1234, 0x2345, 0x3456, 0x4567, 0x5678)
+    data[30:32] = bytes([13, 16])
+    return bytes(data)
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("side,prefix", [("player", "wBattleMon"), ("enemy", "wEnemyMon")])
+def test_battle_view_uses_its_own_layout_and_preserves_packed_pp_and_dvs(title, side, prefix):
+    world = World(title, name_decoder=lambda _raw: "BATTLE")
+    a = world.profile["ram"]
+    raw = battle_vector()
+    world.bus[a[prefix]:a[prefix] + len(raw)] = raw
+    world.bus[a[prefix + "Nickname"]:a[prefix + "Nickname"] + 11] = NICKNAME
+    mon = py(world.reader.read_battle_mon(side))
+    assert mon["species_id"] == 25 and mon["held_item"] == 146
+    assert mon["moves"] == [1, 33, 166, 237]
+    assert mon["dv_word"] == 0xABCD and mon["dvs"] == expected_record()["dvs"]
+    assert mon["pp_raw"] == [0, 65, 130, 255]
+    assert mon["pp"] == [0, 1, 2, 63] and mon["pp_ups"] == [0, 1, 2, 3]
+    assert (mon["status"], mon["status_aux_raw"], mon["hp"], mon["max_hp"]) == (0x88, 0x7F, 0x123, 0x456)
+    assert mon["stats"] == expected_record()["stats"]
+    assert mon["types_raw"] == [13, 16] and mon["raw_hex"] == raw.hex()
+    assert mon["nickname"] == "BATTLE" and mon["nickname_raw_hex"] == NICKNAME.hex()
+    assert mon["identity_qualified"] is False and mon["battle_qualified"] is False
+    assert "ot_id" not in mon and "key" not in mon
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("mode", [0, 1, 2])
+def test_raw_battle_context_masks_flags_without_inventing_whiteout_or_reading_stale_trainer(title, mode):
+    world = World(title)
+    a = world.profile["ram"]
+    world.bus[a["wBattleMode"]] = mode
+    world.bus[a["wBattleType"]] = 5
+    world.bus[a["wBattleResult"]] = (0xC0 if title == "crystal" else 0x80) | 1
+    world.bus[a["wCurBattleMon"]] = 4
+    world.bus[a["wOtherTrainerClass"]] = 42
+    world.bus[a["wOtherTrainerID"]] = 9
+    result = py(world.reader.read_battle())
+    assert result["mode"] == mode and result["battle_type"] == 5 and result["result_code"] == 1
+    assert result["result_raw"] == world.bus[a["wBattleResult"]]
+    assert result["battle_qualified"] is False and "whiteout" not in result
+    if mode:
+        assert result["active_slot"] == 4
+    else:
+        assert "active_slot" not in result
+    if mode == 2:
+        assert result["trainer"] == {"class_raw": 42, "id_raw": 9}
+    else:
+        assert "trainer" not in result
+        assert not any(address in (a["wOtherTrainerClass"], a["wOtherTrainerID"])
+                       for _domain, address, _length in world.calls)
+
+
+def test_invalid_or_changing_battle_context_refuses():
+    world = World()
+    a = world.profile["ram"]
+    world.bus[a["wBattleMode"]] = 3
+    error(world.reader.read_battle(), "enumeration")
+    world.bus[a["wBattleMode"]] = 1
+    world.bus[a["wCurBattleMon"]] = 6
+    error(world.reader.read_battle(), "capacity")
+    world.bus[a["wCurBattleMon"]] = 0
+    calls = [0]
+
+    def changing(address, length, _domain):
+        raw = bytes(world.bus[address:address + length])
+        if address == a["wBattleMode"]:
+            calls[0] += 1
+            if calls[0] == 2:
+                raw = bytes([0])
+        return world.bytes(raw)
+
+    world.read_override = changing
+    error(world.reader.read_battle(), "changed during read")
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("side,prefix", [("player", "wPlayer"), ("enemy", "wEnemy")])
+def test_seven_named_stages_normalize_while_the_eighth_byte_stays_uninterpreted(title, side, prefix):
+    world = World(title)
+    base = world.profile["ram"][prefix + "StatLevels"]
+    raw = [1, 7, 13, 2, 6, 8, 12, 255]
+    world.bus[base:base + 8] = bytes(raw)
+    result = py(world.reader.read_stat_stages(side))
+    assert result["raw"] == raw and result["unused_raw"] == 255
+    assert result["wire"] == [0, 6, 12, 1, 5, 7, 11]
+    assert result["battle_qualified"] is False and result["snapshot_qualified"] is False
+
+
+@pytest.mark.parametrize("bad", [0, 14, 255])
+def test_invalid_named_stage_is_not_clamped_or_replaced_with_neutral(bad):
+    world = World()
+    base = world.profile["ram"]["wPlayerStatLevels"]
+    world.bus[base:base + 8] = bytes([7, 7, 7, bad, 7, 7, 7, 0])
+    error(world.reader.read_stat_stages("player"), "source bounds")
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_badge_regions_remain_separate_eight_bit_fields(title):
+    world = World(title)
+    base = world.profile["ram"]["wJohtoBadges"]
+    world.bus[base:base + 2] = bytes([0x81, 0x42])
+    result = py(world.reader.read_badges())
+    assert result["johto"] == 0x81 and result["kanto"] == 0x42
+    assert result["raw_hex"] == "8142" and result["snapshot_qualified"] is False
+
+
+def test_new_reads_require_all_generated_facts_and_do_not_infer_missing_offsets():
+    world = World()
+    world.lua_profile.constants.BASE_STAT_LEVEL = None
+    error(world.reader.read_stat_stages("player"), "stat-stage facts")
+    world.lua_profile.constants.NUM_JOHTO_BADGES = None
+    error(world.reader.read_badges(), "badge-count facts")
+    world.lua_profile.constants.BATTLERESULT_BITMASK = None
+    error(world.reader.read_battle(), "battle-context facts")
+    world.lua_profile.ram.wEnemyMonDVs = None
+    error(world.reader.read_battle_mon("enemy"), "geometry")
+    error(world.reader.read_battle_mon("other"), "side")
+    error(world.reader.read_stat_stages("other"), "side")
+
+
+def test_source_receipts_cover_ancillary_layouts_and_stat_normalization_bounds():
+    for repo, player_line in (("pokecrystal", "wPlayerStatLevels::"), ("pokegold", "wPlayerStatLevels::")):
+        source = ROOT / ".cache/gen2-build" / repo
+        wram = (source / "ram/wram.asm").read_text()
+        assert "wPlayerID:: dw" in wram and "wPlayerName:: ds NAME_LENGTH" in wram
+        assert "wItems:: ds MAX_ITEMS * 2 + 1" in wram
+        assert "wKeyItems:: ds MAX_KEY_ITEMS + 1" in wram
+        assert "wBalls:: ds MAX_BALLS * 2 + 1" in wram
+        assert "wTMsHMs:: ds NUM_TMS + NUM_HMS" in wram and player_line in wram
+        assert "wPlayerEvaLevel::  db\n\tds 1" in wram
+        constants = (source / "constants/battle_constants.asm").read_text()
+        assert "DEF BASE_STAT_LEVEL EQU 7" in constants and "DEF MAX_STAT_LEVEL EQU 13" in constants
+        assert "const ABILITY ; used for BattleCommand_Curse\nDEF NUM_LEVEL_STATS EQU const_value" in constants
+        effects = (source / "engine/battle/effect_commands.asm").read_text()
+        assert "\tld b, [hl]\n\tdec b\n\tjp z, .CantLower" in effects
+        assert "\tdec b\n\tjr nz, .ComputerMiss\n\tinc b" in effects
