@@ -669,3 +669,169 @@ def test_whiteout_settles_before_the_map_read_so_recovery_engages_before_the_nex
     assert whiteout_at < recover_at < caught_at, (
         "expected: the whiteout is DETECTED, THEN recover() runs, THEN the retried attempt "
         "catches -- got this order instead:\n" + "\n".join(logged))
+
+
+# ── the bag witness (card gen3-P3-C3-23): pin the battle bag's pocket/item navigation ──────────
+# The old code mashed A ~30 times inside the bag hoping to land on POKE BALL. throw_pokeball_
+# from_bag replaces that with a witness-driven sequence: wait for gMain.callback2 ==
+# CB2_BagMenuRun, steer gBagMenuState.pocket to POKEBALLS(2) (bounded at 2 presses), verify the
+# plaintext bag-slot item id, select it, verify gSpecialVar_ItemId agrees, then confirm the
+# USE/CANCEL popup's default row. Every address below is cross-checked against the pinned pret
+# checkout's own symbol table, not just re-asserted from the source comments.
+
+_SYM_PATH = os.path.join(_REPO, "data", "gen3", "pret", "pokefirered.sym")
+_SYM_LINE_RE = re.compile(r"^([0-9a-fA-F]{8})\s+[gl]\s+([0-9a-fA-F]{8})\s+(\S+)\s*$")
+
+
+def _parse_sym(names):
+    """{symbol name -> (address, size)} for exactly the requested names, read straight out of
+    the pinned pret checkout's .sym file — the same file the source comments cite by line, but
+    this reads the ADDRESSES independently rather than trusting a copied-down hex literal."""
+    wanted = set(names)
+    found = {}
+    with open(_SYM_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            m = _SYM_LINE_RE.match(line.rstrip("\n"))
+            if m and m.group(3) in wanted:
+                found[m.group(3)] = (int(m.group(1), 16), int(m.group(2), 16))
+    missing = wanted - found.keys()
+    assert not missing, f"symbol(s) {missing} not found in {_SYM_PATH}"
+    return found
+
+
+def test_bag_witness_addresses_match_the_pret_sym_file(module):
+    sym = _parse_sym(("gBagMenuState", "gSpecialVar_ItemId", "gMain", "CB2_BagMenuRun"))
+
+    bag_addr, bag_size = sym["gBagMenuState"]
+    assert bag_addr == module.BAG_MENU_STATE_ADDR
+    # struct BagStruct (include/item_menu.h): u32 bagCallback, u8 location, bool8 bagOpen,
+    # u16 pocket, u16 itemsAbove[3], u16 cursorPos[3] -- 4+1+1+2+6+6 == 0x14, matching the
+    # symbol's own recorded size, which is the independent cross-check the offsets are right.
+    assert bag_size == 0x14
+    assert module.BAG_POCKET_OFF == 0x06
+    assert module.BAG_ITEMS_ABOVE_OFF == 0x08
+    assert module.BAG_CURSOR_POS_OFF == 0x0E
+
+    special_var_addr, _ = sym["gSpecialVar_ItemId"]
+    assert special_var_addr == module.SPECIAL_VAR_ITEM_ID_ADDR
+
+    gmain_addr, _ = sym["gMain"]
+    assert gmain_addr + 0x04 == module.GMAIN_CALLBACK2_ADDR  # struct Main.callback2 @ +0x04
+
+    cb2_bagmenurun_addr, _ = sym["CB2_BagMenuRun"]
+    assert cb2_bagmenurun_addr | 1 == module.CB2_BAG_MENU_RUN  # +1 for the Thumb bit
+
+    assert module.BAG_POCKET_POKEBALLS == 2       # OPEN_BAG_POKEBALLS
+    assert module.ITEM_POKE_BALL == 4             # include/constants/items.h:8
+    assert module.SB1_POKEBALLS_POCKET_OFFSET == 0x0430
+
+
+def test_throw_pokeball_from_bag_checks_witnesses_in_source_order():
+    """Every gate must appear before the press it guards: the bag-up wait before the pocket
+    steer, the pocket check before the plaintext item-id read, the item-id read before the
+    selecting A, and gSpecialVar_ItemId's check before the final confirming A."""
+    body = _SCRIPT_SRC.split("local function throw_pokeball_from_bag")[1].split(
+        "\n-- ── leg: route1_catch")[0]
+    bag_up_at = body.index("bag_menu_up()")
+    pocket_loop_at = body.index("for _ = 1, 2 do")
+    pocket_check_at = body.index("could not steer gBagMenuState.pocket")
+    item_id_read_at = body.index("bag_pokeballs_item_id(cp, slot)")
+    item_id_check_at = body.index("the POKEBALLS pocket's cursor slot")
+    select_a_at = body.index('G.tap("A", 3, 20)')
+    selected_check_at = body.index("selected_item_id()")
+    confirm_a_at = body.index('G.tap("A", 3, 30)')
+    assert (bag_up_at < pocket_loop_at < pocket_check_at < item_id_read_at < item_id_check_at
+            < select_a_at < selected_check_at < confirm_a_at), (
+        "the bag witness checks are out of order:\n" + body)
+
+
+def test_route1_catch_loop_no_longer_mashes_a_blindly_inside_the_bag():
+    """ROOT CAUSE this card fixes: FR run 21 showed a battle that never resolved because the old
+    code pressed A ~30 times inside the bag hoping to land on POKE BALL. That mash must be gone,
+    replaced by the witness-driven call."""
+    loop_body = _SCRIPT_SRC.split("local function route1_catch_loop")[1].split(
+        "\nLEGS[#LEGS + 1] = {")[0]
+    assert "throw_pokeball_from_bag(cp, \"route1_catch\")" in loop_body
+    assert "for _ = 1, 30 do G.tap(\"A\"" not in loop_body, (
+        "the blind 30x-A bag mash should have been replaced by throw_pokeball_from_bag")
+
+
+@pytest.fixture
+def bag_stubbed():
+    """A fresh runtime with just enough of the BizHawk API for throw_pokeball_from_bag to run
+    for real: memory (a dict-backed store), joypad, emu (framecount/frameadvance), console,
+    client (exit/screenshot) and savestate -- no emulator, no ROM. Returns
+    (runtime, module, store, logged, exits)."""
+    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    store: dict[int, int] = {}
+
+    runtime.globals().memory = runtime.table(
+        read_u8=lambda a, *_: store.get(int(a), 0) & 0xFF,
+        read_u16_le=lambda a, *_: store.get(int(a), 0) & 0xFFFF,
+        read_u32_le=lambda a, *_: store.get(int(a), 0),
+    )
+    runtime.globals().joypad = runtime.table(set=lambda *_: None)
+    runtime.globals().emu = runtime.table(
+        framecount=lambda: 0, frameadvance=lambda: None)
+    logged: list[str] = []
+    runtime.globals().console = runtime.table(log=lambda s: logged.append(str(s)))
+    exits: list[bool] = []
+    runtime.globals().client = runtime.table(
+        exit=lambda *_: exits.append(True), screenshot=lambda *_: None)
+    runtime.globals().savestate = runtime.table(save=lambda *_: True, load=lambda *_: True)
+    mod = runtime.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    return runtime, mod, store, logged, exits
+
+
+def _in_battle_cp(runtime, store, address=0x03000300):
+    """A `cp` whose predicates.in_battle reads TRUE (mask=2, expect=0; raw bit set -> in
+    battle) -- the same shape stubbed_module's own in_battle test uses."""
+    store[address] = 2
+    return runtime.table(predicates=runtime.table(
+        in_battle=runtime.table(address=address, offset=0, mask=2, expect=0, width=1)))
+
+
+def test_throw_pokeball_from_bag_fails_loudly_on_the_wrong_pocket(bag_stubbed):
+    """FAKE-RAM regression: the bag menu is up (gMain.callback2 == CB2_BagMenuRun) but
+    gBagMenuState.pocket is stuck on KEYITEMS(1) -- e.g. a ProcessPocketSwitchInput change that
+    breaks the clamp. Two bounded Right presses cannot fix that, so the function must fail
+    loudly, naming the witness, rather than pressing on into whatever pocket happens to be open."""
+    runtime, module, store, logged, exits = bag_stubbed
+    cp = _in_battle_cp(runtime, store)
+    store[module.GMAIN_CALLBACK2_ADDR] = module.CB2_BAG_MENU_RUN   # bag menu is up
+    store[module.BAG_MENU_STATE_ADDR + module.BAG_POCKET_OFF] = 1  # stuck on KEYITEMS, not 2
+
+    module.throw_pokeball_from_bag(cp, "test")
+
+    assert exits, "a wrong pocket must reach G.finish(false, ...) -> client.exit()"
+    fail_lines = [line for line in logged if "RESULT: FAIL" in line]
+    assert fail_lines, "expected a FAIL result, got:\n" + "\n".join(logged)
+    assert "gBagMenuState.pocket" in fail_lines[-1] and "POKEBALLS(2)" in fail_lines[-1], (
+        f"the failure must name the witness that didn't match: {fail_lines[-1]}")
+    assert "reads 1" in fail_lines[-1]
+
+
+def test_throw_pokeball_from_bag_fails_loudly_on_the_wrong_item(bag_stubbed):
+    """FAKE-RAM regression: the pocket steer succeeds, but the plaintext bag slot under the
+    cursor holds some other item (not ITEM_POKE_BALL) -- must fail before ever pressing A on it,
+    naming the witness and the bad item id."""
+    runtime, module, store, logged, exits = bag_stubbed
+    cp = _in_battle_cp(runtime, store)
+    store[module.GMAIN_CALLBACK2_ADDR] = module.CB2_BAG_MENU_RUN
+    store[module.BAG_MENU_STATE_ADDR + module.BAG_POCKET_OFF] = module.BAG_POCKET_POKEBALLS
+    # itemsAbove[2] = cursorPos[2] = 0 -> slot 0; gSaveBlock1Ptr -> a fake SaveBlock1 whose
+    # POKEBALLS pocket slot 0 holds ITEM_NONE (0), not ITEM_POKE_BALL (4).
+    ptr_addr, sb1_addr = 0x03005008, 0x02020000
+    store[ptr_addr] = sb1_addr
+    store[sb1_addr + module.SB1_POKEBALLS_POCKET_OFFSET] = 0
+    cp = runtime.table(
+        predicates=cp.predicates,
+        pointers=runtime.table(gSaveBlock1Ptr=runtime.table(address=ptr_addr)))
+
+    module.throw_pokeball_from_bag(cp, "test")
+
+    assert exits, "a wrong item id must reach G.finish(false, ...) -> client.exit()"
+    fail_lines = [line for line in logged if "RESULT: FAIL" in line]
+    assert fail_lines, "expected a FAIL result, got:\n" + "\n".join(logged)
+    assert "ITEM_POKE_BALL" in fail_lines[-1] and "slot 0" in fail_lines[-1]

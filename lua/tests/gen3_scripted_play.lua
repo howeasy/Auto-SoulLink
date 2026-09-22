@@ -24,10 +24,13 @@
 --    battle (src/battle_controller_player.c) so "press A twice" IS a pinned FIGHT->move-slot-1
 --    selection; anything the wild/rival side does in response is not controlled.
 --  - Opening the BAG from the action menu is pinned (Right toggles cursor bit0 to
---    B_ACTION_USE_ITEM, src/battle_controller_player.c:248-253), but the BAG's own pocket-tab
---    and item-list navigation to POKE BALL is NOT pinned from source here — mashed with A on a
---    fallback Down/A pattern, bounded, verified by the real RAM outcome (BATTLE_OUTCOME_ADDR),
---    never assumed to have worked.
+--    B_ACTION_USE_ITEM, src/battle_controller_player.c:248-253); the BAG's own pocket-tab and
+--    item-list navigation to POKE BALL is ALSO now pinned (card gen3-P3-C3-23,
+--    throw_pokeball_from_bag below): gBagMenuState.pocket is read and steered (never assumed to
+--    start at ITEMS(0) — GoToBagMenu's OPEN_BAG_LAST leaves it exactly where it was last left,
+--    item_menu.c:307-343), the plaintext bag-slot item id is checked before the selecting A, and
+--    gSpecialVar_ItemId is checked after. What remains unverified is only that this sequence
+--    actually plays out on real hardware/BizHawk — the coordinator's own lane run, not this file.
 --  - The Oak "Pokedex scene" after delivering the parcel is almost entirely NPC `applymovement`
 --    (the player only appears to walk when the script itself moves them — the ApproachCounter/
 --    dex-scene movements are scripted, not driven by joypad input at all); this driver only
@@ -119,6 +122,61 @@ local function lab_scene_var(cp)
     if sb1 < 0x02000000 or sb1 >= 0x02040000 then return -1 end
     return memory.read_u16_le(sb1 + LAB_SCENE_VAR_OFFSET)
 end
+
+-- THE BAG WITNESS (card gen3-P3-C3-23). CB2_BagMenuFromBattle (src/item_menu.c:350-353) calls
+-- GoToBagMenu(ITEMMENULOCATION_BATTLE, OPEN_BAG_LAST, ...); OPEN_BAG_LAST (3) matches none of
+-- the three pocket constants GoToBagMenu checks before overwriting gBagMenuState.pocket
+-- (item_menu.c:337-338: `if (pocket == OPEN_BAG_ITEMS || ... OPEN_BAG_POKEBALLS) ...`), so the
+-- pocket is left exactly where it was last REMEMBERED, not reset — this file must read and
+-- steer it, never assume ITEMS(0). gBagMenuState (pokefirered.sym:440, 0x0203acfc, size 0x14)
+-- is include/item_menu.h's struct BagStruct { MainCallback bagCallback; u8 location;
+-- bool8 bagOpen; u16 pocket; u16 itemsAbove[NUM_BAG_POCKETS_NO_CASES];
+-- u16 cursorPos[NUM_BAG_POCKETS_NO_CASES]; } — u32 @ +0x00, u8 @ +0x04, u8 @ +0x05, u16 @ +0x06,
+-- u16[3] @ +0x08, u16[3] @ +0x0E, totalling 0x14 (matches the symbol's own size).
+-- NUM_BAG_POCKETS_NO_CASES == 3 (include/constants/global.h:56); OPEN_BAG_ITEMS/KEYITEMS/
+-- POKEBALLS == 0/1/2 (include/constants/item_menu.h:4-7) index both arrays directly and ARE
+-- gBagMenuState.pocket's own values (item_menu.c:1379,1388-1416 switch on them raw).
+--
+-- LoadBagMenuGraphics' load state machine (src/item_menu.c:384-506) keeps gMain.callback2 ==
+-- CB2_OpenBagMenu across many frames and only calls SetMainCallback2(CB2_BagMenuRun)
+-- (item_menu.c:502, pokefirered.sym:10170 0x08107ee0) once loading finishes and the input task
+-- already exists (case 14, item_menu.c:469: CreateBagInputHandlerTask) — gMain.callback2 ==
+-- CB2_BagMenuRun is therefore "the bag is up and reading Left/Right/A", the same callback2-
+-- witness shape used throughout this codebase (gMain @ pokefirered.sym:745 0x030030f0,
+-- .callback2 @ +0x04 per include/main.h:14-15).
+local GMAIN_CALLBACK2_ADDR = 0x030030F4  -- gMain.callback2
+local CB2_BAG_MENU_RUN = 0x08107EE1      -- CB2_BagMenuRun | 1 (Thumb bit)
+local BAG_MENU_STATE_ADDR = 0x0203ACFC   -- gBagMenuState
+local BAG_POCKET_OFF, BAG_ITEMS_ABOVE_OFF, BAG_CURSOR_POS_OFF = 0x06, 0x08, 0x0E
+local BAG_POCKET_POKEBALLS = 2           -- OPEN_BAG_POKEBALLS
+local SPECIAL_VAR_ITEM_ID_ADDR = 0x0203AD30  -- gSpecialVar_ItemId (pokefirered.sym:449)
+
+-- POKe BALL is item 4 (include/constants/items.h:8). Its pocket, SaveBlock1.bagPocket_PokeBalls
+-- (include/global.h:781, offset 0x0430 within SaveBlock1: pcItems 0x0298 + bagPocket_Items
+-- (42 * 4) + bagPocket_KeyItems (30 * 4) == 0x0430), holds struct ItemSlot { u16 itemId;
+-- u16 quantity } entries (include/global.h:400-404, 4 bytes each). Only .quantity is encrypted
+-- with gSaveBlock2Ptr->encryptionKey (src/item.c:20-29 GetBagItemQuantity/SetBagItemQuantity,
+-- :41-49 ApplyNewEncryptionKeyToBagItems only XORs the quantity fields); the itemId this file
+-- reads is plaintext, like every other RAM read here.
+local ITEM_POKE_BALL = 4
+local SB1_POKEBALLS_POCKET_OFFSET = 0x0430
+
+local function bag_menu_up() return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_BAG_MENU_RUN end
+local function bag_pocket() return memory.read_u16_le(BAG_MENU_STATE_ADDR + BAG_POCKET_OFF) end
+--- The bag slot actually highlighted: itemsAbove[pocket] (scroll offset) + cursorPos[pocket]
+--- (on-screen row) — item_menu.c:470 initializes the list with exactly this pair.
+local function bag_cursor_slot(pocket)
+    local above = memory.read_u16_le(BAG_MENU_STATE_ADDR + BAG_ITEMS_ABOVE_OFF + pocket * 2)
+    local cursor = memory.read_u16_le(BAG_MENU_STATE_ADDR + BAG_CURSOR_POS_OFF + pocket * 2)
+    return above + cursor
+end
+local function bag_pokeballs_item_id(cp, slot)
+    local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
+    local sb1 = memory.read_u32_le(int(ptr.address))
+    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return -1 end
+    return memory.read_u16_le(sb1 + SB1_POKEBALLS_POCKET_OFFSET + slot * 4)
+end
+local function selected_item_id() return memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) end
 
 -- ── PATHS: every direction list below, OFFLINE-BFS-computed ────────────────────────────────────
 -- Tool: a Python BFS (scratchpad, not checked in) over data/layouts/<map>/map.bin: block u16,
@@ -1097,6 +1155,74 @@ LEGS[#LEGS].resume = function(cp)
     G.phase("balls-received", "after a whiteout restart")
 end
 
+--- Steer the battle bag (already open — the action menu's Right+A already fired
+--- CB2_BagMenuFromBattle) to the POKEBALLS pocket, verify the item under the cursor really is
+--- ITEM_POKE_BALL from BOTH sides of the selecting A (the plaintext bag slot before, then the
+--- engine's own gSpecialVar_ItemId copy after), and confirm the USE/CANCEL popup's default row
+--- (USE, item_menu.c:1353-1357 sContextMenuItems_BattleUse; Menu_InitCursor's last arg 0,
+--- item_menu.c:1431) to throw it. Replaces the old blind 30x-A mash entirely (card
+--- gen3-P3-C3-23): every step below either matches a witness or fails loudly naming it.
+local function throw_pokeball_from_bag(cp, label)
+    if not play.in_battle(cp) then return end
+
+    -- The bag menu itself: gMain.callback2 == CB2_BagMenuRun (see the constant's own comment).
+    local up = false
+    for i = 1, 600 do
+        if bag_menu_up() then up = true; break end
+        if not play.in_battle(cp) then return end
+        if i % 2 == 0 then joypad.set({ A = true }) else joypad.set({}) end
+        G.advance()
+    end
+    joypad.set({})
+    if not up then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the bag menu never came up (gMain.callback2 never read CB2_BagMenuRun) at %s",
+            label, play.at(cp)))
+        return
+    end
+
+    -- Steer the REMEMBERED pocket to POKEBALLS(2). ProcessPocketSwitchInput
+    -- (item_menu.c:1124-1145) clamps at POCKET_POKE_BALLS-1 and no-ops past it, so pressing
+    -- Right more times than needed is harmless — bounded at 2, the worst case from ITEMS(0).
+    for _ = 1, 2 do
+        if bag_pocket() == BAG_POCKET_POKEBALLS then break end
+        G.tap("Right", 3, 20)
+    end
+    if bag_pocket() ~= BAG_POCKET_POKEBALLS then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: could not steer gBagMenuState.pocket to POKEBALLS(2) (reads %d)",
+            label, bag_pocket()))
+        return
+    end
+
+    -- Verify the PLAINTEXT item id under the cursor BEFORE ever pressing A on it.
+    local slot = bag_cursor_slot(BAG_POCKET_POKEBALLS)
+    local item = bag_pokeballs_item_id(cp, slot)
+    if item ~= ITEM_POKE_BALL then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the POKEBALLS pocket's cursor slot %d holds item %d, not ITEM_POKE_BALL(%d)",
+            label, slot, item, ITEM_POKE_BALL))
+        return
+    end
+
+    -- Select it, then require the engine's OWN copy of the selection (gSpecialVar_ItemId,
+    -- item_menu.c:1097) to agree — proof the A landed on the row this file thinks it did.
+    G.tap("A", 3, 20)
+    if selected_item_id() ~= ITEM_POKE_BALL then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: gSpecialVar_ItemId reads %d after selecting the pocket's item, not "
+            .. "ITEM_POKE_BALL(%d)", label, selected_item_id(), ITEM_POKE_BALL))
+        return
+    end
+
+    -- The USE/CANCEL popup's default row (USE) — one A confirms it and starts the throw.
+    G.tap("A", 3, 30)
+end
+
 -- ── leg: route1_catch (capture_wild) ─────────────────────────────────────────────────────────
 -- DESIGN CHOICE (card gen3-P3-C3-18): throw a ball on the FIRST action-menu turn, never fight
 -- first. The starter does not need to weaken a full-HP Pidgey/Rattata to catch it, and fighting
@@ -1123,7 +1249,8 @@ local function route1_catch_loop(cp)
                 .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
         end
         verify_fight_cursor(cp, "route1_catch")
-        -- RISK (see header): BAG is pinned (Right, A); reaching POKE BALL inside it is not.
+        -- BAG is pinned (Right, A); reaching and throwing POKE BALL inside it is now pinned too
+        -- (card gen3-P3-C3-23, throw_pokeball_from_bag).
         if play.in_battle(cp) then
             G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG/USE_ITEM(1), pinned bit toggle
             if action_cursor() ~= ACTION_BAG then
@@ -1132,8 +1259,8 @@ local function route1_catch_loop(cp)
                     "route1_catch: Right did not move the cursor to BAG (read %d)",
                     action_cursor()))
             end
-            G.tap("A", 3, 30)
-            for _ = 1, 30 do G.tap("A", 3, 20) end   -- bag category/list/throw-confirm, mashed
+            G.tap("A", 3, 30)  -- opens the battle bag (CB2_BagMenuFromBattle, item_menu.c:350-353)
+            throw_pokeball_from_bag(cp, "route1_catch")
         end
         local resolved = resolve_battle_and_check_whiteout(cp, 160)
         if resolved and battle_outcome() == B_OUTCOME_CAUGHT then
@@ -1157,6 +1284,16 @@ LEGS[#LEGS + 1] = {
         "data/maps/Route1/map.json; data/layouts/Route1/map.bin metatiles 10-13 = MB_TALL_GRASS",
         "src/battle_controller_player.c:248-253 (Right toggles B_ACTION_USE_ITEM/BAG)",
         "src/battle_script_commands.c (BattleScript_SuccessBallThrow); include/constants/battle.h:82 (B_OUTCOME_CAUGHT=7)",
+        "src/item_menu.c:307-343,350-353 (GoToBagMenu/CB2_BagMenuFromBattle: OPEN_BAG_LAST leaves gBagMenuState.pocket REMEMBERED, not reset)",
+        "src/item_menu.c:384-506 (LoadBagMenuGraphics state machine -> SetMainCallback2(CB2_BagMenuRun) only once loaded)",
+        "src/item_menu.c:1124-1145 (ProcessPocketSwitchInput: DPAD_RIGHT increments gBagMenuState.pocket, clamped at POCKET_POKE_BALLS-1, no wrap)",
+        "include/constants/global.h:50-56 (POCKET_ITEMS/KEY_ITEMS/POKE_BALLS=1/2/3; NUM_BAG_POCKETS_NO_CASES=3); include/constants/item_menu.h:4-7 (OPEN_BAG_ITEMS/KEYITEMS/POKEBALLS=0/1/2)",
+        "include/global.h:400-404,781 (struct ItemSlot; SaveBlock1.bagPocket_PokeBalls offset 0x0430); include/constants/items.h:8 (ITEM_POKE_BALL=4)",
+        "src/item.c:20-29,41-49 (only ItemSlot.quantity is XORed with gSaveBlock2Ptr->encryptionKey; itemId is plaintext)",
+        "src/item_menu.c:1353-1357,1686-1697 (ITEMMENULOCATION_BATTLE + ItemId_GetBattleUsage -> sContextMenuItems_BattleUse {USE,CANCEL}; Task_ItemMenuAction_BattleUse -> ItemId_GetBattleFunc, the throw)",
+        "src/item_menu.c:1420-1431 (Menu_InitCursor(...,0): the USE/CANCEL popup's cursor defaults to row 0 USE)",
+        "src/item_menu.c:1097 (gSpecialVar_ItemId set from the same plaintext BagGetItemIdByPocketPosition read on selection)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:660 (giveitem_msg ..., ITEM_POKE_BALL, 5 — Oak's gift after the Pokedex, parcel_deliver leg)",
     },
     -- playlib calls recover() after our own check_whiteout() raises, then resume() instead of
     -- run(). recover_to_route1_grass leaves the player standing back at the grass origin with
@@ -1521,4 +1658,18 @@ return {
     ACTION_FIGHT = ACTION_FIGHT, ACTION_BAG = ACTION_BAG,
     verify_fight_cursor = verify_fight_cursor,
     resolve_battle_and_check_whiteout = resolve_battle_and_check_whiteout,
+    -- test hooks (card gen3-P3-C3-23): the bag pocket/cursor witness addresses+constants and
+    -- the function that drives the bag with them, so a unit test can cross-check every address
+    -- against pokefirered.sym and exercise the fail-loud paths without an emulator.
+    GMAIN_CALLBACK2_ADDR = GMAIN_CALLBACK2_ADDR,
+    CB2_BAG_MENU_RUN = CB2_BAG_MENU_RUN,
+    BAG_MENU_STATE_ADDR = BAG_MENU_STATE_ADDR,
+    BAG_POCKET_OFF = BAG_POCKET_OFF,
+    BAG_ITEMS_ABOVE_OFF = BAG_ITEMS_ABOVE_OFF,
+    BAG_CURSOR_POS_OFF = BAG_CURSOR_POS_OFF,
+    BAG_POCKET_POKEBALLS = BAG_POCKET_POKEBALLS,
+    SPECIAL_VAR_ITEM_ID_ADDR = SPECIAL_VAR_ITEM_ID_ADDR,
+    ITEM_POKE_BALL = ITEM_POKE_BALL,
+    SB1_POKEBALLS_POCKET_OFFSET = SB1_POKEBALLS_POCKET_OFFSET,
+    throw_pokeball_from_bag = throw_pokeball_from_bag,
 }
