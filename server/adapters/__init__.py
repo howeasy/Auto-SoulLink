@@ -60,6 +60,12 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # loud: game_id_for_rom_type() returned None, the guard in server.py never switched the
     # adapter, and the run continued under whichever adapter was already loaded — the Gen 3
     # default. Every Gen 2 claim that did not come from a Crystal run rested on that.
+    #
+    # RUNTIME ROUTE ONLY. These rows still pick the LEGACY `gen2_crystal` adapter, because
+    # the shipped launcher runs the legacy client until the G3 cutover (docs/gen2/PLAN.md
+    # §5.9). Pairing does NOT read them: every Gen 2 spelling has its own row in
+    # `_ROM_TYPE_TO_FOUNDATION` below. The cutover re-points these rows (and registers
+    # `gen2_gsc`, whose constructor needs a title, not `is_rr`/`rom_type`); it is not here.
     "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
     "Gold": "gen2_crystal", "gold": "gen2_crystal",
     "Silver": "gen2_crystal", "silver": "gen2_crystal",
@@ -111,6 +117,15 @@ _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
     "firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_frlg",
     "firered_ap": "gen3_frlg", "leafgreen_ap": "gen3_frlg",
     "firered_rr": "gen3_rr",
+    # Gen 2 (docs/gen2/PLAN.md §5.9, owner O-16): ONE foundation for Gold, Silver and
+    # Crystal, so every Gen 2 pairing is admitted with no title relation in shared code.
+    # EVERY spelling has a row: the title-cased ones are what both clients send and what
+    # existing run directories persist, and a missing row would silently fall back to the
+    # legacy game_id. `crystal_ap` has NO row on purpose (O-8, not admitted in the RC): it
+    # keeps the legacy foundation `gen2_crystal`, so it never pairs with a gen2_gsc half.
+    "Crystal": "gen2_gsc", "crystal": "gen2_gsc",
+    "Gold": "gen2_gsc", "gold": "gen2_gsc",
+    "Silver": "gen2_gsc", "silver": "gen2_gsc",
 }
 
 

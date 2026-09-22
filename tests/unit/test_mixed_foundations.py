@@ -81,8 +81,11 @@ def test_the_two_gen3_foundations_are_distinct_but_share_one_adapter():
 
 
 def test_every_other_pack_keeps_its_game_id_as_its_foundation():
-    for rom_type in ("red", "blue", "yellow", "crystal", "platinum", "pokemon_black"):
+    for rom_type in ("red", "blue", "yellow", "platinum", "pokemon_black"):
         assert foundation_for_rom_type(rom_type) == adapter_class_for_rom_type(rom_type)().game_id
+    # Gen 2 left this list at P3a: one explicit foundation for all three titles
+    # (tests/unit/test_gen2_pairing_matrix.py), not the legacy game_id.
+    assert foundation_for_rom_type("crystal") == "gen2_gsc"
     # pureRGB is already a foundation of its own by game_id.
     assert foundation_for_rom_type("PureRed") == "gen1_purergb"
     assert foundation_for_rom_type("red") != foundation_for_rom_type("PureRed")
