@@ -1,0 +1,20 @@
+phase probe-state frame=941 idle terminal=field_idle_300
+phase probe-state frame=941 walking terminal=position_changed_120
+phase probe-state frame=974 start_menu terminal=field_controls_locked
+phase probe-state frame=1919 dialog terminal=save_dialog_cb_nonzero
+phase probe-state frame=2039 save terminal=new_counter_partial_slot_then_14_sectors
+phase probe-state frame=981 battle terminal=in_battle_mask_nonzero
+phase probe-state frame=751 fade terminal=palette_fade_active_then_map_changed
+phase probe-state frame=1624 pc_menu terminal=task_pc_main_menu_active_60
+phase probe-state frame=1624 script_running terminal=script_context_not_shutdown_60
+PROBE idle PASS sampled=300 true=300 false=0 terminal=field_idle_300 reached=true R15=452 CPSR=536870943 frame=1241 reason=-
+PROBE walking PASS sampled=120 true=120 false=0 terminal=position_changed_120 reached=true R15=452 CPSR=536870943 frame=1061 reason=-
+PROBE start_menu PASS sampled=120 true=0 false=120 terminal=field_controls_locked reached=true R15=134230898 CPSR=536870975 frame=1094 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: field_controls_locked
+PROBE dialog PASS sampled=120 true=0 false=120 terminal=save_dialog_cb_nonzero reached=true R15=452 CPSR=536870943 frame=2039 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: save_dialog_cb
+PROBE save PASS sampled=758 true=0 false=758 terminal=new_counter_partial_slot_then_14_sectors reached=true R15=136178198 CPSR=63 frame=2836 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: save_dialog_cb
+PROBE battle PASS sampled=120 true=0 false=120 terminal=in_battle_mask_nonzero reached=true R15=134219934 CPSR=1073741887 frame=1101 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: callback1
+PROBE fade PASS sampled=76 true=0 false=76 terminal=palette_fade_active_then_map_changed reached=true R15=452 CPSR=536870943 frame=908 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: palette_fade_active
+PROBE pc_menu PASS sampled=122 true=0 false=122 terminal=task_pc_main_menu_active_60 reached=true R15=452 CPSR=536870943 frame=2488 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: script_context_status
+PROBE script_running PASS sampled=123 true=0 false=123 terminal=script_context_not_shutdown_60 reached=true R15=452 CPSR=536870943 frame=1854 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: script_context_status
+WRITE_LOG count=0 scope=predicate_only no_writes_instance=true native_idle=opcode_queue_only
+RESULT: PASS all checkpoint controls

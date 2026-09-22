@@ -164,7 +164,7 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | `save` (S-10) | ✓ (fixture boot-check re-save) | ✓ | `bootcheck_firered_town`, `shadow_rr_play` |
 | `poison_faint` (S-11) | OPEN | OPEN | — |
 | `borrowed_party`/`nature_change` (S-12, RR) | n/a | OPEN | — |
-| checkpoint negatives (W rows) | ✓ (`checkpoint_fr_clean_2026-09-22c`: idle 276/300 + walking positives; start_menu/dialog/save/battle/fade/script_running false with empty write log; pc_menu RR-only) | ✓ (`checkpoint_rr_companion_2026-09-22`: 9/9 incl. pc_menu + script_running) | evolution/link/native-staged/mid-relocation: SOURCE disposition card R11 |
+| checkpoint negatives (W rows) | ✓ (`checkpoint_fr_clean_2026-09-22d`: all controls incl. battle + script_running; liveness across save lineages: `checkpoint_fr_parcel_lineage_2026-09-22b` idle 275/300 after the link-predicate fix, was 0/300) | ✓ (`checkpoint_rr_companion_2026-09-22b`: 9/9 on the new link predicate) | unreachable states: SOURCE+MODEL `research/checkpoint_unreached_states.md`; native-op-staged OPEN (P5) |
 | overhead budget | ✓ (21 sites hooked: 59.7 fps throttled, hooks off 59.7; unthrottled 333 vs 766 fps with liveness hooks, the mGBA callback-path cost known from P1) | ✓ | `overhead_fr_*`, `overhead_rr_throttled`/`_unthrottled`, `wire_delta_rr_explode` |
 | `reads == PYDEC` (R rows) | ✓ (real encrypted party record, Squirtle L8, every field agrees; planted offender rc=1; box 0 still empty) | ✓ | `reads_pydec_fr_party_2026-09-22`, `reads_pydec_fr`, `reads_pydec_rr` |
 
