@@ -37,6 +37,8 @@ function Registry.new(options)
         return {failed=state.failure,handler_error=state.handler_error,pending=#state.queue,
                 closed=state.closed,registered=state.registered,cleanup_errors=copy(state.cleanup_errors)}
     end
+    -- Read-only view for observers (e.g. a test tee): a detached copy, never the live queue.
+    function self:peek() return copy(state.queue) end
     function self:drain()
         local result = state.queue
         state.queue = {}
@@ -64,7 +66,9 @@ function Registry.new(options)
     end
 
     local function callback(site,...)
-        if not state.ready or state.closed or state.failure or state.handler_error then return end
+        -- handler_error is a status field, not a kill switch: a handler fault is contained
+        -- and later signals keep queuing (the capture/queue faults above do latch).
+        if not state.ready or state.closed or state.failure then return end
         local ok, event = pcall(capture,copy(site),...)
         if not ok then state.failure=tostring(event); return end
         if event == nil then return end

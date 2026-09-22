@@ -341,10 +341,10 @@ function S.bind(dependencies)
             unregister=function(handle) return binding:unregister(handle) end,
             valid_handle=function(handle) return binding:valid_handle(handle) end,
             capture=function(site)
-                local context=binding:context(site)
-                if not context then return nil end
                 local spec=S.KINDS[site.id] or {point=generic_point(site)}
-                if spec.filter and not spec.filter(io,ram,d) then return nil end
+                -- master order: bank, then the per-kind filter, then PC/bytes
+                local context=binding:context(site,spec.filter and function() return spec.filter(io,ram,d) end)
+                if not context then return nil end
                 return {kind=site.id,frame=context.frame,pc=context.pc,bank=context.bank,sp=context.sp,
                         point=spec.point and spec.point(io,ram,d) or nil}
             end,

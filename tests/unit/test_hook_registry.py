@@ -98,7 +98,7 @@ def test_callback_queue_order_overflow_and_error_latches_do_not_reset_on_drain()
     assert service.status(service).pending == 0
 
 
-def test_handler_error_latches_and_registration_callbacks_are_suppressed():
+def test_handler_error_is_recorded_not_a_kill_switch_and_registration_callbacks_are_suppressed():
     w = World()
     w.state.fire_during_registration = True
     service = w.new()[0]
@@ -107,8 +107,11 @@ def test_handler_error_latches_and_registration_callbacks_are_suppressed():
     w.state.callbacks.a()
     assert "handler exploded" in service.status(service).handler_error
     assert len(service.drain(service)) == 1
+    w.state.handler_error = False
     w.state.callbacks.a()
-    assert len(service.drain(service)) == 0
+    assert len(service.drain(service)) == 1
+    assert "handler exploded" in service.status(service).handler_error
+    assert service.status(service).failed is None
 
 
 def test_cleanup_failure_retains_owner_and_allows_explicit_retry():

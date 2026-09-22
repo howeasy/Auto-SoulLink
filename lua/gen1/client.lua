@@ -1509,7 +1509,13 @@ function Client.new(p)
 
     -- ── hello / tick ─────────────────────────────────────────────────────────────────
     function self:send_hello(expected_identity)
-        if expected_identity == nil or hello_identity() ~= expected_identity then
+        -- No argument = master's direct call (live gates): hello now, and the session counts it.
+        if expected_identity == nil then
+            local sent, why = self.hello_session:send_now(io.framecount())
+            if sent then self.hello_sent = true end
+            return sent, why
+        end
+        if hello_identity() ~= expected_identity then
             return false, "hello identity changed or unavailable"
         end
         local party, battle = snapshot_party()
@@ -1565,10 +1571,10 @@ function Client.new(p)
         ready = function(identity)
             local live, why = game_is_live()
             if not live then return false, why end
+            -- wIsInBattle $FF is the lost-battle/blackout state (pokered home/overworld.asm:355),
+            -- a battle like 1 and 2: any nonzero value skips the checkpoint, as on master.
             local battle = reads.read_battle()
-            if not battle or (battle.in_battle ~= 0 and battle.in_battle ~= 1 and battle.in_battle ~= 2) then
-                return false, "battle state unavailable"
-            end
+            if not battle then return false, "battle state unavailable" end
             -- MainMenu can already contain a save. A checkpoint or a running
             -- battle is still required before this game sends its first hello.
             if battle.in_battle == 0 and not safety.check(ws_profile, io) then
@@ -1586,6 +1592,9 @@ function Client.new(p)
         end,
         send = function(identity) return self:send_hello(identity) end,
         retry_delay = function() return 1 end, -- existing Gen 1 next-frame retry policy
+        -- master: a savestate load keeps the session (one hello, panel kept), and a throwing
+        -- hello callback propagates out of frame_end (run.lua logs it) without ending it
+        clock_rewind = "keep", callback_error = "raise",
         on_invalidate = function(reason)
             self.hello_sent = false
             if self.panel then self.panel:clear() end
@@ -1825,13 +1834,24 @@ function Client.new(p)
 
     -- ── per-frame driver ─────────────────────────────────────────────────────────────
     function self:start()
+        -- An in-hook handler fault is logged and re-raised: the registry records it as
+        -- handler_error and keeps queuing later signals (it is never a kill switch).
+        local function logged(kind, fn)
+            return function(sig)
+                local ok, err = pcall(fn, sig)
+                if not ok then
+                    log("[SLink-gen1] signal handler " .. kind .. ": " .. tostring(err))
+                    error(err, 0)
+                end
+            end
+        end
         local handlers = {
-            battle_loop_head = function(sig) self:on_battle_loop_head(sig) end,
-            battle_loop_no_move = function(sig) self:on_battle_loop_no_move(sig) end,
-            apex_preflight = function(sig) self:on_apex_preflight(sig) end,
-            apex_commit = function(sig) self:on_apex_commit(sig) end,
-            transform = function(sig) self:on_transform(sig) end,
-            transform_hp_lo = function(sig) self:on_transform_hp_lo(sig) end,
+            battle_loop_head = logged("battle_loop_head", function(sig) self:on_battle_loop_head(sig) end),
+            battle_loop_no_move = logged("battle_loop_no_move", function(sig) self:on_battle_loop_no_move(sig) end),
+            apex_preflight = logged("apex_preflight", function(sig) self:on_apex_preflight(sig) end),
+            apex_commit = logged("apex_commit", function(sig) self:on_apex_commit(sig) end),
+            transform = logged("transform", function(sig) self:on_transform(sig) end),
+            transform_hp_lo = logged("transform_hp_lo", function(sig) self:on_transform_hp_lo(sig) end),
         }
         local all_sites = sites
         if self.trade and self:trade_patch_present() then
@@ -1844,7 +1864,7 @@ function Client.new(p)
             for k, v in pairs(sites) do all_sites[k] = v end
             all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
                                         capture_offset = 0, expected_hex = hex_of(bytes), symbol = "SlinkTradeService" }
-            handlers.trade_service = function() self.trade:picked_up() end
+            handlers.trade_service = logged("trade_service", function() self.trade:picked_up() end)
             self.trade_enabled = true
         end
         -- Re-arming (e.g. against a newly patched ROM) releases the previous hook set first:
@@ -1864,14 +1884,9 @@ function Client.new(p)
             local pok, perr = self.panel:service()
             if not pok then log("[SLink-gen1] panel: " .. tostring(perr)) end
         end
-        local pumped, pump_error = pcall(net.pump)
-        local connected = false
-        if pumped then
-            connected = self.hello_session:step(self.frame)
-        else
-            self.hello_session:invalidate("transport_error")
-            log("[SLink-gen1] transport pump: " .. tostring(pump_error))
-        end
+        -- master: a pump error propagates (run.lua logs "frame error"); the session stands
+        net.pump()
+        local connected = self.hello_session:step(self.frame)
         self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         connected = connected and self.hello_session:status().ready

@@ -9,14 +9,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class World:
-    def __init__(self, retry=1):
+    def __init__(self, retry=1, clock_rewind="invalidate", callback_error="invalidate"):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.factory = self.lua.eval("dofile")((ROOT / "lua/hello_session.lua").as_posix())
         self.state = self.lua.table(connected=True, identity="save-a", live=True, sent=True,
                                     fail_stage="", retry=retry, attempts=0, invalidations=0, errors=0)
-        policy = self.lua.eval("""function(s)
+        policy = self.lua.eval("""function(s, clock_rewind, callback_error)
             local function check(stage) if s.fail_stage == stage then error(stage .. ' unavailable') end end
             return {
+                clock_rewind=clock_rewind, callback_error=callback_error,
                 connected=function() check('connected'); return s.connected end,
                 identity=function() check('identity'); return s.identity end,
                 ready=function() check('ready'); return s.live, 'game hold' end,
@@ -32,11 +33,16 @@ class World:
                 end,
                 on_error=function(stage, why) s.errors=s.errors+1; s.last_error=stage .. ':' .. why end,
             }
-        end""")(self.state)
+        end""")(self.state, clock_rewind, callback_error)
+        self.policy = policy
         self.scheduler = self.factory.new(policy)
 
     def step(self, now):
         result = self.scheduler.step(self.scheduler, now)
+        return result[0] if isinstance(result, tuple) else result
+
+    def send_now(self, now):
+        result = self.scheduler.send_now(self.scheduler, now)
         return result[0] if isinstance(result, tuple) else result
 
     def status(self):
@@ -158,3 +164,45 @@ def test_throwing_send_uses_the_injected_retry_delay_too():
     world.state.fail_stage = ""
     assert world.step(14) is False and world.state.attempts == 0
     assert world.step(15) is True and world.state.attempts == 1
+
+
+@pytest.mark.parametrize("field", ["clock_rewind", "callback_error"])
+def test_rewind_and_callback_error_policies_are_explicit(field):
+    world = World()
+    world.policy[field] = None
+    with pytest.raises(Exception, match=field):
+        world.factory.new(world.policy)
+
+
+def test_keep_policy_survives_a_clock_rewind_with_one_hello_and_no_stale_deadline():
+    world = World(retry=50, clock_rewind="keep")
+    assert world.step(100) is True
+    assert world.step(1) is True
+    assert world.state.attempts == 1 and world.state.invalidations == 0
+    world.scheduler.invalidate(world.scheduler, "save_reset")
+    world.state.live = False
+    assert world.step(200) is False  # deadline 250 on this timeline
+    world.state.live = True
+    assert world.step(10) is True  # a rewind drops the old deadline instead of waiting it out
+
+
+def test_raise_policy_propagates_a_callback_error_and_keeps_the_session():
+    world = World(callback_error="raise")
+    assert world.step(1) is True
+    world.state.fail_stage = "connected"
+    with pytest.raises(Exception, match="connected unavailable"):
+        world.step(2)
+    assert world.status().ready is True and world.state.invalidations == 0
+    world.state.fail_stage = ""
+    assert world.step(3) is True and world.state.attempts == 1
+
+
+def test_send_now_skips_the_ready_gate_and_existing_readiness_but_not_the_connection():
+    world = World()
+    world.state.live = False
+    assert world.send_now(1) is True and world.state.attempts == 1
+    assert world.send_now(2) is True and world.state.attempts == 2
+    assert world.status().ready is True
+    assert world.step(3) is True and world.state.attempts == 2
+    world.state.connected = False
+    assert world.send_now(4) is False and world.state.attempts == 2

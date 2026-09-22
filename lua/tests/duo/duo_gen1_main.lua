@@ -147,26 +147,27 @@ deps.on_bus_exec = function(fn, addr, name, dom)
     if name == "SLink-gen1-save_witness" then
         local fire = fn
         fn = function()
-            -- GATE: "the callback ran" is NOT evidence the site validated. signals.lua's `fire`
-            -- returns nothing and swallows every rejection (lua/gen1/signals.lua:202-226: early
-            -- `return` when closed/failed, on the wrong hLoadedROMBank, or on a filter; the PC
-            -- and expected-bytes assertions are pcall'd into self.failure rather than raised).
-            -- The one observable that means "validated" is the queue: :219 appends to `pending`
-            -- only once every check has passed. So dump iff `pending` grew by exactly one
-            -- save_witness entry across this call. The signals instance is reached through
-            -- SLINK_GEN1_CLIENT (:182, the same global lua/gen1/run.lua:42 sets) because the
-            -- `gclient` local is declared below this tee (:157) and the instance itself only
-            -- exists after gclient:start() (lua/gen1/client.lua:1005).
+            -- GATE: "the callback ran" is NOT evidence the site validated. The registry's
+            -- callback returns nothing and swallows every rejection (closed/failed service,
+            -- wrong hLoadedROMBank, a filtered hit, PC/byte mismatch latched as `failed`).
+            -- The one observable that means "validated" is the queue, read through the
+            -- service's read-only peek() (a detached copy): dump iff it grew by exactly one
+            -- save_witness entry across this call. The service is reached through
+            -- SLINK_GEN1_CLIENT (the same global lua/gen1/run.lua sets) because `gclient` is
+            -- declared below this tee and the service only exists after gclient:start().
             local sigs = SLINK_GEN1_CLIENT and SLINK_GEN1_CLIENT.signals
-            local before = sigs and #sigs.pending or 0
+            local before = sigs and #sigs:peek() or 0
             fire()
             local why
             if not sigs then
                 why = "no-signals-instance"
-            elseif #sigs.pending ~= before + 1 then
-                why = fmt("pending-%d-to-%d", before, #sigs.pending)
-            elseif sigs.pending[#sigs.pending].kind ~= "save_witness" then
-                why = "kind-" .. tostring(sigs.pending[#sigs.pending].kind)
+            else
+                local after = sigs:peek()
+                if #after ~= before + 1 then
+                    why = fmt("pending-%d-to-%d", before, #after)
+                elseif after[#after].kind ~= "save_witness" then
+                    why = "kind-" .. tostring(after[#after].kind)
+                end
             end
             if why then
                 log("SAVE_WITNESS_DUMP_SKIPPED why=" .. why)

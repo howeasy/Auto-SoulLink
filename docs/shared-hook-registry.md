@@ -31,6 +31,12 @@ The backend registration operation must either return its handle or fail without
 creating an unreported registration: no registry can clean a handle never returned.
 Registration-time callbacks are ignored until the entire set is installed.
 
+If the backend returns a handle this registry instance already owns, the registration
+is refused and that backend registration is left unowned: it is neither unregistered
+nor tracked, because unregistering the handle would remove the other owner's hook.
+The refusing service fails closed, so the callback bound to it stays inert. Such a
+duplicate is a backend fault; the error names the site.
+
 On registration failure, cleanup attempts every accepted owned handle in reverse
 order. No foreign handle is unregistered. Cleanup failure keeps the namespace and
 names reserved, leaves callbacks inert, and is reported on `failed_service:status()`.
@@ -38,6 +44,8 @@ The caller may retry `failed_service:close()` once the backend can unregister.
 
 Methods:
 
+- `service:peek()` returns a detached copy of the queued snapshots in arrival order,
+  for observers such as test tees. Mutating it never changes the queue.
 - `service:drain()` returns queued snapshots in arrival order and starts an empty queue.
   Draining never resets an error latch.
 - `service:status()` returns `failed`, `handler_error`, `pending`, `closed`,
@@ -46,8 +54,10 @@ Methods:
   and returns whether cleanup completed. It is safe to retry and does not discard
   already queued evidence. Ownership is released only after all handles are removed.
 
-A capture exception, invalid event or overflow latches `failed`. A synchronous handler
-exception latches `handler_error`. Either stops subsequent callbacks. The queued event
+A capture exception, invalid event or overflow latches `failed`, which stops subsequent
+callbacks. A synchronous handler exception is contained: the event is already queued,
+`handler_error` records the latest handler failure, and later callbacks keep capturing
+and queuing. `handler_error` is a status field, never a kill switch. The queued event
 snapshot is separate from the handler's mutable argument. Cleanup or callback errors
 never imply rollback of external effects already performed by a backend or handler.
 
@@ -63,8 +73,10 @@ consistency, the flat ROM offset, the entire ROM anchor and that the hook PC fal
 inside that anchor. This binding observes a single bank-shadow byte and refuses
 bank selectors above 255. The returned descriptor includes `pc` and parsed `expected` bytes.
 
-`binding:context(prepared)` drops a different switchable-bank shadow value. At a
-matching bank it requires exact PC, rechecks the anchor through the bus domain, and
+`binding:context(prepared, accept)` drops a different switchable-bank shadow value.
+At a matching bank it then runs the optional binder predicate `accept()`; a false
+result drops the hit before any PC or byte check, so a filtered hit cannot latch a
+failure. For an accepted hit it requires exact PC, rechecks the anchor through the bus domain, and
 returns `{pc, bank, sp, frame}`. Missing bank/SP/frame or incorrect PC/bytes raises.
 These are explicit shadow/byte checks, not a claim that the emulator's actual mapping,
 callback timing or source-only engine site has been physically qualified. A binder
@@ -77,9 +89,13 @@ accepts positive integer handles or nonempty strings and refuses zero GUID varia
 
 `Signals.bind({registry=Registry, gb_binding=GB, owner='SLink-gen1'})` returns a
 factory with the existing `new(profile, sites, io, on_fire)` interface. Its event
-filters and snapshots remain in `lua/gen1/signals.lua`; it explicitly supplies
+filters and snapshots remain in `lua/gen1/signals.lua`; each kind's filter is passed as
+`accept`, restoring master's order (bank, filter, then PC and bytes); it explicitly supplies
 `System Bus`, `ROM`, `PC`, `SP` and `profile.ram.hLoadedROMBank` to the GB binding.
 The existing `SLink-gen1-<kind>` hook names remain unchanged through its naming policy.
+`lua/gen1/client.lua` logs each in-hook handler fault (`signal handler <kind>: ...`) and
+re-raises it, so the fault is visible on the console and in `status().handler_error`.
+The Gen 1 duo save-witness tee counts new queue entries through `peek()`.
 
 Entry owns loading and injecting both dependencies and the release manifest owns
 shipping them. Constructor failure preserves `factory.failed_service` for explicit

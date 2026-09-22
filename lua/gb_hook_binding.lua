@@ -49,12 +49,15 @@ function GB.new(io,config)
         read_bytes(io,flat,out.expected,c.rom_domain,"engine sites differ from the ROM: "..tostring(out.id))
         return out
     end
-    function self:context(site)
+    -- accept (optional): binder predicate run after the bank match and BEFORE the PC/byte
+    -- assertions, so a hit the binder drops can never latch a PC/byte failure.
+    function self:context(site,accept)
         if site.bank>0 then
             local bank=io.read_u8(c.bank_address,c.bank_domain)
             assert(integer(bank,0,255),"bank shadow unavailable")
             if bank~=site.bank then return nil end
         end
+        if accept and not accept() then return nil end
         assert(io.register(c.pc_register)==site.pc,tostring(site.id)..": callback PC differs")
         read_bytes(io,site.address,site.expected,c.bus_domain,tostring(site.id)..": bank/bytes differ at fire time")
         local sp,frame=io.register(c.sp_register),io.framecount()

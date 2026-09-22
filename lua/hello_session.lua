@@ -13,6 +13,12 @@ function HelloSession.new(policy)
     for _, name in ipairs({"connected", "identity", "ready", "send", "retry_delay", "on_invalidate", "on_error"}) do
         assert(type(policy[name]) == "function", "hello policy." .. name .. " required")
     end
+    -- Explicit binder choices, no defaults: what a backward clock (savestate load) and a
+    -- throwing callback mean for the session.
+    assert(policy.clock_rewind == "invalidate" or policy.clock_rewind == "keep",
+           "hello policy.clock_rewind must be 'invalidate' or 'keep'")
+    assert(policy.callback_error == "invalidate" or policy.callback_error == "raise",
+           "hello policy.callback_error must be 'invalidate' or 'raise'")
     local state = {ready=false, connected=false, attempts=0, generation=0}
     local pending_cleanup, stage
     local self = {}
@@ -55,11 +61,15 @@ function HelloSession.new(policy)
         state.next_attempt, state.reason = deadline, tostring(why or "hello pending")
         return false, state.reason
     end
-    local function step(now)
+    local function step(now, force)
         stage = "clock"
         assert(integer(now), "hello clock must be a nonnegative integer")
         if state.last_now and now < state.last_now then
-            if not self:invalidate("clock_rewound") then return false, "invalidation cleanup failed" end
+            if policy.clock_rewind == "keep" then
+                state.next_attempt = nil -- a deadline on the abandoned timeline means nothing
+            elseif not self:invalidate("clock_rewound") then
+                return false, "invalidation cleanup failed"
+            end
         end
         state.last_now = now
         if not cleanup() then return false, "invalidation cleanup failed" end
@@ -76,10 +86,12 @@ function HelloSession.new(policy)
             state.connected = true
         end
         state.identity, state.last_identity = identity, identity
-        if state.ready then return true end
-        if state.next_attempt and now < state.next_attempt then return false, state.reason end
-        local ready, why = call("ready", identity)
-        if ready ~= true then return retry(now, why or "not ready for hello") end
+        if not force then
+            if state.ready then return true end
+            if state.next_attempt and now < state.next_attempt then return false, state.reason end
+            local ready, why = call("ready", identity)
+            if ready ~= true then return retry(now, why or "not ready for hello") end
+        end
         local generation = state.generation
         state.attempts = state.attempts + 1
         local sent, send_reason = call("send", identity)
@@ -90,10 +102,14 @@ function HelloSession.new(policy)
         state.ready, state.next_attempt, state.reason = true, nil, nil
         return true
     end
-    function self:step(now)
-        local ok, ready, why = pcall(step, now)
+    local function run(now, force)
+        local ok, ready, why = pcall(step, now, force)
         if not ok then
             local failed_stage = stage or "step"
+            if policy.callback_error == "raise" then
+                state.last_error = failed_stage .. ": " .. tostring(ready)
+                error(ready, 0)
+            end
             self:invalidate("callback_error")
             report_error(failed_stage, ready)
             -- A throwing callback is paced like a refusal: the injected delay still applies,
@@ -106,6 +122,10 @@ function HelloSession.new(policy)
         end
         return ready, why
     end
+    function self:step(now) return run(now, false) end
+    -- An explicit request (e.g. a harness) to hello now: skips the ready gate, the retry
+    -- pacing and an existing readiness; still checks connection and identity around send.
+    function self:send_now(now) return run(now, true) end
     return self
 end
 

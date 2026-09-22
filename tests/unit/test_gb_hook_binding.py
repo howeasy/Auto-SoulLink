@@ -78,3 +78,17 @@ def test_no_config_defaults_and_zero_guid_is_not_a_handle():
     state.bad_rom = True
     with pytest.raises(LuaError, match="ROM"):
         binding.validate(binding, site)
+
+
+def test_accept_runs_after_the_bank_match_and_before_the_pc_and_byte_checks():
+    lua, module, state, io, config, site = setup()
+    binding = module.new(io, config)
+    prepared = binding.validate(binding, site)
+    calls = []
+    reject = lambda: calls.append("accept") or False
+    state.bank = 3
+    assert binding.context(binding, prepared, reject) is None and calls == []
+    state.bank, state.pc = 2, 0x4102
+    assert binding.context(binding, prepared, reject) is None and calls == ["accept"]
+    with pytest.raises(LuaError, match="callback PC differs"):
+        binding.context(binding, prepared, lambda: True)
