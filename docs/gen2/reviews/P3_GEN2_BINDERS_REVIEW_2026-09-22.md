@@ -128,3 +128,34 @@ built ROMs `.cache/gen2-build/*/*.gbc`). Scratch reproductions lived outside the
 - **Extraction rule**: `write_permit.lua`, `gb_checkpoint.lua`, `gb_hook_binding.lua`, `hook_registry.lua` and
   `admission.lua` contain no Gen 2 or title knowledge. Every game fact reaches them as binder input.
 - **Suites**: the 13 in-scope gen2 unit files passed 587/587 at HEAD. The full `-k gen2` run had only the F5 failures.
+
+## Closure (gen2-R2, fix commit `bf2d5e1`, checked at HEAD `e0b38b7`)
+
+`git diff bf2d5e1 e0b38b7` shows no changes in the Gen 2 server, Lua, pack or generator paths. The working tree was clean.
+Both scratch reproductions (`r2tests/test_r2_findings.py`) now pass. The six affected unit files
+(profile, rom_reader, rom_tables, items, encounters, boxes) passed 211/211.
+
+- **F1 CLOSED (adapter).** `tools/gen_gen2_items.py` parses `MailItems` and checks it against the ROM
+  (`verify_table(ctx, "MailItems", ...)`). Every title's `items.json` has `mail_ids` = 0x9E and 0xB5..0xBD (10 ids,
+  10 `mail: true` rows). `gen2_gsc.py` reads `row["mail"]`, the pack loader requires it to be a bool, and all ten are refused on
+  C, G and S.
+- **F2 CLOSED.** `treemon_enabled_limit` is pinned independently, not only shared: it is parsed from the `GetTreeMons` `cp`
+  operand, it must equal the source-asserted refused tail (fault-injected negatives in
+  `test_treemon_enabled_limit_is_the_gettreemons_cp_bound`), and the generator checks the ROM bytes `FE <limit> 30`.
+  I re-read those bytes myself: C `fe 08 30 10 a7 28`, G/S `fe 04 30 10 a7 28`. Reader tests also carry literal 8/4
+  expectations. Residual (low): the Python and Lua ROM readers trust the profile value within `rock < limit <= count` and do not
+  re-read the ROM gate. A tampered profile would pass both differentials, though the profile is covered by provenance.
+- **F3 CLOSED as a labelled limitation.** Every rod row on all titles carries `map_association="UNQUALIFIED"`. The unreachable
+  indoor rows are still presented (Crystal `new_bark_town` still has 37 labels). The obligation stays OPEN.
+- **F4 CLOSED.** Active plans carry `reset_before_save="LOADBOX_REVERTS_ACTIVE_EDIT"` and
+  `reassert_after_full_save=true`. Backing plans carry `NOT_APPLICABLE`/`false`, with a control test.
+- **Pack regeneration** (structural diff against `92f5445`): items has only `/items/*/mail`, `/sentinels/*/mail` and `/mail_ids` added.
+  The encounter packs have only `/tree/enabled_set_limit` added, and on G/S `tree.sets` shrinks from 5 to 3. Profiles have only
+  `TREEMON_ENABLED_LIMIT` (constant and derived) plus the `treemons.asm` constant-source receipt added. Nothing else changed.
+
+### New finding
+- **N1 MEDIUM, CONFIRMED by grep: the mail gate is not enforced at any transfer boundary.** No shared server code calls
+  `validate_party_blob` or `is_valid_held_item` (`git grep` over `server/` outside `adapters/gen*`). On the Lua side the
+  flag appears nowhere: `boxes.lua` `mon()` and `writes.lua` `write_party_bytes` accept any held byte, and `wire.lua` only
+  projects `held_item` (0..255). This is acceptable while native trade (P4) is unbuilt. The P4 transfer path must call the
+  adapter gate, or the insertion binders need the mail set injected, before any held item is carried.
