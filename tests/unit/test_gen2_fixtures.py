@@ -494,3 +494,47 @@ def test_lua_town_route_saves_inside_the_lab_only(lua):
     step(d, point(lua, f, "PlayersHouse2F", 3, 3))
     buttons, phase, _ = step(d, after_starter(lua, f, "ElmsLab", 7, 5, save_success_counter=0))
     assert phase == "native-save" and buttons == {"Start": True}
+
+
+# --- played-route gate binding --------------------------------------------------------------------
+
+@pytest.mark.parametrize("title", TITLES)
+def test_route_facts_carry_the_source_bound_observer_block(title):
+    f, ctx = facts(title), context(title)
+    obs = f["observer"]
+    assert obs["overworld_tick"]["symbol"] == "OWPlayerInput"
+    for site in [obs["overworld_tick"], obs["save_completed"], *f["ui_origins"].values()]:
+        assert ctx.rom[site["flat"]:site["flat"] + 1].hex() == site["hex"]
+    signals = json.loads((ROOT / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
+    assert obs["save_completed"]["flat"] == signals["titles"][title]["sites"]["save_completed"]["rom_offset"]
+    assert obs["facing"] == {"Down": 0, "Up": 4, "Left": 8, "Right": 12}
+    structs = ctx.symbol("wObjectStructs").address
+    assert ctx.symbol("wPlayerDirection").address == structs + obs["object"]["direction"]
+    assert obs["screen"] == {"width": 20, "height": 18}
+    # Elm asks a mission yes/no only in Crystal; every other driver prompt has a source anchor.
+    assert ("elm_mission" in obs["prompts"]) == (title == "crystal")
+    assert {"clock_confirm", "mom_dst", "mom_dst_confirm", "mom_phone", "starter_confirm", "nickname",
+            "save_confirm"} <= set(obs["prompts"])
+    assert set(obs["scene_symbols"]) == {"PlayersHouse1F", "ElmsLab", "NewBarkTown"}
+
+
+def test_run_play_dispatches_the_reviewed_gate_and_names_the_receipt(tmp_path):
+    spec = g.BY_NAME["crystal_battle"]
+    calls = []
+
+    def runner(script, **kwargs):
+        calls.append((script, kwargs))
+        return True, "result.txt", "RESULT: PASS"
+
+    out = g.run_play(spec, {"observer_qualified": True, "attempt_id": "model-1", "gate_script": g.GATE_SCRIPT},
+                     root=ROOT, runner=runner)
+    (script, kwargs), = calls
+    assert script == g.GATE_SCRIPT and (ROOT / script).is_file()
+    assert kwargs["speed_percent"] == 300 and kwargs["rom_key"] == "crystal_cold" and kwargs["fixture_path"] is None
+    case = json.loads(kwargs["env_overrides"]["SLINK_GEN2_FIXTURE_CASE"])
+    assert case["name"] == spec.name and case["attempt_id"] == "model-1"
+    assert json.loads(kwargs["env_overrides"]["SLINK_GEN2_ROUTE_FACTS"])["fingerprint"] == facts("crystal")["fingerprint"]
+    assert Path(out["receipt_path"]).name == "crystal_battle.played.json"
+    assert Path(out["receipt_path"]).parent == Path(out["candidate_path"]).parent
+    assert out["qualified"] is False
+

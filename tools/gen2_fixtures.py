@@ -22,6 +22,7 @@ if __package__:
     from .gen_gen2_charmap import integer, verify_table
     from .gen_gen2_items import item_ids
     from .gen_gen2_species import const_block
+    from .gen_gen2_area_map import constants as const_values
 else:
     import fixture_qualification as qualification
     from gen2_source_data import ROOT, load_context, rom_offset
@@ -29,6 +30,7 @@ else:
     from gen_gen2_charmap import integer, verify_table
     from gen_gen2_items import item_ids
     from gen_gen2_species import const_block
+    from gen_gen2_area_map import constants as const_values
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,19 @@ BY_NAME = {spec.name: spec for spec in FIXTURES}
 # gambatte RTC trailer. Only the CartRAM is compared; the trailer changes on every save.
 CART_RAM_BYTES = 0x8000
 SAVERAM_BYTES = CART_RAM_BYTES + 22
+# The reviewed played-route gate; run_gb_gate reads its terminal result path from the source.
+GATE_SCRIPT = "lua/tests/test_gen2_scripted_gate.lua"
+PASSABLE_COLLISION = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CAVE", "STAIRCASE",
+                      "WARP_CARPET_DOWN", "WARP_CARPET_LEFT", "WARP_CARPET_UP", "WARP_CARPET_RIGHT")
+# Yes/no prompt -> on-screen text anchors, each verified as a quoted literal in the pinned source.
+# The Elm mission yes/no exists only in Crystal (Gold/Silver ElmsLab.asm has no intro yesorno).
+PROMPT_ANCHORS = {
+    "clock_confirm": ("What?", "Whoa!"), "mom_dst": ("Saving Time now?",), "mom_dst_confirm": ("is that OK?",),
+    "mom_phone": ("the PHONE?",), "elm_mission": ("that I recently",), "starter_confirm": ("TOTODILE, the",),
+    "nickname": ("Give a nickname to",), "save_confirm": ("save the game?",),
+}
+PROMPT_SOURCES = ("data/text/common_1.asm", "data/text/common_2.asm", "data/text/common_3.asm",
+                  "maps/PlayersHouse1F.asm", "maps/ElmsLab.asm")
 if not __package__:
     sys.path.insert(0, str(ROOT))
 
@@ -113,9 +128,7 @@ def _map_facts(ctx, row, areas):
         _require(len(tokens) == 4, "collision row width")
         collision.extend(collision_values["COLL_" + token] for token in tokens)
     verify_table(ctx, symbol, bytes(collision))
-    allowed_names = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CAVE", "STAIRCASE",
-                     "WARP_CARPET_DOWN", "WARP_CARPET_LEFT", "WARP_CARPET_UP", "WARP_CARPET_RIGHT")
-    allowed = {collision_values["COLL_" + value] for value in allowed_names if "COLL_" + value in collision_values}
+    allowed = {collision_values["COLL_" + value] for value in PASSABLE_COLLISION if "COLL_" + value in collision_values}
     grid, codes = [], []
     for y in range(height * 2):
         for x in range(width * 2):
@@ -155,6 +168,78 @@ def _map_facts(ctx, row, areas):
             "source": f"{ctx.source_commit} maps/{name}.asm; {include[1]}"}
 
 
+def _code_site(ctx, symbol, offset=0):
+    bank, address = ctx.symbol(symbol)
+    flat = rom_offset(bank, address + offset)
+    return {"symbol": symbol, "symbol_offset": offset, "bank": bank, "addr": address + offset,
+            "flat": flat, "hex": ctx.rom[flat:flat + 1].hex()}
+
+
+def _observer_facts(ctx, root):
+    """Source constants and code sites the played-route gate observes; RAM addresses stay in the profile."""
+    ram_constants = ctx.read_source("constants/ram_constants.asm")
+    objects = ctx.read_source("constants/map_object_constants.asm")
+    directions = const_block(ram_constants, "DOWN")
+    shifts = dict(re.findall(r"^DEF OW_(DOWN|UP|LEFT|RIGHT)\s+EQU\s+\1\s*<<\s*(\d+)", objects, re.M))
+    _require(len(shifts) == 4, "overworld facing constants missing")
+    facing = {name.title(): directions[name] << int(shifts[name]) for name in ("DOWN", "UP", "LEFT", "RIGHT")}
+    fields, offset = {}, None
+    for line in objects.splitlines():
+        line = line.split(";", 1)[0].strip()
+        if line == "rsreset" and offset is None:
+            offset = 0
+        elif offset is None:
+            continue
+        elif match := re.fullmatch(r"DEF (OBJECT_\w+)\s+rb(?:\s+(\d+))?", line):
+            fields[match[1]] = offset
+            offset += int(match[2] or 1)
+        elif match := re.fullmatch(r"rb_skip(?:\s+(\d+))?", line):
+            offset += int(match[1] or 1)
+        elif line == "DEF OBJECT_LENGTH EQU _RS":
+            fields["OBJECT_LENGTH"] = offset
+            break
+    count = _numeric_definitions(objects)["NUM_OBJECT_STRUCTS"]
+    structs = ctx.symbol("wObjectStructs")
+    _require(ctx.symbol("wObject1Struct").address - structs.address == fields.get("OBJECT_LENGTH")
+             and ctx.symbol("wPlayerDirection").address - structs.address == fields.get("OBJECT_DIRECTION"),
+             "object struct geometry disagrees with symbols")
+    collision = _numeric_definitions(ctx.read_source("constants/collision_constants.asm"))
+    hardware = ctx.read_source("constants/hardware.inc")
+    screen = {key: int(re.search(rf"^def SCREEN_{key.upper()}\s+equ\s+(\d+)", hardware, re.M | re.I)[1])
+              for key in ("width", "height")}
+    events = const_block(ctx.read_source("constants/event_flags.asm"), "EVENT_GOT_A_POKEMON_FROM_ELM")
+    prompts = {}
+    texts = [ctx.read_source(path) for path in PROMPT_SOURCES]
+    for prompt, anchors in PROMPT_ANCHORS.items():
+        found = [anchor for anchor in anchors
+                 if any(re.search(r'^\s*(?:text|line|cont|para)\s+"[^"]*' + re.escape(anchor), text, re.M)
+                        for text in texts)]
+        _require(found == list(anchors) or (not found and prompt == "elm_mission" and ctx.title != "crystal"),
+                 f"prompt anchor missing from source: {prompt}")
+        if found:
+            prompts[prompt] = found
+    signals = _json((Path(root) / f"data/games/gen2_{ctx.title}/engine_signals.json").read_bytes())
+    save = signals["titles"][ctx.title]["sites"]["save_completed"]
+    start = save["rom_offset"]
+    _require(signals["source"]["rom_sha1"] == ctx.source_record()["rom_sha1"]
+             and ctx.rom[start:start + len(save["expected_hex"]) // 2].hex() == save["expected_hex"]
+             and rom_offset(save["bank"], save["addr"]) == start, "save-completed site differs from ROM")
+    scenes = {name: f"w{name}SceneID" for name in ("PlayersHouse1F", "ElmsLab", "NewBarkTown")}
+    for symbol in scenes.values():
+        ctx.symbol(symbol)
+    return {"overworld_tick": _code_site(ctx, "OWPlayerInput"),
+            "save_completed": {"symbol": save["symbol"], "symbol_offset": save["symbol_offset"], "bank": save["bank"],
+                               "addr": save["addr"], "flat": start, "hex": save["expected_hex"]},
+            "facing": facing, "screen": screen, "scene_symbols": scenes, "prompts": prompts,
+            "object": {"length": fields["OBJECT_LENGTH"], "count": count, "sprite": fields["OBJECT_SPRITE"],
+                       "direction": fields["OBJECT_DIRECTION"], "map_x": fields["OBJECT_MAP_X"],
+                       "map_y": fields["OBJECT_MAP_Y"]},
+            "passable_collision": sorted({collision["COLL_" + name] for name in PASSABLE_COLLISION
+                                          if "COLL_" + name in collision}),
+            "pokegear_obtained_bit": const_values(ram_constants, "POKEGEAR_OBTAINED_F", ctx.title)["POKEGEAR_OBTAINED_F"],
+            "got_starter_event": events["EVENT_GOT_A_POKEMON_FROM_ELM"]}
+
+
 def route_facts(title, root=ROOT):
     """Source/ROM-bound candidate navigation facts; no live route qualification."""
     ctx = load_context(title, root=root)
@@ -179,8 +264,7 @@ def route_facts(title, root=ROOT):
                  "battle_menu": "BattleMenu"}
     if title == "crystal":
         ui_labels["gender"] = "InitGender"
-    ui = {kind: {"symbol": symbol, "bank": ctx.symbol(symbol).bank, "addr": ctx.symbol(symbol).address,
-                 "flat": rom_offset(*ctx.symbol(symbol))}
+    ui = {kind: {key: value for key, value in _code_site(ctx, symbol).items() if key != "symbol_offset"}
           for kind, symbol in ui_labels.items()}
     result = {"schema": "gen2-scripted-route-facts-v1", "title": title,
               "rom_sha1": ctx.source_record()["rom_sha1"], "source": ctx.source_record(),
@@ -189,6 +273,7 @@ def route_facts(title, root=ROOT):
               "balls": {"item": items["POKE_BALL"], "quantity": 10, "capacity": capacity,
                         "count_address": ctx.symbol("wNumBalls").address,
                         "data_address": ctx.symbol("wBalls").address, "bank": ctx.symbol("wBalls").bank},
+              "observer": _observer_facts(ctx, root),
               "required_observer": ["source-bound UI context", "CGB bank-valid point", "script-idle overworld input",
                                     "live movement blocking", "native successful-save counter"],
               "open_obligations": ["live_point_observer_binding", "played_route_and_OT_separation",
@@ -238,6 +323,7 @@ def run_play(spec, binding, *, root=ROOT, runner=None):
     return {"case": spec.name, "route_candidate": bool(passed), "qualified": False,
             "result_path": path, "diagnostic": text,
             "candidate_path": str(directory / descriptor["saveram_name"]),
+            "receipt_path": str(directory / (spec.name + ".played.json")),
             "requires": list(qualification.FULL_CHAIN)}
 
 
