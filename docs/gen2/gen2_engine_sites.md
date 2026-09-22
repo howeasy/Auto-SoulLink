@@ -159,6 +159,13 @@ runtime state machines.
   and the slot latch remain unqualified.
 - **PC operations:** deposit/withdraw failure carry branches bypass the
   post-compaction site. Release start occurs after confirmation/refusal checks
+  The binder therefore lets a new deposit/withdraw/release/NPC-trade/ChangeBox
+  start supersede an unconsumed start of the same kind (counted in `drops`):
+  `.BoxFull` (pokecrystal `engine/pokemon/bills_pc.asm:1779,1809`, pokegold
+  `:1757,1787`), `.PartyFull` (`:1834,1864` / `:1812,1842`) and
+  `ChangeBoxSaveGame.refused` (`engine/menus/save.asm:45-59` / `:46-59`)
+  never reach the completion site. Capture/hatch/contest starts keep the
+  duplicate refusal.
   and before removal. Completion consumes retained outgoing identity.
   ChangeBox has distinct attempt and post-save/load candidates.
 - **Evolution:** the evolved struct and level-up move work precede .skip_unown.

@@ -76,6 +76,14 @@ local OPERATIONS = {pc_deposit_complete="pc_deposit_begin",pc_withdraw_complete=
 -- Events that only mean something once a later read settles them: stale ones are dropped.
 local SETTLED = {observation=true,faint=true}
 local FAINTS = {battle_faint={cause="battle",slot="wCurBattleMon"},poison_faint={cause="poison",slot="wCurPartyMon"}}
+-- Operation starts whose routine has a native failure/cancel branch between start and
+-- completion (DepositPokemon .BoxFull, TryWithdrawPokemon .PartyFull, ChangeBoxSaveGame
+-- .refused): a new start of the same kind supersedes the unconsumed one (counted in drops).
+local SUPERSEDES = {change_box_begin=true}
+for name,rule in pairs(STARTS) do if rule.operation then SUPERSEDES[name] = true end end
+-- BizHawk 2.11.1 Gambatte emu.getregister has PC/SP/A..L and no pairs (docs/purergb/PLAN.md
+-- A15): a pair is always composed from its halves, never requested (Gen 1 reads HL alike).
+local PAIRS = {AF={"A","F"},BC={"B","C"},DE={"D","E"},HL={"H","L"}}
 local OPEN = {
     gift_static="Qualified scripted-gift/static caller and final destination context is OPEN",
     link_trade="Native transaction/received identity/save witness context is OPEN",
@@ -199,9 +207,19 @@ local function build(options)
     end
     local service, current, latches, refusals = nil,nil,{},{}
     local carried, drops, active = {},{},nil
+    -- Acquisition starts (a mon already inserted) retired without their final, plus refused
+    -- acquisition starts: a client must never read such a battle as a miss (N3-3).
+    local refused_acquisitions = 0
     local self = {}
+    local function retire(name)
+        if latches[name] and STARTS[name] and not STARTS[name].operation then
+            refused_acquisitions = refused_acquisitions+1
+        end
+        latches[name] = nil
+    end
+    local function retire_all() for name in pairs(latches) do retire(name) end end
     local function clear(reason)
-        latches = {}
+        retire_all()
         self.last_boundary = reason
         -- Finalized batches survive the boundary in engine order (drain delivers them).
         if service then for _,batch in ipairs(service:drain()) do carried[#carried+1] = batch end end
@@ -234,13 +252,10 @@ local function build(options)
     end
     local function scalar(site,name) return memory(point(site,name),1) end
     local function register(name)
+        local pair = PAIRS[name]
+        if pair then return register(pair[1])*256+register(pair[2]) end
         local value = io.register(name)
-        if value == nil and ({A="AF",F="AF",B="BC",C="BC",D="DE",E="DE",H="HL",L="HL"})[name] then
-            local pair = io.register(({A="AF",F="AF",B="BC",C="BC",D="DE",E="DE",H="HL",L="HL"})[name])
-            assert(integer(pair,0,65535),"OPEN: CPU register " .. name .. " unavailable")
-            value = ({A=true,B=true,D=true,H=true})[name] and math.floor(pair/256) or pair%256
-        end
-        assert(integer(value,0,#name == 1 and 255 or 65535),"OPEN: CPU register unavailable")
+        need(integer(value,0,255),"OPEN: CPU register " .. name .. " unavailable")
         return value
     end
     local function guards(name,site,context)
@@ -508,21 +523,33 @@ local function build(options)
                 elseif OPEN[name] or OPEN[site.signal] then
                     refusals[name] = "OPEN: " .. (OPEN[name] or OPEN[site.signal])
                 else
+                    -- The refused-acquisition count in engine order (a battle's start/end
+                    -- observations bracket its captures; drain order would not).
                     events[#events+1] = {kind="observation",site_id=name,signal=site.signal,phase=site.phase,
-                                        semantic_publication="OPEN"}
+                                        semantic_publication="OPEN",refused_acquisitions=refused_acquisitions}
                 end
             end
         end
         assert(#events <= 1,"multiple semantic events at one shared CPU site")
         need(authority.valid(held) == true,"held identity changed while sampling")
+        local superseded = {}
         for name in pairs(starts) do
             active = name
-            need(latches[name] == nil,"duplicate acquisition start in one operation")
+            if latches[name] and SUPERSEDES[name] then
+                superseded[#superseded+1] = name
+            else
+                need(latches[name] == nil,"duplicate acquisition start in one operation")
+            end
             need(not ((name == "capture_party" and latches.capture_box) or (name == "capture_box" and latches.capture_party)),
                  "ambiguous capture destinations in one operation")
         end
+        for _,name in ipairs(superseded) do
+            local drop = drops[name] or {count=0}
+            drop.count,drop.reason = drop.count+1,"superseded: the prior attempt ended on a native failure/cancel branch"
+            drops[name] = drop
+        end
         for name in pairs(consume) do latches[name] = nil end
-        for name in pairs(invalidated) do latches[name] = nil end
+        for name in pairs(invalidated) do retire(name) end
         for name,value in pairs(starts) do latches[name] = value end
         if #events == 0 then return nil end
         for _,event in ipairs(events) do
@@ -560,9 +587,12 @@ local function build(options)
             if ok then return value end
             if type(value) == "table" and type(value.refusal) == "string" then
                 refusals[active or prepared.id] = value.refusal
+                if active and STARTS[active] and not STARTS[active].operation then
+                    refused_acquisitions = refused_acquisitions+1
+                end
                 -- ponytail: a refusal retires every open latch (fail closed); per-latch
                 -- invalidation only if a refusal ever strands an unrelated operation.
-                latches = {}
+                retire_all()
                 return nil
             end
             clear("guard_or_identity_failure"); error(value,0)
@@ -599,6 +629,7 @@ local function build(options)
         local result = service:status()
         result.runtime_authorized,result.physical_status,result.evidence_level = false,"OPEN","MODEL"
         result.refusals,result.open_obligations,result.drops = copy(refusals),copy(OPEN),copy(drops)
+        result.refused_acquisitions = refused_acquisitions
         result.pending_acquisitions = 0
         for _ in pairs(latches) do result.pending_acquisitions = result.pending_acquisitions+1 end
         return result

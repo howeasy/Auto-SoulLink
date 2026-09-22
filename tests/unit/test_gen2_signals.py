@@ -7,6 +7,37 @@ import pytest
 from lupa.lua54 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[2]
+# BizHawk 2.11.1 Gambatte emu.getregister keys (plus bank names): no HL/DE/BC/AF pairs
+# (docs/purergb/PLAN.md A15).
+BIZHAWK_REGISTERS = ("PC", "SP", "A", "B", "C", "D", "E", "F", "H", "L")
+PAIRS = {"AF": ("A", "F"), "BC": ("B", "C"), "DE": ("D", "E"), "HL": ("H", "L")}
+
+
+class Registers(dict):
+    """Single CPU registers as BizHawk has them. A test may set or read a pair for
+    convenience; the emulator side (bizhawk_register) refuses a pair name loudly."""
+
+    def __init__(self, sp):
+        super().__init__({name: 0 for name in BIZHAWK_REGISTERS})
+        self["SP"] = sp
+
+    def __setitem__(self, name, value):
+        if name in PAIRS:
+            super().__setitem__(PAIRS[name][0], value >> 8 & 255)
+            super().__setitem__(PAIRS[name][1], value & 255)
+        else:
+            super().__setitem__(name, value)
+
+    def __getitem__(self, name):
+        if name in PAIRS:
+            return super().__getitem__(PAIRS[name][0]) * 256 + super().__getitem__(PAIRS[name][1])
+        return super().__getitem__(name)
+
+
+def bizhawk_register(registers, name):
+    if name not in BIZHAWK_REGISTERS:
+        raise KeyError(f"BizHawk 2.11.1 emu.getregister has no {name!r} (singles only)")
+    return registers.get(name)
 
 
 class World:
@@ -18,8 +49,7 @@ class World:
         self.sites = self.pack["titles"][title]["sites"]
         self.p = self.profile["titles"][title]
         self.memory, self.rom, self.callbacks, self.removed = {}, {}, {}, []
-        self.reg = {"PC": 0, "SP": 0xC020 if title == "crystal" else 0xDF20,
-                    "AF": 0, "BC": 0, "DE": 0, "HL": 0}
+        self.reg = Registers(0xC020 if title == "crystal" else 0xDF20)
         self.bank, self.shadow, self.wram_bank, self.sram_bank = 0, 0, 1, 1
         self.generation, self.operation, self.frame, self.held = 1, "operation-1", 1, True
         self.fields = {name: row for site in self.sites.values() for name, row in site["point_symbols"].items()}
@@ -48,7 +78,7 @@ class World:
         self.io = self.lua.table(
             model_only=True, cart_ram_linear=True,
             read_u8=self.read, read_range=lambda a, n, d: self.lua.table_from([self.read(a + i, d) for i in range(n)]),
-            register=lambda name: self.reg.get(name), framecount=lambda: self.frame,
+            register=lambda name: bizhawk_register(self.reg, name), framecount=lambda: self.frame,
             on_bus_exec=self.register, unregister=self.unregister, bank_valid=self.bank_valid,
             stack_valid=lambda sp, n: self.stack["minimum_sp"] <= sp and sp + n <= self.stack["exclusive_stack_end"],
             domain_size=lambda domain: 0x8000 if domain == "CartRAM" else 0x200000,
@@ -183,7 +213,7 @@ class World:
             self.memory["System Bus", address + 1] = field["value"] >> 8
         for flag, value in guards.get("flags", {}).items():
             mask = {"Z": 0x80, "C": 0x10}[flag]
-            self.reg["AF"] = self.reg["AF"] & ~mask | (mask if value else 0)
+            self.reg["F"] = self.reg["F"] & ~mask | (mask if value else 0)
 
     @staticmethod
     def events(binder):
@@ -592,7 +622,7 @@ def test_a_faint_on_an_unreadable_slot_is_refused_not_fatal():
 def evolve(world, slot, new_species, *, link_mode=0, a=None, hl_delta=0):
     world.field("wCurPartyMon", slot)
     world.field("wLinkMode", link_mode)
-    world.reg["AF"] = (new_species if a is None else a) << 8
+    world.reg["A"] = new_species if a is None else a
     world.reg["HL"] = world.p["ram"]["wPartySpecies"] + slot + hl_delta
     world.fire("evolution_species_published")
 
@@ -641,3 +671,100 @@ def test_unqualified_evolution_context_is_refused_and_signals_keep_flowing(fault
     world.party([world.mon(species=26)])
     evolve(world, 0, 26)
     assert [event.kind for event in world.events(binder)] == ["key_change"]
+
+
+# ── N3-1: register pairs are composed from BizHawk's single registers ──────────────────
+def test_the_register_fake_is_bizhawk_faithful():
+    registers = Registers(0xC020)
+    registers["HL"] = 0xDCDF
+    assert (registers["H"], registers["L"], bizhawk_register(registers, "L")) == (0xDC, 0xDF, 0xDF)
+    for pair in PAIRS:
+        with pytest.raises(KeyError, match="singles only"):
+            bizhawk_register(registers, pair)
+
+
+def test_an_unavailable_single_register_is_a_refusal_not_a_stop():
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(hp=0)])
+    world.set_guards("whiteout_before_heal")
+    del world.reg["E"]  # the emulator answers nil for it
+    world.fire("whiteout_before_heal")
+    assert world.events(binder) == []
+    status = binder.status(binder)
+    assert status.failed is None and "CPU register E unavailable" in status.refusals.whiteout_before_heal
+    world.set_guards("whiteout_before_heal")
+    world.fire("whiteout_before_heal")
+    assert [event.kind for event in world.events(binder)] == ["whiteout"]
+
+
+# ── N3-2: a native failure branch between start and completion strands no event ────────
+def test_a_deposit_into_a_full_box_does_not_swallow_the_next_deposit():
+    world = World()
+    binder = world.bind()
+    a, b = world.mon(species=25), world.mon(species=172, dvs=0x3AAA)
+    world.party([a, b])
+    world.field("wCurPartyMon", 0)
+    world.fire("pc_deposit_begin")  # SendGetMonIntoFromBox carry -> .BoxFull: no completion
+    assert world.events(binder) == []
+    world.fire("pc_deposit_begin")  # the next attempt (after a box change)
+    world.party([b])
+    world.box([a])
+    world.fire("pc_deposit_complete")
+    (event,) = world.events(binder)
+    assert (event.kind, event.mon.key) == ("party_to_box", "2AAA:1234:19")
+    status = binder.status(binder)
+    assert status.failed is None and status.refusals.pc_deposit_begin is None
+    assert status.drops.pc_deposit_begin.count == 1 and "superseded" in status.drops.pc_deposit_begin.reason
+    assert status.pending_acquisitions == 0
+
+
+def test_a_withdraw_into_a_full_party_does_not_swallow_the_next_withdraw():
+    world = World()
+    binder = world.bind()
+    lead, boxed = world.mon(species=25), world.mon(species=172, dvs=0x3AAA)
+    world.party([lead])
+    world.box([boxed])
+    world.field("wCurPartyMon", 0)
+    world.fire("pc_withdraw_begin")  # carry -> .PartyFull
+    world.fire("pc_withdraw_begin")
+    world.party([lead, boxed])
+    world.box([])
+    world.fire("pc_withdraw_complete")
+    assert [(event.kind, event.mon.key) for event in world.events(binder)] == [("box_to_party", "3AAA:1234:AC")]
+    assert binder.status(binder).drops.pc_withdraw_begin.count == 1
+
+
+def test_a_declined_box_change_does_not_swallow_the_next_box_change():
+    world = World()
+    binder = world.bind()
+    world.reg["DE"] = 3
+    world.fire("change_box_begin")  # YesNoBox "No" -> .refused
+    world.reg["DE"] = 2
+    world.fire("change_box_begin")
+    world.field("wCurBox", 2)
+    world.box([world.mon(species=133)])
+    world.fire("change_box_loaded")
+    (event,) = world.events(binder)
+    assert (event.kind, event.old_box, event.new_box) == ("box_change", 0, 2)
+    assert binder.status(binder).drops.change_box_begin.count == 1
+
+
+# ── N3-3: an acquisition the binder refused after the engine inserted a mon is counted ──
+def test_refused_acquisitions_count_refusals_after_insertion_not_failed_throws():
+    world = World()
+    binder = world.bind()
+    count = lambda: binder.status(binder).refused_acquisitions  # noqa: E731
+    world.fire("capture_party_finalized")  # a missed throw reaches the same RET with no insertion
+    assert world.events(binder) == [] and count() == 0
+    world.party([world.mon(), world.mon(species=19, dvs=0x7AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    assert [event.kind for event in world.events(binder)] == ["capture"] and count() == 0
+    world.party([world.mon(), world.mon()])  # the caught record equals the lead: ambiguous
+    world.fire("capture_party")
+    assert world.events(binder) == [] and count() == 1
+    world.party([world.mon(), world.mon(species=19, dvs=0x8AAA)])
+    world.fire("capture_party")  # inserted, then the battle ends before the final name
+    world.fire("battle_end")
+    assert [event.kind for event in world.events(binder)] == ["observation"] and count() == 2

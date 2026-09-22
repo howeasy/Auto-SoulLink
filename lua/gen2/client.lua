@@ -20,7 +20,8 @@
 -- checkpoint. P4 (native panel, native sound, SLINK trade) is not here: those commands get
 -- the protocol's "nothing happened" replies (handle_command) and request_sfx_local is the
 -- sound seam.
-local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600 }
+local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
+                 MAX_HELD = 64 }
 
 -- Gen 2: the wild battle types whose failure dead-zones the map are exactly the ones the
 -- binder links to the map's area (signals.lua final_event: NORMAL 0, FISH 4, TREE 8);
@@ -63,12 +64,26 @@ function Client.new(p)
         -- until that record reads HP 0 (UpdateFaintedPlayerMon runs before the copy-back)
         faint_latches = {}, refusals_logged = {},
         pending_rescan = false, key_alias = nil, retired_alias = {},
+        -- Gen 2: messages observed before this connection's hello (see send)
+        held = {},
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
     local function send(event, fields)
         if not net.connected() then
             log("[SLink-gen2] drop " .. event .. ": not connected")
+            return false
+        end
+        -- Gen 2: nothing but the hello reaches the server before a hello is queued for this
+        -- connection/identity (Gen 1 gates tick/safe on the same readiness). The candidate
+        -- checkpoint refuses in the overworld, so that can be minutes: earlier messages wait
+        -- in order and follow the hello (frame_end); a reset/reload boundary drops them.
+        if event ~= "hello" and not (self.hello_session and self.hello_session:status().ready) then
+            if #self.held >= Client.MAX_HELD then
+                log("[SLink-gen2] drop " .. event .. ": pre-hello queue full")
+            else
+                self.held[#self.held + 1] = { event = event, fields = fields }
+            end
             return false
         end
         self.seq = self.seq + 1
@@ -223,6 +238,10 @@ function Client.new(p)
         if self.signals then self.signals:boundary(kind) end
         self.faint_latches, self.battle, self.pending_rescan = {}, nil, false
         self.key_alias, self.retired_alias = nil, {}
+        if #self.held > 0 then
+            log("[SLink-gen2] " .. #self.held .. " pre-hello message(s) dropped at the " .. kind .. " boundary")
+            self.held = {}
+        end
         self.hello_session:invalidate(why or kind)
     end
 
@@ -419,10 +438,11 @@ function Client.new(p)
     -- so there is no pending acquisition to settle as in Gen 1's settle_pending_change.
     local function publish_capture(ev)
         local m = ev.mon
-        if m.is_egg then log("[SLink-gen2] capture of an unhatched egg refused") return end
-        local key = mon_key(m)
-        if key ~= m.key then
-            log("[SLink-gen2] capture refused: key disagreement " .. tostring(key) .. " vs " .. tostring(m.key))
+        local key = not m.is_egg and mon_key(m) or nil
+        if key == nil or key ~= m.key then
+            log("[SLink-gen2] capture refused: " .. (m.is_egg and "unhatched egg"
+                or "key disagreement " .. tostring(key) .. " vs " .. tostring(m.key)))
+            if self.battle then self.battle.capture_refused = true end
             return
         end
         -- Gen 2: the hatch is the gift (O-15, gift_daycare); roamer (legend_<species>, O-17)
@@ -446,6 +466,9 @@ function Client.new(p)
             local scripted = wram_byte("wBattleScriptFlags")
             self.battle = { wild = true, area_id = area_id, species = foe and foe.species_id,
                             level = foe and foe.level, captured = false,
+                            -- Gen 2 (N3-3): the binder's count of acquisitions it refused after
+                            -- the engine inserted a mon, stamped in engine order on each observation
+                            refused_base = ev.refused_acquisitions,
                             -- scripted/static and special types resolve nothing (as the binder)
                             resolves = battle ~= nil and AREA_BATTLE_TYPES[battle.battle_type] == true
                                        and scripted ~= nil and math.floor(scripted / 128) % 2 == 0 }
@@ -462,7 +485,11 @@ function Client.new(p)
             local b = self.battle
             if b and b.wild and b.resolves and not b.captured and b.area_id ~= ""
                and not self.resolved_areas[b.area_id] then
-                if not self.has_pokeballs then
+                if b.capture_refused or ev.refused_acquisitions ~= b.refused_base then
+                    log("[SLink-gen2] a capture was refused in this battle: no_catch withheld, "
+                        .. b.area_id .. " stays open")
+                    hud.show("CATCH NOT REPORTED - SEE LOG", 255, 160, 64, 600)
+                elseif not self.has_pokeballs then
                     log("[SLink-gen2] no Poke Balls yet: no_catch withheld, " .. b.area_id .. " stays open")
                 else
                     send("no_catch", { area_id = b.area_id, species_id = b.species, level = b.level })
@@ -671,6 +698,11 @@ function Client.new(p)
         self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         connected = connected and self.hello_session:status().ready
+        if connected and #self.held > 0 then
+            local held = self.held
+            self.held = {}
+            for _, m in ipairs(held) do send(m.event, m.fields) end
+        end
         for _, batch in ipairs(self.signals and self.signals:drain() or {}) do
             for _, ev in ipairs(batch.events or {}) do
                 local ok, err = pcall(self.on_event, self, ev)

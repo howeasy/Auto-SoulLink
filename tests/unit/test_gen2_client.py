@@ -23,7 +23,8 @@ EMULATOR = r"""
 return function(rom, shadow_addr)
     local mem = {["System Bus"] = {}, CartRAM = {}}
     local emu = {bank = 1, shadow = 1, wram_bank = 1, frame = 1, callbacks = {}, writes = {},
-                 regs = {PC = 0, SP = 0xC020, AF = 0, BC = 0, DE = 0, HL = 0}}
+                 -- BizHawk 2.11.1 Gambatte emu.getregister: singles only, no pairs (PLAN A15)
+                 regs = {PC = 0, SP = 0xC020, A = 0, B = 0, C = 0, D = 0, E = 0, F = 0, H = 0, L = 0}}
     local io = {model_only = true, cart_ram_linear = true}
     function io.read_u8(a, d)
         d = d or "System Bus"
@@ -56,7 +57,11 @@ return function(rom, shadow_addr)
         if d == "ROM" then return #rom end
         return d == "CartRAM" and 0x8000 or 0x10000
     end
-    function io.register(name) return emu.regs[name] end
+    function io.register(name)
+        local value = emu.regs[name]
+        if value == nil then error("BizHawk 2.11.1 emu.getregister has no " .. tostring(name) .. " (singles only)") end
+        return value
+    end
     function io.framecount() return emu.frame end
     function io.on_bus_exec(fn, addr, name) emu.callbacks[name] = {fn = fn, addr = addr}; return name end
     function io.unregister(name) emu.callbacks[name] = nil; return true end
@@ -550,10 +555,121 @@ def test_an_evolution_publishes_key_change_and_a_cancelled_one_nothing():
     ivysaur = dict(bulbasaur, species=2)
     world.party([pikachu, ivysaur])
     world.field("wCurPartyMon", 1)
-    world.emu.regs["AF"] = 2 << 8
-    world.emu.regs["HL"] = world.profile["ram"]["wPartySpecies"] + 1
+    species_list = world.profile["ram"]["wPartySpecies"] + 1
+    world.emu.regs["A"], world.emu.regs["H"], world.emu.regs["L"] = 2, species_list >> 8, species_list & 255
     world.fire("evolution_species_published")
     world.frames(1)
     (change,) = world.sent("key_change")
     assert (change["old_key"], change["new_key"], change["reason"], change["new_species"]) == (
         codec_key(bulbasaur), codec_key(ivysaur), "evolution", 2)
+
+
+# ── N3 review findings ──────────────────────────────────────────────────────────────────
+def evolve_slot_one(world):
+    """Bulbasaur in slot 1 evolves; A and H/L are set as BizHawk exposes them (singles)."""
+    bulbasaur = mon(species=1, dvs=0x3AAA)
+    world.party([mon(), bulbasaur])
+    world.hello()
+    world.party([mon(), dict(bulbasaur, species=2)])
+    world.field("wCurPartyMon", 1)
+    species_list = world.profile["ram"]["wPartySpecies"] + 1
+    world.emu.regs["A"], world.emu.regs["H"], world.emu.regs["L"] = 2, species_list >> 8, species_list & 255
+    world.fire("evolution_species_published")
+    world.frames(1)
+
+
+def test_the_evolution_hl_guard_reads_bizhawk_single_registers():
+    def check(world):
+        evolve_slot_one(world)
+        assert [c["new_species"] for c in world.sent("key_change")] == [2]
+        assert not any("STOPPED" in text for text in world.shown())
+
+    # the pre-N3 binder asked the emulator for the pair "HL", which BizHawk does not have
+    falsify(check, mutant("lua/gen2/signals.lua", (
+        "if pair then return register(pair[1])*256+register(pair[2]) end", "")))
+
+
+def test_a_failed_deposit_does_not_swallow_the_next_one():
+    def check(world):
+        lead, pichu = mon(), mon(species=172, dvs=0x3AAA)
+        world.party([lead, pichu])
+        world.hello()
+        world.field("wCurPartyMon", 1)
+        world.fire("pc_deposit_begin")  # .BoxFull: the completion site is skipped
+        world.frames(1)
+        world.fire("pc_deposit_begin")  # box changed, same mon deposited again
+        world.party([lead])
+        world.box([pichu])
+        world.fire("pc_deposit_complete")
+        world.frames(1)
+        assert [m["key"] for m in world.sent("party_to_box")] == [codec_key(pichu)]
+
+    falsify(check, mutant("lua/gen2/signals.lua", ("if latches[name] and SUPERSEDES[name] then", "if false then")))
+
+
+def wild_battle(world):
+    world.hello()
+    world.reply({"cmd": "resolved_areas", "areas": []})
+    world.frames(1)
+    world.field("wBattleMode", 1)
+    world.fire("wild_ready")
+
+
+def end_battle(world):
+    world.fire("battle_end")
+    world.field("wBattleMode", 0)
+    world.frames(1)
+
+
+def test_a_refused_capture_never_becomes_a_no_catch():
+    def check(world):
+        wild_battle(world)
+        world.party([mon(), mon()])  # caught record identical to the lead: the binder refuses
+        world.fire("capture_party")
+        world.fire("capture_party_finalized")
+        world.frames(1)
+        end_battle(world)
+        assert world.sent("capture") == [] and world.sent("no_catch") == []
+        assert any("no_catch withheld, route_29 stays open" in line for line in world.logs.values())
+        assert "show:CATCH NOT REPORTED - SEE LOG" in world.shown()
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "if b.capture_refused or ev.refused_acquisitions ~= b.refused_base then", "if false then")))
+
+
+def test_a_missed_throw_still_ends_as_no_catch():
+    world = World()
+    wild_battle(world)
+    world.fire("capture_party_finalized")  # the ball missed: same RET, no insertion
+    world.frames(1)
+    end_battle(world)
+    assert [n["area_id"] for n in world.sent("no_catch")] == ["route_29"]
+
+
+def test_no_event_reaches_the_server_before_the_hello():
+    def check(world):
+        world.party([mon(hp=0), mon(species=172, dvs=0x3AAA)])
+        world.frames(120)
+        world.field("wCurPartyMon", 0)
+        world.fire("poison_faint")
+        world.frames(1)
+        assert world.sent() == []
+        world.hello()
+        assert [m["event"] for m in world.sent()][:2] == ["hello", "faint"]
+        assert world.sent("faint")[0]["key"] == codec_key(mon(hp=0))
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        'if event ~= "hello" and not (self.hello_session and self.hello_session:status().ready) then',
+        "if false then")))
+
+
+def test_a_reset_drops_messages_held_before_the_hello():
+    world = World()
+    world.party([mon(hp=0), mon(species=172, dvs=0x3AAA)])
+    world.fire("poison_faint")
+    world.frames(1)
+    world.fire("soft_reset")
+    world.frames(1)
+    world.party([mon(), mon(species=172, dvs=0x3AAA)])  # the reloaded save
+    world.hello()
+    assert [m["event"] for m in world.sent()] == ["hello"]
