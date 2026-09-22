@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 import sys
 
+import pytest
+
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 sys.path.insert(0, os.path.join(_REPO, "tools"))
 
@@ -140,6 +142,13 @@ def _stubbed_lane(monkeypatch, text: str):
     monkeypatch.setattr(gate.subprocess, "run", lambda *args, **kwargs: Proc())
     lane = gate.Lane("stub", [sys.executable, "-m", "pytest", "tests/unit"])
     return gate.run_lane(lane, quiet=True)
+
+
+@pytest.mark.parametrize("stdout", ["", "3989 tests collected in 4.80s\n"])
+def test_zero_execution_cannot_pass_the_gen1_binding(monkeypatch, stdout):
+    ok, detail = _stubbed_lane(monkeypatch, stdout)
+    assert not ok
+    assert "no passing tests executed" in detail
 
 
 def test_a_lane_only_run_is_not_a_release_verdict(monkeypatch, capsys):

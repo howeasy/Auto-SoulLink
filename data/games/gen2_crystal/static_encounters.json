@@ -1,0 +1,602 @@
+{
+  "schema": "gen2-static-encounters-v1",
+  "generator": "gen_gen2_statics.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "artifact": "pokecrystal",
+    "repo": "pokecrystal",
+    "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+    "sym_sha256": "cb16279e1c7a72a9e00b266f16d98f2efe9361a830e010a34307cd1d00a20c34",
+    "map_sha256": "64555bbcd59b928869c541478b9d16c8e8e9b81502099a18cf946dd570e1e50b",
+    "lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+    "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+  },
+  "version_dispatch": {
+    "applicable": false
+  },
+  "encounters": [
+    {
+      "id": "IlexForest:IlexForestShrineScript.CelebiEvent:466",
+      "map_name": "IlexForest",
+      "map_group": 3,
+      "map_number": 52,
+      "area_id": "ilex_forest",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/IlexForest.asm:466",
+      "script": "IlexForestShrineScript.CelebiEvent",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 251,
+      "species_const": "CELEBI",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "IlexForestShrineScript.CelebiEvent",
+        "bank": 27,
+        "addr": 28271,
+        "flat": 454255,
+        "expected_hex": "5dfb1e",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "LakeOfRage:RedGyarados:87",
+      "map_name": "LakeOfRage",
+      "map_group": 9,
+      "map_number": 6,
+      "area_id": "lake_of_rage",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/LakeOfRage.asm:87",
+      "script": "RedGyarados",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 130,
+      "species_const": "GYARADOS",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCESHINY"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RedGyarados",
+        "bank": 28,
+        "addr": 16493,
+        "flat": 458861,
+        "expected_hex": "5d821e",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route29:Route29Tutorial1:53",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "area_id": "route_29",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route29.asm:53",
+      "script": "Route29Tutorial1",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 19,
+      "species_const": "RATTATA",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Route29Tutorial1",
+        "bank": 104,
+        "addr": 20367,
+        "flat": 1707919,
+        "expected_hex": "5d1305",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route29:Route29Tutorial2:78",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "area_id": "route_29",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route29.asm:78",
+      "script": "Route29Tutorial2",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 19,
+      "species_const": "RATTATA",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Route29Tutorial2",
+        "bank": 104,
+        "addr": 20421,
+        "flat": 1707973,
+        "expected_hex": "5d1305",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route29:CatchingTutorialDudeScript:118",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "area_id": "route_29",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route29.asm:118",
+      "script": "CatchingTutorialDudeScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 19,
+      "species_const": "RATTATA",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CatchingTutorialDudeScript",
+        "bank": 104,
+        "addr": 20493,
+        "flat": 1708045,
+        "expected_hex": "5d1305",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route36:WateredWeirdTreeScript:77",
+      "map_name": "Route36",
+      "map_group": 10,
+      "map_number": 3,
+      "area_id": "route_36",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route36.asm:77",
+      "script": "WateredWeirdTreeScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 185,
+      "species_const": "SUDOWOODO",
+      "level": 20,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "WateredWeirdTreeScript",
+        "bank": 101,
+        "addr": 16487,
+        "flat": 1654887,
+        "expected_hex": "5db914",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB1F:VoltorbExplodingTrap:454",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 49,
+      "area_id": "mahogany_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB1F.asm:454",
+      "script": "VoltorbExplodingTrap",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 100,
+      "species_const": "VOLTORB",
+      "level": 23,
+      "kind": "scripted_trap_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "VoltorbExplodingTrap",
+        "bank": 27,
+        "addr": 19010,
+        "flat": 444994,
+        "expected_hex": "5d6417",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB1F:GeodudeExplodingTrap:464",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 49,
+      "area_id": "mahogany_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB1F.asm:464",
+      "script": "GeodudeExplodingTrap",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 74,
+      "species_const": "GEODUDE",
+      "level": 21,
+      "kind": "scripted_trap_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GeodudeExplodingTrap",
+        "bank": 27,
+        "addr": 19029,
+        "flat": 445013,
+        "expected_hex": "5d4a15",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB1F:KoffingExplodingTrap:474",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 49,
+      "area_id": "mahogany_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB1F.asm:474",
+      "script": "KoffingExplodingTrap",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 109,
+      "species_const": "KOFFING",
+      "level": 21,
+      "kind": "scripted_trap_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "KoffingExplodingTrap",
+        "bank": 27,
+        "addr": 19048,
+        "flat": 445032,
+        "expected_hex": "5d6d15",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode1:224",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 50,
+      "area_id": "mahogany_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB2F.asm:224",
+      "script": "RocketElectrode1",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "level": 23,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RocketElectrode1",
+        "bank": 27,
+        "addr": 20740,
+        "flat": 446724,
+        "expected_hex": "5d6517",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode2:242",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 50,
+      "area_id": "mahogany_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB2F.asm:242",
+      "script": "RocketElectrode2",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "level": 23,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RocketElectrode2",
+        "bank": 27,
+        "addr": 20783,
+        "flat": 446767,
+        "expected_hex": "5d6517",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode3:260",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 50,
+      "area_id": "mahogany_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB2F.asm:260",
+      "script": "RocketElectrode3",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "level": 23,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RocketElectrode3",
+        "bank": 27,
+        "addr": 20826,
+        "flat": 446810,
+        "expected_hex": "5d6517",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TinTower1F:TinTower1FSuicuneBattleScript.Next2:119",
+      "map_name": "TinTower1F",
+      "map_group": 3,
+      "map_number": 4,
+      "area_id": "tin_tower",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TinTower1F.asm:119",
+      "script": "TinTower1FSuicuneBattleScript.Next2",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 245,
+      "species_const": "SUICUNE",
+      "level": 40,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_SUICUNE"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "TinTower1FSuicuneBattleScript.Next2",
+        "bank": 97,
+        "addr": 20713,
+        "flat": 1593577,
+        "expected_hex": "5df528",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TinTowerRoof:TinTowerHoOh:34",
+      "map_name": "TinTowerRoof",
+      "map_group": 15,
+      "map_number": 12,
+      "area_id": "tin_tower",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TinTowerRoof.asm:34",
+      "script": "TinTowerHoOh",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 250,
+      "species_const": "HO_OH",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "TinTowerHoOh",
+        "bank": 29,
+        "addr": 29269,
+        "flat": 488021,
+        "expected_hex": "5dfa3c",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "UnionCaveB2F:UnionCaveLapras:31",
+      "map_name": "UnionCaveB2F",
+      "map_group": 3,
+      "map_number": 39,
+      "area_id": "union_cave",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/UnionCaveB2F.asm:31",
+      "script": "UnionCaveLapras",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 131,
+      "species_const": "LAPRAS",
+      "level": 20,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "UnionCaveLapras",
+        "bank": 22,
+        "addr": 25379,
+        "flat": 369443,
+        "expected_hex": "5d8314",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "VermilionCity:VermilionSnorlax.Awake:56",
+      "map_name": "VermilionCity",
+      "map_group": 12,
+      "map_number": 3,
+      "area_id": "vermilion_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/VermilionCity.asm:56",
+      "script": "VermilionSnorlax.Awake",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 143,
+      "species_const": "SNORLAX",
+      "level": 50,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "VermilionSnorlax.Awake",
+        "bank": 106,
+        "addr": 27063,
+        "flat": 1747383,
+        "expected_hex": "5d8f32",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "WhirlIslandLugiaChamber:Lugia:34",
+      "map_name": "WhirlIslandLugiaChamber",
+      "map_group": 3,
+      "map_number": 73,
+      "area_id": "whirl_islands",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/WhirlIslandLugiaChamber.asm:34",
+      "script": "Lugia",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 249,
+      "species_const": "LUGIA",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Lugia",
+        "bank": 99,
+        "addr": 17705,
+        "flat": 1623337,
+        "expected_hex": "5df93c",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    }
+  ],
+  "open_obligations": [
+    "runtime_script_reachability",
+    "capture_success_and_finalization",
+    "byte_witnesses_are_not_CPU_signal_sites"
+  ]
+}

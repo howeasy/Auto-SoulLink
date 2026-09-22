@@ -23,10 +23,49 @@ def _stubbed_lane(
     return gate.run_lane(gate.Lane("example", argv), quiet=True, allowed_skips=allowed_skips)
 
 
-def test_clean_pytest_lane_passes(monkeypatch):
-    ok, detail = _stubbed_lane(monkeypatch, "3 passed in 0.4s\n")
+@pytest.mark.parametrize("stdout", ["3 passed in 0.4s\n", "================ 3 passed in 0.4s ================\n"])
+def test_clean_pytest_lane_passes(monkeypatch, stdout):
+    ok, detail = _stubbed_lane(monkeypatch, stdout)
     assert ok, detail
     assert "3 passed" in detail
+
+
+@pytest.mark.parametrize("stdout", ["", "3989 tests collected in 4.80s\n", "0 passed in 0.01s\n"])
+def test_zero_exit_without_executed_tests_fails(monkeypatch, stdout):
+    ok, detail = _stubbed_lane(monkeypatch, stdout)
+    assert not ok
+    assert "no passing tests executed" in detail
+
+
+def test_inherited_collect_only_cannot_pass_a_release_lane(monkeypatch, tmp_path):
+    test_file = tmp_path / "test_required_lane.py"
+    test_file.write_text(
+        "import pytest\n"
+        "@pytest.mark.parametrize('label', ['3 passed'])\n"
+        "def test_required_behavior(label):\n    assert False\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--collect-only")
+    subprocess_run = gate.subprocess.run
+    processes = []
+
+    def record_process(*args, **kwargs):
+        proc = subprocess_run(*args, **kwargs)
+        processes.append(proc)
+        return proc
+
+    monkeypatch.setattr(gate.subprocess, "run", record_process)
+    lane = gate.Lane(
+        "required", [sys.executable, "-m", "pytest", str(test_file), "-q", "-p", "no:cacheprovider"],
+        env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    ok, detail = gate.run_lane(lane, quiet=True, allowed_skips=())
+    assert len(processes) == 1
+    assert processes[0].returncode == 0
+    assert "1 test collected" in processes[0].stdout
+    assert "[3 passed]" in processes[0].stdout
+    assert not ok, detail
+    assert "no passing tests executed" in detail
 
 
 def test_skip_without_printed_reason_fails(monkeypatch):
@@ -46,6 +85,21 @@ def test_only_the_callers_declared_skip_reason_is_allowed(monkeypatch):
 
     ok, _ = _stubbed_lane(monkeypatch, summary)
     assert not ok
+
+
+def test_allowlisted_skips_without_executed_tests_cannot_pass(monkeypatch):
+    reason = "fixture belongs to another selected artifact"
+    ok, detail = _stubbed_lane(
+        monkeypatch, f"1 skipped in 0.1s\nSKIPPED [1] tests/x.py:12: {reason}\n",
+        allowed_skips=[(reason, "binder-declared exclusion")],
+    )
+    assert not ok
+    assert "no passing tests executed" in detail
+
+
+def test_successful_nonpytest_command_does_not_need_a_test_summary(monkeypatch):
+    ok, detail = _stubbed_lane(monkeypatch, "", pytest_lane=False)
+    assert ok, detail
 
 
 def test_unexplained_skip_fails_despite_another_allowed_reason(monkeypatch):

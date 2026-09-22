@@ -1,193 +1,149 @@
-#!/usr/bin/env python3
-"""Generate Gen 2 Crystal full trainer data from pret/pokecrystal.
+"""Generate all selected Gen 2 trainer parties from ASM and verify every ROM byte.
 
-Reads:
-    .cache/pret/pokecrystal/data/trainers/parties.asm
-
-Writes:
-    data/games/gen2_crystal/trainers.json    (extended named_trainers)
-    lua/games/gen2_crystal_trainers.lua      (parallel update)
-
-The classes dict is preserved (already complete from earlier phases). Only the
-named_trainers map is extended: every instance of every class gets a personal
-name. In pret each XxxGroup: section corresponds to one trainer class
-(class_id N matches the Nth group in the file, 1-indexed). Inside a group the
-trainer instances are listed in order; each starts with a line like
-    db "NAME@", TRAINERTYPE_*
-
-Class display names are NOT changed by this script — see the existing
-"classes" map for the canonical labels. Only personal names per instance.
+Keeps consumer-compatible classes/named_trainers maps; adds complete typed parties.
+Mystery Gift CAL2, link and Battle Tower parties remain explicit dynamic exclusions.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
-import sys
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_REPO = os.path.normpath(os.path.join(_THIS_DIR, ".."))
-_PRET = os.path.join(_REPO, ".cache", "pret", "pokecrystal")
-_TRAINERS_JSON = os.path.join(_REPO, "data", "games", "gen2_crystal", "trainers.json")
-_TRAINERS_LUA = os.path.join(_REPO, "lua", "games", "gen2_crystal_trainers.lua")
-_PARTIES_ASM = os.path.join(_PRET, "data", "trainers", "parties.asm")
-
-# Special-character pret names → display.
-NAME_DISPLAY_OVERRIDES = {
-    "FRIEDA":  "Frieda",
-    "TUSCANY": "Tuscany",
-    "ARTHUR":  "Arthur",
-    "SUNNY":   "Sunny",
-    "WESLEY":  "Wesley",
-    "SANTOS":  "Santos",
-    "MONICA":  "Monica",
-}
+if __package__:
+    from .gen_gen2_area_map import source_lines
+    from .gen_gen2_charmap import encode, name_list, parse_charmap, run_cli, verify_table
+    from .gen_gen2_statics import arguments, byte, source_ref, values
+else:
+    from gen_gen2_area_map import source_lines
+    from gen_gen2_charmap import encode, name_list, parse_charmap, run_cli, verify_table
+    from gen_gen2_statics import arguments, byte, source_ref, values
 
 
-def title_case_name(raw: str) -> str:
-    """Convert pret all-caps trainer name to display form.
-
-    Most names are pure alphabetic; the title-case heuristic gives "Joey",
-    "Falkner", etc. Compound names with apostrophes or honorifics get
-    overrides above.
-    """
-    if raw in NAME_DISPLAY_OVERRIDES:
-        return NAME_DISPLAY_OVERRIDES[raw]
-    # Special-char trainers ("MR." prefix, etc.)
-    if raw.startswith("MR_"):
-        return "Mr. " + raw[3:].title()
-    # Default: title-case (Falkner, Joey, etc.)
-    return raw.title()
-
-
-def parse_parties_asm(path: str) -> dict[int, dict[int, str]]:
-    """Return {class_id: {instance_id: personal_name}}.
-
-    class_id is 1-based, matching Nth XxxGroup: label in the file.
-    instance_id is 1-based within the class.
-    """
-    out: dict[int, dict[int, str]] = {}
-    class_id = 0
-    instance_id = 0
-    label_re = re.compile(r"^([A-Za-z_0-9]+)Group:\s*$")
-    name_re = re.compile(r'^db\s+"([^"@]+)@"\s*,\s*TRAINERTYPE')
-
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.split(";", 1)[0]  # keep leading whitespace
-            stripped = line.strip()
-            if not stripped:
-                continue
-            m = label_re.match(stripped)
-            if m:
-                class_id += 1
-                instance_id = 0
-                out[class_id] = {}
-                continue
-            if class_id == 0:
-                continue
-            m = name_re.match(stripped)
-            if m:
-                instance_id += 1
-                name = m.group(1).strip()
-                out[class_id][instance_id] = title_case_name(name)
-    return out
+def trainer_classes(ctx):
+    classes, instances, current, ordinal = {}, {}, None, 0
+    for _, line in source_lines(ctx.read_source("constants/trainer_constants.asm"), ctx.title):
+        if match := re.fullmatch(r"trainerclass (\w+)", line):
+            current = match[1]
+            classes[current] = ordinal
+            instances[ordinal] = []
+            ordinal += 1
+        elif match := re.fullmatch(r"const (\w+)", line):
+            if current is not None:
+                instances[classes[current]].append(match[1])
+        elif line.startswith(("const_skip", "const_next")):
+            raise ValueError("unsupported trainer instance numbering")
+    if classes.get("TRAINER_NONE") != 0 or classes.get("FALKNER") != 1:
+        raise ValueError("trainer class origin changed")
+    return classes, instances
 
 
-def main() -> int:
-    if not os.path.exists(_PRET):
-        sys.stderr.write(f"Missing pret repo at {_PRET}\n")
-        return 1
-
-    parsed = parse_parties_asm(_PARTIES_ASM)
-    total_trainers = sum(len(v) for v in parsed.values())
-
-    # Read existing trainers.json; keep its classes dict intact.
-    with open(_TRAINERS_JSON, encoding="utf-8") as f:
-        existing = json.load(f)
-
-    # Build new named_trainers: every (class_id, instance_id) gets a name.
-    named: dict[str, dict[str, str]] = {}
-    for class_id, instances in sorted(parsed.items()):
-        if not instances:
+def parse_parties(ctx, names, encoding):
+    groups, group, trainer = {}, None, None
+    for line_no, line in source_lines(ctx.read_source("data/trainers/parties.asm"), ctx.title):
+        if line.startswith("INCLUDE ") or line == "Trainers:":
             continue
-        named[str(class_id)] = {str(iid): n for iid, n in sorted(instances.items())}
-
-    new_json = {
-        "classes": existing["classes"],
-        "named_trainers": named,
-    }
-
-    with open(_TRAINERS_JSON, "w", encoding="utf-8") as f:
-        json.dump(new_json, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-    print(f"Wrote {_TRAINERS_JSON}")
-    print(f"  {len(named)} classes, {total_trainers} trainers total")
-
-    # Regenerate the parallel Lua module so the client can resolve names
-    # without a server roundtrip (mirrors the existing module's structure).
-    write_lua_module(existing["classes"], named)
-    print(f"Wrote {_TRAINERS_LUA}")
-    return 0
-
-
-def write_lua_module(classes: dict[str, str], named: dict[str, dict[str, str]]) -> None:
-    """Write the Lua trainer module."""
-    lines: list[str] = []
-    lines.append("--[[")
-    lines.append("  lua/games/gen2_crystal_trainers.lua — Gen 2 trainer class + named lookup.")
-    lines.append("")
-    lines.append("  Source: pret/pokecrystal constants/trainer_constants.asm + data/trainers/parties.asm.")
-    lines.append("  Class IDs are 1-based raw values stored in wOtherTrainerClass.")
-    lines.append("  Generated by tools/gen_gen2_trainers.py — every trainer instance has a name.")
-    lines.append("--]]")
-    lines.append("")
-    lines.append("local M = {}")
-    lines.append("")
-    lines.append("M.CLASS_NAMES = {")
-    for cid_str in sorted(classes, key=int):
-        cid = int(cid_str)
-        name = classes[cid_str]
-        lines.append(f'    [{cid}] = {_lua_string(name)},')
-    lines.append("}")
-    lines.append("")
-    lines.append("M.NAMED = {")
-    for cid_str in sorted(named, key=int):
-        cid = int(cid_str)
-        instances = named[cid_str]
-        entries = []
-        max_iid = max(int(iid) for iid in instances)
-        # Build a positional array indexed 1..max_iid; gaps get nil placeholder.
-        for iid in range(1, max_iid + 1):
-            name = instances.get(str(iid))
-            entries.append(_lua_string(name) if name else "nil")
-        lines.append(f"    [{cid}] = {{{', '.join(entries)}}},")
-    lines.append("}")
-    lines.append("")
-    lines.append("--- Resolve a (class_id, trainer_id) pair to (class_name, trainer_name).")
-    lines.append("-- trainer_id is 1-based, matching wOtherTrainerID.")
-    lines.append("-- Returns empty strings if either lookup fails.")
-    lines.append("function M.resolve(class_id, trainer_id)")
-    lines.append("    local class_name = M.CLASS_NAMES[class_id] or \"\"")
-    lines.append("    local trainer_name = \"\"")
-    lines.append("    local instances = M.NAMED[class_id]")
-    lines.append("    if instances then")
-    lines.append("        trainer_name = instances[trainer_id] or \"\"")
-    lines.append("    end")
-    lines.append("    return class_name, trainer_name")
-    lines.append("end")
-    lines.append("")
-    lines.append("return M")
-    lines.append("")
-
-    with open(_TRAINERS_LUA, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        if match := re.fullmatch(r"(\w+Group):", line):
+            if trainer is not None or match[1] in groups:
+                raise ValueError("unterminated trainer or duplicate group")
+            group = match[1]
+            groups[group] = []
+        elif match := re.fullmatch(r'db "([^"\n]*)@",\s*(TRAINERTYPE_\w+)', line):
+            if group is None or trainer is not None:
+                raise ValueError("unexpected trainer header")
+            kind = names.get(match[2])
+            if kind not in (0, 1, 2, 3):
+                raise ValueError("unsupported trainer party type")
+            raw_name = match[1]
+            encoded = encode(raw_name + "@", encoding)
+            if len(encoded) > 11 or 0xff in encoded:
+                raise ValueError("invalid trainer name bytes")
+            trainer = {"name_raw": raw_name, "name": raw_name.title(), "trainer_type": kind,
+                       "party": [], "source": source_ref(ctx, "data/trainers/parties.asm", line_no),
+                       "encoded": bytearray(encoded + bytes([kind]))}
+        elif line == "db -1":
+            if trainer is None or not 1 <= len(trainer["party"]) <= 6:
+                raise ValueError("empty/oversized/missing trainer party")
+            trainer["encoded"].append(255)
+            groups[group].append(trainer)
+            trainer = None
+        elif line.startswith("db "):
+            if trainer is None:
+                raise ValueError("party data outside trainer record")
+            fields = [byte(token, names) for token in arguments(line[3:])]
+            kind = trainer["trainer_type"]
+            expected = 2 + bool(kind & 2) + 4 * bool(kind & 1)
+            if len(fields) != expected or not 1 <= fields[0] <= 100 or not 1 <= fields[1] <= 251:
+                raise ValueError("malformed trainer monster record")
+            mon = {"level": fields[0], "species": fields[1],
+                   "item": fields[2] if kind & 2 else None,
+                   "moves": fields[-4:] if kind & 1 else None}
+            if mon["moves"] is not None and any(move > 251 for move in mon["moves"]):
+                raise ValueError("invalid trainer move")
+            trainer["party"].append(mon)
+            trainer["encoded"].extend(fields)
+        else:
+            raise ValueError(f"unsupported trainer source line {line_no}: {line}")
+    if trainer is not None or not groups:
+        raise ValueError("unterminated/empty trainer source")
+    return groups
 
 
-def _lua_string(s: str) -> str:
-    """Lua double-quoted string literal with backslash escaping."""
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+def display_name(name):
+    return name.replace("<PKMN>", "Pokémon").replace("#", "Poké").title()
+
+
+def build(ctx):
+    """Derive named trainer parties and retain dynamic caller exclusions."""
+    names = values(ctx)
+    classes, instances = trainer_classes(ctx)
+    encoding = parse_charmap(ctx.read_source("constants/charmap.asm"))["encoding"]
+    groups = parse_parties(ctx, names, encoding)
+    pointers = []
+    for _, line in source_lines(ctx.read_source("data/trainers/party_pointers.asm"), ctx.title):
+        if match := re.fullmatch(r"dw (\w+Group)", line):
+            pointers.append(match[1])
+        elif line != "TrainerGroups:" and not line.startswith(("table_width ", "assert_table_length ")):
+            raise ValueError(f"unsupported trainer pointer source: {line}")
+    if len(pointers) != len(classes) - 1 or set(pointers) != set(groups):
+        raise ValueError("trainer pointer/class/group coverage mismatch")
+    bank = ctx.symbol("TrainerGroups").bank
+    expected = bytearray()
+    for label in pointers:
+        symbol = ctx.symbol(label)
+        if symbol.bank != bank:
+            raise ValueError("trainer group pointer crosses bank")
+        expected.extend(symbol.address.to_bytes(2, "little"))
+    verify_table(ctx, "TrainerGroups", bytes(expected))
+    class_names, names_receipt = name_list(ctx, "data/trainers/class_names.asm", "TrainerClassNames",
+                                          "TRAINER_CLASS_NAME_LENGTH", len(pointers))
+    output = {"schema": "gen2-trainers-v1", "generator": "gen_gen2_trainers.py",
+              "source": ctx.source_record(), "classes": {"0": "Nobody"}, "named_trainers": {},
+              "class_constants": {str(value): name for name, value in classes.items()},
+              "parties": {}, "class_names_rom": names_receipt,
+              "open_obligations": ["MysteryGift_CAL2_party_from_SRAM", "BattleTower_and_link_parties",
+                                   "runtime_trainer_dispatch_and_battle_completion"]}
+    for class_id, label in enumerate(pointers, 1):
+        trainers = groups[label]
+        if len(trainers) != len(instances[class_id]):
+            raise ValueError(f"{label}: source trainer-instance coverage mismatch")
+        raw = b"".join(bytes(row["encoded"]) for row in trainers)
+        offset = verify_table(ctx, label, raw)
+        output["classes"][str(class_id)] = display_name(class_names[class_id - 1])
+        output["named_trainers"][str(class_id)] = {}
+        output["parties"][str(class_id)] = {}
+        for trainer_id, trainer in enumerate(trainers, 1):
+            encoded = bytes(trainer.pop("encoded"))
+            trainer.update(id=trainer_id, class_id=class_id,
+                           constant=instances[class_id][trainer_id - 1],
+                           rom={"flat": offset, "length": len(encoded), "expected_hex": encoded.hex()},
+                           runtime_party_source="SRAM_OVERRIDE" if classes.get("CAL") == class_id and trainer_id == 2 else "ROM_TABLE")
+            output["named_trainers"][str(class_id)][str(trainer_id)] = trainer["name"]
+            output["parties"][str(class_id)][str(trainer_id)] = trainer
+            offset += len(encoded)
+    return output
+
+
+def main(argv=None):
+    return run_cli(argv, build, "trainers.json")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

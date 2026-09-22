@@ -1,0 +1,3495 @@
+{
+  "schema": "gen2-engine-signals-v1",
+  "generator": "tools/gen_gen2_engine_signals.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "artifact": "pokesilver",
+    "repo": "pokegold",
+    "commit": "656583c939d30f920a316177311a502dd222b57c",
+    "rom_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+    "sym_sha256": "208a2b0c20bde8a2997ab4f097d5173eb5554bfae6e553e48fe411d28089c461",
+    "map_sha256": "7aacbebc1564cdc4c09491034591b25cf2998f1df78f0e5aa30eb11747f6ab60",
+    "lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+    "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+  },
+  "specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+  "evidence_level": "SOURCE",
+  "runtime_admission": "NOT_GRANTED",
+  "f3_complete": false,
+  "titles": {
+    "silver": {
+      "sites": {
+        "battle_faint": {
+          "signal": "player_faint",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "UpdateFaintedPlayerMon",
+          "symbol_offset": 0,
+          "bank": 15,
+          "addr": 20724,
+          "rom_offset": 250100,
+          "expected_hex": "fac6cf4f2142cb",
+          "instructions": [
+            "ld a, [wCurBattleMon]",
+            "ld c, a",
+            "ld hl, wBattleParticipantsNotFainted"
+          ],
+          "phase": "before_party_copyback",
+          "semantics": "Engine faint handling has selected wCurBattleMon. Battle HP/status copyback has not yet run; snapshot battle and party records separately.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurBattleMon": {
+              "bank": 0,
+              "addr": 53190
+            },
+            "wBattleMonHP": {
+              "bank": 0,
+              "addr": 51996
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "wBattleResult": {
+              "bank": 0,
+              "addr": 53225
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 15,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 2551,
+              "line_end": 2554,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L2551"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 2514,
+              "line_end": 2515,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L2514"
+            }
+          ]
+        },
+        "battle_end": {
+          "signal": "battle_end_result",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "ExitBattle",
+          "symbol_offset": 0,
+          "bank": 15,
+          "addr": 29782,
+          "rom_offset": 259158,
+          "expected_hex": "cd307d2005",
+          "instructions": [
+            "call IsLinkBattle",
+            "jr nz, .HandleEndOfBattle"
+          ],
+          "phase": "before_end_processing",
+          "semantics": "Entry precedes end-result handling, evolution and cleanup. wBattleResult remains a bitfield; this is not completion or whiteout proof.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wBattleMode": {
+              "bank": 1,
+              "addr": 53526
+            },
+            "wBattleResult": {
+              "bank": 0,
+              "addr": 53225
+            },
+            "wLinkMode": {
+              "bank": 1,
+              "addr": 53314
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 15,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 7965,
+              "line_end": 7967,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7965"
+            }
+          ]
+        },
+        "wild_ready": {
+          "signal": "wild_battle_start",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "InitEnemyWildmon.skip_unown",
+          "symbol_offset": 0,
+          "bank": 15,
+          "addr": 29696,
+          "rom_offset": 259072,
+          "expected_hex": "110090",
+          "instructions": [
+            "ld de, vTiles2"
+          ],
+          "phase": "after_enemy_load",
+          "semantics": "LoadEnemyMon and wild move/PP staging precede this local label; presentation work remains. Source candidate only.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wBattleMode": {
+              "bank": 1,
+              "addr": 53526
+            },
+            "wEnemyMonSpecies": {
+              "bank": 1,
+              "addr": 53487
+            },
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 15,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 7903,
+              "line_end": 7904,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7903"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 7881,
+              "line_end": 7902,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7881"
+            }
+          ]
+        },
+        "trainer_ready": {
+          "signal": "trainer_battle_start",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "InitEnemyTrainer.done",
+          "symbol_offset": 0,
+          "bank": 15,
+          "addr": 29636,
+          "rom_offset": 259012,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "return_after_trainer_setup",
+          "semantics": "ReadTrainerParty and trainer-mode assignment precede the return. No claim that a runtime hook has fired.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wBattleMode": {
+              "bank": 1,
+              "addr": 53526
+            },
+            "wOtherTrainerClass": {
+              "bank": 1,
+              "addr": 53528
+            },
+            "wOtherTrainerID": {
+              "bank": 1,
+              "addr": 53531
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 15,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 7878,
+              "line_end": 7879,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7878"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/battle/core.asm",
+              "line_start": 7827,
+              "line_end": 7880,
+              "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7827"
+            }
+          ]
+        },
+        "new_game": {
+          "signal": "new_game",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "NewGame",
+          "symbol_offset": 0,
+          "bank": 1,
+          "addr": 23582,
+          "rom_offset": 23582,
+          "expected_hex": "afeacbc1cd3a5c",
+          "instructions": [
+            "xor a",
+            "ld [wDebugFlags], a",
+            "call ResetWRAM"
+          ],
+          "phase": "before_reset_wram",
+          "semantics": "New-game entry precedes ResetWRAM and campaign initialization; it is not an admitted live-session boundary.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wPlayerID": {
+              "bank": 1,
+              "addr": 53665
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 1,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/intro_menu.asm",
+              "line_start": 1,
+              "line_end": 4,
+              "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/intro_menu.asm#L1"
+            }
+          ]
+        },
+        "soft_reset": {
+          "signal": "soft_reset",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "Reset",
+          "symbol_offset": 0,
+          "bank": 0,
+          "addr": 1456,
+          "rom_offset": 1456,
+          "expected_hex": "cd4f3daf",
+          "instructions": [
+            "call InitSound",
+            "xor a"
+          ],
+          "phase": "reset_entry",
+          "semantics": "Reset entry invalidates observations; subsequent Init also has cold-start callers. This is not a new-game classifier.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {},
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 0,
+            "required": false
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "home/init.asm",
+              "line_start": 1,
+              "line_end": 3,
+              "source_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/init.asm#L1"
+            }
+          ]
+        },
+        "hatch_species": {
+          "signal": "egg_hatch",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "HatchEggs.nottogepi",
+          "symbol_offset": 6,
+          "bank": 5,
+          "addr": 29549,
+          "rom_offset": 95085,
+          "expected_hex": "ea51d1",
+          "instructions": [
+            "ld [wNamedObjectIndex], a"
+          ],
+          "phase": "after_egg_species_marker",
+          "semantics": "The parallel party species entry has replaced EGG. HP, OT identity and naming still change later; publication must be deferred.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "wPartySpecies": {
+              "bank": 1,
+              "addr": 55843
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 5,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/breeding.asm",
+              "line_start": 244,
+              "line_end": 251,
+              "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L244"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/breeding.asm",
+              "line_start": 206,
+              "line_end": 243,
+              "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L206"
+            }
+          ]
+        },
+        "save_completed": {
+          "signal": "save_completed",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "_SaveGameData",
+          "symbol_offset": 65,
+          "bank": 5,
+          "addr": 19725,
+          "rom_offset": 85261,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "before_success_return",
+          "semantics": "All _SaveGameData calls have returned at this terminal RET. It is a CPU completion candidate, not CartRAM durability or recovery proof.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wSaveFileExists": {
+              "bank": 1,
+              "addr": 53658
+            },
+            "wSavedAtLeastOnce": {
+              "bank": 1,
+              "addr": 53722
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 5,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/save.asm",
+              "line_start": 273,
+              "line_end": 292,
+              "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L273"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/save.asm",
+              "line_start": 273,
+              "line_end": 292,
+              "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L273"
+            }
+          ]
+        },
+        "poison_faint": {
+          "signal": "poison_faint",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "DoPoisonStep.DamageMonIfPoisoned",
+          "symbol_offset": 27,
+          "bank": 20,
+          "addr": 18047,
+          "rom_offset": 329343,
+          "expected_hex": "3e20cd3a3b3600",
+          "instructions": [
+            "ld a, MON_STATUS",
+            "call GetPartyParamLocation",
+            "ld [hl], 0"
+          ],
+          "phase": "after_poison_hp_zero",
+          "semantics": "This branch follows one HP of poison damage and a zero HP result. Status reset follows; wCurPartyMon identifies the affected slot.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "wPoisonStepPartyFlags": {
+              "bank": 0,
+              "addr": 53034
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 20,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/poisonstep.asm",
+              "line_start": 59,
+              "line_end": 90,
+              "source_sha256": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/poisonstep.asm#L59"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/poisonstep.asm",
+              "line_start": 16,
+              "line_end": 18,
+              "source_sha256": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/poisonstep.asm#L16"
+            }
+          ]
+        },
+        "capture_party": {
+          "signal": "capture_party",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PokeBallEffect.skip_pokedex",
+          "symbol_offset": 27,
+          "bank": 3,
+          "addr": 27470,
+          "rom_offset": 60238,
+          "expected_hex": "fa02d0",
+          "instructions": [
+            "ld a, [wCurItem]"
+          ],
+          "phase": "post_insert_pre_nickname",
+          "semantics": "Party-count fork selected TryAddMonToParty; its predef has returned. Caught metadata and nickname work remain; retain acquisition until final identity readback.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 544,
+              "line_end": 558,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L544"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 543,
+              "line_end": 570,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L543"
+            }
+          ]
+        },
+        "capture_box": {
+          "signal": "capture_box",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PokeBallEffect.SendToPC",
+          "symbol_offset": 8,
+          "bank": 3,
+          "addr": 27569,
+          "rom_offset": 60337,
+          "expected_hex": "3e01",
+          "instructions": [
+            "ld a, BANK(sBoxCount)"
+          ],
+          "phase": "post_insert_pre_nickname",
+          "semantics": "SendMonIntoBox predef has returned on the full-party catch branch, before the box-count full flag check. Final-slot and nonfinal-slot runtime controls remain open.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 607,
+              "line_end": 612,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L607"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 543,
+              "line_end": 570,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L543"
+            }
+          ]
+        },
+        "whiteout_before_heal": {
+          "signal": "whiteout",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "Special",
+          "symbol_offset": 0,
+          "bank": 3,
+          "addr": 16939,
+          "rom_offset": 49707,
+          "expected_hex": "213942191919",
+          "instructions": [
+            "ld hl, SpecialsPointers",
+            "add hl, de",
+            "add hl, de",
+            "add hl, de"
+          ],
+          "phase": "before_heal_dispatch",
+          "semantics": "CPU Special dispatch runs before HealParty. Every generated DE, script-bank, script-position and two-level CPU return-stack guard is mandatory; ordinary heals must not be treated as whiteout.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "registers": {
+              "DE": 27
+            },
+            "stack_words_equals": [
+              {
+                "sp_offset": 0,
+                "width": 2,
+                "byte_order": "little",
+                "value": 11828,
+                "meaning": "FarCall_hl call FarCall_JumpToHL return address"
+              },
+              {
+                "sp_offset": 4,
+                "width": 2,
+                "byte_order": "little",
+                "value": 27991,
+                "meaning": "Script_special farcall return after saved AF word"
+              }
+            ],
+            "memory_equals": [
+              {
+                "symbol": "wScriptBank",
+                "bank": 1,
+                "addr": 53600,
+                "width": 1,
+                "value": 4
+              },
+              {
+                "symbol": "wScriptPos",
+                "bank": 1,
+                "addr": 53601,
+                "width": 2,
+                "byte_order": "little",
+                "value": 26791
+              }
+            ],
+            "script_context": {
+              "symbol": "Script_Whiteout",
+              "bank": 4,
+              "addr": 26779,
+              "expected_hex": "4cc268530f2e008a280f1b00"
+            },
+            "runtime_guard_qualification": "OPEN"
+          },
+          "point_symbols": {
+            "wScriptBank": {
+              "bank": 1,
+              "addr": 53600
+            },
+            "wScriptPos": {
+              "bank": 1,
+              "addr": 53601
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/specials.asm",
+              "line_start": 1,
+              "line_end": 6,
+              "source_sha256": "2c86084855998e078e930deb88f70ced8523ec40da1bdd5520fff4393115466b",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/specials.asm#L1"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/whiteout.asm",
+              "line_start": 9,
+              "line_end": 14,
+              "source_sha256": "f96dfa2b188e4622e12498cd4b5cbab596c0138446b8e549f1305d5ffb874b06",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/whiteout.asm#L9"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/overworld/scripting.asm",
+              "line_start": 257,
+              "line_end": 263,
+              "source_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/scripting.asm#L257"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "home/map.asm",
+              "line_start": 1482,
+              "line_end": 1510,
+              "source_sha256": "3f010e2839eeee13f451580c81ec8787639ccab0b5915546f8cb183fd390cbeb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/map.asm#L1482"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "macros/scripts/events.asm",
+              "line_start": 507,
+              "line_end": 510,
+              "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L507"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "macros/scripts/events.asm",
+              "line_start": 548,
+              "line_end": 550,
+              "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L548"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "macros/scripts/events.asm",
+              "line_start": 99,
+              "line_end": 102,
+              "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L99"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "macros/scripts/events.asm",
+              "line_start": 871,
+              "line_end": 874,
+              "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L871"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "home/farcall.asm",
+              "line_start": 1,
+              "line_end": 9,
+              "source_sha256": "3b40cb8d4dcd26d35e71425af1792217508676f109cb7326ceabdb2b7becf0f1",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/farcall.asm#L1"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "home/header.asm",
+              "line_start": 8,
+              "line_end": 9,
+              "source_sha256": "16520be0bd315fadeca15a6e7e949bdd681ea4648c2758762f56a192950c1abc",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/header.asm#L8"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "home/header.asm",
+              "line_start": 12,
+              "line_end": 15,
+              "source_sha256": "16520be0bd315fadeca15a6e7e949bdd681ea4648c2758762f56a192950c1abc",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/header.asm#L12"
+            }
+          ]
+        },
+        "pc_deposit_begin": {
+          "signal": "pc_deposit",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "DepositPokemon",
+          "symbol_offset": 24,
+          "bank": 56,
+          "addr": 30835,
+          "rom_offset": 931955,
+          "expected_hex": "3e08cd492e",
+          "instructions": [
+            "predef SendGetMonIntoFromBox"
+          ],
+          "phase": "before_transfer_attempt",
+          "semantics": "Snapshot selected identity before transfer; full-box/full-party failure must clear the attempt without publication.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 1746,
+              "line_end": 1756,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1746"
+            }
+          ]
+        },
+        "pc_deposit_complete": {
+          "signal": "pc_deposit",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "DepositPokemon",
+          "symbol_offset": 41,
+          "bank": 56,
+          "addr": 30852,
+          "rom_offset": 931972,
+          "expected_hex": "fa04d0",
+          "instructions": [
+            "ld a, [wCurPartySpecies]"
+          ],
+          "phase": "after_successful_copy_and_compaction",
+          "semantics": "The carry failure branch was bypassed and removal returned. Consume the prior identity; slot positions may have compacted.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "pc_deposit_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 1746,
+              "line_end": 1761,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1746"
+            }
+          ]
+        },
+        "pc_withdraw_begin": {
+          "signal": "pc_withdraw",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "TryWithdrawPokemon",
+          "symbol_offset": 31,
+          "bank": 56,
+          "addr": 30968,
+          "rom_offset": 932088,
+          "expected_hex": "3e08cd492e",
+          "instructions": [
+            "predef SendGetMonIntoFromBox"
+          ],
+          "phase": "before_transfer_attempt",
+          "semantics": "Snapshot selected identity before transfer; full-box/full-party failure must clear the attempt without publication.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 1798,
+              "line_end": 1811,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1798"
+            }
+          ]
+        },
+        "pc_withdraw_complete": {
+          "signal": "pc_withdraw",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "TryWithdrawPokemon",
+          "symbol_offset": 49,
+          "bank": 56,
+          "addr": 30986,
+          "rom_offset": 932106,
+          "expected_hex": "fa04d0",
+          "instructions": [
+            "ld a, [wCurPartySpecies]"
+          ],
+          "phase": "after_successful_copy_and_compaction",
+          "semantics": "The carry failure branch was bypassed and removal returned. Consume the prior identity; slot positions may have compacted.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "pc_withdraw_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 1798,
+              "line_end": 1816,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1798"
+            }
+          ]
+        },
+        "pc_release_party_begin": {
+          "signal": "pc_release",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "BillsPCDepositFuncRelease",
+          "symbol_offset": 53,
+          "bank": 56,
+          "addr": 27938,
+          "rom_offset": 929058,
+          "expected_hex": "3e03213d60cf",
+          "instructions": [
+            "farcall RemoveMonFromPartyOrBox"
+          ],
+          "phase": "confirmed_before_removal",
+          "semantics": "Release checks and accepted YesNo precede this call. Snapshot the outgoing record before compaction.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 183,
+              "line_end": 206,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L183"
+            }
+          ]
+        },
+        "pc_release_party_complete": {
+          "signal": "pc_release",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "BillsPCDepositFuncRelease",
+          "symbol_offset": 59,
+          "bank": 56,
+          "addr": 27944,
+          "rom_offset": 929064,
+          "expected_hex": "cd5f79",
+          "instructions": [
+            "call ReleasePKMN_ByePKMN"
+          ],
+          "phase": "after_confirmed_removal",
+          "semantics": "Removal returned; consume the prior outgoing identity instead of reading its compacted former slot.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "pc_release_party_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 183,
+              "line_end": 207,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L183"
+            }
+          ]
+        },
+        "pc_release_box_begin": {
+          "signal": "pc_release",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "BillsPC_Withdraw.release",
+          "symbol_offset": 49,
+          "bank": 56,
+          "addr": 28407,
+          "rom_offset": 929527,
+          "expected_hex": "3e03213d60cf",
+          "instructions": [
+            "farcall RemoveMonFromPartyOrBox"
+          ],
+          "phase": "confirmed_before_removal",
+          "semantics": "Release checks and accepted YesNo precede this call. Snapshot the outgoing record before compaction.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 424,
+              "line_end": 445,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L424"
+            }
+          ]
+        },
+        "pc_release_box_complete": {
+          "signal": "pc_release",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "BillsPC_Withdraw.release",
+          "symbol_offset": 55,
+          "bank": 56,
+          "addr": 28413,
+          "rom_offset": 929533,
+          "expected_hex": "cd5f79",
+          "instructions": [
+            "call ReleasePKMN_ByePKMN"
+          ],
+          "phase": "after_confirmed_removal",
+          "semantics": "Removal returned; consume the prior outgoing identity instead of reading its compacted former slot.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "pc_release_box_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 56,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/bills_pc.asm",
+              "line_start": 424,
+              "line_end": 446,
+              "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L424"
+            }
+          ]
+        },
+        "change_box_begin": {
+          "signal": "change_box",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "ChangeBoxSaveGame",
+          "symbol_offset": 0,
+          "bank": 5,
+          "addr": 19242,
+          "rom_offset": 84778,
+          "expected_hex": "d5",
+          "instructions": [
+            "push de"
+          ],
+          "phase": "before_confirmation",
+          "semantics": "Box-change attempt; confirmations can still refuse. Retain old-box context.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 5,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/save.asm",
+              "line_start": 40,
+              "line_end": 41,
+              "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L40"
+            }
+          ]
+        },
+        "change_box_loaded": {
+          "signal": "change_box",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "ChangeBoxSaveGame",
+          "symbol_offset": 34,
+          "bank": 5,
+          "addr": 19276,
+          "rom_offset": 84812,
+          "expected_hex": "cd814c",
+          "instructions": [
+            "call SavingDontTurnOffThePower"
+          ],
+          "phase": "after_old_box_save_and_new_box_load",
+          "semantics": "Confirmations passed, SaveBox returned, wCurBox changed and LoadBox returned. UI/game-logic resumption remains.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "change_box_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 5,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/save.asm",
+              "line_start": 40,
+              "line_end": 55,
+              "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L40"
+            }
+          ]
+        },
+        "evolution_species_published": {
+          "signal": "evolution_species",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "EvolveAfterBattle_MasterLoop.skip_unown",
+          "symbol_offset": 6,
+          "bank": 16,
+          "addr": 25582,
+          "rom_offset": 271342,
+          "expected_hex": "e5",
+          "instructions": [
+            "push hl"
+          ],
+          "phase": "after_party_species_list_publish",
+          "semantics": "Evolved struct and move work preceded this point; parallel species marker has now been written. wEvolutionOldSpecies retains old species for key migration.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wEvolutionOldSpecies": {
+              "bank": 1,
+              "addr": 53459
+            },
+            "wTempMonSpecies": {
+              "bank": 1,
+              "addr": 53259
+            },
+            "wPartySpecies": {
+              "bank": 1,
+              "addr": 55843
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 16,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/evolve.asm",
+              "line_start": 313,
+              "line_end": 318,
+              "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/evolve.asm#L313"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/evolve.asm",
+              "line_start": 292,
+              "line_end": 314,
+              "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/evolve.asm#L292"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/evolve.asm",
+              "line_start": 225,
+              "line_end": 228,
+              "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/evolve.asm#L225"
+            }
+          ]
+        },
+        "npc_trade_begin": {
+          "signal": "npc_trade",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "DoNPCTrade",
+          "symbol_offset": 0,
+          "bank": 63,
+          "addr": 19049,
+          "rom_offset": 1034857,
+          "expected_hex": "1e01",
+          "instructions": [
+            "ld e, NPCTRADE_GIVEMON"
+          ],
+          "phase": "before_npc_trade_replacement",
+          "semantics": "Snapshot selected outgoing party identity before removal and append.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 63,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/npc_trade.asm",
+              "line_start": 114,
+              "line_end": 115,
+              "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L114"
+            }
+          ]
+        },
+        "npc_trade_finalized": {
+          "signal": "npc_trade",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "DoNPCTrade",
+          "symbol_offset": 292,
+          "bank": 63,
+          "addr": 19341,
+          "rom_offset": 1035149,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_npc_trade_identity_and_stats",
+          "semantics": "Name, OT, DVs, OT ID, item and stats are complete. Receiver is PARTY_COUNT_MINUS_ONE; restored wCurPartyMon is the outgoing selection and must not select the receiver.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "npc_trade_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "wOTTrademonSpecies": {
+              "bank": 0,
+              "addr": 50689
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 63,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/npc_trade.asm",
+              "line_start": 114,
+              "line_end": 244,
+              "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L114"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/npc_trade.asm",
+              "line_start": 167,
+              "line_end": 168,
+              "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L167"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/npc_trade.asm",
+              "line_start": 266,
+              "line_end": 272,
+              "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L266"
+            }
+          ]
+        },
+        "map_entry_complete": {
+          "signal": "map_load",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "EnterMap.dontresetpoison",
+          "symbol_offset": 8,
+          "bank": 37,
+          "addr": 26289,
+          "rom_offset": 616113,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_map_setup_status_publish",
+          "semantics": "RunMapSetupScript returned, entry method cleared, MAPSTATUS_HANDLE published. No write-checkpoint authority.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wMapGroup": {
+              "bank": 1,
+              "addr": 55808
+            },
+            "wMapNumber": {
+              "bank": 1,
+              "addr": 55809
+            },
+            "wMapStatus": {
+              "bank": 1,
+              "addr": 53593
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 37,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/overworld/events.asm",
+              "line_start": 125,
+              "line_end": 131,
+              "source_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/events.asm#L125"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/overworld/events.asm",
+              "line_start": 106,
+              "line_end": 133,
+              "source_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/events.asm#L106"
+            }
+          ]
+        },
+        "continue_confirmed": {
+          "signal": "continue_loaded",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "Continue.Check2Pass",
+          "symbol_offset": 0,
+          "bank": 1,
+          "addr": 24068,
+          "rom_offset": 24068,
+          "expected_hex": "3e08",
+          "instructions": [
+            "ld a, $8"
+          ],
+          "phase": "loaded_confirmed_before_map_entry",
+          "semantics": "TryLoadSaveFile succeeded and Continue/RTC confirmations passed. Clock/roamer/mobile/map setup remains; no overworld admission.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wPlayerID": {
+              "bank": 1,
+              "addr": 53665
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 1,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/intro_menu.asm",
+              "line_start": 271,
+              "line_end": 272,
+              "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/intro_menu.asm#L271"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/intro_menu.asm",
+              "line_start": 251,
+              "line_end": 271,
+              "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/intro_menu.asm#L251"
+            }
+          ]
+        },
+        "capture_party_finalized": {
+          "signal": "capture_party",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "symbol_offset": 0,
+          "bank": 3,
+          "addr": 27721,
+          "rom_offset": 60489,
+          "expected_hex": "fa19d1",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "phase": "after_nickname_requires_acquisition_latch",
+          "semantics": "This common path also runs after failed/tutorial catches. Only a matched prior successful party insertion may publish final identity; without it this site emits nothing.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "capture_party"
+              ],
+              "match_symbols": [
+                "wBattleType"
+              ],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            },
+            "wWildMon": {
+              "bank": 1,
+              "addr": 53583
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 691,
+              "line_end": 692,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 661,
+              "line_end": 680,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L661"
+            }
+          ]
+        },
+        "capture_box_finalized": {
+          "signal": "capture_box",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "symbol_offset": 0,
+          "bank": 3,
+          "addr": 27721,
+          "rom_offset": 60489,
+          "expected_hex": "fa19d1",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "phase": "after_nickname_requires_acquisition_latch",
+          "semantics": "This common path also runs after failed/tutorial catches. Only a matched prior successful box insertion may publish final identity; without it this site emits nothing.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "capture_box"
+              ],
+              "match_symbols": [
+                "wBattleType"
+              ],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            },
+            "wWildMon": {
+              "bank": 1,
+              "addr": 53583
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 691,
+              "line_end": 692,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 661,
+              "line_end": 680,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L661"
+            }
+          ]
+        },
+        "hatch_finalized": {
+          "signal": "egg_hatch",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "HatchEggs.next",
+          "symbol_offset": 0,
+          "bank": 5,
+          "addr": 29733,
+          "rom_offset": 95269,
+          "expected_hex": "2105d0",
+          "instructions": [
+            "ld hl, wCurPartyMon"
+          ],
+          "phase": "after_hatch_metadata_and_name_requires_slot_latch",
+          "semantics": "The next-slot path is shared with unhatched/non-egg skips. Publish gift_daycare only with matching hatch_species latch for current wCurPartyMon; OT/HP/name work completed on that matched path.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "hatch_species"
+              ],
+              "match_symbols": [
+                "wCurPartyMon"
+              ],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wPartySpecies": {
+              "bank": 1,
+              "addr": 55843
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 5,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/breeding.asm",
+              "line_start": 343,
+              "line_end": 344,
+              "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L343"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/breeding.asm",
+              "line_start": 296,
+              "line_end": 344,
+              "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L296"
+            }
+          ]
+        },
+        "link_trade_received": {
+          "signal": "link_trade",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "LinkTrade.done_animation",
+          "symbol_offset": 0,
+          "bank": 10,
+          "addr": 19607,
+          "rom_offset": 167063,
+          "expected_hex": "f1",
+          "instructions": [
+            "pop af"
+          ],
+          "phase": "after_animation_before_received_party_copy",
+          "semantics": "Incoming party copy and forced evolution follow. Intermediate transaction marker only, not completed trade or durability. Only LINK_TRADECENTER is admitted by this candidate guard; Time Capsule and mobile modes are excluded.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "memory_equals": [
+              {
+                "symbol": "wLinkMode",
+                "bank": 1,
+                "addr": 53314,
+                "width": 1,
+                "value": 2
+              }
+            ]
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wCurOTTradePartyMon": {
+              "bank": 0,
+              "addr": 52974
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wLinkMode": {
+              "bank": 1,
+              "addr": 53314
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 10,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/link/link.asm",
+              "line_start": 1808,
+              "line_end": 1809,
+              "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/link/link.asm#L1808"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "constants/serial_constants.asm",
+              "line_start": 1,
+              "line_end": 8,
+              "source_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/serial_constants.asm#L1"
+            }
+          ]
+        },
+        "link_trade_saved": {
+          "signal": "link_trade",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "LinkTrade.save",
+          "symbol_offset": 6,
+          "bank": 10,
+          "addr": 19732,
+          "rom_offset": 167188,
+          "expected_hex": "0e28",
+          "instructions": [
+            "ld c, 40"
+          ],
+          "phase": "after_received_copy_evolution_and_trade_save",
+          "semantics": "SaveAfterLinkTrade returned after AddTempmonToParty and forced evolution. Receiver is appended party slot. Host scenario save and cold reload remain required for durability. Only LINK_TRADECENTER is admitted by this candidate guard; Time Capsule and mobile modes are excluded.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "link_trade_received"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            },
+            "memory_equals": [
+              {
+                "symbol": "wLinkMode",
+                "bank": 1,
+                "addr": 53314,
+                "width": 1,
+                "value": 2
+              }
+            ]
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "wLinkMode": {
+              "bank": 1,
+              "addr": 53314
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 10,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/link/link.asm",
+              "line_start": 1873,
+              "line_end": 1875,
+              "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/link/link.asm#L1873"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/link/link.asm",
+              "line_start": 1807,
+              "line_end": 1874,
+              "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/link/link.asm#L1807"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/menus/save.asm",
+              "line_start": 27,
+              "line_end": 40,
+              "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L27"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "constants/serial_constants.asm",
+              "line_start": 1,
+              "line_end": 8,
+              "source_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/serial_constants.asm#L1"
+            }
+          ]
+        },
+        "bag_ball_received": {
+          "signal": "bag_ball_received",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PutItemInPocket.done",
+          "symbol_offset": 1,
+          "bank": 3,
+          "addr": 21257,
+          "rom_offset": 54025,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_successful_ball_pocket_write",
+          "semantics": "Only success reaches SCF/RET. DE must point at wNumBalls; reject other pockets. Read back pocket contents and quantity rather than assuming a one-item delta.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "registers": {
+              "DE": 54780
+            },
+            "flags": {
+              "C": 1
+            }
+          },
+          "point_symbols": {
+            "wNumBalls": {
+              "bank": 1,
+              "addr": 54780
+            },
+            "wBalls": {
+              "bank": 1,
+              "addr": 54781
+            },
+            "wCurItem": {
+              "bank": 1,
+              "addr": 53250
+            },
+            "wItemQuantityChange": {
+              "bank": 1,
+              "addr": 53257
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/items.asm",
+              "line_start": 230,
+              "line_end": 232,
+              "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L230"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/items.asm",
+              "line_start": 158,
+              "line_end": 234,
+              "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L158"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/items.asm",
+              "line_start": 1,
+              "line_end": 42,
+              "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L1"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/items.asm",
+              "line_start": 136,
+              "line_end": 158,
+              "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L136"
+            }
+          ]
+        },
+        "gift_begin": {
+          "signal": "gift_static",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "GivePoke",
+          "symbol_offset": 0,
+          "bank": 3,
+          "addr": 25230,
+          "rom_offset": 57998,
+          "expected_hex": "d5",
+          "instructions": [
+            "push de"
+          ],
+          "phase": "before_gift_insert_attempt",
+          "semantics": "Record script-gift intent before party/box insertion; failure exit is not acquisition.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wScriptBank": {
+              "bank": 1,
+              "addr": 53600
+            },
+            "wCurItem": {
+              "bank": 1,
+              "addr": 53250
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/move_mon.asm",
+              "line_start": 1632,
+              "line_end": 1633,
+              "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1632"
+            }
+          ]
+        },
+        "gift_party_finalized": {
+          "signal": "gift_static",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "GivePoke.skip_nickname",
+          "symbol_offset": 4,
+          "bank": 3,
+          "addr": 25487,
+          "rom_offset": 58255,
+          "expected_hex": "c8",
+          "instructions": [
+            "ret z"
+          ],
+          "phase": "after_party_gift_identity_and_name",
+          "semantics": "RET Z is party success after metadata and optional name work. Require Z and B=0; failures return separately with B=2.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "registers": {
+              "B": 0
+            },
+            "flags": {
+              "Z": 1
+            },
+            "requires_prior": {
+              "site_ids": [
+                "gift_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/move_mon.asm",
+              "line_start": 1759,
+              "line_end": 1764,
+              "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1759"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/move_mon.asm",
+              "line_start": 1632,
+              "line_end": 1777,
+              "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1632"
+            }
+          ]
+        },
+        "gift_box_finalized": {
+          "signal": "gift_static",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "GivePoke.skip_nickname",
+          "symbol_offset": 33,
+          "bank": 3,
+          "addr": 25516,
+          "rom_offset": 58284,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_box_gift_identity_and_name",
+          "semantics": "Box nickname copy and CloseSRAM completed before B=1 return. Failures return with B=2; receiver is first box slot.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "registers": {
+              "B": 1
+            },
+            "requires_prior": {
+              "site_ids": [
+                "gift_begin"
+              ],
+              "match_symbols": [],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "wCurPartyMon": {
+              "bank": 1,
+              "addr": 53253
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/move_mon.asm",
+              "line_start": 1759,
+              "line_end": 1775,
+              "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1759"
+            }
+          ]
+        },
+        "contest_selected": {
+          "signal": "contest_capture",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "BugContest_SetCaughtContestMon.firstcatch",
+          "symbol_offset": 3,
+          "bank": 3,
+          "addr": 26479,
+          "rom_offset": 59247,
+          "expected_hex": "faedd0",
+          "instructions": [
+            "ld a, [wTempEnemyMonSpecies]"
+          ],
+          "phase": "contest_buffer_selected_before_party_or_box_acquisition",
+          "semantics": "GeneratePartyMonStats completed after first catch or accepted replacement. Decline returns earlier. This is provisional contest buffer, not final party/box capture.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wContestMon": {
+              "bank": 1,
+              "addr": 56551
+            },
+            "wTempEnemyMonSpecies": {
+              "bank": 1,
+              "addr": 53485
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/bug_contest/caught_mon.asm",
+              "line_start": 12,
+              "line_end": 14,
+              "source_sha256": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/bug_contest/caught_mon.asm#L12"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/events/bug_contest/caught_mon.asm",
+              "line_start": 1,
+              "line_end": 35,
+              "source_sha256": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/bug_contest/caught_mon.asm#L1"
+            }
+          ]
+        },
+        "contest_party_finalized": {
+          "signal": "contest_capture",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "CheckPartyFullAfterContest.Party_SkipNickname",
+          "symbol_offset": 26,
+          "bank": 49,
+          "addr": 31834,
+          "rom_offset": 818266,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_contest_party_name_and_metadata",
+          "semantics": "Party copy, OT and nickname finalization complete; Crystal caught location complete. Contest buffer cleared and success published. Receiver PartyCount-1.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "wScriptVar": {
+              "bank": 1,
+              "addr": 53619
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 49,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/caught_nickname.asm",
+              "line_start": 57,
+              "line_end": 70,
+              "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L57"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/caught_nickname.asm",
+              "line_start": 1,
+              "line_end": 72,
+              "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L1"
+            }
+          ]
+        },
+        "contest_box_inserted": {
+          "signal": "contest_capture",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "CheckPartyFullAfterContest.TryAddToBox",
+          "symbol_offset": 50,
+          "bank": 49,
+          "addr": 31885,
+          "rom_offset": 818317,
+          "expected_hex": "fa04d0",
+          "instructions": [
+            "ld a, [wCurPartySpecies]"
+          ],
+          "phase": "after_successful_contest_box_insert_before_name",
+          "semantics": "Capacity refusal bypasses this site. Record success-only insertion latch before nickname/caught metadata; receiver first box record.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 49,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/caught_nickname.asm",
+              "line_start": 72,
+              "line_end": 91,
+              "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L72"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/caught_nickname.asm",
+              "line_start": 71,
+              "line_end": 103,
+              "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L71"
+            }
+          ]
+        },
+        "contest_box_finalized": {
+          "signal": "contest_capture",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "CheckPartyFullAfterContest.BoxFull",
+          "symbol_offset": 9,
+          "bank": 49,
+          "addr": 31945,
+          "rom_offset": 818377,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_contest_box_name_requires_insert_latch",
+          "semantics": "Return shared by success and box-capacity refusal. Publish only with contest_box_inserted latch; never trust BUGCONTEST_BOXED_MON alone. Crystal also writes caught metadata on refusal.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "contest_box_inserted"
+              ],
+              "match_symbols": [
+                "wCurBox"
+              ],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            }
+          },
+          "point_symbols": {
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            },
+            "wCurBox": {
+              "bank": 1,
+              "addr": 55484
+            },
+            "wScriptVar": {
+              "bank": 1,
+              "addr": 53619
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 49,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/caught_nickname.asm",
+              "line_start": 111,
+              "line_end": 116,
+              "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L111"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/pokemon/caught_nickname.asm",
+              "line_start": 102,
+              "line_end": 118,
+              "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L102"
+            }
+          ]
+        },
+        "script_wild_staged": {
+          "signal": "gift_static",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "Script_loadwildmon",
+          "symbol_offset": 17,
+          "bank": 37,
+          "addr": 29333,
+          "rom_offset": 619157,
+          "expected_hex": "c9",
+          "instructions": [
+            "ret"
+          ],
+          "phase": "after_script_wild_species_and_level_staging",
+          "semantics": "CPU interpreter handler has consumed scripted wild species/level and set battle-script flags. This is origin staging, not catch completion; per-story static policy must join a later success-only capture.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "point_symbols": {
+            "wTempWildMonSpecies": {
+              "bank": 1,
+              "addr": 53527
+            },
+            "wCurPartyLevel": {
+              "bank": 1,
+              "addr": 53312
+            },
+            "wBattleScriptFlags": {
+              "bank": 1,
+              "addr": 53632
+            },
+            "wScriptBank": {
+              "bank": 1,
+              "addr": 53600
+            },
+            "wScriptPos": {
+              "bank": 1,
+              "addr": 53601
+            },
+            "wMapGroup": {
+              "bank": 1,
+              "addr": 55808
+            },
+            "wMapNumber": {
+              "bank": 1,
+              "addr": 55809
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 37,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/overworld/scripting.asm",
+              "line_start": 1047,
+              "line_end": 1054,
+              "source_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/scripting.asm#L1047"
+            }
+          ]
+        },
+        "roamer_party_finalized": {
+          "signal": "roamer_capture",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "symbol_offset": 0,
+          "bank": 3,
+          "addr": 27721,
+          "rom_offset": 60489,
+          "expected_hex": "fa19d1",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "phase": "after_roamer_name_requires_success_and_type_guards",
+          "semantics": "Common return requires BATTLETYPE_ROAMING plus a same-operation successful party insertion latch. Failed catches and ordinary/fixed Suicune encounters are excluded. Final key/species drives legend_<species> policy only after independent readback. This row classifies the same acquisition and must not emit a second capture or consume the latch twice.",
+          "event_role": "CLASSIFICATION_ONLY",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "capture_party"
+              ],
+              "match_symbols": [
+                "wBattleType"
+              ],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            },
+            "memory_equals": [
+              {
+                "symbol": "wBattleType",
+                "bank": 1,
+                "addr": 53529,
+                "width": 1,
+                "value": 5
+              }
+            ]
+          },
+          "point_symbols": {
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            },
+            "wWildMon": {
+              "bank": 1,
+              "addr": 53583
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 691,
+              "line_end": 692,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/overworld/wildmons.asm",
+              "line_start": 563,
+              "line_end": 571,
+              "source_sha256": "ed44ca8144bff61cc343a898d9037434e9d5a2ace4a28c604da3686fc1b1abbd",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/wildmons.asm#L563"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "constants/battle_constants.asm",
+              "line_start": 89,
+              "line_end": 103,
+              "source_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/battle_constants.asm#L89"
+            }
+          ]
+        },
+        "roamer_box_finalized": {
+          "signal": "roamer_capture",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "symbol_offset": 0,
+          "bank": 3,
+          "addr": 27721,
+          "rom_offset": 60489,
+          "expected_hex": "fa19d1",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "phase": "after_roamer_name_requires_success_and_type_guards",
+          "semantics": "Common return requires BATTLETYPE_ROAMING plus a same-operation successful box insertion latch. Failed catches and ordinary/fixed Suicune encounters are excluded. Final key/species drives legend_<species> policy only after independent readback. This row classifies the same acquisition and must not emit a second capture or consume the latch twice.",
+          "event_role": "CLASSIFICATION_ONLY",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "runtime_guard_qualification": "OPEN",
+            "requires_prior": {
+              "site_ids": [
+                "capture_box"
+              ],
+              "match_symbols": [
+                "wBattleType"
+              ],
+              "consume_once": true,
+              "mode": "ANY",
+              "scope": "current_operation",
+              "invalidate_on": [
+                "failure",
+                "cancel",
+                "reset",
+                "reload",
+                "source_change"
+              ]
+            },
+            "memory_equals": [
+              {
+                "symbol": "wBattleType",
+                "bank": 1,
+                "addr": 53529,
+                "width": 1,
+                "value": 5
+              }
+            ]
+          },
+          "point_symbols": {
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53529
+            },
+            "wWildMon": {
+              "bank": 1,
+              "addr": 53583
+            },
+            "wCurPartySpecies": {
+              "bank": 1,
+              "addr": 53252
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 55842
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 55850
+            },
+            "sBoxCount": {
+              "bank": 1,
+              "addr": 44396
+            },
+            "sBoxMons": {
+              "bank": 1,
+              "addr": 44418
+            }
+          },
+          "rom_bank_guard": {
+            "symbol": "hROMBank",
+            "addr": 65439,
+            "expected": 3,
+            "required": true
+          },
+          "source_evidence": [
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/items/item_effects.asm",
+              "line_start": 691,
+              "line_end": 692,
+              "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "engine/overworld/wildmons.asm",
+              "line_start": 563,
+              "line_end": 571,
+              "source_sha256": "ed44ca8144bff61cc343a898d9037434e9d5a2ace4a28c604da3686fc1b1abbd",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/wildmons.asm#L563"
+            },
+            {
+              "repo": "pokegold",
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "file": "constants/battle_constants.asm",
+              "line_start": 89,
+              "line_end": 103,
+              "source_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3",
+              "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/battle_constants.asm#L89"
+            }
+          ]
+        }
+      },
+      "inventory": {
+        "wild_battle_start": {
+          "sites": [
+            "wild_ready"
+          ],
+          "remaining": "Natural wild/roamer/contest entry, ready-data and CGB bank/frame firing controls remain OPEN.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "trainer_battle_start": {
+          "sites": [
+            "trainer_ready"
+          ],
+          "remaining": "Natural trainer entry and per-title trainer identity readiness/firing controls remain OPEN.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "battle_end_result": {
+          "sites": [
+            "battle_end"
+          ],
+          "remaining": "Result masking and end/evolution/cleanup lifecycle must be bound and physically witnessed.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "capture_party": {
+          "sites": [
+            "capture_party",
+            "capture_party_finalized"
+          ],
+          "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "capture_box": {
+          "sites": [
+            "capture_box",
+            "capture_box_finalized"
+          ],
+          "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "player_faint": {
+          "sites": [
+            "battle_faint"
+          ],
+          "remaining": "Natural faint sequence and pre-heal identity/HP snapshot qualification remain OPEN.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "poison_faint": {
+          "sites": [
+            "poison_faint"
+          ],
+          "remaining": "Natural poison cause/slot and multi-faint/whiteout differential qualification remain OPEN.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "whiteout": {
+          "sites": [
+            "whiteout_before_heal"
+          ],
+          "remaining": "Implement and physically qualify every CPU dispatch/stack guard, ordinary-heal negatives, battle/poison positives and pre-heal party capture.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "evolution_species": {
+          "sites": [
+            "evolution_species_published"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "npc_trade": {
+          "sites": [
+            "npc_trade_begin",
+            "npc_trade_finalized"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "link_trade": {
+          "sites": [
+            "link_trade_received",
+            "link_trade_saved"
+          ],
+          "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "pc_deposit": {
+          "sites": [
+            "pc_deposit_begin",
+            "pc_deposit_complete"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "pc_withdraw": {
+          "sites": [
+            "pc_withdraw_begin",
+            "pc_withdraw_complete"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "pc_release": {
+          "sites": [
+            "pc_release_party_begin",
+            "pc_release_party_complete",
+            "pc_release_box_begin",
+            "pc_release_box_complete"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "change_box": {
+          "sites": [
+            "change_box_begin",
+            "change_box_loaded"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "map_load": {
+          "sites": [
+            "map_entry_complete"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "bag_ball_received": {
+          "sites": [
+            "bag_ball_received"
+          ],
+          "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "save_completed": {
+          "sites": [
+            "save_completed"
+          ],
+          "remaining": "Bind all save variants/callers, raw CartRAM witness and cold-boot primary/backup recovery; return instruction alone is not durability.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "continue_loaded": {
+          "sites": [
+            "continue_confirmed"
+          ],
+          "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "new_game": {
+          "sites": [
+            "new_game"
+          ],
+          "remaining": "Prove new-campaign lifecycle and admission only after initialized checkpoint; entry does not expose final identity.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "soft_reset": {
+          "sites": [
+            "soft_reset"
+          ],
+          "remaining": "Prove reset lifecycle, queue invalidation and cold-start distinction on each title.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "egg_hatch": {
+          "sites": [
+            "hatch_species",
+            "hatch_finalized"
+          ],
+          "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "gift_static": {
+          "sites": [
+            "gift_begin",
+            "gift_party_finalized",
+            "gift_box_finalized",
+            "script_wild_staged"
+          ],
+          "remaining": "GivePoke final party/box and CPU scripted-wild staging candidates exist. Per-story static origin joins, story eligibility, reset/failure cleanup and natural final capture controls remain OPEN; staging is not acquisition.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "roamer_capture": {
+          "sites": [
+            "roamer_party_finalized",
+            "roamer_box_finalized"
+          ],
+          "remaining": "Roaming-mode success-only post-name candidates exist. Natural extra-catch legend_<species> zone semantics and readback remain OPEN. Crystal TinTower Suicune is scripted BATTLETYPE_SUICUNE, not roaming; its separate per-story legendary/static classification is SOURCE OPEN and cannot be inferred by this roaming guard.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        },
+        "contest_capture": {
+          "sites": [
+            "contest_selected",
+            "contest_party_finalized",
+            "contest_box_inserted",
+            "contest_box_finalized"
+          ],
+          "remaining": "Provisional buffer and final party/box identities distinguished. Box final needs success-only insertion latch because BoxFull return also runs on capacity refusal. national_park_contest zone and decline/full-box/reset/readback controls physically OPEN.",
+          "source_status": "CANDIDATE",
+          "physical_status": "OPEN"
+        }
+      }
+    }
+  },
+  "source_files": {
+    "constants/battle_constants.asm": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3",
+    "constants/serial_constants.asm": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a",
+    "engine/battle/core.asm": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+    "engine/events/bug_contest/caught_mon.asm": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+    "engine/events/npc_trade.asm": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+    "engine/events/poisonstep.asm": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+    "engine/events/specials.asm": "2c86084855998e078e930deb88f70ced8523ec40da1bdd5520fff4393115466b",
+    "engine/events/whiteout.asm": "f96dfa2b188e4622e12498cd4b5cbab596c0138446b8e549f1305d5ffb874b06",
+    "engine/items/item_effects.asm": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+    "engine/items/items.asm": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+    "engine/link/link.asm": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+    "engine/menus/intro_menu.asm": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+    "engine/menus/save.asm": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+    "engine/overworld/events.asm": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d",
+    "engine/overworld/scripting.asm": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d",
+    "engine/overworld/wildmons.asm": "ed44ca8144bff61cc343a898d9037434e9d5a2ace4a28c604da3686fc1b1abbd",
+    "engine/pokemon/bills_pc.asm": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+    "engine/pokemon/breeding.asm": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+    "engine/pokemon/caught_nickname.asm": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+    "engine/pokemon/evolve.asm": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+    "engine/pokemon/move_mon.asm": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+    "home/farcall.asm": "3b40cb8d4dcd26d35e71425af1792217508676f109cb7326ceabdb2b7becf0f1",
+    "home/header.asm": "16520be0bd315fadeca15a6e7e949bdd681ea4648c2758762f56a192950c1abc",
+    "home/init.asm": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8",
+    "home/map.asm": "3f010e2839eeee13f451580c81ec8787639ccab0b5915546f8cb183fd390cbeb",
+    "macros/code.asm": "560fd40cc7e1a2005cb4b9e81a02077833087d9698d35cff8dac6a47ffaafd57",
+    "macros/farcall.asm": "6d7b0a22c83e49765b8b0ecdca0ae10109569fe45d29de22369017018d7c20e8",
+    "macros/predef.asm": "51d1ff731b29299fd29f750fdf994dd06d627edf688328b224a69816556cfa0b",
+    "macros/scripts/events.asm": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5"
+  }
+}

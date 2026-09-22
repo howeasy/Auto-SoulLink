@@ -1,0 +1,1340 @@
+{
+  "schema": "gen2-gifts-v1",
+  "generator": "gen_gen2_gifts.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "artifact": "pokegold",
+    "repo": "pokegold",
+    "commit": "656583c939d30f920a316177311a502dd222b57c",
+    "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+    "sym_sha256": "c4ffacb747e4d5ccd304fbdce0b4db882893c2b92b7996f9c2e8ba74a5fd0d2b",
+    "map_sha256": "01eadca09823e636084734f79a6d71db27f92a837345f12288e4fa965d5257f6",
+    "lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+    "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+  },
+  "version_dispatch": {
+    "applicable": true,
+    "script_var": 0,
+    "symbol": "Script_checkver.gs_version",
+    "flat": 619807,
+    "source": "pokegold@656583c939d30f920a316177311a502dd222b57c constants/misc_constants.asm:21"
+  },
+  "gifts": [
+    {
+      "id": "BillsFamilysHouse:BillScript:27",
+      "map_name": "BillsFamilysHouse",
+      "map_group": 11,
+      "map_number": 6,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/BillsFamilysHouse.asm:27",
+      "script": "BillScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "EEVEE",
+        "20"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 133,
+      "species_const": "EEVEE",
+      "level": 20,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "BillScript",
+        "bank": 87,
+        "addr": 19471,
+        "flat": 1428495,
+        "expected_hex": "2d85140000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPrizeRoomPokemonVendor.MrMime:156",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 20,
+      "area_id": "celadon_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/CeladonGameCornerPrizeRoom.asm:156",
+      "script": "CeladonGameCornerPrizeRoomPokemonVendor.MrMime",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "MR__MIME",
+        "15"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 122,
+      "species_const": "MR__MIME",
+      "level": 15,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CeladonGameCornerPrizeRoomPokemonVendor.MrMime",
+        "bank": 94,
+        "addr": 23473,
+        "flat": 1547185,
+        "expected_hex": "2d7a0f0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPrizeRoomPokemonVendor.Eevee:174",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 20,
+      "area_id": "celadon_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/CeladonGameCornerPrizeRoom.asm:174",
+      "script": "CeladonGameCornerPrizeRoomPokemonVendor.Eevee",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "EEVEE",
+        "15"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 133,
+      "species_const": "EEVEE",
+      "level": 15,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CeladonGameCornerPrizeRoomPokemonVendor.Eevee",
+        "bank": 94,
+        "addr": 23519,
+        "flat": 1547231,
+        "expected_hex": "2d850f0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPrizeRoomPokemonVendor.Porygon:192",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 20,
+      "area_id": "celadon_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/CeladonGameCornerPrizeRoom.asm:192",
+      "script": "CeladonGameCornerPrizeRoomPokemonVendor.Porygon",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "PORYGON",
+        "20"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 137,
+      "species_const": "PORYGON",
+      "level": 20,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CeladonGameCornerPrizeRoomPokemonVendor.Porygon",
+        "bank": 94,
+        "addr": 23565,
+        "flat": 1547277,
+        "expected_hex": "2d89140000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ElmsLab:CyndaquilPokeBallScript:142",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "area_id": "new_bark_town",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/ElmsLab.asm:142",
+      "script": "CyndaquilPokeBallScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CYNDAQUIL",
+        "5",
+        "BERRY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 155,
+      "species_const": "CYNDAQUIL",
+      "level": 5,
+      "item": 173,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CyndaquilPokeBallScript",
+        "bank": 96,
+        "addr": 16629,
+        "flat": 1573109,
+        "expected_hex": "2d9b05ad00",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ElmsLab:TotodilePokeBallScript:172",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "area_id": "new_bark_town",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/ElmsLab.asm:172",
+      "script": "TotodilePokeBallScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "TOTODILE",
+        "5",
+        "BERRY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 158,
+      "species_const": "TOTODILE",
+      "level": 5,
+      "item": 173,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "TotodilePokeBallScript",
+        "bank": 96,
+        "addr": 16695,
+        "flat": 1573175,
+        "expected_hex": "2d9e05ad00",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ElmsLab:ChikoritaPokeBallScript:200",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "area_id": "new_bark_town",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/ElmsLab.asm:200",
+      "script": "ChikoritaPokeBallScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CHIKORITA",
+        "5",
+        "BERRY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 152,
+      "species_const": "CHIKORITA",
+      "level": 5,
+      "item": 173,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "ChikoritaPokeBallScript",
+        "bank": 96,
+        "addr": 16755,
+        "flat": 1573235,
+        "expected_hex": "2d9805ad00",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Gold_Abra:166",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodGameCorner.asm:166",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Gold_Abra",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "checkver Gold menu branch"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "ABRA",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 63,
+      "species_const": "ABRA",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Gold_Abra",
+        "bank": 87,
+        "addr": 26828,
+        "flat": 1435852,
+        "expected_hex": "2d3f0a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Gold_Ekans:184",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodGameCorner.asm:184",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Gold_Ekans",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "checkver Gold menu branch"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "EKANS",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 23,
+      "species_const": "EKANS",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Gold_Ekans",
+        "bank": 87,
+        "addr": 26874,
+        "flat": 1435898,
+        "expected_hex": "2d170a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Gold_Dratini:202",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodGameCorner.asm:202",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Gold_Dratini",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "checkver Gold menu branch"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "DRATINI",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 147,
+      "species_const": "DRATINI",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Gold_Dratini",
+        "bank": 87,
+        "addr": 26920,
+        "flat": 1435944,
+        "expected_hex": "2d930a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Silver_Abra:245",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodGameCorner.asm:245",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Silver_Abra",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": false,
+        "basis": "checkver Silver branch"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "ABRA",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 63,
+      "species_const": "ABRA",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Silver_Abra",
+        "bank": 87,
+        "addr": 27057,
+        "flat": 1436081,
+        "expected_hex": "2d3f0a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Silver_Sandshrew:263",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodGameCorner.asm:263",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Silver_Sandshrew",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": false,
+        "basis": "checkver Silver branch"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SANDSHREW",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 27,
+      "species_const": "SANDSHREW",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Silver_Sandshrew",
+        "bank": 87,
+        "addr": 27103,
+        "flat": 1436127,
+        "expected_hex": "2d1b0a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Silver_Dratini:281",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodGameCorner.asm:281",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Silver_Dratini",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": false,
+        "basis": "checkver Silver branch"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "DRATINI",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 147,
+      "species_const": "DRATINI",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Silver_Dratini",
+        "bank": 87,
+        "addr": 27149,
+        "flat": 1436173,
+        "expected_hex": "2d930a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "MountMortarB1F:MountMortarB1FKiyoScript.BeatKiyo:37",
+      "map_name": "MountMortarB1F",
+      "map_group": 3,
+      "map_number": 52,
+      "area_id": "mt_mortar",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/MountMortarB1F.asm:37",
+      "script": "MountMortarB1FKiyoScript.BeatKiyo",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "TYROGUE",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 236,
+      "species_const": "TYROGUE",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "MountMortarB1FKiyoScript.BeatKiyo",
+        "bank": 70,
+        "addr": 24351,
+        "flat": 1154847,
+        "expected_hex": "2dec0a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route35GoldenrodGate:RandyScript:30",
+      "map_name": "Route35GoldenrodGate",
+      "map_group": 10,
+      "map_number": 14,
+      "area_id": "route_35",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route35GoldenrodGate.asm:30",
+      "script": "RandyScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SPEAROW",
+        "10",
+        "NO_ITEM",
+        "GiftSpearowName",
+        "GiftSpearowOTName"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 21,
+      "species_const": "SPEAROW",
+      "level": 10,
+      "item": 0,
+      "named_trainer": true,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RandyScript",
+        "bank": 86,
+        "addr": 23035,
+        "flat": 1415675,
+        "expected_hex": "2d150a0001505a565a",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "VioletPokecenter1F:VioletPokecenter1F_ElmsAideScript.AskTakeEgg:27",
+      "map_name": "VioletPokecenter1F",
+      "map_group": 10,
+      "map_number": 10,
+      "area_id": "violet_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/VioletPokecenter1F.asm:27",
+      "script": "VioletPokecenter1F_ElmsAideScript.AskTakeEgg",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "TOGEPI",
+        "EGG_LEVEL"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "egg_reception",
+      "species": 175,
+      "species_const": "TOGEPI",
+      "level": 5,
+      "capture_at_reception": false,
+      "hatch_area_id": "gift_daycare",
+      "success_values": [
+        2
+      ],
+      "failure_values": [
+        0
+      ],
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "VioletPokecenter1F_ElmsAideScript.AskTakeEgg",
+        "bank": 86,
+        "addr": 21070,
+        "flat": 1413710,
+        "expected_hex": "2eaf05",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    }
+  ],
+  "npc_trades": [
+    {
+      "trade_id": 0,
+      "kind": "npc_exchange",
+      "requested_species": 96,
+      "offered_species": 66,
+      "nickname": "MUSCLE",
+      "dvs": [
+        55,
+        102
+      ],
+      "item": 174,
+      "ot_id": 37460,
+      "ot_name": "MIKE",
+      "requested_gender": 0,
+      "dialog_set": 0,
+      "record_hex": "0060428c9492828b8450505050503766ae54928c888a84505050505050500000",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c data/events/npc_trades.asm:14",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 1,
+      "kind": "npc_exchange",
+      "requested_species": 69,
+      "offered_species": 95,
+      "nickname": "ROCKY",
+      "dvs": [
+        150,
+        102
+      ],
+      "item": 83,
+      "ot_id": 48926,
+      "ot_name": "KYLE",
+      "requested_gender": 0,
+      "dialog_set": 0,
+      "record_hex": "00455f918e828a985050505050509666531ebf8a988b84505050505050500000",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c data/events/npc_trades.asm:15",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 2,
+      "kind": "npc_exchange",
+      "requested_species": 98,
+      "offered_species": 100,
+      "nickname": "VOLTY",
+      "dvs": [
+        152,
+        136
+      ],
+      "item": 78,
+      "ot_id": 29189,
+      "ot_name": "TIM",
+      "requested_gender": 0,
+      "dialog_set": 1,
+      "record_hex": "016264958e8b939850505050505098884e057293888c50505050505050500000",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c data/events/npc_trades.asm:16",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 3,
+      "kind": "npc_exchange",
+      "requested_species": 148,
+      "offered_species": 112,
+      "nickname": "DON",
+      "dvs": [
+        119,
+        102
+      ],
+      "item": 83,
+      "ot_id": 283,
+      "ot_name": "EMY",
+      "requested_gender": 2,
+      "dialog_set": 2,
+      "record_hex": "029470838e8d50505050505050507766531b01848c9850505050505050500200",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c data/events/npc_trades.asm:17",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 4,
+      "kind": "npc_exchange",
+      "requested_species": 44,
+      "offered_species": 78,
+      "nickname": "RUNNY",
+      "dvs": [
+        150,
+        102
+      ],
+      "item": 79,
+      "ot_id": 15616,
+      "ot_name": "CHRIS",
+      "requested_gender": 0,
+      "dialog_set": 1,
+      "record_hex": "012c4e91948d8d9850505050505096664f003d82879188925050505050500000",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c data/events/npc_trades.asm:18",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 5,
+      "kind": "npc_exchange",
+      "requested_species": 113,
+      "offered_species": 142,
+      "nickname": "AEROY",
+      "dvs": [
+        150,
+        102
+      ],
+      "item": 174,
+      "ot_id": 26491,
+      "ot_name": "KIM",
+      "requested_gender": 0,
+      "dialog_set": 2,
+      "record_hex": "02718e8084918e985050505050509666ae7b678a888c50505050505050500000",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c data/events/npc_trades.asm:19",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    }
+  ],
+  "npc_trades_rom": {
+    "symbol": "NPCTrades",
+    "flat": 1035300,
+    "length": 192
+  },
+  "odd_eggs": {
+    "applicable": false,
+    "basis": "no Odd Egg feature in the selected Gold/Silver source"
+  },
+  "caller_inventory": [
+    {
+      "id": "BlackthornEmysHouse:Emy:12",
+      "map_name": "BlackthornEmysHouse",
+      "map_group": 5,
+      "map_number": 4,
+      "area_id": "blackthorn_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/BlackthornEmysHouse.asm:12",
+      "script": "Emy",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_EMY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 3,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Emy",
+        "bank": 83,
+        "addr": 19682,
+        "flat": 1363170,
+        "expected_hex": "9503",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "DayCare:DayCareManScript_Inside:26",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 22,
+      "area_id": "route_34",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/DayCare.asm:26",
+      "script": "DayCareManScript_Inside",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "DayCareMan"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareManScript_Inside",
+        "bank": 87,
+        "addr": 29083,
+        "flat": 1438107,
+        "expected_hex": "0f1e00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "DayCareMan",
+      "kind": "daycare_interaction"
+    },
+    {
+      "id": "DayCare:DayCareLadyScript:36",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 22,
+      "area_id": "route_34",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/DayCare.asm:36",
+      "script": "DayCareLadyScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "DayCareLady"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareLadyScript",
+        "bank": 87,
+        "addr": 29097,
+        "flat": 1438121,
+        "expected_hex": "0f1f00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "DayCareLady",
+      "kind": "daycare_interaction"
+    },
+    {
+      "id": "GoldenrodDeptStore5F:Mike:127",
+      "map_name": "GoldenrodDeptStore5F",
+      "map_group": 11,
+      "map_number": 16,
+      "area_id": "goldenrod_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/GoldenrodDeptStore5F.asm:127",
+      "script": "Mike",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_MIKE"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 0,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Mike",
+        "bank": 87,
+        "addr": 25034,
+        "flat": 1434058,
+        "expected_hex": "9500",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ManiasHouse:ManiaScript:19",
+      "map_name": "ManiasHouse",
+      "map_group": 22,
+      "map_number": 4,
+      "area_id": "cianwood_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/ManiasHouse.asm:19",
+      "script": "ManiaScript",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "GiveShuckle"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "ManiaScript",
+        "bank": 93,
+        "addr": 20354,
+        "flat": 1527682,
+        "expected_hex": "0f4a00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "GiveShuckle",
+      "kind": "borrowed_gift",
+      "grant": {
+        "kind": "borrowed_gift",
+        "species": 213,
+        "level": 15,
+        "item": 173,
+        "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/events/shuckle.asm:9",
+        "rom": {
+          "kind": "unique_source_label_span",
+          "symbol": "GiveShuckle",
+          "bank": 1,
+          "addr": 29669,
+          "flat": 29669,
+          "expected_hex": "3ed5ea04d03e0fea40d0",
+          "instruction_boundary": "UNQUALIFIED"
+        },
+        "success": "OPEN_runtime_observation",
+        "finalization": "OPEN"
+      }
+    },
+    {
+      "id": "OlivineTimsHouse:Tim:12",
+      "map_name": "OlivineTimsHouse",
+      "map_group": 1,
+      "map_number": 3,
+      "area_id": "olivine_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/OlivineTimsHouse.asm:12",
+      "script": "Tim",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_TIM"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 2,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Tim",
+        "bank": 81,
+        "addr": 17727,
+        "flat": 1328447,
+        "expected_hex": "9502",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "PewterPokecenter1F:Chris:33",
+      "map_name": "PewterPokecenter1F",
+      "map_group": 14,
+      "map_number": 6,
+      "area_id": "pewter_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/PewterPokecenter1F.asm:33",
+      "script": "Chris",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_CHRIS"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 4,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Chris",
+        "bank": 90,
+        "addr": 18167,
+        "flat": 1476343,
+        "expected_hex": "9504",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route14:Kim:15",
+      "map_name": "Route14",
+      "map_group": 17,
+      "map_number": 2,
+      "area_id": "route_14",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route14.asm:15",
+      "script": "Kim",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_KIM"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 5,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Kim",
+        "bank": 79,
+        "addr": 17431,
+        "flat": 1295383,
+        "expected_hex": "9505",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route34:DayCareManScript_Outside:56",
+      "map_name": "Route34",
+      "map_group": 11,
+      "map_number": 1,
+      "area_id": "route_34",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route34.asm:56",
+      "script": "DayCareManScript_Outside",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "DayCareManOutside"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareManScript_Outside",
+        "bank": 75,
+        "addr": 20657,
+        "flat": 1233073,
+        "expected_hex": "0f2000",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "DayCareManOutside",
+      "kind": "daycare_interaction"
+    },
+    {
+      "id": "VioletKylesHouse:Kyle:16",
+      "map_name": "VioletKylesHouse",
+      "map_group": 10,
+      "map_number": 11,
+      "area_id": "violet_city",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/VioletKylesHouse.asm:16",
+      "script": "Kyle",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_KYLE"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 1,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Kyle",
+        "bank": 86,
+        "addr": 22051,
+        "flat": 1414691,
+        "expected_hex": "9501",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    }
+  ],
+  "native_callers": [
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/battle/read_trainer_party.asm:101",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/battle/read_trainer_party.asm:121",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/battle/read_trainer_party.asm:196",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/battle/read_trainer_party.asm:226",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "call",
+      "target": "DayCare_GiveEgg",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/events/daycare.asm:391",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/events/npc_trade.asm:168",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/events/shuckle.asm:14",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/items/item_effects.asm:556",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "farcall",
+      "target": "GivePoke",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/overworld/scripting.asm:1826",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "farcall",
+      "target": "GiveEgg",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/overworld/scripting.asm:1841",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "call",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/pokemon/move_mon.asm:1139",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "call",
+      "target": "TryAddMonToParty",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c engine/pokemon/move_mon.asm:1637",
+      "classification": "OPEN_native_caller"
+    }
+  ],
+  "native_caller_inventory_scope": "direct unconditional call/farcall/callfar/predef to the named grant/party append helpers",
+  "exclusions": [
+    {
+      "kind": "key_item",
+      "constant": "MYSTERY_EGG",
+      "source": [
+        "pokegold@656583c939d30f920a316177311a502dd222b57c maps/MrPokemonsHouse.asm:31"
+      ]
+    }
+  ],
+  "policies": {
+    "egg_reception_is_capture": false,
+    "hatch_area_id": "gift_daycare"
+  },
+  "open_obligations": [
+    "dynamic_native_grant_callers",
+    "conditional_native_calls_and_indirect_dispatch",
+    "source_script_reachability",
+    "success_identity_finalization_and_durability",
+    "CPU_instruction_boundary_qualification"
+  ]
+}

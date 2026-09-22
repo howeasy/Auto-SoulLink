@@ -1,396 +1,425 @@
 #!/usr/bin/env python3
-"""Generate Gen 2 wild encounter tables from pret/pokecrystal raw asm.
+"""Generate pinned G/S/C encounter tables without collapsing map rows.
 
-Reads:
-    .cache/pret/pokecrystal/data/wild/johto_grass.asm
-    .cache/pret/pokecrystal/data/wild/kanto_grass.asm
-    .cache/pret/pokecrystal/data/wild/johto_water.asm
-    .cache/pret/pokecrystal/data/wild/kanto_water.asm
-    data/games/gen2_crystal/area_map.json
-
-Writes:
-    data/games/gen2_crystal/encounter_tables.json
-
-Gen 2 species constants ARE NatDex (1..251) — no internal-index translation needed.
-
-Grass slot percentages: 30, 30, 20, 10, 5, 4, 1 (sum = 100).
-Water slot percentages: 60, 30, 10.
-Each map has 3 grass tables (morn/day/nite); we emit them as separate methods.
-
-Multi-floor dungeons (UNION_CAVE_1F, UNION_CAVE_B1F, ...) collapse to the same
-canonical area_id (e.g. "union_cave") via the area_map. First-wins: the first
-floor encountered is the one we publish.
+ASM is parsed independently of both ROM scanners. Every encoded source table
+is compared with the verified title ROM. Slots remain ordered and unaggregated;
+fishing species zero remains its source-defined time-group reference.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
+from pathlib import Path
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_REPO = os.path.normpath(os.path.join(_THIS_DIR, ".."))
-_PRET = os.path.join(_REPO, ".cache", "pret", "pokecrystal")
-_OUT = os.path.join(_REPO, "data", "games", "gen2_crystal", "encounter_tables.json")
-_AREA_MAP = os.path.join(_REPO, "data", "games", "gen2_crystal", "area_map.json")
+ROOT = Path(__file__).resolve().parents[1]
+if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT))
 
-GRASS_RATES = [30, 30, 20, 10, 5, 4, 1]  # 7 slots
-WATER_RATES = [60, 30, 10]               # 3 slots
-
-# Special-character species display names
-SPECIES_DISPLAY_OVERRIDES = {
-    "NIDORAN_F":   "Nidoran♀",
-    "NIDORAN_M":   "Nidoran♂",
-    "FARFETCH_D":  "Farfetch'd",
-    "MR__MIME":    "Mr. Mime",
-    "MR_MIME":     "Mr. Mime",
-    "HO_OH":       "Ho-Oh",
-    "PORYGON2":    "Porygon2",
-    "JYNX":        "Jynx",
-    "MIME_JR":     "Mime Jr.",  # not in gen2 but harmless
-}
+from tools.gen_gen2_area_map import (  # noqa: E402
+    build_area_map,
+    constants,
+    integer,
+    rom_bytes,
+    run_generator,
+    source_lines,
+)
 
 
-def pret_const_to_area_id(pret_const: str, known_area_ids: set[str]) -> str | None:
-    """Map a pret map constant (ROUTE_29, SPROUT_TOWER_2F, UNION_CAVE_B1F, …)
-    to a canonical area_id in known_area_ids by stripping floor / section suffixes.
-
-    Returns None if no match could be derived.
-    """
-    name = pret_const.lower()
-    # Try direct match first
-    if name in known_area_ids:
-        return name
-    # Strip suffixes in priority order
-    suffixes = [
-        "_b3f", "_b2f", "_b1f",
-        "_1f", "_2f", "_3f", "_4f", "_5f", "_6f", "_7f", "_8f", "_9f", "_10f",
-        "_outside", "_inside",
-        "_violet_entrance", "_blackthorn_entrance",
-        "_mahogany_side", "_blackthorn_side",
-        "_b2f_mahogany_side", "_b2f_blackthorn_side",
-        "_nw", "_sw", "_ne", "_se",
-        "_room_1", "_room_2", "_room_3",
-        "_item_rooms", "_square",
-        "_pokecenter_1f",
-    ]
-    # Try stripping any matching suffix
-    for suf in suffixes:
-        if name.endswith(suf):
-            candidate = name[: -len(suf)]
-            if candidate in known_area_ids:
-                return candidate
-    # Bespoke special cases
-    special = {
-        "whirl_island_nw": "whirl_islands",
-        "whirl_island_sw": "whirl_islands",
-        "whirl_island_ne": "whirl_islands",
-        "whirl_island_se": "whirl_islands",
-        "whirl_island_b1f": "whirl_islands",
-        "whirl_island_b2f": "whirl_islands",
-        "whirl_island_cave": "whirl_islands",
-        "whirl_island_lugia_chamber": "whirl_islands",
-        "mount_moon": "mt_moon",
-        "mount_mortar_1f_inside": "mt_mortar",
-        "mount_mortar_1f_outside": "mt_mortar",
-        "mount_mortar_2f_inside": "mt_mortar",
-        "mount_mortar_b1f": "mt_mortar",
-        "olivine_port": "olivine_city",
-        "vermilion_port": "vermilion_city",
-        "route_10_north": "route_10",
-        "silver_cave_room_1": "silver_cave",
-        "silver_cave_room_2": "silver_cave",
-        "silver_cave_room_3": "silver_cave",
-        "silver_cave_item_rooms": "silver_cave",
-        "mt_silver_outside": "silver_cave",
-        "ruins_of_alph_outside": "ruins_of_alph",
-        "ruins_of_alph_kabuto_chamber": "ruins_of_alph",
-        "ruins_of_alph_omanyte_chamber": "ruins_of_alph",
-        "ruins_of_alph_aerodactyl_chamber": "ruins_of_alph",
-        "ruins_of_alph_ho_oh_chamber": "ruins_of_alph",
-        "ruins_of_alph_inner_chamber": "ruins_of_alph",
-        "ruins_of_alph_research_center": "ruins_of_alph",
-        "dark_cave_violet_entrance": "dark_cave",
-        "dark_cave_blackthorn_entrance": "dark_cave",
-        "mt_mortar_1f_outside": "mt_mortar",
-        "mt_mortar_1f_inside": "mt_mortar",
-        "mt_mortar_2f_inside": "mt_mortar",
-        "mt_mortar_b1f": "mt_mortar",
-        "slowpoke_well_b1f": "slowpoke_well",
-        "slowpoke_well_b2f": "slowpoke_well",
-        "burned_tower_1f": "burned_tower",
-        "burned_tower_b1f": "burned_tower",
-        "ice_path_1f": "ice_path",
-        "ice_path_b1f": "ice_path",
-        "ice_path_b2f_mahogany_side": "ice_path",
-        "ice_path_b2f_blackthorn_side": "ice_path",
-        "ice_path_b3f": "ice_path",
-        "ice_path_b3f_2": "ice_path",
-        "tin_tower_1f": "tin_tower",
-        "tin_tower_2f": "tin_tower",
-        "tin_tower_3f": "tin_tower",
-        "tin_tower_4f": "tin_tower",
-        "tin_tower_5f": "tin_tower",
-        "tin_tower_6f": "tin_tower",
-        "tin_tower_7f": "tin_tower",
-        "tin_tower_8f": "tin_tower",
-        "tin_tower_9f": "tin_tower",
-        "mt_moon_square": "mt_moon",
-        "mt_moon": "mt_moon",
-        "sprout_tower_1f": "sprout_tower",
-        "sprout_tower_2f": "sprout_tower",
-        "sprout_tower_3f": "sprout_tower",
-        "dragons_den_b1f": "dragons_den",
-        "dragons_den_1f": "dragons_den",
-        "victory_road": "victory_road",
-        "cerulean_cave_1f": "cerulean_cave",  # not in current area_map; fallback
-        "cerulean_cave_2f": "cerulean_cave",
-        "cerulean_cave_b1f": "cerulean_cave",
-        "rock_tunnel_1f": "rock_tunnel",
-        "rock_tunnel_b1f": "rock_tunnel",
-        "tohjo_falls": "tohjo_falls",
-    }
-    if name in special:
-        # Allow even if not in known_area_ids — generates a new area_id entry
-        return special[name]
-    return None
+def byte(value):
+    if not isinstance(value, int) or not 0 <= value <= 255:
+        raise ValueError(f"byte out of bounds: {value}")
+    return value
 
 
-def species_display_name(species_const: str) -> str:
-    if species_const in SPECIES_DISPLAY_OVERRIDES:
-        return SPECIES_DISPLAY_OVERRIDES[species_const]
-    return species_const.title().replace("_", " ")
+def level(value):
+    if not 1 <= value <= 100:
+        raise ValueError(f"level out of bounds: {value}")
+    return value
 
 
-def parse_grass_asm(path: str) -> list[dict]:
-    """Parse johto_grass.asm or kanto_grass.asm.
+def threshold(token):
+    match = re.fullmatch(r"([0-9]+) percent(?:\s*\+\s*([0-9]+))?", token.strip())
+    if not match or not 0 <= int(match[1]) <= 100:
+        raise ValueError(f"unsupported percentage: {token}")
+    # macros/data.asm: percent EQUS "* $ff / 100". This is a byte threshold,
+    # not an asserted encounter probability or a percentage denominator of 256.
+    return byte(int(match[1]) * 255 // 100 + int(match[2] or 0))
 
-    Returns list of {map_const, rates: (morn, day, nite), entries: {morn:[],day:[],nite:[]}}
-    """
-    out: list[dict] = []
-    current = None
-    section = None  # 'morn' | 'day' | 'nite' | None
-    section_order = ["morn", "day", "nite"]
-    section_idx = 0
 
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().splitlines()
+def verify(ctx, symbol, encoded):
+    expected = bytes(encoded)
+    flat, actual = rom_bytes(ctx, symbol, len(expected))
+    if actual != expected:
+        raise ValueError(f"{symbol}: independently encoded source disagrees with ROM at {flat:#x}")
 
-    rate_pattern = re.compile(
-        r"^db\s+(\d+)\s*percent\s*,\s*(\d+)\s*percent\s*,\s*(\d+)\s*percent"
-    )
 
-    for raw in lines:
-        line = raw.split(";", 1)[0].strip()
-        if not line:
-            continue
-        m = re.match(r"^def_grass_wildmons\s+([A-Z_0-9]+)\s*$", line)
-        if m:
-            current = {"map_const": m.group(1), "rates": (0, 0, 0),
-                       "morn": [], "day": [], "nite": []}
-            section_idx = 0
-            section = None
-            continue
-        if line == "end_grass_wildmons":
-            if current:
-                out.append(current)
-            current = None
-            section = None
-            continue
+def lines(ctx, path):
+    return list(source_lines(ctx.read_source(path), ctx.title))
+
+
+def map_pair(name, maps):
+    if name not in maps:
+        raise ValueError(f"unknown map name: {name}")
+    return {"map_group": maps[name]["map_group"], "map_number": maps[name]["map_number"]}
+
+
+def pair_bytes(pair):
+    return [byte(pair["map_group"]), byte(pair["map_number"])]
+
+
+def species_id(name, species):
+    if name not in species or not 1 <= species[name] <= 251:
+        raise ValueError(f"unknown/non-Pokemon species: {name}")
+    return species[name]
+
+
+def parse_wild(ctx, path, method, maps, species):
+    records, encoded, current, rates, slots = [], [], None, [], []
+    table, terminated = None, False
+    periods = ("morning", "day", "night") if method == "grass" else ("all",)
+    slot_count = 7 if method == "grass" else 3
+
+    def finish():
         if current is None:
-            continue
-        m = rate_pattern.match(line)
-        if m:
-            current["rates"] = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            section = section_order[0]
-            section_idx = 0
-            continue
-        m = re.match(r"^db\s+(\d+)\s*,\s*([A-Z_0-9]+)\s*$", line)
-        if m and section is not None:
-            current[section].append((int(m.group(1)), m.group(2)))
-            if len(current[section]) == 7 and section_idx < 2:
-                section_idx += 1
-                section = section_order[section_idx]
-    return out
+            return
+        if len(rates) != len(periods) or len(slots) != len(periods) * slot_count:
+            raise ValueError(f"{table}/{current}: incomplete rate/slot record")
+        pair = map_pair(current, maps)
+        encoded.extend(pair_bytes(pair) + rates)
+        for slot in slots:
+            encoded.extend([slot["level"], slot["species"]])
+        for index, period in enumerate(periods):
+            records.append({"table": table, **pair, "time": period, "rate": rates[index],
+                            "slots": slots[index * slot_count:(index + 1) * slot_count]})
 
-
-def parse_water_asm(path: str) -> list[dict]:
-    """Parse johto_water.asm or kanto_water.asm.
-
-    Returns list of {map_const, rate, entries: [(level, species_const), ...]}.
-    """
-    out: list[dict] = []
-    current = None
-    rate_pattern = re.compile(r"^db\s+(\d+)\s*percent")
-
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().splitlines()
-
-    for raw in lines:
-        line = raw.split(";", 1)[0].strip()
-        if not line:
-            continue
-        m = re.match(r"^def_water_wildmons\s+([A-Z_0-9]+)\s*$", line)
-        if m:
-            current = {"map_const": m.group(1), "rate": 0, "entries": []}
-            continue
-        if line == "end_water_wildmons":
-            if current:
-                out.append(current)
+    for _, line in lines(ctx, path):
+        if line.endswith(":") and table is None:
+            table = line.rstrip(":")
+        elif match := re.fullmatch(r"(?:def_(?:grass|water)_wildmons|map_id) ([A-Z0-9_]+)", line):
+            if terminated:
+                raise ValueError(f"{path}: record after terminator")
+            finish()
+            current, rates, slots = match[1], [], []
+        elif line in ("end_grass_wildmons", "end_water_wildmons"):
+            if current is None:
+                raise ValueError(f"{path}: unmatched record end")
+            finish()
             current = None
+        elif line == "db -1":
+            if terminated:
+                raise ValueError(f"{path}: duplicate terminator")
+            finish()
+            current, terminated = None, True
+            encoded.append(255)
+        elif line.startswith("db ") and current is not None:
+            fields = [part.strip() for part in line[3:].split(",")]
+            if not rates:
+                rates = [threshold(part) for part in fields]
+            elif len(fields) == 2:
+                slots.append({"species": species_id(fields[1], species), "level": level(integer(fields[0]))})
+            else:
+                raise ValueError(f"{path}: malformed slot {line}")
+        else:
+            raise ValueError(f"{path}: unsupported wild source line {line}")
+    if not table or not terminated or current is not None:
+        raise ValueError(f"{path}: incomplete table")
+    keys = [(row["map_group"], row["map_number"], row["time"]) for row in records]
+    if len(keys) != len(set(keys)):
+        raise ValueError(f"{path}: duplicate map/time")
+    if not records and table != "SwarmWaterWildMons":
+        raise ValueError(f"{path}: empty required table")
+    verify(ctx, table, encoded)
+    return records
+
+
+def parse_probabilities(ctx):
+    result, table, encoded = {}, None, []
+    for _, line in lines(ctx, "data/wild/probabilities.asm"):
+        if line.endswith(":"):
+            table, encoded = line[:-1], []
+            result[table] = []
+        elif line.startswith("mon_prob "):
+            limit, index = map(integer, line[9:].split(","))
+            row = {"threshold": byte(limit), "slot_offset": byte(index * 2)}
+            result[table].append(row)
+            encoded.extend(row.values())
+        elif line.startswith("assert_table_length "):
+            rows = result[table]
+            if not rows or rows[-1]["threshold"] != 100 or any(
+                row["slot_offset"] != index * 2 or row["threshold"] <= (rows[index - 1]["threshold"] if index else 0)
+                for index, row in enumerate(rows)
+            ):
+                raise ValueError("invalid wild slot probability table")
+            verify(ctx, table, encoded)
+        elif not line.startswith("table_width "):
+            raise ValueError(f"unsupported probability line: {line}")
+    if set(result) != {"GrassMonProbTable", "WaterMonProbTable"}:
+        raise ValueError("missing wild slot probabilities")
+    return result
+
+
+def parse_tree(ctx, maps, species):
+    sets = constants(ctx.read_source("constants/pokemon_data_constants.asm"), "TREEMON_SET_", ctx.title)
+    tables, encoded, current = {}, [], None
+    for _, line in lines(ctx, "data/wild/treemon_maps.asm"):
+        if line.endswith(":"):
+            current, encoded = line[:-1], []
+            tables[current] = []
+        elif line.startswith("treemon_map "):
+            name, set_name = [part.strip() for part in line[12:].split(",")]
+            if set_name not in sets:
+                raise ValueError(f"unknown tree set: {set_name}")
+            row = {**map_pair(name, maps), "set_id": sets[set_name]}
+            tables[current].append(row)
+            encoded.extend(pair_bytes(row) + [byte(row["set_id"])])
+        elif line == "db -1":
+            verify(ctx, current, encoded + [255])
+            current = None
+        else:
+            raise ValueError(f"unsupported tree map line: {line}")
+    if current is not None or set(tables) != {"TreeMonMaps", "RockMonMaps"}:
+        raise ValueError("incomplete headbutt/rock map tables")
+    source = lines(ctx, "data/wild/treemons.asm")
+    pointers = []
+    for _, line in source:
+        if line.startswith("assert_table_length"):
+            break
+        if line.startswith("dw "):
+            pointers.append(line[3:])
+    if len(pointers) != len(sets):
+        raise ValueError("tree set pointer/constant count mismatch")
+    ptr_bytes = []
+    result = []
+    for set_id, pointer in enumerate(pointers):
+        sym = ctx.symbol(pointer)
+        if sym.bank != ctx.symbol("TreeMons").bank:
+            raise ValueError("tree pointer crosses bank")
+        ptr_bytes.extend(sym.address.to_bytes(2, "little"))
+        if set_id == sets["TREEMON_SET_NONE"]:
             continue
-        if current is None:
+        rock = set_id == sets["TREEMON_SET_ROCK"]
+        start = next((i for i, (_, line) in enumerate(source) if line == pointer + ":"), None)
+        if start is None:
+            raise ValueError(f"missing tree set label: {pointer}")
+        parts, encoded = [[]], []
+        for _, line in source[start + 1:]:
+            if line.endswith(":") and not encoded:
+                continue  # legitimate aliased set labels
+            if line == "db -1":
+                encoded.append(255)
+                if len(parts) == (1 if rock else 2):
+                    break
+                parts.append([])
+            elif line.startswith("db "):
+                weight, mon, lvl = [part.strip() for part in line[3:].split(",")]
+                row = {"weight": byte(integer(weight)), "species": species_id(mon, species),
+                       "level": level(integer(lvl))}
+                parts[-1].append(row)
+                encoded.extend(row.values())
+            else:
+                raise ValueError(f"{pointer}: incomplete/unsupported tree set")
+        if not encoded or encoded[-1] != 255 or any(sum(r["weight"] for r in p) != 100 for p in parts):
+            raise ValueError(f"{pointer}: invalid tree probabilities/terminator")
+        verify(ctx, pointer, encoded)
+        result.append({"set_id": set_id, "kind": "rock_smash" if rock else "headbutt",
+                       "common": parts[0], "rare": [] if rock else parts[1]})
+    verify(ctx, "TreeMons", ptr_bytes)
+    return {"headbutt_maps": tables["TreeMonMaps"], "rock_smash_maps": tables["RockMonMaps"], "sets": result}
+
+
+def parse_fishing(ctx, species):
+    source = lines(ctx, "data/wild/fish.asm")
+    headers, rods, times, current = [], {}, [], None
+    for _, line in source:
+        if line.startswith("fishgroup "):
+            headers.append([part.strip() for part in line[10:].split(",")])
+        elif line.startswith(".") and line.endswith(":"):
+            entries = rods[current] if current in rods and not rods[current] else []
+            current = line[:-1]
+            rods[current] = entries  # consecutive labels alias one source table
+        elif line == "TimeFishGroups:":
+            current = "time"
+        elif line.startswith("db "):
+            fields = [part.strip() for part in line[3:].split(",")]
+            if current == "time":
+                if len(fields) != 4:
+                    raise ValueError("malformed time fish group")
+                times.append({"group_id": len(times),
+                              "day": {"species": species_id(fields[0], species), "level": level(integer(fields[1]))},
+                              "night": {"species": species_id(fields[2], species), "level": level(integer(fields[3]))}})
+            elif current in rods:
+                limit = threshold(fields[0])
+                if len(fields) == 2 and fields[1].startswith("time_group "):
+                    mon, lvl = 0, byte(integer(fields[1][11:]))
+                elif len(fields) == 3:
+                    mon, lvl = species_id(fields[1], species), level(integer(fields[2]))
+                else:
+                    raise ValueError("malformed fishing slot")
+                rods[current].append({"threshold": limit, "species": mon, "level": lvl})
+            else:
+                raise ValueError("orphan fishing bytes")
+        elif not (line in ('DEF time_group EQUS "0,"', "FishGroups:")
+                  or line.startswith(("table_width ", "assert_table_length "))):
+            raise ValueError(f"unsupported fishing source: {line}")
+    fish_consts = constants(ctx.read_source("constants/map_data_constants.asm"), "FISHGROUP_", ctx.title)
+    if len(headers) != len(fish_consts) - 1 or not times:
+        raise ValueError("missing fishing groups")
+    encoded_times = [value for row in times for part in (row["day"], row["night"]) for value in part.values()]
+    verify(ctx, "TimeFishGroups", encoded_times)
+    encoded_headers, result = [], []
+    for index, header in enumerate(headers, 1):
+        if len(header) != 4:
+            raise ValueError("malformed fishing header")
+        bite = threshold(header[0])
+        encoded_headers.append(bite)
+        group = {"group_id": index, "bite_threshold": bite}
+        for method, pointer in zip(("old", "good", "super"), header[1:], strict=True):
+            if pointer not in rods or not rods[pointer] or rods[pointer][-1]["threshold"] != 255:
+                raise ValueError(f"missing/unterminated fishing rod table: {pointer}")
+            entries = rods[pointer]
+            if any(row["threshold"] <= (entries[i - 1]["threshold"] if i else 0)
+                   or (row["species"] == 0 and row["level"] >= len(times)) for i, row in enumerate(entries)):
+                raise ValueError(f"invalid fishing thresholds/time reference: {pointer}")
+            symbol = "FishGroups" + pointer
+            sym = ctx.symbol(symbol)
+            if sym.bank != ctx.symbol("FishGroups").bank:
+                raise ValueError("fishing pointer crosses bank")
+            encoded_headers.extend(sym.address.to_bytes(2, "little"))
+            verify(ctx, symbol, [value for row in entries for value in row.values()])
+            group[method] = entries
+        result.append(group)
+    verify(ctx, "FishGroups", encoded_headers)
+    return {"groups": result, "time_groups": times}
+
+
+def parse_roamers(ctx, maps, species):
+    graph, encoded = [], []
+    ended = False
+    for _, line in lines(ctx, "data/wild/roammon_maps.asm"):
+        if line.startswith("roam_map "):
+            if ended:
+                raise ValueError("roamer map after terminator")
+            names = [part.strip() for part in line[9:].split(",")]
+            origin = map_pair(names[0], maps)
+            destinations = [map_pair(name, maps) for name in names[1:]]
+            if not destinations:
+                raise ValueError("empty roamer adjacency")
+            graph.append({**origin, "destinations": destinations})
+            encoded.extend(pair_bytes(origin) + [byte(len(destinations))])
+            encoded.extend(value for pair in destinations for value in pair_bytes(pair))
+            encoded.append(0)
+        elif line == "db -1":
+            encoded.append(255)
+            ended = True
+    if not ended or not graph:
+        raise ValueError("incomplete roamer map table")
+    verify(ctx, "RoamMaps", encoded)
+    source = lines(ctx, "engine/overworld/wildmons.asm")
+    start = next((i for i, (_, line) in enumerate(source) if line == "InitRoamMons:"), None)
+    if start is None:
+        raise ValueError("missing InitRoamMons source label")
+    initial, encoded, value = {}, [], None
+    field_names = {"Species": "species", "Level": "level", "MapGroup": "map_group", "MapNumber": "map_number"}
+    for _, line in source[start + 1:]:
+        if line.startswith("ld a, "):
+            token = line[6:]
+            if token.startswith("GROUP_"):
+                value = map_pair(token[6:], maps)["map_group"]
+            elif token.startswith("MAP_"):
+                value = map_pair(token[4:], maps)["map_number"]
+            elif token in species:
+                value = species_id(token, species)
+            else:
+                value = byte(integer(token))
+            encoded.extend([0x3e, value])
+        elif match := re.fullmatch(r"ld \[(wRoamMon([1-3])(Species|Level|MapGroup|MapNumber|HP))\], a", line):
+            if value is None:
+                raise ValueError("roamer store before value")
+            address = ctx.symbol(match[1]).address
+            encoded.extend([0xea, address & 255, address >> 8])
+            if match[3] != "HP":
+                initial.setdefault(int(match[2]), {})[field_names[match[3]]] = value
+        elif line == "xor a":
+            value = 0
+            encoded.append(0xaf)
+        elif line == "ret":
+            encoded.append(0xc9)
+            break
+        else:
+            raise ValueError(f"unsupported roamer initialization: {line}")
+    if not initial or encoded[-1] != 0xc9 or any(set(row) != set(field_names.values()) for row in initial.values()):
+        raise ValueError("incomplete roamer initialization")
+    verify(ctx, "InitRoamMons", encoded)
+    return {"initial": [initial[key] for key in sorted(initial)], "maps": graph}
+
+
+def parse_contest(ctx, species):
+    slots, fallback, encoded = [], None, []
+    for _, line in lines(ctx, "data/wild/bug_contest_mons.asm"):
+        if line == "ContestMons:":
             continue
-        m = rate_pattern.match(line)
-        if m and current["rate"] == 0:
-            current["rate"] = int(m.group(1))
-            continue
-        m = re.match(r"^db\s+(\d+)\s*,\s*([A-Z_0-9]+)\s*$", line)
-        if m:
-            current["entries"].append((int(m.group(1)), m.group(2)))
-    return out
+        if not line.startswith("db ") or fallback is not None:
+            raise ValueError("unsupported/trailing contest source")
+        weight, mon, lo, hi = [part.strip() for part in line[3:].split(",")]
+        weight, low, high = integer(weight), level(integer(lo)), level(integer(hi))
+        if low > high:
+            raise ValueError("reversed contest levels")
+        row = {"weight": weight, "species": species_id(mon, species), "min_level": low, "max_level": high}
+        encoded.extend([255 if weight == -1 else byte(weight), row["species"], low, high])
+        if weight == -1:
+            fallback = row
+        else:
+            slots.append(row)
+    if fallback is None or sum(row["weight"] for row in slots) != 100:
+        raise ValueError("incomplete contest table")
+    verify(ctx, "ContestMons", encoded)
+    return {"area_id": "national_park_contest", "slots": slots, "fallback": fallback}
 
 
-def aggregate_slots(entries: list[tuple[int, str]], slot_rates: list[int]) -> list[dict]:
-    """Collapse N-slot list to per-species rate + min/max level."""
-    by_species: dict[str, dict] = {}
-    for slot, (level, sp) in enumerate(entries):
-        if sp in ("NO_MON",):
-            continue
-        rate = slot_rates[slot] if slot < len(slot_rates) else 0
-        if sp not in by_species:
-            by_species[sp] = {"_const": sp, "rate": 0, "min_level": level, "max_level": level}
-        cur = by_species[sp]
-        cur["rate"] += rate
-        cur["min_level"] = min(cur["min_level"], level)
-        cur["max_level"] = max(cur["max_level"], level)
-    return list(by_species.values())
+def build_source_tables(ctx, area_map=None):
+    if 'DEF percent EQUS "* $ff / 100"' not in ctx.read_source("macros/data.asm"):
+        raise ValueError("unsupported percentage encoding")
+    area_map = build_area_map(ctx) if area_map is None else area_map
+    maps = {row["map_const"]: row for row in area_map.values()}
+    pokemon_source = ctx.read_source("constants/pokemon_constants.asm").split("DEF NUM_POKEMON", 1)[0]
+    species = constants(pokemon_source, "", ctx.title)
+    if len(species) != 251 or set(species.values()) != set(range(1, 252)):
+        raise ValueError("source species index is not exactly 1..251")
+    wild = {}
+    for method in ("grass", "water"):
+        wild[method] = [record for region in ("johto", "kanto", "swarm")
+                        for record in parse_wild(ctx, f"data/wild/{region}_{method}.asm", method, maps, species)]
+    probabilities = parse_probabilities(ctx)
+    wild["grass_probabilities"] = probabilities["GrassMonProbTable"]
+    wild["water_probabilities"] = probabilities["WaterMonProbTable"]
+    return {"wild": wild, "tree": parse_tree(ctx, maps, species),
+            "fishing": parse_fishing(ctx, species), "roamers": parse_roamers(ctx, maps, species),
+            "contest": parse_contest(ctx, species)}
 
 
-def build_method_entries(aggregated: list[dict]) -> list[dict]:
-    out = []
-    for e in aggregated:
-        # Gen 2 species constants are NatDex (1..251). Most uppercase names
-        # map directly via .title() — overrides handle special chars.
-        out.append({
-            "species_id": _species_const_to_natdex(e["_const"]),
-            "name": species_display_name(e["_const"]),
-            "rate": e["rate"],
-            "min_level": e["min_level"],
-            "max_level": e["max_level"],
-        })
-    out = [x for x in out if x["species_id"]]
-    out.sort(key=lambda x: (-x["rate"], x["species_id"]))
-    return out
+def build_encounters(ctx):
+    areas = build_area_map(ctx)
+    tables = build_source_tables(ctx, areas)
+    return {"schema": "gen2-encounter-tables-v1", "generator": "tools/gen_gen2_encounters.py",
+            "source": ctx.source_record(), "title": ctx.title, **tables,
+            "map_areas": {key: row["area_id"] for key, row in areas.items()},
+            "policy": {"ordinary_area": "shared_across_times_and_methods",
+                       "contest_area": "national_park_contest", "roamer_area": "legend_<species>",
+                       "roamer_consumes_ordinary_area": False, "egg_hatch_area": "gift_daycare",
+                       "acquisition_events": "NOT_ESTABLISHED_BY_TABLES"},
+            "inventory": {"complete": ["map_headers", "map_fishing_groups", "grass", "water",
+                                        "grass_swarms", "water_swarms", "headbutt_slots", "rock_smash_slots",
+                                        "fishing", "time_fishing", "roamer_initialization_and_map_graph", "contest"],
+                          "open": ["unown_form_unlocks:data/wild/unlocked_unowns.asm",
+                                   "flee_rules:data/wild/flee_mons.asm",
+                                   "runtime_encounter_selection_and_acquisition_qualification"]
+                          + (["headbutt_sleep_status:data/wild/treemons_asleep.asm"]
+                             if ctx.title == "crystal" else [])}}
 
 
-_SPECIES_NATDEX_CACHE: dict[str, int] = {}
-
-
-def _species_const_to_natdex(const: str) -> int:
-    """Resolve pret species constant to NatDex by parsing pokemon_constants.asm.
-
-    Gen 2 const_def starts at 1 with BULBASAUR; const_skip increments without
-    naming. Result is cached.
-    """
-    if not _SPECIES_NATDEX_CACHE:
-        path = os.path.join(_PRET, "constants", "pokemon_constants.asm")
-        with open(path, encoding="utf-8") as f:
-            idx = -1
-            for line in f:
-                line = line.split(";", 1)[0].strip()
-                m = re.match(r"^const_def\s+(\d+)\s*$", line)
-                if m:
-                    idx = int(m.group(1))
-                    continue
-                if line == "const_def":
-                    idx = 0
-                    continue
-                if line == "const_skip":
-                    if idx >= 0:
-                        idx += 1
-                    continue
-                m = re.match(r"^const\s+([A-Z_0-9]+)\s*$", line)
-                if m and idx >= 0:
-                    _SPECIES_NATDEX_CACHE[m.group(1)] = idx
-                    idx += 1
-    return _SPECIES_NATDEX_CACHE.get(const, 0)
-
-
-def main() -> int:
-    if not os.path.exists(_PRET):
-        sys.stderr.write(f"Missing pret repo at {_PRET}\n"
-                         "Run tools/build_pret_syms.py first to clone it.\n")
-        return 1
-
-    with open(_AREA_MAP, encoding="utf-8") as f:
-        area_map = json.load(f)
-    known_area_ids = set()
-    for v in area_map.values():
-        if isinstance(v, dict) and "area_id" in v:
-            known_area_ids.add(v["area_id"])
-
-    # Parse all 4 source files
-    grass = (parse_grass_asm(os.path.join(_PRET, "data", "wild", "johto_grass.asm"))
-             + parse_grass_asm(os.path.join(_PRET, "data", "wild", "kanto_grass.asm")))
-    water = (parse_water_asm(os.path.join(_PRET, "data", "wild", "johto_water.asm"))
-             + parse_water_asm(os.path.join(_PRET, "data", "wild", "kanto_water.asm")))
-
-    areas: dict[str, dict[str, list[dict]]] = {}
-    unmapped: list[str] = []
-    skipped_species: set[str] = set()
-
-    for g in grass:
-        area_id = pret_const_to_area_id(g["map_const"], known_area_ids)
-        if not area_id:
-            unmapped.append(g["map_const"])
-            continue
-        if area_id in areas and any(m in areas[area_id] for m in ("Morn", "Day", "Nite")):
-            continue  # first-wins per area
-        block = areas.setdefault(area_id, {})
-        for tod_key, tod_label in (("morn", "Morn"), ("day", "Day"), ("nite", "Nite")):
-            entries = g[tod_key]
-            if not entries:
-                continue
-            agg = aggregate_slots(entries, GRASS_RATES)
-            method_entries = build_method_entries(agg)
-            for sp in [e["_const"] for e in agg if not _species_const_to_natdex(e["_const"])]:
-                skipped_species.add(sp)
-            if method_entries:
-                block[tod_label] = method_entries
-
-    for w in water:
-        area_id = pret_const_to_area_id(w["map_const"], known_area_ids)
-        if not area_id:
-            unmapped.append(w["map_const"])
-            continue
-        block = areas.setdefault(area_id, {})
-        if "Surf" in block:
-            continue
-        if not w["entries"]:
-            continue
-        agg = aggregate_slots(w["entries"], WATER_RATES)
-        method_entries = build_method_entries(agg)
-        if method_entries:
-            block["Surf"] = method_entries
-
-    with open(_OUT, "w", encoding="utf-8") as f:
-        json.dump(areas, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-
-    print(f"Wrote {_OUT}")
-    print(f"  {len(areas)} areas covered")
-    if unmapped:
-        unique = sorted(set(unmapped))
-        print(f"  {len(unique)} unmapped pret consts (need area_map entry):")
-        for x in unique:
-            print(f"    {x}")
-    if skipped_species:
-        print(f"  {len(skipped_species)} species skipped (no const match):")
-        for sp in sorted(skipped_species):
-            print(f"    {sp}")
-    return 0
+def main(argv=None):
+    return run_generator(argv, "encounter_tables.json", build_encounters)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
