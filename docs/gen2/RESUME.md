@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-22, stopping point)
+# Gen 2 implementation resume (updated 2026-09-22, second stopping point)
 
 ## Who coordinates
 
@@ -36,54 +36,69 @@ the coordinator edits the sole ledger: the sweep `RC_MASTER_GUIDE.md` checkpoint
   `patch/gen1/dist/slink_bank3f.bin` rebuilt byte-identically.
 
 ## Done this session (all reviewed; see commit bodies)
+Session 2 (after the first stop; workers were Opus/Sonnet subagents and OMP Gen2-Base, no Codex):
+- `0211c7c` N3 independent review of the Gen 2 client `cc04bb7` + binder fixes `dfb25f6`
+  (`docs/gen2/reviews/P3_GEN2_CLIENT_REVIEW_2026-09-22.md`): 2 HIGH, 1 MEDIUM, 1 LOW.
+  N3-1 was real and serious: BizHawk 2.11.1 `emu.getregister` has NO pair registers
+  (`docs/purergb/PLAN.md` A15), so every `HL`/`DE` read would have killed Gen 2 signals live.
+- `acde60f` fixes for N3-1..N3-4 (pairs composed from singles, BizHawk-faithful register
+  fakes, superseding PC starts, refused captures never `no_catch`, nothing before the hello).
+- `cfbcbba` fixture qualification callbacks: boot/CONTINUE, native re-save, reload, and
+  `qualify()` (invocation in the Runbook).
+- `c03c15f` Gen 2 live inspect gate (`lua/tests/gen2_inspect_gate.lua`,
+  `tests/live/test_gen2_new_gates.py`). R-3 GAME oracle is only a Lua-internal differential:
+  OPEN carry. The `live-new-gates` lane stays UNIMPLEMENTED on purpose.
+- `f86c061` R3 independent review of `cfbcbba` + `acde60f`
+  (`docs/gen2/reviews/P3_QUALIFY_AND_N3_FIXES_REVIEW_2026-09-22.md`): 1 HIGH (Gold/Silver
+  window stack lives in SRAM, `pokegold ram/sram.asm:81-83`, so every G/S re-save would be
+  refused), 3 MEDIUM, 3 LOW. N3 fixes confirmed correct.
+- `0f2b3bc` R3 fixes (N8): G/S SRAM window stack allowed as menu scratch, Crystal sScratch
+  boot-zero, re-save scenario delta (every save byte must match except source-cited fields),
+  pre-hello queue cleared on identity change and on any non-+1 frame step, Python re-derives
+  the verdict from site hits, HUD notice on a full queue. The R3-3 allowed-change list is
+  source-derived: if live qualification refuses on a named field, check that field first.
+  Not yet independently reviewed; the forward-jump queue clear assumes the client ticks
+  every frame (check that in the review).
+- `2df48a0` fishing map association source rule (OMP, accepted, spot-checked) and `c42061d`
+  per-map `fishing_water` in the generator + adapter gate (OMP N7): rod-emitting maps
+  383->62 Crystal, 366->64 Gold/Silver. `fishing_map_association` stays OPEN until a
+  fixture fishes. c42061d has NOT had an independent review yet.
 
-- Gen 1 rebind onto the shared modules repaired and restored to master behaviour
-  (`0a1aa79`, `e0b38b7`, `3c48b20`, `cb02a10`), with a master-equivalence differential that
-  runs master's own files. Two independent Opus reviews plus closures:
-  `docs/gen2/reviews/P3_SHARED_MODULES_REVIEW_2026-09-22.md`.
-- Gen 2 reads, wire projection, fixture tooling, scripted fixture gate, client (candidate
-  graph only), R2 binder fixes (mail list, per-title GetTreeMons limit, box re-assert):
-  `17aeb62`, `92f5445`, `b6c5b87`, `461594b`, `d1cadea`, `cc04bb7`, `bf2d5e1`. Review:
-  `docs/gen2/reviews/P3_GEN2_BINDERS_REVIEW_2026-09-22.md`.
-- Coverage map: F-3 cells amended (`d2b023c`); input pins made checkout-independent with
-  `eol=lf` (`58054c1`); the lane is green. Ledger citations corrected from OMP audits
-  (`bf99768`, `d204b31`, `53e5659`: all 69 ledger citations audited, 9 corrected). RTC
-  trailer facts: `docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md`.
-- Gen 2 client on the candidate graph (`cc04bb7`) and signal-binder fixes (`dfb25f6`):
-  boundaries keep finalized events, refusals are values not kill switches, faints carry
-  identity, evolution qualified from the ROM's evolution table. **Not yet independently
-  reviewed** (author tests only).
+Session 1: see the commit bodies from `5824258` to `463bc71` (Gen 1 rebind repaired and
+restored to master behaviour with a master-equivalence differential; Gen 2 reads, wire,
+fixture tooling, scripted gate, client, binder fixes; coverage-map pins eol=lf; 69 ledger
+citations audited). Reviews: `P3_SHARED_MODULES_REVIEW_2026-09-22.md`,
+`P3_GEN2_BINDERS_REVIEW_2026-09-22.md`, `OMP_RTC_SOURCE_2026-09-22.md`.
 
 ## Physical evidence so far
-
-- **Gen 1 `live-new-gates` PASSED at `3c48b20`:** 19 passed, 1 explained skip, 0 failed.
-- The rest of that Gen 1 lane sequence is **not evidence**: it picked up `cb02a10` mid-run
-  and was stopped at the owner's stopping point. It found one real regression (the
-  `ball_gate_new` park, fixed in `cb02a10`); its other failures were missing inputs, since
-  staged.
+Gen 1 physical set at ONE frozen cut `463bc71`, run from a detached lane worktree
+`C:/Users/howar/AppData/Local/Temp/g2lane` (gitignored inputs copied/junctioned in, plus
+`.cache/upr/PokeRandoZX.jar`). Logs: coordinator scratchpad `n1/`.
+- PASS: live-new-gates (19 + 1 explained skip), inspect-purergb (16 + 4 explained),
+  apex-purergb (1), live-trade-gates (3), inspect-purergb-overlay (6),
+  live-trade-gates-purergb (1), apex-refusal-purergb, live-gates (11/11 after the jar was staged).
+- NOT SETTLED: duo-pairs and duo-pairs-purergb.
+  - First run (worker test suites running concurrently): duo-pairs 15/3 failed,
+    duo-pairs-purergb 26/7 failed (ball-throw timeouts). `verify_gen1_release.py` documents
+    that CPU contention fails duo lanes.
+  - "Quiet" re-run was NOT quiet (OMP ran tests; an EmuHawk with no arguments, not the
+    harness, was open from 17:25): duo-pairs 16/2 failed (`whiteout_new`: both clients gone
+    after PRE_WHITEOUT, "battle_begin with no opponent: ignored"; `pc_ops_new`).
+    duo-pairs-purergb re-run was stopped by the coordinator at the owner's stop.
 - No Gen 2 live run has happened yet.
 
 ## Next actions, in order
-
-1. Nothing is in flight. The signal-binder fixes (`dfb25f6`: boundaries keep finalized events,
-   refusals are values, faints carry identity, evolution qualified) and both OMP ledger audits
-   (`53e5659`: all 69 citations audited, 9 corrected) are committed.
-2. Re-run the whole Gen 1 physical set at ONE frozen commit, with
-   `SLINK_PURERGB_ROMS="E:/Google Drive/SLink/.cache/purergb"`, one lane at a time:
-   inspect-purergb, apex-purergb, duo-pairs, duo-pairs-purergb, live-gates,
-   live-trade-gates, inspect-purergb-overlay, live-trade-gates-purergb,
-   apex-refusal-purergb. That is the gate for the Gen 1 rebind ever reaching master.
-   `test_gen1_trade_patch.py` is red on RGBDS `STRSUB` deprecation warnings; it's
-   pre-existing and not from this branch.
-3. First live Gen 2 fixture run (crystal_town) through `tools/gen2_fixtures.py` and
-   `lua/tests/test_gen2_scripted_gate.lua`. Expect route timing and menu parsing to need
-   live tuning; the list of live-only assumptions is in commit `461594b`.
-4. Independent (non-author) review of the Gen 2 client `cc04bb7` and binder fixes `dfb25f6`
-   before the live inspect gate. It can run in parallel with steps 2-3; Codex is a natural
-   reviewer once it is online.
-5. Fixture qualification callbacks (boot, CONTINUE, re-save, reload) so a played candidate
-   can become a qualified fixture. Then the other seven fixtures, the live inspect gate and
-   the Gen 2 duo harness.
+1. Settle Gen 1 duo: with the machine TRULY idle (no workers, no tests, no other EmuHawk),
+   run `whiteout_new` and `pc_ops_new` on master `8f6a986` and at the branch cut, same
+   harness. Same failure on master = pre-existing flake; branch-only = regression in the
+   rebind (suspect `cb02a10` scripted_inputs policy first). Then re-run duo-pairs and
+   duo-pairs-purergb whole. Rule learned: NO worker test runs while any duo lane runs.
+2. Independent review of `c42061d` (fishing_water) and of the N8 R3 fixes `0f2b3bc`, then the
+   inspect gate `c03c15f` (not yet reviewed).
+3. First live Gen 2 fixture play (crystal_town) and then `qualify()` on the candidate.
+   Watch the live-only assumptions in the bodies of `461594b`, `cfbcbba` and N8.
+4. The other seven fixtures, the live inspect gate run, the Gen 2 duo harness
+   (`tools/e2e_duo.py` gen2_new rows, `tests/e2e/test_duo_gen2_new.py`; not started).
 
 ## Runbook (exact commands; run from the gen2-foundation worktree root)
 
@@ -105,6 +120,8 @@ the coordinator edits the sole ledger: the sweep `RC_MASTER_GUIDE.md` checkpoint
 - **Gen 2 generators:** each has `--check` (for example `python tools/gen_gen2_engine_signals.py --check`,
   `tools/gen_gen2_profile.py`). Packs must regenerate byte-identically. `python tools/verify_gen2_rom_layout.py`
   checks all engine-site bytes against the built ROMs.
+- **Qualify a played candidate:** `python -c "import json; from tools import gen2_fixtures as f; r = f.qualify('crystal_town', r'<candidate_path from run_play>', '<attempt_id>'); print(json.dumps(r, indent=2)); raise SystemExit(0 if r['passed'] else 1)"` (three EmuHawk launches: boot, resave, reload). Live inspect gate: `SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py -q` once fixtures exist.
+- **Run live lanes from a frozen lane worktree** (e.g. `git worktree add --detach C:/Users/howar/AppData/Local/Temp/g2lane <sha>` then copy/junction the gitignored inputs) so code work can continue here; never run worker tests while a duo lane runs.
 - **First live Gen 2 fixture:** there is no CLI for a play. Use
   `from tools import gen2_fixtures as f; spec = next(s for s in f.FIXTURES if s.name == "crystal_town");
   f.run_play(spec, {"observer_qualified": True, "attempt_id": "<id>", "gate_script": f.GATE_SCRIPT})`.
@@ -132,7 +149,9 @@ the coordinator edits the sole ledger: the sweep `RC_MASTER_GUIDE.md` checkpoint
   merge.
 - Coverage validator PLAUSIBLE items (the target+base CLI policy; controls full-equality)
   are left for the Gen 3 binder.
-- Open with an exact reason: indoor fishing map association; U5 double ROM read at boot
+- Open with an exact reason: `fishing_map_association` (rule landed in `c42061d`; open until a
+  fixture fishes; connection strips and story-time blockdata not modelled); R-3 GAME oracle
+  (needs trainer/badge/PC/held-item scenario fixtures); U5 double ROM read at boot
   (measure in the emulator).
 
 ## Stable facts and constraints
