@@ -20,3 +20,9 @@ Plausible: a same-identity savestate at the same frame count evades the pre-hell
 Checked correct: area-map diffs add only fishing_water (388/368/368 rows); permission-table refusal, header/dimension/pointer checks, quadrant order, block-zero; G/S window stack and C sScratch boot-zero; unconditional candidate frame dispatch (lua/gen2/run.lua:122-126); identity-change queue clear; PC/SP width; independent Python decoding; R-3 limitation stated honestly; missing prerequisites fail the gated lane.
 
 Disposition: 1-7 -> fix card gen2-N10 (Opus). 8 -> generator follow-up (fishing stays OPEN meanwhile). Savestate case -> carry.
+
+## Second pass: live Codex thread Gen2-Part2 (independent, static, e19af00)
+
+3 HIGH, 3 MEDIUM, 1 LOW. Independently confirms findings 1 (badge dict), 3 (object exemption covers wMapObjects script pointers; C sym wMap1ObjectScript 01:d738, G/S 01:d45f), 4 (gate can settle on the CONTINUE confirm screen; rated HIGH here), 5 (speed 6399), 6 (fixture binding tautological; rated HIGH here, runner accepts any existing candidate, tools/run_gb_gate.py:297-301), 7 (party domain/range metadata) and 8 (side walls are directional, LOW, no pinned-map miscount established). Did not raise 2 (phone timers).
+Additions: R-5g must also stay OPEN (two DV formulas are not GAME status-symbol evidence); JumpRoamMons rewrites active roamer map fields (C engine/overworld/wildmons.asm:672-700), irrelevant to the eight early fixtures but the allowlist is not exhaustive for late-game saves. Checked correct: c42061d pack diff, collision/quadrant math and refusals; G/S window stack; C sScratch zero-only; R3 delta covers both copies; unconditional frame_end (lua/gen2/run.lua:122-125); witness re-derivation; PYDEC independence; honest R-3 limitation.
+Disposition: all folded into gen2-N10 (addendum: full-consumer, pre-confirm replay, wrong-save receipt, script-pointer mutant, speed wrapper, domain negative controls; no R-5g closure claim).
