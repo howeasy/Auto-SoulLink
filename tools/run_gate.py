@@ -40,16 +40,23 @@ DEFAULT_ROM = "patch/build/slink_RR.gba"
 # never fired in practice (measured: one file touched per run) but it is a landmine under every
 # "N gates pass" claim, and there is no reason to leave it armed.
 _OUT_RE = re.compile(r"patch/build/([A-Za-z0-9_]+_result\.txt)")
+# Gen 3 gates open their result through the shared helper (lua/tests/gen3_boot_check.lua
+# M.open: patch/build/<name>_result.txt), so the path never appears literally in their source.
+_GOPEN_RE = re.compile(r'G\.open\(\s*"([A-Za-z0-9_]+)"\s*\)')
 
 
 def _result_path_for(script):
     """The result file THIS gate writes, read from its own source. None if it declares none."""
     try:
         with open(os.path.join(REPO, script), encoding="utf-8", errors="replace") as f:
-            m = _OUT_RE.search(f.read())
+            src = f.read()
+        m = _OUT_RE.search(src)
     except OSError:
         return None
-    return os.path.join(BUILD, m.group(1)) if m else None
+    if m:
+        return os.path.join(BUILD, m.group(1))
+    g = _GOPEN_RE.search(src)
+    return os.path.join(BUILD, g.group(1) + "_result.txt") if g else None
 
 
 def _has_verdict(path):
