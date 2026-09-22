@@ -104,6 +104,7 @@ SECTION = {
     "SB1_BALL_POCKET_COUNT": "derived", "SB1_FLAGS_OFFSET": "derived",
     "SB1_VARS_OFFSET": "derived", "OVERWORLD_MODE": "derived",
     "BASESTATS_ENTRY_SIZE": "derived", "TASK_STRUCT_SIZE": "derived",
+    "BASESTATS_ADDR_BY_GAME_CODE": "derived",
     "GMAIN_CB2_OFFSET": "derived",
     "BATTLE_RESULTS_PLAYER_FAINTS_OFF": "derived", "BATTLE_RESULTS_FOE_FAINTS_OFF": "derived",
     "PARTY_IN_SB1": "derived", "SB1_PARTY_BASE_OFFSET": "derived",

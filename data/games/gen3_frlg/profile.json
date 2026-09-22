@@ -4,8 +4,8 @@
   "schema": "gen3-profile-v1",
   "source": {
     "file": "lua/games/gen3_frlge.lua",
-    "git_head": "134f007b2b3e1131f90965936326e4511725cc9b",
-    "sha256": "c6040d5a9a90881717e6954a1e4b7733bdd655e0416ed40d784dae124b20b8ff"
+    "git_head": "8e125fee5e947c6d14093786784db2ddf82313cd",
+    "sha256": "c54e261099bc7a235d4adfcc78679ca176384f5c4c9556b816e5d607418f9a10"
   },
   "titles": {
     "emerald": {
@@ -55,6 +55,10 @@
       },
       "admitted": true,
       "derived": {
+        "BASESTATS_ADDR_BY_GAME_CODE": {
+          "BPGE": 136660832,
+          "BPRE": 136660868
+        },
         "BASESTATS_ENTRY_SIZE": 28,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
@@ -176,6 +180,10 @@
       },
       "admitted": true,
       "derived": {
+        "BASESTATS_ADDR_BY_GAME_CODE": {
+          "BPGE": 136660832,
+          "BPRE": 136660868
+        },
         "BASESTATS_ENTRY_SIZE": 28,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,

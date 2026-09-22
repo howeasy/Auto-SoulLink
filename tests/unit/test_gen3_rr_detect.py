@@ -15,6 +15,7 @@ The detector is driven directly - no emulator, no client.  RAM/ROM reads go thro
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 
@@ -33,6 +34,8 @@ CFRU_PTR_ADDR = 0x080001BC          # the RR profile's gBaseStats pointer word
 WORD_OFF = CFRU_PTR_ADDR - ROM_BASE
 VERSION_STR_OFF = 0x108             # the detector reads 32 bytes here
 VERSION_STR = b"pokemon red version\x00"
+# Archipelago renames its cartridges (pokemon_frlg.apworld data/extracted_data.json `rom_names`).
+VERSION_STR_AP = b"pokemon red version AP\x00"
 
 # ROM words read from the four admitted dumps (tests/unit/test_gen3_rr_detect.py::test_real_*).
 VANILLA_WORDS = {"firered": 0x08254784, "leafgreen": 0x08254760}
@@ -87,6 +90,7 @@ class Probe:
         g = self.lua.globals()
         g.read = self._read
         self.lua.execute("""
+            emu = { getsystemid = function() return "GBA" end }
             memory = {
                 read_u8     = function(a, d) return read(a, 1) end,
                 read_u16_le = function(a, d) return read(a, 2) end,
@@ -141,10 +145,40 @@ def test_cfru_word_beats_a_validating_vanilla_pointer():
     assert Probe(ram=synthetic_ram(CFRU_WORD)).variant() == "radical_red"
 
 
-def test_ap_pointer_keeps_its_priority():
-    ram = synthetic_ram(CFRU_WORD)
+def test_ap_pointer_beats_a_plain_name_with_a_16mb_word():
+    ram = synthetic_ram(VANILLA_WORDS["firered"])
     ram.update(sb1(AP_SB1_PTR, AP_SB1))
     assert Probe(ram=ram).variant() == "ap"
+
+
+def test_the_ap_name_is_rom_only():
+    """The Archipelago world renames the header, so AP is known before a save exists."""
+    ram = {ROM_BASE + VERSION_STR_OFF + i: b for i, b in enumerate(VERSION_STR_AP)}
+    assert Probe(ram=ram).variant() == "ap"
+
+
+def test_the_ap_name_beats_the_expanded_build_signature():
+    ram = {ROM_BASE + VERSION_STR_OFF + i: b for i, b in enumerate(VERSION_STR_AP)}
+    ram.update(le(CFRU_PTR_ADDR, CFRU_WORD, 4))
+    assert Probe(ram=ram).variant() == "ap"
+
+
+def test_an_expanded_word_beats_a_validating_ap_pointer():
+    """ROM-only evidence outranks RAM plausibility (an AP word is < 0x09000000 in practice)."""
+    ram = synthetic_ram(CFRU_WORD)
+    ram.update(sb1(AP_SB1_PTR, AP_SB1))
+    assert Probe(ram=ram).variant() == "radical_red"
+
+
+def test_no_version_string_branch_is_rom_only():
+    """An unrecognised name: RR-plausible RAM must still be vanilla; only the ROM sig decides."""
+    ram = loaded_save_ram()
+    ram[RR_SB1 + 0x34] = 3                        # party count 0-6
+    ram.update(le(RR_SB1 + 0x38, 0x12345678, 4))  # non-zero personality
+    ram.update(le(RR_SB1 + 0x38 + 0x58, 44, 2))   # plausible maxHP
+    assert Probe(ram=ram).variant() == "vanilla"
+    ram.update(le(CFRU_PTR_ADDR, CFRU_WORD, 4))
+    assert Probe(ram=ram).variant() == "radical_red"
 
 
 def test_unreadable_signature_fails_closed():
@@ -199,8 +233,64 @@ def test_real_rom_detection(pack, title, kind, is_cfru):
     if is_cfru:
         assert got == "radical_red", f"{title}/{kind}: {got}"
     else:
-        # Not radical_red is the regression contract; `vanilla` is what a loaded
-        # save produces (the SB1 pointer validates).  With RAM uninitialised the
-        # detector keeps its historical "ap" fallback - asserted, not blessed.
         assert got == "vanilla", f"{title}/{kind}: {got}"
-        assert Probe(rom=rom).variant() in ("vanilla", "ap")
+    # The same answer with nothing loaded: the ROM is the only input (card C-OC2).
+    assert Probe(rom=rom).variant() == got
+
+
+# ── per-title gSpeciesInfo (card C-OC2) ────────────────────────────────────────
+
+SYMS = {"firered": "pokefirered.sym", "leafgreen": "pokeleafgreen.sym"}
+
+
+def sym_addr(title: str, name: str) -> int:
+    text = (ROOT / "data/gen3/pret" / SYMS[title]).read_text(encoding="utf-8")
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[3] == name:
+            return int(parts[0], 16)
+    raise KeyError(f"{SYMS[title]}:{name}")
+
+
+def test_the_game_module_carries_the_sym_per_title_address():
+    """pret names the table gSpeciesInfo; the map must equal each title's symbol."""
+    assert sym_addr("firered", "gSpeciesInfo") == 0x08254784
+    assert sym_addr("leafgreen", "gSpeciesInfo") == 0x08254760
+    assert dict(Probe().gen3.profiles.vanilla.BASESTATS_ADDR_BY_GAME_CODE) == {
+        "BPRE": VANILLA_WORDS["firered"], "BPGE": VANILLA_WORDS["leafgreen"]}
+
+
+@pytest.mark.parametrize("title,pack,kind,code,want", [
+    ("firered", "gen3_frlg", "clean", b"BPRE", 0x08254784),
+    ("leafgreen", "gen3_frlg", "clean", b"BPGE", 0x08254760),
+])
+def test_the_running_title_resolves_its_own_table(title, pack, kind, code, want):
+    """The resolution runs at module load, off this cartridge's game code."""
+    rom = rom_bytes(pack, title, kind)
+    if rom is None:
+        pytest.skip(f"{pack}/{title}/{kind} not present on this host")
+    p = Probe(rom=rom)
+    assert want == p.gen3.profiles.vanilla.BASESTATS_ADDR, title
+    # and the value is the one the cartridge itself points at
+    assert int.from_bytes(rom[WORD_OFF:WORD_OFF + 4], "little") == want
+    assert p.gen3.rom_type_for_variant("vanilla") == title
+
+
+def test_rr_keeps_its_pointer_to_the_same_table():
+    rom = rom_bytes("gen3_rr", "radical_red", "clean")
+    if rom is None:
+        pytest.skip("gen3_rr/radical_red/clean not present on this host")
+    p = Probe(rom=rom)
+    rr = p.gen3.profiles.radical_red
+    assert rr.CFRU_BASESTATS_PTR == 0x080001BC
+    assert int.from_bytes(rom[WORD_OFF:WORD_OFF + 4], "little") == CFRU_WORD
+    # memory_gba.lua resolves the table by dereferencing that word; the map must not leak in
+    assert "BASESTATS_ADDR_BY_GAME_CODE" not in p.gen3.profiles.radical_red
+
+
+def test_the_pack_carries_the_per_title_map():
+    pack = json.loads((ROOT / "data/games/gen3_frlg/profile.json").read_text(encoding="utf-8"))
+    for title in ("firered", "leafgreen"):
+        got = pack["titles"][title]["derived"]["BASESTATS_ADDR_BY_GAME_CODE"]
+        assert got == {"BPRE": sym_addr("firered", "gSpeciesInfo"),
+                       "BPGE": sym_addr("leafgreen", "gSpeciesInfo")}, title
