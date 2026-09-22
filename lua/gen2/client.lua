@@ -14,9 +14,9 @@
 --   net      lua/connector.lua      newline-JSON TCP (send/receive/pump/connected)
 --   json/hud/io                     as Gen 1
 --
--- Events come from the binder's latches only (capture, whiteout, PC ops, NPC trade) or from
--- a binder observation settled against one read (faint, battle start/end, save, reset);
--- nothing is inferred by polling. Writes happen only inside the armed permit at the
+-- Events come from the binder's latches only (capture, whiteout, PC ops, NPC trade,
+-- evolution) or from a binder observation settled against one read (faint, battle start/end,
+-- save, reset); nothing is inferred by polling. A binder refusal is logged once per reason. Writes happen only inside the armed permit at the
 -- checkpoint. P4 (native panel, native sound, SLINK trade) is not here: those commands get
 -- the protocol's "nothing happened" replies (handle_command) and request_sfx_local is the
 -- sound seam.
@@ -59,9 +59,9 @@ function Client.new(p)
         -- Gen 2: the binder needs an operation authority (signals.lua header); the client
         -- owns it as a reset epoch, bumped at every reset/reload boundary.
         epoch = 0,
-        -- Gen 2: the faint observation carries no identity; the latch holds it until one
-        -- party read settles it (UpdateFaintedPlayerMon runs before the party copy-back)
-        faint_latches = {},
+        -- Gen 2: the binder's faint names the record (same-frame key); the latch holds it
+        -- until that record reads HP 0 (UpdateFaintedPlayerMon runs before the copy-back)
+        faint_latches = {}, refusals_logged = {},
         pending_rescan = false, key_alias = nil, retired_alias = {},
     }
 
@@ -78,8 +78,8 @@ function Client.new(p)
     end
     self.send = send
 
-    -- Gen 2: a few point scalars (wPoisonStepPartyFlags, wBattleScriptFlags) exist only as
-    -- the engine-site pack's point symbols, not profile.ram; both carry bank + address.
+    -- Gen 2: a few point scalars (wBattleScriptFlags) exist only as the engine-site pack's
+    -- point symbols, not profile.ram; both carry bank + address.
     local points = {}
     for _, site in pairs(sites) do
         for name, pt in pairs(site.point_symbols or {}) do points[name] = pt end
@@ -258,9 +258,10 @@ function Client.new(p)
     end
 
     -- Returns slot, mon, party, why; `why` = "ambiguous key" when two slots answer.
-    -- ponytail: Gen 1's frozen record-evidence latch is not ported: the only Gen 2 key_change
-    -- source is the NPC trade (evolution is OPEN in the binder) and the binder refuses a
-    -- duplicate full key at the receiver. Port it when evolution publication is qualified.
+    -- ponytail: Gen 1's frozen record-evidence latch is not ported: both Gen 2 key_change
+    -- sources (NPC trade, evolution) are refused by the binder when the old or new full key
+    -- names a second record, and two answering slots refuse here. Ceiling: a record leaving
+    -- and an identical one arriving before the ack (Gen 1 cx-fc0d91b7); port it if that bites.
     local function find_party_slot(key)
         local party = current_party()
         if not party then return nil end
@@ -470,18 +471,6 @@ function Client.new(p)
             end
             self.battle = nil
             self.pending_safe = true
-        elseif k == "battle_faint" then
-            local battle = reads.read_battle()
-            if battle and battle.active_slot then
-                self.faint_latches[#self.faint_latches + 1] = { kind = "battle", slot = battle.active_slot,
-                                                                frame = self.frame, area_id = (area_of()) }
-            end
-        elseif k == "poison_faint" then
-            -- one DoPoisonStep pass fires once per fainting mon; one latch settles them all
-            local last = self.faint_latches[#self.faint_latches]
-            if not (last and last.kind == "poison" and last.frame == self.frame) then
-                self.faint_latches[#self.faint_latches + 1] = { kind = "poison", frame = self.frame, area_id = (area_of()) }
-            end
         elseif k == "bag_ball_received" then
             local had = self.has_pokeballs
             self.has_pokeballs = true
@@ -505,6 +494,9 @@ function Client.new(p)
         end
         if k == "capture" then publish_capture(ev)
         elseif k == "whiteout" then announce_whiteout()
+        elseif k == "faint" then
+            self.faint_latches[#self.faint_latches + 1] = { key = m.key, cause = ev.cause, frame = self.frame,
+                                                            area_id = (area_of()) }
         elseif k == "party_to_box" then
             send("party_to_box", { key = mon_key(m), stats = { level = m.level } })
             self.pending_rescan = true
@@ -528,37 +520,17 @@ function Client.new(p)
         end
     end
 
-    -- A faint latch settles once the party record it names reads HP 0 (the copy-back or the
-    -- poison store has landed); a latch older than MAX_PENDING_FRAMES is dropped, logged.
+    -- A faint latch settles once the one record carrying its key reads HP 0 (the copy-back or
+    -- the poison store has landed); a latch older than MAX_PENDING_FRAMES is dropped, logged.
     function self:settle_faints()
         if #self.faint_latches == 0 then return end
-        local party = current_party()
-        if not party then return end
         local keep = {}
         for _, f in ipairs(self.faint_latches) do
-            local slots, done = {}, true
-            if f.kind == "battle" then
-                slots[1] = f.slot
-            else
-                local flags = wram_bytes("wPoisonStepPartyFlags", c.PARTY_LENGTH)
-                if not flags then done = false
-                else
-                    -- DoPoisonStep stores %10 for a mon the step fainted (poisonstep.asm)
-                    for i = 1, party.count do
-                        if math.floor(flags[i] / 2) % 2 == 1 then slots[#slots + 1] = i - 1 end
-                    end
-                end
-            end
-            for _, slot in ipairs(slots) do
-                local mon = party.mons[slot + 1]
-                if not mon or mon.is_egg or mon.hp ~= 0 then done = false end
-            end
-            if done then
-                for _, slot in ipairs(slots) do
-                    send("faint", { key = mon_key(party.mons[slot + 1]), area_id = f.area_id })
-                end
+            local _, mon = find_party_slot(f.key)
+            if mon and mon.hp == 0 then
+                send("faint", { key = f.key, area_id = f.area_id })
             elseif self.frame - f.frame > Client.MAX_PENDING_FRAMES then
-                log("[SLink-gen2] " .. f.kind .. " faint latch expired unsettled")
+                log("[SLink-gen2] " .. tostring(f.cause) .. " faint latch expired unsettled " .. tostring(f.key))
             else
                 keep[#keep + 1] = f
             end
@@ -708,6 +680,15 @@ function Client.new(p)
         -- A binder fault latches the shared registry (no later signal is captured): say so
         -- once, loudly, rather than run on as if events were still being observed.
         local st = self.signals and self.signals:status()
+        -- A refusal is the binder declining one observation (no event); each distinct
+        -- site/reason is logged once, never per frame.
+        for site, why in pairs(st and st.refusals or {}) do
+            local seen = site .. ": " .. tostring(why)
+            if not self.refusals_logged[seen] then
+                self.refusals_logged[seen] = true
+                log("[SLink-gen2] engine signal refused " .. seen)
+            end
+        end
         if st and st.failed and st.failed ~= self.signal_failure_logged then
             self.signal_failure_logged = st.failed
             log("[SLink-gen2] engine signals STOPPED: " .. tostring(st.failed))

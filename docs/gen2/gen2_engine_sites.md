@@ -162,8 +162,9 @@ runtime state machines.
   and before removal. Completion consumes retained outgoing identity.
   ChangeBox has distinct attempt and post-save/load candidates.
 - **Evolution:** the evolved struct and level-up move work precede .skip_unown.
-  The hook follows the parallel species-list write. wEvolutionOldSpecies and
-  wCurPartyMon retain migration context.
+  The hook follows the parallel species-list write. wCurPartyMon names the slot;
+  the old species comes from the generated `identity_migration` table, **not**
+  wEvolutionOldSpecies (see "Evolution identity migration" below).
 - **NPC trade:** nickname, OT name/ID, DVs, held item and stats are complete at
   terminal return. Receiver is **PartyCount minus one**. wCurPartyMon was
   restored to the outgoing selection and must not select the received record.
@@ -191,6 +192,56 @@ runtime state machines.
 - **Map/CONTINUE:** map entry completion follows setup/status publication.
   CONTINUE follows save/RTC confirmation but precedes clock/roamer/mobile/map
   work; it grants no live-session admission.
+
+## Evolution identity migration
+
+`evolution_species_published` is the `push hl` after `ld [hl], a` in
+`EvolveAfterBattle_MasterLoop.skip_unown` (pokecrystal `engine/pokemon/evolve.asm:312-317`,
+pokegold `:313-318`). By then the evolved struct has been copied into the party slot
+(`:291-293` / `:292-294`), A holds the new species and HL points at
+`wPartySpecies + wCurPartyMon`. The binder emits one `key_change` (reason
+`evolution`) with `old_key` = the record's DVs/OT with the old species and
+`new_key` = the record's key, and refuses (a value, not a failure) unless A equals
+the slot's struct species, HL names wCurPartyMon's list entry, `wLinkMode` is 0,
+the species has a pre-evolution, and neither key names a second party record.
+
+- **Old species source.** `wEvolutionOldSpecies` is written once (`evolve.asm:32`,
+  both repos) but shares a WRAM UNION byte with `wListMovesLineSpacing`
+  (Crystal `01:d1ea`, Gold/Silver `01:d0d3`; `ram/wram.asm:2582/2694`,
+  pokegold `:2062/2160`). `LearnLevelMoves` (`evolve.asm:299` / `:300`) reaches
+  `predef LearnMove` (`:468` / `:469`) -> `call ForgetMove` (`learn.asm:33`) ->
+  `ld a, SCREEN_WIDTH * 2` / `ld [wListMovesLineSpacing], a` (`learn.asm:144-145`,
+  both repos) whenever the evolved mon must forget a move, i.e. before the hook.
+  It is therefore not a witness. Instead the generator walks the built ROM's
+  `EvosAttacksPointers` table the way `evolve.asm:44-53` and its `.loop` read it
+  (same bank, STAT entries 4 bytes, others 3, 0 ends a list), refuses unless every
+  species has at most one pre-evolution, and emits `identity_migration.old_species_by_new`
+  (122 entries per title; equal to the independently generated `evolutions.json`).
+- **Cancel control.** A B-press makes `EvolutionAnimation` return carry and
+  `jp c, CancelEvolution` (`evolve.asm:228`, both repos); `CancelEvolution`
+  (`:379-384` / `:380-385`) jumps back to the master loop without executing
+  `.skip_unown`, so a cancelled evolution emits nothing.
+- **Link trade.** `engine/link/link.asm:1998` (pokegold `:1828`) calls
+  `EvolvePokemon` with `wLinkMode` set; that evolution belongs to the OPEN
+  link_trade transaction and is refused.
+
+## Binder delivery and refusal contract
+
+`lua/gen2/signals.lua` (MODEL only) keeps these rules for every site above:
+
+- A boundary (battle_end/soft_reset/new_game/continue_confirmed sites, or an explicit
+  `boundary()`) retires latches but never discards queued events: batches finalized
+  before it are delivered by the next `drain()` in engine order. The only drop is a
+  latch-creating observation (`observation`, `faint`) stamped with an operation that
+  is no longer held; it is counted in `status().drops` with its reason.
+- A refusal is a value: no event, the reason in `status().refusals[site]`, open latches
+  retired, later signals keep flowing (the client logs each site/reason once). Only
+  invariant breaks (corrupt site metadata, broken io, impossible latch state, a
+  mapped ROM bank that disagrees with the verified shadow) stop the shared registry.
+- `battle_faint` and `poison_faint` carry the fainting record's same-frame identity:
+  the party struct at `wCurBattleMon` (`UpdateFaintedPlayerMon` entry) or
+  `wCurPartyMon` (`DoPoisonStep.DamageMonIfPoisoned`). Battle copy-back has not run,
+  but DVs/OT/species never change in battle, so the key is final.
 
 ## Open source and physical obligations
 

@@ -319,7 +319,7 @@ def test_no_faint_without_its_signal_latch():
 
     falsify(check, mutant("lua/gen2/client.lua", (
         "if #self.faint_latches == 0 then return end",
-        'if #self.faint_latches == 0 then self.faint_latches = {{kind = "battle", slot = 0, frame = self.frame}} end')))
+        "if #self.faint_latches == 0 then self.faint_latches = {{key = mon_key(current_party().mons[1]), frame = self.frame}} end")))
 
 
 def test_lua_key_agrees_with_the_python_codec_on_the_same_record():
@@ -409,8 +409,7 @@ def test_a_capture_carries_key_area_and_in_box():
     world.box([boxed])
     world.fire("capture_box")
     world.fire("capture_box_finalized")
-    world.frames(1)  # the binder's battle_end boundary discards undrained events (see report)
-    world.fire("battle_end")
+    world.fire("battle_end")  # same frame: the boundary must not discard the finalized capture
     world.frames(1)
     captures = world.sent("capture")
     assert [(c["key"], c["area_id"], c["in_box"], c["gift"]) for c in captures] == [
@@ -472,3 +471,89 @@ def test_roamer_and_contest_link_under_the_adapter_namespaces(kind):
     world.frames(1)
     (capture,) = world.sent("capture")
     assert capture["area_id"] == expected == {"roamer": "legend_243", "contest": "national_park_contest"}[kind]
+
+
+@pytest.mark.parametrize("boundary", ["battle_end", "soft_reset"])
+def test_a_capture_finalized_in_the_boundary_frame_is_published(boundary):
+    world = World()
+    world.hello()
+    world.field("wBattleMode", 1)
+    caught = mon(species=19, dvs=0x7AAA)
+    world.fire("wild_ready")
+    world.party([mon(), caught])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    world.fire(boundary)  # nothing drained between the capture and the boundary
+    world.frames(1)
+    assert [c["key"] for c in world.sent("capture")] == [codec_key(caught)]
+    assert world.sent("no_catch") == []
+
+
+def test_a_refused_catch_is_logged_once_and_later_signals_still_flow():
+    world = World()
+    world.hello()
+    world.field("wBattleMode", 1)
+    world.field("wBattleScriptFlags", 128)  # a scripted/static battle
+    world.party([mon(), mon(species=243, dvs=0x7AAA)])
+    for _ in range(2):
+        world.fire("capture_party")
+        world.fire("capture_party_finalized")
+        world.frames(1)
+    assert world.sent("capture") == []
+    assert len([line for line in world.logs.values() if "scripted/static" in line]) == 1
+    world.field("wBattleScriptFlags", 0)
+    caught = mon(species=19, dvs=0x8AAA)
+    world.party([mon(), mon(species=243, dvs=0x7AAA), caught])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    world.frames(1)
+    assert [c["key"] for c in world.sent("capture")] == [codec_key(caught)]
+    assert not any("STOPPED" in text for text in world.shown())
+
+
+def test_a_faint_follows_the_fainting_record_not_its_slot():
+    world = World()
+    lead, pichu = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, pichu])
+    world.hello()
+    world.field("wBattleMode", 1)
+    world.field("wCurBattleMon", 1)
+    world.fire("battle_faint")  # copy-back not landed yet
+    world.frames(1)
+    assert world.sent("faint") == []
+    world.party([dict(pichu, hp=0), lead])  # the record moved before its HP 0 landed
+    world.frames(1)
+    assert [f["key"] for f in world.sent("faint")] == [codec_key(pichu)]
+
+
+def test_each_poison_faint_carries_its_own_record():
+    world = World()
+    first, second, survivor = mon(hp=0), mon(species=172, dvs=0x3AAA, hp=0), mon(species=19, dvs=0x7AAA)
+    world.party([first, second, survivor])
+    world.hello()
+    for slot in (0, 1):  # one DoPoisonStep pass, one site hit per fainting mon
+        world.field("wCurPartyMon", slot)
+        world.fire("poison_faint")
+    world.frames(1)
+    assert sorted(f["key"] for f in world.sent("faint")) == sorted([codec_key(first), codec_key(second)])
+
+
+def test_an_evolution_publishes_key_change_and_a_cancelled_one_nothing():
+    world = World()
+    pikachu, bulbasaur = mon(), mon(species=1, dvs=0x3AAA)
+    world.party([pikachu, bulbasaur])
+    world.hello()
+    # Slot 0 was B-cancelled: CancelEvolution returns to the master loop before the
+    # species-list store, so no site fires and the record is unchanged.
+    world.frames(5)
+    assert world.sent("key_change") == []
+    ivysaur = dict(bulbasaur, species=2)
+    world.party([pikachu, ivysaur])
+    world.field("wCurPartyMon", 1)
+    world.emu.regs["AF"] = 2 << 8
+    world.emu.regs["HL"] = world.profile["ram"]["wPartySpecies"] + 1
+    world.fire("evolution_species_published")
+    world.frames(1)
+    (change,) = world.sent("key_change")
+    assert (change["old_key"], change["new_key"], change["reason"], change["new_species"]) == (
+        codec_key(bulbasaur), codec_key(ivysaur), "evolution", 2)

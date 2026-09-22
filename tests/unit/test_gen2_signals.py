@@ -389,7 +389,8 @@ def test_scripted_static_with_normal_battle_type_is_not_guessed_as_wild():
     world.fire("capture_party")
     world.fire("capture_party_finalized")
     assert world.events(binder) == []
-    assert "scripted/static" in binder.status(binder).failed
+    status = binder.status(binder)
+    assert status.failed is None and "scripted/static" in status.refusals.capture_party_finalized
 
 
 def test_duplicate_insertion_and_duplicate_key_are_fail_closed():
@@ -399,13 +400,14 @@ def test_duplicate_insertion_and_duplicate_key_are_fail_closed():
     world.fire("capture_party")
     world.fire("capture_party_finalized")
     assert world.events(binder) == []
-    assert "duplicate acquisition start" in binder.status(binder).failed
+    assert binder.status(binder).failed is None
+    assert "duplicate acquisition start" in binder.status(binder).refusals.capture_party
     world = World()
     binder = world.bind()
     world.party([world.mon(), world.mon()])
     world.fire("capture_party")
     assert world.events(binder) == []
-    assert "ambiguous receiver identity" in binder.status(binder).failed
+    assert "ambiguous receiver identity" in binder.status(binder).refusals.capture_party
 
 
 @pytest.mark.parametrize("site", ["soft_reset", "new_game", "continue_confirmed", "battle_end"])
@@ -487,10 +489,155 @@ def test_pc_failure_or_ambiguous_identity_cannot_publish_completion():
     world.fire("pc_deposit_begin")
     world.fire("pc_deposit_complete")  # No successful copy or compaction happened.
     assert world.events(binder) == []
-    assert "topology" in binder.status(binder).failed
+    assert "topology" in binder.status(binder).refusals.pc_deposit_complete
     world = World()
     binder = world.bind()
     world.box([world.mon()])  # Same FULL key exists in both collections.
     world.fire("pc_deposit_begin")
     assert world.events(binder) == []
-    assert "ambiguous across party/active box" in binder.status(binder).failed
+    assert "ambiguous across party/active box" in binder.status(binder).refusals.pc_deposit_begin
+
+
+# ── boundaries deliver what was finalized before them (item 1) ──────────────────────────
+@pytest.mark.parametrize("boundary", ["battle_end", "soft_reset", "new_game", "continue_confirmed",
+                                      "failure", "reset", "reload"])
+def test_a_boundary_delivers_a_capture_finalized_before_it(boundary):
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(), world.mon(species=19, dvs=0x7AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")  # same frame: nothing drained yet
+    if boundary in world.sites:
+        world.fire(boundary)
+    else:
+        binder.boundary(binder, boundary)
+    events = world.events(binder)
+    assert [event.kind for event in events if event.kind == "capture"] == ["capture"]
+    assert events[0].kind == "capture"  # delivered in engine order, before the boundary's own event
+    assert binder.status(binder).failed is None
+
+
+def test_only_a_stale_observation_is_dropped_and_the_drop_is_recorded():
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(), world.mon(species=19, dvs=0x7AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    world.fire("battle_faint")  # settles against a later read: meaningless in a new epoch
+    world.generation += 1
+    binder.boundary(binder, "reset")
+    events = world.events(binder)
+    assert [event.kind for event in events] == ["capture"]
+    drop = binder.status(binder).drops.battle_faint
+    assert drop.count == 1 and "stale" in drop.reason
+
+
+# ── a refusal is a value, not a kill switch (item 2) ────────────────────────────────────
+def test_one_scripted_static_refusal_does_not_silence_later_signals():
+    world = World()
+    binder = world.bind()
+    world.field("wBattleScriptFlags", 128)
+    world.party([world.mon(), world.mon(species=243, dvs=0x7AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    assert world.events(binder) == []
+    world.field("wBattleScriptFlags", 0)
+    world.party([world.mon(), world.mon(species=243, dvs=0x7AAA), world.mon(species=19, dvs=0x8AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    (event,) = world.events(binder)
+    assert event.kind == "capture" and event.mon.key == "8AAA:1234:13"
+    status = binder.status(binder)
+    assert status.failed is None and "scripted/static" in status.refusals.capture_party_finalized
+
+
+def test_a_refused_final_retires_its_latch():
+    world = World()
+    binder = world.bind()
+    world.field("wBattleScriptFlags", 128)
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    world.field("wBattleScriptFlags", 0)
+    world.fire("capture_party_finalized")  # the refused attempt cannot finalize later
+    assert world.events(binder) == [] and binder.status(binder).pending_acquisitions == 0
+
+
+# ── faint observations carry a same-frame identity (item 3) ─────────────────────────────
+def test_battle_and_poison_faints_carry_the_fainting_record_identity():
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(), world.mon(species=172, dvs=0x3AAA)])
+    world.field("wCurBattleMon", 1)
+    world.fire("battle_faint")
+    (event,) = world.events(binder)
+    assert (event.kind, event.cause, event.slot, event.mon.key) == ("faint", "battle", 1, "3AAA:1234:AC")
+    world.party([world.mon(hp=0), world.mon(species=172, dvs=0x3AAA)])
+    world.field("wCurPartyMon", 0)
+    world.fire("poison_faint")
+    (event,) = world.events(binder)
+    assert (event.kind, event.cause, event.slot, event.mon.key) == ("faint", "poison", 0, "2AAA:1234:19")
+
+
+def test_a_faint_on_an_unreadable_slot_is_refused_not_fatal():
+    world = World()
+    binder = world.bind()
+    world.field("wCurBattleMon", 3)  # one-mon party
+    world.fire("battle_faint")
+    assert world.events(binder) == []
+    status = binder.status(binder)
+    assert status.failed is None and "slot" in status.refusals.battle_faint
+
+
+# ── evolution publishes a key_change at the species-list store (item 4) ─────────────────
+def evolve(world, slot, new_species, *, link_mode=0, a=None, hl_delta=0):
+    world.field("wCurPartyMon", slot)
+    world.field("wLinkMode", link_mode)
+    world.reg["AF"] = (new_species if a is None else a) << 8
+    world.reg["HL"] = world.p["ram"]["wPartySpecies"] + slot + hl_delta
+    world.fire("evolution_species_published")
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_evolution_emits_key_change_from_the_source_pre_evolution(title):
+    world = World(title)
+    binder = world.bind()
+    world.party([world.mon(species=133, dvs=0x3AAA), world.mon(species=26)])  # Pikachu -> Raichu
+    world.field("wEvolutionOldSpecies", 40)  # ForgetMove's wListMovesLineSpacing alias store
+    evolve(world, 1, 26)
+    (event,) = world.events(binder)
+    assert (event.kind, event.reason, event.slot) == ("key_change", "evolution", 1)
+    assert (event.old_key, event.new_key, event.mon.key) == ("2AAA:1234:19", "2AAA:1234:1A", "2AAA:1234:1A")
+    assert event.runtime_authorized is False
+
+
+def test_cancelled_evolution_emits_nothing_and_the_next_slot_is_its_own():
+    world = World()
+    binder = world.bind()
+    # Slot 0 was B-cancelled: CancelEvolution jumps back to the master loop without reaching
+    # the species-list store, so its record is unchanged and nothing fires for it.
+    world.party([world.mon(species=25), world.mon(species=2, dvs=0x3AAA)])
+    assert world.events(binder) == []
+    evolve(world, 1, 2)  # slot 1 (Bulbasaur -> Ivysaur) evolves in the same pass
+    (event,) = world.events(binder)
+    assert (event.slot, event.old_key, event.new_key) == (1, "3AAA:1234:01", "3AAA:1234:02")
+
+
+@pytest.mark.parametrize("fault", ["a_register", "hl_register", "no_pre_evolution", "link_trade", "duplicate"])
+def test_unqualified_evolution_context_is_refused_and_signals_keep_flowing(fault):
+    world = World()
+    binder = world.bind()
+    party = [world.mon(species=26)]
+    if fault == "duplicate":
+        party.append(world.mon(species=25))  # the old key would name two records
+    species = 1 if fault == "no_pre_evolution" else 26
+    if fault == "no_pre_evolution":
+        party = [world.mon(species=1)]
+    world.party(party)
+    evolve(world, 0, species, link_mode=2 if fault == "link_trade" else 0,
+           a=27 if fault == "a_register" else None, hl_delta=int(fault == "hl_register"))
+    assert not any(event.kind == "key_change" for event in world.events(binder))
+    status = binder.status(binder)
+    assert status.failed is None and status.refusals.evolution_species_published
+    world.party([world.mon(species=26)])
+    evolve(world, 0, 26)
+    assert [event.kind for event in world.events(binder)] == ["key_change"]

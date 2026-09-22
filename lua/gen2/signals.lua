@@ -11,12 +11,24 @@
 -- observation. Operation ids must distinguish native attempts. boundary() is
 -- mandatory on failure/cancel/reset/reload/source change. The model API does not
 -- manufacture these missing engine witnesses or claim a physical receipt.
+--
+-- A boundary retires latches, never queued events: everything finalized before it is
+-- delivered by the next drain() in engine order. The one drop is a latch-creating
+-- observation (SETTLED kinds) whose stamp is not the current held one; it is counted in
+-- status().drops with its reason. A refusal (need()) is a value: no event, the reason in
+-- status().refusals, open latches retired, later signals keep flowing. assert/error in
+-- the capture path is reserved for invariant breaks (corrupt site metadata, broken io,
+-- impossible latch state) and still stops the shared registry.
 local S = {}
 
 local function integer(value, low, high)
     return type(value) == "number" and value == math.floor(value) and value >= low and value <= high
 end
 local function callable(value) return type(value) == "function" or type(value) == "userdata" end
+local function need(ok, why)
+    if not ok then error({refusal=why}, 0) end
+    return ok
+end
 local function copy(value)
     if type(value) ~= "table" then return value end
     assert(getmetatable(value) == nil, "plain Gen 2 fact/snapshot table required")
@@ -31,8 +43,8 @@ local function same_source(left, right)
     end
 end
 local function key(mon)
-    assert(type(mon) == "table" and integer(mon.species_id,1,251) and integer(mon.ot_id,0,65535)
-           and integer(mon.dv_word,0,65535), "complete decoded Gen 2 identity required")
+    need(type(mon) == "table" and integer(mon.species_id,1,251) and integer(mon.ot_id,0,65535)
+         and integer(mon.dv_word,0,65535), "complete decoded Gen 2 identity required")
     return string.format("%04X:%04X:%02X",mon.dv_word,mon.ot_id,mon.species_id)
 end
 local CPU = {ld=true,ldh=true,call=true,ret=true,jp=true,jr=true,push=true,pop=true,
@@ -61,10 +73,12 @@ local FINALS = {
 local OPERATIONS = {pc_deposit_complete="pc_deposit_begin",pc_withdraw_complete="pc_withdraw_begin",
     pc_release_party_complete="pc_release_party_begin",pc_release_box_complete="pc_release_box_begin",
     npc_trade_finalized="npc_trade_begin",change_box_loaded="change_box_begin"}
+-- Events that only mean something once a later read settles them: stale ones are dropped.
+local SETTLED = {observation=true,faint=true}
+local FAINTS = {battle_faint={cause="battle",slot="wCurBattleMon"},poison_faint={cause="poison",slot="wCurPartyMon"}}
 local OPEN = {
     gift_static="Qualified scripted-gift/static caller and final destination context is OPEN",
     link_trade="Native transaction/received identity/save witness context is OPEN",
-    evolution_species="Prior species/identity migration context is OPEN",
     contest_party_finalized="Contest-buffer to appended party identity correlation is OPEN",
     contest_selected="Provisional contest buffer is not final acquisition",
 }
@@ -133,6 +147,10 @@ local function build(options)
             end
             source_points[symbol] = point
         end
+        if site.signal == "evolution_species" then
+            assert(type(site.identity_migration) == "table" and type(site.identity_migration.old_species_by_new) == "table",
+                   name .. ": generated pre-evolution table required")
+        end
         by_id[name] = site
         local group_id = string.format("bank%03d_pc%04X",site.bank,site.addr)
         if not grouped[group_id] then
@@ -180,17 +198,19 @@ local function build(options)
         end
     end
     local service, current, latches, refusals = nil,nil,{},{}
+    local carried, drops, active = {},{},nil
     local self = {}
     local function clear(reason)
         latches = {}
         self.last_boundary = reason
-        if service then service:drain() end
+        -- Finalized batches survive the boundary in engine order (drain delivers them).
+        if service then for _,batch in ipairs(service:drain()) do carried[#carried+1] = batch end end
     end
     local function stamp()
         local value = authority.capture()
         assert(type(value) == "table" and (type(value.generation) == "string" or integer(value.generation,0,9007199254740991))
-               and type(value.operation) == "string" and value.operation ~= "", "OPEN: operation identity unavailable")
-        assert(authority.valid(value) == true,"OPEN: held observation unavailable")
+               and type(value.operation) == "string" and value.operation ~= "", "operation identity malformed")
+        need(authority.valid(value) == true,"OPEN: held observation unavailable")
         if current and (current.generation ~= value.generation or current.operation ~= value.operation) then clear("operation_changed") end
         current = copy(value)
         return value
@@ -203,7 +223,7 @@ local function build(options)
     end
     local function memory(source,width)
         assert(width == 1 or width == 2,"unsupported guard width")
-        assert(io.bank_valid(source.bank,source.addr,width) == true,"OPEN: unmapped guard memory")
+        need(io.bank_valid(source.bank,source.addr,width) == true,"OPEN: unmapped guard memory")
         local value = 0
         for i=width-1,0,-1 do
             local byte = io.read_u8(source.addr+i,"System Bus")
@@ -241,8 +261,8 @@ local function build(options)
         for _,condition in ipairs(g.stack_words_equals or {}) do
             assert(condition.width == 2 and condition.byte_order == "little"
                    and integer(condition.sp_offset,0,32),"invalid source stack guard")
-            assert(callable(io.stack_valid) and io.stack_valid(context.sp,condition.sp_offset+2) == true,
-                   "OPEN: bounded mapped stack context unavailable")
+            assert(callable(io.stack_valid),"stack bounds reader required")
+            need(io.stack_valid(context.sp,condition.sp_offset+2) == true,"OPEN: bounded mapped stack context unavailable")
             local lo,hi = io.read_u8(context.sp+condition.sp_offset,"System Bus"),io.read_u8(context.sp+condition.sp_offset+1,"System Bus")
             assert(integer(lo,0,255) and integer(hi,0,255),"stack bytes unavailable")
             if lo+hi*256 ~= condition.value then return false,"caller-stack guard refused" end
@@ -270,43 +290,43 @@ local function build(options)
         local snapshot,why
         if rule.collection == "party" then snapshot,why = reads.read_party()
         else snapshot,why = reads.read_active_box() end
-        assert(snapshot, "OPEN: receiver snapshot unavailable: " .. tostring(why))
-        assert(integer(snapshot.count,1,rule.collection == "party" and 6 or 20),"occupied receiver required")
+        need(snapshot, "OPEN: receiver snapshot unavailable: " .. tostring(why))
+        need(integer(snapshot.count,1,rule.collection == "party" and 6 or 20),"occupied receiver required")
         local slot = rule.selector == "first" and 0 or rule.selector == "last" and snapshot.count-1
                      or scalar(site,"wCurPartyMon")
-        assert(integer(slot,0,snapshot.count-1),"receiver slot unavailable")
+        need(integer(slot,0,snapshot.count-1),"receiver slot unavailable")
         local mon = copy(snapshot.mons[slot+1])
-        assert(mon and (rule.allow_egg or mon.is_egg == false),"final acquisition cannot be an unhatched egg")
+        need(mon and (rule.allow_egg or mon.is_egg == false),"final acquisition cannot be an unhatched egg")
         mon.key = key(mon)
         local matches = 0
         for _,other in ipairs(snapshot.mons) do if key(other) == mon.key then matches=matches+1 end end
-        assert(matches == 1,"ambiguous receiver identity")
+        need(matches == 1,"ambiguous receiver identity")
         return {mon=mon,count=snapshot.count,slot=slot,box_index=snapshot.box_index,collection=rule.collection}
     end
     local function collections()
         local party,pwhy = reads.read_party()
         local box,bwhy = reads.read_active_box()
-        assert(party and box,"OPEN: complete party/active-box snapshots required: " .. tostring(pwhy or bwhy))
+        need(party and box,"OPEN: complete party/active-box snapshots required: " .. tostring(pwhy or bwhy))
         return {party=party,box=box}
     end
     local function sequence(before,after,removed,appended)
         local expected = {}
         for i,mon in ipairs(before.mons) do if i-1 ~= removed then expected[#expected+1] = key(mon) end end
         if appended then expected[#expected+1] = appended end
-        assert(after.count == #expected,"operation count/topology differs")
-        for i,value in ipairs(expected) do assert(key(after.mons[i]) == value,"operation compaction/identity differs") end
+        need(after.count == #expected,"operation count/topology differs")
+        for i,value in ipairs(expected) do need(key(after.mons[i]) == value,"operation compaction/identity differs") end
     end
     local function operation_event(name,site)
         local prior = OPERATIONS[name]
         local before = assert(latches[prior],"operation snapshot unavailable")
         if name == "change_box_loaded" then
             local after,why = reads.read_active_box()
-            assert(after and after.box_index == before.requested,"changed-box destination differs: " .. tostring(why))
+            need(after and after.box_index == before.requested,"changed-box destination differs: " .. tostring(why))
             return {kind="box_change",site_id=name,old_box=before.box_index,new_box=after.box_index,
                     active_box=after,persistence="OPEN"}
         end
         local after = collections()
-        assert(after.box.box_index == before.collections.box.box_index,"current box changed during operation")
+        need(after.box.box_index == before.collections.box.box_index,"current box changed during operation")
         local action = STARTS[prior].operation
         local event = {site_id=name,old_key=before.mon.key,identity_scope="party_and_active_box_only",
                        global_identity_qualification="OPEN"}
@@ -328,7 +348,7 @@ local function build(options)
         else
             assert(action == "npc_trade", "unknown operation policy")
             local received = receiver({collection="party",selector="last"},site)
-            assert(received.mon.key ~= before.mon.key,"NPC trade identity did not change")
+            need(received.mon.key ~= before.mon.key,"NPC trade identity did not change")
             sequence(before.collections.party,after.party,before.slot,received.mon.key)
             sequence(before.collections.box,after.box,nil,nil)
             event.kind,event.new_key,event.mon,event.reason = "key_change",received.mon.key,received.mon,"npc_trade"
@@ -339,29 +359,29 @@ local function build(options)
     local function area(site)
         local group,number = scalar(site,"wMapGroup"),scalar(site,"wMapNumber")
         local row = options.areas and options.areas[tostring(group*256+number)]
-        assert(type(row) == "table" and type(row.area_id) == "string" and row.source
-               and row.source.artifact == pack.source.artifact and row.source.commit == pack.source.commit,
-               "OPEN: source-qualified ordinary area unavailable")
+        need(type(row) == "table" and type(row.area_id) == "string" and row.source
+             and row.source.artifact == pack.source.artifact and row.source.commit == pack.source.commit,
+             "OPEN: source-qualified ordinary area unavailable")
         return row.area_id
     end
     local function final_event(name,site,accepted)
         local rule = FINALS[name]
         local before = assert(latches[rule.prior],"prior acquisition lost")
         local after = receiver(STARTS[rule.prior],site)
-        assert(after.count == before.count and after.slot == before.slot and after.box_index == before.box_index,
-               "receiver topology changed during acquisition")
+        need(after.count == before.count and after.slot == before.slot and after.box_index == before.box_index,
+             "receiver topology changed during acquisition")
         if rule.acquisition == "egg_hatch" then
-            assert(after.mon.dv_word == before.mon.dv_word and after.mon.species_id == before.mon.species_id,
-                   "hatch identity changed beyond source OT finalization")
-        else assert(after.mon.key == before.mon.key,"receiver identity changed during acquisition") end
+            need(after.mon.dv_word == before.mon.dv_word and after.mon.species_id == before.mon.species_id,
+                 "hatch identity changed beyond source OT finalization")
+        else need(after.mon.key == before.mon.key,"receiver identity changed during acquisition") end
         local acquisition,zone,classifications = rule.acquisition,nil,{}
         local classifier = after.collection == "party" and "roamer_party_finalized" or "roamer_box_finalized"
         if acquisition == "wild" then
             -- Script_loadwildmon writes bit 7 in both pinned scripting.asm
             -- handlers. NORMAL battle type alone does not prove ordinary wild
             -- origin (many fixed statics use it). No guessed story attribution.
-            assert(math.floor(scalar(site,"wBattleScriptFlags")/128)%2 == 0,
-                   "OPEN: scripted/static acquisition caller policy unavailable")
+            need(math.floor(scalar(site,"wBattleScriptFlags")/128)%2 == 0,
+                 "OPEN: scripted/static acquisition caller policy unavailable")
         end
         if acquisition == "wild" and accepted[classifier] then
             local encounters = options.encounters
@@ -369,19 +389,59 @@ local function build(options)
             same_source(encounters.source,pack.source)
             local allowed = false
             for _,row in ipairs(encounters.roamers.initial) do if row.species == after.mon.species_id then allowed=true end end
-            assert(allowed,"OPEN: species is not a selected-title roamer")
+            need(allowed,"OPEN: species is not a selected-title roamer")
             acquisition,zone,classifications = "roamer","legend_" .. after.mon.species_id,{classifier}
         elseif acquisition == "wild" then
             local battle_type = scalar(site,"wBattleType")
             -- Specialized/static catch policy is not inferred from a map or key.
-            assert(battle_type == 0 or battle_type == 4 or battle_type == 8,
-                   "OPEN: specialized/static acquisition policy unavailable")
+            need(battle_type == 0 or battle_type == 4 or battle_type == 8,
+                 "OPEN: specialized/static acquisition policy unavailable")
             zone = area(site)
         elseif acquisition == "egg_hatch" then zone = "gift_daycare"
         elseif acquisition == "contest" then zone = "national_park_contest" end
         return {kind="capture",site_id=name,acquisition=acquisition,area_id=zone,destination=after.collection,
                 slot=after.slot,box_index=after.box_index,mon=after.mon,classifications=classifications,
                 identity_scope="observed_destination_only",global_identity_qualification="OPEN"}
+    end
+    -- Same-frame identity of the fainting record: the party struct at the engine's own
+    -- index (UpdateFaintedPlayerMon reads wCurBattleMon; DamageMonIfPoisoned indexes
+    -- wCurPartyMon). Battle copy-back has not run, but DVs/OT/species never change in battle.
+    local function faint_event(name,site)
+        local rule = FAINTS[name]
+        local party,why = reads.read_party()
+        need(party,"OPEN: party snapshot unavailable: " .. tostring(why))
+        local slot = scalar(site,rule.slot)
+        need(integer(slot,0,party.count-1),"faint slot unavailable")
+        local mon = copy(party.mons[slot+1])
+        need(mon.is_egg == false,"an egg cannot faint")
+        mon.key = key(mon)
+        return {kind="faint",site_id=name,cause=rule.cause,slot=slot,mon=mon,phase=site.phase}
+    end
+    -- evolve.asm .skip_unown: `ld [hl], a` stored the new species (A) at wPartySpecies+slot
+    -- after the struct copy; the hook is the following `push hl`. The old species is the
+    -- generated unique pre-evolution of A, never wEvolutionOldSpecies (ForgetMove's
+    -- wListMovesLineSpacing store aliases it; docs/gen2/gen2_engine_sites.md).
+    local function evolution_event(name,site)
+        local slot,new = scalar(site,"wCurPartyMon"),register("A")
+        need(register("HL") == point(site,"wPartySpecies").addr+slot,"species-list store does not name wCurPartyMon")
+        need(scalar(site,"wLinkMode") == 0,"OPEN: link-trade evolution belongs to the link_trade transaction")
+        local party,why = reads.read_party()
+        need(party,"OPEN: party snapshot unavailable: " .. tostring(why))
+        need(integer(slot,0,party.count-1),"evolution slot unavailable")
+        local mon = copy(party.mons[slot+1])
+        need(mon.is_egg == false and mon.species_id == new,"evolved record does not carry the published species")
+        local old = site.identity_migration.old_species_by_new[tostring(new)]
+        need(integer(old,1,251),"species has no source pre-evolution")
+        mon.key = key(mon)
+        local old_key = key({species_id=old,ot_id=mon.ot_id,dv_word=mon.dv_word})
+        for i,other in ipairs(party.mons) do
+            if i ~= slot+1 then
+                local k = key(other)
+                need(k ~= mon.key and k ~= old_key,"ambiguous evolution identity")
+            end
+        end
+        return {kind="key_change",site_id=name,reason="evolution",old_key=old_key,new_key=mon.key,mon=mon,
+                slot=slot,identity_scope="party_only",global_identity_qualification="OPEN"}
     end
     local function process(prepared)
         local held = stamp()
@@ -391,12 +451,14 @@ local function build(options)
                "OPEN: actual mapped ROM bank unavailable")
         local accepted,events,consume,starts,invalidated = {},{},{},{},{}
         for _,name in ipairs(prepared.members) do
+            active = name
             local yes,why,invalid = guards(name,by_id[name],context)
             if yes then accepted[name] = true else refusals[name] = why end
             if invalid then invalidated[invalid] = true end
         end
         for _,name in ipairs(prepared.members) do
             if accepted[name] then
+                active = name
                 local site = by_id[name]
                 if RESET_SITES[name] then clear(RESET_SITES[name]) end
                 if STARTS[name] then
@@ -413,16 +475,20 @@ local function build(options)
                         for _,snapshot in pairs(before.collections) do
                             for _,mon in ipairs(snapshot.mons) do if key(mon) == before.mon.key then matches=matches+1 end end
                         end
-                        assert(matches == 1,"operation identity ambiguous across party/active box")
+                        need(matches == 1,"operation identity ambiguous across party/active box")
                     end
                     starts[name] = before
                 elseif name == "change_box_begin" then
                     assert(callable(reads.read_current_box_num),"current-box reader required")
                     local old,why = reads.read_current_box_num()
                     local requested = register("E")
-                    assert(integer(old,0,13) and integer(requested,0,13),"box-change context unavailable: " .. tostring(why))
+                    need(integer(old,0,13) and integer(requested,0,13),"box-change context unavailable: " .. tostring(why))
                     starts[name] = {site_id=name,box_index=old,requested=requested,fields={},
                                     generation=held.generation,operation=held.operation}
+                elseif FAINTS[name] then
+                    events[#events+1] = faint_event(name,site)
+                elseif site.signal == "evolution_species" then
+                    events[#events+1] = evolution_event(name,site)
                 elseif FINALS[name] then
                     events[#events+1] = final_event(name,site,accepted)
                     consume[FINALS[name].prior] = true
@@ -433,9 +499,9 @@ local function build(options)
                     -- The matching final consumes one latch and decorates one event.
                 elseif name == "whiteout_before_heal" then
                     local party,why = reads.read_party()
-                    assert(party and party.count > 0,"OPEN: pre-heal party snapshot unavailable: " .. tostring(why))
+                    need(party and party.count > 0,"OPEN: pre-heal party snapshot unavailable: " .. tostring(why))
                     for _,mon in ipairs(party.mons) do
-                        assert(mon.is_egg or mon.hp == 0,"pre-heal whiteout party still has live HP")
+                        need(mon.is_egg or mon.hp == 0,"pre-heal whiteout party still has live HP")
                         mon.key = key(mon)
                     end
                     events[#events+1] = {kind="whiteout",site_id=name,party=party,phase=site.phase}
@@ -448,12 +514,12 @@ local function build(options)
             end
         end
         assert(#events <= 1,"multiple semantic events at one shared CPU site")
-        assert(authority.valid(held) == true,"held identity changed while sampling")
+        need(authority.valid(held) == true,"held identity changed while sampling")
         for name in pairs(starts) do
-            assert(latches[name] == nil,"duplicate acquisition start in one operation")
-            if (name == "capture_party" and latches.capture_box) or (name == "capture_box" and latches.capture_party) then
-                error("ambiguous capture destinations in one operation")
-            end
+            active = name
+            need(latches[name] == nil,"duplicate acquisition start in one operation")
+            need(not ((name == "capture_party" and latches.capture_box) or (name == "capture_box" and latches.capture_party)),
+                 "ambiguous capture destinations in one operation")
         end
         for name in pairs(consume) do latches[name] = nil end
         for name in pairs(invalidated) do latches[name] = nil end
@@ -489,25 +555,41 @@ local function build(options)
         unregister=function(handle) return binding:unregister(handle) end,
         valid_handle=function(handle) return binding:valid_handle(handle) end,
         capture=function(prepared)
+            active = nil
             local ok,value = pcall(process,prepared)
-            if not ok then clear("guard_or_identity_failure"); error(value,0) end
-            return value
+            if ok then return value end
+            if type(value) == "table" and type(value.refusal) == "string" then
+                refusals[active or prepared.id] = value.refusal
+                -- ponytail: a refusal retires every open latch (fail closed); per-latch
+                -- invalidation only if a refusal ever strands an unrelated operation.
+                latches = {}
+                return nil
+            end
+            clear("guard_or_identity_failure"); error(value,0)
         end,
     })
     if not service then return nil,error_message,failed end
     function self:drain()
         local ok,held = pcall(stamp)
         if not ok then
-            refusals.drain = tostring(held)
+            refusals.drain = type(held) == "table" and held.refusal or tostring(held)
             clear("stale_drain")
-            return {}
         end
-        local result = service:drain()
-        local current_events = {}
-        for _,batch in ipairs(result) do
-            if batch.generation == held.generation and batch.operation == held.operation then current_events[#current_events+1] = batch end
+        local batches = carried
+        carried = {}
+        for _,batch in ipairs(service:drain()) do batches[#batches+1] = batch end
+        local result = {}
+        for _,batch in ipairs(batches) do
+            local event = batch.events[1]
+            if not SETTLED[event.kind] or (ok and batch.generation == held.generation and batch.operation == held.operation) then
+                result[#result+1] = batch
+            else
+                local drop = drops[event.site_id] or {count=0}
+                drop.count,drop.reason = drop.count+1,"stale epoch: observed before the current held operation"
+                drops[event.site_id] = drop
+            end
         end
-        return current_events
+        return result
     end
     function self:boundary(reason)
         assert(BOUNDARIES[reason],"explicit failure/cancel/reset/reload/source_change boundary required")
@@ -516,7 +598,7 @@ local function build(options)
     function self:status()
         local result = service:status()
         result.runtime_authorized,result.physical_status,result.evidence_level = false,"OPEN","MODEL"
-        result.refusals,result.open_obligations = copy(refusals),copy(OPEN)
+        result.refusals,result.open_obligations,result.drops = copy(refusals),copy(OPEN),copy(drops)
         result.pending_acquisitions = 0
         for _ in pairs(latches) do result.pending_acquisitions = result.pending_acquisitions+1 end
         return result

@@ -219,3 +219,40 @@ def test_real_locked_rom_source_and_generated_pack_agree(title):
     assert "BATTLETYPE_SUICUNE" in inventory["roamer_capture"]["remaining"]
     for name in ("link_trade_received", "link_trade_saved"):
         assert sites[name]["guards"]["memory_equals"][0]["value"] == 2
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_evolution_site_carries_the_rom_pre_evolution_table(title):
+    root = Path(__file__).resolve().parents[2]
+    pack = json.loads((root / f"data/games/gen2_{title}/engine_signals.json").read_text("utf-8"))
+    table = pack["titles"][title]["sites"]["evolution_species_published"]["identity_migration"]
+    # Independent witness: tools/gen_gen2_evos.py's forward graph, reversed.
+    forward = json.loads((root / f"data/games/gen2_{title}/evolutions.json").read_text("utf-8"))["evolutions"]
+    assert table["old_species_by_new"] == {str(new): int(old) for old, news in forward.items() for new in news}
+    assert table["old_species_by_new"]["26"] == 25 and "1" not in table["old_species_by_new"]
+
+
+def test_a_species_with_two_pre_evolutions_is_refused():
+    constants = "\tconst_def 1\n" + "".join(f"\tconst EVOLVE_{name}\n"
+                                              for name in ("LEVEL", "ITEM", "TRADE", "HAPPINESS", "STAT"))
+    pointers = "EvosAttacksPointers::\n" + "\tdw Mon\n" * 251
+    def context(second):
+        rom = bytearray(0x8000)
+        lists = {1: [1, 16, 3, 0], 2: second}
+        cursor = 0x4000 + 2 * 251
+        empty = cursor
+        rom[empty] = 0
+        cursor += 1
+        for species in range(1, 252):
+            address = empty
+            if species in lists:
+                address = cursor
+                rom[cursor:cursor + len(lists[species])] = bytes(lists[species])
+                cursor += len(lists[species])
+            rom[0x4000 + 2 * (species - 1):0x4002 + 2 * (species - 1)] = address.to_bytes(2, "little")
+        return SimpleNamespace(rom=bytes(rom), symbol=lambda name: Symbol(1, 0x4000))
+    read = lambda path: constants if "constants" in path else pointers
+    ok = generator._pre_evolutions(context([5, 20, 1, 4, 0]), read, 1)  # STAT entries are 4 bytes
+    assert ok["old_species_by_new"] == {"3": 1, "4": 2}
+    with pytest.raises(ValueError, match="unique"):
+        generator._pre_evolutions(context([1, 32, 3, 0]), read, 1)

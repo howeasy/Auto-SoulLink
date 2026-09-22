@@ -301,6 +301,49 @@ def _whiteout_guards(ctx, read):
             "runtime_guard_qualification": "OPEN"}
 
 
+def _pre_evolutions(ctx, read, site_bank):
+    """Unique pre-evolution per species, walked from the built ROM's EvosAttacks table.
+
+    EvolveAfterBattle_MasterLoop reads EvosAttacksPointers and each list with no bank
+    switch (evolve.asm), so both must share the evolution site's bank. Entry widths follow
+    the same routine: EVOLVE_STAT is type/level/ATK_*/species, every other type is
+    type/parameter/species, and 0 ends the list. wEvolutionOldSpecies is NOT used: it
+    aliases wListMovesLineSpacing, which ForgetMove (learn.asm) stores during
+    LearnLevelMoves before the species-list publication.
+    """
+    lines = [_clean(line) for line in read("constants/pokemon_data_constants.asm").splitlines()]
+    start = lines.index("const EVOLVE_LEVEL")
+    if lines[start - 1] != "const_def 1":
+        raise ValueError("evolution type enumeration no longer starts at one")
+    kinds = {}
+    for line in lines[start:]:
+        if not line.startswith("const EVOLVE_"):
+            break
+        kinds[line.removeprefix("const ")] = len(kinds) + 1
+    if set(kinds) != {"EVOLVE_LEVEL", "EVOLVE_ITEM", "EVOLVE_TRADE", "EVOLVE_HAPPINESS", "EVOLVE_STAT"}:
+        raise ValueError("evolution types changed")
+    count = sum(1 for line in read("data/pokemon/evos_attacks_pointers.asm").splitlines()
+                if _clean(line).startswith("dw "))
+    table = ctx.symbol("EvosAttacksPointers")
+    if table.bank != site_bank or count != 251:
+        raise ValueError("EvosAttacksPointers is not the evolution site's 251-species table")
+    old_by_new = {}
+    for species in range(1, count + 1):
+        flat = rom_offset(table.bank, table.address + 2 * (species - 1))
+        cursor = rom_offset(table.bank, int.from_bytes(ctx.rom[flat:flat + 2], "little"))
+        while (kind := ctx.rom[cursor]) != 0:
+            width = 4 if kind == kinds["EVOLVE_STAT"] else 3
+            if kind not in kinds.values():
+                raise ValueError(f"unknown evolution type {kind} for species {species}")
+            new = ctx.rom[cursor + width - 1]
+            if not 1 <= new <= count or old_by_new.setdefault(str(new), species) != species:
+                raise ValueError(f"species {new} has no unique source pre-evolution")
+            cursor += width
+    return {"old_species_by_new": dict(sorted(old_by_new.items(), key=lambda row: int(row[0]))),
+            "source_table": "EvosAttacksPointers",
+            "old_species_witness": "unique pre-evolution of the published species (A)"}
+
+
 def generate_pack(ctx, specs):
     if specs.get("schema") != "gen2-engine-site-specs-v1":
         raise ValueError("unsupported site specifications schema")
@@ -404,6 +447,9 @@ def generate_pack(ctx, specs):
             if definition["symbol"] != "Special" or hook != 0:
                 raise ValueError("whiteout requires the guarded CPU Special entry")
             guards = _whiteout_guards(ctx, read)
+        extra = {}
+        if specification["signal"] == "evolution_species":
+            extra["identity_migration"] = _pre_evolutions(ctx, read, symbol.bank)
         sites[site_id] = {
             "signal": specification["signal"], "kind": "CPU_INSTRUCTION",
             "symbol": definition["symbol"], "symbol_offset": before,
@@ -418,6 +464,7 @@ def generate_pack(ctx, specs):
             "rom_bank_guard": {"symbol": "hROMBank", "addr": ctx.symbol("hROMBank").address,
                                "expected": symbol.bank, "required": symbol.bank != 0},
             "source_evidence": evidence,
+            **extra,
         }
     for signal, obligation in specs["inventory"].items():
         actual = {name for name, site in sites.items() if site["signal"] == signal}
