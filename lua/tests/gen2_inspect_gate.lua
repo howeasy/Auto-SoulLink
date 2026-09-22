@@ -3,119 +3,97 @@
   cartridge (docs/gen2/GEN2_BINDING_PLAN.md P3b.3a; docs/gen2/gen2_requirements.md R-1, R-3, R-5g).
 
   Boots WARM from a qualified fixture (tests/fixtures/gen2/<title>_<town|battle>[_ot2].SaveRAM,
-  staged by tools/run_gb_gate.py's _gen2_plan through tools/run_gb_gate.run_gate), settles to a
-  live overworld checkpoint, then takes ONE same-frame raw dump: the party WRAM block and the
-  full CartRAM domain (the active box and all 14 storage boxes live inside it). The dump's frame,
-  domain and byte ranges are recorded and printed so tests/live/test_gen2_new_gates.py can decode
-  the SAME bytes independently with server/adapters/gen2_codec.py (PYDEC) -- fixture-only
-  agreement never closes R-1; only a same-frame Lua/PYDEC disagreement test does.
+  staged by tools/run_gb_gate.py's _gen2_plan through tools/run_gb_gate.run_gate), reaches the
+  overworld through the SAME source-qualified CONTINUE path fixture qualification uses, then takes
+  ONE raw capture: the party WRAM block and the full CartRAM domain (the active box and all 14
+  storage boxes live inside it). The capture's frame, physical domain/offset, logical bus
+  address/bank and lengths are printed so tests/live/test_gen2_new_gates.py can decode the SAME
+  bytes independently with server/adapters/gen2_codec.py (PYDEC) -- fixture-only agreement never
+  closes R-1; only a same-frame Lua/PYDEC disagreement test does.
 
-  lua/gen2/reads.lua is the ONLY production decoder used here; this file supplies nothing but the
-  emulator IO binding (System Bus -> WRAM through the profile's bank map; CartRAM passthrough) and
-  orchestration. No emulator global (memory/emu/joypad/client/gameinfo) is called anywhere except
-  inside G.bizhawk(), so every other function here takes an injected `api`/`getenv` and is
-  lupa-testable with a fake one -- see tests/unit/test_gen2_inspect_gate.py, which sets the global
-  SLINK_GEN2_GATE_LIBRARY (the same flag lua/tests/test_gen2_scripted_gate.lua uses) before
-  dofile()-ing this script, so the trailer below returns G instead of auto-running.
+  CHECKPOINT (R4 #4): valid party bytes alone prove nothing -- TryLoadSaveFile loads the party
+  before the CONTINUE confirmation (C engine/menus/save.asm:596-601, intro_menu.asm:338-348,429-437;
+  G save.asm:538-543, intro_menu.asm:251-260,313-321). Arrival is decided by lua/tests/gen2_qualify.lua's
+  "boot" stage over lua/tests/test_gen2_scripted_gate.lua's bank-checked hooks: the Continue,
+  .Check1Pass, .Check2Pass and FinishContinueFunction sites ran (RestartClock/ErasePreviousSave did
+  not), then OWPlayerInput ran with no newer UI context and wBattleMode 0. CHECKPOINT is "reached"
+  only after that arrival, a byte-stable capture across an idle gap, and OWPlayerInput still
+  running inside the gap. It is a liveness proof, not P3b.5's armed write-checkpoint predicate.
+
+  lua/gen2/reads.lua is the ONLY production decoder used here; this file supplies the emulator IO
+  binding (named-bank WRAM through the profile's bank map; CartRAM passthrough) and orchestration.
+  After the capture no frame advances, so every *_LUA line is decoded at the capture frame, and
+  DECODE_FRAME records it. The Python side binds each Lua decode's own raw_hex to the captured bytes.
 
   R-3 SCOPE NOTE: the RAW_* lines below are a SECOND, independent Lua reader of the same
   profile-declared WRAM addresses (bypassing lua/gen2/reads.lua entirely), not an OCR of the
-  game's own rendered Trainer Card / party status / PC box screens. Closing R-3 against the
-  literal on-screen text (docs/gen2/GEN2_BINDING_PLAN.md P3b.3a's "GAME" oracle) needs UI
-  navigation this card's eight town/battle fixtures cannot reach (no trainer, PC or badge is in
-  range of the scripted route) and is left as a live-only follow-up for the coordinator.
+  game's own rendered Trainer Card / party status / PC box screens. R-3 against the on-screen text
+  (GEN2_BINDING_PLAN P3b.3a's "GAME" oracle) needs UI navigation the eight town/battle fixtures
+  cannot reach, and stays OPEN.
+  R-5g SCOPE NOTE: GENDER_SHINY is a DV-formula cross-check (this file vs an independent Python
+  reimplementation). It is NOT the game's own status-screen gender symbol or shiny palette, which is
+  what R-5g requires; R-5g stays OPEN.
 
-  Environment (all required; run_gb_gate._gen2_plan sets these for a WARM Gen 2 launch):
-    SLINK_ROOT, SLINK_GEN2_TITLE, SLINK_GEN2_ROM_SHA1, SLINK_GEN2_CORE_MODE (must be CGB),
-    SLINK_GEN2_COLD (must be "0" -- this gate only ever boots warm, from a fixture),
-    SLINK_GEN2_SAVERAM_DIR, SLINK_GEN2_SAVERAM_NAME.
+  Environment (all required): SLINK_ROOT; run_gb_gate._gen2_plan's SLINK_GEN2_TITLE/_ROM_SHA1/
+  _CORE_MODE (CGB)/_COLD ("0")/_SAVERAM_DIR/_SAVERAM_NAME; and, from tests/live/test_gen2_new_gates.py
+  (tools/gen2_fixtures.route_facts / qualify_facts), SLINK_GEN2_FIXTURE_CASE, SLINK_GEN2_ROUTE_FACTS and
+  SLINK_GEN2_QUALIFY with stage "boot". Validation is test_gen2_scripted_gate.lua's G.context.
+  Speed is the runner's (run_gb_gate writes SpeedPercent=100); this gate never overrides it.
 
-  Result file: patch/build/gen2_inspect_gate_result.txt (RESULT: PASS|FAIL, last line).
+  Result file: $SLINK_ROOT/patch/build/gen2_inspect_gate_result.txt (RESULT: PASS|FAIL, last line).
   Printed lines (each a single JSON value after its tag, lua/json_codec.lua encoding):
-    DUMP          {frame, party:{domain,bank,address,length,hex}, cartram:{domain,address,length,hex}}
+    CHECKPOINT    "reached" | "not reached" (see above)
+    DUMP          {frame, party:{domain="WRAM", offset, bus_domain="System Bus", bank, address, length, hex},
+                   cartram:{domain="CartRAM", address=0, length=32768, hex}}
     PARTY_LUA     lua/gen2/reads.lua read_party() result
     ACTIVE_BOX_LUA / BOX_LUA_<0..13>   read_active_box() / read_storage_box(i) results
     BADGES_LUA / PLAYER_LUA / BATTLE_LUA   the matching reads.lua accessor result
     RAW_BADGES / RAW_BATTLE / RAW_BOXNUM   the independent hand-rolled second reader (see above)
-    GENDER_SHINY  per party slot, {gender, shiny} derived from dv_word alone (engine/gfx/color.asm
-                  + engine/pokemon/mon_stats.asm GetGender), independent of lua/gen2/reads.lua
-    CHECKPOINT    "reached" once the party+box dump is stable across an idle frame gap
+    GENDER_SHINY  per party slot, {gender, shiny} from dv_word alone (formula cross-check only)
+    DECODE_FRAME  the frame counter after every decode above (must equal DUMP.frame)
 --]]
 local G = {}
 G.RESULT = "patch/build/gen2_inspect_gate_result.txt"
 G.CART_RAM_BYTES = 0x8000
--- ponytail: bounded press-through-title budget and idle-stability window, not a measured
--- native timing; raise if a live run shows the title/CONTINUE sequence needs longer.
-G.BOOT_SETTLE_FRAMES = 1800
+G.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
+-- ponytail: idle-stability window, not a measured native timing; raise if a live run needs longer.
 G.STABILITY_IDLE_FRAMES = 60
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
 end
 
--- BizHawk globals, wrapped once. API objects are userdata in EmuHawk: call, never type-check
--- (docs reference_bizhawk_api_userdata.md).
-function G.bizhawk()
-    return {
-        read_u8 = function(a, d) return memory.read_u8(a, d) end,
-        read_range = function(a, n, d) return memory.read_bytes_as_array(a, n, d) end,
-        domain_size = function(d) return memory.getmemorydomainsize(d) end,
-        advance = function() emu.frameadvance() end,
-        framecount = function() return emu.framecount() end,
-        set_buttons = function(b) joypad.set(b) end,
-        romhash = function() return gameinfo.getromhash() end,
-        systemid = function() return emu.getsystemid() end,
-        speed = function(p) client.speedmode(p) end,
-        exit = function() client.exit() end,
-    }
-end
-
--- Runner-protected bindings only (run_gb_gate._gen2_plan); no route/case JSON here, unlike the
--- scripted-play gate -- this gate drives no scenario, it only reads a fixture that already exists.
-function G.inputs(getenv)
-    local function need(name)
-        local value = getenv(name)
-        assert(type(value) == "string" and value ~= "", "missing environment " .. name)
-        return value
-    end
-    local env = {root = need("SLINK_ROOT"), title = need("SLINK_GEN2_TITLE"),
-                 rom_sha1 = need("SLINK_GEN2_ROM_SHA1"):lower()}
-    assert(({crystal = true, gold = true, silver = true})[env.title], "unsupported SLINK_GEN2_TITLE")
-    assert(#env.rom_sha1 == 40 and env.rom_sha1:match("^%x+$"), "malformed SLINK_GEN2_ROM_SHA1")
-    assert(need("SLINK_GEN2_CORE_MODE") == "CGB", "the inspect gate requires the CGB core")
-    assert(need("SLINK_GEN2_COLD") == "0", "the inspect gate boots WARM from a qualified fixture")
-    return env
+-- The played-route gate as a library: its validated context, bank-checked hooks, qualification
+-- observer and button step are the ones fixture qualification already runs on.
+function G.scripted_gate(root)
+    local previous = SLINK_GEN2_GATE_LIBRARY
+    SLINK_GEN2_GATE_LIBRARY = true
+    local ok, SG = pcall(dofile, root .. "/" .. G.SCRIPTED_GATE)
+    SLINK_GEN2_GATE_LIBRARY = previous
+    assert(ok and type(SG) == "table", "cannot load " .. G.SCRIPTED_GATE .. ": " .. tostring(SG))
+    return SG
 end
 
 -- CGB WRAM geometry (Pan Docs): $C000-$CFFF bank 0, $D000-$DFFF the selected bank 1-7. BizHawk's
--- flat WRAM domain holds bank n at n*$1000, so a named bank is read without trusting the live
--- SVBK -- the same formula test_gen2_scripted_gate.lua uses (no shared lua/gb_sram_addr.lua
--- exists yet; that extraction is P3b.5's, docs/gen2/GEN2_BINDING_PLAN.md P3b.5 row).
+-- flat WRAM domain holds bank n at n*$1000, so a named bank is read without trusting the live SVBK.
 function G.wram_offset(bank, addr, n)
     if bank == 0 and addr >= 0xC000 and addr + n <= 0xD000 then return addr - 0xC000 end
     if integer(bank, 1, 7) and addr >= 0xD000 and addr + n <= 0xE000 then return bank * 0x1000 + addr - 0xD000 end
     error(string.format("WRAM range $%X+%d outside its bank %s window", addr, n, tostring(bank)), 0)
 end
 
-function G.load_pack(env, load)
-    local json = load("lua/json_codec.lua")
-    local function read_json(rel)
-        local f = assert(io.open(env.root .. "/" .. rel, "rb"), "cannot open " .. rel)
-        local text = f:read("a")
-        f:close()
-        return assert(json.decode(text))
-    end
-    local wrapper = read_json("data/games/gen2_" .. env.title .. "/profile.json")
-    local profile = wrapper.titles and wrapper.titles[env.title]
-    assert(wrapper.schema == "gen2-profile-v1" and type(profile) == "table" and profile.title == env.title
-           and profile.rom_sha1 == env.rom_sha1, "profile belongs to another ROM or title")
-    local species_wrapper = read_json("data/games/gen2_" .. env.title .. "/species_index.json")
-    assert(type(species_wrapper.species) == "table", "species index missing its species table")
-    return {profile = profile, species = species_wrapper.species, json = json}
+function G.species(ctx)
+    local rel = "data/games/gen2_" .. ctx.env.title .. "/species_index.json"
+    local f = assert(io.open(ctx.root .. "/" .. rel, "rb"), "cannot open " .. rel)
+    local text = f:read("a")
+    f:close()
+    local wrapper = assert(ctx.json.decode(text))
+    assert(type(wrapper.species) == "table", "species index missing its species table")
+    return wrapper.species
 end
 
--- The reads.lua IO binding: System Bus -> WRAM through the bank map every profile symbol
--- carries; CartRAM is BizHawk's own flat SRAM domain and needs no translation.
+-- The reads.lua IO binding: a profile symbol's logical System Bus address -> its named WRAM bank in
+-- the flat WRAM domain; CartRAM is BizHawk's own flat SRAM domain and needs no translation.
 function G.io(api, profile)
     local bank_of = {}
     for name, addr in pairs(profile.ram) do
@@ -141,24 +119,26 @@ local function hex(bytes)
     return table.concat(out)
 end
 
--- One same-frame raw capture: the party WRAM block (exact reads.lua geometry, recomputed
--- against the profile's own literal wPartyMonNicknamesEnd symbol) and the full CartRAM domain,
--- with frame/domain/address/length recorded for the PYDEC side.
-function G.dump(api, profile, io_)
+-- One raw capture, read from exactly the physical domain/offset it records: the party block
+-- (wPartyCount..wPartyMonNicknamesEnd, the profile's own symbols) and the full CartRAM domain.
+function G.dump(api, profile)
     local a, bank = profile.ram, profile.ram_bank.wPartyCount
     local length = a.wPartyMonNicknamesEnd - a.wPartyCount
-    local party_bytes = io_.read_range(a.wPartyCount, length, "System Bus")
-    local cart_bytes = io_.read_range(0, G.CART_RAM_BYTES, "CartRAM")
+    local offset = G.wram_offset(bank, a.wPartyCount, length)
+    local party_bytes = api.read_range(offset, length, "WRAM")
+    local cart_bytes = api.read_range(0, G.CART_RAM_BYTES, "CartRAM")
+    assert(type(party_bytes) == "table" and #party_bytes == length, "party WRAM read failed")
+    assert(type(cart_bytes) == "table" and #cart_bytes == G.CART_RAM_BYTES, "CartRAM read failed")
     return {
         frame = api.framecount(),
-        party = {domain = "System Bus", bank = bank, address = a.wPartyCount, length = length, hex = hex(party_bytes)},
+        party = {domain = "WRAM", offset = offset, bus_domain = "System Bus", bank = bank,
+                 address = a.wPartyCount, length = length, hex = hex(party_bytes)},
         cartram = {domain = "CartRAM", address = 0, length = G.CART_RAM_BYTES, hex = hex(cart_bytes)},
     }
 end
 
 -- Independent second reader for R-3: the same profile-declared addresses, read directly through
--- io_ rather than through lua/gen2/reads.lua's accessors. See the R-3 SCOPE NOTE at the top of
--- this file for what this does and does not close.
+-- io_ rather than through lua/gen2/reads.lua's accessors. See the R-3 SCOPE NOTE above.
 function G.raw_fields(profile, io_)
     local a = profile.ram
     local badges = io_.read_range(a.wJohtoBadges, 2, "System Bus")
@@ -189,43 +169,51 @@ function G.gender_and_shiny(dv_word, gender_ratio)
     return gender, shiny
 end
 
--- Bounded press-through-title loop: CONTINUE from a warm fixture still shows the title screen
--- first (gatelib.lua's Lib.prove_booted measured the same on Gen 1/Crystal). "A" advances the
--- attract loop/title/CONTINUE prompt; a successful reads.read_party() is the settle condition,
--- mirroring lua/tests/test_gen1_inspect_gate.lua's boot-then-decode shape.
-function G.settle(api, reads)
-    for frame = 1, G.BOOT_SETTLE_FRAMES do
-        local party = reads.read_party()
-        if party then return true, frame end
-        if frame % 6 == 0 then api.set_buttons({A = true}) else api.set_buttons({}) end
-        api.advance()
-    end
-    return false, G.BOOT_SETTLE_FRAMES
+-- The post-CONTINUE overworld arrival: gen2_qualify.lua's "boot" stage (terminal "loaded"), driven
+-- through the scripted gate's hooks and observer. Returns ok, detail, the live hook state (the
+-- caller releases it after the capture window).
+function G.arrive(ctx, SG)
+    local hooked, state = pcall(SG.hooks, ctx)
+    if not hooked then return false, "code-site hooks refused: " .. tostring(state), {release = function() end} end
+    local idle = {}
+    for _, name in ipairs(SG.BUTTONS) do idle[name] = false end
+    local host = ctx.Host.new({step = SG.button_step(ctx), frame = ctx.api.framecount, idle = idle})
+    local case, q = ctx.case, ctx.qualify
+    local ok, result = pcall(ctx.Qualify.run, host, SG.qualify_observer(ctx), ctx.facts, q.facts,
+        {name = case.name, title = case.title, attempt_id = case.attempt_id, stage = "boot",
+         stage_fingerprint = q.stage_fingerprint, max_frames = case.max_frames,
+         max_phase_frames = case.max_phase_frames, settle_frames = case.settle_frames})
+    if not ok then return false, tostring(result), state end
+    local hits = state.hits
+    local native = hits.continue >= 1 and hits.continue_loaded >= 1 and hits.rtc_ok >= 1
+        and hits.finish_continue >= 1 and hits.restart_clock == 0 and hits.erase_save == 0
+    if not native then return false, "overworld reached without the native CONTINUE/RTC path", state end
+    return true, "loaded @" .. tostring(result.end_frame), state
 end
 
--- CHECKPOINT/liveness proxy: the SAME dump taken twice across an idle gap must be byte-identical
--- (a mid-transition or loader-writing screen would not hold still) and the frame counter must
--- have actually advanced. This is a liveness proof, not lua/gen2_write_safety.lua's eventual
--- armed-checkpoint predicate (P3b.5, not yet built); it only proves the game reached a STABLE,
--- running overworld/battle state before the dump this gate certifies is taken.
-function G.stable_dump(api, profile, io_)
-    local before_frame = api.framecount()
-    local first = G.dump(api, profile, io_)
+-- The capture twice across an idle gap: byte-identical (a mid-transition or loader-writing screen
+-- would not hold still), the frame counter advanced, and OWPlayerInput ran inside the gap with no
+-- newer UI context (still in the overworld when the certified capture is taken).
+function G.stable_dump(api, profile, state)
+    local first = G.dump(api, profile)
     for _ = 1, G.STABILITY_IDLE_FRAMES do
         api.set_buttons({})
         api.advance()
     end
-    local second = G.dump(api, profile, io_)
+    local second = G.dump(api, profile)
     local stable = first.party.hex == second.party.hex and first.cartram.hex == second.cartram.hex
-    local advanced = second.frame > before_frame
-    return stable and advanced, second, second.frame - before_frame
+    local tick = state.tick
+    local overworld = #state.errors == 0 and tick ~= nil and tick.frame > first.frame
+        and (state.ui == nil or state.ui.seq < tick.seq)
+    return stable and second.frame > first.frame, overworld, second
 end
 
-function G.main(api, getenv)
+function G.main(api, getenv, SG)
+    local root = getenv("SLINK_ROOT") or SLINK_ROOT or "."
     local lines, failures = {}, 0
     local function log(s)
         lines[#lines + 1] = s
-        local f = io.open(G.RESULT, "w")
+        local f = io.open(root .. "/" .. G.RESULT, "w")
         if f then f:write(table.concat(lines, "\n") .. "\n"); f:close() end
     end
     local function check(what, ok, detail)
@@ -238,36 +226,45 @@ function G.main(api, getenv)
         return failures == 0
     end
 
-    local ok, env = pcall(G.inputs, getenv)
-    if not check("environment bindings present and consistent", ok, env) then return finish("bad environment") end
-
-    local function load(rel) return dofile(env.root .. "/" .. rel) end
-    local pack
-    ok, pack = pcall(G.load_pack, env, load)
-    if not check("selected profile/species pack loaded and matches the running ROM", ok, pack) then
-        return finish("bad pack")
+    local ok, ctx = pcall(function()
+        SG = SG or G.scripted_gate(root)
+        local c = SG.context(api, getenv)
+        assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
+        return c
+    end)
+    if not check("environment, facts, profile and running ROM/CGB bound (scripted-gate context)", ok, not ok and ctx or nil) then
+        return finish("bad environment")
     end
-    local profile, species, json = pack.profile, pack.species, pack.json
+    local species
+    ok, species = pcall(G.species, ctx)
+    if not check("selected species index loaded", ok, species) then return finish("bad pack") end
+    local profile, json = ctx.profile, ctx.json
 
-    local hash = api.romhash()
-    if not check("running ROM sha1 matches the selected title", type(hash) == "string" and hash:lower() == env.rom_sha1,
-                string.format("got %s want %s", tostring(hash), env.rom_sha1)) then return finish("wrong ROM") end
-    if not check("running core is CGB", api.systemid() == "GBC", api.systemid()) then return finish("wrong core") end
-
-    local Reads = load("lua/gen2/reads.lua")
     local io_ = G.io(api, profile)
-    local reads, why = Reads.new(profile, io_)
+    local reads, why = dofile(ctx.root .. "/lua/gen2/reads.lua").new(profile, io_)
     if not check("lua/gen2/reads.lua accepts the selected profile", reads ~= nil, why) then return finish("reads.new refused") end
 
-    local settled, settle_frame = G.settle(api, reads)
-    if not check("party decodes within the settle budget", settled, "stuck at frame " .. tostring(settle_frame)) then
-        return finish("boot settle failed")
+    local arrived, detail, state = G.arrive(ctx, SG)
+    if not check("post-CONTINUE overworld arrival (gen2_qualify boot: CONTINUE/RTC/FinishContinue sites, then OWPlayerInput)",
+                 arrived, detail) then
+        state.release()
+        log("CHECKPOINT not reached")
+        return finish("no qualified overworld arrival")
     end
-    log("[gen2_inspect_gate] settled at frame " .. settle_frame)
+    log("[gen2_inspect_gate] arrived " .. detail)
 
-    local live_ok, dump, gap = G.stable_dump(api, profile, io_)
-    check("dump is byte-stable across an idle frame gap (checkpoint/liveness)", live_ok, "gap=" .. tostring(gap))
-    log("CHECKPOINT " .. (live_ok and "reached" or "not reached"))
+    local captured, stable, overworld, dump = pcall(G.stable_dump, api, profile, state)
+    state.release()
+    if not check("raw capture read from its recorded domains", captured, not captured and stable or nil) then
+        log("CHECKPOINT not reached")
+        return finish("capture failed")
+    end
+    local battle, battle_why = reads.read_battle()
+    check("capture is byte-stable across an idle frame gap", stable)
+    check("OWPlayerInput ran inside the gap with no newer UI context", overworld)
+    check("no battle at the checkpoint", battle ~= nil and battle.mode == 0, battle and battle.mode or battle_why)
+    local reached = stable and overworld and battle ~= nil and battle.mode == 0
+    log("CHECKPOINT " .. (reached and "reached" or "not reached"))
     log("DUMP " .. json.encode(dump))
 
     local party = reads.read_party()
@@ -305,7 +302,6 @@ function G.main(api, getenv)
     check("player identity decodes", player ~= nil, player_why)
     log("PLAYER_LUA " .. json.encode(player))
 
-    local battle, battle_why = reads.read_battle()
     check("battle context decodes", battle ~= nil, battle_why)
     log("BATTLE_LUA " .. json.encode(battle))
 
@@ -320,15 +316,19 @@ function G.main(api, getenv)
     check("independent battle re-read agrees with reads.lua",
           battle ~= nil and battle.mode == raw.battle.mode, "differential")
 
+    local decode_frame = api.framecount()
+    check("every decode ran at the capture frame", decode_frame == dump.frame, decode_frame)
+    log("DECODE_FRAME " .. json.encode(decode_frame))
     return finish()
 end
 
 if SLINK_GEN2_GATE_LIBRARY then return G end
 
+-- Top level: the runner's speed (run_gb_gate: SpeedPercent=100) stands; no speed override here.
 local ROOT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(ROOT, "SLINK_ROOT unset -- launch via tools/run_gb_gate.py")
-local api = G.bizhawk()
-api.speed(6399)
-G.main(api, os.getenv)
+local SG = G.scripted_gate(ROOT)
+local api = SG.bizhawk()
+G.main(api, os.getenv, SG)
 api.exit()
 error("slink-gate-finished", 0)   -- client.exit() is asynchronous; stop here for real

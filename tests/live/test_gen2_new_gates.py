@@ -7,14 +7,21 @@ Each case boots ONE of the eight qualified fixtures (tests/fixtures/gen2/<name>.
 tools/gen2_fixtures.FIXTURES) warm on the real cartridge, runs lua/tests/gen2_inspect_gate.lua,
 and decodes the SAME captured bytes with server/adapters/gen2_codec.py (PYDEC): Lua on hardware
 and Python on the same bytes must agree field for field. Skipped, never hung, without EmuHawk, the
-pinned decomp/ROM build or a qualified fixture -- and the release runner
+pinned decomp/ROM build, a qualified fixture or its qualification receipt -- and the release runner
 (tools/verify_gen2_release.py) counts a skip as a failure, so a missing input is a hard failure
 here too, never a silent pass.
 
+Binding (R4 review): the staged fixture's sha256 and its expected OT come from its qualification
+receipt (tests/fixtures/gen2/receipts/<name>.qualification.json, a passed full-chain
+tools/fixture_qualification report), never from the capture itself; run_gb_gate accepts any
+existing candidate file (tools/run_gb_gate.py:297-301), so a swapped file is refused HERE. The
+capture's frame, physical domain/offset, logical address/bank and lengths are checked exactly, and
+every Lua decode is bound to the captured bytes through its own raw_hex (verify_capture).
+
 SCOPE (P3b.3a only): this file currently carries ONLY the live inspect rows -- R-1 (party/box/name
-decode), R-2 (independent stat recomputation), R-3 (a Lua-internal differential over the same
-profile addresses; see the R-3 scope note in lua/tests/gen2_inspect_gate.lua for what this does
-and does not close against the game's own on-screen display) and R-5g (gender/shiny from DVs).
+decode) and R-2 (independent stat recomputation). R-3 here is a Lua-internal differential over the
+same profile addresses and R-5g a DV-formula cross-check; neither is the game's own on-screen
+display, so R-3 and R-5g stay OPEN (see the scope notes in lua/tests/gen2_inspect_gate.lua).
 The engine-signal (P3b.4), write-window (P3b.5) and client-conformance (P3b.6/P3b.7) rows belong
 in this same file per docs/gen2/GEN2_BINDING_PLAN.md's P3b table, but land as separate, later
 cards, each owning its own function/block here (the §7 one-writer-per-file-at-a-time rule); this
@@ -23,6 +30,7 @@ UNIMPLEMENTED until they do.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -37,7 +45,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from server.adapters import gen2_codec as codec  # noqa: E402
 from server.adapters.gen2_rom_scan import Rom  # noqa: E402
-from tools import gen2_source_data  # noqa: E402
+from tools import gen2_fixtures, gen2_source_data  # noqa: E402
 from tools.gen2_fixtures import FIXTURES  # noqa: E402
 
 pytestmark = [
@@ -47,6 +55,9 @@ pytestmark = [
 ]
 
 GATE = "lua/tests/gen2_inspect_gate.lua"
+RECEIPTS = "tests/fixtures/gen2/receipts"
+CART_RAM_BYTES = 0x8000
+BADGE_FIELDS = ("johto", "kanto")
 
 
 # --- shared, importable, BizHawk-free logic (tests/unit/test_gen2_inspect_gate.py exercises it) ---
@@ -77,6 +88,13 @@ def fixture_missing_reason(name: str, *, repo: Path = REPO) -> str | None:
     return None
 
 
+def receipt_missing_reason(name: str, *, repo: Path = REPO) -> str | None:
+    path = repo / RECEIPTS / f"{name}.qualification.json"
+    if not path.exists():
+        return f"{path.relative_to(repo).as_posix()} not present (no qualification receipt for this fixture)"
+    return None
+
+
 def rom_missing_reason(title: str, *, repo: Path = REPO) -> str | None:
     """None when the pinned decomp/ROM build for `title` is available; a clear skip reason otherwise."""
     try:
@@ -84,6 +102,32 @@ def rom_missing_reason(title: str, *, repo: Path = REPO) -> str | None:
     except Exception as exc:  # noqa: BLE001 - any missing/invalid build input just skips this gate
         return f"{title}: pinned Gen 2 ROM build unavailable ({exc})"
     return None
+
+
+def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) -> int:
+    """The expected OT of the STAGED bytes, from the fixture's own qualification receipt.
+
+    The receipt must be a passed full-chain report whose row for `name` recorded exactly these bytes
+    (artifacts.fixture.sha256) and whose independent PYDEC qualify stage recorded the player ID. A
+    crystal_town file copied under the crystal_town_ot2 name fails the hash binding here."""
+    path = repo / RECEIPTS / f"{name}.qualification.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    if (report.get("schema") != "fixture-qualification-v1" or report.get("scope") != "full"
+            or report.get("passed") is not True):
+        raise AssertionError(f"{name}: receipt is not a passed full-chain qualification report")
+    rows = [row for row in report.get("fixtures") or [] if row.get("name") == name]
+    if len(rows) != 1 or rows[0].get("passed") is not True:
+        raise AssertionError(f"{name}: receipt has no single passed row for this fixture")
+    recorded = ((rows[0].get("artifacts") or {}).get("fixture") or {}).get("sha256")
+    if recorded != hashlib.sha256(fixture_bytes).hexdigest():
+        raise AssertionError(f"{name}: staged fixture bytes differ from the qualified candidate "
+                             f"(receipt sha256 {recorded})")
+    stage = next((row for row in rows[0].get("stages") or []
+                  if row.get("stage") == "qualify" and row.get("status") == "PASS"), {})
+    player_id = (stage.get("evidence") or {}).get("player_id")
+    if not (isinstance(player_id, str) and player_id.isdigit() and int(player_id) <= 0xFFFF):
+        raise AssertionError(f"{name}: receipt carries no qualified player ID")
+    return int(player_id)
 
 
 def _lua_to_py(mon: dict) -> dict:
@@ -105,19 +149,36 @@ def compare_mon(lua_mon: dict, py_mon: dict, *, where: str) -> None:
 
 
 def compare_collection(lua_collection: dict, py_collection: dict, *, where: str) -> None:
+    """Count, the decoded bytes themselves (raw_hex: both decoders read the SAME capture) and every
+    record field for field."""
     if lua_collection is None:
         raise AssertionError(f"{where}: Lua produced no collection")
     if lua_collection["count"] != py_collection["count"]:
         raise AssertionError(f"{where}: count disagrees: lua={lua_collection['count']} "
                              f"pydec={py_collection['count']}")
+    if lua_collection.get("raw_hex") != py_collection["raw_hex"]:
+        raise AssertionError(f"{where}: Lua decoded other bytes than the capture PYDEC decoded")
     for slot, (lua_mon, py_mon) in enumerate(zip(lua_collection["mons"], py_collection["mons"], strict=True)):
         compare_mon(lua_mon, py_mon, where=f"{where} slot {slot}")
 
 
+def compare_badges(lua_badges: dict, raw_badges: dict, *, where: str) -> None:
+    """The declared fields only (reads.lua adds raw_hex/evidence/snapshot_qualified), plus reads.lua's
+    own raw_hex against the second reader's two bytes."""
+    if not isinstance(lua_badges, dict) or not isinstance(raw_badges, dict):
+        raise AssertionError(f"{where}: badge record missing")
+    for field in BADGE_FIELDS:
+        if type(raw_badges.get(field)) is not int or lua_badges.get(field) != raw_badges[field]:
+            raise AssertionError(f"{where}: badge field {field!r} disagrees: lua={lua_badges.get(field)!r} "
+                                 f"raw={raw_badges.get(field)!r}")
+    if lua_badges.get("raw_hex") != "".join(f"{raw_badges[field]:02x}" for field in BADGE_FIELDS):
+        raise AssertionError(f"{where}: badge raw_hex disagrees with the independent re-read")
+
+
 def identity_matches(party: dict, expected_ot_id: int) -> bool:
-    """R-1's wrong-fixture control: a fixture's first party mon must carry ITS OWN OT id. Given
-    the WRONG spec's expected id (the town/battle pairing's own OT, or the other fixture's OT),
-    this returns False rather than raising, so a caller can assert the refusal explicitly."""
+    """R-1's wrong-fixture control: a fixture's first party mon must carry the OT its qualification
+    receipt recorded (qualified_identity). Given another fixture's OT this returns False rather than
+    raising, so a caller can assert the refusal explicitly."""
     if not party.get("mons"):
         return False
     return party["mons"][0]["ot_id"] == expected_ot_id
@@ -126,7 +187,8 @@ def identity_matches(party: dict, expected_ot_id: int) -> bool:
 def gender_and_shiny(dv_word: int, gender_ratio: int) -> tuple[str, bool]:
     """Independent Python reimplementation of GetGender/the shiny check (engine/pokemon/
     mon_stats.asm; engine/gfx/color.asm), matching lua/tests/gen2_inspect_gate.lua's
-    G.gender_and_shiny byte for byte but authored separately -- neither side imports the other."""
+    G.gender_and_shiny byte for byte but authored separately -- neither side imports the other.
+    A formula cross-check only: R-5g needs the game's own display and stays OPEN."""
     attack = (dv_word >> 12) & 0xF
     defense = (dv_word >> 8) & 0xF
     speed = (dv_word >> 4) & 0xF
@@ -143,6 +205,99 @@ def gender_and_shiny(dv_word: int, gender_ratio: int) -> tuple[str, bool]:
     return gender, shiny
 
 
+def wram_offset(bank: int, address: int, length: int) -> int:
+    """CGB flat WRAM domain offset of a named-bank range (Pan Docs; the gate's G.wram_offset twin)."""
+    if bank == 0 and 0xC000 <= address and address + length <= 0xD000:
+        return address - 0xC000
+    if 1 <= bank <= 7 and 0xD000 <= address and address + length <= 0xE000:
+        return bank * 0x1000 + address - 0xD000
+    raise AssertionError(f"WRAM range ${address:X}+{length} outside its bank {bank} window")
+
+
+def check_dump_provenance(dump: dict, profile: dict) -> None:
+    """The capture receipt: exact frame type, physical domain/offset, logical address/bank, lengths
+    and hex sizes (docs/gen2/GEN2_BINDING_PLAN.md:339 -- a dump from another domain, range or frame
+    must not pass)."""
+    frame = dump.get("frame")
+    if type(frame) is not int or frame < 1:
+        raise AssertionError(f"capture frame missing or invalid: {frame!r}")
+    ram, banks = profile["ram"], profile["ram_bank"]
+    address, bank = ram["wPartyCount"], banks["wPartyCount"]
+    length = ram["wPartyMonNicknamesEnd"] - address
+    want = {"domain": "WRAM", "offset": wram_offset(bank, address, length), "bus_domain": "System Bus",
+            "bank": bank, "address": address, "length": length}
+    party = dump.get("party") or {}
+    got = {key: party.get(key) for key in want}
+    if got != want:
+        raise AssertionError(f"party capture provenance {got} != {want}")
+    if not isinstance(party.get("hex"), str) or len(party["hex"]) != 2 * length:
+        raise AssertionError("party capture length disagrees with its recorded range")
+    want = {"domain": "CartRAM", "address": 0, "length": CART_RAM_BYTES}
+    cart = dump.get("cartram") or {}
+    got = {key: cart.get(key) for key in want}
+    if got != want:
+        raise AssertionError(f"CartRAM capture provenance {got} != {want}")
+    if not isinstance(cart.get("hex"), str) or len(cart["hex"]) != 2 * CART_RAM_BYTES:
+        raise AssertionError("CartRAM capture length disagrees with its recorded range")
+
+
+def verify_capture(text: str, profile_wrapper: dict, title: str) -> dict:
+    """The whole BizHawk-free verdict over the gate's COMPLETE printed output: checkpoint, capture
+    receipt, decode frame, Lua/PYDEC equality on the same bytes, the R-3 differential and the R-5g
+    formula cross-check. Returns the PYDEC party for the identity and R-2 checks."""
+    if tagged_lines(text).get("CHECKPOINT") != ["reached"]:
+        raise AssertionError("checkpoint/liveness not reached")
+    profile = profile_wrapper["titles"][title]
+    layout = codec.Gen2Layout.from_profile(profile_wrapper, title)
+    dump = tag_json(text, "DUMP")
+    check_dump_provenance(dump, profile)
+    if tag_json(text, "DECODE_FRAME") != dump["frame"]:
+        raise AssertionError("Lua decodes were not taken at the capture frame")
+
+    # R-1: party, active box and all 14 storage boxes, byte-for-byte, same capture.
+    py_party = codec.decode_party(bytes.fromhex(dump["party"]["hex"]), layout)
+    compare_collection(tag_json(text, "PARTY_LUA"), py_party, where=f"{title} party")
+    cart_raw = bytes.fromhex(dump["cartram"]["hex"])
+    boxes = [("ACTIVE_BOX_LUA", "active box", layout.active_box)] + [
+        (f"BOX_LUA_{index}", f"box {index}", entry) for index, entry in enumerate(layout.storage_boxes)]
+    for tag, where, (flat, length) in boxes:
+        lua_box = tag_json(text, tag)
+        if lua_box is None or lua_box.get("bank", -1) * 0x2000 + lua_box.get("address", 0) - 0xA000 != flat:
+            raise AssertionError(f"{title} {where}: Lua read another CartRAM range than the layout's")
+        compare_collection(lua_box, codec.decode_box(cart_raw[flat:flat + length], layout), where=f"{title} {where}")
+
+    # R-3 (Lua-internal differential only; stays OPEN): reads.lua against the gate's second reader.
+    compare_badges(tag_json(text, "BADGES_LUA"), tag_json(text, "RAW_BADGES"), where=f"{title} badges")
+    boxnum = tag_json(text, "RAW_BOXNUM")
+    if not (isinstance(boxnum, int) and 0 <= boxnum <= 13):
+        raise AssertionError(f"{title}: current box outside 0..13: {boxnum!r}")
+    if tag_json(text, "BATTLE_LUA")["mode"] != tag_json(text, "RAW_BATTLE")["mode"]:
+        raise AssertionError(f"{title}: battle-mode differential")
+
+    # R-5g formula cross-check (stays OPEN): gender/shininess from the same DVs, in Python.
+    species = json.loads((REPO / f"data/games/gen2_{title}/species_index.json").read_text(encoding="utf-8"))["species"]
+    rows = tag_json(text, "GENDER_SHINY")
+    if len(rows) != len(py_party["mons"]):
+        raise AssertionError(f"{title}: gender/shiny rows differ from the party")
+    for row, mon in zip(rows, py_party["mons"], strict=True):
+        gender, shiny = gender_and_shiny(mon["dv_word"], species[str(mon["species_id"])]["gender_ratio"])
+        if (row["gender"], row["shiny"]) != (gender, shiny):
+            raise AssertionError(f"{title}: gender/shiny cross-check disagrees on {mon['species_id']}: {row}")
+    return py_party
+
+
+def inspect_env(spec, fixture_bytes: bytes, *, repo: Path = REPO) -> dict:
+    """The fixture-qualification CONTINUE binding the gate arrives through (stage "boot"), bound to
+    the staged bytes by the stage fingerprint."""
+    facts = gen2_fixtures.route_facts(spec.title, repo)
+    case = {**vars(spec), "title_idle_frames": 0, "attempt_id": "inspect-" + spec.name,
+            **gen2_fixtures.QUALIFY_BUDGET}
+    qualify = {"stage": "boot", "stage_fingerprint": hashlib.sha256(fixture_bytes).hexdigest(),
+               "facts": gen2_fixtures.qualify_facts(spec.title, repo)}
+    return {"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": json.dumps(facts),
+            "SLINK_GEN2_QUALIFY": json.dumps(qualify)}
+
+
 # --- the live gate ------------------------------------------------------------------------------
 
 
@@ -154,56 +309,36 @@ def emuhawk():
     return EMUHAWK
 
 
-def _run_inspect_gate(spec, *, timeout=600):
+def _run_inspect_gate(spec, fixture: Path, fixture_bytes: bytes, *, timeout=600):
     """Boot `spec`'s fixture warm and run the inspect gate; returns (passed, path, text)."""
     from run_gb_gate import run_gate
 
-    fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     directory = REPO / ".cache/gen2-fixtures/inspect-gate" / spec.name
     return run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=timeout,
-                    saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=100)
+                    saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=100,
+                    env_overrides=inspect_env(spec, fixture_bytes))
 
 
 @pytest.mark.parametrize("spec", FIXTURES, ids=lambda spec: spec.name)
 def test_inspect_gate_and_hardware_differential(spec, emuhawk):
-    reason = rom_missing_reason(spec.title) or fixture_missing_reason(spec.name)
+    reason = rom_missing_reason(spec.title) or fixture_missing_reason(spec.name) or receipt_missing_reason(spec.name)
     if reason:
         pytest.skip(reason)
 
-    passed, path, text = _run_inspect_gate(spec)
+    fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
+    staged = fixture.read_bytes()
+    # R-1 wrong-fixture control: identity and bytes come from the receipt, never from this capture.
+    expected_ot = qualified_identity(spec.name, staged)
+
+    passed, path, text = _run_inspect_gate(spec, fixture, staged)
     assert passed, f"gate FAILED on {spec.name}; result {path}: {text[-2500:]}"
-    assert "CHECKPOINT reached" in text, f"checkpoint/liveness not reached on {spec.name}: {text[-1500:]}"
+    if fixture.read_bytes() != staged:
+        raise AssertionError(f"{spec.name}: fixture changed while the gate ran")
 
     profile_wrapper = json.loads((REPO / f"data/games/gen2_{spec.title}/profile.json")
                                  .read_text(encoding="utf-8"))
-    layout = codec.Gen2Layout.from_profile(profile_wrapper, spec.title)
-
-    dump = tag_json(text, "DUMP")
-    assert dump["party"]["domain"] == "System Bus" and dump["cartram"]["domain"] == "CartRAM"
-    assert isinstance(dump["frame"], int) and dump["frame"] >= 0
-    assert dump["cartram"]["length"] == 0x8000
-
-    # R-1: party, active box and all 14 storage boxes, byte-for-byte, same-frame dump.
-    party_raw = bytes.fromhex(dump["party"]["hex"])
-    py_party = codec.decode_party(party_raw, layout)
-    lua_party = tag_json(text, "PARTY_LUA")
-    compare_collection(lua_party, py_party, where=f"{spec.name} party")
-
-    cart_raw = bytes.fromhex(dump["cartram"]["hex"])
-    active_flat, active_len = layout.active_box
-    py_active = codec.decode_box(cart_raw[active_flat:active_flat + active_len], layout)
-    lua_active = tag_json(text, "ACTIVE_BOX_LUA")
-    compare_collection(lua_active, py_active, where=f"{spec.name} active box")
-
-    for index, (flat, length) in enumerate(layout.storage_boxes):
-        py_box = codec.decode_box(cart_raw[flat:flat + length], layout)
-        lua_box = tag_json(text, f"BOX_LUA_{index}")
-        compare_collection(lua_box, py_box, where=f"{spec.name} box {index}")
-
-    # R-1 wrong-fixture control (positive half; the refusal half is a MODEL unit test --
-    # tests/unit/test_gen2_inspect_gate.py -- since it needs no cartridge): this fixture's own
-    # decoded OT id must match itself.
-    assert identity_matches(py_party, py_party["mons"][0]["ot_id"])
+    py_party = verify_capture(text, profile_wrapper, spec.title)
+    assert identity_matches(py_party, expected_ot), (spec.name, "captured OT differs from the qualified fixture")
 
     # R-2: independent stat recomputation from base stats sourced off the ROM, never the party's
     # own stored stat fields (CalcMonStats double-derivation, ticket 20).
@@ -214,24 +349,3 @@ def test_inspect_gate_and_hardware_differential(spec, emuhawk):
         computed = codec.calc_stats(base, mon["dvs"], mon["stat_exp"], mon["level"])
         assert mon["max_hp"] == computed["hp"], (spec.name, mon["species_id"], "max_hp")
         assert mon["stats"] == {k: v for k, v in computed.items() if k != "hp"}, (spec.name, mon["species_id"])
-
-    # R-3: reads.lua's structured accessors against the gate's OWN independent second reader of
-    # the same addresses (see the scope note in lua/tests/gen2_inspect_gate.lua).
-    badges = tag_json(text, "BADGES_LUA")
-    raw_badges = tag_json(text, "RAW_BADGES")
-    assert badges == raw_badges, (spec.name, "badges differential", badges, raw_badges)
-    boxnum = tag_json(text, "RAW_BOXNUM")
-    assert isinstance(boxnum, int) and 0 <= boxnum <= 13
-    battle = tag_json(text, "BATTLE_LUA")
-    raw_battle = tag_json(text, "RAW_BATTLE")
-    assert battle["mode"] == raw_battle["mode"], (spec.name, "battle-mode differential")
-
-    # R-5g: gender/shininess from the same DVs, recomputed independently in Python.
-    gender_shiny = tag_json(text, "GENDER_SHINY")
-    species_index = json.loads((REPO / f"data/games/gen2_{spec.title}/species_index.json")
-                               .read_text(encoding="utf-8"))["species"]
-    assert len(gender_shiny) == len(py_party["mons"])
-    for row, mon in zip(gender_shiny, py_party["mons"], strict=True):
-        ratio = species_index[str(mon["species_id"])]["gender_ratio"]
-        gender, shiny = gender_and_shiny(mon["dv_word"], ratio)
-        assert row["gender"] == gender and row["shiny"] == shiny, (spec.name, mon["species_id"], row)

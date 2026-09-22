@@ -782,3 +782,22 @@ def test_refused_acquisitions_count_refusals_after_insertion_not_failed_throws()
     world.fire("capture_party")  # inserted, then the battle ends before the final name
     world.fire("battle_end")
     assert [event.kind for event in world.events(binder)] == ["observation"] and count() == 2
+
+
+# ── R4 S2: an abandoned timeline is not a natural boundary ─────────────────────────────────────
+def test_an_abandoned_timeline_discards_finalized_batches_and_retires_latches():
+    world = World()
+    binder = world.bind()
+    world.party([world.mon(), world.mon(species=19, dvs=0x7AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")  # finalized but not drained
+    world.party([world.mon(), world.mon(species=19, dvs=0x7AAA), world.mon(species=16, dvs=0x5AAA)])
+    world.fire("capture_party")  # a second insertion: an open acquisition latch
+    assert binder.status(binder).pending_acquisitions == 1
+    binder.abandon(binder, "savestate load")
+    assert world.events(binder) == []
+    status = binder.status(binder)
+    assert status.pending_acquisitions == 0 and status.failed is None
+    assert status.drops.abandoned_timeline.count == 1 and "savestate load" in status.drops.abandoned_timeline.reason
+    world.fire("capture_party_finalized")  # the resumed timeline has no insertion behind this final
+    assert [event.kind for event in world.events(binder)] == []

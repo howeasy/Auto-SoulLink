@@ -101,49 +101,86 @@ SCRATCH_WRITES = {"crystal": (), "gold": (("sWindowStackBottom", ("sWindowStackT
 # LoadBattleAnimGFX engine/battle_anims/helpers.asm:105-122), so a candidate that met a wild battle holds
 # graphics there. Those 32 bytes may change on a qualification boot, and only to zero.
 BOOT_ZEROED = {"crystal": ("sScratch", ("sScratch", 0x20))}
-# PLAN 5.6 expected scenario delta. Inside the save spans a no-op CONTINUE + native re-save writes the same
-# bytes back (SavePlayerData/SavePokemonData/SaveBox and the backups copy the live WRAM: C engine/menus/save.asm
-# :266-295,498-594, G :273-291,396-536), so every saved byte must equal the candidate: player ID, map, position,
-# party, items and the Ball pocket, event flags, the active and current storage box, mail, options, check
-# values. Only these may differ. SRAM: the checksums (SaveChecksum C :526, SaveBackupChecksum :583; G :424,
-# :495; strict_checksum_witness still verifies them), sStackTop (UpdateStackTop C :297, G :294) and
-# sRTCStatusFlags (SaveRTC C/G engine/rtc/rtc.asm:76-89).
+# PLAN 5.6 expected scenario delta -- a FRESH-FIXTURE oracle. Inside the save spans a no-op CONTINUE + native
+# re-save writes the same bytes back (SavePlayerData/SavePokemonData/SaveBox and the backups copy the live WRAM:
+# C engine/menus/save.asm:266-295,498-594, G :273-291,396-536), so every saved byte must equal the candidate:
+# player ID, map, position, party, items and the Ball pocket, event flags, the active and current storage box,
+# mail, options, check values. Scope: the eight early-game fixtures. Saves with active roamers (JumpRoamMons
+# moves them), Pokerus (CheckPokerusTick -> ApplyPokerusTick), Mystery Gift decorations, an RTC overflow
+# (ClearDailyTimers) or Crystal Battle Tower state change compared bytes and REFUSE; they are out of scope, and
+# the answer is a new rule with its own source transition, never a looser span.
+# Free SRAM: the checksums (SaveChecksum C :526, SaveBackupChecksum :583; G :424, :495;
+# strict_checksum_witness still verifies them) and sStackTop (UpdateStackTop C :297, G :294).
 RESAVE_FREE_SRAM = (("sChecksum", ("sChecksum", 2)), ("sBackupChecksum", ("sBackupChecksum", 2)),
-                    ("sStackTop", ("sStackTop", 2)), ("sRTCStatusFlags", ("sRTCStatusFlags", 1)))
-# Game-data fields, in every copy, that CONTINUE, the overworld frames before the save, or the save rewrite:
+                    ("sStackTop", ("sStackTop", 2)))
+# SaveRTC writes 0 to sRTCStatusFlags on every save (C/G engine/rtc/rtc.asm:76-88): the re-saved byte must be 0.
+RESAVE_ZEROED_SRAM = ("sRTCStatusFlags",)
+# Genuinely dynamic game-data fields, in every copy: CONTINUE, the overworld frames before the save, or the
+# save itself rewrite them with time- or movement-dependent values, so any value is accepted:
 RESAVE_FREE_WRAM = (
     # StageRTCTimeForSave stamps the RTC time (C/G engine/rtc/rtc.asm:63-74); FixTime derives wCurDay
     # (C home/time.asm:129-174, G :122-167); GameTimer counts play time (C/G home/game_time.asm:11).
     ("wRTC", ("wRTC", 4)), ("wCurDay", ("wCurDay", 1)), ("wGameTimeCap", ("wGameTimeFrames", 1)),
     # Object engine state: MapSetupScript_Continue (C data/maps/setup_scripts.asm:164-182, G :161-179) clears
     # the command queue (HandleContinueMap) and rebuilds the sprites (RefreshMapSprites); NPC movement
-    # advances it every frame. The saved checkpoint is wMapGroup/wMapNumber/wXCoord/wYCoord, still compared.
-    ("wObjectFollow_Leader", "wVariableSprites"),
+    # advances the follow state and wObjectStructs every frame. The saved checkpoint is wMapGroup/wMapNumber/
+    # wXCoord/wYCoord, still compared. Span: wObjectFollow_Leader..wCmdQueue end (C ram/wram.asm:3032-3045,
+    # G :2441-2460); the `ds 40` pad above wMapObjects (C :3047, G :2462) is never written, so it stays compared.
+    ("wObjectFollow_Leader", ("wMapObjects", -40)),
+    # wMapObjects is NOT reloaded by CONTINUE (LoadMapAttributes_SkipObjects skips ReadObjectEvents: C home/map.asm
+    # :385-415, G :754-784), so its script pointers, event flags, sprites, movement, hours, masks (wObjectMasks)
+    # and wVariableSprites must survive a re-save byte for byte. Only two fields move without a script:
+    #   MAPOBJECT_OBJECT_STRUCT_ID of each NPC map object, set when an NPC enters the visible range
+    #   (CopyMapObjectToObjectStruct.CopyMapObjectToTempObject C engine/overworld/player_object.asm:170-174,
+    #   G :166-170) and reset to -1 when it leaves (DeleteMapObject C/G engine/overworld/map_objects.asm:5-25,
+    #   ApplyDeletionToMapObject C/G home/map_objects.asm:317-326);
+    #   the player map object's Y/X (RefreshPlayerCoords C engine/overworld/player_object.asm:102-122, G :87-107).
+    *((f"wMap{n}ObjectStructID", (f"wMap{n}ObjectStructID", 1)) for n in range(1, 16)),
+    ("wPlayerObjectYCoord", ("wPlayerObjectXCoord", 1)),
     # LoadMapTimeOfDay in the same script: time-of-day palette state from the RTC.
     ("wTimeOfDayPal", ("wCurTimeOfDay", 1)),
     # CheckTimeEvents every overworld frame (C engine/overworld/events.asm:449-466, G :436-454):
-    # CheckDailyResetTimer (C engine/overworld/time.asm:103-134, G :89-97) stores today in its timer through
-    # _CalcDaysSince (C :399, G :354) and clears the daily flags once a day passed; CheckPokerusTick
-    # (C :194-204, G :149-159) stores today in wTimerEventStartDay the same way.
-    ("wDailyResetTimer", ("wDailyFlags2", 1)), ("wTimerEventStartDay", ("wTimerEventStartDay", 1)),
-    # Continue .Check2Pass -> JumpRoamMons (C engine/menus/intro_menu.asm:372, G :283) ends in
-    # _BackUpMapIndices (C engine/overworld/wildmons.asm:743-752, G :748): last map := current map.
-    ("wRoamMons_CurMapNumber", ("wRoamMons_LastMapGroup", 1)),
+    # CheckDayDependentEventHL stamps today into the day byte of wDailyResetTimer through _CalcDaysSince
+    # (C engine/overworld/time.asm:73-81,399-408, G :59-67,354-363); CheckPokerusTick (C :194-204, G :149-159)
+    # stamps wTimerEventStartDay the same way. Day stamps only; the countdown byte is ruled below.
+    (("wDailyResetTimer", 1), ("wDailyResetTimer", 2)), ("wTimerEventStartDay", ("wTimerEventStartDay", 1)),
 )
-RESAVE_FREE_WRAM_TITLE = {
-    # Crystal CheckDailyResetTimer also clears wSwarmFlags/wUnusedDailyFlag and the rematch/phone flags and
-    # ticks wKenjiBreakTimer (C engine/overworld/time.asm:107-134); FinishContinueFunction sets
-    # SHOWN_MAP_NAME_SIGN (C engine/menus/intro_menu.asm:467), the map-sign check clears it
-    # (C engine/events/map_name_sign.asm:29).
-    "crystal": (("wSwarmFlags", ("wUnusedDailyFlag", 1)), ("wDailyRematchFlags", "wYanmaMapGroup"),
-                ("wMapNameSignFlags", ("wMapNameSignFlags", 1))),
-    # Gold/Silver FinishContinueFunction sets GAME_TIMER_COUNTING_F in the saved wGameTimerPaused
-    # (G engine/menus/intro_menu.asm:347; Crystal does not save it); CheckSwarmFlag clears the swarm map and
-    # flag every overworld frame once the daily swarm flag is gone (G engine/overworld/events.asm:452 ->
-    # engine/events/specials.asm:299-314).
-    "gold": (("wGameTimerPaused", ("wGameTimerPaused", 1)), ("wSwarmMapGroup", ("wFishingSwarmFlag", 1))),
-    "silver": (("wGameTimerPaused", ("wGameTimerPaused", 1)), ("wSwarmMapGroup", ("wFishingSwarmFlag", 1))),
+# Saved fields that move only along a deterministic source transition: exempt from the byte comparison, and
+# checked per copy by _ruled_problems instead. (rule, start, end) with _wram_span's start/end forms.
+#   daily_countdown  CheckDailyResetTimer's one-day countdown: minus the days since its stamp, or restarted to 1
+#                    by RestartDailyResetTimer -> InitOneDayCountdown when it runs out (C engine/overworld/time.asm
+#                    :61-81,99-106,288-306; G :47-67,85-92,243-261).
+#   daily_cleared    zeroed only when that reset fires, never set (C :107-122 wDailyFlags1/2, wSwarmFlags,
+#                    wUnusedDailyFlag and the rematch/phone-item/phone-time-of-day flags; G :92-96 wDailyFlags1/2).
+#   kenji            Crystal wKenjiBreakTimer's first byte, ticked by the same reset: minus one, or resampled to
+#                    3..6 by SampleKenjiBreakCountdown once it is at or reaches 0 (C :123-142).
+#   map_sign         Crystal: only SHOWN_MAP_NAME_SIGN (bit 1, C constants/ram_constants.asm:138-140) may move:
+#                    FinishContinueFunction sets it (C engine/menus/intro_menu.asm:467-468), the map-sign check
+#                    clears it (C engine/events/map_name_sign.asm:29-31).
+#   timer_counting   Gold/Silver: FinishContinueFunction sets GAME_TIMER_COUNTING_F (bit 0,
+#                    G constants/ram_constants.asm:29-30) in the saved wGameTimerPaused (G engine/menus/
+#                    intro_menu.asm:347-348); nothing else moves.
+#   swarm            Gold/Silver: CheckSwarmFlag zeroes wSwarmMapGroup/wSwarmMapNumber/wFishingSwarmFlag every
+#                    overworld frame while DAILYFLAGS1_SWARM_F (bit 2, G constants/ram_constants.asm:301-305) is
+#                    clear (G engine/overworld/events.asm:452 -> engine/events/specials.asm:299-314).
+#   roam_indices     Continue .Check2Pass -> JumpRoamMons (C engine/menus/intro_menu.asm:372, G :283) ends in
+#                    _BackUpMapIndices (C engine/overworld/wildmons.asm:743-752, G :748-757): last := cur,
+#                    cur := (wMapNumber, wMapGroup).
+RESAVE_RULED_WRAM = {
+    "all": (("daily_countdown", "wDailyResetTimer", ("wDailyResetTimer", 1)),
+            ("daily_cleared", "wDailyFlags1", ("wDailyFlags2", 1)),
+            ("roam_indices", "wRoamMons_CurMapNumber", ("wRoamMons_LastMapGroup", 1))),
+    "crystal": (("daily_cleared", "wSwarmFlags", ("wUnusedDailyFlag", 1)),
+                ("daily_cleared", "wDailyRematchFlags", ("wDailyPhoneTimeOfDayFlags", 4)),
+                ("kenji", "wKenjiBreakTimer", ("wKenjiBreakTimer", 1)),
+                ("map_sign", "wMapNameSignFlags", ("wMapNameSignFlags", 1))),
+    "gold": (("timer_counting", "wGameTimerPaused", ("wGameTimerPaused", 1)),
+             ("swarm", "wSwarmMapGroup", ("wFishingSwarmFlag", 1))),
 }
+RESAVE_RULED_WRAM["silver"] = RESAVE_RULED_WRAM["gold"]
+# _CalcDaysSince wraps the day difference at 20 * 7 (C engine/overworld/time.asm:399-408, G :354-363).
+DAYS_WRAP = 20 * 7
+SHOWN_MAP_NAME_SIGN_F, GAME_TIMER_COUNTING_F, DAILYFLAGS1_SWARM_F = 1, 0, 2
 # The WRAM start of each layout.regions copy.
 _REGION_STARTS = {"player": "wPlayerData", "player1": "wPlayerData1", "player2": "wPlayerData2",
                   "player3": "wPlayerData3", "map": "wCurMapData", "pokemon": "wPokemonData"}
@@ -560,7 +597,7 @@ def _cart_span(ctx, start, end):
 
 
 def _wram_span(ctx, start, end):
-    first = ctx.symbol(start).address
+    first = ctx.symbol(start[0]).address + start[1] if isinstance(start, tuple) else ctx.symbol(start).address
     last = ctx.symbol(end[0]).address + end[1] if isinstance(end, tuple) else ctx.symbol(end).address
     _require(first < last, f"empty source WRAM span: {start}")
     return first, last
@@ -616,18 +653,53 @@ def _symbol_namer(ctx):
     return name_at
 
 
+def _ruled_problems(ctx, title, before, after):
+    """Start symbols of RESAVE_RULED_WRAM fields whose re-saved bytes are not their source transition from the
+    candidate's; before/after(symbol, size) read one save copy. An unchanged field always passes."""
+    (count_b, day_b), (count_a, day_a) = before("wDailyResetTimer", 2), after("wDailyResetTimer", 2)
+    days = (day_a - day_b) % DAYS_WRAP
+    fired = count_b == 0 or days >= count_b   # UpdateTimeRemaining hit 0 (C engine/overworld/time.asm:288-306)
+    problems = []
+    for rule, start, end in RESAVE_RULED_WRAM["all"] + RESAVE_RULED_WRAM[title]:
+        first, last = _wram_span(ctx, start, end)
+        b, a = before(start, last - first), after(start, last - first)
+        if a == b:
+            continue
+        if rule == "daily_countdown":
+            ok = a[0] == (1 if fired else count_b - days)
+        elif rule == "daily_cleared":
+            ok = fired and all(x in (y, 0) for x, y in zip(a, b))
+        elif rule == "kenji":
+            ok = fired and (a[0] == b[0] - 1 if b[0] >= 2 else 3 <= a[0] <= 6)
+        elif rule == "map_sign":
+            ok = (a[0] ^ b[0]) & ~(1 << SHOWN_MAP_NAME_SIGN_F) & 0xFF == 0
+        elif rule == "timer_counting":
+            ok = a[0] == b[0] | 1 << GAME_TIMER_COUNTING_F
+        elif rule == "swarm":
+            ok = not any(a) and not after("wDailyFlags1", 1)[0] >> DAILYFLAGS1_SWARM_F & 1
+        else:  # roam_indices
+            ok = a == after("wMapNumber", 1) + after("wMapGroup", 1) + b[:2]
+        if not ok:
+            problems.append(start)
+    return problems
+
+
 def resave_scenario_delta(original, resaved, layout, title, root=ROOT):
-    """Saved fields a no-op CONTINUE + native re-save changed inside the save spans (PLAN 5.6); [] passes."""
+    """Saved fields a no-op CONTINUE + native re-save changed inside the save spans (PLAN 5.6); [] passes.
+
+    A FRESH-FIXTURE oracle (see RESAVE_FREE_SRAM's scope note): free fields accept any value, ruled fields only
+    their source transition, sRTCStatusFlags only 0, and everything else must be byte-identical."""
     _require(len(original) == len(resaved) == CART_RAM_BYTES, "compare exactly two CartRAM images")
     ctx = load_context(title, root=root)
     free = bytearray(CART_RAM_BYTES)
-    for span in RESAVE_FREE_SRAM:
+    for span in RESAVE_FREE_SRAM + tuple((name, (name, 1)) for name in RESAVE_ZEROED_SRAM):
         start, end = _cart_span(ctx, *span)
         free[start:end] = b"\x01" * (end - start)
     copies = [(label, at, layout.addresses[_REGION_STARTS[region.name]], region.length,
                ctx.symbol(_REGION_STARTS[region.name]).bank)
               for region in layout.regions for label, at in (("", region.primary), ("backup ", region.backup))]
-    for first, last in (_wram_span(ctx, *row) for row in RESAVE_FREE_WRAM + RESAVE_FREE_WRAM_TITLE[title]):
+    ruled = tuple((start, end) for _, start, end in RESAVE_RULED_WRAM["all"] + RESAVE_RULED_WRAM[title])
+    for first, last in (_wram_span(ctx, *row) for row in RESAVE_FREE_WRAM + ruled):
         covered = 0
         for _, at, base, length, _ in copies:  # a field may straddle two Gold/Silver regions
             low, high = max(first, base), min(last, base + length)
@@ -644,6 +716,19 @@ def resave_scenario_delta(original, resaved, layout, title, root=ROOT):
                         else name_at("s", index // 0x2000, 0xA000 + index % 0x2000))
                 if name not in names:
                     names.append(name)
+
+    def reader(image, label):
+        def read(symbol, size):
+            address = ctx.symbol(symbol).address
+            for name, at, base, length, _ in copies:
+                if name == label and base <= address and address + size <= base + length:
+                    return image[at + address - base:at + address - base + size]
+            raise ValueError(f"ruled field outside the saved copies: {label}{symbol}")
+        return read
+
+    for label in ("", "backup "):
+        names += [label + symbol for symbol in _ruled_problems(ctx, title, reader(original, label), reader(resaved, label))]
+    names += [name for name in RESAVE_ZEROED_SRAM if resaved[_cart_span(ctx, name, (name, 1))[0]] != 0]
     return names
 
 
@@ -698,6 +783,12 @@ def post_oracle_stage(context):
         saved = inspect_candidate(context.artifacts["resave:fixture"], profile, context.artifacts["rom"], spec)
         stages = {row["stage"]: row["fingerprint"] for row in context.previous}
         validate_game_witness(_json(context.artifacts["boot:game_witness"]), context, original, "boot", stages["boot"])
+        # The native save itself (R4 S3): same-player overwrite branch, a counted successful save, and the
+        # CartRAM it witnessed is exactly the re-save output judged below.
+        save = _json(context.artifacts["resave:save_witness"])
+        validate_game_witness(save, context, original, "resave", stages["resave"])
+        _require(save.get("resave_cartram_sha256") == saved["cartram_sha256"],
+                 "GAME save witness hash differs from the re-saved fixture")
         validate_game_witness(_json(context.artifacts["resave:reload_witness"]), context, saved, "reload", stages["resave"])
         _require(saved["player_id"] == original["player_id"] and saved["identity_key"] == original["identity_key"],
                  "re-save changed fixture identity")

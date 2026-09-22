@@ -695,7 +695,7 @@ def test_held_messages_do_not_replay_after_a_savestate_load(jump):
         world.hello()
         assert [m["event"] for m in world.sent()] == ["hello"]
 
-    falsify(check, mutant("lua/gen2/client.lua", ('drop_held("savestate load")', "")))
+    falsify(check, mutant("lua/gen2/client.lua", ('self:abandon_timeline("savestate load")', "")))
 
 
 def test_a_full_pre_hello_queue_is_shown_on_the_hud_once():
@@ -719,3 +719,59 @@ def test_a_reset_drops_messages_held_before_the_hello():
     world.party([mon(), mon(species=172, dvs=0x3AAA)])  # the reloaded save
     world.hello()
     assert [m["event"] for m in world.sent()] == ["hello"]
+
+
+# ── R4 S2: a savestate load/rewind abandons the timeline; a natural boundary does not ────────────
+def _pump_fails_once(world):
+    calls = {"n": 0}
+
+    def pump():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("socket pump failed")
+    world.net.pump = pump
+
+
+@pytest.mark.parametrize("jump", [-60, 600])
+def test_a_capture_queued_before_a_rewind_is_never_published(jump):
+    """A pump error leaves a finalized capture queued in the binder; the player then loads a state."""
+    def check(world):
+        world.hello()
+        world.frames(100)
+        world.field("wBattleMode", 1)
+        world.fire("wild_ready")
+        world.party([mon(), mon(species=19, dvs=0x7AAA)])
+        world.fire("capture_party")
+        world.fire("capture_party_finalized")
+        _pump_fails_once(world)
+        with pytest.raises(Exception, match="socket pump failed"):
+            world.frames(1)
+        world.emu.frame += jump
+        world.field("wBattleMode", 0)
+        world.party([mon()])  # the loaded state never caught anything
+        world.frames(3)
+        assert world.sent("capture") == [] and world.sent("no_catch") == []
+
+    falsify(check, mutant("lua/gen2/signals.lua", ("        count = count+#service:drain()\n",
+                                                   "        for _,b in ipairs(service:drain()) do carried[#carried+1] = b end\n")))
+
+
+def test_pending_faint_and_acquisition_latches_do_not_survive_a_rewind():
+    def check(world):
+        world.hello()
+        world.frames(100)
+        world.field("wBattleMode", 1)
+        world.fire("battle_faint")  # copy-back not landed: the faint latch waits for HP 0
+        world.party([mon(), mon(species=19, dvs=0x7AAA)])
+        world.fire("capture_party")  # insertion latch, never finalized on this timeline
+        world.frames(1)
+        world.emu.frame -= 60
+        world.frames(1)
+        world.party([mon(hp=0), mon(species=19, dvs=0x7AAA)])  # the resumed timeline
+        world.fire("capture_party_finalized")
+        world.frames(40)
+        assert world.sent("faint") == [] and world.sent("capture") == []
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "        if self.signals then self.signals:abandon(why) end\n"
+        "        self.faint_latches = {}\n        self.battle, self.pending_rescan = nil, false\n", "")))

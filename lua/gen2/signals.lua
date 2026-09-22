@@ -628,6 +628,21 @@ local function build(options)
         assert(BOUNDARIES[reason],"explicit failure/cancel/reset/reload/source_change boundary required")
         clear(reason)
     end
+    -- An abandoned timeline (a savestate load or rewind) is NOT a natural boundary: the engine
+    -- never reached it, so nothing observed on the timeline the player left may be delivered --
+    -- finalized batches included, unlike clear() -- and every open latch is retired (R4 S2).
+    function self:abandon(reason)
+        retire_all()
+        self.last_boundary = reason
+        local count = #carried
+        carried = {}
+        count = count+#service:drain()
+        if count > 0 then
+            local drop = drops.abandoned_timeline or {count=0}
+            drop.count,drop.reason = drop.count+count,"abandoned timeline: " .. tostring(reason)
+            drops.abandoned_timeline = drop
+        end
+    end
     function self:status()
         local result = service:status()
         result.runtime_authorized,result.physical_status,result.evidence_level = false,"OPEN","MODEL"

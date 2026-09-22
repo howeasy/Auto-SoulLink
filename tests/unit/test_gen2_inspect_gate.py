@@ -1,22 +1,23 @@
 """MODEL/SOURCE unit and lupa coverage for the P3b.3a live inspect gate -- no emulator, no
 cartridge. Two things are exercised:
 
-  1. lua/tests/gen2_inspect_gate.lua's pure functions and G.main(), driven under lupa with a fake
-     `api` over synthetic WRAM/CartRAM bytearrays -- proving the driver actually emits a
-     frame/domain/range-carrying DUMP record and the CHECKPOINT/PASS lines, and that it refuses
-     cleanly on missing/malformed inputs.
-  2. tests/live/test_gen2_new_gates.py's importable comparator functions (compare_collection,
-     identity_matches, gender_and_shiny, tag_json, fixture_missing_reason, rom_missing_reason) --
-     the first falsifier: the comparator must actually fail on a single mutated byte and on a
-     wrong-fixture identity, and the skip-reason helpers must actually report a reason rather than
-     silently passing when an input is absent.
+  1. lua/tests/gen2_inspect_gate.lua under lupa: its pure functions over a fake `api`, and the WHOLE
+     gate (top-level wrapper included) on tests/unit/test_gen2_scripted_gate.py's synthetic
+     cartridge (QualifySim: title -> CONTINUE -> confirmation -> the saved map). That proves the
+     checkpoint needs the source-qualified CONTINUE arrival, not just decodable party bytes, that the
+     wrapper keeps the runner's speed, and that the printed capture carries its frame/domain/ranges.
+  2. tests/live/test_gen2_new_gates.py's importable verifier: the COMPLETE gate output is fed through
+     verify_capture (the actual live consumer), and each binding -- badges, capture provenance, same
+     bytes, decode frame, the qualification-receipt identity -- is shown to refuse its falsifier.
 
 Passing here is authoring/MODEL evidence only, never PHYSICAL evidence -- see
 tests/live/test_gen2_new_gates.py for the cartridge lane this gate is meant to run under.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -31,10 +32,12 @@ from run_gb_gate import describe_gen2  # noqa: E402
 
 from server.adapters import gen2_codec as codec  # noqa: E402
 from tests.live import test_gen2_new_gates as live  # noqa: E402
+from tests.unit.test_gen2_scripted_gate import QualifySim, make_root, qualify_env  # noqa: E402
 
 GATE = REPO / "lua/tests/gen2_inspect_gate.lua"
 TITLE = "crystal"
 ROM_SHA1 = describe_gen2(TITLE)["rom_sha1"]
+RESULT = "patch/build/gen2_inspect_gate_result.txt"
 
 
 def profile_wrapper(title=TITLE):
@@ -45,13 +48,8 @@ def profile_row(title=TITLE):
     return profile_wrapper(title)["titles"][title]
 
 
-def species_row(species_id, title=TITLE):
-    species = json.loads((REPO / f"data/games/gen2_{title}/species_index.json").read_text(encoding="utf-8"))
-    return species["species"][str(species_id)]
-
-
 # =================================================================================================
-# Part 1: the Lua gate under lupa, with a fake BizHawk `api`
+# Part 1a: pure gate functions with a fake BizHawk `api`
 # =================================================================================================
 
 
@@ -61,25 +59,17 @@ def wram_offset(addr, bank):
 
 class FakeApi:
     """A fake BizHawk: a flat WRAM bytearray (8 banks x 4KiB, matching the real domain size), a
-    flat CartRAM bytearray, a frame counter, a captured button log and an exit flag."""
+    flat CartRAM bytearray and a frame counter."""
 
-    def __init__(self, lua, *, rom_sha1=ROM_SHA1, cart_size=0x8000):
+    def __init__(self, lua, *, cart_size=0x8000):
         self.lua = lua
         self.bus = bytearray(0x8000)
         self.cart = bytearray(cart_size)
         self.frame = 0
-        self.buttons_log = []
-        self.speeds = []
-        self.exited = False
-        self.rom_sha1 = rom_sha1
-        self.systemid_value = "GBC"
-        self.advance_hook = None  # optional callable(frame) -> mutate self.bus/cart mid-settle
 
     def table(self):
         return self.lua.table(read_range=self.read_range, domain_size=self.domain_size,
-                              advance=self.advance, framecount=self.framecount,
-                              set_buttons=self.set_buttons, romhash=self.romhash,
-                              systemid=self.systemid, speed=self.speed, exit=self.exit)
+                              framecount=lambda: self.frame)
 
     def read_range(self, addr, n, domain):
         addr, n = int(addr), int(n)
@@ -90,32 +80,9 @@ class FakeApi:
     def domain_size(self, domain):
         return {"WRAM": len(self.bus), "CartRAM": len(self.cart)}[str(domain)]
 
-    def advance(self):
-        self.frame += 1
-        if self.advance_hook:
-            self.advance_hook(self.frame, self)
-
-    def framecount(self):
-        return self.frame
-
-    def set_buttons(self, buttons):
-        self.buttons_log.append(dict(buttons) if buttons else {})
-
-    def romhash(self):
-        return self.rom_sha1
-
-    def systemid(self):
-        return self.systemid_value
-
-    def speed(self, _p):
-        self.speeds.append(_p)
-
-    def exit(self):
-        self.exited = True
-
 
 def put(bus_or_cart, profile, symbol, data, *, cart=False):
-    addr = profile["ram"][symbol] if not cart else profile["ram"][symbol]
+    addr = profile["ram"][symbol]
     if cart:
         bank = profile["sram_bank"][symbol]
         flat = bank * 0x2000 + addr - 0xA000
@@ -136,18 +103,12 @@ def _fresh_party_record(species_id=158, ot_id=0x1234, level=5):
     record[2:6] = bytes((1, 2, 3, 4))  # MON_MOVES
     record[6:8] = ot_id.to_bytes(2, "big")  # MON_OT_ID
     record[8:11] = (135).to_bytes(3, "big")  # MON_EXP
-    # MON_HP_EXP..MON_SPC_EXP (offsets 11..21): stat exp, left zero
     record[21:23] = (0x2AAA).to_bytes(2, "big")  # MON_DVS: shiny-and-female-leaning vector
-    # MON_PP (23..27), MON_HAPPINESS (27), MON_POKERUS (28..31): left zero
     record[31] = level                 # MON_LEVEL
-    record[32:34] = bytes((0, 0))      # MON_STATUS (2 bytes: status + an unused byte)
     record[34:36] = (20).to_bytes(2, "big")   # MON_HP
     record[36:38] = (20).to_bytes(2, "big")   # MON_MAXHP
-    record[38:40] = (10).to_bytes(2, "big")   # MON_ATK
-    record[40:42] = (10).to_bytes(2, "big")   # MON_DEF
-    record[42:44] = (10).to_bytes(2, "big")   # MON_SPD
-    record[44:46] = (10).to_bytes(2, "big")   # MON_SAT
-    record[46:48] = (10).to_bytes(2, "big")   # MON_SDF
+    for at in range(38, 48, 2):
+        record[at:at + 2] = (10).to_bytes(2, "big")  # MON_ATK..MON_SDF
     return bytes(record)
 
 
@@ -159,17 +120,12 @@ def place_one_mon_party(bus, profile, *, species_id=158, ot_id=0x1234):
     put(bus, profile, "wPartyMonNicknames", bytes([0x81] + [0xBB] * 10))
 
 
-def place_empty_box(cart, profile, symbol):
-    """count=0, terminator immediately after; the rest of the (already zeroed) box is unused."""
-    put(cart, profile, symbol, bytes([0, 255]), cart=True)
-
-
 def place_all_boxes_empty(cart, profile):
-    place_empty_box(cart, profile, "sBox")
+    """count=0, terminator immediately after; the rest of the (zeroed) boxes is unused."""
+    put(cart, profile, "sBox", bytes([0, 255]), cart=True)
     for entry in profile["storage_boxes"]:
         flat = entry["bank"] * 0x2000 + entry["addr"] - 0xA000
-        cart[flat] = 0
-        cart[flat + 1] = 255
+        cart[flat:flat + 2] = bytes([0, 255])
 
 
 @pytest.fixture
@@ -180,13 +136,6 @@ def gate():
     return lua, module
 
 
-def env_getenv(lua, overrides=None):
-    env = {"SLINK_ROOT": str(REPO).replace("\\", "/"), "SLINK_GEN2_TITLE": TITLE,
-           "SLINK_GEN2_ROM_SHA1": ROM_SHA1, "SLINK_GEN2_CORE_MODE": "CGB", "SLINK_GEN2_COLD": "0"}
-    env.update(overrides or {})
-    return lua.eval("function(t) return function(k) return t[k] end end")(lua.table_from(env))
-
-
 def test_wram_offset_matches_pan_docs_bank_windows(gate):
     _lua, G = gate
     assert G.wram_offset(0, 0xC000, 1) == 0
@@ -195,21 +144,10 @@ def test_wram_offset_matches_pan_docs_bank_windows(gate):
     assert G.wram_offset(7, 0xDFFF, 1) == 0x7FFF
     with pytest.raises(LuaError):
         G.wram_offset(0, 0xD000, 1)  # bank 0 does not cover the switchable window
-
-
-def test_inputs_requires_every_binding_and_refuses_a_cold_boot(gate):
-    lua, G = gate
-    env = G.inputs(env_getenv(lua))
-    assert env.title == TITLE and env.rom_sha1 == ROM_SHA1
-    for missing in ("SLINK_GEN2_TITLE", "SLINK_GEN2_ROM_SHA1", "SLINK_GEN2_CORE_MODE", "SLINK_GEN2_COLD"):
-        with pytest.raises(LuaError):
-            G.inputs(env_getenv(lua, {missing: None}))
-    with pytest.raises(LuaError, match="WARM"):
-        G.inputs(env_getenv(lua, {"SLINK_GEN2_COLD": "1"}))
-    with pytest.raises(LuaError):
-        G.inputs(env_getenv(lua, {"SLINK_GEN2_CORE_MODE": "DMG"}))
-    with pytest.raises(LuaError):
-        G.inputs(env_getenv(lua, {"SLINK_GEN2_TITLE": "emerald"}))
+    for bank, addr, n in ((0, 0xC000, 1), (0, 0xCFFF, 1), (1, 0xD000, 1), (7, 0xDFFF, 1), (3, 0xD123, 0x40)):
+        assert live.wram_offset(bank, addr, n) == G.wram_offset(bank, addr, n)
+    with pytest.raises(AssertionError):
+        live.wram_offset(0, 0xD000, 1)
 
 
 def test_io_binding_reads_the_right_wram_bank_and_cartram_passthrough(gate):
@@ -220,8 +158,7 @@ def test_io_binding_reads_the_right_wram_bank_and_cartram_passthrough(gate):
     api.cart[100] = 0x42
     io_ = G.io(api.table(), profile)
     party_addr = profile_row()["ram"]["wPartyCount"]
-    got = io_.read_range(party_addr, 1, "System Bus")
-    assert got[1] == 1  # party count we placed
+    assert io_.read_range(party_addr, 1, "System Bus")[1] == 1  # party count we placed
     assert io_.read_range(100, 1, "CartRAM")[1] == 0x42
     assert io_.bank_valid(profile_row()["ram_bank"]["wPartyCount"], party_addr, 1) is True
     assert io_.bank_valid(99, party_addr, 1) is False
@@ -229,22 +166,25 @@ def test_io_binding_reads_the_right_wram_bank_and_cartram_passthrough(gate):
         io_.read_range(0xC001, 1, "System Bus")  # not a profile symbol address
 
 
-def test_dump_records_frame_domain_and_ranges(gate):
+def test_dump_records_the_physical_domain_offset_and_logical_address(gate):
+    """R4 #7: the party is read from flat WRAM at a recorded offset; the bus address/bank ride along."""
     lua, G = gate
-    profile = lua.table_from(profile_row(), recursive=True)
+    row = profile_row()
+    profile = lua.table_from(row, recursive=True)
     api = FakeApi(lua)
-    place_one_mon_party(api.bus, profile_row())
+    place_one_mon_party(api.bus, row)
+    api.cart[0x7FFF] = 0x99
     api.frame = 77
-    io_ = G.io(api.table(), profile)
-    dump = G.dump(api.table(), profile, io_)
+    dump = G.dump(api.table(), profile)
+    address, bank = row["ram"]["wPartyCount"], row["ram_bank"]["wPartyCount"]
+    length = row["ram"]["wPartyMonNicknamesEnd"] - address
     assert dump.frame == 77
-    assert dump.party.domain == "System Bus"
-    assert dump.party.address == profile_row()["ram"]["wPartyCount"]
-    assert dump.party.length == (profile_row()["ram"]["wPartyMonNicknamesEnd"]
-                                 - profile_row()["ram"]["wPartyCount"])
-    assert dump.cartram.domain == "CartRAM" and dump.cartram.address == 0 and dump.cartram.length == 0x8000
-    # the first byte of the party hex is the count we placed (1)
-    assert dump.party.hex[:2] == "01"
+    assert (dump.party.domain, dump.party.bus_domain, dump.party.bank, dump.party.address, dump.party.length) == (
+        "WRAM", "System Bus", bank, address, length)
+    assert dump.party.offset == wram_offset(address, bank)
+    assert dump.party.hex == bytes(api.bus[dump.party.offset:dump.party.offset + length]).hex()
+    assert (dump.cartram.domain, dump.cartram.address, dump.cartram.length) == ("CartRAM", 0, 0x8000)
+    assert dump.cartram.hex[-2:] == "99"
 
 
 def test_raw_fields_reads_badges_boxnum_and_battle_independently(gate):
@@ -258,8 +198,7 @@ def test_raw_fields_reads_badges_boxnum_and_battle_independently(gate):
     put(api.bus, row, "wBattleMode", bytes([2]))
     put(api.bus, row, "wOtherTrainerClass", bytes([9]))
     put(api.bus, row, "wOtherTrainerID", bytes([1]))
-    io_ = G.io(api.table(), profile)
-    raw = G.raw_fields(profile, io_)
+    raw = G.raw_fields(profile, G.io(api.table(), profile))
     assert raw.badges.johto == 3 and raw.badges.kanto == 0
     assert raw.boxnum == 5
     assert raw.battle.mode == 2 and raw.battle.trainer_class == 9 and raw.battle.trainer_id == 1
@@ -273,8 +212,7 @@ def test_raw_fields_omits_trainer_fields_outside_battle(gate):
     put(api.bus, row, "wJohtoBadges", bytes([0, 0]))
     put(api.bus, row, "wCurBox", bytes([0]))
     put(api.bus, row, "wBattleMode", bytes([0]))
-    io_ = G.io(api.table(), profile)
-    raw = G.raw_fields(profile, io_)
+    raw = G.raw_fields(profile, G.io(api.table(), profile))
     assert raw.battle.mode == 0
     assert raw.battle.trainer_class is None
 
@@ -288,99 +226,212 @@ def test_raw_fields_omits_trainer_fields_outside_battle(gate):
 ])
 def test_gender_and_shiny_matches_source_formula(gate, dv_word, ratio, gender, shiny):
     _lua, G = gate
-    got_gender, got_shiny = G.gender_and_shiny(dv_word, ratio)
-    assert (got_gender, got_shiny) == (gender, shiny)
+    assert tuple(G.gender_and_shiny(dv_word, ratio)) == (gender, shiny)
 
 
-def test_settle_succeeds_immediately_when_the_party_is_already_present(gate):
-    lua, G = gate
-    profile = lua.table_from(profile_row(), recursive=True)
-    api = FakeApi(lua)
-    place_one_mon_party(api.bus, profile_row())
-    io_ = G.io(api.table(), profile)
-    Reads = lua.eval("dofile")((REPO / "lua/gen2/reads.lua").as_posix())
-    reads = Reads.new(profile, io_)
-    ok, frame = G.settle(api.table(), reads)
-    assert ok is True and frame == 1
+# =================================================================================================
+# Part 1b: the whole gate on the synthetic cartridge (QualifySim)
+# =================================================================================================
 
 
-def test_settle_presses_a_until_the_party_appears_then_stops(gate):
-    lua, G = gate
-    profile = lua.table_from(profile_row(), recursive=True)
-    api = FakeApi(lua)
+class InspectSim(QualifySim):
+    """QualifySim booted from a structurally valid save: one decodable party mon (loaded at CONTINUE,
+    before the confirmation, as TryLoadSaveFile does), empty boxes, set badges. `confirm=False` keeps
+    the game on the CONTINUE confirmation screen forever, with the party decodable from the very first
+    frame (title and menus included): valid, stable party bytes, never the overworld."""
 
-    def reveal_after_ten(frame, api_ref):
-        if frame == 10:
-            place_one_mon_party(api_ref.bus, profile_row())
-    api.advance_hook = reveal_after_ten
-    io_ = G.io(api.table(), profile)
-    Reads = lua.eval("dofile")((REPO / "lua/gen2/reads.lua").as_posix())
-    reads = Reads.new(profile, io_)
-    ok, frame = G.settle(api.table(), reads)
-    assert ok is True and frame == 11  # read_party() is checked again right after frame 10's advance
-    assert any(b.get("A") for b in api.buttons_log)
+    def __init__(self, lua, title=TITLE, *, confirm=True, johto=0x03):
+        self.confirm, self.johto = confirm, johto
+        super().__init__(lua, title, "town")
+        self.cart[:] = bytes(len(self.cart))
+        place_all_boxes_empty(self.cart, self.prof)
+        self.booted = bytes(self.cart[:0x8000])
+        self.speeds = []
+
+    def load(self):
+        place_one_mon_party(self.wram, self.prof)
+        self.put("wJohtoBadges", [self.johto, 0])
+        self.put("wCurBox", [0])
+        self.put("wNumBalls", [0, 0xFF])
+
+    def game(self):
+        if self.confirm:
+            yield from super().game()
+            return
+        self.load()
+        yield from self.wait(20)
+        self.clear()
+        yield from self.until("Start", "title")
+        yield from self.wait(2)
+        yield from self.menu("main_menu", ["CONTINUE", "NEW GAME", "OPTION"], "CONTINUE")
+        self.fire("continue")
+        yield from self.wait(20)
+        while True:   # the confirmation never accepts: no Check1Pass, no FinishContinueFunction
+            self.fire("continue_confirm")
+            yield
+
+    def install(self, env):
+        super().install(env)
+        glob = self.lua.globals()
+        glob.client = self.lua.table_from({"speedmode": self.speeds.append, "saveram": self.saveram,
+                                           "exit": lambda: setattr(self, "exited", True)})
 
 
-def test_settle_fails_closed_when_the_party_never_appears(gate):
-    lua, G = gate
-    profile = lua.table_from(profile_row(), recursive=True)
-    api = FakeApi(lua)
-    io_ = G.io(api.table(), profile)
-    Reads = lua.eval("dofile")((REPO / "lua/gen2/reads.lua").as_posix())
-    reads = Reads.new(profile, io_)
-    G.BOOT_SETTLE_FRAMES = 20  # bound the test; production value is 1800
-    ok, frame = G.settle(api.table(), reads)
-    assert ok is False and frame == 20
+def inspect_root(tmp_path, title=TITLE):
+    root = make_root(tmp_path, title)
+    for rel in ("lua/tests/test_gen2_scripted_gate.lua", f"data/games/gen2_{title}/species_index.json"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO / rel, root / rel)
+    return root
 
 
-def test_main_emits_pass_checkpoint_and_a_full_dump(gate, tmp_path):
-    lua, G = gate
-    G.BOOT_SETTLE_FRAMES = 50
-    api = FakeApi(lua)
-    place_one_mon_party(api.bus, profile_row())
-    place_all_boxes_empty(api.cart, profile_row())
-    getenv = env_getenv(lua)
-    result_path = REPO / G.RESULT
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    G.main(api.table(), getenv)
-    text = result_path.read_text(encoding="utf-8")
-    assert text.splitlines()[-1].startswith("RESULT: PASS")
+def inspect_env(root, title=TITLE, stage="boot", **case_changes):
+    spec, env = qualify_env(root, title, "town", stage)
+    if case_changes:
+        case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
+        case.update(case_changes)
+        env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
+    return spec, env
+
+
+def run_top_level(root, env, sim):
+    """The gate exactly as EmuHawk runs it: the top-level wrapper, not the library entry point."""
+    sim.install(env)
+    with pytest.raises(LuaError, match="slink-gate-finished"):
+        sim.lua.execute(GATE.read_text(encoding="utf-8"))
+    assert sim.exited
+    return (root / RESULT).read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def passing_run(tmp_path_factory):
+    root = inspect_root(tmp_path_factory.mktemp("inspect"))
+    _spec, env = inspect_env(root)
+    sim = InspectSim(LuaRuntime(unpack_returned_tuples=True))
+    text = run_top_level(root, env, sim)
+    return text, sim
+
+
+def test_gate_reaches_a_qualified_checkpoint_and_the_live_verifier_accepts_its_complete_output(passing_run):
+    """Addendum (a): the COMPLETE printed output through the actual live consumer."""
+    text, _sim = passing_run
+    assert text.strip().splitlines()[-1].startswith("RESULT: PASS"), text
     assert "CHECKPOINT reached" in text
-    dump = json.loads(next(line[5:] for line in text.splitlines() if line.startswith("DUMP ")))
-    assert dump["party"]["domain"] == "System Bus" and dump["cartram"]["domain"] == "CartRAM"
-    assert isinstance(dump["frame"], int)
-    party = json.loads(next(line[10:] for line in text.splitlines() if line.startswith("PARTY_LUA ")))
-    assert party["count"] == 1 and party["mons"][0]["species_id"] == 158
-    for index in range(14):
-        assert f"BOX_LUA_{index} " in text
+    py_party = live.verify_capture(text, profile_wrapper(), TITLE)
+    assert live.identity_matches(py_party, 0x1234)
+    badges = live.tag_json(text, "BADGES_LUA")
+    assert {"raw_hex", "evidence", "snapshot_qualified"} <= set(badges)   # reads.lua's full shape
 
 
-def test_main_fails_closed_on_a_wrong_rom_hash(gate):
-    lua, G = gate
-    api = FakeApi(lua, rom_sha1="0" * 40)
-    getenv = env_getenv(lua)
-    result_path = REPO / G.RESULT
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    G.main(api.table(), getenv)
-    text = result_path.read_text(encoding="utf-8")
-    assert text.splitlines()[-1].startswith("RESULT: FAIL")
-    assert "wrong ROM" in text.splitlines()[-1]
+def test_wrapper_keeps_the_runners_speed(passing_run):
+    """R4 #5 / addendum (e): run_gb_gate writes SpeedPercent=100; the gate must not override it."""
+    _text, sim = passing_run
+    assert sim.speeds == []
 
 
-def test_main_fails_closed_on_missing_environment(gate):
-    lua, G = gate
-    api = FakeApi(lua)
-    result_path = REPO / G.RESULT
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    G.main(api.table(), lua.eval("function(k) return nil end"))
-    text = result_path.read_text(encoding="utf-8")
-    assert text.splitlines()[-1].startswith("RESULT: FAIL")
-    assert "bad environment" in text.splitlines()[-1]
+def test_valid_party_on_the_continue_confirmation_screen_never_reaches_the_checkpoint(tmp_path):
+    """R4 #4 / addendum (b): the party is already decodable before CONTINUE is confirmed
+    (C engine/menus/intro_menu.asm:338-348,429-442; G :251-260,313-326)."""
+    root = inspect_root(tmp_path)
+    _spec, env = inspect_env(root, max_frames=3000, max_phase_frames=600)
+    sim = InspectSim(LuaRuntime(unpack_returned_tuples=True), confirm=False)
+    text = run_top_level(root, env, sim)
+    assert text.strip().splitlines()[-1].startswith("RESULT: FAIL"), text
+    assert "CHECKPOINT reached" not in text and "DUMP " not in text
+    assert "no qualified overworld arrival" in text
+
+
+def test_a_non_boot_qualification_binding_refuses_before_any_input(tmp_path):
+    root = inspect_root(tmp_path)
+    _spec, env = inspect_env(root, stage="resave")
+    sim = InspectSim(LuaRuntime(unpack_returned_tuples=True))
+    text = run_top_level(root, env, sim)
+    assert "bad environment" in text.strip().splitlines()[-1] and sim.inputs == []
+
+
+def test_a_wrong_rom_binding_refuses_before_any_input(tmp_path):
+    root = inspect_root(tmp_path)
+    _spec, env = inspect_env(root)
+    env["SLINK_GEN2_ROM_SHA1"] = "0" * 40
+    sim = InspectSim(LuaRuntime(unpack_returned_tuples=True))
+    text = run_top_level(root, env, sim)
+    assert "bad environment" in text.strip().splitlines()[-1] and sim.inputs == []
 
 
 # =================================================================================================
-# Part 2: tests/live/test_gen2_new_gates.py's importable comparators -- the first falsifier
+# Part 2: tests/live/test_gen2_new_gates.py's verifier -- each binding refuses its falsifier
 # =================================================================================================
+
+
+def retag(text, tag, change):
+    """Rewrite the first `TAG <json>` line through `change(value) -> value`."""
+    lines = text.splitlines()
+    at = next(i for i, line in enumerate(lines) if line.startswith(tag + " "))
+    lines[at] = tag + " " + json.dumps(change(json.loads(lines[at][len(tag) + 1:])))
+    return "\n".join(lines) + "\n"
+
+
+def _flip_hex(value, at):
+    raw = bytearray(bytes.fromhex(value))
+    raw[at] ^= 0x01
+    return raw.hex()
+
+
+def _set(path, value):
+    def change(obj):
+        target = obj
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value(target[path[-1]]) if callable(value) else value
+        return obj
+    return change
+
+
+def test_one_badge_byte_mismatch_fails_the_verifier(passing_run):
+    text, _sim = passing_run
+    for tag, field in (("RAW_BADGES", "kanto"), ("BADGES_LUA", "johto")):
+        with pytest.raises(AssertionError, match="badge"):
+            live.verify_capture(retag(text, tag, _set([field], lambda v: v ^ 1)), profile_wrapper(), TITLE)
+
+
+@pytest.mark.parametrize("tag,change,match", [
+    ("DUMP", _set(["party", "domain"], "System Bus"), "party capture provenance"),
+    ("DUMP", _set(["party", "offset"], lambda v: v + 1), "party capture provenance"),
+    ("DUMP", _set(["party", "bank"], lambda v: v + 1), "party capture provenance"),
+    ("DUMP", _set(["party", "address"], lambda v: v + 1), "party capture provenance"),
+    ("DUMP", _set(["party", "length"], lambda v: v - 1), "party capture provenance"),
+    ("DUMP", _set(["party", "bus_domain"], "WRAM"), "party capture provenance"),
+    ("DUMP", _set(["cartram", "address"], 1), "CartRAM capture provenance"),
+    ("DUMP", _set(["cartram", "length"], 0x4000), "CartRAM capture provenance"),
+    ("DUMP", _set(["cartram", "domain"], "SRAM"), "CartRAM capture provenance"),
+    ("DUMP", _set(["frame"], 0), "capture frame"),
+    ("DECODE_FRAME", lambda frame: frame + 1, "capture frame"),
+    # A capture from another frame: the bytes PYDEC decodes are not the bytes Lua decoded.
+    ("DUMP", _set(["party", "hex"], lambda v: _flip_hex(v, 40)), "other bytes"),
+    ("DUMP", _set(["cartram", "hex"], lambda v: _flip_hex(v, _real_layout().active_box[0] + 100)), "other bytes"),
+    ("BOX_LUA_3", _set(["bank"], lambda v: v ^ 1), "another CartRAM range"),
+])
+def test_capture_metadata_and_same_bytes_bindings_refuse(passing_run, tag, change, match):
+    """R4 #7 / addendum (f): domain, range, length, frame and same-capture falsifiers."""
+    text, _sim = passing_run
+    with pytest.raises(AssertionError, match=match):
+        live.verify_capture(retag(text, tag, change), profile_wrapper(), TITLE)
+
+
+def test_a_checkpoint_that_was_not_reached_fails_the_verifier(passing_run):
+    text, _sim = passing_run
+    with pytest.raises(AssertionError, match="checkpoint"):
+        live.verify_capture(text.replace("CHECKPOINT reached", "CHECKPOINT not reached"), profile_wrapper(), TITLE)
+
+
+def test_compare_badges_uses_the_declared_fields_of_a_complete_reads_lua_record():
+    """R4 #1: reads.lua adds raw_hex/evidence/snapshot_qualified; RAW_BADGES has johto/kanto only."""
+    lua_record = {"johto": 3, "kanto": 0, "raw_hex": "0300", "evidence": "RAW_RAM_ONLY", "snapshot_qualified": False}
+    live.compare_badges(lua_record, {"johto": 3, "kanto": 0}, where="control")
+    with pytest.raises(AssertionError, match="kanto"):
+        live.compare_badges(lua_record, {"johto": 3, "kanto": 1}, where="mismatch")
+    with pytest.raises(AssertionError, match="raw_hex"):
+        live.compare_badges({**lua_record, "raw_hex": "0301"}, {"johto": 3, "kanto": 0}, where="raw")
 
 
 def _real_layout():
@@ -393,9 +444,7 @@ def _one_mon_collection(layout, *, species_id=158, ot_id=0x1234, mutate_byte=Non
         offset, xor = mutate_byte
         record[offset] ^= xor
     body = bytearray(layout.addresses["wPartyMonNicknamesEnd"] - layout.addresses["wPartyCount"])
-    body[0] = 1
-    body[1] = species_id
-    body[2] = 255
+    body[0], body[1], body[2] = 1, species_id, 255
     records = layout.addresses["wPartyMon1"] - layout.addresses["wPartyCount"]
     ots = layout.addresses["wPartyMonOTs"] - layout.addresses["wPartyCount"]
     nicks = layout.addresses["wPartyMonNicknames"] - layout.addresses["wPartyCount"]
@@ -406,15 +455,12 @@ def _one_mon_collection(layout, *, species_id=158, ot_id=0x1234, mutate_byte=Non
 
 
 def _as_lua_shaped(py_collection):
-    """A PYDEC decode is already shaped like the Lua one (same field names); round-trip through
-    JSON to strip the dataclass-free but still-Python-only bits (none here) and prove the
-    comparator works on a plain dict, exactly what json.loads(the gate's own line) would hand it."""
+    """What json.loads(the gate's own line) would hand the comparator: a plain dict."""
     return json.loads(json.dumps(py_collection))
 
 
 def test_compare_collection_agrees_on_an_identical_decode():
-    layout = _real_layout()
-    collection = _one_mon_collection(layout)
+    collection = _one_mon_collection(_real_layout())
     live.compare_collection(_as_lua_shaped(collection), collection, where="identity control")
 
 
@@ -427,13 +473,59 @@ def test_compare_collection_fails_on_a_single_mutated_byte():
 
 
 def test_compare_collection_fails_on_a_mismatched_count():
-    layout = _real_layout()
-    collection = _one_mon_collection(layout)
+    collection = _one_mon_collection(_real_layout())
     lua_shaped = _as_lua_shaped(collection)
-    lua_shaped["count"] = 0
-    lua_shaped["mons"] = []
+    lua_shaped["count"], lua_shaped["mons"] = 0, []
     with pytest.raises(AssertionError, match="count disagrees"):
         live.compare_collection(lua_shaped, collection, where="count control")
+
+
+# --- R4 #6 / addendum (c): the expected identity comes from the fixture's qualification receipt ---
+
+def write_receipt(repo, name, data, player_id, *, report=None, row=None, stage=None):
+    path = repo / live.RECEIPTS / f"{name}.qualification.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = {"schema": "fixture-qualification-v1", "scope": "full", "passed": True, "errors": [],
+            "fixtures": [{"name": name, "passed": True, "problems": [],
+                          "artifacts": {"fixture": {"path": f"{name}.SaveRAM", "size": len(data),
+                                                    "sha256": hashlib.sha256(data).hexdigest()}},
+                          "stages": [{"stage": "qualify", "status": "PASS",
+                                      "evidence": {"player_id": str(player_id), **(stage or {})}}],
+                          **(row or {})}],
+            **(report or {})}
+    path.write_text(json.dumps(body), encoding="utf-8")
+
+
+TOWN, OT2 = b"crystal_town bytes" * 8, b"crystal_town_ot2 bytes" * 8
+
+
+def test_qualified_identity_binds_the_staged_bytes_and_the_receipts_ot(tmp_path):
+    write_receipt(tmp_path, "crystal_town", TOWN, 0x1234)
+    write_receipt(tmp_path, "crystal_town_ot2", OT2, 0x5678)
+    assert live.qualified_identity("crystal_town", TOWN, repo=tmp_path) == 0x1234
+    assert live.qualified_identity("crystal_town_ot2", OT2, repo=tmp_path) == 0x5678
+    # crystal_town's file copied under the crystal_town_ot2 name: refused by the receipt's hash.
+    with pytest.raises(AssertionError, match="differ from the qualified candidate"):
+        live.qualified_identity("crystal_town_ot2", TOWN, repo=tmp_path)
+    # A capture of the town save checked against the ot2 receipt's identity is refused too.
+    town_capture = _one_mon_collection(_real_layout(), ot_id=0x1234)
+    assert live.identity_matches(town_capture, live.qualified_identity("crystal_town", TOWN, repo=tmp_path))
+    assert not live.identity_matches(town_capture, live.qualified_identity("crystal_town_ot2", OT2, repo=tmp_path))
+
+
+@pytest.mark.parametrize("changes,match", [
+    ({"report": {"passed": False}}, "passed full-chain"),
+    ({"report": {"scope": "static"}}, "passed full-chain"),
+    ({"report": {"schema": "other"}}, "passed full-chain"),
+    ({"row": {"passed": False}}, "single passed row"),
+    ({"row": {"name": "crystal_battle"}}, "single passed row"),
+    ({"row": {"stages": []}}, "no qualified player ID"),
+    ({"stage": {"player_id": "0x1234"}}, "no qualified player ID"),
+])
+def test_qualified_identity_refuses_an_unqualified_or_misbound_receipt(tmp_path, changes, match):
+    write_receipt(tmp_path, "crystal_town", TOWN, 0x1234, **changes)
+    with pytest.raises(AssertionError, match=match):
+        live.qualified_identity("crystal_town", TOWN, repo=tmp_path)
 
 
 def test_identity_matches_refuses_the_wrong_fixtures_own_ot():
@@ -441,29 +533,33 @@ def test_identity_matches_refuses_the_wrong_fixtures_own_ot():
     town = _one_mon_collection(layout, ot_id=0x1234)
     ot2 = _one_mon_collection(layout, ot_id=0x5678)
     assert live.identity_matches(town, 0x1234)
-    assert not live.identity_matches(town, 0x5678)   # town dump checked against the ot2 identity
-    assert not live.identity_matches(ot2, 0x1234)    # ot2 dump checked against the town identity
+    assert not live.identity_matches(town, 0x5678)
+    assert not live.identity_matches(ot2, 0x1234)
 
 
 def test_gender_and_shiny_matches_the_lua_reimplementation(gate):
     _lua, G = gate
     for dv_word, ratio in ((0x2AAA, 31), (0x0000, 31), (0x0000, 255), (0x0000, 254), (0x0000, 0), (0xF000, 200)):
-        lua_gender, lua_shiny = G.gender_and_shiny(dv_word, ratio)
-        py_gender, py_shiny = live.gender_and_shiny(dv_word, ratio)
-        assert (lua_gender, lua_shiny) == (py_gender, py_shiny), (dv_word, ratio)
+        assert tuple(G.gender_and_shiny(dv_word, ratio)) == live.gender_and_shiny(dv_word, ratio), (dv_word, ratio)
 
 
 def test_tag_json_parses_the_gates_own_line_shape():
-    text = "  [ok] something\nDUMP {\"frame\": 5, \"party\": {\"domain\": \"System Bus\"}}\nRESULT: PASS x (0 checks failed)\n"
-    dump = live.tag_json(text, "DUMP")
-    assert dump == {"frame": 5, "party": {"domain": "System Bus"}}
+    text = "  [ok] something\nDUMP {\"frame\": 5, \"party\": {\"domain\": \"WRAM\"}}\nRESULT: PASS x (0 checks failed)\n"
+    assert live.tag_json(text, "DUMP") == {"frame": 5, "party": {"domain": "WRAM"}}
     with pytest.raises(AssertionError, match="no 'MISSING' line"):
         live.tag_json(text, "MISSING")
 
 
-def test_fixture_and_rom_missing_reasons_are_never_silent(tmp_path):
-    reason = live.fixture_missing_reason("crystal_town", repo=tmp_path)
-    assert reason and "crystal_town.SaveRAM" in reason
+def test_missing_inputs_are_never_silent(tmp_path):
+    assert "crystal_town.SaveRAM" in live.fixture_missing_reason("crystal_town", repo=tmp_path)
+    assert "crystal_town.qualification.json" in live.receipt_missing_reason("crystal_town", repo=tmp_path)
+    assert "crystal" in live.rom_missing_reason("crystal", repo=tmp_path)
 
-    reason = live.rom_missing_reason("crystal", repo=tmp_path)
-    assert reason and "crystal" in reason
+
+def test_inspect_env_binds_the_boot_stage_to_the_staged_bytes():
+    spec = live.FIXTURES[0]
+    env = live.inspect_env(spec, TOWN)
+    qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
+    assert qualify["stage"] == "boot" and qualify["stage_fingerprint"] == hashlib.sha256(TOWN).hexdigest()
+    assert json.loads(env["SLINK_GEN2_FIXTURE_CASE"])["name"] == spec.name
+    assert qualify["facts"]["route_facts_fingerprint"] == json.loads(env["SLINK_GEN2_ROUTE_FACTS"])["fingerprint"]

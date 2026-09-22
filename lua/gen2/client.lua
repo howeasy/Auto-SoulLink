@@ -78,7 +78,7 @@ function Client.new(p)
         -- connection/identity (Gen 1 gates tick/safe on the same readiness). The candidate
         -- checkpoint refuses in the overworld, so that can be minutes: earlier messages wait
         -- in order and follow the hello (frame_end); a reset/reload boundary, an identity change
-        -- and a savestate load drop them (drop_held).
+        -- and a savestate load drop them (drop_held; the load through abandon_timeline).
         if event ~= "hello" and not (self.hello_session and self.hello_session:status().ready) then
             if #self.held >= Client.MAX_HELD then
                 log("[SLink-gen2] drop " .. event .. ": pre-hello queue full")
@@ -255,6 +255,19 @@ function Client.new(p)
         self.key_alias, self.retired_alias = nil, {}
         drop_held("the " .. kind .. " boundary")
         self.hello_session:invalidate(why or kind)
+    end
+
+    -- A savestate load or rewind abandons the timeline (R4 S2). Unlike boundary(), which keeps
+    -- what the engine finalized before a natural in-engine reset/reload, nothing observed on the
+    -- timeline the player left may be published on the one they resumed: queued binder batches,
+    -- pending acquisition/faint latches, the battle context and held messages all go, and the
+    -- epoch moves so a settled observation stamped before the load is stale.
+    function self:abandon_timeline(why)
+        self.epoch = self.epoch + 1
+        if self.signals then self.signals:abandon(why) end
+        self.faint_latches = {}
+        self.battle, self.pending_rescan = nil, false
+        drop_held(why)
     end
 
     function self:validate()
@@ -711,8 +724,8 @@ function Client.new(p)
     function self:frame_end()
         local now = io.framecount()
         -- Gen 2: onframeend runs once per emulated frame (lua/gen2/run.lua), so any other step of
-        -- the frame counter is a savestate load or rewind: held messages describe another timeline.
-        if self.last_frame ~= nil and now ~= self.last_frame + 1 then drop_held("savestate load") end
+        -- the frame counter is a savestate load or rewind: everything queued describes another timeline.
+        if self.last_frame ~= nil and now ~= self.last_frame + 1 then self:abandon_timeline("savestate load") end
         self.last_frame, self.frame = now, now
         net.pump()
         local connected = self.hello_session:step(self.frame)
