@@ -45,8 +45,9 @@ explicitly; OMP live session `Gen2-Base` or a headless OMP. The sole ledger is t
 
 ## Next actions, in order
 
-1. Reconcile whatever was in flight at the stop (see the ledger: the Gen 2 signal-binder card
-   and the OMP F/R/C/D/T/N citation audit).
+1. Nothing is in flight. The signal-binder fixes (`dfb25f6`: boundaries keep finalized events,
+   refusals are values, faints carry identity, evolution qualified) and both OMP ledger audits
+   (`53e5659`: all 69 citations audited, 9 corrected) are committed.
 2. Re-run the whole Gen 1 physical set at ONE frozen commit, with
    `SLINK_PURERGB_ROMS="E:/Google Drive/SLink/.cache/purergb"`, one lane at a time:
    inspect-purergb, apex-purergb, duo-pairs, duo-pairs-purergb, live-gates,
