@@ -135,3 +135,27 @@ def test_candidate_graph_refuses_rom_replacement_after_initial_hash():
     result = world.entry.build_candidate(world.args())
     assert isinstance(result, tuple) and result[0] is None and "changed" in result[1]
     assert world.writes == []
+
+
+def test_client_composition_is_model_only_explicit_and_inert_until_start():
+    world = World()
+    args = world.args()
+    args.net, args.hud, args.player = world.lua.table(), world.lua.table(), "a"
+    result, reason = world.entry.build_candidate(args)
+    assert result is None and "model_only" in reason
+    world.io.model_only = True
+    result, reason = world.entry.build_candidate(args)
+    assert result is None and "checkpoint" in reason
+    args.checkpoint = world.lua.eval("{check=function() return false, 'OPEN' end}")
+    parts = world.entry.build_candidate(args)
+    assert parts.client is not None and parts.client.signals is None
+    assert parts.production_admitted is False and parts.runtime_started is False
+    assert world.writes == []
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_header_detection_names_each_title_and_nothing_else(title):
+    world = World(title)
+    assert world.entry.detect_title(lambda address: world.image[int(address)])[0] == title
+    detected, header = world.entry.detect_title(lambda address: b"POKEMON RED\0"[int(address) - 0x134])
+    assert detected is None and header == "POKEMON RED"

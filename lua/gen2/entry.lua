@@ -1,7 +1,9 @@
 -- Gen 2 source-candidate composition and fail-closed production admission.
--- No runtime client, transport, hook registration, emulator global or activation.
--- build_candidate requires explicit candidate_only=true and injected IO/policies;
--- build/admit cannot promote the current BUILT, G1-PENDING source catalogs.
+-- No emulator global or production activation. build_candidate requires explicit
+-- candidate_only=true and injected IO/policies; with deps.net it also composes the
+-- Gen 2 client (lua/gen2/client.lua) over the same MODEL graph (model_only IO,
+-- MODEL_PROBE signals, an injected checkpoint), still runtime_started=false until
+-- client:start(). build/admit cannot promote the current BUILT, G1-PENDING catalogs.
 local Entry = {}
 
 Entry.PACKS = {
@@ -200,18 +202,64 @@ function Entry.build_candidate(deps)
                "candidate source anchor mismatch")
         local Reads, Writes, Rom = load("lua/gen2/reads.lua"), load("lua/gen2/writes.lua"), load("lua/gen2/rom.lua")
         local Permit = load("lua/write_permit.lua")
-        local reads, why = Reads.new(profile, io_, deps.decode_name)
+        -- Names decode through the pack's ONE charmap and the shared scanner (Gen 1's shape).
+        local decode_name = deps.decode_name or load("lua/token_scanner.lua").new({
+            glyphs=data.charmap.glyphs, terminator=data.charmap.terminator,
+            max_length=profile.derived.name_length,
+            unknown=function(byte) return string.format("<$%02X>", byte) end})
+        local reads, why = Reads.new(profile, io_, decode_name)
         assert(reads, why)
         local writes = Writes.new(profile, io_, Permit, assert(deps.write_policy, "explicit candidate write policy required"))
         local rom = Rom.new(profile, io_)
+        local client
+        if deps.net ~= nil then
+            -- The client graph is MODEL by construction: signals.new_model is the only binder
+            -- that registers (signals.new refuses until P3b.4 PHYSICAL requalification).
+            assert(io_.model_only == true, "candidate client requires model_only IO")
+            local checkpoint = assert(deps.checkpoint, "explicit candidate checkpoint required")
+            assert(type(checkpoint.check) == "function", "checkpoint:check required")
+            local Signals, Registry, GB = load("lua/gen2/signals.lua"), load("lua/hook_registry.lua"),
+                                          load("lua/gb_hook_binding.lua")
+            local title = deps.title
+            client = load("lua/gen2/client.lua").new({
+                reads=reads, wire=load("lua/gen2/wire.lua"), writes=writes, rom=rom,
+                safety={check=function() return checkpoint:check() end},
+                signals=function(authority)
+                    return Signals.new_model({title=title, profile=data.profile, pack=data.sites, io=io_,
+                        Registry=Registry, GB=GB, reads=reads, authority=authority, owner="SLink-gen2",
+                        max_pending=64, areas=data.area_map, encounters=data.encounters})
+                end,
+                net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
+                profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,
+                player=assert(deps.player, "explicit player required"), rom_type=def.rom_type,
+                rom_sha1=profile.rom_sha1, log=deps.log,
+                hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
+            })
+        end
         assert(io_.domain_size("ROM") == size and Admission.sha1(read_rom, size) == profile.rom_sha1
                and io_.domain_size("ROM") == size, "candidate ROM changed during composition")
         return {pack=def.pack, title=deps.title, profile=profile, data=data, reads=reads, writes=writes,
-                rom=rom, production_admitted=false, runtime_started=false,
+                rom=rom, client=client, production_admitted=false, runtime_started=false,
                 qualification="SOURCE_MODEL_CANDIDATE"}
     end)
     if not ok then return nil, tostring(result) end
     return result
+end
+
+-- Header family (ROM $0134..$0143). It only picks which pack build_candidate hash-checks.
+local HEADERS = {PM_CRYSTAL="crystal", POKEMON_GLD="gold", POKEMON_SLV="silver"}
+function Entry.detect_title(read_rom_u8)
+    local chars = {}
+    for i = 0, 15 do
+        local b = read_rom_u8(0x134 + i)
+        if b < 0x20 or b > 0x7E then break end
+        chars[#chars + 1] = string.char(b)
+    end
+    local header = table.concat(chars)
+    for prefix, title in pairs(HEADERS) do
+        if header:sub(1, #prefix) == prefix then return title, header end
+    end
+    return nil, header
 end
 
 function Entry.build(deps)

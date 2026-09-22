@@ -1,0 +1,474 @@
+"""Gen 2 client rules (P3b): lupa on the real Entry.build_candidate graph with emulator stubs.
+
+The graph is SOURCE/MODEL (signals.new_model, an injected checkpoint); nothing here is a
+PHYSICAL receipt. Every falsifier runs twice: on the shipped sources, where the rule holds,
+and on a deliberately broken variant (a textual mutation of one module, swapped in through
+Lua's dofile), where the same assertion must fail. A mutation whose anchor text is missing
+fails loudly, so a variant cannot silently stop testing anything.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+from lupa.lua54 import LuaRuntime
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from server.adapters import gen2_codec  # noqa: E402
+from server.adapters.gen2_gsc import Gen2GSCAdapter  # noqa: E402
+
+EMULATOR = r"""
+return function(rom, shadow_addr)
+    local mem = {["System Bus"] = {}, CartRAM = {}}
+    local emu = {bank = 1, shadow = 1, wram_bank = 1, frame = 1, callbacks = {}, writes = {},
+                 regs = {PC = 0, SP = 0xC020, AF = 0, BC = 0, DE = 0, HL = 0}}
+    local io = {model_only = true, cart_ram_linear = true}
+    function io.read_u8(a, d)
+        d = d or "System Bus"
+        if d == "ROM" then return rom:byte(a + 1) or 0 end
+        if d == "System Bus" and a < 0x8000 then
+            local flat = a < 0x4000 and a or emu.bank * 0x4000 + a - 0x4000
+            return rom:byte(flat + 1) or 0
+        end
+        if d == "System Bus" and a == shadow_addr then return emu.shadow end
+        return mem[d][a] or 0
+    end
+    function io.read_range(a, n, d)
+        local out = {}
+        for i = 1, n do out[i] = io.read_u8(a + i - 1, d) end
+        return out
+    end
+    function io.write_u8(a, v, d)
+        emu.writes[#emu.writes + 1] = {a, v, d}
+        mem[d or "System Bus"][a] = v
+    end
+    function io.bank_valid(bank, a, n)
+        if a < 0x4000 then return bank == 0 and a + n <= 0x4000 end
+        if a < 0x8000 then return bank == emu.bank and a + n <= 0x8000 end
+        if a >= 0xC000 and a < 0xD000 then return bank == 0 and a + n <= 0xD000 end
+        if a >= 0xD000 and a < 0xE000 then return bank == emu.wram_bank and a + n <= 0xE000 end
+        return bank == 0 and a >= 0xFF80 and a + n <= 0xFFFF
+    end
+    function io.stack_valid(sp, n) return sp >= 0xC000 and sp + n <= 0xD000 end
+    function io.domain_size(d)
+        if d == "ROM" then return #rom end
+        return d == "CartRAM" and 0x8000 or 0x10000
+    end
+    function io.register(name) return emu.regs[name] end
+    function io.framecount() return emu.frame end
+    function io.on_bus_exec(fn, addr, name) emu.callbacks[name] = {fn = fn, addr = addr}; return name end
+    function io.unregister(name) emu.callbacks[name] = nil; return true end
+    function emu.poke(d, a, bytes) for i = 1, #bytes do mem[d][a + i - 1] = bytes[i] end end
+    function emu.fire(bank, addr)
+        emu.regs.PC, emu.bank, emu.shadow = addr, bank, bank
+        local hit = 0
+        for _, cb in pairs(emu.callbacks) do
+            if cb.addr == addr then hit = hit + 1; cb.fn() end
+        end
+        return hit
+    end
+    local net = {sent = {}, inbox = {}, up = true}
+    function net.send(line) net.sent[#net.sent + 1] = line end
+    function net.receive() return table.remove(net.inbox, 1) end
+    function net.pump() end
+    function net.connected() return net.up end
+    local hud = {shown = {}}
+    local function rec(kind) return function(text) hud.shown[#hud.shown + 1] = kind .. ":" .. tostring(text) end end
+    hud.show, hud.prompt, hud.nuzlocke_start = rec("show"), rec("prompt"), rec("nuzlocke")
+    hud.set_rebuilding, hud.set_game_over, hud.clear_rebuilding = rec("rebuild"), rec("game_over"), rec("rebuild_done")
+    hud.sanitize = function(s) return s end
+    local logs = {}
+    return emu, io, net, hud, logs, function(t) logs[#logs + 1] = t end
+end
+"""
+
+MUTATE = r"""
+return function(swaps)
+    local real = dofile
+    dofile = function(path)
+        for suffix, source in pairs(swaps) do
+            if path:sub(-#suffix) == suffix then return assert(load(source, "@" .. path))() end
+        end
+        return real(path)
+    end
+end
+"""
+
+POLICY = r"""
+return function(owner)
+    return {authorize = function(op, req) return owner(op, req.slot) end,
+            pointer_stable = function() return true end,
+            lifetime = {capture = function() return 1 end, valid = function() return true end},
+            provenance = function() return {site = "test_gen2_client"} end}
+end
+"""
+
+
+def mon(species=25, ot=0x1234, dvs=0x2AAA, nickname=0x81, hp=30, egg=False):
+    return {"species": species, "ot": ot, "dvs": dvs, "nickname": nickname, "hp": hp, "egg": egg}
+
+
+def collection(mons, capacity, stride):
+    record_start = capacity + 2
+    ot_start = record_start + capacity * stride
+    nick_start = ot_start + capacity * 11
+    raw = bytearray(nick_start + capacity * 11)
+    raw[0] = len(mons)
+    raw[len(mons) + 1] = 255
+    for i, m in enumerate(mons):
+        raw[i + 1] = 253 if m["egg"] else m["species"]
+        start = record_start + i * stride
+        raw[start] = m["species"]
+        raw[start + 6:start + 8] = m["ot"].to_bytes(2, "big")
+        raw[start + 21:start + 23] = m["dvs"].to_bytes(2, "big")
+        raw[start + 31] = 20
+        if stride == 48:
+            raw[start + 34:start + 36] = m["hp"].to_bytes(2, "big")
+            raw[start + 36:start + 38] = (50).to_bytes(2, "big")
+        raw[ot_start + i * 11:ot_start + i * 11 + 2] = bytes([0x80, 0x50])
+        raw[nick_start + i * 11:nick_start + i * 11 + 2] = bytes([m["nickname"], 0x50])
+    return raw
+
+
+def codec_key(m):
+    return gen2_codec.key({"dv_word": m["dvs"], "ot_id": m["ot"], "species_id": m["species"]})
+
+
+class World:
+    def __init__(self, title="crystal", swaps=None):
+        self.title = title
+        self.lua = LuaRuntime(unpack_returned_tuples=True)
+        if swaps:
+            self.lua.execute(MUTATE)(self.lua.table_from(swaps))
+        self.profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
+        self.sites = json.loads((ROOT / f"data/games/gen2_{title}/engine_signals.json").read_text())["titles"][title]["sites"]
+        self.points = {n: pt for s in self.sites.values() for n, pt in s["point_symbols"].items()}
+        repo = "pokecrystal" if title == "crystal" else "pokegold"
+        rom = (ROOT / f".cache/gen2-build/{repo}/{self.profile['artifact']}.gbc").read_bytes()
+        self.emu, self.io, self.net, self.hud, self.logs, log = self.lua.execute(EMULATOR)(
+            rom, self.profile["ram"]["hROMBank"])
+        self.checkpoint_ok = False
+        self.owned = lambda op, slot: True
+        checkpoint = self.lua.eval("function(f) return {check=function() return f() end} end")(
+            lambda: (self.checkpoint_ok, "stub checkpoint"))
+        entry = self.lua.eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
+        args = self.lua.table(root=ROOT.as_posix(), title=title, io=self.io, candidate_only=True,
+                              write_policy=self.lua.execute(POLICY)(lambda op, slot: self.owned(op, slot)),
+                              net=self.net, hud=self.hud, player="a", checkpoint=checkpoint, log=log)
+        result = entry.build_candidate(args)
+        parts = result[0] if isinstance(result, tuple) else result
+        assert parts is not None, result
+        self.parts, self.client = parts, parts.client
+        # A saved game standing in the overworld: one party mon, one ball, box 1 empty.
+        self.field("wPlayerID", 0x1234, 2)
+        self.party([mon()])
+        self.box([])
+        self.ram("wNumBalls", [1, 1, 5, 255])
+        self.field("wMapGroup", 24)
+        self.field("wMapNumber", 3)
+        for name in ("wBattleMode", "wBattleType", "wBattleScriptFlags", "wCurBox", "wCurPartyMon",
+                     "wCurBattleMon", "wLinkMode"):
+            self.field(name, 0)
+        self.client.start(self.client)
+
+    # ── memory ──
+    def ram(self, name, data):
+        self.emu.poke("System Bus", self.profile["ram"][name], self.lua.table_from(list(data)))
+
+    def field(self, name, value, width=1):
+        address = self.points[name]["addr"] if name in self.points else self.profile["ram"][name]
+        data = value.to_bytes(width, "big") if width == 2 and name == "wPlayerID" else \
+            bytes((value >> (8 * i)) & 255 for i in range(width))
+        self.emu.poke("System Bus", address, self.lua.table_from(list(data)))
+
+    def party(self, mons):
+        self.ram("wPartyCount", collection(mons, 6, 48))
+
+    def box(self, mons):
+        self.emu.poke("CartRAM", self.profile["derived"]["active_box_flat"],
+                      self.lua.table_from(list(collection(mons, 20, 32))))
+
+    def hp_of(self, slot):
+        base = self.profile["ram"]["wPartyMon1"] + slot * 48
+        return self.io.read_u8(base + 34) * 256 + self.io.read_u8(base + 35), self.io.read_u8(base + 32)
+
+    # ── engine ──
+    def fire(self, site_id):
+        site = self.sites[site_id]
+        assert self.emu.fire(site["bank"], site["addr"]) > 0, site_id
+
+    def frames(self, n=1):
+        for _ in range(n):
+            self.emu.frame += 1
+            self.client.frame_end(self.client)
+
+    def reply(self, *commands):
+        self.net.inbox[len(self.net.inbox) + 1] = json.dumps({"commands": list(commands)})
+
+    # ── observations ──
+    def sent(self, event=None):
+        lines = [json.loads(line) for line in self.net.sent.values()]
+        return [m for m in lines if event is None or m["event"] == event]
+
+    def shown(self):
+        return list(self.hud.shown.values())
+
+    def written(self):
+        return [tuple(w.values()) for w in self.emu.writes.values()]
+
+    def hello(self):
+        self.checkpoint_ok = True
+        self.frames(2)
+        hellos = self.sent("hello")
+        assert len(hellos) == 1, self.logs.values()
+        return hellos[0]
+
+
+def mutant(path, *pairs):
+    source = (ROOT / path).read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert source.count(old) == 1, f"mutation anchor drifted in {path}: {old!r}"
+        source = source.replace(old, new)
+    return {path: source}
+
+
+def falsify(check, swaps):
+    """The rule holds on the shipped sources and fails on the broken variant."""
+    check(World())
+    with pytest.raises(AssertionError):
+        check(World(swaps=swaps))
+
+
+# ── falsifiers ──────────────────────────────────────────────────────────────────────────
+def test_no_hello_before_the_checkpoint():
+    def check(world):
+        world.frames(120)
+        assert world.sent("hello") == []
+        world.hello()
+
+    falsify(check, mutant("lua/gen2/client.lua", ("if battle.mode == 0 and not safety.check() then",
+                                                  "if false then")))
+
+
+def test_no_write_outside_the_armed_gate():
+    def check(world):
+        world.party([mon(), mon(species=172, dvs=0x3AAA)])
+        world.hello()
+        world.checkpoint_ok = False
+        world.reply({"cmd": "force_faint", "key": codec_key(mon(species=172, dvs=0x3AAA))})
+        world.frames(130)
+        assert world.written() == []
+        assert not any("KO'd" in text for text in world.shown())
+
+    falsify(check, mutant("lua/gen2/client.lua", ("local safe = safety.check()", "local safe = true")))
+
+
+def test_the_permit_itself_refuses_an_unarmed_write():
+    world = World()
+    ok, err = world.lua.eval("function(w) return pcall(function() return w:faint_party_slot(0, {mode=0, link_mode=0}) end) end")(
+        world.parts.writes)
+    assert ok is False and "no armed write window" in err and world.written() == []
+
+
+def test_an_unhatched_egg_never_reaches_the_wire():
+    def check(world):
+        first, second = mon(), mon(species=172, dvs=0x3AAA)
+        world.party([first, mon(species=175, dvs=0x4AAA, egg=True), second])
+        world.box([mon(species=176, dvs=0x5AAA, egg=True), mon(species=133, dvs=0x6AAA)])
+        hello = world.hello()
+        assert [(e["slot"], e["key"]) for e in hello["party"]] == [(0, codec_key(first)), (2, codec_key(second))]
+        assert [(e["box"], e["slot"], e["species_id"]) for e in hello["pc_boxes"]] == [(0, 1, 133)]
+        world.frames(30)
+        tick = world.sent("tick")[-1]
+        assert [e["slot"] for e in tick["party"]] == [0, 2]
+
+    # With only the client filter gone the wire refusal fails the hello closed; with both
+    # gone the egg is on the wire. Either way the rule's assertion is what goes red.
+    client_only = mutant("lua/gen2/client.lua", ("            if not m.is_egg then\n                local e, why = wire.party_entry",
+                                                 "            if true then\n                local e, why = wire.party_entry"))
+    falsify(check, client_only)
+    falsify(check, {**client_only, **mutant("lua/gen2/wire.lua", ("    if mon.is_egg then return", "    if false then return"))})
+
+
+def test_no_capture_without_its_acquisition_latch():
+    def check(world):
+        world.hello()
+        world.field("wBattleMode", 1)
+        world.party([mon(), mon(species=19, dvs=0x7AAA)])
+        world.fire("capture_party_finalized")  # the final-name site alone: no insertion latch
+        world.frames(1)
+        assert world.sent("capture") == []
+
+    # broken binder: the party final is accepted with no insertion latch behind it
+    falsify(check, mutant("lua/gen2/signals.lua",
+                          ('if not found then return false,"required prior success/identity unavailable" end',
+                           'if not found then return name == "capture_party_finalized" end'),
+                          ('local before = assert(latches[rule.prior],"prior acquisition lost")',
+                           "local before = latches[rule.prior] or receiver(STARTS[rule.prior],site)")))
+
+
+def test_no_faint_without_its_signal_latch():
+    def check(world):
+        world.hello()
+        world.field("wBattleMode", 1)
+        world.party([mon(hp=0)])  # HP 0 alone, no UpdateFaintedPlayerMon
+        world.frames(40)
+        assert world.sent("faint") == []
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "if #self.faint_latches == 0 then return end",
+        'if #self.faint_latches == 0 then self.faint_latches = {{kind = "battle", slot = 0, frame = self.frame}} end')))
+
+
+def test_lua_key_agrees_with_the_python_codec_on_the_same_record():
+    def check(world):
+        starter, caught = mon(species=155, ot=0x0BCD, dvs=0xFEDC), mon(species=19, ot=0x0BCD, dvs=0x1357)
+        world.party([starter])
+        hello = world.hello()
+        assert hello["party"][0]["key"] == codec_key(starter)
+        world.field("wBattleMode", 1)
+        world.party([starter, caught])
+        world.fire("capture_party")
+        world.fire("capture_party_finalized")
+        world.frames(1)
+        assert [c["key"] for c in world.sent("capture")] == [codec_key(caught)]
+
+    falsify(check, mutant("lua/gen2/wire.lua", ('string.format("%04X:%04X:%02X", mon.dv_word, mon.ot_id, mon.species_id)',
+                                                'string.format("%04X:%04X:%02X", mon.ot_id, mon.dv_word, mon.species_id)')))
+
+
+def test_an_active_slot_forced_faint_is_never_reported_as_success():
+    def check(world):
+        active, bench = mon(), mon(species=172, dvs=0x3AAA)
+        world.party([active, bench])
+        world.hello()
+        world.field("wBattleMode", 1)  # the stub checkpoint ignores the battle: writes.lua must not
+        world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
+        world.frames(130)
+        assert world.hp_of(0) == (30, 0) and world.written() == []
+        assert not any("KO'd" in text for text in world.shown())
+        assert any(text.startswith("show:KO held") for text in world.shown())
+        assert any("active faint" in line for line in world.logs.values())
+
+    falsify(check, mutant("lua/gen2/client.lua", ("        if ok then\n            hud.show(\"!! \"",
+                                                  "        if true then\n            hud.show(\"!! \"")))
+
+
+def test_a_reset_leaves_no_stale_latch():
+    def check(world):
+        world.hello()
+        world.field("wBattleMode", 1)
+        world.fire("battle_faint")  # copy-back not landed: the latch waits for HP 0
+        world.party([mon(), mon(species=19, dvs=0x7AAA)])
+        world.fire("capture_party")  # insertion latch, never finalized
+        world.frames(1)
+        world.fire("soft_reset")
+        world.frames(1)
+        world.field("wBattleMode", 0)
+        world.party([mon(hp=0), mon(species=19, dvs=0x7AAA)])  # the reloaded save
+        world.fire("capture_party_finalized")
+        world.frames(40)
+        assert world.sent("faint") == [] and world.sent("capture") == []
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "self.faint_latches, self.battle, self.pending_rescan = {}, nil, false",
+        "self.battle, self.pending_rescan = nil, false")))
+
+
+# ── positive controls ───────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_one_hello_with_the_protocol_party_shape(title):
+    world = World(title)
+    hello = world.hello()
+    world.frames(90)
+    assert len(world.sent("hello")) == 1
+    assert hello["rom_type"] == title.capitalize() and hello["foundation"] == "gen2_gsc"
+    assert hello["ot_id"] == 0x1234 and hello["has_pokeballs"] is True and hello["ball_count"] == 5
+    (entry,) = hello["party"]
+    assert set(entry) >= {"key", "slot", "species_id", "level", "hp", "maxHP", "status_cond", "moves",
+                          "pp", "pp_ups", "held_item_id", "active", "blob_hex"}
+    assert (entry["slot"], entry["key"], entry["level"], entry["hp"], entry["maxHP"]) == (0, codec_key(mon()), 20, 30, 50)
+    adapter = Gen2GSCAdapter(title)
+    assert adapter.validate_party_blob(entry["blob_hex"], key=entry["key"], species_marker=entry["species_id"])
+    assert "rom_content" not in hello and hello["panel"] is False and hello["sfx"] is False
+
+
+def test_a_capture_carries_key_area_and_in_box():
+    world = World()
+    world.hello()
+    world.field("wBattleMode", 1)
+    caught = mon(species=19, dvs=0x7AAA)
+    world.fire("wild_ready")
+    world.party([mon(), caught])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    world.frames(1)
+    boxed = mon(species=161, dvs=0x8AAA)
+    world.box([boxed])
+    world.fire("capture_box")
+    world.fire("capture_box_finalized")
+    world.frames(1)  # the binder's battle_end boundary discards undrained events (see report)
+    world.fire("battle_end")
+    world.frames(1)
+    captures = world.sent("capture")
+    assert [(c["key"], c["area_id"], c["in_box"], c["gift"]) for c in captures] == [
+        (codec_key(caught), "route_29", False, False), (codec_key(boxed), "route_29", True, False)]
+    assert world.sent("no_catch") == []
+
+
+def test_a_bench_faint_is_written_through_the_permit():
+    world = World()
+    active, bench = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([active, bench])
+    world.hello()
+    world.frames(60)  # a live validation enables writes
+    world.reply({"cmd": "force_faint", "key": codec_key(bench), "nickname": "PICHU"})
+    world.frames(2)
+    assert world.hp_of(1) == (0, 0) and world.hp_of(0) == (30, 0)
+    receipts = [dict(r.items()) for r in world.parts.writes.log.values()]
+    assert [(r["why"], r["status"], r["n"]) for r in receipts] == [("overworld", "written", 1), ("overworld", "written", 2)]
+    assert "show:!! PICHU KO'd" in world.shown()
+
+
+def test_a_hatched_egg_is_published_as_a_gift_daycare_capture():
+    world = World()
+    egg = mon(species=175, dvs=0x4AAA, egg=True)
+    world.party([mon(), egg])
+    assert [e["slot"] for e in world.hello()["party"]] == [0]
+    world.field("wCurPartyMon", 1)
+    world.party([mon(), dict(egg, egg=False)])  # the hatch publishes the species marker
+    world.fire("hatch_species")
+    hatched = dict(egg, egg=False, ot=0x1234, nickname=0x83)
+    world.party([mon(), hatched])
+    world.fire("hatch_finalized")
+    world.frames(1)
+    (capture,) = world.sent("capture")
+    assert (capture["key"], capture["area_id"], capture["gift"], capture["in_box"]) == (
+        codec_key(hatched), "gift_daycare", True, False)
+
+
+@pytest.mark.parametrize("kind", ["roamer", "contest"])
+def test_roamer_and_contest_link_under_the_adapter_namespaces(kind):
+    world = World()
+    world.hello()
+    adapter = Gen2GSCAdapter("crystal")
+    world.field("wBattleMode", 1)
+    if kind == "roamer":
+        raikou = mon(species=243, dvs=0x9AAA)
+        world.field("wBattleType", 5)
+        world.field("wCurPartySpecies", 243)
+        world.party([mon(), raikou])
+        world.fire("capture_party")
+        world.fire("capture_party_finalized")
+        expected = adapter.gift_link_area("legend_243", acquisition="roamer", species_id=243)
+    else:
+        world.box([mon(species=123, dvs=0x9AAA)])
+        world.fire("contest_box_inserted")
+        world.box([mon(species=123, dvs=0x9AAA, nickname=0x84)])
+        world.fire("contest_box_finalized")
+        expected = adapter.gift_link_area("national_park_contest", acquisition="contest", species_id=123)
+    world.frames(1)
+    (capture,) = world.sent("capture")
+    assert capture["area_id"] == expected == {"roamer": "legend_243", "contest": "national_park_contest"}[kind]
