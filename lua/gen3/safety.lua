@@ -35,7 +35,12 @@ function S.new(pack, deps, kind)
         if ok then return result end
         return nil, tostring(result)
     end
+    -- Refusal returns false, reason: the first failure in check order (callers match on it).
+    -- self.last_clauses is the sorted list of EVERY failing clause key of the last check:
+    -- predicate names, "cpu", "task", "native", "pointer", or {"pack"} when the pack/ROM
+    -- preamble fails (nothing after it is evaluated); {} on accept. Refuse iff any clause fails.
     function self:check(snapshot)
+        self.last_clauses = {}
         local ok, result = pcall(function()
             assert(pack.version == "gen3-overworld-v1", "unsupported checkpoint")
             assert(type(kind) == "string", "artifact kind required")
@@ -49,17 +54,30 @@ function S.new(pack, deps, kind)
                 end
             end
             for _, name in ipairs(predicates) do assert(pack.predicates[name], "missing predicate: " .. name) end
-            for name, p in pairs(pack.predicates) do
+        end)
+        if not ok then self.last_clauses = {"pack"}; return false, tostring(result) end
+        -- Every clause is evaluated (reads only), so the refusal names all of them.
+        local failed, first = {}, nil
+        local function clause(key, fn)
+            local good, why = pcall(fn)
+            if not good then failed[#failed + 1] = key; first = first or tostring(why) end
+        end
+        for name, p in pairs(pack.predicates) do
+            clause(name, function()
                 local value = read(p.address + p.offset, p.width)
                 if p.mask then value = value & uint(p.mask, 256 ^ p.width - 1) end
                 assert(value == p.expect, "forbidden state: " .. name)
-            end
-            -- One parked range per title, from the pack. A frame end taken inside an IRQ handler
-            -- fails the mode test on purpose; the next parked frame admits (checkpoint doc §4.3).
+            end)
+        end
+        -- One parked range per title, from the pack. A frame end taken inside an IRQ handler
+        -- fails the mode test on purpose; the next parked frame admits (checkpoint doc §4.3).
+        clause("cpu", function()
             local cpu, regs = assert(pack.cpu), deps.regs()
             local pc, cpsr = uint(regs.R15, 4294967295), uint(regs.CPSR, 4294967295)
             assert(cpsr % 32 == cpu.mode and math.floor(cpsr / 32) % 2 == cpu.thumb
                 and pc >= cpu.pc_min and pc <= cpu.pc_max, "CPU outside parked checkpoint")
+        end)
+        clause("task", function()
             local t, allowed = assert(pack.tasks), {}
             for _, address in pairs(t.allowed_overworld_tasks) do allowed[uint(address, 4294967295)] = true end
             assert(next(allowed), "empty task allow-list")
@@ -71,16 +89,21 @@ function S.new(pack, deps, kind)
                     assert(fn % 2 == 1 and allowed[fn - 1], "unknown active task")
                 end
             end
+        end)
+        clause("native", function()
             assert(deps.native_idle() == true, "native transaction in flight or unreadable")
+        end)
+        clause("pointer", function()
             local current = pointers()
             if snapshot then
                 for name, value in pairs(current) do assert(snapshot[name] == value, "pointer moved: " .. name) end
                 for name in pairs(snapshot) do assert(current[name] ~= nil, "pointer layout changed") end
             end
-            return true
         end)
-        if not ok then return false, tostring(result) end
-        return result, "verified overworld checkpoint"
+        table.sort(failed)
+        self.last_clauses = failed
+        if first then return false, first end
+        return true, "verified overworld checkpoint"
     end
     return self
 end

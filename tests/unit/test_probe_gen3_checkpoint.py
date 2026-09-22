@@ -47,8 +47,103 @@ def test_all_states_have_named_terminals(module):
 ])
 def test_verdict_requires_nonvacuous_terminal(module, expectation, samples, yes, reached, error, want):
     lua, probe = module
-    row = lua.table_from({"expectation": expectation, "samples": samples, "yes": yes, "reached": reached, "error": error})
-    assert probe.verdict(row) is want
+    row = lua.table_from({"expectation": expectation, "samples": samples, "yes": yes, "reached": reached,
+                          "error": error, "expect_clauses": lua.table_from({"in_battle": True})})
+    assert probe.verdict(row)[0] is want
+
+
+def run_row(lua, probe, spec_name, refusals, reached=True):
+    """Build a row from the real spec and tally one safety refusal per clause list."""
+    spec = next(r for r in probe.STATES.values() if r.name == spec_name)
+    row = lua.table_from({"expectation": spec.expectation, "expect_clauses": spec.expect_clauses,
+                          "min_samples": spec.min_samples, "samples": 0, "yes": 0, "no": 0,
+                          "reached": reached})
+    for clauses in refusals:
+        probe.tally(row, False, "first", lua.table_from(clauses))
+    return row
+
+
+def test_verdict_fails_on_refusal_by_unexpected_clause(module):
+    lua, probe = module
+    row = run_row(lua, probe, "script_running", [["script_context_status"]] * 60 + [["cpu"]])
+    ok, why = probe.verdict(row)
+    assert ok is False and "1 refusals without an expected clause" in why and "refused by cpu" in why
+    # The FR 2026-09-22b shape: script_running refused by an unrelated predicate alone.
+    row = run_row(lua, probe, "script_running", [["wireless_comm_type"]] * 123)
+    assert probe.verdict(row)[0] is False
+    assert probe.clause_counts(row) == "wireless_comm_type:123"
+
+
+def test_verdict_passes_when_expected_clause_is_among_several(module):
+    lua, probe = module
+    row = run_row(lua, probe, "pc_menu", [["script_context_status", "task"]] * 122)
+    assert tuple(probe.verdict(row)) == (True, "-")
+    assert probe.clause_counts(row) == "script_context_status:122,task:122"
+    # script_context_status alone is NOT the pc_menu clause (the RR 22b receipt's reported reason).
+    row = run_row(lua, probe, "pc_menu", [["script_context_status"]] * 122)
+    assert probe.verdict(row)[0] is False
+
+
+def test_every_negative_row_declares_expect_clauses(module):
+    lua, probe = module
+    want = {"start_menu": {"field_controls_locked"},
+            "dialog": {"save_dialog_cb", "field_controls_locked"},
+            "save": {"save_dialog_cb", "field_controls_locked"},
+            "battle": {"in_battle", "callback1", "callback2"},
+            "fade": {"palette_fade_active"},
+            "pc_menu": {"task"},
+            "script_running": {"script_context_status"}}
+    got = {r.name: set(r.expect_clauses.keys()) for r in probe.STATES.values() if r.expectation == "negative"}
+    assert got == want
+    row = lua.table_from({"expectation": "negative", "samples": 5, "yes": 0, "reached": True})
+    assert probe.verdict(row)[0] is False  # a negative row without expect_clauses cannot pass
+
+
+def test_min_samples_from_spec(module):
+    lua, probe = module
+    rows = {r.name: r for r in probe.STATES.values()}
+    assert rows["pc_menu"].min_samples == 60 and rows["script_running"].min_samples == 60
+    row = run_row(lua, probe, "script_running", [["script_context_status"]] * 59)
+    ok, why = probe.verdict(row)
+    assert ok is False and "59 < min_samples 60" in why
+    probe.tally(row, False, "first", lua.table_from(["script_context_status"]))
+    assert probe.verdict(row)[0] is True
+    assert "row.samples >= 60" not in SOURCE  # the hold lives only in the spec
+
+
+def test_real_safety_names_every_failing_clause_sorted():
+    from tests.unit.test_gen3_safety import World
+    w = World("radical_red", "companion")
+    for name in ("script_context_status", "field_controls_locked"):
+        p = w.pack["predicates"][name]
+        w.lua.globals().put(p["address"] + p["offset"], p.get("mask", p["expect"] ^ 1), p["width"])
+    w.lua.globals().idle = False
+    ok, reason = w.safety.check(w.safety, None)  # arity unchanged: writes.lua unpacks two
+    assert ok is False and reason
+    assert list(w.safety.last_clauses.values()) == ["field_controls_locked", "native", "script_context_status"]
+    w.lua.globals().rom[w.pack["anchors"]["frame_control"]["rom_offset"]] ^= 1
+    assert w.safety.check(w.safety, None)[0] is False
+    assert list(w.safety.last_clauses.values()) == ["pack"]
+    idle = World()
+    assert idle.check() and len(idle.safety.last_clauses) == 0
+
+
+def sym(path, name):
+    for line in (ROOT / "data/gen3/pret" / path).read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[3] == name:
+            return int(parts[0], 16)
+    raise KeyError(name)
+
+
+def test_witness_addresses_derived_from_sym(module):
+    _, probe = module
+    assert sym("pokefirered.sym", "Task_PCMainMenu") == probe.TASK_PC_MAIN_MENU
+    assert sym("pokefirered.sym", "sGlobalScriptContextStatus") == probe.SCRIPT_STATUS
+    # LeafGreen's Task_PCMainMenu differs, so the pc_menu row must not admit leafgreen.
+    assert sym("pokeleafgreen.sym", "Task_PCMainMenu") != probe.TASK_PC_MAIN_MENU
+    pc_menu = next(r for r in probe.STATES.values() if r.name == "pc_menu")
+    assert not any(k.startswith("leafgreen/") for k in pc_menu.artifacts)
 
 
 def test_read_only_dependencies_forward_domain_and_raw_registers(module):
@@ -76,7 +171,8 @@ def test_real_safety_frame_end_sampling_and_save_witness_are_wired():
     assert "counter > before and G.sectors_at(domain,counter) < 14" in SOURCE
     assert "G.sectors_at(domain,after) >= 14" in SOURCE
     assert 'FAIL not run' in SOURCE and "passed = false" in SOURCE
-    assert "#write_log == 0" in SOURCE
+    assert "WRITE_SURFACE none (predicate-only probe)" in SOURCE and "WRITE_LOG" not in SOURCE
+    assert "P.tally(active, ok, reason, safety.last_clauses)" in SOURCE
     assert "memory.write" not in SOURCE
     assert 'dofile(wt .. "/lua/gen3/writes.lua")' not in SOURCE
 

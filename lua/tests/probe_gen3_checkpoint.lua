@@ -10,26 +10,42 @@
 -- Pack predicates: gen3_rr/write_checkpoint.json:77-160; CPU:55-62; tasks:161-173.
 -- Safety surface: lua/gen3/safety.lua:12,33-38. No writes.lua instance is constructed.
 local P = {}
+-- expect_clauses: every counted refusal of a negative row must name at least one of these
+-- safety clause keys (safety.last_clauses after check); any other refusal fails the row.
+-- min_samples: witnessed frames the row must count (default 1).
 P.STATES = {
     {name="idle", terminal="field_idle_300", expectation="positive"},
     {name="walking", terminal="position_changed_120", expectation="report"},
-    {name="start_menu", terminal="field_controls_locked", expectation="negative"},
-    {name="dialog", terminal="save_dialog_cb_nonzero", expectation="negative"},
-    {name="save", terminal="new_counter_partial_slot_then_14_sectors", expectation="negative"},
-    {name="battle", terminal="in_battle_mask_nonzero", expectation="negative"},
-    {name="fade", terminal="palette_fade_active_then_map_changed", expectation="negative"},
+    {name="start_menu", terminal="field_controls_locked", expectation="negative",
+        expect_clauses={field_controls_locked=true}},
+    {name="dialog", terminal="save_dialog_cb_nonzero", expectation="negative",
+        expect_clauses={save_dialog_cb=true, field_controls_locked=true}},
+    {name="save", terminal="new_counter_partial_slot_then_14_sectors", expectation="negative",
+        expect_clauses={save_dialog_cb=true, field_controls_locked=true}},
+    {name="battle", terminal="in_battle_mask_nonzero", expectation="negative",
+        expect_clauses={in_battle=true, callback1=true, callback2=true}},
+    {name="fade", terminal="palette_fade_active_then_map_changed", expectation="negative",
+        expect_clauses={palette_fade_active=true}},
+    -- Task_PCMainMenu is off the allow-list, so "task" fails on every witnessed frame. The PC is
+    -- opened by a script, so script_context_status also refuses; it is counted, not accepted.
     {name="pc_menu", terminal="task_pc_main_menu_active_60", expectation="negative",
+        expect_clauses={task=true}, min_samples=60,
         artifacts={["radical_red/companion"]=true}},
     {name="script_running", terminal="script_context_not_shutdown_60", expectation="negative",
+        expect_clauses={script_context_status=true}, min_samples=60,
+        note="witness=same_byte_as_script_context_status,independent_read_path,not_independent_evidence",
         artifacts={["firered/clean"]=true, ["radical_red/companion"]=true}},
 }
 
--- Witness addresses. Neither witness touches safety; each reads one engine variable.
+-- Witness addresses. Neither witness calls safety; each reads one engine variable. The script
+-- witness reads the SAME byte as the script_context_status predicate: an independent read path,
+-- not independent evidence. The pc_menu witness (a gTasks func) is a different variable.
 -- sGlobalScriptContextStatus: pokefirered.sym:663 0x03000EA8; pret src/script.c
 -- CONTEXT_RUNNING 0 / WAITING 1 / SHUTDOWN 2 (docs/gen3_write_checkpoint.md:217). RR keeps
 -- it: gen3_rr/write_checkpoint.json binds the same address (literal-pool proven, both ROMs).
 P.SCRIPT_STATUS, P.CONTEXT_SHUTDOWN = 0x03000EA8, 2
--- Task_PCMainMenu: pokefirered.sym:6125 0x0808C39C; RR companion exec hook hits=294 while the
+-- Task_PCMainMenu: pokefirered.sym:6125 0x0808C39C (the unit test derives it from the .sym;
+-- pokeleafgreen.sym has 0x0808C370, so the row stays RR-only); RR companion exec hook hits=294 while the
 -- storage main menu was up (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt).
 P.TASK_PC_MAIN_MENU = 0x0808C39C
 
@@ -68,12 +84,49 @@ function P.planned(title, kind, rows_env)
     return plan
 end
 
--- Counts are conditional on an INDEPENDENT state witness, not on safety's answer.
+-- Count one witnessed frame: safety's ok, reason and last_clauses, plus clause attribution.
+function P.tally(row, ok, reason, clauses)
+    row.samples = row.samples + 1
+    if ok then row.yes = row.yes + 1; return end
+    row.no, row.reason = row.no + 1, tostring(reason)
+    row.clauses = row.clauses or {}
+    local hit = false
+    for _, key in ipairs(clauses or {}) do
+        row.clauses[key] = (row.clauses[key] or 0) + 1
+        hit = hit or (row.expect_clauses or {})[key] == true
+    end
+    if row.expect_clauses and not hit then
+        row.unattributed = (row.unattributed or 0) + 1
+        row.misattributed = table.concat(clauses or {"none"}, "+")
+    end
+end
+
+-- Counts are conditional on the row's state witness, not on safety's answer. Returns ok, why.
 function P.verdict(row)
-    if row.error or not row.reached or row.samples == 0 then return false end
-    if row.expectation == "positive" then return row.yes / row.samples >= 0.90 end
-    if row.expectation == "negative" then return row.yes == 0 end
-    return true
+    if row.error then return false, "callback error: " .. tostring(row.error) end
+    if not row.reached then return false, "terminal not reached" end
+    local min = row.min_samples or 1
+    if row.samples < min then return false, string.format("samples %d < min_samples %d", row.samples, min) end
+    if row.expectation == "positive" then
+        return row.yes / row.samples >= 0.90, "positive rate"
+    end
+    if row.expectation == "negative" then
+        if row.yes > 0 then return false, "accepted " .. row.yes .. " witnessed frames" end
+        if not row.expect_clauses then return false, "negative row declares no expect_clauses" end
+        if (row.unattributed or 0) > 0 then
+            return false, string.format("%d refusals without an expected clause, refused by %s",
+                row.unattributed, row.misattributed)
+        end
+    end
+    return true, "-"
+end
+
+function P.clause_counts(row)
+    local keys, out = {}, {}
+    for k in pairs(row.clauses or {}) do keys[#keys + 1] = k end
+    table.sort(keys)
+    for _, k in ipairs(keys) do out[#out + 1] = k .. ":" .. row.clauses[k] end
+    return #out > 0 and table.concat(out, ",") or "-"
 end
 
 function P.build_deps(mem, emulator, native_idle)
@@ -99,7 +152,7 @@ function P.run()
     local kind = assert(os.getenv("SLINK_GEN3_KIND"), "SLINK_GEN3_KIND clean/companion required")
     local plan = P.planned(title, kind, os.getenv("SLINK_CHECKPOINT_ROWS"))
     local active, callback_error, hook
-    local rows, write_log = {}, {} -- predicate-only evidence; NOT a writer execution test
+    local rows = {} -- predicate-only evidence; NOT a writer execution test
     local mb
     if title == "radical_red" then
         -- Loading mailbox.lua defines helpers; this probe calls ONLY present/busy.
@@ -127,6 +180,7 @@ function P.run()
     local function begin(index, witness)
         local spec = P.STATES[index]
         local row = {name=spec.name, terminal=spec.terminal, expectation=spec.expectation,
+            expect_clauses=spec.expect_clauses, min_samples=spec.min_samples,
             samples=0, yes=0, no=0, reached=false, reason="-", witness=witness}
         rows[index], active = row, row
         G.phase("probe-state", row.name .. " terminal=" .. row.terminal)
@@ -138,9 +192,7 @@ function P.run()
         -- not fabricated as BIOS/0x1F. A core sampling mismatch fails the idle gate.
         if active.witness() then
             local ok, reason = safety:check()
-            active.samples = active.samples + 1
-            if ok then active.yes = active.yes + 1
-            else active.no = active.no + 1; active.reason = tostring(reason) end
+            P.tally(active, ok, reason, safety.last_clauses)
             local regs = deps.regs()
             active.r15, active.cpsr, active.frame = regs.R15, regs.CPSR, deps.frame()
         end
@@ -266,7 +318,7 @@ function P.run()
                     for _ = 1,120 do if pc_up() then break end; G.advance() end
                 end
                 G.idle(120)
-                row.reached = pc_up() and row.samples >= 60
+                row.reached = pc_up()
                 if not row.reached then row.reason = "storage menu task not held" end
             else row.reason = where end
             active = nil
@@ -293,7 +345,7 @@ function P.run()
                 G.tap("A",3,0)
                 for _ = 1,60 do if running() then break end; G.advance() end
                 G.idle(120)
-                row.reached = running() and row.samples >= 60
+                row.reached = running()
                 if not row.reached then row.reason = "script context not held" end
             else row.reason = where end
             active = nil
@@ -311,15 +363,16 @@ function P.run()
             passed = false
             G.log(string.format("PROBE %s FAIL not run", spec.name))
         else
-            local good = P.verdict(row)
+            local good, why = P.verdict(row)
             passed = passed and good
-            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d terminal=%s reached=%s R15=%s CPSR=%s frame=%s reason=%s",
+            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d terminal=%s reached=%s R15=%s CPSR=%s frame=%s clauses=%s verdict=%s%s reason=%s",
                 row.name, good and "PASS" or "FAIL", row.samples, row.yes, row.no, row.terminal,
-                tostring(row.reached), tostring(row.r15), tostring(row.cpsr), tostring(row.frame), row.reason))
+                tostring(row.reached), tostring(row.r15), tostring(row.cpsr), tostring(row.frame),
+                P.clause_counts(row), why, spec.note and (" note=" .. spec.note) or "", row.reason))
         end
     end
-    assert(#write_log == 0, "predicate probe write log must be empty")
-    G.log("WRITE_LOG count=0 scope=predicate_only no_writes_instance=true native_idle=opcode_queue_only")
+    -- Not evidence: this probe constructs no writer, so there is nothing to count.
+    G.log("WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only")
     G.finish(passed, ok and (callback_error or "all checkpoint controls") or tostring(err))
 end
 
