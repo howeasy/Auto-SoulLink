@@ -28,3 +28,12 @@ Additions: R-5g must also stay OPEN (two DV formulas are not GAME status-symbol 
 Disposition: all folded into gen2-N10 (addendum: full-consumer, pre-confirm replay, wrong-save receipt, script-pointer mutant, speed wrapper, domain negative controls; no R-5g closure claim).
 
 Correction (Gen2-Part2, coordinator-verified): finding 2 REFUTED. The phone timers are in the unsaved wMapStatus block (C ram/wram.asm:2907-2972; wReceiveCallDelay_StartTime 01:d466 precedes wPlayerData 01:d47b), and SavePlayerData copies only wPlayerData..End + wCurMapData (C save.asm:498-508; G :396-406). Dropped from N10.
+
+## Supplement (Gen2-Part2 reconciliation)
+
+Reconciliation: 1,3-8 CONFIRMED; 2 REFUTED. Additional:
+- S1 MED CONFIRMED: free re-save bytes accept any value; daily flags may only stay or clear (C engine/overworld/time.asm:103-124, G :89-96), resaved sRTCStatusFlags must be 0 (engine/rtc/rtc.asm:76-88).
+- S2 MED CONFIRMED path (end-to-end PLAUSIBLE): a non-+1 frame step drops only held messages; queued binder batches/latches from the abandoned timeline survive (lua/gen2/client.lua:104-108,249-257,694-729; signals.lua:224-228,605-624).
+- S3 LOW CONFIRMED: post_oracle never requires resave:save_witness (tools/gen2_fixtures.py:693-718 vs 765-790).
+- Scope: the re-save delta is a fresh-fixture oracle; active roamers (JumpRoamMons), Pokerus ticks, Mystery Gift decorations, RTC-overflow ClearDailyTimers and Crystal Battle Tower state are out of scope and must refuse.
+Disposition: S1-S3 + scope statement folded into gen2-N10 (lease extended to lua/gen2/client.lua, signals.lua and their tests).
