@@ -8,13 +8,16 @@ import pytest
 from tools.gen3_shadow_negatives import DEFAULT_MANIFEST, REPO, check_manifest, load_manifest, main
 
 
-def manifest(tmp_path, kind="faint", scope="observer"):
+def manifest(tmp_path, kind="faint", scope="observer", source_head=""):
     path = tmp_path / "manifest.json"
-    path.write_text(json.dumps({"schema": 1, "receipts": [{
+    data = {"schema": 1, "receipts": [{
         "file": "receipt.log", "artifact": "test", "scope": scope,
         "why": "synthetic:1: controlled test", "must_not": [
             {"kind": kind, "why": "synthetic:1: this operation is forbidden"}],
-    }]}), encoding="utf-8")
+    }]}
+    if source_head:
+        data["source_head"] = source_head
+    path.write_text(json.dumps(data), encoding="utf-8")
     return path
 
 
@@ -129,3 +132,60 @@ def test_stdout_matches_committed_report(capsys):
     assert main([str(DEFAULT_MANIFEST)]) == 0
     actual = capsys.readouterr().out
     assert actual == expected, "stdout does not match committed report"
+
+
+def test_unmatched_pc_release_counts_once(tmp_path):
+    """Unmatched pc_release creates both diagnostic and event; count once."""
+    path = manifest(tmp_path, "pc_move")
+    # Unmatched pc_release: no begin, has end.
+    # This creates a diagnostic AND an event via incomplete() + event replacement.
+    (tmp_path / "receipt.log").write_text(
+        "SHADOW t=1 frame=10 kind=pc_release key=x\n", encoding="utf-8")
+    row = check_manifest(path, tmp_path)["receipts"][0]["rows"][0]
+    assert row["count"] == 1, "unmatched pc_release should count once, not twice"
+    assert not row["passed"], "unmatched completion under forbidding pc_move should fail"
+
+
+def test_unmatched_trade_begin_counts_once(tmp_path):
+    """Unmatched trade_begin has no corresponding event; count it once."""
+    path = manifest(tmp_path, "trade_done")
+    # Unmatched begin: no matching completion.
+    # This creates only a diagnostic, no event.
+    (tmp_path / "receipt.log").write_text(
+        "SHADOW t=1 frame=10 kind=trade_begin key=x\n", encoding="utf-8")
+    row = check_manifest(path, tmp_path)["receipts"][0]["rows"][0]
+    assert row["count"] == 1, "unmatched trade_begin should count once"
+    assert not row["passed"], "unmatched begin under forbidding trade_done should fail"
+
+
+def test_poison_faint_counted_once(tmp_path):
+    """Raw poison_faint record is counted exactly once."""
+    path = manifest(tmp_path, "poison_faint")
+    (tmp_path / "receipt.log").write_text(
+        "SHADOW t=1 frame=10 kind=poison_faint key=x\n", encoding="utf-8")
+    row = check_manifest(path, tmp_path)["receipts"][0]["rows"][0]
+    assert row["count"] == 1, "raw poison_faint should count exactly once"
+    assert not row["passed"]
+
+
+def test_source_head_printed(tmp_path, capsys):
+    """source_head from manifest is printed in report header."""
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps({"schema": 1, "source_head": "abcd1234567890",
+                                 "receipts": [{
+        "file": "receipt.log", "artifact": "test", "scope": "observer",
+        "why": "test", "must_not": [
+            {"kind": "battle_begin", "why": "test"}],
+    }]}), encoding="utf-8")
+    (tmp_path / "receipt.log").write_text(
+        "SHADOW t=1 frame=10 kind=save key=\n", encoding="utf-8")
+    assert main([str(path), "--root", str(tmp_path)]) == 0
+    output = capsys.readouterr().out
+    assert "source_head: abcd1234567890" in output
+
+
+def test_source_head_format(tmp_path):
+    """source_head is stored as 7-40 hex sha."""
+    path = manifest(tmp_path, source_head="5dc1bec2aeea61fe107efc55c19ff9e63faa532e")
+    report = check_manifest(path, tmp_path)
+    assert report.get("source_head") == "5dc1bec2aeea61fe107efc55c19ff9e63faa532e"

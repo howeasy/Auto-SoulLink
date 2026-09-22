@@ -1,3 +1,4 @@
+source_head: 5dc1bec2aeea61fe107efc55c19ff9e63faa532e
 PRESENT docs/gen3/probes/shadow_rr_play_r5d_pc_ops_2026-09-21.shadow.log [rr_companion; observer] pc_move count=4
 PRESENT docs/gen3/probes/shadow_rr_play_r5d_pc_ops_2026-09-21.shadow.log [rr_companion; observer] save count=1
 EXPECTED-ZERO PASS docs/gen3/probes/shadow_rr_play_r5d_pc_ops_2026-09-21.shadow.log [rr_companion; observer] battle_begin count=0

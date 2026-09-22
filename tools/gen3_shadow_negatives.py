@@ -18,6 +18,20 @@ if __package__:
 else:
     import gen3_shadow_diff as shadow_diff
 
+
+def _has_corresponding_event(diagnostic: dict, events: list) -> bool:
+    """Check if a diagnostic has a corresponding event already counted.
+
+    Unmatched completion diagnostics create both a diagnostic entry and an
+    event; count the event once, not twice.
+    """
+    for event in events:
+        if (event.kind == diagnostic["kind"] and
+                event.key == diagnostic["key"] and
+                event.sink == diagnostic["sink"]):
+            return True
+    return False
+
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO / "docs/gen3/negatives_manifest.json"
 SCOPES = {"observer", "observer_excerpt", "log_format_only"}
@@ -58,6 +72,8 @@ def load_manifest(path: Path) -> list[dict]:
 
 def check_manifest(path: Path, root: Path = REPO) -> dict:
     """Return all rows, continuing after missing/malformed receipts; no file writes."""
+    manifest_data = json.loads(path.read_text(encoding="utf-8"))
+    source_head = manifest_data.get("source_head", "")
     results = []
     for entry in load_manifest(path):
         result = {"file": entry["file"], "artifact": entry["artifact"],
@@ -71,9 +87,13 @@ def check_manifest(path: Path, root: Path = REPO) -> dict:
                 raise ValueError("receipt must stay within root")
             events = shadow_diff.reduce_shadow(receipt)
             counts.update(event.kind for event in events)
+            # Use the same poison_faint derivation as gen3_shadow_diff.
             counts["poison_faint"] += sum(event.cause == "poison" for event in events)
             result["positives"] = {kind: count for kind, count in sorted(counts.items()) if count}
-            diagnostics.update(item["kind"] for item in events.diagnostics)
+            # Only count diagnostics that don't have corresponding events.
+            for diag in events.diagnostics:
+                if not _has_corresponding_event(diag, events):
+                    diagnostics[diag["kind"]] += 1
             result["diagnostics"] = events.diagnostics
             # ponytail: BLOCKER fix — only log_format_only may be empty
             if entry["scope"] in ("observer", "observer_excerpt") and not any(
@@ -101,7 +121,8 @@ def check_manifest(path: Path, root: Path = REPO) -> dict:
     failed = sum(not row["passed"] for row in rows)
     return {"passed": failed == 0 and not any(r["errors"] for r in results),
             "receipts": results, "summary": {"receipts": len(results), "checks": len(rows),
-                                             "passed": len(rows) - failed, "failed": failed}}
+                                             "passed": len(rows) - failed, "failed": failed},
+            "source_head": source_head}
 
 
 def main(argv=None) -> int:
@@ -120,6 +141,9 @@ def main(argv=None) -> int:
     elif "error" in report:
         print(f"FAIL {report['error']}")
     else:
+        source_head = report.get("source_head", "")
+        if source_head:
+            print(f"source_head: {source_head}")
         for receipt in report["receipts"]:
             label = f"{receipt['file']} [{receipt['artifact']}; {receipt['scope']}]"
             for kind, count in receipt["positives"].items():
