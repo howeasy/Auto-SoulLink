@@ -44,6 +44,11 @@ FIXTURES = tuple(FixtureSpec(f"{title}_{target}", title, target, "default", 0)
                  for title in ("crystal", "gold", "silver") for target in ("town", "battle")) + tuple(
     FixtureSpec(f"crystal_{target}_ot2", "crystal", target, "ot2", 240) for target in ("town", "battle"))
 MAPS = ("PlayersHouse2F", "PlayersHouse1F", "NewBarkTown", "ElmsLab", "Route29")
+BY_NAME = {spec.name: spec for spec in FIXTURES}
+# docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md: 32 KiB CartRAM plus the 22-byte BizHawk 2.11.1
+# gambatte RTC trailer. Only the CartRAM is compared; the trailer changes on every save.
+CART_RAM_BYTES = 0x8000
+SAVERAM_BYTES = CART_RAM_BYTES + 22
 if not __package__:
     sys.path.insert(0, str(ROOT))
 
@@ -51,6 +56,17 @@ if not __package__:
 def _require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def cart_ram(raw):
+    """The compared CartRAM of an exact-length SaveRAM; the RTC trailer is never compared."""
+    _require(isinstance(raw, bytes) and len(raw) == SAVERAM_BYTES,
+             f"Gen 2 SaveRAM must be exactly {SAVERAM_BYTES} bytes (CartRAM + RTC trailer)")
+    return raw[:CART_RAM_BYTES]
+
+
+def _facts_sha256(facts):
+    return hashlib.sha256(json.dumps(facts, sort_keys=True).encode()).hexdigest()
 
 
 def _json(raw):
@@ -97,24 +113,27 @@ def _map_facts(ctx, row, areas):
         _require(len(tokens) == 4, "collision row width")
         collision.extend(collision_values["COLL_" + token] for token in tokens)
     verify_table(ctx, symbol, bytes(collision))
-    allowed_names = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CAVE",
+    allowed_names = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CAVE", "STAIRCASE",
                      "WARP_CARPET_DOWN", "WARP_CARPET_LEFT", "WARP_CARPET_UP", "WARP_CARPET_RIGHT")
     allowed = {collision_values["COLL_" + value] for value in allowed_names if "COLL_" + value in collision_values}
-    grid = []
+    grid, codes = [], []
     for y in range(height * 2):
         for x in range(width * 2):
             block = blocks[(y // 2) * width + x // 2]
             at = block * 4 + (y % 2) * 2 + x % 2
             _require(at < len(collision), "block indexes unknown collision row")
             code = collision[at]
+            codes.append(code)
             grid.append(2 if code == collision_values["COLL_TALL_GRASS"] else 1 if code in allowed else 0)
+    carpets = {collision_values["COLL_WARP_CARPET_" + side.upper()]: side for side in ("Down", "Left", "Up", "Right")}
     text = ctx.read_source("maps/" + name + ".asm")
     warps, scenes, objects, coords = [], {}, {}, []
     for line_no, line in source_lines(text, ctx.title):
         if line.startswith("warp_event "):
             x, y, destination, warp = [part.strip() for part in line[11:].split(",")]
             warps.append({"x": int(x), "y": int(y), "destination": destination,
-                          "warp": int(warp), "source_line": line_no})
+                          "warp": int(warp), "source_line": line_no,
+                          "carpet": carpets.get(codes[int(y) * width * 2 + int(x)])})
         elif line.startswith(("scene_script ", "scene_const ")):
             scene = line.split(",")[-1].strip() if line.startswith("scene_script ") else line.split()[1]
             scenes[scene] = len(scenes)
@@ -175,7 +194,7 @@ def route_facts(title, root=ROOT):
               "open_obligations": ["live_point_observer_binding", "played_route_and_OT_separation",
                                    "RTC_and_cold_boot_continue_resave_reload_GAME_witnesses"]}
     _require(selected["ram"]["wNumBalls"] + 1 == result["balls"]["data_address"], "ball pocket geometry")
-    result["fingerprint"] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
+    result["fingerprint"] = _facts_sha256(result)
     return result
 
 
@@ -239,7 +258,7 @@ def inspect_candidate(raw, profile, rom, spec):
     from server.adapters import gen2_codec as codec
     from server.adapters.gen2_rom_scan import Rom
 
-    _require(len(raw) == 0x8000, "RTC-tail normalization OPEN; exact 0x8000 CartRAM required")
+    raw = cart_ram(raw)
     layout = codec.Gen2Layout.from_profile(profile, spec.title)
     witness = codec.strict_checksum_witness(raw, layout)
     _require(witness["valid"], "independent checksum/marker/copy witness refused")
@@ -268,7 +287,7 @@ def inspect_candidate(raw, profile, rom, spec):
     _require(all(1 <= item < 255 and 1 <= quantity <= 99 for item, quantity in items), "invalid saved Ball slot")
     return {"player_id": player_id, "location": location, "position": position, "ball_items": items,
             "party_raw_hex": party["raw_hex"],
-            "identity_key": codec.key(mon), "fixture_sha256": hashlib.sha256(raw).hexdigest(),
+            "identity_key": codec.key(mon), "cartram_sha256": hashlib.sha256(raw).hexdigest(),
             "physical_qualification": False}
 
 
@@ -276,17 +295,18 @@ def validate_played_receipt(receipt, spec, facts, inspection):
     _require(receipt.get("schema") == "gen2-played-route-v1" and receipt.get("case") == spec.name,
              "played-origin receipt missing or misbound")
     _require(receipt.get("facts_fingerprint") == facts["fingerprint"]
-             and receipt.get("fixture_sha256") == inspection["fixture_sha256"]
+             and receipt.get("cartram_sha256") == inspection["cartram_sha256"]
              and receipt.get("rom_sha1") == facts["rom_sha1"], "played-origin byte/source binding mismatch")
     _require(receipt.get("core_mode") == "CGB" and receipt.get("speed_percent") == 300
              and receipt.get("input_mode") == "normal_buttons", "played-origin input/core witness incomplete")
     required = ["new-game", "leave-bedroom", "mom", "to-elm", "starter"]
     if spec.target == "battle":
-        required += ["leave-elm", "to-route29", "route29-grass"]
+        required += ["o10-balls", "leave-elm", "to-route29", "route29-grass"]
     required += ["native-save", "route-saved"]
     trace = receipt.get("phases")
     _require(isinstance(trace, list) and all(isinstance(row, dict) for row in trace), "played phase trace missing")
     labels = [row.get("phase") for row in trace]
+    _require(spec.target == "battle" or "o10-balls" not in labels, "town fixture recorded an O-10 injection")
     previous = -1
     for label in required:
         positions = [i for i, value in enumerate(labels) if value == label and i > previous]
@@ -294,7 +314,7 @@ def validate_played_receipt(receipt, spec, facts, inspection):
         previous = positions[0]
     frames = [row.get("frame") for row in trace]
     _require(all(type(frame) is int and frame >= 0 for frame in frames)
-             and all(b > a for a, b in zip(frames, frames[1:])), "played trace frame order invalid")
+             and all(b > a for a, b in zip(frames, frames[1:], strict=False)), "played trace frame order invalid")
     allowed = ["O-10:BallPocket"] if spec.target == "battle" else []
     _require(receipt.get("harness_write_scopes") == allowed, "unauthorized or unrecorded fixture staging")
 
@@ -304,7 +324,7 @@ def validate_game_witness(game, context, inspection, stage, fingerprint):
              and game.get("case") == context.fixture and game.get("stage") == stage
              and game.get("stage_fingerprint") == fingerprint, "independent GAME witness missing/stale/misbound")
     _require(game.get("rom_sha1") == context.provenance["rom_sha1"]
-             and game.get("fixture_sha256") == inspection["fixture_sha256"], "GAME source/save binding mismatch")
+             and game.get("cartram_sha256") == inspection["cartram_sha256"], "GAME source/save binding mismatch")
     _require(game.get("core_mode") == "CGB" and game.get("speed_percent") == 100
              and game.get("observer") == "independent_GAME"
              and game.get("continue_selected") is True and game.get("native_load_completed") is True
@@ -320,51 +340,62 @@ def validate_identity_cohorts(rows):
              and ids["crystal_town_ot2"] != ids["crystal_town"], "Crystal OT2 is not a distinct played identity")
 
 
+def qualify_stage(context):
+    """Independent PYDEC static oracle for one candidate; never a played-origin or GAME proof."""
+    try:
+        spec = BY_NAME[context.fixture]
+        rom = context.artifacts["rom"]
+        profile = _json(context.artifacts["profile"])
+        _require(context.provenance["title"] == spec.title
+                 and hashlib.sha1(rom).hexdigest() == context.provenance["rom_sha1"],
+                 "ROM differs from the pinned sha1 of the selected title")
+        _require((profile.get("source") or {}).get("rom_sha1") == context.provenance["rom_sha1"],
+                 "profile belongs to another ROM")
+        result = inspect_candidate(context.artifacts["fixture"], profile, rom, spec)
+        facts = _json(context.artifacts["route_facts"])
+        _require(_facts_sha256(facts) == context.provenance["route_facts_sha256"], "route facts differ from verified source")
+        target = facts["maps"]["ElmsLab" if spec.target == "town" else "Route29"]
+        _require(result["location"] == (target["map_group"], target["map_number"]), "saved target map mismatch")
+        x, y = result["position"]
+        _require(0 <= x < target["width"] and 0 <= y < target["height"], "saved coordinate outside source map")
+        tile = target["grid"][y * target["width"] + x]
+        _require(tile == 2 if spec.target == "battle" else tile == 1, "saved fixture terrain is not the required floor/grass")
+        if spec.target == "battle":
+            _require(any(item == facts["balls"]["item"] and quantity > 0 for item, quantity in result["ball_items"]),
+                     "battle fixture has no real Poke Ball in the Ball pocket")
+        validate_played_receipt(_json(context.artifacts["played_receipt"]), spec, facts, result)
+        # O-10: fixture balls are harness-injected for tests/validation, never a ball_received witness.
+        return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
+            evidence={"oracle": "independent Gen2 PYDEC", "player_id": str(result["player_id"]),
+                      "ball_origin": "O-10 harness injection" if spec.target == "battle" else "none",
+                      "natural_ball_acquisition": "false"},
+            notes=("Static bytes do not prove played origin, RTC or GAME qualification.",))
+    except (ValueError, KeyError, TypeError) as exc:
+        return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
+
+
+def post_oracle_stage(context):
+    """Independent re-save PYDEC plus GAME raw-party witnesses; CartRAM only, never the RTC trailer."""
+    try:
+        spec = BY_NAME[context.fixture]
+        profile = _json(context.artifacts["profile"])
+        original = inspect_candidate(context.artifacts["fixture"], profile, context.artifacts["rom"], spec)
+        saved = inspect_candidate(context.artifacts["resave:fixture"], profile, context.artifacts["rom"], spec)
+        stages = {row["stage"]: row["fingerprint"] for row in context.previous}
+        validate_game_witness(_json(context.artifacts["boot:game_witness"]), context, original, "boot", stages["boot"])
+        validate_game_witness(_json(context.artifacts["resave:reload_witness"]), context, saved, "reload", stages["resave"])
+        _require(saved["player_id"] == original["player_id"] and saved["identity_key"] == original["identity_key"],
+                 "re-save changed fixture identity")
+        return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
+            evidence={"oracle": "independent re-save PYDEC + GAME raw-party witness"})
+    except (ValueError, KeyError, TypeError) as exc:
+        return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
+
+
 def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks=None):
     """Exactly eight cases; full mode requires independent GAME callbacks."""
-    callbacks = {}
-    by_name = {spec.name: spec for spec in FIXTURES}
-
-    def qualify(context):
-        try:
-            spec = by_name[context.fixture]
-            result = inspect_candidate(context.artifacts["fixture"], _json(context.artifacts["profile"]),
-                                       context.artifacts["rom"], spec)
-            facts = _json(context.artifacts["route_facts"])
-            _require(hashlib.sha256(json.dumps(facts, sort_keys=True).encode()).hexdigest() ==
-                     context.provenance["route_facts_sha256"], "route facts differ from verified source")
-            target = facts["maps"]["ElmsLab" if spec.target == "town" else "Route29"]
-            _require(result["location"] == (target["map_group"], target["map_number"]), "saved target map mismatch")
-            x, y = result["position"]
-            _require(0 <= x < target["width"] and 0 <= y < target["height"], "saved coordinate outside source map")
-            tile = target["grid"][y * target["width"] + x]
-            _require(tile == 2 if spec.target == "battle" else tile == 1, "saved fixture terrain is not the required floor/grass")
-            if spec.target == "battle":
-                _require(any(item == facts["balls"]["item"] and quantity > 0 for item, quantity in result["ball_items"]),
-                         "battle fixture has no real Poke Ball in the Ball pocket")
-            validate_played_receipt(_json(context.artifacts["played_receipt"]), spec, facts, result)
-            return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
-                evidence={"oracle": "independent Gen2 PYDEC", "player_id": str(result["player_id"])},
-                notes=("Static bytes do not prove played origin, RTC or GAME qualification.",))
-        except (ValueError, KeyError, TypeError) as exc:
-            return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
-
-    def post_oracle(context):
-        try:
-            spec = by_name[context.fixture]
-            original = inspect_candidate(context.artifacts["fixture"], _json(context.artifacts["profile"]), context.artifacts["rom"], spec)
-            saved = inspect_candidate(context.artifacts["resave:fixture"], _json(context.artifacts["profile"]), context.artifacts["rom"], spec)
-            stages = {row["stage"]: row["fingerprint"] for row in context.previous}
-            validate_game_witness(_json(context.artifacts["boot:game_witness"]), context, original, "boot", stages["boot"])
-            validate_game_witness(_json(context.artifacts["resave:reload_witness"]), context, saved, "reload", stages["resave"])
-            _require(saved["player_id"] == original["player_id"] and saved["identity_key"] == original["identity_key"],
-                     "re-save changed fixture identity")
-            return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
-                evidence={"oracle": "independent re-save PYDEC + GAME raw-party witness"})
-        except (ValueError, KeyError, TypeError) as exc:
-            return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
-
-    callbacks.update(qualify=qualify, post_oracle=post_oracle)
+    callbacks = {"qualify": qualify_stage, "post_oracle": post_oracle_stage}
+    by_name = BY_NAME
     if game_callbacks:
         _require(set(game_callbacks) <= {"boot", "resave"}, "independent PYDEC callbacks cannot be replaced")
         callbacks.update(game_callbacks)
@@ -384,7 +415,7 @@ def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks
                  "route_facts": Path(directory) / (spec.title + "_route_facts.json"),
                  "played_receipt": Path(directory) / (spec.name + ".played.json")},
                 {"title": spec.title, "rom_sha1": ctx.source_record()["rom_sha1"], "scope": "candidate fixture",
-                 "route_facts_sha256": hashlib.sha256(json.dumps(facts_by_title[spec.title], sort_keys=True).encode()).hexdigest()}))
+                 "route_facts_sha256": _facts_sha256(facts_by_title[spec.title])}))
         report = qualification.qualify_fixtures(cases, callbacks, scope=scope, max_fixtures=8)
         if report["passed"]:
             try:

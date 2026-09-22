@@ -91,7 +91,11 @@ function P.new(facts, case)
     local function walk(point,map,goal)
         local button,why = direction(map,point,goal)
         if not button then return nil,why end
-        return button == "arrived" and {} or {[button]=true},self.phase
+        if button ~= "arrived" then return {[button]=true},self.phase end
+        -- A carpet warp (COLL_WARP_CARPET_*) fires only on a push toward its edge; standing on
+        -- it is not arrival. The house and lab exits are carpets (route facts warp.carpet).
+        if goal.carpet then return press(goal.carpet) end
+        return {},self.phase
     end
     local function has_balls(point)
         local pocket = point.ball_pocket
@@ -165,7 +169,9 @@ function P.new(facts, case)
             self.phase="mom"
             if point.mom_scene ~= maps.PlayersHouse1F.scenes.SCENE_PLAYERSHOUSE1F_NOOP or point.pokegear_obtained ~= true then
                 local trigger = maps.PlayersHouse1F.coord_events[1]
-                if not trigger then return nil,"Mom source trigger missing" end
+                -- Gold/Silver start Mom from an on-entry scene script, not a coord event
+                -- (pokegold maps/PlayersHouse1F.asm:9,15-16): wait; max_phase_frames bounds it.
+                if not trigger then return {},self.phase end
                 return walk(point,maps.PlayersHouse1F,trigger)
             end
             return walk(point,maps.PlayersHouse1F,warp_to(maps.PlayersHouse1F,"NEW_BARK_TOWN"))
@@ -196,7 +202,9 @@ function P.new(facts, case)
                     return nil,"O-10 only permits the empty Ball pocket at the settled lab checkpoint"
                 end
                 self.phase="o10-balls"; injection_pending=true
-                return {},self.phase,{kind="o10-ball-pocket",exception="O-10",attempt_id=case.attempt_id,
+                -- O-10: test/validation staging only; never a natural ball-acquisition witness.
+                return {},self.phase,{kind="o10-ball-pocket",exception="O-10",natural_acquisition=false,
+                    attempt_id=case.attempt_id,
                     facts_fingerprint=facts.fingerprint,bank=balls.bank,
                     expected={{address=balls.count_address,value=0},{address=balls.data_address,value=255}},
                     writes={{address=balls.data_address,value=balls.item},{address=balls.data_address+1,value=balls.quantity},

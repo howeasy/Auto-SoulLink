@@ -185,3 +185,34 @@ def test_environment_cannot_replace_verified_bindings(host, overrides):
     with pytest.raises(ValueError, match="overrides"):
         invoke(host, env_overrides=overrides)
     assert not host["launches"]
+
+
+def test_shared_harness_names_no_generation():
+    import inspect
+    import re
+    for function in (runner.seed_saveram, runner.run_gate):
+        # A generation key, a generation-named helper or a "Gen N" branch message.
+        assert re.search(r"[\"']gen\d[\"']|_gen\d_|Gen \d", inspect.getsource(function)) is None, function.__name__
+
+
+def test_gen2_refusals_are_driven_by_explicit_descriptor_fields(host, monkeypatch):
+    entry = runner.GENS["gen2"]
+    assert entry["implicit_staging"] is False and entry["plan"] is runner._gen2_plan
+    assert runner.GENS["gen1"]["implicit_staging"] is True and runner.GENS["gen1"]["plan"] is None
+    with pytest.raises(ValueError, match="no implicit"):
+        runner.seed_saveram("crystal_cold", "town")
+    # Known-positive control: flipping the field removes the refusal (the entry has no play module).
+    monkeypatch.setitem(entry, "implicit_staging", True)
+    with pytest.raises(KeyError):
+        runner.seed_saveram("crystal_cold", "town")
+    # run_gate reaches the plan only through the descriptor callable.
+    calls = []
+
+    def plan(*args):
+        calls.append(args)
+        raise ValueError("descriptor plan refused")
+
+    monkeypatch.setitem(entry, "plan", plan)
+    with pytest.raises(ValueError, match="descriptor plan refused"):
+        invoke(host)
+    assert calls and not host["launches"] and not host["copies"] and not host["deletes"]

@@ -95,8 +95,18 @@ def _rebuild_command(play_name: str, rom_key: str, target: str) -> str:
 # In `patched`, a base fixture of None means COLD BOOT: there is no battery save to seed, and
 # any stale one is removed so the ROM reaches NEW GAME — that is what the `*_cold` keys are.
 #   key -> (fixture to seed from, ROM path, SaveRAM filename BizHawk will use)
+#
+# Descriptor fields the shared harness reads instead of naming a generation:
+#   implicit_staging  seed_saveram may copy the committed fixture for this key
+#   plan              None, or plan(rom_key, saveram_dir, fixture_path, speed_percent) -> launch plan
+#   config            writes the plan's emulator config (only with a plan)
+#   protected_env     environment names a caller's env_overrides may never replace
 GENS = {
     "gen1": {
+        "implicit_staging": True,
+        "plan": None,
+        "config": None,
+        "protected_env": frozenset(),
         "play": g1,
         "saveram_names": {
             "red": "Pokemon - Red Version (USA, Europe).SaveRAM",
@@ -154,6 +164,10 @@ GENS = {
         },
     },
     "gen2": {
+        "implicit_staging": False,
+        # plan/config are bound below, after their definitions.
+        "protected_env": frozenset({"SLINK_GEN2_TITLE", "SLINK_GEN2_ROM_SHA1", "SLINK_GEN2_CORE_MODE",
+                                    "SLINK_GEN2_COLD", "SLINK_GEN2_SAVERAM_DIR", "SLINK_GEN2_SAVERAM_NAME"}),
         "descriptors": {key: describe_gen2(key) for title in _GEN2_IDENTITIES for key in (title, title + "_cold")},
         "saveram_names": {title: describe_gen2(title)["saveram_name"] for title in _GEN2_IDENTITIES},
         "patched": {},
@@ -242,9 +256,10 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     whole point of the per-instance redirect: two instances of one cartridge share a gamedb
     filename, so they need separate directories rather than separate names.
     """
-    if gen_for(rom_key) == "gen2":
-        raise ValueError("Gen 2 has no implicit fixture staging; run_gate requires an explicit isolated directory and candidate")
     spec = GENS[gen_for(rom_key)]
+    if not spec["implicit_staging"]:
+        raise ValueError(f"{rom_key!r} has no implicit fixture staging; "
+                         "run_gate requires an explicit isolated directory and candidate")
     play = spec["play"]
     # play.fixture_path, not a second copy of the naming rule: an overlay key resolves to the
     # CLEAN pure fixture (A4), which this inlined f-string would miss.
@@ -300,7 +315,11 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
     if not isinstance(config, dict) or not any(row.get("Type") == "Save RAM" and row.get("System") in g1._GB_PATH_SYSTEMS
         for row in (config.get("PathEntries") or {}).get("Paths", [])):
         raise ValueError("Gen 2 requires a parseable config with an explicit GB Save RAM path entry")
-    return {**descriptor, "rom": rom, "directory": directory, "fixture": fixture, "speed_percent": speed_percent}
+    env = {"SLINK_GEN2_TITLE": descriptor["title"], "SLINK_GEN2_ROM_SHA1": descriptor["rom_sha1"],
+           "SLINK_GEN2_CORE_MODE": descriptor["core_mode"], "SLINK_GEN2_COLD": "1" if descriptor["cold"] else "0",
+           "SLINK_GEN2_SAVERAM_DIR": str(directory), "SLINK_GEN2_SAVERAM_NAME": descriptor["saveram_name"]}
+    return {**descriptor, "rom": rom, "directory": directory, "fixture": fixture, "speed_percent": speed_percent,
+            "env": env}
 
 
 def _gen2_config(plan, path):
@@ -319,13 +338,15 @@ def _gen2_config(plan, path):
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
+GENS["gen2"].update(plan=_gen2_plan, config=_gen2_config)
+
+
 def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
              saveram_dir=None, fixture_path=None, speed_percent=None, env_overrides=None):
     """Run one gate. Returns (passed, result_path, text)."""
     if type(timeout) not in (int, float) or not 0 < timeout <= 86400:
         raise ValueError("gate timeout must be positive and bounded")
-    protected = {"SLINK_ROOT", "SLINK_GATE_TITLE", "SLINK_GEN2_TITLE", "SLINK_GEN2_ROM_SHA1",
-                 "SLINK_GEN2_CORE_MODE", "SLINK_GEN2_COLD", "SLINK_GEN2_SAVERAM_DIR", "SLINK_GEN2_SAVERAM_NAME"}
+    protected = {"SLINK_ROOT", "SLINK_GATE_TITLE"}.union(*(entry["protected_env"] for entry in GENS.values()))
     overrides = dict(env_overrides or {})
     for key, value in overrides.items():
         if (not isinstance(key, str) or re.fullmatch(r"SLINK_[A-Z0-9_]+", key) is None or key in protected
@@ -333,12 +354,11 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
             raise ValueError("gate environment overrides must be textual SLINK_* values outside protected bindings")
     if not os.path.exists(EMUHAWK):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
-    generation = gen_for(rom_key)
-    spec = GENS[generation]
-    plan = _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent) if generation == "gen2" else None
+    spec = GENS[gen_for(rom_key)]
+    plan = spec["plan"](rom_key, saveram_dir, fixture_path, speed_percent) if spec["plan"] else None
     play = spec.get("play")
     if plan and _result_path_for(script) is None:
-        raise ValueError("Gen 2 gate must declare its exact terminal result path")
+        raise ValueError("a planned gate must declare its exact terminal result path")
 
     if plan:
         rom_rel = plan["rom"].relative_to(Path(REPO).resolve()).as_posix()
@@ -385,7 +405,7 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
     tag = os.path.splitext(os.path.basename(script))[0]
     cfg_rel = f"patch/build/gate_cfg_{tag}_{rom_key}.ini"
     if plan:
-        _gen2_config(plan, Path(REPO) / cfg_rel)
+        spec["config"](plan, Path(REPO) / cfg_rel)
     elif os.path.exists(BIZHAWK_CONFIG):
         write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), purergb=g1.is_purergb(rom_key))
 
@@ -393,11 +413,9 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
     env.update(overrides)
     if plan:
         env.pop("SLINK_GATE_TITLE", None)
-        env.update(SLINK_GEN2_TITLE=plan["title"], SLINK_GEN2_ROM_SHA1=plan["rom_sha1"],
-                   SLINK_GEN2_CORE_MODE=plan["core_mode"], SLINK_GEN2_COLD="1" if plan["cold"] else "0",
-                   SLINK_GEN2_SAVERAM_DIR=str(plan["directory"]), SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
+        env.update(plan["env"])
         if hashlib.sha1(plan["rom"].read_bytes()).hexdigest() != plan["rom_sha1"]:
-            raise ValueError("Gen 2 ROM changed before launch")
+            raise ValueError("planned ROM changed before launch")
     cmd = [EMUHAWK, f"--lua={script}"]
     if os.path.exists(os.path.join(REPO, cfg_rel)):
         cmd.append(f"--config={cfg_rel}")
