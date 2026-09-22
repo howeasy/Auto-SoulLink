@@ -26,7 +26,7 @@ The coordinator integrated docs/gen2/gen2_requirements.md byte-for-byte from the
 
 | Input | SHA256 |
 |---|---|
-| requirements | a8b35f97988039725e8af26396783f004a2d5342b1f0444896c05297a3990f20 |
+| requirements | 6b7adfd1e8af07f6b49b1cf8cae384c0f7c0b3f8bffbf51f8c198a09b7d30491 |
 | protocol | d88979380a06975e12ebd2b72b8c707a33361b8d0fbacbcdb5e9e6a2d11d878b |
 | artifact_policy | 113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed |
 
@@ -221,7 +221,7 @@ Inventory and mapping modes validate the complete planned map. Closure mode stil
 {
   "schema_version": 1,
   "input_sha256": {
-    "requirements": "a8b35f97988039725e8af26396783f004a2d5342b1f0444896c05297a3990f20",
+    "requirements": "6b7adfd1e8af07f6b49b1cf8cae384c0f7c0b3f8bffbf51f8c198a09b7d30491",
     "protocol": "d88979380a06975e12ebd2b72b8c707a33361b8d0fbacbcdb5e9e6a2d11d878b",
     "artifact_policy": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed"
   },
