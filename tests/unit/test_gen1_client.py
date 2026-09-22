@@ -1100,6 +1100,23 @@ def test_play_sound_becomes_a_semantic_code_when_the_run_and_cartridge_allow_it(
     world.assert_all_conform()
 
 
+def test_everyday_success_is_the_short_notify_blip_on_a_cartridge_that_has_it(world):
+    """Owner 2026-09-22: the long fanfare stays for nuzlocke start / shiny (95); link formed,
+    trade done and new encounter (25) get code 4 (SFX_START_MENU) when caps bit 2 says the
+    ROM knows it. The test above (caps $03) keeps 25 -> 1 for an older cartridge."""
+    _patch_sfx(world)
+    world.bus[PANEL_CAPS] = CAP_SFX_AND_PANEL | 0x04
+    world.connect()
+    world.reply({"cmd": "config", "native_sounds": True})
+    world.step()
+    world.reply({"cmd": "play_sound", "sound": 25})
+    world.step()
+    world.bus[SFX_REQUEST] = 0
+    world.reply({"cmd": "play_sound", "sound": 95})
+    world.step()
+    assert _sfx_writes(world) == [4, 1]
+
+
 def test_play_sound_is_silent_without_the_run_option_or_the_capability(world):
     _patch_sfx(world)
     world.connect()

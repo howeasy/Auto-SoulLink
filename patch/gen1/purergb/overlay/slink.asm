@@ -5,6 +5,7 @@
 DEF SLINK_ABI_VERSION  EQU 3
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
+DEF SLINK_CAP_SFX_NOTIFY EQU 1 << 2   ; knows SFX code 4 (an older build drops it unplayed)
 
 ; Panel handshake. The client may paint only in AWAIT, and must stop at CLOSED.
 DEF SLINK_PANEL_CLOSED EQU 0
@@ -22,7 +23,7 @@ wSlinkMailbox::
 wSlinkBeacon::       ds 4 ; +0..3  'SLNK', rewritten every VBlank
 wSlinkAbi::          db   ; +4     ABI version
 wSlinkFrameCounter:: dw   ; +5..6  16-bit frame counter
-wSlinkSfxRequest::   db   ; +7     SFX request: a semantic code (1 success, 2 failure, 3 boo),
+wSlinkSfxRequest::   db   ; +7     SFX request: a semantic code (1 success, 2 failure, 3 boo, 4 notify),
                           ;        played by SlinkSfxService on the main thread and zeroed
 wSlinkCaps::         db   ; +8     capability bits
 wSlinkPanelState::   db   ; +9     panel state: CLOSED / AWAIT / STAGED
@@ -35,7 +36,7 @@ wSlinkMailboxEnd::
 ; Bounded hold, in FRAMES of the mailbox's own counter (the vanilla note explains why not
 ; in service calls): GET_ITEM_2 owns CHAN5 for ~180 frames and a request behind it must wait.
 DEF SLINK_SFX_HOLD_MAX EQU 240
-DEF SLINK_SFX_CODES    EQU 3
+DEF SLINK_SFX_CODES    EQU 4
 
 
 SECTION "SLink Hook", ROMX
@@ -61,7 +62,7 @@ SlinkHook::
 	ld a, SLINK_ABI_VERSION
 	ld [wSlinkAbi], a
 	; Panel and SFX: the SFX request is served on the main thread (SlinkSfxService), never here.
-	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX
+	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
 	ld [wSlinkCaps], a
 
 	; 16-bit little-endian frame counter; `inc [hl]` sets Z on wrap.
@@ -169,6 +170,10 @@ SlinkSfxService::
 	; rejects any higher id there, so TINK/DENIED would be consumed into silence; the one id
 	; that channel accepts is CRY_SFX_END itself = SFX_LEVEL_UP in the battle bank (the way
 	; the vanilla level-up jingle plays through the alarm). Battle end zeroes the flag.
+	; START_MENU is CHAN8-only, which the alarm never marks, so the notify blip plays as is.
+	ld a, b
+	cp SFX_START_MENU
+	jr z, .resolved
 	ld a, [wAudioROMBank]
 	cp BANK(Audio2_PlaySound)
 	jr nz, .resolved
@@ -209,10 +214,10 @@ SlinkSfxService::
 	ld [wSlinkSfxHold], a
 	ret
 
-;                   1 success       2 failure    3 boo
-.bankAudio1: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
-.bankAudio2: db SFX_LEVEL_UP,   SFX_TINK,    SFX_TINK   ; no buzzer in the battle bank
-.bankAudio3: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
+;                   1 success       2 failure    3 boo      4 notify
+.bankAudio1: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK,  SFX_START_MENU
+.bankAudio2: db SFX_LEVEL_UP,   SFX_TINK,    SFX_TINK,  SFX_START_MENU ; no buzzer in the battle bank
+.bankAudio3: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK,  SFX_START_MENU
 
 
 ; The SLINK panel. Opened from the START-menu row through SlinkStartMenuEntry (ROM0). The

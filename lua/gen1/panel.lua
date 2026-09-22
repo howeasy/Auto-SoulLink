@@ -24,12 +24,15 @@ local PAGES   = MAILBOX + 11                -- client -> patch: page count (0 re
 local OFF_ABI, OFF_SFX, OFF_CAPS, OFF_STATE, OFF_PAGE, OFF_PAGES = 4, 7, 8, 9, 10, 11
 local CAP_SFX   = 0x01                      -- SLINK_CAP_SFX: the main-thread SFX service is built in
 local CAP_PANEL = 0x02                      -- SLINK_CAP_PANEL
+local CAP_SFX_NOTIFY = 0x04                 -- SLINK_CAP_SFX_NOTIFY: the ROM knows code 4
 local CLOSED, AWAIT, STAGED = 0, 1, 2
 -- slink.asm SlinkSfxService: what the request byte may carry. The ROM resolves the code to a
 -- sound id for the audio bank loaded at play time (ids are per bank), holds it through fades
 -- and busy channels, and zeroes the byte when it plays. Anything else is consumed unplayed.
-local SFX_SUCCESS, SFX_FAILURE, SFX_BOO = 1, 2, 3
+local SFX_SUCCESS, SFX_FAILURE, SFX_BOO, SFX_NOTIFY = 1, 2, 3, 4
 -- The server speaks Gen 3 SE numbers (docs/protocol.md play_sound); this is the Gen 1 binding.
+-- SUCCESS is the long fanfare, kept for nuzlocke start / shiny (95); everyday success (25)
+-- is the short notify blip on a cartridge that has it (sfx_code_for).
 local SFX_CODE_FOR_GEN3_ID = { [25] = SFX_SUCCESS, [26] = SFX_FAILURE, [22] = SFX_BOO, [95] = SFX_SUCCESS }
 local SFX_QUEUE_MAX = 4                     -- a burst beyond this drops the OLDEST: the newest news wins
 
@@ -44,7 +47,7 @@ local DEADLINE = 60
 
 P.MAILBOX, P.CAPS, P.STATE, P.PAGE, P.PAGES, P.SFX = MAILBOX, CAPS, STATE, PAGE, PAGES, SFX
 P.CLOSED, P.AWAIT, P.STAGED = CLOSED, AWAIT, STAGED
-P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO = SFX_SUCCESS, SFX_FAILURE, SFX_BOO
+P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY = SFX_SUCCESS, SFX_FAILURE, SFX_BOO, SFX_NOTIFY
 P.SFX_CODE_FOR_GEN3_ID, P.SFX_QUEUE_MAX = SFX_CODE_FOR_GEN3_ID, SFX_QUEUE_MAX
 P.ROWS, P.COLS, P.MAX_PAGES, P.DEADLINE = ROWS, COLS, MAX_PAGES, DEADLINE
 
@@ -126,7 +129,14 @@ function P.new(profile, io, writes, sanitize)
     function self:abi() return u8(ABI) or 0 end
 
     --- The Gen 1 code for a server `play_sound` id, or nil for ids Gen 1 has no sound for.
-    function self:sfx_code_for(sound_id) return SFX_CODE_FOR_GEN3_ID[sound_id] end
+    function self:sfx_code_for(sound_id)
+        if sound_id == 25 then
+            -- an older cartridge drops code 4 unplayed: it keeps the fanfare instead
+            local caps = u8(CAPS)
+            if caps ~= nil and caps ~= 0xFF and (caps & CAP_SFX_NOTIFY) ~= 0 then return SFX_NOTIFY end
+        end
+        return SFX_CODE_FOR_GEN3_ID[sound_id]
+    end
 
     --- Does THIS cartridge play sound? Same beacon, the SFX bit of the same caps byte.
     function self:sfx_present()
@@ -154,7 +164,7 @@ function P.new(profile, io, writes, sanitize)
     --- from a `play_sound` command is mapped through P.SFX_CODE_FOR_GEN3_ID by the caller.
     --- Posted now if the request byte is free, else queued and drained by service().
     function self:request_sfx(code)
-        if code ~= SFX_SUCCESS and code ~= SFX_FAILURE and code ~= SFX_BOO then return false end
+        if code ~= SFX_SUCCESS and code ~= SFX_FAILURE and code ~= SFX_BOO and code ~= SFX_NOTIFY then return false end
         if not self:sfx_present() then return false end
         if #self.sfx_queue == 0 and post_sfx(code) then return true end
         if #self.sfx_queue >= SFX_QUEUE_MAX then table.remove(self.sfx_queue, 1) end
