@@ -1,0 +1,21 @@
+phase start frame=1 title=radical_red
+phase resume frame=1 from=pc_ops
+phase shadow frame=1 observer started admitted_by=hash
+phase leg-state frame=1653 pc_ops <- E:/Howard/Bizhawk/GBA/State/slink_pokecenter_full.State
+phase leg-start frame=1653 pc_ops
+phase deposited frame=3643 party 3 -> 2, key 91BCEDE1:2BDDC8BF left the party
+phase withdrawn frame=5265 party 2 -> 3, key 91BCEDE1:2BDDC8BF is back; 2 other records byte-identical
+phase leg-done frame=5265 pc_ops
+phase leg-state frame=1653 pc_release <- E:/Howard/Bizhawk/GBA/State/slink_pokecenter_full.State
+phase leg-start frame=1653 pc_release
+phase released frame=4275 party 3 -> 2, key 76A4B39A:2BDDC8BF gone (source-pinned RELEASE route + Yes/No confirmation; no box read exists to check from here)
+phase leg-done frame=4275 pc_release
+phase leg-state frame=970 save <- E:/Howard/Bizhawk/GBA/State/slink_overworld.State
+phase leg-start frame=970 save
+phase save-menu frame=970 counter=4
+phase save-dialog frame=1925 attempt=6
+phase saved frame=1972 counter=4->5
+phase slot-complete frame=2726 sectors=14/14
+phase saved frame=3326 counter 4 -> 5
+phase leg-done frame=3326 save
+RESULT: PASS reached: pc_ops,pc_release,save | open (skipped): 
