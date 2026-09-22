@@ -142,3 +142,5 @@ Blocking items for the request:
 **Counts:** 10 DONE (7 model + 2 checkpoint + reads), 5 PARTIAL (natural-play legs + branches + overhead + differential), 0 MISSING
 
 > Coordinator status at 583517b: NOT yet ready to send. Open before the request: FR `capture_wild` (route1_catch fix in flight, card C3-21) and the FR PC kinds that follow from it; five R10 rows PARTIAL (natural-play leg scope, per-branch negatives beyond the curated manifest, overhead measured on stand-ins, natural-play differential has no wire side by design). Those PARTIAL rows go to the owner as stated limits, not as DONE.
+
+> Caveat (OMP review cx-f470be07): checkpoint negative rows count any refusal; attribution to the row's own clause is not yet enforced by the probe. The current receipts (checkpoint_fr_clean_2026-09-22d, checkpoint_rr_companion_2026-09-22b) show a fitting reason on every row; the WRITE_LOG count=0 line is tautological (the probe has no writer) and is not cited as evidence.
