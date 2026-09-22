@@ -567,6 +567,44 @@ def test_active_force_faint_waits_for_the_battle_loop_head(world):
     assert world.party()[0]["hp"] == 0
 
 
+@pytest.mark.parametrize("cmd", ["force_faint", "force_explode"])
+def test_benched_partner_faints_at_the_next_battle_loop_head(world, cmd):
+    """Live run 2026-09-22: a benched mon whose partner died stayed alive (and switchable)
+    for the rest of the battle -- the write waited for the overworld checkpoint."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[1])
+    world.reply({"cmd": cmd, "key": key, "nickname": "PIDGEY"})
+    world.step(3)
+    world.fire("battle_loop_head")
+    m = world.party()[1]
+    assert m["hp"] == 0 and m["status"] == 0, "the bench mon dies inside the battle"
+    assert world.party()[0]["hp"] > 0, "the active battler is untouched"
+    assert world.bus[world.ram["wBattleMonMoves"]] != 0x99, "no EXPLOSION stamped on the wrong mon"
+
+
+def test_a_battle_write_that_never_landed_is_applied_after_the_battle(world):
+    """The battle ended before a loop head: the queued write must fall to the checkpoint,
+    not sit in pending_battle_writes until some later battle."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[0])
+    world.reply({"cmd": "force_explode", "key": key})
+    world.step()
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.overworld_safe()
+    world.step(2)
+    assert world.party()[0]["hp"] == 0
+    assert len(world.client.pending_battle_writes) == 0
+
+
 def test_hello_waits_for_the_overworld_checkpoint_not_the_main_menu(world):
     # MainMenu -> TryLoadSaveFile: the save is in WRAM (party readable, wPlayerID set) before
     # the player chooses CONTINUE or NEW GAME, so a readable party is not "in the game"
