@@ -164,7 +164,7 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | `save` (S-10) | ✓ (fixture boot-check re-save) | ✓ | `bootcheck_firered_town`, `shadow_rr_play` |
 | `poison_faint` (S-11) | OPEN | OPEN | — |
 | `borrowed_party`/`nature_change` (S-12, RR) | n/a | OPEN | — |
-| checkpoint negatives (W rows) | ◐ (`checkpoint_fr_clean_2026-09-22`: idle positive 276/300 after the per-title parked-CPU clause, walking positive, start_menu/dialog/save/fade false with empty write log; battle row waits for slink_fr_battle.State) | ✓ | `checkpoint_rr_companion` |
+| checkpoint negatives (W rows) | ◐ (`checkpoint_fr_clean_2026-09-22b`: idle 276/300 + walking positives; start_menu/dialog/save/fade/script_running false with empty write log; battle row waits for slink_fr_battle.State; pc_menu RR-only) | ✓ (`checkpoint_rr_companion_2026-09-22`: 9/9 incl. pc_menu + script_running; evolution/link/native-staged/mid-relocation still unreceipted) | `checkpoint_*_2026-09-22*` |
 | overhead budget | ✓ (21 sites hooked: 59.7 fps throttled, hooks off 59.7; unthrottled 333 vs 766 fps with liveness hooks, the mGBA callback-path cost known from P1) | ✓ | `overhead_fr_*`, `overhead_rr_throttled`/`_unthrottled`, `wire_delta_rr_explode` |
 | `reads == PYDEC` (R rows) | ✓ (real encrypted party record, Squirtle L8, every field agrees; planted offender rc=1; box 0 still empty) | ✓ | `reads_pydec_fr_party_2026-09-22`, `reads_pydec_fr`, `reads_pydec_rr` |
 
