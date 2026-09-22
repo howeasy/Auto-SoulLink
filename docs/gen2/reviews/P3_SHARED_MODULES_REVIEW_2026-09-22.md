@@ -205,3 +205,49 @@ is the missing contract doc (O1).
 - `gen1_fixtures.py`: orchestration only; the `qualify()` oracle is unchanged, and scanner caches are restored in `finally`.
 - `coverage_map.py`: contains no game names.
 - Admission catalog: 9 candidates, all hashes lower-case, none shared.
+
+## Closure (gen2-R1, HEAD e0b38b7)
+
+Read-only re-check of the fixes by gen2-W8. At `e0b38b7`, `lua/` and the new test file match HEAD
+in the tree. The new and updated tests pass: `test_gen1_rebind_regressions.py`,
+`test_hook_registry.py`, `test_hello_session.py` and `test_gb_hook_binding.py` give 60 passed. I
+reran my original master-vs-HEAD probes and added `probe_closure.py`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| U1 handler error kills signals | CLOSED | `hook_registry.lua:71` no longer gates on `handler_error`. The probe now matches master: `later: ['battle_loop_head','move_mon']`, `failed: None`. |
+| U2 duo tee reads `pending` | CLOSED | The tee uses `#sigs:peek()`. `test_u2_*` runs the real tee chunk for both the dump and skip cases. |
+| U3 no-arg `send_hello` | CLOSED | HEAD returns `(True, nil)` with 1 hello (master: 1 hello), and 40 later frames add none. |
+| Diff 1 rewind | CLOSED | `clock_rewind="keep"`. Probe S3 gives master (1,1), HEAD (1,1), with no panel clear. |
+| Diff 4 `$FF` blackout | CLOSED | Probe S1 gives master 1 hello, HEAD 1 hello. |
+| Diff 6 pump error | CLOSED | `net.pump` is unprotected again. HEAD raises `LuaError` and sends 1 hello in total, with no clear. |
+| U6 check order | PARTIAL | The order is restored (bank, filter, then PC/bytes), and a wrong-PC filtered hit latches nothing. A filter that throws is still a difference; see N1. |
+| O1 scripted-inputs doc | CLOSED | `docs/shared-scripted-inputs.md` exists. |
+| O3 duplicate handle | CLOSED | Documented in `docs/shared-hook-registry.md:34-38`. |
+
+Attack results:
+- (a) `send_now` keeps the connection and identity checks around send and skips only `ready` and
+  pacing. Master's direct call skipped the same gates, so nothing master checked is bypassed.
+  Offline, HEAD returns `(false,'disconnected')` and master sends nothing, so they are equivalent.
+  Two direct calls produce 2 hellos on both.
+- (b) The filter-error regression is real; it is listed as N1.
+- (c) `peek()` is a deep copy. Mutating a nested `point.party[1]`, or adding a field through the
+  view, leaves the drained event unchanged, and each call returns a fresh table.
+- (d) The save_reset tolerance is honestly scoped. It collapses runs of consecutive clears on
+  both traces, only in that scenario, and `clear` is idempotent when no sent line falls between
+  two clears. However, the trace records only sent lines, panel clears and frame errors: no
+  replies, panel rows, writes or signals. None of the 8 scenarios exercises commands, captures or
+  writes. So "master-equivalent" holds for hello/panel scheduling only, not for the whole client.
+
+New findings (ranked):
+- **N1 [LOW-MED, CONFIRMED]** A filter that throws now latches `failure` and silently drops all
+  later signals. The accept callback runs inside the registry's capture pcall
+  (`signals.lua:346`, `gb_hook_binding.lua:60`). On master the error escaped that one hit and
+  later signals continued. Probe: a missing `F` register on `bag_received` gives master
+  `later: ['move_mon'], failed: None` and HEAD `later: [], failed: 'no F register'`. This is latent
+  (the only filter reads H, L, F and `wCurItem`, all proven live), but it is an unlisted
+  kill-switch of the same class as U1. Either treat a throwing filter as a dropped hit and record
+  it, or list it as an intended difference.
+- **N2 [LOW, CONFIRMED]** A direct `send_hello()` with an unreadable party now refuses
+  (`'hello party snapshot unavailable'`, 0 hellos). Master sent a hello with an empty party. This
+  falls within listed diff #5 but now applies to the gate path too.
