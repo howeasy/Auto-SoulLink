@@ -1,0 +1,33 @@
+STATUS frame=635 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=20837 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=21258 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=591
+SHADOW t=2 frame=21342 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=21858 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1152
+STATUS frame=22458 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1752
+STATUS frame=23058 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2352
+SHADOW t=3 frame=23079 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=23658 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2927
+SHADOW t=4 frame=23917 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=24258 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3511
+STATUS frame=24858 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4090
+STATUS frame=25458 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4676
+SHADOW t=5 frame=25957 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=26058 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5267
+SHADOW t=6 frame=26592 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=26658 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5851
+STATUS frame=27258 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6440
+STATUS frame=27858 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7017
+STATUS frame=28458 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7606
+STATUS frame=29058 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8190
+SHADOW t=7 frame=29407 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=29658 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8783
+SHADOW t=8 frame=29743 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=30258 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=9359
+STATUS frame=30858 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=9944
+SHADOW t=9 frame=31177 kind=faint key= address=134353864 callback_address=134353864 cpsr=63 mode=thumb raw_r15=134353866 sp=50363868 thumb=1
+STATUS frame=31458 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=10540
+SHADOW t=10 frame=31873 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=11 frame=32000 kind=whiteout key= address=134571774 callback_address=134571774 cpsr=1610612799 mode=thumb raw_r15=134571776 sp=50363924 thumb=1
+STATUS frame=32058 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=11105
+STATUS frame=32658 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=11705
+STATUS frame=33258 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=12305

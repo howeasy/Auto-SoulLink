@@ -1,0 +1,14 @@
+phase start frame=1 title=firered
+phase resume frame=1 from=parcel_deliver
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-state frame=20688 parcel_deliver <- E:/Howard/Bizhawk/GBA/State/slink_fr_parcel_fetch.State
+phase leg-start frame=20688 parcel_deliver
+phase heal-start frame=21517 parcel_deliver: slot0 14/23
+phase healed frame=22674 parcel_deliver: slot0 23/23
+phase encounter frame=23937 #1 during step Down at (16,15)
+phase encounter-done frame=26052 #1 resolved at (16,15)
+phase encounter frame=26612 #2 during step Down at (8,32)
+phase encounter-done frame=29507 #2 resolved at (8,32)
+phase encounter frame=29763 #3 during step Down at (12,38)
+RESULT: FAIL encounter #3 displaced the player: map 787 at (12,38) -> map 1284 at (7,4). A battle moves neither, and the destination is not the heal map, so this was not a whiteout either; the rest of the path no longer applies
