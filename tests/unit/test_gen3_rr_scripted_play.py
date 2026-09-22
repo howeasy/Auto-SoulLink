@@ -58,7 +58,9 @@ _KNOWN_STATES = {
     "slink_pokecenter.State", "slink_pokecenter_full.State",
 }
 
-_RUNNABLE = {"battle_to_field", "wild_faint", "wild_catch", "door_warp", "pc_ops", "save"}
+_RUNNABLE = {
+    "battle_to_field", "wild_faint", "wild_catch", "door_warp", "pc_ops", "pc_release", "save",
+}
 
 # RAM/coordinate/counter/predicate terminal helpers this driver actually uses.
 _TERMINAL_HELPERS = (
@@ -356,6 +358,40 @@ def test_leg_names_are_unique(legs):
     assert len(names) == len(set(names))
 
 
+def test_pc_release_runs_after_pc_ops_and_before_save(legs):
+    """pc_release reuses pc_ops's own route to the PC and its shared menu helpers -- it must
+    run after pc_ops in the file, and before the save leg that ends the sequence."""
+    names = [leg["name"] for leg in _each(legs)]
+    assert names.index("pc_ops") < names.index("pc_release") < names.index("save")
+
+
+def test_pc_release_declares_the_pokecenter_state_and_the_pinned_site_pair(legs):
+    leg = _leg(legs, "pc_release")
+    assert leg["state"] == "slink_pokecenter_full.State"
+    assert set(_py_list(leg["exercises"])) == {"pc_release_begin", "pc_release"}
+
+
+def test_pc_release_confirmation_moves_off_the_no_default_before_confirming():
+    """Task_ReleaseMon's Yes/No box starts on NO (ShowYesNoWindow(1),
+    pokefirered src/pokemon_storage_system_tasks.c:1261) and does not wrap
+    (Menu_MoveCursorNoWrapAround), so an Up press before the confirming A is not optional --
+    the FR driver's own pc_release leg skips it and says outright that the press is unpinned
+    (lua/tests/gen3_scripted_play.lua:1263-1267). This greps the RAW source rather than the
+    parsed leg table because the press sequence is code, not a leg field."""
+    start = _SCRIPT_SRC.index('name = "pc_release"')
+    release_src = _SCRIPT_SRC[start:_SCRIPT_SRC.index("\n}\n", start)]
+    up_idx = release_src.find('pc_press("Up"')
+    release_idx = release_src.find('-- RELEASE ->')
+    confirm_idx = release_src.find('pc_press("A", 240)')
+    assert up_idx != -1, "pc_release never presses Up before confirming"
+    assert release_idx < up_idx < confirm_idx, (
+        "pc_release must press Up (off the NO default) after selecting RELEASE and before the "
+        "confirming A"
+    )
+    assert "ShowYesNoWindow(1)" in release_src
+    assert "does not wrap" in release_src or "no wrap" in release_src.lower()
+
+
 def test_state_path_resolves_bare_names_and_passes_absolute_ones_through(module):
     fn = module.state_path
     assert fn("slink_door.State").endswith("/slink_door.State")
@@ -495,6 +531,9 @@ def test_a_map_change_that_never_settles_back_to_the_field_fails(lua, fake, modu
 # ── behaviour: pc_ops keyed oracle ───────────────────────────────────────────────────────────
 
 _PARTY_ABC = "{ {0xAAAA0001, 0x1111, 0xA0}, {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0} }"
+# _PARTY_ABC with slot 2 (CCCC0003, the third mon) gone and the other two untouched -- the clean
+# release pc_release's oracle must accept.
+_PARTY_ABC_MINUS_C = "{ {0xAAAA0001, 0x1111, 0xA0}, {0xBBBB0002, 0x2222, 0xB0} }"
 
 
 def _pc_scenario(lua, fake, after_withdraw: str):
@@ -574,6 +613,90 @@ def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
         end
     """)
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "never got back to the field from the menu" in log
+
+
+# ── behaviour: pc_release keyed oracle ───────────────────────────────────────────────────────
+# Press-count map for pc_release's FIXED script (no branching, so the count is exact): 5 A's to
+# open the storage menu, Down+A into the party view, Down+Down+A onto slot 2's popup, three
+# Downs to RELEASE, A to pick it (a=8), Up (no A) off the ShowYesNoWindow(1) NO default, then A
+# confirms (a=9) -- the mutation threshold below -- and two more A's dismiss the follow-up
+# messages (a=10, a=11).
+
+
+def _release_scenario(lua, fake, after_release: str):
+    """Deposit-mode party view on slot 2 (the third mon, key CCCC0003:00003333). The fake
+    mutates the party once FAKE.a reaches 9, the confirming A -- exactly where ReleaseMon()
+    fires in Task_ReleaseMon's own state machine (pokefirered src/pokemon_storage_system_tasks.c
+    :1301-1306)."""
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    fake.set_pos(7, 8)                 # slink_pokecenter_full.State stands here
+    lua.execute(f"""
+        FAKE.set_party({_PARTY_ABC})
+        FAKE.on_frame = function()
+            if FAKE.a >= 9 then FAKE.set_party({after_release}) end
+        end
+    """)
+
+
+def test_pc_release_accepts_a_clean_release_of_the_targeted_slot(lua, fake, legs):
+    """Down,Down from the lead selects slot 2 -- the third mon, CCCC0003 -- so a release that
+    removes exactly that key and leaves the other two byte-identical must pass."""
+    _release_scenario(lua, fake, _PARTY_ABC_MINUS_C)
+    ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "pc_release")["run"])
+    assert ok, f"{err}\n{log}"
+    assert "phase released" in log
+    assert "party 3 -> 2" in log
+    assert "CCCC0003:00003333 gone" in log
+
+
+def test_pc_release_fails_when_the_party_count_never_drops(lua, fake, legs):
+    """The scenario the pret-pinned Up press exists to prevent: ShowYesNoWindow(1) starts the
+    confirmation on NO, and a press sequence that confirms without moving off it declines the
+    release, so the party never shrinks. If a future edit ever drops that Up, this is what
+    should fail -- not a silent no-op PASS."""
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    fake.set_pos(7, 8)
+    lua.execute(f"FAKE.set_party({_PARTY_ABC})")   # on_frame left unset: nothing ever mutates
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_release")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "the party count is 3, not 2" in log
+
+
+def test_pc_release_fails_when_the_wrong_slot_is_released(lua, fake, legs):
+    """The count drops by exactly one, but it is the LEAD (slot 0) that vanished, not the
+    targeted slot 2 -- a count-only oracle would accept this."""
+    _release_scenario(lua, fake,
+                       "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0} }")
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_release")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "left instead" in log
+
+
+def test_pc_release_fails_when_a_survivor_record_changed(lua, fake, legs):
+    _release_scenario(lua, fake,
+                       "{ {0xAAAA0001, 0x1111, 0xDEAD}, {0xBBBB0002, 0x2222, 0xB0} }")
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_release")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "not byte-identical" in log
+
+
+def test_pc_release_fails_when_the_storage_ui_never_closes(lua, fake, legs):
+    _release_scenario(lua, fake, _PARTY_ABC_MINUS_C)
+    lua.execute("""
+        local inner = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            inner(f)
+            if FAKE.a >= 9 then FAKE.set_overworld(false) end   -- the UI never closes
+        end
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_release")["run"])
     assert not ok
     assert "never got back to the field from the menu" in log
 

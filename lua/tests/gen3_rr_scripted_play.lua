@@ -606,6 +606,30 @@ LEGS[#LEGS + 1] = {
     end,
 }
 
+-- ── PC storage menu helpers, shared by pc_ops and pc_release ────────────────────────────────
+-- FIVE A PRESSES reach the storage menu, not one: interact -> "booted up the PC" -> the PC
+-- list -> row 0 (Someone's PC) -> "Accessed Someone's PC." -> "Pokemon Storage System opened."
+-- The census timings are ~120 frames between them, 180 before the menu settles; those are what
+-- this mirrors (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt).
+local function pc_press(btn, wait)
+    G.tap(btn, 3, 13)
+    G.idle(wait or 120)
+end
+local function open_storage_menu()
+    for _ = 1, 5 do pc_press("A", 120) end
+    G.idle(60)                  -- the census waited 180 in total before the menu
+end
+-- THE COUNT IS A LIE WHILE THE PC IS OPEN. The census read party=3 throughout the storage
+-- screen even after TryStorePartyMonInBox fired: gPlayerPartyCount is recomputed on exit. So
+-- every assertion in a PC leg is made on the FIELD, never in the menu, and "leave the PC" is
+-- part of the operation rather than tidying up after. The leaving itself is playlib's
+-- leave_menu: on_field goes true while the PC's exit textbox is still up, and stopping there
+-- shifts every press of the NEXT open by one (PHYSICAL r5b/r5c -- the "withdraw" half deposited
+-- again). The rule is shared; the button and the spacing are the binding's.
+local function leave_storage(cp, label)
+    play.leave_menu(cp, label, { flush = 5, flush_gap = 27, settle = 60 })
+end
+
 -- ── leg: pc_ops ────────────────────────────────────────────────────────────────────────────
 -- The PC storage FRONTEND, which is exactly what the boxsync duo bypasses: OP_DEPOSIT_MON /
 -- OP_WITHDRAW_MON call CreateCompressedMonFromBoxMon and compact the party directly
@@ -659,30 +683,6 @@ LEGS[#LEGS + 1] = {
         -- 0x001B5859, Deposit at 0x001B586C, Move at 0x001B587E -- and retains
         -- ShowPokemonStorageSystemPC, EnterPokeStorage and Task_DepositMenu byte-for-byte.
         --
-        -- FIVE A PRESSES reach the storage menu, not one: interact -> "booted up the PC" ->
-        -- the PC list -> row 0 (Someone's PC) -> "Accessed Someone's PC." -> "Pokemon Storage
-        -- System opened." The census timings are ~120 frames between them, 180 before the menu
-        -- settles; those are what this mirrors.
-        local function pc_press(btn, wait)
-            G.tap(btn, 3, 13)
-            G.idle(wait or 120)
-        end
-        local function open_storage_menu()
-            for _ = 1, 5 do pc_press("A", 120) end
-            G.idle(60)                  -- the census waited 180 in total before the menu
-        end
-        -- THE COUNT IS A LIE WHILE THE PC IS OPEN. The census read party=3 throughout the
-        -- storage screen even after TryStorePartyMonInBox fired: gPlayerPartyCount is
-        -- recomputed on exit. So every assertion in this leg is made on the FIELD, never in
-        -- the menu, and "leave the PC" is part of the operation rather than tidying up after.
-        -- The leaving itself is playlib's leave_menu: on_field goes true while the PC's exit
-        -- textbox is still up, and stopping there shifts every press of the NEXT open by one
-        -- (PHYSICAL r5b/r5c -- the "withdraw" half deposited again). The rule is shared; the
-        -- button and the spacing are the binding's.
-        local function leave_storage()
-            play.leave_menu(cp, "pc_ops", { flush = 5, flush_gap = 27, settle = 60 })
-        end
-
         -- DEPOSIT: Down, A picks Deposit (row 1 of Withdraw/Deposit/Move/Move Items/See Ya);
         -- Down, A picks the party mon after the lead; A confirms Store.
         open_storage_menu()
@@ -692,7 +692,7 @@ LEGS[#LEGS + 1] = {
         pc_press("A", 240)                           -- commit box 0 -> TryStorePartyMonInBox
                                                      -- (R9: STORE opens the chooser; the census
                                                      -- pressed A, A after the slot popup)
-        leave_storage()
+        leave_storage(cp, "pc_ops")
 
         local mid = play.party_snapshot()
         if mid.n ~= before.n - 1 then
@@ -733,7 +733,7 @@ LEGS[#LEGS + 1] = {
                                                      -- the cursor to See Ya)
         pc_press("A", 120)                           -- box 0 slot 0 -> its context menu
         pc_press("A", 240)                           -- Withdraw
-        leave_storage()
+        leave_storage(cp, "pc_ops")
 
         local after = play.party_snapshot()
         if after.n ~= mid.n + 1 then
@@ -769,6 +769,133 @@ LEGS[#LEGS + 1] = {
         G.phase("withdrawn", string.format("party %d -> %d, key %s is back; %d other records "
                                            .. "byte-identical", mid.n, after.n, gone,
                                            before.n - 1))
+    end,
+}
+
+-- ── leg: pc_release ────────────────────────────────────────────────────────────────────────
+-- pc_release_begin/pc_release fire inside ReleaseMon, reached from the SAME selected-mon popup
+-- pc_ops uses to STORE (STORE / SUMMARY / MARK / RELEASE / CANCEL), so the walk here is pc_ops's
+-- own route with three Downs and a different final row. RR keeps FR's entry 0x08093218 and
+-- completion 0x08093256 for this pair (docs/gen3/research/fr_pc_flow_and_pc_move_sites.md rows
+-- ~89 and ~103) — but RR's release UI equivalence to vanilla is UNVERIFIED beyond those two
+-- entry addresses (same doc, row ~110: "release is not in the receipt's observed function
+-- list"). This leg's press sequence is pret-SOURCE-PINNED (not a guess, unlike the FR driver's
+-- own pc_release leg, lua/tests/gen3_scripted_play.lua:1263-1267, which presses its
+-- confirmation as a single A and says outright "THE CONFIRMATION IS NOT PINNED"); the physical
+-- lane run is what proves RR's copy of that UI actually behaves the way the pinned FR source
+-- says it does.
+LEGS[#LEGS + 1] = {
+    name = "pc_release",
+    state = "slink_pokecenter_full.State",
+    exercises = { "pc_release_begin", "pc_release" },
+    source = {
+        "docs/gen3/research/fr_pc_flow_and_pc_move_sites.md (rows ~89/~103: RR keeps FR's "
+            .. "pc_release_begin entry 0x08093218 and pc_release completion 0x08093256; row "
+            .. "~110: RR equivalence is UNVERIFIED beyond those two addresses)",
+        "docs/gen3_engine_sites.md pc_release_begin row (ReleaseMon entry, called after "
+            .. "permission/confirmation in Task_ReleaseMon) and pc_release row (ReleaseMon+0x3E, "
+            .. "after purge, before display refresh)",
+        "src/pokemon_storage_system_data.c:1761-1805 (SetMenuTextsForMon, OPTION_DEPOSIT: "
+            .. "SetMenuText order is STORE, then the common tail SUMMARY, MARK, RELEASE, CANCEL "
+            .. "-- rows 0..4, so Down x3 from STORE lands on RELEASE)",
+        "src/pokemon_storage_system_tasks.c:1008-1019 (MENU_TEXT_RELEASE case: "
+            .. "SetPokeStorageTask(Task_ReleaseMon) when the mon can be moved)",
+        "src/pokemon_storage_system_tasks.c:1255-1305 (Task_ReleaseMon: state 0 prints "
+            .. "MSG_RELEASE_POKE and calls ShowYesNoWindow(1); state 1's "
+            .. "Menu_ProcessInputNoWrapClearOnChoose returns 0 for YES/confirm, 1 or "
+            .. "MENU_B_PRESSED for NO/decline; state 3 calls ReleaseMon() -- the "
+            .. "pc_release_begin/pc_release pair)",
+        "src/pokemon_storage_system_tasks.c:2595-2599 (ShowYesNoWindow(cursorPos): "
+            .. "CreateYesNoMenu then Menu_MoveCursorNoWrapAround(cursorPos) -- pos 1 IS the NO "
+            .. "row; every OTHER ShowYesNoWindow call in this file passes 0 (lines 1620, 1946, "
+            .. "2005), so release is the one prompt that starts on NO on purpose, and "
+            .. "Menu_MoveCursorNoWrapAround does not wrap -- Up is required to reach YES, a "
+            .. "plain A confirms NO and declines the release)",
+        "src/pokemon_storage_system_tasks.c:1307-1339 (states 4/5/6/7: exactly two more JOY_NEW "
+            .. "waits -- MSG_WAS_RELEASED then MSG_BYE_BYE -- before CompactPartySlots and the "
+            .. "return to Task_PokeStorageMain)",
+        "lua/tests/mkstate.lua:270-300 (slink_pokecenter_full.State: party of 3 at (11,8))",
+    },
+    check = check_on_field,
+    run = function(cp)
+        -- Same BFS-pinned approach to the PC as pc_ops (see PATHS above); each leg loads its
+        -- own declared savestate, so this leg walks there itself rather than inheriting pc_ops's
+        -- position.
+        play.follow(cp, "pokecenter_start_to_pc", "pc_release")
+        G.tap("Up", 2, 13)               -- face the (solid) PC metatile without stepping onto it
+
+        local before = play.party_snapshot()
+        if before.n < 2 then
+            G.finish(false, string.format(
+                "pc_release: the party holds %d mon; DEPOSIT mode (which is how the party-side "
+                .. "popup is reached) refuses at one, and the oracle needs a survivor to prove "
+                .. "byte-identical", before.n))
+        end
+
+        open_storage_menu()
+        pc_press("Down", 20); pc_press("A", 180)                 -- Deposit -> party view
+        pc_press("Down", 20); pc_press("Down", 20)                -- lead -> slot 1 -> slot 2
+        pc_press("A", 120)                                        -- slot 2 (the third mon) -> popup
+
+        -- THE POPUP ORDER IS SOURCE-PINNED, not the FR driver's row count: SetMenuTextsForMon's
+        -- OPTION_DEPOSIT branch calls SetMenuText(MENU_TEXT_STORE), then the shared tail always
+        -- adds SUMMARY, MARK, RELEASE, CANCEL in that order (pokemon_storage_system_data.c
+        -- :1761-1805). Rows are 0=STORE 1=SUMMARY 2=MARK 3=RELEASE 4=CANCEL, so three Downs from
+        -- the freshly-opened popup (which starts on STORE) land on RELEASE.
+        for _ = 1, 3 do pc_press("Down", 20) end                  -- STORE -> SUMMARY -> MARK -> RELEASE
+        pc_press("A", 120)                                        -- RELEASE -> Task_ReleaseMon,
+                                                                   -- ShowYesNoWindow(1) (NO default)
+
+        -- THE CONFIRMATION. ShowYesNoWindow's argument is the initial cursor position, and
+        -- release passes 1 (NO) while every other Yes/No box in this same file passes 0 (YES) --
+        -- a deliberate default, not an oversight. Menu_MoveCursorNoWrapAround does not wrap, so
+        -- from NO the only way to reach YES (choice 0, which Task_ReleaseMon's own switch
+        -- confirms is the release branch) is Up, then A. This is the fix over the FR driver's
+        -- pc_release leg, which presses A alone and documents that press as unpinned; reading
+        -- ShowYesNoWindow's own call site pins it.
+        pc_press("Up", 20)                                        -- off the NO default, onto YES
+        pc_press("A", 240)                                        -- confirm -> ReleaseMon() fires
+                                                                   -- (pc_release_begin/pc_release)
+
+        -- THE TWO FOLLOW-UP MESSAGES, BOUNDED BY THE STATE MACHINE ITSELF: Task_ReleaseMon has
+        -- exactly two more JOY_NEW waits between the confirm and the return to
+        -- Task_PokeStorageMain -- MSG_WAS_RELEASED, then MSG_BYE_BYE (which is what triggers
+        -- CompactPartySlots). Two A presses, not a guessed count.
+        pc_press("A", 180)                                        -- dismiss "was released"
+        pc_press("A", 240)                                        -- dismiss "Bye-bye" -> compact
+        leave_storage(cp, "pc_release")
+
+        local after = play.party_snapshot()
+        if after.n ~= before.n - 1 then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "pc_release: the party count is %d, not %d after the pinned RELEASE route -- "
+                .. "compare against the confirmation sequence in this leg's source citations "
+                .. "(Up onto YES, then A, then two more A's for the follow-up messages)",
+                after.n, before.n - 1))
+        end
+        local gone, why = play.departed_key(before, after)
+        if not gone then G.finish(false, "pc_release: " .. why) end
+        -- Down, Down from the lead selects slot 2 (the third mon) -- before.order is built in
+        -- party-slot order, so the targeted key is before.order[3].
+        if gone ~= before.order[3] then
+            G.finish(false, string.format(
+                "pc_release: slot 2 (key %s, selected by Down,Down from the lead) was targeted "
+                .. "but %s left instead -- the popup navigation reached the wrong mon or the "
+                .. "wrong row", before.order[3], gone))
+        end
+        local ok, bad = play.survivors_intact(before, after, gone)
+        if not ok then G.finish(false, "pc_release: " .. bad) end
+        -- WHAT THIS CANNOT PROVE: that the mon was RELEASED and not deposited -- RR's 58-byte
+        -- CompressedPokemon boxes have no decrypt-free read pinned (same limitation pc_ops
+        -- states for its withdraw half), so nothing here can look in a box to tell the two
+        -- apart. The observer's pc_release_begin/pc_release pair is what does: it fires on this
+        -- route and on no other, and RR's UI equivalence to vanilla beyond the two entry
+        -- addresses is UNVERIFIED (see this leg's header) -- the lane run against the real
+        -- observer is the proof, not this comment.
+        G.phase("released", string.format(
+            "party %d -> %d, key %s gone (source-pinned RELEASE route + Yes/No confirmation; "
+            .. "no box read exists to check from here)", before.n, after.n, gone))
     end,
 }
 
