@@ -57,6 +57,25 @@ local MON_SIZE            = 100
 local OFF_HP, OFF_MAXHP   = 0x56, 0x58  -- lua/tests/duo/duo_main.lua:26-27
 local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
 
+-- THE ACTION-MENU WITNESS (card gen3-P3-C3-21). FR run 19's coordinator replay showed the wild
+-- intro ("Wild RATTATA appeared!" -> "Go! SQUIRTLE!") is long enough to outlast a fixed A-tap
+-- clear, so a Right press issued on a timer lands on the still-open intro text and does nothing
+-- -- the cursor stays at FIGHT for the mash that follows and the starter fights instead of being
+-- thrown a ball. gBattlerControllerFuncs[0] (0x03004FE0, u32; pokefirered.sym:802) reads
+-- HandleInputChooseAction (0x0802E438, +1 for the Thumb bit; pokefirered.sym line 1990) exactly
+-- when the player's own action menu (src/battle_controller_player.c) is waiting for input --
+-- the same address+value probe_gen3_rr_bag.lua's CTRL/ACTION_MENU already uses for the RR duo,
+-- which is this same FR symbol (RR is a FR ROM hack). gActionSelectionCursor (0x02023FF8, u8[4]
+-- per-battler; pokefirered.sym:146) is 0 FIGHT, 1 BAG, 2 POKeMON, 3 RUN
+-- (src/battle_controller_player.c); battler 0 is the player.
+local BATTLER_CTRL_ADDR = 0x03004FE0
+local HANDLE_INPUT_CHOOSE_ACTION = 0x0802E439  -- 0x0802E438 | 1 (Thumb bit)
+local ACTION_CURSOR_ADDR = 0x02023FF8
+local ACTION_FIGHT, ACTION_BAG = 0, 1
+
+local function action_menu_up() return memory.read_u32_le(BATTLER_CTRL_ADDR) == HANDLE_INPUT_CHOOSE_ACTION end
+local function action_cursor() return memory.read_u8(ACTION_CURSOR_ADDR) end
+
 -- WHERE A WHITEOUT PUTS YOU. pret src/overworld.c SetWarpDestinationToLastHealLocation warps to
 -- gSaveBlock1Ptr->lastHealLocation, which a new game seeds to the player's own house
 -- (src/new_game.c). Identified from the ROM rather than assumed -- map 4.0 is the only 13x10
@@ -574,6 +593,71 @@ local function check_whiteout(cp, before_map, before_x, before_y)
     end
 end
 
+--- Bounded wait for the action-menu witness (see the constants above), pressing A every OTHER
+--- frame ONLY while the witness is false and the battle is still up -- the same "menu" step
+--- shape probe_gen3_rr_bag.lua uses. Returns false either on timeout OR because the battle
+--- itself ended before ever reaching the menu (nothing here needs the menu at that point); the
+--- caller tells those two apart with play.in_battle(cp).
+local function wait_for_action_menu(cp, budget)
+    for i = 1, (budget or 1200) do
+        if action_menu_up() then return true end
+        if not play.in_battle(cp) then return false end
+        if i % 2 == 0 then joypad.set({ A = true }) else joypad.set({}) end
+        G.advance()
+    end
+    joypad.set({})
+    return false
+end
+
+--- Wait for the menu witness and require the cursor to be sitting on FIGHT(0) -- the default
+--- every battle starts on (gActionSelectionCursor resets per battle,
+--- src/battle_controller_player.c). route1_catch is about to toggle it to BAG(1) and
+--- route1_faint is about to mash A on it; both need to know the press is landing on the menu
+--- they think it is, not on the still-open "Wild X appeared!" intro text (FR run 19's bug).
+--- A battle that ends before the menu ever comes up is not a failure -- there is nothing here
+--- for either leg to press.
+local function verify_fight_cursor(cp, label)
+    if not play.in_battle(cp) then return end
+    if not wait_for_action_menu(cp, 1200) then
+        if play.in_battle(cp) then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "%s: the action menu never came up (gBattlerControllerFuncs[0] never read "
+                .. "HandleInputChooseAction) at %s", label, play.at(cp)))
+        end
+        return
+    end
+    if action_cursor() ~= ACTION_FIGHT then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the action menu opened on cursor %d, not FIGHT(0)", label, action_cursor()))
+    end
+end
+
+--- The fight/settle/whiteout-check tail shared by route1_catch_loop and route1_faint: mash A
+--- until the battle clears, then let the post-battle scene settle BEFORE reading the map, and
+--- only then hand off to check_whiteout.
+---
+--- ROOT CAUSE (FR run 19): without the settle wait, in_battle can clear a good while before a
+--- whiteout's own heal-and-warp sequence actually lands the player on the heal map -- the
+--- trailing "no more usable POKeMON... whited out!" message and the walk-home narration both
+--- run AFTER the battle callback itself has already handed control back. check_whiteout, called
+--- right then, reads the OLD map and sees no whiteout at all; the actual warp fires later,
+--- unnoticed, in the MIDDLE of the next hunt_encounter's walk -- and because play.step() counts
+--- any readable map change as ordinary progress, that hunt just wanders the house for its whole
+--- cycle budget and reports "no wild encounter", which is exactly what FR run 19's receipt
+--- showed (two real encounters fought and fainted, no whiteout-recover phase logged, then "40
+--- cycles ... at (7,4)" -- the player's own house). wait_scene_settled is the same call
+--- opts.battle already makes after every OTHER absorbed battle in this file; this is that same
+--- fix, applied where a leg fights its own.
+local function resolve_battle_and_check_whiteout(cp, mash_budget)
+    local before_map, before_x, before_y = play.map(cp), G.pos(cp)
+    local resolved = play.mash_a(mash_budget or 160, function() return not play.in_battle(cp) end)
+    if resolved then play.wait_scene_settled(cp, 1800) end
+    check_whiteout(cp, before_map, before_x, before_y)
+    return resolved
+end
+
 --- Whiteout recovery for route1_catch/route1_faint: back out to Pallet Town
 --- (recover_to_pallet_town), then continue to the Route 1 grass loop's own origin. Reuses the
 --- SAME two PATHS entries a normal walk there already uses -- town_start_to_oak_trigger's
@@ -1016,8 +1100,11 @@ end
 -- appeared!" INTRO text, not the action menu -- the old code's very first press (Right, meant to
 -- toggle FIGHT(0) -> BAG(1)) landed on that text and did nothing, so the 30-A mash that followed
 -- opened with the cursor still at its battle-start default FIGHT(0) and fought a real move
--- instead. Clearing the intro text FIRST (bounded, below) fixes exactly that: the Right that
--- follows now always lands on the real action menu.
+-- instead. A fixed A-tap count to clear the intro (run 19) was not enough either -- the
+-- coordinator's replay showed the intro ("Wild X appeared!" -> "Go! SQUIRTLE!") can outlast it.
+-- verify_fight_cursor (above) replaces both: it waits for the actual engine witness
+-- (gBattlerControllerFuncs[0] == HandleInputChooseAction) instead of a frame count, and confirms
+-- the cursor really is FIGHT(0) before Right is pressed.
 local function route1_catch_loop(cp)
     local caught = false
     for encounter = 1, 4 do
@@ -1027,20 +1114,20 @@ local function route1_catch_loop(cp)
                 "route1_catch: 40 cycles of the pinned grass loop produced no wild "
                 .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
         end
-        local before_map, before_x, before_y = play.map(cp), G.pos(cp)
-        for _ = 1, 6 do
-            if not play.in_battle(cp) then break end
-            G.tap("A", 3, 20)
-        end
+        verify_fight_cursor(cp, "route1_catch")
         -- RISK (see header): BAG is pinned (Right, A); reaching POKE BALL inside it is not.
         if play.in_battle(cp) then
             G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG/USE_ITEM(1), pinned bit toggle
+            if action_cursor() ~= ACTION_BAG then
+                G.shot("stuck")
+                G.finish(false, string.format(
+                    "route1_catch: Right did not move the cursor to BAG (read %d)",
+                    action_cursor()))
+            end
             G.tap("A", 3, 30)
             for _ = 1, 30 do G.tap("A", 3, 20) end   -- bag category/list/throw-confirm, mashed
         end
-        -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
-        local resolved = play.mash_a(160, function() return not play.in_battle(cp) end)
-        check_whiteout(cp, before_map, before_x, before_y)
+        local resolved = resolve_battle_and_check_whiteout(cp, 160)
         if resolved and battle_outcome() == B_OUTCOME_CAUGHT then
             caught = true
             break
@@ -1106,16 +1193,21 @@ LEGS[#LEGS + 1] = {
                     "route1_faint: 40 cycles of the pinned grass loop produced no wild "
                     .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
             end
-            local before_map, before_x, before_y = play.map(cp), G.pos(cp)
+            -- The same menu witness route1_catch uses (card gen3-P3-C3-21), so this leg's FIGHT
+            -- choice is as deterministic as that one's BAG choice: confirm the cursor really is
+            -- FIGHT(0) before mashing A on it, rather than assuming the intro text is gone.
+            verify_fight_cursor(cp, "route1_faint")
             -- Keep attacking (RISK, see header) until this battle ends, then check the faint
             -- counter — a strong starter may just keep winning; bounded at 20 encounters.
-            -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
-            play.mash_a(160, function() return not play.in_battle(cp) end)
-            -- A faint that also empties the party IS a whiteout: our own check_whiteout raises
-            -- the same signal playlib's handle_encounter would have, so run_leg's recover()/
-            -- resume() engages instead of this leg reporting a plain "never advanced" failure
-            -- for a faint that in fact just happened.
-            check_whiteout(cp, before_map, before_x, before_y)
+            -- resolve_battle_and_check_whiteout settles the post-battle scene BEFORE reading the
+            -- map (ROOT CAUSE, see that function's comment) -- without it, a faint's whiteout
+            -- warp can land after this check has already passed, and the displacement then
+            -- surfaces unnoticed inside the NEXT hunt_encounter's walk instead of here. A faint
+            -- that also empties the party IS a whiteout: check_whiteout raises the same signal
+            -- playlib's handle_encounter would have, so run_leg's recover()/resume() engages
+            -- instead of this leg reporting a plain "never advanced" failure for a faint that in
+            -- fact just happened.
+            resolve_battle_and_check_whiteout(cp, 160)
             if player_faints() > before then fainted = true; break end
         end
         if not fainted then
@@ -1243,7 +1335,10 @@ LEGS[#LEGS + 1] = {
     exercises = { "pc_release_begin", "pc_release" },
     source = {
         "docs/gen3/research/fr_pc_flow_and_pc_move_sites.md (the selected-mon popup order and the release completion pair: pc_release_begin at ReleaseMon entry 0x08093218, pc_release at +0x3E = 0x08093256)",
-        "src/pokemon_storage_system_data.c:1755-1772 (popup rows); src/pokemon_storage_system_tasks.c:1255-1305 (Task_ReleaseMon calls ReleaseMon after the confirmation)",
+        "src/pokemon_storage_system_data.c:1761-1805 (popup rows STORE 0, SUMMARY 1, MARK 2, RELEASE 3, CANCEL 4)",
+        "src/pokemon_storage_system_tasks.c:1255-1305 (Task_ReleaseMon: RELEASE opens a Yes/No confirmation, ShowYesNoWindow(1))",
+        "src/pokemon_storage_system_tasks.c:2595-2599 (ShowYesNoWindow(1) starts the cursor on NO and does not wrap -- a bare A declines silently)",
+        "src/pokemon_storage_system_tasks.c:1307-1339 (confirming YES runs ReleaseMon, then two trailing message boxes: MSG_WAS_RELEASED, MSG_BYE_BYE)",
     },
     run = function(cp)
         -- The leg runs straight after the round trip, so the player is already at the PC.
@@ -1259,21 +1354,23 @@ LEGS[#LEGS + 1] = {
         pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.menu)    -- DEPOSIT (party area)
         pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.press)   -- party slot 1 -> popup
         for _ = 1, 3 do pc_press("Down", PC_WAIT.cursor) end             -- STORE -> ... -> RELEASE
-        pc_press("A", PC_WAIT.press)                                     -- RELEASE
-        -- THE CONFIRMATION IS NOT PINNED. The note says Task_ReleaseMon runs "after
-        -- permission/confirmation" without giving the prompt's cursor or row count, so this is
-        -- the one press here that is a guess -- and it is why the terminal below is the party
-        -- itself and not any press succeeding.
-        pc_press("A", PC_WAIT.commit)
+        pc_press("A", PC_WAIT.press)                                     -- RELEASE -> Yes/No confirm
+        -- THE CONFIRMATION IS PINNED. ShowYesNoWindow(1) starts the cursor on NO and does not
+        -- wrap (pokemon_storage_system_tasks.c:2595-2599), so a bare A here declines silently --
+        -- Up moves the cursor to YES first. Two more A's clear the trailing MSG_WAS_RELEASED and
+        -- MSG_BYE_BYE messages (pokemon_storage_system_tasks.c:1307-1339).
+        pc_press("Up", PC_WAIT.cursor)
+        pc_press("A", PC_WAIT.press)                                     -- YES
+        pc_press("A", PC_WAIT.press)                                     -- MSG_WAS_RELEASED
+        pc_press("A", PC_WAIT.commit)                                    -- MSG_BYE_BYE
         leave_storage(cp, "pc_release")
 
         local after = play.party_snapshot()
         if after.n ~= before.n - 1 then
             G.shot("stuck")
             G.finish(false, string.format(
-                "pc_release: the party count is %d, not %d. The RELEASE row is pinned; the "
-                .. "confirmation press after it is NOT (see this leg's comment) and is the "
-                .. "first thing to re-pin from a census of Task_ReleaseMon",
+                "pc_release: the party count is %d, not %d. The whole route (RELEASE, Up, A, "
+                .. "A, A) is pinned to source -- see this leg's citations",
                 after.n, before.n - 1))
         end
         local gone, why = play.departed_key(before, after)
@@ -1407,4 +1504,13 @@ return {
     HEAL_MAP = HEAL_MAP,
     check_whiteout = check_whiteout,
     save_battle_state_once = save_battle_state_once,
+    -- test hooks (card gen3-P3-C3-21): the action-menu witness address/value pair and cursor
+    -- constants, and the fight/settle/whiteout-check tail both route1_catch and route1_faint
+    -- share.
+    BATTLER_CTRL_ADDR = BATTLER_CTRL_ADDR,
+    HANDLE_INPUT_CHOOSE_ACTION = HANDLE_INPUT_CHOOSE_ACTION,
+    ACTION_CURSOR_ADDR = ACTION_CURSOR_ADDR,
+    ACTION_FIGHT = ACTION_FIGHT, ACTION_BAG = ACTION_BAG,
+    verify_fight_cursor = verify_fight_cursor,
+    resolve_battle_and_check_whiteout = resolve_battle_and_check_whiteout,
 }

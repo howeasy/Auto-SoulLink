@@ -50,6 +50,8 @@ _TERMINAL_HELPERS = (
     "wait_for_map_change", "G.mash", "G.flash_domain", "in_battle(", "mash_a(", "lab_scene_var(",
     # the PC legs terminate on the KEYED party snapshot, read on the field after leaving the PC
     "party_snapshot(", "departed_key(", "survivors_intact(", "slot0_hp(",
+    # route1_faint's own stop condition (gBattleResults.playerFaintCounter advancing)
+    "player_faints(",
 )
 
 
@@ -381,23 +383,26 @@ def test_recover_helper_reuses_existing_paths_and_resets_the_grass_cursor():
     assert "grass_step = 1" in body, "recovery must reset the grass loop cursor"
 
 
-def test_route1_catch_clears_the_battle_intro_before_touching_the_action_menu():
-    """ROOT CAUSE of FR run 18's fainted starter: a Right press issued the instant the encounter
-    fires lands on the still-open 'Wild X appeared!' text and does nothing, so the cursor stays
-    at its battle-start default (FIGHT) for the mash that follows. The intro-clearing loop must
-    appear BEFORE the Right press in source order, not after."""
+def test_route1_catch_waits_for_the_menu_witness_before_touching_the_action_menu():
+    """ROOT CAUSE of FR run 18's fainted starter (and run 19's replay of the same class of bug):
+    a Right press issued on a timer can land on the still-open 'Wild X appeared!'/'Go! X!' intro
+    text and does nothing, so the cursor stays at its battle-start default (FIGHT) for the mash
+    that follows. verify_fight_cursor (the engine witness, not a frame count) must appear BEFORE
+    the Right press in source order, not after, and the tail must settle before judging a
+    whiteout (resolve_battle_and_check_whiteout, not a bare check_whiteout call)."""
     body = _SCRIPT_SRC.split("local function route1_catch_loop")[1].split(
         "\nLEGS[#LEGS + 1] = {")[0]
-    clear_at = body.index('G.tap("A", 3, 20)')
+    verify_at = body.index('verify_fight_cursor(cp, "route1_catch")')
     right_at = body.index('G.tap("Right", 3, 20)')
-    assert clear_at < right_at, "the intro text must be cleared before Right selects BAG"
-    assert "check_whiteout(cp, before_map, before_x, before_y)" in body
+    assert verify_at < right_at, "the menu witness must be confirmed before Right selects BAG"
+    assert "resolve_battle_and_check_whiteout(cp, 160)" in body
 
 
 def test_route1_faint_run_checks_for_whiteout_after_each_battle():
     leg_src = _SCRIPT_SRC.split('name = "route1_faint"')[1].split(
         '\n-- ── leg: viridian_pc_deposit_withdraw')[0]
-    assert "check_whiteout(cp, before_map, before_x, before_y)" in leg_src
+    assert "resolve_battle_and_check_whiteout(cp, 160)" in leg_src
+    assert 'verify_fight_cursor(cp, "route1_faint")' in leg_src
 
 
 @pytest.fixture
@@ -475,9 +480,192 @@ def test_route1_faint_resume_short_circuits_on_an_existing_faint(emu_stubbed):
     assert any("survived the recovery walk" in line for line in logged)
 
 
+# ── the action-menu witness (card gen3-P3-C3-21) ───────────────────────────────────────────────
+
+
+def test_action_menu_witness_addresses(module):
+    """gBattlerControllerFuncs[0] (pokefirered.sym line 802) reads HandleInputChooseAction
+    (pokefirered.sym line 1990, 0802e438, +1 for the Thumb bit) exactly when the player's action
+    menu is waiting for input; gActionSelectionCursor (pokefirered.sym line 146) is the per-
+    battler cursor, battler 0 the player."""
+    assert module.BATTLER_CTRL_ADDR == 0x03004FE0
+    assert module.HANDLE_INPUT_CHOOSE_ACTION == 0x0802E438 | 1
+    assert module.ACTION_CURSOR_ADDR == 0x02023FF8
+    assert (module.ACTION_FIGHT, module.ACTION_BAG) == (0, 1)
+
+
+# ── pc_release's confirmation (coordinator addendum to card gen3-P3-C3-21) ─────────────────────
+
+
+def test_pc_release_confirms_yes_before_the_trailing_messages():
+    """ShowYesNoWindow(1) starts the cursor on NO and does not wrap (pret
+    src/pokemon_storage_system_tasks.c:2595-2599), so RELEASE's own confirmation needs an Up
+    before the A that accepts it, followed by exactly two more A's for the trailing
+    MSG_WAS_RELEASED / MSG_BYE_BYE messages (src/pokemon_storage_system_tasks.c:1307-1339)."""
+    leg_src = _SCRIPT_SRC.split('name = "pc_release"')[1].split('\n-- ── leg: save')[0]
+    release_at = leg_src.index('-- RELEASE -> Yes/No confirm')
+    up_at = leg_src.index('pc_press("Up", PC_WAIT.cursor)')
+    assert release_at < up_at, "Up must come after selecting RELEASE"
+    tail = leg_src[up_at:leg_src.index("leave_storage")]
+    a_presses = re.findall(r'pc_press\("A"', tail)
+    assert len(a_presses) == 3, f"expected YES + MSG_WAS_RELEASED + MSG_BYE_BYE, got {a_presses}"
+
+
 def test_save_battle_state_once_saves_no_more_than_once(emu_stubbed):
     _, module, _store, _logged, save_calls = emu_stubbed
     module.save_battle_state_once(None)
     module.save_battle_state_once(None)
     module.save_battle_state_once(None)
     assert len(save_calls) == 1, f"expected exactly one save, got {save_calls}"
+
+
+# ── FR run 19: the whiteout must be caught HERE, not in the middle of the next hunt ────────────
+# root cause: in_battle clears well before a whiteout's own heal-and-warp sequence actually lands
+# the player on the heal map (the trailing "whited out!" message and walk-home narration both run
+# AFTER the battle callback hands control back). check_whiteout, read right when in_battle
+# clears, therefore saw the OLD map and never raised -- the real displacement fired later,
+# unnoticed, inside the NEXT hunt_encounter's walk. resolve_battle_and_check_whiteout's fix is to
+# settle the scene first (the same wait opts.battle already does for every OTHER absorbed
+# battle); this drives route1_catch through exactly that timing and checks run_leg's recover()
+# actually engages before the retried attempt.
+
+
+def test_whiteout_settles_before_the_map_read_so_recovery_engages_before_the_next_attempt():
+    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+
+    # Load once with an inert `memory` (module-scope code touches no host API) just to read the
+    # real witness address/value constants off the loaded module before wiring the real fake.
+    runtime.globals().memory = runtime.table(
+        read_u8=lambda *_: 0, read_u16_le=lambda *_: 0,
+        read_u32_le=lambda *_: 0, read_s16_le=lambda *_: 0,
+    )
+    module = runtime.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+
+    PTR_ADDR, SB1_ADDR = 0x03005008, 0x02020000
+    IN_BATTLE_ADDR, SCS_ADDR, FCL_ADDR = 0x03000300, 0x03000400, 0x03000500
+    BATTLE_OUTCOME_ADDR = 0x02023E8A
+    GRASS_X, GRASS_Y = 12, 37
+    HOUSE_X, HOUSE_Y = 8, 5
+    HEAL_GROUP, HEAL_NUM = 4, 0
+    ROUTE1_GROUP, ROUTE1_NUM = 3, 19
+    B_OUTCOME_CAUGHT = 7
+
+    # A tiny clock (ticks once per emu.frameadvance, i.e. once per M.advance) and an "epoch"
+    # the recover() spy resets for the second attempt: t0/battle_len drive when in_battle clears,
+    # warp_at/quiet_from drive when the map (and the scene) actually settle -- decoupled on
+    # purpose, the same gap the real engine leaves between the two. battle_len/warp_at are past
+    # the ~750 frames route1_catch_loop's OWN pinned Right+A+30xA bag mash burns before it ever
+    # reaches resolve_battle_and_check_whiteout, so `before_map` is captured on the grass, not
+    # already mid-warp.
+    clock = {"t": 0}
+    ep = {"t0": 0, "battle_len": 1900, "warp_at": 2000, "quiet_from": 2000,
+          "cursor": module.ACTION_FIGHT, "outcome": 0}
+    calls = {"recover": 0}
+
+    def in_battle():
+        return (clock["t"] - ep["t0"]) < ep["battle_len"]
+
+    def warped():
+        return ep["warp_at"] is not None and clock["t"] >= ep["warp_at"]
+
+    def quiet():
+        return ep["quiet_from"] is not None and clock["t"] >= ep["quiet_from"]
+
+    def read_u8(addr, *_a):
+        addr = int(addr)
+        if addr == IN_BATTLE_ADDR:
+            return 2 if in_battle() else 0          # mask=2, expect=0: pred_ok True == NOT in battle
+        if addr in (SCS_ADDR, FCL_ADDR):
+            return 0 if quiet() else 1              # expect=0 == idle/unlocked
+        if addr == SB1_ADDR + 0x04:
+            return HEAL_GROUP if warped() else ROUTE1_GROUP
+        if addr == SB1_ADDR + 0x05:
+            return HEAL_NUM if warped() else ROUTE1_NUM
+        if addr == module.ACTION_CURSOR_ADDR:
+            return ep["cursor"]
+        if addr == BATTLE_OUTCOME_ADDR:
+            return ep["outcome"]
+        return 0
+
+    def read_s16_le(addr, *_a):
+        addr = int(addr)
+        if addr == SB1_ADDR + 0x00:
+            return HOUSE_X if warped() else GRASS_X
+        if addr == SB1_ADDR + 0x02:
+            return HOUSE_Y if warped() else GRASS_Y
+        return 0
+
+    def read_u32_le(addr, *_a):
+        addr = int(addr)
+        if addr == PTR_ADDR:
+            return SB1_ADDR
+        if addr == module.BATTLER_CTRL_ADDR:
+            return module.HANDLE_INPUT_CHOOSE_ACTION    # the action menu is always "up" here
+        return 0
+
+    runtime.globals().memory = runtime.table(
+        read_u8=read_u8, read_u16_le=read_u8, read_u32_le=read_u32_le, read_s16_le=read_s16_le,
+    )
+    runtime.globals().emu = runtime.table(
+        framecount=lambda: clock["t"], frameadvance=lambda: clock.__setitem__("t", clock["t"] + 1))
+    joy = {}
+
+    def joypad_set(buttons):
+        joy.clear()
+        if buttons:
+            for k in buttons:
+                joy[k] = True
+        if joy.get("Right"):
+            ep["cursor"] = module.ACTION_BAG
+
+    runtime.globals().joypad = runtime.table(set=joypad_set)
+    logged: list[str] = []
+    runtime.globals().console = runtime.table(log=lambda s: logged.append(str(s)))
+    runtime.globals().savestate = runtime.table(save=lambda *_: True)
+    runtime.globals().client = runtime.table(exit=lambda *_: None, screenshot=lambda *_: None)
+
+    cp = runtime.table(
+        pointers=runtime.table(gSaveBlock1Ptr=runtime.table(address=PTR_ADDR)),
+        predicates=runtime.table(
+            in_battle=runtime.table(address=IN_BATTLE_ADDR, offset=0, mask=2, expect=0, width=1),
+            script_context_status=runtime.table(address=SCS_ADDR, offset=0, mask=1, expect=0, width=1),
+            field_controls_locked=runtime.table(address=FCL_ADDR, offset=0, mask=1, expect=0, width=1),
+        ),
+    )
+
+    catch_leg = None
+    for i in range(1, len(module.LEGS) + 1):
+        if module.LEGS[i]["name"] == "route1_catch":
+            catch_leg = module.LEGS[i]
+    assert catch_leg is not None, "no route1_catch leg"
+    # route1_catch's own leg.run walks the whole way from the lab to the grass before it ever
+    # calls route1_catch_loop; that walk is irrelevant here (it is exercised elsewhere, e.g.
+    # test_route1_legs_declare_recover_and_resume) and this test starts already positioned on
+    # the grass. Drive the loop directly through play.run_leg by using leg.resume (the loop
+    # itself) as BOTH the first attempt and the retry -- run_leg's own attempt>0 rule is what
+    # decides which body runs, not what this test is checking.
+    leg = runtime.table(name="route1_catch", run=catch_leg["resume"], resume=catch_leg["resume"])
+
+    def recover_spy(_cp):
+        """Stands in for recover_to_route1_grass: back on the grass, no more warping, and (so
+        the retried attempt can actually finish) a fresh battle that gets caught outright."""
+        calls["recover"] += 1
+        ep["t0"] = clock["t"]
+        ep["battle_len"] = 40
+        ep["warp_at"] = None
+        ep["quiet_from"] = clock["t"] + 60
+        ep["cursor"] = module.ACTION_FIGHT
+        ep["outcome"] = B_OUTCOME_CAUGHT
+
+    leg["recover"] = recover_spy
+
+    module.play.run_leg(cp, leg, runtime.table(max_recoveries=1))
+
+    assert calls["recover"] == 1, "recover() must run exactly once"
+    whiteout_at = next(i for i, line in enumerate(logged) if "phase whiteout " in line)
+    recover_at = next(i for i, line in enumerate(logged) if "whiteout-recover " in line)
+    caught_at = next(i for i, line in enumerate(logged) if "phase caught " in line)
+    assert whiteout_at < recover_at < caught_at, (
+        "expected: the whiteout is DETECTED, THEN recover() runs, THEN the retried attempt "
+        "catches -- got this order instead:\n" + "\n".join(logged))
