@@ -114,12 +114,21 @@ local SB1_VARS_OFFSET = 0x1000
 local VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB = 0x4055
 local LAB_SCENE_VAR_OFFSET = SB1_VARS_OFFSET + (VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB - 0x4000) * 2
 
---- The lab scene var, read through cp.pointers.gSaveBlock1Ptr the way G.map/G.pos do
---- (gen3_boot_check.lua:118-123): -1 while the pointer is not yet a sane EWRAM address.
-local function lab_scene_var(cp)
+--- gSaveBlock1Ptr, dereferenced fresh every call: FR relocates SaveBlock1 on every map load, so
+--- nothing here may cache the pointed-to address across frames (gen3_boot_check.lua:118-123's
+--- own M.map does the same fresh read). nil while the pointer is not yet a sane EWRAM address.
+local function sb1_ptr(cp)
     local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
     local sb1 = memory.read_u32_le(int(ptr.address))
-    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return -1 end
+    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return nil end
+    return sb1
+end
+
+--- The lab scene var, read through gSaveBlock1Ptr the way G.map/G.pos do: -1 while the pointer
+--- is not yet a sane EWRAM address.
+local function lab_scene_var(cp)
+    local sb1 = sb1_ptr(cp)
+    if not sb1 then return -1 end
     return memory.read_u16_le(sb1 + LAB_SCENE_VAR_OFFSET)
 end
 
@@ -171,12 +180,71 @@ local function bag_cursor_slot(pocket)
     return above + cursor
 end
 local function bag_pokeballs_item_id(cp, slot)
-    local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
-    local sb1 = memory.read_u32_le(int(ptr.address))
-    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return -1 end
+    local sb1 = sb1_ptr(cp)
+    if not sb1 then return -1 end
     return memory.read_u16_le(sb1 + SB1_POKEBALLS_POCKET_OFFSET + slot * 4)
 end
 local function selected_item_id() return memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) end
+
+-- THE PARCEL-DELIVERY ORACLE (card gen3-P3-C3-26). FALSE PASS FOUND: the old parcel_deliver leg
+-- called play.wait_scene_settled and reported success the instant it returned true, with no RAM
+-- check at all -- but PalletTown_ProfessorOaksLab_EventScript_ProfOak (data/maps/
+-- PalletTown_ProfessorOaksLab/scripts.inc:567-660) is a TALK-TO script (`lock; faceplayer`),
+-- triggered by pressing A while facing the object, not by walking up to or facing it. The old
+-- leg never pressed A, so the field was ALREADY idle+unlocked (nothing had started) the instant
+-- it finished walking -- exactly what wait_scene_settled's own "quiet" predicate reads as
+-- "settled". The PHYSICAL RAM dump that caught this (slink_fr_parcel_deliver.State) showed
+-- ITEM_OAKS_PARCEL still sitting in the key-items pocket and every POKe BALLS slot at 0. Three
+-- real terminals replace the guess, each one a write the script itself makes:
+--   1. ITEM_OAKS_PARCEL leaves the key-items pocket (scripts.inc:601 `removeitem`)
+--   2. FLAG_SYS_POKEDEX_GET gets set (scripts.inc:656 `setflag`)
+--   3. ITEM_POKE_BALL lands in the POKe BALLS pocket (scripts.inc:660 `giveitem_msg ...,
+--      ITEM_POKE_BALL, 5`)
+--
+-- SaveBlock1.bagPocket_KeyItems (pret include/global.h:779, offset 0x03B8; BAG_KEYITEMS_COUNT=30
+-- per include/constants/global.h:37) holds the same struct ItemSlot{itemId,quantity} shape as
+-- bagPocket_PokeBalls above -- itemId plaintext, only .quantity XOR-keyed (src/item.c:20-29).
+-- ITEM_OAKS_PARCEL=349 (include/constants/items.h:421). Scan every slot, never assume 0: this
+-- file's own rule (see the bag-witness comment above), even though the PHYSICAL dump found it
+-- there.
+local SB1_KEYITEMS_POCKET_OFFSET = 0x03B8
+local BAG_KEYITEMS_COUNT = 30
+local ITEM_OAKS_PARCEL = 349
+local function key_items_has_parcel(cp)
+    local sb1 = sb1_ptr(cp)
+    if not sb1 then return true end  -- unreadable: never claim "delivered" on a bad read
+    for slot = 0, BAG_KEYITEMS_COUNT - 1 do
+        if memory.read_u16_le(sb1 + SB1_KEYITEMS_POCKET_OFFSET + slot * 4) == ITEM_OAKS_PARCEL then
+            return true
+        end
+    end
+    return false
+end
+
+-- FLAG_SYS_POKEDEX_GET = SYS_FLAGS(0x800) + 0x29 = 0x829 (include/constants/flags.h:1324,1375).
+-- SaveBlock1.flags[] at SB1+0x0EE0 (include/global.h:790; NUM_FLAG_BYTES-sized, vanilla profile's
+-- own SB1_FLAGS_OFFSET). Flags are bit-packed: byte flags[idx/8], bit (idx&7) — the exact shape
+-- GetFlagAddr/FlagGet use (src/event_data.c:279-309).
+local SB1_FLAGS_OFFSET = 0x0EE0
+local FLAG_SYS_POKEDEX_GET = 0x829
+local function pokedex_get_flag(cp)
+    local sb1 = sb1_ptr(cp)
+    if not sb1 then return false end
+    local byte = memory.read_u8(sb1 + SB1_FLAGS_OFFSET + (FLAG_SYS_POKEDEX_GET // 8))
+    return (byte & (1 << (FLAG_SYS_POKEDEX_GET % 8))) ~= 0
+end
+
+-- POKe BALLS pocket: does any slot hold ITEM_POKE_BALL? Reuses bag_pokeballs_item_id's own
+-- reader/offset (SaveBlock1.bagPocket_PokeBalls +0x0430); BAG_POKEBALLS_COUNT=13
+-- (include/constants/global.h:38). Scanned, not assumed at slot 0, for the same reason as the
+-- key-items scan above.
+local BAG_POKEBALLS_COUNT = 13
+local function pokeballs_pocket_has_poke_ball(cp)
+    for slot = 0, BAG_POKEBALLS_COUNT - 1 do
+        if bag_pokeballs_item_id(cp, slot) == ITEM_POKE_BALL then return true end
+    end
+    return false
+end
 
 -- ── PATHS: every direction list below, OFFLINE-BFS-computed ────────────────────────────────────
 -- Tool: a Python BFS (scratchpad, not checked in) over data/layouts/<map>/map.bin: block u16,
@@ -1090,11 +1158,61 @@ LEGS[#LEGS + 1] = {
 }
 
 -- ── leg: parcel_deliver ──────────────────────────────────────────────────────────────────────
+-- Press A until the delivery is actually under way, proven by the FIRST RAM write the script
+-- makes (removeitem ITEM_OAKS_PARCEL, scripts.inc:601), never by a frame count or by the field
+-- "going quiet" — quiet is also what an interaction that never started looks like, which is the
+-- false pass this card fixes (see the oracle comment above key_items_has_parcel). Bounded
+-- generously: the removeitem fires after only the first two message boxes
+-- (Text_OakHaveSomethingForMe, then the "Delivered Oak's Parcel" fanfare message) clear.
+local function start_oak_delivery(cp, label)
+    for _ = 1, 400 do
+        if not key_items_has_parcel(cp) then return end
+        G.tap("A", 3, 16)
+    end
+    G.shot("stuck")
+    G.finish(false, string.format(
+        "%s: talking to Oak never removed ITEM_OAKS_PARCEL(%d) from the key-items pocket",
+        label, ITEM_OAKS_PARCEL))
+    -- explicit return: client.exit() is real on hardware but a no-op under test (fake RAM), so
+    -- fail-fast never relies only on the host actually exiting.
+    return
+end
+
+--- THE REAL ORACLE (card gen3-P3-C3-26). A settled scene proves the ENGINE went quiet, not that
+--- the delivery happened. Checks every terminal PalletTown_ProfessorOaksLab_EventScript_ProfOak
+--- actually writes (scripts.inc:601,656,660): the parcel gone, the dex flag set, a POKe BALL in
+--- the pocket.
+local function verify_parcel_delivered(cp, label)
+    -- Each check `return`s on failure (client.exit() is real on hardware but a no-op under
+    -- test), so exactly ONE reason is ever reported -- the first terminal that didn't hold,
+    -- not whichever happened to run last.
+    if key_items_has_parcel(cp) then
+        G.shot("stuck")
+        G.finish(false, label .. ": ITEM_OAKS_PARCEL is still in the key-items pocket")
+        return
+    end
+    if not pokedex_get_flag(cp) then
+        G.shot("stuck")
+        G.finish(false, label .. ": FLAG_SYS_POKEDEX_GET never got set")
+        return
+    end
+    if not pokeballs_pocket_has_poke_ball(cp) then
+        G.shot("stuck")
+        G.finish(false, label .. ": the POKe BALLS pocket has no ITEM_POKE_BALL")
+        return
+    end
+    G.phase("balls-received", label .. ": parcel gone, dex flag set, POKe BALL in the pocket")
+end
+
 LEGS[#LEGS + 1] = {
     name = "parcel_deliver",
     exercises = { "map_load" },
     source = {
-        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:600-660 (DeliveredOaksParcel -> dex scene -> ReceivedFivePokeBalls)",
+        "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:567-660 (EventScript_ProfOak, a TALK-TO script: lock/faceplayer -> ReceiveDexScene -> ReceivedFivePokeBalls)",
+        "data/maps/PalletTown_ProfessorOaksLab/map.json (LOCALID_OAKS_LAB_PROF_OAK object_event at (6,3), flag FLAG_HIDE_OAK_IN_HIS_LAB, script EventScript_ProfOak)",
+        "include/global.h:779,790 (SaveBlock1.bagPocket_KeyItems +0x03B8; SaveBlock1.flags[] +0x0EE0); include/constants/global.h:37-38 (BAG_KEYITEMS_COUNT=30, BAG_POKEBALLS_COUNT=13)",
+        "include/constants/items.h:421 (ITEM_OAKS_PARCEL=349); include/constants/flags.h:1324,1375 (FLAG_SYS_POKEDEX_GET = SYS_FLAGS(0x800)+0x29)",
+        "src/event_data.c:279-309 (GetFlagAddr/FlagGet: flags[idx/8], bit (idx&7))",
     },
     -- The whole leg from Pallet Town onwards, shared by run() and resume(): after a whiteout
     -- the parcel is still in the bag and Oak is still waiting, so the ONLY thing a restart has
@@ -1131,14 +1249,18 @@ LEGS[#LEGS + 1] = {
         play.follow(cp, "lab_entrance_to_oak", "parcel_deliver")
         G.tap("Up", 2, 13)
         -- Talking to Oak with the parcel triggers the whole delivery + Pokedex + 5-balls
-        -- cutscene (scripts.inc:600-660); long, almost entirely message boxes and NPC
-        -- applymovement. wait_scene_settled: idle+unlocked debounced 60 frames, plus callback2
-        -- back to CB2_Overworld, never a single read.
-        if not play.wait_scene_settled(cp, 6000, function() return G.pred_ok(cp, "callback2") end) then
+        -- cutscene (scripts.inc:567-660); long, almost entirely message boxes and NPC
+        -- applymovement. FACING him is not talking to him — start_oak_delivery presses A until
+        -- the scene is actually under way (proven by the parcel leaving the bag), THEN
+        -- wait_scene_settled rides the rest of it out (idle+unlocked debounced 60 frames, plus
+        -- callback2 back to CB2_Overworld, never a single read), and verify_parcel_delivered
+        -- checks the real terminals before this leg is allowed to call it done.
+        start_oak_delivery(cp, "parcel_deliver")
+        if not play.wait_scene_settled(cp, 12000, function() return G.pred_ok(cp, "callback2") end) then
             G.shot("stuck")
             G.finish(false, "parcel_deliver: Oak's dex-scene never returned control")
         end
-        G.phase("balls-received", "assumed from the scene completing (no bag read available)")
+        verify_parcel_delivered(cp, "parcel_deliver")
     end,
 }
 -- resume() reuses the leg's own tail. Written after the table literal because it needs the leg
@@ -1148,11 +1270,12 @@ LEGS[#LEGS].resume = function(cp)
     for _, l in ipairs(LEGS) do if l.name == "parcel_deliver" then leg = l end end
     leg.deliver_from_town(cp)
     G.tap("Up", 2, 13)
-    if not play.wait_scene_settled(cp, 6000, function() return G.pred_ok(cp, "callback2") end) then
+    start_oak_delivery(cp, "parcel_deliver (resume)")
+    if not play.wait_scene_settled(cp, 12000, function() return G.pred_ok(cp, "callback2") end) then
         G.shot("stuck")
         G.finish(false, "parcel_deliver (resume): Oak's dex-scene never returned control")
     end
-    G.phase("balls-received", "after a whiteout restart")
+    verify_parcel_delivered(cp, "parcel_deliver (resume)")
 end
 
 --- Steer the battle bag (already open — the action menu's Right+A already fired
@@ -1681,4 +1804,17 @@ return {
     ITEM_POKE_BALL = ITEM_POKE_BALL,
     SB1_POKEBALLS_POCKET_OFFSET = SB1_POKEBALLS_POCKET_OFFSET,
     throw_pokeball_from_bag = throw_pokeball_from_bag,
+    -- test hooks (card gen3-P3-C3-26): the parcel-delivery oracle -- the false pass this fixes,
+    -- the addresses/constants it reads, and the two functions that drive and check it.
+    SB1_KEYITEMS_POCKET_OFFSET = SB1_KEYITEMS_POCKET_OFFSET,
+    BAG_KEYITEMS_COUNT = BAG_KEYITEMS_COUNT,
+    ITEM_OAKS_PARCEL = ITEM_OAKS_PARCEL,
+    SB1_FLAGS_OFFSET = SB1_FLAGS_OFFSET,
+    FLAG_SYS_POKEDEX_GET = FLAG_SYS_POKEDEX_GET,
+    BAG_POKEBALLS_COUNT = BAG_POKEBALLS_COUNT,
+    key_items_has_parcel = key_items_has_parcel,
+    pokedex_get_flag = pokedex_get_flag,
+    pokeballs_pocket_has_poke_ball = pokeballs_pocket_has_poke_ball,
+    start_oak_delivery = start_oak_delivery,
+    verify_parcel_delivered = verify_parcel_delivered,
 }

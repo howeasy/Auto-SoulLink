@@ -835,3 +835,197 @@ def test_throw_pokeball_from_bag_fails_loudly_on_the_wrong_item(bag_stubbed):
     fail_lines = [line for line in logged if "RESULT: FAIL" in line]
     assert fail_lines, "expected a FAIL result, got:\n" + "\n".join(logged)
     assert "ITEM_POKE_BALL" in fail_lines[-1] and "slot 0" in fail_lines[-1]
+
+
+# ── the parcel-delivery oracle (card gen3-P3-C3-26): FALSE PASS FOUND ──────────────────────────
+# The old parcel_deliver leg called wait_scene_settled and reported success the instant it
+# returned true, with NO RAM check at all. But PalletTown_ProfessorOaksLab_EventScript_ProfOak
+# (data/maps/PalletTown_ProfessorOaksLab/scripts.inc:567-660) is a TALK-TO script (`lock;
+# faceplayer`), triggered by pressing A while facing the object -- and the old leg only ever
+# faced Oak, never pressed A, so the field was already idle+unlocked (nothing had started) the
+# instant it finished walking, which is exactly what "settled" reads as. A PHYSICAL RAM dump
+# (slink_fr_parcel_deliver.State) caught it: ITEM_OAKS_PARCEL was still in the key-items pocket
+# and every POKe BALLS slot read 0 after a run this leg had reported PASS.
+
+def test_parcel_oracle_address_arithmetic(module):
+    """Every offset/id below is source arithmetic, independently checked here rather than just
+    re-typed from a comment: pret include/global.h:779,790 (SaveBlock1.bagPocket_KeyItems at
+    +0x03B8, SaveBlock1.flags[] at +0x0EE0), include/constants/global.h:37-38
+    (BAG_KEYITEMS_COUNT=30, BAG_POKEBALLS_COUNT=13), include/constants/items.h:421
+    (ITEM_OAKS_PARCEL=349), include/constants/flags.h:1324,1375 (FLAG_SYS_POKEDEX_GET =
+    SYS_FLAGS(0x800)+0x29 == 0x829)."""
+    assert module.SB1_KEYITEMS_POCKET_OFFSET == 0x03B8
+    assert module.BAG_KEYITEMS_COUNT == 30
+    assert module.ITEM_OAKS_PARCEL == 349
+    assert module.SB1_FLAGS_OFFSET == 0x0EE0
+    assert module.FLAG_SYS_POKEDEX_GET == 0x829
+    assert module.BAG_POKEBALLS_COUNT == 13
+    # bagPocket_KeyItems (+0x03B8) and bagPocket_PokeBalls (+0x0430) are adjacent slabs of the
+    # same struct ItemSlot[] run (pret include/global.h:779-780) -- 30 slots * 4 bytes apart,
+    # not two independently-guessed offsets.
+    assert (module.SB1_KEYITEMS_POCKET_OFFSET + module.BAG_KEYITEMS_COUNT * 4
+            == module.SB1_POKEBALLS_POCKET_OFFSET)
+
+
+def test_lab_entrance_to_oak_matches_the_rom_bfs(module):
+    """tools/gba_map.py "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" --map 4.3 --bfs
+    6,12 6,4 returns exactly 8x Up (Oak's object_event sits at (6,3), solid; the door's landing
+    tile is (6,12)) -- geometry from the ROM/decomp, never a screenshot."""
+    entry = module.PATHS["lab_entrance_to_oak"]
+    assert (entry["from"][1], entry["from"][2]) == (6, 12)
+    assert (entry["to"][1], entry["to"][2]) == (6, 4)
+    dirs = [entry["dirs"][i] for i in range(1, len(entry["dirs"]) + 1)]
+    assert dirs == ["Up"] * 8
+
+
+def test_parcel_deliver_run_body_talks_before_it_waits_and_verifies_after(module):
+    """Source-order check: the walk to Oak, then facing him, then ACTUALLY STARTING the
+    interaction, then riding the scene out, then the real oracle -- in that order, both in
+    run() and in resume() (the whiteout-restart tail reuses the same shape). Scoped to the
+    parcel_deliver leg specifically -- every other leg also has a `run = function(cp)`."""
+    leg_src = _SCRIPT_SRC.split("-- ── leg: parcel_deliver", 1)[1].split(
+        "-- ── leg: route1_catch", 1)[0]
+    run_body = leg_src.split("run = function(cp)", 1)[1].split(
+        "LEGS[#LEGS].resume = function(cp)", 1)[0]
+    resume_body = leg_src.split("LEGS[#LEGS].resume = function(cp)", 1)[1]
+    # run() walks there directly; resume() reaches the same tile through leg.deliver_from_town
+    # (the whiteout-restart path, which also ends at "lab_entrance_to_oak") -- different walk
+    # markers, same tail after it.
+    walk_markers = {
+        "run": 'play.follow(cp, "lab_entrance_to_oak"',
+        "resume": "leg.deliver_from_town(cp)",
+    }
+    for label, body in (("run", run_body), ("resume", resume_body)):
+        walk_at = body.index(walk_markers[label])
+        face_at = body.index('G.tap("Up", 2, 13)', walk_at)
+        start_at = body.index("start_oak_delivery(cp,", face_at)
+        settle_at = body.index("wait_scene_settled(cp,", start_at)
+        verify_at = body.index("verify_parcel_delivered(cp,", settle_at)
+        assert walk_at < face_at < start_at < settle_at < verify_at, (
+            f"parcel_deliver's {label} tail is out of order:\n" + body)
+
+
+@pytest.fixture
+def parcel_cp(bag_stubbed):
+    """A `cp` with a fake gSaveBlock1Ptr, for the overworld save-data oracle
+    (key_items_has_parcel / pokedex_get_flag / pokeballs_pocket_has_poke_ball /
+    start_oak_delivery / verify_parcel_delivered) -- none of them touch a predicate, only
+    cp.pointers.gSaveBlock1Ptr, so no fake predicates are needed here (unlike _in_battle_cp)."""
+    runtime, module, store, logged, exits = bag_stubbed
+    ptr_addr, sb1_addr = 0x03005008, 0x02020000
+    store[ptr_addr] = sb1_addr
+    cp = runtime.table(pointers=runtime.table(gSaveBlock1Ptr=runtime.table(address=ptr_addr)))
+    return runtime, module, store, logged, exits, cp, sb1_addr
+
+
+def _set_parcel_slot(store, sb1_addr, module, slot, item_id):
+    store[sb1_addr + module.SB1_KEYITEMS_POCKET_OFFSET + slot * 4] = item_id
+
+
+def _set_pokedex_flag(store, sb1_addr, module, value):
+    flag = module.FLAG_SYS_POKEDEX_GET
+    byte_addr = sb1_addr + module.SB1_FLAGS_OFFSET + (flag // 8)
+    bit = 1 << (flag % 8)
+    cur = store.get(byte_addr, 0)
+    store[byte_addr] = (cur | bit) if value else (cur & ~bit)
+
+
+def _set_ball_slot(store, sb1_addr, module, slot, item_id):
+    store[sb1_addr + module.SB1_POKEBALLS_POCKET_OFFSET + slot * 4] = item_id
+
+
+def test_key_items_has_parcel_reads_every_slot(parcel_cp):
+    _, module, store, _, _, cp, sb1_addr = parcel_cp
+    assert module.key_items_has_parcel(cp) is False   # every slot ITEM_NONE(0) by default
+    _set_parcel_slot(store, sb1_addr, module, 0, module.ITEM_OAKS_PARCEL)
+    assert module.key_items_has_parcel(cp) is True
+    _set_parcel_slot(store, sb1_addr, module, 0, 0)
+    _set_parcel_slot(store, sb1_addr, module, 5, module.ITEM_OAKS_PARCEL)  # not just slot 0
+    assert module.key_items_has_parcel(cp) is True
+
+
+def test_pokedex_get_flag_bit_math(parcel_cp):
+    _, module, store, _, _, cp, sb1_addr = parcel_cp
+    assert module.pokedex_get_flag(cp) is False
+    _set_pokedex_flag(store, sb1_addr, module, True)
+    assert module.pokedex_get_flag(cp) is True
+
+
+def test_pokeballs_pocket_has_poke_ball_reads_every_slot(parcel_cp):
+    _, module, store, _, _, cp, sb1_addr = parcel_cp
+    assert module.pokeballs_pocket_has_poke_ball(cp) is False
+    _set_ball_slot(store, sb1_addr, module, 3, module.ITEM_POKE_BALL)  # not just slot 0
+    assert module.pokeballs_pocket_has_poke_ball(cp) is True
+
+
+def test_verify_parcel_delivered_fails_loudly_on_the_physically_observed_false_pass(parcel_cp):
+    """FAKE-RAM regression: the exact bad state the coordinator's PHYSICAL RAM dump of
+    slink_fr_parcel_deliver.State found -- ITEM_OAKS_PARCEL still in the key-items pocket slot 0,
+    every POKe BALLS slot 0. The old leg reported this run a PASS; this oracle must not."""
+    _, module, store, logged, exits, cp, sb1_addr = parcel_cp
+    _set_parcel_slot(store, sb1_addr, module, 0, module.ITEM_OAKS_PARCEL)
+
+    module.verify_parcel_delivered(cp, "test")
+
+    assert exits, "the false-pass RAM state must reach G.finish(false, ...) -> client.exit()"
+    fail_lines = [line for line in logged if "RESULT: FAIL" in line]
+    assert fail_lines, "expected a FAIL result, got:\n" + "\n".join(logged)
+    assert "ITEM_OAKS_PARCEL" in fail_lines[-1] and "key-items pocket" in fail_lines[-1]
+
+
+def test_verify_parcel_delivered_passes_on_the_good_state(parcel_cp):
+    """FAKE-RAM: parcel gone, dex flag set, a POKe BALL in the pocket -- must NOT fail."""
+    _, module, store, logged, exits, cp, sb1_addr = parcel_cp
+    _set_pokedex_flag(store, sb1_addr, module, True)
+    _set_ball_slot(store, sb1_addr, module, 0, module.ITEM_POKE_BALL)
+
+    module.verify_parcel_delivered(cp, "test")
+
+    assert not exits, "the good RAM state must not fail"
+    assert not [line for line in logged if "RESULT: FAIL" in line]
+
+
+def test_verify_parcel_delivered_checks_the_dex_flag_not_just_the_ball(parcel_cp):
+    """FAKE-RAM: the parcel is gone and a ball is already in the pocket, but
+    FLAG_SYS_POKEDEX_GET never got set -- a partial scene, not a completed one, must still
+    fail."""
+    _, module, store, logged, exits, cp, sb1_addr = parcel_cp
+    _set_ball_slot(store, sb1_addr, module, 0, module.ITEM_POKE_BALL)
+
+    module.verify_parcel_delivered(cp, "test")
+
+    assert exits
+    fail_lines = [line for line in logged if "RESULT: FAIL" in line]
+    assert fail_lines and "FLAG_SYS_POKEDEX_GET" in fail_lines[-1]
+
+
+def test_start_oak_delivery_fails_loudly_if_the_parcel_never_leaves(parcel_cp):
+    """FAKE-RAM: A is mashed but the parcel never disappears (the interaction never really
+    started) -- must fail loudly naming the item, rather than mashing forever."""
+    _, module, store, logged, exits, cp, sb1_addr = parcel_cp
+    _set_parcel_slot(store, sb1_addr, module, 0, module.ITEM_OAKS_PARCEL)  # never removed
+
+    module.start_oak_delivery(cp, "test")
+
+    assert exits
+    fail_lines = [line for line in logged if "RESULT: FAIL" in line]
+    assert fail_lines and "ITEM_OAKS_PARCEL" in fail_lines[-1]
+
+
+def test_start_oak_delivery_stops_as_soon_as_the_parcel_leaves(parcel_cp):
+    """FAKE-RAM: the parcel disappears after a few A presses (standing in for the scene's own
+    `removeitem`) -- start_oak_delivery must return quietly, never calling G.finish."""
+    runtime, module, store, logged, exits, cp, sb1_addr = parcel_cp
+    _set_parcel_slot(store, sb1_addr, module, 0, module.ITEM_OAKS_PARCEL)
+    presses = {"n": 0}
+
+    def joypad_set(_buttons):
+        presses["n"] += 1
+        if presses["n"] >= 3:
+            _set_parcel_slot(store, sb1_addr, module, 0, 0)
+
+    runtime.globals().joypad = runtime.table(set=joypad_set)
+
+    module.start_oak_delivery(cp, "test")
+
+    assert not exits, "must return once the parcel leaves, not mash on to the frame budget"
