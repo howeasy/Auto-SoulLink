@@ -283,3 +283,44 @@ def test_repeated_production_builds_share_hook_ownership_and_release_it_on_close
     second.start(second)
     assert len(registrations) == 2 * registered
     second.signals.close(second.signals)
+
+
+def test_a_retry_through_a_second_build_keeps_the_failed_cleanup_authority():
+    """Red control: a second Entry.build must not replace the failed service that still owns a handle."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    rom = _dump("red")
+    state = {"calls": 0, "can_remove": False, "removed": []}
+
+    def read(address, domain=None):
+        return rom[int(address)] if domain == "ROM" or address < 0x4000 else 0
+
+    def register(_callback, _address, _name, _domain=None):
+        state["calls"] += 1
+        return "00000000-0000-0000-0000-000000000000" if state["calls"] == 2 else f"owned-{state['calls']}"
+
+    def unregister(handle):
+        if not state["can_remove"]:
+            return False
+        state["removed"].append(str(handle))
+        return True
+
+    io = lua.table(read_u8=read, read_range=lambda a, n, d=None: lua.table_from([read(a + i, d) for i in range(n)]),
+                   write_u8=lambda *_args: None, register=lambda _name: 0,
+                   domains=lambda: lua.table("ROM", "System Bus"), framecount=lambda: 0,
+                   on_bus_exec=register, unregister=unregister)
+    deps = lua.table(root=_REPO.replace("\\", "/"), title="red", player="a", io=io,
+                     net=lua.table(), hud=lua.table(), rom_sha1="MODEL")
+    first, _first_parts = entry.build(deps)
+    with pytest.raises(lupa.LuaError, match="cleanup failed"):
+        first.start(first)
+    second, parts = entry.build(deps)
+    with pytest.raises(lupa.LuaError, match="outstanding failed hook cleanup"):
+        second.start(second)
+    failed = parts.signals.failed_service
+    assert failed.status(failed).registered == 1 and state["calls"] == 2
+    state["can_remove"] = True
+    assert failed.close(failed) is True and state["removed"] == ["owned-1"]
+    second.start(second)
+    assert parts.signals.failed_service is None
+    second.signals.close(second.signals)

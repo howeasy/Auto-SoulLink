@@ -134,6 +134,7 @@ end
 
 function Client.new(p)
     local HelloSession = assert(p.hello_session, "shared hello_session factory required")
+    local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
     local reads, signals_mod, writes, safety = p.reads, p.signals, p.writes, p.safety
     local net, json, hud, io = p.net, p.json, p.hud, p.io
     local profile, sites, ws_profile, area_map = p.profile, p.sites, p.write_checkpoint, p.area_map
@@ -1595,6 +1596,24 @@ function Client.new(p)
         on_error = function(stage, why) log("[SLink-gen1] hello " .. stage .. ": " .. tostring(why)) end,
     })
 
+    self.replies = ReplyDispatch.new({
+        budget = math.huge, -- existing Gen 1 policy: drain every queued line each frame
+        receive = function() return net.receive() end,
+        decode = function(line) return json.decode(line) end,
+        validate = function(reply)
+            if type(reply) == "table" and type(reply.commands) == "table" then return reply.commands end
+            return nil, "unreadable reply line"
+        end,
+        handle = function(cmd) return self:handle_command(cmd) end,
+        on_error = function(stage, why, subject)
+            if stage == "handle" then
+                log("[SLink-gen1] command " .. tostring(type(subject) == "table" and subject.cmd or nil) .. ": " .. why)
+            else
+                log("[SLink-gen1] unreadable reply line")
+            end
+        end,
+    })
+
     function self:send_tick(event)
         local party, battle = snapshot_party()
         if not party then return end
@@ -1828,6 +1847,12 @@ function Client.new(p)
             handlers.trade_service = function() self.trade:picked_up() end
             self.trade_enabled = true
         end
+        -- Re-arming (e.g. against a newly patched ROM) releases the previous hook set first:
+        -- the shared registry owns one "SLink-gen1" namespace at a time.
+        if self.signals then
+            assert(self.signals:close(), "previous engine signals could not be released")
+            self.signals = nil
+        end
         self.signals = signals_mod.new(profile, all_sites, io, handlers)
     end
 
@@ -1872,19 +1897,7 @@ function Client.new(p)
             local battle = reads.read_battle()
             if battle.in_battle == 0 then self.pending_safe = false; send("safe", {}) end
         end
-        while true do
-            local line = net.receive()
-            if not line then break end
-            local ok, reply = pcall(json.decode, line)
-            if ok and type(reply) == "table" and type(reply.commands) == "table" then
-                for _, cmd in ipairs(reply.commands) do
-                    local hok, herr = pcall(self.handle_command, self, cmd)
-                    if not hok then log("[SLink-gen1] command " .. tostring(cmd and cmd.cmd) .. ": " .. tostring(herr)) end
-                end
-            else
-                log("[SLink-gen1] unreadable reply line")
-            end
-        end
+        self.replies:step()
         local tok, terr = pcall(self.trade_tick, self)
         if not tok then log("[SLink-gen1] trade: " .. tostring(terr)) end
         self:run_deferred()

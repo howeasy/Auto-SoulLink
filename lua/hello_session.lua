@@ -96,6 +96,12 @@ function HelloSession.new(policy)
             local failed_stage = stage or "step"
             self:invalidate("callback_error")
             report_error(failed_stage, ready)
+            -- A throwing callback is paced like a refusal: the injected delay still applies,
+            -- unless the clock or the delay policy itself is what failed.
+            if failed_stage ~= "clock" and failed_stage ~= "retry_delay" then
+                local scheduled, why = pcall(retry, now, state.last_error)
+                if not scheduled then report_error("retry_delay", why) end
+            end
             return false, state.last_error
         end
         return ready, why

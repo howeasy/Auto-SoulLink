@@ -25,8 +25,10 @@
 -- rand_overlay). The header title only narrows candidates and words the refusal. This file
 -- is the ONLY place a foundation is ever named; everything downstream sees pack data.
 local Entry = {}
--- One registry instance owns the production hook backend across repeated builds.
-local shared_hook_registry
+-- One registry instance and ONE bound signals factory own the production hook backend
+-- across repeated builds: the factory holds the only reference to a failed service whose
+-- cleanup is still outstanding, so a per-build rebind would drop that cleanup authority.
+local shared_signals
 
 local function load_json(json, path)
     local f = assert(io.open(path, "rb"), "cannot open " .. path)
@@ -316,16 +318,19 @@ function Entry.build(deps)
     local root = assert(deps.root, "deps.root required")
     local L = function(rel) return dofile(root .. "/" .. rel) end
     local json = L("lua/json_codec.lua")
-    local R, S, W, B, Rom = L("lua/gen1/reads.lua"), L("lua/gen1/signals.lua"), L("lua/gen1/writes.lua"),
-                            L("lua/gen1/boxes.lua"), L("lua/gen1/rom.lua")
+    local R, W, B, Rom = L("lua/gen1/reads.lua"), L("lua/gen1/writes.lua"),
+                         L("lua/gen1/boxes.lua"), L("lua/gen1/rom.lua")
     local T, P = L("lua/gen1/trade_overlay.lua"), L("lua/gen1/panel.lua")
     local Safety = L("lua/gen1_write_safety.lua")
     local Permit = L("lua/write_permit.lua")
     local Checkpoint = L("lua/gb_checkpoint.lua")
     local Scanner = L("lua/token_scanner.lua")
-    if not shared_hook_registry then shared_hook_registry = L("lua/hook_registry.lua") end
-    local GBHooks = L("lua/gb_hook_binding.lua")
-    S = S.bind({registry=shared_hook_registry, gb_binding=GBHooks, owner="SLink-gen1"})
+    local HelloSession, ReplyDispatch = L("lua/hello_session.lua"), L("lua/reply_dispatch.lua")
+    if not shared_signals then
+        shared_signals = L("lua/gen1/signals.lua").bind({registry=L("lua/hook_registry.lua"),
+                                                         gb_binding=L("lua/gb_hook_binding.lua"), owner="SLink-gen1"})
+    end
+    local S = shared_signals
     local safety = Safety.new(Checkpoint)
     local Client = L("lua/gen1/client.lua")
 
@@ -388,9 +393,11 @@ function Entry.build(deps)
         player = assert(deps.player, "deps.player required"), rom_type = pack_def.rom_type[title],
         rom_sha1 = deps.rom_sha1, log = deps.log or function() end,
         foundation = pack, artifact_kind = deps.kind or "clean",
+        hello_session = HelloSession, reply_dispatch = ReplyDispatch,
     })
     return client, { profile = profile, sites = sites, reads = reads, writes = writes, boxes = boxes,
-                     rom = rom, json = json, panel = panel, box_io = box_io, pack = pack }
+                     rom = rom, json = json, panel = panel, box_io = box_io, pack = pack,
+                     signals = S }
 end
 
 -- Header family from the cartridge header (ROM $0134..$0143): "POKEMON RED"/"BLUE"/"YELLOW"/
