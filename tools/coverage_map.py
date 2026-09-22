@@ -272,10 +272,12 @@ def validate_coverage(document: dict, *, obligations: Mapping[str, Obligation],
             mapped = _mapping(row["mapping"], policy, artifacts)
             if not mapped:
                 report["unmapped"].append(identifier)
-            else:
-                for name, artifact in row["mapping"]["artifacts"].items():
-                    if _artifact_digest(artifact) is None and name not in report["unbuilt_artifacts"]:
-                        report["unbuilt_artifacts"].append(name)
+            # Bound targets matter whether or not the row is mapped yet: a PLANNED
+            # target on an UNMAPPED row is still unbuilt, and must still be reported.
+            wanted = policy.artifact_ids if policy.artifact_ids is not None else artifacts
+            for name in wanted:
+                if _artifact_digest(artifacts[name]) is None and name not in report["unbuilt_artifacts"]:
+                    report["unbuilt_artifacts"].append(name)
             evidence = row["evidence"]
             _require(isinstance(evidence, dict) and set(policy.required_layers) <= set(evidence)
                      and set(evidence) <= policy.allowed_layers, "missing or inapplicable evidence layer")

@@ -243,6 +243,9 @@ python tools/coverage_map.py --map PATH --requirements PATH --protocol PATH
 
 Exit 0 means only the requested mode succeeded. Exit 1 means missing/invalid
 inputs or a failed requested check; argument errors exit 2. JSON stdout reports
-which mappings/layers remain open. `tests/unit/test_gen2_coverage_map.py` contains
-neutral contract controls parameterized with two unrelated binder identities,
-plus generic Markdown/CLI controls; none requires a ROM or emulator.
+which mappings/layers remain open. `tests/unit/test_coverage_map_contract.py`
+contains the generation-neutral contract controls, parameterized with two
+unrelated binder identities, plus generic Markdown/CLI controls; none requires
+a ROM or emulator, and a later binder (e.g. Gen 3) runs this file unchanged.
+`tests/unit/test_gen2_coverage_map.py` holds only the Gen 2-specific sync checks
+against the real, checked-in `docs/gen2/gen2_coverage_map.md`.
