@@ -394,13 +394,26 @@ GEN3.profiles = {
 
 -- ── Variant detection ─────────────────────────────────────────────────────────
 -- Determines which profile (vanilla, ap, radical_red) matches the running ROM.
--- Detection strategy (same priority as original M.initProfile):
---   1. Read ROM offset 0x108 for "pokemon red/green version" (present in BOTH AP and RR)
---   2. If found, disambiguate by checking IWRAM SaveBlock1 pointers:
---      - AP:  SB1_PTR at 0x03004F58
---      - RR:  SB1_PTR at 0x03003840
---   3. If 0x108 has ARM code (not ASCII), also try RR detection.
---   4. Fallback: vanilla.
+-- Detection strategy:
+--   1. Read ROM offset 0x108 for "pokemon red/green version".  The string is in the
+--      GBA header of vanilla FRLG, AP and RR alike — it is NOT an AP/RR marker.
+--   2. Disambiguate by IWRAM SaveBlock1 pointer plausibility, in this order:
+--        AP pointer (0x03004F58) -> "ap"
+--        ROM-only CFRU signature -> "radical_red"
+--        vanilla pointer (0x03005008) -> "vanilla"
+--        else "ap" (IWRAM not yet initialised)
+--   3. radical_red is NEVER returned on RAM plausibility alone.  The ROM-only
+--      signature is the word at 0x080001BC (the profile's gBaseStats pointer)
+--      landing in the expanded half of the image: each admitted dump's own value
+--      is FR clean 0x08254784, LG clean 0x08254760, RR clean/companion 0x097B98EC.
+--      The previous probe accepted the whole 0x08000000..0x08FFFFFF range, which
+--      vanilla FireRed satisfies, so vanilla FR was reported as radical_red
+--      (docs/gen3/probes/census_fr_overworld_2026-09-21.txt:1 `variant=radical_red`).
+--   4. The RAM-plausibility RR test (_detectRR: SB1 pointer + party shape) is no longer
+--      part of the decision: it cannot separate vanilla from RR, and requiring it would
+--      misclassify RR before a save is loaded, when those pointers are not initialised.
+--      The function stays as the source tools/gen_gen3_profile.py reads PARTY_CAPACITY
+--      from; it is not called here.
 
 -- Validate that a candidate SB1_PTR_ADDR points to plausible SaveBlock1 data.
 local function _validateSB1Ptr(ptr_addr)
@@ -412,7 +425,12 @@ local function _validateSB1Ptr(ptr_addr)
     return mapGroup <= 42 and mapNum <= 199
 end
 
--- Stronger RR detection: validates SB1 pointer AND party structure.
+-- RAM-plausibility probe for Radical Red: validates the SB1 pointer AND party shape.
+-- NOT part of the variant decision any more (see the header note above): RAM cannot
+-- separate vanilla from RR, and gating on it would misclassify RR before a save is
+-- loaded.  Kept because tools/gen_gen3_profile.py:346-357 derives the RR profile's
+-- PARTY_CAPACITY from the `partyCount` limit in this body, and that derivation is
+-- checked by tests/unit/test_gen3_profile.py.
 local function _detectRR()
     local rr = GEN3.profiles.radical_red
     if not rr then return false end
@@ -430,6 +448,17 @@ local function _detectRR()
         if pers == 0 or maxHP == 0 or maxHP > 999 then return false end
     end
     return true
+end
+
+-- ROM-only CFRU/Radical Red signature. Fail closed: an unreadable or non-integer
+-- word is never CFRU, so a missing signal cannot promote a ROM to radical_red.
+local CFRU_PTR_MIN, CFRU_PTR_MAX = 0x09000000, 0x0A000000
+local function _romIsCFRU()
+    local rr = GEN3.profiles.radical_red
+    if not rr then return false end
+    local ok, word = pcall(memory.read_u32_le, rr.CFRU_BASESTATS_PTR, "System Bus")
+    if not ok or type(word) ~= "number" or word % 1 ~= 0 then return false end
+    return word >= CFRU_PTR_MIN and word < CFRU_PTR_MAX
 end
 
 --- Returns the detected variant: "vanilla", "ap", "radical_red", or "emerald".
@@ -457,33 +486,25 @@ function GEN3.detect_variant()
     local has_version_str = rom_name:find("pokemon red version")
                          or rom_name:find("pokemon green version")
 
-    -- Step 2: Detect profile by validating IWRAM pointers
+    -- Step 2: profile by IWRAM pointer, AP first (original priority), then the
+    -- ROM-only CFRU signature, then vanilla.
     if has_version_str then
-        -- Both AP and RR have this string; check AP first (original priority)
         if _validateSB1Ptr(GEN3.profiles.ap.SB1_PTR_ADDR) then
             return "ap"
-        elseif _detectRR() then
+        elseif _romIsCFRU() then
+            -- ROM is immutable, so this holds before a save is loaded too.
             return "radical_red"
+        elseif _validateSB1Ptr(GEN3.profiles.vanilla.SB1_PTR_ADDR) then
+            return "vanilla"
         else
-            -- IWRAM not yet initialised (game resetting / loading save).
-            -- Vanilla FRLG NEVER has the version string at ROM 0x108, so this
-            -- is definitely AP or RR — returning "vanilla" here is always wrong.
-            -- Use a ROM-stable probe to distinguish them:
-            --   CFRU/RR places a gBaseStats ROM pointer at ROM address 0x080001BC.
-            --   AP (recompiled vanilla) has ARM code there, not a ROM pointer.
-            -- ROM is immutable; this read is always valid regardless of save state.
-            local ok, cfru_ptr = pcall(memory.read_u32_le, 0x080001BC, "System Bus")
-            if ok and cfru_ptr >= 0x08000000 and cfru_ptr < 0x09000000 then
-                return "radical_red"
-            end
-            -- No CFRU ROM pointer → assume AP.
+            -- IWRAM not yet initialised (game resetting / loading save) and no
+            -- CFRU signature in the ROM.  Historical fallback, unchanged.
             return "ap"
         end
-    else
-        -- No version string — could be vanilla or RR (future builds)
-        if _detectRR() then
-            return "radical_red"
-        end
+    end
+    -- No version string — could be vanilla or a hack (future builds)
+    if _romIsCFRU() then
+        return "radical_red"
     end
     return "vanilla"
 end

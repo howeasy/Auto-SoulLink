@@ -5,7 +5,7 @@
   "source": {
     "file": "lua/games/gen3_frlge.lua",
     "git_head": "134f007b2b3e1131f90965936326e4511725cc9b",
-    "sha256": "29dec5cd12bbd5b666c10d309e505a34fea3ab17ad56c180a038c6e465342a47"
+    "sha256": "c6040d5a9a90881717e6954a1e4b7733bdd655e0416ed40d784dae124b20b8ff"
   },
   "titles": {
     "emerald": {
