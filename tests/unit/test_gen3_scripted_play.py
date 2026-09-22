@@ -12,7 +12,7 @@ import os
 import re
 
 import pytest
-from lupa import LuaRuntime
+from lupa import LuaError, LuaRuntime
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 _SCRIPT = os.path.join(_REPO, "lua", "tests", "gen3_scripted_play.lua")
@@ -159,6 +159,11 @@ def test_no_run_body_terminates_on_a_bare_frame_count():
     for body in bodies:
         is_open_stub = "G.phase(" in body and "OPEN" in body and "for " not in body
         if is_open_stub:
+            continue
+        # route1_catch's run() delegates its hunt+catch loop (shared with resume()) to a named
+        # function; test_route1_catch_loop_carries_a_terminal_helper checks THAT body instead of
+        # this thin wrapper.
+        if "_loop(cp)" in body:
             continue
         assert any(h in body for h in _TERMINAL_HELPERS), (
             "a non-open leg's run body has no coordinate/map/counter/predicate terminal helper:\n"
@@ -347,3 +352,132 @@ def test_the_loop_cursor_persists_across_calls_in_the_source():
     assert "\nlocal grass_step = 1" in _SCRIPT_SRC, "grass_step must be file-scoped"
     body = _SCRIPT_SRC.split("local function hunt_encounter")[1].split("\nlocal ")[0]
     assert "grass_step = ((grass_step - 2)" in body, "the cursor must rewind on an encounter"
+
+
+# ── route1_catch / route1_faint whiteout recovery (card gen3-P3-C3-18) ─────────────────────────
+# Both legs own their own battle (hunt_encounter calls play.step with enc=false), so playlib's
+# own whiteout detector never sees a displacement there; check_whiteout is this file's own copy
+# of the same signal, and these legs must raise it and declare recover()/resume() or a whiteout
+# just runs off the end of the leg looking like an ordinary loss.
+
+
+def test_route1_legs_declare_recover_and_resume(legs):
+    for i in range(1, len(legs) + 1):
+        leg = legs[i]
+        if leg["name"] in ("route1_catch", "route1_faint"):
+            assert callable(leg["recover"]), f"{leg['name']} has no recover()"
+            assert callable(leg["resume"]), f"{leg['name']} has no resume()"
+
+
+def test_recover_helper_reuses_existing_paths_and_resets_the_grass_cursor():
+    """recover_to_route1_grass must not invent a new BFS path (the file already has the two it
+    needs) and must reset grass_step, or a resumed hunt starts mid-square from the fresh origin
+    instead of the step a whiteout actually interrupted."""
+    body = _SCRIPT_SRC.split("local function recover_to_route1_grass")[1].split(
+        "\nlocal function heal_at_nurse")[0]
+    assert "recover_to_pallet_town(cp)" in body
+    assert '"town_start_to_oak_trigger"' in body
+    assert '"route1_south_to_grass_spot"' in body
+    assert "grass_step = 1" in body, "recovery must reset the grass loop cursor"
+
+
+def test_route1_catch_clears_the_battle_intro_before_touching_the_action_menu():
+    """ROOT CAUSE of FR run 18's fainted starter: a Right press issued the instant the encounter
+    fires lands on the still-open 'Wild X appeared!' text and does nothing, so the cursor stays
+    at its battle-start default (FIGHT) for the mash that follows. The intro-clearing loop must
+    appear BEFORE the Right press in source order, not after."""
+    body = _SCRIPT_SRC.split("local function route1_catch_loop")[1].split(
+        "\nLEGS[#LEGS + 1] = {")[0]
+    clear_at = body.index('G.tap("A", 3, 20)')
+    right_at = body.index('G.tap("Right", 3, 20)')
+    assert clear_at < right_at, "the intro text must be cleared before Right selects BAG"
+    assert "check_whiteout(cp, before_map, before_x, before_y)" in body
+
+
+def test_route1_faint_run_checks_for_whiteout_after_each_battle():
+    leg_src = _SCRIPT_SRC.split('name = "route1_faint"')[1].split(
+        '\n-- ── leg: viridian_pc_deposit_withdraw')[0]
+    assert "check_whiteout(cp, before_map, before_x, before_y)" in leg_src
+
+
+@pytest.fixture
+def emu_stubbed(request):
+    """Like `stubbed_module`, plus the bare minimum G.phase needs (emu.framecount, console.log)
+    so check_whiteout's logging call on the whiteout path doesn't blow up on a missing global —
+    neither touches a file (M.phase only writes to `out`, which stays nil: G.open is never
+    called here) or the emulator for real. Optional `savestate.save` (param-marked tests only),
+    for save_battle_state_once. Returns (runtime, module, store, logged, save_calls).
+    """
+    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    store: dict[int, int] = {}
+
+    runtime.globals().memory = runtime.table(
+        read_u8=lambda a, *_: store.get(int(a), 0) & 0xFF,
+        read_u16_le=lambda a, *_: store.get(int(a), 0) & 0xFFFF,
+        read_u32_le=lambda a, *_: store.get(int(a), 0),
+    )
+    runtime.globals().emu = runtime.table(framecount=lambda: 0)
+    logged: list[str] = []
+    runtime.globals().console = runtime.table(log=lambda s: logged.append(str(s)))
+    save_calls: list[str] = []
+    runtime.globals().savestate = runtime.table(
+        save=lambda path: (save_calls.append(path), True)[1])
+    mod = runtime.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    return runtime, mod, store, logged, save_calls
+
+
+def _fake_cp(runtime, store, ptr_addr, sb1_addr, group, num):
+    store[ptr_addr] = sb1_addr
+    store[sb1_addr + 0x04] = group
+    store[sb1_addr + 0x05] = num
+    return runtime.table(pointers=runtime.table(
+        gSaveBlock1Ptr=runtime.table(address=ptr_addr)))
+
+
+def test_check_whiteout_raises_when_displaced_to_the_heal_map(emu_stubbed):
+    runtime, module, store, logged, _ = emu_stubbed
+    assert module.HEAL_MAP == 4 * 256 + 0
+    ptr_addr, sb1_addr = 0x03005008, 0x02020000
+    # The player is now reading the heal map's (group, num) == HEAL_MAP.
+    cp = _fake_cp(runtime, store, ptr_addr, sb1_addr, 4, 0)
+    with pytest.raises(LuaError):
+        module.check_whiteout(cp, 3 * 256 + 19, 12, 37)  # before_map = Route1 (3.19)
+
+
+def test_check_whiteout_does_not_raise_when_still_on_the_same_map(emu_stubbed):
+    runtime, module, store, logged, _ = emu_stubbed
+    ptr_addr, sb1_addr = 0x03005008, 0x02020000
+    cp = _fake_cp(runtime, store, ptr_addr, sb1_addr, 3, 19)  # still on Route1
+    module.check_whiteout(cp, 3 * 256 + 19, 12, 37)  # before_map == current map: no whiteout
+    assert not logged, "a same-map read must not log or raise a whiteout"
+
+
+def test_route1_faint_resume_short_circuits_on_an_existing_faint(emu_stubbed):
+    """resume() is only ever called by run_leg after check_whiteout() raised, and a one-mon party
+    can only white out BY fainting -- so resume() must accept that without re-grinding, checking
+    the (likely reset) counter first and falling back to the whiteout itself as evidence."""
+    _, module, store, logged, _ = emu_stubbed
+    faint_leg = None
+    for i in range(1, len(module.LEGS) + 1):
+        if module.LEGS[i]["name"] == "route1_faint":
+            faint_leg = module.LEGS[i]
+    assert faint_leg is not None
+    battle_results_addr = 0x03004F90
+
+    store[battle_results_addr] = 0
+    faint_leg["resume"](None)
+    assert any("accepted the whiteout itself" in line for line in logged)
+
+    logged.clear()
+    store[battle_results_addr] = 2
+    faint_leg["resume"](None)
+    assert any("survived the recovery walk" in line for line in logged)
+
+
+def test_save_battle_state_once_saves_no_more_than_once(emu_stubbed):
+    _, module, _store, _logged, save_calls = emu_stubbed
+    module.save_battle_state_once(None)
+    module.save_battle_state_once(None)
+    module.save_battle_state_once(None)
+    assert len(save_calls) == 1, f"expected exactly one save, got {save_calls}"

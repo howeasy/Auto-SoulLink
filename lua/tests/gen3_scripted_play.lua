@@ -457,6 +457,24 @@ local GRASS_ORIGIN = { 12, 37 }
 -- belt to that braces.
 local grass_step = 1
 
+-- CHECKPOINT BATTLE STATE. probe_gen3_checkpoint.lua's battle row (SLINK_CHECKPOINT_BATTLE_STATE,
+-- default slink_prebattle.State) has no source before this driver: the committed fixture
+-- (tests/fixtures/gen3/firered_town.sav) has party=0, so no wild battle is reachable from it at
+-- all. Route 1's grass loop is the first point in the WHOLE natural-play run that is reliably
+-- in-battle, so save it there -- once, the first time either route1_catch or route1_faint (or
+-- any future Route 1 leg through hunt_encounter) actually lands in one, not once per leg and not
+-- again on a whiteout retry's second encounter.
+local battle_state_saved = false
+
+local function save_battle_state_once(cp)
+    if battle_state_saved or not H.save_state then return end
+    local path = play.state_path("slink_fr_battle.State")
+    if path and H.save_state(path) then
+        battle_state_saved = true
+        G.phase("battle-state-saved", path)
+    end
+end
+
 local function hunt_encounter(cp, label, cycles)
     local start_map = play.map(cp)
     -- Re-anchor if we are not on one of the square's four tiles at all (a whiteout recovery or
@@ -482,6 +500,7 @@ local function hunt_encounter(cp, label, cycles)
                 grass_step = ((grass_step - 2) % #GRASS_LOOP) + 1
                 G.phase("encounter-found", string.format("%s: cycle %d at %s",
                                                          label, cycle, play.at(cp)))
+                save_battle_state_once(cp)
                 return true
             end
             -- enc = false: THIS leg owns the battle it is hunting for, so the walker must not
@@ -494,6 +513,7 @@ local function hunt_encounter(cp, label, cycles)
                 grass_step = ((grass_step - 2) % #GRASS_LOOP) + 1
                 G.phase("encounter-found", string.format("%s: cycle %d mid-step %s at %s",
                                                          label, cycle, dir, play.at(cp)))
+                save_battle_state_once(cp)
                 return true
             end
             if not stepped then
@@ -507,7 +527,9 @@ local function hunt_encounter(cp, label, cycles)
                                              label, cycle, play.at(cp)))
         end
     end
-    return play.in_battle(cp)
+    local landed_in_battle = play.in_battle(cp)
+    if landed_in_battle then save_battle_state_once(cp) end
+    return landed_in_battle
 end
 
 --- Walk out of the house a whiteout put us in, back to Pallet Town's door-exit tile (6,9) --
@@ -531,6 +553,52 @@ local function recover_to_pallet_town(cp)
             x, y))
     end
     G.phase("recovered", "back outside at " .. play.at(cp))
+end
+
+--- route1_catch and route1_faint own their own battle (hunt_encounter calls play.step with
+--- enc=false precisely so THIS file, not playlib, decides how to fight/throw) -- which means
+--- playlib's own whiteout detector (P.handle_encounter's `error({whiteout=true,...},0)`,
+--- playlib.lua:288-297) never sees the displacement, and P.run_leg's recover()/resume()
+--- machinery only ever fires on that exact signal shape. A leg that opts out of playlib fighting
+--- its battles must raise the same signal itself, or a whiteout here just runs off the end of
+--- the leg looking like a plain loss. `before_map/x/y` is the position the caller captured right
+--- as the battle started (same convention as handle_encounter's own `before`).
+local function check_whiteout(cp, before_map, before_x, before_y)
+    local nmap = play.map(cp)
+    if nmap == HEAL_MAP and before_map ~= HEAL_MAP then
+        G.phase("whiteout", string.format(
+            "battle displaced the player from map %s (%d,%d) to the heal map %s at %s",
+            tostring(before_map), before_x, before_y, tostring(HEAL_MAP), play.at(cp)))
+        error({ whiteout = true, map = nmap, from_map = before_map,
+                from_x = before_x, from_y = before_y }, 0)
+    end
+end
+
+--- Whiteout recovery for route1_catch/route1_faint: back out to Pallet Town
+--- (recover_to_pallet_town), then continue to the Route 1 grass loop's own origin. Reuses the
+--- SAME two PATHS entries a normal walk there already uses -- town_start_to_oak_trigger's
+--- (6,9)->(12,1) route and route1_south_to_grass_spot's (12,39)->(12,37) -- rather than a new
+--- BFS: by this point in the run OakTrigger's gate (var VAR_MAP_SCENE_PALLET_TOWN_OAK==0) has
+--- long since gone false for real (the starter leg already fired it), so walking back over
+--- (12,1) is a plain tile crossing, not a re-trigger (see that PATHS entry's own comment).
+--- Verified with the tool the file's own header requires: `python tools/gba_map.py
+--- "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" --map 3.0 --bfs 6,9 12,1` and
+--- `--map 3.19 --bfs 12,39 12,37` both returned exactly these two PATHS entries' own dirs.
+---
+--- grass_step MUST reset to 1: left pointing at whatever step a mid-square whiteout
+--- interrupted, the next hunt would walk off the band from the fresh origin (12,37) instead of
+--- starting the loop there (same class of bug hunt_encounter's own resume-in-place comment
+--- documents for an in-place interruption; this is the equivalent for an interruption that
+--- teleports the player away entirely).
+local function recover_to_route1_grass(cp)
+    recover_to_pallet_town(cp)
+    play.follow(cp, "town_start_to_oak_trigger", "whiteout-recovery")
+    if not play.enter_warp(cp, "Up", 30) then
+        G.finish(false, "whiteout recovery: PalletTown->Route1 crossing never fired")
+    end
+    play.follow(cp, "route1_south_to_grass_spot", "whiteout-recovery")
+    grass_step = 1
+    G.phase("recovered", "back in the grass at " .. play.at(cp))
 end
 
 --- Heal at a Poke Center counter: walk to the talking tile, face the nurse, A through her
@@ -938,6 +1006,55 @@ LEGS[#LEGS].resume = function(cp)
 end
 
 -- ── leg: route1_catch (capture_wild) ─────────────────────────────────────────────────────────
+-- DESIGN CHOICE (card gen3-P3-C3-18): throw a ball on the FIRST action-menu turn, never fight
+-- first. The starter does not need to weaken a full-HP Pidgey/Rattata to catch it, and fighting
+-- first only spends more turns taking return hits for nothing this leg needs -- catching is
+-- retried across encounters (bounded), not across turns of one losing fight.
+--
+-- ROOT CAUSE of FR run 18's fainted starter, found by reading what this leg used to send: hunt_
+-- encounter() returns the instant the encounter fires, which is still the "Wild PIDGEY
+-- appeared!" INTRO text, not the action menu -- the old code's very first press (Right, meant to
+-- toggle FIGHT(0) -> BAG(1)) landed on that text and did nothing, so the 30-A mash that followed
+-- opened with the cursor still at its battle-start default FIGHT(0) and fought a real move
+-- instead. Clearing the intro text FIRST (bounded, below) fixes exactly that: the Right that
+-- follows now always lands on the real action menu.
+local function route1_catch_loop(cp)
+    local caught = false
+    for encounter = 1, 4 do
+        if not hunt_encounter(cp, "route1_catch", 40) then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "route1_catch: 40 cycles of the pinned grass loop produced no wild "
+                .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
+        end
+        local before_map, before_x, before_y = play.map(cp), G.pos(cp)
+        for _ = 1, 6 do
+            if not play.in_battle(cp) then break end
+            G.tap("A", 3, 20)
+        end
+        -- RISK (see header): BAG is pinned (Right, A); reaching POKE BALL inside it is not.
+        if play.in_battle(cp) then
+            G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG/USE_ITEM(1), pinned bit toggle
+            G.tap("A", 3, 30)
+            for _ = 1, 30 do G.tap("A", 3, 20) end   -- bag category/list/throw-confirm, mashed
+        end
+        -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
+        local resolved = play.mash_a(160, function() return not play.in_battle(cp) end)
+        check_whiteout(cp, before_map, before_x, before_y)
+        if resolved and battle_outcome() == B_OUTCOME_CAUGHT then
+            caught = true
+            break
+        end
+    end
+    if not caught then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "route1_catch: never reached B_OUTCOME_CAUGHT (last outcome=%d) after 4 encounters "
+            .. "— the bag-menu mash (RISK, see header) is the likely culprit", battle_outcome()))
+    end
+    G.phase("caught", "outcome=" .. battle_outcome())
+end
+
 LEGS[#LEGS + 1] = {
     name = "route1_catch",
     exercises = { "capture_wild" },
@@ -946,6 +1063,10 @@ LEGS[#LEGS + 1] = {
         "src/battle_controller_player.c:248-253 (Right toggles B_ACTION_USE_ITEM/BAG)",
         "src/battle_script_commands.c (BattleScript_SuccessBallThrow); include/constants/battle.h:82 (B_OUTCOME_CAUGHT=7)",
     },
+    -- playlib calls recover() after our own check_whiteout() raises, then resume() instead of
+    -- run(). recover_to_route1_grass leaves the player standing back at the grass origin with
+    -- grass_step reset, so resuming is just running the hunt+catch loop again.
+    recover = function(cp) recover_to_route1_grass(cp) end,
     run = function(cp)
         play.follow(cp, "oak_to_lab_exit", "route1_catch")
         -- Same door as leave_lab_for_parcel (5..7,12): a press INTO it, not a plain walk-onto.
@@ -956,33 +1077,9 @@ LEGS[#LEGS + 1] = {
         play.follow(cp, "lab_exit_to_route1_edge", "route1_catch")
         if not play.enter_warp(cp, "Up", 30) then G.finish(false, "route1_catch: PalletTown->Route1 crossing never fired") end
         play.follow(cp, "route1_south_to_grass_spot", "route1_catch")
-        local caught = false
-        for encounter = 1, 4 do
-            if not hunt_encounter(cp, "route1_catch", 40) then
-                G.shot("stuck")
-                G.finish(false, string.format(
-                    "route1_catch: 40 cycles of the pinned grass loop produced no wild "
-                    .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
-            end
-            -- RISK (see header): BAG is pinned (Right, A); reaching POKE BALL inside it is not.
-            G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG/USE_ITEM(1), pinned bit toggle
-            G.tap("A", 3, 30)
-            for _ = 1, 30 do G.tap("A", 3, 20) end   -- bag category/list/throw-confirm, mashed
-            -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
-            local resolved = play.mash_a(160, function() return not play.in_battle(cp) end)
-            if resolved and battle_outcome() == B_OUTCOME_CAUGHT then
-                caught = true
-                break
-            end
-        end
-        if not caught then
-            G.shot("stuck")
-            G.finish(false, string.format(
-                "route1_catch: never reached B_OUTCOME_CAUGHT (last outcome=%d) after 4 encounters "
-                .. "— the bag-menu mash (RISK, see header) is the likely culprit", battle_outcome()))
-        end
-        G.phase("caught", "outcome=" .. battle_outcome())
+        route1_catch_loop(cp)
     end,
+    resume = route1_catch_loop,
 }
 
 -- ── leg: route1_faint ────────────────────────────────────────────────────────────────────────
@@ -992,7 +1089,13 @@ LEGS[#LEGS + 1] = {
     source = {
         "data/maps/Route1/map.json (wild encounter table, same grass patch)",
         "lua/games/gen3_frlge.lua:vanilla.BATTLE_RESULTS_ADDR (gBattleResults.playerFaintCounter @ +0)",
+        "src/overworld.c SetWarpDestinationToLastHealLocation (a single-mon party can only white "
+        .. "out BY fainting, so the whiteout itself is proof of the site this leg exercises)",
     },
+    -- Same recovery as route1_catch: back to Pallet Town, then to the grass origin, grass_step
+    -- reset. Needed here even though resume() below does no hunting of its own -- the NEXT leg
+    -- (viridian_pc_deposit_withdraw) still expects to start from the grass, not the heal house.
+    recover = function(cp) recover_to_route1_grass(cp) end,
     run = function(cp)
         local before = player_faints()
         local fainted = false
@@ -1003,10 +1106,16 @@ LEGS[#LEGS + 1] = {
                     "route1_faint: 40 cycles of the pinned grass loop produced no wild "
                     .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
             end
+            local before_map, before_x, before_y = play.map(cp), G.pos(cp)
             -- Keep attacking (RISK, see header) until this battle ends, then check the faint
             -- counter — a strong starter may just keep winning; bounded at 20 encounters.
             -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up.
             play.mash_a(160, function() return not play.in_battle(cp) end)
+            -- A faint that also empties the party IS a whiteout: our own check_whiteout raises
+            -- the same signal playlib's handle_encounter would have, so run_leg's recover()/
+            -- resume() engages instead of this leg reporting a plain "never advanced" failure
+            -- for a faint that in fact just happened.
+            check_whiteout(cp, before_map, before_x, before_y)
             if player_faints() > before then fainted = true; break end
         end
         if not fainted then
@@ -1015,6 +1124,22 @@ LEGS[#LEGS + 1] = {
                          .. "(RISK: the starter may simply keep winning — see header)")
         end
         G.phase("fainted", "playerFaintCounter=" .. player_faints())
+    end,
+    -- run_leg only calls resume() after check_whiteout() raised above, so reaching here already
+    -- proves the faint: a single-mon party whites out BY fainting, and there is no other way to
+    -- land in resume(). gBattleResults (BATTLE_RESULTS_ADDR) is a scratch struct the engine
+    -- clears on returning to the field after a whiteout, so re-reading it here the way run()
+    -- does would report 0 and look like nothing happened -- check it FIRST anyway (it is cheap
+    -- and free if some other flow left it set), then fall back to the whiteout itself as
+    -- evidence rather than grinding for a SECOND faint the recovered party doesn't need.
+    resume = function(cp)
+        local counter = player_faints()
+        if counter > 0 then
+            G.phase("fainted", "playerFaintCounter=" .. counter .. " (survived the recovery walk)")
+        else
+            G.phase("fainted", "accepted the whiteout itself as evidence (playerFaintCounter "
+                             .. "was reset to 0 by the engine, as expected)")
+        end
     end,
 }
 
@@ -1277,4 +1402,9 @@ return {
     follow = play.follow,
     in_battle = play.in_battle,
     LAB_SCENE_VAR_OFFSET = LAB_SCENE_VAR_OFFSET,
+    -- test hooks (card gen3-P3-C3-18): the whiteout signal a leg that owns its own battle must
+    -- raise itself, the heal map id it compares against, and the checkpoint-battle-state guard.
+    HEAL_MAP = HEAL_MAP,
+    check_whiteout = check_whiteout,
+    save_battle_state_once = save_battle_state_once,
 }
