@@ -371,3 +371,68 @@ def test_master_equivalence_differential(name, master_root, monkeypatch):
     master, head = traces
     assert any(entry[0] == "sent" for entry in master), "the scenario must be observable"
     assert head == master
+
+
+# ── W14: a phase callback that parks (duo ball_gate_new's rival hold) runs as on master ───
+
+_PARK_STUB = """
+local real_dofile = dofile
+model_ram, model_frame, model_steps, model_log = {}, 0, 0, {}
+emu = {framecount = function() return model_frame end}
+memory = {read_u8 = function() return 0 end}
+gameinfo = {getromhash = function() return string.rep("ab", 20) end}
+dofile = function(path)
+    if path:match("/lua/gen1/entry.lua$") then
+        return {harness_bus_u8 = function() return function(a) return model_ram[a] or 0 end end}
+    elseif path:match("/gen1_rb_ball_gate_inputs.lua$") then
+        return {new = function()
+            local calls = 0
+            local phases = {"walk", "walk", "rival-challenge-dialogue", "fight", "fight", "lab-loss-complete"}
+            return {step = function(_, _, point, frame)
+                calls = calls + 1
+                return {A = calls % 2 == 1}, phases[math.min(calls, #phases)]
+            end}
+        end}
+    end
+    return real_dofile(path)
+end
+model_step = function(buttons)
+    model_steps = model_steps + 1; model_frame = model_frame + 1
+    model_log[#model_log + 1] = buttons and buttons.A and "A" or "-"
+end
+"""
+
+_PARK_RUN = """
+local P = dofile(HOST)
+local play = P.new(ROOT, "red", "a", {})
+play.point = function() return {tick = model_frame} end
+local seen = {}
+local receipts = play.run(model_step, {"lab"}, function(name, phase, frame, point)
+    seen[#seen + 1] = name .. ":" .. phase .. "@" .. frame .. "/" .. point.tick
+    if phase == "rival-challenge-dialogue" then
+        for _ = 1, PARK do model_step(nil) end   -- the duo wait_until: yield_frame() per frame
+    end
+end, 10)
+return receipts.lab, model_steps, model_frame, table.concat(seen, ","), table.concat(model_log)
+"""
+
+
+def _park_run(host_path, park=50):
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_PARK_STUB)
+    g = lua.globals()
+    g.HOST, g.ROOT, g.PARK = pathlib.Path(host_path).as_posix(), REPO.as_posix(), park
+    return lua.execute(_PARK_RUN)
+
+
+def test_w14_parked_phase_callback_matches_master(tmp_path_factory):
+    """ball_gate_new parks 900 s inside on_phase; master counted only loop iterations against
+    max_frames_each (so 50 parked frames under a 10-iteration bound pass), did not re-read the
+    point, and stepped the pre-park buttons afterwards."""
+    scratch = tmp_path_factory.mktemp("w14_master")
+    master = scratch / "gen1_scripted_play.lua"
+    master.write_bytes(subprocess.run(["git", "show", f"{MASTER}:lua/tests/gen1_scripted_play.lua"],
+                                      cwd=REPO, check=True, capture_output=True).stdout)
+    want = _park_run(master)
+    assert want[0] == 6 and want[1] == 56  # 6 iterations; 5 route steps + 50 parked + 1 idle
+    assert _park_run(REPO / "lua" / "tests" / "gen1_scripted_play.lua") == want

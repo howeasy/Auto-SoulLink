@@ -39,13 +39,31 @@ Steps `frames` idle frames (integer `0..1000000`) and returns `frames`.
 | `settle_frames` | Consecutive terminal iterations needed, `1..max_frames`. Default 1. |
 | `max_phase_changes` | Bound on the phase trace, `1..1000000`. Default 256. |
 | `terminal_idle` | Required boolean: step one idle frame after settling. |
+| `phase_callback_may_advance` | Optional boolean, default `false`. See below. |
 
 Each iteration calls `decide(frame, iteration)`, which must return
 `buttons, phase[, point[, request]]` without advancing the clock. `phase` is a nonempty
 string of at most 256 bytes. On a phase change the host appends
 `{phase, frame, iteration}` to the trace and calls `on_phase(name, phase, frame, point)`.
 A non-nil `request` must be a table, requires `on_request`, and `on_request(request,
-point, frame)` must return exactly `true`. Neither callback may advance the clock.
+point, frame)` must return exactly `true`. Neither callback may advance the clock,
+unless the spec opts in for `on_phase`.
+
+### Parking in `on_phase`
+
+With `phase_callback_may_advance = true`, `on_phase` may step frames itself, for example
+to hold one player at a phase until an external release. The host then:
+
+- counts the whole park as the one iteration it happened in, so parked frames count
+  against neither `max_frames` nor `max_phase_frames`;
+- keeps the point, phase and buttons that `decide` returned before the callback, and
+  steps those buttons next;
+- records the trace entry with the pre-callback frame;
+- still raises if the clock went backwards.
+
+The host cannot interrupt a synchronous callback, so the callback must bound its own
+wait. The receipt's `frames`/`end_frame` include parked frames and `iterations` does
+not. `decide` and `on_request` stay strict.
 
 When the terminal phase has held for `settle_frames` iterations the run returns
 `{name, terminal, iterations, frames, start_frame, end_frame, trace, requests}` without
@@ -63,6 +81,9 @@ of the terminal phase and any request policy.
 ## Bindings
 
 `lua/tests/gen1_scripted_play.lua` binds `step` to a one-`frameadvance` driver step,
-`frame` to `emu.framecount()` and `idle` to the Gen 1 lane's button map.
+`frame` to `emu.framecount()` and `idle` to the Gen 1 lane's button map. Its route
+chain is the only caller that sets `phase_callback_may_advance`. It does this so master
+`8f6a986` semantics still hold: the duo `ball_gate_new` parks in `on_phase` under
+`wait_until`'s 900 s wall-clock limit. Master had no other bound on those frames.
 `lua/tests/gen2_scripted_play.lua` receives the host by injection, with its game observer. The unit
 controls are in `tests/unit/test_scripted_inputs.py`.

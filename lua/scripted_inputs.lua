@@ -56,6 +56,8 @@ function S.new(io)
         local stable = integer(spec.settle_frames or 1, 1, bound, "terminal settling bound")
         local trace_bound = integer(spec.max_phase_changes or 256, 1, LIMIT, "phase trace bound")
         assert(type(spec.terminal_idle) == "boolean", "terminal idle policy required")
+        local may_park = spec.phase_callback_may_advance
+        assert(may_park == nil or type(may_park) == "boolean", "phase callback policy must be boolean")
         local start, previous, phase_frames, settled = clock(), nil, 0, 0
         local trace, requests = {}, 0
         for iteration = 1, bound do
@@ -69,7 +71,11 @@ function S.new(io)
                 trace[#trace + 1] = {phase=phase, frame=current, iteration=iteration}
                 previous, phase_frames = phase, 0
                 if on_phase then on_phase(spec.name, phase, current, point) end
-                assert(clock() == current, "phase callback advanced a frame outside the host")
+                -- Opt-in park: frames the callback spends are not iterations, and the point and
+                -- buttons decided before it stand. Its own wait is the only bound on them.
+                local after = clock()
+                assert(after == current or (may_park and after > current),
+                    "phase callback advanced a frame outside the host")
             end
             phase_frames = phase_frames + 1
             assert(phase_frames <= phase_bound, spec.name .. ": phase made no bounded progress: " .. phase)

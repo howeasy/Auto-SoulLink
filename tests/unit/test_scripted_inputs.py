@@ -81,3 +81,34 @@ def test_missing_budget_and_phase_trace_overrun_refuse(lua):
         lua.execute('spec.max_phase_frames=nil;host.run(spec,function() return {},"done" end)')
     with pytest.raises(Exception, match="trace bound"):
         lua.execute('spec.max_phase_frames=10;spec.max_phase_changes=1;host.run(spec,function(f,n) return {},n==1 and "a" or "b" end)')
+
+
+_PARK = """
+    local phases={"walk","park","walk","done"}
+    local result=host.run(spec,function(f,n) return {A=n==2},phases[n] end,function(name,phase)
+        if phase=="park" then for _=1,50 do frame=frame+DELTA end end
+    end)
+    return result.iterations,result.frames,calls,held[2].A,result.trace[2].frame
+"""
+
+
+def test_strict_default_refuses_a_frame_advancing_phase_callback(lua):
+    lua.globals().DELTA = 1
+    with pytest.raises(Exception, match="phase callback advanced"):
+        lua.execute(_PARK)
+    assert lua.globals().calls == 1
+
+
+def test_opted_in_park_counts_one_iteration_and_keeps_the_decided_buttons(lua):
+    lua.globals().DELTA = 1
+    # 50 parked frames under a 10-frame budget: the park is not iterations or phase frames.
+    got = lua.execute("spec.phase_callback_may_advance=true;spec.max_phase_frames=1;" + _PARK)
+    assert got == (4, 54, 4, True, 1)
+
+
+def test_park_policy_must_be_boolean_and_the_clock_cannot_go_back(lua):
+    with pytest.raises(Exception, match="policy must be boolean"):
+        lua.execute('spec.phase_callback_may_advance=1;host.run(spec,function() return {},"done" end)')
+    lua.globals().DELTA = -1
+    with pytest.raises(Exception, match="phase callback advanced"):
+        lua.execute("frame=100;spec.phase_callback_may_advance=true;" + _PARK)

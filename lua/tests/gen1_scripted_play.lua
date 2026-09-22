@@ -217,7 +217,10 @@ function P.new(ROOT, title, player, opts)
             local spec = assert(modules[name], "unknown route " .. tostring(name))
             local driver = assert(dofile(ROOT .. "/lua/tests/" .. spec.file)).new(expected)
             local receipt = host.run({name=name, terminal=spec.terminal, max_frames=max_frames_each,
-                max_phase_frames=max_frames_each, max_phase_changes=max_frames_each, terminal_idle=true}, function(frame)
+                max_phase_frames=max_frames_each, max_phase_changes=max_frames_each, terminal_idle=true,
+                -- master: on_phase may park (duo ball_gate_new holds A's rival for the go-file);
+                -- those frames never counted against max_frames_each.
+                phase_callback_may_advance=true}, function(frame)
                 local point = self.point()
                 local buttons, phase = driver.step(handshake, status, point, frame)
                 return buttons, phase, point
