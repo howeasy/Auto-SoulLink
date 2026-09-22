@@ -1,52 +1,78 @@
-# Gen 2 implementation resume — 2026-09-22
+# Gen 2 implementation resume (updated 2026-09-22, stopping point)
 
-Owner resumed coding and requested ten native Codex workers plus one bounded OMP lane.
-Keep independent work assigned. The original49-MD grounding is complete; do not repeat it.
-Current grants and ACKs live only in the sweep RC_MASTER_GUIDE checkpoint.
+## Who coordinates
 
-## Locations and completed P1
+The owner made **Claude** the Gen 2 coordinator on 2026-09-22 after Codex became unavailable,
+until the owner says otherwise from Codex. **Do not use Codex until the owner gives the
+go-ahead.** Workers: up to 3 Opus 5.5 / Sonnet / Haiku subagents at once, model set
+explicitly; OMP live session `Gen2-Base` or a headless OMP. The sole ledger is the sweep
+`RC_MASTER_GUIDE.md` checkpoint plus `WORKTREE_REGISTER.md`; this note is a summary.
 
-- Planning: E:/Google Drive/SLink, claude/gen2-planning-kickoff-a18801 at9c7e7ac plus reviewed spec,35tickets and planning corrections. Preserve unrelated untracked randomizer.html.
-- Implementation: E:/Google Drive/SLink/.claude/worktrees/gen2-foundation, codex/gen2-foundation at93ccb8ee5a12ad892b9db04bbf7341572fc63675 plus P2/P3 candidates.
-- Base: master8f6a986 + approved shared imports644b3b8/fa8c2f8/1d1171a + reviewed shared-only runner correction645bc73. Do not restore the unselected Gen3 manifest or wire logger.
-- P1 exact25-file commit93ccb8e: four canonical ROM builds, eight byte-preserved SYM/MAP artifacts, provenance/slack, builder/parser/admission and CI.209focused tests passed; independent code review and OMP12/12hash audit accepted. Same-cut --check preserved all eleven publication files. No ROM tracked or uploaded.
-- Owner authorized pushing only93ccb8e. Both [gen2-syms](https://github.com/howeasy/Auto-SoulLink/actions/runs/35739332750) and [tests](https://github.com/howeasy/Auto-SoulLink/actions/runs/35739332625) succeeded at that head. See [P1 receipt](reviews/P1_BUILD_RECEIPT_2026-09-22.md).
-- Former planning worktree remains detached9c7e7ac and untouched. No emulator lane claimed.
+## Where things are
 
-## Current frontier
+- Implementation: `E:/Google Drive/SLink/.claude/worktrees/gen2-foundation`, branch
+  `codex/gen2-foundation`. HEAD is recorded in the ledger (`source_head`). Nothing pushed
+  since P1 (`93ccb8e`); no master merge.
+- The Codex in-flight tree was snapshotted verbatim in `5824258` before any reshaping.
+- Planning docs: the root checkout's `claude/gen2-planning-kickoff-a18801` (`9c7e7ac`).
+- ROM dumps and staged/built cartridges were copied or built inside the worktree for live
+  lanes (all gitignored): Gen 1 + Gen 2 dumps at the root, `patch/build/gen1_pure*.gbc`,
+  `patch/gen1/build/slink_{red,blue}.gb`, `.cache/pret`. The tracked
+  `patch/gen1/dist/slink_bank3f.bin` rebuilt byte-identically.
 
-P2 generated profiles, species/evolutions, text, areas/encounters, statics/gifts/trainers,
-checkpoint and engine-site catalogs exist for all three titles. Independent reviews accepted
-bounded source facts. Fixes closed immutable source-read races, direct CLI imports and the
-Lua ROM-bank terminator. Source candidates do not qualify runtime sites.
+## Done this session (all reviewed; see commit bodies)
 
-Coverage separates PLANNED target slots from built hashes eligible for evidence. A planned
-artifact can be mapped but cannot support CLOSED evidence. The runner/map follow-up is
-active; neutral schema review accepted. All197evidence cells remain OPEN. F-3 planned witness
-selection preserves ENGINE + PYDEC/GAME; mapping completeness is not physical qualification.
+- Gen 1 rebind onto the shared modules repaired and restored to master behaviour
+  (`0a1aa79`, `e0b38b7`, `3c48b20`, `cb02a10`), with a master-equivalence differential that
+  runs master's own files. Two independent Opus reviews plus closures:
+  `docs/gen2/reviews/P3_SHARED_MODULES_REVIEW_2026-09-22.md`.
+- Gen 2 reads, wire projection, fixture tooling, scripted fixture gate, client (candidate
+  graph only), R2 binder fixes (mail list, per-title GetTreeMons limit, box re-assert):
+  `17aeb62`, `92f5445`, `b6c5b87`, `461594b`, `d1cadea`, `cc04bb7`, `bf2d5e1`. Review:
+  `docs/gen2/reviews/P3_GEN2_BINDERS_REVIEW_2026-09-22.md`.
+- Coverage map: F-3 cells amended (`d2b023c`); input pins made checkout-independent with
+  `eol=lf` (`58054c1`); the lane is green. Ledger citations corrected from OMP audits
+  (`bf99768`, `d204b31`). RTC trailer facts: `docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md`.
 
-P3 candidates include independent Python codec, Lua reads, shared write permit with Gen1
-rebind, Gen2 party writes and game adapter. Review caught full-key species omission, missing
-Egg-marker inference, level-validation and numeric interval defects. Exact fix/closure states
-are in the sole guide. Active-battle action suppression remains unqualified; CheckTurn is a
-source candidate only. New legacy adapter failures caused by replaced P2 pack shapes stay
-visible until the planned adapter cutover; do not relabel the whole suite green.
+## Physical evidence so far
 
-Shared checkpoint, token scanning, fixture qualification, admission/Entry and Gen2 box plans
-are being coded. One worker owns Gen1 Entry and bundle composition for the shared modules;
-other authors send their required dependency contracts to that writer. Do not copy generic
-lifecycle or fold production code into the independent oracle.
+- **Gen 1 `live-new-gates` PASSED at `3c48b20`:** 19 passed, 1 explained skip, 0 failed.
+- The rest of that Gen 1 lane sequence is **not evidence**: it picked up `cb02a10` mid-run
+  and was stopped at the owner's stopping point. It found one real regression (the
+  `ball_gate_new` park, fixed in `cb02a10`); its other failures were missing inputs, since
+  staged.
+- No Gen 2 live run has happened yet.
 
-## Next actions
+## Next actions, in order
 
-1. Inspect current native statuses and sole checkpoint, reuse workers and ACK exact grants.
-   Historical cache cards are dispatch briefs, never competing ledgers.
-2. Close concrete findings, freeze hashes and selectively integrate reviewed P2 source work
-   while disjoint P3 implementation continues. Copy reviewed planning inputs to implementation.
-3. Advance production composition and scripted fixture tooling. Eight fixture saves must be
-   played and independently qualified; current source/model tests do not substitute.
-4. Preserve unsigned owner gates and BUILT/G1=PENDING catalogs. No runtime admission, physical
-   regression, master merge or release claim follows from candidate coding or P1 CI.
+1. Reconcile whatever was in flight at the stop (see the ledger: the Gen 2 signal-binder card
+   and the OMP F/R/C/D/T/N citation audit).
+2. Re-run the whole Gen 1 physical set at ONE frozen commit, with
+   `SLINK_PURERGB_ROMS="E:/Google Drive/SLink/.cache/purergb"`, one lane at a time:
+   inspect-purergb, apex-purergb, duo-pairs, duo-pairs-purergb, live-gates,
+   live-trade-gates, inspect-purergb-overlay, live-trade-gates-purergb,
+   apex-refusal-purergb. That is the gate for the Gen 1 rebind ever reaching master.
+   `test_gen1_trade_patch.py` is red on RGBDS `STRSUB` deprecation warnings; it's
+   pre-existing and not from this branch.
+3. First live Gen 2 fixture run (crystal_town) through `tools/gen2_fixtures.py` and
+   `lua/tests/test_gen2_scripted_gate.lua`. Expect route timing and menu parsing to need
+   live tuning; the list of live-only assumptions is in commit `461594b`.
+4. Then the other seven fixtures, the live inspect gate, and the Gen 2 duo harness.
+
+## Open decisions and carries
+
+- **Owner decision (G3 server cutover):** unhatched eggs are kept off the wire (derived from
+  O-15), so the server's party count is one low while an egg is carried and it could send a
+  linked mon into a full party. The client refuses such writes today.
+- **P4 carry:** the mail flag is correct but not yet enforced on any transfer path. Native
+  trade must call the adapter's held-item check (T-3).
+- **Merge carry:** 13 intended Gen 1 behaviour differences are listed in the body of
+  `0a1aa79`; the reviews marked the rest KEEP. The Gen 1 physical lanes must pass before
+  merge.
+- Coverage validator PLAUSIBLE items (the target+base CLI policy; controls full-equality)
+  are left for the Gen 3 binder.
+- Open with an exact reason: indoor fishing map association; U5 double ROM read at boot
+  (measure in the emulator).
 
 ## Stable facts and constraints
 
@@ -55,7 +81,7 @@ lifecycle or fold production code into the independent oracle.
 - Gold d8b8a3600a465308c9953dfa04f0081c05bdcb94; Silver49b163f7e57702bc939d642a18f591de55d92dae.
 - Prior unchanged Gen1 baseline:3247passed/737skipped/5missing-Blue-ROM setup errors; Lua193passed. Not an all-green physical regression. Exact classified receipts are in .cache/gen2-orchestration-20260922/baseline.
 - Poké Balls are the sole staging exception. Scripted normal input, one emulator lane, route300%, qualification100%, no Computer Use. Mailbox placement still needs native ownership proof.
-- Both Magi servers approved; native worker setting10 active. Do not start replacement headless pools or extra OMP lanes. Gen2-Base provides contextual source checks.
+- Gen2-Base (OMP, live) provides contextual source checks; a fresh headless OMP is used where an independent reviewer is needed.
 - Stat formula doubles base AND DV; capped ceiling square root precedes division by4. Full identity is DV:OT:species. Egg list markers are separate from actual record species.
 - No parked-worktree deletion, master merge or release authorized. Remote authority covers only the exact P1 commit.
-- Sole authority: E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2/docs/gen1_reference/RC_MASTER_GUIDE.md and WORKTREE_REGISTER.md. Coordinator task01a0c8f3-5345-73b2-9714-a57ec67338e1.
+- Sole authority: E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2/docs/gen1_reference/RC_MASTER_GUIDE.md and WORKTREE_REGISTER.md. Coordinator: Claude session 1d2b4c9a (see ledger).

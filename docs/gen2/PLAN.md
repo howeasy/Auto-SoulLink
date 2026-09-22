@@ -1,12 +1,10 @@
 # Gen 2 (Gold / Silver / Crystal) onto the Gen 1 layout: plan (rev 3.1, APPROVED for owner presentation by Codex round 3)
 
-> Current execution checkpoint (2026-09-22): owner resumed with "Restarted. Lets get to work.
-> We need this thing coded." P1 is committed and pushed at `93ccb8e`; both GitHub workflows
-> passed. Ten built-in Codex lanes are coding and reviewing the P2 source packs and P3
-> shared mechanisms, codecs, adapters and storage candidates on that isolated foundation.
-> P0 spec/ticket review found one weakened second-review clause; it is corrected in ticket 23.
-> Actual baseline/build/CI evidence remains separately recorded; the owner go-ahead is not a
-> physical or release pass. See [RESUME.md](RESUME.md) and the sole guide checkpoint.
+> Current execution checkpoint (2026-09-22, stopping point): Claude took over coordination from
+> Codex at the owner's request. P1 pushed at `93ccb8e`; P2 packs and P3 components built and
+> independently reviewed on `codex/gen2-foundation` (not pushed). Gen 1 `live-new-gates`
+> passed on the shared-module rebind; the rest of the Gen 1 physical set and every Gen 2 live
+> run are still to do. No gate is signed. See [RESUME.md](RESUME.md) and the sole ledger.
 
 _Planning only. Nothing was implemented, built or run beyond read-only reconnaissance and one
 scratch RGBDS build of `ram.asm` by a research worker (throwaway, outside the repo). Worktree
