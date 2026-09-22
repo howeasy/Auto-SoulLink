@@ -42,6 +42,8 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 - Checkpoint PHYSICAL: FR all controls PASS on two save lineages (town fixture idle 276/300; post-parcel 275/300), RR 9/9.
 - G3 draft: docs/gen3/G3_request_draft.md (refreshed to 583517b + status line).
 
+> FALSE PASS FOUND 2026-09-22 (`fr_bag_dump_parcel_state_2026-09-22.txt`): slink_fr_parcel_deliver.State still holds ITEM_OAKS_PARCEL (349) in the key pocket and no Poke Balls, so the FR `parcel_deliver` leg never delivered the parcel (no Pokedex, no balls). Earlier "parcel delivered" wording in FR run 15-18 receipts/commits is wrong; the "post-parcel lineage" checkpoint receipts are a PRE-delivery state (the wireless liveness finding and fix are unaffected). Fix card C3-26 (Sonnet) in flight; FR states from parcel_deliver onward must be regenerated after it.
+
 ## Next actions (in order)
 
 1. FR capture_wild (the only remaining lane item for G3): FR runs 20/21 reach the action menu deterministically and steer to BAG, but the in-battle bag pocket navigation to POKe BALL is unpinned (run 21: one battle, never resolved, outcome 0). Card: pin it from pret (src/item_menu.c: which pocket the battle bag opens on — remembered last pocket; pocket switch keys; POKe BALLS pocket index; Oak gives 5 Poke Balls after the Pokedex) with a RAM witness for the open pocket (gBagMenuState / sBagMenuState pocket field from the .sym), then re-run from slink_fr_parcel_deliver.State (SLINK_GEN3_PLAY_FROM=route1_catch). Then route1_faint, viridian_pc_deposit_withdraw, pc_release on FR for the FR PC kinds.
