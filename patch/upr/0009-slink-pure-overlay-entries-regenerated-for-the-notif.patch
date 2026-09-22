@@ -1,0 +1,50 @@
+From 0350873b4dccf7eb8910785c1969608cd0214850 Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Tue, 22 Sep 2026 18:34:05 -0400
+Subject: [PATCH] slink: pure overlay entries regenerated for the notify-SFX
+ overlay build (CRCs 248A/5E4C/5C6A)
+
+---
+ src/com/dabomstew/pkrandom/config/gen1_offsets.ini | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+index 14fed7f..17c1729 100755
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1429,8 +1429,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x1D9F
+-CRC32=DAD06B16
++CRCInHeader=0x248A
++CRC32=54FC28AF
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1512,8 +1512,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x5761
+-CRC32=E5EAEBB4
++CRCInHeader=0x5E4C
++CRC32=C8E3768A
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1595,8 +1595,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x557F
+-CRC32=2F4EEA8F
++CRCInHeader=0x5C6A
++CRC32=9EA8F4D5
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+-- 
+2.54.0.windows.1
+
