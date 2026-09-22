@@ -75,6 +75,11 @@ def check_manifest(path: Path, root: Path = REPO) -> dict:
             result["positives"] = {kind: count for kind, count in sorted(counts.items()) if count}
             diagnostics.update(item["kind"] for item in events.diagnostics)
             result["diagnostics"] = events.diagnostics
+            # ponytail: BLOCKER fix — only log_format_only may be empty
+            if entry["scope"] in ("observer", "observer_excerpt") and not any(
+                "SHADOW " in line for line in shadow_diff.read_text(receipt).splitlines()
+            ):
+                result["errors"].append("observer receipt must contain SHADOW records")
             # Also catch frame_control, which the semantic parser deliberately drops.
             if entry["scope"] == "log_format_only" and any(
                 "SHADOW " in line for line in shadow_diff.read_text(receipt).splitlines()

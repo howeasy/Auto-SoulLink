@@ -80,11 +80,10 @@ def test_invalid_manifest_fails(tmp_path, capsys):
 def test_real_manifest_against_committed_receipts():
     entries = load_manifest(DEFAULT_MANIFEST)
     missing = [entry["file"] for entry in entries if not (REPO / entry["file"]).is_file()]
-    if missing:
-        pytest.skip("committed receipt absent in this checkout: " + ", ".join(missing))
+    assert not missing, "committed receipt absent in this checkout: " + ", ".join(missing)
     report = check_manifest(DEFAULT_MANIFEST)
     assert report["passed"], report
-    assert report["summary"] == {"receipts": 7, "checks": 61, "passed": 61, "failed": 0}
+    assert report["summary"] == {"receipts": 10, "checks": 79, "passed": 79, "failed": 0}
     assert all(row["count"] == 0 for result in report["receipts"] for row in result["rows"])
     by_file = {result["file"]: result["positives"] for result in report["receipts"]}
     assert by_file["docs/gen3/probes/shadow_rr_play_r5d_pc_ops_2026-09-21.shadow.log"] == {
@@ -93,3 +92,40 @@ def test_real_manifest_against_committed_receipts():
     assert by_file["docs/gen3/probes/shadow_fr_play_run17_2026-09-21.shadow.log"] == {
         "battle_begin": 8, "battle_end": 7, "map_load": 8, "mon_given": 1,
     }
+    assert by_file["docs/gen3/probes/shadow_rr_play_r5_2026-09-21.shadow.log"] == {
+        "battle_begin": 4, "battle_end": 7, "capture_wild": 1, "faint": 6, "map_load": 1, "mon_given": 1, "whiteout": 1,
+    }
+    assert by_file["docs/gen3/probes/shadow_rr_faint_2026-09-21.txt"] == {
+        "battle_begin": 4, "battle_end": 5, "faint": 5, "map_load": 1, "whiteout": 1,
+    }
+    assert by_file["docs/gen3/probes/shadow_fr_play_2026-09-21.txt"] == {
+        "map_load": 1,
+    }
+    assert by_file["docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.shadow.log"] == {
+        "pc_move": 5, "save": 1,
+    }
+    assert by_file["docs/gen3/probes/shadow_fr_play_run18_2026-09-21.shadow.log"] == {
+        "battle_begin": 8, "battle_end": 8, "faint": 1, "map_load": 8, "mon_given": 1, "whiteout": 1,
+    }
+    assert by_file["docs/gen3/probes/shadow_fr_play_run19_2026-09-22.shadow.log"] == {
+        "battle_begin": 2, "battle_end": 2, "faint": 1, "map_load": 1, "whiteout": 1,
+    }
+
+
+def test_empty_observer_receipt_fails(tmp_path):
+    """Verify that empty observer receipts produce an error."""
+    path = manifest(tmp_path)
+    (tmp_path / "receipt.log").write_text("", encoding="utf-8")
+    report = check_manifest(path, tmp_path)
+    assert not report["passed"]
+    assert report["receipts"][0]["errors"]
+    assert "observer receipt must contain SHADOW records" in report["receipts"][0]["errors"][0]
+
+
+def test_stdout_matches_committed_report(capsys):
+    report_path = REPO / "docs/gen3/probes/negatives_report_2026-09-22.txt"
+    assert report_path.is_file(), "committed report must exist"
+    expected = report_path.read_text(encoding="utf-8")
+    assert main([str(DEFAULT_MANIFEST)]) == 0
+    actual = capsys.readouterr().out
+    assert actual == expected, "stdout does not match committed report"

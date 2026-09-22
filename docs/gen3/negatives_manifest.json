@@ -5,7 +5,7 @@
     "exclusions":  [
                        "Census receipts are function probes, not observer logs (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt:47-56).",
                        "Aggregate-only summaries are not expanded into invented SHADOW events (docs/gen3/probes/shadow_fr_play_run15_2026-09-21.txt:27-32).",
-                       "The combined shadow_rr_play_2026-09-21.txt contains separate sessions whose t resets (:30,47,82); use separate monotonic logs instead of bypassing the shared parser.",
+                       "The combined shadow_rr_play_2026-09-21.txt contains separate sessions whose t resets (:47,82 gate door_warp and pc_ops legs); use separate monotonic logs instead of bypassing the shared parser.",
                        "This is a curated matrix, not all absent kinds in all files. Do not infer closure of every semantic branch or artifact from its PASS."
                    ],
     "receipts":  [
@@ -306,6 +306,102 @@
                                           {
                                               "kind":  "nature_change",
                                               "why":  "docs/gen3/probes/checkpoint_fr_clean_2026-09-21.txt:1-16 is a predicate probe report, explicitly predicate_only at :15 and RESULT FAIL at :16. It must contain no SHADOW records. Passing this format check does NOT override the failed checkpoint run or establish observer-hook silence."
+                                          }
+                                      ]
+                     },
+                     {
+                         "file":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.shadow.log",
+                         "artifact":  "rr_companion",
+                         "scope":  "observer",
+                         "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC. Observer registration/liveness: matching .shadow.log:1-3. Expected absence applies to this captured PC/release/save run, not all gameplay.",
+                         "must_not":  [
+                                          {
+                                              "kind":  "battle_begin",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          },
+                                          {
+                                              "kind":  "battle_end",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          },
+                                          {
+                                              "kind":  "faint",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          },
+                                          {
+                                              "kind":  "capture_wild",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          },
+                                          {
+                                              "kind":  "whiteout",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          },
+                                          {
+                                              "kind":  "mon_given",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          },
+                                          {
+                                              "kind":  "map_load",
+                                              "why":  "docs/gen3/probes/shadow_rr_play_r6_pc_release_2026-09-22.txt:1-21 runs pc_ops (deposit/withdraw), pc_release (release a box mon), and save legs only. No battle, encounter, or worldmap traversal occurs; no NPC interaction beyond the PC."
+                                          }
+                                      ]
+                     },
+                     {
+                         "file":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.shadow.log",
+                         "artifact":  "fr_clean",
+                         "scope":  "observer",
+                         "why":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.txt:1-56 covers starter gift, rival battle, parcel delivery (with encounters), route1_catch, and ends in faint/whiteout without a capture. No PC operation, save, trade, or evolution leg completes; the run_catch leg fails after whiteout. Observer registration/liveness: matching .shadow.log:1-3. Expected absence applies to this captured route1_catch run, not all gameplay.",
+                         "must_not":  [
+                                          {
+                                              "kind":  "pc_move",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.txt:1-56 covers starter gift, rival battle, parcel delivery (with encounters), route1_catch, and ends in faint/whiteout without a capture. No PC operation, save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "save",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.txt:1-56 covers starter gift, rival battle, parcel delivery (with encounters), route1_catch, and ends in faint/whiteout without a capture. No PC operation, save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "trade_done",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.txt:1-56 covers starter gift, rival battle, parcel delivery (with encounters), route1_catch, and ends in faint/whiteout without a capture. No PC operation, save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "evolve_species_store",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.txt:1-56 covers starter gift, rival battle, parcel delivery (with encounters), route1_catch, and ends in faint/whiteout without a capture. No PC operation, save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "capture_wild",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run18_2026-09-21.txt:48-56 route1_catch leg ends in faint/whiteout (:85-88) without catching any wild mon; the leg never reaches a catch state."
+                                          }
+                                      ]
+                     },
+                     {
+                         "file":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.shadow.log",
+                         "artifact":  "fr_clean",
+                         "scope":  "observer",
+                         "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 resumes route1_catch from a saved battle state (slink_fr_parcel_deliver.State), finds two wild encounters, and ends in faint/whiteout without a capture. No PC operation, NPC gift (after starter), save, trade, or evolution leg completes. Observer registration/liveness: matching .shadow.log:1-4. Expected absence applies to this resumed route1_catch run, not all gameplay.",
+                         "must_not":  [
+                                          {
+                                              "kind":  "pc_move",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 resumes route1_catch from a saved battle state, finds two encounters, and ends in faint/whiteout without a capture. No PC operation, NPC gift (after starter), save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "mon_given",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 resumes route1_catch from a saved battle state, finds two encounters, and ends in faint/whiteout without a capture. No PC operation, NPC gift (after starter), save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "save",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 resumes route1_catch from a saved battle state, finds two encounters, and ends in faint/whiteout without a capture. No PC operation, NPC gift (after starter), save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "trade_done",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 resumes route1_catch from a saved battle state, finds two encounters, and ends in faint/whiteout without a capture. No PC operation, NPC gift (after starter), save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "evolve_species_store",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 resumes route1_catch from a saved battle state, finds two encounters, and ends in faint/whiteout without a capture. No PC operation, NPC gift (after starter), save, trade, or evolution leg completes."
+                                          },
+                                          {
+                                              "kind":  "capture_wild",
+                                              "why":  "docs/gen3/probes/shadow_fr_play_run19_2026-09-22.txt:1-15 route1_catch leg ends in faint/whiteout (:13-16) without catching any wild mon; the leg never reaches a catch state."
                                           }
                                       ]
                      }
