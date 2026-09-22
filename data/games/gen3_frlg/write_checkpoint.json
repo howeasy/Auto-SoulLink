@@ -48,12 +48,13 @@
       }
     },
     "cpu": {
-      "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
+      "census": "docs/gen3/probes/census_fr_overworld_2026-09-21.txt",
       "mode": 31,
-      "observed_pc": 452,
-      "pc_max": 16383,
-      "pc_min": 0,
-      "thumb": 0
+      "observed_pc": 134219948,
+      "pc_max": 134219967,
+      "pc_min": 134219920,
+      "symbol": "WaitForVBlank",
+      "thumb": 1
     },
     "pointers": {
       "gPokemonStoragePtr": {
@@ -220,12 +221,11 @@
       }
     },
     "cpu": {
-      "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
       "mode": 31,
-      "observed_pc": 452,
-      "pc_max": 16383,
-      "pc_min": 0,
-      "thumb": 0
+      "pc_max": 134219967,
+      "pc_min": 134219920,
+      "symbol": "WaitForVBlank",
+      "thumb": 1
     },
     "pointers": {
       "gPokemonStoragePtr": {

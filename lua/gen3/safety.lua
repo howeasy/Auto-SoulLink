@@ -54,6 +54,8 @@ function S.new(pack, deps, kind)
                 if p.mask then value = value & uint(p.mask, 256 ^ p.width - 1) end
                 assert(value == p.expect, "forbidden state: " .. name)
             end
+            -- One parked range per title, from the pack. A frame end taken inside an IRQ handler
+            -- fails the mode test on purpose; the next parked frame admits (checkpoint doc §4.3).
             local cpu, regs = assert(pack.cpu), deps.regs()
             local pc, cpsr = uint(regs.R15, 4294967295), uint(regs.CPSR, 4294967295)
             assert(cpsr % 32 == cpu.mode and math.floor(cpsr / 32) % 2 == cpu.thumb

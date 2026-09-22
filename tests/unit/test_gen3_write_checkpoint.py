@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -90,9 +91,38 @@ def test_version_and_fail_closed_shape(pack: str, title: str) -> None:
                 "field_controls_locked", "script_context_status", "save_dialog_cb",
                 "link_callback"):
         assert key in block["predicates"], f"{title}: missing predicate {key}"
-    assert block["cpu"]["mode"] == 0x1F and block["cpu"]["thumb"] == 0
-    assert block["cpu"]["pc_min"] <= block["cpu"]["observed_pc"] <= block["cpu"]["pc_max"]
     assert block["pointers"], f"{title}: no SaveBlock pointers to revalidate"
+
+
+def census_rows(path: str) -> dict[int, int]:
+    """The `final` section's `R15=0x... xN` rows of a frame-end census."""
+    text = (G.ROOT / path).read_text(encoding="utf-8").split("final at frame", 1)[1]
+    return {int(m[0], 16): int(m[1]) for m in re.findall(r"R15=(0x[0-9A-F]+) x(\d+)", text)}
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_frlg_cpu_is_parked_in_wait_for_vblank(title: str) -> None:
+    cpu = load("gen3_frlg")[title]["cpu"]
+    addr, size = G.parse_sym(G.SYM_DIR / G.PACKS["gen3_frlg"][title][0])["WaitForVBlank"]
+    assert (cpu["pc_min"], cpu["pc_max"]) == (addr, addr + size - 1)
+    assert cpu["mode"] == 0x1F and cpu["thumb"] == 1 and cpu["symbol"] == "WaitForVBlank"
+    if title == "leafgreen":  # no LG census exists; FR's observation must not be copied over
+        assert "observed_pc" not in cpu and "census" not in cpu
+        return
+    rows = census_rows(cpu["census"])
+    rom_pcs = {pc for pc in rows if pc >= G.ROM_BASE}
+    assert rom_pcs and all(addr <= pc <= cpu["pc_max"] for pc in rom_pcs)
+    assert cpu["observed_pc"] == max(rows, key=rows.get)
+    # everything else is the BIOS IRQ vector -- refused by the clause, and a small minority
+    assert all(pc < 0x4000 for pc in set(rows) - rom_pcs)
+    assert sum(rows[pc] for pc in rom_pcs) > 0.9 * sum(rows.values())
+
+
+def test_rr_cpu_is_the_bios_census() -> None:
+    cpu = load("gen3_rr")["radical_red"]["cpu"]
+    assert cpu == {"mode": 0x1F, "thumb": 0, "pc_min": 0, "pc_max": 0x3FFF, "observed_pc": 0x1C4,
+                   "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt"}
+    assert census_rows(cpu["census"]) == {0x1C4: 1800}
 
 
 def test_generator_check_passes_on_the_committed_files() -> None:

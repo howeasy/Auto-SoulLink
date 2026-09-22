@@ -22,7 +22,7 @@ Nothing here was measured on an emulator except the CPU census, which is cited w
 | built ROM sha1 | `41cb23d8…` (FR) / `574fa542…` (LG) — identical to the admitted US 1.0 dumps, so a `.sym` address is a real address in the shipped ROM |
 | FR / LG ROMs | `Pokemon - FireRed Version (USA).gba`, `Pokemon - LeafGreen Version (USA).gba` |
 | RR ROMs | `Pokemon - Radical Red.gba` (clean 4.1) and `patch/build/slink_RR.gba` (companion, sha1 `b7d1e075…`) |
-| CPU census | `docs/gen3/probes/census_rr_overworld_2026-09-21.txt` |
+| CPU census | `docs/gen3/probes/census_fr_overworld_2026-09-21.txt` (FR), `census_rr_overworld_2026-09-21.txt` (RR); none for LG |
 | hook probes | `docs/gen3/probes/hooks_fr_clean_2026-09-21.txt`, `hooks_rr_companion_2026-09-21.txt` |
 
 File:line citations below are lines in the pinned pret tree, fetched at that commit.
@@ -221,7 +221,7 @@ at the same offset in all four ROMs.
 | `link_transferring` | `gLinkTransferringData` `0x030030E4` | `== 0` | `src/main.c:195-210` |
 | `wireless_comm_type` | `gWirelessCommType` `0x03003F3C` | `== 0` | `src/link.c`, `IsLinkTaskFinished` |
 | tasks | `gTasks` `0x03005090` | every active slot's `func` ∈ `allowed_overworld_tasks` | §3 |
-| CPU | — | CPSR mode `0x1F`, `T == 0`, R15 ∈ `[0x0000,0x3FFF]` | the census fact, §4.3 |
+| CPU | FRLG: `WaitForVBlank` `0x08000890` size `0x30` | FRLG: CPSR mode `0x1F`, `T == 1`, R15 ∈ `[0x08000890,0x080008BF]`; RR: mode `0x1F`, `T == 0`, R15 ∈ `[0x0000,0x3FFF]` | per title, §4.3 |
 | pointers | §4.4 | snapshot at arm time, revalidate before each write | PLAN §5.3 |
 
 Cable Club, the PC, the party menu, an in-game trade and a START-menu save all reach the player's
@@ -231,14 +231,26 @@ the set rather than just the callback pair.
 
 ### 4.3 The parked-PC clause
 
-PLAN §5.3 left this to the census. Over 1800 frame-ends of RR overworld-idle, R15 was
-`0x000001C4` on **every** frame, CPSR mode `0x1F` (System) with `T = 0`
-(`census_rr_overworld_2026-09-21.txt`). `0x000001C4` is inside the GBA BIOS interrupt path, which
-is where a frame boundary lands while the main thread sits in `WaitForVBlank`
-(`src/main.c:462-468`). So the clause is meaningful on GBA and is added: **mode `0x1F`, `T == 0`,
-R15 in the BIOS range `[0x0000,0x3FFF]`**, with the exact observed value kept in the JSON as
-`observed_pc` for reference only — the predicate tests the range, not the single value, because
-one savestate on one build is not a proof that no other BIOS address can be the parked PC.
+PLAN §5.3 left this to the census. The clause is **per title**: one R15 range plus CPSR mode and
+T bit, emitted by the generator; `lua/gen3/safety.lua` holds no game fact.
+
+**FRLG** park in ROM. `AgbMain` ends every frame by calling `WaitForVBlank`
+(`src/main.c:216`), a busy-wait on `gMain.intrCheck` (`src/main.c:462-468`). The range is that
+symbol's whole body from each title's own `.sym` (`08000890 l 00000030 WaitForVBlank`, the same
+address in `pokefirered.sym` and `pokeleafgreen.sym`): **mode `0x1F`, `T == 1`, R15 ∈
+`[0x08000890,0x080008BF]`**. FR census (`census_fr_overworld_2026-09-21.txt`): 1707/1800 frame
+ends at R15 `0x080008AC..0x080008B4`, mode 31, T=1; `observed_pc` keeps the modal `0x080008AC`.
+The other 93 (~5%) landed on the BIOS IRQ vector (R15 `0x0000001C`, mode `0x12` IRQ, T=0). Those
+are **refused on purpose**: an IRQ handler is mid-flight, and the next parked frame admits, so
+liveness holds. LG has no census; its block has no `observed_pc`/`census`, only the symbol.
+
+**Radical Red** (CFRU) parks in the BIOS instead. Over 1800 frame-ends of RR overworld-idle, R15
+was `0x000001C4` on **every** frame, CPSR mode `0x1F` (System) with `T = 0`
+(`census_rr_overworld_2026-09-21.txt`), inside the GBA BIOS `IntrWait` path. The clause is
+**mode `0x1F`, `T == 0`, R15 in the BIOS range `[0x0000,0x3FFF]`**, with the exact observed
+value kept in the JSON as `observed_pc` for reference only — the predicate tests the range, not
+the single value, because one savestate on one build is not a proof that no other BIOS address
+can be the parked PC.
 
 Not sampled in that run: menu, battle and save buckets (no input script). PLAN §6 P3's scripted
 play covers them, and until then this clause is a *necessary* condition only.

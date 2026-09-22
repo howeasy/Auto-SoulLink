@@ -36,6 +36,9 @@ class World:
                 frame=function() return frame end}
         """)
         g = self.lua.globals()
+        cpu = self.pack["cpu"]  # a parked frame end for this title
+        g.cpu.R15 = cpu.get("observed_pc", cpu["pc_min"])
+        g.cpu.CPSR = cpu["mode"] | cpu["thumb"] << 5
         for anchor in self.pack["anchors"].values():
             for i, byte in enumerate(bytes.fromhex(anchor["expected_hex"][kind])):
                 g.rom[anchor["rom_offset"] + i] = byte
@@ -81,6 +84,19 @@ def test_cpu_refuses_other_mode_thumb_or_unparked_pc(r15, cpsr):
     w.lua.globals().cpu.R15 = r15
     w.lua.globals().cpu.CPSR = cpsr
     assert not w.check()
+
+
+@pytest.mark.parametrize("r15,cpsr,ok", [
+    (0x080008AC, 0x6000003F, True),   # WaitForVBlank, System mode, Thumb (FR census row)
+    (0x080008AC, 0x6000001F, False),  # same PC, T=0
+    (0x0000001C, 0x00000012, False),  # BIOS IRQ vector in IRQ mode: refused on purpose
+    (0x000001C4, 0x0000001F, False),  # the RR BIOS park is not an FR park
+])
+def test_firered_parked_cpu(r15, cpsr, ok):
+    w = World("firered", "clean")
+    w.lua.globals().cpu.R15 = r15
+    w.lua.globals().cpu.CPSR = cpsr
+    assert bool(w.check()) is ok
 
 
 def test_unknown_active_task():

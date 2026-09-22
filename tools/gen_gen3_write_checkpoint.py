@@ -122,11 +122,36 @@ ALLOWED_TASKS = ("Task_RunPerStepCallback", "Task_RunTimeBasedEvents", "Task_Wea
 TASK_STRUCT_SIZE = 0x28
 TASK_COUNT = 16
 
-# P1 frame-end census (docs/gen3/probes/census_rr_overworld_2026-09-21.txt): 1800/1800 frames
-# parked at R15=0x000001C4 in the GBA BIOS with CPSR mode 0x1F (System) and T=0.
-CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
-       "observed_pc": 0x000001C4,
-       "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt"}
+# The frame-end "parked CPU" clause is per title: one R15 range + CPSR mode + T bit.
+#
+# FRLG idles in ROM, not the BIOS: AgbMain ends every frame in WaitForVBlank (pret/pokefirered
+# c75f3523 src/main.c:216 the call, :462-468 the body -- a busy-wait on gMain.intrCheck), so the
+# range is that symbol's whole body from the title's own .sym, System mode (0x1F), Thumb.  FR
+# census (docs/gen3/probes/census_fr_overworld_2026-09-21.txt): 1707/1800 frame ends at R15
+# 0x080008AC..0x080008B4, mode 0x1F, T=1.  The other 93 landed in the BIOS IRQ vector (R15=0x1C,
+# mode 0x12, T=0) and are refused on purpose -- the next parked frame admits.  LG has no census,
+# so its block carries no observed_pc.
+PARKED_SYMBOL = "WaitForVBlank"
+FRLG_CENSUS = {"firered": (0x080008AC, "docs/gen3/probes/census_fr_overworld_2026-09-21.txt")}
+# RR (CFRU) parks in the BIOS instead (docs/gen3/probes/census_rr_overworld_2026-09-21.txt):
+# 1800/1800 frames at R15=0x000001C4 with CPSR mode 0x1F (System) and T=0.
+RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
+          "observed_pc": 0x000001C4,
+          "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt"}
+
+
+def cpu_clause(title: str, syms, is_rr: bool) -> dict:
+    if is_rr:
+        return dict(RR_CPU)
+    addr, size = syms[PARKED_SYMBOL]
+    cpu = {"mode": 0x1F, "thumb": 1, "pc_min": addr, "pc_max": addr + size - 1,
+           "symbol": PARKED_SYMBOL}
+    if title in FRLG_CENSUS:
+        pc, census = FRLG_CENSUS[title]
+        if not addr <= pc < addr + size:
+            raise SystemExit(f"{title}: census PC {pc:#010x} is outside {PARKED_SYMBOL}")
+        cpu.update(observed_pc=pc, census=census)
+    return cpu
 
 # RR relocates the save blocks; these come from the admitted pack profile, not from a symbol.
 RR_POINTERS = {"gSaveBlock1Ptr": "SB1_PTR_ADDR", "gSaveBlock2Ptr": "SB2_PTR_ADDR"}
@@ -255,7 +280,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         "tasks": {"symbol": "gTasks", "struct_size": TASK_STRUCT_SIZE, "count": TASK_COUNT,
                   "func_offset": 0, "is_active_offset": 4,
                   "allowed_overworld_tasks": allowed},
-        "cpu": dict(CPU),
+        "cpu": cpu_clause(title, syms, is_rr),
         "pointers": {},
     }
     if ok_data("gTasks"):
