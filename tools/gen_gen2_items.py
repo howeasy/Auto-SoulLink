@@ -70,6 +70,22 @@ def attribute_rows(text: str) -> list[list[str]]:
     return rows
 
 
+def mail_items(text: str, ids: dict[int, str]) -> list[int]:
+    """MailItems list, the engine's only mail test (ItemIsMail: C engine/pokemon/mail_2.asm:941-945,
+    G :922-926; data/items/mail_items.asm:1-12 in both pins). No name pattern: LITEBLUEMAIL lacks _MAIL."""
+    by_name, out, lines = {name: key for key, name in ids.items()}, [], source_lines(text)
+    if not lines or lines[0] != "MailItems:" or lines[-1] != "db -1":
+        raise ValueError("MailItems shape changed")
+    for line in lines[1:-1]:
+        match = re.fullmatch(r"db\s+(\w+)", line)
+        if not match or match[1] not in by_name or by_name[match[1]] in out:
+            raise ValueError(f"unsupported MailItems row: {line}")
+        out.append(by_name[match[1]])
+    if len(out) != 10:
+        raise ValueError("MailItems count changed")
+    return out
+
+
 def build(ctx) -> dict:
     """Generate all native item-table slots, with byte0/255 sentinels separate."""
     names, table = name_list(ctx, "data/items/names.asm", "ItemNames", "ITEM_NAME_LENGTH", 256)
@@ -85,6 +101,8 @@ def build(ctx) -> dict:
     # This shortcut is executed by the native text engine, not guessed title casing.
     verify_table(ctx, "PlacePOKeText", encode("POKé@", chars["encoding"]))
     rows = attribute_rows(ctx.read_source("data/items/attributes.asm"))
+    mail = mail_items(ctx.read_source("data/items/mail_items.asm"), ids)
+    verify_table(ctx, "MailItems", bytes(mail) + bytes([0xff]))
     raw, items, sentinels = bytearray(), {}, {}
     pockets = {values[key]: key for key in ("ITEM", "KEY_ITEM", "BALL", "TM_HM")}
     for index, (name, row) in enumerate(zip(names, rows, strict=True)):
@@ -103,7 +121,8 @@ def build(ctx) -> dict:
                  "held_effect": effect, "parameter_byte": parameter & 255,
                  "permissions": permissions, "pocket": pockets[pocket],
                  "key_item": pocket == values["KEY_ITEM"], "ball": pocket == values["BALL"],
-                 "tm_hm": machine, "field_menu": field, "battle_menu": battle}
+                 "tm_hm": machine, "field_menu": field, "battle_menu": battle,
+                 "mail": item_id in mail}
         if item_id in (0, 255):
             entry["constant"] = "NO_ITEM" if item_id == 0 else "ITEM_FROM_MEM"
             sentinels[str(item_id)] = entry
@@ -113,7 +132,8 @@ def build(ctx) -> dict:
     return {"schema": "gen2-items-v1", "generator": "tools/gen_gen2_items.py", "source": ctx.source_record(),
             "title": ctx.title, "tables": {"names": table, "attributes": {"symbol": "ItemAttributes", "offset": offset, "rows": 256, "record_size": 7}},
             "items": items, "sentinels": sentinels,
-            "ball_ids": [int(key) for key, entry in items.items() if entry["ball"]]}
+            "ball_ids": [int(key) for key, entry in items.items() if entry["ball"]],
+            "mail_ids": mail}
 
 
 def main(argv=None) -> int:

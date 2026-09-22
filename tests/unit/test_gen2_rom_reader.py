@@ -68,6 +68,8 @@ def cartridge(request):
             "num_grassmon": 7, "num_watermon": 3, "num_fishgroups": 13,
             "num_treemon_sets": 8 if title == "crystal" else 6,
             "treemon_set_rock": 7 if title == "crystal" else 3,
+            # GetTreeMons cp bound: C engine/events/treemons.asm:100, G :101.
+            "treemon_enabled_limit": 8 if title == "crystal" else 4,
             "num_time_fishgroups": 22, "num_roammon_maps": 16,
             "roamer_count": 2 if title == "crystal" else 3,
         },
@@ -143,7 +145,9 @@ def test_source_tree_and_rock_vectors_preserve_title_differences(cartridge, rom_
     tree = native(rom_reader.tree())
     assert len(tree["headbutt_maps"]) == 34
     assert len(tree["rock_smash_maps"]) == 4
-    assert len(tree["sets"]) == (7 if title == "crystal" else 5)
+    assert len(tree["sets"]) == (7 if title == "crystal" else 3)
+    assert tree["enabled_set_limit"] == (8 if title == "crystal" else 4)
+    assert [row["set_id"] for row in tree["sets"]] == list(range(1, 8 if title == "crystal" else 4))
     rock = next(row for row in tree["sets"] if row["kind"] == "rock_smash")
     assert rock["common"] == [
         {"weight": 90, "species": 98, "level": 15},
@@ -384,3 +388,16 @@ def test_roaming_map_terminator_must_remain_in_table_bank(cartridge, generated_p
         python_scan(negative, profile)
     with pytest.raises(LuaError, match="bound"):
         reader(negative, profile).roamers()
+
+
+@pytest.mark.parametrize("value", (None, 1, 9, "rock", 2.5))
+def test_tree_enabled_limit_fact_is_required_and_bounded(cartridge, value):
+    _, image, original = cartridge
+    profile = copy.deepcopy(original)
+    if value is None:
+        del profile["derived"]["treemon_enabled_limit"]
+    else:  # "rock" would disable the rock-smash set.
+        profile["derived"]["treemon_enabled_limit"] = (
+            profile["derived"]["treemon_set_rock"] if value == "rock" else value)
+    with pytest.raises(LuaError):
+        reader(image, profile).tree()

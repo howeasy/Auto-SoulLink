@@ -159,3 +159,22 @@ def test_byte_threshold_rounding(text, expected):
 def test_bad_threshold_refuses(text):
     with pytest.raises(ValueError):
         threshold(text)
+
+
+def test_disabled_tree_sets_emit_no_headbutt_set(built):
+    # pokegold engine/events/treemons.asm:98-102 refuses sets >= NUM_TREEMON_SETS - 2
+    # (UNUSED, CITY) and set 0; pokecrystal :100-105 refuses only >= NUM_TREEMON_SETS and 0.
+    _, packs = built
+    root = Path(__file__).resolve().parents[2]
+    towns = {"new_bark_town", "violet_city", "ecruteak_city", "mahogany_town", "blackthorn_city"}
+    for title, pack in packs.items():
+        on_disk = json.loads((root / f"data/games/gen2_{title}/encounter_tables.json").read_text("utf-8"))
+        assert on_disk["tree"] == pack["tree"]
+        tree, areas = pack["tree"], pack["map_areas"]
+        limit = 8 if title == "crystal" else 4
+        assert tree["enabled_set_limit"] == limit
+        assert [row["set_id"] for row in tree["sets"]] == list(range(1, limit))
+        disabled = {areas[str(row["map_group"] * 256 + row["map_number"])]
+                    for row in tree["headbutt_maps"] if row["set_id"] >= limit}
+        # The raw TreeMonMaps rows stay (ROM-verified); only their encounters vanish.
+        assert disabled == (set() if title == "crystal" else towns), title

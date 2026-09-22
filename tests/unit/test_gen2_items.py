@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.gen_gen2_items import attribute_rows, item_ids
+from tools.gen_gen2_items import attribute_rows, item_ids, mail_items
 
 
 def source_ids():
@@ -55,3 +55,20 @@ def test_generated_source_verified_packs_keep_title_specific_items_and_sentinels
         assert pack["items"]["249"]["tm_hm"] == "HM07"
         assert "0" not in pack["items"] and "255" not in pack["items"]
         assert pack["sentinels"]["0"]["constant"] == "NO_ITEM"
+
+
+def test_mail_flag_is_the_source_mailitems_list_not_a_name_pattern():
+    ids = {0x9E: "FLOWER_MAIL", 0xB6: "LITEBLUEMAIL", 0xAD: "BERRY"}
+    rows = ["MailItems:", "db FLOWER_MAIL", "db LITEBLUEMAIL"]
+    with pytest.raises(ValueError, match="count"):
+        mail_items(chr(10).join(rows + ["db -1"]), ids)
+    for bad in (rows + ["db GHOST_MAIL", "db -1"], rows, ["db FLOWER_MAIL", "db -1"]):
+        with pytest.raises(ValueError):
+            mail_items(chr(10).join(bad), ids)
+    root = Path(__file__).resolve().parents[2] / "data/games"
+    for title in ("crystal", "gold", "silver"):
+        pack = json.loads((root / f"gen2_{title}/items.json").read_bytes())
+        flagged = [int(key) for key, row in pack["items"].items() if row["mail"]]
+        assert flagged == pack["mail_ids"] and len(flagged) == 10
+        assert pack["items"]["182"]["constant"] == "LITEBLUEMAIL" and pack["items"]["182"]["mail"]
+        assert not pack["items"]["173"]["mail"]  # BERRY

@@ -139,6 +139,36 @@ def _literal(text: str, name: str) -> int:
     return _expression(matches[0], {})
 
 
+def treemon_enabled_limit(text: str, values: dict[str, int]) -> int:
+    """GetTreeMons' own `cp` bound: tree sets 1..limit-1 can yield an encounter.
+
+    pokecrystal engine/events/treemons.asm:96-105 uses `cp NUM_TREEMON_SETS`;
+    pokegold :94-106 uses `cp NUM_TREEMON_SETS - 2` and asserts that UNUSED/CITY are
+    the two refused tail sets. Both refuse TREEMON_SET_NONE via `and a / jr z`. The
+    source asserts must name exactly the refused tail, so a bound that disagrees with
+    them (or an unasserted tail) refuses generation instead of guessing a rule.
+    """
+    lines = [raw.split(";", 1)[0].strip() for raw in _block(text, "GetTreeMons:", "ld hl, TreeMons").splitlines()]
+    lines = [line for line in lines if line and line != "GetTreeMons:"]
+    asserted = {}
+    for line in lines:
+        if line.startswith("assert"):
+            match = re.fullmatch(r"assert\s+(TREEMON_SET_[A-Z0-9_]+)\s*==\s*(.+)", line)
+            if not match or match[1] not in values or values[match[1]] != _expression(match[2], values):
+                raise ValueError(f"GetTreeMons assert fails or is unsupported: {line}")
+            asserted[match[1]] = values[match[1]]
+    code = [line for line in lines if not line.startswith("assert")]
+    if (len(code) != 7 or not code[0].startswith("cp ")
+            or code[1:] != ["jr nc, .quit", "and a", "jr z, .quit", "ld e, a", "ld d, 0", "ld hl, TreeMons"]
+            or asserted.get("TREEMON_SET_NONE") != 0):
+        raise ValueError("unsupported GetTreeMons set gate")
+    limit, count = _expression(code[0][3:], values), values["NUM_TREEMON_SETS"]
+    tail = {value for name, value in asserted.items() if name != "TREEMON_SET_NONE"}
+    if not 1 < limit <= count or tail != set(range(limit, count)):
+        raise ValueError(f"GetTreeMons bound {limit} disagrees with its asserted refused sets {sorted(tail)}")
+    return limit
+
+
 def _constants(ctx) -> tuple[dict, dict, dict]:
     paths = (
         "constants/battle_constants.asm", "constants/pokemon_constants.asm",
@@ -148,6 +178,7 @@ def _constants(ctx) -> tuple[dict, dict, dict]:
         "ram/wram.asm", "ram/sram.asm", "macros/ram.asm", "data/pokemon/base_stats.asm",
         "constants/misc_constants.asm", "engine/menus/save.asm",
         "constants/ram_constants.asm", "engine/battle/effect_commands.asm",
+        "engine/events/treemons.asm",
     )
     source = {path: ctx.read_source(path) for path in paths}
     battle, pokemon, data = [source[f"constants/{name}_constants.asm"]
@@ -208,6 +239,7 @@ def _constants(ctx) -> tuple[dict, dict, dict]:
     if roamers != list(range(1, len(roamers) + 1)) or not roamers:
         raise ValueError("non-contiguous or empty initialized roamer slots")
     values["ROAMER_COUNT"] = len(roamers)
+    values["TREEMON_ENABLED_LIMIT"] = treemon_enabled_limit(source["engine/events/treemons.asm"], values)
     # Internal assembler counters are not exported as profile constants.
     values = {key: value for key, value in values.items() if key not in ("_RS", "const_value")}
     receipts = {path: {"sha256": hashlib.sha256(text.encode()).hexdigest(),
@@ -432,10 +464,14 @@ def build(title: str, root: Path = ROOT) -> dict:
         "num_grassmon": constants["NUM_GRASSMON"], "num_watermon": constants["NUM_WATERMON"],
         "num_fishgroups": constants["NUM_FISHGROUPS"], "num_time_fishgroups": constants["NUM_TIME_FISHGROUPS"],
         "num_treemon_sets": constants["NUM_TREEMON_SETS"], "treemon_set_rock": constants["TREEMON_SET_ROCK"],
+        "treemon_enabled_limit": constants["TREEMON_ENABLED_LIMIT"],
         "num_roammon_maps": constants["NUM_ROAMMON_MAPS"], "roamer_count": constants["ROAMER_COUNT"],
         "rom_size": len(ctx.rom), "bag_capacity": constants["MAX_ITEMS"],
         "ball_capacity": constants["MAX_BALLS"], "key_item_capacity": constants["MAX_KEY_ITEMS"],
     }
+    gate = rom_offset(*ctx.symbol("GetTreeMons"))
+    if ctx.rom[gate:gate + 3] != bytes([0xFE, constants["TREEMON_ENABLED_LIMIT"], 0x30]):
+        raise ValueError(f"{title}: GetTreeMons ROM gate disagrees with source bound")
     # Validate table numbering directly in the ROM; source and symbol arithmetic
     # must describe all 251 records rather than merely a plausible first row.
     base = rom["BaseData"]["flat"]

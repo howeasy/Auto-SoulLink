@@ -245,3 +245,38 @@ def test_ancillary_stage_facts_require_their_exact_source_contract(monkeypatch, 
     monkeypatch.setattr(generator, "load_context", lambda *args, **kwargs: ChangedSource())
     with pytest.raises(ValueError, match="stat.stage"):
         generator.build("gold")
+
+
+# GetTreeMons: pokegold engine/events/treemons.asm:94-106 (cp NUM_TREEMON_SETS - 2,
+# asserts UNUSED/CITY are the last two sets); pokecrystal :96-105 (cp NUM_TREEMON_SETS).
+@pytest.mark.parametrize("title,limit", [("crystal", 8), ("gold", 4), ("silver", 4)])
+def test_treemon_enabled_limit_is_the_gettreemons_cp_bound(title, limit):
+    import json
+    from pathlib import Path
+
+    from tools.gen2_source_data import load_context
+    from tools.gen_gen2_profile import _constants, treemon_enabled_limit
+
+    values, receipts, source = _constants(load_context(title))
+    text = source["engine/events/treemons.asm"]
+    assert "engine/events/treemons.asm" in receipts
+    assert treemon_enabled_limit(text, values) == values["TREEMON_ENABLED_LIMIT"] == limit
+    root = Path(__file__).resolve().parents[2]
+    selected = json.loads((root / f"data/games/gen2_{title}/profile.json").read_text("utf-8"))["titles"][title]
+    assert selected["derived"]["treemon_enabled_limit"] == limit
+    assert selected["constants"]["TREEMON_ENABLED_LIMIT"] == limit
+    bound = "cp NUM_TREEMON_SETS - 2" if title != "crystal" else "cp NUM_TREEMON_SETS"
+    tail = ("\tassert TREEMON_SET_UNUSED == NUM_TREEMON_SETS - 2\n"
+            "\tassert TREEMON_SET_CITY == NUM_TREEMON_SETS - 1\n")
+    faults = [text.replace(bound, "cp NUM_TREEMON_SETS - 3"),  # bound disagrees with asserts
+              text.replace(bound, "cp 1"), text.replace("jr nc, .quit", "jr c, .quit", 1),
+              text.replace("assert TREEMON_SET_NONE == 0", "assert TREEMON_SET_NONE == 1")]
+    if title == "crystal":
+        faults.append(text.replace(bound, "cp NUM_TREEMON_SETS - 1"))  # unasserted disabled set
+    else:
+        faults.append(text.replace(tail, ""))  # the disabled tail must be asserted in source
+        faults.append(text.replace(bound, "cp NUM_TREEMON_SETS"))  # asserts say the tail is ignored
+    for fault in faults:
+        assert fault != text
+        with pytest.raises(ValueError):
+            treemon_enabled_limit(fault, values)

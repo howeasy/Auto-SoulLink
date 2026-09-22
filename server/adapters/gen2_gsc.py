@@ -120,6 +120,7 @@ class Gen2GSCAdapter(GameAdapter):
                      and (isinstance(row.get("constant"), str)
                           or row.get("constant") is None and row.get("placeholder") is True)
                      and type(row.get("placeholder")) is bool and type(row.get("key_item")) is bool
+                     and type(row.get("mail")) is bool
                      and _integer(row.get("permissions"), 0, 255), "invalid item attributes")
         moves = load("moves", "gen2-moves-v1")["moves"]
         self._moves = {row["id"]: row for row in moves}
@@ -215,10 +216,12 @@ class Gen2GSCAdapter(GameAdapter):
             return True
         row = self._items.get(item_id)
         # CANT_TOSS bit 7, constants/item_data_constants.asm:33-35 and
-        # _CheckTossableItem, engine/items/items.asm:494-501. Mail is an explicit
-        # unsupported transfer payload; a 70-byte mon cannot transport its mail.
+        # _CheckTossableItem, engine/items/items.asm:494-501. Mail (O-14) never
+        # travels: a 70-byte mon cannot carry its sPartyMail entry. The flag is the
+        # engine's MailItems list (data/items/mail_items.asm:1-12, both pins, read by
+        # ItemIsMail C engine/pokemon/mail_2.asm:941-945, G :922-926), never a name.
         return bool(row and not row["placeholder"] and not row["key_item"]
-                    and not row["permissions"] & 0x80 and not row["constant"].endswith("_MAIL"))
+                    and not row["permissions"] & 0x80 and not row["mail"])
 
     def item_name(self, item_id):
         if not _integer(item_id, 1, 254):
@@ -347,10 +350,13 @@ class Gen2GSCAdapter(GameAdapter):
                      encounter_rate_byte=row["rate"], time=row["time"], source_table=row["table"])
         tree = self._encounters["tree"]
         sets = {row["set_id"]: row for row in tree["sets"]}
+        limit = tree.get("enabled_set_limit")
+        _require(_integer(limit, 2, 255) and sorted(sets) == list(range(1, limit)), "tree set gate invalid")
         for kind, maps in (("Headbutt", tree["headbutt_maps"]), ("Rock Smash", tree["rock_smash_maps"])):
             for row in maps:
-                # GetTreeMons explicitly refuses TREEMON_SET_NONE == 0.
-                if row["set_id"] == 0:
+                # GetTreeMons refuses set 0 and sets >= the generated bound
+                # (C engine/events/treemons.asm:100-105, G :98-102: G/S UNUSED, CITY).
+                if not 0 < row["set_id"] < limit:
                     continue
                 _require(row["set_id"] in sets, "unknown encounter tree set")
                 source = sets[row["set_id"]]
@@ -378,7 +384,12 @@ class Gen2GSCAdapter(GameAdapter):
                     slots = [entry if entry["species"] else times[entry["level"]][daytime] for entry in group[rod]]
                     emit(int(key), f"{rod.title()} Rod ({label})", slots, weights,
                          fish_group=group["group_id"], bite_threshold=group["bite_threshold"],
-                         selection_scope="base_group; runtime swarm selection OPEN")
+                         selection_scope="base_group; runtime swarm selection OPEN",
+                         # ponytail: known limitation, not a catchable-set claim. Every map
+                         # header names a fish group, indoor maps included (C data/maps/maps.asm:495-496,
+                         # G :476-477 give ElmsLab/PlayersHouse1F FISHGROUP_SHORE), and which maps
+                         # have fishable water is gen2_rom_scan's OPEN fishing_map_association.
+                         map_association="UNQUALIFIED")
         tables, maps_by_method, tables_by_map = {}, {}, {}
         for area, label, key, source_table in grouped:
             maps_by_method.setdefault((area, label), set()).add(key)

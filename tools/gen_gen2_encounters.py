@@ -23,6 +23,7 @@ from tools.gen_gen2_area_map import (  # noqa: E402
     run_generator,
     source_lines,
 )
+from tools.gen_gen2_profile import treemon_enabled_limit  # noqa: E402
 
 
 def byte(value):
@@ -186,8 +187,12 @@ def parse_tree(ctx, maps, species):
             break
         if line.startswith("dw "):
             pointers.append(line[3:])
-    if len(pointers) != len(sets):
+    if len(pointers) != len(sets) or sorted(sets.values()) != list(range(len(sets))):
         raise ValueError("tree set pointer/constant count mismatch")
+    # Same profile fact as tools/gen_gen2_profile.py: GetTreeMons refuses set 0 and
+    # every set >= this bound (G engine/events/treemons.asm:98-102, C :100-105).
+    limit = treemon_enabled_limit(ctx.read_source("engine/events/treemons.asm"),
+                                  {**sets, "NUM_TREEMON_SETS": len(sets)})
     ptr_bytes = []
     result = []
     for set_id, pointer in enumerate(pointers):
@@ -195,8 +200,8 @@ def parse_tree(ctx, maps, species):
         if sym.bank != ctx.symbol("TreeMons").bank:
             raise ValueError("tree pointer crosses bank")
         ptr_bytes.extend(sym.address.to_bytes(2, "little"))
-        if set_id == sets["TREEMON_SET_NONE"]:
-            continue
+        if not sets["TREEMON_SET_NONE"] < set_id < limit:
+            continue  # pointer still ROM-verified above; the engine never reads it
         rock = set_id == sets["TREEMON_SET_ROCK"]
         start = next((i for i, (_, line) in enumerate(source) if line == pointer + ":"), None)
         if start is None:
@@ -224,7 +229,8 @@ def parse_tree(ctx, maps, species):
         result.append({"set_id": set_id, "kind": "rock_smash" if rock else "headbutt",
                        "common": parts[0], "rare": [] if rock else parts[1]})
     verify(ctx, "TreeMons", ptr_bytes)
-    return {"headbutt_maps": tables["TreeMonMaps"], "rock_smash_maps": tables["RockMonMaps"], "sets": result}
+    return {"headbutt_maps": tables["TreeMonMaps"], "rock_smash_maps": tables["RockMonMaps"], "sets": result,
+            "enabled_set_limit": limit}
 
 
 def parse_fishing(ctx, species):

@@ -1043,6 +1043,44 @@ class TestGen2GSCAdapter:
         for item in (6, 175, 158, 255, 256, -1, True):
             assert not gsc_adapter.is_valid_held_item(item)
 
+    # data/items/mail_items.asm:1-12 (MailItems, identical in both pins; read by
+    # ItemIsMail, C engine/pokemon/mail_2.asm:941-945, G :922-926). Ids from
+    # constants/item_constants.asm. LITEBLUEMAIL/PORTRAITMAIL lack an _MAIL suffix.
+    MAIL_ITEMS = (0x9E, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD)
+
+    def test_every_source_mail_item_is_refused_as_held_item(self, gsc_adapter):
+        """O-14: held items travel with a traded mon, mail does not."""
+        pack = json.loads((Path(__file__).resolve().parents[2] / "data/games"
+                           / f"gen2_{gsc_adapter.title}" / "items.json").read_text("utf-8"))
+        assert pack["mail_ids"] == list(self.MAIL_ITEMS)
+        for item in self.MAIL_ITEMS:
+            assert not gsc_adapter.is_valid_held_item(item), hex(item)
+            raw = bytearray(_gsc_blob())
+            raw[1] = item
+            assert not gsc_adapter.validate_party_blob(bytes(raw), species_marker=25), hex(item)
+        # Non-mail control: BERRY (0xAD) and the 0x8F control still pass.
+        assert gsc_adapter.is_valid_held_item(0xAD) and gsc_adapter.is_valid_held_item(0x8F)
+        assert gsc_adapter.validate_party_blob(_gsc_blob(), species_marker=25)
+
+    def test_mail_gate_reads_the_pack_flag_not_the_constant_name(self, tmp_path):
+        from server.adapters.gen2_gsc import Gen2GSCAdapter
+
+        source = Path(__file__).resolve().parents[2] / "data/games/gen2_crystal"
+        shutil.copytree(source, tmp_path / "gen2_crystal")
+        path = tmp_path / "gen2_crystal/items.json"
+        data = json.loads(path.read_text("utf-8"))
+        data["items"]["173"]["mail"] = True  # BERRY, flagged as mail.
+        data["items"]["182"]["constant"] = "LITEBLUE_MAIL"  # suffix alone must not matter
+        data["items"]["182"]["mail"] = False
+        path.write_text(json.dumps(data), encoding="utf-8")
+        adapter = Gen2GSCAdapter("crystal", data_root=tmp_path)
+        assert not adapter.is_valid_held_item(173)
+        assert adapter.is_valid_held_item(182)
+        del data["items"]["173"]["mail"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(ValueError):
+            Gen2GSCAdapter("crystal", data_root=tmp_path)
+
     def test_blob_preserves_identity_names_and_held_item(self, gsc_adapter):
         raw = _gsc_blob()
         assert gsc_adapter.validate_party_blob(raw, key="2AAA:1234:19", species_marker=25)
@@ -1106,6 +1144,23 @@ class TestGen2GSCAdapter:
         for payload in ({}, {"schema": "gen2-rom-tables-v1"}):
             with pytest.raises(ValueError):
                 gsc_adapter.rom_content_fingerprint(payload)
+
+
+    def test_fishing_rows_are_marked_unqualified_while_map_association_is_open(self, gsc_adapter):
+        """Review F3: header fish groups include indoor maps; no reachability rule is guessed."""
+        rods = {label: rows for area in ("new_bark_town", "route_29")
+                for label, rows in gsc_adapter.encounter_table(area).items() if "Rod" in label}
+        assert any("(ElmsLab)" in label for label in rods)  # documented limitation, still present
+        assert rods and all(row["map_association"] == "UNQUALIFIED" for rows in rods.values() for row in rows)
+        assert all("map_association" not in row for row in gsc_adapter.encounter_table("route_29")["Morn"])
+
+    def test_disabled_tree_sets_present_no_headbutt(self, gsc_adapter):
+        """G/S GetTreeMons refuses UNUSED/CITY (pokegold engine/events/treemons.asm:98-102)."""
+        for area in ("new_bark_town", "violet_city", "ecruteak_city", "mahogany_town", "blackthorn_city"):
+            table = gsc_adapter.encounter_table(area) or {}
+            assert not [label for label in table if label.startswith("Headbutt")], (area, sorted(table))
+        # Enabled sets are still presented on every title.
+        assert {"Headbutt Common", "Headbutt Rare"} <= set(gsc_adapter.encounter_table("azalea_town"))
 
 
 class TestGen2GSCPackRefusal:

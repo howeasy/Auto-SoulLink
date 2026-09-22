@@ -138,7 +138,11 @@ function B.new(profile, gate)
             obligations={party_coordination="EXTERNAL_REQUIRED", prepared_record="PP_AND_PARTY_TRANSFORMS_EXTERNAL",
                          durability="UNQUALIFIED", checksum="BOX_BYTES_UNCHECKSUMMED",
                          memorial_record=operation == "memorial" and "EXTERNAL_REQUIRED" or "NOT_APPLICABLE",
-                         reassert_after_full_save=operation == "memorial"},
+                         -- Continue runs LoadBox (C engine/menus/save.asm:601, G :543), copying the
+                         -- stored box over sBox; only SaveBox (C :275, G :282) syncs back. A reset
+                         -- before the next SAVE reverts any active-box edit.
+                         reset_before_save=active and "LOADBOX_REVERTS_ACTIVE_EDIT" or "NOT_APPLICABLE",
+                         reassert_after_full_save=operation == "memorial" or active},
             requirements=requirements,
         }
         if active then

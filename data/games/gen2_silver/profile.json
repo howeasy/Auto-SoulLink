@@ -64,6 +64,10 @@
           "encoding": "utf-8-normalized-newlines",
           "sha256": "899551eed12752fb9c712b36ffa1b4134485f42e069ef218fe58fb66e13fe38b"
         },
+        "engine/events/treemons.asm": {
+          "encoding": "utf-8-normalized-newlines",
+          "sha256": "741766419b3bb2fc6086e7f715ff552f100b32b8cd72c93449eabc4b3f59cdbb"
+        },
         "engine/menus/save.asm": {
           "encoding": "utf-8-normalized-newlines",
           "sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
@@ -203,6 +207,7 @@
         "SP_ATTACK": 3,
         "SP_DEFENSE": 4,
         "TRAINER_BATTLE": 2,
+        "TREEMON_ENABLED_LIMIT": 4,
         "TREEMON_SET_CANYON": 2,
         "TREEMON_SET_CITY": 5,
         "TREEMON_SET_FOREST": 1,
@@ -243,6 +248,7 @@
         ],
         "sram_box_stride": 1104,
         "stat_stage_min": 1,
+        "treemon_enabled_limit": 4,
         "treemon_set_rock": 3
       },
       "hram": {

@@ -214,18 +214,24 @@ class Rom:
     def tree(self) -> dict:
         count = self._constant("NUM_TREEMON_SETS", 8 if self.title == "crystal" else 6)
         rock = self._constant("TREEMON_SET_ROCK", 7 if self.title == "crystal" else 3)
+        # Generated profile fact (tools/gen_gen2_profile.py): GetTreeMons refuses set 0
+        # and every set >= limit (C engine/events/treemons.asm:100-105, G :98-102).
+        limit = self._constant("TREEMON_ENABLED_LIMIT")
+        if not rock < limit <= count:
+            raise RomScanError("TREEMON_ENABLED_LIMIT outside the decodable tree sets")
         bank, _ = self._location("TreeMons")
         pointers = self._cursor("TreeMons")
         addresses = [pointers.word() for _ in range(count)]
         sets = []
-        for set_id in range(1, count):  # Set zero is disabled even when its pointer aliases data.
+        for set_id in range(1, limit):  # Disabled sets are not decoded, even when pointers alias data.
             cursor = self._pointer(bank, addresses[set_id], f"tree set {set_id}")
             common = self._tree_slots(cursor)
             rare = [] if set_id == rock else self._tree_slots(cursor)
             sets.append({"set_id": set_id, "kind": "rock_smash" if set_id == rock else "headbutt",
                          "common": common, "rare": rare})
         return {"headbutt_maps": self._tree_maps("TreeMonMaps", count),
-                "rock_smash_maps": self._tree_maps("RockMonMaps", count), "sets": sets}
+                "rock_smash_maps": self._tree_maps("RockMonMaps", count), "sets": sets,
+                "enabled_set_limit": limit}
 
     def _fish_slots(self, cursor: _Cursor, time_count: int) -> list[dict]:
         rows, previous = [], -1

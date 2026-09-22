@@ -33,6 +33,8 @@ def constants(title):
             "NUM_WATERMON": 3, "GRASS_WILDDATA_LENGTH": 47, "WATER_WILDDATA_LENGTH": 9,
             "NUM_TREEMON_SETS": 8 if title == "crystal" else 6,
             "TREEMON_SET_ROCK": 7 if title == "crystal" else 3,
+            # GetTreeMons cp bound: C engine/events/treemons.asm:100, G :101.
+            "TREEMON_ENABLED_LIMIT": 8 if title == "crystal" else 4,
             "NUM_FISHGROUPS": 13, "FISHGROUP_DATA_LENGTH": 7, "NUM_TIME_FISHGROUPS": 22,
             "NUM_ROAMMON_MAPS": 16}
 
@@ -205,6 +207,23 @@ def test_actual_pinned_rom_known_positives(actual, title):
     assert all(r["level"] == 40 for r in result["roamers"]["initial"])
     assert len(result["roamers"]["maps"]) == 16
     assert context.source_commit in {"7a7881d0d62e0ddbd82dcf10e7116807487ac651", "656583c939d30f920a316177311a502dd222b57c"}
+
+
+@pytest.mark.parametrize("value", (None, 1, 7, 9))
+def test_tree_enabled_limit_fact_is_required_and_bounded(vector, value):
+    rom, profile = vector
+    assert with_hash(rom, profile).tree()["enabled_set_limit"] == 8
+    if value is None:
+        del profile["constants"]["TREEMON_ENABLED_LIMIT"]
+    else:
+        profile["constants"]["TREEMON_ENABLED_LIMIT"] = value  # 7 would disable the rock set.
+    with pytest.raises(RomScanError):
+        with_hash(rom, profile).tree()
+
+
+def test_gold_silver_tree_sets_stop_at_the_enabled_limit(actual):
+    for title, ids in (("crystal", [1, 2, 3, 4, 5, 6, 7]), ("gold", [1, 2, 3]), ("silver", [1, 2, 3])):
+        assert [row["set_id"] for row in actual[title][1]["tree"]["sets"]] == ids
 
 
 def test_gold_and_silver_are_distinct_and_night_tables_are_preserved(actual):

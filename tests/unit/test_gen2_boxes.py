@@ -99,6 +99,24 @@ def test_inactive_box_writes_never_touch_padding_and_memorial_has_no_hp_patch():
     assert plan.obligations.reassert_after_full_save is True
 
 
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("operation", ["deposit", "withdraw"])
+def test_current_box_plans_carry_reassert_after_full_save(title, operation):
+    """Continue runs LoadBox (C engine/menus/save.asm:601, G :543), copying the stored
+    box over sBox; only SaveBox (C :275, G :282) syncs back. A reset before the next
+    SAVE silently reverts an active-box edit, so every active plan must say so."""
+    w = World(title)
+    active = w.plan(operation, current=3, target=3)
+    assert active.owner == "active" and active.copyback.mode == "ENGINE_SAVEBOX_DEFERRED"
+    assert active.obligations.reassert_after_full_save is True
+    assert active.obligations.reset_before_save == "LOADBOX_REVERTS_ACTIVE_EDIT"
+    # Control: a backing-box plan is durable in SRAM without the engine copy-back.
+    backing = w.plan(operation, current=3, target=4)
+    assert backing.owner == "backing"
+    assert backing.obligations.reassert_after_full_save is False
+    assert backing.obligations.reset_before_save == "NOT_APPLICABLE"
+
+
 @pytest.mark.parametrize("operation", ["deposit", "withdraw", "memorial"])
 def test_before_first_save_refuses_all_plans(operation):
     w = World()

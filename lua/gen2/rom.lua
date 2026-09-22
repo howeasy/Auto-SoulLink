@@ -161,7 +161,10 @@ function Rom.new(profile, io)
     function self.tree()
         local set_count = constant("num_treemon_sets", 2, 256)
         local rock_id = constant("treemon_set_rock", 1, set_count - 1)
-        local result = {headbutt_maps = {}, rock_smash_maps = {}, sets = {}}
+        -- Generated profile fact (tools/gen_gen2_profile.py): GetTreeMons refuses set 0
+        -- and every set >= limit (C engine/events/treemons.asm:100-105, G :98-102).
+        local limit = constant("treemon_enabled_limit", rock_id + 1, set_count)
+        local result = {headbutt_maps = {}, rock_smash_maps = {}, sets = {}, enabled_set_limit = limit}
         local function maps(name)
             local entry, output, seen = symbol(name), {}, {}
             local cursor = entry.flat
@@ -195,9 +198,9 @@ function Rom.new(profile, io)
                 cursor = cursor + 3
             end
         end
-        -- Set zero is explicitly disabled by GetTreeMons, even when its pointer
-        -- aliases real data in Gold/Silver. It is deliberately not a decoded set.
-        for id = 1, set_count - 1 do
+        -- Disabled sets (zero, and G/S UNUSED/CITY) are deliberately not decoded,
+        -- even when their pointers alias real data.
+        for id = 1, limit - 1 do
             local cursor = pointer(entry, word(entry.flat + id * 2), entry.flat + set_count * 2)
             local common, next_cursor = slots(cursor)
             local rare = {}
