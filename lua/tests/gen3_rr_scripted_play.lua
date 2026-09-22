@@ -60,6 +60,26 @@ local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via the gen3 fixture/gate tooling")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
 local PL = dofile(WT .. "/lua/tests/playlib.lua")
+local JSON = dofile(WT .. "/lua/json_codec.lua")
+local Reads = dofile(WT .. "/lua/gen3/reads.lua")
+local profile_file = assert(io.open(WT .. "/data/games/gen3_rr/profile.json", "rb"))
+local profile = assert(JSON.decode(profile_file:read("a"))).titles.radical_red
+profile_file:close()
+assert(profile.admitted and profile.derived.CFRU_COMPRESSED_BOX
+       and profile.derived.CFRU_NO_ENCRYPT, "RR compressed box profile is not admitted")
+local box_bases = assert(profile.derived.CFRU_BOX_BASES)
+local box_count = assert(profile.derived.BOXES_PER_STORE)
+local box_stride = assert(profile.derived.COMPRESSED_MON_SIZE)
+assert(#box_bases == box_count and box_stride == Reads.COMPRESSED_MON_SIZE,
+       "RR compressed box layout disagrees with reads.lua")
+local function read_bytes(addr, count)
+    local bytes = {}
+    for i = 1, count do bytes[i] = memory.read_u8(addr + i - 1) end
+    return bytes
+end
+local reader = Reads.new(profile, {
+    read_u8 = memory.read_u8, read_u32 = memory.read_u32_le, read_bytes = read_bytes,
+})
 
 -- ── RR RAM observables ─────────────────────────────────────────────────────────────────────
 -- PROFILE FACTS: these come from the radical_red profile (lua/games/gen3_frlge.lua:192-260 /
@@ -70,6 +90,9 @@ local PARTY_BASE          = 0x02024284  -- radical_red.PARTY_BASE (gPlayerParty)
 local BATTLE_MONS_ADDR    = 0x02023BE4  -- radical_red.BATTLE_MONS_ADDR (gBattleMons)
 local BATTLE_OUTCOME_ADDR = 0x02023E8A  -- radical_red.BATTLE_OUTCOME_ADDR (gBattleOutcome)
 local BATTLE_RESULTS_ADDR = 0x03004F90  -- radical_red.BATTLE_RESULTS_ADDR (gBattleResults)
+local ENEMY_BASE          = assert(profile.ram.ENEMY_BASE)
+local BATTLER_INDEX_ADDR  = assert(profile.ram.BATTLER_PARTY_INDEXES_ADDR)
+local BATTLER_POS_ADDR    = 0x02023BD6  -- gBattlerPositions (pret pokefirered.sym:81)
 local FAINTS_OFF          = 0x00        -- radical_red.BATTLE_RESULTS_PLAYER_FAINTS_OFF
 local MON_SIZE            = 100         -- vanilla 100-byte party record (lua/tests/duo/duo_main.lua)
 local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
@@ -100,6 +123,82 @@ local function at_action_menu() return memory.read_u32_le(CTRL_ADDR) == ACTION_M
 --- (itemId, quantity) of ball-pocket slot 0.
 local function ball_slot0()
     return memory.read_u16_le(BALL_POCKET_ADDR), memory.read_u16_le(BALL_POCKET_ADDR + 2)
+end
+local play
+
+-- These are game-fact projections; playlib still owns the generic keyed comparison and pacing.
+-- reads.lua decodes each 0x3A-byte compressed record from profile.derived.CFRU_BOX_BASES.
+local function owned_snapshot(label)
+    local party = play.party_snapshot()
+    local mons, why = reader.read_party()
+    if not mons or #mons ~= party.n then
+        G.finish(false, label .. ": unreadable party: " .. tostring(why))
+    end
+    local owned = {party = party, mons = {}, boxes = {}}
+    for i, mon in ipairs(mons) do
+        local key = reader.key(mon)
+        if mon.species == 0 or mon.has_species ~= 1 or owned.mons[key]
+           or key ~= party.order[i] then
+            G.finish(false, label .. ": ambiguous or invalid party record " .. key)
+        end
+        owned.mons[key] = {species = mon.species, personality = mon.personality}
+    end
+    for box = 0, box_count - 1 do
+        local records, bad = reader.read_box(box)
+        if not records then G.finish(false, label .. ": unreadable box: " .. tostring(bad)) end
+        for slot, mon in ipairs(records) do
+            if mon.species ~= 0 then
+                local key = reader.key(mon)
+                if mon.has_species ~= 1 or owned.mons[key] or owned.boxes[key] then
+                    G.finish(false, label .. ": ambiguous or invalid box record " .. key)
+                end
+                local addr = box_bases[box + 1] + (slot - 1) * box_stride
+                owned.boxes[key] = {box = box, slot = slot - 1, species = mon.species,
+                                    personality = mon.personality,
+                                    raw = string.char(table.unpack(read_bytes(addr, box_stride)))}
+            elseif mon.has_species ~= 0 then
+                G.finish(false, label .. ": empty box record has species flag")
+            end
+        end
+    end
+    return owned
+end
+
+local function boxes_unchanged(label, before, after, except)
+    for key, old in pairs(before) do
+        if key ~= except then
+            local new = after[key]
+            if not new or old.box ~= new.box or old.slot ~= new.slot or old.raw ~= new.raw then
+                G.finish(false, label .. ": box record changed or disappeared: " .. key)
+            end
+        end
+    end
+    for key in pairs(after) do
+        if key ~= except and not before[key] then
+            G.finish(false, label .. ": unexpected box addition: " .. key)
+        end
+    end
+end
+
+local function field_ready(cp)
+    return play.on_field(cp) and G.pred_ok(cp, "script_context_status")
+           and G.pred_ok(cp, "field_controls_locked")
+end
+
+local function stable_field(cp, expected_map, x, y, budget)
+    local stable = 0
+    for _ = 1, budget do
+        local px, py = G.pos(cp)
+        if field_ready(cp) and play.map(cp) == expected_map
+           and (x == nil or (px == x and py == y)) then
+            stable = stable + 1
+            if stable >= 16 then return true end
+        else
+            stable = 0
+        end
+        G.advance()
+    end
+    return false
 end
 
 -- ── PATHS: parsed from the RR BINARY, never from a screenshot ─────────────────────────────────
@@ -210,7 +309,6 @@ local H = {
     end,
 }
 
-local play
 play = PL.bind(H, {
     paths     = PATHS,
     state_dir = "E:/Howard/Bizhawk/GBA/State",
@@ -326,7 +424,7 @@ LEGS[#LEGS + 1] = {
     exercises = { "faint", "battle_begin", "battle_end" },
     source = {
         "lua/tests/mkstate.lua:143-180 (slink_prebattle.State is captured IN TALL GRASS, the last in-grass position before an encounter — so pacing here is a real wild-encounter source)",
-        "docs/gen3_engine_sites.md faint row (rr PINNED 080213C4/+4, Cmd_tryfaintmon after the PLAYER faint-counter store) — NOTE the lane negative in this file's header: that vanilla site did NOT fire on RR even though this leg's oracle passed, so RR's faint path is elsewhere (OPEN, owned outside this driver)",
+        "data/games/gen3_rr/engine_signals.json faint row (RR cleanup completion 0909EED2; old vanilla Cmd_tryfaintmon site did not fire on RR)",
         "lua/games/gen3_frlge.lua:138-142 + data/games/gen3_rr/profile.json BATTLE_RESULTS_ADDR (gBattleResults.playerFaintCounter @ +0) — the ENGINE's own faint tally, which a host HP poke does not move",
         "lua/tests/duo/scenario_explode.lua:22-28,50-52 (gBattleMons[0] = the player battler; hp @ +0x28, maxHP @ +0x2C)",
     },
@@ -339,9 +437,9 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, "wild_faint: could not get back to the field from the loaded state")
         end
-        local faints_before = player_faints()
         local ENCOUNTERS = 12
         local fainted = false
+        local last_baseline = 0
         for enc = 1, ENCOUNTERS do
             if not pace(cp, 4000, function() return play.in_battle(cp) end) then
                 G.shot("stuck")
@@ -358,12 +456,26 @@ LEGS[#LEGS + 1] = {
             local saw_positive = false
             local saw_zero = false
             local turns = 0
+            local battler_key, battler_slot, baseline
             local function sample()
                 if not play.in_battle(cp) then return end
                 local hp, maxhp = player_bmon_hp(), player_bmon_maxhp()
                 if maxhp == 0 then return end        -- struct not loaded: not a reading
-                if hp > 0 then saw_positive = true
-                elseif saw_positive then saw_zero = true end
+                local slot = memory.read_u8(BATTLER_INDEX_ADDR)
+                if (memory.read_u8(BATTLER_POS_ADDR) & 1) ~= 0 or slot >= play.party_count() then
+                    G.finish(false, "wild_faint: battler 0 is not a readable player party mon")
+                end
+                local key = H.party_key(slot)
+                if hp > 0 and not saw_positive then
+                    battler_slot, battler_key = slot, key
+                    baseline = player_faints()  -- RR resets this counter at EACH battle start
+                    last_baseline = baseline
+                    saw_positive = true
+                elseif saw_positive and (slot ~= battler_slot or key ~= battler_key) then
+                    G.finish(false, "wild_faint: the sampled player battler changed identity")
+                elseif hp == 0 and saw_positive then
+                    saw_zero = true
+                end
             end
             while play.in_battle(cp) and turns < 40 do
                 turns = turns + 1
@@ -385,11 +497,11 @@ LEGS[#LEGS + 1] = {
                     "wild_faint: encounter %d never returned to the field (in_battle=%s)",
                     enc, tostring(play.in_battle(cp))))
             end
-            if saw_zero and player_faints() > faints_before then fainted = true; break end
+            if saw_zero and player_faints() > baseline then fainted = true; break end
             G.phase("survived", string.format(
-                "encounter %d: hp_positive=%s hp_zero=%s faints %d->%d outcome=%d",
+                "encounter %d: hp_positive=%s hp_zero=%s faints %d->%d outcome=%d key=%s",
                 enc, tostring(saw_positive), tostring(saw_zero),
-                faints_before, player_faints(), battle_outcome()))
+                last_baseline, player_faints(), battle_outcome(), tostring(battler_key)))
         end
         if not fainted then
             G.shot("stuck")
@@ -398,11 +510,11 @@ LEGS[#LEGS + 1] = {
                 .. "%d -> %d). The party mon in this savestate may simply keep winning — RR's "
                 .. "starting party is whatever the battery save carries, and nothing here weakens "
                 .. "it. Re-run with a save whose lead is under-levelled for the route.",
-                ENCOUNTERS, faints_before, player_faints()))
+                ENCOUNTERS, last_baseline, player_faints()))
         end
         G.phase("fainted", string.format(
-            "player battler went positive -> 0 HP in battle; playerFaintCounter %d -> %d; party=%d",
-            faints_before, player_faints(), play.party_count()))
+            "same player battler went positive -> 0 HP; playerFaintCounter %d -> %d; party=%d",
+            last_baseline, player_faints(), play.party_count()))
     end,
 }
 
@@ -417,7 +529,7 @@ LEGS[#LEGS + 1] = {
         "docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt (INPUT PIN: at the action menu Right (BAG), A, Right, Right (Items -> Key Items -> Poke Balls), A (select), A (use); the throw resolved to Gotcha! ~900 frames later)",
         "docs/gen3/research/rr_bag_layout.md (RR balls live at fixed EWRAM 0x0203C354, 50 raw ItemSlots of {u16 id, u16 qty}; Poke Ball is item 4 -- NOT the vanilla SaveBlock1 pocket, which is why the FR bag handling does not carry over)",
         "lua/tests/mkstate_gen3_rr_fill.lua (SLINK_GIVE_BALLS writes that pocket; it produced slink_prebattle_balls.State)",
-        "docs/gen3_engine_sites.md capture_wild row (rr PINNED 0802D824/+4, Cmd_givecaughtmon immediately after BL GiveMonToPlayer)",
+        "data/games/gen3_rr/engine_signals.json capture_wild row (RR replacement capture at 0907DD88 after GiveMonToPlayer; old vanilla site is displaced)",
         "lua/games/gen3_frlge.lua:206,311-314 (radical_red BATTLE_OUTCOME_ADDR 0x02023E8A; BALL_POCKET_ADDR 0x0203C354, BALL_POCKET_ENC=false)",
     },
     -- The fixture IS the precondition. A run that opens the BAG with no balls in it wanders
@@ -435,7 +547,9 @@ LEGS[#LEGS + 1] = {
         return nil
     end,
     run = function(cp)
-        local before_party = play.party_count()
+        local before = owned_snapshot("wild_catch before")
+        local before_party = before.party.n
+        local source_map = play.map(cp)
         local _, balls = ball_slot0()
         G.phase("balls", string.format("pocket slot 0 = Poke Ball x%d, party=%d",
                                        balls, before_party))
@@ -446,6 +560,13 @@ LEGS[#LEGS + 1] = {
                 G.finish(false, "wild_catch: no wild encounter while pacing -- "
                              .. "slink_prebattle_balls.State must be standing in TALL GRASS")
             end
+        end
+        if battle_outcome() ~= 0 then
+            G.finish(false, "wild_catch: battle outcome was not 0 before this catch")
+        end
+        local enemy, bad = reader.decode_party_mon(read_bytes(ENEMY_BASE, MON_SIZE))
+        if not enemy or enemy.species == 0 or enemy.has_species ~= 1 then
+            G.finish(false, "wild_catch: unreadable enemy identity: " .. tostring(bad))
         end
 
         -- One throw per ball. A MISS returns to the action menu, so the whole sequence simply
@@ -537,13 +658,45 @@ LEGS[#LEGS + 1] = {
                 "wild_catch: %d throw(s) and gBattleOutcome is %d, not %d (B_OUTCOME_CAUGHT)",
                 throws, battle_outcome(), B_OUTCOME_CAUGHT))
         end
-        -- Let the catch text finish before reading the party: the acquisition happens inside
-        -- Cmd_givecaughtmon, which runs while that text is still up.
-        play.mash_a(600, function() return play.on_field(cp) end)
-
-        local after_party = play.party_count()
+        -- A caught outcome is not an acquisition oracle. Require a settled field and a new
+        -- PID/species in the owned party or compressed boxes; GiveMonToPlayer changes OTID.
+        if not play.mash_a(2400, function() return play.on_field(cp) end)
+           or not stable_field(cp, source_map, nil, nil, 1200) then
+            G.finish(false, "wild_catch: caught outcome never returned to a controllable field")
+        end
+        local after = owned_snapshot("wild_catch after")
+        local after_party = after.party.n
+        local new_count, new_place, new_box_key = 0, nil, nil
+        for key, old in pairs(before.mons) do
+            local kept = after.mons[key]
+            if not kept or kept.species ~= old.species then
+                G.finish(false, "wild_catch: existing party mon changed identity: " .. key)
+            end
+        end
+        for key, mon in pairs(after.mons) do
+            if not before.mons[key] then
+                if mon.personality ~= enemy.personality or mon.species ~= enemy.species then
+                    G.finish(false, "wild_catch: new party mon is not the caught enemy")
+                end
+                new_count, new_place = new_count + 1, "party"
+            end
+        end
+        for key, mon in pairs(after.boxes) do
+            if not before.boxes[key] then
+                if mon.personality ~= enemy.personality or mon.species ~= enemy.species then
+                    G.finish(false, string.format("wild_catch: new boxed mon is not the caught "
+                        .. "enemy (pid=%08X species=%d, expected pid=%08X species=%d)",
+                        mon.personality, mon.species, enemy.personality, enemy.species))
+                end
+                new_count, new_place, new_box_key = new_count + 1, "box", key
+            end
+        end
+        boxes_unchanged("wild_catch", before.boxes, after.boxes, new_box_key)
+        if new_count ~= 1 then
+            G.finish(false, "wild_catch: caught outcome has no unique new owned record")
+        end
         if before_party < 6 then
-            if after_party ~= before_party + 1 then
+            if after_party ~= before_party + 1 or new_place ~= "party" then
                 G.shot("stuck")
                 G.finish(false, string.format(
                     "wild_catch: outcome says caught but the party went %d -> %d; with room in "
@@ -552,12 +705,12 @@ LEGS[#LEGS + 1] = {
             G.phase("caught", string.format("outcome=%d, party %d -> %d after %d throw(s)",
                                             battle_outcome(), before_party, after_party, throws))
         else
-            -- A full party sends the catch to a box (that is the pc_move site). There is no
-            -- decrypt-free box-count observable pinned for RR, so this branch is REPORTED, not
-            -- asserted -- see the pc_move_full_party leg.
+            if after_party ~= before_party or new_place ~= "box" then
+                G.finish(false, "wild_catch: full-party catch did not add exactly one boxed mon")
+            end
             G.phase("caught", string.format(
-                "outcome=%d with a full party (%d): the mon went to a box, which this leg "
-                .. "cannot read back", battle_outcome(), before_party))
+                "outcome=%d with a full party (%d): the matching mon was read back in a box",
+                battle_outcome(), before_party))
         end
     end,
 }
@@ -571,9 +724,8 @@ LEGS[#LEGS + 1] = {
     open_reason = "SendMonToPC (RR: the compressed-storage detour at 090B6E38) only runs on an "
                .. "ACQUISITION that cannot fit in the party — a catch or a gift with SIX party "
                .. "mons. wild_catch now supplies the catch, but no savestate in the family "
-               .. "carries a full party, and RR 58-byte CompressedPokemon boxes have no "
-               .. "decrypt-free count observable pinned, so the result could not be read back "
-               .. "even if it fired",
+               .. "carries a full party. The ROM-pinned compressed boxes are readable; the "
+               .. "missing full-party fixture and live lane keep this kind OPEN",
     source = {
         "docs/gen3_engine_sites.md pc_move row (rr PINNED 090B6E9A/+6; entry/trampoline 08040B90 -> 090B6E38, CFRU compressed-PC acquisition)",
         "docs/gen3_engine_sites.md mon_given row (rr PINNED 0907D7F8/+8, RR replacement common POP at 0907D800; R0 = party(0)/PC(1)/failure(2))",
@@ -593,6 +745,9 @@ LEGS[#LEGS + 1] = {
     },
     check = check_on_field,
     run = function(cp)
+        if play.map(cp) ~= 769 then
+            G.finish(false, "door_warp: source is not the pinned outside map 769")
+        end
         local ok, detail = play.enter_warp(cp, "Up", 30)
         if not ok then
             G.shot("stuck")
@@ -600,6 +755,11 @@ LEGS[#LEGS + 1] = {
             G.finish(false, string.format(
                 "door_warp: %s (at (%d,%d)) — SLINK_STATE must be slink_door.State (standing in "
                 .. "front of a Pokémon Center door, facing north)", detail, px, py))
+        end
+        -- The shared warp helper proves a transition, not which map won a second fade.
+        -- This fixture's physical receipt fixes both map ids and the inside rest tile.
+        if not stable_field(cp, 1284, 7, 8, 300) then
+            G.finish(false, "door_warp: destination is not stable, controllable map 1284 at (7,8)")
         end
         local px, py = G.pos(cp)
         G.phase("warped", string.format("%s at=(%d,%d)", detail, px, py))
@@ -663,7 +823,8 @@ LEGS[#LEGS + 1] = {
         -- back, with every other record byte-identical. A count that merely returns to where it
         -- started — deposit A then withdraw B, or release A and withdraw something else — FAILS
         -- here, which is the whole reason a count-only oracle was not good enough.
-        local before = play.party_snapshot()
+        local before_world = owned_snapshot("pc_ops before")
+        local before = before_world.party
         if before.n < 2 then
             G.finish(false, string.format(
                 "pc_ops: the party holds %d mon — the oracle needs at least 2 (one to deposit, "
@@ -694,7 +855,8 @@ LEGS[#LEGS + 1] = {
                                                      -- pressed A, A after the slot popup)
         leave_storage(cp, "pc_ops")
 
-        local mid = play.party_snapshot()
+        local mid_world = owned_snapshot("pc_ops after deposit")
+        local mid = mid_world.party
         if mid.n ~= before.n - 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -719,6 +881,15 @@ LEGS[#LEGS + 1] = {
                 "pc_ops: the count dropped but every key is still present ([%s] -> [%s]) -- "
                 .. "that is not a deposit", play.keylist(before), play.keylist(mid)))
         end
+        if gone ~= before.order[2] then
+            G.finish(false, "pc_ops: the deposited mon was not selected party slot 1")
+        end
+        if not mid_world.boxes[gone] then
+            G.finish(false, "pc_ops: selected mon did not appear in a compressed box")
+        end
+        local kept, changed = play.survivors_intact(before, mid, gone)
+        if not kept then G.finish(false, "pc_ops deposit: " .. changed) end
+        boxes_unchanged("pc_ops deposit", before_world.boxes, mid_world.boxes, gone)
         G.phase("deposited", string.format("party %d -> %d, key %s left the party",
                                            before.n, mid.n, gone))
 
@@ -735,7 +906,8 @@ LEGS[#LEGS + 1] = {
         pc_press("A", 240)                           -- Withdraw
         leave_storage(cp, "pc_ops")
 
-        local after = play.party_snapshot()
+        local after_world = owned_snapshot("pc_ops after withdraw")
+        local after = after_world.party
         if after.n ~= mid.n + 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -750,6 +922,10 @@ LEGS[#LEGS + 1] = {
                 .. "now holds [%s]. A released-and-replaced mon, or a different box mon, is "
                 .. "not a round trip", gone, play.keylist(after)))
         end
+        if after_world.boxes[gone] then
+            G.finish(false, "pc_ops: withdraw copied the selected mon and left it boxed")
+        end
+        boxes_unchanged("pc_ops withdraw", before_world.boxes, after_world.boxes)
         -- The travelling record may differ byte for byte (RR stores a 58-byte
         -- CompressedPokemon, so the round trip is lossy BY DESIGN); the ones that STAYED must
         -- not have moved a single byte.
@@ -824,7 +1000,8 @@ LEGS[#LEGS + 1] = {
         play.follow(cp, "pokecenter_start_to_pc", "pc_release")
         G.tap("Up", 2, 13)               -- face the (solid) PC metatile without stepping onto it
 
-        local before = play.party_snapshot()
+        local before_world = owned_snapshot("pc_release before")
+        local before = before_world.party
         if before.n < 2 then
             G.finish(false, string.format(
                 "pc_release: the party holds %d mon; DEPOSIT mode (which is how the party-side "
@@ -865,7 +1042,8 @@ LEGS[#LEGS + 1] = {
         pc_press("A", 240)                                        -- dismiss "Bye-bye" -> compact
         leave_storage(cp, "pc_release")
 
-        local after = play.party_snapshot()
+        local after_world = owned_snapshot("pc_release after")
+        local after = after_world.party
         if after.n ~= before.n - 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -886,26 +1064,27 @@ LEGS[#LEGS + 1] = {
         end
         local ok, bad = play.survivors_intact(before, after, gone)
         if not ok then G.finish(false, "pc_release: " .. bad) end
-        -- WHAT THIS CANNOT PROVE: that the mon was RELEASED and not deposited -- RR's 58-byte
-        -- CompressedPokemon boxes have no decrypt-free read pinned (same limitation pc_ops
-        -- states for its withdraw half), so nothing here can look in a box to tell the two
-        -- apart. The observer's pc_release_begin/pc_release pair is what does: it fires on this
-        -- route and on no other, and RR's UI equivalence to vanilla beyond the two entry
-        -- addresses is UNVERIFIED (see this leg's header) -- the lane run against the real
-        -- observer is the proof, not this comment.
+        if after_world.boxes[gone] then
+            G.finish(false, "pc_release: selected mon was deposited instead of released")
+        end
+        boxes_unchanged("pc_release", before_world.boxes, after_world.boxes)
+        -- The box census proves no storage transfer. The observer's release entry/completion
+        -- pair is separate site evidence; playlib's health check does not assert that pair.
         G.phase("released", string.format(
-            "party %d -> %d, key %s gone (source-pinned RELEASE route + Yes/No confirmation; "
-            .. "no box read exists to check from here)", before.n, after.n, gone))
+            "party %d -> %d, key %s gone from party and every box; boxes unchanged",
+            before.n, after.n, gone))
     end,
 }
 
 -- ── leg: save ──────────────────────────────────────────────────────────────────────────────
 LEGS[#LEGS + 1] = {
     name = "save",
+    -- Each RR leg loads its own state. This one proves a save attempt completed for the
+    -- overworld fixture; it does not claim to persist the preceding catch or PC effects.
     state = "slink_overworld.State",
     exercises = { "save" },
     source = {
-        "lua/tests/gen3_boot_check.lua save_via_menu (START-menu row search + flash sector-counter witness; no guessed menu row)",
+        "lua/tests/gen3_boot_check.lua save_via_menu (START-menu row search, complete validated slot and SaveRAM flush)",
         "data/games/gen3_rr/write_checkpoint.json radical_red.anchors.try_saving_data (TrySavingData, identical clean/companion bytes)",
         "docs/gen3/research/rr_site_reachability.md (TrySavingData keeps its vanilla callers on RR)",
     },
@@ -913,12 +1092,11 @@ LEGS[#LEGS + 1] = {
     run = function(cp)
         local domain = select(1, G.flash_domain())
         if not domain then G.finish(false, "save: no flash memory domain") end
-        local ok, before, after = G.save_via_menu(cp, domain)
+        local ok, before, after, why = G.save_via_menu(cp, domain)
         if not ok then
-            G.finish(false, string.format("save: counter never advanced (%d -> %d)", before, after))
+            G.finish(false, string.format("save: %s (%d -> %d)", tostring(why), before, after))
         end
-        pcall(client.saveram)
-        G.phase("saved", string.format("counter %d -> %d", before, after))
+        G.phase("save-complete", string.format("fixture counter %d -> %d", before, after))
     end,
 }
 

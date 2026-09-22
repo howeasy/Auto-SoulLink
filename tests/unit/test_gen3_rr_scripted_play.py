@@ -16,6 +16,7 @@ becomes an observable outcome here instead of falling through.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -67,7 +68,7 @@ _TERMINAL_HELPERS = (
     "G.pos", "G.map", "mapid(", "G.pred_ok", "G.pred(", "in_battle(", "on_field(",
     "party_count(", "player_bmon_hp(", "player_faints(", "party_snapshot(",
     "at_action_menu(", "battle_outcome(", "hold_until_map_change(", "walk_to(",
-    "G.save_via_menu", "G.flash_domain",
+    "G.save_via_menu", "G.flash_domain", "owned_snapshot(", "stable_field(",
 )
 
 _BIZHAWK_GLOBALS = ("gui", "movie", "bizstring", "input", "mainmemory")
@@ -176,6 +177,10 @@ function FAKE.reset()
     FAKE.set_sb1(true)
     FAKE.set_map(3, 1)
     FAKE.set_pos(15, 7)
+    for _, name in ipairs({"script_context_status", "field_controls_locked"}) do
+        local p = FAKE.cp.predicates[name]
+        w8(p.address + p.offset, p.expect)
+    end
 end
 
 function FAKE.set_battle(on)
@@ -215,6 +220,24 @@ function FAKE.set_party(list)
         FAKE.w32(base + 0, m[1])
         FAKE.w32(base + 4, m[2])
         FAKE.w32(base + 8, m[3] or 0)
+        FAKE.w8(base + 0x13, 2)              -- BoxPokemon.hasSpecies
+        FAKE.w16(base + 0x20, m[4] or 1)    -- fixed-order RR Growth.species
+    end
+end
+
+function FAKE.set_enemy(pid, otid, species)
+    local base = FAKE.enemy_base
+    for i = 0, 99 do w8(base + i, 0) end
+    FAKE.w32(base, pid); FAKE.w32(base + 4, otid)
+    w8(base + 0x13, 2); FAKE.w16(base + 0x20, species)
+end
+
+function FAKE.set_box(box, slot, pid, otid, species)
+    local base = FAKE.box_bases[box + 1] + slot * FAKE.box_stride
+    for i = 0, FAKE.box_stride - 1 do w8(base + i, 0) end
+    if species and species ~= 0 then
+        FAKE.w32(base, pid); FAKE.w32(base + 4, otid)
+        w8(base + 0x13, 2); FAKE.w16(base + 0x1C, species)
     end
 end
 
@@ -253,6 +276,12 @@ def module(lua):
     # exercised below is the one the lane uses.
     cp = mod.boot_check.checkpoint()[0]   # checkpoint() returns (cp, title_key)
     lua.globals().FAKE.init(cp)
+    with open(os.path.join(_REPO, "data", "games", "gen3_rr", "profile.json"), encoding="utf-8") as f:
+        profile = json.load(f)["titles"]["radical_red"]
+    fake = lua.globals().FAKE
+    fake.box_bases = lua.table_from(profile["derived"]["CFRU_BOX_BASES"])
+    fake.box_stride = profile["derived"]["COMPRESSED_MON_SIZE"]
+    fake.enemy_base = profile["ram"]["ENEMY_BASE"]
     return mod
 
 
@@ -528,6 +557,35 @@ def test_a_map_change_that_never_settles_back_to_the_field_fails(lua, fake, modu
     assert "never settled" in detail
 
 
+def test_door_leg_requires_the_recorded_destination_and_settled_controls(lua, fake, legs):
+    fake.set_overworld(True)
+    lua.execute("FAKE.on_frame = function(f) if f >= 100 then FAKE.set_map(5, 4); FAKE.set_pos(7, 8) end end")
+    ok, log, err = fake.run_leg(_leg(legs, "door_warp")["run"])
+    assert ok, f"{err}\n{log}"
+
+
+def test_door_leg_rejects_a_wrong_destination_after_a_real_map_change(lua, fake, legs):
+    fake.set_overworld(True)
+    lua.execute("FAKE.on_frame = function(f) if f >= 100 then FAKE.set_map(5, 3); FAKE.set_pos(7, 8) end end")
+    ok, log, _err = fake.run_leg(_leg(legs, "door_warp")["run"])
+    assert not ok and "destination is not stable" in log
+
+
+def test_door_leg_rejects_a_field_that_stays_locked(lua, fake, legs):
+    fake.set_overworld(True)
+    lua.execute("""
+        FAKE.on_frame = function(f)
+            if f >= 100 then
+                FAKE.set_map(5, 4); FAKE.set_pos(7, 8)
+                local p = FAKE.cp.predicates.field_controls_locked
+                FAKE.w8(p.address + p.offset, p.expect ~ 1)
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "door_warp")["run"])
+    assert not ok and "destination is not stable" in log
+
+
 # ── behaviour: pc_ops keyed oracle ───────────────────────────────────────────────────────────
 
 _PARTY_ABC = "{ {0xAAAA0001, 0x1111, 0xA0}, {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0} }"
@@ -548,9 +606,12 @@ def _pc_scenario(lua, fake, after_withdraw: str):
             -- the PHYSICAL flow (census_rr_pc_deposit_2026-09-21.txt): five A presses to
             -- reach the storage menu, then Down+A, Down+A, A to deposit -- and the same five
             -- again before the withdraw's three
-            if FAKE.a >= 16 then FAKE.set_party({after_withdraw})
+            if FAKE.a >= 16 then
+                FAKE.set_party({after_withdraw})
+                FAKE.set_box(0, 0, 0, 0, 0)
             elseif FAKE.a >= 8 then
-                FAKE.set_party({{ {{0xBBBB0002, 0x2222, 0xB0}}, {{0xCCCC0003, 0x3333, 0xC0}} }})
+                FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xA0}}, {{0xCCCC0003, 0x3333, 0xC0}} }})
+                FAKE.set_box(0, 0, 0xBBBB0002, 0x2222, 1)
             end
         end
     """)
@@ -560,29 +621,80 @@ def test_pc_ops_accepts_a_real_round_trip_even_though_the_record_is_lossy(lua, f
     """RR stores a 58-byte CompressedPokemon, so the travelling record legitimately comes back
     with different bytes; its KEY must survive, and the records that stayed must not move."""
     _pc_scenario(lua, fake,
-                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
-                 "{0xAAAA0001, 0x1111, 0xDEAD} }")
+                 "{ {0xAAAA0001, 0x1111, 0xA0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xBBBB0002, 0x2222, 0xDEAD} }")
     ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert ok, f"{err}\n{log}"
-    assert "AAAA0001:00001111 left the party" in log
+    assert "BBBB0002:00002222 left the party" in log
     assert "is back" in log
+
+
+def test_pc_ops_refuses_the_wrong_selected_mon_even_if_it_returns(lua, fake, legs):
+    _pc_scenario(lua, fake, _PARTY_ABC)
+    lua.execute("""
+        FAKE.on_frame = function()
+            if FAKE.a >= 16 then
+                FAKE.set_party({ {0xAAAA0001,0x1111,0xA0}, {0xBBBB0002,0x2222,0xB0},
+                                 {0xCCCC0003,0x3333,0xC0} })
+                FAKE.set_box(0, 0, 0, 0, 0)
+            elseif FAKE.a >= 8 then
+                FAKE.set_party({ {0xBBBB0002,0x2222,0xB0}, {0xCCCC0003,0x3333,0xC0} })
+                FAKE.set_box(0, 0, 0xAAAA0001, 0x1111, 1)
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok and "deposited mon was not selected" in log
+
+
+def test_pc_ops_rejects_a_copy_on_withdraw_that_leaves_a_box_duplicate(lua, fake, legs):
+    _pc_scenario(lua, fake, _PARTY_ABC)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 16 then FAKE.set_box(0, 0, 0xBBBB0002, 0x2222, 1) end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok and "ambiguous or invalid box record" in log
+
+
+def test_pc_ops_rejects_party_departure_without_box_placement(lua, fake, legs):
+    _pc_scenario(lua, fake, _PARTY_ABC)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            FAKE.set_box(0, 0, 0, 0, 0)
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok and "did not appear in a compressed box" in log
+
+
+def test_pc_ops_rejects_duplicate_party_keys_before_using_a_keyed_oracle(lua, fake, legs):
+    _pc_scenario(lua, fake, _PARTY_ABC)
+    lua.execute("FAKE.set_party({ {0xAAAA0001,0x1111,0xA0}, {0xAAAA0001,0x1111,0xA0}, {0xCCCC0003,0x3333,0xC0} })")
+    ok, log, _err = fake.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok and "ambiguous or invalid party record" in log
 
 
 def test_pc_ops_fails_when_a_different_mon_comes_back(lua, fake, legs):
     """Deposit A, withdraw B: the count returns to 3, which a count-only oracle would accept."""
     _pc_scenario(lua, fake,
-                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
-                 "{0xBBBB0002, 0x2222, 0xB0} }")
+                 "{ {0xAAAA0001, 0x1111, 0xA0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xAAAA0001, 0x1111, 0xA0} }")
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
     assert "RESULT: FAIL" in log
-    assert "withdrawn mon is NOT the deposited one" in log
+    assert "ambiguous or invalid party record" in log
 
 
 def test_pc_ops_fails_when_the_deposited_mon_was_released_and_another_withdrawn(lua, fake, legs):
     """A released-and-replaced mon also restores the count. It is not a round trip."""
     _pc_scenario(lua, fake,
-                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{ {0xAAAA0001, 0x1111, 0xA0}, {0xCCCC0003, 0x3333, 0xC0}, "
                  "{0xEEEE0009, 0x9999, 0xE0} }")
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
@@ -592,8 +704,8 @@ def test_pc_ops_fails_when_the_deposited_mon_was_released_and_another_withdrawn(
 
 def test_pc_ops_fails_when_a_bystander_record_changed(lua, fake, legs):
     _pc_scenario(lua, fake,
-                 "{ {0xBBBB0002, 0x2222, 0xBEEF}, {0xCCCC0003, 0x3333, 0xC0}, "
-                 "{0xAAAA0001, 0x1111, 0xA0} }")
+                 "{ {0xAAAA0001, 0x1111, 0xBEEF}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xBBBB0002, 0x2222, 0xB0} }")
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
     assert "is not byte-identical after the round trip" in log
@@ -603,8 +715,8 @@ def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
     """The final return to the field is an assertion, not a courtesy: leaving the UI up hands
     the next leg a broken starting point."""
     _pc_scenario(lua, fake,
-                 "{ {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0}, "
-                 "{0xAAAA0001, 0x1111, 0xDEAD} }")
+                 "{ {0xAAAA0001, 0x1111, 0xA0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xBBBB0002, 0x2222, 0xDEAD} }")
     lua.execute("""
         local inner = FAKE.on_frame
         FAKE.on_frame = function(f)
@@ -650,6 +762,32 @@ def test_pc_release_accepts_a_clean_release_of_the_targeted_slot(lua, fake, legs
     assert "phase released" in log
     assert "party 3 -> 2" in log
     assert "CCCC0003:00003333 gone" in log
+
+
+def test_pc_release_rejects_deposit_of_the_selected_mon(lua, fake, legs):
+    _release_scenario(lua, fake, _PARTY_ABC_MINUS_C)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 9 then FAKE.set_box(0, 0, 0xCCCC0003, 0x3333, 1) end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "pc_release")["run"])
+    assert not ok and "deposited instead of released" in log
+
+
+def test_pc_release_rejects_any_other_box_addition(lua, fake, legs):
+    _release_scenario(lua, fake, _PARTY_ABC_MINUS_C)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 9 then FAKE.set_box(0, 0, 0xEEEE0005, 0x5555, 1) end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "pc_release")["run"])
+    assert not ok and "unexpected box addition" in log
 
 
 def test_pc_release_fails_when_the_party_count_never_drops(lua, fake, legs):
@@ -711,6 +849,7 @@ def test_wild_faint_will_not_call_it_a_faint_without_the_engines_own_counter(lua
     fake.set_battle(False)
     fake.set_overworld(True)
     fake.set_faints(0)
+    lua.execute("FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })")
     lua.execute("""
         FAKE.on_frame = function(f)
             local t = f % 800
@@ -730,6 +869,54 @@ def test_wild_faint_will_not_call_it_a_faint_without_the_engines_own_counter(lua
     assert "hp_zero=true" in log        # the HP transition WAS seen; the counter is what failed
 
 
+def test_wild_faint_uses_the_counter_baseline_of_each_new_battle(lua, fake, legs):
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    fake.set_faints(1)  # the loaded state's preceding battle had one player faint
+    lua.execute("""
+        FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })
+        FAKE.on_frame = function(f)
+            local t = f % 800
+            if t < 300 then
+                FAKE.set_battle(false); FAKE.set_overworld(true); FAKE.set_menu(false)
+            else
+                FAKE.set_battle(true); FAKE.set_overworld(false); FAKE.set_menu(true)
+                if t < 600 then
+                    FAKE.set_bmon(20, 20); FAKE.set_faints(0)
+                else
+                    FAKE.set_bmon(0, 20); FAKE.set_faints(1)
+                end
+            end
+        end
+    """)
+    ok, log, err = fake.run_leg(_leg(legs, "wild_faint")["run"])
+    assert ok, f"{err}\n{log}"
+    assert "playerFaintCounter 0 -> 1" in log
+
+
+def test_wild_faint_refuses_a_changed_player_battler_identity(lua, fake, legs):
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    lua.execute("""
+        FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })
+        FAKE.on_frame = function(f)
+            local t = f % 800
+            if t < 300 then
+                FAKE.set_battle(false); FAKE.set_overworld(true)
+            else
+                FAKE.set_battle(true); FAKE.set_overworld(false); FAKE.set_menu(true)
+                if t < 600 then FAKE.set_bmon(20, 20)
+                else
+                    FAKE.set_bmon(0, 20); FAKE.set_faints(1)
+                    FAKE.set_party({ {0xBBBB0002, 0x2222, 0xB0} })
+                end
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_faint")["run"])
+    assert not ok and "changed identity" in log
+
+
 # -- behaviour: wild_catch (the pinned CFRU bag sequence) --------------------------------------
 
 
@@ -742,6 +929,7 @@ def _catch_world(lua, fake, *, balls=5, throws_to_catch=1):
     fake.set_menu(True)
     fake.set_balls(4, balls)
     fake.set_outcome(0)
+    fake.set_enemy(0xCAFE0002, 0x9999, 2)
     lua.execute(f"""
         FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xA0}} }})
         FAKE.on_frame = function()
@@ -755,7 +943,7 @@ def _catch_world(lua, fake, *, balls=5, throws_to_catch=1):
                 if FAKE.a >= {throws_to_catch} * 3 + 4 then
                     FAKE.set_battle(false); FAKE.set_overworld(true)
                     FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xA0}},
-                                     {{0xCAFE0002, 0x2222, 0xB0}} }})
+                                     {{0xCAFE0002, 0x2222, 0xB0, 2}} }})
                 end
             end
         end
@@ -783,6 +971,91 @@ def test_wild_catch_passes_when_the_ball_lands_and_the_party_grows(lua, fake, le
     ok, log, err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
     assert ok, f"{err}\n{log}"
     assert "outcome=7, party 1 -> 2" in log
+
+
+def test_wild_catch_refuses_an_outcome_already_caught_before_this_battle(lua, fake, legs):
+    _catch_world(lua, fake)
+    fake.set_outcome(7)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "outcome was not 0 before this catch" in log
+
+
+def test_wild_catch_rejects_a_new_mon_with_the_wrong_species(lua, fake, legs):
+    _catch_world(lua, fake)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 7 then
+                FAKE.set_party({ {0xAAAA0001,0x1111,0xA0}, {0xCAFE0002,0x2222,0xB0,3} })
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "new party mon is not the caught enemy" in log
+
+
+def test_wild_catch_places_the_matching_mon_in_a_box_when_party_is_full(lua, fake, legs):
+    _catch_world(lua, fake)
+    lua.execute("""
+        local full = {
+            {0xAAAA0001,0x1111,0xA0}, {0xBBBB0002,0x2222,0xB0},
+            {0xCCCC0003,0x3333,0xC0}, {0xDDDD0004,0x4444,0xD0},
+            {0xEEEE0005,0x5555,0xE0}, {0xFFFF0006,0x6666,0xF0}
+        }
+        FAKE.set_party(full)
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            FAKE.set_party(full)
+            if FAKE.a >= 7 then FAKE.set_box(0, 0, 0xCAFE0002, 0x2222, 2) end
+        end
+    """)
+    ok, log, err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert ok, f"{err}\n{log}"
+    assert "matching mon was read back in a box" in log
+
+
+def test_wild_catch_refuses_outcome_seven_with_no_new_party_or_box_record(lua, fake, legs):
+    _catch_world(lua, fake)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "no unique new owned record" in log
+
+
+def test_wild_catch_refuses_a_boxless_full_party_outcome(lua, fake, legs):
+    _catch_world(lua, fake)
+    lua.execute("""
+        local full = {
+            {0xAAAA0001,0x1111,0xA0}, {0xBBBB0002,0x2222,0xB0},
+            {0xCCCC0003,0x3333,0xC0}, {0xDDDD0004,0x4444,0xD0},
+            {0xEEEE0005,0x5555,0xE0}, {0xFFFF0006,0x6666,0xF0}
+        }
+        FAKE.set_party(full)
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f) original(f); FAKE.set_party(full) end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "no unique new owned record" in log
+
+
+def test_wild_catch_requires_a_return_to_controllable_field(lua, fake, legs):
+    _catch_world(lua, fake)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 7 then FAKE.set_overworld(false) end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "never returned to a controllable field" in log
 
 
 def test_wild_catch_retries_with_the_next_ball_after_a_miss(lua, fake, legs):
@@ -817,7 +1090,7 @@ def test_wild_catch_fails_when_the_outcome_says_caught_but_the_party_did_not_gro
     """)
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
     assert not ok
-    assert "the party went 1 -> 1" in log
+    assert "no unique new owned record" in log
 
 
 def test_the_pokecenter_path_is_bfs_pinned_against_the_parsed_collision_grid(module):
@@ -851,6 +1124,37 @@ def test_wild_catch_fails_when_the_bag_sequence_never_spends_a_ball(lua, fake, l
     assert not ok
     assert "ball not thrown on throw 1" in log
     assert "never reached USE" in log
+
+
+def test_save_leg_reports_the_shared_oracles_failure_reason(lua, fake, module, legs):
+    boot = module.boot_check
+    flash, save = boot.flash_domain, boot.save_via_menu
+    try:
+        boot.flash_domain = lua.eval("function() return 'Flash' end")
+        boot.save_via_menu = lua.eval(
+            "function() return false, 4, 5, 'the new slot has a bad checksum' end"
+        )
+        ok, log, _err = fake.run_leg(_leg(legs, "save")["run"])
+        assert not ok and "the new slot has a bad checksum" in log
+    finally:
+        boot.flash_domain, boot.save_via_menu = flash, save
+
+
+def test_save_leg_claims_only_fixture_save_completion(lua, fake, module, legs):
+    boot = module.boot_check
+    flash, save = boot.flash_domain, boot.save_via_menu
+    flush = lua.globals().client.saveram
+    try:
+        boot.flash_domain = lua.eval("function() return 'Flash' end")
+        boot.save_via_menu = lua.eval("function() return true, 4, 5, nil end")
+        lua.execute("FAKE.flush_calls = 0; client.saveram = function() FAKE.flush_calls = FAKE.flush_calls + 1 end")
+        ok, log, err = fake.run_leg(_leg(legs, "save")["run"])
+        assert ok, f"{err}\n{log}"
+        assert "phase save-complete" in log
+        assert fake.flush_calls == 0  # save_via_menu owns the single flush
+    finally:
+        boot.flash_domain, boot.save_via_menu = flash, save
+        lua.globals().client.saveram = flush
 
 
 def test_the_frame_end_binding_reports_a_refused_registration(lua, module):
