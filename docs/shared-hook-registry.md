@@ -76,7 +76,10 @@ bank selectors above 255. The returned descriptor includes `pc` and parsed `expe
 `binding:context(prepared, accept)` drops a different switchable-bank shadow value.
 At a matching bank it then runs the optional binder predicate `accept()`; a false
 result drops the hit before any PC or byte check, so a filtered hit cannot latch a
-failure. For an accepted hit it requires exact PC, rechecks the anchor through the bus domain, and
+failure. A throwing `accept` is also a dropped hit: that one callback yields no event,
+`binding:status()` records `accept_errors` (a count) and `accept_error` (the latest
+message, prefixed with the site id), and later hits keep running. It is never a latch,
+the same rule as a handler error. For an accepted hit it requires exact PC, rechecks the anchor through the bus domain, and
 returns `{pc, bank, sp, frame}`. Missing bank/SP/frame or incorrect PC/bytes raises.
 These are explicit shadow/byte checks, not a claim that the emulator's actual mapping,
 callback timing or source-only engine site has been physically qualified. A binder

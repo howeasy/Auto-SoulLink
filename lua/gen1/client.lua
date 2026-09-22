@@ -1874,6 +1874,7 @@ function Client.new(p)
             self.signals = nil
         end
         self.signals = signals_mod.new(profile, all_sites, io, handlers)
+        self.filter_errors_logged = 0
     end
 
     function self:frame_end()
@@ -1893,6 +1894,15 @@ function Client.new(p)
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
+        end
+        -- A throwing hook filter dropped a hit (master: the error reached the console). Log
+        -- once per NEW error, never per frame.
+        if self.signals and self.signals.filter_status then
+            local fs = self.signals:filter_status()
+            if fs.accept_errors > (self.filter_errors_logged or 0) then
+                self.filter_errors_logged = fs.accept_errors
+                log("[SLink-gen1] signal filter " .. tostring(fs.accept_error) .. " (" .. fs.accept_errors .. " dropped)")
+            end
         end
         self:rival_window_tick()
         self:settle_pending_change()

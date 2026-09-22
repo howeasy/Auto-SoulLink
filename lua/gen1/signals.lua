@@ -360,6 +360,8 @@ function S.bind(dependencies)
             error(why,0)
         end
         factory.failed_service=nil
+        -- Read-only: a fresh copy of the binding's dropped-filter record ({accept_errors, accept_error}).
+        function service:filter_status() return binding:status() end
         return service
     end
     return factory

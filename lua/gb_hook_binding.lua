@@ -30,6 +30,9 @@ function GB.new(io,config)
     end
     assert(integer(c.bank_address,0,65535),"explicit bank shadow address required")
     local self={}
+    local accept_errors,accept_error=0,nil
+    -- Binder filter faults are dropped hits, recorded here; never a latch.
+    function self:status() return {accept_errors=accept_errors,accept_error=accept_error} end
     function self:validate(site)
         local out=copy(site)
         -- This contract observes one explicit bank-shadow byte; larger bank
@@ -50,14 +53,22 @@ function GB.new(io,config)
         return out
     end
     -- accept (optional): binder predicate run after the bank match and BEFORE the PC/byte
-    -- assertions, so a hit the binder drops can never latch a PC/byte failure.
+    -- assertions, so a hit the binder drops can never latch a PC/byte failure. A throwing
+    -- accept drops that one hit and is recorded in status(); later hits still run.
     function self:context(site,accept)
         if site.bank>0 then
             local bank=io.read_u8(c.bank_address,c.bank_domain)
             assert(integer(bank,0,255),"bank shadow unavailable")
             if bank~=site.bank then return nil end
         end
-        if accept and not accept() then return nil end
+        if accept then
+            local ok,accepted=pcall(accept)
+            if not ok then
+                accept_errors,accept_error=accept_errors+1,tostring(site.id)..": "..tostring(accepted)
+                return nil
+            end
+            if not accepted then return nil end
+        end
         assert(io.register(c.pc_register)==site.pc,tostring(site.id)..": callback PC differs")
         read_bytes(io,site.address,site.expected,c.bus_domain,tostring(site.id)..": bank/bytes differ at fire time")
         local sp,frame=io.register(c.sp_register),io.framecount()

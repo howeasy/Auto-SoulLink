@@ -92,3 +92,16 @@ def test_accept_runs_after_the_bank_match_and_before_the_pc_and_byte_checks():
     assert binding.context(binding, prepared, reject) is None and calls == ["accept"]
     with pytest.raises(LuaError, match="callback PC differs"):
         binding.context(binding, prepared, lambda: True)
+
+
+def test_a_throwing_accept_drops_that_hit_records_the_error_and_later_hits_still_run():
+    lua, module, state, io, config, site = setup()
+    binding = module.new(io, config)
+    prepared = binding.validate(binding, site)
+    assert binding.status(binding).accept_errors == 0
+    boom = lua.eval("function() error('F register unavailable') end")
+    assert binding.context(binding, prepared, boom) is None
+    status = binding.status(binding)
+    assert status.accept_errors == 1 and "F register unavailable" in status.accept_error
+    context = binding.context(binding, prepared, lambda: True)
+    assert context.pc == 0x4101

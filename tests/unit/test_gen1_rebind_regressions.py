@@ -221,6 +221,51 @@ def test_u6_filtered_hit_with_a_wrong_pc_does_not_stop_later_signals():
     assert [s["kind"] for s in h.drain()] == ["move_mon"]
 
 
+def test_n1_a_throwing_filter_drops_one_hit_and_later_signals_still_queue():
+    """Reviewer's probe: bag_received with the F register missing. Master let that error escape
+    one hit and still queued move_mon; it must never latch the service."""
+    h = Harness("red")
+    h.start()
+    del h.regs["F"]
+    h.arrive("bag_received")
+    h.regs["F"] = 0
+    assert h.status().failed is None
+    h.arrive("move_mon")
+    assert [s["kind"] for s in h.drain()] == ["move_mon"]
+
+
+def test_n1_client_logs_each_new_filter_error_once_never_per_frame():
+    w = _world()
+    w.connect()
+
+    def filter_logs():
+        return [line for line in w.logs if "signal filter" in line]
+
+    del w.regs["F"]
+    w.fire("bag_received")
+    w.regs["F"] = 0
+    w.step(5)
+    logs = filter_logs()
+    assert len(logs) == 1 and "bag_received" in logs[0] and "'F'" in logs[0]
+    w.step(60)
+    assert len(filter_logs()) == 1
+    del w.regs["F"]
+    w.fire("bag_received")
+    w.regs["F"] = 0
+    w.step(3)
+    assert len(filter_logs()) == 2
+
+
+def test_n1_signals_filter_status_is_a_detached_copy():
+    h = Harness("red")
+    h.start()
+    del h.regs["F"]
+    h.arrive("bag_received")
+    view = h.svc.filter_status(h.svc)
+    view.accept_errors = 99
+    assert h.svc.filter_status(h.svc).accept_errors == 1
+
+
 # ── master-equivalence differential ──────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
