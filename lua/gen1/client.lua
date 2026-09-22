@@ -1815,6 +1815,14 @@ function Client.new(p)
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
         end
+        -- signals.lua latches its first fire-time failure and drops every later hook: say so
+        -- once, loudly, instead of a run that silently stops seeing captures and battles
+        local sf = self.signals and self.signals.failure
+        if sf and not self.signal_failure_shown then
+            self.signal_failure_shown = true
+            log("[SLink-gen1] ENGINE SIGNALS STOPPED: " .. tostring(sf))
+            hud.show("SLINK: engine hooks stopped - restart Lua, send slink_lua.log", 255, 60, 60, 1800)
+        end
         self:rival_window_tick()
         self:settle_pending_change()
         -- Every readable frame OBSERVES each alias (pure pass, no similarity, nothing refreshed):

@@ -36,7 +36,7 @@ def _rom(title: str) -> bytes:
 
 
 def _run_launcher(script: str, system_id: str | None, rom: bytes,
-                  detected_game_id: str = "gen3_frlge") -> list[str]:
+                  detected_game_id: str = "gen3_frlge", bizhawk: str = "2.11.1") -> list[str]:
     """dofile `lua/<script>` with stub BizHawk globals; return the paths it dofile'd.
 
     Only `gen1/entry.lua` is executed for real -- every other dofile target is recorded
@@ -66,6 +66,7 @@ def _run_launcher(script: str, system_id: str | None, rom: bytes,
 
     g.dofile = fake_dofile
     g.emu = lua.table_from({"getsystemid": getsystemid})
+    g.client = lua.table_from({"getversion": lambda: bizhawk})
     g.memory = lua.table_from({
         "read_u8": lambda addr, domain: rom[addr] if 0 <= addr < len(rom) else 0,
     })
@@ -103,6 +104,13 @@ def test_only_one_client_is_ever_loaded():
     loaded = _run_launcher("slink.lua", "GBC", _rom("POKEMON YELLOW"))
     clients = [p for p in loaded if "client" in p or p == _NEW_CLIENT]
     assert clients == [_NEW_CLIENT], f"expected exactly one client, got {clients}"
+
+
+def test_an_old_bizhawk_is_refused_before_the_gen1_client_starts():
+    """BizHawk 2.9.1 ran the client with every engine hook dead (live run 2026-09-22): no
+    capture, no battle ever reported. Refuse it loudly instead."""
+    with pytest.raises(lupa.LuaError, match="too old"):
+        _run_launcher("slink.lua", "GBC", _rom("POKEMON GREEN"), bizhawk="2.9.1")
 
 
 def test_a_non_gameboy_core_is_untouched_by_the_gen1_route():
