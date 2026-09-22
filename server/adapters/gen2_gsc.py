@@ -374,6 +374,13 @@ class Gen2GSCAdapter(GameAdapter):
             if group is None:
                 _require(area["fishing_group"] == 0, "unknown map fishing group")
                 continue
+            # A rod needs a water quadrant it can stand beside: header fish groups alone
+            # reach indoor maps that hold no water at all (review F3, OMP N7). The flag is
+            # source/ROM-derived by tools/gen_gen2_area_map.py; the obligation stays OPEN
+            # until a fixture actually fishes, so the rows keep UNQUALIFIED below.
+            _require(isinstance(area.get("fishing_water"), bool), "missing fishing_water flag")
+            if not area["fishing_water"]:
+                continue
             for rod in ("old", "good", "super"):
                 # fish.asm .loop accepts <= threshold. Random spans 0..255;
                 # rates below are conditional on a bite, whose threshold is separate.
@@ -385,10 +392,11 @@ class Gen2GSCAdapter(GameAdapter):
                     emit(int(key), f"{rod.title()} Rod ({label})", slots, weights,
                          fish_group=group["group_id"], bite_threshold=group["bite_threshold"],
                          selection_scope="base_group; runtime swarm selection OPEN",
-                         # ponytail: known limitation, not a catchable-set claim. Every map
-                         # header names a fish group, indoor maps included (C data/maps/maps.asm:495-496,
-                         # G :476-477 give ElmsLab/PlayersHouse1F FISHGROUP_SHORE), and which maps
-                         # have fishable water is gen2_rom_scan's OPEN fishing_map_association.
+                         # ponytail: known limitation, not a catchable-set claim. Rod rows are
+                         # gated on the source/ROM-derived fishing_water flag, but
+                         # fishing_map_association (gen2_rom_scan OPEN_OBLIGATIONS) stays OPEN
+                         # until a fixture fishes: connection strips, walkable-region
+                         # connectivity and runtime swarm selection are not modelled.
                          map_association="UNQUALIFIED")
         tables, maps_by_method, tables_by_map = {}, {}, {}
         for area, label, key, source_table in grouped:

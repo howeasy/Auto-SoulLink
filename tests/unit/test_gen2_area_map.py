@@ -12,6 +12,7 @@ from tools import gen2_source_data
 from tools.gen_gen2_area_map import (
     build_area_map,
     constants,
+    fishing_water,
     map_constants,
     rom_bytes,
     run_generator,
@@ -46,6 +47,51 @@ def test_all_map_headers_are_bound_and_contest_is_separate(context):
     assert by_name["NATIONAL_PARK_BUG_CONTEST"]["area_id"] == "national_park_contest"
     assert by_name["UNION_CAVE_1F"]["area_id"] == by_name["UNION_CAVE_B1F"]["area_id"] == "union_cave"
     assert all(row["source"]["commit"] == context.source_commit for row in rows.values())
+
+
+def test_fishing_water_follows_the_accepted_rule(context):
+    """F6 (docs/gen2/reviews/OMP_FISHING_ASSOCIATION_2026-09-22.md): a rod needs a water
+    quadrant with a standable neighbour, so a header fish group alone is not enough."""
+    rows = {row["map_const"]: row for row in build_area_map(context).values()}
+    assert all(isinstance(row["fishing_water"], bool) for row in rows.values())
+    # Water the rod can face from walkable ground, including an indoor cave (F7).
+    assert all(rows[name]["fishing_water"] for name in ("NEW_BARK_TOWN", "ROUTE_32", "UNION_CAVE_1F"))
+    # No water at all (ElmsLab, PlayersHouse1F) or water walled off from every standing
+    # tile (Route 16's decorative pockets).
+    assert not any(rows[name]["fishing_water"] for name in ("ELMS_LAB", "PLAYERS_HOUSE_1F", "ROUTE_16"))
+    # Cerulean Gym is the documented pret bug: the pool is reachable, but only Gold/Silver
+    # give the map a fish group (Crystal data/maps/maps.asm:218 vs Gold :210).
+    assert rows["CERULEAN_GYM"]["fishing_water"] is True
+    assert rows["CERULEAN_GYM"]["fishing_group"] == (0 if context.title == "crystal" else 1)
+
+
+def test_fishing_water_rule_needs_a_standable_neighbour():
+    """The rule is the engine's own: faced-tile permission, block 0 = wall, and a neighbour
+    the player can occupy (home/map.asm:1591-1650, :1713-1716)."""
+    names = {"COLL_FLOOR": 0x00, "LAND_TILE": 0x00, "WATER_TILE": 0x01, "COLL_PIT": 0x60,
+             "HI_NYBBLE_LEDGES": 0xA0, "HI_NYBBLE_SIDE_WALLS": 0xB0, "HI_NYBBLE_SIDE_BUOYS": 0xC0}
+    permissions = [0x00] * 256
+    permissions[0x29] = 0x01  # COLL_WATER -> WATER_TILE (data/collision/collision_permissions.asm)
+    permissions[0xB2] = 0x00  # COLL_UP_WALL keeps LAND_TILE but GetMovementPermissions refuses it
+    permissions[0xA3] = 0x00  # COLL_HOP_DOWN likewise: a hop is never a standing tile
+    water, floor = bytes([0x29] * 4), bytes(4)
+    # metatile 0 unused, 1 all water, 2 all floor, 3 side wall, 4 hop ledge
+    table = bytes(4) + water + floor + bytes([0xB2] * 4) + bytes([0xA3] * 4)
+    assert fishing_water(b"\x01", 1, 1, table, permissions, names) is False      # nothing to stand on
+    assert fishing_water(b"\x01\x02", 2, 1, table, permissions, names) is True   # floor beside water
+    assert fishing_water(b"\x01\x03", 2, 1, table, permissions, names) is False  # side wall only
+    assert fishing_water(b"\x01\x04", 2, 1, table, permissions, names) is False  # hop ledge only
+    assert fishing_water(b"\x00\x01", 2, 1, table, permissions, names) is False  # block 0 is wall
+    with pytest.raises(ValueError, match="outside the tileset collision table"):
+        fishing_water(b"\x09\x01", 2, 1, table, permissions, names)
+
+
+def test_collision_permission_table_is_cross_checked_against_the_rom(context):
+    rom = bytearray(context.rom)
+    offset = gen2_source_data.rom_offset(*context.symbol("CollisionPermissionTable"))
+    rom[offset + 0x29] ^= 1  # COLL_WATER's permission byte
+    with pytest.raises(ValueError, match="permission table differs"):
+        build_area_map(replace(context, rom=bytes(rom)))
 
 
 def test_header_landmark_byte_corruption_refuses(context):

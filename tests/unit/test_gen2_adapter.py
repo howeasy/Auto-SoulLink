@@ -1146,13 +1146,29 @@ class TestGen2GSCAdapter:
                 gsc_adapter.rom_content_fingerprint(payload)
 
 
-    def test_fishing_rows_are_marked_unqualified_while_map_association_is_open(self, gsc_adapter):
-        """Review F3: header fish groups include indoor maps; no reachability rule is guessed."""
-        rods = {label: rows for area in ("new_bark_town", "route_29")
-                for label, rows in gsc_adapter.encounter_table(area).items() if "Rod" in label}
-        assert any("(ElmsLab)" in label for label in rods)  # documented limitation, still present
-        assert rods and all(row["map_association"] == "UNQUALIFIED" for rows in rods.values() for row in rows)
-        assert all("map_association" not in row for row in gsc_adapter.encounter_table("route_29")["Morn"])
+    def test_fishing_rows_are_gated_on_reachable_water(self, gsc_adapter):
+        """OMP N7 / review F3: rod rows exist only where the rod can face water."""
+        pack = json.loads((Path(__file__).resolve().parents[2] / "data/games"
+                           / f"gen2_{gsc_adapter.title}" / "area_map.json").read_text("utf-8"))
+        tables = {area: gsc_adapter.encounter_table(area) or {}
+                  for area in ("new_bark_town", "route_29", "route_16", "union_cave")}
+        rods = {label: rows for table in tables.values()
+                for label, rows in table.items() if "Rod" in label}
+        assert rods, "expected rod rows where the rod can reach water"
+        for rows in rods.values():
+            for row in rows:
+                source = pack[str(row["map_group"] * 256 + row["map_number"])]
+                assert source["fishing_water"] is True
+                assert source["fishing_group"] != 0
+                assert row["map_association"] == "UNQUALIFIED"
+        # The review's example is gone: no rod row comes from a dry indoor map.
+        assert not [label for label in rods if "(ElmsLab)" in label]
+        # New Bark Town's six maps each used to carry six rod labels; only the town has water.
+        assert len([label for label in tables["new_bark_town"] if "Rod" in label]) == 6
+        # A dry route and a walled-water route keep their other rows and gain no rod rows.
+        for area in ("route_29", "route_16"):
+            assert tables[area] and not [label for label in tables[area] if "Rod" in label]
+        assert all("map_association" not in row for row in tables["route_29"]["Morn"])
 
     def test_disabled_tree_sets_present_no_headbutt(self, gsc_adapter):
         """G/S GetTreeMons refuses UNUSED/CITY (pokegold engine/events/treemons.asm:98-102)."""
