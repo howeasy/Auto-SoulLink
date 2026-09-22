@@ -111,7 +111,11 @@ LANES = [
          why="UNIMPLEMENTED P4: panel/sound and transient receipts on qualified overlays"),
     Lane("live-new-gates", _pytest("tests/live/test_gen2_new_gates.py"),
          env={"SLINK_LIVE": "1"},
-         why="UNIMPLEMENTED P3b: all titles, same-frame reads, natural sites and write windows"),
+         why="UNIMPLEMENTED P3b: P3b.3a landed the live inspect rows (lua/tests/gen2_inspect_gate.lua"
+             " -- same-frame party/box dump, R-1/R-2/R-3/R-5g on the running cartridge); the"
+             " engine-site (P3b.4), write-window (P3b.5) and client-conformance (P3b.6/P3b.7) rows"
+             " this lane's full requirement mapping also needs are not yet in this file, so the"
+             " lane stays gated"),
     Lane("live-trade-gates", _pytest("tests/live/test_gen2_trade_gates.py"),
          env={"SLINK_LIVE": "1"},
          why="UNIMPLEMENTED P4: native trade, held items, refusal and exact-record reload"),
@@ -151,7 +155,7 @@ UNIMPLEMENTED = {
     "fixtures": "P3b fixture qualifier, eight played fixtures and GAME/PYDEC reload evidence",
     "patch-build": "P4 companion build command and patched-artifact qualification",
     "live-gates": "P4 panel/sound gate and transient-receipt contract",
-    "live-new-gates": "P3b cartridge/read/site/write gates and per-title prerequisites",
+    "live-new-gates": "P3b.4-P3b.7 engine-site/write/client rows still absent from tests/live/test_gen2_new_gates.py (P3b.3a landed only the inspect rows; see the lane's why=)",
     "live-trade-gates": "P4 trade and held-item persistence/refusal gates",
     "duo-pairs": "P3b/P4 scenario registry, isolated saves and mandatory witness/oracle pipeline",
     "release-evidence": "P3b machine ledger plus P6 applicability/artifact/receipt evaluation",

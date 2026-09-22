@@ -36,6 +36,19 @@ def test_required_phase_lanes_and_every_title_are_declared():
     assert "--check" in _lane("source-build").argv
 
 
+def test_live_new_gates_lane_targets_the_p3b3a_inspect_driver():
+    """P3b.3a landed lua/tests/gen2_inspect_gate.lua and tests/live/test_gen2_new_gates.py; this
+    lane's argv already names that file (nothing to rename), it stays UNIMPLEMENTED because the
+    lane's full requirement mapping also needs the engine-site/write/client rows no card has
+    landed yet, and its why= now says so instead of describing the whole file as absent."""
+    lane = _lane("live-new-gates")
+    assert "tests/live/test_gen2_new_gates.py" in lane.argv
+    assert (Path(__file__).resolve().parents[2] / "tests/live/test_gen2_new_gates.py").exists()
+    assert "P3b.3a" in lane.why and "inspect" in lane.why
+    assert "live-new-gates" in gate.UNIMPLEMENTED
+    assert {"R-1", "R-2", "R-3", "R-5g"} <= set(gate.REQUIREMENTS["live-new-gates"])
+
+
 def test_moves_regeneration_is_a_required_f5_source_lane():
     lane = _lane("moves-generated")
     assert lane.argv[1:] == ["tools/gen_gen2_moves.py", "--check"]
