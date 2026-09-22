@@ -11,3 +11,11 @@ patch/upr/*.patch text eol=lf
 data/pret/*.sym text eol=lf
 data/purergb/*.sym text eol=lf
 data/purergb/*.map text eol=lf
+# Gen 2 RGBDS snapshots are hashed as emitted (CRLF on the pinned Windows toolchain).
+# Preserve these bytes in Git; text normalization would invalidate the source lock.
+data/gen2/*.sym -text whitespace=cr-at-eol
+data/gen2/*.map -text whitespace=cr-at-eol
+data/gen2_sources.lock.json text eol=lf
+data/gen2/*.json text eol=lf
+data/games/gen2_*/*.json text eol=lf
+data/games/gen2_*/charmap.lua text eol=lf

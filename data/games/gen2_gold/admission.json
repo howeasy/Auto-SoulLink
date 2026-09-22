@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "purpose": "P1_ARTIFACT_MATRIX_ONLY",
+  "foundation": "gen2_gsc",
+  "title": "gold",
+  "pack": "gen2_gold",
+  "selected_revision": "US",
+  "source_lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+  "gate": {
+    "id": "G1",
+    "state": "PENDING"
+  },
+  "unknown_hash_policy": "REFUSE",
+  "refused_kinds": [
+    "archipelago",
+    "randomized",
+    "unknown"
+  ],
+  "authorized_title_pairings": [
+    [
+      "crystal",
+      "crystal"
+    ],
+    [
+      "crystal",
+      "gold"
+    ],
+    [
+      "crystal",
+      "silver"
+    ],
+    [
+      "gold",
+      "gold"
+    ],
+    [
+      "gold",
+      "silver"
+    ],
+    [
+      "silver",
+      "silver"
+    ]
+  ],
+  "artifact_kind_compatibility": {
+    "clean": {
+      "clean": "REQUIRES_G1",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    },
+    "overlay": {
+      "clean": "REFUSED",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    },
+    "ghost": {
+      "clean": "REFUSED",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "pokegold",
+      "kind": "clean",
+      "revision": "US",
+      "selection": "SELECTED",
+      "lock_output": "pokegold",
+      "status": "BUILT",
+      "sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+      "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+    },
+    {
+      "id": "gold_overlay",
+      "kind": "overlay",
+      "revision": "US",
+      "selection": "FUTURE",
+      "status": "PLANNED"
+    },
+    {
+      "id": "gold_ghost",
+      "kind": "ghost",
+      "revision": "US",
+      "selection": "FUTURE",
+      "status": "PLANNED"
+    }
+  ]
+}

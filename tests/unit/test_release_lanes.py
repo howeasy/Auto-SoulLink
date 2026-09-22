@@ -97,6 +97,18 @@ def _run_gate(argv, *, failing=()):
     return result, calls
 
 
+def test_list_prints_lanes_and_requirements_without_running_them(capsys):
+    result, calls = _run_gate(["--list"])
+    assert result == 0
+    assert calls == []
+    out = capsys.readouterr().out
+    lines = [line.split() for line in out.splitlines()]
+    assert ["fast", "[fast]"] in lines
+    assert ["physical", "[slow]"] in lines
+    assert lines.count(["requirements:", "example.requirement"]) == 2
+    assert "GATE PASSED" not in out
+
+
 def test_quick_run_omits_slow_lane_and_cannot_claim_release(capsys):
     result, calls = _run_gate(["--quick"])
     assert result == 0
