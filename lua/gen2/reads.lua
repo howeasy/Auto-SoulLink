@@ -320,7 +320,7 @@ function R.new(profile, io, decode_name)
 
     function r.read_player()
         -- C ram/wram.asm:2994-2996; G:2399-2401. Trainer Card prints the ID
-        -- as a two-byte number (C trainer_card.asm:241-243; G:239-241).
+        -- as a two-byte number (C engine/menus/trainer_card.asm:241-243; G:239-241).
         -- PrintNum's .word loads the first byte as high: C engine/math/print_num.asm:48-53;
         -- G home/print_num.asm:48-53. NAME_LENGTH is the allocation, not the input-screen limit.
         local valid,why = geometry("wPlayerID",{wPlayerName=2})
@@ -441,7 +441,8 @@ function R.new(profile, io, decode_name)
     end
 
     function r.read_battle()
-        -- C ram/wram.asm:2720-2739; G:2186-2207. These bytes describe raw
+        -- C ram/wram.asm:2720-2739 (wCurBattleMon 2343, wBattleResult 2394);
+        -- G:2186-2207 (wCurBattleMon 1818, wBattleResult 1875). These bytes describe raw
         -- context, not a qualified running battle. In particular LOSE is transient.
         local flags = profile.title == "crystal" and 192 or 128
         if c.WILD_BATTLE ~= 1 or c.TRAINER_BATTLE ~= 2 or c.BATTLERESULT_BITMASK ~= flags then
@@ -557,8 +558,6 @@ function R.new(profile, io, decode_name)
         return raw_observation({raw=bytes,wire=wire,unused_raw=bytes[c.NUM_LEVEL_STATS],
             raw_hex=hex(bytes),battle_qualified=false})
     end
-
-    function r.read_admission_facts()
 
     function r.read_admission_facts()
         local saved,why = wram("wSavedAtLeastOnce",1)

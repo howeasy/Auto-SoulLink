@@ -217,7 +217,7 @@ def test_stage_symbol_offset_cannot_disagree_with_named_index(monkeypatch):
         generator.build("crystal")
 
 
-@pytest.mark.parametrize("fault", ["seven_instead_of_eight", "lower_bound_branch", "sharp_clamp", "stage_padding"])
+@pytest.mark.parametrize("fault", ["seven_instead_of_eight", "lower_bound_branch", "sharp_clamp", "lowerstat_clamp", "stage_padding"])
 def test_ancillary_stage_facts_require_their_exact_source_contract(monkeypatch, fault):
     from tools import gen_gen2_profile as generator
 
@@ -236,6 +236,8 @@ def test_ancillary_stage_facts_require_their_exact_source_contract(monkeypatch, 
                     return text.replace("\tjp z, .CantLower", "\tjp c, .CantLower")
                 if fault == "sharp_clamp":
                     return text.replace("\tjr nz, .ComputerMiss\n\tinc b", "\tjr nz, .ComputerMiss\n\tdec b")
+                if fault == "lowerstat_clamp":  # Curse lowers Speed through LowerStat, not StatDown.
+                    return text.replace("\tjr nz, .got_num_stages\n\tinc b", "\tjr nz, .got_num_stages\n\tdec b")
             if fault == "stage_padding" and relative == "ram/wram.asm":
                 return text.replace("wPlayerEvaLevel::  db\n\tds 1", "wPlayerEvaLevel::  db\n\tds 2")
             return text

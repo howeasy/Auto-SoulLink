@@ -494,6 +494,13 @@ def test_corrupt_pocket_never_becomes_an_empty_success(pocket, symbol, offset, v
     error(world.reader.read_pocket(pocket), message)
 
 
+def test_bag_refuses_whole_when_any_pocket_is_corrupt():
+    world = World()
+    _put_pockets(world)
+    world.bus[world.profile["ram"]["wNumBalls"]] = 13
+    error(world.reader.read_bag(), "balls: pocket count exceeds capacity")
+
+
 def test_ancillary_methods_refuse_missing_symbols_decoder_failures_and_wrong_banks():
     world = World(name_decoder=lambda _raw: None)
     error(world.reader.read_player(), "decoder unavailable")

@@ -286,7 +286,10 @@ def _stat_stage_minimum(ctx, constants: dict, source: dict) -> int:
     454-472 / G:942-960 declare seven named bytes followed by one unnamed byte.
     The lower bound has no upstream constant: StatDown's decrement refuses zero,
     and its sharp-lowering path increments zero back to one (C effect_commands:
-    4339-4349; G:4306-4316). This is a derived source fact, not a live-state grant.
+    4339-4349; G:4306-4316). LowerStat, Curse's Speed drop, repeats the same
+    refusal/clamp (C effect_commands:4674-4683; G:4637-4646). Other writers reset
+    to BASE_STAT_LEVEL or copy a whole array. This is a derived source fact, not a
+    live-state grant.
     """
     if ([constants[name] for name, _suffix in STAT_STAGE_FIELDS] != list(range(7))
             or constants["ABILITY"] != 7 or constants["NUM_LEVEL_STATS"] != 8
@@ -322,6 +325,11 @@ def _stat_stage_minimum(ctx, constants: dict, source: dict) -> int:
     if ("ld b, [hl]\ndec b\njp z, .CantLower" not in lower
             or "ld a, [wLoweredStat]\nand $f0\njr z, .ComputerMiss\ndec b\njr nz, .ComputerMiss\ninc b" not in lower):
         raise ValueError("stat-stage minimum lacks the native decrement/refusal/sharp-clamp proof")
+    lowered = "\n".join(instructions(_block(effects, "LowerStat:", r"\.got_num_stages")))
+    if ("ld b, [hl]\ndec b\njr z, .cant_lower_anymore" not in lowered
+            or "ld a, [wLoweredStat]\nand $f0\njr z, .got_num_stages\ndec b\njr nz, .got_num_stages\ninc b"
+            not in lowered):
+        raise ValueError("stat-stage minimum lacks the LowerStat decrement/refusal/sharp-clamp proof")
     upper = "\n".join(instructions(_block(effects, "RaiseStat:", r"\.got_num_stages")))
     if "ld b, [hl]\ninc b\nld a, MAX_STAT_LEVEL\ncp b\njp c, .cant_raise_stat" not in upper:
         raise ValueError("stat-stage maximum lacks its native bound check")
