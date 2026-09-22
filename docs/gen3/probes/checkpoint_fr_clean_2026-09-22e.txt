@@ -1,0 +1,19 @@
+phase probe-state frame=816 idle terminal=field_idle_300
+phase probe-state frame=816 walking terminal=position_changed_120
+phase probe-state frame=849 start_menu terminal=field_controls_locked
+phase probe-state frame=1567 dialog terminal=save_dialog_cb_nonzero
+phase probe-state frame=1687 save terminal=new_counter_partial_slot_then_14_sectors
+phase probe-state frame=35002 battle terminal=in_battle_mask_nonzero
+phase probe-state frame=865 fade terminal=palette_fade_active_then_map_changed
+phase probe-state frame=34021 script_running terminal=script_context_not_shutdown_60
+PROBE idle PASS sampled=300 true=276 false=24 terminal=field_idle_300 reached=true R15=134219950 CPSR=1610612799 frame=1116 clauses=cpu:24 verdict=positive rate reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:77: CPU outside parked checkpoint
+PROBE walking PASS sampled=120 true=109 false=11 terminal=position_changed_120 reached=true R15=134219948 CPSR=1610612799 frame=936 clauses=cpu:11 verdict=- reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:77: CPU outside parked checkpoint
+PROBE start_menu PASS sampled=120 true=0 false=120 terminal=field_controls_locked reached=true R15=134219950 CPSR=1610612799 frame=969 clauses=cpu:9,field_controls_locked:120,task:120 verdict=- reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:69: forbidden state: field_controls_locked
+PROBE dialog PASS sampled=120 true=0 false=120 terminal=save_dialog_cb_nonzero reached=true R15=134219948 CPSR=1610612799 frame=1687 clauses=cpu:6,field_controls_locked:120,save_dialog_cb:120,task:120 verdict=- reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:69: forbidden state: save_dialog_cb
+PROBE save PASS sampled=244 true=0 false=244 terminal=new_counter_partial_slot_then_14_sectors reached=true R15=136178016 CPSR=63 frame=2321 clauses=cpu:244,field_controls_locked:244,save_dialog_cb:244,task:244 verdict=- reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:69: forbidden state: save_dialog_cb
+PROBE battle PASS sampled=120 true=0 false=120 terminal=in_battle_mask_nonzero reached=true R15=134219952 CPSR=63 frame=35122 clauses=callback1:111,callback2:120,cpu:6,field_controls_locked:120,in_battle:120,palette_fade_active:6,task:103 verdict=- reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:69: forbidden state: callback1
+PROBE fade PASS sampled=43 true=0 false=43 terminal=palette_fade_active_then_map_changed reached=true R15=134219956 CPSR=1610612799 frame=978 clauses=cpu:3,field_controls_locked:43,palette_fade_active:43,task:43 verdict=- reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:69: forbidden state: palette_fade_active
+PROBE pc_menu SKIP not selected for firered/clean
+PROBE script_running PASS sampled=123 true=0 false=123 terminal=script_context_not_shutdown_60 reached=true R15=134219948 CPSR=1610612799 frame=34167 clauses=cpu:9,field_controls_locked:123,script_context_status:123,task:121 verdict=- note=witness=same_byte_as_script_context_status,independent_read_path,not_independent_evidence reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:69: forbidden state: script_context_status
+WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only
+RESULT: PASS all checkpoint controls
