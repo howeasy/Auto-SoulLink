@@ -150,6 +150,8 @@ RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
 def cpu_clause(title: str, syms, is_rr: bool) -> dict:
     if is_rr:
         return dict(RR_CPU)
+    if PARKED_SYMBOL not in syms:
+        raise SystemExit(f"{title}: missing parked-CPU symbol {PARKED_SYMBOL}")
     addr, size = syms[PARKED_SYMBOL]
     cpu = {"mode": 0x1F, "thumb": 1, "pc_min": addr, "pc_max": addr + size - 1,
            "symbol": PARKED_SYMBOL}

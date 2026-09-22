@@ -82,6 +82,20 @@ def test_evolution(title, kind, clause):
         assert_refused(w, "unknown active task")
 
 
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_evolution_task_from_engine_signals_is_refused(kind):
+    path = ROOT / "data/games/gen3_rr/engine_signals.json"
+    signals = json.loads(path.read_text(encoding="utf-8"))
+    site = signals["titles"]["radical_red"]["artifacts"][kind]["sites"]["evolve_species_store"]
+    task = site["function"]
+    assert task["symbol"] == "Task_EvolutionScene"
+    w = World("radical_red", kind)
+    assert w.check()
+    add_task(w, task["address"])
+    assert_refused(w, "unknown active task")
+    assert list(w.safety.last_clauses.values()) == ["task"]
+
+
 @pytest.mark.parametrize("title,kind", TITLES)
 @pytest.mark.parametrize("clause", ["link_callback", "link_players_received", "link_transferring",
                                     "callback1", "task"])

@@ -219,10 +219,17 @@ at the same offset in all four ROMs.
 | `soft_reset_disabled` | `gSoftResetDisabled` `0x03003530` | `== 0` | `src/save.c:887,958` — `Task_LinkFullSave` holds it for the whole flash write |
 | `link_callback` | `gLinkCallback` `0x03003F80` | `== 0` | `src/link.c:748,756,1133`, `ClearLinkCallback` |
 | `link_transferring` | `gLinkTransferringData` `0x030030E4` | `== 0` | `src/main.c:195-210` |
-| `link_players_received` | `gReceivedRemoteLinkPlayers` `0x03003F64` | `== 0` | `src/link.c:410,421` (`OpenLink`/`CloseLink` clear it), `:540` and `src/link_rfu_2.c:1879,2065` set it once a partner's player data is in; RR proven through `CloseLink`'s pool. Replaces `wireless_comm_type` (`gWirelessCommType` `0x03003F3C`), which is the sticky transport selector set by the title menu's adapter probe (`src/main_menu.c:573` -> `src/link.c:243-261`), not a link-activity flag — it refused every idle frame of a FR save lineage (`docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt`) |
+| `link_players_received` | `gReceivedRemoteLinkPlayers` `0x03003F64` | `== 0` | `src/link.c:410,421` (`OpenLink`/`CloseLink` clear it), `:540` and `src/link_rfu_2.c:1879,2065` set it once a partner's player data is in; RR address proven through `CloseLink`'s literal pool, link-ACTIVE semantics are inference only (see below). Replaces `wireless_comm_type` (`gWirelessCommType` `0x03003F3C`), which is the sticky transport selector set by the title menu's adapter probe (`src/main_menu.c:573` -> `src/link.c:243-261`), not a link-activity flag — it refused every idle frame of a FR save lineage (`docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt`) |
 | tasks | `gTasks` `0x03005090` | every active slot's `func` ∈ `allowed_overworld_tasks` | §3 |
 | CPU | FRLG: `WaitForVBlank` `0x08000890` size `0x30` | FRLG: CPSR mode `0x1F`, `T == 1`, R15 ∈ `[0x08000890,0x080008BF]`; RR: mode `0x1F`, `T == 0`, R15 ∈ `[0x0000,0x3FFF]` | per title, §4.3 |
 | pointers | §4.4 | snapshot at arm time, revalidate before each write | PLAN §5.3 |
+
+**RR link evidence limit.** The `CloseLink` literal-pool comparison proves the address of
+`gReceivedRemoteLinkPlayers` in both admitted RR ROMs. The RR link-ACTIVE side of
+`link_players_received` is **inference only** from the FRLG paths; CFRU-added link entries have
+not been decoded. The RR companion idle side is **PHYSICAL: 300/300 frames admitted** in
+`docs/gen3/probes/checkpoint_rr_companion_2026-09-22b.txt` (`PROBE idle`); that receipt does not
+qualify active-link refusal.
 
 Cable Club, the PC, the party menu, an in-game trade and a START-menu save all reach the player's
 party or the save while `callback2 == CB2_Overworld`; each of them is caught by
@@ -325,3 +332,7 @@ pytest tests/unit/test_gen3_write_checkpoint.py -q
 
 The generator refuses a ROM whose sha1 is not the pinned dump, and prints every RR fact it had to
 drop. `--check` is the thing that fails if a `.sym`, a ROM or a pin moves under the committed JSON.
+
+Change-log correction (2026-09-22, gen3-P3-C3-25): commit `900a51b`'s revert count was
+**4 failing tests, not 5**, as measured by OMP review `cx-eabcfef4` (recorded in
+`docs/gen3_resume.md`, Next actions item 4).

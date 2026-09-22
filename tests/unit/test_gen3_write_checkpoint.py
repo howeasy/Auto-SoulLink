@@ -94,6 +94,22 @@ def test_version_and_fail_closed_shape(pack: str, title: str) -> None:
     assert block["pointers"], f"{title}: no SaveBlock pointers to revalidate"
 
 
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_no_wireless_comm_type_predicate(pack: str, title: str) -> None:
+    assert "wireless_comm_type" not in load(pack)[title]["predicates"]
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_no_predicate_reads_wireless_transport_selector(pack: str, title: str) -> None:
+    # pokefirered.sym:781: gWirelessCommType is a sticky transport selector, not link activity.
+    # Check the full read span so renaming the predicate or changing its base cannot hide it.
+    for name, predicate in load(pack)[title]["predicates"].items():
+        start = predicate["address"] + predicate["offset"]
+        assert not start <= 0x03003F3C < start + predicate["width"], (
+            f"{title}: {name} reads gWirelessCommType"
+        )
+
+
 def census_rows(path: str) -> dict[int, int]:
     """The `final` section's `R15=0x... xN` rows of a frame-end census."""
     text = (G.ROOT / path).read_text(encoding="utf-8").split("final at frame", 1)[1]
@@ -116,6 +132,14 @@ def test_frlg_cpu_is_parked_in_wait_for_vblank(title: str) -> None:
     # everything else is the BIOS IRQ vector -- refused by the clause, and a small minority
     assert all(pc < 0x4000 for pc in set(rows) - rom_pcs)
     assert sum(rows[pc] for pc in rom_pcs) > 0.9 * sum(rows.values())
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_missing_parked_symbol_has_named_error(title: str) -> None:
+    syms = G.parse_sym(G.SYM_DIR / G.PACKS["gen3_frlg"][title][0])
+    del syms["WaitForVBlank"]
+    with pytest.raises(SystemExit, match=rf"^{title}: missing parked-CPU symbol WaitForVBlank$"):
+        G.cpu_clause(title, syms, is_rr=False)
 
 
 def test_rr_cpu_is_the_bios_census() -> None:

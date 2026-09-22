@@ -194,7 +194,11 @@ The probe's supplier (`lua/tests/probe_gen3_checkpoint.lua:104-111`) works like 
 - `busy()` (`:519-521`) means that instance's Lua `outbox` is non-empty or the opcode halfword at
   `0x0203F806` is non-zero.
 
-**What `native_idle=opcode_queue_only` (receipt line `WRITE_LOG ...`) covers:**
+**What `native_idle=opcode_queue_only` covers:** C3-24's probe prints
+`WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only`
+(`lua/tests/probe_gen3_checkpoint.lua:375`). Older receipts used `WRITE_LOG ...`; neither
+label supplies PHYSICAL write-gate evidence, because the probe has no `writes.lua` instance.
+
 - An opcode posted but not yet consumed by the frame hook. The opcode is written last
   (`mailbox.lua` `post`), and the hook clears it in `ack()` (`patch/src/handlers.c:559-565`).
 - Multi-frame opcodes that keep the slot occupied until they finish, such as FORCE_MOVE while
@@ -311,7 +315,7 @@ load, then write refused". That exercises `writes.lua:35` on RR, and on FR it ex
 | FR clean, PC menu | `checkpoint_fr_clean_2026-09-22b.txt:16` `SKIP not selected` | `Task_PCMainMenu` (`pret:src/pokemon_storage_system_menu.c:356`, FR `0x0808C39C`) ∉ allow-list; the PC script trips `script_context_status` first on RR (`checkpoint_rr_companion_2026-09-22.txt:17`) | added `test_gen3_safety_unreached.py:103-107` (all four artifacts) |
 | FR clean, battle | `:14` `FAIL reached=false` (no in-battle state) | `in_battle` (`battle_main.c:711`), `callback2` | `test_gen3_safety.py:70-78` (RR pack); added `test_evolution[in_battle]` for all four artifacts |
 | LG clean, RR clean | no checkpoint receipt at all | same packs and clauses (predicate addresses identical, `write_checkpoint.json`) | all tests in the added file run LG and RR clean |
-| empty write log | `WRITE_LOG count=0 scope=predicate_only no_writes_instance=true` (both receipts) | `writes.lua:22-23,37-38` | every added negative drives `writes.lua` and asserts `writes` and `log` both empty; `test_positive_control_arms_and_writes` (`:58-64`) proves the same harness does write when the state is idle |
+| empty write log | current probe prints `WRITE_SURFACE none (predicate-only probe)`; older receipts' `WRITE_LOG count=0 scope=predicate_only no_writes_instance=true` was not write-gate evidence | `writes.lua:22-23,37-38` (MODEL only; the probe has no writer instance) | every added negative drives `writes.lua` and asserts `writes` and `log` both empty; `test_positive_control_arms_and_writes` (`:58-64`) proves the same harness does write when the state is idle |
 
 ## 6. Gates run
 
@@ -337,10 +341,13 @@ file was not edited. Failing tests in the added file:
 
 ## 7. Table for `docs/gen3/G3_request_draft.md` §4
 
-| State | Artifact(s) | Refusing clause (safety.lua) | SOURCE | Unit test (false + empty write log) | Verdict |
+Clause line references below describe the original R11 cut `8d65cf0`. Per-clause attribution
+landed separately in `3040b91`; the first-failure reason remains order-dependent.
+
+| State | Artifact(s) | A refusing clause (order-dependent until per-clause attribution lands) | SOURCE | Unit test (false + empty write log) | Verdict |
 |---|---|---|---|---|---|
 | Evolution | FR, LG | `callback2` :55; task allow-list :71; `in_battle` :55 (post-battle) | pret `evolution_scene.c:202,207,293,310,779,833`; `battle_main.c:711,3900,3925` | `test_gen3_safety_unreached.py:67-82` | SOURCE+MODEL covered; PHYSICAL OPEN |
-| Evolution | RR clean/companion | task allow-list :71 (`Task_EvolutionScene` 0x080CE8DC pinned, `engine_signals.json` `evolve_species_store`); `callback2` value pinned (`profile.json` `CB2_EVOLUTION_UPDATE_ADDR`) | as FR; RR `EvolutionScene` body differs, so the callback2 / in_battle legs are UNVERIFIED | same | SOURCE+MODEL covered (task leg); PHYSICAL OPEN |
+| Evolution | RR clean/companion | task allow-list :71 (`Task_EvolutionScene` 0x080CE8DC pinned, `engine_signals.json` `evolve_species_store`); `callback2` value pinned (`profile.json` `CB2_EVOLUTION_UPDATE_ADDR`) | as FR; RR `EvolutionScene` body differs, so the callback2 / in_battle legs are UNVERIFIED | `test_evolution` covers the generic task allow-list property, not proof of the RR address `0x080CE8DC`; added `test_rr_evolution_task_from_engine_signals_is_refused` uses the pinned RR function address from each artifact's `evolve_species_store` row (execution pending coordinator gates) | SOURCE+MODEL covered (generic task leg); PHYSICAL OPEN |
 | Link (cable / wireless) | all | `callback1` (`CB1_UpdateLinkState`), `link_callback`, `wireless_comm_type` :55; task allow-list :71; `link_transferring` is always 0 at the park (defense in depth only) | pret `link.c:394,1690-1694`; `cable_club.c:579,873`; `union_room.c:407,1161`; `overworld.c:1605,1643`; `main.c:195-216` | `test_gen3_safety_unreached.py:85-100`; `test_gen3_safety.py:70-78` | SOURCE+MODEL covered; PHYSICAL OPEN |
 | Native op staged | RR companion | `native_idle` :74 | probe-only supplier `probe_gen3_checkpoint.lua:104-111` = opcode slot `0x0203F806` ≠ 0; client outbox, staged buffers and ghost not covered; fail-open when the mailbox is absent | `test_gen3_safety_unreached.py:110-115`; `test_gen3_safety.py:121-127,134-140` | **GAP**: predicate MODEL-covered, no production supplier (P5 C5-1 `native.lua`); OPEN/deferred |
 | Mid-relocation | FR, LG | pointer revalidation :77 (+ window expiry `writes.lua:35`) | pret `load_save.c:69-83,85-116`; `battle_main.c:614`; `overworld.c:1337` | `test_gen3_safety_unreached.py:118-132`; `test_gen3_safety.py:151-161`; `test_gen3_writes.py:51-58` | SOURCE+MODEL covered; PHYSICAL OPEN |
