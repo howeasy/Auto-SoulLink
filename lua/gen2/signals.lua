@@ -81,9 +81,12 @@ local FAINTS = {battle_faint={cause="battle",slot="wCurBattleMon"},poison_faint=
 -- .refused): a new start of the same kind supersedes the unconsumed one (counted in drops).
 local SUPERSEDES = {change_box_begin=true}
 for name,rule in pairs(STARTS) do if rule.operation then SUPERSEDES[name] = true end end
--- BizHawk 2.11.1 Gambatte emu.getregister has PC/SP/A..L and no pairs (docs/purergb/PLAN.md
--- A15): a pair is always composed from its halves, never requested (Gen 1 reads HL alike).
+-- BizHawk 2.11.1 Gambatte emu.getregister has PC/SP/A..L (plus the bank names) and no pairs
+-- (docs/purergb/PLAN.md A15): a pair is always composed from its halves, never requested (Gen 1
+-- reads HL alike).
 local PAIRS = {AF={"A","F"},BC={"B","C"},DE={"D","E"},HL={"H","L"}}
+-- PC and SP are the 16-bit singles; every other single is 8-bit.
+local WIDTH = {PC=65535,SP=65535}
 local OPEN = {
     gift_static="Qualified scripted-gift/static caller and final destination context is OPEN",
     link_trade="Native transaction/received identity/save witness context is OPEN",
@@ -255,7 +258,7 @@ local function build(options)
         local pair = PAIRS[name]
         if pair then return register(pair[1])*256+register(pair[2]) end
         local value = io.register(name)
-        need(integer(value,0,255),"OPEN: CPU register " .. name .. " unavailable")
+        need(integer(value,0,WIDTH[name] or 255),"OPEN: CPU register " .. name .. " unavailable")
         return value
     end
     local function guards(name,site,context)

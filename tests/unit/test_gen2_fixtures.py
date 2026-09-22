@@ -6,6 +6,7 @@ these controls is no PHYSICAL evidence.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 from pathlib import Path
@@ -321,10 +322,48 @@ def sram_offset(title, symbol):
     return found.bank * 0x2000 + found.address - 0xA000
 
 
+@functools.lru_cache(maxsize=None)
+def layout_of(title):
+    return codec.Gen2Layout.from_profile(profile(title), title)
+
+
+def put_saved(raw, title, symbol, data):
+    """Write one saved WRAM field (source symbol address) into both save copies."""
+    layout, address = layout_of(title), context(title).symbol(symbol).address
+    for region in layout.regions:
+        base = layout.addresses[STARTS[region.name]]
+        if base <= address and address + len(data) <= base + region.length:
+            for at in (region.primary, region.backup):
+                raw[at + address - base:at + address - base + len(data)] = data
+            return
+    raise AssertionError(symbol)
+
+
+def reseal(raw, title):
+    layout = layout_of(title)
+    for copy_name in ("primary", "backup"):
+        at = layout.checksum_offsets[copy_name]
+        raw[at:at + 2] = codec.sav_checksum(bytes(raw), layout, copy_name).to_bytes(2, "little")
+
+
 def resave_in_place(raw, spec):
-    """A faithful native re-save: sStackTop moves (UpdateStackTop), everything else is rewritten identically."""
-    at = sram_offset(spec.title, "sStackTop")
-    raw[at] ^= 0x5A
+    """A faithful native re-save: only what the source rewrites moves (stack top, play time, the RTC stamp,
+    the object engine, the roamer map indices; Gold/Silver menus rewrite the SRAM window stack)."""
+    raw[sram_offset(spec.title, "sStackTop")] ^= 0x5A
+    for symbol in ("wGameTimeFrames", "wRTC", "wPlayerStruct", "wRoamMons_LastMapGroup"):
+        put_saved(raw, spec.title, symbol, b"\x2a")
+    if spec.title != "crystal":
+        raw[sram_offset(spec.title, "sWindowStackBottom") + 7] ^= 0x33
+    reseal(raw, spec.title)
+
+
+def resave_changes(symbol, data):
+    """A re-save that also rewrites one saved field a CONTINUE + save must preserve (checksums stay valid)."""
+    def resave(raw, spec):
+        resave_in_place(raw, spec)
+        put_saved(raw, spec.title, symbol, data)
+        reseal(raw, spec.title)
+    return resave
 
 
 def resave_touches_hall_of_fame(raw, spec):
@@ -332,10 +371,11 @@ def resave_touches_hall_of_fame(raw, spec):
     raw[sram_offset(spec.title, "sHallOfFame") + 3] ^= 0xFF
 
 
-def fake_gate(*, land=None, resave=resave_in_place, trailer=b"\xff" * 22, witness=True, calls=None):
+def fake_gate(*, land=None, resave=resave_in_place, trailer=b"\xff" * 22, witness=True, calls=None, mutate=None):
     """A model of the qualification gate: boots exactly the staged SaveRAM bytes and writes the GAME witness.
 
-    `land(stage, location, position)` moves where CONTINUE lands; `resave(raw, spec)` is the native re-save.
+    `land(stage, location, position)` moves where CONTINUE lands; `resave(raw, spec)` is the native re-save;
+    `mutate(stage, game)` edits the written witness.
     """
     def runner(script, *, rom_key, target, timeout, saveram_dir, fixture_path, speed_percent, env_overrides):
         q = json.loads(env_overrides["SLINK_GEN2_QUALIFY"])
@@ -356,13 +396,18 @@ def fake_gate(*, land=None, resave=resave_in_place, trailer=b"\xff" * 22, witnes
                 "cartram_sha256": inspection["cartram_sha256"], "core_mode": "CGB", "speed_percent": 100,
                 "observer": "independent_GAME", "continue_selected": True, "native_load_completed": True,
                 "rtc_validated": True, "party_raw_hex": inspection["party_raw_hex"],
-                "location": location, "position": position, "save_success_counter": 0}
+                "location": location, "position": position, "save_success_counter": 0,
+                "site_hits": {"continue": 1, "continue_loaded": 1, "rtc_ok": 1, "restart_clock": 0,
+                              "finish_continue": 1, "same_save_file": int(q["stage"] == "resave"), "erase_save": 0},
+                "harness_write_scopes": [], "input_mode": "normal_buttons", "qualified": False}
         directory = Path(saveram_dir)
         if q["stage"] == "resave":
             body = bytearray(raw[:0x8000])
             resave(body, spec)
             (directory / run_gb_gate.describe_gen2(spec.title)["saveram_name"]).write_bytes(bytes(body) + trailer)
             game.update(save_success_counter=1, resave_cartram_sha256=hashlib.sha256(bytes(body)).hexdigest())
+        if mutate:
+            mutate(q["stage"], game)
         (directory / f"{spec.name}.{q['stage']}.witness.json").write_text(json.dumps(game if witness else {}))
         return True, "result.txt", "RESULT: PASS (model)"
 
@@ -445,6 +490,114 @@ def test_save_write_spans_are_source_bound_and_exclude_other_boxes(title):
     changed[sram_offset(title, "sBox2")] ^= 1
     assert g.unexpected_resave_bytes(bytes(body), bytes(changed), layout, title) == [
         (sram_offset(title, "sBox2"), sram_offset(title, "sBox2") + 1)]
+
+
+# --- R3 review: scratch SRAM, the expected scenario delta, the re-derived GAME verdict ------------
+
+@pytest.mark.parametrize("title", ["gold", "silver"])
+def test_gold_silver_sram_window_stack_is_scratch_but_its_neighbours_are_not(title):
+    """G ram/sram.asm:79-84: menus rewrite $1800-$1FFF; one byte below it is still a stray."""
+    layout, body = layout_of(title), cart(title, "town", 0x1234)
+    bottom, top = sram_offset(title, "sWindowStackBottom"), sram_offset(title, "sWindowStackTop")
+    assert (bottom, top) == (0x1800, 0x1FFF)
+    for at in (bottom, 0x1FFE, top):
+        changed = bytearray(body)
+        changed[at] ^= 0xFF
+        assert g.unexpected_resave_bytes(body, bytes(changed), layout, title) == []
+        assert g.resave_scenario_delta(body, bytes(changed), layout, title) == []
+    changed = bytearray(body)
+    changed[bottom - 1] ^= 1
+    assert g.unexpected_resave_bytes(body, bytes(changed), layout, title) == [(bottom - 1, bottom)]
+
+
+def test_crystal_keeps_its_window_stack_in_wram():
+    assert "sWindowStackBottom" not in context("crystal").symbols
+    body = cart("crystal", "town", 0x1234)
+    changed = bytearray(body)
+    changed[0x1FFE] ^= 0xFF
+    assert g.unexpected_resave_bytes(body, bytes(changed), layout_of("crystal"), "crystal") == [(0x1FFE, 0x1FFF)]
+
+
+def test_crystal_boot_may_only_zero_the_first_32_scratch_bytes():
+    """C home/init.asm:98,205-213 ClearsScratch; Gold has no such routine."""
+    for title, stray in (("crystal", []), ("gold", [(0, 0x20)])):
+        body = bytearray(cart(title, "battle", 0x1234))
+        body[0:0x40] = b"\x77" * 0x40  # battle animation graphics left in sScratch
+        booted = bytearray(body)
+        booted[0:0x20] = bytes(0x20)
+        assert g.unexpected_resave_bytes(bytes(body), bytes(booted), layout_of(title), title) == stray
+    body = bytearray(cart("crystal", "battle", 0x1234))
+    body[0:0x40] = b"\x77" * 0x40
+    for at, value in ((0x05, 0x12), (0x20, 0x00)):
+        changed = bytearray(body)
+        changed[at] = value
+        assert g.unexpected_resave_bytes(bytes(body), bytes(changed), layout_of("crystal"), "crystal") == [(at, at + 1)]
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_resave_scenario_delta_names_preserved_fields_and_allows_source_rewrites(title):
+    layout, body = layout_of(title), cart(title, "battle", 0x1234)
+    spec = g.BY_NAME[f"{title}_battle"]
+    assert g.resave_scenario_delta(body, body, layout, title) == []
+    faithful = bytearray(body)
+    resave_in_place(faithful, spec)
+    assert g.resave_scenario_delta(body, bytes(faithful), layout, title) == []
+    balls = bytearray(body)
+    put_saved(balls, title, "wNumBalls", b"\x00")
+    reseal(balls, title)
+    assert g.unexpected_resave_bytes(body, bytes(balls), layout, title) == []
+    assert set(g.resave_scenario_delta(body, bytes(balls), layout, title)) == {"wNumBalls", "backup wNumBalls"}
+    box = bytearray(body)
+    box[sram_offset(title, "sBox")] ^= 1
+    assert any(name.startswith("sBox") for name in g.resave_scenario_delta(body, bytes(box), layout, title))
+
+
+def resave_moves_the_player(raw, spec):
+    x = g._saved_field(bytes(raw), layout_of(spec.title), "wXCoord", 1)[0]
+    resave_changes("wXCoord", bytes([(x + 1) % 256]))(raw, spec)
+
+
+def resave_spends_a_ball(raw, spec):
+    if spec.target != "battle":
+        return resave_in_place(raw, spec)
+    return resave_changes("wBalls", bytes([facts(spec.title)["balls"]["item"], 9, 255]))(raw, spec)
+
+
+def resave_touches_the_active_box(raw, spec):
+    resave_in_place(raw, spec)
+    raw[sram_offset(spec.title, "sBox")] ^= 1
+
+
+@pytest.mark.parametrize("resave, match", [
+    (resave_changes("wMoney", b"\x00\x10\x00"), "must preserve: "),
+    (resave_moves_the_player, "saved position"),
+    (resave_spends_a_ball, "saved ball_items"),
+    (resave_touches_the_active_box, "must preserve: sBox"),
+])
+def test_resave_that_changes_a_preserved_saved_field_fails(tmp_path, resave, match):
+    report = full_report(tmp_path, resave=resave)
+    assert not report["passed"] and match in problems(report)
+    assert any(row["stages"][-1]["stage"] == "post_oracle" and row["stages"][-1]["status"] == "FAIL"
+               for row in report["fixtures"])
+
+
+@pytest.mark.parametrize("stage, change, match", [
+    ("boot", lambda game: game["site_hits"].update(restart_clock=1), "qualification incomplete"),
+    ("boot", lambda game: game["site_hits"].update(continue_loaded=0), "qualification incomplete"),
+    ("reload", lambda game: game["site_hits"].update(finish_continue=0), "qualification incomplete"),
+    ("resave", lambda game: game["site_hits"].update(erase_save=1), "qualification incomplete"),
+    ("resave", lambda game: game["site_hits"].update(same_save_file=0), "overwrite branch"),
+    ("boot", lambda game: game.update(save_success_counter=1), "save counter"),
+    ("reload", lambda game: game.update(save_success_counter=1), "save counter"),
+    ("boot", lambda game: game.pop("site_hits"), "hit counts missing"),
+    ("boot", lambda game: game.update(harness_write_scopes=["O-10:BallPocket"]), "staging"),
+    ("resave", lambda game: game.update(input_mode="lua_write"), "non-button"),
+    ("reload", lambda game: game.update(qualified=True), "qualification claim"),
+])
+def test_the_game_verdict_is_rederived_from_the_recorded_site_hits(tmp_path, stage, change, match):
+    """The gate's own booleans stay True: only the recorded hits/counters/scopes differ."""
+    report = full_report(tmp_path, mutate=lambda at, game: change(game) if at == stage else None)
+    assert not report["passed"] and match in problems(report)
 
 
 @pytest.mark.parametrize("callbacks", [None, "boot_only", "resave_only"])

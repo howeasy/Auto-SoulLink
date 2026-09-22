@@ -7,9 +7,10 @@ import pytest
 from lupa.lua54 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[2]
-# BizHawk 2.11.1 Gambatte emu.getregister keys (plus bank names): no HL/DE/BC/AF pairs
+# BizHawk 2.11.1 Gambatte emu.getregister keys, bank names included: no HL/DE/BC/AF pairs
 # (docs/purergb/PLAN.md A15).
-BIZHAWK_REGISTERS = ("PC", "SP", "A", "B", "C", "D", "E", "F", "H", "L")
+BIZHAWK_REGISTERS = ("PC", "SP", "A", "B", "C", "D", "E", "F", "H", "L",
+                     "ROM0 BANK", "ROMX BANK", "VRAM BANK", "SRAM BANK", "WRAM BANK")
 PAIRS = {"AF": ("A", "F"), "BC": ("B", "C"), "DE": ("D", "E"), "HL": ("H", "L")}
 
 
@@ -678,6 +679,7 @@ def test_the_register_fake_is_bizhawk_faithful():
     registers = Registers(0xC020)
     registers["HL"] = 0xDCDF
     assert (registers["H"], registers["L"], bizhawk_register(registers, "L")) == (0xDC, 0xDF, 0xDF)
+    assert bizhawk_register(registers, "WRAM BANK") == 0 and bizhawk_register(registers, "SP") == 0xC020
     for pair in PAIRS:
         with pytest.raises(KeyError, match="singles only"):
             bizhawk_register(registers, pair)
@@ -696,6 +698,18 @@ def test_an_unavailable_single_register_is_a_refusal_not_a_stop():
     world.set_guards("whiteout_before_heal")
     world.fire("whiteout_before_heal")
     assert [event.kind for event in world.events(binder)] == ["whiteout"]
+
+
+def test_a_16_bit_register_guard_is_compared_not_refused():
+    """R3 I-1: PC/SP are 16-bit singles; a guard on SP compares instead of refusing as out of range."""
+    world = World()
+    world.sites["whiteout_before_heal"]["guards"]["registers"]["SP"] = world.reg["SP"]
+    binder = world.bind()
+    world.party([world.mon(hp=0)])
+    world.set_guards("whiteout_before_heal")
+    world.fire("whiteout_before_heal")
+    assert [event.kind for event in world.events(binder)] == ["whiteout"]
+    assert binder.status(binder).failed is None
 
 
 # ── N3-2: a native failure branch between start and completion strands no event ────────

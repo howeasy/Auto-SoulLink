@@ -65,7 +65,7 @@ function Client.new(p)
         faint_latches = {}, refusals_logged = {},
         pending_rescan = false, key_alias = nil, retired_alias = {},
         -- Gen 2: messages observed before this connection's hello (see send)
-        held = {},
+        held = {}, held_full = false, last_frame = nil,
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
@@ -77,10 +77,17 @@ function Client.new(p)
         -- Gen 2: nothing but the hello reaches the server before a hello is queued for this
         -- connection/identity (Gen 1 gates tick/safe on the same readiness). The candidate
         -- checkpoint refuses in the overworld, so that can be minutes: earlier messages wait
-        -- in order and follow the hello (frame_end); a reset/reload boundary drops them.
+        -- in order and follow the hello (frame_end); a reset/reload boundary, an identity change
+        -- and a savestate load drop them (drop_held).
         if event ~= "hello" and not (self.hello_session and self.hello_session:status().ready) then
             if #self.held >= Client.MAX_HELD then
                 log("[SLink-gen2] drop " .. event .. ": pre-hello queue full")
+                -- a lost capture/faint/deposit is a transition the hello snapshot cannot rebuild:
+                -- the player sees it once per filled queue, not only the log
+                if not self.held_full then
+                    self.held_full = true
+                    hud.show("SLINK EVENTS LOST - SEE LOG", 255, 64, 64, 600)
+                end
             else
                 self.held[#self.held + 1] = { event = event, fields = fields }
             end
@@ -92,6 +99,14 @@ function Client.new(p)
         return net.send(json.encode(msg)) ~= false
     end
     self.send = send
+
+    -- Gen 2: held messages belong to the save and the timeline that produced them.
+    local function drop_held(why)
+        if #self.held > 0 then
+            log("[SLink-gen2] " .. #self.held .. " pre-hello message(s) dropped: " .. why)
+        end
+        self.held, self.held_full = {}, false
+    end
 
     -- Gen 2: a few point scalars (wBattleScriptFlags) exist only as the engine-site pack's
     -- point symbols, not profile.ram; both carry bank + address.
@@ -238,10 +253,7 @@ function Client.new(p)
         if self.signals then self.signals:boundary(kind) end
         self.faint_latches, self.battle, self.pending_rescan = {}, nil, false
         self.key_alias, self.retired_alias = nil, {}
-        if #self.held > 0 then
-            log("[SLink-gen2] " .. #self.held .. " pre-hello message(s) dropped at the " .. kind .. " boundary")
-            self.held = {}
-        end
+        drop_held("the " .. kind .. " boundary")
         self.hello_session:invalidate(why or kind)
     end
 
@@ -621,7 +633,12 @@ function Client.new(p)
         clock_rewind = "keep", callback_error = "raise", -- Gen 1 parity
         on_invalidate = function(reason)
             self.hello_sent = false
-            if reason == "identity_changed" then self.key_alias, self.retired_alias = nil, {} end
+            -- Gen 2: another save's identity; what was held belongs to the previous one. A transient
+            -- identity_unavailable keeps the queue (the same identity returning is not a change).
+            if reason == "identity_changed" then
+                self.key_alias, self.retired_alias = nil, {}
+                drop_held("identity change")
+            end
         end,
         on_error = function(stage, why) log("[SLink-gen2] hello " .. stage .. ": " .. tostring(why)) end,
     })
@@ -692,7 +709,11 @@ function Client.new(p)
     end
 
     function self:frame_end()
-        self.frame = io.framecount()
+        local now = io.framecount()
+        -- Gen 2: onframeend runs once per emulated frame (lua/gen2/run.lua), so any other step of
+        -- the frame counter is a savestate load or rewind: held messages describe another timeline.
+        if self.last_frame ~= nil and now ~= self.last_frame + 1 then drop_held("savestate load") end
+        self.last_frame, self.frame = now, now
         net.pump()
         local connected = self.hello_session:step(self.frame)
         self.hello_sent = connected == true
@@ -700,7 +721,7 @@ function Client.new(p)
         connected = connected and self.hello_session:status().ready
         if connected and #self.held > 0 then
             local held = self.held
-            self.held = {}
+            self.held, self.held_full = {}, false
             for _, m in ipairs(held) do send(m.event, m.fields) end
         end
         for _, batch in ipairs(self.signals and self.signals:drain() or {}) do

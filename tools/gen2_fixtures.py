@@ -10,6 +10,7 @@ orchestration remain shared (tools/run_gb_gate.py, tools/fixture_qualification.p
 from __future__ import annotations
 
 import argparse
+import bisect
 import hashlib
 import json
 import re
@@ -88,6 +89,64 @@ SAVE_WRITES = (("sOptions", "sGameData"), ("sGameData", "sGameDataEnd"), ("sChec
                ("sMysteryGiftItem", "sDailyMysteryGiftPartnerIDs"), ("sRTCStatusFlags", ("sRTCStatusFlags", 1)))
 SAVE_WRITES_CRYSTAL = (("sGSBallFlag", ("sGSBallFlag", 1)), ("sGSBallFlagBackup", ("sGSBallFlagBackup", 1)),
                        ("sBattleTowerChallengeState", ("sBattleTowerChallengeState", 1)))
+# CartRAM the game rewrites outside any save: UI/scratch state, never save data. Gold/Silver keep the menu
+# window stack in SRAM bank 0 (G ram/sram.asm:79-84 sWindowStackBottom..sWindowStackTop, flat $1800-$1FFF).
+# Every menu writes it: _PushWindow (G engine/menus/menu.asm:438) stores the menu header and tile backups,
+# ClearWindowData (G home/menu.asm:712) zeroes its top from StartMenu and MainMenu, so CONTINUE and START/SAVE
+# both rewrite it. Crystal keeps the stack in WRAM (wWindowStack, C home/menu.asm:768-772): nothing there.
+SCRATCH_WRITES = {"crystal": (), "gold": (("sWindowStackBottom", ("sWindowStackTop", 1)),),
+                  "silver": (("sWindowStackBottom", ("sWindowStackTop", 1)),)}
+# Crystal Init zeroes sScratch[0:$20] on every boot (C home/init.asm:98 -> ClearsScratch :205-213; Gold has no
+# such routine). Battle animations decompress into sScratch (DecompressRequest2bpp C home/gfx.asm:118-133 via
+# LoadBattleAnimGFX engine/battle_anims/helpers.asm:105-122), so a candidate that met a wild battle holds
+# graphics there. Those 32 bytes may change on a qualification boot, and only to zero.
+BOOT_ZEROED = {"crystal": ("sScratch", ("sScratch", 0x20))}
+# PLAN 5.6 expected scenario delta. Inside the save spans a no-op CONTINUE + native re-save writes the same
+# bytes back (SavePlayerData/SavePokemonData/SaveBox and the backups copy the live WRAM: C engine/menus/save.asm
+# :266-295,498-594, G :273-291,396-536), so every saved byte must equal the candidate: player ID, map, position,
+# party, items and the Ball pocket, event flags, the active and current storage box, mail, options, check
+# values. Only these may differ. SRAM: the checksums (SaveChecksum C :526, SaveBackupChecksum :583; G :424,
+# :495; strict_checksum_witness still verifies them), sStackTop (UpdateStackTop C :297, G :294) and
+# sRTCStatusFlags (SaveRTC C/G engine/rtc/rtc.asm:76-89).
+RESAVE_FREE_SRAM = (("sChecksum", ("sChecksum", 2)), ("sBackupChecksum", ("sBackupChecksum", 2)),
+                    ("sStackTop", ("sStackTop", 2)), ("sRTCStatusFlags", ("sRTCStatusFlags", 1)))
+# Game-data fields, in every copy, that CONTINUE, the overworld frames before the save, or the save rewrite:
+RESAVE_FREE_WRAM = (
+    # StageRTCTimeForSave stamps the RTC time (C/G engine/rtc/rtc.asm:63-74); FixTime derives wCurDay
+    # (C home/time.asm:129-174, G :122-167); GameTimer counts play time (C/G home/game_time.asm:11).
+    ("wRTC", ("wRTC", 4)), ("wCurDay", ("wCurDay", 1)), ("wGameTimeCap", ("wGameTimeFrames", 1)),
+    # Object engine state: MapSetupScript_Continue (C data/maps/setup_scripts.asm:164-182, G :161-179) clears
+    # the command queue (HandleContinueMap) and rebuilds the sprites (RefreshMapSprites); NPC movement
+    # advances it every frame. The saved checkpoint is wMapGroup/wMapNumber/wXCoord/wYCoord, still compared.
+    ("wObjectFollow_Leader", "wVariableSprites"),
+    # LoadMapTimeOfDay in the same script: time-of-day palette state from the RTC.
+    ("wTimeOfDayPal", ("wCurTimeOfDay", 1)),
+    # CheckTimeEvents every overworld frame (C engine/overworld/events.asm:449-466, G :436-454):
+    # CheckDailyResetTimer (C engine/overworld/time.asm:103-134, G :89-97) stores today in its timer through
+    # _CalcDaysSince (C :399, G :354) and clears the daily flags once a day passed; CheckPokerusTick
+    # (C :194-204, G :149-159) stores today in wTimerEventStartDay the same way.
+    ("wDailyResetTimer", ("wDailyFlags2", 1)), ("wTimerEventStartDay", ("wTimerEventStartDay", 1)),
+    # Continue .Check2Pass -> JumpRoamMons (C engine/menus/intro_menu.asm:372, G :283) ends in
+    # _BackUpMapIndices (C engine/overworld/wildmons.asm:743-752, G :748): last map := current map.
+    ("wRoamMons_CurMapNumber", ("wRoamMons_LastMapGroup", 1)),
+)
+RESAVE_FREE_WRAM_TITLE = {
+    # Crystal CheckDailyResetTimer also clears wSwarmFlags/wUnusedDailyFlag and the rematch/phone flags and
+    # ticks wKenjiBreakTimer (C engine/overworld/time.asm:107-134); FinishContinueFunction sets
+    # SHOWN_MAP_NAME_SIGN (C engine/menus/intro_menu.asm:467), the map-sign check clears it
+    # (C engine/events/map_name_sign.asm:29).
+    "crystal": (("wSwarmFlags", ("wUnusedDailyFlag", 1)), ("wDailyRematchFlags", "wYanmaMapGroup"),
+                ("wMapNameSignFlags", ("wMapNameSignFlags", 1))),
+    # Gold/Silver FinishContinueFunction sets GAME_TIMER_COUNTING_F in the saved wGameTimerPaused
+    # (G engine/menus/intro_menu.asm:347; Crystal does not save it); CheckSwarmFlag clears the swarm map and
+    # flag every overworld frame once the daily swarm flag is gone (G engine/overworld/events.asm:452 ->
+    # engine/events/specials.asm:299-314).
+    "gold": (("wGameTimerPaused", ("wGameTimerPaused", 1)), ("wSwarmMapGroup", ("wFishingSwarmFlag", 1))),
+    "silver": (("wGameTimerPaused", ("wGameTimerPaused", 1)), ("wSwarmMapGroup", ("wFishingSwarmFlag", 1))),
+}
+# The WRAM start of each layout.regions copy.
+_REGION_STARTS = {"player": "wPlayerData", "player1": "wPlayerData1", "player2": "wPlayerData2",
+                  "player3": "wPlayerData3", "map": "wCurMapData", "pokemon": "wPokemonData"}
 PASSABLE_COLLISION = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CAVE", "STAIRCASE",
                       "WARP_CARPET_DOWN", "WARP_CARPET_LEFT", "WARP_CARPET_UP", "WARP_CARPET_RIGHT")
 # Yes/no prompt -> on-screen text anchors, each verified as a quoted literal in the pinned source.
@@ -388,10 +447,8 @@ def run_play(spec, binding, *, root=ROOT, runner=None):
 
 def _saved_field(raw, layout, symbol, size):
     address = layout.addresses[symbol]
-    starts = {"player": "wPlayerData", "player1": "wPlayerData1", "player2": "wPlayerData2",
-              "player3": "wPlayerData3", "map": "wCurMapData", "pokemon": "wPokemonData"}
     for region in layout.regions:
-        base = layout.addresses[starts[region.name]]
+        base = layout.addresses[_REGION_STARTS[region.name]]
         if base <= address and address + size <= base + region.length:
             start = region.primary + address - base
             return raw[start:start + size]
@@ -470,25 +527,49 @@ def validate_game_witness(game, context, inspection, stage, fingerprint):
              and game.get("stage_fingerprint") == fingerprint, "independent GAME witness missing/stale/misbound")
     _require(game.get("rom_sha1") == context.provenance["rom_sha1"]
              and game.get("cartram_sha256") == inspection["cartram_sha256"], "GAME source/save binding mismatch")
+    hits = game.get("site_hits")
+    _require(isinstance(hits, dict) and all(type(hits.get(site)) is int and hits[site] >= 0 for site in QUALIFY_SITES),
+             "GAME witness code-site hit counts missing")
+    # The verdict is re-derived from the recorded site hits (QUALIFY_SITES), never taken from the gate's flags.
+    continued = hits["continue"] >= 1 and hits["continue_loaded"] >= 1
+    loaded = continued and hits["finish_continue"] >= 1
+    rtc = hits["rtc_ok"] >= 1 and hits["restart_clock"] == 0
     _require(game.get("core_mode") == "CGB" and game.get("speed_percent") == 100
-             and game.get("observer") == "independent_GAME"
-             and game.get("continue_selected") is True and game.get("native_load_completed") is True
-             and game.get("rtc_validated") is True, "GAME boot/RTC/CGB qualification incomplete")
+             and game.get("observer") == "independent_GAME" and continued and loaded and rtc
+             and hits["erase_save"] == 0 and game.get("continue_selected") is True
+             and game.get("native_load_completed") is True and game.get("rtc_validated") is True,
+             "GAME boot/RTC/CGB qualification incomplete")
+    saves = game.get("save_success_counter")
+    _require(type(saves) is int and (saves >= 1 and hits["same_save_file"] >= 1 if stage == "resave" else saves == 0),
+             "GAME save counter or overwrite branch does not match the stage")
+    _require(game.get("harness_write_scopes") == [] and game.get("input_mode") == "normal_buttons"
+             and game.get("qualified") is False, "GAME witness recorded staging, non-button input or a qualification claim")
     _require(game.get("party_raw_hex") == inspection["party_raw_hex"], "GAME/PYDEC loaded-party mismatch")
     _require(game.get("location") == list(inspection["location"]) and game.get("position") == list(inspection["position"]),
              "GAME CONTINUE landed on a different map/checkpoint than the saved fixture")
 
 
-def save_write_spans(title, layout, raw, root=ROOT):
-    """Sorted (start, end) CartRAM spans the CONTINUE load and a native re-save may rewrite."""
-    ctx = load_context(title, root=root)
-
+def _cart_span(ctx, start, end):
+    """Flat CartRAM (start, end) of a source span; end is a symbol or (symbol, bytes past it)."""
     def flat(name, extra=0):
         bank, address = ctx.symbol(name)
         _require(0 <= bank < 4 and 0xA000 <= address < 0xC000, f"not a CartRAM symbol: {name}")
         return bank * 0x2000 + address - 0xA000 + extra
 
-    spans = [(flat(start), flat(*end) if isinstance(end, tuple) else flat(end))
+    return flat(start), flat(*end) if isinstance(end, tuple) else flat(end)
+
+
+def _wram_span(ctx, start, end):
+    first = ctx.symbol(start).address
+    last = ctx.symbol(end[0]).address + end[1] if isinstance(end, tuple) else ctx.symbol(end).address
+    _require(first < last, f"empty source WRAM span: {start}")
+    return first, last
+
+
+def save_write_spans(title, layout, raw, root=ROOT):
+    """Sorted (start, end) CartRAM spans the CONTINUE load and a native re-save may rewrite."""
+    ctx = load_context(title, root=root)
+    spans = [_cart_span(ctx, start, end)
              for start, end in SAVE_WRITES + (SAVE_WRITES_CRYSTAL if title == "crystal" else ())]
     spans += [(region.backup, region.backup + region.length) for region in layout.regions]
     box = _saved_field(raw, layout, "wCurBox", 1)[0]
@@ -500,19 +581,70 @@ def save_write_spans(title, layout, raw, root=ROOT):
 
 
 def unexpected_resave_bytes(original, resaved, layout, title, root=ROOT):
-    """(start, end) runs where a re-save changed CartRAM outside the source save write spans."""
+    """(start, end) runs where a re-save changed CartRAM outside the source save write and scratch spans."""
     _require(len(original) == len(resaved) == CART_RAM_BYTES, "compare exactly two CartRAM images")
+    ctx = load_context(title, root=root)
     allowed = bytearray(CART_RAM_BYTES)
-    for start, end in save_write_spans(title, layout, original, root):
+    for start, end in save_write_spans(title, layout, original, root) + [
+            _cart_span(ctx, *span) for span in SCRATCH_WRITES[title]]:
         allowed[start:end] = b"\x01" * (end - start)
+    zeroed = range(*_cart_span(ctx, *BOOT_ZEROED[title])) if title in BOOT_ZEROED else range(0)
     runs = []
     for index in range(CART_RAM_BYTES):
-        if original[index] != resaved[index] and not allowed[index]:
+        if original[index] != resaved[index] and not allowed[index] and not (index in zeroed and resaved[index] == 0):
             if runs and runs[-1][1] == index:
                 runs[-1][1] = index + 1
             else:
                 runs.append([index, index + 1])
     return [tuple(run) for run in runs]
+
+
+def _symbol_namer(ctx):
+    """(kind 'w'|'s', bank, address) -> the nearest source symbol at or below it."""
+    table = {}
+    for name, (bank, address) in ctx.symbols.items():
+        if name[:1] in ("w", "s") and "." not in name:
+            table.setdefault((name[0], bank), []).append((address, name))
+    for rows in table.values():
+        rows.sort()
+
+    def name_at(kind, bank, address):
+        rows = table.get((kind, bank), [])
+        at = bisect.bisect_right(rows, (address, "\uffff")) - 1
+        return rows[at][1] if at >= 0 else f"${address:04X}"
+
+    return name_at
+
+
+def resave_scenario_delta(original, resaved, layout, title, root=ROOT):
+    """Saved fields a no-op CONTINUE + native re-save changed inside the save spans (PLAN 5.6); [] passes."""
+    _require(len(original) == len(resaved) == CART_RAM_BYTES, "compare exactly two CartRAM images")
+    ctx = load_context(title, root=root)
+    free = bytearray(CART_RAM_BYTES)
+    for span in RESAVE_FREE_SRAM:
+        start, end = _cart_span(ctx, *span)
+        free[start:end] = b"\x01" * (end - start)
+    copies = [(label, at, layout.addresses[_REGION_STARTS[region.name]], region.length,
+               ctx.symbol(_REGION_STARTS[region.name]).bank)
+              for region in layout.regions for label, at in (("", region.primary), ("backup ", region.backup))]
+    for first, last in (_wram_span(ctx, *row) for row in RESAVE_FREE_WRAM + RESAVE_FREE_WRAM_TITLE[title]):
+        covered = 0
+        for _, at, base, length, _ in copies:  # a field may straddle two Gold/Silver regions
+            low, high = max(first, base), min(last, base + length)
+            if low < high:
+                free[at + low - base:at + high - base] = b"\x01" * (high - low)
+                covered += high - low
+        _require(covered == 2 * (last - first), f"free WRAM field is not saved data in both copies: ${first:04X}")
+    name_at, names = _symbol_namer(ctx), []
+    for start, end in save_write_spans(title, layout, original, root):
+        for index in range(start, end):
+            if original[index] != resaved[index] and not free[index]:
+                copy = next((row for row in copies if row[1] <= index < row[1] + row[3]), None)
+                name = (copy[0] + name_at("w", copy[4], copy[2] + index - copy[1]) if copy
+                        else name_at("s", index // 0x2000, 0xA000 + index % 0x2000))
+                if name not in names:
+                    names.append(name)
+    return names
 
 
 def validate_identity_cohorts(rows):
@@ -569,13 +701,18 @@ def post_oracle_stage(context):
         validate_game_witness(_json(context.artifacts["resave:reload_witness"]), context, saved, "reload", stages["resave"])
         _require(saved["player_id"] == original["player_id"] and saved["identity_key"] == original["identity_key"],
                  "re-save changed fixture identity")
+        # Compared directly with the candidate, not only through the GAME witnesses read after the save.
+        for key in ("location", "position", "party_raw_hex", "ball_items"):
+            _require(saved[key] == original[key], f"re-save changed the saved {key}")
         from server.adapters import gen2_codec as codec
 
         layout = codec.Gen2Layout.from_profile(profile, spec.title)
-        stray = unexpected_resave_bytes(cart_ram(context.artifacts["fixture"]),
-                                        cart_ram(context.artifacts["resave:fixture"]), layout, spec.title)
+        before, after = cart_ram(context.artifacts["fixture"]), cart_ram(context.artifacts["resave:fixture"])
+        stray = unexpected_resave_bytes(before, after, layout, spec.title)
         _require(not stray, "re-save changed CartRAM outside the source save regions: "
                  + ", ".join(f"${start:04X}-${end - 1:04X}" for start, end in stray[:8]))
+        delta = resave_scenario_delta(before, after, layout, spec.title)
+        _require(not delta, "re-save changed saved fields a CONTINUE + save must preserve: " + ", ".join(delta[:8]))
         return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
             evidence={"oracle": "independent re-save PYDEC + GAME raw-party witness"})
     except (ValueError, KeyError, TypeError) as exc:
@@ -610,7 +747,7 @@ def _stage_gate(context, stage, fixture, *, label, attempt_id, root, runner, tim
 
 
 def _boot_stage(context, **gate):
-    """Cold boot the candidate, CONTINUE into the overworld; GAME must agree with PYDEC and the checkpoint."""
+    """Warm boot the candidate SaveRAM (COLD=0), CONTINUE into the overworld; GAME must agree with PYDEC."""
     try:
         spec = BY_NAME[context.fixture]
         inspection = inspect_candidate(context.artifacts["fixture"], _json(context.artifacts["profile"]),
@@ -626,7 +763,7 @@ def _boot_stage(context, **gate):
 
 
 def _resave_stage(context, **gate):
-    """CONTINUE, native START/SAVE, flush; then cold boot the re-save and CONTINUE again (reload)."""
+    """CONTINUE, native START/SAVE, flush; then warm boot the re-save and CONTINUE again (reload)."""
     try:
         from tools import run_gb_gate
 
@@ -635,8 +772,6 @@ def _resave_stage(context, **gate):
         original = inspect_candidate(context.artifacts["fixture"], profile, rom, spec)
         directory, save_path, game = _stage_gate(context, "resave", context.artifacts["fixture"], label="resave", **gate)
         validate_game_witness(game, context, original, "resave", context.fingerprint)
-        _require(type(game.get("save_success_counter")) is int and game["save_success_counter"] >= 1,
-                 "native re-save completion missing from the GAME witness")
         flushed = (directory / run_gb_gate.describe_gen2(spec.title)["saveram_name"]).read_bytes()
         after = inspect_candidate(flushed, profile, rom, spec)
         _require(game.get("resave_cartram_sha256") == after["cartram_sha256"],

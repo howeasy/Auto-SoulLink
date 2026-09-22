@@ -23,8 +23,10 @@ EMULATOR = r"""
 return function(rom, shadow_addr)
     local mem = {["System Bus"] = {}, CartRAM = {}}
     local emu = {bank = 1, shadow = 1, wram_bank = 1, frame = 1, callbacks = {}, writes = {},
-                 -- BizHawk 2.11.1 Gambatte emu.getregister: singles only, no pairs (PLAN A15)
-                 regs = {PC = 0, SP = 0xC020, A = 0, B = 0, C = 0, D = 0, E = 0, F = 0, H = 0, L = 0}}
+                 -- BizHawk 2.11.1 Gambatte emu.getregister: singles and bank names, no pairs (PLAN A15)
+                 regs = {PC = 0, SP = 0xC020, A = 0, B = 0, C = 0, D = 0, E = 0, F = 0, H = 0, L = 0,
+                         ["ROM0 BANK"] = 0, ["ROMX BANK"] = 1, ["VRAM BANK"] = 0, ["SRAM BANK"] = 0,
+                         ["WRAM BANK"] = 1}}
     local io = {model_only = true, cart_ram_linear = true}
     function io.read_u8(a, d)
         d = d or "System Bus"
@@ -661,6 +663,50 @@ def test_no_event_reaches_the_server_before_the_hello():
     falsify(check, mutant("lua/gen2/client.lua", (
         'if event ~= "hello" and not (self.hello_session and self.hello_session:status().ready) then',
         "if false then")))
+
+
+def test_held_messages_do_not_follow_an_identity_change():
+    """R3-4 A: a faint held for save A (OT 0x1234) never reaches save B's (OT 0x5678) session."""
+    def check(world):
+        world.party([mon(hp=0), mon(species=172, dvs=0x3AAA)])
+        world.field("wCurPartyMon", 0)
+        world.fire("poison_faint")
+        world.frames(1)
+        assert world.sent() == []
+        world.field("wPlayerID", 0x5678, 2)  # another save, no frame-counter jump
+        world.party([mon(ot=0x5678), mon(species=172, dvs=0x3AAA, ot=0x5678)])
+        hello = world.hello()
+        assert hello["ot_id"] == 0x5678 and [m["event"] for m in world.sent()] == ["hello"]
+
+    falsify(check, mutant("lua/gen2/client.lua", ('drop_held("identity change")', "")))
+
+
+@pytest.mark.parametrize("jump", [-60, 600])
+def test_held_messages_do_not_replay_after_a_savestate_load(jump):
+    """R3-4 B: a savestate load (the frame counter steps other than +1, back or forward) drops them."""
+    def check(world):
+        world.frames(100)  # the counter must stay nonnegative after the rewind
+        world.party([mon(hp=0), mon(species=172, dvs=0x3AAA)])
+        world.field("wCurPartyMon", 0)
+        world.fire("poison_faint")
+        world.frames(1)
+        world.emu.frame += jump
+        world.party([mon(), mon(species=172, dvs=0x3AAA)])  # the loaded state has no faint
+        world.hello()
+        assert [m["event"] for m in world.sent()] == ["hello"]
+
+    falsify(check, mutant("lua/gen2/client.lua", ('drop_held("savestate load")', "")))
+
+
+def test_a_full_pre_hello_queue_is_shown_on_the_hud_once():
+    """R3-7: the 65th held message is lost; the player sees it, once per filled queue."""
+    def check(world):
+        for n in range(66):
+            world.client.send("faint", world.lua.table(key=f"k{n}"))
+        assert world.sent() == []
+        assert sum("SLINK EVENTS LOST" in text for text in world.shown()) == 1
+
+    falsify(check, mutant("lua/gen2/client.lua", ('hud.show("SLINK EVENTS LOST - SEE LOG", 255, 64, 64, 600)', "")))
 
 
 def test_a_reset_drops_messages_held_before_the_hello():
