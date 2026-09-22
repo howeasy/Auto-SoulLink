@@ -1,4 +1,5 @@
-"""MODEL controls for lua/tests/gen2_scripted_play.lua's Mom's-house day-of-week/DST handling.
+"""MODEL controls for lua/tests/gen2_scripted_play.lua's Mom's-house day-of-week/DST handling,
+and for lua/tests/gen2_qualify.lua (the CONTINUE / native re-save qualification driver).
 
 Pure point -> buttons/phase, same lua harness as tests/unit/test_gen2_fixtures.py (no emulator).
 Passing here is authoring evidence only, never PHYSICAL evidence.
@@ -12,9 +13,19 @@ as ui.kind == "yes_no" with a classified ui.prompt, exactly like mom_dst/mom_dst
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from tests.unit.test_gen2_fixtures import driver, lua, point, step  # noqa: F401  (fixture + helpers)
+from tests.unit.test_gen2_fixtures import (  # noqa: F401  (fixture + helpers)
+    ROOT,
+    driver,
+    facts,
+    lua,
+    point,
+    step,
+)
+from tools import gen2_fixtures as g
 
 TITLES = ("crystal", "gold", "silver")
 
@@ -99,3 +110,125 @@ def test_unclassified_yes_no_prompt_still_refuses(lua, title):
     d, f = driver(lua, title)
     buttons, why, _ = step(d, yes_no_point(lua, f, None, cursor=1))
     assert buttons is None and "unmapped yes/no prompt" in why
+
+
+# --- lua/tests/gen2_qualify.lua: CONTINUE / re-save driver (pure; no emulator) -------------------
+
+FP = "cd" * 32
+DONE = {"continue": 1, "continue_loaded": 1, "rtc_ok": 1, "restart_clock": 0, "finish_continue": 1,
+        "same_save_file": 0, "erase_save": 0}
+_QFACTS = {}
+
+
+def qdriver(lua, title="crystal", stage="boot"):
+    if title not in _QFACTS:
+        _QFACTS[title] = g.qualify_facts(title, ROOT)
+    Q = lua.execute((ROOT / "lua/tests/gen2_qualify.lua").read_text(encoding="utf-8"))
+    f = facts(title)
+
+    def table(value):
+        return lua.table_from(json.loads(json.dumps(value)), recursive=True)
+
+    case = {"name": f"{title}_town", "title": title, "attempt_id": "model", "stage": stage, "stage_fingerprint": FP}
+    return Q.new(table(f), table(_QFACTS[title]), lua.table_from(case)), f, _QFACTS[title]
+
+
+def qpoint(lua, f, *, hits=None, ui=None, overworld=False, saves=0, **fields):
+    row = {"title": f["title"], "rom_sha1": f["rom_sha1"], "core_mode": "CGB", "attempt_id": "model",
+           "facts_fingerprint": f["fingerprint"], "stage_fingerprint": FP, "overworld_ready": overworld,
+           "battle_mode": 0, "save_success_counter": saves, "input_ready": True}
+    row.update(fields)
+    value = lua.table_from(row)
+    value["hits"] = lua.table_from({**dict.fromkeys(DONE, 0), **(hits or {})})
+    if ui is not None:
+        value["ui"] = lua.table_from({**ui, "items": lua.table_from(ui.get("items", []))})
+    return value
+
+
+def ui(f, q, kind, **fields):
+    site = f["ui_origins"].get(kind) or q["ui_origins"][kind]
+    return {"kind": kind, "origin": site["symbol"], "columns": 1, **fields}
+
+
+def act(d, value):
+    """One decision plus the driver's one-frame release (gen2_qualify.lua press())."""
+    buttons, phase, _ = step(d, value)
+    if buttons:
+        assert step(d, value)[0] == {}
+    return buttons, phase
+
+
+def continue_into_overworld(lua, d, f, q):
+    assert act(d, qpoint(lua, f, ui=ui(f, q, "title"))) == ({"Start": True}, "title")
+    menu = ui(f, q, "main_menu", items=["NEW GAME", "CONTINUE", "OPTION"], cursor=1)
+    assert act(d, qpoint(lua, f, ui=menu)) == ({"Down": True}, "continue")
+    assert act(d, qpoint(lua, f, ui={**menu, "cursor": 2})) == ({"A": True}, "continue")
+    assert act(d, qpoint(lua, f, ui=ui(f, q, "continue_confirm"), hits={"continue": 1})) == ({"A": True}, "continue")
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_qualify_boot_continues_into_the_overworld_and_stops(lua, title):
+    d, f, q = qdriver(lua, title)
+    continue_into_overworld(lua, d, f, q)
+    assert act(d, qpoint(lua, f, overworld=True, hits=DONE)) == ({}, "loaded")
+    assert d.terminal == "loaded" and act(d, qpoint(lua, f, overworld=True, hits=DONE)) == ({}, "loaded")
+
+
+def test_qualify_overworld_without_the_native_continue_path_refuses(lua):
+    d, f, q = qdriver(lua)
+    continue_into_overworld(lua, d, f, q)
+    buttons, why = act(d, qpoint(lua, f, overworld=True, hits={**DONE, "finish_continue": 0}))
+    assert buttons is None and "native CONTINUE path" in why
+    d, f, q = qdriver(lua)
+    buttons, why = act(d, qpoint(lua, f, overworld=True, hits=DONE))
+    assert buttons is None and "native CONTINUE path" in why
+
+
+@pytest.mark.parametrize("hits,match", [({"restart_clock": 1}, "RestartClock"), ({"erase_save": 1}, "ErasePreviousSave")])
+def test_qualify_refuses_an_rtc_reset_or_an_erased_save_at_any_point(lua, hits, match):
+    d, f, q = qdriver(lua)
+    buttons, why = act(d, qpoint(lua, f, ui=ui(f, q, "title"), hits=hits))
+    assert buttons is None and match in why
+
+
+def test_qualify_refuses_a_foreign_stage_a_reset_and_unmapped_ui(lua):
+    d, f, q = qdriver(lua)
+    buttons, why = act(d, qpoint(lua, f, ui=ui(f, q, "title"), stage_fingerprint="00" * 32))
+    assert buttons is None and "foreign" in why
+    d, f, q = qdriver(lua)
+    continue_into_overworld(lua, d, f, q)
+    buttons, why = act(d, qpoint(lua, f, ui=ui(f, q, "main_menu", items=["CONTINUE"], cursor=1)))
+    assert buttons is None and "reset to main menu" in why
+    d, f, q = qdriver(lua)
+    buttons, why = act(d, qpoint(lua, f, ui=ui(f, q, "text")))
+    assert buttons is None and "not valid for qualification" in why
+
+
+def test_qualify_resave_saves_through_start_and_the_same_player_overwrite(lua):
+    d, f, q = qdriver(lua, stage="resave")
+    continue_into_overworld(lua, d, f, q)
+    assert act(d, qpoint(lua, f, overworld=True, hits=DONE)) == ({"Start": True}, "save")
+    menu = ui(f, q, "start_menu", items=["POKéMON", "PACK", "POKéGEAR", "CHRIS", "SAVE", "OPTION", "EXIT"], cursor=5)
+    assert act(d, qpoint(lua, f, ui=menu, hits=DONE)) == ({"A": True}, "save")
+
+    def yes_no(prompt, cursor=1):
+        return ui(f, q, "yes_no", items=["YES", "NO"], cursor=cursor, prompt=prompt)
+
+    assert act(d, qpoint(lua, f, ui=yes_no("save_confirm", 2), hits=DONE)) == ({"Up": True}, "save")
+    assert act(d, qpoint(lua, f, ui=yes_no("save_confirm"), hits=DONE)) == ({"A": True}, "save")
+    same = {**DONE, "same_save_file": 1}
+    assert act(d, qpoint(lua, f, ui=yes_no("save_overwrite"), hits=same)) == ({"A": True}, "save")
+    assert act(d, qpoint(lua, f, overworld=True, hits=same, saves=1)) == ({}, "resaved")
+    assert d.terminal == "resaved"
+
+
+def test_qualify_resave_refuses_another_players_overwrite_and_unknown_prompts(lua):
+    for prompt, hits, match in (("save_overwrite", DONE, "same-player"), ("nickname", DONE, "unmapped yes/no")):
+        d, f, q = qdriver(lua, stage="resave")
+        continue_into_overworld(lua, d, f, q)
+        act(d, qpoint(lua, f, overworld=True, hits=DONE))
+        menu = ui(f, q, "start_menu", items=["SAVE"], cursor=1)
+        act(d, qpoint(lua, f, ui=menu, hits=DONE))
+        box = ui(f, q, "yes_no", items=["YES", "NO"], cursor=1, prompt=prompt)
+        buttons, why = act(d, qpoint(lua, f, ui=box, hits=hits))
+        assert buttons is None and match in why

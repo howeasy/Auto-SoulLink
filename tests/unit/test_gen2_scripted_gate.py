@@ -11,12 +11,12 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from lupa import LuaError, LuaRuntime
 
-from tools import gen2_fixtures as g
-from tools import run_gb_gate
+from tools import gen2_fixtures as g, run_gb_gate
 from tools.gen2_source_data import load_context
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -434,7 +434,7 @@ class Sim:
 # --- harness ---------------------------------------------------------------------------------------
 
 GATE_MODULES = ("lua/json_codec.lua", "lua/write_permit.lua", "lua/scripted_inputs.lua", "lua/gb_hook_binding.lua",
-                "lua/gen2/reads.lua", "lua/tests/gen2_scripted_play.lua")
+                "lua/gen2/reads.lua", "lua/tests/gen2_scripted_play.lua", "lua/tests/gen2_qualify.lua")
 
 
 def make_root(tmp_path, title, drop=()):
@@ -656,6 +656,159 @@ def test_non_button_input_is_refused(tmp_path):
     assert sim.inputs == [] and sim.frame == 0
     step(sim.lua.table_from({"A": True}))
     assert sim.inputs == [{"A": True}] and sim.frame == 1
+
+
+# --- qualification mode (warm boot -> CONTINUE -> overworld -> START/SAVE) ------------------------
+
+def qfacts(title):
+    return cached(("qfacts", title), lambda: g.qualify_facts(title, ROOT))
+
+
+class QualifySim(Sim):
+    """A synthetic cartridge booted from a battery save: title -> CONTINUE -> the saved map (-> SAVE)."""
+
+    def __init__(self, lua, title, target, *, rtc_reset=False, other_player=False, where=("ElmsLab", 4, 3)):
+        self.qf, self.rtc_reset, self.other_player, self.where = qfacts(title), rtc_reset, other_player, where
+        super().__init__(lua, title, target)
+        self.sites.update(self.qf["ui_origins"])
+        self.sites.update(self.qf["sites"])
+        self.cart[:] = bytes((i * 13 + 5) & 0xFF for i in range(len(self.cart)))
+        self.booted = bytes(self.cart[:0x8000])
+
+    def load(self):
+        """TryLoadSaveFile: the party comes back into WRAM (the synthetic battery holds it)."""
+        starter = self.facts["starter"]
+        mon = bytearray(48)
+        mon[0], mon[31] = starter["species"], starter["level"]
+        self.put("wPartyCount", [1, starter["species"], 0xFF] + [0] * 5 + list(mon))
+        self.put("wNumBalls", [0, 0xFF])
+
+    def party_hex(self):
+        ram = self.prof["ram"]
+        start = self.offset("wPartyCount")
+        return bytes(self.wram[start:start + ram["wPartyMonNicknamesEnd"] - ram["wPartyCount"]]).hex()
+
+    def save(self):
+        items = ["POKéMON", "PACK", "POKéGEAR", "CHRIS", "SAVE", "OPTION", "EXIT"]
+        yield from self.menu("start_menu", items, "SAVE", at=(8, 0))
+        yield from self.yes_no("save the game?")
+        if not self.other_player:
+            self.fire("same_save_file")
+        yield from self.yes_no("OK to overwrite?")
+        yield from self.wait(4)
+        self.cart[0x1F10] ^= 0x5A   # a native re-save moves sStackTop
+        self.fire("save_completed")
+        yield from self.wait(4)
+
+    def game(self):
+        yield from self.wait(20)
+        self.clear()
+        yield from self.until("Start", "title")
+        yield from self.wait(2)
+        yield from self.menu("main_menu", ["CONTINUE", "NEW GAME", "OPTION"], "CONTINUE")
+        self.fire("continue")
+        self.load()
+        yield from self.wait(20)
+        self.fire("continue_confirm")
+        yield from self.until("A")
+        self.fire("continue_loaded")
+        self.fire("restart_clock" if self.rtc_reset else "rtc_ok")
+        yield from self.wait(20)
+        self.fire("finish_continue")
+        yield from self.enter(*self.where)
+        while True:
+            self.fire("overworld_tick")
+            got = yield
+            if "Start" in got.edges:
+                yield from self.save()
+
+
+def qualify_env(root, title, target, stage, **changes):
+    spec, env = make_env(root, title, target)
+    descriptor = run_gb_gate.describe_gen2(title)
+    env.update(SLINK_GEN2_COLD="0", SLINK_GEN2_SAVERAM_NAME=descriptor["saveram_name"],
+               SLINK_GEN2_QUALIFY=json.dumps({"stage": stage, "stage_fingerprint": "ab" * 32, "facts": qfacts(title)}))
+    env.update(changes)
+    return spec, env
+
+
+def witness_path(env, spec, stage):
+    return Path(env["SLINK_GEN2_SAVERAM_DIR"]) / f"{spec.name}.{stage}.witness.json"
+
+
+@pytest.mark.parametrize("title,stage", [("crystal", "boot"), ("gold", "reload"), ("silver", "boot")])
+def test_qualification_boot_writes_a_game_witness_of_the_loaded_checkpoint(tmp_path, title, stage):
+    root = make_root(tmp_path, title)
+    spec, env = qualify_env(root, title, "town", stage)
+    sim = QualifySim(LuaRuntime(unpack_returned_tuples=True), title, "town")
+    verdict, text = run(root, env, sim)
+    assert verdict.startswith("RESULT: PASS"), text
+    game = json.loads(witness_path(env, spec, stage).read_text(encoding="utf-8"))
+    lab = facts(title)["maps"]["ElmsLab"]
+    assert game["schema"] == "gen2-fixture-game-witness-v1" and game["stage"] == stage and game["case"] == spec.name
+    assert game["stage_fingerprint"] == "ab" * 32 and game["speed_percent"] == 100 and game["observer"] == "independent_GAME"
+    assert game["cartram_sha256"] == hashlib.sha256(sim.booted).hexdigest()
+    assert game["location"] == [lab["map_group"], lab["map_number"]] and game["position"] == [4, 3]
+    assert game["party_raw_hex"] == sim.party_hex() and game["save_success_counter"] == 0
+    assert game["continue_selected"] is game["rtc_validated"] is game["native_load_completed"] is True
+    assert "resave_cartram_sha256" not in game and game["harness_write_scopes"] == []
+    assert [row["phase"] for row in game["phases"]] == ["title", "continue", "loaded"]
+    # Normal buttons only and no memory write of any kind.
+    assert sim.writes == [] and all(set(row) <= set(g_buttons()) for row in sim.inputs)
+    # The witness satisfies the independent validator it is written for.
+    inspection = {"cartram_sha256": game["cartram_sha256"], "party_raw_hex": game["party_raw_hex"],
+                  "location": tuple(game["location"]), "position": tuple(game["position"])}
+    context = SimpleNamespace(fixture=spec.name, provenance={"rom_sha1": facts(title)["rom_sha1"]})
+    g.validate_game_witness(game, context, inspection, stage, "ab" * 32)
+
+
+def test_qualification_resave_saves_natively_and_flushes_the_cartram(tmp_path):
+    root = make_root(tmp_path, "crystal")
+    spec, env = qualify_env(root, "crystal", "battle", "resave")
+    sim = QualifySim(LuaRuntime(unpack_returned_tuples=True), "crystal", "battle", where=("Route29", 10, 10))
+    verdict, text = run(root, env, sim)
+    assert verdict.startswith("RESULT: PASS"), text
+    game = json.loads(witness_path(env, spec, "resave").read_text(encoding="utf-8"))
+    flushed = (Path(env["SLINK_GEN2_SAVERAM_DIR"]) / env["SLINK_GEN2_SAVERAM_NAME"]).read_bytes()
+    assert len(flushed) == g.SAVERAM_BYTES
+    assert game["resave_cartram_sha256"] == hashlib.sha256(flushed[:0x8000]).hexdigest() != game["cartram_sha256"]
+    assert game["cartram_sha256"] == hashlib.sha256(sim.booted).hexdigest()
+    assert game["save_success_counter"] == 1 and game["site_hits"]["same_save_file"] == 1
+    assert [row["phase"] for row in game["phases"]] == ["title", "continue", "save", "resaved"]
+    assert sim.writes == []
+
+
+@pytest.mark.parametrize("sim_changes,match", [
+    ({"rtc_reset": True}, "RestartClock ran"),
+    ({"other_player": True}, "same-player branch"),
+])
+def test_qualification_refuses_an_rtc_reset_or_another_players_save(tmp_path, sim_changes, match):
+    root = make_root(tmp_path, "crystal")
+    spec, env = qualify_env(root, "crystal", "town", "resave")
+    witness_path(env, spec, "resave").write_text("{\"stale\": true}")
+    sim = QualifySim(LuaRuntime(unpack_returned_tuples=True), "crystal", "town", **sim_changes)
+    verdict, _ = run(root, env, sim)
+    assert verdict.startswith("RESULT: FAIL") and match in verdict
+    assert not witness_path(env, spec, "resave").exists()
+
+
+BAD_BINDINGS = {
+    "cold": lambda: {"SLINK_GEN2_COLD": "1"},
+    "stage": lambda: {"SLINK_GEN2_QUALIFY": json.dumps({"stage": "replay", "stage_fingerprint": "ab" * 32})},
+    "foreign": lambda: {"SLINK_GEN2_QUALIFY": json.dumps({"stage": "boot", "stage_fingerprint": "ab" * 32,
+                                                          "facts": {**qfacts("gold"), "title": "crystal"}})},
+}
+
+
+@pytest.mark.parametrize("bad,match", [("cold", "warm descriptor"), ("stage", "stage binding"),
+                                       ("foreign", "differ from the selected")])
+def test_qualification_bad_binding_refuses_before_any_input(tmp_path, bad, match):
+    root = make_root(tmp_path, "crystal")
+    spec, env = qualify_env(root, "crystal", "town", "boot", **BAD_BINDINGS[bad]())
+    sim = QualifySim(LuaRuntime(unpack_returned_tuples=True), "crystal", "town")
+    verdict, _ = run(root, env, sim)
+    assert verdict.startswith("RESULT: FAIL") and match in verdict
+    assert sim.inputs == [] and not witness_path(env, spec, "boot").exists()
 
 
 # --- runner binding --------------------------------------------------------------------------------

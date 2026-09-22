@@ -2,8 +2,10 @@
 
 Authoring/inspection is read-only. This module never creates ROM/save/fixture
 bytes, repairs a save, or treats a Lua RESULT line as fixture qualification.
-An authorized coordinator supplies the game observer and boot/re-save callbacks.
-Process, frame, timeout and qualification orchestration remain shared.
+game_callbacks() binds the boot/re-save stages to the reviewed gate (warm boot,
+CONTINUE, native re-save, reload); the PYDEC stages stay fixed. qualify() runs the
+full chain for one played candidate. Process, frame, timeout and qualification
+orchestration remain shared (tools/run_gb_gate.py, tools/fixture_qualification.py).
 """
 from __future__ import annotations
 
@@ -53,6 +55,39 @@ CART_RAM_BYTES = 0x8000
 SAVERAM_BYTES = CART_RAM_BYTES + 22
 # The reviewed played-route gate; run_gb_gate reads its terminal result path from the source.
 GATE_SCRIPT = "lua/tests/test_gen2_scripted_gate.lua"
+# Qualification (warm boot the candidate SaveRAM, CONTINUE, re-save, reload) runs at 100%; routes at 300%.
+QUALIFY_SPEED_PERCENT = 100
+# ponytail: live calibration knobs; the Crystal intro alone runs thousands of frames before the title.
+QUALIFY_BUDGET = {"max_frames": 30000, "max_phase_frames": 12000, "settle_frames": 30}
+# Code sites the qualification gate counts. Every label is in both pinned sources:
+#   Continue, .Check1Pass (A accepted), .Check2Pass (RTC accepted)  C engine/menus/intro_menu.asm:338,353,359;
+#     G :251,265,271. ConfirmContinue C :429-442, G :313-326 (A continues, B backs out).
+#   RestartClock via Continue_CheckRTC_RestartClock (RTC_RESET) C :444-457, G :328-341.
+#   FinishContinueFunction -> OverworldLoop C :459-477, G :343-357.
+#   AskOverwriteSaveFile.yoursavefile (same player ID) C engine/menus/save.asm:181-203 (:192), G :169-191 (:180).
+#   ErasePreviousSave (another player's file: boxes/HoF erased) C :360, G :333.
+QUALIFY_SITES = {"continue": "Continue", "continue_loaded": "Continue.Check1Pass", "rtc_ok": "Continue.Check2Pass",
+                 "restart_clock": "RestartClock", "finish_continue": "FinishContinueFunction",
+                 "same_save_file": "AskOverwriteSaveFile.yoursavefile", "erase_save": "ErasePreviousSave"}
+QUALIFY_UI = {"continue_confirm": "ConfirmContinue"}
+# SaveMenu prompts _WouldYouLikeToSaveTheGameText then _AlreadyASaveFileText (C data/text/common_3.asm:187-212,
+# G data/text/common_2.asm:1274-1299). The overwrite text's first line scrolls off (`cont`), so the
+# same-player branch is told from _AnotherSaveFileText by the .yoursavefile site, never by the screen.
+QUALIFY_PROMPTS = {"save_confirm": ("save the game?",), "save_overwrite": ("OK to overwrite?",)}
+# CartRAM the CONTINUE load and a native re-save may rewrite; every other byte must survive unchanged.
+#   _SaveGameData C engine/menus/save.asm:266-295, G :273-291: options + check values, game data, checksums,
+#   the backup copy (layout regions), SaveBox into the active box slot, sStackTop (UpdateStackTop),
+#   BackupPartyMonMail (engine/pokemon/mail.asm:239), BackupMysteryGift (C engine/link/mystery_gift.asm:1374,
+#   G :1217), SaveRTC's sRTCStatusFlags (engine/rtc/rtc.asm:76); Crystal BackupGSBallFlag
+#   (mobile/mobile_41.asm:515) and sBattleTowerChallengeState (save.asm:286-292). TryLoadSaveFile
+#   (C save.asm:596, G :538) runs LoadBox and the Restore* twins of the same spans.
+#   (start, end): end is a symbol or (symbol, bytes past it).
+SAVE_WRITES = (("sOptions", "sGameData"), ("sGameData", "sGameDataEnd"), ("sChecksum", "sBox"), ("sBox", "sBoxEnd"),
+               ("sBackupOptions", ("sBackupCheckValue1", 1)), ("sBackupChecksum", ("sBackupCheckValue2", 1)),
+               ("sStackTop", ("sStackTop", 2)), ("sPartyMail", "sMysteryGiftData"),
+               ("sMysteryGiftItem", "sDailyMysteryGiftPartnerIDs"), ("sRTCStatusFlags", ("sRTCStatusFlags", 1)))
+SAVE_WRITES_CRYSTAL = (("sGSBallFlag", ("sGSBallFlag", 1)), ("sGSBallFlagBackup", ("sGSBallFlagBackup", 1)),
+                       ("sBattleTowerChallengeState", ("sBattleTowerChallengeState", 1)))
 PASSABLE_COLLISION = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CAVE", "STAIRCASE",
                       "WARP_CARPET_DOWN", "WARP_CARPET_LEFT", "WARP_CARPET_UP", "WARP_CARPET_RIGHT")
 # Yes/no prompt -> on-screen text anchors, each verified as a quoted literal in the pinned source.
@@ -285,6 +320,28 @@ def route_facts(title, root=ROOT):
     return result
 
 
+def qualify_facts(title, root=ROOT):
+    """Source-bound CONTINUE/re-save facts for the qualification gate; the route facts stay unchanged."""
+    ctx = load_context(title, root=root)
+    route = route_facts(title, root)
+    texts = [ctx.read_source(path) for path in PROMPT_SOURCES]
+    for anchors in QUALIFY_PROMPTS.values():
+        for anchor in anchors:
+            _require(any(re.search(r'^\s*(?:text|line|cont|para)\s+"[^"]*' + re.escape(anchor), text, re.M)
+                         for text in texts), f"qualification prompt anchor missing from source: {anchor}")
+
+    def site(symbol):
+        return {key: value for key, value in _code_site(ctx, symbol).items() if key != "symbol_offset"}
+
+    result = {"schema": "gen2-qualify-facts-v1", "title": title, "rom_sha1": route["rom_sha1"],
+              "route_facts_fingerprint": route["fingerprint"], "speed_percent": QUALIFY_SPEED_PERCENT,
+              "ui_origins": {kind: site(symbol) for kind, symbol in QUALIFY_UI.items()},
+              "sites": {kind: site(symbol) for kind, symbol in QUALIFY_SITES.items()},
+              "prompts": {kind: list(anchors) for kind, anchors in QUALIFY_PROMPTS.items()}}
+    result["fingerprint"] = _facts_sha256(result)
+    return result
+
+
 def fixture_manifest(root=ROOT):
     facts = {title: route_facts(title, root) for title in ("crystal", "gold", "silver")}
     return {"schema": "gen2-fixture-plan-v1", "qualified": False, "facts": facts,
@@ -418,6 +475,44 @@ def validate_game_witness(game, context, inspection, stage, fingerprint):
              and game.get("continue_selected") is True and game.get("native_load_completed") is True
              and game.get("rtc_validated") is True, "GAME boot/RTC/CGB qualification incomplete")
     _require(game.get("party_raw_hex") == inspection["party_raw_hex"], "GAME/PYDEC loaded-party mismatch")
+    _require(game.get("location") == list(inspection["location"]) and game.get("position") == list(inspection["position"]),
+             "GAME CONTINUE landed on a different map/checkpoint than the saved fixture")
+
+
+def save_write_spans(title, layout, raw, root=ROOT):
+    """Sorted (start, end) CartRAM spans the CONTINUE load and a native re-save may rewrite."""
+    ctx = load_context(title, root=root)
+
+    def flat(name, extra=0):
+        bank, address = ctx.symbol(name)
+        _require(0 <= bank < 4 and 0xA000 <= address < 0xC000, f"not a CartRAM symbol: {name}")
+        return bank * 0x2000 + address - 0xA000 + extra
+
+    spans = [(flat(start), flat(*end) if isinstance(end, tuple) else flat(end))
+             for start, end in SAVE_WRITES + (SAVE_WRITES_CRYSTAL if title == "crystal" else ())]
+    spans += [(region.backup, region.backup + region.length) for region in layout.regions]
+    box = _saved_field(raw, layout, "wCurBox", 1)[0]
+    _require(box < len(layout.storage_boxes), "saved wCurBox outside the source box inventory")
+    at, size = layout.storage_boxes[box]
+    spans.append((at, at + size))
+    _require(all(0 <= start < end <= CART_RAM_BYTES for start, end in spans), "save write span outside CartRAM")
+    return sorted(spans)
+
+
+def unexpected_resave_bytes(original, resaved, layout, title, root=ROOT):
+    """(start, end) runs where a re-save changed CartRAM outside the source save write spans."""
+    _require(len(original) == len(resaved) == CART_RAM_BYTES, "compare exactly two CartRAM images")
+    allowed = bytearray(CART_RAM_BYTES)
+    for start, end in save_write_spans(title, layout, original, root):
+        allowed[start:end] = b"\x01" * (end - start)
+    runs = []
+    for index in range(CART_RAM_BYTES):
+        if original[index] != resaved[index] and not allowed[index]:
+            if runs and runs[-1][1] == index:
+                runs[-1][1] = index + 1
+            else:
+                runs.append([index, index + 1])
+    return [tuple(run) for run in runs]
 
 
 def validate_identity_cohorts(rows):
@@ -474,10 +569,129 @@ def post_oracle_stage(context):
         validate_game_witness(_json(context.artifacts["resave:reload_witness"]), context, saved, "reload", stages["resave"])
         _require(saved["player_id"] == original["player_id"] and saved["identity_key"] == original["identity_key"],
                  "re-save changed fixture identity")
+        from server.adapters import gen2_codec as codec
+
+        layout = codec.Gen2Layout.from_profile(profile, spec.title)
+        stray = unexpected_resave_bytes(cart_ram(context.artifacts["fixture"]),
+                                        cart_ram(context.artifacts["resave:fixture"]), layout, spec.title)
+        _require(not stray, "re-save changed CartRAM outside the source save regions: "
+                 + ", ".join(f"${start:04X}-${end - 1:04X}" for start, end in stray[:8]))
         return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
             evidence={"oracle": "independent re-save PYDEC + GAME raw-party witness"})
     except (ValueError, KeyError, TypeError) as exc:
         return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
+
+
+def _stage_gate(context, stage, fixture, *, label, attempt_id, root, runner, timeout):
+    """One warm-boot qualification gate run on exactly these SaveRAM bytes; returns (dir, witness path, witness)."""
+    from tools import run_gb_gate
+
+    spec = BY_NAME[context.fixture]
+    facts_text = context.artifacts["route_facts"].decode("utf-8")
+    qfacts = qualify_facts(spec.title, root)
+    _require(qfacts["route_facts_fingerprint"] == _json(facts_text)["fingerprint"],
+             "qualification facts differ from the recorded route facts")
+    directory = (Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name / "qualify"
+                 / f"{label}-{context.fingerprint[:16]}")
+    directory.mkdir(parents=True, exist_ok=True)
+    source = directory / (spec.name + ".input.SaveRAM")
+    source.write_bytes(fixture)
+    witness = directory / f"{spec.name}.{stage}.witness.json"
+    witness.unlink(missing_ok=True)
+    case = {**vars(spec), "title_idle_frames": 0, "attempt_id": attempt_id, **QUALIFY_BUDGET}
+    passed, _, text = (runner or run_gb_gate.run_gate)(
+        GATE_SCRIPT, rom_key=spec.title, target=spec.target, timeout=timeout, saveram_dir=str(directory),
+        fixture_path=str(source), speed_percent=QUALIFY_SPEED_PERCENT,
+        env_overrides={"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": facts_text,
+                       "SLINK_GEN2_QUALIFY": json.dumps({"stage": stage, "stage_fingerprint": context.fingerprint,
+                                                         "facts": qfacts})})
+    _require(passed and witness.is_file(), f"{stage} gate did not pass: {(text or '').strip()[-400:]}")
+    return directory, witness, _json(witness.read_bytes())
+
+
+def _boot_stage(context, **gate):
+    """Cold boot the candidate, CONTINUE into the overworld; GAME must agree with PYDEC and the checkpoint."""
+    try:
+        spec = BY_NAME[context.fixture]
+        inspection = inspect_candidate(context.artifacts["fixture"], _json(context.artifacts["profile"]),
+                                       context.artifacts["rom"], spec)
+        _, path, game = _stage_gate(context, "boot", context.artifacts["fixture"], label="boot", **gate)
+        validate_game_witness(game, context, inspection, "boot", context.fingerprint)
+        return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
+            evidence={"observer": "independent_GAME CONTINUE", "location": json.dumps(game["location"]),
+                      "position": json.dumps(game["position"]), "cartram_sha256": inspection["cartram_sha256"]},
+            outputs={"game_witness": path})
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
+
+
+def _resave_stage(context, **gate):
+    """CONTINUE, native START/SAVE, flush; then cold boot the re-save and CONTINUE again (reload)."""
+    try:
+        from tools import run_gb_gate
+
+        spec = BY_NAME[context.fixture]
+        profile, rom = _json(context.artifacts["profile"]), context.artifacts["rom"]
+        original = inspect_candidate(context.artifacts["fixture"], profile, rom, spec)
+        directory, save_path, game = _stage_gate(context, "resave", context.artifacts["fixture"], label="resave", **gate)
+        validate_game_witness(game, context, original, "resave", context.fingerprint)
+        _require(type(game.get("save_success_counter")) is int and game["save_success_counter"] >= 1,
+                 "native re-save completion missing from the GAME witness")
+        flushed = (directory / run_gb_gate.describe_gen2(spec.title)["saveram_name"]).read_bytes()
+        after = inspect_candidate(flushed, profile, rom, spec)
+        _require(game.get("resave_cartram_sha256") == after["cartram_sha256"],
+                 "flushed re-save differs from the GAME-witnessed CartRAM")
+        resaved = directory / (spec.name + ".resaved.SaveRAM")
+        resaved.write_bytes(flushed)
+        _, reload_path, reload = _stage_gate(context, "reload", flushed, label="reload", **gate)
+        validate_game_witness(reload, context, after, "reload", context.fingerprint)
+        return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
+            evidence={"observer": "independent_GAME re-save + reload", "resave_cartram_sha256": after["cartram_sha256"]},
+            outputs={"fixture": resaved, "save_witness": save_path, "reload_witness": reload_path})
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
+
+
+def game_callbacks(attempt_id, *, root=ROOT, runner=None, timeout=1200):
+    """The Gen 2 boot/resave stages, bound to the reviewed gate through tools/run_gb_gate.run_gate."""
+    _require(isinstance(attempt_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", attempt_id) is not None,
+             "bounded attempt ID required")
+    gate = {"attempt_id": attempt_id, "root": root, "runner": runner, "timeout": timeout}
+    return {"boot": lambda context: _boot_stage(context, **gate),
+            "resave": lambda context: _resave_stage(context, **gate)}
+
+
+def _fixture_case(spec, fixture, receipt, facts_path, facts, root):
+    ctx = load_context(spec.title, root=root)
+    return qualification.FixtureCase(spec.name,
+        {"fixture": fixture, "profile": Path(root) / f"data/games/gen2_{spec.title}/profile.json",
+         "rom": ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"],
+         "route_facts": facts_path, "played_receipt": receipt},
+        {"title": spec.title, "rom_sha1": ctx.source_record()["rom_sha1"], "scope": "candidate fixture",
+         "route_facts_sha256": _facts_sha256(facts)})
+
+
+def qualify(spec_or_name, candidate_path, attempt_id, *, receipt_path=None, root=ROOT, runner=None, timeout=1200):
+    """Full-chain qualification of ONE played candidate (run_play's candidate_path/receipt_path).
+
+    Static PYDEC, boot/CONTINUE, native re-save + reload, independent post-oracle. Launches EmuHawk
+    three times (boot, resave, reload) at 100%; the report never claims physical qualification.
+    """
+    spec = spec_or_name if isinstance(spec_or_name, FixtureSpec) else BY_NAME[spec_or_name]
+    callbacks = {"qualify": qualify_stage, "post_oracle": post_oracle_stage,
+                 **game_callbacks(attempt_id, root=root, runner=runner, timeout=timeout)}
+    candidate = Path(candidate_path)
+    receipt = Path(receipt_path) if receipt_path else candidate.parent / (spec.name + ".played.json")
+    facts = route_facts(spec.title, root)
+    snapshot = Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name / "qualify"
+    snapshot.mkdir(parents=True, exist_ok=True)
+    facts_path = snapshot / (spec.title + "_route_facts.json")
+    facts_path.write_text(json.dumps(facts), encoding="utf-8")
+    report = qualification.qualify_fixtures([_fixture_case(spec, candidate, receipt, facts_path, facts, root)],
+                                            callbacks, scope="full", attempt_id=attempt_id, max_fixtures=1)
+    report["physical_qualification"] = False
+    report["open_obligations"] = ["coordinator GAME/RTC/played-origin review", "recorded source/physical gate sign-off"]
+    return report
 
 
 def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks=None):
@@ -494,16 +708,11 @@ def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks
         cases, facts_by_title = [], {}
         for path in paths:
             spec = by_name[path.stem]
-            ctx = load_context(spec.title, root=root)
             if spec.title not in facts_by_title:
                 facts_by_title[spec.title] = route_facts(spec.title, root)
-            cases.append(qualification.FixtureCase(spec.name,
-                {"fixture": path, "profile": Path(root) / f"data/games/gen2_{spec.title}/profile.json",
-                 "rom": ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"],
-                 "route_facts": Path(directory) / (spec.title + "_route_facts.json"),
-                 "played_receipt": Path(directory) / (spec.name + ".played.json")},
-                {"title": spec.title, "rom_sha1": ctx.source_record()["rom_sha1"], "scope": "candidate fixture",
-                 "route_facts_sha256": _facts_sha256(facts_by_title[spec.title])}))
+            cases.append(_fixture_case(spec, path, Path(directory) / (spec.name + ".played.json"),
+                                       Path(directory) / (spec.title + "_route_facts.json"),
+                                       facts_by_title[spec.title], root))
         report = qualification.qualify_fixtures(cases, callbacks, scope=scope, max_fixtures=8)
         if report["passed"]:
             try:

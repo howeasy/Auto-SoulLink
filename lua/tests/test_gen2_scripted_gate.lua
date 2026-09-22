@@ -22,6 +22,14 @@
   O-10 (owner ruling): battle cases stage ONE Poke Ball stack into the empty Ball pocket through
   lua/write_permit.lua, bounded to the profile Ball-pocket span. Tests/validation only; never a
   natural ball-acquisition witness. Town cases record no write scope and refuse any request.
+
+  QUALIFICATION mode (SLINK_GEN2_QUALIFY = {stage, stage_fingerprint, facts}, launched only by
+  tools/gen2_fixtures.game_callbacks): a WARM boot of the candidate SaveRAM at 100%, driven by
+  lua/tests/gen2_qualify.lua through CONTINUE (boot/reload) and a native START/SAVE (resave). No
+  harness write of any kind. The CartRAM is hashed before the first emulated frame; the GAME witness
+  ($SLINK_GEN2_SAVERAM_DIR/<case>.<stage>.witness.json, gen2-fixture-game-witness-v1) records the
+  loaded map/position, the WRAM party bytes and the counted CONTINUE/RTC/overwrite code sites.
+  A resave also flushes the SaveRAM. The witness is evidence for tools/gen2_fixtures, never a verdict.
 --]]
 local G = {}
 local fmt = string.format
@@ -33,6 +41,9 @@ G.CART_RAM_BYTES = 0x8000
 -- docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md: BizHawk 2.11.1 gambatte appends 8+14 RTC bytes.
 G.RTC_TRAILER_BYTES = 22
 G.SPEED_PERCENT = 300
+G.QUALIFY_SPEED_PERCENT = 100
+G.WITNESS_SCHEMA = "gen2-fixture-game-witness-v1"
+G.QUALIFY_STAGES = {boot=true, resave=true, reload=true}
 G.O10_SCOPE = "O-10:BallPocket"
 -- ponytail: live calibration knobs. A menu is pressed UI_SETTLE frames after its origin ran and a
 -- confirm that the game did not take is re-pulsed every UI_REPULSE frames (Gen 1 gate cadence).
@@ -151,7 +162,12 @@ function G.inputs(getenv, json)
     assert(({crystal=true, gold=true, silver=true})[env.title], "unsupported SLINK_GEN2_TITLE")
     assert(#env.rom_sha1 == 40 and env.rom_sha1:match("^%x+$"), "malformed SLINK_GEN2_ROM_SHA1")
     assert(need("SLINK_GEN2_CORE_MODE") == "CGB", "played fixtures require the CGB core")
-    assert(need("SLINK_GEN2_COLD") == "1", "played fixtures start from a cold boot")
+    local qualify = getenv("SLINK_GEN2_QUALIFY")
+    if qualify == nil or qualify == "" then
+        assert(need("SLINK_GEN2_COLD") == "1", "played fixtures start from a cold boot")
+    else
+        assert(need("SLINK_GEN2_COLD") == "0", "qualification boots the candidate SaveRAM (warm descriptor)")
+    end
     assert(not env.saveram:find("[/\\]"), "SaveRAM name must be a bare file name")
     local case, facts = decode("SLINK_GEN2_FIXTURE_CASE"), decode("SLINK_GEN2_ROUTE_FACTS")
     assert(case.title == env.title and (case.target == "town" or case.target == "battle")
@@ -172,6 +188,19 @@ function G.inputs(getenv, json)
     for _, key in ipairs({"overworld_tick", "save_completed", "facing", "screen", "scene_symbols", "prompts",
                           "object", "passable_collision", "pokegear_obtained_bit", "got_starter_event"}) do
         assert(facts.observer[key] ~= nil, "route facts observer missing " .. key)
+    end
+    if qualify ~= nil and qualify ~= "" then
+        local q = decode("SLINK_GEN2_QUALIFY")
+        assert(G.QUALIFY_STAGES[q.stage] == true and type(q.stage_fingerprint) == "string"
+               and #q.stage_fingerprint == 64 and q.stage_fingerprint:match("^%x+$"), "qualification stage binding required")
+        local qf = q.facts
+        assert(json.kind(qf) == "object" and qf.schema == "gen2-qualify-facts-v1" and qf.title == env.title
+               and qf.rom_sha1 == env.rom_sha1 and qf.route_facts_fingerprint == facts.fingerprint
+               and qf.speed_percent == G.QUALIFY_SPEED_PERCENT, "qualification facts differ from the selected ROM or route")
+        for _, key in ipairs({"ui_origins", "sites", "prompts"}) do
+            assert(json.kind(qf[key]) == "object", "qualification facts missing " .. key)
+        end
+        env.qualify = q
     end
     env.case, env.facts = case, facts
     return env
@@ -228,7 +257,14 @@ function G.context(api, getenv)
     local ctx = {api=api, env=env, case=env.case, facts=env.facts, obs=env.facts.observer, profile=profile,
                  json=json, charmap=charmap, root=root, scopes={}, log=function() end,
                  Permit=L("lua/write_permit.lua"), Host=L("lua/scripted_inputs.lua"),
-                 Play=L("lua/tests/gen2_scripted_play.lua"), Binding=L("lua/gb_hook_binding.lua")}
+                 Play=L("lua/tests/gen2_scripted_play.lua"), Binding=L("lua/gb_hook_binding.lua"),
+                 qualify=env.qualify, prompts=env.facts.observer.prompts}
+    if env.qualify then
+        ctx.Qualify, ctx.prompts = L("lua/tests/gen2_qualify.lua"), env.qualify.facts.prompts
+        local ram = profile.ram
+        assert(integer(ram.wPartyMonNicknamesEnd, 0xC000, 0xDFFF) and ram.wPartyMonNicknamesEnd > ram.wPartyCount,
+               "profile facts missing: wPartyMonNicknamesEnd")
+    end
     local bank_of = {}
     for name, addr in pairs(profile.ram) do
         local bank = profile.ram_bank[name]
@@ -338,7 +374,10 @@ function G.hooks(ctx)
         assert(binding:valid_handle(handle), id .. ": hook registration failed")
         state.handles[#state.handles + 1] = handle
     end
-    for kind, site in pairs(ctx.facts.ui_origins) do
+    local origins = {}
+    for kind, site in pairs(ctx.facts.ui_origins) do origins[kind] = site end
+    for kind, site in pairs(ctx.qualify and ctx.qualify.facts.ui_origins or {}) do origins[kind] = site end
+    for kind, site in pairs(origins) do
         watch(kind, site, function(frame, seq)
             local ui = state.ui
             -- A looping origin (InitClock.SetHourLoop) re-fires every frame: one context, first frame kept.
@@ -348,6 +387,12 @@ function G.hooks(ctx)
     end
     watch("overworld_tick", obs.overworld_tick, function(frame, seq) state.tick = {frame=frame, seq=seq} end)
     watch("save_completed", obs.save_completed, function() state.saves = state.saves + 1 end)
+    -- Qualification: counted source sites (CONTINUE path, RTC acceptance, overwrite branch).
+    state.hits = {}
+    for id, site in pairs(ctx.qualify and ctx.qualify.facts.sites or {}) do
+        state.hits[id] = 0
+        watch(id, site, function() state.hits[id] = state.hits[id] + 1 end)
+    end
     function state.release()
         for _, handle in ipairs(state.handles) do pcall(binding.unregister, binding, handle) end
         state.handles = {}
@@ -392,7 +437,7 @@ function G.observer(ctx)
                 local menu = G.parse_menu(rows, obs.screen.width, obs.screen.height)
                 if menu then view.items, view.cursor, view.columns = menu.items, menu.cursor, menu.columns
                 else ready = false end
-                if u.kind == "yes_no" then view.prompt = G.classify_prompt(rows, obs.prompts) end
+                if u.kind == "yes_no" then view.prompt = G.classify_prompt(rows, ctx.prompts) end
             end
             point.ui, point.input_ready = view, ready
         end
@@ -509,6 +554,32 @@ function G.button_step(ctx)
     end
 end
 
+-- SHA-256 of the 32 KiB CartRAM; the emulator RTC trailer is never hashed.
+function G.cart_digest(api)
+    local size = api.domain_size("CartRAM")
+    assert(integer(size, G.CART_RAM_BYTES, 2^24), "CartRAM domain smaller than 32 KiB")
+    local cart = api.read_range(0, G.CART_RAM_BYTES, "CartRAM")
+    assert(type(cart) == "table" and #cart == G.CART_RAM_BYTES, "CartRAM read failed")
+    return G.sha256(function(i) return cart[i + 1] end, G.CART_RAM_BYTES)
+end
+
+-- Flush the SaveRAM and prove the file is exactly the live CartRAM plus the RTC trailer.
+function G.flush(ctx, digest)
+    ctx.api.saveram()
+    local saved = read_file(ctx.env.dir .. "/" .. ctx.env.saveram)
+    assert(#saved == G.CART_RAM_BYTES + G.RTC_TRAILER_BYTES,
+           fmt("flushed SaveRAM is %d bytes, expected CartRAM + %d-byte RTC trailer", #saved, G.RTC_TRAILER_BYTES))
+    assert(G.sha256(function(i) return saved:byte(i + 1) end, G.CART_RAM_BYTES) == digest,
+           "flushed SaveRAM differs from the live CartRAM")
+    return saved
+end
+
+local function idle_buttons()
+    local idle = {}
+    for _, name in ipairs(G.BUTTONS) do idle[name] = false end
+    return idle
+end
+
 -- The route, the native save witness, the CartRAM hash and the receipt.
 function G.play(ctx)
     local api, case, facts, env = ctx.api, ctx.case, ctx.facts, ctx.env
@@ -516,9 +587,7 @@ function G.play(ctx)
     os.remove(receipt_path)   -- a stale receipt must never describe this attempt
     api.speed(G.SPEED_PERCENT)
     local state = G.hooks(ctx)
-    local idle = {}
-    for _, name in ipairs(G.BUTTONS) do idle[name] = false end
-    local host = ctx.Host.new({step=G.button_step(ctx), frame=api.framecount, idle=idle})
+    local host = ctx.Host.new({step=G.button_step(ctx), frame=api.framecount, idle=idle_buttons()})
     local on_request = G.o10_handler(ctx)
     local ok, result = pcall(ctx.Play.run, host, G.observer(ctx), facts, case,
         function(_, phase, frame) ctx.log(fmt("  phase %s @%d", phase, frame)) end, on_request)
@@ -528,18 +597,8 @@ function G.play(ctx)
     assert(#ctx.scopes == (case.target == "battle" and 1 or 0), "harness write scopes differ from the case")
     local cgb = api.read_u8(ctx.profile.hram.hCGB, "System Bus")
     assert(integer(cgb, 1, 255), "the game did not report CGB hardware (hCGB)")
-    -- CartRAM is the 32 KiB SRAM; the emulator RTC trailer is never hashed.
-    local size = api.domain_size("CartRAM")
-    assert(integer(size, G.CART_RAM_BYTES, 2^24), "CartRAM domain smaller than 32 KiB")
-    local cart = api.read_range(0, G.CART_RAM_BYTES, "CartRAM")
-    assert(type(cart) == "table" and #cart == G.CART_RAM_BYTES, "CartRAM read failed")
-    local digest = G.sha256(function(i) return cart[i + 1] end, G.CART_RAM_BYTES)
-    api.saveram()
-    local saved = read_file(env.dir .. "/" .. env.saveram)
-    assert(#saved == G.CART_RAM_BYTES + G.RTC_TRAILER_BYTES,
-           fmt("flushed SaveRAM is %d bytes, expected CartRAM + %d-byte RTC trailer", #saved, G.RTC_TRAILER_BYTES))
-    assert(G.sha256(function(i) return saved:byte(i + 1) end, G.CART_RAM_BYTES) == digest,
-           "flushed SaveRAM differs from the live CartRAM")
+    local digest = G.cart_digest(api)
+    local saved = G.flush(ctx, digest)
     local json, phases = ctx.json, {}
     for i, row in ipairs(result.trace) do phases[i] = json.object({phase=row.phase, frame=row.frame}) end
     local body = assert(json.encode(json.object({
@@ -556,6 +615,76 @@ function G.play(ctx)
     return fmt("%s route-saved cartram_sha256=%s (candidate only)", case.name, digest)
 end
 
+-- The qualification observer: the route point plus the stage binding and the counted code sites.
+function G.qualify_observer(ctx)
+    local base, state, q = G.observer(ctx), ctx.state, ctx.qualify
+    return function()
+        local point = base()
+        point.stage_fingerprint = q.stage_fingerprint
+        local hits = {}
+        for id, n in pairs(state.hits) do hits[id] = n end
+        point.hits = hits
+        return point
+    end
+end
+
+-- One qualification stage: warm boot -> CONTINUE -> overworld (-> native re-save), then the GAME witness.
+function G.qualify(ctx)
+    local api, case, facts, env, q, json = ctx.api, ctx.case, ctx.facts, ctx.env, ctx.qualify, ctx.json
+    local out = env.dir .. "/" .. case.name .. "." .. q.stage .. ".witness.json"
+    os.remove(out)   -- a stale witness must never describe this attempt
+    -- The booted battery bytes, hashed before the first emulated frame can rewrite any of them.
+    local booted = G.cart_digest(api)
+    api.speed(G.QUALIFY_SPEED_PERCENT)
+    local state = G.hooks(ctx)
+    local host = ctx.Host.new({step=G.button_step(ctx), frame=api.framecount, idle=idle_buttons()})
+    local stage_case = {name=case.name, title=case.title, attempt_id=case.attempt_id, stage=q.stage,
+                        stage_fingerprint=q.stage_fingerprint, max_frames=case.max_frames,
+                        max_phase_frames=case.max_phase_frames, settle_frames=case.settle_frames}
+    local ok, result = pcall(ctx.Qualify.run, host, G.qualify_observer(ctx), facts, q.facts, stage_case,
+        function(_, phase, frame) ctx.log(fmt("  phase %s @%d", phase, frame)) end)
+    state.release()
+    assert(ok, "qualification " .. q.stage .. " failed: " .. tostring(result))
+    local hits = state.hits
+    local continue_selected = hits.continue >= 1 and hits.continue_loaded >= 1
+    local rtc_validated = hits.rtc_ok >= 1 and hits.restart_clock == 0
+    local native_load_completed = continue_selected and hits.finish_continue >= 1
+    assert(continue_selected and rtc_validated and native_load_completed, "native CONTINUE/RTC path was not observed")
+    assert(hits.erase_save == 0, "ErasePreviousSave ran")
+    local cgb = api.read_u8(ctx.profile.hram.hCGB, "System Bus")
+    assert(integer(cgb, 1, 255), "the game did not report CGB hardware (hCGB)")
+    local map = assert(ctx.reads.read_map(), "loaded map is unreadable")
+    local ram = ctx.profile.ram
+    local party, hex = ctx.sym("wPartyCount", 0, ram.wPartyMonNicknamesEnd - ram.wPartyCount), {}
+    for i, byte in ipairs(party) do hex[i] = fmt("%02x", byte) end
+    local resaved = nil
+    if q.stage == "resave" then
+        assert(state.saves >= 1, "native save completion was not observed")
+        assert(hits.same_save_file >= 1, "the re-save did not take the same-player overwrite branch")
+        resaved = G.cart_digest(api)
+        G.flush(ctx, resaved)
+    else
+        assert(state.saves == 0, "a boot/reload stage must not save")
+    end
+    local phases = {}
+    for i, row in ipairs(result.trace) do phases[i] = json.object({phase=row.phase, frame=row.frame}) end
+    local body = assert(json.encode(json.object({
+        schema=G.WITNESS_SCHEMA, case=case.name, attempt_id=case.attempt_id, stage=q.stage,
+        stage_fingerprint=q.stage_fingerprint, title=env.title, rom_sha1=facts.rom_sha1,
+        facts_fingerprint=facts.fingerprint, qualify_facts_fingerprint=q.facts.fingerprint,
+        cartram_sha256=booted, resave_cartram_sha256=resaved, core_mode="CGB", hcgb=cgb,
+        speed_percent=G.QUALIFY_SPEED_PERCENT, input_mode="normal_buttons", observer="independent_GAME",
+        continue_selected=continue_selected, native_load_completed=native_load_completed,
+        rtc_validated=rtc_validated, location=json.array({map.group, map.number}), position=json.array({map.x, map.y}),
+        party_raw_hex=table.concat(hex), save_success_counter=state.saves, site_hits=json.object(hits),
+        phases=json.array(phases), harness_write_scopes=json.array({}), qualified=false})))
+    local f = assert(io.open(out, "wb"), "cannot write " .. out)
+    f:write(body)
+    f:close()
+    ctx.log("WITNESS " .. out)
+    return fmt("%s %s witness cartram_sha256=%s (evidence only)", case.name, q.stage, booted)
+end
+
 function G.main(api, getenv)
     local root = getenv("SLINK_ROOT") or SLINK_ROOT or "."
     local out, lines = root .. "/" .. G.RESULT, {}
@@ -564,11 +693,12 @@ function G.main(api, getenv)
         local f = io.open(out, "w")
         if f then f:write(table.concat(lines, "\n") .. "\n") f:close() end
     end
-    log("[test_gen2_scripted_gate] played-route candidate")
+    log("[test_gen2_scripted_gate] played-route candidate / fixture qualification stage")
     local ok, why = pcall(function()
         local ctx = G.context(api, getenv)
         ctx.log = log
         log(fmt("  case %s attempt %s facts %s", ctx.case.name, ctx.case.attempt_id, ctx.facts.fingerprint:sub(1, 12)))
+        if ctx.qualify then return G.qualify(ctx) end
         return G.play(ctx)
     end)
     log(fmt("RESULT: %s %s", ok and "PASS" or "FAIL", tostring(why)))
