@@ -1674,11 +1674,12 @@ LEGS[#LEGS + 1] = {
     run = function(cp)
         local domain = select(1, G.flash_domain())
         if not domain then G.finish(false, "save: no flash memory domain") end
-        local ok, before, after = G.save_via_menu(cp, domain)
+        -- save_via_menu validates the new slot (unique ids, one slot, checksums) and flushes.
+        local ok, before, after, why = G.save_via_menu(cp, domain)
         if not ok then
-            G.finish(false, string.format("save: never advanced (%d -> %d)", before, after))
+            G.finish(false, string.format("save: %s (counter %s -> %s)", tostring(why),
+                                          tostring(before), tostring(after)))
         end
-        pcall(client.saveram)
         G.phase("saved", string.format("counter %d -> %d", before, after))
     end,
 }

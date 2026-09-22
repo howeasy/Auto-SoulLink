@@ -33,12 +33,30 @@ local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via tools/gen3_fixtures.py")
 local JSON = dofile(WT .. "/lua/json_codec.lua")
 
--- Flash geometry, the same constants server/adapters/gen3_codec.py carries
--- (pokefirered include/save.h: SECTOR_SIZE 0x1000, SECTOR_SIGNATURE 0x08012025, the footer's
--- signature at +0xFF8 and the save counter at +0xFFC; 32 physical sectors = 0x20000).
+-- Flash geometry, the same constants server/adapters/gen3_codec.py carries (pret
+-- pokefirered include/save.h:63-71 struct SaveSector: data[3968], unused, then the footer
+-- u16 id @0xFF4, u16 checksum @0xFF6, u32 signature @0xFF8, u32 counter @0xFFC; 32
+-- physical sectors = 0x20000, two slots of 14 at sectors 0-13 and 14-27).
 local SECTOR_SIZE, SECTORS = 0x1000, 32
+local SECTORS_PER_SLOT = 14
+local OFF_ID, OFF_CHECKSUM = 0x0FF4, 0x0FF6
 local OFF_SIGNATURE, OFF_COUNTER = 0x0FF8, 0x0FFC
 local SIGNATURE = 0x08012025
+
+-- Per-id section sizes: the SAVEBLOCK_CHUNK macro (pret src/save.c:43-72), mirrored from
+-- gen3_codec.slot_layout: size = min(sizeof(object) - chunk*CHUNK, CHUNK). CHUNK is 0xF80
+-- for vanilla FR/LG and CFRU's 0xFF0 for Radical Red (gen3_codec CHUNK_SIZE_CFRU).
+local function section_sizes(chunk)
+    local sizes = {}
+    for _, o in ipairs({ { 0x0F24, 0, 0 }, { 0x3D68, 1, 4 }, { 0x83D0, 5, 13 } }) do
+        for id = o[2], o[3] do
+            local off = (id - o[2]) * chunk
+            sizes[id] = math.max(0, math.min(o[1] - off, chunk))
+        end
+    end
+    return sizes
+end
+local SIZES = { vanilla = section_sizes(0x0F80), cfru = section_sizes(0x0FF0) }
 
 -- ── logging: phase transitions only, never per frame ────────────────────────────────────────
 -- (reference_bizhawk_gate_drivers: a console.log per frame starves the emulator.)
@@ -84,6 +102,7 @@ function M.checkpoint()
     local doc = assert(JSON.decode(raw), "malformed checkpoint JSON: " .. path)
     local want = os.getenv("SLINK_GEN3_TITLE")
     if want and want ~= "" then
+        M.title = want
         return assert(doc[want], "no title " .. want .. " in " .. path), want
     end
     local only, key
@@ -91,6 +110,7 @@ function M.checkpoint()
         assert(only == nil, "several titles in " .. path .. " — set SLINK_GEN3_TITLE")
         only, key = v, k
     end
+    M.title = key
     return assert(only, "empty checkpoint " .. path), key
 end
 
@@ -150,12 +170,13 @@ function M.flash_domain()
     return nil, table.concat(names, ", ")
 end
 
---- The highest save counter over the signature-valid sectors of the flash image. -1 when no
---- sector carries the signature (an erased or unread battery). This is the witness the save
---- actually happened: it is the byte the loader itself uses to pick a slot.
+--- The highest save counter over the signature-valid SLOT sectors (0-27) of the flash image.
+--- -1 when none carries the signature (an erased or unread battery). This is the witness the
+--- save actually happened: it is the word the loader itself uses to pick a slot. Sectors 28-31
+--- (Hall of Fame / trainer tower, CFRU-repurposed on RR) are not slot sectors.
 function M.save_counter(domain)
     local best = -1
-    for s = 0, SECTORS - 1 do
+    for s = 0, 2 * SECTORS_PER_SLOT - 1 do
         local base = s * SECTOR_SIZE
         if memory.read_u32_le(base + OFF_SIGNATURE, domain) == SIGNATURE then
             local c = memory.read_u32_le(base + OFF_COUNTER, domain)
@@ -165,21 +186,53 @@ function M.save_counter(domain)
     return best
 end
 
---- How many signature-valid slot sectors (id < 14) carry save counter `ctr`. A finished
---- full save has all 14; the counter appears in the first written sector long before the
---- loop ends (PHYSICAL, RR companion 2026-09-21: ~66 frames per sector under the mGBA flash
---- timing, so a 14-sector save spans ~950 frames after the counter first moves).
-function M.sectors_at(domain, ctr)
-    local n = 0
-    for s = 0, SECTORS - 1 do
+--- pret src/save.c CalculateChecksum: wrapping u32 sum of size/4 LE words, folded to u16.
+local function sector_checksum(domain, base, size)
+    local sum = 0
+    for i = 0, size // 4 - 1 do
+        sum = (sum + memory.read_u32_le(base + i * 4, domain)) & 0xFFFFFFFF
+    end
+    return ((sum >> 16) + sum) & 0xFFFF
+end
+
+--- The save written at counter `ctr`, judged the way gen3_codec.qualify_flash judges a slot:
+--- returns (n, why) where n is how many of the 14 logical ids 0..13 appear EXACTLY ONCE in
+--- the ONE physical slot the game writes that counter to (pret save.c HandleWriteSector:
+--- slot = gSaveCounter % 2, sectors 14*slot .. 14*slot+13), each carrying the signature and
+--- `ctr`. n == 14 additionally requires every section checksum (over that id's chunk size)
+--- to match; `why` names the first defect when n < 14. The checksum pass runs only once the
+--- structure is whole (the counter word is the last one a sector write programs), so the
+--- per-poll cost while the save is in flight stays at 3 reads per sector.
+--- The chunk table follows the checkpoint title (M.title, set by M.checkpoint): radical_red
+--- is CFRU, anything else vanilla; `cfru` overrides.
+function M.sectors_at(domain, ctr, cfru)
+    if cfru == nil then cfru = M.title == "radical_red" end
+    local sizes = cfru and SIZES.cfru or SIZES.vanilla
+    local first = SECTORS_PER_SLOT * (ctr % 2)
+    local where, n, why = {}, 0, nil
+    for s = first, first + SECTORS_PER_SLOT - 1 do
         local base = s * SECTOR_SIZE
-        if memory.read_u32_le(base + OFF_SIGNATURE, domain) == SIGNATURE
-           and memory.read_u32_le(base + OFF_COUNTER, domain) == ctr
-           and memory.read_u16_le(base + OFF_SIGNATURE - 8, domain) < 14 then
-            n = n + 1
+        local id = memory.read_u16_le(base + OFF_ID, domain)
+        if memory.read_u32_le(base + OFF_SIGNATURE, domain) ~= SIGNATURE then
+            why = why or string.format("sector %d: no signature", s)
+        elseif memory.read_u32_le(base + OFF_COUNTER, domain) ~= ctr then
+            why = why or string.format("sector %d: counter is not %d", s, ctr)
+        elseif id >= SECTORS_PER_SLOT then
+            why = why or string.format("sector %d: out-of-range id %d", s, id)
+        elseif where[id] then
+            why = why or string.format("sector %d: duplicate id %d (also sector %d)", s, id, where[id])
+        else
+            where[id], n = s, n + 1
         end
     end
-    return n
+    if n < SECTORS_PER_SLOT then return n, why end
+    for id = 0, SECTORS_PER_SLOT - 1 do
+        local base = where[id] * SECTOR_SIZE
+        if sector_checksum(domain, base, sizes[id]) ~= memory.read_u16_le(base + OFF_CHECKSUM, domain) then
+            return n - 1, string.format("sector %d (id %d): bad checksum", where[id], id)
+        end
+    end
+    return n, nil
 end
 
 -- ── input, on a frame budget ────────────────────────────────────────────────────────────────
@@ -257,8 +310,10 @@ function M.boot_to_field(cp, frames)
     return false
 end
 
---- Open the START menu, find the SAVE row, confirm, and wait for the save counter to move.
---- Returns (ok, before_counter, after_counter).
+--- Open the START menu, find the SAVE row, confirm, wait for the new slot to be complete and
+--- valid (M.sectors_at), wait for the dialog to close, then flush the battery file.
+--- Returns (ok, before_counter, after_counter, why): ok is true ONLY when all of that held;
+--- otherwise `why` names the step that failed (menu, counter, slot, dialog, flush).
 ---
 --- ROW SEARCH, NOT A ROW INDEX. One A press per attempt, then the engine is asked whether
 --- `sSaveDialogCB` became non-zero; a wrong row is backed out of with B (until callback2 is
@@ -292,7 +347,7 @@ function M.save_via_menu(cp, domain, attempts)
     end
     if not opened then
         M.shot("stuck")
-        return false, before, before
+        return false, before, before, "the save dialog never opened"
     end
 
     -- Confirm (YES is the default on both the save prompt and the overwrite prompt) and keep
@@ -307,26 +362,35 @@ function M.save_via_menu(cp, domain, attempts)
     end)
     if not moved then
         M.shot("stuck")
-        return false, before, after
+        return false, before, after, "the save counter never advanced"
     end
     M.phase("saved", string.format("counter=%d->%d", before, after))
     -- The counter moving is NOT completion: wait for every sector of the new slot.
-    local done = M.sectors_at(domain, after)
+    local done, why = M.sectors_at(domain, after)
     for _ = 1, 6000 do
-        if done >= 14 then break end
+        if done >= SECTORS_PER_SLOT then break end
         M.advance()
-        if M.spent % 16 == 0 then done = M.sectors_at(domain, after) end
+        if M.spent % 16 == 0 then done, why = M.sectors_at(domain, after) end
     end
-    M.phase("slot-complete", string.format("sectors=%d/14", done))
-    if done < 14 then
+    M.phase("slot-complete", string.format("sectors=%d/14%s", done, why and (" " .. why) or ""))
+    if done < SECTORS_PER_SLOT then
         M.shot("stuck")
-        return false, before, after
+        return false, before, after, "the new slot is not a valid save: " .. tostring(why)
     end
+    local closed = false
     for _ = 1, 600 do                  -- let the dialog close before the flush
-        if not dialog() then break end
+        if not dialog() then closed = true; break end
         M.advance()
     end
-    return true, before, after
+    if not closed then
+        M.shot("stuck")
+        return false, before, after, "the save dialog never closed in 600 frames"
+    end
+    local fok, ferr = pcall(client.saveram)
+    if not fok then
+        return false, before, after, "SaveRAM flush failed: " .. tostring(ferr)
+    end
+    return true, before, after, nil
 end
 
 -- ── run as a gate ───────────────────────────────────────────────────────────────────────────
@@ -358,13 +422,11 @@ local function run()
                                    .. "patch/build/gen3_stuck.png", cb2))
     end
 
-    local ok, before, after = M.save_via_menu(cp, domain)
+    local ok, before, after, why = M.save_via_menu(cp, domain)   -- flushes on success
     if not ok then
-        M.finish(false, string.format("the in-game save never advanced the sector counter "
-                                   .. "(%d -> %d). See patch/build/gen3_stuck.png", before, after))
+        M.finish(false, string.format("the in-game save failed (%d -> %d): %s. See "
+                                   .. "patch/build/gen3_stuck.png", before, after, why))
     end
-
-    pcall(client.saveram)              -- flush the battery file before we exit
     M.idle(60)
     M.phase("flushed")
     M.finish(true, string.format("counter %d -> %d", before, after))

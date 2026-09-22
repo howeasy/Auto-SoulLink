@@ -168,13 +168,12 @@ end
 G.phase("outside", string.format("map=%s", tostring(mapid())))
 
 -- ── leg 7: the in-game save, same driver the boot check uses ────────────────────────────────
-local ok, before, after = G.save_via_menu(cp, domain)
+-- save_via_menu validates the new slot (unique ids, one slot, checksums) and flushes.
+local ok, before, after, why = G.save_via_menu(cp, domain)
 if not ok then
-    G.finish(false, string.format("the in-game save never advanced the sector counter (%d -> %d)",
-                                  before, after))
+    G.finish(false, string.format("the in-game save failed: %s (counter %s -> %s)",
+                                  tostring(why), tostring(before), tostring(after)))
 end
-
-pcall(client.saveram)
 G.idle(60)
 G.phase("flushed")
 G.finish(true, string.format("map=%s counter %d -> %d", tostring(mapid()), before, after))
