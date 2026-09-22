@@ -280,3 +280,35 @@ def test_treemon_enabled_limit_is_the_gettreemons_cp_bound(title, limit):
         assert fault != text
         with pytest.raises(ValueError):
             treemon_enabled_limit(fault, values)
+
+
+_GEN2_SCRIPTED_ROUTE_SYMBOLS = (
+    "wTilemap", "wObjectStructs", "wTileUp", "wTileDown", "wTileLeft", "wTileRight",
+    "wPokegearFlags", "wEventFlags", "wPlayersHouse1FSceneID", "wElmsLabSceneID",
+    "wNewBarkTownSceneID",
+)
+
+
+@pytest.mark.parametrize("title,artifact", [("crystal", "pokecrystal"), ("gold", "pokegold"), ("silver", "pokesilver")])
+def test_scripted_route_symbols_match_the_pinned_sym_file(title, artifact):
+    """Each new profile RAM symbol must equal the bank:address the pinned .sym file
+    gives that title, parsed independently of tools/rgbds_symbols.py."""
+    import re
+    from pathlib import Path
+
+    from tools.gen_gen2_profile import build
+
+    root = Path(__file__).resolve().parents[2]
+    sym_text = (root / f"data/gen2/{artifact}.sym").read_text("utf-8")
+    by_name = {}
+    for line in sym_text.splitlines():
+        match = re.match(r"^([0-9A-Fa-f]{2}):([0-9A-Fa-f]{4}) (\S+)$", line)
+        if match:
+            by_name[match.group(3)] = (int(match.group(1), 16), int(match.group(2), 16))
+
+    selected = build(title)["titles"][title]
+    for name in _GEN2_SCRIPTED_ROUTE_SYMBOLS:
+        assert name in by_name, f"{artifact}.sym is missing {name}"
+        bank, address = by_name[name]
+        assert selected["ram_bank"][name] == bank
+        assert selected["ram"][name] == address

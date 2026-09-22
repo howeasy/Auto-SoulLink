@@ -43,6 +43,9 @@ RAM_SYMBOLS = (
     "wSavedAtLeastOnce", "wSaveFileExists",
     "wCurBattleMon", "wOtherTrainerClass", "wOtherTrainerID",
     "hJoyDown", "hJoyPressed", "hJoyReleased",
+    "wTilemap", "wObjectStructs", "wTileUp", "wTileDown", "wTileLeft", "wTileRight",
+    "wPokegearFlags", "wEventFlags", "wPlayersHouse1FSceneID", "wElmsLabSceneID",
+    "wNewBarkTownSceneID",
 )
 STAT_STAGE_FIELDS = (
     ("ATTACK", "Atk"), ("DEFENSE", "Def"), ("SPEED", "Spd"),

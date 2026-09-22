@@ -61,6 +61,8 @@ PROMPT_ANCHORS = {
     "clock_confirm": ("What?", "Whoa!"), "mom_dst": ("Saving Time now?",), "mom_dst_confirm": ("is that OK?",),
     "mom_phone": ("the PHONE?",), "elm_mission": ("that I recently",), "starter_confirm": ("TOTODILE, the",),
     "nickname": ("Give a nickname to",), "save_confirm": ("save the game?",),
+    # SetDayOfWeek confirm: _OakTimeIsItText, C data/text/common_1.asm:212-213, G :152-153.
+    "day_confirm": (", is it?",),
 }
 PROMPT_SOURCES = ("data/text/common_1.asm", "data/text/common_2.asm", "data/text/common_3.asm",
                   "maps/PlayersHouse1F.asm", "maps/ElmsLab.asm")
