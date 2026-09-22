@@ -733,7 +733,7 @@ def test_throw_pokeball_from_bag_checks_witnesses_in_source_order():
     body = _SCRIPT_SRC.split("local function throw_pokeball_from_bag")[1].split(
         "\n-- ── leg: route1_catch")[0]
     bag_up_at = body.index("bag_menu_up()")
-    pocket_loop_at = body.index("for _ = 1, 2 do")
+    pocket_loop_at = body.index("for _ = 1, 4 do")  # press, wait for the switch, settle (FR run 22)
     pocket_check_at = body.index("could not steer gBagMenuState.pocket")
     item_id_read_at = body.index("bag_pokeballs_item_id(cp, slot)")
     item_id_check_at = body.index("the POKEBALLS pocket's cursor slot")

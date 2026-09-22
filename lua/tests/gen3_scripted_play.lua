@@ -1185,9 +1185,18 @@ local function throw_pokeball_from_bag(cp, label)
     -- Steer the REMEMBERED pocket to POKEBALLS(2). ProcessPocketSwitchInput
     -- (item_menu.c:1124-1145) clamps at POCKET_POKE_BALLS-1 and no-ops past it, so pressing
     -- Right more times than needed is harmless — bounded at 2, the worst case from ITEMS(0).
-    for _ = 1, 2 do
-        if bag_pocket() == BAG_POCKET_POKEBALLS then break end
-        G.tap("Right", 3, 20)
+    -- PHYSICAL FR run 22: back-to-back Rights moved 0 -> 1 only; the pocket-switch animation
+    -- swallows input until it finishes. So press, wait (bounded) for the pocket value to change,
+    -- let the switch settle, and only then press again.
+    for _ = 1, 4 do
+        local before = bag_pocket()
+        if before == BAG_POCKET_POKEBALLS then break end
+        G.tap("Right", 3, 0)
+        for _ = 1, 60 do
+            if bag_pocket() ~= before then break end
+            G.advance()
+        end
+        G.idle(40)
     end
     if bag_pocket() ~= BAG_POCKET_POKEBALLS then
         G.shot("stuck")
