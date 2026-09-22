@@ -627,10 +627,18 @@ local function verify_fight_cursor(cp, label)
         end
         return
     end
+    -- The cursor is REMEMBERED across battles (PHYSICAL FR run 20: the menu opened on BAG(1)),
+    -- so steer it to FIGHT with the pinned bit toggles of HandleInputChooseAction (pret
+    -- src/battle_controller_player.c): Left clears bit0, Up clears bit1. Bounded, verified.
+    for _ = 1, 4 do
+        local c = action_cursor()
+        if c == ACTION_FIGHT then return end
+        if c % 2 == 1 then G.tap("Left", 3, 20) elseif c >= 2 then G.tap("Up", 3, 20) end
+    end
     if action_cursor() ~= ACTION_FIGHT then
         G.shot("stuck")
         G.finish(false, string.format(
-            "%s: the action menu opened on cursor %d, not FIGHT(0)", label, action_cursor()))
+            "%s: could not steer the action cursor to FIGHT(0) (reads %d)", label, action_cursor()))
     end
 end
 
