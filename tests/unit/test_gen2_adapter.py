@@ -1,5 +1,9 @@
 """Tests for the Gen 2 Crystal adapter."""
 
+import json
+import shutil
+from pathlib import Path
+
 import pytest
 
 from server.adapters.gen2_crystal import Gen2CrystalAdapter
@@ -912,3 +916,227 @@ def test_memorial_box_index_is_box_14(adapter):
     emits memorial entries with box=13.
     """
     assert adapter.memorial_box_index == 13
+
+
+# Candidate GSC adapter coverage is separate from the still-registered legacy
+# adapter above. Its 17 old encounter-wrapper failures predate this card.
+@pytest.fixture(scope="module", params=("crystal", "gold", "silver"))
+def gsc_adapter(request):
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+
+    return Gen2GSCAdapter(request.param)
+
+
+def _gsc_blob():
+    raw = bytearray(70)
+    raw[0:8] = bytes([25, 143, 33, 45, 0, 0, 0x12, 0x34])
+    raw[21:23] = bytes.fromhex("2aaa")
+    raw[23:27] = bytes([35, 40, 0, 0])
+    raw[31] = 20
+    raw[34:38] = bytes.fromhex("00200030")
+    raw[38:48] = bytes.fromhex("00200020002000200020")
+    raw[48:] = bytes([0x80, 0x50] + [0] * 9 + [0x81, 0x50] + [0] * 9)
+    return bytes(raw)
+
+
+class TestGen2GSCAdapter:
+    @pytest.mark.parametrize("kind,slot_count", [("grass", 7), ("water", 3)])
+    def test_normal_and_swarm_tables_remain_alternatives(self, gsc_adapter, kind, slot_count):
+        """Actual normal/swarm rows share one area but each distribution totals 100%."""
+        path = (Path(__file__).resolve().parents[2] / "data/games"
+                / f"gen2_{gsc_adapter.title}" / "encounter_tables.json")
+        pack = json.loads(path.read_text("utf-8"))
+        by_map_time = {}
+        for row in pack["wild"][kind]:
+            key = row["map_group"], row["map_number"], row["time"]
+            by_map_time.setdefault(key, []).append(row)
+        alternative_groups = 0
+        for (group, number, daytime), alternatives in by_map_time.items():
+            area = pack["map_areas"][str(group * 256 + number)]
+            source_names = {row["table"] for row in alternatives}
+            projected = {
+                method: rows for method, rows in gsc_adapter.encounter_table(area).items()
+                if rows and rows[0].get("source_table") in source_names
+                and rows[0].get("map_group") == group and rows[0].get("map_number") == number
+                and rows[0].get("time") == daytime
+            }
+            # This is the reported symptom: the old projection has 14 grass or
+            # 6 water slots and sums to 200 after merging two alternatives.
+            assert all(len(rows) == slot_count for rows in projected.values())
+            assert all(sum(row["rate"] for row in rows) == 100 for rows in projected.values())
+            assert len(projected) == len(alternatives)
+            for source in alternatives:
+                selected = [rows for rows in projected.values()
+                            if {row["source_table"] for row in rows} == {source["table"]}]
+                assert len(selected) == 1
+                assert [row["species_id"] for row in selected[0]] == [row["species"] for row in source["slots"]]
+                assert [row["min_level"] for row in selected[0]] == [row["level"] for row in source["slots"]]
+                assert [row["slot"] for row in selected[0]] == list(range(slot_count))
+            if len(alternatives) > 1:
+                alternative_groups += 1
+                assert any("Swarm" in method for method in projected)
+                assert any("Normal" in method for method in projected)
+            assert gsc_adapter.encounter_table(area + "_swarm") is None
+        # Crystal deliberately has no water swarm table; still exercise every
+        # actual normal-water distribution there, without reporting a skip.
+        assert alternative_groups > 0 if kind == "grass" or gsc_adapter.title != "crystal" else alternative_groups == 0
+
+    def test_selected_pack_and_capability_refusal(self, gsc_adapter):
+        assert gsc_adapter.game_id == "gen2_gsc"
+        assert gsc_adapter.title in {"crystal", "gold", "silver"}
+        assert gsc_adapter.party_blob_size() == 70
+        assert gsc_adapter.mons_per_box == 20
+        assert gsc_adapter.memorial_box_index == 13
+        assert not gsc_adapter.supports_abilities()
+        assert not gsc_adapter.supports_info_panel()
+        assert not gsc_adapter.native_trade_ui()
+        assert not gsc_adapter.supports_explode_mode()
+        assert gsc_adapter.info_panel_width() == 0
+        assert gsc_adapter.rival_trainer_ids() == set()
+        gsc_adapter.set_artifact_kind("clean")
+        with pytest.raises(ValueError):
+            gsc_adapter.set_artifact_kind("named")
+        assert gsc_adapter.pairing_kind("named") == "named"
+
+    def test_raw_ratio_sentinels_and_dv_boundaries(self, gsc_adapter):
+        # Actual generated source bytes: 254 is female, 255 is genderless.
+        for attack in range(16):
+            for speed in range(16):
+                dvs = f"{attack:X}A{speed:X}A"
+                assert gsc_adapter.gender_from_key(f"{dvs}:1234:F1", 241) == "female"
+                assert gsc_adapter.gender_from_key(f"{dvs}:1234:51", 81) == "genderless"
+                assert gsc_adapter.gender_from_key(f"{dvs}:1234:80", 128) == "male"
+                assert gsc_adapter.gender_from_key(f"{dvs}:1234:98", 152) == (
+                    "female" if attack * 16 + speed <= 31 else "male"
+                )
+        assert gsc_adapter.gender_from_key("7AAA:1234:19", 25) == "female"
+        assert gsc_adapter.gender_from_key("8AAA:1234:19", 25) == "male"
+        assert gsc_adapter.gender_from_key("AAAA:1234:19", 152) == ""
+
+    def test_dv_shiny_mask_and_strict_keys(self, gsc_adapter):
+        for attack in range(16):
+            assert gsc_adapter.is_shiny(f"{attack:X}AAA:1234:19") is bool(attack & 2)
+        for key in ("AAAA:1234:FD", "AAAA:1234:00", "AAAA:1234:FC", "AAAA:1234:FF",
+                    "AAAA:1234:1", "AAAA:1234:19\n", "AAAA:1234", None):
+            assert not gsc_adapter.is_valid_mon_key(key)
+            assert not gsc_adapter.is_shiny(key)
+            assert gsc_adapter.parse_ot_id(key) == ""
+        assert gsc_adapter.is_valid_mon_key("2aaa:abcd:fb")
+        assert gsc_adapter.parse_ot_id("2aaa:abcd:fb") == "ABCD"
+        assert not gsc_adapter.is_shiny("AA9A:1234:19")
+
+    def test_species_evolution_move_and_held_item_facts(self, gsc_adapter):
+        assert gsc_adapter.species_name(152) == "Chikorita"
+        assert gsc_adapter.species_types(81) == (23, 9)
+        assert gsc_adapter.species_types(197) == (27, 27)
+        assert gsc_adapter.to_national_dex(253) == 0
+        assert gsc_adapter.species_types(253) is None
+        assert gsc_adapter.evo_family(25) == gsc_adapter.evo_family(172)
+        assert gsc_adapter.evo_family(133) == gsc_adapter.evo_family(197)
+        assert gsc_adapter.evo_family(106) == gsc_adapter.evo_family(237)
+        assert gsc_adapter.move_data(44)["type_name"] == "Dark"
+        assert gsc_adapter.move_data(44)["split"] == 1
+        assert gsc_adapter.move_data(14)["split"] == 2
+        assert gsc_adapter.move_data(252) is None
+        assert gsc_adapter.is_valid_held_item(0)
+        assert gsc_adapter.is_valid_held_item(143)
+        for item in (6, 175, 158, 255, 256, -1, True):
+            assert not gsc_adapter.is_valid_held_item(item)
+
+    def test_blob_preserves_identity_names_and_held_item(self, gsc_adapter):
+        raw = _gsc_blob()
+        assert gsc_adapter.validate_party_blob(raw, key="2AAA:1234:19", species_marker=25)
+        assert gsc_adapter.validate_party_blob(raw.hex(), species_marker=25)
+        assert not gsc_adapter.validate_party_blob(raw)  # EGG state is absent from the blob.
+        mon = gsc_adapter.decode_party_blob(raw, species_marker=25)
+        assert mon["held_item"] == 143
+        assert mon["key"] == "2AAA:1234:19"
+        assert mon["ot_raw_hex"] == raw[48:59].hex()
+        assert mon["nickname_raw_hex"] == raw[59:70].hex()
+        assert not gsc_adapter.validate_party_blob(raw, key="2AAA:1234:1A", species_marker=25)
+        assert not gsc_adapter.validate_party_blob(raw[:-1], species_marker=25)
+        assert not gsc_adapter.validate_party_blob(raw + b"\0", species_marker=25)
+        for offset, value in ((0, 253), (1, 6), (1, 158), (2, 252), (31, 0)):
+            bad = bytearray(raw)
+            bad[offset] = value
+            assert not gsc_adapter.validate_party_blob(bytes(bad), species_marker=25)
+        egg = gsc_adapter.decode_party_blob(raw, species_marker=253)
+        assert egg["is_egg"] and egg["species_id"] == 25
+
+    def test_acquisition_namespaces_require_explicit_origin(self, gsc_adapter):
+        assert gsc_adapter.gift_link_area("route_29", acquisition="egg_hatch", species_id=25) == "gift_daycare"
+        assert gsc_adapter.gift_link_area("route_29", acquisition="roamer", species_id=243) == "legend_243"
+        assert gsc_adapter.gift_link_area("national_park", acquisition="contest", species_id=123) == "national_park_contest"
+        assert gsc_adapter.gift_link_area("legend_243") == "legend_243"
+        assert gsc_adapter.gift_link_area("national_park_contest") == "national_park_contest"
+        assert gsc_adapter.is_gift_area("legend_243")
+        assert gsc_adapter.is_gift_area("gift_daycare")
+        assert not gsc_adapter.is_gift_area("route_34")
+        assert not gsc_adapter.is_gift_area("goldenrod_city")
+        assert not gsc_adapter.is_gift_area("legend_25")
+        assert not gsc_adapter.is_gift_area("legend_0243")
+        assert not gsc_adapter.is_gift_area("gift_")
+        assert gsc_adapter.is_gift_area("static_2310_130")  # 09:06 Red Gyarados.
+        assert not gsc_adapter.is_gift_area("static_02310_130")
+        assert not gsc_adapter.is_gift_area("static_2310_25")
+        assert gsc_adapter.is_daycare_area("gift_daycare")
+        assert not gsc_adapter.is_egg_pickup_area("egg_route_30")
+        with pytest.raises(ValueError):
+            gsc_adapter.gift_link_area("route_30", acquisition="egg_pickup", species_id=175)
+        with pytest.raises(ValueError):
+            gsc_adapter.gift_link_area("route_29", acquisition="roamer", species_id=25)
+        if gsc_adapter.title == "crystal":
+            with pytest.raises(ValueError):
+                gsc_adapter.gift_link_area("tin_tower", acquisition="roamer", species_id=245)
+        else:
+            assert gsc_adapter.gift_link_area("route_29", acquisition="roamer", species_id=245) == "legend_245"
+
+    def test_presentation_keeps_source_map_time_and_slot_rows(self, gsc_adapter):
+        table = gsc_adapter.encounter_table("route_29")
+        assert {"Morn", "Day", "Nite"} <= set(table)
+        assert any(row["species_id"] == 161 for row in table["Morn"])
+        assert any(row["species_id"] == 163 for row in table["Nite"])
+        assert all("map_group" in row and "slot" in row for row in table["Morn"])
+        assert gsc_adapter.encounter_table("unmapped_place") is None
+        assert gsc_adapter.gym_badge_slugs("")[4][1] == "Mineral Badge"
+        assert gsc_adapter.gym_badge_slugs("")[5][1] == "Storm Badge"
+        assert gsc_adapter.status_token(0x08) == "PSN"
+        assert gsc_adapter.ability_name(1) == ""
+        assert gsc_adapter.sprite_html(253) == ""
+        for payload in ({}, {"schema": "gen2-rom-tables-v1"}):
+            with pytest.raises(ValueError):
+                gsc_adapter.rom_content_fingerprint(payload)
+
+
+class TestGen2GSCPackRefusal:
+    def test_title_selection_is_explicit(self):
+        from server.adapters.gen2_gsc import Gen2GSCAdapter
+
+        for title in ("crystal11", "ap", "unknown", None, "../crystal"):
+            with pytest.raises(ValueError):
+                Gen2GSCAdapter(title)
+
+    @pytest.mark.parametrize("corruption", ["title", "missing_title", "source", "schema", "missing_species", "ratio"])
+    def test_mismatched_or_malformed_pack_is_refused(self, tmp_path, corruption):
+        from server.adapters.gen2_gsc import Gen2GSCAdapter
+
+        source = Path(__file__).resolve().parents[2] / "data/games/gen2_crystal"
+        target = tmp_path / "gen2_crystal"
+        shutil.copytree(source, target)
+        path = target / "species_index.json"
+        data = json.loads(path.read_text("utf-8"))
+        if corruption == "title":
+            data["title"] = "gold"
+        elif corruption == "missing_title":
+            del data["title"]
+        elif corruption == "source":
+            data["source"]["rom_sha1"] = "0" * 40
+        elif corruption == "schema":
+            data["schema"] = "gen1-species-index-v1"
+        elif corruption == "missing_species":
+            del data["species"]["81"]
+        else:
+            data["species"]["81"]["gender_ratio"] = 256
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(ValueError):
+            Gen2GSCAdapter("crystal", data_root=tmp_path)
