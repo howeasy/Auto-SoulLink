@@ -83,13 +83,13 @@ def test_evolution(title, kind, clause):
 
 
 @pytest.mark.parametrize("title,kind", TITLES)
-@pytest.mark.parametrize("clause", ["link_callback", "wireless_comm_type", "link_transferring",
+@pytest.mark.parametrize("clause", ["link_callback", "link_players_received", "link_transferring",
                                     "callback1", "task"])
 def test_link(title, kind, clause):
     w = World(title, kind)
     if clause == "link_callback":  # link.c:394 OpenLink
         set_pred(w, clause, sym(title, "LinkCB_RequestPlayerDataExchange") | 1)
-    elif clause in ("wireless_comm_type", "link_transferring"):  # link.c:1693, main.c:195
+    elif clause in ("link_players_received", "link_transferring"):  # link.c:540 / rfu_2.c:2065, main.c:195
         set_pred(w, clause, 1)
     elif clause == "callback1":  # overworld.c:1605,1643 link rooms run CB2_Overworld + this cb1
         set_pred(w, clause, sym(title, "CB1_UpdateLinkState") | 1)
@@ -98,6 +98,19 @@ def test_link(title, kind, clause):
         assert_refused(w, "unknown active task")
         return
     assert_refused(w, "forbidden state: " + clause)
+
+
+@pytest.mark.parametrize("title,kind", TITLES)
+@pytest.mark.parametrize("comm_type", [1, 2, 3])
+def test_wireless_comm_type_alone_is_idle(title, kind, comm_type):
+    # gWirelessCommType is the sticky transport selector: the title menu's adapter probe sets 1
+    # (main_menu.c:573 -> link.c:248) and nothing clears it on the field.  With no link session it
+    # must NOT refuse (receipt checkpoint_fr_parcel_lineage_2026-09-22.txt: 300/300 idle refused).
+    w = World(title, kind)
+    w.lua.globals().put(sym(title, "gWirelessCommType"), comm_type, 1)
+    assert w.check()
+    set_pred(w, "link_players_received", 1)  # the same frame once a partner is connected
+    assert_refused(w, "forbidden state: link_players_received")
 
 
 @pytest.mark.parametrize("title,kind", TITLES)

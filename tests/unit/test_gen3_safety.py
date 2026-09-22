@@ -68,9 +68,9 @@ def test_committed_census_positive(title, kind):
 
 
 @pytest.mark.parametrize("name", ["callback1", "callback2", "field_controls_locked", "in_battle",
-                                  "link_callback", "link_transferring", "palette_fade_active",
-                                  "save_dialog_cb", "script_context_status", "soft_reset_disabled",
-                                  "wireless_comm_type"])
+                                  "link_callback", "link_players_received", "link_transferring",
+                                  "palette_fade_active", "save_dialog_cb", "script_context_status",
+                                  "soft_reset_disabled"])
 def test_each_forbidden_state(name):
     w = World()
     p = w.pack["predicates"][name]

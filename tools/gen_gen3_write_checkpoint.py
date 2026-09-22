@@ -94,7 +94,14 @@ PREDICATES = {
     "soft_reset_disabled": ("gSoftResetDisabled", 0, 1, None, 0),
     "link_callback": ("gLinkCallback", 0, 4, None, 0),
     "link_transferring": ("gLinkTransferringData", 0, 1, None, 0),
-    "wireless_comm_type": ("gWirelessCommType", 0, 1, None, 0),
+    # src/link.c:421 CloseLink / :410 OpenLink clear it; :540 (cable) and link_rfu_2.c:1879,2065
+    # (wireless) set it once the partner's player data is in -- non-zero for a whole link session.
+    # NOT gWirelessCommType: that is the transport selector (0 cable, 1 RFU), set by the title
+    # menu's adapter probe (main_menu.c:573 -> link.c:243-261) and sticky (CloseLink leaves it),
+    # so it is 1 for the whole session on hardware with the adapter (receipt
+    # docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt).  The pre-exchange window is
+    # link_callback + callback1 + the task allow-list.
+    "link_players_received": ("gReceivedRemoteLinkPlayers", 0, 1, None, 0),
 }
 
 # data symbol -> the FR function whose literal pool pins it (used only to prove RR)
@@ -108,7 +115,7 @@ WITNESS = {
     "gSoftResetDisabled": "AgbMain",
     "gLinkTransferringData": "AgbMain",
     "gLinkCallback": "ClearLinkCallback",
-    "gWirelessCommType": "IsLinkTaskFinished",
+    "gReceivedRemoteLinkPlayers": "CloseLink",
 }
 
 # Every task that is legitimately running while the player just stands in the overworld:

@@ -363,3 +363,20 @@ file was not edited. Failing tests in the added file:
    liveness risk for FR writes after that cutscene, if the value persists (§2).
 5. **`link_transferring` cannot refuse at the parked frame end** (§2). Keep it, but do not cite it
    as the link witness.
+
+## Errata (2026-09-22, card gen3-P3-C3-22)
+
+- **`wireless_comm_type` was the wrong link predicate; replaced by `link_players_received`
+  (`gReceivedRemoteLinkPlayers` `0x03003F64` == 0).** Resolves §2's liveness observation and §8
+  finding 4. `gWirelessCommType` selects the transport (0 cable, 1 RFU); in single-player play its
+  only writer is the title menu's adapter probe (`src/main_menu.c:573` -> `IsWirelessAdapterConnected`
+  `src/link.c:243-261`: `SetWirelessCommType1` at `:248`, cleared at `:257` only if the adapter
+  does not answer), and nothing on the field clears it (`CloseLink` `:419-426`). On hardware with
+  the Wireless Adapter FRLG shipped with, it is 1 for the whole session, so the clause would refuse
+  every write. Physical: `docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt` idle 0/300.
+  No Oak-lab / Pokedex code writes it; why BizHawk's probe left it non-zero on that lineage and
+  not the town fixture is UNVERIFIED (one read of `0x03003F3C` on both states would settle it).
+  Tests: `test_gen3_safety_unreached.py::test_wireless_comm_type_alone_is_idle` (1/2/3 alone =
+  admit; plus `link_players_received` = refuse), and the `test_link` / `test_each_forbidden_state`
+  rows now name `link_players_received`. Line citations in §2/§7 that name `wireless_comm_type`
+  describe the old pack.

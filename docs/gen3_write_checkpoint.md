@@ -219,7 +219,7 @@ at the same offset in all four ROMs.
 | `soft_reset_disabled` | `gSoftResetDisabled` `0x03003530` | `== 0` | `src/save.c:887,958` — `Task_LinkFullSave` holds it for the whole flash write |
 | `link_callback` | `gLinkCallback` `0x03003F80` | `== 0` | `src/link.c:748,756,1133`, `ClearLinkCallback` |
 | `link_transferring` | `gLinkTransferringData` `0x030030E4` | `== 0` | `src/main.c:195-210` |
-| `wireless_comm_type` | `gWirelessCommType` `0x03003F3C` | `== 0` | `src/link.c`, `IsLinkTaskFinished` |
+| `link_players_received` | `gReceivedRemoteLinkPlayers` `0x03003F64` | `== 0` | `src/link.c:410,421` (`OpenLink`/`CloseLink` clear it), `:540` and `src/link_rfu_2.c:1879,2065` set it once a partner's player data is in; RR proven through `CloseLink`'s pool. Replaces `wireless_comm_type` (`gWirelessCommType` `0x03003F3C`), which is the sticky transport selector set by the title menu's adapter probe (`src/main_menu.c:573` -> `src/link.c:243-261`), not a link-activity flag — it refused every idle frame of a FR save lineage (`docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt`) |
 | tasks | `gTasks` `0x03005090` | every active slot's `func` ∈ `allowed_overworld_tasks` | §3 |
 | CPU | FRLG: `WaitForVBlank` `0x08000890` size `0x30` | FRLG: CPSR mode `0x1F`, `T == 1`, R15 ∈ `[0x08000890,0x080008BF]`; RR: mode `0x1F`, `T == 0`, R15 ∈ `[0x0000,0x3FFF]` | per title, §4.3 |
 | pointers | §4.4 | snapshot at arm time, revalidate before each write | PLAN §5.3 |
@@ -257,9 +257,12 @@ play covers them, and until then this clause is a *necessary* condition only.
 
 ### 4.4 SaveBlock pointer snapshot and revalidation
 
-Vanilla FRLG sets `gSaveBlock1Ptr`/`gSaveBlock2Ptr` once at boot (`src/main.c:232-233`) and
-`UpdateSaveAddresses` (`src/save.c:630`) re-reads them plus `gPokemonStoragePtr` into the sector
-table on every save. RR relocates them.
+Vanilla FRLG re-points all three (`gSaveBlock1Ptr`, `gSaveBlock2Ptr`, `gPokemonStoragePtr`) by
+one random offset (`src/load_save.c:69-83` `SetSaveBlocksPointers`, called from
+`MoveSaveBlocks_ResetHeap` `:110`) on every battle start (`src/battle_main.c:614`) and map load
+(`src/overworld.c:1337`); `UpdateSaveAddresses` (`src/save.c:630`) re-reads them into the sector
+table on every save. RR never relocates: its offset is fixed at 0 (`0x0804C062`), and its pointer
+addresses come from the profile, not a symbol.
 
 | title | gSaveBlock1Ptr | gSaveBlock2Ptr | storage | source |
 |---|---|---|---|---|
@@ -306,7 +309,7 @@ than at "the checkpoint":
 | party menu open | `callback2` (`CB2_InitPartyMenu`) and task allow-list |
 | evolution scene | `callback2` (`CB2_EvolutionSceneUpdate`) |
 | in-game or link trade | `callback2` (`CB2_InGameTrade` / `CB2_LinkTrade`) |
-| Cable Club / link active | `link_callback`, `link_transferring`, `wireless_comm_type`, task allow-list (`Task_EnterCableClubSeat`) |
+| Cable Club / link active | `link_callback`, `link_players_received`, `callback1` (`CB1_UpdateLinkState`), task allow-list (`Task_EnterCableClubSeat`); `link_transferring` is defense in depth only |
 | battle | `in_battle`, `callback2` |
 | screen fading (map transition) | `palette_fade_active` |
 | mid-relocation (RR) | pointer snapshot revalidation (§4.4) |

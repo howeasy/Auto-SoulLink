@@ -113,6 +113,13 @@
         "symbol": "gLinkCallback",
         "width": 4
       },
+      "link_players_received": {
+        "address": 50347876,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gReceivedRemoteLinkPlayers",
+        "width": 1
+      },
       "link_transferring": {
         "address": 50344164,
         "expect": 0,
@@ -147,13 +154,6 @@
         "expect": 0,
         "offset": 0,
         "symbol": "gSoftResetDisabled",
-        "width": 1
-      },
-      "wireless_comm_type": {
-        "address": 50347836,
-        "expect": 0,
-        "offset": 0,
-        "symbol": "gWirelessCommType",
         "width": 1
       }
     },
