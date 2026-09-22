@@ -122,7 +122,7 @@
   "schema": "gen3-profile-v1",
   "source": {
     "file": "lua/games/gen3_frlge.lua",
-    "git_head": "8e125fee5e947c6d14093786784db2ddf82313cd",
+    "git_head": "897fefc351a0eebe998bf8a0658c9b882d5d118f",
     "sha256": "c54e261099bc7a235d4adfcc78679ca176384f5c4c9556b816e5d607418f9a10"
   },
   "titles": {
