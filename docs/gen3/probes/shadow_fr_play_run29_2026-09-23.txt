@@ -1,0 +1,44 @@
+# FR run 29 (2026-09-23): re-confirmation on the C3-40 cut (37c531f1/af3f1b16), PLAY_FROM=viridian_pc_deposit_withdraw from slink_fr_route1_faint.State, observer on
+phase start frame=1 title=firered
+phase resume frame=1 from=viridian_pc_deposit_withdraw
+phase field frame=779 map=(5,4)
+phase shadow frame=779 observer started admitted_by=hash
+phase leg-state frame=45760 viridian_pc_deposit_withdraw <- E:/Howard/Bizhawk/GBA/State/slink_fr_route1_faint.State
+phase leg-start frame=45760 viridian_pc_deposit_withdraw
+phase encounter frame=46192 #1 during step Up at (12,25)
+phase whiteout frame=50094 battle displaced the player from map 787 (12,25) to the heal map 1284 at (7,4)
+phase whiteout-recover frame=50094 viridian_pc_deposit_withdraw: attempt 1 of 2
+phase whiteout-recovered frame=50097 viridian_pc_deposit_withdraw restarts at (7,4)
+phase pc-exit frame=50778 step=1 tasks=[0808D2BD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=50884 step=2 tasks=[0808ECE5] storage_state=2 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=50990 step=3 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,0808C39D] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=51096 step=4 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase deposited frame=51128 party 2 -> 1, key 263620B6:99DE0D8A left
+phase pc-exit frame=51732 step=1 tasks=[0808D2BD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=51838 step=2 tasks=[0808ECE5] storage_state=2 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=51944 step=3 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,0808C39D] storage_state=-1 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=52050 step=4 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=0
+phase withdrawn frame=52082 party 1 -> 2, key 263620B6:99DE0D8A is back; 1 survivors byte-identical
+phase leg-state-saved frame=52082 viridian_pc_deposit_withdraw -> E:/Howard/Bizhawk/GBA/State/slink_fr_viridian_pc_deposit_withdraw.State
+phase leg-done frame=52082 viridian_pc_deposit_withdraw
+phase leg-start frame=52082 pc_release
+phase pc-exit frame=52902 step=1 tasks=[0808D2BD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=53008 step=2 tasks=[0808ECE5] storage_state=2 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=53114 step=3 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,0808C39D] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=53220 step=4 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase released frame=53252 party 2 -> 1, selected key 263620B6:99DE0D8A gone from party and all 14 boxes; boxes unchanged
+phase leg-state-saved frame=53252 pc_release -> E:/Howard/Bizhawk/GBA/State/slink_fr_pc_release.State
+phase leg-done frame=53252 pc_release
+phase leg-start frame=53252 save
+phase save-menu frame=53252 counter=1
+phase save-dialog frame=54526 attempt=7
+phase saved frame=55005 counter=1->2
+phase slot-complete frame=55272 sectors=14/14
+phase saved frame=55401 counter 1 -> 2
+phase leg-state-saved frame=55401 save -> E:/Howard/Bizhawk/GBA/State/slink_fr_save.State
+phase leg-done frame=55401 save
+phase skip-open frame=55401 pc_move_full_party: SendMonToPC only runs on an acquisition that cannot fit in the party, i.e. a catch or gift with six party mons; this route reaches Viridian with far fewer, and nothing here fills a party to six
+phase skip-open frame=55401 gift_mon: earliest non-starter givemon is Route 4's Magikarp, past Mt. Moon
+phase skip-open frame=55401 npc_trade: earliest trade is Cerulean's Mr. Mime for an Abra, needing Route 24
+phase skip-open frame=55401 evolution: earliest is the starter's own level-up (Squirtle Lv.16); needs many more battles
+RESULT: PASS reached: viridian_pc_deposit_withdraw,pc_release,save | open (skipped): pc_move_full_party,gift_mon,npc_trade,evolution
