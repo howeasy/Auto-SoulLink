@@ -1137,3 +1137,18 @@ def test_grass_hunt_first_step_follows_the_tile(machine, start, first):
     with pytest.raises(LuaError, match="stop"):
         mod.hunt_encounter(fake.cp, "t", 1)
     assert fake.dirs[1] == first
+
+
+def test_viridian_pc_recovers_from_a_whiteout_into_its_own_center(machine):
+    # FR run 28: the Route 1 walk whited out; the landing is Viridian Center 5.4 (7,4).
+    lua, mod, fake = machine
+    leg = next(l for l in mod.LEGS.values() if l.name == "viridian_pc_deposit_withdraw")
+    fake.place(5, 4, 7, 4)
+    leg.recover(fake.cp)                                  # the landing verifies
+    fake.place(5, 4, 7, 8)
+    with pytest.raises(LuaError, match="whiteout landing"):
+        leg.recover(fake.cp)
+    lua.execute("F.paths={}; D.play.follow=function(cp,name) F.paths[#F.paths+1]=name; error('stop',0) end")
+    with pytest.raises(LuaError, match="stop"):
+        leg.resume(fake.cp)
+    assert fake.paths[1] == "center_heal_spot_to_pc"      # resume starts inside the Center

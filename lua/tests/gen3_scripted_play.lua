@@ -638,6 +638,12 @@ local PATHS = {
         map = "PokemonCenter_1F", from = { 7, 8 }, to = { 11, 2 },
         dirs = { "Up","Up","Up","Up","Right","Right","Right","Right","Up","Up" },
     },
+    -- The tail of pokecenter_entrance_to_pc from its (7,4) waypoint: the whiteout landing
+    -- (heal_location.c: Viridian -> Center 5.4 (7,4)). Same BFS-verified tiles, no new geometry.
+    center_heal_spot_to_pc = {
+        map = "PokemonCenter_1F", from = { 7, 4 }, to = { 11, 2 },
+        dirs = { "Right","Right","Right","Right","Up","Up" },
+    },
 }
 
 -- ── the Gen 3 binding ────────────────────────────────────────────────────────────────────────
@@ -2295,13 +2301,25 @@ LEGS[#LEGS + 1] = {
         "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba parsed with tools/gba_map.py: ViridianCity (3.1) warp (26,26) -> map 5.4, whose only MB_PC (0x83) metatile is (11,1); bfs (7,8)->(11,2) = Up x4, Right x4, Up x2 with the four object-event tiles blocked",
         "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt (the same flow observed hook by hook, and the source of the frame spacing)",
     },
-    run = function(cp)
+    -- A whiteout on the Route 1 walk (FR run 28: the weak post-faint party lost at (12,25))
+    -- lands the player, healed, inside this very Center at (7,4): recover checks that landing,
+    -- resume walks the tail of the PC path from there and does the PC work as run() would.
+    recover = function(cp)
+        guarded_recovery(cp, "viridian_pc_deposit_withdraw", function(c)
+            verify_destination(c, "viridian_pc whiteout landing", {group=5, num=4, x=7, y=4})
+        end)
+    end,
+    run = function(cp, from_heal_spot)
+        if from_heal_spot then
+            play.follow(cp, "center_heal_spot_to_pc", "viridian_pc_deposit_withdraw")
+        else
         return_to_grass_origin(cp, "viridian_pc_deposit_withdraw")
         play.follow(cp, "route1_grass_to_north_edge", "viridian_pc_deposit_withdraw")
         warp_to(cp, "Up", 30, DEST.viridian_south, "viridian_pc Route1->Viridian")
         play.follow(cp, "route1_edge_to_pokecenter_door", "viridian_pc_deposit_withdraw")
         warp_to(cp, "Up", 30, DEST.center, "viridian_pc Center door")
         play.follow(cp, "pokecenter_entrance_to_pc", "viridian_pc_deposit_withdraw")
+        end
         G.tap("Up", 2, 13)               -- face the (solid) PC metatile at (11,1)
 
         local before_world = owned_snapshot("viridian_pc before")
@@ -2386,6 +2404,8 @@ LEGS[#LEGS + 1] = {
 -- Was OPEN for want of a pinned route; the R9 note supplies one. RELEASE is row 3 of the SAME
 -- selected-mon popup the deposit uses (STORE / SUMMARY / MARK / RELEASE / CANCEL), so the walk
 -- to it is the deposit's own route with three Downs instead of a STORE.
+do local vpc = LEGS[#LEGS]; vpc.resume = function(cp) vpc.run(cp, true) end end
+
 LEGS[#LEGS + 1] = {
     name = "pc_release",
     exercises = { "pc_release_begin", "pc_release" },
