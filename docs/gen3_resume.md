@@ -2,6 +2,34 @@
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
+## CHECKPOINT 11 (2026-09-23, in progress): G4 FRLG lane
+
+HEAD c8f0c804; clean lane worktree `.claude/worktrees/gen3-lane-clean` (detached, keep it clean).
+- PASS on a clean cut with the C5 stack (d199da32): faint_cmd, link, boxsync, reconnect (+ wrong-save C-1/C-2);
+  receipts and goldens are in docs/gen3/probes/*2026-09-23b.txt; conformance is 59/59 including item 15.
+- Owner ruling "Apply inside too": writes land inside Pokemon Centers (5ecfae3b; Codex ACCEPT as SOURCE/MODEL).
+  Live: WRITE_IN_CENTER was observed at 5.4 (7,4) with the Union Room tasks active. The full receipt (G4 2a) is owed:
+  C4-6m.
+- Fixed and committed today:
+  - PC withdraw box_to_party (767ba0a5);
+  - enemy party by occupancy (f2aec36f): item 15 and dead-zone no_catch;
+  - LG FR-copied SE headers and evolution CB2s (123c6c45);
+  - the rival swap C5 stack (2dc1b750; Codex REV4 ACCEPT);
+  - session arrival order for force_faint vs memorialize (684bbb7a);
+  - harness races and oracles.
+- In flight:
+  - C4-BW: the battle_faint clause becomes exec_flags==1 + HandleInputChooseAction, because pret says ==0 never
+    holds at the parked menu. This blocks linked_faint_active.
+  - C4-6m: Center receipt gaps, the deadzone per-player dead_zone oracle, and the nurse clause parse. This blocks
+    deadzone and whiteout.
+  - C4-LGSE2: a fail-closed LG guard.
+  - Codex REV-session-order-1.
+- Rehearsed: cold-boot 8/8 (8a13f38b); release zip boots FR on the new client (99c70d9c; gate tools/check_release_zip.py);
+  rollback bundle (2cd9f993; master's RR md5 pin is stale, this branch corrects it).
+- Gen 1 live: town SFX is red on master too (not caused by the cutover); a Gen 1-side gate or sound mismatch, reported.
+- Still owed for G4: FRLG probe rows (battle_input_wild incl.), the Center receipt on FR and LG, final-cut re-takes,
+  the Gen 2 lane re-run, and the owner's Manager run.
+
 ## STOP POINT 2026-09-23 (owner: stop at the milestone)
 
 Resume here. HEAD 767ba0a5. Milestone: FR<->LG faint_cmd_gen3 PASS on the new client, clean cut (c6d5ea4f).
