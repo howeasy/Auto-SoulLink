@@ -21,8 +21,11 @@
             accepted hold, with the SRAM-closed bus view recorded. Then START menu (refused by
             wScriptRunning/wScriptMode, and the OWPlayerInput anchor stays silent inside it), Elm's
             script text box (wScriptRunning/wScriptMode/wScriptFlags), a native SAVE (the
-            wGameLogicPaused window, 62+ frames: REQUIRED), SaveRAM flushed, then the lab exit warp
-            (wMapStatus) and liveness in New Bark.
+            wGameLogicPaused window, 62+ frames: REQUIRED), SaveRAM flushed and its exact bytes (CartRAM +
+            RTC trailer) kept as <case>.u2_saved.SaveRAM (U.saved_path), then the lab exit warp (wMapStatus)
+            and liveness in New Bark. The snapshot, not the SaveRAM file, is the post-save image: Gold/Silver
+            keep the window stack and sScratch in SRAM, so the menu close and overworld after the save (and
+            EmuHawk's exit-time flush) rewrite that file.
     reload  the town run's flushed SaveRAM, cold-booted: its CartRAM hash before any frame, CONTINUE,
             liveness, the persisted party HP + active/backing box bytes, DUMP (party + CartRAM).
     battle  <title>_battle (Route 29 grass): liveness, walk the grass until a wild battle (bounded), the
@@ -291,6 +294,9 @@ function U.inspect_gate(root)
     assert(ok and type(IG) == "table", "cannot load " .. U.INSPECT_GATE .. ": " .. tostring(IG))
     return IG
 end
+
+-- The flushed post-save SaveRAM image of a town run (the reload candidate and the persistence evidence).
+function U.saved_path(dir, case_name) return dir .. "/" .. case_name .. ".u2_saved.SaveRAM" end
 
 local live_api   -- set only by this file's own BizHawk entry below; a library caller cannot claim it
 
@@ -590,7 +596,10 @@ function U.main(api, getenv, SG, IG)
             phases[#phases + 1] = {phase=phase, frame=frame, accepted=rec.accepted}
             if phase == "post_save" then
                 local digest = SG.cart_digest(api)
-                SG.flush(ctx, digest)
+                local bytes, snapshot = SG.flush(ctx, digest), U.saved_path(ctx.env.dir, ctx.case.name)
+                local f = assert(io.open(snapshot, "wb"), "cannot write " .. snapshot)
+                assert(f:write(bytes), "cannot write " .. snapshot)
+                f:close()
                 local c = profile.constants
                 save = {frame=frame, saves=state.saves, cartram_sha256=digest, flushed=true,
                         party_hp_hex=hex(ctx.sym("wPartyMon1HP", 0, 2)), mon_hp=c.MON_HP}

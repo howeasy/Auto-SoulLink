@@ -435,9 +435,14 @@ def run_u2(tmp_path, mode, *, title="crystal", carry=None, **switches):
     return sim, text
 
 
+def _snapshot(sim):
+    """The town gate's kept post-save image: the live lane's persistence evidence and reload candidate."""
+    return u2.saved_image(Path(sim.saveram_path).parent, f"{sim.title}_town")
+
+
 def _carry(sim):
     start = sim.offset("wPartyCount")
-    saved = Path(sim.saveram_path).read_bytes()
+    saved = _snapshot(sim).read_bytes()
     return (bytes(sim.wram[start:start + PROFILE[sim.title]["ram"]["wPartyMonNicknamesEnd"]
                           - PROFILE[sim.title]["ram"]["wPartyCount"]]),
             saved[:u2.CART_RAM_BYTES], saved)
@@ -496,6 +501,7 @@ def reports_for(receipt):
     for mode in ("town", "battle"):
         run = receipt["runs"][mode]
         out[run["fixture"]] = {"schema": "fixture-qualification-v1", "passed": True, "errors": [],
+                               "scope": "full", "required_stages": ["qualify", "boot", "resave", "post_oracle"],
                                "attempt_id": run["qualification_attempt_id"],
                                "fixtures": [{"name": run["fixture"], "passed": True,
                                              "artifacts": {"fixture": {"sha256": run["fixture_sha256"]}},
@@ -679,6 +685,10 @@ def _control_fault(receipt, fault):
         town["write"]["box"]["backing_before_hex"] = town["write"]["box"]["after_hex"]
     elif fault == "save_not_flushed":
         town["save"]["flushed"] = False
+    elif fault == "start_one_edge":             # 30 frames, but only one of them open at both edges
+        start["both_edges"] = 1
+    elif fault == "phase_unnamed":              # U2b-review L1: threw "table index is nil"
+        del town["phases"][0]["phase"]
 
 
 CONTROL_FAULTS = {
@@ -703,6 +713,8 @@ CONTROL_FAULTS = {
     "box_count": "count+1 write",
     "backing_already_held": "backing box slot already held",
     "save_not_flushed": "native save not flushed",
+    "start_one_edge": "start_menu: no accepted checkpoint hold",
+    "phase_unnamed": "town run: a phase entry names no phase",
 }
 
 
@@ -712,6 +724,43 @@ def test_every_control_is_recomputed_from_the_raw_records(sim_runs, fault):
     _control_fault(receipt, fault)
     scope, why = u2.lua_qualified(pack_of("crystal"), "crystal", receipt)
     assert scope is None and CONTROL_FAULTS[fault] in why, why
+
+
+def test_a_malformed_receipt_refuses_with_a_reason_instead_of_raising(sim_runs):
+    """U2b-review L1: M.new guards M.qualified, so a receipt that raises on access never escapes check()."""
+    receipt = receipt_for(sim_runs, "crystal")
+    del receipt["runs"]["town"]["phases"][0]["phase"]
+    accepted, why = Candidate().check(receipt)
+    assert accepted is False and "names no phase" in why, why
+    c = Candidate()
+    hostile = c.lua.eval('setmetatable({}, {__index=function() error("boom") end})')
+    binder = c.module.new(c.lua.table_from(c.pack, recursive=True), "crystal", c.io, c.evaluator,
+                          c.ownership, hostile)
+    accepted, why = binder.check(binder, "party_hp")
+    assert accepted is False and "malformed write-window receipt" in why and "boom" in why, why
+
+
+def test_the_lua_full_chain_matches_fixture_qualification():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import fixture_qualification
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval("dofile")((ROOT / "lua/gen2_write_safety.lua").as_posix())
+    assert tuple(module.FULL_CHAIN.values()) == fixture_qualification.FULL_CHAIN
+
+
+def test_the_committed_crystal_receipt_still_qualifies_and_binds():
+    """U2c keeps the receipt schema: the PHYSICAL Crystal receipt (6ba4527) passes M.qualified and
+    M.bind_fixture_qualification against its fixtures' committed qualification reports."""
+    receipts = ROOT / "tests/fixtures/gen2/receipts"
+    receipt = json.loads((receipts / "crystal.write_window.json").read_text(encoding="utf-8"))
+    assert {run["evidence_level"] for run in receipt["runs"].values()} == {"PHYSICAL"}
+    scope, why = u2.lua_qualified(pack_of("crystal"), "crystal", receipt)
+    assert scope is not None, why
+    assert scope["kinds"] == ["box_deposit", "party_hp"]
+    reports = {name: json.loads((receipts / f"{name}.qualification.json").read_text(encoding="utf-8"))
+               for name in ("crystal_town", "crystal_battle")}
+    bound, why = u2.lua_bind(receipt, reports)
+    assert bound is True, why
 
 
 def test_the_synthetic_runs_record_the_real_window_mechanisms(sim_runs):
@@ -734,7 +783,9 @@ BIND_FAULTS = {"attempt": lambda r: r.update(attempt_id="requal-other"),
                "failed": lambda r: r.update(passed=False),
                "errors": lambda r: r.update(errors=["x"]),
                "row": lambda r: r["fixtures"][0].update(name="crystal_town_ot2"),
-               "rom": lambda r: r["fixtures"][0]["provenance"].update(rom_sha1="0" * 40)}
+               "rom": lambda r: r["fixtures"][0]["provenance"].update(rom_sha1="0" * 40),
+               "scope": lambda r: r.update(scope="static"),
+               "stages": lambda r: r.update(required_stages=["qualify", "boot"])}
 
 
 @pytest.mark.parametrize("fault", [None, *sorted(BIND_FAULTS)])
@@ -757,7 +808,30 @@ def _symbols(title):
 def _town_inputs(sim_runs, title="crystal"):
     sim = sim_runs[title]["town_sim"]
     return (sim_runs[title]["texts"]["town"], pack_of(title)["titles"][title]["primary"], _symbols(title),
-            Path(sim.saveram_path).read_bytes(), bytes(sim.booted))
+            _snapshot(sim).read_bytes(), bytes(sim.booted))
+
+
+def test_persistence_is_checked_on_the_post_save_snapshot_not_the_exit_time_file(sim_runs):
+    """U2c (Gold live failure): the gate keeps playing after the flush, and on Gold/Silver the menu close
+    and overworld rewrite the SRAM window stack and sScratch, so EmuHawk's exit-time SaveRAM is not the
+    post-save image. The gate keeps the flushed bytes; the wrapper verifies (and reloads) those."""
+    text, primary, symbols, snapshot, staged = _town_inputs(sim_runs, "gold")
+    sim = sim_runs["gold"]["town_sim"]
+    run = live_tag(text, "U2_RUN")
+    assert snapshot == Path(sim.saveram_path).read_bytes()   # the flushed file, byte for byte (RTC trailer too)
+    assert len(snapshot) == u2.CART_RAM_BYTES + 22
+    assert hashlib.sha256(snapshot[:u2.CART_RAM_BYTES]).hexdigest() == run["save"]["cartram_sha256"]
+    exit_time = bytearray(snapshot)   # what the lane's SaveRAM holds after the post-save window close
+    scratch = u2.sram_flat(symbols["sScratch"].bank, symbols["sScratch"].address)
+    exit_time[scratch] ^= 0xFF
+    with pytest.raises(AssertionError, match="flushed SaveRAM differs"):
+        u2.verify_town(text, primary, symbols, bytes(exit_time), staged)   # the old wrapper's input
+    assert u2.verify_town(text, primary, symbols, snapshot, staged)["mode"] == "town"
+    tampered = bytearray(snapshot)
+    tampered[scratch] ^= 1
+    with pytest.raises(AssertionError, match="flushed SaveRAM differs"):
+        u2.verify_town(text, primary, symbols, bytes(tampered), staged)
+    assert sim_runs["gold"]["candidate"] == snapshot   # the reload cold-booted the snapshot
 
 
 def test_python_verifiers_accept_the_synthetic_runs(sim_runs):

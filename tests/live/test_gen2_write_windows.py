@@ -5,8 +5,9 @@
 Per title (Crystal first, then Gold) three EmuHawk launches of lua/tests/gen2_write_windows.lua:
   town    <title>_town: an idle-hold party write (lua/gen2/writes.lua) and a current-box deposit into the
           authoritative sBox copy in CartRAM (lua/gen2/boxes.lua), START menu / Elm's script text box /
-          native SAVE (wGameLogicPaused, required) / lab exit warp windows, the flushed SaveRAM.
-  reload  that flushed SaveRAM, cold-booted through CONTINUE: the written bytes must be there.
+          native SAVE (wGameLogicPaused, required) / lab exit warp windows, the flushed SaveRAM kept by
+          the gate as <fixture>.u2_saved.SaveRAM (saved_image).
+  reload  that post-save image, cold-booted through CONTINUE: the written bytes must be there.
   battle  <title>_battle: a Route 29 wild battle window, a refused party-only write to the active slot.
 Each run prints its own record (U2_RUN; evidence_level is the gate's, never stamped here). This file
 re-derives liveness (phases + MEASURED PC/hROMBank at accepted holds) and persistence (raw offsets from the
@@ -81,6 +82,14 @@ def offsets(symbols, current_box: int) -> dict:
             "backing": sram_flat(backing.bank, backing.address)}
 
 
+def saved_image(directory: Path, fixture: str) -> Path:
+    """The post-save SaveRAM image the town gate flushed, digest-checked and kept (lua/tests/
+    gen2_write_windows.lua U.saved_path). Never the lane's SaveRAM file: the gate keeps playing after the
+    save and Gold/Silver keep the window stack and sScratch in SRAM (tools/gen2_fixtures.py
+    SCRATCH_WRITES), so the menu close, the overworld and EmuHawk's exit-time flush rewrite that file."""
+    return directory / f"{fixture}.u2_saved.SaveRAM"
+
+
 def run_record(text: str) -> dict:
     assert "RESULT: PASS" in text.splitlines()[-1], text[-2000:]
     run = live.tag_json(text, "U2_RUN")
@@ -126,9 +135,11 @@ def verify_town(text: str, primary: dict, symbols, cartram: bytes, staged: bytes
 
 
 def verify_reload(text: str, primary: dict, symbols, town: dict, candidate: bytes) -> dict:
-    """The cold reload of the town run's flushed save. The current box lives in SRAM, so CONTINUE runs no
-    LoadBox: this proves the cold-booted CartRAM (hashed before the first frame) still holds both box copies
-    and the party HP after the game loaded and ran on it."""
+    """The cold reload of the town run's flushed save. CONTINUE runs LoadBox (TryLoadSaveFile, C
+    engine/menus/save.asm:596-601; G :543), which copies the current box's backing slot sBox<n> over the
+    active sBox: the active copy after the reload therefore proves the backing slot carried the deposit
+    through the save and the cold boot, and the backing check proves nothing overwrote it since. Both are
+    read from the CartRAM the game loaded and ran on (its boot hash taken before the first frame)."""
     run = run_record(text)
     verify_liveness(run, primary)
     assert run["fixture_sha256"] == hashlib.sha256(candidate).hexdigest(), "reload ran on another file"
@@ -228,8 +239,7 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
 
     town_fixture = REPO / "tests/fixtures/gen2" / f"{town_spec.name}.SaveRAM"
     directory, text = _run(town_spec, town_fixture, staged[town_spec.name], "town", f"{title}_town", town_q)
-    from run_gb_gate import describe_gen2
-    saved = directory / describe_gen2(title)["saveram_name"]
+    saved = saved_image(directory, town_spec.name)
     town = verify_town(text, primary, symbols, saved.read_bytes(), staged[town_spec.name])
 
     candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_town.reload_candidate.SaveRAM"

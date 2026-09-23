@@ -25,7 +25,9 @@ M.COVERED_CONTROLS = {["idle reacquisition"]=true, ["warp/Continue"]=true}
 M.RUNS = {town="_town", reload="_town", battle="_battle"}
 -- The only harness scopes that may write bytes, per run (sorted).
 M.TEST_SCOPES = {town={"u2-test-box-write", "u2-test-party-write"}, reload={}, battle={}}
--- Negative windows per run: minimum frames (2 = at least one frame open at both edges), the
+-- tools/fixture_qualification.py FULL_CHAIN: the stages a full-scope qualification report ran.
+M.FULL_CHAIN = {"qualify", "boot", "resave", "post_oracle"}
+-- Negative windows per run: minimum frames (at least frames-1 of them open at both edges), the
 -- predicates of which one must fail on EVERY window frame, and whether the anchor must stay silent.
 -- START menu: CheckMenuOW -> CallScript sets wScriptRunning (C home/map.asm:925-935) and PlayerEvents
 -- .ok sets wScriptMode (C engine/overworld/events.asm:271-276); the menu loop never reaches OWPlayerInput.
@@ -100,7 +102,7 @@ local function window_problem(mode, want, w)
     if type(w) ~= "table" or not integer(w.frames, want.frames, COUNT) then
         return name .. " window not observed for " .. want.frames .. " frames"
     end
-    if not integer(w.both_edges, 1, w.frames - 1) or not integer(w.raw, 0, COUNT) or w.accepted ~= 0 then
+    if not integer(w.both_edges, want.frames - 1, w.frames - 1) or not integer(w.raw, 0, COUNT) or w.accepted ~= 0 then
         return name .. ": no accepted checkpoint hold inside the window"
     end
     if want.anchor_silent and w.raw ~= 0 then
@@ -143,7 +145,8 @@ function M.run_problem(run, mode, primary)
     end
     local at = {}
     for _, entry in ipairs(type(run.phases) == "table" and run.phases or {}) do
-        if type(entry) == "table" and at[entry.phase] == nil then at[entry.phase] = entry.accepted end
+        if type(entry) ~= "table" or not named(entry.phase) then return "a phase entry names no phase" end
+        if at[entry.phase] == nil then at[entry.phase] = entry.accepted end
     end
     for _, pair in ipairs(M.REACQUIRE[mode]) do
         local before, after = at[pair[1]], at[pair[2]]
@@ -266,6 +269,10 @@ function M.bind_fixture_qualification(receipt, reports)
            or type(report.errors) ~= "table" or next(report.errors) ~= nil then
             return nil, mode .. ": fixture qualification report did not pass"
         end
+        local stages = report.required_stages
+        local full = report.scope == "full" and plain_array(stages) and #stages == #M.FULL_CHAIN
+        for i, stage in ipairs(M.FULL_CHAIN) do full = full and stages[i] == stage end
+        if not full then return nil, mode .. ": fixture qualification report is not a full-chain report" end
         if not named(report.attempt_id) or report.attempt_id ~= run.qualification_attempt_id then
             return nil, mode .. ": run names another qualification attempt"
         end
@@ -297,7 +304,9 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
     if receipt == nil then
         unqualified = "Gen 2 checkpoint is SOURCE_CANDIDATE; runtime qualification is OPEN"
     else
-        scope, unqualified = M.qualified(pack, title, receipt)
+        local ok, result, why = pcall(M.qualified, pack, title, receipt)
+        if ok then scope, unqualified = result, why
+        else unqualified = "malformed write-window receipt: " .. tostring(result) end
     end
     -- The runtime authority for one write kind: the same held evaluation inspect_candidate reports,
     -- but only behind the PHYSICAL receipt and only for a kind it proved. Must run inside the
