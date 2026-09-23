@@ -159,7 +159,7 @@ function Client.new(p)
         -- REJECTED: its retirement commands (force_faint / memorialize) name the old key the
         -- server still knows, the mon's bytes carry the new one (review cx-6aacc4f1 #1)
         retired_alias = {},
-        deferred = {}, pending_battle_writes = {},
+        deferred = {}, pending_battle_writes = {}, arrivals = 0,
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         nuzlocke_announced = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
@@ -490,16 +490,33 @@ function Client.new(p)
         end
     end
 
+    -- A battle-held write handed to `deferred` later keeps its ARRIVAL position: appended, it
+    -- fell behind a later memorialize for the same key, which buried the live mon and then
+    -- dropped the faint ("key not in party"). Gen 3 684bbb7a fixed the same shape.
+    -- ponytail: mirrors Gen 3's lua/core/deferred.lua Deferred:push; folds into it at the
+    -- post-G4 convergence card (owner ruling), not a third queue.
+    local function defer_held(entry)
+        for i, queued in ipairs(self.deferred) do
+            if queued.arrival and queued.arrival > entry.arrival then
+                table.insert(self.deferred, i, entry)
+                return
+            end
+        end
+        self.deferred[#self.deferred + 1] = entry
+    end
+
     function self:handle_command(cmd)
         local c = cmd.cmd
         if c == "noop" then return end
+        self.arrivals = self.arrivals + 1
+        cmd.arrival = self.arrivals
         if c == "force_faint" or c == "force_explode" then
             local slot, mon, party, why = find_party_slot(cmd.key)
             if why then log("[SLink-gen1] " .. c .. ": " .. why .. " " .. tostring(cmd.key)) return end
             if not party then
                 -- unreadable right now (AddPartyMon's AskName window): keep it; the checkpoint
                 -- re-finds the key (a server command is never resent)
-                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
                 self.known_keys[cmd.key] = true
                 return
             end
@@ -512,7 +529,7 @@ function Client.new(p)
                 -- 2026-09-22): its party struct has no battle shadow, HasMonFainted refuses it
                 -- (core.asm:1473-1482, .notAlreadyOut :2402-2404) and GainExperience skips HP 0
                 -- (experience.asm:10-13). Explode = faint on the bench (EXPLOSION needs the field).
-                local w = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                local w = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
                 if self.writes_enabled and (battle.in_battle == 1 or battle.in_battle == 2)
                    and battle.type == 0 and battle.link_state ~= 4 and slot ~= battle.player_mon_number then
                     local ok, err = pcall(function()
@@ -534,7 +551,7 @@ function Client.new(p)
                 -- at the loop head by the active-battler path
                 self.pending_battle_writes[#self.pending_battle_writes + 1] = w
             else
-                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
             end
             self.known_keys[cmd.key] = true
             return
@@ -1040,7 +1057,7 @@ function Client.new(p)
             -- owed: the checkpoint zeroes it, instead of it waiting for some later battle
             for _, w in ipairs(self.pending_battle_writes) do
                 -- a bench write that landed on receipt is re-zeroed as a backstop, silently
-                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname, quiet = w.landed }
+                defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, quiet = w.landed, arrival = w.arrival })
             end
             self.pending_battle_writes = {}
             self.battle = nil
@@ -1456,7 +1473,7 @@ function Client.new(p)
                 end
             elseif slot then
                 -- special/link battle: leave the bench alone until the checkpoint
-                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
+                defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, arrival = w.arrival })
             end
         end
         self.pending_battle_writes = keep

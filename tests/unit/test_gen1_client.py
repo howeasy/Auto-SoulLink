@@ -704,6 +704,34 @@ def test_a_battle_write_that_never_landed_is_applied_after_the_battle(world):
     assert len(world.client.pending_battle_writes) == 0
 
 
+@pytest.mark.parametrize("special", [False, True])
+def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
+    """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
+    In battle the faint is held in pending_battle_writes; the hand-over (battle_end flush, or the
+    special-battle loop-head fallback) used to APPEND it behind the memorialize, which buried the
+    live mon first and then dropped the faint ("key not in party"). Gen 3 684bbb7a, same shape."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[0])
+    world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
+    world.step()
+    if special:
+        world.bus[world.ram["wBattleType"]] = 2
+        world.fire("battle_loop_head")
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step()                                # the battle_end signal is handled on the frame
+    queued = [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+    assert queued == ["force_faint", "memorialize"], queued
+    world.overworld_safe()
+    world.step(4)
+    assert not any("force_faint dropped" in line for line in world.logs), world.logs
+    assert len(world.events("memorialize_done")) == 1
+
+
 def test_hello_waits_for_the_overworld_checkpoint_not_the_main_menu(world):
     # MainMenu -> TryLoadSaveFile: the save is in WRAM (party readable, wPlayerID set) before
     # the player chooses CONTINUE or NEW GAME, so a readable party is not "in the game"
