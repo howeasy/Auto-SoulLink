@@ -866,3 +866,18 @@ def test_return_to_grass_origin_refuses_off_square(machine):
     fake.place(3, 19, 12, 30)
     with pytest.raises(LuaError, match="grass square"):
         mod.return_to_grass_origin(fake.cp, "t")
+
+
+@pytest.mark.parametrize("start,first", [((12, 37), "Right"), ((13, 37), "Down"),
+                                         ((13, 38), "Left"), ((12, 38), "Up")])
+def test_grass_hunt_first_step_follows_the_tile(machine, start, first):
+    # FR run 27: a hunt resumed from a savestate at (13,38) stepped Right, off the square.
+    lua, mod, fake = machine
+    fake.place(3, 19, *start)
+    lua.execute("""
+        F.dirs={}
+        D.play.step=function(cp,dir) F.dirs[#F.dirs+1]=dir; error("stop", 0) end
+    """)
+    with pytest.raises(LuaError, match="stop"):
+        mod.hunt_encounter(fake.cp, "t", 1)
+    assert fake.dirs[1] == first

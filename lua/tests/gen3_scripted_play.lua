@@ -1008,6 +1008,12 @@ local function hunt_encounter(cp, label, cycles)
                 .. "(12..13,37..38)", label, play.at(cp)))
         end
         grass_step = 1
+    else
+        -- The step is a function of the tile, not of history: a leg resumed from a savestate
+        -- (FR run 27: route1_faint from slink_fr_route1_catch.State at (13,38)) starts with
+        -- grass_step reset to 1 (Right), which walks off the square. GRASS_LOOP from (12,37).
+        grass_step = (px == 12 and py == 37) and 1 or (px == 13 and py == 37) and 2
+                     or (px == 13 and py == 38) and 3 or 4
     end
     for cycle = 1, (cycles or 40) do
         for _ = 1, #GRASS_LOOP do
@@ -2273,6 +2279,7 @@ return {
     LEGS = LEGS, PATHS = PATHS, play = play,
     GRASS_LOOP = GRASS_LOOP, GRASS_ORIGIN = GRASS_ORIGIN,
     return_to_grass_origin = return_to_grass_origin,
+    hunt_encounter = hunt_encounter,
     -- test hooks (Codex review cx-378ce251): the in_battle polarity wrapper and the lab scene
     -- var address arithmetic, both independently checkable without an emulator.
     follow = play.follow,
