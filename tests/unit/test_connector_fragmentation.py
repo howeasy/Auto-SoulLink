@@ -250,3 +250,151 @@ def test_the_tail_of_an_over_long_line_is_not_delivered_as_a_line():
     assert delivered == [good], (
         f"expected only the valid line to survive the resync, got "
         f"{[(len(d), d[:20]) for d in delivered]}")
+
+
+# ── the Gen 3 production client over the SAME fragmenting connector (P4 card C4-5) ─────────
+#
+# Every test above proves connector.lua reassembles a fragmented line for a hand-authored
+# c.send/c.receive script. This drives the same fragmenting mock through the REAL Gen 3
+# client's own frame_end (lua/gen3/client.lua over lua/core/session.lua) -- the production
+# lua/gen3/entry.lua build, not a stand-in -- so the client's own send()/receive() calls (not
+# a test script's) are what gets fragmented and reassembled.
+#
+# tests/unit/gen3_world.py's World wires its own stub `net` with no hook to substitute a real
+# connector (a read-only file for this card; a `net` override hook there is worth adding
+# later, filed as a follow-up rather than edited here -- docs/gen3/research/
+# p4_gen1_contract_map.md §4.3: "if it lacks a hook you need, report it"), so this builds the
+# smallest real client directly against lua/gen3/entry.lua, reusing gen3_world.py's own
+# pack-loading helpers and pointer/predicate offsets (duplicated from
+# test_connector_reconnect.py's own copy rather than imported: the two files' mock sockets
+# have deliberately different shapes -- chunked send/receive here, hard-fail there -- and
+# each file stays self-contained about which one it drives).
+
+from tests.unit.gen3_world import ROM_BASE, SB1_ADDR, SB2_ADDR, pack_json  # noqa: E402
+
+
+def _gen3_client_over(rt, net):
+    """A minimal, live gen3_frlg/firered production client (empty party) whose net is the
+    given connector.lua instance -- built on the SAME LuaRuntime as `net` (lupa refuses to mix
+    tables from two runtimes)."""
+    L = rt
+    repo_posix = _REPO.replace("\\", "/")               # embedded in Lua string literals below
+
+    profile = pack_json("gen3_frlg", "profile.json")["titles"]["firered"]
+    sites = pack_json("gen3_frlg", "engine_signals.json")["titles"]["firered"]["artifacts"]["clean"]["sites"]
+    wc = pack_json("gen3_frlg", "write_checkpoint.json")["firered"]
+
+    rom: dict[int, int] = {}
+    for site in sites.values():
+        for i, b in enumerate(bytes.fromhex(site["expected_hex"])):
+            rom[site["rom_offset"] + i] = b
+    for anchor in wc["anchors"].values():
+        for i, b in enumerate(bytes.fromhex(anchor["expected_hex"]["clean"])):
+            rom[anchor["rom_offset"] + i] = b
+
+    bus: dict[int, int] = {}
+    regs = {"R13": 0x03007F00, "R15": 0, "CPSR": 0}
+    frame = [0]
+
+    def poke_int(addr, value, width):
+        for i in range(width):
+            bus[addr + i] = (value >> (8 * i)) & 0xFF
+
+    def byte(addr):
+        if addr >= ROM_BASE:
+            return rom.get(addr - ROM_BASE, 0)
+        return bus.get(addr, 0)
+
+    io_ = L.table(
+        read_u8=lambda a: byte(int(a)),
+        read_u16=lambda a: byte(int(a)) | (byte(int(a) + 1) << 8),
+        read_u32=lambda a: sum(byte(int(a) + i) << (8 * i) for i in range(4)),
+        read_bytes=lambda a, n: L.table(*[byte(int(a) + i) for i in range(int(n))]),
+        rom_read=lambda off, n: L.table(*[rom.get(int(off) + i, 0) for i in range(int(n))]),
+        framecount=lambda: frame[0], register=lambda name: regs.get(str(name), 0),
+        write_u8=lambda a, v, *_: bus.__setitem__(int(a), int(v)),
+        saveram=lambda: None,
+    )
+    hooks: dict[str, tuple] = {}
+    ev = L.table(
+        on_bus_exec=lambda fn, addr, name: (hooks.__setitem__(str(name), (fn, int(addr))),
+                                            f"id-{len(hooks)}")[1],
+        unregister=lambda i: None,
+    )
+    hud = L.table(show=lambda *a: None, prompt=lambda *a: None, set_game_over=lambda: None,
+                  set_rebuilding=lambda t: None, clear_rebuilding=lambda: None,
+                  nuzlocke_start=lambda *a: None)
+    Entry = rt.eval(f'dofile("{repo_posix}/lua/gen3/entry.lua")')
+    client, _parts = Entry.build(L.table(
+        root=repo_posix, mode="production", io=io_, ev=ev, net=net, hud=hud,
+        pack="gen3_frlg", title="firered", kind="clean", player="a",
+        rom_sha1="ab" * 20, log=lambda t: None,
+    ))
+
+    ptrs = wc["pointers"]
+    poke_int(ptrs["gSaveBlock1Ptr"]["address"], SB1_ADDR, 4)
+    poke_int(ptrs["gSaveBlock2Ptr"]["address"], SB2_ADDR, 4)
+    poke_int(ptrs["gPokemonStoragePtr"]["address"], profile["ram"]["POKEMON_STORAGE_BASE"], 4)
+    d = profile["derived"]
+    if "SB2_OT_ID_OFFSET" in d:
+        poke_int(SB2_ADDR + d["SB2_OT_ID_OFFSET"], 0xABCD, 4)
+    poke_int(profile["ram"]["PARTY_COUNT_ADDR"], 0, 1)
+    for p in wc["predicates"].values():
+        poke_int(p["address"] + p["offset"], p["expect"], p["width"])
+    cpu = wc["cpu"]
+    regs["R15"] = cpu["pc_min"]
+    regs["CPSR"] = cpu["mode"] | (cpu["thumb"] << 5)
+    client.start(client)
+
+    def step():
+        frame[0] += 1
+        client.frame_end(client)
+
+    return client, step
+
+
+def test_gen3_clients_hello_line_survives_fragmentation_byte_perfect():
+    """The client's own hello -- not a test-authored line -- reassembles whole on the peer
+    side across many small sends, the same guarantee test_a_long_line_is_sent_exactly_once...
+    proves for a hand-driven c.send() above."""
+    rt, c, mock, _ = _lua_env(chunk=8)
+    c.init("127.0.0.1", 1)
+    client, step = _gen3_client_over(rt, c)
+    step()
+    assert _connect(c, mock) or c.connected()
+
+    for _ in range(4000):
+        c.pump()
+
+    received = "".join(mock.sent[i] for i in range(1, len(mock.sent) + 1))
+    lines = [ln for ln in received.split("\n") if ln]
+    assert lines, "the client's hello never reached the peer"
+    hello = json.loads(lines[0])
+    assert hello["event"] == "hello" and hello["party"] == []
+    _ = client
+
+
+def test_gen3_client_handles_a_command_reply_split_across_many_frames():
+    """An inbound reply split into many small chunks (the same fragmentation shape
+    test_a_line_split_across_frames_is_reassembled_whole proves for a hand-driven c.receive())
+    is correctly reassembled and acted on by the real client -- not just returned as a whole
+    string by connector.lua, but decoded and dispatched by lua/core/session.lua's own receive
+    loop (session.lua:315-327)."""
+    rt, c, mock, _ = _lua_env(chunk=8)
+    c.init("127.0.0.1", 1)
+    client, step = _gen3_client_over(rt, c)
+    step()
+    for _ in range(50):
+        step()
+        if c.connected():
+            break
+    assert c.connected()
+
+    reply = json.dumps({"commands": [{"cmd": "game_over"}]})
+    rt.execute("local m, s = ...; m.inbox = s .. '\\n'", mock, reply)
+    for _ in range(2000):
+        step()
+        if client.game_over:
+            break
+
+    assert client.game_over is True, "the fragmented game_over command was never applied"
