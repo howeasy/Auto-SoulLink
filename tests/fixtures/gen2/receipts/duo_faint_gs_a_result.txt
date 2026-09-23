@@ -1,0 +1,48 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_faint","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3504
+  phase battle @4228
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6888,"key":"01A5:C4A6:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"01A5:C4A6:10","level":2,"maxHP":13,"nickname":"PIDGEY","player":"a","seq":120,"species_id":16,"stats":{"level":2,"maxHP"
+CAPTURE_SENT {"frame":6888,"key":"01A5:C4A6:10","seq":120}
+CAUGHT 01A5:C4A6:10
+RX box_mon key=01A5:C4A6:10
+TX {"event":"box_mon_failed","key":"01A5:C4A6:10","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":121}
+TX {"event":"safe","player":"a","seq":122}
+  phase save @6948
+  phase saved @7642
+MYKEY 0 EC63:C4A6:9E
+MYKEY 1 01A5:C4A6:10
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"a712e342586d7fa9d92a520361d255e02e70cc8d3594a155e18067ba0f311b17","client_saves":1,"frame":7672,"gate_saves":1,"key":"01A5:C4A6:10","save_completed_frame":7642,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-gs-faint-link/patch/build/e2e_gen2_faint_gen2-gs-faint_a_link_save.SaveRAM"}
+RX play_sound
+RX msgbox
+RX party_mon key=01A5:C4A6:10
+TX {"event":"sync_retrieve_failed","key":"01A5:C4A6:10","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":176}
+RX box_mon key=01A5:C4A6:10
+TX {"event":"box_mon_failed","key":"01A5:C4A6:10","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":177}
+RX hud_show
+  phase walk @9219
+  phase battle @9494
+ENGINE_FAINT {"cause":"battle","frame":12754,"key":"01A5:C4A6:10","site_id":"battle_faint","slot":1}
+TX {"area_id":"route_29","event":"faint","key":"01A5:C4A6:10","player":"a","seq":321}
+FAINT_SENT {"frame":12754,"key":"01A5:C4A6:10","seq":321}
+RX memorialize key=01A5:C4A6:10
+TX {"event":"memorialize_failed","key":"01A5:C4A6:10","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":322}
+RX game_over
+TX {"event":"safe","player":"a","seq":341}
+  phase fainted @13342
+  phase save @13372
+  phase saved @14067
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"54e9f49dabc084bea76c6de01d954ca71127de00178ca5b82d0d0d849f80b8b8","client_saves":2,"flushed_matches":true,"frame":14097,"gate_saves":2,"save_completed_frame":14067,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-gs-faint-link/patch/build/saveram_gen2_faint_gen2-gs-faint_a/Pokemon - Gold Version (USA, Europe).SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6888,"key":"01A5:C4A6:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"faint":{"cause":"battle","frame":12754,"key":"01A5:C4A6:10","site_id":"battle_faint","slot":1},"faint_sent":{"frame":12754,"key":"01A5:C4A6:10","seq":321},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":50342},"input_mode":"normal_buttons","key":"01A5:C4A6:10","link_save":{"cartram_bytes":32768,"cartram_sha256":"a712e342586d7fa9d92a520361d255e02e70cc8d3594a155e18067ba0f311b17","client_saves":1,"frame":7672,"gate_saves":1,"key":"01A5:C4A6:10","save_completed_frame":7642,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-gs-faint-link/patch/build/e2e_gen2_faint_gen2-gs-faint_a_link_save.SaveRAM"},"player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"54e9f49dabc084bea76c6de01d954ca71127de00178ca5b82d0d0d849f80b8b8","client_saves":2,"flushed_matches":true,"frame":14097,"gate_saves":2,"save_completed_frame":14067,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-gs-faint-link/patch/build/saveram_gen2_faint_gen2-gs-faint_a/Pokemon - Gold Version (USA, Europe).SaveRAM"},"scenario":"gen2_faint","schema":"gen2-duo-faint-v1","title":"gold"}
+RESULT: PASS (fainted 01A5:C4A6:10)

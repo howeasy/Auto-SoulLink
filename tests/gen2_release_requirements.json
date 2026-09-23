@@ -19,7 +19,7 @@
         "initiator": "crystal",
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
-        "scenarios": ["link"]
+        "scenarios": ["link", "gen2_faint"]
       },
       "proofs": [
         {
@@ -33,6 +33,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_pydec_result.txt",
                       "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
           }
+        },
+        {
+          "scenario": "gen2_faint",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_faint --lane gen2-cc-faint --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_a_result.txt",
+                  "sha256": "edad646a80123aad992c72a1a7f7e119f06bbdaee54cc40e1cb5dc2ec16a6ec1"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_b_result.txt",
+                  "sha256": "3a48040450de017a4fde0f48924f14c7cb19c04ac794576b81c2a5f14a6e988e"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_pydec_result.txt",
+                      "sha256": "dc3d563a0e38f4eeac83a66d98890897cebdc62f71246c4f40e3820182ce3807"}
+          }
         }
       ]
     },
@@ -45,7 +57,7 @@
         "initiator": "gold",
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
-        "scenarios": ["link"]
+        "scenarios": ["link", "gen2_faint"]
       },
       "proofs": [
         {
@@ -58,6 +70,18 @@
                   "sha256": "a527c6928cc02129d0e73fc9b306d2d27eaf3122e0d4bd97ed62271ce750eda1"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_pydec_result.txt",
                       "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
+          }
+        },
+        {
+          "scenario": "gen2_faint",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_faint --lane gen2-gs-faint --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_a_result.txt",
+                  "sha256": "4843853fc068d4a18a9bdfcd6991ae680c528e6126cc7af690c3f811667af1d4"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_b_result.txt",
+                  "sha256": "87245edba2a9d3bf267e7c931af8ff609f59001430776a70136dcab2c14ffcab"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_pydec_result.txt",
+                      "sha256": "6407bef7d5e7a08fd5c4ca662a240ddbd3f7fce48d48d3c52974c7bbc4ac9e71"}
           }
         }
       ]
