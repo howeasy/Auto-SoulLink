@@ -280,7 +280,7 @@ local function build_production(deps, c)
     -- the real mailbox was busy (Codex REV2). The session does not exist yet, so send resolves it
     -- lazily. The FULL pack profile is read here: the arena lives at profile.native, outside
     -- titles (Codex REV on C5-1). Clean artifacts, FRLG and packs with no native block get none.
-    local client
+    local session   -- not `client`: that is a BizHawk global name (test_gen3_signals BizHawk-globals scan)
     local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
     if not native and pack == "gen3_rr" and c.artifact_kind == "companion"
        and type(full_profile.native) == "table" then
@@ -324,14 +324,14 @@ local function build_production(deps, c)
             },
             writes = writes, reads = reads, array = c.json.array,
             send = function(event, fields)
-                if client then return client.send(event, fields) end
+                if session then return session.send(event, fields) end
             end,
-            in_battle = function() return client and client.driver.in_battle() or false end,
+            in_battle = function() return session and session.driver.in_battle() or false end,
             artifact_kind = c.artifact_kind, log = log,
             refresh_enemy = refresh_enemy, panel_closed = panel_closed,
         })
     end
-    client = L("lua/gen3/client.lua").new({
+    session = L("lua/gen3/client.lua").new({
         reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
         writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
         hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
@@ -346,7 +346,7 @@ local function build_production(deps, c)
     local parts = c.parts
     parts.writes, parts.boxes, parts.safety, parts.policy, parts.native = writes, boxes, safety, policy, native
     parts.native_present = native ~= nil
-    return client, parts
+    return session, parts
 end
 
 function Entry.build(deps)

@@ -268,6 +268,9 @@ def lua():
 
 @pytest.fixture(scope="module")
 def module(lua):
+    # Restored at teardown: gen3_scripted_play.lua reads SLINK_GEN3_TITLE (C4-LG), so a leaked
+    # "radical_red" silently gives every later FR test RR addresses.
+    saved = {k: os.environ.get(k) for k in ("SLINK_ROOT", "SLINK_GEN3_CHECKPOINT", "SLINK_GEN3_TITLE")}
     os.environ.setdefault("SLINK_ROOT", _LUA_REPO)
     os.environ["SLINK_GEN3_CHECKPOINT"] = f"{_LUA_REPO}/data/games/gen3_rr/write_checkpoint.json"
     os.environ["SLINK_GEN3_TITLE"] = "radical_red"
@@ -282,7 +285,12 @@ def module(lua):
     fake.box_bases = lua.table_from(profile["derived"]["CFRU_BOX_BASES"])
     fake.box_stride = profile["derived"]["COMPRESSED_MON_SIZE"]
     fake.enemy_base = profile["ram"]["ENEMY_BASE"]
-    return mod
+    yield mod
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 
 
 @pytest.fixture(scope="module")
