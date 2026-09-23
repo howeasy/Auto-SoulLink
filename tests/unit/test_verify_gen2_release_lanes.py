@@ -769,3 +769,19 @@ def test_new_gates_precheck_blocks_run_lane_before_pytest(monkeypatch):
     ok, detail = gate.run_lane(_lane("live-new-gates"), quiet=True)
     assert not ok
     assert detail == "new-gates.x: gap"
+
+
+def test_pydec_end_status_is_per_scenario():
+    """link must end alive; gen2_faint may end dead or memorial (the memorialize NACK lets the
+    server finish the pair), never alive."""
+    axes = {"initiator": "gold", "partner": "silver"}
+    keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
+
+    def errs(scenario, status):
+        line = f"PYDEC: PASS a={keys['a']} b={keys['b']} area=route_29 titles=gold/silver status={status}"
+        return gate._pydec_cell_errors([line], scenario, axes, keys)
+
+    assert errs("link", "alive") == []
+    assert errs("link", "memorial") != []
+    assert errs("gen2_faint", "dead") == [] and errs("gen2_faint", "memorial") == []
+    assert errs("gen2_faint", "alive") != []

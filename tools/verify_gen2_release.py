@@ -234,8 +234,9 @@ DUO_REQUIRED_SCENARIOS = frozenset({"link"})
 
 
 # Codex's H5 PYDEC format (review O16 F1): "PYDEC: PASS a=<key> b=<key> area=<id>
-# titles=<a-title>/<b-title> status=<alive|dead>" -- link ends alive, gen2_faint ends dead.
-SCENARIO_END_STATUS = {"link": "alive", "gen2_faint": "dead"}
+# titles=<a-title>/<b-title> status=<alive|dead|memorial>" -- link ends alive; gen2_faint ends dead, or
+# memorial once the Gen 2 memorialize NACK lets the server finish the pair (owner, via Codex H5).
+SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}}
 
 
 def _fixture_sha256(root: Path, fixture: str) -> str | None:
@@ -276,7 +277,8 @@ def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys
             "titles": f"{axes['initiator']}/{axes['partner']}",
             "status": SCENARIO_END_STATUS.get(scenario)}
     errors = [f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
-              for key, value in want.items() if value is not None and tokens.get(key) != value]
+              for key, value in want.items()
+              if value is not None and not (tokens.get(key) in value if isinstance(value, set) else tokens.get(key) == value)]
     if not tokens.get("area"):
         errors.append("pydec receipt does not name this cell: area= is empty or missing")
     return errors
