@@ -1,11 +1,11 @@
-# Gen 3 migration — resume note (2026-09-21, session 2 in progress)
+# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 9: G3 request ready)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
 ## Where things are
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45`, branch `claude/gen3-migration-planning-5d8e45`, pushed to origin on owner authority (2026-09-21) so CI could build the pret symbols. Not merged to master. Base: master `4749a2c`.
-- Coordinator: Claude session `92be0738-12a4-4228-b388-eb5fe6f7c779` (Fable 5.1). Codex live thread "Plan Gen3 support" (repo root, `E:/Google Drive/SLink`) is the research/implementation peer; headless Codex persists `gen3-syms`, `gen3-tap` exist (their sandbox cannot run Python: the coordinator runs their checks).
+- Coordinator: Claude session `30c21a7a-9a9b-44db-b573-10e09226bcc8` (Opus 5.5; earlier sessions 92be0738, f4121ed4). Peers (2026-09-23): Codex live thread **"Review Gen 3 Part 2"** (id 01a0cba4-88cf-7a51-9616-2e0eb582bc87, workingDirectory `E:\Google Drive\SLink`). Its live REQUESTS return NO_LIVE_PEER, so cards go as `delivery: steer` NOTES with a `queueKey`, and replies come back as notes or via `magi exchange <id>`. OMP session **"Gen3-2"** (case-sensitive) takes live requests, one card at a time. Subagents: Haiku/Sonnet/Opus with `model` set, at most 3 at a time. The Stop hook `~/.claude/hooks/orchestration.py` tracks note cards (`done note:<queueKey>`); never `clear` to silence it. magi refuses new requests until old replies get `kind: outcome` (RECONCILE_FIRST).
 - Owner rulings (G0 signed 2026-09-21): FRLG vanilla + Radical Red only; strangler; battery fixtures; agbcc git pin; admitted companion = what the shipped `SLink-RR.ups` produces (md5 `bf8e94a0…`, patcher pin corrected at `72dffad`); LeafGreen dump placed and verified; keep the two-reviewer G6 precedent; `codex/rr-foundation` tagged `archive/codex/rr-foundation` (local); vanilla FRLG trade NOT in this release; no `sync_pending`/`trade_failed`.
 
 ## Gate status
@@ -15,6 +15,8 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 | G0 | SIGNED (PLAN §14.1) |
 | G1 | **SIGNED 2026-09-21** (PLAN §14.1). Receipts: hook probe PASS on FR clean + RR companion (`docs/gen3/probes/hooks_*_2026-09-21.txt`), frame-end census (`census_rr_overworld_2026-09-21.txt`: R15 parked in BIOS `0x1C4`, System/ARM), flash domain = `SRAM` 0x20000, six RR duos PASS twice on the old client, golden transcripts committed (`tests/fixtures/gen3/wire/`, 796K, four gzipped), conformance suite 16 passed with the old-client characterization (items 1/14 documented as A19; 29/30 were checker over-assertions; 28 unevidenced). Ask the owner to sign G1 with those receipts. |
 | G2 | **SIGNED 2026-09-21** as pinned facts only (PLAN §14.1; report `docs/gen3/G2_report_2026-09-21.md`, §9 = G3 carry-forward list). |
+| G3a | SIGNED (P3a pairing; see P3/P3a section). |
+| G3 | **REQUEST READY 2026-09-23**: `docs/gen3/G3_request_draft.md` (5efd1f24), awaiting owner signature. |
 
 ## Landed this session (planning branch, in order)
 
