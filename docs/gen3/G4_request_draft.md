@@ -86,6 +86,23 @@ Commands are the ones the receipts themselves used. **S**
    `linked_faint_active_gen3` — the **in-battle** faint the owner requires on vanilla with RR
    parity (`docs/gen3_resume.md`, checkpoint 10 rulings). Each needs its own PASS receipt with
    witness hashes and counter deltas; `--wire-log` for the ones whose wire shape is new.
+2a. **Writes inside a Pokemon Center (owner ruling 2026-09-23; 5ecfae3b, Codex REV-center-tasks-1 ACCEPT
+   as SOURCE/MODEL only).** This widens the G3-signed task allow-list, so it needs its own PHYSICAL
+   receipt on FR and LG (RR at G5), kept separate from the G3 signature:
+   (1) pin ROM/pack/source hashes and fixture; stand in an identified Center 1F reached naturally; log map,
+   coordinates, frame, the FULL active task list, RFU/received-player state, callback/script/fade predicates,
+   parked CPU and the pointer snapshot;
+   (2) deliver a real queued SLink mutation while the Union Room background set is present, and show the
+   overworld arm and the writes landing INSIDE the Center before leaving (whiteout_gen3's rebuild is the
+   natural carrier); independently read the keyed party/PC result; a PASS after walking out does not count;
+   (3) save normally: fresh save-hook witness + counter, flushed battery / PYDEC readback of the affected
+   slot, no unrelated record changed, no duplicate event or ACK;
+   (4) negative controls: move toward an RFU/Union Room/cable session (nurse, 2F attendant, Union Room
+   entry and return) and show the newly refused task or predicate by name with ZERO mutation while blocked.
+   Record 2F/Union Room locations explicitly. Limit: BizHawk has no wireless adapter, so partner detection
+   is proven from source only;
+   (5) the existing field/battle/menu/IRQ negative controls must still hold.
+   Keep the transitive-audit manifest (the C4-UR closure list and callback roots) as audit evidence.
 3. **The FRLG-relevant probe rows** — the battle/native/sound rows that need battle savestates
    (13+ rows, per `docs/gen3_resume.md`'s checkpoint-10 next-actions item 2):
    `python tools/run_gate.py lua/tests/probe_gen3_checkpoint.lua --rom patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba`
