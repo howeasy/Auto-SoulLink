@@ -145,7 +145,9 @@ class Machine:
             if self.pc == 0xFFFF:
                 return
             op = self.fetch()
-            if op in (0xF5, 0xC5, 0xD5, 0xE5):
+            if op == 0x00:
+                pass
+            elif op in (0xF5, 0xC5, 0xD5, 0xE5):
                 hi, lo = {0xF5: "af", 0xC5: "bc", 0xD5: "de", 0xE5: "hl"}[op]
                 self.push(self.r[hi] << 8 | self.r[lo])
             elif op in (0xF1, 0xC1, 0xD1, 0xE1):
@@ -246,7 +248,7 @@ def test_emitted_counter_wrap_repeat_and_native_reset(compiled):
     assert machine.ram[machine.mailbox + 30] == 87
 
 
-@pytest.mark.parametrize("mutation", ["return_only", "bad_beacon", "bank_restore", "caps"])
+@pytest.mark.parametrize("mutation", ["return_only", "bad_beacon", "bank_restore", "caps", "vblank_flag"])
 def test_emitted_negative_controls(compiled, mutation):
     machine = Machine(compiled)
     rom = bytearray(machine.rom)
@@ -262,6 +264,13 @@ def test_emitted_negative_controls(compiled, mutation):
         pattern = bytes([0xAF, 0xEA, (machine.mailbox + 8) & 255, (machine.mailbox + 8) >> 8])
         pos = rom.index(pattern, start)
         rom[pos] = 0x78  # ld a,b instead of xor a: advertise unsupported capability
+    elif mutation == "vblank_flag":
+        occurred = 0xCFB3 if machine.title == "crystal" else 0xCEEA
+        start = machine.symbols["SlinkDelayFrameBridge"][1]
+        end = machine.symbols["SlinkDelayFrameBridgeEnd"][1]
+        store = bytes([0xEA, occurred & 255, occurred >> 8])
+        pos = rom.index(store, start, end)
+        rom[pos:pos + 3] = bytes(3)  # omit the displaced flag write, keeping register effects
     else:
         start = machine.symbols["SlinkDelayFrameBridge"][1]
         pos = rom.index(b"\xf1\xd7", start)
