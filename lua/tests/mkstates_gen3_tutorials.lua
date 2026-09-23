@@ -54,6 +54,9 @@ M.START_MENU_CURSOR_ADDR = 0x020370F4    -- sStartMenuCursorPos
 M.START_MENU_COUNT_ADDR  = 0x020370F5    -- sNumStartMenuItems
 M.START_MENU_ORDER_ADDR  = 0x020370F6    -- sStartMenuOrder
 M.START_MENU_WINDOW_ADDR = 0x0203ABE0    -- sStartMenuWindowId (0xFF = closed)
+M.GMAIN_CALLBACK2_ADDR   = 0x030030F4    -- gMain.callback2 (main.h:14-15)
+M.TASKS_ADDR             = 0x03005090    -- gTasks[16], 40 bytes each: func +0, isActive +4
+M.PALETTE_FADE_BYTE_ADDR = 0x02037ABF    -- gPaletteFade+7, bit 7 = active (checkpoint predicate)
 
 M.SB1_VARS_OFF = 0x1000                  -- global.h:791
 M.VAR_OLD_MAN = 0x4051
@@ -72,14 +75,14 @@ M.TITLES = {
     firered = {
         oak_old_man = { 0x080E75AC, 0x080EB658 }, pokedude = { 0x081560A0, 0x0815A008 },
         TASK_FIELD_ITEM_CONTEXT = 0x08109BE5,   -- Task_FieldItemContextMenuHandleInput
-        CB2_TEACHY_TV = 0x0815AC2D,             -- TeachyTvMainCallback
+        CB2_TEACHY_TV = 0x0815AB95,             -- TeachyTvCallback (NOT ...MainCallback, see ttv_list_ready)
         TASK_TTV_LIST = 0x0815B2C1,             -- TeachyTvOptionListController
         TASK_TTV_MSG = 0x0815B4ED,              -- TeachyTvRenderMsgAndSwitchClusterFuncs
     },
     leafgreen = {
         oak_old_man = { 0x080E7584, 0x080EB630 }, pokedude = { 0x0815607C, 0x08159FE4 },
         TASK_FIELD_ITEM_CONTEXT = 0x08109BBD,
-        CB2_TEACHY_TV = 0x0815AC09,
+        CB2_TEACHY_TV = 0x0815AB71,
         TASK_TTV_LIST = 0x0815B29D,
         TASK_TTV_MSG = 0x0815B4C9,
     },
@@ -138,6 +141,27 @@ function M.battle_witness(kind, T, in_battle)
     return true, detail
 end
 
+function M.task_live(fn)
+    for i = 0, 15 do
+        local base = M.TASKS_ADDR + i * 40
+        if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == fn then return true end
+    end
+    return false
+end
+
+--- Will TeachyTvOptionListController READ an A? LIVE 2026-09-23 (FR+LG, c08328b4): the old test
+--- `callback2 == TeachyTvMainCallback and list task live and fade idle` passed on a snapshot taken
+--- INSIDE TeachyTvMainCallback case 1 (teachy_tv.c:473-501): the list task already exists (:486)
+--- but BeginNormalPaletteFade (:497) and SetMainCallback2(TeachyTvCallback) (:499) had not run
+--- yet. The A then landed in the fade-in, which the list ignores (:720 `if (!gPaletteFade.active)`),
+--- and nothing was chosen: "TTVSCR_BATTLE was not chosen". Case 1 installs TeachyTvCallback LAST,
+--- after the fade has started, so that callback + a finished fade is the real input-ready state.
+function M.ttv_list_ready(T)
+    return memory.read_u32_le(M.GMAIN_CALLBACK2_ADDR) == T.CB2_TEACHY_TV
+        and memory.read_u8(M.PALETTE_FADE_BYTE_ADDR) & 0x80 == 0
+        and M.task_live(T.TASK_TTV_LIST)
+end
+
 -- ── the run (BizHawk only) ───────────────────────────────────────────────────────────────────
 
 local G   -- gen3_boot_check, bound by run()
@@ -169,13 +193,7 @@ local function run()
         end
         return true
     end
-    local function task_on(fn)
-        for i = 0, 15 do
-            local base = SP.TASKS_BASE + i * 40
-            if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == fn then return true end
-        end
-        return false
-    end
+    local task_on = M.task_live
     local function cb2() return memory.read_u32_le(SP.GMAIN_CALLBACK2_ADDR) end
     --- Wait up to `frames` for pred(); with `a`, pulse A (never B) on the 16-frame cadence.
     local function await(pred, frames, a)
@@ -322,16 +340,20 @@ local function run()
 
     -- Teachy TV list: row 0 == TTVSCR_BATTLE, read back before and after the A
     local S0 = M.TTV_STATIC_ADDR
-    if not await(function()
-        return cb2() == T.CB2_TEACHY_TV and task_on(T.TASK_TTV_LIST) and G.pred_ok(cp, "palette_fade_active")
-    end, 900) then return fail("the Teachy TV list never took input") end
-    G.idle(13)
-    local idx = memory.read_u16_le(S0 + M.TTV_SCROLL_OFF) + memory.read_u16_le(S0 + M.TTV_ROW_OFF)
-    if idx ~= M.TTVSCR_BATTLE then return fail("Teachy TV list cursor on row " .. idx) end
-    G.tap("A", 3, 0)
-    if not await(function()
+    local function chosen()
         return task_on(T.TASK_TTV_MSG) and memory.read_u8(S0 + M.TTV_WHICH_OFF) == M.TTVSCR_BATTLE
-    end, 120) then return fail("TTVSCR_BATTLE was not chosen") end
+    end
+    for _ = 1, 3 do   -- a swallowed A leaves the list up; only A is ever retried
+        if not hold(function() return M.ttv_list_ready(T) end, 900) then
+            return fail("the Teachy TV list never took input")
+        end
+        local idx = memory.read_u16_le(S0 + M.TTV_SCROLL_OFF) + memory.read_u16_le(S0 + M.TTV_ROW_OFF)
+        if idx ~= M.TTVSCR_BATTLE then return fail("Teachy TV list cursor on row " .. idx) end
+        G.tap("A", 3, 0)
+        if await(chosen, 120) then break end
+        G.phase("ttv-retry", "A not taken by the list")
+    end
+    if not chosen() then return fail("TTVSCR_BATTLE was not chosen") end
     G.phase("ttv-battle", "row 0 chosen")
 
     -- host text (A only) into the Pokedude demo, then witness with no input at all

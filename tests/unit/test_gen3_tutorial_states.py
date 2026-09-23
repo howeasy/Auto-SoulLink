@@ -85,9 +85,12 @@ def test_addresses_match_sym_and_map(env, title):
     assert sym("sNumStartMenuItems", stem) == m.START_MENU_COUNT_ADDR
     assert sym("sStartMenuOrder", stem) == m.START_MENU_ORDER_ADDR
     assert sym("sStartMenuWindowId", stem) == m.START_MENU_WINDOW_ADDR
+    assert sym("gMain", stem) + 4 == m.GMAIN_CALLBACK2_ADDR
+    assert sym("gTasks", stem) == m.TASKS_ADDR
+    assert sym("gPaletteFade", stem) + 7 == m.PALETTE_FADE_BYTE_ADDR
     t = m.TITLES[title]
     for key, name in (("TASK_FIELD_ITEM_CONTEXT", "Task_FieldItemContextMenuHandleInput"),
-                      ("CB2_TEACHY_TV", "TeachyTvMainCallback"),
+                      ("CB2_TEACHY_TV", "TeachyTvCallback"),
                       ("TASK_TTV_LIST", "TeachyTvOptionListController"),
                       ("TASK_TTV_MSG", "TeachyTvRenderMsgAndSwitchClusterFuncs")):
         assert t[key] == sym(name, stem) | 1, key
@@ -250,6 +253,40 @@ def test_wrong_controller_or_type_fails(env, title):
         assert not ok and reason in why, (kind, flags, hex(ctrl), why)
     ok, why = witness(env, title, "pokedude", 0x10000, dude, in_battle=False)
     assert not ok and "not in battle" in why
+
+
+def list_snapshot(env, title, cb2_name, fade_active, task=True):
+    _, m, ram = env
+    stem = TITLES[title]
+    ram.put(m.GMAIN_CALLBACK2_ADDR, sym(cb2_name, stem) | 1, 4)
+    ram.put(m.PALETTE_FADE_BYTE_ADDR, 0x80 if fade_active else 0, 1)
+    ram.put(m.TASKS_ADDR + 3 * 40, sym("TeachyTvOptionListController", stem) | 1, 4)
+    ram.put(m.TASKS_ADDR + 3 * 40 + 4, 1 if task else 0, 1)
+    return m.ttv_list_ready(m.TITLES[title])
+
+
+@pytest.mark.parametrize("title", sorted(TITLES))
+def test_ttv_list_not_ready_mid_setup(env, title):
+    # LIVE FR+LG on c08328b4: "TTVSCR_BATTLE was not chosen". A snapshot inside
+    # TeachyTvMainCallback case 1 has the list task but no fade yet; the A fell into the fade-in.
+    assert not list_snapshot(env, title, "TeachyTvMainCallback", fade_active=False)
+    assert not list_snapshot(env, title, "TeachyTvCallback", fade_active=True)
+    assert not list_snapshot(env, title, "TeachyTvCallback", fade_active=False, task=False)
+    assert list_snapshot(env, title, "TeachyTvCallback", fade_active=False)
+
+
+def test_ttv_setup_installs_the_steady_callback_after_the_fade():
+    if not PRET.exists():
+        pytest.skip("pret checkout not present")
+    ttv = (PRET / "src/teachy_tv.c").read_text()
+    body = ttv[ttv.index("static void TeachyTvMainCallback(void)\n{"):]
+    body = body[:body.index("\n}\n")]
+    task = body.index("CreateTask(TeachyTvOptionListController, 0)")
+    fade = body.index("BeginNormalPaletteFade(")
+    steady = body.index("SetMainCallback2(TeachyTvCallback)")
+    assert task < fade < steady       # list task exists before the fade even starts
+    listc = ttv[ttv.index("static void TeachyTvOptionListController(u8 taskId)\n{"):]
+    assert listc.index("if (!gPaletteFade.active)") < listc.index("ListMenu_ProcessInput")
 
 
 def test_fake_memory_refuses_writes(env):
