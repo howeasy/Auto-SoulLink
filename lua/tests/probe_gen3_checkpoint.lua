@@ -85,8 +85,16 @@ function P.planned(title, kind, rows_env)
 end
 
 -- Count one witnessed frame: safety's ok, reason and last_clauses, plus clause attribution.
-function P.tally(row, ok, reason, clauses)
+function P.tally(row, ok, reason, clauses, cpsr)
     row.samples = row.samples + 1
+    -- safety.lua refuses IRQ mode (0x12) by design. Preserve raw/negative
+    -- counts; only the positive rate uses the non-IRQ denominator.
+    if type(cpsr) == "number" and (cpsr & 0x1F) == 0x12 then
+        row.irq = (row.irq or 0) + 1
+    else
+        row.non_irq_samples = (row.non_irq_samples or 0) + 1
+        if ok then row.non_irq_yes = (row.non_irq_yes or 0) + 1 end
+    end
     if ok then row.yes = row.yes + 1; return end
     row.no, row.reason = row.no + 1, tostring(reason)
     row.clauses = row.clauses or {}
@@ -108,7 +116,9 @@ function P.verdict(row)
     local min = row.min_samples or 1
     if row.samples < min then return false, string.format("samples %d < min_samples %d", row.samples, min) end
     if row.expectation == "positive" then
-        return row.yes / row.samples >= 0.90, "positive rate"
+        local eligible = row.non_irq_samples or 0
+        if eligible == 0 then return false, "no non-IRQ positive samples" end
+        return (row.non_irq_yes or 0) / eligible >= 0.90, "positive rate"
     end
     if row.expectation == "negative" then
         if row.yes > 0 then return false, "accepted " .. row.yes .. " witnessed frames" end
@@ -181,7 +191,8 @@ function P.run()
         local spec = P.STATES[index]
         local row = {name=spec.name, terminal=spec.terminal, expectation=spec.expectation,
             expect_clauses=spec.expect_clauses, min_samples=spec.min_samples,
-            samples=0, yes=0, no=0, reached=false, reason="-", witness=witness}
+            samples=0, yes=0, no=0, irq=0, non_irq_samples=0, non_irq_yes=0,
+            reached=false, reason="-", witness=witness}
         rows[index], active = row, row
         G.phase("probe-state", row.name .. " terminal=" .. row.terminal)
         return row
@@ -192,8 +203,8 @@ function P.run()
         -- not fabricated as BIOS/0x1F. A core sampling mismatch fails the idle gate.
         if active.witness() then
             local ok, reason = safety:check()
-            P.tally(active, ok, reason, safety.last_clauses)
             local regs = deps.regs()
+            P.tally(active, ok, reason, safety.last_clauses, regs.CPSR)
             active.r15, active.cpsr, active.frame = regs.R15, regs.CPSR, deps.frame()
         end
     end
@@ -365,8 +376,9 @@ function P.run()
         else
             local good, why = P.verdict(row)
             passed = passed and good
-            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d terminal=%s reached=%s R15=%s CPSR=%s frame=%s clauses=%s verdict=%s%s reason=%s",
-                row.name, good and "PASS" or "FAIL", row.samples, row.yes, row.no, row.terminal,
+            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d irq=%d non_irq_sampled=%d non_irq_true=%d terminal=%s reached=%s R15=%s CPSR=%s frame=%s clauses=%s verdict=%s%s reason=%s",
+                row.name, good and "PASS" or "FAIL", row.samples, row.yes, row.no,
+                row.irq, row.non_irq_samples, row.non_irq_yes, row.terminal,
                 tostring(row.reached), tostring(row.r15), tostring(row.cpsr), tostring(row.frame),
                 P.clause_counts(row), why, spec.note and (" note=" .. spec.note) or "", row.reason))
         end

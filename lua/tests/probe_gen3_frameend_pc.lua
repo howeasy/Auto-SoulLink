@@ -18,9 +18,8 @@ local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/probe_gen3_frameend_pc_result.txt"
 
--- Mirror lua/clients/gen3_frlge_client.lua's package.path setup so require("memory_gba") /
--- require("game_detect") resolve from lua/tests/.
-package.path = WT .. "/lua/?.lua;" .. WT .. "/lua/games/?.lua;" .. package.path
+-- Reuse the new client's hash admission table, not game_detect's heuristic.
+package.path = WT .. "/lua/?.lua;" .. WT .. "/lua/games/?.lua;" .. WT .. "/lua/gen3/?.lua;" .. package.path
 
 local lines = {}
 local function log(s) lines[#lines + 1] = s; console.log(s) end
@@ -32,9 +31,25 @@ local function finish(ok, why)
 end
 
 local M = require("memory_gba")
-local game_detect = require("game_detect")
-local detected = game_detect.detect()
-M.applyProfile(detected.profile, detected.variant)
+local Entry = require("gen3.entry")
+local JSON = dofile(WT .. "/lua/json_codec.lua")
+local hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash()
+assert(type(hash) == "string" and (#hash == 32 or #hash == 40)
+       and not hash:find("[^%x]"), "census: missing or invalid cartridge hash")
+hash = hash:lower()
+local admitted = Entry.admission_table(WT, JSON)[hash]
+assert(admitted, "census: unadmitted Gen 3 ROM hash " .. hash)
+local requested = os.getenv("SLINK_GEN3_TITLE")
+assert(not requested or requested == "" or requested == admitted.title,
+       "census: title mismatch: requested " .. tostring(requested)
+       .. ", loaded " .. admitted.title)
+local artifact = assert(Entry.artifacts(WT, JSON, admitted.pack)[admitted.title][admitted.kind])
+local sha1 = assert(artifact.rom_sha1, "census: admitted artifact has no pinned ROM sha1")
+local game = require("games.gen3_frlge")
+local variant = admitted.title == "radical_red" and "radical_red" or "vanilla"
+M.applyProfile(assert(game.profiles[variant]), variant)
+log(string.format("[probe] title=%s sha1=%s hash=%s pack=%s kind=%s admission=hash",
+    admitted.title, sha1, hash, admitted.pack, admitted.kind))
 -- Optional overworld savestate (the live gates load theirs the same way, e.g.
 -- test_live_partyevents.lua:17,45); without it the census samples the title screen only.
 local STATE = os.getenv("SLINK_STATE")
@@ -43,8 +58,7 @@ if STATE and STATE ~= "" then
     console.log("[census] savestate " .. STATE .. " -> " .. tostring(ok_ss))
     emu.frameadvance()
 end
-local P = detected.profile
-log(string.format("[probe] variant=%s game_id=%s", tostring(detected.variant), tostring(detected.game_id)))
+local P = game.profiles[variant]
 
 -- gMain.callback2: profile GMAIN_ADDR + GMAIN_CB2_OFFSET on vanilla (games/gen3_frlge.lua
 -- GMAIN_ADDR/GMAIN_CB2_OFFSET). RR's GMAIN_ADDR is nil (games/gen3_frlge.lua:254); CFRU preserves
@@ -53,11 +67,10 @@ log(string.format("[probe] variant=%s game_id=%s", tostring(detected.variant), t
 -- in the sense that no profile field names it for RR.
 local CB2_ADDR = (P.GMAIN_ADDR and (P.GMAIN_ADDR + (P.GMAIN_CB2_OFFSET or 0x04))) or 0x030030F4
 if not P.GMAIN_ADDR then log("[probe] †UNVERIFIED-source: RR gMain.callback2 @ 0x030030F4 per lua/peer_ghost_npc.lua:62 (no profile field)") end
--- callback1: struct Main convention is callback1 immediately before callback2 (+0x00 vs +0x04).
--- No GMAIN_CB1_OFFSET field exists in any profile and pokefirered is not in the local pret cache
--- (.cache/pret has no pokefirered checkout) — this offset is †UNVERIFIED-source.
+-- callback1 is immediately before callback2: pret/pokefirered@c75f352 include/main.h:12-16
+-- pins the struct Main offsets +0x00 and +0x04. A live RR callback address remains unverified.
 local CB1_ADDR = CB2_ADDR - 0x04
-log("[probe] †UNVERIFIED-source: gMain.callback1 offset assumed +0x00 (CB1_ADDR = CB2_ADDR-4); not pinned locally")
+log("[probe] gMain.callback1 offset +0x00, callback2 +0x04 (pret include/main.h:12-16)")
 
 -- gPaletteFade.active: 0x02037AB8 (BPRE.ld), active flag byte +7 bit 0x80 — located live, not
 -- derived from the struct's bitfield packing. Source: patch/src/handlers.c:244-247,

@@ -48,6 +48,7 @@ def test_all_states_have_named_terminals(module):
 def test_verdict_requires_nonvacuous_terminal(module, expectation, samples, yes, reached, error, want):
     lua, probe = module
     row = lua.table_from({"expectation": expectation, "samples": samples, "yes": yes, "reached": reached,
+                          "non_irq_samples": samples, "non_irq_yes": yes,
                           "error": error, "expect_clauses": lua.table_from({"in_battle": True})})
     assert probe.verdict(row)[0] is want
 
@@ -72,6 +73,52 @@ def test_verdict_fails_on_refusal_by_unexpected_clause(module):
     row = run_row(lua, probe, "script_running", [["wireless_comm_type"]] * 123)
     assert probe.verdict(row)[0] is False
     assert probe.clause_counts(row) == "wireless_comm_type:123"
+
+
+def test_positive_excludes_irq_from_rate_but_records_raw_counts(module):
+    lua, probe = module
+    row = lua.table_from({"expectation": "positive", "samples": 0, "yes": 0, "no": 0,
+                          "irq": 0, "non_irq_samples": 0, "non_irq_yes": 0,
+                          "reached": True})
+    for _ in range(260):
+        probe.tally(row, True, "ok", None, 0x1F)
+    for _ in range(40):
+        probe.tally(row, False, "IRQ mode refused", lua.table_from(["cpu"]), 0x12)
+    assert row.samples == 300 and row.yes == 260 and row.no == 40
+    assert row.irq == 40 and row.non_irq_samples == 260 and row.non_irq_yes == 260
+    assert row.yes / row.samples < 0.90 <= row.non_irq_yes / row.non_irq_samples
+    assert tuple(probe.verdict(row)) == (True, "positive rate")
+
+
+def test_positive_still_fails_when_non_irq_rate_is_below_bar(module):
+    lua, probe = module
+    row = lua.table_from({"expectation": "positive", "samples": 0, "yes": 0, "no": 0,
+                          "irq": 0, "non_irq_samples": 0, "non_irq_yes": 0,
+                          "reached": True})
+    for _ in range(267):
+        probe.tally(row, True, "ok", None, 0x1F)
+    for _ in range(33):
+        probe.tally(row, False, "other refusal", lua.table_from(["task"]), 0x1F)
+    for _ in range(15):
+        probe.tally(row, False, "IRQ refused", lua.table_from(["cpu"]), 0x12)
+    assert row.samples == 315 and row.irq == 15
+    assert row.non_irq_samples == 300 and row.non_irq_yes == 267
+    assert probe.verdict(row)[0] is False
+
+
+def test_positive_with_only_irq_samples_fails_and_negative_still_counts_irq(module):
+    lua, probe = module
+    pos = lua.table_from({"expectation": "positive", "samples": 0, "yes": 0, "no": 0,
+                          "irq": 0, "non_irq_samples": 0, "non_irq_yes": 0,
+                          "reached": True})
+    for _ in range(300):
+        probe.tally(pos, False, "IRQ", lua.table_from(["cpu"]), 0x12)
+    assert probe.verdict(pos)[0] is False
+
+    neg = run_row(lua, probe, "battle", [])
+    probe.tally(neg, True, "wrongly accepted", None, 0x12)
+    assert neg.samples == 1 and neg.irq == 1
+    assert probe.verdict(neg)[0] is False
 
 
 def test_verdict_passes_when_expected_clause_is_among_several(module):
@@ -172,7 +219,8 @@ def test_real_safety_frame_end_sampling_and_save_witness_are_wired():
     assert "G.sectors_at(domain,after) >= 14" in SOURCE
     assert 'FAIL not run' in SOURCE and "passed = false" in SOURCE
     assert "WRITE_SURFACE none (predicate-only probe)" in SOURCE and "WRITE_LOG" not in SOURCE
-    assert "P.tally(active, ok, reason, safety.last_clauses)" in SOURCE
+    assert "P.tally(active, ok, reason, safety.last_clauses, regs.CPSR)" in SOURCE
+    assert "irq=%d non_irq_sampled=%d non_irq_true=%d" in SOURCE
     assert "memory.write" not in SOURCE
     assert 'dofile(wt .. "/lua/gen3/writes.lua")' not in SOURCE
 
