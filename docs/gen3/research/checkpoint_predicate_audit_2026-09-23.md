@@ -84,3 +84,29 @@ RR: the four gated link bodies and the START/save-dialog wrappers are byte-ident
 RunSaveFailedScreen differ from FR, so RR is not qualified here.
 
 PHYSICAL rows owed are listed in the review; they are carried into the G4 draft's 2a/2b.
+
+## RR save path after the C4-SAVE change (headless Codex cx-8de92003; RR clean 964f951a, companion b7d1e075; SLink 160c2508)
+
+- The START-menu save stays refused on both RR artifacts. PROVEN from the bytes:
+  - Task_StartMenuHandleInput (0x0806F1F0) and the field lock persist through the save;
+  - StartCB_Save2 unlocks only after the completed dialog (0x0806F610);
+  - TrySavingData is synchronous (0x0806F952/962).
+- RR's extension writes (parasite bytes, sectors 30/31) run INSIDE each synchronous sector write
+  (HandleWriteSector -> 0x090B8CB4). This differs from upstream CFRU's post-loop ordering.
+- RunSaveFailedScreen recovery runs from CallCallbacks with the START task still active and the field still locked.
+  PROVEN; its only differences from FR are two NOPed map-tile calls.
+- RR adds a full save inside task50_after_link_battle_save (0x0806FC84 -> 0x09042E28 -> TrySavingData). That task is
+  not allowed.
+- NOT PROVEN: that no other RR save caller runs with only allowed tasks active. The whole-ROM BL/literal census found
+  no autosave or PC-save, but it cannot exclude computed calls.
+- The change is not live for RR players: entry.lua ROUTED = gen3_frlg only, and RR still routes to the old client.
+
+G5 rows on both RR artifacts:
+- first, repeat, overwrite and cancel saves;
+- flash-operation boundaries including sectors 30/31;
+- save failure through RunSaveFailedScreen states 0-8;
+- the post-link-battle save and other script/link/HOF saves;
+- any suspected autosave.
+
+Record the old and new predicate results each frame. The counterexample to look for is an in-progress save that the
+new predicate admits while the old predicate's only failure is save_dialog_cb.
