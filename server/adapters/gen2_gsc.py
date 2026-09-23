@@ -560,7 +560,7 @@ class Gen2GSCAdapter(GameAdapter):
     def sprite_src(self, species_id):
         if not _integer(species_id, 1, 251):
             return ""
-        folder = "crystal/transparent" if self.title == "crystal" else self.title
+        folder = f"{self.title}/transparent"  # bare gold/ and silver/ PNGs are opaque white
         return f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-ii/{folder}/{species_id}.png"
 
     def sprite_html(self, species_id, form=0):

@@ -349,3 +349,7 @@ class TestGen2GSCPackRefusal:
         path.write_text(json.dumps(data), encoding="utf-8")
         with pytest.raises(ValueError):
             Gen2GSCAdapter("crystal", data_root=tmp_path)
+
+def test_sprites_use_the_transparent_folder(gsc_adapter):
+    # the bare gold/ and silver/ PNGs have an opaque white background
+    assert gsc_adapter.sprite_src(25).endswith(f"/generation-ii/{gsc_adapter.title}/transparent/25.png")
