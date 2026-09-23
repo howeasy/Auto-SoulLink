@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 7: all three titles pass O-22; first C<->C duo run in progress; paused for compaction)
+# Gen 2 implementation resume (updated 2026-09-23, session 7: FIRST PHYSICAL Gen 2 DUO PASS (C<->C link); all three titles in production; paused for compaction)
 
 ## Who coordinates
 
@@ -118,24 +118,16 @@ This note summarises it; it is not a second ledger.
 
 ## Next, in order
 
-1. **First physical C<->C duo — the Soul Link FORMED on hardware (run 1, 2026-09-23)**: both production clients
-   (A crystal_battle, B crystal_battle_ot2) walked Route 29, caught a Rattata each, saved; the server linked
-   `route_29` A 0C6D:B541:13 <-> B 0F5C:AC24:13 (alive, area linked); both drivers RESULT PASS; witness validator
-   PASS. The run was marked FAIL only because H2's oracle counted `mon_stats` as an extra acceptance -> fixed
-   `855c91e`; the fixed oracle PASSES on run 1's real output (data dir C:/Users/howar/AppData/Local/Temp/
-   slink_duo_link_o5ax1k53). **Run 2 FAILED on A: "no Poke Ball left in the pocket"** although A booted from the
-   exact fixture (.bak == fixture): the pack's Ball pocket was read while item names were still garbage tiles
-   (`items=- cursor=nil`, only `CANCEL` decoded; log .cache/duo-gen2-cc-link2.log) -> a pocket-draw readiness
-   race in the pack reading (lua/tests/duo/gen2_route29_inputs.lua / the shared pack UI kinds, F.ball_cursor).
-   Also A's hello carried `ball_count: 0` with `in_battle: true` — check the client's in-battle ball count read.
-   **CAVEAT: run 2 is contaminated** — it ran 14:53-14:56 while U3b's Gold/Silver edits to lua/gen2/{entry,client,run}.lua
-   were uncommitted in the tree (committed 14:56:48 as `3352cab3`); they change hello readiness, which may explain A's
-   odd hello. NEXT: wait for U5 to commit (its server/launcher edits are in the tree), then rerun the duo on a CLEAN
-   committed tree; only if A's pocket race recurs, cut the Ball-pocket readiness card (stable decodable item list,
-   bounded) + the in-battle ball_count check.
-2. Reconcile U5 (commit + slink-adapter-guard review + Gen 3 unit check) and U3's final report (G/S admission scope);
-   non-author review of U3.
-3. Gold/Silver admission + route if U3/U5 did not include them; then G<->S duo and the C<->G `link` (O-16); OMP
+1. **MILESTONE REACHED — first PHYSICAL Gen 2 duo PASS** (`bfc7ccc`, clean tree at `9147014d`):
+   `python tools/e2e_duo.py --game gen2_new --scenario link --lane gen2-cc-link --keep-data` -> `link: PASS`. Server
+   linked route_29 A D34C:B541:A3 HOOTHOOT <-> B ACED:AC24:13 RATTATA (alive); both drivers PASS; save-witness +
+   independent link oracle PYDEC PASS. Receipts `tests/fixtures/gen2/receipts/duo_link_cc_{a,b,pydec}_result.txt`.
+   (Run 1 formed the link; oracle over-counted mon_stats -> fixed `855c91e`. Run 2 void: uncommitted U3b edits.)
+2. Reviews: U3/U3b (`1f07f71e`, `3352cab3`: all three titles production) and U5 (`9147014d`: slink.lua routes
+   crystal/gold/silver to gen2/run.lua, server rows -> gen2_gsc, crystal_ap legacy, Gen 2 release manifest) —
+   slink-adapter-guard for U5. Carry from U5: a pre-cutover persisted run keeps Gen2CrystalAdapter silently
+   (state.py:905-913, server.py:1406) -> migration before P3b.8. The duo's process-local routing override can go now.
+3. G<->S duo and the C<->G `link` (O-16) (driver + lane need Gold/Silver battle fixtures in the launch env); OMP
    static-canon-impl cherry-pick + review; H2b; the H4 lane closure; gen2-M1 Gen 1 duo A/B.
 
 ## Runbook (exact commands; run from this worktree root)
