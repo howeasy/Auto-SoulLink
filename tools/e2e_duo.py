@@ -74,12 +74,9 @@ SCENARIOS = {
                    "oracle": "assert_gen2_faint_saved", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
-    # Gen 1, Box 14 on Gen 2. Gen 3 has its own memorial path and is not covered here.
-    "memorialize": {"flags": [], "timeout": 300, "games": ("gen2",)},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
     # step 3): lua/tests/duo/scenario_gen1_*.lua and gen1_hunt.lua are gone, so every entry that
-    # named `("gen1",)` went with them. The Gen 2 scenarios below are the shared GB ones.
+    # named `("gen1",)` went with them.
     # NEW Gen 1 client (lua/gen1/*, game "gen1_new"): docs/gen1_requirements.md D-1 and D-3
     # from real play through lua/tests/duo/duo_gen1_main.lua. Both battle fixtures carry
     # exactly ONE Poke Ball, so each side gets one throw; the hunt fights one Tackle first
@@ -918,14 +915,12 @@ def saved_money(sram):
 #     emulator upgrade.
 #   * DIFFERENT CARTRIDGES per instance on the new Gen 1 client: A is Red, B is Blue. The two
 #     cannot collide over BizHawk's SaveRAM because it names saves from its own gamedb entry.
-#   * The shared GB duo wrapper (duo_gb_main.lua), since the boot and the HP endianness
-#     differ from Gen 3. Gen 2 uses the same one.
+#   * Generation-specific drivers compose each client's production graph.
 #
 # gen3_rr keeps exactly the previous behaviour and stays the default.
 FAMILY_EVIDENCE = {
     "gen2_new": EvidenceContract("check_gen2_save_witness", require_oracle=True),
     "gen1_new": EvidenceContract("check_save_witness", require_oracle=True),
-    "gen2_crystal": EvidenceContract(),
     "gen3_rr": EvidenceContract(),
 }
 
@@ -1060,23 +1055,6 @@ GAMES = {
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "puregreen"},
         "scenario_prefix": "gen1_",
-    },
-    # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
-    # works because write_run_config gives each instance its own SaveRAM directory: BizHawk
-    # names a save from its gamedb entry, keyed on ROM hash rather than the path launched,
-    # so two instances would otherwise share one file and stamp on each other.
-    #
-    # duo_gb_main resolves scenarios as scenario_<prefix><name> then scenario_gb_<name>, so
-    # faint/boxsync/memorialize come from the shared files — they are written entirely
-    # against ctx and are identical for both generations.
-    "gen2": {
-        "main": "lua/tests/duo/duo_gb_main.lua",
-        "game": "gen2_crystal",
-        "play": "gen2_playthrough",
-        "rom": {"a": "patch/build/gen2_crystal.gbc", "b": "patch/build/gen2_crystal.gbc"},
-        "uses_savestate": False,
-        "fixture": {"a": "crystal", "b": "crystal"},
-        "scenario_prefix": "gen2_",
     },
 }
 
@@ -4214,7 +4192,7 @@ class DuoRun:
             for i in range(min(3, len(ka), len(kb))):
                 self.inject_link(ka[i], kb[i], area_id=f"duo{i}")
             self.go()
-        elif self.scenario in ("faint", "memorialize", "explode_g1"):
+        elif self.scenario in ("faint", "explode_g1"):
             self.inject_link(ka[0], kb[0])
             self.go()
         elif self.scenario == "whiteout":

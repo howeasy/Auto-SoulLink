@@ -349,8 +349,10 @@ def test_gen3_selection_is_exactly_the_radical_red_set():
         ["faint", "boxsync", "trade", "ghost", "infopanel", "explode"])
 
 
-def test_gen2_runs_the_three_scenarios_crystal_is_verified_on():
-    assert sorted(scenarios_for("gen2")) == sorted(["faint", "boxsync", "memorialize"])
+def test_legacy_gen2_chain_is_not_selectable():
+    assert "gen2" not in GAMES
+    assert "gen2_crystal" not in duo_module.FAMILY_EVIDENCE
+    assert "memorialize" not in SCENARIOS
 
 
 def test_the_old_gen1_titles_are_gone():
@@ -364,21 +366,19 @@ def test_the_old_gen1_titles_are_gone():
 
 def test_selection_does_not_leak_across_generations():
     """Exact matching: nothing from another title's set may appear."""
-    assert "memorialize" in scenarios_for("gen2") and "memorialize" not in scenarios_for("gen3_rr")
-    assert not scenario_applies("trade", "gen2")
-    assert not scenario_applies("link_new", "gen2")
+    for game in ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold"):
+        assert not scenario_applies("trade", game)
+        assert not scenario_applies("link_new", game)
 
 
 def test_the_pytest_wrappers_agree_with_the_runner():
     """The per-generation wrapper hardcodes the scenarios it runs. If it names one the runner
     would refuse for that game, the two have drifted — which is the original bug, just pointing
     the other way."""
-    for module, game in (("test_duo_gen2", "gen2"),):
-        sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
-        mod = __import__(module)
-        for name in mod.SCENARIOS:
-            assert scenario_applies(name, game), (
-                f"{module}.py runs '{name}' on {game}, but the runner would refuse it")
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen2_new")
+    for game in mod.PAIRINGS:
+        assert set(mod.SCENARIOS) == set(scenarios_for(game))
 
 
 def test_every_gen1_new_scenario_declares_an_oracle_that_exists():
@@ -391,11 +391,10 @@ def test_every_gen1_new_scenario_declares_an_oracle_that_exists():
         assert isinstance(SCENARIOS[name].get("oracle_kwargs", {}), dict)
 
 
-def test_other_generations_keep_the_legacy_verdict_path():
-    """Gen 2/Gen 3 entries carry no oracle: for them a client RESULT is the whole verdict."""
-    for game in ("gen2", "gen3_rr"):
-        for name in scenarios_for(game):
-            assert "oracle" not in SCENARIOS[name], f"{name} ({game}) declares an oracle"
+def test_gen3_keeps_the_legacy_verdict_path():
+    """Gen 3 entries retain their existing verdict path."""
+    for name in scenarios_for("gen3_rr"):
+        assert "oracle" not in SCENARIOS[name], f"{name} declares an oracle"
 
 
 def test_gen1_new_does_not_inherit_the_old_gen1_family():
@@ -425,7 +424,7 @@ def test_whiteout_new_is_registered_for_gen1_new_and_nothing_else():
     assert not scenario_applies("whiteout_new", "gen1")
     assert not scenario_applies("whiteout_new", "gen1_yellow")
     assert not scenario_applies("whiteout_new", "gen3_rr")
-    assert "whiteout_new" not in scenarios_for("gen2")
+    assert "whiteout_new" not in scenarios_for("gen2_new")
 
 
 def test_the_clause_and_poison_scenarios_opt_in_to_gen1_new_alone():
@@ -437,7 +436,7 @@ def test_the_clause_and_poison_scenarios_opt_in_to_gen1_new_alone():
         assert not scenario_applies(name, "gen1")
         assert not scenario_applies(name, "gen1_yellow")
         assert not scenario_applies(name, "gen3_rr")
-        assert name not in scenarios_for("gen2")
+        assert name not in scenarios_for("gen2_new")
 
 
 def test_the_clause_and_poison_entries_carry_their_flags_oracles_and_fixtures():
