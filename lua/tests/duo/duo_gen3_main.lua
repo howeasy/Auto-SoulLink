@@ -100,6 +100,17 @@ local function load_or_die(rel, label)
     return mod
 end
 
+-- Any OTHER load-time step -- a JSON read, the .sym scan, the symbol asserts, the boot call --
+-- goes through the same discipline (card C4-GUARD): a failure there raised out of the main chunk,
+-- so the driver stopped after its first log line and wrote no RESULT, and the harness could only
+-- report a missing MYKEY. Live witness: the save_then_write_gen3 red receipt (C4-STW-DIAG), both
+-- instances silent after "TCP connected" with one EmuHawk left holding a .NET exception dialog.
+local function guard(label, fn)
+    local ok, value = pcall(fn)
+    if not ok then finish(false, "load: " .. label .. ": " .. tostring(value)) end
+    return value
+end
+
 local JSON = load_or_die("/lua/json_codec.lua", "json_codec.lua")
 local G = load_or_die("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua")
 SLINK_GEN3_TITLE = D.title   -- the scripted helpers read their per-title addresses from this (C4-LG)
@@ -118,20 +129,30 @@ local title = D.title
 -- 62887460). Every OTHER read in this file goes through `cp`/`profile`, so this one branch is
 -- the whole of the pack selection.
 local pack = title == "radical_red" and "gen3_rr" or "gen3_frlg"
-local cp = assert(read_json("data/games/" .. pack .. "/write_checkpoint.json")[title], "no checkpoint for " .. title)
-local profile = assert(read_json("data/games/" .. pack .. "/profile.json").titles[title], "no profile for " .. title)
+local cp_rel = "data/games/" .. pack .. "/write_checkpoint.json"
+local cp = guard("checkpoint for title '" .. title .. "' in " .. cp_rel, function()
+    local doc = read_json(cp_rel)
+    return assert(doc[title], cp_rel .. " has no entry for title '" .. title .. "'")
+end)
+local profile_rel = "data/games/" .. pack .. "/profile.json"
+local profile = guard("profile for title '" .. title .. "' in " .. profile_rel, function()
+    local doc = read_json(profile_rel)
+    return assert(doc.titles and doc.titles[title], profile_rel .. " has no titles." .. title)
+end)
 G.title, G.budget = title, 5000000
 local function bus_bytes(addr, n)
     local out = {}
     for i = 1, n do out[i] = memory.read_u8(addr + i - 1, "System Bus") end
     return out
 end
-local reader = Reads.new(profile, {
-    read_u8 = function(a) return memory.read_u8(a, "System Bus") end,
-    read_u16 = function(a) return memory.read_u16_le(a, "System Bus") end,
-    read_u32 = function(a) return memory.read_u32_le(a, "System Bus") end,
-    read_bytes = bus_bytes,
-}, cp.pointers)
+local reader = guard("reader (reads.lua) for title '" .. title .. "'", function()
+    return Reads.new(profile, {
+        read_u8 = function(a) return memory.read_u8(a, "System Bus") end,
+        read_u16 = function(a) return memory.read_u16_le(a, "System Bus") end,
+        read_u32 = function(a) return memory.read_u32_le(a, "System Bus") end,
+        read_bytes = bus_bytes,
+    }, cp.pointers)
+end)
 
 -- pret's symbols for THIS title (the first definition of a name: HandleInputChooseAction is also
 -- a static in the Oak/old-man and Pokedude controllers, which sort after the player's).
@@ -160,11 +181,18 @@ do
     -- available choice, not a confirmed fact; see the card's final report.
     local sym_title = title == "radical_red" and "firered" or title
     local path = ROOT .. "/data/gen3/pret/poke" .. sym_title .. ".sym"
-    for line in io.lines(path) do
-        local addr, name = line:match("^(%x+) %a %x+ (%S+)")
-        if name and want[name] and not S[name] then S[name] = tonumber(addr, 16) end
-    end
-    for _, n in ipairs(SYMS) do assert(S[n], "pret symbol " .. n .. " missing from " .. path) end
+    guard("pret symbols in " .. path, function()
+        local fh = assert(io.open(path, "r"), "cannot read " .. path)
+        for line in fh:lines() do
+            local addr, name = line:match("^(%x+) %a %x+ (%S+)")
+            if name and want[name] and not S[name] then S[name] = tonumber(addr, 16) end
+        end
+        fh:close()
+        local missing = {}
+        for _, n in ipairs(SYMS) do if not S[n] then missing[#missing + 1] = n end end
+        assert(#missing == 0,
+               "pret symbol(s) missing from " .. path .. ": " .. table.concat(missing, ", "))
+    end)
 end
 
 -- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
@@ -1097,11 +1125,15 @@ function ctx.save(tag)
 end
 
 -- ── boot: battery -> CONTINUE -> field, then the production hello ───────────────────────
-if not G.boot_to_field(cp, 9000) then
+-- Guarded too (card C4-GUARD): a raise inside the boot is the same silent hang as a load-time
+-- one -- the driver never reaches MYKEY, so a bare raise here writes no RESULT either.
+local reached_field = guard("boot to field from the battery save",
+                            function() return G.boot_to_field(cp, 9000) end)
+if not reached_field then
     G.shot(D.scenario .. "_" .. D.player .. "_bootfail")
     finish(false, "never reached the field from the battery save")
 end
-local booted = ctx.party()
+local booted = guard("party read after boot", function() return ctx.party() end)
 if not booted then finish(false, "party unreadable after boot") end
 for _, m in ipairs(booted) do
     boot_keys[m.key] = true

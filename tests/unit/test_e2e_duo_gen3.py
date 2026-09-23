@@ -807,6 +807,193 @@ def test_load_or_die_reports_a_failure_through_finish_and_returns_a_success():
     assert msg.startswith("load: bad.lua: ") and "boom: /repo/lua/bad.lua" in msg
 
 
+# ── load-time guarding beyond dofiles (card C4-GUARD) ──────────────────────────────────────
+# C4-LG2 pcall-wrapped the load section's dofiles; the REST of that section could still raise out
+# of the main chunk and hang the same way it fixed (no RESULT, the harness left waiting on MYKEY):
+# an `assert` on a missing write_checkpoint.json / profile.json title, the .sym scan and its
+# per-symbol asserts. The live witness is the save_then_write_gen3 red receipt (C4-STW-DIAG): both
+# instances silent after connect and one EmuHawk left holding a .NET exception dialog. Every
+# load-time read and symbol assert now runs inside guard(), which reports "load: <label>: <err>"
+# through finish() -- the same discipline, and the same "load: " prefix, as load_or_die.
+_LOAD_SECTION = re.compile(r"local function load_or_die\(.*?(?=\n-- ── seams teed)", re.S)
+_GUARD_FN = re.compile(r"local function guard\(.*?\nend\n", re.S)
+# The revision this card's falsifier is pinned to (never HEAD~n): the load section as it was when
+# a missing checkpoint title / symbol / .sym died silently.
+PRE_GUARD_REV = "8e9e7ba4"
+
+
+def _driver_syms():
+    text = DRIVER.read_text(encoding="utf-8")
+    return re.findall(r'"(\w+)"', re.search(r"local SYMS = \{(.*?)\}", text, re.S).group(1))
+
+
+def _lua_long(text):
+    assert "]]" not in text, "the fake cannot carry a long bracket"
+    return f"[[{text}]]"
+
+
+def _sym_text(names):
+    return "".join(f"{0x02000000 + 4 * i:08x} g {4 * i:08x} {n}\r\n" for i, n in enumerate(names))
+
+
+def _run_load_section(title="firered", *, sym_names=None, sym_readable=True, checkpoint_title=True,
+                      section_override=None):
+    """Run the driver's REAL load section under lupa with fakes for everything it touches.
+
+    Returns (messages, completed): the finish() messages the section produced -- empty when it ran
+    to the end -- and whether it got there. The fakes are deliberately dumb (one module per dofile
+    path, one blob per read path) because what is under test is the guard wiring, not the decoding.
+    """
+    from lupa import LuaRuntime
+
+    section = section_override or _LOAD_SECTION.search(DRIVER.read_text(encoding="utf-8"))
+    assert section, "no load section (load_or_die .. seams) in the driver"
+    names = _driver_syms() if sym_names is None else sym_names
+    sym_path = f"/repo/data/gen3/pret/poke{title}.sym"
+    files = {
+        "/repo/data/games/gen3_frlg/write_checkpoint.json": "<checkpoint>",
+        "/repo/data/games/gen3_frlg/profile.json": "<profile>",
+    }
+    if sym_readable:
+        files[sym_path] = _sym_text(names)
+    entries = ",\n".join(f'  ["{p}"] = {_lua_long(t)}' for p, t in files.items())
+    checkpoint_doc = f"{{ {title} = {{ pointers = {{}} }} }}" if checkpoint_title else "{}"
+    prelude = f"""
+local ROOT = "/repo"
+captured = {{}}  -- global: the test reads it back after the pcall
+local function finish(ok, msg)
+    captured[#captured + 1] = tostring(msg)
+    error("FINISHED_STUB", 0)
+end
+local function make_handle(text)
+    local h = {{}}
+    function h:read(_) return text end
+    function h:close() end
+    function h:lines()
+        local pos = 1
+        return function()
+            if pos > #text then return nil end
+            local nl = text:find("\\n", pos, true)
+            local line
+            if nl then line = text:sub(pos, nl - 1); pos = nl + 1
+            else line = text:sub(pos); pos = #text + 1 end
+            return (line:gsub("\\r$", ""))
+        end
+    end
+    return h
+end
+local BAD_OPEN = {_lua_long("" if sym_readable else sym_path)}
+local FILES = {{
+{entries}
+}}
+local DECODED = {{
+  ["<checkpoint>"] = {checkpoint_doc},
+  ["<profile>"] = {{ titles = {{ {title} = {{}} }} }},
+}}
+local MODULES = {{
+  ["/repo/lua/json_codec.lua"] = {{ decode = function(t) return DECODED[t] or {{}} end }},
+  ["/repo/lua/tests/gen3_boot_check.lua"] = {{ title = "", budget = 0 }},
+  ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}} }},
+  ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
+}}
+local function dofile(path)
+    local m = MODULES[path]
+    if not m then error("no fake module for " .. path, 0) end
+    return m
+end
+local io = {{
+    open = function(path, _)
+        if path == BAD_OPEN or not FILES[path] then return nil, "No such file or directory" end
+        return make_handle(FILES[path])
+    end,
+    lines = function(path)
+        if path == BAD_OPEN or not FILES[path] then error("cannot open " .. path, 0) end
+        return make_handle(FILES[path]):lines()
+    end,
+}}
+local D = {{ title = {_lua_long(title)} }}
+local memory = {{ read_u8 = function() return 0 end, read_u16_le = function() return 0 end,
+                  read_u32_le = function() return 0 end }}
+"""
+    # The section is not a file: it is the middle of the driver, so it expects the chunk's own
+    # locals (ROOT, D, io, memory, finish) to be in scope. Wrap prelude + section in ONE function
+    # body, exactly like the real chunk, and keep `captured` global so the test can read it.
+    section_src = section.group(0) if hasattr(section, "group") else section
+    body = prelude + "\n" + section_src + "\nreturn true"
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    runner = lua.eval("function()\n" + body + "\nend")
+    ok, _ = lua.globals().pcall(runner)
+    captured = lua.globals().captured
+    return [captured[i] for i in range(1, len(captured) + 1)], bool(ok)
+
+
+def test_load_section_guards_the_json_reads_the_sym_scan_and_the_symbol_asserts():
+    text = DRIVER.read_text(encoding="utf-8")
+    fn = _GUARD_FN.search(text)
+    assert fn, "no local function guard(...) in the driver"
+    assert "pcall(fn)" in fn.group(0) and 'finish(false, "load: "' in fn.group(0), fn.group(0)
+    section = _LOAD_SECTION.search(text).group(0)
+    assert re.search(r'guard\(\s*"checkpoint', section), "the checkpoint read is not guarded"
+    assert re.search(r'guard\(\s*"profile', section), "the profile read is not guarded"
+    assert re.search(r'guard\(\s*"pret symbols in ', section), "the .sym scan is not guarded"
+    # the two shapes C4-STW-DIAG named as silently lethal are gone from the section.
+    assert "io.lines(" not in section and "assert(S[" not in section, section
+    # and the pre-MYKEY steps past the load section are guarded too.
+    assert 'guard("boot to field' in text and 'guard("party read after boot' in text
+
+
+def test_guard_reports_a_missing_checkpoint_title():
+    msgs, done = _run_load_section(checkpoint_title=False)
+    assert not done, "a missing checkpoint title must not let the section continue"
+    assert len(msgs) == 1, msgs
+    assert msgs[0].startswith("load: "), msgs
+    assert "write_checkpoint.json" in msgs[0] and "firered" in msgs[0], msgs
+
+
+def test_guard_reports_a_missing_pret_symbol():
+    msgs, done = _run_load_section(sym_names=[n for n in _driver_syms() if n != "sSaveDialogCB"])
+    assert not done, "a missing symbol must not let the section continue"
+    assert len(msgs) == 1, msgs
+    assert msgs[0].startswith("load: "), msgs
+    assert "sSaveDialogCB" in msgs[0] and "pokefirered.sym" in msgs[0], msgs
+
+
+def test_guard_reports_an_unreadable_sym():
+    msgs, done = _run_load_section(sym_readable=False)
+    assert not done, "an unreadable .sym must not let the section continue"
+    assert len(msgs) == 1, msgs
+    assert msgs[0].startswith("load: "), msgs
+    assert "cannot read" in msgs[0] and "pokefirered.sym" in msgs[0], msgs
+
+
+def test_a_clean_load_section_completes_without_a_finish():
+    msgs, done = _run_load_section()
+    assert done and msgs == [], msgs
+
+
+def test_the_guard_is_what_ends_the_silent_hang():
+    """Falsifier, pinned by sha to the revision before this card.
+
+    The same fakes that make the guarded section report a named RESULT make the UNGUARDED section
+    report nothing at all -- which is the live symptom (no RESULT, the harness left waiting on
+    MYKEY, the driver's first log line its last) that the guard exists to end.
+    """
+    import subprocess
+
+    proc = subprocess.run(["git", "show", f"{PRE_GUARD_REV}:lua/tests/duo/duo_gen3_main.lua"],
+                          cwd=REPO, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace")
+    if proc.returncode != 0 or "local function guard(" in proc.stdout:
+        pytest.skip(f"{PRE_GUARD_REV}:duo_gen3_main.lua unavailable or already guarded")
+    old = _LOAD_SECTION.search(proc.stdout)
+    assert old, "the pre-card driver has no load section"
+
+    msgs, done = _run_load_section(section_override=old.group(0), checkpoint_title=False)
+    assert not done and msgs == [], f"the unguarded section reported something: {msgs}"
+    msgs, done = _run_load_section(checkpoint_title=False)
+    assert not done and len(msgs) == 1 and msgs[0].startswith("load: "), msgs
+
+
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
 def test_every_pret_symbol_the_driver_reads_exists(title):
     text = DRIVER.read_text(encoding="utf-8")
