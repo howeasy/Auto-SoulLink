@@ -398,14 +398,14 @@ function G.display_pass(ctx, SG, log, check, reads, species)
         return table.concat(out)
     end
     local function screen()
-        return G.parse_menu(G.screen(ctx), obs.screen.width, obs.screen.height)
+        return SG.parse_menu(SG.screen(ctx), obs.screen.width, obs.screen.height)
     end
     local hooks = G.display_hooks(ctx)
     local failed = 0
     local function fail(what, detail)
         failed = failed + 1
         log(string.format("  [FAIL] %s  -- %s", what, tostring(detail)))
-        local ok, rows = pcall(G.screen, ctx)
+        local ok, rows = pcall(SG.screen, ctx)
         if ok then
             for y, row in ipairs(rows) do log(string.format("  screen %02d |%s|", y, table.concat(row))) end
         end
@@ -724,7 +724,10 @@ function G.main(api, getenv, SG)
     local decode_frame = api.framecount()
     check("every decode ran at the capture frame", decode_frame == dump.frame, decode_frame)
     log("DECODE_FRAME " .. json.encode(decode_frame))
-    G.display_pass(ctx, SG, log, check, reads, species)
+    local displayed, display_why = pcall(G.display_pass, ctx, SG, log, check, reads, species)
+    if not displayed then
+        check("display oracle ran (normal-button navigation and wTilemap reads)", false, display_why)
+    end
     return finish()
 end
 

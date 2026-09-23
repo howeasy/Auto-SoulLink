@@ -33,13 +33,15 @@ from run_gb_gate import describe_gen2  # noqa: E402
 
 from server.adapters import gen2_codec as codec  # noqa: E402
 from tests.live import test_gen2_new_gates as live  # noqa: E402
-from tests.unit.test_gen2_scripted_gate import QualifySim, make_root, qualify_env  # noqa: E402
+from tests.unit.test_gen2_scripted_gate import QualifySim, context, make_root, qualify_env  # noqa: E402
 from tools import fixture_qualification as qualification  # noqa: E402
 
 GATE = REPO / "lua/tests/gen2_inspect_gate.lua"
 TITLE = "crystal"
 ROM_SHA1 = describe_gen2(TITLE)["rom_sha1"]
 RESULT = "patch/build/gen2_inspect_gate_result.txt"
+# The pinned rgbds symbol artifact per title, as the gate's own G.SYM_ARTIFACT resolves.
+SYM_ARTIFACT = {"crystal": "pokecrystal", "gold": "pokegold", "silver": "pokesilver"}
 
 
 def profile_wrapper(title=TITLE):
@@ -242,8 +244,11 @@ class InspectSim(QualifySim):
     the game on the CONTINUE confirmation screen forever, with the party decodable from the very first
     frame (title and menus included): valid, stable party bytes, never the overworld."""
 
-    def __init__(self, lua, title=TITLE, *, confirm=True, johto=0x03):
+    def __init__(self, lua, title=TITLE, *, confirm=True, johto=0x03, card_id_col=5):
         self.confirm, self.johto = confirm, johto
+        self.card_id_col = card_id_col
+        self.player_id = 0x0034          # 5 digits with a leading zero: "00052"
+        self.player_name = "GOLD"
         super().__init__(lua, title, "town")
         self.cart[:] = bytes(len(self.cart))
         place_all_boxes_empty(self.cart, self.prof)
@@ -255,6 +260,150 @@ class InspectSim(QualifySim):
         self.put("wJohtoBadges", [self.johto, 0])
         self.put("wCurBox", [0])
         self.put("wNumBalls", [0, 0xFF])
+        # Trainer Card sources: wPlayerID is a 2-byte word, wPlayerName an '@'-terminated name.
+        self.put("wPlayerID", [self.player_id >> 8 & 0xFF, self.player_id & 0xFF])
+        self.put("wPlayerName", [self.enc[c] for c in self.player_name] + [self.enc["@"]] + [0] * 10)
+
+    def site(self, label):
+        """A source label's (bank, address) from the same rgbds symbol artifact the gate parses."""
+        symbol = context(self.title).symbol(label)
+        return symbol.bank, symbol.address
+
+    def lead_mon(self):
+        species_id = self.get("wPartySpecies")
+        dv_word = int.from_bytes(self.wram[self.offset("wPartyMons", 21):self.offset("wPartyMons", 23)], "big")
+        return species_id, dv_word
+
+    # --- scripted display screens (the gate's normal-button navigation) ---------------------------
+
+    def start_menu_flow(self):
+        """START menu: the gate picks the Status entry (the player's name) or #MON, and B exits."""
+        while True:
+            items = ["#DEX", "#MON", "PACK", self.player_name, "SAVE", "OPTION", "EXIT"]
+            chosen = yield from self.menu_select("start_menu", items, at=(8, 0))
+            if chosen == self.player_name:
+                yield from self.card_screen()
+                continue
+            if chosen == "#MON":
+                yield from self.party_flow()
+                continue
+            self.clear()
+            return                      # EXIT, or a B press
+
+    def menu_select(self, kind, items, at=(0, 0)):
+        """A boxed vertical menu (▶ cursor + borders, so the gate's parse_menu sees it) that returns
+        the chosen label on A, or "EXIT" on B. Unlike Sim.menu it does not assert the choice."""
+        self.clear()
+        x0, y0 = at
+        width = max(len(self.tokens(item)) for item in items) + 2
+        x1, y1 = x0 + 1 + width, y0 + 2 * len(items)
+        self.box(x0, y0, x1, y1)
+        cursor = 0
+
+        def render():
+            for index, item in enumerate(items):
+                x, y = x0 + 1, y0 + 1 + 2 * index
+                self.rows[y][x] = "▶" if index == cursor else " "
+                self.text_at(x + 1, y, item)
+            self.draw()
+
+        render()
+        yield from self.wait(2)
+        if kind and kind in self.sites:
+            self.fire(kind)
+        while True:
+            got = yield
+            for button, delta in (("Up", -1), ("Down", 1)):
+                if button in got.edges and 0 <= cursor + delta < len(items):
+                    cursor += delta
+                    render()
+            if "A" in got.edges:
+                self.clear()
+                return items[cursor]
+            if "B" in got.edges:
+                self.clear()
+                return "EXIT"
+
+    def card_screen(self):
+        """Trainer Card page 1: the head cells TrainerCard_PrintTopHalfOfCard writes (name at (7,2),
+        the 5-digit wPlayerID at (5,4)). TrainerCard_Page1_Joypad runs once per frame until B."""
+        self.clear()
+        self.text_at(7, 2, self.player_name)
+        self.text_at(self.card_id_col, 4, "".join(str(self.player_id // 10 ** (4 - i) % 10) for i in range(5)))
+        self.draw()
+        bank, address = self.site("TrainerCard_Page1_Joypad")
+        while True:
+            self.run_at(bank, address)
+            got = yield
+            if "B" in got.edges:
+                self.clear()
+                return
+
+    def party_flow(self):
+        """#MON: the party menu (no ▶ tile), then the mon submenu (STATS default), then STATS."""
+        selected = yield from self.party_menu()
+        if selected != "select":
+            return
+        choice = yield from self.menu_select("mon_submenu", ["STATS", "SWITCH", "CANCEL"], at=(6, 6))
+        if choice == "STATS":
+            yield from self.stats_screen()
+
+    def party_menu(self):
+        self.clear()
+        for index in range(self.get("wPartyCount")):
+            self.text_at(1, 1 + 2 * index, "PARTY MON")
+        self.textbox("Choose a POKéMON.")
+        self.draw()
+        while True:
+            got = yield
+            if "A" in got.edges:
+                self.clear()
+                return "select"
+            if "B" in got.edges:
+                self.clear()
+                return "cancel"
+
+    def draw_stats(self, page):
+        """The stats-screen head cells PlaceGenderChar/PlaceShinyIcon write, plus the GREEN page's
+        item line. A genderless or non-shiny mon leaves the blank cell (ClearTilemap's ' ')."""
+        self.clear()
+        species_id, dv_word = self.lead_mon()
+        ratio = json.loads((REPO / f"data/games/gen2_{self.title}/species_index.json")
+                           .read_text(encoding="utf-8"))["species"][str(species_id)]["gender_ratio"]
+        gender, shiny = live.gender_and_shiny(dv_word, ratio)
+        if gender in ("male", "female"):
+            self.rows[0][18] = "♂" if gender == "male" else "♀"
+        if shiny:
+            self.rows[0][19] = "⁂"
+        if page == "green":
+            self.text_at(0, 8, "ITEM")
+            self.text_at(8, 8, "---")
+        self.draw()
+
+    def stats_screen(self):
+        """MonStatsJoypad runs once per frame; RIGHT/A advance the page (A quits on the BLUE page)."""
+        order = {"pink": "green", "green": "blue", "blue": "pink"}
+        page = "pink"
+        self.draw_stats(page)
+        bank, address = self.site("MonStatsJoypad")
+        while True:
+            self.run_at(bank, address)
+            got = yield
+            if "B" in got.edges:
+                self.clear()
+                return
+            if "Right" in got.edges:
+                page = order[page]
+                self.draw_stats(page)
+            elif "A" in got.edges:
+                if page == "blue":      # the BLUE page's A exits (engine/pokemon/stats_screen.asm:382-386)
+                    self.clear()
+                    return
+                page = order[page]
+                self.draw_stats(page)
+
+    def save(self):
+        yield from self.start_menu_flow()
 
     def game(self):
         if self.confirm:
@@ -281,7 +430,8 @@ class InspectSim(QualifySim):
 
 def inspect_root(tmp_path, title=TITLE):
     root = make_root(tmp_path, title)
-    for rel in ("lua/tests/test_gen2_scripted_gate.lua", f"data/games/gen2_{title}/species_index.json"):
+    for rel in ("lua/tests/test_gen2_scripted_gate.lua", f"data/games/gen2_{title}/species_index.json",
+                f"data/games/gen2_{title}/item_names.json", f"data/gen2/{SYM_ARTIFACT[title]}.sym"):
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPO / rel, root / rel)
     return root

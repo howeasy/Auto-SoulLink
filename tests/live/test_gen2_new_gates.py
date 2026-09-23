@@ -19,9 +19,13 @@ capture's frame, physical domain/offset, logical address/bank and lengths are ch
 every Lua decode is bound to the captured bytes through its own raw_hex (verify_capture).
 
 SCOPE (P3b.3a only): this file currently carries ONLY the live inspect rows -- R-1 (party/box/name
-decode) and R-2 (independent stat recomputation). R-3 here is a Lua-internal differential over the
-same profile addresses and R-5g a DV-formula cross-check; neither is the game's own on-screen
-display, so R-3 and R-5g stay OPEN (see the scope notes in lua/tests/gen2_inspect_gate.lua).
+decode) and R-2 (independent stat recomputation). Its R-3 row is now the TILEMAP display half:
+GAME_TRAINER_CARD reads the game's own rendered Trainer Card back through a title-keyed charmap and
+against the captured wPlayerID/wPlayerName, so R-3's tilemap half is CLOSED here. R-3's badge half
+stays OPEN -- Johto/Kanto badges are VRAM tiles animated as OAM, invisible to a wTilemap oracle, and
+need an OAM/VRAM witness. R-5g's display half is likewise CLOSED by GAME_STATS_HEAD (the (18,0)
+gender glyph and (19,0) shiny marker re-derived here from the same DVs); the DV-formula cross-check
+(GENDER_SHINY) stays as its internal twin. The PC box header stays OUT OF SCOPE: Elm's lab has no PC.
 The engine-signal (P3b.4), write-window (P3b.5) and client-conformance (P3b.6/P3b.7) rows belong
 in this same file per docs/gen2/GEN2_BINDING_PLAN.md's P3b table, but land as separate, later
 cards, each owning its own function/block here (the §7 one-writer-per-file-at-a-time rule); this
@@ -278,6 +282,137 @@ def wram_offset(bank: int, address: int, length: int) -> int:
     raise AssertionError(f"WRAM range ${address:X}+{length} outside its bank {bank} window")
 
 
+# --- R-3/R-5g display oracle: the tiles the game writes into wTilemap ---------------------------
+#
+# A title-keyed byte -> glyph table for the only tiles the display oracle reads. Crystal values come
+# from constants/charmap.asm:97,193,199,201-210; Gold/Silver values were RE-READ from
+# pokegold/constants/charmap.asm (pret/pokegold backs both carts): the A-Z ($80-$99), a-z ($A0-$B9)
+# and digit ($F6-$FF) runs, "♂" ($EF), "♀" ($F5), "⁂" ($3F), the blank ' ' ($7F), the '@' string
+# terminator ($50) and '-' ($E3) are byte-for-byte identical across the three titles. Pinned here
+# rather than read from data/games/gen2_<title>/charmap.lua so the decode is independent of the pack
+# the gate itself loads.
+_LETTERS = {0x80 + index: char for index, char in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")}
+_LETTERS.update({0xA0 + index: char for index, char in enumerate("abcdefghijklmnopqrstuvwxyz")})
+_DIGITS = {0xF6 + index: str(index) for index in range(10)}
+CHARMAP: dict[str, dict[int, str]] = {
+    title: {**_LETTERS, **_DIGITS, 0x7F: " ", 0x50: "@", 0xE3: "-", 0xEF: "♂", 0xF5: "♀", 0x3F: "⁂"}
+    for title in ("crystal", "gold", "silver")
+}
+BLANK_BYTE = 0x7F
+GENDER_BYTE = {"male": 0xEF, "female": 0xF5, "genderless": BLANK_BYTE}
+SHINY_BYTE = 0x3F
+# The stats GREEN page prints .Item at (0,8) and the name after it at (8,8) in Crystal
+# (engine/pokemon/stats_screen.asm:726-733) but at (6,8) in Gold/Silver (:567-577). No item prints
+# .ThreeDashes "---" (C :755-757, G :610-614).
+ITEM_COLUMN = {"crystal": 8, "gold": 6, "silver": 6}
+NO_ITEM_TEXT = "---"
+
+
+def decode_cells(title: str, raw_hex: str) -> str:
+    """The printable text of a run of wTilemap cell bytes, through the pinned title charmap."""
+    glyphs = CHARMAP[title]
+    out = []
+    for byte in bytes.fromhex(raw_hex):
+        if byte not in glyphs:
+            raise AssertionError(f"{title}: tilemap byte ${byte:02X} has no pinned glyph")
+        out.append(glyphs[byte])
+    return "".join(out)
+
+
+def decode_terminated(title: str, raw_hex: str) -> str:
+    """A NUL-terminated RAM name's text up to the '@' ($50) tile, through the pinned title charmap."""
+    glyphs = CHARMAP[title]
+    out = []
+    for byte in bytes.fromhex(raw_hex):
+        if byte == 0x50:
+            break
+        if byte not in glyphs:
+            raise AssertionError(f"{title}: name byte ${byte:02X} has no pinned glyph")
+        out.append(glyphs[byte])
+    return "".join(out)
+
+
+def _normalize(text: str) -> str:
+    return text.replace("é", "E").replace("É", "E").upper()
+
+
+def verify_display(text: str, title: str, py_party: dict, species: dict) -> None:
+    """R-3/R-5g display rows: the game's OWN rendered tilemap, decoded and re-derived here.
+
+    Trainer Card: the (5,4) five digit tiles must render the captured wPlayerID zero-padded to five
+    (wPlayerID is not in the party blob, so the gate's raw wPlayerID bytes ride on the line), and the
+    (7,2) cells must render wPlayerName. Stats head: the (18,0) gender glyph and (19,0) shiny marker
+    are re-derived from the lead mon's DVs and its species gender ratio -- a genderless or non-shiny
+    mon must leave the blank tile -- and the GREEN page's item line must carry the game's no-item
+    text. Each Lua-decoded field is also compared against this module's own decode of the raw bytes.
+    """
+    if not py_party.get("mons"):
+        raise AssertionError(f"{title}: display oracle needs a party mon")
+    lead = py_party["mons"][0]
+    glyphs = CHARMAP[title]
+
+    card = tag_json(text, "GAME_TRAINER_CARD")
+    if type(card.get("frame")) is not int or card["frame"] < 1:
+        raise AssertionError(f"{title}: trainer card frame missing or invalid: {card.get('frame')!r}")
+    if card.get("blank_byte") != BLANK_BYTE:
+        raise AssertionError(f"{title}: card blank tile {card.get('blank_byte')!r} != ${BLANK_BYTE:02X}")
+    id_hex = card["id_digits_hex"]
+    if len(id_hex) != 10:
+        raise AssertionError(f"{title}: trainer card ID row is not five cells: {id_hex!r}")
+    id_text = decode_cells(title, id_hex)
+    expected_id = f"{int(card['player_id_hex'], 16):05d}"
+    if len(card["player_id_hex"]) != 4:
+        raise AssertionError(f"{title}: wPlayerID is not a 2-byte word: {card['player_id_hex']!r}")
+    if id_text != expected_id:
+        raise AssertionError(f"{title}: card ID digits {id_text!r} != wPlayerID {expected_id!r}")
+    if card.get("id_text") != id_text or card.get("expected_id_text") != expected_id:
+        raise AssertionError(f"{title}: card ID fields disagree with the Python decode: {card!r}")
+    if (card.get("name_row"), card.get("name_col")) != (2, 7):
+        raise AssertionError(f"{title}: card name is not at (7,2): {(card.get('name_col'), card.get('name_row'))!r}")
+    expected_name = decode_terminated(title, card["player_name_hex"])
+    name_text = decode_cells(title, card["name_bytes_hex"])
+    if name_text != expected_name:
+        raise AssertionError(f"{title}: card name {name_text!r} != wPlayerName {expected_name!r}")
+    if card.get("name_text") != name_text or card.get("expected_name") != expected_name:
+        raise AssertionError(f"{title}: card name fields disagree with the Python decode: {card!r}")
+    if card.get("name_length") != len(name_text) or len(name_text) != len(expected_name):
+        raise AssertionError(f"{title}: card name length {card.get('name_length')!r} != {len(expected_name)}")
+
+    head = tag_json(text, "GAME_STATS_HEAD")
+    if head.get("species_id") != lead["species_id"] or head.get("dv_word") != lead["dv_word"]:
+        raise AssertionError(f"{title}: stats head is not the lead mon: {head!r}")
+    gender, shiny = gender_and_shiny(lead["dv_word"], species[str(lead["species_id"])]["gender_ratio"])
+    want_gender, want_shiny = GENDER_BYTE[gender], SHINY_BYTE if shiny else BLANK_BYTE
+    if (head.get("gender"), bool(head.get("shiny"))) != (gender, shiny):
+        raise AssertionError(f"{title}: stats head gender/shiny {head.get('gender')!r}/{head.get('shiny')!r} "
+                             f"!= {gender}/{shiny}")
+    if head.get("blank_byte") != BLANK_BYTE:
+        raise AssertionError(f"{title}: stats blank tile {head.get('blank_byte')!r} != ${BLANK_BYTE:02X}")
+    if head.get("gender_byte") != want_gender or head.get("gender_expected") != want_gender:
+        raise AssertionError(f"{title}: (18,0) gender byte {head.get('gender_byte')!r} != ${want_gender:02X}")
+    if head.get("shiny_byte") != want_shiny or head.get("shiny_expected") != want_shiny:
+        raise AssertionError(f"{title}: (19,0) shiny byte {head.get('shiny_byte')!r} != ${want_shiny:02X}")
+
+    item = tag_json(text, "GAME_STATS_ITEM")
+    if item.get("held_item") != lead["held_item"]:
+        raise AssertionError(f"{title}: item line is not the lead mon's: {item!r}")
+    if (item.get("item_row"), item.get("item_col")) != (8, ITEM_COLUMN[title]):
+        raise AssertionError(f"{title}: item is not at ({ITEM_COLUMN[title]},8): {item!r}")
+    if item.get("label_text") != "ITEM":
+        raise AssertionError(f"{title}: GREEN page (0,8) label {item.get('label_text')!r} != 'ITEM'")
+    if lead["held_item"] == 0:
+        if item.get("item_expected") != NO_ITEM_TEXT or item.get("item_text") != NO_ITEM_TEXT:
+            raise AssertionError(f"{title}: no-item line {item.get('item_text')!r} != {NO_ITEM_TEXT!r}")
+        if decode_cells(title, item["item_bytes_hex"]) != NO_ITEM_TEXT:
+            raise AssertionError(f"{title}: no-item cells do not decode to {NO_ITEM_TEXT!r}")
+    else:
+        pack = json.loads((REPO / f"data/games/gen2_{title}/item_names.json").read_text(encoding="utf-8"))
+        if not isinstance(pack.get(str(lead["held_item"])), str):
+            raise AssertionError(f"{title}: item pack has no name for id {lead['held_item']}")
+        if _normalize(item["item_text"]) != _normalize(pack[str(lead["held_item"])]):
+            raise AssertionError(f"{title}: item text {item['item_text']!r} != pack {pack[str(lead['held_item'])]!r}")
+
+
 def check_dump_provenance(dump: dict, profile: dict) -> None:
     """The capture receipt: exact frame type, physical domain/offset, logical address/bank, lengths
     and hex sizes (docs/gen2/GEN2_BINDING_PLAN.md:339 -- a dump from another domain, range or frame
@@ -307,8 +442,8 @@ def check_dump_provenance(dump: dict, profile: dict) -> None:
 
 def verify_capture(text: str, profile_wrapper: dict, title: str) -> dict:
     """The whole BizHawk-free verdict over the gate's COMPLETE printed output: checkpoint, capture
-    receipt, decode frame, Lua/PYDEC equality on the same bytes, the R-3 differential and the R-5g
-    formula cross-check. Returns the PYDEC party for the identity and R-2 checks."""
+    receipt, decode frame, Lua/PYDEC equality on the same bytes, the R-3 differential, the R-5g
+    formula cross-check and the R-3/R-5g display rows (verify_display). Returns the PYDEC party."""
     if tagged_lines(text).get("CHECKPOINT") != ["reached"]:
         raise AssertionError("checkpoint/liveness not reached")
     profile = profile_wrapper["titles"][title]
@@ -347,6 +482,9 @@ def verify_capture(text: str, profile_wrapper: dict, title: str) -> dict:
         gender, shiny = gender_and_shiny(mon["dv_word"], species[str(mon["species_id"])]["gender_ratio"])
         if (row["gender"], row["shiny"]) != (gender, shiny):
             raise AssertionError(f"{title}: gender/shiny cross-check disagrees on {mon['species_id']}: {row}")
+
+    # R-3 tilemap / R-5g display halves: the game's own rendered screens, re-derived here.
+    verify_display(text, title, py_party, species)
     return py_party
 
 
