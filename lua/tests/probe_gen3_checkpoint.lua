@@ -531,7 +531,7 @@ function P.run()
     local G = dofile(wt .. "/lua/tests/gen3_boot_check.lua")
     local S = dofile(wt .. "/lua/gen3/safety.lua")
     G.open("probe_gen3_checkpoint")
-    G.budget = 45000
+    G.budget = 90000   -- 2B: the nine bw rows add up to ~20k frames worst case (mash/pulse bounds)
     local cp, title = G.checkpoint()
     local kind = assert(os.getenv("SLINK_GEN3_KIND"), "SLINK_GEN3_KIND clean/companion required")
     local plan = P.planned(title, kind, os.getenv("SLINK_CHECKPOINT_ROWS"))
