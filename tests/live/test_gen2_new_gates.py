@@ -406,7 +406,8 @@ def verify_display(text: str, title: str, py_party: dict, species: dict) -> None
         if decode_cells(title, item["item_bytes_hex"]) != NO_ITEM_TEXT:
             raise AssertionError(f"{title}: no-item cells do not decode to {NO_ITEM_TEXT!r}")
     else:
-        pack = json.loads((REPO / f"data/games/gen2_{title}/item_names.json").read_text(encoding="utf-8"))
+        items = json.loads((REPO / f"data/games/gen2_{title}/items.json").read_text(encoding="utf-8"))["items"]
+        pack = {key: row.get("name") for key, row in items.items() if isinstance(row, dict)}
         if not isinstance(pack.get(str(lead["held_item"])), str):
             raise AssertionError(f"{title}: item pack has no name for id {lead['held_item']}")
         if _normalize(item["item_text"]) != _normalize(pack[str(lead["held_item"])]):

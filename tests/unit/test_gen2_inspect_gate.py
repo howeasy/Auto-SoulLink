@@ -449,7 +449,7 @@ class InspectSim(QualifySim):
 def inspect_root(tmp_path, title=TITLE):
     root = make_root(tmp_path, title)
     for rel in ("lua/tests/test_gen2_scripted_gate.lua", f"data/games/gen2_{title}/species_index.json",
-                f"data/games/gen2_{title}/item_names.json", f"data/gen2/{SYM_ARTIFACT[title]}.sym"):
+                f"data/games/gen2_{title}/items.json", f"data/gen2/{SYM_ARTIFACT[title]}.sym"):
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPO / rel, root / rel)
     return root

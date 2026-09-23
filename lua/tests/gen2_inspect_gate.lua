@@ -303,14 +303,21 @@ function G.item_expected(pack, held_item)
     return G.normalize_text(name)
 end
 
+-- Item id -> display name from the title's source-generated items pack (tools/gen_gen2_items; every
+-- title has one). The legacy data/games/gen2_crystal/item_names.json predates the pinned sources and
+-- has no Gold/Silver twin (live inspect run 2026-09-23: the Gold item leg could not open it).
 function G.item_names(ctx)
-    local rel = "data/games/gen2_" .. ctx.env.title .. "/item_names.json"
+    local rel = "data/games/gen2_" .. ctx.env.title .. "/items.json"
     local f = assert(io.open(ctx.root .. "/" .. rel, "rb"), "cannot open " .. rel)
     local text = f:read("a")
     f:close()
     local wrapper = assert(ctx.json.decode(text), rel .. " is malformed")
-    assert(type(wrapper) == "table", rel .. " is not an id table")
-    return wrapper
+    assert(type(wrapper) == "table" and type(wrapper.items) == "table", rel .. " has no items table")
+    local names = {}
+    for id, row in pairs(wrapper.items) do
+        if type(row) == "table" and type(row.name) == "string" then names[tostring(id)] = row.name end
+    end
+    return names
 end
 
 -- The two joypad-state code sites the display pass waits on are not among the route facts'
