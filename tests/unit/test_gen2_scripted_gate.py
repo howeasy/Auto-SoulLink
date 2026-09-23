@@ -308,7 +308,9 @@ class Sim:
         o = obs["object"]
         structs = bytearray(o["length"] * o["count"])
         structs[o["sprite"]], structs[o["direction"]] = 1, obs["facing"][self.facing]
-        structs[o["map_x"]], structs[o["map_y"]] = self.x + 4, self.y + 4
+        # mid_step: live a6 showed the player struct already at its destination while wXCoord/wYCoord lag
+        ahead = getattr(self, "mid_step", (0, 0))
+        structs[o["map_x"]], structs[o["map_y"]] = self.x + 4 + ahead[0], self.y + 4 + ahead[1]
         for index, (x, y) in enumerate(self.objects(), 1):
             base = index * o["length"]
             structs[base + o["sprite"]], structs[base + o["map_x"]], structs[base + o["map_y"]] = 2, x + 4, y + 4
@@ -640,9 +642,39 @@ def test_wait_loops_are_ready_only_while_they_fire_and_once_origins_persist(tmp_
     for _ in range(9):
         sim.advance()
     assert look() == ("title", True, False)
+    ctx.state.ui.consumed = sim.frame   # answered: the title drops its first press, so it re-pulses
+    for _ in range(16):
+        sim.advance()
+    assert look() == ("title", True, False)
+    ctx.state.ui.kind, ctx.state.ui.consumed = "continue_confirm", sim.frame   # a map-load confirm never does
+    for _ in range(40):
+        sim.advance()
+    assert look() == ("continue_confirm", False, False)
+    ctx.state.ui.kind = "title"
     sim.fire("overworld_tick")
     sim.advance()
     assert look() == (None, None, True)
+
+
+def test_npc_positions_do_not_shift_while_the_player_struct_is_mid_step(tmp_path):
+    """Object struct coords are map coords + 4 (player_object.asm RefreshPlayerCoords, map_objects.asm spawns).
+    Mid-step the player struct already holds its destination while wXCoord/wYCoord lag (live attempt
+    n2-crystal-town-a6): a player-relative offset shifted every NPC one tile and put Mom on her own trigger."""
+    root = make_root(tmp_path, "crystal")
+    _, env = make_env(root, "crystal", "town")
+    sim = Sim(LuaRuntime(unpack_returned_tuples=True), "crystal", "town")
+    sim.gen = sim.wait(10 ** 6)
+    next(sim.gen)
+    gate, ctx = library(sim, env)
+    gate.hooks(ctx)
+    observe = gate.observer(ctx)
+    sim.map, sim.x, sim.y = "ElmsLab", 4, 6
+    want = sorted(sim.objects())
+    for ahead in ((0, 0), (-1, 0), (1, 0), (0, 1), (0, -1)):
+        sim.mid_step = ahead
+        sim.sync()
+        blocked = observe()["blocked"]
+        assert sorted((b["x"], b["y"]) for b in blocked.values()) == want, ahead
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold"])

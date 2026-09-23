@@ -40,8 +40,10 @@ function Q.new(facts, qfacts, case)
         return buttons, phase, buttons ~= nil and buttons.A == true
     end
 
+    -- A native press is HELD for HOLD frames: Crystal's main-menu loop (engine/menus/main_menu.asm MainMenuJoypadLoop -> MenuJoypadLoop) samples GetJoypad once per iteration, after WaitBGMap's DelayFrames 4 (home/menu.asm), so a 1-frame press on a fixed re-pulse cadence can stay out of phase forever (live attempt n2-crystal-town-a1..a3). A/B/Start never repeat at any hold (GetMenuJoypad reads the hJoyPressed edge, home/menu.asm:35-48); only a held DIRECTION repeats (hJoyLast via JoyTextDelay: 15 frames, then 5), so HOLD must stay < 15 and below the walk step, or a held direction moves twice (review gen2-R17).
+    local HOLD, held, hold_left = 12, nil, 0
     local function press(button)
-        release = true
+        release, held, hold_left = true, button, HOLD - 1
         return {[button]=true}, self.phase
     end
     local function choose(ui, wanted)
@@ -75,6 +77,7 @@ function Q.new(facts, qfacts, case)
         end
         if hits.restart_clock > 0 then return nil, "RestartClock ran: the saved RTC was not accepted" end
         if hits.erase_save > 0 then return nil, "ErasePreviousSave ran: the save was treated as another file" end
+        if hold_left > 0 then hold_left = hold_left - 1; return {[held]=true}, self.phase end
         if release then release = false; return {}, self.phase end
         if self.phase == self.terminal then return {}, self.phase end
         if loaded and save_counter ~= nil and integer(point.save_success_counter, 0, math.huge)

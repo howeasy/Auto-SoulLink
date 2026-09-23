@@ -52,7 +52,11 @@ local function direction(map, point, goal)
             end
         end
     end
-    return nil, "source route blocked or live collision facts disagree"
+    local steps, objects = {}, {}
+    for _, d in ipairs(DIRECTIONS) do steps[#steps+1] = d[1] .. "=" .. tostring(point.can_step[d[1]]) end
+    for _, b in ipairs(point.blocked or {}) do objects[#objects+1] = b.x .. "," .. b.y end
+    return nil, string.format("source route blocked or live collision facts disagree at %d,%d goal %s,%s can_step %s blocked %s",
+        point.x, point.y, tostring(goal.x), tostring(goal.y), table.concat(steps, " "), table.concat(objects, " "))
 end
 
 function P.new(facts, case)
@@ -66,8 +70,10 @@ function P.new(facts, case)
     assert(integer(case.title_idle_frames,0,40000), "bounded requested title idle required")
     local title_started = nil
 
+    -- A native press is HELD for HOLD frames: Crystal's main-menu loop (engine/menus/main_menu.asm MainMenuJoypadLoop -> MenuJoypadLoop) samples GetJoypad once per iteration, after WaitBGMap's DelayFrames 4 (home/menu.asm), so a 1-frame press on a fixed re-pulse cadence can stay out of phase forever (live attempt n2-crystal-town-a1..a3). A/B/Start never repeat at any hold (GetMenuJoypad reads the hJoyPressed edge, home/menu.asm:35-48); only a held DIRECTION repeats (hJoyLast via JoyTextDelay: 15 frames, then 5), so HOLD must stay < 15 and below the walk step, or a held direction moves twice (review gen2-R17).
+    local HOLD, held, hold_left = 12, nil, 0
     local function press(button)
-        release = true
+        release, held, hold_left = true, button, HOLD - 1
         return {[button]=true}, self.phase
     end
     local function choose(ui, wanted, columns)
@@ -118,6 +124,7 @@ function P.new(facts, case)
             return nil,"missing or foreign source-bound CGB observation"
         end
         if point.action_error then return nil,"fixture action refused: " .. tostring(point.action_error) end
+        if hold_left > 0 then hold_left = hold_left - 1; return {[held]=true}, self.phase end
         if release then release=false; return {},self.phase end
         if self.phase == self.terminal then return {},self.phase end
         if point.has_existing_save and not entered then return nil,"cold NEW GAME requires an empty isolated save lane" end

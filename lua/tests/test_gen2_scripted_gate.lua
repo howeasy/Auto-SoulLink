@@ -57,6 +57,12 @@ G.MENU_KINDS = {main_menu=true, gender=true, name_choices=true, yes_no=true, sta
 -- WaitPressAorB_BlinkCursor .loop (text) spins within a frame (home/joypad.asm:358-367): same rule.
 G.LOOP_KINDS = {prompt_button=true, wait_button=true, day_picker=true, clock_hour=true, clock_minute=true, text=true}
 G.LOOP_WINDOW = 2
+-- A confirm here starts a map load, so a re-pulse would land in the loaded overworld before any newer
+-- context exists (live attempt n2-crystal-town-a7: the re-pulsed A talked to Elm, ProfElmScript). The
+-- title screen, by contrast, drops its first press and needs the re-pulse; MainMenu replaces it at once.
+-- One-shot + the same-kind merge rule: a SECOND continue_confirm inside one stage would be stranded
+-- (never ready again) and the stage would hang to its phase bound. Impossible today: one CONTINUE per boot.
+G.ONE_SHOT_KINDS = {continue_confirm=true}
 G.CONFIRM = {A=true, B=true, Start=true}
 -- Charmap glyph names (data/games/gen2_<title>/charmap.lua), not byte values.
 G.GLYPH = {cursor="▶", top_left="┌", bottom_left="└", side="│", space=" "}
@@ -427,6 +433,8 @@ function G.observer(ctx)
     for _, code in ipairs(obs.passable_collision) do passable[code] = true end
     for name, value in pairs(obs.facing) do facing[value] = name end
     local o = obs.object
+    -- ponytail: opt-in live diagnostics (SLINK_GEN2_TRACE=1): one line per 120 frames, never per frame
+    local trace = os and os.getenv and os.getenv("SLINK_GEN2_TRACE") == "1"
     return function()
         assert(#state.errors == 0, "code-site hook refused: " .. tostring(state.errors[1]))
         local frame = api.framecount()
@@ -440,7 +448,7 @@ function G.observer(ctx)
         if u and (state.tick == nil or u.seq > state.tick.seq) then
             local view = {kind=u.kind, origin=u.origin}
             local ready = frame - u.frame >= G.UI_SETTLE_FRAMES
-                and (u.consumed == nil or frame - u.consumed >= G.UI_REPULSE_FRAMES)
+                and (u.consumed == nil or (not G.ONE_SHOT_KINDS[u.kind] and frame - u.consumed >= G.UI_REPULSE_FRAMES))
                 and (not G.LOOP_KINDS[u.kind] or frame - u.last <= G.LOOP_WINDOW)
             if G.MENU_KINDS[u.kind] then
                 local rows = G.screen(ctx)
@@ -452,6 +460,13 @@ function G.observer(ctx)
                 view.prompt = G.classify_prompt(G.screen(ctx), ctx.prompts)   -- which text is waiting
             end
             point.ui, point.input_ready = view, ready
+        end
+        if trace and frame % 30 == 0 and ctx.log then
+            local s = state.ui
+            ctx.log(fmt("  trace @%d ui=%s seq=%s age=%s last=%s consumed=%s tick=%s ready=%s items=%s cursor=%s", frame,
+                s and s.kind or "-", s and s.seq or "-", s and frame - s.frame or "-", s and frame - s.last or "-", s and s.consumed and frame - s.consumed or "-",
+                state.tick and state.tick.seq or "-", tostring(point.input_ready),
+                point.ui and point.ui.items and table.concat(point.ui.items, "|") or "-", point.ui and point.ui.cursor or "-"))
         end
         local map = reads.read_map()
         if map then point.map_group, point.map_number, point.x, point.y = map.group, map.number, map.x, map.y end
@@ -486,10 +501,18 @@ function G.observer(ctx)
         point.facing = facing[field(0, o.direction)]
         point.blocked = {}
         if map then
-            local dx, dy = field(0, o.map_x) - map.x, field(0, o.map_y) - map.y
+            -- Object struct coords are map coords + 4 (engine/overworld/player_object.asm: wXCoord/wYCoord
+            -- add 4; NPC spawns write the same OBJECT_MAP_X/Y bias, engine/overworld/map_objects.asm). Not player-relative: mid-step the player struct already holds its destination while
+            -- wXCoord/wYCoord lag, which shifted every NPC by one tile (live attempt n2-crystal-town-a6).
+            local dx, dy = 4, 4
             for index = 1, o.count - 1 do
                 if field(index, o.sprite) ~= 0 then
                     point.blocked[#point.blocked + 1] = {x=field(index, o.map_x) - dx, y=field(index, o.map_y) - dy}
+                    if trace and ctx.log and frame % 30 == 0 then
+                        ctx.log(fmt("  trace-obj @%d player struct %d,%d wXY %d,%d obj%d struct %d,%d -> %d,%d", frame,
+                            field(0, o.map_x), field(0, o.map_y), map.x, map.y, index, field(index, o.map_x),
+                            field(index, o.map_y), field(index, o.map_x) - dx, field(index, o.map_y) - dy))
+                    end
                 end
             end
         end
@@ -592,6 +615,14 @@ local function idle_buttons()
     return idle
 end
 
+-- On a failed live stage, the visible screen text (wTilemap through the charmap): the one
+-- fact a failure message cannot carry. Diagnostics only; never an oracle.
+local function log_screen(ctx)
+    local ok, rows = pcall(G.screen, ctx)
+    if not ok or not ctx.log then return end
+    for y, row in ipairs(rows) do ctx.log(fmt("  screen %02d |%s|", y, table.concat(row))) end
+end
+
 -- The route, the native save witness, the CartRAM hash and the receipt.
 function G.play(ctx)
     local api, case, facts, env = ctx.api, ctx.case, ctx.facts, ctx.env
@@ -604,6 +635,7 @@ function G.play(ctx)
     local ok, result = pcall(ctx.Play.run, host, G.observer(ctx), facts, case,
         function(_, phase, frame) ctx.log(fmt("  phase %s @%d", phase, frame)) end, on_request)
     state.release()
+    if not ok then log_screen(ctx) end
     assert(ok, "route failed: " .. tostring(result))
     assert(state.saves >= 1, "native save completion was not observed")
     assert(#ctx.scopes == (case.target == "battle" and 1 or 0), "harness write scopes differ from the case")
@@ -656,6 +688,7 @@ function G.qualify(ctx)
     local ok, result = pcall(ctx.Qualify.run, host, G.qualify_observer(ctx), facts, q.facts, stage_case,
         function(_, phase, frame) ctx.log(fmt("  phase %s @%d", phase, frame)) end)
     state.release()
+    if not ok then log_screen(ctx) end
     assert(ok, "qualification " .. q.stage .. " failed: " .. tostring(result))
     local hits = state.hits
     local continue_selected = hits.continue >= 1 and hits.continue_loaded >= 1

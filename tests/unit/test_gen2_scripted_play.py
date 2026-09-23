@@ -48,10 +48,15 @@ def origin_point(lua, f, kind, *, area="PlayersHouse1F", x=9, y=1, origin=None, 
     return value
 
 
+HOLD = 12  # lua/tests/gen2_scripted_play.lua / gen2_qualify.lua press(): frames a native press is held
+
+
 def press_then_release(d, value):
-    """The driver holds a button for exactly one observed frame, then consumes one release
-    frame (gen2_scripted_play.lua:121) before it will act on the next observation again."""
+    """The driver holds a native press for exactly HOLD observed frames (a menu loop may sample input
+    only once per WaitBGMap iteration), then consumes one release frame before acting again."""
     buttons, phase, request = step(d, value)
+    for _ in range(HOLD - 1):
+        assert step(d, value)[0] == buttons, "expected the press held for HOLD frames"
     empty, phase2, _ = step(d, value)
     assert empty == {}, "expected the driver's one-frame release before the next press"
     return buttons, phase2, request
@@ -170,9 +175,11 @@ def ui(f, q, kind, **fields):
 
 
 def act(d, value):
-    """One decision plus the driver's one-frame release (gen2_qualify.lua press())."""
+    """One decision, held for HOLD frames, plus the one-frame release (gen2_qualify.lua press())."""
     buttons, phase, _ = step(d, value)
     if buttons:
+        for _ in range(HOLD - 1):
+            assert step(d, value)[0] == buttons
         assert step(d, value)[0] == {}
     return buttons, phase
 
