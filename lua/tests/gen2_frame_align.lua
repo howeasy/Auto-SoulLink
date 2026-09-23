@@ -1,11 +1,19 @@
 --[[
-  lua/tests/gen2_frame_align.lua -- card gen2-U1: the Crystal engine-hook proof on the RUNNING cartridge
-  (docs/gen2/GEN2_BINDING_PLAN.md P3b.4: the 5.13 frame-alignment probe, B-9, and the 5.11 engine-sequence
-  proof; docs/gen2/reviews/P3B7_PLAN_CODEX_2026-09-23.md row U1).
+  lua/tests/gen2_frame_align.lua -- card gen2-U1 (Crystal) / gen2-U1-GS (Gold, Silver): the engine-hook
+  proof on the RUNNING cartridge (docs/gen2/GEN2_BINDING_PLAN.md P3b.4: the 5.13 frame-alignment probe,
+  B-9, and the 5.11 engine-sequence proof; docs/gen2/reviews/P3B7_PLAN_CODEX_2026-09-23.md row U1).
+
+  PER TITLE (SLINK_GEN2_TITLE; the fixture is <title>_battle): the title's own profile, engine_signals
+  pack rows and .sym, and its own route facts' UI origins (battle_menu = BattleMenu, C 0f:6139, G/S
+  0f:5f9a; the menu is read by G.BATTLE_MENU_GRID, valid for G/S per N17). Silver's capture rows sit 2
+  bytes below Gold's (docs/gen2/reviews/OMP_U1_BATTLE_FACTS_2026-09-23.md O10), so no title borrows
+  another's rows and each writes its own <title>.engine_sites.json. G/S capture_party is the
+  `ld a, [wCurItem]` right after predef TryAddMonToParty (pokegold engine/items/item_effects.asm:556-558),
+  the same point as Crystal's `farcall SetCaughtData`, so the frame-alignment rule below is unchanged.
 
   Result file: patch/build/gen2_frame_align_result.txt (RESULT: PASS|FAIL, last line).
 
-  Boots crystal_battle WARM (Route 29 grass, the fixture's recorded O-10 Ball stack already in the save;
+  Boots <title>_battle WARM (Route 29 grass, the fixture's recorded O-10 Ball stack already in the save;
   no harness write of any kind here), arrives through the same source-qualified CONTINUE path the
   inspect gate uses, then arms EVERY engine_signals.json site through the shared lua/hook_registry.lua +
   lua/gb_hook_binding.lua (load-time expected_hex check in the ROM domain, hROMBank filter, PC == site,
@@ -23,10 +31,10 @@
   hit (battle_party), N+1 inside the callback (the RAM effect is already there) and N+1 to the main loop
   after the frame returns. TryAddMonToParty increments wPartyCount in its first instructions and then runs
   GeneratePartyMonStats (move_mon.asm:3-19, :94-264), so the increment may land frames BEFORE the callback
-  (live U1 rerun: pre_party == callback_party). The main loop samples wPartyCount after every frame and
-  records the first frame it changed (party_changed <= callback; the receipt states the distance). This
-  capture RAM effect IS the frame-alignment control: it substitutes
-  plan 5.13's "DMG Gen 1 pin" (coordinator-accepted, card gen2-U1b). Each accepted hit also records the
+  (live U1 rerun: pre_party == callback_party; pokegold move_mon.asm:3-19 is the same code). The main
+  loop samples wPartyCount after every frame and records the first frame it changed (party_changed <=
+  callback; the receipt states the distance). This capture RAM effect IS the frame-alignment control: it
+  substitutes plan 5.13's "DMG Gen 1 pin" (coordinator-accepted, card gen2-U1b). Each accepted hit also records the
   MEASURED PC register and hROMBank byte (never the anchor echo), checked against the pinned bank/PC.
   The receipt's evidence_level is PHYSICAL only when the api is this script's own BizHawk binding.
 
@@ -38,8 +46,8 @@
   Environment: the inspect gate's (SLINK_ROOT, run_gb_gate._gen2_plan bindings, SLINK_GEN2_FIXTURE_CASE,
   SLINK_GEN2_ROUTE_FACTS, SLINK_GEN2_QUALIFY stage "boot") plus SLINK_GEN2_U1_FACTS from
   tests/live/test_gen2_frame_align.py: {pack_ui = {kind -> site}, decoy = {symbol, bank, addr, flat, hex},
-  prompts = {catch_nickname = {anchor}}} (PokeBallEffect asks _AskGiveNicknameText,
-  item_effects.asm:574-581, not GiveANickname_YesNo's gift text). The battle menu is read through the
+  prompts = {catch_nickname = {anchor}}} (PokeBallEffect asks _AskGiveNicknameText, C item_effects.asm:
+  574-581, G :572-578, not GiveANickname_YesNo's gift text). The battle menu is read through the
   shared gate's G.parse_menu + G.BATTLE_MENU_GRID (the N17 constant, pinned to BattleMenuHeader by
   tests/unit/test_gen2_scripted_gate.py), never a local geometry. SLINK_GEN2_TRACE=1
   logs a state line (phase, UI, readiness, battle mode, PC + stack labels) every 30 frames; any play
@@ -59,6 +67,11 @@ F.BUDGET = {max_frames=60000, max_phase_frames=24000, settle_frames=30}
 F.MAX_UP_PRESSES = 3
 F.HIT_LOG = 32
 F.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
+-- Per title: the rgblink .sym (diagnostics) and the title whose production binder must refuse this
+-- title's receipt (Crystal keeps its original Gold refusal; Gold and Silver refuse each other).
+F.SYM = {crystal="pokecrystal", gold="pokegold", silver="pokesilver"}
+F.REFUSE = {crystal="gold", gold="silver", silver="gold"}
+F.NAMES = {crystal="Crystal", gold="Gold", silver="Silver"}
 
 local fmt = string.format
 local function integer(value, low, high)
@@ -315,7 +328,7 @@ end
 function F.probe(ctx, pack, decoy_site)
     local Registry = dofile(ctx.root .. "/lua/hook_registry.lua")
     local B = binding(ctx)
-    local sites = pack.titles.crystal.sites
+    local sites = pack.titles[ctx.env.title].sites
     local record = {sites={}, aligned=0, misaligned=0, accept_errors=0, seq=0,
                     decoy={raw=0, accepted=0, bank_rejects=0}, negatives={}}
     local groups, descriptors = {}, {}
@@ -444,7 +457,7 @@ function F.negatives(ctx, Signals, wrapper, pack)
     if control then control:close() end
 
     local bad = copy(pack)
-    local site = bad.titles.crystal.sites.capture_party
+    local site = bad.titles[ctx.env.title].sites.capture_party
     site.expected_hex = fmt("%02x", (tonumber(site.expected_hex:sub(1, 2), 16) + 1) % 256) .. site.expected_hex:sub(3)
     local refused, reason = Signals.new_model(binder_options(ctx, wrapper, bad, "gen2-u1-bad-byte"))
     if refused then refused:close() end
@@ -453,7 +466,7 @@ function F.negatives(ctx, Signals, wrapper, pack)
         and "refused" or "NOT refused"
 
     local script = copy(pack)
-    local sites = script.titles.crystal.sites
+    local sites = script.titles[ctx.env.title].sites
     local ctx_script = sites.whiteout_before_heal.guards.script_context
     local arm = sites.capture_party
     arm.bank, arm.addr, arm.expected_hex = ctx_script.bank, ctx_script.addr, ctx_script.expected_hex
@@ -491,12 +504,13 @@ function F.main(api, getenv, SG)
         log(fmt("RESULT: %s %s (%d checks failed)", failures == 0 and "PASS" or "FAIL", extra or "u1", failures))
         return failures == 0
     end
-    log("[gen2_frame_align] U1 Crystal engine-hook proof + frame-alignment probe")
+    log(fmt("[gen2_frame_align] U1 %s engine-hook proof + frame-alignment probe",
+            F.NAMES[getenv("SLINK_GEN2_TITLE")] or tostring(getenv("SLINK_GEN2_TITLE"))))
 
     local ok, ctx = pcall(function()
         SG = SG or F.scripted_gate(root)
         local c = SG.context(api, getenv)
-        assert(c.env.title == "crystal" and c.case.name == "crystal_battle", "U1 runs on crystal_battle only")
+        assert(F.SYM[c.env.title] and c.case.name == c.env.title .. "_battle", "U1 runs on <title>_battle only")
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.u1 = assert(c.json.decode(assert(getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
         return c
@@ -506,8 +520,9 @@ function F.main(api, getenv, SG)
     end
     ctx.log = log
     local json = ctx.json
-    local wrapper = read_json(ctx, "data/games/gen2_crystal/profile.json")
-    local pack = read_json(ctx, "data/games/gen2_crystal/engine_signals.json")
+    local title = ctx.env.title
+    local wrapper = read_json(ctx, "data/games/gen2_" .. title .. "/profile.json")
+    local pack = read_json(ctx, "data/games/gen2_" .. title .. "/engine_signals.json")
     local Signals = dofile(ctx.root .. "/lua/gen2/signals.lua")
 
     -- The pack-UI origins and the item submenu join the scripted gate's UI context (this gate's own
@@ -557,7 +572,7 @@ function F.main(api, getenv, SG)
     local symbol_at
     local function where()   -- PC and the ROM words on the stack, as bank-guessed labels (diagnostics only)
         if symbol_at == nil then
-            local f = assert(io.open(ctx.root .. "/data/gen2/pokecrystal.sym", "rb"))
+            local f = assert(io.open(ctx.root .. "/data/gen2/" .. F.SYM[title] .. ".sym", "rb"))
             symbol_at = F.symbols(f:read("a"))
             f:close()
         end
@@ -570,7 +585,7 @@ function F.main(api, getenv, SG)
         return table.concat(out, "<")
     end
     local driver = F.driver(ctx.facts.maps.Route29)
-    local played, outcome = F.play(host, {name="u1-crystal", terminal=driver.terminal,
+    local played, outcome = F.play(host, {name="u1-" .. title, terminal=driver.terminal,
         max_frames=F.BUDGET.max_frames, max_phase_frames=F.BUDGET.max_phase_frames,
         settle_frames=F.BUDGET.settle_frames, terminal_idle=true}, driver, observe,
         {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end, where=where,
@@ -609,7 +624,7 @@ function F.main(api, getenv, SG)
         sites[name] = {bank=s.bank, addr=s.addr, expected_hex=s.expected_hex, symbol=s.symbol, hits=0, raw=s.raw}
     end
     local a = record.align
-    local receipt = {schema=Signals.RECEIPT_SCHEMA, title="crystal", evidence_level=evidence, result="PASS",
+    local receipt = {schema=Signals.RECEIPT_SCHEMA, title=title, evidence_level=evidence, result="PASS",
         rom_sha1=pack.source.rom_sha1, pack_commit=pack.source.commit, pack_specs_sha256=pack.specs_sha256,
         fixture=case.name, attempt_id=case.attempt_id, core_mode="CGB", input_mode="normal_buttons",
         fixture_sha256=q.stage_fingerprint, qualification_attempt_id=ctx.u1.qualification_attempt_id,
@@ -625,7 +640,8 @@ function F.main(api, getenv, SG)
             accepted=record.decoy.accepted, bank_rejects=record.decoy.bank_rejects},
         sites=sites, proven=json.array(proven), absent=json.array(F.ABSENT)}
 
-    -- The production gate on this very ROM: the receipt registers exactly the proven sites; Gold refuses.
+    -- The production gate on this very ROM: the receipt registers exactly the proven sites; the other
+    -- title (F.REFUSE, with its own pack) refuses it.
     local options = binder_options(ctx, wrapper, pack, "gen2-u1-production", true)
     options.runtime_qualification = receipt
     local service, why = Signals.new(options)
@@ -635,11 +651,14 @@ function F.main(api, getenv, SG)
     check("production Signals.new registers exactly the receipted sites",
           service ~= nil and table.concat(registered, ",") == table.concat(proven, ","),
           service and table.concat(registered, ",") or why)
-    options.title, options.owner = "gold", "gen2-u1-production-gold"
-    local gold, gold_why = Signals.new(options)
-    if gold then gold:close() end
-    check("production Signals.new refuses Gold", gold == nil, gold_why)
-    log("PRODUCTION " .. json.encode({registered=json.array(registered), gold_refusal=tostring(gold_why)}))
+    local other = F.REFUSE[title]
+    options.title, options.owner = other, "gen2-u1-production-" .. other
+    options.pack = read_json(ctx, "data/games/gen2_" .. other .. "/engine_signals.json")
+    local refused, refused_why = Signals.new(options)
+    if refused then refused:close() end
+    check("production Signals.new refuses " .. F.NAMES[other], refused == nil, refused_why)
+    log("PRODUCTION " .. json.encode({registered=json.array(registered), refused_title=other,
+                                      refusal=tostring(refused_why)}))
     if failures == 0 then log("RECEIPT " .. json.encode(receipt)) end
     return finish()
 end

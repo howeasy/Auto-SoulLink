@@ -4,8 +4,9 @@
 -- Current engine_signals packs are SOURCE_CANDIDATE, never runtime authority by themselves.
 -- new(options) registers production hooks ONLY for sites a PHYSICAL engine-site receipt
 -- (options.runtime_qualification, schema gen2-engine-site-receipt-v1, written by the live gate
--- lua/tests/gen2_frame_align.lua via tests/live/test_gen2_frame_align.py) proves, on a title in
--- PHYSICAL_TITLES (Crystal only: Gold/Silver stay refused). Every other site stays unregistered.
+-- lua/tests/gen2_frame_align.lua via tests/live/test_gen2_frame_align.py) proves, for a title from
+-- its OWN PHYSICAL receipt (PHYSICAL_TITLES: each title's receipt title is itself; no Silver-from-Gold
+-- shortcut, Silver's capture rows differ). Every other site stays unregistered.
 -- Registration is not admission: runtime admission stays with admission.json/entry.lua (O-22, U3).
 -- new_model(options) requires explicit MODEL_PROBE authority and model_only IO.
 -- Options: title, profile/pack wrappers, Registry, GB, io, reads (gen2/reads),
@@ -103,8 +104,11 @@ local OPEN = {
 }
 
 S.RECEIPT_SCHEMA = "gen2-engine-site-receipt-v1"
--- Titles with a live engine-site receipt path. Gold/Silver have none yet: always refused.
-S.PHYSICAL_TITLES = {crystal=true}
+-- title -> the receipt title that may authorize its engine sites. Every title has its own live
+-- receipt path (lua/tests/gen2_frame_align.lua) and is authorized only by its own receipt: Silver's
+-- three capture rows sit 2 bytes below Gold's (docs/gen2/reviews/OMP_U1_BATTLE_FACTS_2026-09-23.md O10),
+-- unlike the write-window RECEIPT_TITLE (lua/gen2_write_safety.lua) where Silver follows Gold.
+S.PHYSICAL_TITLES = {crystal="crystal", gold="gold", silver="silver"}
 S.RECEIPT_NEGATIVES = {"wrong_pack_byte","script_bytecode_arm","wrong_bank_hit"}
 
 local COUNT = 9007199254740991
@@ -118,7 +122,8 @@ local function hex64(value) return type(value) == "string" and #value == 64 and 
 -- A proven site none of whose ANY-mode predecessors is proven is dropped (it could never
 -- publish); an ALL-mode site needs every predecessor proven.
 function S.qualified_sites(title, pack, receipt)
-    if not S.PHYSICAL_TITLES[title] then
+    local owner = S.PHYSICAL_TITLES[title]
+    if not owner then
         return nil,"Gen 2 runtime signal qualification is OPEN for " .. tostring(title) .. ": no PHYSICAL receipt path"
     end
     if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA or receipt.evidence_level ~= "PHYSICAL"
@@ -126,12 +131,12 @@ function S.qualified_sites(title, pack, receipt)
         return nil,"PHYSICAL engine-site qualification receipt required"
     end
     local data = type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title]
-    if type(data) ~= "table" or type(data.sites) ~= "table" or type(pack.source) ~= "table" or receipt.title ~= title
+    if type(data) ~= "table" or type(data.sites) ~= "table" or type(pack.source) ~= "table" or receipt.title ~= owner
        or receipt.rom_sha1 ~= pack.source.rom_sha1 or receipt.pack_commit ~= pack.source.commit
        or type(pack.specs_sha256) ~= "string" or receipt.pack_specs_sha256 ~= pack.specs_sha256 then
         return nil,"qualification receipt belongs to another title, ROM or engine-site pack"
     end
-    if receipt.fixture ~= title .. "_battle" or receipt.core_mode ~= "CGB" or receipt.input_mode ~= "normal_buttons"
+    if receipt.fixture ~= owner .. "_battle" or receipt.core_mode ~= "CGB" or receipt.input_mode ~= "normal_buttons"
        or type(receipt.harness_write_scopes) ~= "table" or next(receipt.harness_write_scopes) ~= nil
        or not hex64(receipt.fixture_sha256) or type(receipt.attempt_id) ~= "string" or receipt.attempt_id == ""
        or type(receipt.qualification_attempt_id) ~= "string" or receipt.qualification_attempt_id == "" then

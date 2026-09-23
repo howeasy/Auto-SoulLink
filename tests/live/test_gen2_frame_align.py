@@ -1,8 +1,9 @@
-"""PHYSICAL lane for card gen2-U1: the Crystal engine-hook proof + the 5.13 frame-alignment probe (B-9).
+"""PHYSICAL lane for cards gen2-U1 / gen2-U1-GS: the engine-hook proof + the 5.13 frame-alignment probe (B-9),
+one run per title on that title's own qualified battle fixture, ROM and pack rows.
 
-    SLINK_LIVE=1 pytest tests/live/test_gen2_frame_align.py -q -p no:randomly
+    SLINK_LIVE=1 pytest tests/live/test_gen2_frame_align.py -q -p no:randomly -k crystal   (or gold, silver)
 
-Boots the qualified crystal_battle fixture warm and runs lua/tests/gen2_frame_align.lua: normal-button
+Boots the qualified <title>_battle fixture warm and runs lua/tests/gen2_frame_align.lua: normal-button
 play from Route 29 grass to a wild encounter, a Poke Ball catch (the fixture's recorded O-10 stack) and a
 native save, with every engine_signals.json site armed through the shared hook registry + GB binding.
 This file re-checks the gate's printed hits independently against the pack (pinned bank/PC, engine
@@ -10,7 +11,7 @@ order, capture_box silent, callback frame == armed frame, the RAM effect one fra
 loop, the refused negatives) and, on PASS, writes the PHYSICAL receipt that lua/gen2/signals.lua's
 production path (S.new -> S.qualified_sites) accepts:
 
-    tests/fixtures/gen2/receipts/crystal.engine_sites.json
+    tests/fixtures/gen2/receipts/<title>.engine_sites.json
 
 FRAME-ALIGNMENT CONTROL: the capture RAM effect (the callback sees wPartyCount N+1, the main loop N
 before and N+1 after) substitutes plan 5.13's "DMG Gen 1 pin" (coordinator-accepted, card gen2-U1b).
@@ -45,11 +46,11 @@ pytestmark = [
 ]
 
 GATE = "lua/tests/gen2_frame_align.lua"
-FIXTURE = "crystal_battle"
-RECEIPT = REPO / "tests/fixtures/gen2/receipts/crystal.engine_sites.json"
+TITLES = ("crystal", "gold", "silver")
 EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed")
-# BattlePack's per-pocket input states and ItemSubmenu's USE/QUIT box (pokecrystal engine/items/pack.asm:
-# 685-782 .ItemsPocketMenu/.KeyItemsPocketMenu/.TMHMPocketMenu/.BallsPocketMenu, :783-803 ItemSubmenu).
+# BattlePack's per-pocket input states and ItemSubmenu's USE/QUIT box (engine/items/pack.asm:685-782
+# .ItemsPocketMenu/.KeyItemsPocketMenu/.TMHMPocketMenu/.BallsPocketMenu, :783-803 ItemSubmenu; the same
+# lines and pocket order in pokecrystal and pokegold, resolved per title from its own .sym).
 # The shared scripted gate has no pack UI kinds, so this gate adds them to its own in-memory facts.
 PACK_UI = {"pack_items": "BattlePack.ItemsPocketMenu", "pack_balls": "BattlePack.BallsPocketMenu",
            "pack_key": "BattlePack.KeyItemsPocketMenu", "pack_tmhm": "BattlePack.TMHMPocketMenu",
@@ -71,10 +72,12 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
     assert decoy is not None, "no unused ROM bank for the wrong-bank decoy"
     pack_ui = {kind: {k: v for k, v in gen2_fixtures._code_site(ctx, symbol).items() if k != "symbol_offset"}
                for kind, symbol in PACK_UI.items()}
-    # PokeBallEffect asks AskGiveNicknameText -> _AskGiveNicknameText (pokecrystal engine/items/item_effects.asm:
-    # 1113-1115, data/text/common_3.asm:1250-1255), not the gift-side "received?" text the route facts bind.
+    # PokeBallEffect asks AskGiveNicknameText -> _AskGiveNicknameText (C engine/items/item_effects.asm:
+    # 1113-1115, data/text/common_3.asm:1250-1255; G/S item_effects.asm:1102-1103, common_3.asm:289-294),
+    # not the gift-side "received?" text the route facts bind.
     anchor = "Give a nickname to"
-    assert f'text "{anchor}"' in ctx.read_source("data/text/common_3.asm"), "catch nickname anchor left the source"
+    assert f'_AskGiveNicknameText::\n\ttext "{anchor}"' in ctx.read_source("data/text/common_3.asm"), \
+        "catch nickname anchor left the source"
     return {"pack_ui": pack_ui, "decoy": decoy, "prompts": {"catch_nickname": [anchor]},
             "qualification_attempt_id": qualification_attempt_id}
 
@@ -83,9 +86,9 @@ def tag_json(text: str, tag: str):
     return live.tag_json(text, tag)
 
 
-def verify(text: str, pack: dict) -> dict:
+def verify(text: str, pack: dict, title: str) -> dict:
     """Independent re-check of the gate output; returns the receipt the gate printed."""
-    sites = pack["titles"]["crystal"]["sites"]
+    sites = pack["titles"][title]["sites"]
     summary = tag_json(text, "HIT_SUMMARY")
     for name, row in summary.items():
         if row["hits"]:
@@ -112,7 +115,9 @@ def verify(text: str, pack: dict) -> dict:
     assert "script bytecode" in negatives["script_bytecode_arm"], negatives
     production = tag_json(text, "PRODUCTION")
     assert sorted(production["registered"]) == sorted(EXPECT), production
+    assert production["refused_title"] != title, production
     receipt = tag_json(text, "RECEIPT")
+    assert receipt["title"] == title and receipt["fixture"] == f"{title}_battle", receipt
     source = pack["source"]
     assert (receipt["rom_sha1"], receipt["pack_commit"], receipt["pack_specs_sha256"]) == (
         source["rom_sha1"], source["commit"], pack["specs_sha256"])
@@ -124,8 +129,9 @@ def verify(text: str, pack: dict) -> dict:
     return receipt
 
 
-def test_crystal_engine_sites_fire_at_their_routines(emuhawk):  # noqa: F811
-    spec = gen2_fixtures.BY_NAME[FIXTURE]
+@pytest.mark.parametrize("title", TITLES)
+def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
+    spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
               or live.receipt_missing_reason(spec.name))
     if reason:
@@ -146,8 +152,8 @@ def test_crystal_engine_sites_fire_at_their_routines(emuhawk):  # noqa: F811
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"
     assert fixture.read_bytes() == staged, "fixture changed while the gate ran"
 
-    pack = json.loads((REPO / "data/games/gen2_crystal/engine_signals.json").read_text(encoding="utf-8"))
-    receipt = verify(text, pack)
+    pack = json.loads((REPO / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
+    receipt = verify(text, pack, title)
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
-    RECEIPT.write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")

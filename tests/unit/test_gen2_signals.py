@@ -923,10 +923,39 @@ def test_crystal_receipt_registers_only_the_proven_sites_and_publishes_physical_
 
 
 @pytest.mark.parametrize("title", ["gold", "silver"])
-def test_gold_and_silver_refuse_production_even_with_a_matching_receipt(title):
+def test_gold_and_silver_register_only_with_their_own_receipt(title):
+    """U1-GS: each title's own receipt registers exactly its proven sites at its OWN pack rows."""
     world = World(title)
     binder, why = production(world, receipt(world))
-    assert binder is None and "OPEN" in why and world.callbacks == {}
+    assert binder is not None, why
+    assert {address for _, address in world.callbacks.values()} == {world.sites[n]["addr"] for n in U1_EXPECT}
+    assert sorted(binder.status(binder).registered_sites.values()) == sorted(U1_EXPECT)
+
+
+@pytest.mark.parametrize("title,other", [("gold", "silver"), ("silver", "gold"), ("gold", "crystal"),
+                                         ("silver", "crystal"), ("crystal", "gold"), ("crystal", "silver")])
+def test_a_receipt_never_registers_another_titles_sites(title, other):
+    """U1-GS: no Silver-from-Gold (or any cross-title) shortcut: another title's receipt is refused as-is,
+    and relabelled with this title's name it still names the other ROM and rows."""
+    world, foreign = World(title), receipt(World(other))
+    binder, why = production(world, foreign)
+    assert binder is None and why and world.callbacks == {}
+    foreign["title"], foreign["fixture"] = title, f"{title}_battle"
+    binder, why = production(world, foreign)
+    assert binder is None and why and world.callbacks == {}
+
+
+def test_every_title_is_authorized_only_by_its_own_engine_site_receipt():
+    """PHYSICAL_TITLES is the data: title -> the receipt title allowed to authorize it. Silver's capture
+    rows sit 2 bytes below Gold's (O10), so unlike write windows Silver never follows Gold."""
+    module = World().module
+    assert dict(module.PHYSICAL_TITLES) == {"crystal": "crystal", "gold": "gold", "silver": "silver"}
+    gold, silver = World("gold").sites, World("silver").sites
+    assert all(gold[n]["addr"] - silver[n]["addr"] == 2
+               for n in ("capture_party", "capture_party_finalized", "capture_box"))
+    _, gate = u1_gate()
+    refuse = dict(gate.REFUSE)
+    assert refuse == {"crystal": "gold", "gold": "silver", "silver": "gold"}
 
 
 RAW_FAULTS = {  # U1b: the summary flags stay "passed"; only the raw measurements are wrong
@@ -1215,13 +1244,15 @@ def test_the_u1_driver_throws_a_ball_and_refuses_a_battle_without_a_catch():
     assert buttons is None and "without a catch" in why
 
 
-@pytest.mark.parametrize("fault", [None, "echo_pc", "echo_bank"])
-def test_the_u1_probe_and_negatives_run_on_the_shared_binders(fault):
+@pytest.mark.parametrize("title,fault", [("crystal", None), ("crystal", "echo_pc"), ("crystal", "echo_bank"),
+                                         ("gold", None), ("silver", None)])
+def test_the_u1_probe_and_negatives_run_on_the_shared_binders(title, fault):
     """The live gate's own arming, frame bookkeeping and load-time negatives, on the pack-faithful
     fake ROM: aligned hits in engine order, the capture RAM effect, a decoy that never passes.
+    U1-GS: the same run on Gold and Silver arms each title's OWN pack rows (ctx.env.title keys the pack).
     U1b faults: a binder that echoes its anchor without checking lets battle_end fire off its PC or
     bank; the probe's MEASURED PC/hROMBank must still expose it."""
-    world = World()
+    world = World(title)
     lua = world.lua
     lua.execute("SLINK_GEN2_GATE_LIBRARY = true")
     gate = lua.eval("dofile")((ROOT / "lua/tests/gen2_frame_align.lua").as_posix())
@@ -1247,7 +1278,7 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(fault):
         return b
     end} end""")(world.gb)
     ctx = lua.table(api=api, root=ROOT.as_posix(), reads=world.reads, sym=sym,
-                    env=lua.table(title="crystal"), profile=lua.table_from(world.p, recursive=True),
+                    env=lua.table(title=title), profile=lua.table_from(world.p, recursive=True),
                     Binding=binding)
     wrapper, pack = lua.table_from(world.profile, recursive=True), lua.table_from(world.pack, recursive=True)
     negatives, detail = gate.negatives(ctx, world.module, wrapper, pack)
