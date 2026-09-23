@@ -157,11 +157,16 @@ end
 function F.state_line(tag, frame, phase, point, where)
     local ui = type(point) == "table" and point.ui or nil
     point = type(point) == "table" and point or {}
-    return fmt("  %s @%s phase=%s ui=%s prompt=%s ready=%s battle_mode=%s ow=%s items=%s cursor=%s at=%s",
+    local steps = {}
+    for _, d in ipairs(F.DIRECTIONS) do
+        if type(point.can_step) == "table" then steps[#steps + 1] = d[1]:sub(1, 1) .. (point.can_step[d[1]] and "1" or "0") end
+    end
+    return fmt("  %s @%s phase=%s ui=%s prompt=%s ready=%s battle_mode=%s ow=%s items=%s cursor=%s map=%s:%s xy=%s,%s step=%s at=%s",
         tag, tostring(frame), tostring(phase), ui and tostring(ui.kind) or "-", ui and tostring(ui.prompt) or "-",
         tostring(point.input_ready), tostring(point.battle_mode), tostring(point.overworld_ready),
         ui and type(ui.items) == "table" and table.concat(ui.items, "|") or "-",
-        ui and tostring(ui.cursor) or "-", tostring(where))
+        ui and tostring(ui.cursor) or "-", tostring(point.map_group), tostring(point.map_number),
+        tostring(point.x), tostring(point.y), table.concat(steps), tostring(where))
 end
 
 -- The bounded play; on ANY failure (phase bound, driver refusal) it logs the last point, where the CPU
@@ -189,7 +194,9 @@ function F.play(host, spec, driver, observe, diag)
             diag.log(F.state_line("trace", frame, phase, point, locate()))
         end
         return buttons, phase, point
-    end, function(_, phase, frame) diag.log(fmt("  phase %s @%d", phase, frame)) end)
+    end, function(_, phase, frame)
+        diag.log(fmt("  phase %s @%d xy=%s,%s", phase, frame, tostring(last and last.x), tostring(last and last.y)))
+    end)
     if not ok then
         diag.log(F.state_line("stall", diag.frame(), driver.phase, last, locate()))
         local shown, rows = pcall(diag.screen)
