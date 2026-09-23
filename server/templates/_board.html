@@ -88,6 +88,7 @@
   {% endif %}
   {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
     {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
+    {% set stalled = (status.faint_repair_stalled or {}).get(pid) %}{% if stalled %}<div class="identity-warn">&#9888; Player {{ pid | upper }}: {{ stalled | length }} linked faint(s) never landed in game and the server stopped retrying &mdash; check that game.</div>{% endif %}
     {% if p.admission != 'admitted' %}<div class="identity-warn">&#9888; Player {{ pid | upper }} not admitted: {{ p.admission_reason }}</div>{% endif %}
   {% endfor %}
 
