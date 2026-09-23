@@ -550,7 +550,9 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
   bottom: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: var(--c-card);
+  /* A pop-up floats over the page, so it must be opaque. Default's --c-card is 4% white
+   * and its --c-bg 90% opaque: card over bg twice leaves nothing showing through. */
+  background: linear-gradient(var(--c-card), var(--c-card)), linear-gradient(var(--c-bg), var(--c-bg)), linear-gradient(var(--c-bg), var(--c-bg));
   border: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
   border-radius: 6px;
   padding: 4px;
