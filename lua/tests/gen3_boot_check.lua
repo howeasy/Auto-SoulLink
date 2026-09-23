@@ -324,7 +324,11 @@ end
 --- lua/tests/test_live_startmenu.lua:96-104; the companion patch adds one).
 function M.save_via_menu(cp, domain, attempts)
     local function field() return M.pred_ok(cp, "callback2") end
-    local function dialog() return (M.pred(cp, "save_dialog_cb")) ~= 0 end
+    -- OPEN = sSaveDialogCB changed since before the menu: pret never clears it (start_menu.c
+    -- :608-842), so after an earlier save this boot it still holds SaveDialogCB_ReturnSuccess
+    -- and a bare ~= 0 would "open" on the first A of any row.
+    local cb0 = M.pred(cp, "save_dialog_cb")
+    local function dialog() return (M.pred(cp, "save_dialog_cb")) ~= cb0 end
 
     local before = M.save_counter(domain)
     M.phase("save-menu", string.format("counter=%d", before))
@@ -377,11 +381,30 @@ function M.save_via_menu(cp, domain, attempts)
         M.shot("stuck")
         return false, before, after, "the new slot is not a valid save: " .. tostring(why)
     end
+    -- `dialog()` (sSaveDialogCB ~= 0) is right for detecting the dialog OPEN above -- this
+    -- boot's cold start zeroes it (bss) and StartMenu_PrepareForSave (pret start_menu.c:608)
+    -- is the first thing to touch it -- but it is the WRONG signal for closed: pret never
+    -- resets sSaveDialogCB to NULL on any exit path (:608-842 is every assignment there is),
+    -- so once this save has opened the dialog once, `dialog()` reads non-zero for the rest of
+    -- the boot, saved or not. The real "control is back" signal is the field-controls lock
+    -- ShowStartMenu took out for the whole menu (:405 LockPlayerFieldControls, the moment
+    -- Start was first pressed above) and only StartCB_Save2's OKAY/ERROR exits release
+    -- (:586, :598) -- `field_controls_locked` already tracks that.
+    --
+    -- SaveDialogCB_ReturnSuccess (:827-835) itself gates on !IsSEPlaying() and then
+    -- SaveDialog_Wait60FramesOrAButtonHeld (:671-687): JOY_HELD(A_BUTTON) (not JOY_NEW, so a
+    -- re-pulse lands whether or not a prior press was still down) returns TRUE immediately, a
+    -- 60-frame timeout returns TRUE with no press at all -- B is never read there. A press is
+    -- not strictly required, only faster than the timeout; re-pulse it every 16 frames anyway
+    -- so a slow SE/printer never leaves the timeout as the only path.
+    local function unlocked() return M.pred_ok(cp, "field_controls_locked") end
     local closed = false
-    for _ = 1, 600 do                  -- let the dialog close before the flush
-        if not dialog() then closed = true; break end
+    for i = 1, 600 do                  -- let the dialog close before the flush
+        if unlocked() then closed = true; break end
+        if i % 16 == 1 then joypad.set({ A = true }) else joypad.set({}) end
         M.advance()
     end
+    joypad.set({})
     if not closed then
         M.shot("stuck")
         return false, before, after, "the save dialog never closed in 600 frames"

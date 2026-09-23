@@ -87,27 +87,40 @@ class World:
         g.SLINK_ROOT = ROOT.as_posix()
         g.flash = bytes(image)
         self.lua.execute("""
-            frame, dialog, flushes = 0, 0, 0
+            frame, dialog, locked, swapped, a_seen, flushes = 0, 0, 0, false, false, 0
             local function rd(fmt) return function(a) return (string.unpack(fmt, flash, a + 1)) end end
             memory = {read_u32_le = rd("<I4"), read_u16_le = rd("<I2"), read_u8 = rd("<I1")}
             console = {log = function() end}
-            joypad = {set = function() end}
+            -- close_on_a: only an A press seen AFTER the flash has already swapped (the
+            -- fake's stand-in for "counter/slot already validated") can clear `locked` --
+            -- gen3_boot_check.lua must not press A before that point either.
+            joypad = {set = function(t)
+                if close_on_a and swapped and t and t.A then a_seen = true end
+                -- the SAVE row's A moves sSaveDialogCB off whatever it held (0 on a cold
+                -- boot, SaveDialogCB_ReturnSuccess after an earlier save); stuck = it never moves
+                if t and t.A and not dialog_stuck then dialog = 0x0806F001 end
+            end}
             client = {screenshot = function() end, saveram = function() flushes = flushes + 1 end}
             emu = {framecount = function() return frame end,
                    frameadvance = function()
                        frame = frame + 1
-                       if swap_at and frame >= swap_at then flash, swap_at = pending, nil end
-                       if close_at and frame >= close_at then dialog = 0 end
+                       if swap_at and frame >= swap_at then flash, swap_at = pending, nil; swapped = true end
+                       if close_at and frame >= close_at then locked = 0 end
+                       if a_seen then locked = 0 end
                    end}
         """)
         self.G = self.lua.eval(f'dofile("{(ROOT / "lua/tests/gen3_boot_check.lua").as_posix()}")')
         self.G.title = title
-        # The menu drive is stubbed at the predicate: callback2 always on the field, the
-        # save dialog callback is the `dialog` global the frame hook controls.
+        # The menu drive is stubbed at the predicate: callback2 always on the field, the save
+        # dialog OPEN is the `dialog` global (sSaveDialogCB), its CLOSE is now
+        # `field_controls_locked` -> the `locked` global the frame/joypad hooks control
+        # (gen3_boot_check.lua stopped polling `dialog` to detect closed -- pret never resets
+        # sSaveDialogCB to NULL, so that predicate can only ever detect OPEN).
         self.lua.execute("""
             local G = ...
             G.pred = function(cp, name)
                 if name == "save_dialog_cb" then return dialog, 0 end
+                if name == "field_controls_locked" then return locked, 0 end
                 return 1, 1
             end
         """, self.G)
@@ -115,9 +128,11 @@ class World:
     def sectors_at(self, ctr):
         return self.G.sectors_at(DOMAIN, ctr)
 
-    def save(self, after: bytes, swap_at=200, close_at=None):
+    def save(self, after: bytes, swap_at=200, close_at=None, close_on_a=False,
+             dialog=0, dialog_stuck=False):
         g = self.lua.globals()
-        g.dialog, g.pending, g.swap_at, g.close_at = 1, bytes(after), swap_at, close_at
+        g.dialog, g.locked, g.pending, g.swap_at, g.close_at = dialog, 1, bytes(after), swap_at, close_at
+        g.close_on_a, g.swapped, g.a_seen, g.dialog_stuck = close_on_a, False, False, dialog_stuck
         return self.G.save_via_menu(self.lua.table(), DOMAIN)
 
 
@@ -157,6 +172,17 @@ def test_dialog_timeout_returns_false():
     assert w.lua.globals().flushes == 0
 
 
+def test_save_closes_only_after_the_helper_presses_a():
+    # No timer (close_at=None) -- only an A press seen after the slot is already validated
+    # can clear the lock. card C3-30: the pre-fix helper never presses A while it waits (it
+    # only polled sSaveDialogCB, which pret never clears either -- start_menu.c:608-842), so
+    # this must fail against the unfixed lua/tests/gen3_boot_check.lua and pass once it does.
+    w = World(bytes(valid(CTR - 1)))
+    ok, before, after, why = w.save(valid(CTR), close_at=None, close_on_a=True)
+    assert (ok, before, after, why) == (True, CTR - 1, CTR, None)
+    assert w.lua.globals().flushes == 1
+
+
 def test_flush_failure_returns_false():
     w = World(bytes(valid(CTR - 1)))
     w.lua.execute('client.saveram = function() error("disk full") end')
@@ -168,3 +194,18 @@ def test_invalid_new_slot_returns_false():
     w = World(bytes(valid(CTR - 1)))
     ok, _, _, why = w.save(bad_checksum(), close_at=400)
     assert ok is False and "bad checksum" in why
+
+
+def test_stale_dialog_callback_is_not_an_open_dialog():
+    # A second save in one boot: sSaveDialogCB still holds the last save's
+    # SaveDialogCB_ReturnSuccess (pret never clears it). If no row ever opens the dialog, the
+    # helper must say so -- a bare "~= 0" check "opened" on the first A of any row.
+    w = World(bytes(valid(CTR - 1)))
+    ok, before, after, why = w.save(valid(CTR), close_at=400, dialog=0x0806F0F1, dialog_stuck=True)
+    assert ok is False and after == before and "never opened" in why
+
+
+def test_second_save_in_one_boot_opens_on_change():
+    w = World(bytes(valid(CTR - 1)))
+    ok, _, after, why = w.save(valid(CTR), close_at=400, dialog=0x0806F0F1)
+    assert (ok, after, why) == (True, CTR, None)
