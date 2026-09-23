@@ -7,7 +7,76 @@ files were deleted or edited outside `tools/make_release.py`,
 (`docs/gen2/PLAN.md:126-142`) lists as REPLACE/REMOVE, whether each path is still referenced
 today, and whether it looks safe to act on once the owner clears the two blockers below.
 
-## Blockers to any REMOVE (read this first)
+## P3b.8b outcome (2026-09-23): REMOVE executed
+
+Owner ruling O-25 (`ae769e1e`, docs/gen2/REVIEW_RECORD.md) refused Archipelago Crystal. That
+cleared blocker 1. Blocker 2 was already closed by `49a5c69d` and now also covers a run
+whose rom_type routes nowhere. Worker P3b.8b executed the REMOVE half in three commits:
+
+- `aa9c960b`: **refuse loudly.**
+  - `lua/slink.lua` refuses every Game Boy cartridge the Gen 1 and Gen 2 routes do not
+    recognise. `AP_CRYSTAL` gets "Archipelago Crystal is not supported (O-25)".
+  - The server refuses a `crystal_ap` / "Crystal (AP)" hello, citing O-25
+    (`_REFUSED_ROM_TYPES`, `unrouted_rom_type_reason`).
+  - A run persisted under `gen2_crystal` is refused with `UnsafeGameMigration` whatever its
+    rom_type resolves to (`_RETIRED_GAME_IDS`). This includes none at all, and the
+    refusal does not need the adapter to be registered.
+  - The Manager's "Crystal (Archipelago)" game row is dropped.
+- `d8028dbf`: removes the legacy Lua runtime, its tests and its tooling (27 files).
+- `c6201179`: removes `server/adapters/gen2_crystal.py` and its registry line.
+
+Current verdict for every row in the tables below. The older rows keep their original
+text as the evidence trail.
+
+| Path | Verdict |
+|---|---|
+| `tests/fixtures/gen2/crystal_town.SaveRAM`, `data/games/gen2_crystal/*` (REPLACE) | DONE (unchanged from the table below). Some pack files were read only by the removed adapter, see "Kept" |
+| `tests/unit/test_gen2_adapter.py` (REPLACE) | **DONE** `d8028dbf`: now only `TestGen2GSCAdapter` + `TestGen2GSCPackRefusal`. The legacy tests are gone |
+| `lua/slink_gen2.lua` | **DONE** `d8028dbf` (also dropped from `tools/make_release.py` `_LUA_ROOT`/`_LAUNCHER_SCRIPTS`) |
+| the 15 legacy `lua/tests/*gen2*` probe/test scripts | **DONE** `d8028dbf` |
+| `lua/clients/gen2_crystal_client.lua` | **DONE** `d8028dbf` (the launcher row went in `aa9c960b`) |
+| `lua/memory_gb.lua` | **DONE** `d8028dbf`. **Not shared**: every Gen 1 / Gen 3 hit is a comment citing line numbers. The one remaining runtime `require` is in the legacy e2e chain (follow-up below) |
+| `lua/games/gen2_crystal.lua`, `lua/games/gen2_crystal_trainers.lua` | **DONE** `d8028dbf` (also left `lua/game_detect.lua`'s registry and the release manifest) |
+| `lua/gen2_crystal_locations.lua`, `lua/gen2_crystal_areas.lua` | **DONE** `d8028dbf` (manifest rows dropped in the same commit) |
+| `server/adapters/gen2_crystal.py` | **DONE** `c6201179`. Before it went, the O-24 worker (`25bfca25`) moved `tests/unit/test_state_faint_repair.py` to `Gen2GSCAdapter`. `test_gen2_moves.py` and `test_gen3_adapter.py` were repointed in `d8028dbf` |
+| `tests/unit/test_gen2_{ap_addresses,ball_items}.py` | **DONE** `d8028dbf` |
+| `tests/live/test_gen2_gates.py` | **DONE** `d8028dbf` |
+| `tools/verify_profile_addresses.py` (+ `tests/unit/test_profile_addresses.py`) | **DONE** `d8028dbf`, the whole tool. The census finding above is stale: `tools/verify_gen1_release.py` no longer has a `profile-addresses` lane (grep: no hit outside historical receipt logs), so nothing live used it |
+| `tools/gen2_playthrough.py` | **KEPT, follow-up.** `tests/e2e/test_duo_gen2.py` imports it at module level, and `tests/unit/test_e2e_duo_scenario_selection.py` imports that module. Deleting it would break test collection, and both files are under Codex's H5 lease |
+| `tests/e2e/test_duo_gen2.py` | **KEPT, follow-up** (`tests/e2e/*` is under Codex's H5 lease) |
+
+### Follow-up: retire the legacy e2e_duo `gen2` row (not done: other workers' leases)
+
+`tools/e2e_duo.py`'s `GAMES["gen2"]` row (`"main": "lua/tests/duo/duo_gb_main.lua"`,
+`"game": "gen2_crystal"`, `"play": "gen2_playthrough"`) and its `EvidenceContract` entry
+`"gen2_crystal"` drive the removed legacy client. It is dead at runtime: `duo_gb_main.lua`
+requires `memory_gb` and dofiles `lua/tests/gatelib.lua`, whose `GAMES.gen2_crystal` names
+`games.gen2_crystal` and `gen2_crystal_client.lua`. All of those are gone. It fails only if
+someone runs `--game gen2` under `SLINK_E2E=1`, and nothing in the unit suite runs it. Remove
+these together, once H5/H1c release `tools/e2e_duo.py`, `tests/e2e/*` and `lua/tests/duo/*`:
+
+- the e2e_duo `gen2` row and `EvidenceContract["gen2_crystal"]`
+- the legacy `gen2` game cases in `tests/unit/test_e2e_duo_scenario_selection.py` (`scenarios_for("gen2")`, the `test_duo_gen2` wrapper check)
+- `tests/e2e/test_duo_gen2.py`
+- `lua/tests/duo/duo_gb_main.lua` and `lua/tests/duo/scenario_gb_{faint,boxsync,memorialize}.lua`
+- `lua/tests/gatelib.lua`
+- `tools/gen2_playthrough.py`
+
+### Kept, and why
+
+- `lua/tests/gatelib.lua`: its only runtime consumer is `lua/tests/duo/duo_gb_main.lua`
+  (H1c lease), so it goes with the follow-up above.
+- `data/games/gen2_crystal/{gender_ratios,species_types,item_names}.json` were read only by
+  the removed adapter. `data/games/gen2_*` is outside this card, so they are left for the
+  pack owner. `server/data/items/__init__.py:13` and `data/games/gen2_crystal/README.md`
+  still describe the old loader in prose.
+- Stale prose that names removed files, left for a doc sweep:
+  - `lua/games/README.md`, `lua/tests/README.md`, `tests/TESTING.md`
+  - `.github/copilot-instructions.md`, `data/games/gen1_rby/README.md:9`
+  - the example in the `tools/run_gb_gate.py:6` docstring
+  - line-number comments citing `memory_gb.lua` in `lua/gen1/panel.lua` and the Gen 1 panel tests
+
+## Blockers to any REMOVE (read this first) — HISTORICAL, both cleared (see above)
 
 1. **`crystal_ap` still runs on the legacy client + adapter, live.** `lua/slink.lua:84-104`'s
    Gen 2 route only recognises the three admitted titles (`Entry.detect_title` matches
