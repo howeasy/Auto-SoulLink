@@ -228,6 +228,11 @@ SCENARIOS = {
     "center_controls_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
                              "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                              "no_save": ("b",), "oracle": "assert_center_controls_gen3_saved"},
+    # C4-6r's PRODUCT FINDING as a live regression: after an in-game save the stale sSaveDialogCB
+    # must not hold SLink writes (fix: C4-SAVE). FAILS on a pack that still has save_dialog_cb.
+    "save_then_write_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
+                             "target": "town", "frames": 2000000, "no_save": ("b",),
+                             "oracle": "assert_save_then_write_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
@@ -1473,6 +1478,15 @@ def _receipt_line(text, match):
     start = text.rfind("\n", 0, match.start()) + 1
     end = text.find("\n", match.end())
     return text[start:end if end >= 0 else len(text)]
+
+
+def save_then_write_chain(ka):
+    """save_then_write_gen3's A receipt, in order (scenario_gen3_save_then_write.lua emits it)."""
+    k = re.escape(ka)
+    return [r"(?m)^SAVE_WITNESS_DUMP .*saves=1 ",
+            r"(?m)^STALE_SAVE_DIALOG save_dialog_cb=0x[0-9A-F]{8}:SaveDialogCB_ReturnSuccess",
+            rf"(?m)^WRITE_PROBE_READY {k} ", gen3_rx("box_mon", ka), gen3_tx("stats_cache", ka),
+            gen3_boxed(ka), rf"(?m)^WRITE_LANDED box_mon {k} ", r"(?m)^SAVE_WITNESS_DUMP .*saves=2 "]
 
 
 def center_controls_chain(ka):
@@ -5251,6 +5265,15 @@ class DuoRun:
             raise RuntimeError(f"A never reported stats_cache for {ka}; no party_mon probe to send")
         self.queue_command("a", {"cmd": "party_mon", "key": ka, "stats": cached["stats"]})
 
+    def orchestrate_save_then_write_gen3(self):
+        """A saves, reports the stale sSaveDialogCB on an idle field, and only then is its keyed
+        box_mon queued: the write must land there (C4-6r finding, C4-SAVE fix)."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        ka = self._link_keys["a"]
+        self._gen3_mark("a", rf"^WRITE_PROBE_READY {re.escape(ka)} ", "A idle after its save, sSaveDialogCB stale")
+        self.queue_command("a", {"cmd": "box_mon", "key": ka})
+
     def orchestrate_whiteout_gen3(self):
         """Both halves of the slot-1 pair boxed (A by hand, B by the mirrored box_mon), the
         server's own party_keys agreeing (assert_whiteout_both_boxed, shared with Gen 1), then A
@@ -5570,6 +5593,27 @@ class DuoRun:
             forbidden=[gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka)])
         self._gen3_raise(problems, f"center_controls: {ka} held at the Cable Club menu, the cable "
                                    f"link wait and the Union Room attendant; landed once released")
+
+    def assert_save_then_write_gen3_saved(self, results):
+        """The regression's persisted half: two saves (the witness already checked the second is
+        the flushed battery), the stale sSaveDialogCB observed between them, the keyed box_mon
+        received only after WRITE_PROBE_READY, ACKed with no failure, read back boxed, and the
+        final save holding A's linked mon in a box and not in the party. The pair stays alive."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka = self._link_keys["a"]
+        party, boxes = self._gen3_saved("a")
+        problems = []
+        if ka in [gen3_key(m) for m in party]:
+            problems.append(f"a: the final save still holds {ka} in the party")
+        if ka not in [gen3_key(m) for m in boxes.values()]:
+            problems.append(f"a: the final save holds {ka} in no box")
+        chain = save_then_write_chain(ka)
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
+            forbidden=[gen3_tx("box_mon_failed", ka)])
+        self._gen3_raise(problems, f"save_then_write: {ka} boxed by a keyed write on an idle field after "
+                                   f"an in-game save (stale sSaveDialogCB observed); saved twice")
 
     def assert_whiteout_gen3_saved(self, results):
         """One whiteout, one rebuild, no deaths: A whited out with the pair boxed on both sides,

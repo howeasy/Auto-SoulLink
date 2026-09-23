@@ -261,7 +261,7 @@ GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3
 GEN3_RR_NEW_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
 # C4-6m: G4 item 2a's Center 2F controls run on FR/LG only; gen3_lgfr is the same family with
 # LeafGreen as A, so it selects exactly what gen3_frlg does.
-GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3",)
+GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 
 

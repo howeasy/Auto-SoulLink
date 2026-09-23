@@ -844,7 +844,8 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
                   D = {}, hp0_tag = "FORCED_HP0" }
-    local probes, released = 0, false          -- released: a talk's script closed (mash_until)
+    -- released: a talk's script closed (mash_until); save_then_write starts on an idle field
+    local probes, released = 0, scenario == "save_then_write"
     ctx.log = function(s)
         logs[#logs + 1] = tostring(s)
         local live = tostring(s):match("^CONTROL_LIVE (%S+)")
@@ -852,6 +853,10 @@ function FAKE(scenario, player, phase, spec)
             probes = probes + 1
             local probe = ({ cable_welcome_message = "box_mon", nurse = "box_mon", union_room_attendant = "party_mon" })[live]
             if probe then logs[#logs + 1] = "RX " .. probe .. " key=" .. (spec.linked or "K1") end
+        end
+        if tostring(s):find("^WRITE_PROBE_READY") then
+            probes = probes + 1
+            logs[#logs + 1] = "RX box_mon key=" .. (spec.linked or "K1")
         end
     end
     ctx.frames = function() end
@@ -914,6 +919,8 @@ function FAKE(scenario, player, phase, spec)
         if event == "sync_retrieve_done" then gone[key] = nil; boxed[key] = nil end
         -- live r9: after the cancelled cable link the released probe never landed
         if spec.stale and event == "stats_cache" then return false end
+        -- today's pack: the probe stays held on save_dialog_cb after the save
+        if spec.held and event == "stats_cache" then return false end
         logs[#logs + 1] = "TX " .. event .. " " .. tostring(key) .. " {}"
         return true
     end
@@ -947,7 +954,13 @@ function FAKE(scenario, player, phase, spec)
     ctx.trade_phase = function() return spec.trade_phase or "scene" end
     ctx.hp0 = function() return spec.hp0 end
     ctx.battle_hold = function() return { why = "active battler" } end
-    ctx.save = function() return true end
+    local saves = 0
+    ctx.save = function()
+        saves = saves + 1
+        logs[#logs + 1] = string.format("SAVE_WITNESS_DUMP path=p bytes=131072 saves=%d frame=1 counter=%d",
+                                        saves, 4 + saves)
+        return true
+    end
     ctx.catch = function()
         if spec.catch_why then return nil, spec.catch_why end
         return "K9"
@@ -1038,6 +1051,9 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.special_result = function() return spec.var_result or 0 end
     ctx.stale_predicates = function()
+        if scenario == "save_then_write" and not spec.no_stale then
+            return { "save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)" }
+        end
         if spec.stale then
             return { "link_callback=0x0800A721:LinkCB_RequestPlayerDataExchange(sLinkOpen=0)",
                      "save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)" }
@@ -2755,3 +2771,62 @@ def test_stale_predicates_names_only_pointers_whose_state_is_over(stale_model):
                    "save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)"], got
     lua.execute("MEM[0x20] = 1; LIVE[0x40] = true")                     # link open, save running
     assert list(lua.globals().STALE().values()) == []
+
+
+# ── C4-6s: save_then_write_gen3, the live regression for the stale sSaveDialogCB ─────────────
+_HELD_ON_SAVE = 'lua:"...lua/gen3/safety.lua:73: forbidden state: save_dialog_cb"'
+
+
+def test_save_then_write_emits_its_own_oracle_chain(lua):
+    ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {})
+    assert ok and passed is True, msg
+    chain = duo.save_then_write_chain("K1")
+    assert duo.gen3_receipt_problems("a", logs, required=chain,
+                                     ordered=list(zip(chain, chain[1:], strict=False))) == [], logs
+
+
+def test_save_then_write_fails_by_name_while_the_pack_holds_on_save_dialog_cb(lua):
+    """Today's pack: the probe stays held on save_dialog_cb; the run must say exactly that."""
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial",
+                                     {"held": "lua:true", "queue": "box", "why": _HELD_ON_SAVE})
+    assert ok and passed is False and "stayed HELD" in msg and "(clause save_dialog_cb:" in msg, msg
+
+
+def test_save_then_write_refuses_a_run_that_does_not_exercise_the_defect(lua):
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial", {"no_stale": "lua:true"})
+    assert ok and passed is False and "does not exercise the defect" in msg, msg
+
+
+def test_save_then_write_oracle_positive_and_negatives(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    boxed = _saved(fixture, 5, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False, species=16)})
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "save_then_write_gen3", {"a": boxed, "b": boxed},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipt = ("SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
+               "STALE_SAVE_DIALOG save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)\n"
+               f"WRITE_PROBE_READY {k} map=3.1\nRX box_mon key={k}\nTX stats_cache {k} {{}}\n"
+               f"BOXED_OBSERVED {k} box=0:0\nWRITE_LANDED box_mon {k} map=3.1\n"
+               "SAVE_WITNESS_DUMP path=p bytes=1 saves=2 frame=2 counter=6\n")
+    run.assert_save_then_write_gen3_saved({"a": receipt, "b": ""})
+    assert notes and "save_then_write" in notes[-1]
+    with pytest.raises(RuntimeError, match="STALE_SAVE_DIALOG"):
+        run.assert_save_then_write_gen3_saved({"a": receipt.replace("STALE_SAVE_DIALOG", "STALE_X"), "b": ""})
+    with pytest.raises(RuntimeError, match="box_mon_failed"):
+        run.assert_save_then_write_gen3_saved({"a": receipt + f"TX box_mon_failed {k} {{}}\n", "b": ""})
+    in_party = _saved(fixture, 5, [STARTER, PIDGEY])
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "save_then_write_gen3", {"a": in_party, "b": in_party},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    with pytest.raises(RuntimeError, match="still holds"):
+        run.assert_save_then_write_gen3_saved({"a": receipt, "b": ""})
+
+
+def test_the_save_then_write_runner_queues_only_after_the_stale_witness():
+    body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    orch = body[body.index("def orchestrate_save_then_write_gen3"):body.index("def orchestrate_whiteout_gen3")]
+    assert orch.index("WRITE_PROBE_READY") < orch.index('"cmd": "box_mon"')
+    assert duo.SCENARIOS["save_then_write_gen3"]["no_save"] == ("b",)
+    assert duo.scenario_applies("save_then_write_gen3", "gen3_frlg")
+    assert duo.scenario_applies("save_then_write_gen3", "gen3_lgfr")
