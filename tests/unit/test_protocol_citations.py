@@ -352,7 +352,9 @@ def test_the_field_rule_judges_the_first_citation_of_multi_citation_rows():
     problems = check_citations(text)
     field_problems = [p for p in problems if "field the row documents" in p]
     assert len(field_problems) == 7, problems
-    assert len(field_problems) == len(problems), problems
+    # The pinned doc is judged against TODAY's sources, so a later code move can add symbol-span
+    # findings for that old text (e.g. 3235ddf3 moved gen3_frlge.py:581-582); only field findings count.
+    assert all("field the row documents" in p or "outside the span" in p for p in problems), problems
     assert any("state.py:952" in p and "`maxHP`" in p for p in problems), problems
     assert any("server.py:3779" in p and "`active`" in p for p in problems), problems
     assert any("state.py:1033-1046" in p and "`species_id`" in p for p in problems), problems
