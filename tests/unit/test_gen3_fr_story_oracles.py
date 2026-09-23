@@ -1155,9 +1155,13 @@ def test_viridian_pc_recovers_from_a_whiteout_into_its_own_center(machine):
 
 
 def test_pc_exit_answers_continue_box_with_b_not_a(machine):
-    # FR run 28b: B in storage opens "Continue BOX operations?" (Task_OnBPressed, cursor on
-    # YES); A there keeps the box open, and the old exit loop pressed A forever. pret
-    # pokemon_storage_system_tasks.c:1988-2035: B on the prompt exits.
+    # FR run 28b: B in storage opens "Continue BOX operations?" (Task_OnBPressed). Its cursor
+    # starts on NO, not YES -- ShowYesNoWindow(0) -> CreateYesNoMenu(..., initialCursorPos = 1)
+    # then a 0-delta move (pokemon_storage_system_tasks.c:2595-2599; menu.c:323-334) -- so A
+    # selects NO and B is MENU_B_PRESSED: BOTH exit (tasks.c:2016-2031), and only Down+A (YES)
+    # stays in the box. The 28b loop was on the storage TOP MENU this exits to, not on the
+    # prompt (run 28c's dump shows Task_PCMainMenu live across every stuck step). The assertion
+    # is the real property either way: nothing may press A while a box menu owns input.
     lua, mod, fake = machine
     lua.execute("""
         F.pcstore=0x0202A000; F.field=false; F.stage='storage'; F.a_in_box=0
@@ -1189,3 +1193,372 @@ def test_pc_exit_answers_continue_box_with_b_not_a(machine):
     """)
     assert mod.PC.leave(fake.cp, "exit") is True
     assert fake.a_in_box == 0 and fake.stage == "field"
+
+
+# ── C3-40: every remaining PC/exit stage check gets its own witness ───────────────────────────
+# Finding 3 of cx-006e6f09 measured 19 PC stage checks and 5 exit checks whose deletion left the
+# suite green. Each test below drives the real PC.* function through the fake RAM and asserts
+# the ONE named failure that guard emits, so deleting the guard turns its test red (the
+# before/after mutation matrix is the C3-40 receipt). The fakes supply RAM transitions only.
+
+
+def test_pc_open_rejects_a_stale_result_without_the_choice_witness(machine):
+    """VAR_RESULT can hold the PREVIOUS PC visit's row (127 = owner list already cancelled,
+    pc.inc:20-37). It is written by Task_MultichoiceMenu_HandleInput, so it may only be read
+    once that task is gone -- reading it while the menu is still up, or trusting it before the
+    visit wrote it, accepts a PC the player never chose."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.w32(0x03005090,0x0809CC99); F.w8(0x03005090+4,1) -- Task_MultichoiceMenu_HandleInput
+        F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,3)          -- row 0, four owner rows
+        F.w16(0x020370D0,127)                               -- stale VAR_RESULT
+        F.on_tap=function(button)
+            if button~='A' then return end
+            -- the choice is consumed; the top menu appears and no new VAR_RESULT was written
+            F.w32(0x03005090,0x0808C39D); F.w16(0x03005090+8,2); F.w16(0x03005090+10,0)
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_which_pc_result_not_someones"):
+        mod.PC.open(fake.cp, "stale-result")
+
+
+@pytest.mark.parametrize("rows", [2, 6])
+def test_pc_open_refuses_an_impossible_owner_row_count(machine, rows):
+    """CreatePCMenuWindow offers three rows (no Pokedex), four (Pokedex obtained) or five (game
+    clear) -- src/script_menu.c:1006-1034; the four-row case is the one a normal post-parcel run
+    sees. Any other count means the menu being read is not this menu."""
+    lua, mod, fake = machine
+    fake.w32(0x03005090, 0x0809CC99)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x0203ADE4 + 2, 0)
+    fake.w8(0x0203ADE4 + 4, rows - 1)
+    with pytest.raises(LuaError, match="pc_which_pc_wrong_row_count"):
+        mod.PC.open(fake.cp, "row-count")
+
+
+def test_pc_open_waits_for_the_storage_top_menu_to_accept_input(machine):
+    """Task_PCMainMenu state 2 is HANDLE_INPUT (pokemon_storage_system_menu.c:230-264); a row
+    read while the menu is still sliding in is a row the player cannot press yet."""
+    lua, mod, fake = machine
+    fake.w32(0x03005090, 0x0808C39D)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w16(0x03005090 + 8, 1)      # still opening
+    fake.w16(0x03005090 + 10, 0)
+    with pytest.raises(LuaError, match="pc_storage_top_not_ready"):
+        mod.PC.open(fake.cp, "top-not-ready")
+
+
+def test_pc_open_refuses_a_resumed_top_menu_on_another_row(machine):
+    """A resumed session can leave the top menu on the last used option (FieldTask_ReturnToPcMenu,
+    pokemon_storage_system_menu.c:354-372); the leg's next step assumes WITHDRAW."""
+    lua, mod, fake = machine
+    fake.w32(0x03005090, 0x0808C39D)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w16(0x03005090 + 8, 2)
+    fake.w16(0x03005090 + 10, 1)     # parked on DEPOSIT
+    with pytest.raises(LuaError, match="pc_storage_top_wrong_row"):
+        mod.PC.open(fake.cp, "top-row")
+
+
+def test_pc_mode_requires_the_five_row_storage_menu(machine):
+    """The storage menu is WITHDRAW / DEPOSIT / MOVE POKeMON / MOVE ITEMS / SEE YA!
+    (pokemon_storage_system_menu.c:37-43) -- five rows. A different count means the menu that is
+    up belongs to another screen."""
+    lua, mod, fake = machine
+    fake.w32(0x03005090, 0x0808C39D)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w16(0x03005090 + 8, 2)
+    fake.w16(0x03005090 + 10, 1)
+    fake.w8(0x0203ADE4 + 4, 3)       # four rows
+    with pytest.raises(LuaError, match="pc_storage_top_wrong_row_count"):
+        mod.PC.mode("deposit", 1)
+
+
+def test_pc_mode_refuses_a_storage_entered_in_another_mode(machine):
+    """gStorage->boxOption must be the row that was just chosen (OPTION_WITHDRAW 0 /
+    OPTION_DEPOSIT 1, include/pokemon_storage_system_internal.h:17-24). Entering DEPOSIT while
+    the storage is in MOVE MONS would drive the party-side popup for the wrong operation."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore)
+        F.w32(0x03005090,0x0808C39D); F.w8(0x03005090+4,1)
+        F.w16(0x03005090+8,2); F.w16(0x03005090+10,1)
+        F.w8(0x0203ADE4+4,4)
+        F.on_tap=function(button)
+            if button=='A' then
+                F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0); F.w8(F.pcstore+1,2)
+            end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_mode_mismatch"):
+        mod.PC.mode("deposit", 1)
+
+
+def test_pc_mode_waits_for_the_storage_cursor_before_handing_over(machine):
+    """Task_PokeStorageMain's state 0 is the box view ready for input. Returning before it
+    arrives hands the next stage a menu that is still placing its cursor."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore)
+        F.w32(0x03005090,0x0808C39D); F.w8(0x03005090+4,1)
+        F.w16(0x03005090+8,2); F.w16(0x03005090+10,1)
+        F.w8(0x0203ADE4+4,4)
+        F.on_tap=function(button)
+            if button=='A' then
+                F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,1); F.w8(F.pcstore+1,1)
+            end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_cursor_not_ready"):
+        mod.PC.mode("deposit", 1)
+
+
+def test_pc_cursor_refuses_an_out_of_range_position(machine):
+    """A box holds 30 mons and the party six; a position past that is not a storage cursor, and
+    the guard runs before any press so a bad read cannot be walked around the box."""
+    lua, mod, fake = machine
+    fake.w32(0x020397B0, 0x0202A000)
+    fake.w32(0x03005090, 0x0808D2BD)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x02039820, 1)           # the party area the caller asked for
+    fake.w8(0x02039821, 6)           # six is past the last party slot
+    with pytest.raises(LuaError, match="pc_storage_cursor_invalid"):
+        mod.PC.cursor("bad-cursor", 1, 3)
+
+
+@pytest.mark.parametrize("maxc,cursor,row,stage", [(3, 0, 0, "wrong_row_count"),
+                                                   (4, 4, 3, "wrong_row")])
+def test_pc_popup_requires_five_rows_and_a_row_it_can_reach(machine, maxc, cursor, row, stage):
+    """STORE / SUMMARY / MARK / RELEASE / CANCEL is five rows in both modes
+    (SetMenuTextsForMon, pokemon_storage_system_data.c:1755-1805); a cursor already BELOW the
+    wanted row means this read belongs to a different menu instance."""
+    lua, mod, fake = machine
+    lua.execute(f"""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,2); F.w8(F.pcstore+1,1)
+        F.w8(0x02039820,1); F.w8(0x02039821,1)           -- the party-area storage cursor
+        F.w8(0x0203ADE4+2,1); F.w8(0x0203ADE4+4,4)       -- the storage cursor's own menu
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.on_tap=function(button)
+            if button~='A' then return end
+            F.w32(0x03005090,0x0808D879)                 -- Task_OnSelectedMon: the popup opens
+            F.w8(0x0203ADE4+2,{cursor}); F.w8(0x0203ADE4+4,{maxc})
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_popup_" + stage):
+        mod.PC.popup("popup", 1, 1, row)
+
+
+def test_pc_popup_refuses_a_popup_opened_in_move_mons_mode(machine):
+    """A party-area cursor serves the DEPOSIT popup (STORE / SUMMARY / MARK / RELEASE / CANCEL).
+    boxOption is its own enum (OPTION_MOVE_MONS = 2, OPTION_MOVE_ITEMS = 3,
+    include/pokemon_storage_system_internal.h:17-24), so a popup opened while the storage is
+    moving mons is not the operation this stage drives. Comparing boxOption to the CURSOR_AREA
+    value instead of the area's own option made this a coincidence of 0/1 (C3-40, finding 5)."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,2); F.w8(F.pcstore+1,2) -- MOVE MONS
+        F.w8(0x02039820,1); F.w8(0x02039821,1)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+    """)
+    with pytest.raises(LuaError, match="pc_storage_popup_wrong_mode"):
+        mod.PC.popup("move-mons", 1, 1, 0)
+
+
+def test_pc_box_chooser_must_start_on_the_deposit_box(machine):
+    """CreateChooseBoxMenuSprites(sDepositBoxId) opens on the last confirmed box
+    (pokemon_storage_system_tasks.c:1189-1222); on a fresh leg that is box 0, so anything else
+    means the chooser on screen is not the one this leg opened, and its A would store into a box
+    the oracle never snapshotted."""
+    lua, mod, fake = machine
+    fake.w32(0x020397B0, 0x0202A000)
+    fake.w8(0x0202A000, 1)
+    fake.w32(0x03005090, 0x0808DD89)      # Task_DepositMenu
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x020397B6, 1)                # sDepositBoxId: last confirmed box 1
+    with pytest.raises(LuaError, match="pc_box_chooser_wrong_box"):
+        mod.PC.box("box-chooser")
+
+
+def test_pc_box_reports_a_full_destination_box(machine):
+    """A full destination box makes TryStorePartyMonInBox fail and returns to box selection with
+    an error (pokemon_storage_system_tasks.c:1201-1249); the leg must not read that as a
+    deposit."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,1)
+        F.w32(0x03005090,0x0808DD89); F.w8(0x03005090+4,1)
+        F.w8(0x020397B6,0)
+        F.on_tap=function(button)
+            if button=='A' then F.w8(F.pcstore,4) end -- BOX_FULL error state
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_box_deposit_box_full"):
+        mod.PC.box("box-full")
+
+
+@pytest.mark.parametrize("start_cursor,honour_up,stage", [(2, False, "not_no"),
+                                                          (1, False, "not_yes")])
+def test_pc_release_confirmation_guards_its_cursor(machine, start_cursor, honour_up, stage):
+    """Task_ReleaseMon shows ShowYesNoWindow(1): the cursor starts on NO and does not wrap
+    (pokemon_storage_system_tasks.c:1255-1305,2595-2599). Release is the one prompt whose YES is
+    reached with Up, so both readings are guarded -- a NO-default prompt confirmed with a bare A
+    declines silently."""
+    lua, mod, fake = machine
+    lua.execute(f"""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,1); F.w8(F.pcstore+1,1)
+        F.w32(0x03005090,0x0808DECD); F.w8(0x03005090+4,1)   -- Task_ReleaseMon
+        F.w8(0x0203ADE4+2,{start_cursor}); F.w8(0x0203ADE4+4,1)
+        F.on_tap=function(button)
+            if button=='Up' and {str(honour_up).lower()} then F.w8(0x0203ADE4+2,0) end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_release_confirmation_" + stage):
+        mod.PC.release("release-cursor")
+
+
+def test_pc_release_waits_for_both_trailing_messages(machine):
+    """After ReleaseMon() the task walks MSG_WAS_RELEASED -> MSG_BYE_BYE before
+    CompactPartySlots and the return to Task_PokeStorageMain (tasks.c:1307-1339): the release is
+    not done while the bye message is still up."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,1); F.w8(F.pcstore+1,1)
+        F.w32(0x03005090,0x0808DECD); F.w8(0x03005090+4,1)
+        F.w8(0x0203ADE4+2,1); F.w8(0x0203ADE4+4,1)
+        F.on_tap=function(button)
+            if button=='Up' then F.w8(0x0203ADE4+2,0) end
+            if button=='A' then F.w8(F.pcstore,4) end   -- confirmed; never reaches MSG_BYE_BYE
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_release_bye_message_missing"):
+        mod.PC.release("release-bye")
+
+
+def _exit_world(lua, owner=True, owner_maxc=3, cancel_result=True, field=True):
+    """One exit loop, with one clause of the real sequence withheld per test case."""
+    lua.execute(f"""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.field=false; F.b=0
+        G.pred_ok=function(_,name)
+            if name=='script_context_status' or name=='field_controls_locked' then return F.field end
+            return true
+        end
+        F.on_tap=function(button)
+            if button=='B' then
+                F.b=F.b+1
+                if F.b==1 then F.w32(0x03005090,0) end                 -- storage closes
+                if F.b==2 then
+                    F.w32(0x03005090,0)                                -- owner list cancelled
+                    if {str(cancel_result).lower()} then F.w16(0x020370D0,127) end
+                    if {str(field).lower()} then F.field=true end
+                end
+            end
+        end
+        F.on_frame=function()
+            if {str(owner).lower()} and F.b==1 and memory.read_u32_le(0x03005090)==0 then
+                F.w32(0x03005090,0x0809CC99); F.w8(0x0203ADE4+4,{owner_maxc})
+            end
+        end
+    """)
+
+
+@pytest.mark.parametrize("kwargs,stage", [
+    ({"owner": False}, "exit_owner_list_missing"),
+    ({"owner_maxc": 1}, "exit_owner_row_count"),
+    ({"cancel_result": False}, "exit_owner_not_canceled"),
+    ({"field": False}, "exit_not_field"),
+])
+def test_pc_exit_names_the_clause_it_failed(machine, kwargs, stage):
+    """pc.inc:50-55 loops back to the PC main script after storage: the exit must reach the owner
+    list (the multichoice pc.inc:20-25 opened), cancel it with VAR_RESULT 127, and only then be
+    on the field with the script shutdown and the controls unlocked. Each clause has its own
+    name, so a stuck exit says which one broke."""
+    lua, mod, fake = machine
+    _exit_world(lua, **kwargs)
+    with pytest.raises(LuaError, match="pc_" + stage):
+        mod.PC.leave(fake.cp, "exit-clause")
+
+
+@pytest.mark.parametrize("task", [0x0808D2BD, 0x0808D879, 0x0808DD89,
+                                  0x0808DC9D, 0x0808DECD])
+def test_pc_exit_never_presses_a_while_any_storage_task_owns_input(machine, task):
+    """Task_PokeStorageMain / Task_OnSelectedMon / Task_DepositMenu, and -- C3-40 finding 7 --
+    Task_WithdrawMon (0x0808DC9D) and Task_ReleaseMon (0x0808DECD): while any of them is up, an
+    A acts INSIDE the box (it picks the row under the cursor) instead of dismissing a message.
+    The exit loop must wait them out; only the B/message-box branches may press."""
+    lua, mod, fake = machine
+    lua.execute(f"""
+        F.pcstore=0x0202A000; F.field=false; F.a_in_box=0; F.t=0
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,1)          -- a storage task owns input
+        F.w32(0x03005090,{task}); F.w8(0x03005090+4,1); F.w16(0x03005090+8,1)
+        G.pred_ok=function(_,name)
+            if name=='script_context_status' or name=='field_controls_locked' then return F.field end
+            return true
+        end
+        F.on_tap=function(button)
+            if button=='A' then F.a_in_box=F.a_in_box+1 end
+            if button=='B' and memory.read_u32_le(0x03005090)==0x0809CC99 then
+                F.w32(0x03005090,0); F.w16(0x020370D0,127); F.field=true
+            end
+        end
+        F.on_frame=function()
+            F.t=F.t+1
+            if F.t==40 then F.w32(0x03005090,0x0809CC99); F.w8(0x0203ADE4+4,3) end
+        end
+    """)
+    assert mod.PC.leave(fake.cp, "never-a") is True
+    assert fake.a_in_box == 0, "the exit pressed A while a storage task owned input"
+
+
+def test_route1_faint_stops_on_any_settled_faint_not_on_a_counter_increase(machine):
+    """BattleStartClearSetData zeroes gBattleResults.playerFaintCounter at the start of EVERY
+    battle (src/battle_main.c:2308), so a non-zero reading after a settled fight is evidence of a
+    faint in that fight no matter what the value was before it. A resumed leg really can start
+    with the counter already set -- that is the FR run 26 shape, a state saved while a battle was
+    still resolving -- and the leg's own resume() documents taking it as evidence for exactly
+    that reason. Comparing against a baseline sampled before the loop instead only ends the leg
+    when the counter GROWS across the whole leg, which is the form C3-36 replaced. The fake
+    therefore starts the leg with the counter already set and leaves it unchanged: the growth
+    form would hunt all 20 encounters and fail."""
+    lua, mod, fake = machine
+    lua.globals().savestate = lua.table(save=lambda *_: True)
+    lua.execute("""
+        F.fights=0
+        F.w8(0x03004F90,1)                        -- already non-zero when the leg starts
+        F.place(3,19,12,37)                       -- on the pinned grass square
+        D.play.step=function() return false,'in_battle' end
+        D.play.fight_through=function() F.fights=F.fights+1; return true end
+        D.play.in_battle=function() return false end
+        D.play.wait_scene_settled=function() return true end
+        D.play.on_field=function() return true end
+    """)
+    leg(mod, "route1_faint").run(fake.cp)
+    assert fake.fights == 1, "a settled fight with the counter set must end the leg"
+
+
+def test_route1_faint_reports_a_counter_that_never_advanced(machine):
+    """The other half of the same contract: with no faint recorded the leg keeps hunting, and
+    after the 20th encounter it names the risk instead of reporting a fake PASS (FR run 26)."""
+    lua, mod, fake = machine
+    lua.globals().savestate = lua.table(save=lambda *_: True)
+    lua.execute("""
+        F.fights=0
+        F.place(3,19,12,37)
+        D.play.step=function() return false,'in_battle' end
+        D.play.fight_through=function() F.fights=F.fights+1; return true end
+        D.play.in_battle=function() return false end
+        D.play.wait_scene_settled=function() return true end
+        D.play.on_field=function() return true end
+    """)
+    with pytest.raises(LuaError, match="playerFaintCounter never advanced"):
+        leg(mod, "route1_faint").run(fake.cp)
+    assert fake.fights == 20, "the leg must keep hunting until its encounter budget runs out"

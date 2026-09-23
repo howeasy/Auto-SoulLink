@@ -1366,7 +1366,16 @@ local PC_DEPOSIT_MENU = 0x0808DD89
 local PC_WITHDRAW_MON = 0x0808DC9D
 local PC_RELEASE_MON = 0x0808DECD
 -- Task_OnBPressed (pokemon_storage_system_tasks.c:1988-2035): B in storage asks "Continue BOX
--- operations?" with the cursor on YES (ShowYesNoWindow(0)); B on that prompt EXITS, A stays.
+-- operations?". The cursor starts on NO, not YES: ShowYesNoWindow(cursorPos)
+-- (tasks.c:2595-2599) calls CreateYesNoMenu(..., initialCursorPos = 1) -- that 7th argument IS
+-- the initial row (include/menu.h:49) -- and then Menu_MoveCursorNoWrapAround(cursorPos), which
+-- moves by a DELTA (menu.c:323-334); ShowYesNoWindow(0)'s zero moves nothing, so the cursor
+-- stays on row 1 of gText_YesNo "YES\nNO" (strings.c:156).
+-- Confirmed PHYSICALLY: FR run 28d's receipt logs `menu_cursor=1` while this task is up
+-- (docs/gen3/probes/shadow_fr_play_run28_2026-09-23.txt:73). With the cursor on NO, A selects
+-- NO and B is MENU_B_PRESSED: BOTH exit (state 2 case 1 / MENU_B_PRESSED, tasks.c:2016-2031);
+-- only Down+A (YES, case 0) stays in the box. B is pressed because its outcome cannot depend
+-- on where the cursor happens to be.
 local PC_ON_B_PRESSED = 0x0808ECE5
 local PC_MENU_CURSOR = 0x0203ADE4 + 2
 local PC_MENU_MAX_CURSOR = 0x0203ADE4 + 4 -- src/menu.c:9-25
@@ -1374,6 +1383,13 @@ local PC_RESULT = 0x020370D0 -- sym:231 gSpecialVar_Result, VAR_RESULT
 local PC_CURSOR_AREA, PC_CURSOR_POS = 0x02039820, 0x02039821
 local PC_STORAGE_PTR = 0x020397B0 -- sym:307; gStorage->state +0, boxOption +1
 local PC_DEPOSIT_BOX_ID = 0x020397B6 -- sym:310; sDepositBoxId
+-- gStorage->boxOption is one enum (OPTION_WITHDRAW 0, OPTION_DEPOSIT 1, OPTION_MOVE_MONS 2,
+-- include/pokemon_storage_system_internal.h:17-24) and CURSOR_AREA_* is another (IN_BOX 0,
+-- IN_PARTY 1, :108-115); they merely happen to share 0/1. A popup offers the option its
+-- cursor's own area implies, so map the area instead of comparing the two enums directly
+-- (C3-40, finding 5 of cx-006e6f09: a MOVE-MONS popup would have slipped through).
+local PC_POPUP_OPTION = { [0] = 0, [1] = 1 } -- CURSOR_AREA_IN_BOX -> OPTION_WITHDRAW,
+                                             -- CURSOR_AREA_IN_PARTY -> OPTION_DEPOSIT
 local PC = {}
 
 local function pc_task(fn)
@@ -1457,7 +1473,10 @@ function PC.open(cp, label)
         for _ = 1, 12 do
             if pc_task(PC_MAIN_MENU) then break end
             if pc_task(PC_MULTICHOICE) then
-                if memory.read_u8(PC_MENU_CURSOR) ~= 0 then return pc_fail(label, "which_pc_wrong_row") end
+                -- NO re-read of the row here: the entry read above covers a RESUMED menu with
+                -- the cursor parked on another row, and A is this loop's only press -- nothing
+                -- inside PC.open can move the cursor (the guard that used to sit here was
+                -- undetectable by mutation, cx-006e6f09).
                 G.tap("A", 3, 13) -- Someone's/Bill's PC, verified row 0
             elseif not G.pred_ok(cp, "script_context_status") then
                 G.tap("A", 3, 13) -- Accessed PC / storage opened script boxes
@@ -1536,7 +1555,9 @@ end
 function PC.popup(label, area, pos, row)
     if not PC.cursor(label, area, pos) then return false end
     local storage = pc_storage()
-    if memory.read_u8(storage + 1) ~= area then return pc_fail(label, "storage_popup_wrong_mode") end
+    if memory.read_u8(storage + 1) ~= PC_POPUP_OPTION[area] then
+        return pc_fail(label, "storage_popup_wrong_mode")
+    end
     for _ = 1, 4 do
         if pc_task(PC_ON_SELECTED) and memory.read_u8(storage) == 2 then break end
         if not pc_task(PC_STORAGE_MAIN) then return pc_fail(label, "storage_popup_unexpected_task") end
@@ -1647,7 +1668,10 @@ local function leave_storage(cp, label)
         if pc_task(PC_STORAGE_MAIN) and storage and memory.read_u8(storage) == 0 then
             G.tap("B", 3, 13)
         elseif pc_task(PC_ON_B_PRESSED) then
-            -- the Continue-BOX yes/no: never A (YES keeps the box open; FR run 28b looped here)
+            -- the Continue-BOX yes/no: B only. Its cursor starts on NO, so A would exit too --
+            -- but A's outcome depends on where the cursor is while B's never does. (FR run 28b
+            -- looped on the STORAGE TOP MENU this exits to, not on this prompt: run 28c's dump
+            -- shows Task_PCMainMenu live across every stuck step.)
             if storage and memory.read_u8(storage) == 2 then G.tap("B", 3, 13) else G.advance() end
         elseif pc_task(PC_MAIN_MENU) then
             -- Leaving the box lands on the storage MAIN menu (WITHDRAW/DEPOSIT/..., PHYSICAL FR
@@ -1655,8 +1679,9 @@ local function leave_storage(cp, label)
             -- (pokemon_storage_system_menu.c:263-290). Only while it accepts input (state 2).
             local main = pc_task(PC_MAIN_MENU)
             if memory.read_u16_le(main + 8) == 2 then G.tap("B", 3, 13) else G.advance() end
-        elseif pc_task(PC_STORAGE_MAIN) or pc_task(PC_ON_SELECTED) or pc_task(PC_DEPOSIT_MENU) then
-            G.advance()      -- a storage task still owns input: A here would act inside the box
+        elseif pc_task(PC_STORAGE_MAIN) or pc_task(PC_ON_SELECTED) or pc_task(PC_DEPOSIT_MENU)
+            or pc_task(PC_WITHDRAW_MON) or pc_task(PC_RELEASE_MON) then
+            G.advance()      -- ANY storage task owning input: A here would act inside the box
         elseif not G.pred_ok(cp, "script_context_status") then
             G.tap("A", 3, 13) -- PC script's message boxes before the owner list
         else

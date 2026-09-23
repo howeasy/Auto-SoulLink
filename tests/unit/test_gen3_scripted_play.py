@@ -1,6 +1,8 @@
 """gen3_scripted_play.lua's LEGS table (card gen3-P3-C3-5).
 
-Pure-Lua checks through lupa: no emulator, no ROM. The script's top-level code only builds the
+Pure-Lua checks through lupa: no emulator, and no ROM for every check but one -- the PATHS
+re-walk below loads a FireRed dump from patch/build (or the repo root) to BFS the PokemonCenter's
+own collision grid, and skips when neither is present. The script's top-level code only builds the
 LEGS table (closures aren't called), so it loads with SLINK_ROOT set and nothing else stubbed —
 same shape as test_gen1_scripted_host.py's `dofile` pattern. This does NOT run any leg; it
 checks the table's SHAPE (site-kind coverage, citation format, no frame-count terminal), which
@@ -10,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 
 import pytest
 from lupa import LuaError, LuaRuntime
@@ -894,6 +897,57 @@ def test_lab_entrance_to_oak_matches_the_rom_bfs(module):
     assert (entry["to"][1], entry["to"][2]) == (6, 4)
     dirs = [entry["dirs"][i] for i in range(1, len(entry["dirs"]) + 1)]
     assert dirs == ["Up"] * 8
+
+
+# ── `center_heal_spot_to_pc` re-walked on the ROM's own collision grid (C3-40, finding 6) ─────
+# This path is the tail of `pokecenter_entrance_to_pc` from the whiteout landing (7,4), which
+# SetWhiteoutRespawnWarpAndHealerNpc pins for a generic Pokemon Center (src/heal_location.c:106-127:
+# warp->x = 7, warp->y = 4). It was asserted by NAME only
+# (test_viridian_pc_recovers_from_a_whiteout_into_its_own_center: fake.paths[1] == "..."): nothing
+# checked that its four Rights and two Ups are the ROM's own walk from that tile rather than a
+# copy of a neighbour's. BFS blocks the Center's object tiles, the same call the PATHS comment
+# cites (`python tools/gba_map.py "<FR>.gba" --map 5.4 --bfs 7,4 11,2`).
+
+_FR_ROM_CANDIDATES = (
+    os.path.join(_REPO, "patch", "build", "gen3_Pokemon_-_FireRed_Version_(USA).gba"),
+    "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba",
+)
+
+
+def _fr_rom():
+    sys.path.insert(0, os.path.join(_REPO, "tools"))
+    import gba_map
+    for path in _FR_ROM_CANDIDATES:
+        if os.path.exists(path):
+            return gba_map, path
+    pytest.skip("no FireRed dump present to walk the Center's collision grid")
+
+
+def _lua_dirs(entry):
+    return [entry["dirs"][i] for i in range(1, len(entry["dirs"]) + 1)]
+
+
+def test_center_heal_spot_to_pc_matches_the_rom_bfs(module):
+    """The whiteout landing (7,4) -> the PC's own approach tile (11,2), 15x10 PokemonCenter_1F."""
+    gba_map, rom_path = _fr_rom()
+    m = gba_map.load(rom_path).map(5, 4)
+    entry = module.PATHS["center_heal_spot_to_pc"]
+    assert (entry["from"][1], entry["from"][2]) == (7, 4)
+    assert (entry["to"][1], entry["to"][2]) == (11, 2)
+    assert (m.width, m.height) == (15, 10)
+    assert m.bfs((7, 4), (11, 2)) == _lua_dirs(entry), (
+        "center_heal_spot_to_pc is not the ROM's shortest walk from the whiteout landing"
+    )
+
+
+def test_center_heal_spot_to_pc_is_the_tail_of_the_center_entrance_path(module):
+    """The two paths must agree tile for tile: resume() walks this one from the heal spot, run()
+    walks the long one to the same (11,2)."""
+    entrance = _lua_dirs(module.PATHS["pokecenter_entrance_to_pc"])
+    heal_spot = _lua_dirs(module.PATHS["center_heal_spot_to_pc"])
+    assert entrance[4:] == heal_spot, (
+        "center_heal_spot_to_pc must be pokecenter_entrance_to_pc from its (7,4) waypoint"
+    )
 
 
 def test_parcel_deliver_run_body_talks_before_it_waits_and_verifies_after(module):
