@@ -1,4 +1,4 @@
-# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 9: G3 request ready)
+# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 10: first live duo on the new client PASS)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
@@ -49,12 +49,20 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 > OWNER RULING 2026-09-22: peer ghost removed from the Gen 3 RC and deferred post-RC (PLAN §0/§10, requirements 'Not in this release'). P5 drops ghost.lua and the ghost scenario; RR duo set is eight.
 
-## P4 in progress (2026-09-23, after G3 signed)
+## Checkpoint 10 (2026-09-23, owner stop): first live duo on the NEW Gen 3 client PASS
 
-- Owner rulings: in-battle faint must work on vanilla with RR parity (PLAN §0 "In-battle faint"); RR is brought under the new standard alongside P4 (PLAN §0 "RR under the new standard"). All P4 cards are pack-neutral.
-- Landed: 4f9cb1c6 (C4-5a Manager labels), b59e071a (C3-42 PC.popup row 4, OMP), c54ae24a (research: `docs/gen3/research/p4_old_client_inventory.md` Codex, `p4_gen1_contract_map.md` Opus).
-- In flight: C4-F fixtures (Sonnet, emulator lane), C4-1 `lua/core/{session,identity,deferred}.lua` (Opus), C4-2a reads/profile incl. RR + battle fields (Sonnet), C4-3 `lua/gen3/boxes.lua` pack-neutral (Codex; deposit restores PP like the game), C4-0c fact-check (OMP).
-- Queued: C4-B battle_faint write predicate design (pinned battle sites + checkpoint clauses, FR/LG/RR); C4-2b Gen 3 client driver (after C4-1); C4-4 entry production mode/run.lua/route/manifest; C4-5 conformance World + write-ownership guard; C4-6 duo lane; P5 C5-1 native.lua, C5-3 companion re-pin, C5-4 gatelib.
+- **Milestone:** `gen3_frlg` `faint_cmd_gen3` PASS live on the new client (receipt `docs/gen3/probes/duo_fr_faint_cmd_gen3_2026-09-23.txt`, c8098b30): A's faint -> B force_faint lands through the overworld checkpoint, both memorialize to box 13, both save (counter 4->5, 14/14 sectors, hook dump == flushed battery), PYDEC oracle PASS. First attempt failed on a HARNESS bug (debug inject_event drains A's queue into the HTTP reply; fixed c8020f61). The first RR attempt died on a load bug (RR title syms), fixed c8020f61, not yet re-run.
+- **Owner rulings this stretch (PLAN §0):** in-battle faint must work on vanilla with RR parity; RR comes under the new standard alongside P4 (all cards pack-neutral, P5 cards in parallel, RR route flips at G5); old RR client addresses are trusted evidence, design follows the Gen 1 standard (not behaviour-for-behaviour).
+- **Landed (P4/P5, all gated; ~35 commits 10cd25f9..c8098b30):** G3 signed (10cd25f9); shared core `lua/core/{session,identity,deferred}.lua` (89601bc3 + fix rounds f3575ff5, aa062f61, 690e1c63, a7bba8b1); `lua/gen3/client.lua` pack-neutral driver + Entry production mode + World harness (73736eda); reads/profile for both packs (af529c86, RR pins 6c955402, exec flags + LG BASESTATS fix 13913c25); boxes (3554c986, 3c9c42a5, d1d4fcec); native.lua (7a03318f, BUSY fix + per-op deadlines a15de812); safety reason dispatch battle/battle_commit/native/sound (2a52924e); Entry binding single native instance (9505648b); sound (f02ed90b); RR trade FSM (a15de812, 78908fe8); RR save layout in the codec (62887460); bootstrap/route/manifest (099fc0cc); conformance World + write ownership (7efcc74d); duo harness gen3_frlg (d146b992) + gen3_rr_new (46a5f597); LG scripted helpers (912dbecd); FR party fixtures cold-boot only (03276561); Gen 1 rebind handoff doc (2f74068a).
+- **Independent review status (Codex):** ACCEPT writes.lua, deferred.lua, identity.lua, entry binding, native.lua, core session.lua (REV6). client.lua quiet-timer ACCEPT; trade lifecycle fixes 78908fe8 await REV7 (queued). Duo harness REJECT (7 MAJORs: RR decode, whiteout no-op, record integrity, RR extension freshness, explode HP poke, rival/native_absent non-performance, wait_go) -> fix card C4-6b in flight. boxes.lua: Opus REJECT fixed in d1d4fcec.
+- **In flight at stop:** C4-6b duo-harness fixes (Opus); C4-F2 save_via_menu root fix (a stray Down walks the player during the save; seen live) (Sonnet, lane re-verify); C4-8 busy-mailbox single-instance test + rival-swap refresh window design (OMP; uncommitted test_gen3_entry.py + docs/gen3/research/rival_swap_refresh_window.md in tree); REV7 trade lifecycle (Codex).
+
+## Next actions (checkpoint 10)
+
+1. Reconcile the four in-flight cards (gate, commit, review): C4-6b -> Codex re-review; C4-F2 -> lane re-verify; C4-8 -> commit test + design doc; REV7 -> close or fix.
+2. Lane: re-run gen3_rr_new faint_cmd_gen3 (RR load fixed); then the remaining FRLG duos (link, deadzone, boxsync, whiteout, reconnect, linked_faint_active needs the battle policy which is now bound) after C4-6b; the 13 battle/native/sound probe rows (need 5 battle savestates).
+3. Open design items: rival-swap gBattleMons refresh window (OMP C4-8 doc); LeafGreen fixtures for the FR<->LG G4 duo; RR battle fixtures; RR walking/battle-menu syms beyond the 13 cited.
+4. Old-client latent bug found: vanilla OUTCOME_CAUGHT/RAN were 6/3 (pret 7/4) -> ask the owner whether to patch the shipped old client before cutover.
 
 ## Checkpoint 9 (2026-09-23, owner stop): G3 request ready
 
