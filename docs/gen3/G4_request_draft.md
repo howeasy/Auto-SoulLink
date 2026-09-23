@@ -103,6 +103,21 @@ Commands are the ones the receipts themselves used. **S**
    is proven from source only;
    (5) the existing field/battle/menu/IRQ negative controls must still hold.
    Keep the transitive-audit manifest (the C4-UR closure list and callback roots) as audit evidence.
+2b. **In-battle faint window (eaa96787; Codex REV-battle-window-1 ACCEPT as SOURCE/MODEL).** The first live
+   receipt is linked_faint_active_gen3 PASS (4ec51ed0). Still owed PHYSICAL, on BOTH FR and LG:
+   - wild AND trainer parked-menu positives: a keyed benched HP write before any input or battle end;
+   - the active target held until switch or end;
+   - doubles: both active slots held; a true bench positive on the primary menu; the partner menu refused;
+     B-cancel reopens the window;
+   - boundary negatives: menu draw, move/target, bag/party/summary, confirmed switch/item/run, intro, faint,
+     animation, link;
+   - Pokedude, old man and Safari refused.
+   Each receipt records the full clauses, the controller/exec/comm tuple, CPU at the write, the keyed party slot
+   before and after, and an untouched active gBattleMons; a later turn/switch and a save/reload keep the faint.
+   Caveats Codex recorded:
+   - battle safety has no CPU clause, so the tuple is frame-granular, not an atomic proof;
+   - RR's old flags==0 tuple is unchanged and not RR qualification;
+   - the design doc overstates "AI reads no bench" (AI_TARGET reads bench HP read-only).
 3. **The FRLG-relevant probe rows** — the battle/native/sound rows that need battle savestates
    (13+ rows, per `docs/gen3_resume.md`'s checkpoint-10 next-actions item 2):
    `python tools/run_gate.py lua/tests/probe_gen3_checkpoint.lua --rom patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba`
