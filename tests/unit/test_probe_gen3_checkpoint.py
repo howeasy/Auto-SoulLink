@@ -50,12 +50,12 @@ FIRERED_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOV
     BATTLE_COMMIT_STATE3, NATIVE_ABSENT, SOUND_DRIVER}
 LEAFGREEN_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU,
     BATTLE_ANIMATION, BATTLE_FAINT_PROMPT, BATTLE_INTRO, BATTLE_LINK, BATTLE_OVER,
-    NATIVE_ABSENT, SOUND_DRIVER}
+    BATTLE_COMMIT_STATE3, NATIVE_ABSENT, SOUND_DRIVER}
 RADICAL_RED_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, NATIVE_ABSENT, SOUND_DRIVER}
 RADICAL_RED_COMPANION_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU,
     BATTLE_OVER, BATTLE_COMMIT_STATE3, NATIVE_IDLE_FIELD, NATIVE_IDLE_BATTLE}
 assert len(FIRERED_CLEAN_REASON_ROWS) == 11
-assert len(LEAFGREEN_CLEAN_REASON_ROWS) == 10
+assert len(LEAFGREEN_CLEAN_REASON_ROWS) == 11
 assert len(RADICAL_RED_CLEAN_REASON_ROWS) == 3
 assert len(RADICAL_RED_COMPANION_REASON_ROWS) == 7
 
@@ -363,7 +363,8 @@ def test_artifact_rows_are_negative_and_gated(module):
     for name in ("pc_menu", "script_running"):
         assert rows[name].expectation == "negative"
     assert set(rows["pc_menu"].artifacts.keys()) == {"radical_red/companion"}
-    assert set(rows["script_running"].artifacts.keys()) == {"firered/clean", "radical_red/companion"}
+    assert set(rows["script_running"].artifacts.keys()) == {
+        "firered/clean", "leafgreen/clean", "radical_red/companion"}
     assert all(rows[n].artifacts is None for n in TERMINALS if n not in ("pc_menu", "script_running"))
 
 
@@ -371,7 +372,7 @@ def test_artifact_rows_are_negative_and_gated(module):
     ("firered", "clean", None, CORE | {9} | FIRERED_CLEAN_REASON_ROWS),
     ("radical_red", "companion", None, CORE | {8, 9} | RADICAL_RED_COMPANION_REASON_ROWS),
     ("radical_red", "clean", None, CORE | RADICAL_RED_CLEAN_REASON_ROWS),
-    ("leafgreen", "clean", None, CORE | LEAFGREEN_CLEAN_REASON_ROWS),
+    ("leafgreen", "clean", None, CORE | {9} | LEAFGREEN_CLEAN_REASON_ROWS),
     ("radical_red", "companion", "script_running", CORE | {9}),
     ("radical_red", "companion", "pc_menu, script_running", CORE | {8, 9}),
     ("radical_red", "companion", "none", CORE),
@@ -447,3 +448,30 @@ def test_the_rr_fallback_needs_the_pointer_to_move_after_the_press(module):
     assert opened() is False                           # stale non-zero alone is NOT a dialog
     lua.execute("CB = 0x0806F7A1")
     assert opened() is True
+
+
+# ── C4-PROBE2: LG script_running + the send-out prompt witness ────────────────────────────────
+def _sym(name, sym):
+    import re
+    text = (ROOT / "data/gen3/pret" / sym).read_text(encoding="utf-8")
+    return int(re.search(rf"^([0-9a-f]{{8}}) \S+ \S+ {name}$", text, re.M).group(1), 16)
+
+
+@pytest.mark.parametrize("sym", ["pokefirered.sym", "pokeleafgreen.sym"])
+def test_send_out_prompt_is_wait_for_mon_selection_on_both_titles(module, sym):
+    _, probe = module
+    assert _sym("WaitForMonSelection", sym) | 1 == probe.WAIT_FOR_MON_SELECTION
+    faint = next(r for r in probe.STATES.values() if r.name == "battle_faint_prompt")
+    assert faint.until_witness == "send_out_prompt"
+    assert set(faint.artifacts.keys()) == {"firered/clean", "leafgreen/clean"}
+    assert "send_out_prompt = function() return w32(ctrl_a) == P.WAIT_FOR_MON_SELECTION end" in SOURCE
+    # the row is only reached when the prompt was: a mash that stops short fails by name
+    assert "row.reached = held > 0 and arrived" in SOURCE
+    assert 'row.reason = spec.until_witness .. " never reached"' in SOURCE
+
+
+def test_frlg_script_row_uses_the_built_state_at_the_woman_tile(module):
+    _, probe = module
+    assert list(probe.SCRIPT_TILE.values()) == [20, 13]
+    assert '"slink_script.State"' in SOURCE and "slink_fr_parcel_deliver" not in SOURCE
+    assert "walk({}, P.SCRIPT_TILE[1], P.SCRIPT_TILE[2])" in SOURCE

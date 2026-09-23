@@ -3,8 +3,10 @@
 
 Cold-boots tests/fixtures/gen3/<title>_party_<kind>.sav through gen3_fixtures.py's per-run
 SaveRAM plumbing (no developer battery touched) and drives lua/tests/mkstates_gen3.lua with
-scripted normal inputs. Kinds: town -> slink_overworld/slink_door; battle -> slink_preintro/
-slink_prebattle/slink_postbattle. Point the probe at the output with SLINK_STATE_DIR.
+scripted normal inputs. Kinds: town -> slink_overworld/slink_door/slink_script; battle ->
+slink_preintro/slink_prebattle/slink_postbattle; trainer (seeded from the town battery) ->
+slink_pretrainer/slink_prefaint (the Route 22 early rival). Point the probe at the output with
+SLINK_STATE_DIR.
 
     python tools/mkstates_gen3.py --title firered --kind town --out-dir patch/build/gen3_probe_states/firered
     python tools/mkstates_gen3.py --title leafgreen --kind battle --out-dir patch/build/gen3_probe_states/leafgreen
@@ -18,13 +20,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen3_fixtures as fx  # noqa: E402
 
 LUA = "lua/tests/mkstates_gen3.lua"
+# kind -> the party battery it cold-boots from
+FIXTURE_KIND = {"town": "town", "battle": "battle", "trainer": "town"}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--title", choices=sorted(fx.PARTY_TITLES), default="firered")
-    ap.add_argument("--kind", choices=["town", "battle"], required=True)
+    ap.add_argument("--kind", choices=sorted(FIXTURE_KIND), required=True)
     ap.add_argument("--out-dir", required=True, help="where the .State files land")
     ap.add_argument("--rom", default=None, help="default: the title's dump at the checkout root")
     ap.add_argument("--saveram-name", default=None, help="default: the title's gamedb battery name")
@@ -32,7 +36,7 @@ def main() -> int:
     args = ap.parse_args()
 
     rom = fx.resolve_rom(args.title, args.rom)
-    fixture = fx.FIXTURES_DIR / f"{args.title}_party_{args.kind}.sav"
+    fixture = fx.FIXTURES_DIR / f"{args.title}_party_{FIXTURE_KIND[args.kind]}.sav"
     seed = fx.codec.split_rtc(fixture.read_bytes())[0]
     saveram = args.saveram_name or str(fx.PARTY_TITLES[args.title]["saveram"])
     rom_rel, run_dir, _ = fx._prepare_run(f"mkstates_{args.title}_{args.kind}", rom,

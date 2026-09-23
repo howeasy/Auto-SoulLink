@@ -44,7 +44,7 @@ P.STATES = {
     {name="script_running", terminal="script_context_not_shutdown_60", expectation="negative",
         expect_clauses={script_context_status=true}, min_samples=60,
         note="witness=same_byte_as_script_context_status,independent_read_path,not_independent_evidence",
-        artifacts={["firered/clean"]=true, ["radical_red/companion"]=true}},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true}},
 }
 
 -- C4-B2: the battle / native / sound reasons. Declarative: each row names the savestate to load
@@ -89,9 +89,10 @@ P.REASON_ROWS = {
                                                 battle_input_controller=true},
         reason="battle_faint", witness="battle_not_input",
         state_env="SLINK_CHECKPOINT_FAINT_STATE", state="slink_prefaint.State",
-        inputs={{mash=160}},
+        inputs={{mash=3000}}, until_witness="send_out_prompt",
         artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
-        note="mash to the forced send-out prompt after a faint"},
+        note="from the lead's HP-0 frame, mash until the forced send-out prompt is up "
+            .. "(ctrl==WaitForMonSelection), then hold there"},
     {name="battle_intro", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
         expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_input=true,
                                                 battle_input_controller=true},
@@ -119,7 +120,7 @@ P.REASON_ROWS = {
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},
                 {idle=240}},
-        artifacts={["firered/clean"]=true, ["radical_red/companion"]=true},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
         note="the commit guard: a committed battler (3/4) must refuse the Variant-3 pre-fill"},
     {name="native_idle_field", terminal="companion beacon present and mailbox idle",
         expectation="positive", min_samples=60, reason="native", witness="native_idle",
@@ -157,6 +158,14 @@ P.SCRIPT_STATUS, P.CONTEXT_SHUTDOWN = 0x03000EA8, 2
 -- pokeleafgreen.sym has 0x0808C370, so the row stays RR-only); RR companion exec hook hits=294 while the
 -- storage main menu was up (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt).
 P.TASK_PC_MAIN_MENU = 0x0808C39C
+-- WaitForMonSelection | 1: gBattlerControllerFuncs[0] while the forced send-out party screen is
+-- up (pret src/battle_controller_player.c:1297-1311). pokefirered.sym:2021 and
+-- pokeleafgreen.sym:2021 agree (0x08030684); battle_faint_prompt is FR/LG-only.
+P.WAIT_FOR_MON_SELECTION = 0x08030685
+-- FR/LG script_running tile (tools/mkstates_gen3.lua slink_script.State): below the Viridian
+-- woman, object 5 at (20,12), MOVEMENT_TYPE_FACE_UP, ViridianCity_EventScript_Woman
+-- (lock/faceplayer/msgbox; pret data/maps/ViridianCity/map.json + scripts.inc:168-173).
+P.SCRIPT_TILE = {20, 13}
 
 function P.script_active(read_u8)
     return read_u8(P.SCRIPT_STATUS) ~= P.CONTEXT_SHUTDOWN
@@ -523,6 +532,7 @@ function P.run()
             end,
             battle_link = function() return w32(type_a) & 2 ~= 0 end,
             battle_resolved = function() return w8(out_a) ~= 0 end,
+            send_out_prompt = function() return w32(ctrl_a) == P.WAIT_FOR_MON_SELECTION end,
             native_idle = function()
                 return native ~= nil and w32(native.base) == native.sig
             end,
@@ -539,18 +549,21 @@ function P.run()
                 -- the witness (calling it here handed begin() a boolean: C4-PROBE, first FR run)
                 local build = WIT[spec.witness]
                 row = begin(i, spec.witness_value ~= nil and build(spec) or build)
+                -- until_witness: the mash runs to that state, and the row is only reached there
+                local stop = WIT[spec.until_witness] or function() return row.witness() end
                 for _, step in ipairs(spec.inputs or {}) do
                     if step.tap then G.tap(step.tap, step.frames or 3, step.gap or 13)
                     elseif step.idle then G.idle(step.idle)
-                    elseif step.mash then G.mash(step.mash, function() return row.witness() end) end
+                    elseif step.mash then G.mash(step.mash, stop) end
                 end
-                local held = 0
+                local held, arrived = 0, spec.until_witness == nil or stop()
                 for _ = 1, spec.hold or 180 do
                     if row.witness() then held = held + 1 end
                     G.advance()
                 end
-                row.reached = held > 0
-                if not row.reached then row.reason = "state witness never held" end
+                row.reached = held > 0 and arrived
+                if not arrived then row.reason = spec.until_witness .. " never reached"
+                elseif not row.reached then row.reason = "state witness never held" end
                 active = nil
             end
         end
@@ -559,16 +572,17 @@ function P.run()
             local p = cp.predicates.script_context_status
             assert(p and p.address == P.SCRIPT_STATUS and (p.offset or 0) == 0,
                 "pack does not bind sGlobalScriptContextStatus at the sym address")
-            -- RR: nurse (7,2) behind MB_COUNTER (7,3), talk from (7,4) facing Up.
-            -- FR: Oak (object 4) at (6,3), player at (6,4) facing Up. gba_map 5.4 / 4.3.
+            -- RR: nurse (7,2) behind MB_COUNTER (7,3), talk from (7,4) facing Up (gba_map 5.4).
+            -- FR/LG: the Viridian woman from P.SCRIPT_TILE, in the mkstates-built state (C4-PROBE2;
+            -- the earlier FR row used an externally made Oak-lab state).
             local rr = title == "radical_red"
             load(os.getenv("SLINK_CHECKPOINT_SCRIPT_STATE")
-                or (rr and "slink_pokecenter_full.State" or "slink_fr_parcel_deliver.State"))
+                or (rr and "slink_pokecenter_full.State" or "slink_script.State"))
             local function running() return P.script_active(memory.read_u8) end
             row = begin(9, running)
             local there, where
             if rr then there, where = walk({"Up","Up","Up","Up"}, 7, 4)
-            else there, where = walk({}, 6, 4) end
+            else there, where = walk({}, P.SCRIPT_TILE[1], P.SCRIPT_TILE[2]) end
             if there and running() then there, where = false, "script already running before A" end
             if there then
                 G.tap("Up",3,20)
