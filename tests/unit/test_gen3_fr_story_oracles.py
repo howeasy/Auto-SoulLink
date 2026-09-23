@@ -343,6 +343,76 @@ def test_incidental_battle_resteers_remembered_pokemon_cursor_on_each_turn(machi
     assert fake.partyA == 0
 
 
+def test_forced_switch_selects_healthy_slot_from_run26_party_menu(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.in_battle=true; F.invalid=0; F.selected=-1; F.stage='party'; F.turns=0
+        F.w8(0x02024029,2)
+        F.w16(0x02024284+0x56,0); F.w16(0x02024284+0x58,23)
+        F.w16(0x02024284+100+0x56,17); F.w16(0x02024284+100+0x58,17)
+        F.w32(0x030030F4,0x0811EBA1) -- CB2_UpdatePartyMenu | Thumb
+        F.w8(0x0203B0A0+8,1)        -- PARTY_MENU_TYPE_IN_BATTLE
+        F.w8(0x0203B0A0+9,0)        -- selected slot 0 (fainted)
+        F.w8(0x0203B0A0+0xB,1)      -- PARTY_ACTION_SEND_OUT
+        F.w32(0x03005090,0x081203B9) -- Task_ReturnToChooseMonAfterText | Thumb
+        F.w8(0x03005090+4,1)
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            return true
+        end
+        F.on_tap=function(button)
+            local task=F.r8(0x03005090) | F.r8(0x03005091)<<8
+                       | F.r8(0x03005092)<<16 | F.r8(0x03005093)<<24
+            if F.stage=='party' then
+                if button=='A' and task==0x081203B9 then
+                    F.w32(0x03005090,0x0811FB29) -- dismiss 'has no energy'
+                elseif button=='Down' and task==0x0811FB29 then
+                    F.w8(0x0203B0A0+9,1)
+                elseif button=='A' and task==0x0811FB29 then
+                    if F.r8(0x0203B0A0+9)==0 then
+                        F.invalid=F.invalid+1; F.w32(0x03005090,0x081203B9)
+                    else F.w32(0x03005090,0x08122C5D) end -- SEND OUT popup
+                elseif button=='A' and task==0x08122C5D then
+                    F.selected=F.r8(0x0203B0A0+9)
+                    F.stage='action'; F.w32(0x030030F4,0x08011101)
+                    F.w8(0x0203B0C0,1) -- TrySwitchInPokemon accepted the slot
+                    F.w32(0x03004FE0,D.HANDLE_INPUT_CHOOSE_ACTION)
+                    F.w8(D.ACTION_CURSOR_ADDR,0)
+                end
+            elseif F.stage=='action' and button=='A' then
+                F.stage='move'; F.w32(0x03004FE0,0)
+            elseif F.stage=='move' and button=='A' then
+                F.stage='animation'; F.turns=F.turns+1
+            elseif F.stage=='animation' and button=='A' then F.in_battle=false end
+        end
+    """)
+    mod.play.handle_encounter(fake.cp, None, "Down", lua.table(map=787, x=12, y=38))
+    assert fake.selected == 1 and fake.invalid == 0
+    assert fake.in_battle is False and fake.turns >= 1
+
+
+def test_route1_faint_does_not_finish_on_counter_while_battle_open(machine):
+    lua, mod, fake = machine
+    lua.globals().savestate = lua.table(save=lambda *_: True)
+    lua.execute("""
+        F.in_battle=true
+        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+        F.w8(D.ACTION_CURSOR_ADDR,0)
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            return true
+        end
+        D.play.mash_a=function() F.w8(0x03004F90,1); return true end
+        D.play.wait_scene_settled=function() return true end
+        D.play.fight_through=function()
+            F.w8(0x03004F90,1); F.in_battle=false; return true
+        end
+    """)
+    leg(mod, "route1_faint").run(fake.cp)
+    assert fake.in_battle is False
+    assert any(str(fake.log[i]).startswith("fainted ") for i in range(1, len(fake.log) + 1))
+
+
 def test_unknown_heal_checkpoint_never_reaches_nil_destination_comparison(machine):
     lua, mod, fake = machine
     fake.heal(3, 2, 17, 26)
@@ -359,6 +429,34 @@ def test_second_whiteout_inside_recover_fails_by_name(machine, name):
     lua.execute("D.play.follow=function() error({whiteout=true},0) end")
     with pytest.raises(LuaError, match="whiteout_during_recovery"):
         leg(mod, name).recover(fake.cp)
+
+
+def test_recovery_rethrows_unrelated_error_unchanged(machine):
+    lua, mod, fake = machine
+    fake.place(5, 4, 7, 4)
+    lua.execute("D.play.follow=function() error('source path failed',0) end")
+    with pytest.raises(LuaError, match="source path failed"):
+        leg(mod, "route1_faint").recover(fake.cp)
+
+
+def test_forced_party_menu_rejects_no_living_replacement(machine):
+    lua, mod, fake = machine
+    fake.w8(0x02024029, 2)
+    fake.w32(0x030030F4, 0x0811EBA1)
+    fake.w8(0x0203B0A0 + 8, 1)
+    fake.w8(0x0203B0A0 + 0xB, 1)
+    lua.execute("G.pred_ok=function(_,name) return name~='in_battle' end")
+    with pytest.raises(LuaError, match="forced_party_no_healthy_mon"):
+        mod.play.fight_through(fake.cp)
+
+
+def test_incidental_battle_refuses_a_fight_press_that_stays_on_action_menu(machine):
+    lua, mod, fake = machine
+    fake.w32(mod.BATTLER_CTRL_ADDR, mod.HANDLE_INPUT_CHOOSE_ACTION)
+    fake.w8(mod.ACTION_CURSOR_ADDR, 0)
+    lua.execute("G.pred_ok=function(_,name) return name~='in_battle' end")
+    with pytest.raises(LuaError, match="FIGHT selection did not leave the action menu"):
+        mod.play.fight_through(fake.cp)
 
 
 def test_heal_pointer_is_fresh_and_invalid_pointer_fails(machine):

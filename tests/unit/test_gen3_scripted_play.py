@@ -401,8 +401,10 @@ def test_route1_catch_waits_for_the_menu_witness_before_touching_the_action_menu
 def test_route1_faint_run_checks_for_whiteout_after_each_battle():
     leg_src = _SCRIPT_SRC.split('name = "route1_faint"')[1].split(
         '\n-- ── leg: viridian_pc_deposit_withdraw')[0]
-    assert "resolve_battle_and_check_whiteout(cp, 160)" in leg_src
-    assert 'verify_fight_cursor(cp, "route1_faint")' in leg_src
+    assert "play.fight_through(cp, 1200)" in leg_src
+    assert "play.in_battle(cp)" in leg_src
+    assert "play.wait_scene_settled(cp, 1800)" in leg_src
+    assert "play.on_field(cp)" in leg_src
 
 
 @pytest.fixture

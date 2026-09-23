@@ -271,6 +271,34 @@ end
 -- witness shape used throughout this codebase (gMain @ pokefirered.sym:745 0x030030f0,
 -- .callback2 @ +0x04 per include/main.h:14-15).
 local GMAIN_CALLBACK2_ADDR = 0x030030F4  -- gMain.callback2
+-- pret/pokefirered@c75f352: pokefirered.sym:507,829,10991,11025,11043,11149.
+-- include/party_menu.h:8-19: slotId +9, action +0xB; src/party_menu.c:5832-5857
+-- opens the mandatory battle menu at slot 0 and :1119-1150 accepts input only
+-- while Task_HandleChooseMonInput is active. src/data/party_menu.h:1095 puts
+-- SEND OUT at popup row 0 for PARTY_ACTION_SEND_OUT=1.
+local CB2_UPDATE_PARTY_MENU = 0x0811EBA1
+local PARTY_MENU_ADDR = 0x0203B0A0
+local PARTY_MENU_SLOT_OFF, PARTY_MENU_ACTION_OFF = 9, 0xB
+local PARTY_ACTION_SEND_OUT = 1
+local TASKS_BASE, TASK_SIZE = 0x03005090, 40
+local TASK_CHOOSE_MON = 0x0811FB29
+local TASK_RETURN_AFTER_TEXT = 0x081203B9
+local TASK_SELECTION_POPUP = 0x08122C5D
+local PARTY_MENU_EXIT_FLAG = 0x0203B0C0
+local function party_menu_up()
+    return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_UPDATE_PARTY_MENU
+end
+local function party_task()
+    for slot = 0, 15 do
+        local base = TASKS_BASE + slot * TASK_SIZE
+        if memory.read_u8(base + 4) ~= 0 then
+            local fn = memory.read_u32_le(base)
+            if fn == TASK_CHOOSE_MON or fn == TASK_RETURN_AFTER_TEXT
+               or fn == TASK_SELECTION_POPUP then return fn end
+        end
+    end
+    return nil
+end
 local CB2_BAG_MENU_RUN = 0x08107EE1      -- CB2_BagMenuRun | 1 (Thumb bit)
 local BAG_MENU_STATE_ADDR = 0x0203ACFC   -- gBagMenuState
 local BAG_POCKET_OFF, BAG_ITEMS_ABOVE_OFF, BAG_CURSOR_POS_OFF = 0x06, 0x08, 0x0E
@@ -705,16 +733,17 @@ local H = {
     end,
 }
 
-local play, check_whiteout, verify_fight_cursor
+local play, check_whiteout, verify_fight_cursor, send_out_healthy_mon
 play = PL.bind(H, {
     paths          = PATHS,
     -- where the per-leg savestates below land
     state_dir      = os.getenv("SLINK_GEN3_PLAY_STATES_DIR") or "E:/Howard/Bizhawk/GBA/State",
     max_recoveries = 2,
-    -- HOW THIS GAME FIGHTS an incidental battle. FR run 20 showed the action
-    -- cursor is REMEMBERED, including POKEMON(2) after route1_catch; FR run 25e
-    -- opened the party menu and mashed the fainted lead. Witness and steer to
-    -- FIGHT every time the action menu returns, then select move slot 1.
+    -- HOW THIS GAME FIGHTS an incidental battle. The action cursor resets on
+    -- new-battle setup and switch-in (battle_controllers.c:51-52 and
+    -- battle_controller_player.c:2099-2100), but can remain on POKEMON(2)
+    -- within one battle. FR run 25e was a mid-battle forced party selection.
+    -- Witness and steer to FIGHT whenever the action menu returns.
     -- Input policy, not library policy: which button dismisses a textbox and which advances a
     -- scripted scene are per-game facts, same as opts.battle (Codex cx-bc675fa4).
     clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
@@ -730,31 +759,42 @@ play = PL.bind(H, {
         local turns, taps_per_turn = 32, math.max(1, math.ceil((budget or 1200) / 32))
         for _ = 1, turns do
             if not play.in_battle(cp) then break end
-            verify_fight_cursor(cp, "incidental_battle")
-            if not play.in_battle(cp) then break end
-            if not action_menu_up() then
-                G.finish(false, "incidental_battle: action menu disappeared before FIGHT selection")
-                return false
+            local menu = party_menu_up() and "party" or verify_fight_cursor(cp, "incidental_battle")
+            if menu == "party" then
+                if not send_out_healthy_mon(cp, "incidental_battle") then return false end
+            elseif play.in_battle(cp) then
+                if not action_menu_up() then
+                    G.finish(false, "incidental_battle: action menu disappeared before FIGHT selection")
+                    return false
+                end
+                -- Require the witnessed action menu to close under FIGHT before
+                -- the next A selects move slot 1; a dropped press stays bounded.
+                for _ = 1, 4 do
+                    if not action_menu_up() then break end
+                    G.tap("A", 3, 13)
+                end
+                if action_menu_up() then
+                    G.finish(false, "incidental_battle: FIGHT selection did not leave the action menu")
+                    return false
+                end
+                G.tap("A", 3, 13)  -- move slot 1
+                -- Stop before an unqualified A can select a remembered cursor
+                -- or the forced party menu on the next turn.
+                play.mash_a(taps_per_turn, function()
+                    return not play.in_battle(cp) or action_menu_up() or party_menu_up()
+                end)
             end
-            -- Require the witnessed action menu to close under FIGHT before
-            -- the next A selects move slot 1; a dropped press stays bounded.
-            for _ = 1, 4 do
-                if not action_menu_up() then break end
-                G.tap("A", 3, 13)
-            end
-            if action_menu_up() then
-                G.finish(false, "incidental_battle: FIGHT selection did not leave the action menu")
-                return false
-            end
-            G.tap("A", 3, 13)  -- move slot 1
-            -- The stop predicate runs BEFORE each press. An action-menu return
-            -- is never consumed by an unqualified A, even late in the battle.
-            play.mash_a(taps_per_turn, function()
-                return not play.in_battle(cp) or action_menu_up()
-            end)
         end
         if play.in_battle(cp) then return false end
+        if party_menu_up() then
+            G.finish(false, "incidental_battle: forced party menu remained open after battle")
+            return false
+        end
         if not play.wait_scene_settled(cp, 1800) then return false end
+        if not play.on_field(cp) then
+            G.finish(false, "incidental_battle: field callback never settled after battle")
+            return false
+        end
         -- Raise the shared recovery signal here: playlib's static heal_map cannot
         -- express FR's lastHealLocation-dependent respawn projection.
         check_whiteout(cp, before_map, before_x, before_y, checkpoint)
@@ -1080,8 +1120,9 @@ end
 --- caller tells those two apart with play.in_battle(cp).
 local function wait_for_action_menu(cp, budget)
     for i = 1, (budget or 1200) do
-        if action_menu_up() then return true end
-        if not play.in_battle(cp) then return false end
+        if party_menu_up() then joypad.set({}); return "party" end
+        if action_menu_up() then joypad.set({}); return true end
+        if not play.in_battle(cp) then joypad.set({}); return false end
         if i % 2 == 0 then joypad.set({ A = true }) else joypad.set({}) end
         G.advance()
     end
@@ -1099,22 +1140,28 @@ end
 --- for either leg to press.
 verify_fight_cursor = function(cp, label)
     if not play.in_battle(cp) then return end
-    if not wait_for_action_menu(cp, 1200) then
+    local ready = wait_for_action_menu(cp, 1200)
+    if ready == "party" then
+        if label == "incidental_battle" then return "party" end
+        G.finish(false, label .. ": unexpected forced party menu before action selection")
+        return
+    end
+    if not ready then
         if play.in_battle(cp) then
             G.shot("stuck")
             G.finish(false, string.format(
-                "%s: the action menu never came up (gBattlerControllerFuncs[0] never read "
-                .. "HandleInputChooseAction) at %s", label, play.at(cp)))
+                "%s: neither action nor forced party menu came up (possible move-menu/no-PP "
+                .. "path) at %s", label, play.at(cp)))
             return
         end
         return
     end
-    -- The cursor is REMEMBERED across battles (PHYSICAL FR run 20: the menu opened on BAG(1)),
-    -- so steer it to FIGHT with the pinned bit toggles of HandleInputChooseAction (pret
-    -- src/battle_controller_player.c): Left clears bit0, Up clears bit1. Bounded, verified.
+    -- The cursor can remain off FIGHT within one battle (FR run 20 read BAG(1)),
+    -- although new battles and switch-in reset it. Steer with the pinned bit
+    -- toggles of HandleInputChooseAction: Left clears bit0, Up clears bit1.
     for _ = 1, 4 do
         local c = action_cursor()
-        if c == ACTION_FIGHT then return end
+        if c == ACTION_FIGHT then return "fight" end
         if c % 2 == 1 then G.tap("Left", 3, 20) elseif c >= 2 then G.tap("Up", 3, 20) end
     end
     if action_cursor() ~= ACTION_FIGHT then
@@ -1123,6 +1170,82 @@ verify_fight_cursor = function(cp, label)
             "%s: could not steer the action cursor to FIGHT(0) (reads %d)", label, action_cursor()))
         return
     end
+    return "fight"
+end
+
+--- Mandatory faint replacement only: source battle_scripts_1.s:2829-2836 opens
+--- BS_FAINTED; battle_script_commands.c openpartyscreen uses SEND_OUT, not the
+--- optional trainer shift prompt. In FR, an A on the fainted slot just prints
+--- "has no energy" (party_menu.c:5916-5933). Read callback, input task, cursor,
+--- and plaintext party HP before each selection. Never infer a slot from pixels.
+send_out_healthy_mon = function(cp, label)
+    if not party_menu_up() then G.finish(false, label .. ": forced_party_menu_missing"); return false end
+    local kind = memory.read_u8(PARTY_MENU_ADDR + 8) & 0x0F
+    local action = memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_ACTION_OFF)
+    if kind ~= 1 or action ~= PARTY_ACTION_SEND_OUT then
+        G.finish(false, label .. ": forced_party_wrong_action: expected in-battle SEND_OUT")
+        return false
+    end
+    local count = memory.read_u8(PARTY_COUNT_ADDR)
+    if count < 2 or count > 6 then
+        G.finish(false, label .. ": forced_party_count: need a replacement party")
+        return false
+    end
+    local target
+    for slot = 0, count - 1 do
+        local base = PARTY_BASE + slot * MON_SIZE
+        if memory.read_u16_le(base + OFF_HP) > 0
+           and memory.read_u16_le(base + OFF_MAXHP) > 0 then target = slot; break end
+    end
+    if not target then G.finish(false, label .. ": forced_party_no_healthy_mon"); return false end
+    local ready = false
+    for _ = 1, 1200 do
+        local task = party_task()
+        if not party_menu_up() then break end
+        if task == TASK_CHOOSE_MON then ready = true; break end
+        if task == TASK_RETURN_AFTER_TEXT then G.tap("A", 3, 13)
+        else G.advance() end
+    end
+    if not ready then G.finish(false, label .. ": forced_party_input_not_ready"); return false end
+    for _ = 1, 8 do
+        local slot = memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_SLOT_OFF)
+        if slot == target then break end
+        if slot >= count then G.finish(false, label .. ": forced_party_cursor_invalid"); return false end
+        G.tap(slot < target and "Down" or "Up", 3, 20)
+        if party_task() ~= TASK_CHOOSE_MON then
+            G.finish(false, label .. ": forced_party_cursor_lost_input"); return false
+        end
+    end
+    if memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_SLOT_OFF) ~= target then
+        G.finish(false, label .. ": forced_party_cursor_stalled"); return false
+    end
+    if memory.read_u16_le(PARTY_BASE + target * MON_SIZE + OFF_HP) == 0 then
+        G.finish(false, label .. ": forced_party_target_fainted"); return false
+    end
+    G.tap("A", 3, 20) -- healthy party slot -> SEND OUT / SUMMARY / CANCEL popup
+    local popup = false
+    for _ = 1, 180 do
+        if not party_menu_up() then break end
+        if party_task() == TASK_SELECTION_POPUP then popup = true; break end
+        G.advance()
+    end
+    if not popup then G.finish(false, label .. ": forced_party_sendout_popup_missing"); return false end
+    if memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_SLOT_OFF) ~= target then
+        G.finish(false, label .. ": forced_party_popup_target_changed"); return false
+    end
+    G.tap("A", 3, 20) -- SEND OUT is popup row 0 (src/data/party_menu.h:1095)
+    for _ = 1, 900 do
+        if not party_menu_up() then
+            if memory.read_u8(PARTY_MENU_EXIT_FLAG) == 1 then return true end
+            break
+        end
+        if party_task() == TASK_RETURN_AFTER_TEXT then
+            G.finish(false, label .. ": forced_party_sendout_rejected"); return false
+        end
+        G.advance()
+    end
+    G.finish(false, label .. ": forced_party_sendout_never_returned_to_battle")
+    return false
 end
 
 --- The fight/settle/whiteout-check tail shared by route1_catch_loop and route1_faint: mash A
@@ -1831,8 +1954,8 @@ LEGS[#LEGS + 1] = {
     source = {
         "data/maps/Route1/map.json (wild encounter table, same grass patch)",
         "lua/games/gen3_frlge.lua:vanilla.BATTLE_RESULTS_ADDR (gBattleResults.playerFaintCounter @ +0)",
-        "src/overworld.c SetWarpDestinationToLastHealLocation (a single-mon party can only white "
-        .. "out BY fainting, so the whiteout itself is proof of the site this leg exercises)",
+        "src/battle_script_commands.c Cmd_openpartyscreen; data/battle_scripts_1.s:2829-2836 "
+        .. "(after a faint with another healthy mon the forced SEND_OUT menu continues the battle)",
     },
     -- Same recovery as route1_catch: back to Pallet Town, then to the grass origin, grass_step
     -- reset. Needed here even though resume() below does no hunting of its own -- the NEXT leg
@@ -1848,21 +1971,16 @@ LEGS[#LEGS + 1] = {
                     "route1_faint: 40 cycles of the pinned grass loop produced no wild "
                     .. "encounter (attempt %d, at %s)", encounter, play.at(cp)))
             end
-            -- The same menu witness route1_catch uses (card gen3-P3-C3-21), so this leg's FIGHT
-            -- choice is as deterministic as that one's BAG choice: confirm the cursor really is
-            -- FIGHT(0) before mashing A on it, rather than assuming the intro text is gone.
-            verify_fight_cursor(cp, "route1_faint")
-            -- Keep attacking (RISK, see header) until this battle ends, then check the faint
-            -- counter — a strong starter may just keep winning; bounded at 20 encounters.
-            -- resolve_battle_and_check_whiteout settles the post-battle scene BEFORE reading the
-            -- map (ROOT CAUSE, see that function's comment) -- without it, a faint's whiteout
-            -- warp can land after this check has already passed, and the displacement then
-            -- surfaces unnoticed inside the NEXT hunt_encounter's walk instead of here. A faint
-            -- that also empties the party IS a whiteout: check_whiteout raises the same signal
-            -- playlib's handle_encounter would have, so run_leg's recover()/resume() engages
-            -- instead of this leg reporting a plain "never advanced" failure for a faint that in
-            -- fact just happened.
-            resolve_battle_and_check_whiteout(cp, 160)
+            -- A faint with a healthy second mon leaves this battle OPEN on a
+            -- mandatory party selection. The FR battle policy handles that
+            -- RAM-witnessed send-out and the remaining fight, then checks for
+            -- whiteout after the field settles. The faint counter alone is not
+            -- a leg terminal (FR run 26 saved a mid-battle state there).
+            if not play.fight_through(cp, 1200) or play.in_battle(cp)
+               or not play.wait_scene_settled(cp, 1800) or not play.on_field(cp) then
+                G.finish(false, "route1_faint: battle_not_settled_after_faint")
+                return
+            end
             if player_faints() > before then fainted = true; break end
         end
         if not fainted then
@@ -1872,9 +1990,8 @@ LEGS[#LEGS + 1] = {
         end
         G.phase("fainted", "playerFaintCounter=" .. player_faints())
     end,
-    -- run_leg only calls resume() after check_whiteout() raised above, so reaching here already
-    -- proves the faint: a single-mon party whites out BY fainting, and there is no other way to
-    -- land in resume(). gBattleResults (BATTLE_RESULTS_ADDR) is a scratch struct the engine
+    -- run_leg only calls resume() after a whiteout signal raised above, so reaching here already
+    -- proves all usable mons fainted. gBattleResults (BATTLE_RESULTS_ADDR) is a scratch struct the engine
     -- clears on returning to the field after a whiteout, so re-reading it here the way run()
     -- does would report 0 and look like nothing happened -- check it FIRST anyway (it is cheap
     -- and free if some other flow left it set), then fall back to the whiteout itself as
