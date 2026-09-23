@@ -1065,6 +1065,47 @@ def test_bind_fixture_qualification_names_the_qualified_bytes_and_attempt():
     assert ok is None and why
 
 
+# card gen2-u1e-poison (main's ruling (1)): the U1 receipt runs on an explicit per-title fixture allow-list. Gold
+# may also run on gold_battle_errand (post Mr. Pokemon errand, same Route 29 end point): the only Gold state that
+# reaches a day POISON_STING foe (Bug Catcher Wade, Route 31). No wildcard, no cross-title entry.
+U1_FIXTURES = {"crystal": ["crystal_battle"], "gold": ["gold_battle", "gold_battle_errand"], "silver": ["silver_battle"]}
+
+
+def test_the_u1_fixture_allow_list_is_the_data():
+    module = World().module
+    assert {title: sorted(fixtures.values()) for title, fixtures in module.U1_FIXTURES.items()} == U1_FIXTURES
+
+
+@pytest.mark.parametrize("title,fixture,registers", [
+    ("gold", "gold_battle", True), ("gold", "gold_battle_errand", True), ("crystal", "crystal_battle", True),
+    ("silver", "silver_battle", True),
+    ("gold", "gold_town", False), ("gold", "gold_battle_ot2", False), ("gold", "gold_errand", False),
+    ("crystal", "crystal_battle_errand", False), ("silver", "gold_battle_errand", False),
+    ("silver", "silver_battle_errand", False), ("crystal", "crystal_battle_ot2", False)])
+def test_a_u1_receipt_registers_only_from_an_allow_listed_fixture(title, fixture, registers):
+    world = World(title)
+    listed = receipt(world)
+    listed["fixture"] = fixture
+    binder, why = production(world, listed)
+    assert (binder is not None) == registers, why
+    if not registers:
+        assert world.callbacks == {} and "fixture" in why
+
+
+def test_a_listed_fixture_still_needs_its_own_passed_qualification_report():
+    """Allow-listed is not qualified: bind_fixture_qualification needs a passed report row for THAT fixture."""
+    world = World("gold")
+    report = json.loads((ROOT / "tests/fixtures/gen2/receipts/gold_battle.qualification.json").read_text())
+    errand = receipt(world)
+    errand["fixture"] = "gold_battle_errand"
+    errand["qualification_attempt_id"] = report["attempt_id"]
+    result = world.module.bind_fixture_qualification(world.lua.table_from(errand, recursive=True),
+                                                     world.lua.table_from(report, recursive=True))
+    assert isinstance(result, tuple) and result[0] is None and "fixture" in result[1]
+    result = world.module.bind_fixture_qualification(world.lua.table_from(errand, recursive=True), None)
+    assert isinstance(result, tuple) and result[0] is None
+
+
 def test_an_arm_inside_a_script_span_is_refused_whatever_symbol_it_claims():
     """U1b: 04:64E0 lies in Script_Whiteout bytecode past the 13-byte checked prefix."""
     world = World()

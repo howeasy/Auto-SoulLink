@@ -110,6 +110,15 @@ S.RECEIPT_SCHEMA = "gen2-engine-site-receipt-v1"
 -- unlike the write-window RECEIPT_TITLE (lua/gen2_write_safety.lua) where Silver follows Gold.
 S.PHYSICAL_TITLES = {crystal="crystal", gold="gold", silver="silver"}
 S.RECEIPT_NEGATIVES = {"wrong_pack_byte","script_bytecode_arm","wrong_bank_hit"}
+-- title -> the fixtures a U1 receipt may run on: an explicit allow-list, no wildcard. Each must also carry its
+-- own passed qualification report (bind_fixture_qualification). gold_battle_errand is Gold after the Mr. Pokemon
+-- errand, ending where gold_battle ends: the only Gold state that reaches a day POISON_STING foe (card
+-- gen2-u1e-poison, main's ruling (1)).
+S.U1_FIXTURES = {crystal={"crystal_battle"}, gold={"gold_battle","gold_battle_errand"}, silver={"silver_battle"}}
+local function u1_fixture(owner, fixture)
+    for _,name in ipairs(S.U1_FIXTURES[owner] or {}) do if name == fixture then return true end end
+    return false
+end
 
 local COUNT = 9007199254740991
 local function hex64(value) return type(value) == "string" and #value == 64 and value:match("^%x+$") ~= nil end
@@ -136,11 +145,11 @@ function S.qualified_sites(title, pack, receipt)
        or type(pack.specs_sha256) ~= "string" or receipt.pack_specs_sha256 ~= pack.specs_sha256 then
         return nil,"qualification receipt belongs to another title, ROM or engine-site pack"
     end
-    if receipt.fixture ~= owner .. "_battle" or receipt.core_mode ~= "CGB" or receipt.input_mode ~= "normal_buttons"
+    if not u1_fixture(owner, receipt.fixture) or receipt.core_mode ~= "CGB" or receipt.input_mode ~= "normal_buttons"
        or type(receipt.harness_write_scopes) ~= "table" or next(receipt.harness_write_scopes) ~= nil
        or not hex64(receipt.fixture_sha256) or type(receipt.attempt_id) ~= "string" or receipt.attempt_id == ""
        or type(receipt.qualification_attempt_id) ~= "string" or receipt.qualification_attempt_id == "" then
-        return nil,"qualification receipt is not a normal-button CGB run of the qualified battle fixture"
+        return nil,"qualification receipt is not a normal-button CGB run of an allow-listed qualified U1 fixture"
     end
     local a, d = receipt.frame_alignment, receipt.decoy
     if receipt.bank_check ~= "live" or type(a) ~= "table" or a.passed ~= true
