@@ -72,6 +72,14 @@ REPO_MAILBOX_STUB = {
 # Card P4.1c: Codex's beacon/ABI/DelayFrame bridge, once it exists.
 OPTIONAL_SHARED_FILES = ["slink.asm"]
 
+# The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
+# so it is copied -- never duplicated under patch/gen2 -- from its one committed location. It is
+# copy-only: slink.asm (card P4.1c) INCLUDEs it itself (engine/slink/slink_abi.inc), so it never
+# gets its own top-level INCLUDE from main.asm, and copying it alone (no consumer yet) changes no
+# ROM byte. Absent today; card P4.1c adds it (coordinator follow-up gen2-p41a-abi-copy).
+GB_DIR = ROOT / "patch" / "gb"
+SHARED_ABI_NAME = "slink_abi.inc"
+
 # (file, anchor) per repo -- the anchor is the tail of main.asm up to (not including) the rest of
 # the "Stadium 2 Checksums" section line, so the fixed ROMX[$addr] suffix that differs between the
 # two repos is never part of the matched text. Verify-then-replace-once, same discipline as
@@ -98,51 +106,63 @@ def rom_facts(data: bytes) -> dict:
     }
 
 
-def overlay_plan(repo: str, src_dir: pathlib.Path) -> list[tuple[str, pathlib.Path]]:
-    """Return (dest name under engine/slink/, source path) pairs for files that exist.
+def overlay_plan(
+    repo: str, src_dir: pathlib.Path, gb_dir: pathlib.Path = GB_DIR
+) -> list[tuple[str, pathlib.Path, bool]]:
+    """Return (dest name under engine/slink/, source path, needs a main.asm INCLUDE) triples.
 
     The repo-specific mailbox stub is normalised to a fixed destination name (slink_mailbox.asm)
     so shared files (Codex's slink.asm) can reference the wSlinkMailbox symbol without caring
-    which title they were built for. An empty return means "empty overlay" -- apply_overlay()
-    then touches nothing in the checkout.
+    which title they were built for. The shared ABI header is copy-only (its own consumer,
+    slink.asm, INCLUDEs it once that file exists) -- copying it alone never touches main.asm and
+    changes no ROM byte. An empty return means "empty overlay" -- apply_overlay() then touches
+    nothing in the checkout.
     """
-    plan: list[tuple[str, pathlib.Path]] = []
+    plan: list[tuple[str, pathlib.Path, bool]] = []
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
-        plan.append(("slink_mailbox.asm", stub))
+        plan.append(("slink_mailbox.asm", stub, True))
+    abi = gb_dir / SHARED_ABI_NAME
+    if abi.is_file():
+        plan.append((SHARED_ABI_NAME, abi, False))
     for name in OPTIONAL_SHARED_FILES:
         path = src_dir / name
         if path.is_file():
-            plan.append((name, path))
+            plan.append((name, path, True))
     return plan
 
 
-def apply_overlay(checkout: pathlib.Path, repo: str, src_dir: pathlib.Path) -> list[str]:
+def apply_overlay(
+    checkout: pathlib.Path, repo: str, src_dir: pathlib.Path, gb_dir: pathlib.Path = GB_DIR
+) -> list[str]:
     """Copy the overlay plan into `checkout` and hook main.asm. Returns the files applied."""
-    plan = overlay_plan(repo, src_dir)
+    plan = overlay_plan(repo, src_dir, gb_dir)
     if not plan:
         return []
+    include_names = [name for name, _path, include in plan if include]
     main_path = checkout / "main.asm"
-    anchor = MAIN_ANCHORS[repo]
-    text = main_path.read_text(encoding="utf-8")
-    n = text.count(anchor)
-    if n != 1:
-        raise RuntimeError(
-            f"{repo}: expected the Stadium-checksums anchor exactly once in main.asm, found {n}"
-        )
+    if include_names:
+        anchor = MAIN_ANCHORS[repo]
+        text = main_path.read_text(encoding="utf-8")
+        n = text.count(anchor)
+        if n != 1:
+            raise RuntimeError(
+                f"{repo}: expected the Stadium-checksums anchor exactly once in main.asm, found {n}"
+            )
     dest_dir = checkout / OVERLAY_DST
     dest_dir.mkdir(parents=True, exist_ok=True)
-    names = []
-    for dest_name, source_path in plan:
+    applied = []
+    for dest_name, source_path, _include in plan:
         (dest_dir / dest_name).write_bytes(source_path.read_bytes())
-        names.append(dest_name)
-    block = "\n".join(
-        ['; SLink companion overlay (tools/build_gen2_companion.py)']
-        + [f'INCLUDE "{OVERLAY_DST}/{name}"' for name in names]
-    )
-    new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
-    main_path.write_text(text.replace(anchor, new_anchor, 1), encoding="utf-8", newline="\n")
-    return names
+        applied.append(dest_name)
+    if include_names:
+        block = "\n".join(
+            ['; SLink companion overlay (tools/build_gen2_companion.py)']
+            + [f'INCLUDE "{OVERLAY_DST}/{name}"' for name in include_names]
+        )
+        new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
+        main_path.write_text(text.replace(anchor, new_anchor, 1), encoding="utf-8", newline="\n")
+    return applied
 
 
 def fresh_copy(repo_dir: pathlib.Path, commit: str, dest: pathlib.Path) -> pathlib.Path:

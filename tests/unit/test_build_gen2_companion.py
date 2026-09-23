@@ -21,37 +21,71 @@ import build_gen2_companion as bc  # noqa: E402
 # ---------------------------------------------------------------- overlay_plan
 
 
+def _no_gb_dir(tmp_path: Path) -> Path:
+    """An isolated, guaranteed-absent patch/gb/ stand-in so tests don't depend on whether the
+    real patch/gb/slink_abi.inc (Codex, card P4.1c) has landed in this checkout yet."""
+    return tmp_path / "gb-does-not-exist"
+
+
 def test_empty_src_dir_is_the_empty_overlay(tmp_path):
-    assert bc.overlay_plan("pokecrystal", tmp_path) == []
-    assert bc.overlay_plan("pokegold", tmp_path) == []
+    gb_dir = _no_gb_dir(tmp_path)
+    assert bc.overlay_plan("pokecrystal", tmp_path, gb_dir) == []
+    assert bc.overlay_plan("pokegold", tmp_path, gb_dir) == []
 
 
 def test_nonexistent_src_dir_is_also_the_empty_overlay(tmp_path):
     missing = tmp_path / "does-not-exist"
-    assert bc.overlay_plan("pokecrystal", missing) == []
+    assert bc.overlay_plan("pokecrystal", missing, _no_gb_dir(tmp_path)) == []
 
 
 def test_mailbox_stub_only_selects_the_repo_specific_file(tmp_path):
+    gb_dir = _no_gb_dir(tmp_path)
     (tmp_path / "slink_mailbox_crystal.asm").write_text("; crystal\n")
     (tmp_path / "slink_mailbox_goldsilver.asm").write_text("; gold/silver\n")
-    crystal_plan = bc.overlay_plan("pokecrystal", tmp_path)
-    gold_plan = bc.overlay_plan("pokegold", tmp_path)
-    assert crystal_plan == [("slink_mailbox.asm", tmp_path / "slink_mailbox_crystal.asm")]
-    assert gold_plan == [("slink_mailbox.asm", tmp_path / "slink_mailbox_goldsilver.asm")]
+    crystal_plan = bc.overlay_plan("pokecrystal", tmp_path, gb_dir)
+    gold_plan = bc.overlay_plan("pokegold", tmp_path, gb_dir)
+    assert crystal_plan == [("slink_mailbox.asm", tmp_path / "slink_mailbox_crystal.asm", True)]
+    assert gold_plan == [("slink_mailbox.asm", tmp_path / "slink_mailbox_goldsilver.asm", True)]
 
 
 def test_shared_slink_asm_is_included_for_both_repos_when_present(tmp_path):
+    gb_dir = _no_gb_dir(tmp_path)
     (tmp_path / "slink_mailbox_crystal.asm").write_text("; crystal\n")
     (tmp_path / "slink_mailbox_goldsilver.asm").write_text("; gold/silver\n")
     (tmp_path / "slink.asm").write_text("; codex P4.1c\n")
-    names = [name for name, _ in bc.overlay_plan("pokecrystal", tmp_path)]
+    names = [name for name, _path, _include in bc.overlay_plan("pokecrystal", tmp_path, gb_dir)]
     assert names == ["slink_mailbox.asm", "slink.asm"]
 
 
 def test_shared_slink_asm_alone_without_a_mailbox_stub_is_still_picked_up(tmp_path):
+    gb_dir = _no_gb_dir(tmp_path)
     (tmp_path / "slink.asm").write_text("; codex P4.1c\n")
-    names = [name for name, _ in bc.overlay_plan("pokecrystal", tmp_path)]
+    names = [name for name, _path, _include in bc.overlay_plan("pokecrystal", tmp_path, gb_dir)]
     assert names == ["slink.asm"]
+
+
+# ---------------------------------------------------------------- shared ABI header (gb_dir)
+# Coordinator follow-up gen2-p41a-abi-copy: Codex's P4.1c owns patch/gb/slink_abi.inc (shared
+# with Gen 1) and slink.asm INCLUDEs it as engine/slink/slink_abi.inc. This tool copies -- never
+# duplicates -- that one committed file. It is copy-only: no main.asm INCLUDE, because slink.asm
+# is the file that references it.
+
+
+def test_shared_abi_header_absent_is_a_no_op(tmp_path):
+    """The file doesn't exist yet (Codex writes it in P4.1c); absence must never be an error."""
+    gb_dir = _no_gb_dir(tmp_path)
+    assert bc.overlay_plan("pokecrystal", tmp_path, gb_dir) == []
+    (tmp_path / "slink_mailbox_crystal.asm").write_text("; crystal\n")
+    names = [name for name, _path, _include in bc.overlay_plan("pokecrystal", tmp_path, gb_dir)]
+    assert bc.SHARED_ABI_NAME not in names
+
+
+def test_shared_abi_header_present_is_copied_but_not_included(tmp_path):
+    gb_dir = tmp_path / "gb"
+    gb_dir.mkdir()
+    (gb_dir / bc.SHARED_ABI_NAME).write_text("; shared ABI (patch/gb/slink_abi.inc)\n")
+    plan = bc.overlay_plan("pokecrystal", tmp_path, gb_dir)
+    assert (bc.SHARED_ABI_NAME, gb_dir / bc.SHARED_ABI_NAME, False) in plan
 
 
 # ---------------------------------------------------------------- apply_overlay
@@ -84,7 +118,7 @@ def _fake_checkout(tmp_path: Path, repo: str) -> Path:
 def test_empty_overlay_touches_nothing(tmp_path, repo):
     checkout = _fake_checkout(tmp_path, repo)
     before = (checkout / "main.asm").read_text(encoding="utf-8")
-    applied = bc.apply_overlay(checkout, repo, tmp_path / "empty-src")
+    applied = bc.apply_overlay(checkout, repo, tmp_path / "empty-src", _no_gb_dir(tmp_path))
     assert applied == []
     assert (checkout / "main.asm").read_text(encoding="utf-8") == before
     assert not (checkout / bc.OVERLAY_DST).exists()
@@ -100,7 +134,7 @@ def test_mailbox_only_overlay_copies_the_stub_and_hooks_main_asm(tmp_path, repo,
     src_dir.mkdir()
     (src_dir / stub_name).write_text('SECTION "SLink Mailbox", WRAM0[$0000]\n\tds 1\n')
 
-    applied = bc.apply_overlay(checkout, repo, src_dir)
+    applied = bc.apply_overlay(checkout, repo, src_dir, _no_gb_dir(tmp_path))
 
     assert applied == ["slink_mailbox.asm"]
     copied = checkout / bc.OVERLAY_DST / "slink_mailbox.asm"
@@ -122,7 +156,7 @@ def test_apply_overlay_refuses_a_checkout_missing_the_anchor(tmp_path):
     (src_dir / "slink_mailbox_crystal.asm").write_text('SECTION "x", WRAM0[$0000]\n')
 
     with pytest.raises(RuntimeError, match="exactly once"):
-        bc.apply_overlay(checkout, "pokecrystal", src_dir)
+        bc.apply_overlay(checkout, "pokecrystal", src_dir, _no_gb_dir(tmp_path))
 
 
 def test_apply_overlay_refuses_a_checkout_with_the_anchor_twice(tmp_path):
@@ -134,7 +168,42 @@ def test_apply_overlay_refuses_a_checkout_with_the_anchor_twice(tmp_path):
     (src_dir / "slink_mailbox_crystal.asm").write_text('SECTION "x", WRAM0[$0000]\n')
 
     with pytest.raises(RuntimeError, match="exactly once"):
-        bc.apply_overlay(checkout, "pokecrystal", src_dir)
+        bc.apply_overlay(checkout, "pokecrystal", src_dir, _no_gb_dir(tmp_path))
+
+
+def test_apply_overlay_copies_shared_abi_header_alongside_the_mailbox_stub(tmp_path):
+    checkout = _fake_checkout(tmp_path, "pokecrystal")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "slink_mailbox_crystal.asm").write_text('SECTION "SLink Mailbox", WRAM0[$0000]\n\tds 1\n')
+    gb_dir = tmp_path / "gb"
+    gb_dir.mkdir()
+    (gb_dir / bc.SHARED_ABI_NAME).write_text("; shared ABI\n")
+
+    applied = bc.apply_overlay(checkout, "pokecrystal", src_dir, gb_dir)
+
+    assert bc.SHARED_ABI_NAME in applied
+    copied = checkout / bc.OVERLAY_DST / bc.SHARED_ABI_NAME
+    assert copied.read_text(encoding="utf-8") == "; shared ABI\n"
+    # Copy-only: it is never given its own main.asm INCLUDE line (slink.asm will INCLUDE it).
+    main_text = (checkout / "main.asm").read_text(encoding="utf-8")
+    assert f'INCLUDE "{bc.OVERLAY_DST}/{bc.SHARED_ABI_NAME}"' not in main_text
+
+
+def test_apply_overlay_with_only_the_shared_abi_header_never_touches_main_asm(tmp_path):
+    """A copy-only file with no includable consumer yet must not trigger the main.asm hook --
+    this keeps the empty-overlay falsifier valid even after patch/gb/slink_abi.inc lands."""
+    checkout = _fake_checkout(tmp_path, "pokecrystal")
+    before = (checkout / "main.asm").read_text(encoding="utf-8")
+    gb_dir = tmp_path / "gb"
+    gb_dir.mkdir()
+    (gb_dir / bc.SHARED_ABI_NAME).write_text("; shared ABI\n")
+
+    applied = bc.apply_overlay(checkout, "pokecrystal", tmp_path / "empty-src", gb_dir)
+
+    assert applied == [bc.SHARED_ABI_NAME]
+    assert (checkout / "main.asm").read_text(encoding="utf-8") == before
+    assert (checkout / bc.OVERLAY_DST / bc.SHARED_ABI_NAME).is_file()
 
 
 # ---------------------------------------------------------------- rom_facts
