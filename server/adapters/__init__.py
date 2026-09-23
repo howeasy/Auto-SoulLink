@@ -112,6 +112,37 @@ def game_id_for_rom_type(rom_type: str) -> str | None:
     return _ROM_TYPE_TO_GAME_ID.get(rom_type)
 
 
+# game_id pairs where a run PERSISTED under the old adapter must never be silently
+# reopened under the new one after a rom_type cutover (server/state.py load()). Gen 2's
+# U5 cutover (gen2_crystal -> gen2_gsc) is the first case: the two adapters put the SAME
+# physical gift event under DIFFERENT area_id keys -- e.g. a starter pickup persists as
+# bare "new_bark_town" under Gen2CrystalAdapter's `_GIFT_AREAS`/base `gift_link_area`
+# (gen2_crystal.py is_gift_area matches the bare place name), but as "gift_new_bark_town"
+# under Gen2GSCAdapter (gen2_gsc.py is_gift_area only matches a "gift_"-prefixed id, so
+# base.gift_link_area remaps it). Likewise the daycare area is bare "route_34" under the
+# old adapter vs "gift_daycare" under the new one. Reinterpreting old keys under the new
+# adapter would silently orphan any pending gift/daycare capture (the new client will
+# never again send the old key) or mis-track area cooldown state -- so this migration is
+# refused rather than attempted.
+_UNSAFE_GAME_ID_MIGRATIONS: dict[str, frozenset[str]] = {
+    "gen2_crystal": frozenset({"gen2_gsc"}),
+}
+
+
+def persisted_migration_refusal(old_game_id: str, new_game_id: str) -> str | None:
+    """None if a run persisted under old_game_id may reload under new_game_id.
+
+    Otherwise, the operator-facing reason it must not (see _UNSAFE_GAME_ID_MIGRATIONS).
+    """
+    if new_game_id in _UNSAFE_GAME_ID_MIGRATIONS.get(old_game_id, ()):
+        return (f"this run was saved under adapter {old_game_id!r}, but its rom_type now "
+                f"resolves to {new_game_id!r} and the two adapters use incompatible "
+                f"area_id/state formats — reopening it under {new_game_id!r} would silently "
+                f"corrupt or orphan persisted gift/daycare state. Archive or delete this "
+                f"run's links.json to start a fresh run under {new_game_id!r}.")
+    return None
+
+
 # ROM-type string → PAIRING FOUNDATION, where a game_id is too coarse to pair on.
 # A foundation is a data pack + memory layout, not a class: Radical Red and vanilla
 # FireRed share `Gen3Adapter` but share no layout, so a clean FR must not pair with a

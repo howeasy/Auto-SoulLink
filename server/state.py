@@ -39,6 +39,14 @@ MEMORIAL_PATH = os.path.join(DATA_DIR, "memorial.json")
 # Explode Mode kills came to be invisible in the dashboard and to OBS.
 DEATH_COMMANDS = ("force_faint", "force_explode")
 
+
+class UnsafeGameMigration(RuntimeError):
+    """A persisted run's adapter cannot be safely carried over after a rom_type cutover.
+
+    Raised by SoulLinkState.load(); never caught by its own broad except-and-log so it
+    reaches the operator starting the server, not a connecting client.
+    """
+
 # The party/box sync commands whose effect the server cannot observe until the client
 # answers.  Tracked from delivery to answer in SoulLinkState.sync_inflight so the drift
 # reconciler never acts on a key whose command is still on the wire.
@@ -905,6 +913,15 @@ class SoulLinkState:
             saved_game_id = data.get("game_id", "")
             effective_rr = state.is_rr
             if saved_game_id and state.adapter.game_id != saved_game_id:
+                # A rom_type cutover (e.g. Gen 2's U5) may have moved this rom_type onto a
+                # different game_id since this run was saved. Refuse rather than silently
+                # reopening it under either the stale saved adapter or a mismatched new one
+                # when the registry says that specific migration is unsafe.
+                from server.adapters import game_id_for_rom_type, persisted_migration_refusal
+                current_game_id = game_id_for_rom_type(state.rom_type) if state.rom_type else None
+                refusal = persisted_migration_refusal(saved_game_id, current_game_id) if current_game_id else None
+                if refusal:
+                    raise UnsafeGameMigration(f"{state._links_path}: {refusal}")
                 log.warning(f"Saved game_id={saved_game_id!r} differs from adapter "
                             f"game_id={state.adapter.game_id!r}; using saved game_id")
                 # Re-resolve adapter from registry if available
@@ -954,6 +971,11 @@ class SoulLinkState:
                         "restored_keys":      set(rb.get("restored_keys", [])),
                     }
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
+        except UnsafeGameMigration:
+            # Operator-facing and fatal: this run must not start under either adapter.
+            # Not caught below — a corrupt-file warning-and-continue would silently
+            # resume it under the stale adapter, exactly what this refusal prevents.
+            raise
         except Exception as e:
             log.error(f"Failed to load {state._links_path}: {e}")
         return state
