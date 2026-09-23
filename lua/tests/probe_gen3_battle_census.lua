@@ -96,7 +96,7 @@ if script and script ~= "" then
         local px, py = G.pos(cp)
         local mg, mn = G.map(cp)
         G.phase("script", string.format("%s frame=%d party=%d pos=(%d,%d) map=%d,%d facing=%d", s, emu.framecount(),
-            memory.read_u8(0x02024029), px, py, mg, mn, memory.read_u8(0x02036E38 + 0x18) >> 4))
+            memory.read_u8(0x02024029), px, py, mg, mn, memory.read_u8(0x02036E38 + 0x18) & 0x0F))
     end
     FRAMES = math.max(0, FRAMES - used)
 end

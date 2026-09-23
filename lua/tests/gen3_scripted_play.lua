@@ -757,14 +757,15 @@ local H = {
 
     -- gObjectEvents = 0x02036E38 (pokefirered.sym:205), object 0 = the player, stride 0x24.
     -- currentCoords are s16 x/y at +0x10/+0x12 stored +7 (MAP_OFFSET); facingDirection is the
-    -- HIGH nibble at +0x18 (pret include/global.fieldmap.h struct ObjectEvent). Introduced on
+    -- LOW nibble at +0x18 and movementDirection the high one (pret include/global.fieldmap.h:254-255
+    -- declares `u8 facingDirection:4; u8 movementDirection:4;`, packed LSB-first). Introduced on
     -- run 8 to cross-check the live object against SaveBlock1.pos when the two disagreed.
     obj_pos = function(i)
         local base = OBJ_EVENTS_ADDR + (i or 0) * 0x24
         return memory.read_s16_le(base + 0x10) - 7, memory.read_s16_le(base + 0x12) - 7
     end,
     obj_facing = function(i)
-        return memory.read_u8(OBJ_EVENTS_ADDR + (i or 0) * 0x24 + 0x18) >> 4
+        return memory.read_u8(OBJ_EVENTS_ADDR + (i or 0) * 0x24 + 0x18) & 0x0F
     end,
     party_count = function() return memory.read_u8(PARTY_COUNT_ADDR) end,
     -- Party IDENTITY, for playlib's keyed snapshot. PID:OTID is the same handle the duo
@@ -1928,10 +1929,10 @@ LEGS[#LEGS + 1] = {
         end
         do
             -- Face the ball and PROVE the facing: ObjectEvent.facingDirection is the low nibble
-            -- at +0x18 (include/global.fieldmap.h: u8 movementDirection:4 / facingDirection:4);
+            -- at +0x18 (include/global.fieldmap.h:254-255: u8 facingDirection:4 / movementDirection:4);
             -- 1=down 2=up 3=left 4=right. Hold Up until it reads 2 (the ball object is solid,
             -- so Up can only turn, never step).
-            local function facing() return memory.read_u8(OBJ_EVENTS_ADDR + 0x18) >> 4 end
+            local function facing() return memory.read_u8(OBJ_EVENTS_ADDR + 0x18) & 0x0F end
             for _ = 1, 4 do
                 if facing() == 2 then break end
                 for _ = 1, 8 do joypad.set({ Up = true }); G.advance() end

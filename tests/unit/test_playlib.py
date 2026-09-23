@@ -1181,3 +1181,17 @@ def test_a_step_that_ends_in_a_battle_is_reported_as_such_not_as_a_stall(lua, wo
     lua.execute("W.blocked = true")
     ok, why = play.step(None, "Right", 100, None, False)
     assert ok is False and why == "stalled"
+
+
+def test_gen3_facing_readers_take_the_low_nibble():
+    """pret include/global.fieldmap.h:254-255 declares `u8 facingDirection:4; u8 movementDirection:4;`
+    at ObjectEvent+0x18, packed LSB-first: the LOW nibble is facing, the high one is the movement
+    direction (they differ while facingDirectionLocked). OMP C4-FACE found three `>> 4` readers."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2]
+    for rel in ("lua/tests/gen3_scripted_play.lua", "lua/tests/probe_gen3_battle_census.lua",
+                "lua/tests/duo/duo_gen3_main.lua"):
+        src = (root / rel).read_text(encoding="utf-8")
+        for line in src.splitlines():
+            if "+ 0x18)" in line and "read_u8" in line:
+                assert ">> 4" not in line, f"{rel}: facing read from the high nibble: {line.strip()}"
