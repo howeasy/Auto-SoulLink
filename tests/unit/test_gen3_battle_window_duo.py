@@ -35,6 +35,7 @@ function world(mode, fault)
             frame = frame + 1
             if ready and rx == 0 and fault ~= 'no_rx' then
                 rx = 1
+                if fault=='natural_end' then battling=false; outcome=4 end
                 if mode == 'trainer_bench' then
                     if fault == 'late_bench' then battling=false; outcome=1 end
                     if fault ~= 'no_write' then write('battle_faint') end
@@ -52,6 +53,7 @@ function world(mode, fault)
     c.wait_go = function() return fault ~= 'no_go' end
     c.linked = function() return 'K' end
     c.find = function(k) if k == target_key then return {key=k,slot=target_slot,hp=hp} end end
+    c.party = function() return {{slot=0,level=fault=='prep_floor' and 6 or 9}} end
     c.received = function(cmd,k) return k == 'K' and rx or 0 end
     c.battle_hold = function(k)
         if k=='K' and battling and rx>0 and fault~='missing_hold' then return {why='active battler'} end
@@ -62,16 +64,22 @@ function world(mode, fault)
     c.watch = function(fn) watchers[#watchers+1]=fn end
     c.battle_window_snapshot = function(k)
         if fault == 'snapshot_error' and ready then error('unreadable bus') end
-        return {frame=frame, in_battle=battling, outcome=outcome,
-                is_trainer=mode=='trainer_bench', trainer_id=fault=='wrong_trainer' and 104 or 330,
-                battlers_count=2, active_slots={0}, party_base=0x02024284,
+        return {frame=frame, samples=frame, in_battle=battling, outcome=outcome,
+                is_trainer=mode=='trainer_bench', trainer_id=fault=='wrong_trainer' and 104 or 102,
+                battlers_count=2, active_slots=fault=='two_slots' and {0,2} or {0},
+                party_base=fault=='unaligned' and 0x02024285 or 0x02024284,
                 target_count=fault=='duplicate_key' and 2 or 1,
-                target={key=target_key,slot=target_slot,hp=hp}, active_bytes=active_bytes,
+                target={key=target_key,slot=target_slot,hp=hp},
+                active_bytes=fault=='short_record' and string.rep('A',0x57) or active_bytes,
                 battle_permit=battling and not (ready and fault=='denied_battle_write'),
                 overworld_permit=not battling and fault~='denied_field_write',
-                tuple='main=selection comm0=1 flags=1 controller=player'}
+                tuple=fault=='empty_tuple' and '' or 'main=selection comm0=1 flags=1 controller=player'}
     end
-    c.enter_trainer = function(label,id)
+    c.enter_trainer = function(label,id,prep)
+        assert(id==102 and prep.level_floor==8 and prep.max_frames==60000)
+        if fault=='prep_hp' then hp=hp-1 end
+        if fault=='prep_slot' then target_slot=3 end
+        if fault=='prep_transient' then hp=19; c.frames(1); hp=20 end
         if fault=='route_failed' then return false,'blocked on normal route' end
         battling=true
         return true
@@ -144,7 +152,9 @@ def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save(mode)
         assert log.index("BATTLE_WINDOW_EXIT active_end") < log.index("BATTLE_WINDOW_LANDED")
         assert "reason=overworld" in log
     else:
-        assert "trainer=330" in log and "reason=battle_faint" in log
+        assert "trainer=102" in log and "reason=battle_faint" in log
+        assert log.index("BATTLE_WINDOW_LANDED") < log.index("BATTLE_WINDOW_EXIT trainer_bench")
+        assert "active_hex=" in log and "samples=" in log and "PREP_LEVEL before=9 after=9" in log
 
 
 @pytest.mark.parametrize("mode,fault,reason", [
@@ -163,6 +173,7 @@ def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save(mode)
     ("active_end", "denied_field_write", "active target mutated"),
     ("active_end", "no_exit_write", "no witnessed"),
     ("active_end", "no_rx", "no fresh keyed"),
+    ("active_end", "natural_end", "NOT_SUBJECT active_end"),
     ("trainer_bench", "snapshot_error", "observer error"),
     ("trainer_bench", "revived", "revived"),
     ("active_end", "save_failed", "save failed"),
@@ -177,6 +188,14 @@ def test_observed_failure_is_named_and_never_saved_as_a_pass(mode, fault, reason
     ("route_failed", "trainer route"),
     ("wrong_trainer", "wrong trainer/type"),
     ("duplicate_key", "ambiguous target"),
+    ("short_record", "unreadable battle snapshot"),
+    ("unaligned", "unreadable battle snapshot"),
+    ("empty_tuple", "unreadable battle snapshot"),
+    ("two_slots", "readable single battle"),
+    ("prep_hp", "PREPARATION altered"),
+    ("prep_slot", "PREPARATION altered"),
+    ("prep_floor", "level floor"),
+    ("prep_transient", "PREPARATION altered"),
 ])
 def test_bad_setup_does_not_publish_ready(fault, reason):
     passed, why, (log, *_) = run("trainer_bench", fault)
