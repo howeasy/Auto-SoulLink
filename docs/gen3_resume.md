@@ -16,7 +16,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 | G1 | **SIGNED 2026-09-21** (PLAN §14.1). Receipts: hook probe PASS on FR clean + RR companion (`docs/gen3/probes/hooks_*_2026-09-21.txt`), frame-end census (`census_rr_overworld_2026-09-21.txt`: R15 parked in BIOS `0x1C4`, System/ARM), flash domain = `SRAM` 0x20000, six RR duos PASS twice on the old client, golden transcripts committed (`tests/fixtures/gen3/wire/`, 796K, four gzipped), conformance suite 16 passed with the old-client characterization (items 1/14 documented as A19; 29/30 were checker over-assertions; 28 unevidenced). Ask the owner to sign G1 with those receipts. |
 | G2 | **SIGNED 2026-09-21** as pinned facts only (PLAN §14.1; report `docs/gen3/G2_report_2026-09-21.md`, §9 = G3 carry-forward list). |
 | G3a | SIGNED (P3a pairing; see P3/P3a section). |
-| G3 | **REQUEST READY 2026-09-23**: `docs/gen3/G3_request_draft.md` (5efd1f24), awaiting owner signature. |
+| G3 | **SIGNED 2026-09-23** (PLAN §14.1) on `docs/gen3/G3_request_draft.md` as written; OPEN/PARTIAL/LG+RR-clean carried as limits. P4 started. |
 
 ## Landed this session (planning branch, in order)
 
