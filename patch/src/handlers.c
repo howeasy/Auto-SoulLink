@@ -318,6 +318,9 @@ typedef struct {
  * ACTION_CTRL_B is NOT a menu: it is PlayerBufferRunCommand, the idle dispatcher every controller
  * returns to. Kept for reference only; gating on it matched the post-commit frame (C5-FMS-FIX). */
 #define ACTION_CTRL_A           0x0802E439u   /* HandleInputChooseAction */
+#define ACTION_CTRL_CFRU        0x090A9EA1u   /* same parked action menu, second spelling: detour target
+                                               * of 0x0802E438, stored directly (LDR@0x090A9E76) when the
+                                               * CFRU L-button window closes; CFRU compares both itself */
 #define ACTION_CTRL_B           0x0802E3B5u   /* PlayerBufferRunCommand (not a menu) */
 #define MOVE_CTRL_THUNK         0x0802EA11u   /* HandleInputChooseMove (thunk -> CFRU 0x090AB8B8) */
 #define PlayerBufferExecCompleted ((void (*)(void))0x0802E33Du)  /* slot = RunCommand, clear exec bit */
@@ -627,15 +630,27 @@ static void slink_force_controller(void)
 }
 
 /* Every frame while armed: when the player's action/move menu is up, swap its
- * controller pointer to ours so the engine drives our forced choice natively. */
+ * controller pointer to ours so the engine drives our forced choice natively.
+ * Never in a link battle: PlayerBufferExecCompleted's link branch would send a transfer.
+ * The forced slot bypasses the menu's own checks (Disable, Encore, Taunt, Choice lock,
+ * AreAllMovesUnusable); only a slot with no PP (or no move) is refused, since the engine would
+ * otherwise run a 0-PP move. */
 static void drive_force_move(void)
 {
     if (!AM->armed) return;
     u32 b = AM->battler;
     volatile u32 *cf = (volatile u32 *)(gBattlerControllerFuncs + b * 4);
     u8 comm = R8(gBattleCommunication + b);
-    if ((comm == COMM_WAIT_ACTION_CHOSEN      && *cf == ACTION_CTRL_A) ||
-        (comm == COMM_WAIT_ACTION_CASE_CHOSEN && *cf == MOVE_CTRL_THUNK)) {
+    u32 c = *cf;
+    u8 parked = !(R32(RV_BATTLE_TYPE) & RV_BATTLE_TYPE_LINK) &&
+        ((comm == COMM_WAIT_ACTION_CHOSEN      && (c == ACTION_CTRL_A || c == ACTION_CTRL_CFRU)) ||
+         (comm == COMM_WAIT_ACTION_CASE_CHOSEN && c == MOVE_CTRL_THUNK));
+    if (parked) {
+        if (R8(gBattleMons + b * BATTLE_MON_SIZE + 0x24 + AM->move_pos) == 0) {   /* pp[move_pos] */
+            AM->armed = 0;
+            MB->status = ST_FAIL; MB->reason = 11; MB->ack_seq = AM->seq; MB->opcode = 0;
+            return;
+        }
         *cf = ((u32)&slink_force_controller) | 1u;   /* Thumb */
     }
     if (++AM->frames > 600) {
@@ -2118,7 +2133,7 @@ void slink_hook(void)
         break;
 
     case OP_FORCE_MOVE_SLOT:      /* args: [0]=battler [1]=target [2]=move_pos */
-        if (MB->args[0] > 3 || MB->args[2] > 3) { ack(ST_FAIL, 2); return; }  /* bound: slink_force_controller reads gBattleMons[battler].moves[move_pos] */
+        if (MB->args[0] > 3 || MB->args[1] > 3 || MB->args[2] > 3) { ack(ST_FAIL, 2); return; }  /* bound: gBattleMons[battler].moves[move_pos], moveTarget = a battler */
         AM->battler  = MB->args[0];
         AM->target   = MB->args[1];
         AM->move_pos = MB->args[2];

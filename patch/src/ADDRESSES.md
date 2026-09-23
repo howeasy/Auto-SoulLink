@@ -577,7 +577,12 @@ mask and read from `gBattleBufferB`.
 bodies are byte-identical too:
 BEFORE_ACTION_CHOSEN=0 → WAIT_ACTION_CHOSEN=1 → WAIT_ACTION_CASE_CHOSEN=2 → CONFIRMED_STANDBY=3 →
 CONFIRMED=4 (→ SELECTION_SCRIPT=5, WAIT_SET_BEFORE_ACTION=6).
-- comm 0: emits ChooseAction + Mark, comm→1. **The action menu parks at comm 1** (exec bit set).
+- comm 0: emits ChooseAction + Mark, comm→1. **The action menu parks at comm 1** (exec bit set),
+  under EITHER of two controller spellings: `0x0802E439` (`HandleInputChooseAction`, whose entry is
+  detoured to the CFRU body) or **`0x090A9EA1`** (the CFRU body itself, stored directly by
+  `LDR@0x090A9E76` when the CFRU L-button window closes). CFRU's own sprite callbacks compare the slot
+  against both (`LDR@0x09068D6C/72`, `0x09069832/38`); `tools/research/rr_battle_tuple.py` pins
+  detour(`0x0802E438`) == `0x090A9EA1`. Research: `docs/gen3/research/rr_battle_tuple_2026-09-23.md` §1.
 - comm 1: when the exec mask clears, reads `gBattleBufferB[b][1]` (action); USE_MOVE(0) → emits
   ChooseMove, comm→2. **The move menu parks at comm 2.**
 - comm 2: reads `gBattleBufferB[b][2]`=move_pos + `[3]`=target → sets `chosenMovePositions=[2]`,
@@ -603,6 +608,16 @@ sidesteps both the buffer-transfer round-trip *and* CFRU's Z-move byte (a stale 
 fire as "Breakneck Blitz"). The exec mask is `bit|bit<<4|bit<<8|bit<<12|0xF0000000` on
 `gBattleExecBuffer=0x02023BC8`.
 
+**Gate (C5-FMS-FIX follow-up):** swap only when NOT a link battle (`gBattleTypeFlags & 2 == 0`:
+`PlayerBufferExecCompleted` has a link branch, pret `battle_controller_player.c:186-195`) and either
+comm 1 with `0x0802E439` or `0x090A9EA1`, or comm 2 with `0x0802EA11`.
+
+**Contract.** A forced slot overrides the menu's own checks: Disable, Encore, Taunt, Choice lock,
+`AreAllMovesUnusable`/Struggle (pret `battle_main.c:3146-3160`, `3285-3293`); that is the point of
+forcing. The one refusal: `pp[move_pos] == 0` (this also covers an empty slot) → disarm, ack
+`ST_FAIL` reason **11**, and the menu stays with the player. `OP_FORCE_MOVE_SLOT` staging bounds
+battler, target and move_pos to 0..3 (reason 2); target is written to `moveTarget[b]`, a battler id.
+
 **What was wrong before C5-FMS-FIX** (evidence: `docs/gen3/research/rr_battle_tuple_2026-09-23.md` §7,
 `tests/unit/test_patch_force_move_slot.py`):
 1. The swap gated on `comm == 2` for the action menu and `comm == 3` for the move menu. They park at
@@ -620,8 +635,20 @@ parked menu (so comm reached 2 under the action controller) and every hung contr
 likely explain the 2026-06 real-play softlock (INFERRED; nothing here was run on an emulator).
 
 **REBUILD REQUIRED before this reaches players.** `patch/src/handlers.c` changes are source-only. The
-fix ships only after the companion ROM is rebuilt, `patch/dist/SLink-RR.ups` is regenerated and
-`server/patcher.py`'s md5 is re-pinned. None of that was done here; the owner decides when. After the
+fix ships only after the companion ROM is rebuilt and `patch/dist/SLink-RR.ups` is regenerated; the new
+companion hash (today md5 `bf8e94a01c0aee0aa7eb37c7333329af`, sha1
+`b7d1e0756fcc66575878affc8f7b95c45386bb1c`) must then be re-pinned EVERYWHERE, together:
+- `server/patcher.py` (`patched_md5`, RR row)
+- `data/games/gen3_rr/engine_signals.json` (`titles.radical_red.artifacts.companion.rom_md5`/`rom_sha1`;
+  consumed by `lua/gen3/entry.lua`)
+- `data/games/gen3_rr/profile.json`, `data/games/gen3_rr/write_checkpoint.json` (generated; regenerate)
+- `tools/gen_gen3_profile.py` (`RR_WITNESS_SHA1`), `tools/gen_gen3_write_checkpoint.py` (ROMS),
+  `tools/pin_gen3_site.py`, `tools/research/rr_save_callers.py` (ROMS)
+- `tests/unit/test_gen3_profile.py`
+- records: `docs/gen3/research/pins_inventory.md` (the inventory; start there),
+  `docs/gen3/G2_report_2026-09-21.md`, `patch/README.md`, and the other `docs/gen3*` notes that quote it.
+`tests/unit/test_patch_force_move_slot.py::test_companion_hash_pins_agree` fails if the code/data pins
+disagree with `engine_signals.json`. None of that was done here; the owner decides when. After the
 rebuild, re-run `test_live_forcemove.lua` with its nudge loop re-derived for the 0-based enum (it still
 reads `c < 2 or c >= 4`), and prove the turn completes (the battle reaches the next action menu), not
 just the PP drop.

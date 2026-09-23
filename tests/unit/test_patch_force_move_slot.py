@@ -32,6 +32,9 @@ WAIT_ACTION_CHOSEN, WAIT_ACTION_CASE_CHOSEN, WAIT_ACTION_CONFIRMED_STANDBY = 1, 
 HANDLE_INPUT_CHOOSE_ACTION = 0x0802E439   # FR sym 0x0802E438 (RR detours the body to CFRU)
 HANDLE_INPUT_CHOOSE_MOVE = 0x0802EA11      # FR sym 0x0802EA10 (RR: thunk to CFRU 0x090AB8B8)
 PLAYER_BUFFER_EXEC_COMPLETED = 0x0802E33D  # FR sym 0x0802E33C
+PLAYER_BUFFER_RUN_COMMAND = 0x0802E3B5     # FR sym 0x0802E3B4: idle dispatcher, NOT a menu
+CFRU_CHOOSE_ACTION = 0x090A9EA1            # RR: detour target of 0x0802E438 / post-L-window spelling
+BATTLE_TYPE_LINK = 0x02
 
 
 def _src() -> str:
@@ -60,25 +63,56 @@ def _val(tok: str, defs: dict[str, int]) -> int:
     return int(tok, 0) if tok[0].isdigit() else defs[tok]
 
 
-def test_swap_gate_matches_the_parked_menus():
-    src = _src()
+def _gate(src: str):
+    """drive_force_move's `parked` expression as a Python predicate (comm, ctrl, type_flags) -> bool.
+    Evaluated, not pattern-matched: the C is translated token-for-token and run on a truth table."""
     defs = _defines(src)
-    cond = re.search(r"if\s*\((.*?)\)\s*\{\s*\*cf\s*=", _body(src, "drive_force_move"), re.S).group(1)
-    clauses, depth, start = [], 0, 0          # split on top-level || only
-    for i, ch in enumerate(cond):
-        depth += {"(": 1, ")": -1}.get(ch, 0)
-        if depth == 0 and cond.startswith("||", i):
-            clauses.append(cond[start:i])
-            start = i + 2
-    clauses.append(cond[start:])
-    gate = set()
-    for clause in clauses:
-        comms = re.findall(r"comm\s*==\s*(\w+)", clause)
-        ctrls = re.findall(r"\*cf\s*==\s*(\w+)", clause)
-        assert len(comms) == 1 and ctrls, clause
-        gate |= {(_val(comms[0], defs), _val(c, defs)) for c in ctrls}
-    assert gate == {(WAIT_ACTION_CHOSEN, HANDLE_INPUT_CHOOSE_ACTION),
-                    (WAIT_ACTION_CASE_CHOSEN, HANDLE_INPUT_CHOOSE_MOVE)}
+    expr = re.search(r"u8 parked =(.*?);", _body(src, "drive_force_move"), re.S).group(1)
+    expr = re.sub(r"\b(0x[0-9A-Fa-f]+|\d+)u\b", r"\1", expr)
+    expr = expr.replace("&&", " and ").replace("||", " or ").replace("!(", " not (")
+    code = compile(" ".join(expr.split()), "parked", "eval")
+
+    def parked(comm: int, ctrl: int, type_flags: int = 0) -> bool:
+        ns = dict(defs, comm=comm, c=ctrl,
+                  R32=lambda a: type_flags if a == defs["RV_BATTLE_TYPE"] else 0)
+        return bool(eval(code, {}, ns))
+    return parked
+
+
+def test_swap_gate_matches_the_parked_menus():
+    parked = _gate(_src())
+    ctrls = (HANDLE_INPUT_CHOOSE_ACTION, CFRU_CHOOSE_ACTION, HANDLE_INPUT_CHOOSE_MOVE,
+             PLAYER_BUFFER_RUN_COMMAND, 0)
+    got = {(comm, ctrl) for comm in range(7) for ctrl in ctrls if parked(comm, ctrl)}
+    want = {(WAIT_ACTION_CHOSEN, HANDLE_INPUT_CHOOSE_ACTION),
+            (WAIT_ACTION_CHOSEN, CFRU_CHOOSE_ACTION),
+            (WAIT_ACTION_CASE_CHOSEN, HANDLE_INPUT_CHOOSE_MOVE)}
+    fmt = lambda xs: sorted((c, hex(k)) for c, k in xs)  # noqa: E731
+    assert got == want, f"extra {fmt(got - want)}, missing {fmt(want - got)}"
+
+
+def test_swap_gate_refuses_link_battles():
+    parked = _gate(_src())
+    for comm, ctrl in ((1, HANDLE_INPUT_CHOOSE_ACTION), (1, CFRU_CHOOSE_ACTION), (2, HANDLE_INPUT_CHOOSE_MOVE)):
+        assert parked(comm, ctrl, 0)
+        assert not parked(comm, ctrl, BATTLE_TYPE_LINK), (comm, hex(ctrl))
+        assert parked(comm, ctrl, 1 << 24)   # CFRU bit-24 mode is not link
+
+
+def test_zero_pp_slot_is_refused_before_the_swap():
+    body = _body(_src(), "drive_force_move")
+    branch = body[body.index("if (parked)"):]
+    pp = re.search(r"R8\(gBattleMons \+ b \* BATTLE_MON_SIZE \+ 0x24 \+ AM->move_pos\) == 0\)", branch)
+    assert pp, "no pp[move_pos] == 0 refusal in the parked branch"
+    refusal = branch[pp.end():branch.index("*cf =")]
+    assert "AM->armed = 0" in refusal and "ST_FAIL" in refusal and "return;" in refusal
+
+
+def test_staging_bounds_every_arg():
+    src = _src()
+    case = src[src.index("case OP_FORCE_MOVE_SLOT:"):]
+    guard = case[:case.index("{ ack(ST_FAIL")]
+    assert sorted(re.findall(r"MB->args\[(\d)\] > 3", guard)) == ["0", "1", "2"], guard
 
 
 def test_forced_choice_lands_in_standby_and_hands_the_controller_back():
@@ -137,3 +171,52 @@ def test_rr_bytes_match_the_pins():
     assert syms[HANDLE_INPUT_CHOOSE_ACTION - 1] == "HandleInputChooseAction"
     assert syms[HANDLE_INPUT_CHOOSE_MOVE - 1] == "HandleInputChooseMove"
     assert syms[PLAYER_BUFFER_EXEC_COMPLETED - 1] == "PlayerBufferExecCompleted"
+    assert syms[PLAYER_BUFFER_RUN_COMMAND - 1] == "PlayerBufferRunCommand"
+
+
+def test_rr_controller_detours_match_the_pins():
+    """The second action-menu spelling, and where the hand-back really puts the slot in RR."""
+    import sys
+    sys.path.insert(0, str(REPO / "tools" / "research"))
+    import rr_battle_tuple as t
+    try:
+        rr = t.rsc.ROMS["clean"][0].read_bytes()
+    except OSError:
+        pytest.skip("Radical Red ROM not on this machine")
+    # HandleInputChooseAction is detoured to the CFRU body; the L-window close stores it directly
+    assert t.detour(rr, 0x0802E438) == CFRU_CHOOSE_ACTION
+    assert t.ldr_value(rr, 0x090A9E76) == CFRU_CHOOSE_ACTION
+    # CFRU's own sprite callbacks compare the slot against BOTH spellings
+    assert {t.ldr_value(rr, a) for a in (0x09068D6C, 0x09069832)} == {HANDLE_INPUT_CHOOSE_ACTION}
+    assert {t.ldr_value(rr, a) for a in (0x09068D72, 0x09069838)} == {CFRU_CHOOSE_ACTION}
+    # PlayerBufferExecCompleted: LDR@0x0802E34A; bx -> 0x0904459A, which stores RunCommand, or
+    # 0x090ACD8D in the CFRU bit-24 mode, into the slot (str r1,[r0] @0x090445BA), then returns
+    assert t.detour(rr, 0x0802E34A) == 0x0904459B
+    assert t.ldr_value(rr, 0x090445B2) == 0x090ACD8D
+    assert t.ldr_value(rr, 0x090445B6) == PLAYER_BUFFER_RUN_COMMAND
+    assert struct.unpack_from("<H", rr, 0x090445BA - 0x08000000)[0] == 0x6001   # str r1, [r0]
+    assert t.ldr_value(rr, 0x090445BC) == 0x0802E34F
+
+
+# Every CODE/DATA pin of the companion ROM hash. A rebuild must re-pin them together (docs listed in
+# ADDRESSES.md's rebuild note are records, not checked here). The reference pair is engine_signals.json.
+COMPANION_PINS = (
+    "server/patcher.py",
+    "data/games/gen3_rr/profile.json",
+    "data/games/gen3_rr/write_checkpoint.json",
+    "tools/gen_gen3_profile.py",
+    "tools/gen_gen3_write_checkpoint.py",
+    "tools/pin_gen3_site.py",
+    "tools/research/rr_save_callers.py",
+    "tests/unit/test_gen3_profile.py",
+)
+
+
+def test_companion_hash_pins_agree():
+    import json
+    sig = json.loads((REPO / "data/games/gen3_rr/engine_signals.json").read_text(encoding="utf-8"))
+    comp = sig["titles"]["radical_red"]["artifacts"]["companion"]
+    md5, sha1 = comp["rom_md5"], comp["rom_sha1"]
+    stale = [f for f in COMPANION_PINS if md5 not in (REPO / f).read_text(encoding="utf-8")
+             and sha1 not in (REPO / f).read_text(encoding="utf-8")]
+    assert not stale, f"companion md5 {md5} / sha1 {sha1} missing from {stale}"
