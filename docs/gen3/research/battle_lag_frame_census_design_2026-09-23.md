@@ -246,3 +246,25 @@ them. The analysis in §1-§3 stands, and so does the size estimate (about 1e-4 
 The decision goes to the owner, with two choices: (a) record the window as a limit, or (b) add the
 inverse R15 clause after the census. Separately, the LG CPU census (finding 6) is worth running
 whichever way the owner decides.
+
+## Coordinator follow-up (2026-09-23): what a write in the window actually does on FR/LG
+
+The only commit that can straddle a frame end while the tuple still reads as parked is the
+action-menu commit in HandleInputChooseAction. That call writes the action type alone:
+`BtlController_EmitTwoReturnValues(1, B_ACTION_SWITCH, 0)`, per pret
+src/battle_controller_player.c:238, and FIGHT, BAG and RUN are the same shape. Every follow-on
+choice happens later, under a different controller, and the permit's `battle_input_controller`
+clause refuses those frames. The later choices are the switch target (party menu,
+WaitForMonSelection, battle_main.c:3196-3200 and :3306), the move, and the item. So:
+- **battle_faint (bench HP -> 0) in the window.** The player has only picked the action type. If
+  it was POKEMON, the party menu then opens on the already-fainted bench mon, and the normal
+  TrySwitchInPokemon refuses it. My earlier worry, "switch into the mon just fainted", cannot
+  happen: the target is never chosen inside the window.
+- **battle_commit (the forced move) in the window.** Writing comm=3 plus the forced action skips
+  the engine's read of the player's just-emitted action, so the forced move stands. That is the
+  intended Explode Mode result. On FR/LG the commit path has no other side effect. The RR
+  L-throw ball loss is the exception, and RR already holds battle_commit (a1bbc686).
+
+Conclusion: on FR/LG the window has no harmful outcome for either write kind. It is recorded as a
+limit for the RC, and no clause is added. Owner asked for "the check if small"; after this trace
+there is nothing for it to guard.
