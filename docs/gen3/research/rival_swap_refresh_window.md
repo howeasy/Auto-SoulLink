@@ -1,10 +1,13 @@
-# The rival-swap window — revised contract (P4 card C5-8c, after Codex REV-4 + owner rulings)
+# The rival-swap window — revised contract (P4 card C5-8d, after Codex REV-5)
 
 C5-8's redesign accepted the ordering claim (a swap that lands before the opponent controller's
 snapshot is carried by the engine end to end) but was **rejected as specified**. Three majors and
 five minors are folded in below. The window values are the C5-9 pins. Doc-only: no code.
 
-C5-8c adds two owner rulings (PLAN §0, 2026-09-23): the server tags every `replace_rival_team`
+C5-8d folds in Codex REV-5's remaining items: the rival swap gets its **own opcode** (16 stays
+the trade's), the window check lives in the **patch** at consumption with link and trainer context,
+**W2 is deferred**, and §3.3 restates the identity contract as built (nonce + counter + the
+`battle_identity` capability). Earlier: two owner rulings (PLAN §0, 2026-09-23): the server tags every `replace_rival_team`
 with a **battle request id** that the client must match (§3.3), and the **RR patch enforces the
 window at consumption** (§5.3), which makes the patch the authority and the Lua guard a
 pre-filter. Three Codex REV-4 majors are folded in: the W1 trailing edge (§5.2, with the
@@ -68,7 +71,8 @@ reset (`native.lua`'s "native reset" poison path); or the window itself closing 
 1. `epoch.open` and `cmd.trainer_id == epoch.trainer_id` — else refuse `stale_epoch` /
    `trainer_mismatch`;
 2. the window clause of §5 passes — else refuse `window_closed`;
-3. (W2 only) the slot-viability rule of §4 passes — else refuse `slots_unviable`.
+3. the selectable-team rule of §4.3 passes — for **every** tier, W1 included (§4.3), else
+   refuse `slots_unviable`.
 
 A refusal never writes, so the rival keeps its own team: the failure mode is "no swap", never a
 half-swap.
@@ -81,11 +85,12 @@ with a battle request id. The contract:
 
 | step | who | what |
 |---|---|---|
-| mint | **client** | when it emits `trainer_battle_start` (`lua/gen3/client.lua:424`, `{trainer_id = b.trainer_id}`), it also emits `battle_id`: the epoch id it just opened (a per-client monotonic counter, incremented on every battle-begin signal, §3.1). A restart resets the counter, so an id from a previous session can never match. |
-| echo | **server** | `_handle_trainer_battle_start` (`server/state.py:3087-3120`) stores the latest `(battle_id, trainer_id)` per player and passes the id through `queue_rival_team_swap` (`:3052-3080`) into the `replace_rival_team` command as `"battle_id": <int>`; the payload becomes `{cmd, trainer_id, battle_id, n, blobs_hex, source}`. For the dashboard's manual inject (`source='manual'`) the server uses the latest stored id for that player, so a manual swap is still request-id-correlated to the battle that is actually running. |
-| check | **client** | at dispatch (the `native.transfer("enemy", …, valid)` guard) both must hold: `cmd.battle_id == epoch.id` **and** `cmd.trainer_id == epoch.trainer_id`, with the epoch open. Missing, non-numeric or mismatched id → refuse. |
-| reply | **client** | `rival_team_replaced{trainer_id, species_ids = {}, error = "stale_battle_id"}` and nothing is written (the rival keeps its own team). The old clients' shape is unchanged — they simply never send an id and are refused by the same check. |
-| protocol | `docs/protocol.md` | add to the `trainer_battle_start` event row: `battle_id` — the client's battle request id, minted per battle-begin signal, echoed by the server on every command that belongs to that battle; a client refuses a command whose `battle_id` does not match the battle it is in. Add to the `replace_rival_team` command row: **required** `battle_id`, plus the `stale_battle_id` error on `rival_team_replaced`. |
+| mint | **client** | when it emits `trainer_battle_start`, it emits **both halves**: `session` (a nonce minted once per client PROCESS — seeded by the bootstrap, `lua/gen3/run.lua`, from wall clock + process CPU clock + a random draw + the ROM hash) and `battle_id` (a counter bumped on every battle-begin signal, §3.1). A reconnect inside the same process keeps both; only a restart re-mints the nonce. **The counter alone is not the identity** (Codex REV-5): a restarted session's battle 1 and a previous session's battle 1 are both 1, so a command queued for the old session would pass; the nonce is what makes that impossible. |
+| echo | **server** | `_handle_trainer_battle_start` stores the latest `(session, battle_id, trainer_id)` per player and passes the pair through `queue_rival_team_swap` into the command as `"session"` + `"battle_id"` (`{cmd, trainer_id, session, battle_id, n, blobs_hex, source}`). The pair is copied into the queued command and **never retagged** — a command always carries the identity it was created for. For the dashboard's manual inject (`source='manual'`) the server uses the latest stored pair. |
+| check | **client** | at dispatch: the epoch is open, `cmd.session == epoch.session` (this process's nonce), `cmd.battle_id == epoch.battle_id`, `cmd.battle_id` is an integral number, and — when both sides name one — the trainer ids match. Missing, malformed, other-session or mismatched → refuse. |
+| reply | **client** | `rival_team_replaced{trainer_id, species_ids = {}, error = "stale_battle_id"}` and nothing is written (the rival keeps its own team). |
+| capability | **client → server** | the new client declares `battle_identity: true` in its hello. The server refuses an identity-less **manual** inject only for a client that declared it: Gen 1, Gen 2 and the old Gen 3 RR client (which stays the production RR client until the patch card lands) keep the pre-card behaviour and get a command with neither field. Capability is never inferred from anything else, and a restart of the server is covered because the dropped connection makes the client re-hello. |
+| protocol | `docs/protocol.md` | the `trainer_battle_start` event row carries `session` + `battle_id` (minted per battle-begin, echoed on every command of that battle, refused on mismatch); the `replace_rival_team` row carries the optional pair; `rival_team_replaced` gained `stale_battle_id`; hello gained `battle_identity`; §9 item 45a records all of it. |
 
 Job epoch equality (Codex REV-4): the *job* is bound to the epoch that existed when it was
 queued, not merely to a live epoch — the guard therefore compares the command's `battle_id`
@@ -110,9 +115,15 @@ Three ways to be correct, in order of preference:
   live until case 15 runs `InitBattleControllers`; `CB2_HandleStartBattle` advances one switch case
   per frame (case 0 waits on `IsDma3ManagerBusyWithBgCopy`, case 1 does the berry data and jumps to
   15 for non-link), so the selection is at least two frames after the value appears. The engine
-  then selects the swapped team's slots itself — correct for singles *and* doubles, with no
-  viability rule.
-- **W2 — land after the selection and validate it** (fallback). Admitted only when every
+  then selects the swapped team's slots itself — correct for singles *and* doubles — **and it still
+  needs §4.3's selectable-team precondition**: moving the selection to the replacement means the
+  replacement has to be selectable. §4.3 is not a W2-only rule (C5-8d corrected an earlier draft
+  that said so).
+- **W2 — land after the selection and validate it — DEFERRED (C5-8d).** The patch's consumption
+  predicate (§5.3) is W1-only: it proves "before the selection", which is precisely what W2 is
+  *not*. W2 is therefore unavailable until it has its own consumption predicate (e.g. a phase value
+  strictly after `BattleIntroDrawTrainersOrMonsSprites`), and nothing in this design may rely on
+  it. The bullet below is what such a predicate would have to validate. Admitted only when every
   preselected enemy index is viable **in the replacement**: for each enemy battler
   (`gBattlerPartyIndexes[1]`, plus `[3]` when `gBattlersCount >= 4`),
   `idx < n`, and the staged blob at `idx` satisfies the same predicate the engine used
@@ -123,11 +134,13 @@ Three ways to be correct, in order of preference:
   it adds a second game-state write with its own window and its own risk of disagreeing with the
   engine's later reads.
 
-**Doubles** are covered by both tiers (W1 by construction; W2 by checking both enemy battlers).
+**Doubles** are covered by W1 (the engine's own selection), with §4.3's two-viable precondition;
+W2's doubles half is deferred with W2.
 
 **W2's rule is *eligibility*, not selection order (Codex REV-4).** `SetBattlePartyIds` picks the
 *first* viable slot per battler and stores that index; after a swap the stored index is what the
-engine keeps using, so W2 only has to prove that index is still *eligible* in the replacement
+engine keeps using, so W2 (in its deferred form) would only have to prove that index is still
+*eligible* in the replacement
 (`HP != 0`, `species ∉ {SPECIES_NONE, SPECIES_EGG}` with `SPECIES_EGG = 412`
 (PRET `include/constants/species.h:421`), not an egg, and distinct from the other battler's index
 in doubles). It does **not** have to be the replacement's first viable slot, and must not be
@@ -145,8 +158,17 @@ is skipped by the scan like any fainted party mon.
 | singles | ≥ 1 enemy mon eligible by the engine's predicate | `slots_unviable` (nothing written) |
 | doubles | ≥ 2 **distinct** eligible enemy mons (the second battler's scan excludes the first's index) | `slots_unviable` |
 
+**The predicate is the engine *getter's* semantics, not a raw header bit (C5-8d).** The engine
+asks `GetMonData(&gEnemyParty[j], MON_DATA_SPECIES_OR_EGG)`, which returns `species` except when
+`species != 0 && (Misc.isEgg || boxMon.isBadEgg)`, in which case it returns `SPECIES_EGG`
+(PRET `src/pokemon.c:3245-3249`) — so an empty slot, an egg **and a bad egg** all fail it — plus
+`MON_DATA_HP != 0` and `MON_DATA_IS_EGG == 0` (`src/battle_controllers.c:306-320,341-347`). The Lua
+side must reproduce *that*, not a decoded header bit: `lua/gen3/reads.lua`'s `decode_party_mon`
+yields `hp`, `species`, `is_egg_flag` and `is_bad_egg` (`lua/gen3/reads.lua:238-276`), and the rule
+is `hp != 0 and species != 0 and not is_egg_flag and not is_bad_egg`.
+
 The check is decode-only: the command carries `blobs_hex`, and `lua/gen3/reads.lua`'s
-`decode_party_mon` already yields `hp`, `species` and `is_egg_flag` (`lua/gen3/reads.lua:238-276`). It runs
+`decode_party_mon` already yields those fields. It runs
 in the same dispatch guard as the window clauses, for **both** tiers, because it is a property of
 the request rather than of the window. RR's own selection stub (`0x0904449D`) remains OPEN — but
 this precondition does not depend on it: it reuses pret's eligibility rule, which RR inherits for
@@ -169,7 +191,8 @@ predicate.
 | `intro_request_open` | `rom.BATTLE_INTRO_GET_MONS_DATA_ADDR` (0x08012FAD) and `ram.BATTLE_COMM_ADDR + 1` (0x02023E83) | `gBattleMainFunc == 0x08012FAD` **and** the per-battler request index `== 0` | the request walk starts at index 0 (the player), so the enemy's snapshot has not been requested; each invocation handles exactly one index (PRET `src/battle_main.c:2523-2536`) |
 | `battle_not_link` | `gBattleTypeFlags` (write_checkpoint `battle_not_link`) | `& 0x02 == 0` | **essential**: in a link battle index 0 is not guaranteed to be the player and there is no rival team to replace |
 | epoch (§3) | client-local | open + trainer id match | binds the reply to this battle |
-| slots (§4) | `ram.BATTLER_PARTY_INDEXES_ADDR` + blobs | viability predicate | W2 only |
+| slots (§4.3) | the staged blobs (decode-only) | selectable-team rule | **every tier** |
+| link | `gBattleTypeFlags` (write_checkpoint `battle_not_link`) | `& 0x02 == 0` | Lua pre-filter AND the patch (§5.3) |
 
 Do **not** add a `callback2 == CB2_HandleStartBattle` clause: `SetMainCallback2(BattleMainCB2)` at
 `src/battle_main.c:1066` replaces it before the intro runs, so the equality would exclude exactly
@@ -206,25 +229,54 @@ RR-PIN).
 
 The concern still has one honest foothold: CFRU replaces the *tails* of `SetBattlePartyIds`
 (`0x0904449D`) and `InitSinglePlayerBtlControllers` (`0x09044531`) with stubs (RR-BIN, measured), so
-a CFRU-only wait between the phase write and the selection cannot be excluded by FR source. That is
-precisely why the owner's ruling makes the **patch** the authority, and why the FR ordering above is
-recorded as evidence rather than as the guard.
+a CFRU-only wait between the phase write and the selection cannot be excluded by FR source.
 
-### 5.3 The patch enforces the window at consumption (owner ruling 2)
+**Codex's resolution (REV-5), recorded here as the accepted reading.** My source reading is not
+disputed: the two operations are in one straight-line call, the phase store first. What it does not
+do is *prove atomicity as the client observes it* — the emulator can stop the CPU mid-call (a
+savestate, a frame-advance, a debugger halt, or a CFRU-only wait inside one of the stubs) after
+`SetUpBattleVars` set `Dummy` and before `InitBattleControllers` stores `BeginBattleIntro`, and a
+frame-end hook that then publishes an op is admitted by a Lua-only guard while the resumed call
+still runs the selection on the old party. So the ordering argument is *evidence about the normal
+path*, not a guarantee; the patch-side check of §5.3 covers the interrupted path by construction,
+which is why it is the authority and the Lua clause set is only a pre-filter.
 
-At `OP_SET_ENEMY_PARTY` consumption (`patch/src/handlers.c:1867`), before the first byte is copied,
-the patch evaluates — in-RAM, no Lua:
+### 5.3 The rival swap gets its OWN opcode (REV-5 blocker 2), and the patch enforces the window
+
+`OP_SET_ENEMY_PARTY` is **shared**: the field trade stages the partner's mon with it and then runs
+the scene — `transfer("enemy")` from `lua/gen3/client.lua:1017-1026` reaches
+`native:transfer("enemy", …)`, which is `OP_SET_ENEMY_PARTY` + `BLOB_BUF`
+(`lua/gen3/native.lua:224-245`), and the scene handler itself documents the dependency: "trades
+`gPlayerParty[slot]` with the mon staged in `gEnemyParty[0]` (caller must OP_SET_ENEMY_PARTY count=1
+first)" (`patch/src/handlers.c:1993-1998`). A window check on opcode 16 would therefore reject every
+trade. The rival swap gets its own opcode:
+
+| item | value |
+|---|---|
+| name / number | `OP_RIVAL_SWAP = 28` — the enum's current maximum is `OP_SHOW_INFO = 27` (`patch/src/handlers.c:52-53`) |
+| args | `args[0] = count` (1..6), `args[1] = trainer_id` (the trainer the client announced) |
+| staging | identical to 16: `count` × 100 raw party-mon bytes in `BLOB_BUF`, no Lua-side gating of the stage |
+| `OP_SET_ENEMY_PARTY` (16) | **unchanged**, still the trade's transport, no window check, no trainer context |
+| profile / Lua | the key `OP_RIVAL_SWAP` joins the profile's `native` block next to `OP_SET_ENEMY_PARTY` (`data/games/gen3_rr/profile.json:49`, sourced from the old client's mailbox table `lua/mailbox.lua:307`, which must gain the row too); `native.lua` gains a `transfer("rival", {blobs_hex, trainer_id})` step that uses it, and its `replace_rival_team` path switches from `transfer("enemy", …)` to it |
+| ABI | the mailbox **layout** does not change, so `abi_version` stays **1** (`patch/src/ADDRESSES.md:371`). A version bump would be wrong here: `native.lua`'s `present()` requires *exact* equality of the ABI word, so bumping it for an *additive* opcode would report the native part absent on every old patch and disable trades, menus and sounds too. Compatibility comes from the dispatcher instead: an unknown opcode takes `ack(ST_FAIL)` (the enum's own note, `handlers.c:31-36`), so a new client on an old patch refuses the swap cleanly. If a future change alters the *layout*, the bump must ship with a range check in `present()` |
+| `ADDRESSES.md` | rows for the new opcode, the reason code, and the enum note; `patch/dist/SLink-RR.ups` rebuilt (`patch/tools/build.py`) |
+| re-pin | `server/patcher.py:66-76` (`patched_md5` for the RR target, `data/games/gen3_rr/profile.json`'s `rom`/`_rom_anchors`, and the write_checkpoint/engine_signals anchors) re-verified against the rebuilt companion; `--check` on the profile generator must stay current |
+
+**The consumption check** (inside the new opcode's case, before the first byte is copied) — all in
+RAM, no Lua:
 
 | part | source | why |
 |---|---|---|
-| `gBattleCommunication[0] < 15` | `ram.BATTLE_COMM_ADDR` (RR-PROD `0x02023E82`), also `MULTIUSE_STATE` (PRET `include/constants/battle_script_commands.h:31`) | `CB2_HandleStartBattle` advances exactly one case per frame and case 15 is `InitBattleControllers`; `< 15` therefore proves the selection has **not** run |
-| `gBattleMainFunc == BEGIN_BATTLE_INTRO_DUMMY_ADDR` (`0x080123BD`) | C5-9 pin (RR-BIN: stored at pool `0xD2E8` by the store at `0xD282`) | the setup phase value, alive only from `SetUpBattleVars` (PRET `src/battle_main.c:699`) until `InitBattleControllers` (`:113`) |
+| `gBattleCommunication[0] < 15` | `ram.BATTLE_COMM_ADDR` (RR-PROD `0x02023E82`), also `MULTIUSE_STATE` (PRET `include/constants/battle_script_commands.h:31`) | `CB2_HandleStartBattle` advances exactly one case per frame and case 15 is `InitBattleControllers`; `< 15` proves the selection has **not** run |
+| `gBattleMainFunc == BEGIN_BATTLE_INTRO_DUMMY_ADDR` (`0x080123BD`) | C5-9 pin (RR-BIN: pool `0xD2E8`, store at `0xD282`) | the setup phase value, alive only from `SetUpBattleVars` (PRET `src/battle_main.c:699`) until `InitBattleControllers` (`:113`) |
 | `gMain.callback2 == CB2_HandleStartBattle\|1` (`0x08010509`) | write_checkpoint pack / SYM | this battle's own setup callback, not the overworld and not `BattleMainCB2` |
+| `!(gBattleTypeFlags & BATTLE_TYPE_LINK)` | `ram.BATTLE_TYPE_ADDR` | **REV-5 major**: a link battle has no rival team to replace, and the Lua pre-filter must not be the only place that says so |
+| `gTrainerBattleOpponent_A == args[1]` | `ram.TRAINER_OPPONENT_ADDR` | the intended trainer context: the patch only swaps for the trainer the client announced |
 
-All three failing or any one failing → the patch performs **no copy at all**, writes
-`status = ST_FAIL`, `ack = job.seq` and `reason = REASON_WINDOW_CLOSED` into the mailbox (the reason
-slot is `u16` at offset 14, `patch/src/ADDRESSES.md:376`; the reason code list is ABI and lands in
-the same file with the rebuild), and returns. The op is *refused*, never partially applied.
+Any part failing → **no copy at all**, `status = ST_FAIL`, `ack = job.seq`, `reason =
+REASON_WINDOW_CLOSED` in the mailbox reason slot (u16 at offset 14, `patch/src/ADDRESSES.md:376`);
+the reason-code list is ABI and lands with the rebuild. The op is *refused*, never partially
+applied. The Lua clause set of §5.1 stays as a **pre-filter**.
 
 Surfacing it: `native.lua`'s completion branch already distinguishes `OK`/`FAIL`
 (`lua/gen3/native.lua:353-356`). It gains one line — on `FAIL`, read the reason word and carry it
@@ -287,41 +339,54 @@ from the existing checkpoint fixtures and must name one of their `expect_clauses
 |---|---|---|---|---|
 | `swap_pre_selection` | a driver stages the op while `gBattleMainFunc == BEGIN_BATTLE_INTRO_DUMMY_ADDR` | positive, W1 | — | the swap precedes the engine's own selection: the enemy index that the fight sends out resolves to the **partner's** mon, and the request-buffer payload carries the partner's PID |
 | `swap_window_margins` | the same run, all witnesses stamped per frame | positive (timing receipt) | — | the frame deltas: signal → staging → the patch's blob write → the selection (`InitBattleControllers`) → the request for index 0 → for index 1 → the copy → the first dex write. This row is what makes any timing claim admissible — including the old client's |
-| `swap_after_selection_viable` | the op staged at `BEGIN_BATTLE_INTRO_ADDR` with a staged team whose preselected slots are all viable, singles | positive, W2 | — | W2 works when the viability rule holds |
+| ~~`swap_after_selection_viable`~~ | — | — | — | **removed (C5-8d): W2 is deferred**, so there is no positive row for it until it has its own consumption predicate |
+| `trade_staging_and_scene` | a field trade: `transfer("enemy")` staging → `OP_TRADE_SCENE` | positive (regression) | — | the **other** user of opcode 16 is untouched by this design: the staged mon still reaches `gEnemyParty[0]`, the scene still runs, and the reply is `trade_done`. The row exists so a rival-swap change can never silently break trades (`lua/gen3/client.lua:1017-1026`, `lua/gen3/native.lua:224-245`, `patch/src/handlers.c:1993-1998`) |
+| `rival_swap_opcode` | a rival battle with the new opcode staged | positive (regression) | — | `OP_RIVAL_SWAP` copies the partner's team and `OP_SET_ENEMY_PARTY` is *not* what the rival path posts — the two uses are separable on the wire and in the mailbox opcode log |
 | `intro_request_zero` | the first request frame with the request index `0` | positive | — | the second clause's index is observable |
 | `stale_epoch` | an op dispatched after `battle_end` (epoch closed) | negative | `stale_epoch` | a late reply cannot touch the next battle's party |
 | `late_reply_next_battle` | battle *n*'s op delivered inside battle *n+1*'s window (same rival id) | negative (or the documented residual refusal) | `trainer_mismatch` / `window_closed` | the correlation contract; the same-id case is the residual §3 names |
-| `invalid_slot_fainted` | W2, the preselected enemy index holds a fainted or egg mon in the staged team | negative | `slots_unviable` | the viability rule refuses instead of sending out an impossible mon |
-| `invalid_slot_short_team` | W2, the staged team is shorter than the preselected index | negative | `slots_unviable` | the same, for an index past the team |
+| `invalid_slot_fainted` | a replacement whose only enemy mons are fainted | negative | `slots_unviable` | the selectable-team rule (§4.3, every tier) refuses instead of sending out an impossible mon |
+| `invalid_slot_bad_egg` | a replacement whose lead is a **bad egg** (or species 0) — the case a raw header-bit check would miss | negative | `slots_unviable` | the rule follows the engine getter (`MON_DATA_SPECIES_OR_EGG`, PRET `src/pokemon.c:3245-3249`), not a decoded header bit |
 | `end_turn_idle` | the after-turn state (comm zeroed, exec idle, outcome 0, maxHP > 0) | negative | `intro_entry_dummy`, `intro_entry`, `intro_request_open` | **the row that refutes the C4-8 clause set** |
-| `post_first_dex` | `gBattleMainFunc == BattleIntroDrawTrainersOrMonsSprites` (copy + first dex write) | negative | the three intro clauses | the copy/dex frame is out |
-| `post_faint_replacement` | a faint mid-battle, the engine choosing the next mon | negative | the three intro clauses | the swap cannot run when the replacement is chosen; the replacement still comes from the swapped team because it was swapped pre-selection |
-| `input_wait_refused` | `HandleTurnActionSelectionState` | negative | the three intro clauses | the rest frame of the battle is not an intro frame |
-| `link_battle_refused` | a link battle at the same phase values | negative | `battle_not_link` | link exclusion is load-bearing |
+| `post_first_dex` | `gBattleMainFunc == BattleIntroDrawTrainersOrMonsSprites` (copy + first dex write) | negative | the window clauses (§5.3) | the copy/dex frame is out |
+| `post_faint_replacement` | a faint mid-battle, the engine choosing the next mon | negative | the window clauses (§5.3) | the swap cannot run when the replacement is chosen; the replacement still comes from the swapped team because it was swapped pre-selection |
+| `input_wait_refused` | `HandleTurnActionSelectionState` | negative | the window clauses (§5.3) | the rest frame of the battle is not an intro frame |
+| `link_battle_refused` | a link battle at the same phase values, with the op **staged past the Lua pre-filter** (a probe that dispatches anyway) | negative at the **patch** | the patch's link clause (§5.3) | link exclusion is load-bearing in the authority, not only in Lua |
 | `wild_battle_refused` | a wild battle's intro | negative | the trainer/epoch gate | no trainer id, no epoch, no swap |
-| `mid_case15_suspension` | a driver samples every frame around case 15 and records whether `gBattleMainFunc` ever reads `BEGIN_BATTLE_INTRO_DUMMY_ADDR` *after* `gBattlerPartyIndexes[1]` has been set | negative (the mid-case-15 state must not be admitted) | the three patch parts (§5.3) | settles the trailing-edge question physically: if the Dummy value is ever observable with a selection already stored, the patch check refuses there; the row also records the frame gap between the Dummy value and the selection (the W1 margin) |
-| `stale_battle_id` | a same-trainer reply delivered while the client's epoch id has advanced (battle *n*'s command, battle *n+1* running) | negative | `battle_id` (client-side) | the request-id check refuses a reply whose `battle_id` is not the current epoch, even though `trainer_id` matches — the case `trainer_id` alone could not catch, and the queued-blob staleness (`server/state.py:3074-3079`) rides with it |
-| `no_viable_singles` | W1/W2 with a replacement whose enemy mons are all fainted/eggs | negative | `slots_unviable` | `SetBattlePartyIds` would find no eligible slot; the refusal happens before any write |
+| `mid_case15_suspension` | a driver samples every frame across the setup and stamps, in order: the frame the op is **published** (while `Dummy`, before any selection), the frame `gBattlerPartyIndexes[0..3]` is first **written** (the selection), and the frame the op is **consumed or refused** | negative for the interrupted case | the five patch parts (§5.3) | the REV-5 interruption case: if the CPU can be stopped between the phase store and the selection, the consumption check must still refuse; the row also records the Dummy→selection gap (the W1 margin) |
+| `stale_battle_id` | three shapes, one row each in the harness: (a) a same-trainer reply from battle *n* delivered in battle *n+1*; (b) a **cross-session** reply (the previous client process's nonce, the same counter); (c) the server/manual lifecycle — a declared client with no stored identity is refused a manual inject server-side, and a client that never declared one still gets the old command | negative | `battle_id` / `session` (client), the identity gate (server) | the identity contract as built (§3.3): (a) and (b) are what `trainer_id` alone cannot catch, and (c) is the capability gate — including the queued-blob staleness (`server/state.py:3074-3079`) that rides with a late reply |
+| `no_viable_singles` | a replacement with no eligible mon at all (all fainted/egg) | negative | `slots_unviable` | the engine's selection would find no eligible slot; the refusal happens before any write, on every tier |
 | `one_viable_doubles` | a doubles battle whose replacement has exactly one eligible enemy mon | negative | `slots_unviable` | doubles needs two *distinct* eligible mons (the second battler's scan excludes the first's index) |
-| `patch_window_refusal` | an op staged inside the Lua window but consumed outside the patch's condition (e.g. forced by a probe that posts the opcode with the phase value moved on) | negative | the patch's `REASON_WINDOW_CLOSED` | the patch, not Lua, is the authority: the reply is `refresh_failed` with `reason = window_closed` and `gEnemyParty` is byte-identical |
+| `patch_window_refusal` | the rival opcode consumed outside the patch's condition (a probe posts it with the phase value moved on) | negative | the patch's `REASON_WINDOW_CLOSED` | the patch, not Lua, is the authority: the reply is `refresh_failed` with `reason = window_closed` and `gEnemyParty` is byte-identical |
+| `patch_trainer_context` | the rival opcode consumed with `args[1]` naming a different trainer than `gTrainerBattleOpponent_A` | negative | the patch's trainer clause | the intended-trainer context is enforced in the authority, so a stale op for another trainer cannot swap |
 
 ## 9. Open items
 
-1. **The patch change (G5 scope)** — owner ruling 2: the consumption check of §5.3, the
-   `REASON_WINDOW_CLOSED` code in the ABI/`patch/src/ADDRESSES.md`, a rebuild and a companion
-   re-pin. Until it lands, the Lua pre-filter is the only gate and the trailing edge of §5.2 is
-   unenforced on RR.
-2. **The server/protocol change (separate card)** — owner ruling 1: mint/echo the `battle_id`,
-   store the latest per player for the manual inject, and add the `protocol.md` rows drafted in
-   §3.3. Needs the adapter-side guard and an independent review.
-3. **RR selection pin** (`0x0904449D` / `0x09044531` CFru tails) — required before W2 is allowed on
+1. **The patch change (G5 scope)** — `OP_RIVAL_SWAP = 28` with the consumption check of §5.3, the
+   `REASON_WINDOW_CLOSED` code, the `ADDRESSES.md` rows (enum + reason + the ABI note), the
+   `lua/mailbox.lua` row, the profile's `native` key, a rebuild of `patch/dist/SLink-RR.ups`, the
+   `server/patcher.py` `patched_md5` update, and the companion re-pin (profile `_rom_anchors` +
+   write_checkpoint/engine_signals anchors re-verified on the rebuilt ROM). Until it lands, the Lua
+   pre-filter is the only gate and the interruption case of §5.2 is unenforced on RR. The ABI
+   version stays 1 (see §5.3): `present()` requires exact equality, so bumping it for an additive
+   opcode would disable every native feature on old patches.
+2. **The identity contract** — implemented by C5-10/C5-10b (§3.3 now describes what shipped:
+   nonce + counter, the `battle_identity` capability, the manual refusal only for declared clients,
+   never-retagged commands). Still open there: a lane capture with ids so conformance item 45a's
+   transcript checker stops being vacuous.
+3. **W2's own consumption predicate** — W2 is deferred (§4) because the patch's predicate proves
+   "before the selection", which is the opposite of W2. If W2 is ever wanted (e.g. to keep the
+   dex right when an op arrives late), it needs a phase value strictly after
+   `BattleIntroDrawTrainersOrMonsSprites` and its own probe rows.
+4. **RR selection pin** (`0x0904449D` / `0x09044531` CFru tails) — required before W2 is allowed on
    RR. W1 does not need it; the §4.3 precondition does not either (it reuses the inherited loop).
-4. **The timing receipt** (`swap_window_margins`, `mid_case15_suspension`) — settles both the new
+5. **The timing receipt** (`swap_window_margins`, `mid_case15_suspension`) — settles both the new
    design's margin and the old client's actual behaviour.
-5. **Doubles on RR**: the second enemy battler's predicate lives in the CFru tail; until it is
-   enumerated, W2 refuses doubles on RR and W1 covers them (with §4.3's two-viable precondition).
-6. **The dummy-value gap**: frames between `CB2_InitBattle`'s entry and `SetUpBattleVars` admit no
+6. **Doubles on RR**: the second enemy battler's predicate lives in the CFru tail; W1 covers
+   doubles with §4.3's two-viable precondition, and W2's doubles half is deferred with W2.
+7. **The dummy-value gap**: frames between `CB2_InitBattle`'s entry and `SetUpBattleVars` admit no
    clause; the probe should record how wide that gap is in practice relative to the op's latency.
-7. **Anonymous/manual replies**: the manual inject path relies on the server's stored latest
-   `battle_id`. If a dashboard swap is ever issued *outside* a battle the client is in, the client's
-   epoch check refuses it — correct, but worth stating in the dashboard's own copy.
+8. **Dashboard copy**: an identity-less manual inject now refuses *server-side* for a client that
+   declared `battle_identity` (§3.3), and a swap issued outside a battle the client is in is refused
+   by the client's own epoch check. Both are correct; the button's help text should say so rather
+   than let a player read the refusal as a failure.
