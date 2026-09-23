@@ -453,58 +453,33 @@ local function boot_and_check(cp, label)
     return domain
 end
 
---- Save via the START menu, retrying (not blindly repeating) through any battle a stray press
---- during the row search triggers, and gate on the final position before trusting the result --
---- playlib's shared, already-proven save driver is never changed here, only re-asked. Recovery
---- from a drift (either direction across the Route1<->Viridian connection) goes through
---- reach_target, which knows the way back for both BATTLE_TARGET and TOWN_TARGET.
+--- Reach `target`, save via the START menu, and assert the save landed where it should --
+--- playlib's shared, already-proven save driver is never changed here, only asked once.
 ---
---- PHYSICAL 2026-09-23: the row search's own stray press can land AFTER the pre-save position
---- check but still land INSIDE the save transaction (save-menu opens at the right tile, the
---- drift happens while hunting for the SAVE row, and the write that follows bakes the drifted
---- position in) -- sok=true from save_via_menu is not proof the SAVED data is at `target`. So
---- the destination is re-checked AFTER every save, and a post-save mismatch is retried exactly
---- like a save failure: recover position, save again (overwriting the bad write), never trusted
---- on the strength of save_via_menu's own verdict alone. 8 attempts, not 3: PHYSICAL 2026-09-23,
---- a drift can chain into a longer row search on the very next attempt (more Down presses, more
---- chances for another stray one), so the budget has to absorb more than one bad attempt in a
---- row -- reach_target's own recovery is unconditional and idempotent, so extra attempts cost
---- time, never correctness.
+--- PHYSICAL 2026-09-23 (gen3-P4-C4-F): save_via_menu's OLD row search could press a stray Down
+--- during the "SAVE" hunt and drift the player across a map connection mid-save, so a single
+--- post-save position check was load-bearing (a retry-on-drift workaround lived here). FIXED
+--- AT THE ROOT in gen3_boot_check.lua (card gen3-P4-C4-F2): save_via_menu now gates every
+--- navigation press on the START menu's own window witness and finds the SAVE row from the
+--- engine's sStartMenuOrder instead of searching for it, so the drift this file used to retry
+--- around cannot happen there any more. This is back to a single attempt with one post-save
+--- assertion, the same shape gen3_boot_check.lua's own `run()` and every other caller of
+--- save_via_menu (gen3_scripted_play.lua, duo_gen3_main.lua, ...) already trusts.
 local function save_at(cp, domain, target, label)
-    local sok, before, after, why, post_ok
-    for attempt = 1, 8 do
-        if not flee_battle(cp, label) then return nil end
-        if not at_dest(cp, target) then
-            if not reach_target(cp, label, target) then return nil end
-        end
-        if not at_dest(cp, target) then
-            G.finish(false, string.format("%s: attempt %d not at the save target (%s)",
-                     label, attempt, play.at(cp)))
-            return nil
-        end
-        G.phase("pre-save-pos", string.format("%s: attempt %d at %s map=%s", label, attempt,
-                                              play.at(cp), tostring(play.map(cp))))
-        sok, before, after, why = G.save_via_menu(cp, domain)
-        if sok then
-            post_ok = at_dest(cp, target)
-            if post_ok then break end
-            G.phase("save-drift", string.format(
-                "%s: attempt %d saved but drifted post-save to %s map=%s; retrying",
-                label, attempt, play.at(cp), tostring(play.map(cp))))
-        else
-            G.phase("save-retry", string.format("%s: attempt %d failed (%s)", label, attempt,
-                                                tostring(why)))
-        end
+    if not flee_battle(cp, label) then return nil end
+    if not at_dest(cp, target) then
+        if not reach_target(cp, label, target) then return nil end
     end
+    if not at_dest(cp, target) then
+        G.finish(false, string.format("%s: not at the save target (%s)", label, play.at(cp)))
+        return nil
+    end
+    G.phase("pre-save-pos", string.format("%s: at %s map=%s", label,
+                                          play.at(cp), tostring(play.map(cp))))
+    local sok, before, after, why = G.save_via_menu(cp, domain)
     if not sok then
         G.finish(false, string.format("%s: in-game save failed (%d -> %d): %s", label,
                                       before, after, tostring(why)))
-        return nil
-    end
-    if not post_ok then
-        G.finish(false, string.format(
-            "%s: saved but never landed on target after 8 attempts (last: %s map=%s)",
-            label, play.at(cp), tostring(play.map(cp))))
         return nil
     end
     if not my_verify_destination(cp, label .. " final", target) then return nil end

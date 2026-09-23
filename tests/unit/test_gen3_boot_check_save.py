@@ -88,22 +88,88 @@ class World:
         g.flash = bytes(image)
         self.lua.execute("""
             frame, dialog, locked, swapped, a_seen, flushes = 0, 0, 0, false, false, 0
+            -- START menu fake (card C4-F2): sStartMenuWindowId/sStartMenuCursorPos/
+            -- sNumStartMenuItems/sStartMenuOrder at their REAL addresses (independently
+            -- hardcoded here, not read off the module -- this is what makes it a falsifier
+            -- rather than a tautology). Defaults are "already open, one row, already on SAVE"
+            -- (window=1 i.e. not WINDOW_NONE, count=1, order={4}, cursor=0) so every test above
+            -- this one, which never touches start-menu state, is unaffected.
+            -- down_before_open counts a Down seen while the window still reads WINDOW_NONE --
+            -- the exact leak-onto-the-field bug the fix must never reintroduce.
+            -- open_delay models the fade-in gap PER OPEN (every real Start press, not just the
+            -- first): the window drops to WINDOW_NONE the instant Start is pressed and comes
+            -- back `open_delay` frames later, so a caller that reopens the menu several times
+            -- (the old row search's own "close, reopen, walk one more row" cycle) is tested on
+            -- every one of those opens, not just the first.
+            WINDOW_ADDR, COUNT_ADDR, CURSOR_ADDR, ORDER_ADDR = 0x0203ABE0, 0x020370F5, 0x020370F4, 0x020370F6
+            WINDOW_NONE = 0xFF
+            startmenu_window, startmenu_open_delay, startmenu_open_at = 1, 0, nil
+            startmenu_cursor, startmenu_count, startmenu_order = 0, 1, {4}
+            down_before_open = 0
+            -- initial_lock_until models the settle-period lock PHYSICAL 2026-09-23 found: a
+            -- fresh CONTINUE can hold sLockFieldControls locked for 100+ frames before any
+            -- input at all. start_before_free counts a Start seen while that lock still holds
+            -- -- gen3_boot_check.lua must wait it out, never press Start hoping it lands.
+            initial_lock_until, start_before_free = 0, 0
             local function rd(fmt) return function(a) return (string.unpack(fmt, flash, a + 1)) end end
-            memory = {read_u32_le = rd("<I4"), read_u16_le = rd("<I2"), read_u8 = rd("<I1")}
+            memory = {read_u32_le = rd("<I4"), read_u16_le = rd("<I2"),
+                read_u8 = function(a)
+                    if a == WINDOW_ADDR then return startmenu_window end
+                    if a == COUNT_ADDR then return startmenu_count end
+                    if a == CURSOR_ADDR then return startmenu_cursor end
+                    if a >= ORDER_ADDR and a < ORDER_ADDR + 9 then
+                        return startmenu_order[a - ORDER_ADDR + 1] or 0
+                    end
+                    return (string.unpack("<I1", flash, a + 1))
+                end}
             console = {log = function() end}
+            local function true_save_row()
+                for i = 0, startmenu_count - 1 do
+                    if startmenu_order[i + 1] == 4 then return i end
+                end
+                return nil
+            end
             -- close_on_a: only an A press seen AFTER the flash has already swapped (the
             -- fake's stand-in for "counter/slot already validated") can clear `locked` --
             -- gen3_boot_check.lua must not press A before that point either.
             joypad = {set = function(t)
                 if close_on_a and swapped and t and t.A then a_seen = true end
                 -- the SAVE row's A moves sSaveDialogCB off whatever it held (0 on a cold
-                -- boot, SaveDialogCB_ReturnSuccess after an earlier save); stuck = it never moves
-                if t and t.A and not dialog_stuck then dialog = 0x0806F001 end
+                -- boot, SaveDialogCB_ReturnSuccess after an earlier save); stuck = it never
+                -- moves. Gated on the CURSOR actually sitting on the real save row -- a press
+                -- on any other row is a real game pressing something else, not SAVE (this is
+                -- what makes the falsifier below distinguish "found the row" from "pressed A
+                -- on whatever row it happened to be on", the old helper's actual bug class).
+                if t and t.A and not dialog_stuck and startmenu_cursor == true_save_row() then
+                    dialog = 0x0806F001
+                end
+                if t and t.Start then
+                    if frame < initial_lock_until then start_before_free = start_before_free + 1 end
+                    startmenu_window = WINDOW_NONE
+                    startmenu_open_at = frame + startmenu_open_delay
+                    -- mirrors pret's LockPlayerFieldControls, taken out the instant Start is
+                    -- processed (start_menu.c ShowStartMenu); close_at/close_on_a/a_seen below
+                    -- model the save flow's own later release, same as before.
+                    locked = 1
+                end
+                if t and t.Down then
+                    if startmenu_window == WINDOW_NONE then down_before_open = down_before_open + 1 end
+                    -- no wrap modeled: save_via_menu never needs it (see gen3_boot_check.lua's
+                    -- own comment above the row walk) and a real bug relying on wrap would show
+                    -- up here as "cursor never reached the SAVE row", not a false pass.
+                    if startmenu_cursor < startmenu_count - 1 then
+                        startmenu_cursor = startmenu_cursor + 1
+                    end
+                end
             end}
             client = {screenshot = function() end, saveram = function() flushes = flushes + 1 end}
             emu = {framecount = function() return frame end,
                    frameadvance = function()
                        frame = frame + 1
+                       if startmenu_open_at and frame >= startmenu_open_at then
+                           startmenu_window, startmenu_open_at = 1, nil
+                       end
+                       if initial_lock_until > 0 and frame == initial_lock_until then locked = 0 end
                        if swap_at and frame >= swap_at then flash, swap_at = pending, nil; swapped = true end
                        if close_at and frame >= close_at then locked = 0 end
                        if a_seen then locked = 0 end
@@ -128,10 +194,30 @@ class World:
     def sectors_at(self, ctr):
         return self.G.sectors_at(DOMAIN, ctr)
 
-    def save(self, after: bytes, swap_at=200, close_at=None, close_on_a=False,
-             dialog=0, dialog_stuck=False):
+    def configure_start_menu(self, *, open_delay=0, cursor=0, count=1, order=(4,)):
+        """open_delay=0: the window reads open ~1 frame after every Start press (the common
+        case for every test above this one). open_delay=<n>: the window reads WINDOW_NONE for
+        n frames after EVERY Start press (initial open and every reopen) -- models the fade-in
+        gap the physical bug leaked a Down into."""
         g = self.lua.globals()
-        g.dialog, g.locked, g.pending, g.swap_at, g.close_at = dialog, 1, bytes(after), swap_at, close_at
+        g.startmenu_window = 1
+        g.startmenu_open_delay, g.startmenu_open_at = open_delay, None
+        g.startmenu_cursor, g.startmenu_count = cursor, count
+        g.startmenu_order = self.lua.table(*order)
+        g.down_before_open = 0
+
+    def save(self, after: bytes, swap_at=200, close_at=None, close_on_a=False,
+             dialog=0, dialog_stuck=False, initial_lock_frames=0):
+        """initial_lock_frames: sLockFieldControls reads locked for this many frames from the
+        very start, before any Start press -- models the settle-period lock PHYSICAL 2026-09-23
+        found. 0 (default): free from the start, the common case for every test above this one
+        (a Start press itself still locks it, same as the real game, until close_at/close_on_a
+        release it)."""
+        g = self.lua.globals()
+        g.dialog = dialog
+        g.locked = 1 if initial_lock_frames else 0
+        g.initial_lock_until, g.start_before_free = initial_lock_frames, 0
+        g.pending, g.swap_at, g.close_at = bytes(after), swap_at, close_at
         g.close_on_a, g.swapped, g.a_seen, g.dialog_stuck = close_on_a, False, False, dialog_stuck
         return self.G.save_via_menu(self.lua.table(), DOMAIN)
 
@@ -209,3 +295,81 @@ def test_second_save_in_one_boot_opens_on_change():
     w = World(bytes(valid(CTR - 1)))
     ok, _, after, why = w.save(valid(CTR), close_at=400, dialog=0x0806F0F1)
     assert (ok, after, why) == (True, CTR, None)
+
+
+# --- root-cause fix (card gen3-P4-C4-F2): witnessed row navigation, not a counted search -------
+#
+# PHYSICAL 2026-09-23 (gen3-P4-C4-F): the old row SEARCH re-tapped Start and pressed Down right
+# after, with no check that the menu window actually existed yet. Field control locks the
+# instant Start registers, but the list window (sStartMenuWindowId) is created a few frames
+# later; a Down sent in that gap could still land on whatever the wrong row before it opened,
+# walking the player across a map connection mid-save. gen3_boot_check.lua now gates every
+# navigation press on the window witness and finds the SAVE row from the engine's own
+# sStartMenuOrder/sNumStartMenuItems instead of hunting for it by counting presses.
+
+
+def test_no_down_presses_before_the_start_menu_window_is_open():
+    """The falsifier: a Down must never be sent while sStartMenuWindowId still reads
+    WINDOW_NONE. SAVE sits at row 2 of a 3-row menu; the cursor starts at row 0, so 2 Downs are
+    needed once the window opens -- but EVERY Start press (the first open and any reopen) is
+    followed by a 40-frame fade-in gap, well past every fixed cadence this driver uses (Start's
+    own tap is only 3 frames), so any Down sent before the window is back is exactly the
+    physical bug. Red against the pre-fix helper (see the manual revert-test note in the card
+    report); green here."""
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(open_delay=40, cursor=0, count=3, order=(1, 2, 4))
+    ok, before, after, why = w.save(valid(CTR), close_at=400)
+    assert (ok, before, after, why) == (True, CTR - 1, CTR, None)
+    assert w.lua.globals().down_before_open == 0
+    assert w.lua.globals().startmenu_cursor == 2   # landed on the SAVE row itself
+
+
+@pytest.mark.parametrize("cursor,order,expect_downs", [
+    (0, (4,), 0),            # single-row menu, already on SAVE
+    (0, (1, 2, 3, 4), 3),    # SAVE last
+    (2, (1, 2, 4, 5, 6), 0),  # already sitting on the SAVE row
+])
+def test_save_row_found_from_the_order_table_not_a_fixed_index(cursor, order, expect_downs):
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(cursor=cursor, count=len(order), order=order)
+    ok, _, after, why = w.save(valid(CTR), close_at=400)
+    assert (ok, after, why) == (True, CTR, None)
+    assert w.lua.globals().startmenu_cursor == order.index(4)
+
+
+def test_no_save_row_in_the_order_table_is_a_named_failure():
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(cursor=0, count=3, order=(1, 2, 3))   # no action id 4 anywhere
+    ok, before, after, why = w.save(valid(CTR), close_at=400)
+    assert ok is False and before == after == CTR - 1
+    assert "no SAVE row" in why
+
+
+def test_start_menu_window_never_opening_is_a_named_failure_not_a_hang():
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(open_delay=10_000_000, cursor=0, count=1, order=(4,))
+    ok, before, after, why = w.save(valid(CTR), close_at=400)
+    assert ok is False and before == after == CTR - 1
+    assert "window never opened" in why
+
+
+def test_waits_out_the_initial_settle_lock_before_ever_pressing_start():
+    """PHYSICAL 2026-09-23 (live gen3-P4-C4-F boot-check on firered_party_battle.sav): right
+    after boot_to_field returns, sLockFieldControls read locked for ~125 frames with zero
+    input -- a settle period the pre-C4-F2 helper never waited for, so its first Start press
+    (issued immediately) was silently swallowed and it hung ("the start menu window never
+    opened"). The fix waits for the field_controls_locked witness to read free before ever
+    touching Start."""
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(cursor=0, count=1, order=(4,))
+    ok, before, after, why = w.save(valid(CTR), close_at=600, initial_lock_frames=125)
+    assert (ok, before, after, why) == (True, CTR - 1, CTR, None)
+    assert w.lua.globals().start_before_free == 0
+
+
+def test_field_never_freeing_is_a_named_failure_not_a_hang():
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(cursor=0, count=1, order=(4,))
+    ok, before, after, why = w.save(valid(CTR), close_at=None, initial_lock_frames=10_000_000)
+    assert ok is False and before == after == CTR - 1
+    assert "never freed" in why

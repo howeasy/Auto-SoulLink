@@ -19,10 +19,11 @@
 -- sibling is lua/tests/gen3_fr_newgame_inputs.lua, which needs the same SAVE driver.
 --
 -- NO GUESSED MENU GEOMETRY. FR's and RR's START menus differ in row order and RR's row count
--- moves with the companion patch, so `save_via_menu` does not press "Down N times": it walks
--- one row per attempt and asks the ENGINE whether the save dialog opened (`sSaveDialogCB`
--- from the checkpoint profile). Nothing here is a †UNVERIFIED input sequence; the only fixed
--- shapes are "Start opens the menu" and "B backs out", which both games share.
+-- moves with the companion patch, so `save_via_menu` never presses "Down N times" blind: it
+-- reads the engine's own sStartMenuOrder to find the SAVE row, walks the cursor there (every
+-- press gated on the menu window actually being open, card C4-F2), and asks the ENGINE whether
+-- the save dialog opened (`sSaveDialogCB` from the checkpoint profile). Nothing here is a
+-- †UNVERIFIED input sequence.
 --
 -- The save itself is proven by the SaveRAM-backed sector counter advancing in the flash
 -- memory domain, never by assuming the button press worked.
@@ -42,6 +43,29 @@ local SECTORS_PER_SLOT = 14
 local OFF_ID, OFF_CHECKSUM = 0x0FF4, 0x0FF6
 local OFF_SIGNATURE, OFF_COUNTER = 0x0FF8, 0x0FFC
 local SIGNATURE = 0x08012025
+
+-- ── START menu witnesses (pret pokefirered src/start_menu.c) ────────────────────────────────
+-- WRAM globals, not code: identical addresses in pokefirered.sym AND pokeleafgreen.sym (grepped
+-- both directly, card C4-F2), and already relied on at these same addresses for Radical Red by
+-- lua/tests/test_live_startmenu.lua's own live probe -- so no per-title table (gen3_title_syms,
+-- which exists for .text addresses that DO shift per title) is needed for these four.
+local START_MENU_CURSOR_ADDR    = 0x020370F4   -- sStartMenuCursorPos (u8): highlighted row
+local START_MENU_COUNT_ADDR     = 0x020370F5   -- sNumStartMenuItems (u8): rows built this open
+local START_MENU_ORDER_ADDR     = 0x020370F6   -- sStartMenuOrder (u8[9]): action id per row
+local START_MENU_WINDOW_ID_ADDR = 0x0203ABE0   -- sStartMenuWindowId (u8): WINDOW_NONE (0xFF)
+                                                -- until ShowStartMenu creates the list window
+local WINDOW_NONE = 0xFF
+-- start_menu.c's action-id enum (POKEDEX=0, POKEMON=1, BAG=2, PLAYER=3, SAVE=4, OPTION=5,
+-- EXIT=6, RETIRE_SAFARI=7, PLAYER_LINK=8 -- id 8 is the "dead" row reference_rr_startmenu_hijack
+-- names). Title-invariant: same source, same enum: confirmed against both .sym files' callback
+-- order (StartMenuPokedexCallback, ...PokemonCallback, ...BagCallback, ...PlayerCallback,
+-- ...SaveCallback is the 5th, i.e. index 4) and against RR's own observed order in
+-- test_live_startmenu.lua (whose [1 2 3 4 5 6] is this same enum with id 0 not yet unlocked).
+local MENU_ACTION_SAVE = 4
+
+local function start_menu_open()
+    return memory.read_u8(START_MENU_WINDOW_ID_ADDR) ~= WINDOW_NONE
+end
 
 -- Per-id section sizes: the SAVEBLOCK_CHUNK macro (pret src/save.c:43-72), mirrored from
 -- gen3_codec.slot_layout: size = min(sizeof(object) - chunk*CHUNK, CHUNK). CHUNK is 0xF80
@@ -310,20 +334,23 @@ function M.boot_to_field(cp, frames)
     return false
 end
 
---- Open the START menu, find the SAVE row, confirm, wait for the new slot to be complete and
---- valid (M.sectors_at), wait for the dialog to close, then flush the battery file.
---- Returns (ok, before_counter, after_counter, why): ok is true ONLY when all of that held;
---- otherwise `why` names the step that failed (menu, counter, slot, dialog, flush).
+--- Open the START menu, walk straight to the SAVE row, confirm, wait for the new slot to be
+--- complete and valid (M.sectors_at), wait for the dialog to close, then flush the battery
+--- file. Returns (ok, before_counter, after_counter, why): ok is true ONLY when all of that
+--- held; otherwise `why` names the step that failed (menu, counter, slot, dialog, flush).
 ---
---- ROW SEARCH, NOT A ROW INDEX. One A press per attempt, then the engine is asked whether
---- `sSaveDialogCB` became non-zero; a wrong row is backed out of with B (until callback2 is
---- CB2_Overworld again, which every submenu — Pokédex, Bag, trainer card — leaves), the menu
---- is reopened and the cursor walks down one row. FRLG keeps the START cursor position
---- between openings, so a relative walk covers every row whatever the cursor started on. 14
---- attempts is more rows than either build's menu has (RR's normal field menu is six,
---- lua/tests/test_live_startmenu.lua:96-104; the companion patch adds one).
+--- WITNESSED, NOT COUNTED. PHYSICAL 2026-09-23 (gen3-P4-C4-F/C4-F2): the previous "one A per
+--- attempt, back out with B, reopen, one Down further" row SEARCH could press Down right after
+--- re-tapping Start but before the menu actually had the window up -- field control locks the
+--- instant Start registers (pret start_menu.c ShowStartMenu -> LockPlayerFieldControls), but
+--- the list WINDOW (sStartMenuWindowId) is created a few frames later, and a Down sent in that
+--- gap could still land on a submenu the wrong row opened, walking the player across a map
+--- connection mid-save. Fixed at the root: every navigation press is gated on
+--- `start_menu_open()` (the window existing -- field control is already locked by then, so
+--- nothing typed from here on can ever reach the free-moving field), and the SAVE row is read
+--- directly from the engine's own sStartMenuOrder/sNumStartMenuItems rather than hunted for by
+--- counting presses, so there is no wrong row to back out of at all.
 function M.save_via_menu(cp, domain, attempts)
-    local function field() return M.pred_ok(cp, "callback2") end
     -- OPEN = sSaveDialogCB changed since before the menu: pret never clears it (start_menu.c
     -- :608-842), so after an earlier save this boot it still holds SaveDialogCB_ReturnSuccess
     -- and a bare ~= 0 would "open" on the first A of any row.
@@ -332,27 +359,84 @@ function M.save_via_menu(cp, domain, attempts)
 
     local before = M.save_counter(domain)
     M.phase("save-menu", string.format("counter=%d", before))
-    M.tap("Start", 3, 30)
+
+    -- Wait for field control to be free before ever touching Start. PHYSICAL 2026-09-23: right
+    -- after control returns to the player (a fresh CONTINUE, this driver's own boot_to_field),
+    -- sLockFieldControls can hold LOCKED for 100+ frames with no input at all -- a settle
+    -- period, observed on a tall-grass spawn -- and a Start press sent during it is silently
+    -- swallowed. The pre-fix row search only ever "worked" by accident: its own retry loop
+    -- re-pressed Start every cycle until one happened to land after the window closed, which
+    -- is what its "several attempts before the dialog opened" logs actually were.
+    -- `field_controls_locked`'s pred_ok is TRUE when sLockFieldControls == 0, i.e. FREE.
+    -- Retried, not one-shot: a fresh CONTINUE's settle lock is the one PHYSICAL cause pinned so
+    -- far, but a Start press can still land in some other transient un-witnessed gap (observed
+    -- right after fleeing a battle back to the field) and be swallowed the same way. Retrying
+    -- the wait-then-press cycle is safe here -- unlike Down/A, a Start sent while the menu is
+    -- ALREADY open just toggles it shut, which is exactly why this only re-presses after
+    -- confirming (via the very next check) that it is still closed.
+    local function controls_free() return M.pred_ok(cp, "field_controls_locked") end
     local opened = false
-    for attempt = 1, (attempts or 14) do
-        M.tap("A", 3, 60)
-        if dialog() then
-            M.phase("save-dialog", "attempt=" .. attempt)
-            opened = true
-            break
+    for _ = 1, 5 do
+        local freed = false
+        for _ = 1, 300 do
+            if controls_free() then freed = true; break end
+            M.advance()
         end
-        for _ = 1, 12 do
-            if field() then break end
-            M.tap("B", 3, 20)          -- back out of whatever that row opened
+        if not freed then
+            M.shot("stuck")
+            return false, before, before, "field controls never freed before the save attempt"
         end
-        M.tap("B", 3, 20)              -- close the START menu if it is still up
-        M.tap("Start", 3, 30)          -- reopen; the cursor keeps its row
-        M.tap("Down", 3, 13)           -- one row further down
+        M.tap("Start", 3, 0)
+        for _ = 1, 120 do
+            if start_menu_open() then opened = true; break end
+            M.advance()
+        end
+        if opened then break end
     end
     if not opened then
         M.shot("stuck")
+        return false, before, before, "the start menu window never opened"
+    end
+
+    local n = memory.read_u8(START_MENU_COUNT_ADDR)
+    local save_row = nil
+    for i = 0, n - 1 do
+        if memory.read_u8(START_MENU_ORDER_ADDR + i) == MENU_ACTION_SAVE then save_row = i; break end
+    end
+    if not save_row then
+        M.shot("stuck")
+        return false, before, before, string.format(
+            "no SAVE row in sStartMenuOrder (%d items, no action id %d)", n, MENU_ACTION_SAVE)
+    end
+
+    -- Forward-only, no wrap assumed: a fresh boot's cursor starts at row 0 (bss-cleared), at or
+    -- before save_row; a repeat save later in the same boot leaves the cursor sitting exactly
+    -- on save_row from the last confirm (FRLG keeps the position between openings), so every
+    -- real caller of save_via_menu starts at-or-before the target and Down alone always
+    -- reaches it. Budget past `n` rows for presses wasted while the witness above was still
+    -- settling; `attempts` overrides for a caller with a known-larger menu.
+    local reached = false
+    for _ = 1, (attempts or (n + 8)) do
+        if memory.read_u8(START_MENU_CURSOR_ADDR) == save_row then reached = true; break end
+        if not start_menu_open() then
+            M.shot("stuck")
+            return false, before, before, "the start menu closed unexpectedly during the row walk"
+        end
+        M.tap("Down", 3, 13)
+    end
+    if not reached then
+        M.shot("stuck")
+        return false, before, before, string.format(
+            "cursor never reached the SAVE row (row %d, at %d)", save_row,
+            memory.read_u8(START_MENU_CURSOR_ADDR))
+    end
+
+    M.tap("A", 3, 60)
+    if not dialog() then
+        M.shot("stuck")
         return false, before, before, "the save dialog never opened"
     end
+    M.phase("save-dialog", "row=" .. save_row)
 
     -- Confirm (YES is the default on both the save prompt and the overwrite prompt) and keep
     -- tapping A through "SAVING… DON'T TURN OFF THE POWER" and the "saved the game" box.
