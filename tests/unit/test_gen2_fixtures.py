@@ -845,7 +845,8 @@ def test_qualify_facts_are_source_bound_and_leave_the_route_facts_unchanged(titl
         assert ctx.rom[site["flat"]:site["flat"] + 1].hex() == site["hex"], kind
     assert q["sites"]["continue_loaded"]["symbol"] == "Continue.Check1Pass"
     assert q["ui_origins"]["continue_confirm"]["symbol"] == "ConfirmContinue"
-    assert q["prompts"] == {"save_confirm": ["save the game?"], "save_overwrite": ["OK to overwrite?"]}
+    assert q["prompts"] == {"save_confirm": ["save the game?"], "save_overwrite": ["OK to overwrite?"],
+                            "save_overwrite_text": ["There is already a", "There is another"]}
     # The played-route facts carry no qualification-only anchor, so recorded receipts stay bound.
     assert "save_overwrite" not in facts(title)["observer"]["prompts"]
 
@@ -984,10 +985,24 @@ def test_route_facts_carry_the_source_bound_observer_block(title):
     assert ctx.symbol("wPlayerDirection").address == structs + obs["object"]["direction"]
     assert obs["screen"] == {"width": 20, "height": 18}
     # Elm asks a mission yes/no only in Crystal; every other driver prompt has a source anchor.
+    assert {kind: site["symbol"] for kind, site in f["ui_origins"].items()
+            if kind in ("yes_no", "text", "prompt_button", "wait_button", "day_picker")} == {
+        "yes_no": "_YesNoBox", "text": "WaitPressAorB_BlinkCursor.loop",
+        "prompt_button": "PromptButton.input_wait_loop", "wait_button": "JoyWaitAorB", "day_picker": "SetDayOfWeek.loop2"}
+    assert obs["prompts"]["nickname"] == ["received?"]   # the row left under the box after the `cont` scroll
     assert ("elm_mission" in obs["prompts"]) == (title == "crystal")
     assert {"clock_confirm", "mom_dst", "mom_dst_confirm", "mom_phone", "starter_confirm", "nickname",
             "save_confirm"} <= set(obs["prompts"])
     assert set(obs["scene_symbols"]) == {"PlayersHouse1F", "ElmsLab", "NewBarkTown"}
+
+
+@pytest.mark.parametrize("label", ["PromptButton.input_wait_loop", "JoyWaitAorB", "SetDayOfWeek.loop2"])
+def test_route_facts_refuse_a_missing_wait_origin_label(monkeypatch, label):
+    ctx = context("gold")
+    symbols = {name: value for name, value in ctx.symbols.items() if name != label}
+    monkeypatch.setattr(g, "load_context", lambda title, root=ROOT: dataclasses.replace(ctx, symbols=symbols))
+    with pytest.raises(ValueError, match=f"required symbol '{label}' missing"):
+        ROUTE_FACTS("gold", ROOT)
 
 
 def test_run_play_dispatches_the_reviewed_gate_and_names_the_receipt(tmp_path):

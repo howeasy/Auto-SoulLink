@@ -51,12 +51,18 @@ G.UI_SETTLE_FRAMES = 8
 G.UI_REPULSE_FRAMES = 16
 G.OVERWORLD_WINDOW = 2
 G.MENU_KINDS = {main_menu=true, gender=true, name_choices=true, yes_no=true, start_menu=true, battle_menu=true}
+-- Wait origins bound at a loop that runs once per waiting frame: a context whose loop stopped firing for
+-- LOOP_WINDOW frames was answered, so it is shown but never ready (no stale re-pulse into the next UI).
+-- InitClock .SetHourLoop/.SetMinutesLoop DelayFrame per idle pass too (engine/rtc/timeset.asm:66-69, SetHour/SetMinutes).
+-- WaitPressAorB_BlinkCursor .loop (text) spins within a frame (home/joypad.asm:358-367): same rule.
+G.LOOP_KINDS = {prompt_button=true, wait_button=true, day_picker=true, clock_hour=true, clock_minute=true, text=true}
+G.LOOP_WINDOW = 2
 G.CONFIRM = {A=true, B=true, Start=true}
 -- Charmap glyph names (data/games/gen2_<title>/charmap.lua), not byte values.
 G.GLYPH = {cursor="▶", top_left="┌", bottom_left="└", side="│", space=" "}
 G.REQUIRED_RAM = {"wMapGroup", "wPartyCount", "wBattleMode", "wSavedAtLeastOnce", "wNumBalls", "wBalls",
     "wTilemap", "wObjectStructs", "wTileUp", "wTileDown", "wTileLeft", "wTileRight",
-    "wPokegearFlags", "wEventFlags"}
+    "wPokegearFlags", "wEventFlags", "wSaveFileExists"}
 G.REQUIRED_HRAM = {"hROMBank", "hCGB"}
 
 local BUTTON = {}
@@ -380,9 +386,9 @@ function G.hooks(ctx)
     for kind, site in pairs(origins) do
         watch(kind, site, function(frame, seq)
             local ui = state.ui
-            -- A looping origin (InitClock.SetHourLoop) re-fires every frame: one context, first frame kept.
-            if ui and ui.kind == kind and ui.seq == seq - 1 then ui.seq = seq
-            else state.ui = {kind=kind, origin=site.symbol, frame=frame, seq=seq} end
+            -- A looping origin (InitClock.SetHourLoop) re-fires every frame: one context, first and last frame kept.
+            if ui and ui.kind == kind and ui.seq == seq - 1 then ui.seq, ui.last = seq, frame
+            else state.ui = {kind=kind, origin=site.symbol, frame=frame, last=frame, seq=seq} end
         end)
     end
     watch("overworld_tick", obs.overworld_tick, function(frame, seq) state.tick = {frame=frame, seq=seq} end)
@@ -424,20 +430,26 @@ function G.observer(ctx)
     return function()
         assert(#state.errors == 0, "code-site hook refused: " .. tostring(state.errors[1]))
         local frame = api.framecount()
+        -- GameInit loads wSaveFileExists before any UI origin runs (C engine/menus/intro_menu.asm:1329-1330,
+        -- G :1140-1142); MainMenu_GetWhichMenu offers CONTINUE on it (C engine/menus/main_menu.asm:191-199).
         local point = {title=ctx.env.title, rom_sha1=facts.rom_sha1, core_mode="CGB", attempt_id=case.attempt_id,
-                       facts_fingerprint=facts.fingerprint, has_existing_save=false,
+                       facts_fingerprint=facts.fingerprint,
+                       has_existing_save=state.ui ~= nil and ctx.sym("wSaveFileExists")[1] ~= 0,
                        save_success_counter=state.saves}
         local u = state.ui
         if u and (state.tick == nil or u.seq > state.tick.seq) then
             local view = {kind=u.kind, origin=u.origin}
             local ready = frame - u.frame >= G.UI_SETTLE_FRAMES
                 and (u.consumed == nil or frame - u.consumed >= G.UI_REPULSE_FRAMES)
+                and (not G.LOOP_KINDS[u.kind] or frame - u.last <= G.LOOP_WINDOW)
             if G.MENU_KINDS[u.kind] then
                 local rows = G.screen(ctx)
                 local menu = G.parse_menu(rows, obs.screen.width, obs.screen.height)
                 if menu then view.items, view.cursor, view.columns = menu.items, menu.cursor, menu.columns
                 else ready = false end
                 if u.kind == "yes_no" then view.prompt = G.classify_prompt(rows, ctx.prompts) end
+            elseif u.kind == "prompt_button" then
+                view.prompt = G.classify_prompt(G.screen(ctx), ctx.prompts)   -- which text is waiting
             end
             point.ui, point.input_ready = view, ready
         end

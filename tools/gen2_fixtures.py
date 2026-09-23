@@ -74,7 +74,10 @@ QUALIFY_UI = {"continue_confirm": "ConfirmContinue"}
 # SaveMenu prompts _WouldYouLikeToSaveTheGameText then _AlreadyASaveFileText (C data/text/common_3.asm:187-212,
 # G data/text/common_2.asm:1274-1299). The overwrite text's first line scrolls off (`cont`), so the
 # same-player branch is told from _AnotherSaveFileText by the .yoursavefile site, never by the screen.
-QUALIFY_PROMPTS = {"save_confirm": ("save the game?",), "save_overwrite": ("OK to overwrite?",)}
+# That `cont` waits in PromptButton (<_CONT> -> _ContText, C home/text.asm:231,502-512,528-539); its first
+# lines bind the wait: save_overwrite_text.
+QUALIFY_PROMPTS = {"save_confirm": ("save the game?",), "save_overwrite": ("OK to overwrite?",),
+                   "save_overwrite_text": ("There is already a", "There is another")}
 # CartRAM the CONTINUE load and a native re-save may rewrite; every other byte must survive unchanged.
 #   _SaveGameData C engine/menus/save.asm:266-295, G :273-291: options + check values, game data, checksums,
 #   the backup copy (layout regions), SaveBox into the active box slot, sStackTop (UpdateStackTop),
@@ -191,7 +194,9 @@ PASSABLE_COLLISION = ("FLOOR", "TALL_GRASS", "LONG_GRASS", "DOOR", "LADDER", "CA
 PROMPT_ANCHORS = {
     "clock_confirm": ("What?", "Whoa!"), "mom_dst": ("Saving Time now?",), "mom_dst_confirm": ("is that OK?",),
     "mom_phone": ("the PHONE?",), "elm_mission": ("that I recently",), "starter_confirm": ("TOTODILE, the",),
-    "nickname": ("Give a nickname to",), "save_confirm": ("save the game?",),
+    # Anchors are rows still on screen under the box: a `cont` scrolls its first line off (TextScroll x2,
+    # C home/text.asm:520-526). _CaughtAskNicknameText (C data/text/common_2.asm:1084-1090, G :717-723).
+    "nickname": ("received?",), "save_confirm": ("save the game?",),
     # SetDayOfWeek confirm: _OakTimeIsItText, C data/text/common_1.asm:212-213, G :152-153.
     "day_confirm": (", is it?",),
 }
@@ -393,8 +398,19 @@ def route_facts(title, root=ROOT):
     capacity = _numeric_definitions(ctx.read_source("constants/item_data_constants.asm"))["MAX_BALLS"]
     ui_labels = {"title": "StartTitleScreen", "main_menu": "MainMenu", "name_choices": "NamePlayer",
                  "clock_hour": "InitClock.SetHourLoop", "clock_minute": "InitClock.SetMinutesLoop",
-                 "yes_no": "YesNoBox", "text": "WaitPressAorB_BlinkCursor", "start_menu": "StartMenu",
-                 "battle_menu": "BattleMenu"}
+                 # YesNoBox falls into PlaceYesNoBox's `jr _YesNoBox` (C home/menu.asm:418-428, G :382-392);
+                 # SaveTheGame_yesorno calls PlaceYesNoBox directly (C engine/menus/save.asm:209-214, G :197-202),
+                 # so only the shared body sees every yes/no box. Hooks fire at the exact PC only.
+                 "yes_no": "_YesNoBox", "text": "WaitPressAorB_BlinkCursor.loop", "start_menu": "StartMenu",
+                 "battle_menu": "BattleMenu",
+                 # WaitPressAorB_BlinkCursor .loop (home/joypad.asm:358-367) spins without DelayFrame: it
+                 # fires many times per waiting frame, never once an answered wait returns.
+                 # Script/text waits, bound at their per-frame loops so an answered wait stops firing:
+                 # PromptButton .input_wait_loop (home/joypad.asm:411-421; para/cont/prompt and script
+                 # promptbutton), WaitButton's JoyWaitAorB (:292-300, :308; script waitbutton), Mom's weekday
+                 # picker SetDayOfWeek .loop2 (engine/rtc/timeset.asm:420-423). Same labels in pokegold.
+                 "prompt_button": "PromptButton.input_wait_loop", "wait_button": "JoyWaitAorB",
+                 "day_picker": "SetDayOfWeek.loop2"}
     if title == "crystal":
         ui_labels["gender"] = "InitGender"
     ui = {kind: {key: value for key, value in _code_site(ctx, symbol).items() if key != "symbol_offset"}

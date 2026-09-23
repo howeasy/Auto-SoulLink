@@ -145,10 +145,18 @@ class Sim:
 
     def fire(self, kind):
         site = self.sites[kind]
-        self.hram[self.prof["hram"]["hROMBank"] - 0xFF80] = site["bank"] or 1
-        self.pc = site["addr"]
-        for fn in self.hooks.get(site["addr"], []):
-            fn(site["addr"], 0, 0)
+        self.run_at(site["bank"], site["addr"])
+
+    def run_at(self, bank, address):
+        self.hram[self.prof["hram"]["hROMBank"] - 0xFF80] = bank or 1
+        self.pc = address
+        for fn in self.hooks.get(address, []):
+            fn(address, 0, 0)
+
+    def execute(self, *labels):
+        """The ROM's own control flow through these source labels: a hook sees only the PCs executed."""
+        for label in labels:
+            self.run_at(*context(self.title).symbol(label))
 
     def saveram(self):
         data = bytes(self.cart[:0x8000]) + bytes(range(22))
@@ -216,16 +224,16 @@ class Sim:
             if button in got.edges:
                 return
 
-    def text(self, *lines):
+    def text(self, *lines, kind="prompt_button"):
+        """A source text wait: PromptButton/JoyWaitAorB loop once per frame until A (home/joypad.asm:292-421)."""
         self.clear()
         self.textbox(*lines)
         self.draw()
         yield from self.wait(3)
-        self.fire("text")
-        yield from self.until("A")
+        yield from self.until("A", kind)
         self.clear()
 
-    def menu(self, kind, items, expect, *, columns=1, at=(0, 0), lines=()):
+    def menu(self, kind, items, expect, *, columns=1, at=(0, 0), lines=(), via=None):
         self.clear()
         if lines:
             self.textbox(*lines)
@@ -245,7 +253,10 @@ class Sim:
 
         render()
         yield from self.wait(2)
-        self.fire(kind)
+        if via:
+            self.execute(*via)
+        else:
+            self.fire(kind)
         while True:
             got = yield
             moves = {"Up": -columns, "Down": columns, "Left": -1, "Right": 1}
@@ -258,8 +269,14 @@ class Sim:
                 self.clear()
                 return
 
-    def yes_no(self, anchor, answer="YES"):
-        yield from self.menu("yes_no", ["YES", "NO"], answer, at=(13, 6), lines=(anchor,))
+    def yes_no(self, *lines, answer="YES", via=("YesNoBox", "PlaceYesNoBox", "_YesNoBox")):
+        """YesNoBox falls through PlaceYesNoBox's `jr _YesNoBox` (C home/menu.asm:418-428, G :382-392).
+        `lines` are the two textbox rows the ROM leaves on screen under the box."""
+        yield from self.menu("yes_no", ["YES", "NO"], answer, at=(13, 6), lines=lines, via=via)
+
+    def save_yes_no(self, *lines):
+        """SaveTheGame_yesorno enters at PlaceYesNoBox, never YesNoBox (C engine/menus/save.asm:209-214, G :197-202)."""
+        yield from self.yes_no(*lines, via=("PlaceYesNoBox", "_YesNoBox"))
 
     # --- game ----------------------------------------------------------------------------------
     def warp_to(self, name, destination):
@@ -321,33 +338,41 @@ class Sim:
             yield from self.elm()
 
     def mom(self):
-        yield from self.text("#MON GEAR, or")
+        # MeetMomScript (C maps/PlayersHouse1F.asm:35-81): promptbuttons, the weekday picker, waitbutton.
+        yield from self.text("ELM, next door, is")
         obs = self.facts["observer"]
         self.put("wPokegearFlags", [1 << obs["pokegear_obtained_bit"]])
         self.scene("PlayersHouse1F", self.facts["maps"]["PlayersHouse1F"]["scenes"]["SCENE_PLAYERSHOUSE1F_NOOP"])
-        yield from self.yes_no("Saving Time now?")
+        yield from self.text("#MON GEAR, or")
+        yield from self.text("What day is it?", kind="day_picker")
+        yield from self.yes_no("SUNDAY, is it?")
+        yield from self.yes_no("Is it Daylight", "Saving Time now?")
         yield from self.yes_no("is that OK?")
-        yield from self.yes_no("the PHONE?")
-        yield from self.text("Hurry up, baby!")
+        yield from self.yes_no("know how to use", "the PHONE?")
+        yield from self.text("Hurry up, baby!", kind="wait_button")
 
     def elm(self):
         yield from self.text("There you are!")
         if self.title == "crystal":
-            yield from self.yes_no("that I recently")
-        yield from self.text("Go on. Pick one!")
+            yield from self.yes_no("that I recently", "caught.")
+        yield from self.text("Go on. Pick one!", kind="wait_button")
         elm = self.facts["maps"]["ElmsLab"]["objects"]["ProfElmScript"]
         self.x, self.y = elm["x"], elm["y"] + 1
         self.scene("ElmsLab", self.facts["maps"]["ElmsLab"]["scenes"]["SCENE_ELMSLAB_CANT_LEAVE"])
         self.sync()
 
     def starter(self):
-        yield from self.yes_no("TOTODILE, the")
+        yield from self.yes_no("TOTODILE, the", "water #MON?")
         yield from self.text("received TOTODILE!")
         starter = self.facts["starter"]
         mon = bytearray(48)
         mon[0], mon[31] = starter["species"], starter["level"]
         self.put("wPartyCount", [1, starter["species"], 0xFF] + [0] * 5 + list(mon))
-        yield from self.yes_no("Give a nickname to", "NO")
+        # GiveANickname_YesNo prints _CaughtAskNicknameText (C engine/pokemon/caught_data.asm:154-157,
+        # G caught_nickname.asm:123-126): its `cont "received?"` waits in PromptButton, then TextScroll x2
+        # (C home/text.asm:520-526,581-611) wipes "Give a nickname to" before the YesNoBox.
+        yield from self.text("Give a nickname to", "the TOTODILE you")
+        yield from self.yes_no("the TOTODILE you", "received?", answer="NO")
         event = self.facts["observer"]["got_starter_event"]
         self.put("wEventFlags", [self.get("wEventFlags", event // 8) | 1 << event % 8], event // 8)
         self.scene("NewBarkTown", self.facts["maps"]["NewBarkTown"]["scenes"]["SCENE_NEWBARKTOWN_NOOP"])
@@ -356,8 +381,8 @@ class Sim:
     def save(self):
         items = ["POKéMON", "PACK", "POKéGEAR", "CHRIS", "SAVE", "OPTION", "EXIT"]
         yield from self.menu("start_menu", items, "SAVE", at=(8, 0))
-        yield from self.yes_no("save the game?")
-        yield from self.wait(4)
+        yield from self.save_yes_no("Would you like to", "save the game?")
+        yield from self.wait(4)   # wSaveFileExists == 0: AskOverwriteSaveFile erases, no text (save.asm:181-184)
         for i in range(0x8000):
             self.cart[i] = (i * 7 + self.frame) & 0xFF
         self.put("wSavedAtLeastOnce", [1])
@@ -548,7 +573,7 @@ def test_bad_environment_refuses_before_any_input(tmp_path, change, match):
     assert sim.inputs == [] and not receipt_path(env, spec).exists()
 
 
-@pytest.mark.parametrize("drop", ["wTilemap", "wEventFlags", "hCGB", "wElmsLabSceneID"])
+@pytest.mark.parametrize("drop", ["wTilemap", "wEventFlags", "hCGB", "wElmsLabSceneID", "wSaveFileExists"])
 def test_missing_profile_fact_refuses(tmp_path, drop):
     root = make_root(tmp_path, "crystal", drop=(drop,))
     spec, env = make_env(root, "crystal", "town")
@@ -556,6 +581,89 @@ def test_missing_profile_fact_refuses(tmp_path, drop):
     verdict, _ = run(root, env, sim)
     assert verdict.startswith("RESULT: FAIL") and "profile facts missing" in verdict and drop in verdict
     assert sim.inputs == [] and not receipt_path(env, spec).exists()
+
+
+def test_a_non_empty_save_lane_refuses_new_game(tmp_path):
+    """TryLoadSaveData found a save (wSaveFileExists != 0): the cold route refuses before NEW GAME."""
+    root = make_root(tmp_path, "gold")
+    spec, env = make_env(root, "gold", "town")
+    sim = Sim(LuaRuntime(unpack_returned_tuples=True), "gold", "town")
+    sim.put("wSaveFileExists", [1])
+    verdict, _ = run(root, env, sim)
+    assert verdict.startswith("RESULT: FAIL") and "empty isolated save lane" in verdict
+    assert not any(row.get("A") for row in sim.inputs) and not receipt_path(env, spec).exists()
+
+
+def test_wait_loops_are_ready_only_while_they_fire_and_once_origins_persist(tmp_path):
+    """A wait loop (PromptButton, InitClock, WaitPressAorB_BlinkCursor) that stopped firing was answered:
+    shown, never re-pulsed. A once-origin (StartTitleScreen) keeps its context, ready after the settle frames."""
+    root = make_root(tmp_path, "crystal")
+    _, env = make_env(root, "crystal", "town")
+    sim = Sim(LuaRuntime(unpack_returned_tuples=True), "crystal", "town")
+    sim.gen = sim.wait(10 ** 6)   # frames advance; only the fires below reach the hooks
+    next(sim.gen)
+    gate, ctx = library(sim, env)
+    gate.hooks(ctx)
+    observe = gate.observer(ctx)
+
+    def look():
+        value = observe()
+        return value["ui"]["kind"] if value["ui"] else None, value["input_ready"], value["overworld_ready"]
+
+    for _ in range(9):
+        sim.fire("prompt_button")
+        sim.advance()
+    assert look() == ("prompt_button", True, False)
+    sim.advance()
+    sim.advance()
+    sim.advance()
+    assert look() == ("prompt_button", False, False)
+    sim.fire("prompt_button")   # the next para's wait resumes the same context
+    sim.advance()
+    assert look() == ("prompt_button", True, False)
+    for _ in range(9):   # InitClock .SetHourLoop is a per-frame loop too: answered means not ready
+        sim.fire("clock_hour")
+        sim.advance()
+    assert look() == ("clock_hour", True, False)
+    for _ in range(3):
+        sim.advance()
+    assert look() == ("clock_hour", False, False)
+    for _ in range(9):   # WaitPressAorB_BlinkCursor .loop spins several times per frame
+        sim.fire("text")
+        sim.fire("text")
+        sim.advance()
+    assert look() == ("text", True, False)
+    for _ in range(3):
+        sim.advance()
+    assert look() == ("text", False, False)
+    sim.fire("title")   # a once-origin: StartTitleScreen runs once and its context persists
+    for _ in range(9):
+        sim.advance()
+    assert look() == ("title", True, False)
+    sim.fire("overworld_tick")
+    sim.advance()
+    assert look() == (None, None, True)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold"])
+def test_prompts_classify_the_rows_the_rom_leaves_after_a_cont_scroll(title):
+    """`cont` = PromptButton, then TextScroll x2 (C home/text.asm:502-526,581-611): at the box only the last two
+    rows remain. The overwrite box is save_overwrite (its first line is gone), the `cont` wait before it is
+    save_overwrite_text, and the nickname box keeps "received?" but never "Give a nickname to"."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_GEN2_GATE_LIBRARY = True
+    gate = lua.execute(GATE.read_text(encoding="utf-8"))
+
+    def classify(prompts, *rows):
+        table = lua.table_from([lua.table_from(list(row)) for row in rows])
+        return gate.classify_prompt(table, lua.table_from({k: lua.table_from(v) for k, v in prompts.items()}))
+
+    qualify, route = qfacts(title)["prompts"], facts(title)["observer"]["prompts"]
+    assert classify(qualify, "There is already a", "save file. Is it") == "save_overwrite_text"
+    assert classify(qualify, "save file. Is it", "OK to overwrite?") == "save_overwrite"
+    assert classify(qualify, "Would you like to", "save the game?") == "save_confirm"
+    assert classify(route, "the TOTODILE you", "received?") == "nickname"
+    assert classify(route, "Give a nickname to", "the TOTODILE you") is None   # the wait, not the box
 
 
 def test_timeout_writes_failed_and_no_success_receipt(tmp_path):
@@ -691,10 +799,13 @@ class QualifySim(Sim):
     def save(self):
         items = ["POKéMON", "PACK", "POKéGEAR", "CHRIS", "SAVE", "OPTION", "EXIT"]
         yield from self.menu("start_menu", items, "SAVE", at=(8, 0))
-        yield from self.yes_no("save the game?")
+        yield from self.save_yes_no("Would you like to", "save the game?")
         if not self.other_player:
             self.fire("same_save_file")
-        yield from self.yes_no("OK to overwrite?")
+        # _AlreadyASaveFileText / _AnotherSaveFileText `cont` (C data/text/common_3.asm:202-212, G common_2.asm:
+        # 1289-1299) places <_CONT> (C home/text.asm:231,528-539) -> _ContText -> PromptButton (:502-512): a text wait.
+        yield from self.text("There is another" if self.other_player else "There is already a", "save file. Is it")
+        yield from self.save_yes_no("save file. Is it", "OK to overwrite?")   # first line scrolled off
         yield from self.wait(4)
         self.cart[0x1F10] ^= 0x5A   # a native re-save moves sStackTop
         self.fire("save_completed")

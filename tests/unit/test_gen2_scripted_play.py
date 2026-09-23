@@ -4,12 +4,13 @@ and for lua/tests/gen2_qualify.lua (the CONTINUE / native re-save qualification 
 Pure point -> buttons/phase, same lua harness as tests/unit/test_gen2_fixtures.py (no emulator).
 Passing here is authoring evidence only, never PHYSICAL evidence.
 
-Mom's SetDayOfWeek picker (engine/rtc/timeset.asm:385-436, both pokecrystal and pokegold/pokesilver)
-runs before the day-of-week/DST question chain in maps/PlayersHouse1F.asm (MeetMomScript, line 49
-in pokecrystal / line 40 in pokegold). Its own confirm box ("<DAY>, is it?", ConfirmWeekdayText at
-engine/rtc/timeset.asm:531-540, text at data/text/common_1.asm _OakTimeIsItText) executes through the
-same shared YesNoBox routine as every other yes/no prompt in the game, so it is observed generically
-as ui.kind == "yes_no" with a classified ui.prompt, exactly like mom_dst/mom_dst_confirm/mom_phone.
+Map-script texts wait in PromptButton (home/joypad.asm:383-431, its .input_wait_loop :411-421) or
+WaitButton (:302-309, looping in JoyWaitAorB :292-300); OWPlayerInput does not run while a script runs
+(engine/overworld/events.asm:241-246), so these are UI origins of their own, fed with their real
+route-fact symbols here, never a synthetic "text" kind. Mom's SetDayOfWeek picker
+(engine/rtc/timeset.asm:385-436, both pokecrystal and pokegold/pokesilver) waits in .loop2 (:420-423)
+before its own confirm YesNoBox ("<DAY>, is it?", _OakTimeIsItText), which is observed generically as
+ui.kind == "yes_no" with a classified ui.prompt, exactly like mom_dst/mom_dst_confirm/mom_phone.
 """
 from __future__ import annotations
 
@@ -39,11 +40,11 @@ def yes_no_point(lua, f, prompt, cursor, *, area="PlayersHouse1F", x=9, y=1):
     return value
 
 
-def text_point(lua, f, *, area="PlayersHouse1F", x=9, y=1):
-    """A dismiss-with-A textbox observation (covers the picker's own "What day is it?" display)."""
-    value = point(lua, f, area, x, y, mom_scene=0, pokegear_obtained=False)
-    ui = lua.table_from({"kind": "text", "origin": f["ui_origins"]["text"]["symbol"]}, recursive=True)
-    value["ui"], value["input_ready"] = ui, True
+def origin_point(lua, f, kind, *, area="PlayersHouse1F", x=9, y=1, origin=None, **fields):
+    """A script-state observation: a bound wait origin is running and overworld input is not."""
+    value = point(lua, f, area, x, y, mom_scene=0, pokegear_obtained=False, overworld_ready=False, **fields)
+    symbol = origin or f["ui_origins"][kind]["symbol"]
+    value["ui"], value["input_ready"] = lua.table_from({"kind": kind, "origin": symbol}), True
     return value
 
 
@@ -55,14 +56,32 @@ def press_then_release(d, value):
     assert empty == {}, "expected the driver's one-frame release before the next press"
     return buttons, phase2, request
 
+WAITS = {"prompt_button": "PromptButton.input_wait_loop", "wait_button": "JoyWaitAorB",
+         "day_picker": "SetDayOfWeek.loop2"}
+
+
 @pytest.mark.parametrize("title", TITLES)
-def test_day_picker_dismiss_text_presses_a(lua, title):
-    """"What day is it?" (WaitPressAorB_BlinkCursor origin) is the generic ui.kind == "text" case:
-    press A. Day navigation (Up/Down) is never driven; the un-navigated default (wTempDayOfWeek =
-    SUNDAY, engine/rtc/timeset.asm:398-399) is what reaches the picker's own YesNoBox confirm."""
+@pytest.mark.parametrize("kind", WAITS)
+def test_script_wait_origins_are_answered_with_a(lua, title, kind):
+    """Mom's `writetext ... / promptbutton` (maps/PlayersHouse1F.asm:36-38), the script `waitbutton`s and
+    the weekday picker's .loop2: each is its real source symbol and each gets A. On the picker A accepts
+    the shown day; Up/Down are never driven, so the un-navigated default (wTempDayOfWeek = SUNDAY,
+    engine/rtc/timeset.asm:398-399) reaches the picker's own YesNoBox confirm."""
     d, f = driver(lua, title)
-    buttons, phase, _ = step(d, text_point(lua, f))
+    assert f["ui_origins"][kind]["symbol"] == WAITS[kind]
+    buttons, phase, _ = step(d, origin_point(lua, f, kind))
     assert buttons == {"A": True} and phase == "new-game"
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_unmapped_script_state_idles_or_refuses_never_presses(lua, title):
+    """No blind fallback: a script running with no bound origin idles; an unknown or mis-bound origin refuses."""
+    d, f = driver(lua, title)
+    idle = point(lua, f, "PlayersHouse1F", 9, 1, mom_scene=0, pokegear_obtained=False, overworld_ready=False)
+    assert step(d, idle)[:2] == ({}, "new-game")
+    for kind, origin in (("script_text", "PrintText"), ("prompt_button", "WaitPressAorB_BlinkCursor")):
+        buttons, why, _ = step(d, origin_point(lua, f, kind, origin=origin))
+        assert buttons is None and "unmapped or unbound" in why
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -202,6 +221,67 @@ def test_qualify_refuses_a_foreign_stage_a_reset_and_unmapped_ui(lua):
     d, f, q = qdriver(lua)
     buttons, why = act(d, qpoint(lua, f, ui=ui(f, q, "text")))
     assert buttons is None and "not valid for qualification" in why
+
+
+def overwrite_wait(f, q):
+    """_AlreadyASaveFileText's `cont` wait (PromptButton), classified by its first line."""
+    return ui(f, q, "prompt_button", prompt="save_overwrite_text")
+
+
+def into_save_confirm(lua, d, f, q):
+    continue_into_overworld(lua, d, f, q)
+    act(d, qpoint(lua, f, overworld=True, hits=DONE))
+    act(d, qpoint(lua, f, ui=ui(f, q, "start_menu", items=["SAVE"], cursor=1), hits=DONE))
+
+
+@pytest.mark.parametrize("kind", ["prompt_button", "wait_button", "day_picker"])
+def test_qualify_refuses_script_wait_origins(lua, kind):
+    """Outside the overwrite text a PromptButton/WaitButton/picker wait refuses: at CONTINUE, in the
+    overworld, at the save menu before YES, and even carrying the overwrite text's classification."""
+    for where in ("title", "continue_confirm", "overworld", "save_menu"):
+        d, f, q = qdriver(lua, stage="resave")
+        if where == "continue_confirm":
+            act(d, qpoint(lua, f, ui=ui(f, q, "title")))
+            act(d, qpoint(lua, f, ui=ui(f, q, "main_menu", items=["CONTINUE"], cursor=1)))
+        elif where == "overworld":
+            continue_into_overworld(lua, d, f, q)
+        elif where == "save_menu":
+            into_save_confirm(lua, d, f, q)
+        wait = ui(f, q, kind, prompt="save_overwrite_text")
+        buttons, why = act(d, qpoint(lua, f, ui=wait, hits=DONE))
+        assert buttons is None and f"not valid for qualification: {kind}" in why, where
+
+
+def test_qualify_resave_answers_the_overwrite_text_wait_only_on_its_source_text(lua):
+    """(a) save_confirm YES -> the `cont` PromptButton wait -> the same-player overwrite YES -> saved."""
+    d, f, q = qdriver(lua, stage="resave")
+    into_save_confirm(lua, d, f, q)
+    same = {**DONE, "same_save_file": 1}
+    assert act(d, qpoint(lua, f, ui=ui(f, q, "yes_no", items=["YES", "NO"], cursor=1, prompt="save_confirm"),
+                         hits=DONE)) == ({"A": True}, "save")
+    unbound = ui(f, q, "prompt_button", prompt="save_confirm")
+    buttons, why = act(d, qpoint(lua, f, ui=unbound, hits=same))
+    assert buttons is None and "not valid for qualification: prompt_button" in why
+    d, f, q = qdriver(lua, stage="resave")
+    into_save_confirm(lua, d, f, q)
+    act(d, qpoint(lua, f, ui=ui(f, q, "yes_no", items=["YES", "NO"], cursor=1, prompt="save_confirm"), hits=DONE))
+    assert act(d, qpoint(lua, f, ui=overwrite_wait(f, q), hits=same)) == ({"A": True}, "save")
+    assert act(d, qpoint(lua, f, ui=overwrite_wait(f, q), hits=same)) == ({"A": True}, "save")   # re-pulse
+    box = ui(f, q, "yes_no", items=["YES", "NO"], cursor=1, prompt="save_overwrite")
+    assert act(d, qpoint(lua, f, ui=box, hits=same)) == ({"A": True}, "save")
+    # (c) after the overwrite answer the window is closed: a further text wait refuses.
+    buttons, why = act(d, qpoint(lua, f, ui=overwrite_wait(f, q), hits=same))
+    assert buttons is None and "not valid for qualification: prompt_button" in why
+
+
+def test_qualify_prompt_button_after_the_save_witness_never_presses(lua):
+    """(c) once the native save witness counted, the stage is terminal: no A reaches any later wait."""
+    d, f, q = qdriver(lua, stage="resave")
+    into_save_confirm(lua, d, f, q)
+    same = {**DONE, "same_save_file": 1}
+    act(d, qpoint(lua, f, ui=ui(f, q, "yes_no", items=["YES", "NO"], cursor=1, prompt="save_confirm"), hits=DONE))
+    assert act(d, qpoint(lua, f, ui=overwrite_wait(f, q), hits=same, saves=1)) == ({}, "resaved")
+    assert act(d, qpoint(lua, f, ui=overwrite_wait(f, q), hits=same, saves=1)) == ({}, "resaved")
 
 
 def test_qualify_resave_saves_through_start_and_the_same_player_overwrite(lua):

@@ -141,15 +141,20 @@ function P.new(facts, case)
                 if type(ui.items) ~= "table" or not ui.items[index] then return nil,"preset name choices missing" end
                 return choose(ui,ui.items[index],1)
             end
-            if ui.kind == "clock_hour" or ui.kind == "clock_minute" or ui.kind == "text" then return press("A") end
+            -- Script/text waits (PromptButton, WaitButton, Mom's weekday picker) all take A: map scripts
+            -- keep OWPlayerInput from running (engine/overworld/events.asm:241-246), so these are the
+            -- only UI a script shows between its yes/no boxes. A on the picker's .loop2
+            -- (engine/rtc/timeset.asm:420-423) accepts the shown day, never navigated with Up/Down.
+            if ui.kind == "clock_hour" or ui.kind == "clock_minute" or ui.kind == "text" or ui.kind == "prompt_button"
+               or ui.kind == "wait_button" or ui.kind == "day_picker" then return press("A") end
             if ui.kind == "yes_no" then
                 -- SetDayOfWeek (engine/rtc/timeset.asm:385-436) is Mom's own picker, called from
                 -- MeetMomScript before the DST questions (maps/PlayersHouse1F.asm:49/40). Its
                 -- ConfirmWeekdayText confirm ("<DAY>, is it?", engine/rtc/timeset.asm:531-540,
                 -- text at data/text/common_1.asm _OakTimeIsItText) shares the same YesNoBox origin
-                -- as every other yes/no prompt; the day picker itself (its Up/Down loop2) is never
-                -- separately observed, so the un-navigated default (wTempDayOfWeek=SUNDAY) is what
-                -- gets confirmed and re-confirmed on a "No" loop-back (timeset.asm:429 jr c, .loop).
+                -- as every other yes/no prompt. The picker is left on its default (wTempDayOfWeek=SUNDAY,
+                -- timeset.asm:398-399; .loop keeps it), so SUNDAY is confirmed, and re-confirmed on a
+                -- "No" loop-back (timeset.asm:429 jr c, .loop).
                 local known = {nickname=true,clock_confirm=true,mom_dst=true,mom_dst_confirm=true,
                     mom_phone=true,elm_mission=true,starter_confirm=true,save_confirm=true,day_confirm=true}
                 if not known[ui.prompt] then return nil,"unmapped yes/no prompt" end

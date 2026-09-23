@@ -5,6 +5,10 @@
 --   boot / reload  title -> CONTINUE -> ConfirmContinue (A) -> the overworld          terminal "loaded"
 --   resave         the same, then START -> SAVE -> YES ("save the game?") -> YES ("OK to overwrite?",
 --                  same-player branch only) -> the native save completion           terminal "resaved"
+--                  The overwrite text's `cont` waits in PromptButton (C data/text/common_3.asm:202-212,
+--                  G common_2.asm:1289-1299; <_CONT> -> _ContText, C home/text.asm:231,502-512,528-539): A
+--                  there only, between the save_confirm YES and the overwrite answer. Every other
+--                  PromptButton/WaitButton/weekday-picker wait refuses.
 --
 -- Source: Continue/.Check1Pass/.Check2Pass/ConfirmContinue/Continue_CheckRTC_RestartClock/
 -- FinishContinueFunction C engine/menus/intro_menu.asm:338-477, G :251-357. SaveMenu and
@@ -31,6 +35,10 @@ function Q.new(facts, qfacts, case)
         and #case.stage_fingerprint == 64, "stage fingerprint required")
     local self = {terminal=TERMINAL[case.stage], phase="title", qualified=false}
     local release, continued, loaded, save_counter = false, false, false, nil
+    local confirmed, overwritten = false, false
+    local function answered(buttons, phase)
+        return buttons, phase, buttons ~= nil and buttons.A == true
+    end
 
     local function press(button)
         release = true
@@ -97,12 +105,22 @@ function Q.new(facts, qfacts, case)
             if case.stage == "resave" and loaded then
                 if ui.kind == "start_menu" then self.phase = "save"; return choose(ui, "SAVE") end
                 if ui.kind == "yes_no" and self.phase == "save" then
-                    if ui.prompt == "save_confirm" then return choose(ui, "YES") end
+                    if ui.prompt == "save_confirm" then
+                        local buttons, phase, a = answered(choose(ui, "YES"))
+                        confirmed = confirmed or a
+                        return buttons, phase
+                    end
                     if ui.prompt == "save_overwrite" then
                         if hits.same_save_file < 1 then return nil, "overwrite prompt is not the same-player branch" end
-                        return choose(ui, "YES")
+                        local buttons, phase, a = answered(choose(ui, "YES"))
+                        overwritten = overwritten or a
+                        return buttons, phase
                     end
                     return nil, "unmapped yes/no prompt"
+                end
+                if ui.kind == "prompt_button" and self.phase == "save" and confirmed and not overwritten
+                   and ui.prompt == "save_overwrite_text" then
+                    return press("A")
                 end
             end
             return nil, "UI is not valid for qualification: " .. tostring(ui.kind)
