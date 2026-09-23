@@ -48,6 +48,10 @@ there (the sweep worktree is gone). This note summarises it; it is not a second 
   fix was the re-save oracle: Gold/Silver `RestoreOverworldMapTiles` copies the screen tilemap into `sScratch[0:$168]`.
   **Next when resumed:** live inspect gate on the eight fixtures; N14b strict re-save rules (then re-qualify all eight,
   ~5 min each via the coordinator driver); gen2-M1 Gen 1 duo A/B; the Gen 2 duo harness (P3b.7).
+  N14b source facts are DONE (Codex): `docs/gen2/reviews/N14B_FACTS_CODEX_2026-09-23.md` is the implementation
+  card's input. Local master has moved again (9 commits past the last sync): merge it before the next shared
+  change. Coordinator lane driver (not committed): session scratchpad `run_fixtures.py` = run_play + qualify +
+  stage + receipt per fixture, stop at the first failure; recreate from the eight-fixture commit body if lost.
 - **`398aef4` FIRST LIVE GEN 2 PLAY + QUALIFICATION PASS** (crystal_town, attempt n2-crystal-town-a7;
   route 112 s @300%, qualify 4/4 stages 211 s @100%, player_id 46401). The played save replaced the legacy
   `tests/fixtures/gen2/crystal_town.SaveRAM` (owner); receipt in `tests/fixtures/gen2/receipts/`. Live fixes: 12-frame
