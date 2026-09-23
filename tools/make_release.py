@@ -120,6 +120,7 @@ _LUA_GEN2 = [
     "rom.lua",
     "signals.lua",
     "wire.lua",
+    "boxes.lua",
 ]
 
 # lua/clients/
