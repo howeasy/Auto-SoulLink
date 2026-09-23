@@ -152,10 +152,13 @@ def test_close_attempts_every_handle_even_when_first_unregister_fails():
 
 def test_validated_descriptors_and_queued_events_are_not_mutable_callback_aliases():
     w = World()
+    w.options.validate = w.lua.eval("""function(s) return function(site)
+        s.validated=s.validated+1; return {id=site.id,nested={v=1}}
+    end end""")(w.state)
     w.options.capture = w.lua.eval("""function(site)
-        local event={kind=site.id}
-        site.id='rewritten'
-        return event
+        local top=pcall(function() site.id='rewritten' end)
+        local deep=pcall(function() site.nested.v=9 end)
+        return {kind=site.id,v=site.nested.v,refused=not top and not deep}
     end""")
     w.options.on_event = w.lua.eval("function(event) event.kind='handler-rewritten' end")
     service = w.new()[0]
@@ -163,7 +166,33 @@ def test_validated_descriptors_and_queued_events_are_not_mutable_callback_aliase
     w.state.callbacks.a()
     w.state.callbacks.a()
     queued = service.drain(service)
-    assert [queued[i].kind for i in (1, 2)] == ["a", "a"]
+    assert [(queued[i].kind, queued[i].v, queued[i].refused) for i in (1, 2)] == [("a", 1, True)] * 2
+    assert service.status(service).failed is None
+
+
+def test_unguarded_capture_write_latches_failure_instead_of_leaking_into_later_hits():
+    w = World()
+    w.options.capture = w.lua.eval("function(site) site.id='rewritten'; return {kind=site.id} end")
+    service = w.new()[0]
+    w.state.callbacks.a()
+    assert "read-only" in service.status(service).failed
+    assert service.status(service).pending == 0
+
+
+def test_rejected_hits_reuse_one_prepared_view_without_per_hit_copies():
+    w = World()
+    seen = w.lua.eval("{}")
+    w.options.capture = w.lua.eval("""function(seen) return function(site)
+        seen[#seen+1]=site
+        return nil
+    end end""")(seen)
+    w.new()
+    for _ in range(50):
+        w.state.callbacks.a()
+    assert len(seen) == 50
+    assert w.lua.eval("function(t) for i=2,#t do if not rawequal(t[i],t[1]) then return false end end return true end")(seen)
+    keys = w.lua.eval("function(t) local k={} for key in pairs(t) do k[#k+1]=key end return table.concat(k,',') end")
+    assert seen[1].id == "a" and keys(seen[1]) == "id"
 
 
 def test_nonfinite_capacity_and_sparse_sites_refuse_without_registration():

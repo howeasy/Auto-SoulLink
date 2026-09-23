@@ -16,6 +16,17 @@ local function copy(value, seen)
     seen[value] = nil
     return result
 end
+-- Deep read-only view, built once per site: capture gets the SAME view on every hit, so the
+-- (mostly wrong-bank) reject path allocates nothing. A write raises, which latches failed.
+-- ponytail: no cycle guard; only ever fed a descriptor already passed through copy(), which refuses cycles.
+local function frozen(value)
+    if type(value) ~= "table" then return value end
+    local inner = {}
+    for key, item in pairs(value) do inner[key] = frozen(item) end
+    return setmetatable({}, {__index=inner, __len=function() return #inner end,
+        __pairs=function() return next, inner, nil end, __metatable=false,
+        __newindex=function() error("prepared site descriptor is read-only", 2) end})
+end
 
 local function sequence(values)
     assert(type(values) == "table" and getmetatable(values) == nil, "plain site array required")
@@ -69,7 +80,7 @@ function Registry.new(options)
         -- handler_error is a status field, not a kill switch: a handler fault is contained
         -- and later signals keep queuing (the capture/queue faults above do latch).
         if not state.ready or state.closed or state.failure then return end
-        local ok, event = pcall(capture,copy(site),...)
+        local ok, event = pcall(capture,site,...)
         if not ok then state.failure=tostring(event); return end
         if event == nil then return end
         local queued, why = pcall(function()
@@ -113,8 +124,8 @@ function Registry.new(options)
             prepared[i] = {site=checked,name=name}
         end
         for _, descriptor in ipairs(prepared) do
-            local site = descriptor.site
-            local handle = options.register(copy(site),function(...) callback(site,...) end,descriptor.name)
+            local site, view = descriptor.site, frozen(descriptor.site)
+            local handle = options.register(copy(site),function(...) callback(view,...) end,descriptor.name)
             assert(options.valid_handle(handle) == true, "engine signal registration failed: " .. site.id)
             assert(not handles[handle], "engine signal registration returned an already owned handle: " .. site.id)
             handles[handle] = self

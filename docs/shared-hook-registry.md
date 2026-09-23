@@ -25,8 +25,13 @@ reuse the instance rather than relying on separate `dofile` calls to share owner
 - `name_for_site(prepared)`: optional naming policy; otherwise `owner .. ':' .. id`.
 
 The registry reserves the namespace, validates **all** descriptors and hook names,
-then registers. Descriptors are copied before external validation, registration and
-capture. Names and accepted handles must be unique within the shared instance.
+then registers. Descriptors are copied before external validation and registration.
+Capture instead receives one deep read-only view per site, built at registration and
+reused on every hit, so a rejected (e.g. wrong-bank) hit allocates nothing. A write to
+the view, at any depth, raises and so latches `failed`; it can never leak into later
+hits. The view has a metatable: capture must read it by index, `#`, `ipairs` or `pairs`,
+not `rawget`/`next`, and must not return it inside an event (events must be plain).
+Names and accepted handles must be unique within the shared instance.
 The backend registration operation must either return its handle or fail without
 creating an unreported registration: no registry can clean a handle never returned.
 Registration-time callbacks are ignored until the entire set is installed.
