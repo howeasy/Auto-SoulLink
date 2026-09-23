@@ -33,7 +33,12 @@ from run_gb_gate import describe_gen2  # noqa: E402
 
 from server.adapters import gen2_codec as codec  # noqa: E402
 from tests.live import test_gen2_new_gates as live  # noqa: E402
-from tests.unit.test_gen2_scripted_gate import QualifySim, context, make_root, qualify_env  # noqa: E402
+from tests.unit.test_gen2_scripted_gate import (  # noqa: E402
+    QualifySim,
+    context,
+    make_root,
+    qualify_env,
+)
 from tools import fixture_qualification as qualification  # noqa: E402
 
 GATE = REPO / "lua/tests/gen2_inspect_gate.lua"
@@ -138,6 +143,15 @@ def gate():
     lua.globals().SLINK_GEN2_GATE_LIBRARY = True
     module = lua.eval("dofile")(GATE.as_posix())
     return lua, module
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_display_hook_labels_exist_once_in_each_titles_own_sym(gate, title):
+    # review gen2-O6: MonStatsJoypad is Crystal-only; a missing label aborted the whole Gold/Silver pass
+    _, module = gate
+    sym = (REPO / f"data/gen2/{module.SYM_ARTIFACT[title]}.sym").read_text(encoding="utf-8").split()
+    for label in ("TrainerCard_Page1_Joypad", module.STATS_JOYPAD[title]):
+        assert sym.count(label) == 1, (title, label)
 
 
 def test_wram_offset_matches_pan_docs_bank_windows(gate):

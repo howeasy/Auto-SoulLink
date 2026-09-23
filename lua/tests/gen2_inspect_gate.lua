@@ -316,6 +316,12 @@ end
 -- expected ROM byte is read from the running ROM at the site's flat offset, exactly as the scripted
 -- gate's hooks do. The shared gate file is not touched.
 G.SYM_ARTIFACT = {crystal = "pokecrystal", gold = "pokegold", silver = "pokesilver"}
+-- The stats screen's per-frame joypad wait, entered after the page is drawn: Crystal MonStatsJoypad
+-- (C engine/pokemon/stats_screen.asm:117,120); Gold/Silver have no such label, their loop is
+-- StatsScreen_LoadPage.joypad_loop after `jp hl` draws the page (G stats_screen.asm:58-92), with the
+-- same RIGHT/A page advance and A-on-BLUE_PAGE exit (review gen2-O6).
+G.STATS_JOYPAD = {crystal = "MonStatsJoypad", gold = "StatsScreen_LoadPage.joypad_loop",
+                  silver = "StatsScreen_LoadPage.joypad_loop"}
 function G.sym_site(ctx, label)
     local artifact = assert(G.SYM_ARTIFACT[ctx.env.title], "unsupported title " .. tostring(ctx.env.title))
     local path = ctx.root .. "/data/gen2/" .. artifact .. ".sym"
@@ -360,7 +366,7 @@ function G.display_hooks(ctx)
     watch("trainer_card", G.sym_site(ctx, "TrainerCard_Page1_Joypad"), function(frame)
         state.card.hits, state.card.frame = state.card.hits + 1, frame
     end)
-    watch("mon_stats", G.sym_site(ctx, "MonStatsJoypad"), function(frame)
+    watch("mon_stats", G.sym_site(ctx, G.STATS_JOYPAD[ctx.env.title]), function(frame)
         state.stats.hits, state.stats.frame = state.stats.hits + 1, frame
     end)
     watch("overworld_tick", obs.overworld_tick, function(frame) state.tick = frame end)
