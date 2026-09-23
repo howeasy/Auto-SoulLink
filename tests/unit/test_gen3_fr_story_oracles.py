@@ -1142,7 +1142,7 @@ def test_grass_hunt_first_step_follows_the_tile(machine, start, first):
 def test_viridian_pc_recovers_from_a_whiteout_into_its_own_center(machine):
     # FR run 28: the Route 1 walk whited out; the landing is Viridian Center 5.4 (7,4).
     lua, mod, fake = machine
-    leg = next(l for l in mod.LEGS.values() if l.name == "viridian_pc_deposit_withdraw")
+    leg = next(g for g in mod.LEGS.values() if g.name == "viridian_pc_deposit_withdraw")
     fake.place(5, 4, 7, 4)
     leg.recover(fake.cp)                                  # the landing verifies
     fake.place(5, 4, 7, 8)
