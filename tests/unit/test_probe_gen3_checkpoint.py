@@ -980,3 +980,102 @@ def test_a4_witness_value_only_with_a_factory_and_never_on_until(module):
     w, stop = probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "battle_comm_eq",
                                                      "witness_value": 0}))
     assert w() is True and stop() is True             # comm0 reads 0 in the empty fake RAM
+
+
+# ── N7 live at d8a62085: SHIFT A merged with the popup A in the GAME's key reads ─────────────
+class Game:
+    """ReadKeys (pret src/main.c:296-300) once per main-loop pass; `lag` frames get no pass
+    (the pass that started earlier overran). Counts JOY_NEW(button) edges."""
+
+    def __init__(self, lag=()):
+        self.lag, self.frame, self.pad, self.held, self.edges = set(lag), 0, {}, 0, []
+
+    def set(self, keys):
+        self.pad = dict(keys.items())
+
+    def advance(self):
+        self.frame += 1
+        if self.frame not in self.lag:
+            keys = sum(bit for name, bit in (("A", 1), ("B", 2), ("Down", 0x80)) if self.pad.get(name))
+            new = keys & ~self.held
+            if new:
+                self.edges.append((self.frame, new))
+            self.held = keys
+        self.pad = {}                       # joypad.set holds for one frame only
+
+
+def old_taps(game, taps):
+    """G.tap(btn, 3, gap): 3 pressed frames, then `gap` released ones (0b37e14d..a596b337 TAP_A)."""
+    for btn, gap in taps:
+        for _ in range(3):
+            game.set({btn: True})
+            game.advance()
+        for _ in range(gap):
+            game.set({})
+            game.advance()
+
+
+def test_n7_trace_shape_one_release_frame_in_a_lag_frame_is_one_press():
+    """The live shape: popup A at 1925-1927, one release frame 1928, SHIFT A 1929-1931. If the
+    game's pass skips 1928, it reads A held throughout: ONE edge, SHIFT never chosen."""
+    g = Game(lag={4})                                  # frame 4 == the 1928 release frame
+    old_taps(g, [("A", 1), ("A", 1)])
+    assert g.edges == [(1, 1)]
+    g = Game()
+    old_taps(g, [("A", 1), ("A", 1)])
+    assert [f for f, _ in g.edges] == [1, 5]           # without the lag it worked on paper
+
+
+@pytest.mark.parametrize("lag", [(), (4,), (2, 3, 4, 5), (1, 2, 6, 7, 8), tuple(range(3, 12, 2))])
+def test_press_makes_every_tap_a_game_read_edge(module, lag):
+    lua, probe = module
+    g = Game(lag=lag)
+    held = lambda: g.held  # noqa: E731
+    for _ in range(3):
+        ok, frames = probe.press("A", lambda k: g.set(k), g.advance, held, 1)
+        assert ok is True and frames >= 3
+    assert len([e for e in g.edges if e[1] & 1]) == 3
+
+
+def test_press_fails_by_name_when_the_game_never_reads_it(module):
+    lua, probe = module
+    g = Game(lag=range(1, 200))                        # the game never runs a pass
+    ok, why = probe.press("A", lambda k: g.set(k), g.advance, lambda: g.held, 1)
+    assert ok is False and why == "A: the game never read A pressed in 30 frames"
+    stuck = Game()
+    ok, why = probe.press("B", lambda k: stuck.set(k), stuck.advance, lambda: 0x2, 0)
+    assert ok is False and "never read B released" in why
+
+
+def test_held_keys_offset_is_gmain_heldkeys_on_both_titles(module):
+    _, probe = module
+    for sym_file in ("pokefirered.sym", "pokeleafgreen.sym"):
+        assert _sym("gMain", sym_file) == 0x030030F0
+    assert 0x030030F4 + probe.HELD_KEYS_OFF == 0x030030F0 + 0x2C
+    assert "local pressed, why = P.press(step.tap, function(k) joypad.set(k) end, G.advance, held_keys," in SOURCE
+    assert 'G.log("BWPRESS " .. spec.bw .. " " .. n .. " " .. why)' in SOURCE
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_party_popup_wait_is_the_selection_task_not_the_list(title):
+    """pret party_menu.c:1211-1213 + 3055-3060: A on a CHOOSE_MON list calls
+    Task_TryCreateSelectionWindow synchronously, which sets Task_HandleSelectionMenuInput in the
+    same frame; that task reads input from the next frame (:3062-3066, no fade). So a zero-frame
+    popup wait right after the A is correct -- but the list task alone must never satisfy it."""
+    w, probe = bw_world(title)
+    T = w.ctx.T
+    w.set(**parked(title), cb2=T.CB2_UPDATE_PARTY_MENU, tasks=(T.TASK_CHOOSE_MON,), pm=(1, 0, 1))
+    assert probe.BW_WAITS.party_input(w.sample(), w.ctx) is True
+    assert probe.BW_WAITS.party_popup(w.sample(), w.ctx) is False
+    w.set(**parked(title), cb2=T.CB2_UPDATE_PARTY_MENU, tasks=(T.TASK_SELECTION_POPUP,), pm=(1, 0, 1))
+    assert probe.BW_WAITS.party_popup(w.sample(), w.ctx) is True
+
+
+def test_press_first_waits_for_the_game_to_read_the_release(module):
+    """The previous input (here a gap-0 G.tap, as the non-bw rows still press) left A held in the
+    game's last read and the next frame is a lag frame: pressing at once would be no edge."""
+    lua, probe = module
+    g = Game(lag={4})
+    old_taps(g, [("A", 0)])
+    ok, _ = probe.press("A", lambda k: g.set(k), g.advance, lambda: g.held, 0)
+    assert ok is True and [f for f, _ in g.edges] == [1, 6]

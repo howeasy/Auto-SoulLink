@@ -429,6 +429,39 @@ function P.check_inputs(spec)
 end
 
 P.BW_HASHES = {"rom", "fixture", "pack", "source", "state"}
+
+-- ── game-confirmed presses (N7 live, lane d8a62085) ────────────────────────────────────────
+-- A menu only acts on JOY_NEW: ReadKeys (pret src/main.c:296-300) sets newKeys = input &
+-- ~heldKeysRaw once per main-loop pass (:180). A pass that overruns a frame (the popup's window
+-- + text work on the A frame, party_menu.c:3044-3059) reads keys on fewer frames than the
+-- emulator runs, so a one-frame release between two A taps can go unread: the game saw A held
+-- 1925..1931 and never a second press, so SHIFT never fired. P.press therefore reads the game's
+-- own gMain.heldKeys (0x030030F0 + 0x2C, include/main.h:31, both titles): it waits until the
+-- game has READ the button released, holds until the game has READ it pressed (that read is the
+-- JOY_NEW edge), then waits until it reads it released again, then idles `gap`.
+P.KEY_BITS = {A = 0x1, B = 0x2, Select = 0x4, Start = 0x8, Right = 0x10, Left = 0x20, Up = 0x40,
+              Down = 0x80, R = 0x100, L = 0x200}
+P.HELD_KEYS_OFF = 0x2C - 0x04   -- gMain.heldKeys, relative to gMain.callback2 (title syms)
+P.PRESS_BOUND = 30
+
+--- true, frames | false, why. set/advance/held are the joypad, one emulated frame, and the
+--- game's gMain.heldKeys; never more than P.PRESS_BOUND frames per phase.
+function P.press(btn, set, advance, held, gap)
+    local bit, n = assert(P.KEY_BITS[btn], "unknown button " .. tostring(btn)), 0
+    local function phase(keys, want, what)
+        for _ = 1, P.PRESS_BOUND do
+            set(keys); advance(); n = n + 1
+            if (held() & bit ~= 0) == want then return true end
+        end
+        return false, string.format("%s: the game never read %s %s in %d frames", btn, btn, what, P.PRESS_BOUND)
+    end
+    local ok, why = phase({}, false, "released")
+    if ok then ok, why = phase({[btn] = true}, true, "pressed") end
+    if ok then ok, why = phase({}, false, "released after the press") end
+    if not ok then set({}); return false, why end
+    for _ = 1, gap or 0 do set({}); advance(); n = n + 1 end
+    return true, n
+end
 -- struct Pokemon is 100 bytes, hp u16 at +0x56 (pret include/pokemon.h; duo_main.lua:26)
 P.PARTY_MON_SIZE, P.MON_HP_OFF = 100, 0x56
 
@@ -438,11 +471,12 @@ function P.bw_diag(prefix, s)
     if s == nil then return prefix .. " no sample fed yet" end
     local e = s.extra or {}
     local usable = (e.party_count or 0) >= 2 and (e.slot1_hp or 0) > 0
-    return string.format("%s frame=%s ctrl0=%s chosen0=%s bufB0=%s,%s outcome=%s cb2=%s pm_type=%s pm_slot=%s pm_action=%s bag_location=%s fade=%s party_count=%s slot1_hp=%s slot1_usable=%s",
+    return string.format("%s frame=%s ctrl0=%s chosen0=%s bufB0=%s,%s outcome=%s cb2=%s pm_type=%s pm_slot=%s pm_action=%s bag_location=%s fade=%s party_count=%s slot1_hp=%s slot1_usable=%s keys=%s",
         prefix, tostring(s.frame), s.ctrl[0] and string.format("%08X", s.ctrl[0]) or "nil", tostring(s.chosen0),
         tostring(s.ret[0]), tostring(s.ret[1]), tostring(s.outcome), s.cb2 and string.format("%08X", s.cb2) or "nil",
         tostring(s.pm_type), tostring(s.pm_slot), tostring(s.pm_action), tostring(s.bag_location),
-        tostring(s.fade), tostring(e.party_count), tostring(e.slot1_hp), tostring(usable))
+        tostring(s.fade), tostring(e.party_count), tostring(e.slot1_hp), tostring(usable),
+        e.keys and string.format("%04X", e.keys) or "nil")
 end
 
 --- The receipt meta for one bw row, or nil + why when any of the five hashes is absent (the
@@ -678,6 +712,7 @@ function P.run()
             local x, y = G.pos(cp)
             local extra = {map = g .. "." .. n, pos = x .. "," .. y,
                 party_count = memory.read_u8(bw_ctx.T.PARTY_COUNT_ADDR),
+                keys = memory.read_u16_le(bw_ctx.T.GMAIN_CALLBACK2_ADDR + P.HELD_KEYS_OFF),
                 slot1_hp = memory.read_u16_le(bw_ctx.T.PARTY_BASE + P.PARTY_MON_SIZE + P.MON_HP_OFF)}
             -- N8's receipt_fields: the ball pocket total (SaveBlock1 +0x430, quantity XOR the
             -- low 16 bits of SaveBlock2.encryptionKey; lua/gen3/reads.lua read_balls), every frame
@@ -905,12 +940,17 @@ function P.run()
             assert(btn ~= "B" or not (bw_last and (bw_last.type or 0) & bw_ctx.K.BATTLE_TYPE_POKEDUDE ~= 0),
                 "B refused while BATTLE_TYPE_POKEDUDE is set")
         end
+        local function held_keys() return memory.read_u16_le(bw_ctx.T.GMAIN_CALLBACK2_ADDR + P.HELD_KEYS_OFF) end
         local function bw_steps(spec)
             for n, step in ipairs(spec.inputs) do
                 if step.throw_ball then
                     G.phase("helper", spec.name .. " throw_pokeball_from_bag: its own G.finish ends the run here")
                 end
-                if step.tap then no_b(step.tap); G.tap(step.tap, step.frames or 3, step.gap or 13)
+                if step.tap then
+                    no_b(step.tap)
+                    local pressed, why = P.press(step.tap, function(k) joypad.set(k) end, G.advance, held_keys,
+                        step.gap or 13)
+                    if not pressed then G.log("BWPRESS " .. spec.bw .. " " .. n .. " " .. why) end
                 elseif step.idle then G.idle(step.idle)
                 elseif step.mash then G.mash(step.mash, bw_wait(step.stop))
                 elseif step.wait then
