@@ -145,26 +145,26 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | FR clean | S-1..S-11 (vanilla kinds; no N rows) | ≤ 120 frames standing still in ordinary overworld play (§5.5 liveness bound) | `gen3_frlg` seven: `faint_cmd`, `linked_faint_active`, `boxsync`, `whiteout`, `link`, `deadzone`, `reconnect` | · |
 | LG clean | S-1..S-11 (vanilla kinds; no N rows) | same bound | `gen3_frlg` seven (same set, driven on LG) | · |
 | RR clean | S-1..S-11 (no native/mailbox kinds; no companion observations exist there) | same bound | `native_absent` (clean RR beside companion RR: native refused cleanly, storage via Lua fallback) plus the `gen3_rr` base run on the clean side of that pair | · |
-| RR companion | S-1..S-13 + N-1..N-8 | same bound | `gen3_rr` nine (PLAN §5.5): `faint_cmd`, `linked_faint_active`, `boxsync`, `trade`, `ghost`, `infopanel`, `explode`, `rival_swap`, `native_absent` | · |
+| RR companion | S-1..S-13 + N-1..N-7 | same bound | `gen3_rr` eight (PLAN §5.5; the `ghost` scenario was dropped with the peer-ghost ruling, PLAN §0/§10): `faint_cmd`, `linked_faint_active`, `boxsync`, `trade`, `infopanel`, `explode`, `rival_swap`, `native_absent` | · |
 
-### X.1 — G3 coverage by kind (P3 shadow observer, PHYSICAL only; refreshed 2026-09-21 checkpoint 3)
+### X.1 — G3 coverage by kind (P3 shadow observer, PHYSICAL only; refreshed 2026-09-23 checkpoint 7)
 
 `✓` = observer SHADOW line for the kind in a natural-play or duo receipt, callback == site; `◐` = site pinned and hooked-reachable but not yet witnessed by the observer; `·` = no receipt; `OPEN` = no natural-play source in this phase (listed for the G3 signature).
 
 | kind (row) | FR clean | RR companion | receipt(s) |
 |---|---|---|---|
-| `battle_begin`/`battle_end` (S-2) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play`, `census_rr_battle` |
-| `faint` (S-3) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_faint` (re-pin 0x0909EED2) |
-| `capture_wild` (S-4) | ◐ (route1_catch leg: grass hunt fixed, run 17 pending) | ✓ (wild_catch: outcome 7, party 1->2, observer `capture_wild` at 0x0907DD88 callback == site) | `shadow_rr_play_r5` (+ `.shadow.log`), `census_rr_faint_v3b_catch` |
-| `pc_move` (S-5) | ◐ (viridian_pc leg being pinned from `research/fr_pc_flow_and_pc_move_sites.md`) | ✓ (pc_ops: deposit 3->2 and withdraw 2->3 of the same key, other records byte-identical; observer `pc_deposit` x1, `pc_withdraw` x1, `pc_box_place` x2; `pc_release_begin`/`pc_release` x1 each in the pc_release leg, departed key == slot-2 key) | `shadow_rr_play_r5d_pc_ops` (+ `.shadow.log`), `shadow_rr_play_r6_pc_release`, `census_rr_pc_deposit`, `census_rr_pc_withdraw` |
-| `whiteout` (S-6) | ✓ | ✓ | `shadow_fr_play_run14`, `shadow_rr_play` |
-| `map_load` (S-7) | ✓ | ✓ | `shadow_fr_play_run15`, `shadow_rr_play` |
+| `battle_begin`/`battle_end` (S-2) | ✓ (`shadow_fr_play_run25_2026-09-23`: battle_begin 7, battle_end 6; `run17`: 8/7, `run18`: 8/8) | ✓ (`shadow_rr_play_r9_2026-09-23`: battle_begin 4, battle_end 7; r5: 4/7) | `shadow_fr_play_run25_2026-09-23`, `shadow_fr_play_run15`, `shadow_rr_play_r9_2026-09-23`, `census_rr_battle` |
+| `faint` (S-3) | ✓ (`run25_2026-09-23`: faint 1, `playerFaintCounter=1` on the `route1_faint` leg; `run14`: 1) | ✓ (`r9_2026-09-23`: faint 6, HP positive→0 with `playerFaintCounter 0 -> 1`; `shadow_rr_faint` re-pin 0x0909EED2) | `shadow_fr_play_run25_2026-09-23`, `shadow_fr_play_run14`, `shadow_rr_play_r9_2026-09-23` |
+| `capture_wild` (S-4) | ✓ **PHYSICAL** (`run25_2026-09-23.shadow.log:57`, `callback_address == address`, `mon_given` ×1 in the same frame; leg verdict `outcome=7`) | ✓ (r9: `outcome=7, party 1 -> 2`; `pc`-free capture at 0x0907DD88 callback == site; r5: 1) | `shadow_fr_play_run25_2026-09-23` (+ `.shadow.log`), `shadow_rr_play_r9_2026-09-23`, `shadow_rr_play_r5`, `census_rr_faint_v3b_catch` |
+| `pc_move` (S-5) | **pending, not claimed** — the `viridian_pc` leg failed again in run 25 (25d path start at (12,37) vs (13,38); 25e incidental encounter loop) and is blocked on C3-36; FR run 27 pending. Leg pinned from `research/fr_pc_flow_and_pc_move_sites.md`. | ✓ (r9: `pc_deposit` ×1, `pc_withdraw` ×1, `pc_box_place` ×2, `pc_release_begin`/`pc_release` ×1 each, all callback == site; deposit 3→2, withdraw 2→3 of the same key with the other records byte-identical, release gone from party and every box. r5d/r6: the same four branches at earlier cuts.) `pc_move_full_party` remains OPEN (no full-party fixture). | `shadow_rr_play_r9_2026-09-23` (+ `.shadow.log`), `shadow_rr_play_r5d_pc_ops`, `shadow_rr_play_r6_pc_release`, `census_rr_pc_deposit`, `census_rr_pc_withdraw` |
+| `whiteout` (S-6) | ✓ (`run18`: 1; run 25 had no whiteout) | ✓ (`r9_2026-09-23`: 1; r5: 1) | `shadow_fr_play_run18_2026-09-21`, `shadow_rr_play_r9_2026-09-23` |
+| `map_load` (S-7) | ✓ (`run25_2026-09-23`: 6; `run17`: 8; `run18`: 8) | ✓ (`r9_2026-09-23`: 1, door 769→1284 at (7,8); r5: 1) | `shadow_fr_play_run25_2026-09-23`, `shadow_fr_play_run15`, `shadow_rr_play_r9_2026-09-23` |
 | `evolve_species_store` (S-8) | OPEN (evolution leg needs a level-up plan) | OPEN | — |
 | `trade_done` (S-9) | OPEN (npc_trade leg not reached) | OPEN (native trade = duo `trade`, commanded) | — |
-| `save` (S-10) | ✓ (fixture boot-check re-save) | ✓ | `bootcheck_firered_town`, `shadow_rr_play` |
+| `save` (S-10) | ◐ (the fixture boot-check re-save is a persistence witness, not the site `0x08015D36`; no SHADOW line, and run 25 stopped before the FR save leg) | ✓ (`shadow_rr_play_r8_save_2026-09-23`: RESULT PASS, counter 4→5, slot 14/14, dialog closed; `r9` save ×1) | `shadow_rr_play_r8_save_2026-09-23` (+ `.shadow.log`), `shadow_rr_play_r9_2026-09-23`, `bootcheck_firered_town` |
 | `poison_faint` (S-11) | OPEN | OPEN | — |
 | `borrowed_party`/`nature_change` (S-12, RR) | n/a | OPEN | — |
-| checkpoint negatives (W rows) | ✓ (`checkpoint_fr_clean_2026-09-22d`: all controls incl. battle + script_running; liveness across save lineages: `checkpoint_fr_parcel_lineage_2026-09-22b` idle 275/300 after the link-predicate fix, was 0/300) | ✓ (`checkpoint_rr_companion_2026-09-22b`: 9/9 on the new link predicate) | unreachable states: SOURCE+MODEL `research/checkpoint_unreached_states.md`; native-op-staged OPEN (P5) |
+| checkpoint negatives (W rows) | ✓ (`checkpoint_fr_clean_2026-09-23_nonirq.txt`: `RESULT: PASS all checkpoint controls` over non-IRQ samples — idle 276/276 accepted, every forbidden row false with its expected clause, C3-24 attribution; positive rows need `non_irq_samples >= max(min_samples, 30)`, C3-35) | ✓ (`checkpoint_rr_companion_2026-09-22b`: 9/9 on the new link predicate) | unreachable states: SOURCE+MODEL `research/checkpoint_unreached_states.md`; native-op-staged OPEN (P5) |
 | overhead budget | ✓ (21 sites hooked: 59.7 fps throttled, hooks off 59.7; unthrottled 333 vs 766 fps with liveness hooks, the mGBA callback-path cost known from P1) | ✓ | `overhead_fr_*`, `overhead_rr_throttled`/`_unthrottled`, `wire_delta_rr_explode` |
 | `reads == PYDEC` (R rows) | ✓ (real encrypted party record, Squirtle L8, every field agrees; planted offender rc=1; box 0 still empty) | ✓ | `reads_pydec_fr_party_2026-09-22`, `reads_pydec_fr`, `reads_pydec_rr` |
 
@@ -232,6 +232,14 @@ branch (not merged; its `docs/rr_reference/*` are reference inputs only).
 - 2026-09-21 P3 wire deltas with the REAL old client, RR explode duo with vs without the observer: `docs/gen3/probes/wire_delta_rr_explode_2026-09-21.txt` — 0 semantic deltas; only periodic samples (tick, ghost_pos) differ by 1-2 records. Together with the throttled overhead receipt this closes the PLAN §5.7 overhead budget (frame time and wire behaviour) on RR companion.
 
 - 2026-09-21 P3 FR natural play run 15: `docs/gen3/probes/shadow_fr_play_run15_2026-09-21.txt` — starter, rival, parcel fetch, Viridian heal (slot 0 14/23 -> 23/23 via the nurse), parcel delivered with five mid-walk encounters handled; observer: battle_begin x6, battle_end x6, map_load x8, mon_given x1. Next: the Route 1 catch leg (encounter search bound too tight).
+
+- 2026-09-23 P3 FR run 25: `docs/gen3/probes/shadow_fr_play_run25_2026-09-23.txt` (+ `.shadow.log`) — `parcel_deliver` PASS (parcel gone, dex flag set, POKé BALL in the pocket, lab scene 6), `route1_catch` PASS with the observer seeing `capture_wild` ×1 and `mon_given` ×1 in the same frame (`callback_address == address`) and the leg's own `outcome=7`, `route1_faint` PASS (`playerFaintCounter=1`); `viridian_pc_deposit_withdraw` FAIL (25d path start (12,37) vs (13,38); 25e incidental encounter loop), blocked on C3-36 with FR run 27 pending. **FR `capture_wild` is now PHYSICAL**; the FR PC kinds are not claimed.
+
+- 2026-09-23 P3 RR save leg: `docs/gen3/probes/shadow_rr_play_r8_save_2026-09-23.txt` — RESULT PASS on the fixed helper (C3-30 `30d13c63`): counter 4→5, slot 14/14 valid, the save dialog closed, fixture flushed; observer `save` ×1, callback == site.
+
+- 2026-09-23 P3 RR whole lane at the pointer correction: `docs/gen3/probes/shadow_rr_play_r9_2026-09-23.txt` — RESULT PASS at `09c051d0`: battle_to_field, wild_faint, wild_catch, door_warp, pc_ops (deposit 3→2 then withdraw 2→3 of the same key, others byte-identical), pc_release (gone from party and every box), save; `pc_move_full_party` open (no full-party fixture). First lane receipt on the ROM-derived save-block pointers (C3-33) with the `saveblocks_setter` anchor armed; observer saw capture_wild, faint ×6, whiteout, map_load (769→1284), pc_deposit/withdraw/box_place ×2/release_begin/release, save, battle_begin ×4, battle_end ×7.
+
+- 2026-09-23 P3 FR checkpoint controls on the non-IRQ scoring: `docs/gen3/probes/checkpoint_fr_clean_2026-09-23_nonirq.txt` — `RESULT: PASS all checkpoint controls` with idle 276/276 non-IRQ samples accepted (all 24 refused frames are IRQ mode, parked-CPU clause), walking 109/109, and every forbidden row false with at least one of its expected clauses (C3-24 attribution); positive rows additionally require `non_irq_samples >= max(min_samples, 30)` from C3-35 (`eb97f457`), which this idle row clears by 9×.
 
 ### Old-client characterization (P1)
 
