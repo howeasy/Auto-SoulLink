@@ -1,0 +1,32 @@
+# census: lua/tests/probe_gen3_frameend_pc.lua title=leafgreen lane=fbfae6fa14b448424e6efe97f955f9fe498057f6 tracked_clean=True (checked before and after)
+# invocation: SLINK_GEN3_TITLE=leafgreen SLINK_STATE=<lane>/patch/build/gen3_probe_states_c4p2/leafgreen/slink_overworld.State python tools/run_gate.py lua/tests/probe_gen3_frameend_pc.lua --rom "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba" --timeout 400  (RESULT: PASS, 34s)
+# finding: 1800/1800 overworld-idle frames; every non-IRQ frame end inside WaitForVBlank 0x080008AC-0x080008B4, within the LG pack's cpu range [0x08000890,0x080008BF]; 125 frames in the BIOS IRQ vector 0x0000001C (refused by the clause on purpose, as on FR). First LG frame-end CPU evidence (the LG cpu block had symbol provenance only).
+[probe] title=leafgreen sha1=574fa542ffebb14be69902d1d36f1ec0a4afd71e hash=574fa542ffebb14be69902d1d36f1ec0a4afd71e pack=gen3_frlg kind=clean admission=hash
+[probe] gMain.callback1 offset +0x00, callback2 +0x04 (pret include/main.h:12-16)
+[probe] armed — sampling frame-end CPU/state census for 1800 frames
+[probe] emu.getregisters() keys: CPSR,R0,R1,R10,R11,R12,R13,R14,R15,R2,R3,R4,R5,R6,R7,R8,R9,SPSR
+---- [probe] interim at frame 600 (bios_seen=true) ----
+  overworld-idle: 600 frames
+    R15=0x080008AC x260
+    R15=0x080008AE x78
+    R15=0x080008B2 x77
+    R15=0x080008B4 x74
+    R15=0x080008B0 x73
+    R15=0x0000001C x38
+    CPSR mode/T=31/1 x562
+    CPSR mode/T=18/0 x38
+    tasks={0806E811,0806E83D,08079DE1} x600
+    (1 distinct task-function sets total)
+---- [probe] final at frame 1800 (bios_seen=true) ----
+  overworld-idle: 1800 frames
+    R15=0x080008AC x771
+    R15=0x080008AE x240
+    R15=0x080008B0 x227
+    R15=0x080008B4 x222
+    R15=0x080008B2 x215
+    R15=0x0000001C x125
+    CPSR mode/T=31/1 x1675
+    CPSR mode/T=18/0 x125
+    tasks={0806E811,0806E83D,08079DE1} x1800
+    (1 distinct task-function sets total)
+RESULT: PASS
