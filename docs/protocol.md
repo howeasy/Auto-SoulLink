@@ -28,7 +28,7 @@
 | Client → server envelope | `{"event": "<type>", "player": "a"\|"b", "seq": N, ...fields}` — `send()` stamps `seq` and `player` on every event | `gen3_frlge_client.lua:1047-1060` |
 | Server → client envelope | **exactly one line per inbound line**: `{"commands": [ {...}, {...} ]}`. Never fewer than one element: an empty queue is `[{"cmd":"noop"}]` | `server.py:2527-2528`, `server.py:2555-2559`, `state.py:376-384` |
 | Reply on malformed JSON | `{"commands":[{"cmd":"noop"}]}` | `server.py:2439-2444` |
-| Reply on unknown `player` | `{"commands":[{"cmd":"noop"}]}`; `player` MUST be `"a"` or `"b"` (`VALID_PLAYERS`) | `server.py:79`, `server.py:2446-2450` |
+| Reply on unknown `player` | `{"commands":[{"cmd":"noop"}]}`; `player` MUST be `"a"` or `"b"` (`VALID_PLAYERS`) | `server.py:79` (the set), `server.py:1410` (the check in `handle_client`) |
 | Reply on duplicate `seq` | `{"commands":[{"cmd":"noop"}]}` — the event is **not processed** | `server.py:2512-2523` |
 | ACK/NACK envelope | **None.** There is no per-event ack. Command receipt is implicit (the reply line). Command *execution* is acknowledged only for the deferred commands via dedicated events (§5). | — |
 | Delivery model | Commands for the sender are returned in the reply to the event that produced them. Commands for the *partner* are queued in `queued_commands[partner]` and flushed in the reply to the partner's **next event of any type** (ticks included). | `state.py:2-8`, `state.py:239-244`, `state.py:376-384` |
@@ -45,8 +45,8 @@
 | Rule | Cite |
 |---|---|
 | `seq` is a per-client monotonically increasing `int` starting at 1 for the process lifetime; it does **not** reset on TCP reconnect (only on script reload) | `gen3_frlge_client.lua:1044`, `gen3_frlge_client.lua:1052` |
-| The duplicate-event counter is **per connection**, not per player: `last_seq` is a local of `handle_client`, so it is born with the socket and dies with it. An event with `seq <= last_seq` is dropped as a duplicate of one seen on *this* connection; a new connection starts from `-1` by construction, so a client that restarts and counts from 1 again is never mistaken for a duplicate. | `server/server.py:1095-1101` (the per-connection locals), `:1243-1254` (the guard) |
-| A connection is **ignored until it says hello**: any non-`hello` event on a connection whose hello has not been accepted is answered `noop`, with one WARNING per connection. The per-slot identity gate in `_dispatch` is the second line. | `server/server.py:1230-1241`, `:1255-1256` |
+| The duplicate-event counter is **per connection**, not per player: `last_seq` is a local of `handle_client`, so it is born with the socket and dies with it. An event with `seq <= last_seq` is dropped as a duplicate of one seen on *this* connection; a new connection starts from `-1` by construction, so a client that restarts and counts from 1 again is never mistaken for a duplicate. | `server/server.py:1359-1594` (the per-connection locals), `:1243-1254` (the guard) |
+| A connection is **ignored until it says hello**: any non-`hello` event on a connection whose hello has not been accepted is answered `noop`, with one WARNING per connection. The per-slot identity gate in `_dispatch` is the second line. | `server/server.py:1855-2303`, `:1255-1256` |
 | ⚠ RETIRED 2026-09-17 (`0629736`) — kept so the history reads straight: the server used to keep `_last_seq[player]` and treat `seq <= 1 and last > 10` as a client restart, which trapped a client that restarted after sending ≤ 10 events (its first events, `hello` included, were silently dropped) and forced a conformance harness to never reuse a server instance across "restarts". `reconnect_new`'s wrong-save leg hit exactly that trap live. The heuristic is deleted and the constraint no longer exists — a harness may reuse a server across restarts freely. | `0629736`; `server/server.py:1098-1101` |
 | Omitting `seq` (`-1` default) disables the guard for that message | `server/server.py:1248-1249` |
 
@@ -73,7 +73,7 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 | Field | Type | Required | Gen 3 sends | Server reads | Cite |
 |---|---|---|---|---|---|
 | `event` | `"hello"` | yes | yes | dispatch | `state.py:249` |
-| `player` | `"a"\|"b"` | yes | yes | `handle_client` | `server.py:2446` |
+| `player` | `"a"\|"b"` | yes | yes | `handle_client` | `server.py:1359` |
 | `seq` | int | SHOULD | yes | dup guard | `server.py:2513` |
 | `rom_type` | str | yes (routing) | yes | adapter selection, set-once commit, `is_rr = rom_type.endswith("_rr")` | `server.py:2478-2511`, `server.py:2853-2856` |
 | `party` | list[PartyEntry] (§4.1) | yes (may be `[]`) | yes | identity, `party_size`, `party_keys`, blobs, hp==0 faints, display backfill, `party_details` seed | `state.py:876-883`, `state.py:951-1048`, `server.py:2883-2902` |
@@ -102,11 +102,11 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 |---|---|---|---|
 | 0 | Any non-`hello` event from a player with a standing `identity_error` → `[noop]`, not processed | blocked | `server.py:2800-2801` |
 | 0' | Any non-`hello` event from a player not admitted (only matters when `rom_contract.json` exists; a run without a contract admits everyone) → `[noop]` | blocked | `server.py:2808-2809`, `server.py:1761-1779` |
-| 1 | ROM contract check (`_decide_admission`): rejected if the contract is unreadable, names no fingerprint for this player, the contract's `rom_sha1` and the hello's `rom_sha1` both exist and differ, the hello has no `rom_content`, the adapter raises on it, or the fingerprint differs. `rom_content_fingerprint()` returning `None` admits. No contract ⇒ admitted. | rejected ⇒ **`[noop]` returned, state untouched** | `server.py:1722-1759`, `server.py:2811-2830` |
+| 1 | ROM contract check (`_decide_admission`): rejected if the contract is unreadable, names no fingerprint for this player, the contract's `rom_sha1` and the hello's `rom_sha1` both exist and differ, the hello has no `rom_content`, the adapter raises on it, or the fingerprint differs. `rom_content_fingerprint()` returning `None` admits. No contract ⇒ admitted. | rejected ⇒ **`[noop]` returned, state untouched** | `server.py:712-758`, `server.py:712-758` |
 | 1' | Pairing (`_mixed_games_error`, in `handle_client` **before** the per-cartridge capability updates and the adapter reselection, so a refused hello changes nothing). The run is locked to one **foundation** — a pack, not a `game_id`: `firered`/`leafgreen` ⇒ `gen3_frlg`, `firered_rr` ⇒ `gen3_rr`, and elsewhere the `game_id` itself (`gen1_rby` vs `gen1_purergb`). The foundation is **derived** from `rom_type` via `foundation_for_rom_type()`, and the check is **fail-closed on every input**: a `rom_type` that is absent, empty, non-string or unrecognized is refused (it used to be skipped, which let a hello with no `rom_type` past the lock entirely), and an invalid retry does not clear a standing rejection. The hello's own `foundation` is optional but **absent is not empty**: omit the key and it is derived; send it and it must be the derived string, so `null`, `""`, `false`, `0`, `[]`, `{}` and any other value are refused. A non-string `artifact_kind` is refused likewise. It is also locked to one **pairing kind**: each foundation's adapter class normalizes the declared `artifact_kind` through `GameRulesAdapter.pairing_kind()` (default `named → clean`; `Gen3Adapter` adds `companion → clean`, since both patches are per cartridge). The **committed** kind is the declared one — `set_artifact_kind` is unaffected, so pureRGB `clean` vs `overlay` stays refused. Variants of one foundation (Red beside Blue, FireRed beside LeafGreen, companion RR beside clean RR) pair. Reply is only `hud_show{text:"[x] MIXED GAMES", color:[255,0,0], duration:600}`; `identity_error[pid]` is set and every later event gets `[noop]` until a conforming hello. | rejected | `server.py` `_mixed_games_error`, `adapters/__init__.py` `foundation_for_rom_type` |
 | 2 | Identity: `incoming_ot = msg.ot_id` else `adapter.parse_ot_id(party[0].key)`; empty party and no `ot_id` ⇒ no identity check at all | — | `state.py:892-895` |
 | 3 | First hello with an OT locks `player_identity[pid] = {ot_id, trainer_name or "A"/"B"}` and persists | locked | `state.py:929-936` |
-| 4 | Later hello with a different OT: `identity_error[pid]` set, `msg["_rejected"]=True`, the reply is **only** `hud_show{text:"[x] WRONG SAVE: slot A", color:[255,0,0], duration:600}`, and `_handle_hello` returns before touching party state | rejected | `state.py:900-918` |
+| 4 | Later hello with a different OT: `identity_error[pid]` set, `msg["_rejected"]=True`, the reply is **only** `hud_show{text:"[x] WRONG SAVE: slot A", color:[255,0,0], duration:600}`, and `_handle_hello` returns before touching party state | rejected | `state.py:1003-1264` |
 | 5 | Matching OT clears `identity_error` and may refresh `trainer_name` | ok | `state.py:919-927` |
 
 ⚠ DISAGREEMENT: the WRONG SAVE `hud_show` uses `color`/`duration`, not the `r,g,b,frames` every other `hud_show` uses. The Gen 3 parser only reads `r,g,b,frames` (`gen3_frlge_client.lua:299-302`), so this toast renders white for 300 frames. A new client SHOULD accept both spellings.
@@ -117,11 +117,11 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 
 | Effect | Cite |
 |---|---|
-| `party_size[pid] = len(party)`; blob cache refreshed (`_ingest_party_blobs`) | `state.py:876-883` |
+| `party_size[pid] = len(party)`; blob cache refreshed (`_ingest_party_blobs`) | `state.py:3045-3089` |
 | `_has_helld.add(pid)`; **partner removed from `_has_helld`** so partner-side `box_mon` becomes optimistic until the partner hellos | `state.py:945-950` |
 | `party_keys[pid] = {key for entries with maxHP > 0}` minus DEAD/MEMORIAL keys | `state.py:951-959` |
 | Re-quarantine: any pending (unlinked) capture found in the party gets `box_mon` re-queued, unless that would leave zero alive mons | `state.py:961-976` |
-| Any party entry with `hp == 0` whose key is an ALIVE link, if `pokeballs_obtained[pid]`, is treated as a faint that happened offline → `_propagate_faint` (partner gets `force_faint`/`force_explode`) | `state.py:978-1000` |
+| Any party entry with `hp == 0` whose key is an ALIVE link, if `pokeballs_obtained[pid]`, is treated as a faint that happened offline → `_propagate_faint` (partner gets `force_faint`/`force_explode`) | `state.py:2907-2951` |
 | Every key in `pending_memorials[pid]` gets `memorialize` re-queued (dedup against queue) | `state.py:1002-1007` |
 | Any DEAD/MEMORIAL key present in the party gets `memorialize` + `hud_show "[x] Dead in party -> grave"` | `state.py:1009-1025` |
 | Nickname/species back-fill into `LinkEntry.MonInfo` from the snapshot | `state.py:1027-1048` |
@@ -129,15 +129,15 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 | **Always** `config{overworld_presence, native_messages, native_sounds, battle_calc, pc_trade_npc}` | `state.py:1070-1082` |
 | Re-arm an interrupted whiteout rebuild (`party_mon` × outstanding + `rebuild_start`) | `state.py:1084-1111` |
 | `game_over` if `run_over` | `state.py:1113-1115` |
-| server.py: commit `rom_type` once, commit `trainer_name` once, ingest `rom_content`, seed `party_details`/`battle_state`, `_cache_mon_info` | `server.py:2851-2909` |
+| server.py: commit `rom_type` once, commit `trainer_name` once, ingest `rom_content`, seed `party_details`/`battle_state`, `_cache_mon_info` | `server.py:1735-1775` |
 
 Nothing else is "replayed": there is no event log replay. Pending commands queued for this player while offline are simply included in the hello reply (they were never removed from `queued_commands`).
 
 ### 2.4 `tick` / `safe` shared handling
 
-`handle_event` treats `safe` and `tick` identically (`state.py:354-374`): if `has_pokeballs is True` the gate opens; if `party` is present, `party_size` is updated, blobs are re-ingested and `_reconcile_party_keys` runs. `_reconcile_party_keys` (`state.py:2185-2273`) repairs `party_keys` toward the snapshot and may queue `party_mon` to the partner for a ghost-boxed linked mon. It is suppressed during an active rebuild, during a trade in phase `applying`, and for `_trade_settle_ticks[pid]` (=12) ticks after a trade commits (`state.py:2207-2220`, `state.py:485`, `state.py:727`).
+`handle_event` treats `safe` and `tick` identically (`state.py:354-374`): if `has_pokeballs is True` the gate opens; if `party` is present, `party_size` is updated, blobs are re-ingested and `_reconcile_party_keys` runs. `_reconcile_party_keys` (`state.py:2362-2453`) repairs `party_keys` toward the snapshot and may queue `party_mon` to the partner for a ghost-boxed linked mon. It is suppressed during an active rebuild, during a trade in phase `applying`, and for `_trade_settle_ticks[pid]` (=12) ticks after a trade commits (`state.py:2362-2453`, `state.py:303`, `state.py:303`).
 
-⚠ DISAGREEMENT: the Gen 3 `safe` event carries **no fields** (`gen3_frlge_client.lua:4123`) although `_ingest_party_blobs`' docstring says blobs ride "every hello / tick / safe" (`state.py:2743`). `safe` is therefore, in practice, only a queue flush that marks "the client is in the overworld again". server.py logs it and nothing more (`server.py:3018-3019`). A new client MAY send `safe` without a party.
+⚠ DISAGREEMENT: the Gen 3 `safe` event carries **no fields** (`gen3_frlge_client.lua:4123`) although `_ingest_party_blobs`' docstring says blobs ride "every hello / tick / safe" (`state.py:3045`). `safe` is therefore, in practice, only a queue flush that marks "the client is in the overworld again". server.py logs it and nothing more (`server.py:3018-3019`). A new client MAY send `safe` without a party.
 
 ### 2.5 `stats_cache`
 
@@ -149,7 +149,7 @@ Nothing else is "replayed": there is no event log replay. Pending commands queue
 
 **Shipped (`server/state.py:59`, `:152`, `:2267-2299`).** A keyed `party_mon`, `box_mon` or `memorialize` remains in flight after its reply leaves the server until a matching keyed acknowledgement resolves it or `SYNC_INFLIGHT_RECONCILES` (= 6) reconciler passes expire the window. `SoulLinkState.sync_inflight` tracks `(key, cmd) -> passes_remaining` per player (`:152`); `_arm_inflight` seeds the window at `SYNC_INFLIGHT_RECONCILES` when `handle_event` drains and clears the player's outbound queue (`:380-388` calls `:2267-2271`); `_ack_inflight` clears every in-flight entry for a key the instant any event carrying that key arrives (`:277-278`, `:2273-2277`); `_expire_inflight` spends one pass only when `_reconcile_party_keys` actually reconciles, not on a pass it skips for a rebuild or trade (`:2279-2290`, called at `:2348`). Reply delivery is not execution. While the command is queued or in flight, `_has_pending_command` (`:2292-2299`) makes reconciliation treat the target's transient party/box placement as still-pending rather than a player move — consulted at `:2356-2357`, `:2379-2380` and `:2394-2395`. Expiry permits reconciliation again; it is not a success acknowledgement or a delivery guarantee.
 
-The existing keyed responses are `sync_retrieve_done` / `sync_retrieve_failed` for retrieval, `box_mon_failed` for failed deposit, and `memorialize_done` / `memorialize_failed` for memorial handling (`server/state.py:318-386`). `stats_cache` currently updates cached stats and the party model (`:318-330`); it is sent before the Gen 1 deposit (`lua/gen1/client.lua:533`), not proof of successful deposit, but because it carries the target `key` it still acks that key's in-flight window through the generic `_ack_inflight` path (`server/state.py:277-278`). Do not invent a `box_mon_done` event.
+The existing keyed responses are `sync_retrieve_done` / `sync_retrieve_failed` for retrieval, `box_mon_failed` for failed deposit, and `memorialize_done` / `memorialize_failed` for memorial handling (`handle_event`'s reply branches at `server/state.py:369-419` for the first two; `_handle_memorialize_done`/`_handle_memorialize_failed` at `:2993-3043`). `stats_cache` currently updates cached stats and the party model (`:318-330`); it is sent before the Gen 1 deposit (`lua/gen1/client.lua:533`), not proof of successful deposit, but because it carries the target `key` it still acks that key's in-flight window through the generic `_ack_inflight` path (`server/state.py:2325-2329`). Do not invent a `box_mon_done` event.
 
 ## 3. Client → server events
 
@@ -163,7 +163,7 @@ The existing keyed responses are `sync_retrieve_done` / `sync_retrieve_failed` f
 | Uniqueness | not guaranteed for Gen 1; the server refuses (force-faints) a capture whose key already indexes a live link, and both halves of a pair MUST have distinct keys | `state.py:2499-2522` |
 | Stability | MUST be stable across party↔box moves and across reconnects; MUST change only via `key_change` (or a trade, §6) | `state.py:2406-2419` |
 
-`species_id` on the wire is the **game-internal** species id (CFRU id for RR, internal index for Gen 1). The adapter converts with `to_national_dex`/`species_name` (`base.py:332-335`, `gen3_frlge.py:574-575`, `gen1_rby.py:578-586`). `level` is the displayed level (int). Slots are 0-based (`slot=i`, `gen3_frlge_client.lua:1295`).
+`species_id` on the wire is the **game-internal** species id (CFRU id for RR, internal index for Gen 1). The adapter converts with `to_national_dex`/`species_name` (`base.py:393-395`, `gen3_frlge.py:581-582`, `gen1_rby.py:429-431`). `level` is the displayed level (int). Slots are 0-based (`slot=i`, `gen3_frlge_client.lua:1295`).
 
 ### 3.2 Event table
 
@@ -174,10 +174,10 @@ Dispatch order and the full accepted set: `state.py:249-353`. Anything else is l
 | `hello` | `rom_type:str`, `party:list` | see §2.1 | TCP connect edge `gen3:1915-1945` | §2.2–2.3 | Always answered with `resolved_areas` + `config`. |
 | `tick` | — (all optional) | `has_pokeballs:bool`, `party`, `area_id`, `loc_name`, `in_battle:bool`, `is_trainer_battle:bool`, `trainer_id:int`, `opponent_name:str`, `opponent_class:str`, `enemy_party:list`, `is_doubles:bool`, `pc_boxes:list`, `ball_count:int`, `badges:int bitmask`, `kanto_badges`, `trainer_name:str` | every 30 frames (~0.5 s) `gen3:1477`, `gen3:4126-4372` | state: gate, `party_size`, blobs, reconcile `state.py:354-374`; server.py: dashboard state, `battle_state`, dupes-clause check on wild-battle start, `party_details` **replaced** from `party` — all in `server.py`: `_dispatch`'s tick branch (`:2075-2156`) plus the `event == "tick"` `party_details` refresh at `:2177-2178`; `battle_state` and the wild-battle-start dupes check at `:2090-2148` (this range moved from `:3020-3143`) | `party` omitted while a borrowed party is in RAM (`gen3:4143-4145`). `enemy_party` MUST be `[]` when not in battle to clear stale foes (`gen3:4342`, `server.py`: the in-battle-exit reset in `_dispatch`, `:2095-2101`). The **first** tick with `in_battle=true` MUST carry `area_id` and `enemy_party[0].species_id` for the dupes-at-battle-start prompt (`server.py`: `_dispatch`, `:2129-2148`). |
 | `safe` | — | same as tick | first overworld frame after a battle (`pending_safe`) `gen3:2971,2984,4120-4124` | same as tick | Gen 3 sends `{event:"safe"}` only. |
-| `area_enter` | `area_id:str` | `loc_name:str` | `loc ~= prev_loc` (any map change) `gen3:2718-2722` | ignored if `area_id==""` or `is_gift_area`; else UNSEEN→PENDING_{partner}, PENDING_{self}→PENDING_BOTH; `_save` `state.py:1117-1135`; server.py: `player_area`, event log `server.py:2911-2923` | Gen 3 sends it for every location change even with `area_id=""` (town). `area_id` strings are adapter-namespace snake_case (`route_1`, `oaks_lab`, `intro`, `gift_<g>_<n>`). |
-| `capture` | `key`, `area_id` | `species_id:int`, `level:int`, `hp:int`, `maxHP:int`, `nickname:str`, `held_item_id:int`, `is_egg:bool`, `gift:bool`, `in_box:bool`, `stats:dict` | (a) new key in party during/after battle `gen3:3584-3593`; (b) new key in a box post-battle `gen3:3911-3973`, `3981-4081`; (c) new key outside battle after 45-frame buffer, `gift=true` `gen3:3859-3879`; (d) post-freeze recovery `gen3:3256-3265`, `3340-3344` | `_handle_capture` `state.py:1147-1633`: gift detection, shiny clause, bonus pairing, DZ/LINKED/second-capture rejection (`force_faint`+`memorialize`+SE 26+`hud_show`), species clause (`force_faint`+`gui_prompt "[x] Dup X"`+`unresolve_area`), pending add, **quarantine `box_mon`** if `!in_box && party_size>=1 && !gift`, stats cache, link formation (`msgbox "X and Y linked!"`, SE 25 both, `party_mon` both if both parties < 6) or first-capture (`hud_show ">> Got X"` to partner) | `key` and `area_id` MUST be non-empty or the event is dropped. `species_id` MUST be sent for the species clause. `stats` absent ⇒ server builds `{level,maxHP}` from top-level (`state.py:1503-1512`). `in_box=true` MUST be set when the catch landed in the PC (party full) so the server does not queue a redundant `box_mon`. A capture before `has_pokeballs` uses `area_id="intro"` in Gen 3 (`gen3:3620-3621`). |
-| `faint` | `key` | `area_id` | party HP >0→0 in overworld `gen3:3683`; in battle after 3-frame debounce / faint-counter / EvRing confirm `gen3:3772,3783,3794` | `party_keys.discard`; ignored if `!pokeballs_obtained`; if key is an ALIVE link → `_propagate_faint`: partner gets `force_faint` (or `force_explode` if `explode_mode && adapter.supports_explode_mode()`) + `play_sound 26`, both get `memorialize`, entry DEAD, `_check_game_over` `state.py:1635-1665`, `2604-2646` | server.py enriches killer from cached `battle_state.enemy_party` (first foe with hp>0) and `_level` from `party_details` `server.py:2954-2968`. A client MUST NOT re-report the HP=0 it wrote itself for a `force_faint` (`gen3:3667-3672`). |
-| `no_catch` | `area_id` | `species_id:int`, `level:int` | wild battle ended, nothing caught, area unresolved, 90-frame grace elapsed `gen3:4085-4106` | ignored for gift areas / resolved areas / own pending capture; suppressed with `unresolve_area` if a clause retry is pending for either player; **species-clause reroll** (`gui_prompt "Dupes clause: X -- reroll!"` + `unresolve_area`) if `species_lock` and `species_id` is in a family already held; else area → DEAD_ZONE, `LinkEntry(status=DEAD, cause="dead_zone")`, SE 26 + `msgbox "<Area> is a dead zone!"` to both, partner's pending capture gets `force_faint`+`memorialize`, `_check_game_over` `state.py:1772-1921` | `species_id`/`level` MUST be sent: without `species_id` the reroll can never fire and a legitimate dupe encounter dead-zones the area. The client MUST mark the area resolved locally before sending (`gen3:4091`) and un-mark on `unresolve_area`. |
+| `area_enter` | `area_id:str` | `loc_name:str` | `loc ~= prev_loc` (any map change) `gen3:2718-2722` | ignored if `area_id==""` or `is_gift_area`; else UNSEEN→PENDING_{partner}, PENDING_{self}→PENDING_BOTH; `_save` `state.py:3333-3421`; server.py: `player_area`, event log `server.py`: `_dispatch`'s `area_enter` branch `:1975-1987` | Gen 3 sends it for every location change even with `area_id=""` (town). `area_id` strings are adapter-namespace snake_case (`route_1`, `oaks_lab`, `intro`, `gift_<g>_<n>`). |
+| `capture` | `key`, `area_id` | `species_id:int`, `level:int`, `hp:int`, `maxHP:int`, `nickname:str`, `held_item_id:int`, `is_egg:bool`, `gift:bool`, `in_box:bool`, `stats:dict` | (a) new key in party during/after battle `gen3:3584-3593`; (b) new key in a box post-battle `gen3:3911-3973`, `3981-4081`; (c) new key outside battle after 45-frame buffer, `gift=true` `gen3:3859-3879`; (d) post-freeze recovery `gen3:3256-3265`, `3340-3344` | `_handle_capture` `state.py:1296-1782`: gift detection, shiny clause, bonus pairing, DZ/LINKED/second-capture rejection (`force_faint`+`memorialize`+SE 26+`hud_show`), species clause (`force_faint`+`gui_prompt "[x] Dup X"`+`unresolve_area`), pending add, **quarantine `box_mon`** if `!in_box && party_size>=1 && !gift`, stats cache, link formation (`msgbox "X and Y linked!"`, SE 25 both, `party_mon` both if both parties < 6) or first-capture (`hud_show ">> Got X"` to partner) | `key` and `area_id` MUST be non-empty or the event is dropped. `species_id` MUST be sent for the species clause. `stats` absent ⇒ server builds `{level,maxHP}` from top-level (`state.py:1503-1512`). `in_box=true` MUST be set when the catch landed in the PC (party full) so the server does not queue a redundant `box_mon`. A capture before `has_pokeballs` uses `area_id="intro"` in Gen 3 (`gen3:3620-3621`). |
+| `faint` | `key` | `area_id` | party HP >0→0 in overworld `gen3:3683`; in battle after 3-frame debounce / faint-counter / EvRing confirm `gen3:3772,3783,3794` | `party_keys.discard`; ignored if `!pokeballs_obtained`; if key is an ALIVE link → `_propagate_faint`: partner gets `force_faint` (or `force_explode` if `explode_mode && adapter.supports_explode_mode()`) + `play_sound 26`, both get `memorialize`, entry DEAD, `_check_game_over` `state.py:2907-2951`, `2604-2646` | server.py enriches killer from cached `battle_state.enemy_party` (first foe with hp>0) and `_level` from `party_details` `server.py:2954-2968`. A client MUST NOT re-report the HP=0 it wrote itself for a `force_faint` (`gen3:3667-3672`). |
+| `no_catch` | `area_id` | `species_id:int`, `level:int` | wild battle ended, nothing caught, area unresolved, 90-frame grace elapsed `gen3:4085-4106` | ignored for gift areas / resolved areas / own pending capture; suppressed with `unresolve_area` if a clause retry is pending for either player; **species-clause reroll** (`gui_prompt "Dupes clause: X -- reroll!"` + `unresolve_area`) if `species_lock` and `species_id` is in a family already held; else area → DEAD_ZONE, `LinkEntry(status=DEAD, cause="dead_zone")`, SE 26 + `msgbox "<Area> is a dead zone!"` to both, partner's pending capture gets `force_faint`+`memorialize`, `_check_game_over` `state.py:3273-3306` | `species_id`/`level` MUST be sent: without `species_id` the reroll can never fire and a legitimate dupe encounter dead-zones the area. The client MUST mark the area resolved locally before sending (`gen3:4091`) and un-mark on `unresolve_area`. |
 | `whiteout` | — | — | all previously-alive party mons at HP 0 and a real faint (or EvRing LOSS) confirmed `gen3:3803-3815` | plan rebuild from boxed alive pairs (`party_mon`s + `rebuild_start` to self, `party_mon`s + `hud_show` to partner), then for every ALIVE link whose half is in `party_keys[pid]`: partner `force_faint`, DEAD/`cause="whiteout"`, `memorialize` both; `party_keys[pid].clear()`; `hud_show "[x] PC empty"` + `game_over` both if nothing to rebuild `state.py:1923-2005` | server.py zeroes all `party_details` hp `server.py:2974-2978`. |
 | `party_to_box` | `key` | `stats:dict` | known key vanished from party outside battle, HP>0, after 5-frame buffer `gen3:3697-3727`, `3819-3838` | cache stats, `party_size -= 1`, discard key; if key is an ALIVE link and partner's half is in their party (or partner hasn't hello'd) → cancel pending `party_mon` for it, queue `box_mon` to partner, discard from partner's `party_keys` `state.py:2007-2053` | MUST NOT be sent for keys the client moved itself on server command (`sync_written_keys`, `gen3:3711`). |
 | `box_to_party` | `key` | `area_id`, `nickname` | known key reappeared in party after 5-frame buffer `gen3:3594-3611`, `3840-3857` | rebuild path confirm; quarantine enforcement (`box_mon` + `hud_show "[!] X: unlinked"`); dead/memorial → `memorialize` + `hud_show`; partner party logically full (≥6 counting pending `box_mon`s) → `box_mon` back + `hud_show "[!] X: re-boxed"`; else add key, queue `party_mon{key,nickname?,stats?}` to partner (cancelling pending `box_mon`) `state.py:2055-2161` | Partner's key is **not** added to `party_keys` until their `sync_retrieve_done`. |
@@ -187,7 +187,7 @@ Dispatch order and the full accepted set: `state.py:249-353`. Anything else is l
 | `stats_cache` | `key`, `stats` | — | before deposit `gen3:1631` | §2.5 | |
 | `sync_retrieve_done` | `key` | — | after `party_mon` succeeded **or** the mon was already in the party `gen3:1679-1680`, `1740-1741`, `2490`, `2505` | `party_keys.add`; rebuild bookkeeping, `rebuild_done` when complete `state.py:295-303`, `2389-2404` | ACK for `party_mon`. |
 | `sync_retrieve_failed` | `key` | — | party full after 3 retries / no stats / write failed `gen3:1707`, `1726`, `1745`, `2508` | discard key; drop from rebuild; **re-box the partner's linked half** (`box_mon` + `hud_show "[!] X: re-boxed"`) `state.py:304-331` | NACK for `party_mon`. |
-| `box_mon_failed` | `key` | `reason:str` | **never sent by Gen 3** | restore key to `party_keys`, `party_size += 1`, `_save` `state.py:332-345` | ⚠ DISAGREEMENT: the server discards the key the moment it queues `box_mon`; a client that cannot deposit and does not send this leaves the server's party model one mon short (`gen3:1653-1656` only logs). A new client MUST send it on deposit failure. |
+| `box_mon_failed` | `key` | `reason:str` | **never sent by Gen 3** | restore key to `party_keys`, `party_size += 1`, `_save` `state.py:3333-3421` | ⚠ DISAGREEMENT: the server discards the key the moment it queues `box_mon`; a client that cannot deposit and does not send this leaves the server's party model one mon short (`gen3:1653-1656` only logs). A new client MUST send it on deposit failure. |
 | `memorialize_done` | `key` | `box:int` | after the mon is in the memorial box `gen3:1770` | discard from `pending_memorials`+`party_keys`; when both halves are done → `LinkStatus.MEMORIAL` + `memorial.json` `state.py:2688-2711` | `box` is ignored by the server. |
 | `memorialize_failed` | `key` | `reason:str` | Lua path failed `gen3:1829` | treated as done for pair-status purposes `state.py:2713-2738` | |
 | `trade_request` | — | — | talk to ghost / PC-NPC when no UI or trade in flight `gen3:2167-2171`, `2185-2190` | §6.1 | Silently ignored while a trade is pending. |
@@ -212,11 +212,11 @@ The pair therefore stays **ALIVE with a phantom boxed half** in server state; th
 
 The client can emit the final per-mon `faint` followed immediately by one `whiteout`, before `battle_end` and the engine's blackout/heal path; the blackout hook only supplies `whiteout` if it has not already been sent (`lua/gen1/client.lua:605-618`, `:681`). Do not require a `whiteout` death cause on links already retired by their preceding faint events.
 
-1. `_handle_whiteout` plans against surviving ALIVE links whose two halves are boxed. It excludes pending/unlinked captures (`server/state.py:2405-2430`, `_alive_pc_mons`) and caps picks by the partner's available party room (`:2434-2456`, `_plan_rebuild`).
-2. For the whited-out player, enqueue `party_mon` for each chosen key, then `rebuild_start{text,keys}`; for the partner, enqueue corresponding `party_mon` commands then the informational `hud_show` (`server/state.py:2463-2515`, `_queue_rebuild_commands`). These are per-player queues, not a globally ordered cross-socket stream.
+1. `_handle_whiteout` plans against surviving ALIVE links whose two halves are boxed. It excludes pending/unlinked captures (`server/state.py:2457-2484`, `_alive_pc_mons`) and caps picks by the partner's available party room (`:2434-2456`, `_plan_rebuild`).
+2. For the whited-out player, enqueue `party_mon` for each chosen key, then `rebuild_start{text,keys}`; for the partner, enqueue corresponding `party_mon` commands then the informational `hud_show` (`server/state.py:2515-2567`, `_queue_rebuild_commands`). These are per-player queues, not a globally ordered cross-socket stream.
 3. Rebuild retrievals are queued before any additional force-faint/memorial commands produced by this whiteout handler (`server/state.py:2020-2050` queues the rebuild before `:2054-2072` force-faints and memorializes). Earlier per-mon faints may already have queued memorials. Gen 1 appends a last-mon-blocked memorial to the deferred tail so a later retrieval can unblock it (`lua/gen1/client.lua:552-557`).
 4. At each cartridge's safe write checkpoint, `party_mon` yields keyed `sync_retrieve_done` or `sync_retrieve_failed` (`lua/gen1/client.lua:546-547`). The server adds confirmed keys, records rebuild completion, or drops failed keys and may re-box the partner (`server/state.py:332-366`).
-5. Once every queued key for that player's rebuild has resolved, send `rebuild_done` and clear `rebuild_pending[player]` (`server/state.py:2517-2531`, `_maybe_finish_rebuild`). This banner completion is not itself a bilateral barrier: physical proof requires both sides' retrieval acknowledgements and saved-state readback (`prep/PLAN_v3.9.md:494-505`).
+5. Once every queued key for that player's rebuild has resolved, send `rebuild_done` and clear `rebuild_pending[player]` (`server/state.py:2569-2584`, `_maybe_finish_rebuild`). This banner completion is not itself a bilateral barrier: physical proof requires both sides' retrieval acknowledgements and saved-state readback (`prep/PLAN_v3.9.md:494-505`).
 
 With no rebuildable pair, the game-over path applies; the whiteout handler handles retired party links with no picks and also invokes the shared game-over check (`server/state.py:2085-2101`). Rebuild does not resurrect DEAD/MEMORIAL links. A release-created phantom boxed half remains a separate limit, not a guaranteed rebuild candidate on the cartridge.
 
@@ -228,10 +228,10 @@ Built by `build_party_snapshot` (`gen3_frlge_client.lua:1186-1314`, fields at `1
 
 | Field | Type | Required | Server consumer | Cite |
 |---|---|---|---|---|
-| `key` | key | **MUST** | `party_keys` (`m["key"]` — a missing key raises `KeyError` in `_handle_hello` and kills the connection coroutine), `_reconcile_party_keys`, blobs, `party_details` (skipped if falsy) | `state.py:952`, `state.py:2222`, `server.py:2899` |
+| `key` | key | **MUST** | `party_keys` (`m["key"]` — a missing key raises `KeyError` in `_handle_hello` and kills the connection coroutine), `_reconcile_party_keys`, blobs, `party_details` (skipped if falsy) | `state.py:1003`, `state.py:2362`, `server.py:2899` |
 | `maxHP` | int | MUST | hello: only `maxHP > 0` entries count as party members; HP bars | `state.py:952`, `server.py:3863` |
 | `hp` | int | MUST | hello offline-faint detection (`hp == 0`), alive set for re-quarantine; HP bars | `state.py:964`, `state.py:980-997` |
-| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:2780`, `server.py:2885` |
+| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:2780`, `server.py:4709` |
 | `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:2778`, `server.py:8081-8089` |
 | `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:1033-1046`, `server.py:3385-3388` |
 | `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:1032-1043` |
@@ -244,7 +244,7 @@ Built by `build_party_snapshot` (`gen3_frlge_client.lua:1186-1314`, fields at `1
 | `held_item_id` (legacy alias `held_item`) | int | optional | `adapter.item_name` | `server.py:2890`, `server.py:3798-3799` |
 | `ability_id` (legacy alias `ability`) | int | optional | `adapter.ability_name` (hidden when `!supports_abilities()`) | `server.py:2891`, `server.py:3389-3390` |
 | `form` | int | optional (Gen 4+) | sprite form | `server.py:3386` |
-| `blob_hex` | hex, **exactly `adapter.party_blob_size()*2` chars** | MUST for trade / rival swap | `_ingest_party_blobs` — wrong length or non-hex ⇒ entry silently dropped from `partner_blobs` ⇒ that mon is never trade-eligible and rival swap says "no cached party blobs" | `state.py:2740-2784`, `base.py:204-218` |
+| `blob_hex` | hex, **exactly `adapter.party_blob_size()*2` chars** | MUST for trade / rival swap | `_ingest_party_blobs` — wrong length or non-hex ⇒ entry silently dropped from `partner_blobs` ⇒ that mon is never trade-eligible and rival swap says "no cached party blobs" | `state.py:3045-3089`, `base.py:204-218` |
 
 Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry; `gender` is derived server-side from `adapter.gender_from_key(key, species_id)` (`server.py:2892`).
 
@@ -288,7 +288,7 @@ Built by `scan_next_boxes` (`gen3_frlge_client.lua:1409-1467`, entry at `1451-14
 |---|---|---|---|
 | `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:8019`, `8027`, `4401` |
 | `slot` | int, 0-based | display `slot+1`, logs | `server.py:4402` |
-| `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:2878-2880`, `8066-8079` |
+| `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:1735-1775`, `8066-8079` |
 | `species_id`, `nickname` | int, str | display | `server.py:8023-8025`, `4386` |
 | `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:3834-3859` |
 | `held_item_id`, `ability_id`, `moves` | | box table | `server.py:4390-4391`, `3423-3432` |
@@ -299,13 +299,13 @@ There is **no** "active box index" on the wire.
 
 | Builder | Reads | Adapter calls |
 |---|---|---|
-| `_build_status_dict` `server.py:3365-3606` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
+| `_build_status_dict` `server.py:2407-2652` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
 | `_build_status_html` `server.py:3608+` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities` (hide column, `:3736`), `gender_from_key`, `item_name`, `ability_description`, `stat_stage_labels` (`:3870`, `:3967`), `species_types`/`type_name` (via `type_badges_html`), `memorial_box_index`, `trainer_info` |
-| `_build_link_panel` `server.py:2565-2681` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
-| `_build_party_overlay_context` `server.py:5366-5412` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
-| `_build_badges_overlay_context` `server.py:5947-5966` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
-| `_check_memorial_box_contamination` `server.py:7980-8079` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
-| `_memorial_box_indices` `server.py:7954-7978` | dead count | `memorial_box_index`, `mons_per_box` |
+| `_build_link_panel` `server.py:1606-1722` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
+| `_build_party_overlay_context` `server.py:2854-2900` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
+| `_build_badges_overlay_context` `server.py:3270-3289` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
+| `_check_memorial_box_contamination` `server.py:4598-4697` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
+| `_memorial_box_indices` `server.py:4544-4568` | dead count | `memorial_box_index`, `mons_per_box` |
 
 `status_icon_html` (`html_render.py:150-166`) decodes `status_cond` with the Gen 3 bit layout directly (SLP bits 0-2, TOX 0x80, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40). A client for a generation with a different layout MUST translate to this layout on the wire (see §8).
 
@@ -372,7 +372,7 @@ Tokens are `"t<N>"` (`state.py:511`). A reply with a non-matching token is ignor
 
 ## 6. Trade sub-protocol
 
-State lives in `SoulLinkState.pending_trade` (one slot for the whole run, `state.py:228`). Only **linked pairs** may be traded: the initiator's mon must be one half of an ALIVE link **and** both halves must have cached blobs, i.e. both mons are in their owners' parties with valid `blob_hex` (`_eligible_trade_pairs`, `state.py:455-475`).
+State lives in `SoulLinkState.pending_trade` (one slot for the whole run, `state.py:530`). Only **linked pairs** may be traded: the initiator's mon must be one half of an ALIVE link **and** both halves must have cached blobs, i.e. both mons are in their owners' parties with valid `blob_hex` (`_eligible_trade_pairs`, `state.py:530-550`).
 
 ### 6.1 Phases
 
@@ -385,7 +385,7 @@ State lives in `SoulLinkState.pending_trade` (one slot for the whole run, `state
 | `applying` | `_execute_trade` `:625-658` | `apply_trade{slot:a_slot, blob_hex:b_blob, old_key:a_key, token}` to **a** | `apply_trade{slot:b_slot, blob_hex:a_blob, old_key:b_key, token}` to **b** `:648-653` | both `trade_done` received → `_commit_trade`; or watchdog force-commit |
 | committed | `_commit_trade` `:684-727` | `play_sound 25` + `msgbox "Traded <gives> for <gets>!"` to both `:715-721` | same | `pending_trade=None`, `_trade_settle_ticks = {a:12, b:12}` `:724-727` |
 
-`_execute_trade` **re-validates** before dispatch: the link must still be ALIVE and both keys still in their `party_keys`; otherwise both get `msgbox "Trade canceled - a POKeMON is\nno longer available."` and the slot is freed (`state.py:633-645`).
+`_execute_trade` **re-validates** before dispatch: the link must still be ALIVE and both keys still in their `party_keys`; otherwise both get `msgbox "Trade canceled - a POKeMON is\nno longer available."` and the slot is freed (`state.py:749-790`).
 
 ### 6.2 `apply_trade` client obligations
 
@@ -396,11 +396,11 @@ State lives in `SoulLinkState.pending_trade` (one slot for the whole run, `state
 5. Freeze party diffing during the apply and for a settle window after (`party_diff_ok` includes `not pending_trade_apply`, `:3392`; `POST_UNFREEZE_SETTLE` `:3436`).
 6. Defer all `box_mon`/`party_mon`/`memorialize` while the trade is in flight, then **purge** any that target the old or new key (`:2634`, `:3423-3429`).
 
-### 6.3 `_handle_trade_done` (`state.py:660-682`)
+### 6.3 `_handle_trade_done` (`state.py:792-814`)
 
 Accepts only in phase `applying`; ignores a mismatching non-empty `token`; buffers `(new_key, new_species)` per side; commits when **both** sides have reported. Nothing about the link is mutated before that, so a half-completed trade is never observable.
 
-### 6.4 `_commit_trade` (`state.py:684-727`)
+### 6.4 `_commit_trade` (`state.py:816-859`)
 
 | Step | Cite |
 |---|---|
@@ -431,52 +431,52 @@ Accepts only in phase `applying`; ignores a mismatching non-empty `token`; buffe
 
 | Member | Signature | Default | Purpose | Used at | Cite |
 |---|---|---|---|---|---|
-| `game_id` | property → str | abstract | registry key, persisted in `links.json` | `state.py:2971`, `800-819`; `server.py:2495` | `base.py:55-59` |
-| `is_gift_area` | `(area_id) -> bool` | abstract | gift/static areas: no `area_enter` state, no `no_catch`, no quarantine; MUST recognise the `gift_` prefix | `state.py:1123`, `1143`, `1778`; `gift_link_area` | `base.py:61-68` |
-| `is_fixed_species_gift` | `(area_id) -> bool` | `False` | bypass species/gender/type clauses for forced-species gifts | `state.py:1423`, `1526` | `base.py:70-82` |
-| `is_daycare_area` | `(area_id) -> bool` | `False` | daycare eggs are not gifts | `state.py:1145`; `gift_link_area` | `base.py:84-93` |
-| `gift_link_area` | `(area_id) -> str` | `area_id` if gift/daycare else `f"gift_{area_id}"` | namespace under which a gift caught in a wild area links | `state.py:1349` | `base.py:95-109` |
-| `is_egg_pickup_area` | `(area_id) -> bool` | `startswith("egg_")` | (declared; not called by state.py at this commit) | — | `base.py:111-124` |
-| `evo_family` | `(species_id) -> int` | abstract | species clause family key | `state.py:1424-1450`, `1701-1759`, `1818-1862`, `2526-2556` | `base.py:126-132` |
-| `gender_from_key` | `(key, species_id) -> "male"\|"female"\|"genderless"` | abstract | gender clause (`genderless` never violates); dashboard gender | `state.py:2560-2561`; `server.py:2892`, `3775` | `base.py:134-141` |
-| `species_types` | `(species_id) -> (t1,t2)\|None` | abstract | type clause; type badges | `state.py:2567-2568`; `html_render.py:65` | `base.py:143-149` |
-| `is_shiny` | `(key) -> bool` | abstract | shiny clause (bonus mons) | `state.py:1165` | `base.py:151-159` |
-| `parse_ot_id` | `(key) -> str` | `GameAdapter`: second `:` segment of a 2-part key | identity lock fallback when hello lacks `ot_id` | `state.py:895` | `base.py:161-168`, `550-562` |
-| `is_valid_mon_key` | `(key) -> bool` | `GameAdapter`: two hex segments ≤ 8 digits | validation (dashboard APIs) | — | `base.py:170-173`, `564-578` |
-| `species_name` | `(species_id) -> str` | abstract | every HUD/msgbox label, logs | pervasive | `base.py:175-181` |
-| `type_name` | `(type_id) -> str` | abstract | type clause message, badges | `state.py:2575` | `base.py:183-186` |
-| `rival_trainer_ids` | `() -> set[int]` | `set()` | rival-team-swap trigger set | `state.py:2839` | `base.py:188-202` |
-| `party_blob_size` | `() -> int` | `0` (= do not cache blobs) | byte length every `blob_hex` MUST decode to; gates trade eligibility and rival swap | `state.py:2760` | `base.py:204-218` |
-| `supports_abilities` | `() -> bool` | `True` | hide Ability columns | `server.py:3736` | `base.py:220-230` |
-| `status_token` | `(status_cond) -> "SLP"\|"PSN"\|"BRN"\|"FRZ"\|"PAR"\|"TOX"\|""` | `""` | native `link_panel` status field (helper `gb_status_token` for GB layouts) | `server.py:2604`, `4230` | `base.py:232-238`, `516-536` |
-| `info_panel_width` | `() -> int` | `0` | 0 = no native panel width concept (Gen 3 fallback: panel on adapter's say-so); ≤20 ⇒ compact rows | `server.py:1798`, `2640-2679` | `base.py:240-248` |
-| `supports_info_panel` | `() -> bool` | `False` | veto for `link_panel` | `server.py:1792` | `base.py:250-264` |
-| `supports_explode_mode` | `() -> bool` | `False` | `force_explode` instead of `force_faint` | `state.py:2619-2621` | `base.py:266-279` |
+| `game_id` | property → str | abstract | registry key, persisted in `links.json` | `state.py:2971`, `800-819`; `server.py:2495` | `base.py:73-75` |
+| `is_gift_area` | `(area_id) -> bool` | abstract | gift/static areas: no `area_enter` state, no `no_catch`, no quarantine; MUST recognise the `gift_` prefix | `state.py:1123`, `1143`, `1778`; `gift_link_area` | `base.py:78-84` |
+| `is_fixed_species_gift` | `(area_id) -> bool` | `False` | bypass species/gender/type clauses for forced-species gifts | `state.py:1423`, `1526` | `base.py:86-98` |
+| `is_daycare_area` | `(area_id) -> bool` | `False` | daycare eggs are not gifts | `state.py:1145`; `gift_link_area` | `base.py:100-109` |
+| `gift_link_area` | `(area_id) -> str` | `area_id` if gift/daycare else `f"gift_{area_id}"` | namespace under which a gift caught in a wild area links | `state.py:1349` | `base.py:111-125` |
+| `is_egg_pickup_area` | `(area_id) -> bool` | `startswith("egg_")` | (declared; not called by state.py at this commit) | — | `base.py:127-140` |
+| `evo_family` | `(species_id) -> int` | abstract | species clause family key | `state.py:1424-1450`, `1701-1759`, `1818-1862`, `2526-2556` | `base.py:143-148` |
+| `gender_from_key` | `(key, species_id) -> "male"\|"female"\|"genderless"` | abstract | gender clause (`genderless` never violates); dashboard gender | `state.py:2560-2561`; `server.py:2892`, `3775` | `base.py:151-157` |
+| `species_types` | `(species_id) -> (t1,t2)\|None` | abstract | type clause; type badges | `state.py:2567-2568`; `html_render.py:65` | `base.py:160-165` |
+| `is_shiny` | `(key) -> bool` | abstract | shiny clause (bonus mons) | `state.py:1314` (`self.adapter.is_shiny` in `_handle_capture`; the standalone helper at `:107` is legacy, per its own docstring) | `base.py:168-175` |
+| `parse_ot_id` | `(key) -> str` | `GameAdapter`: second `:` segment of a 2-part key | identity lock fallback when hello lacks `ot_id` | `state.py:895` | `base.py:178-184`, `550-562` |
+| `is_valid_mon_key` | `(key) -> bool` | `GameAdapter`: two hex segments ≤ 8 digits | validation (dashboard APIs) | — | `base.py:187-189`, `564-578` |
+| `species_name` | `(species_id) -> str` | abstract | every HUD/msgbox label, logs | pervasive | `base.py:192-197` |
+| `type_name` | `(type_id) -> str` | abstract | type clause message, badges | `state.py:2575` | `base.py:200-202` |
+| `rival_trainer_ids` | `() -> set[int]` | `set()` | rival-team-swap trigger set | `state.py:2839` | `base.py:204-218` |
+| `party_blob_size` | `() -> int` | `0` (= do not cache blobs) | byte length every `blob_hex` MUST decode to; gates trade eligibility and rival swap | `state.py:2760` | `base.py:220-234` |
+| `supports_abilities` | `() -> bool` | `True` | hide Ability columns | `server.py:3736` | `base.py:236-246` |
+| `status_token` | `(status_cond) -> "SLP"\|"PSN"\|"BRN"\|"FRZ"\|"PAR"\|"TOX"\|""` | `""` | native `link_panel` status field (helper `gb_status_token` for GB layouts) | `server.py:2604`, `4230` | `base.py:248-254`, `516-536` |
+| `info_panel_width` | `() -> int` | `0` | 0 = no native panel width concept (Gen 3 fallback: panel on adapter's say-so); ≤20 ⇒ compact rows | `server.py:1798`, `2640-2679` | `base.py:256-264` |
+| `supports_info_panel` | `() -> bool` | `False` | veto for `link_panel` | `server.py:1792` | `base.py:266-280` |
+| `supports_explode_mode` | `() -> bool` | `False` | `force_explode` instead of `force_faint` | `state.py:2619-2621` | `base.py:282-295` |
 
 ### 7.2 Presentation (`GamePresentationAdapter`)
 
 | Member | Signature | Default | Used at | Cite |
 |---|---|---|---|---|
-| `sprite_html` | `(species_id, form=0) -> str` | abstract | `server.py:1621-1629` → everywhere sprites render | `base.py:289-297` |
-| `ability_name` | `(ability_id, species_id=0) -> str` | abstract | `server.py:3390`, `3953` | `base.py:299-306` |
-| `ability_description` | `(ability_id) -> str` | abstract | `server.py:3805`, `3954` | `base.py:308-310` |
-| `trainer_info` | `(trainer_id) -> (name, class)`; `("","")` if unknown | abstract | `server.py:3053-3056` (tick `trainer_id`) | `base.py:313-320` |
-| `item_name` | `(item_id) -> str` | abstract | `server.py:3799`, `3955` | `base.py:322-325` |
-| `area_display_name` | `(area_id) -> str` | abstract | dead-zone text `state.py:1876`; panel, dashboard | `base.py:327-330` |
-| `to_national_dex` | `(species_id) -> int` | abstract | `sprite_src` default | `base.py:332-335`, `445-446` |
-| `gender_symbol` | `(gender) -> str` | abstract | dashboard | `base.py:337-340` |
-| `form_sprite_id` | `(species_id) -> int\|None` | abstract | forms | `base.py:342-345` |
-| `form_sprite_url` | `(species_id, form=0) -> str\|None` | `None` | Gen 4+ forms | `base.py:347-358` |
-| `rom_content_fingerprint` | `(payload) -> str\|None`; MUST raise on malformed | `None` | admission `server.py:1746` | `base.py:360-372` |
-| `ingest_rom_content` | `(payload) -> tables\|None`; MUST raise on malformed | `None` | `server.py:1652`; adapter also needs `use_rom_encounters(tables)` for per-player adoption `server.py:1663-1675` | `base.py:374-390` |
-| `encounter_table` | `(area_id) -> {method: [ {name, species_id, rate, min_level, max_level} ]}\|None` | `None` | encounter panel `server.py:2244-2266`, `1813+` | `base.py:392-403` |
-| `trainers_for_area` / `trainer_party` / `trainer_brief` | see file | `[]` / `[]` / synthesised | Upcoming Trainers panel `server.py:1896+` | `base.py:405-434` |
-| `sprite_src` | `(species_id) -> url` | PokeAPI by national dex | encounter panel | `base.py:436-447` |
-| `move_name` / `move_data` | `(move_id) -> str` / `-> {name,type_id,type_name,power,accuracy,pp,split}\|None` | `""` / `None` | move tables `server.py:3401`, calc paste | `base.py:449-462` |
-| `stat_stage_labels` | `() -> list[str]` (7 slots; `""` blanks a slot) | `["ATK","DEF","SPD","SATK","SDEF","ACC","EVA"]` | `server.py:3870`, `3967` | `base.py:464-472` |
-| `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:7966` | `base.py:474-483` |
-| `memorial_box_index` | property → int (0-based; `-1` = none) | `-1` | contamination scan, memorial contents | `base.py:485-493` |
-| `gym_badge_slugs` | `(rom_type) -> [(pokeapi_id, name)]` | Kanto 1-8 | badges overlay | `base.py:495-513` |
+| `sprite_html` | `(species_id, form=0) -> str` | abstract | `server.py:1621-1629` → everywhere sprites render | `base.py:350-357` |
+| `ability_name` | `(ability_id, species_id=0) -> str` | abstract | `server.py:3390`, `3953` | `base.py:360-366` |
+| `ability_description` | `(ability_id) -> str` | abstract | `server.py:3805`, `3954` | `base.py:369-371` |
+| `trainer_info` | `(trainer_id) -> (name, class)`; `("","")` if unknown | abstract | `server.py:3053-3056` (tick `trainer_id`) | `base.py:374-380` |
+| `item_name` | `(item_id) -> str` | abstract | `server.py:3799`, `3955` | `base.py:383-385` |
+| `area_display_name` | `(area_id) -> str` | abstract | dead-zone text `state.py:1876`; panel, dashboard | `base.py:388-390` |
+| `to_national_dex` | `(species_id) -> int` | abstract | `sprite_src` default | `base.py:393-395`, `445-446` |
+| `gender_symbol` | `(gender) -> str` | abstract | dashboard | `base.py:398-400` |
+| `form_sprite_id` | `(species_id) -> int\|None` | abstract | forms | `base.py:403-405` |
+| `form_sprite_url` | `(species_id, form=0) -> str\|None` | `None` | Gen 4+ forms | `base.py:407-418` |
+| `rom_content_fingerprint` | `(payload) -> str\|None`; MUST raise on malformed | `None` | admission `server.py:1746` | `base.py:420-432` |
+| `ingest_rom_content` | `(payload) -> tables\|None`; MUST raise on malformed | `None` | `server.py:1652`; adapter also needs `use_rom_encounters(tables)` for per-player adoption `server.py:1663-1675` | `base.py:434-450` |
+| `encounter_table` | `(area_id) -> {method: [ {name, species_id, rate, min_level, max_level} ]}\|None` | `None` | encounter panel `server.py:2244-2266`, `1813+` | `base.py:452-463` |
+| `trainers_for_area` / `trainer_party` / `trainer_brief` | see file | `[]` / `[]` / synthesised | Upcoming Trainers panel `server.py:1896+` | `base.py:465-471` |
+| `sprite_src` | `(species_id) -> url` | PokeAPI by national dex | encounter panel | `base.py:496-507` |
+| `move_name` / `move_data` | `(move_id) -> str` / `-> {name,type_id,type_name,power,accuracy,pp,split}\|None` | `""` / `None` | move tables `server.py:3401`, calc paste | `base.py:509-514` |
+| `stat_stage_labels` | `() -> list[str]` (7 slots; `""` blanks a slot) | `["ATK","DEF","SPD","SATK","SDEF","ACC","EVA"]` | `server.py:3870`, `3967` | `base.py:524-532` |
+| `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:7966` | `base.py:535-543` |
+| `memorial_box_index` | property → int (0-based; `-1` = none) | `-1` | contamination scan, memorial contents | `base.py:546-553` |
+| `gym_badge_slugs` | `(rom_type) -> [(pokeapi_id, name)]` | Kanto 1-8 | badges overlay | `base.py:555-573` |
 
 ### 7.3 Routing (`server/adapters/__init__.py`)
 
@@ -503,13 +503,13 @@ Things a non-Gen-3 client/adapter must neutralise on the wire, or that should be
 | 5 | `html_render.py:150-166` | `status_icon_html` decodes `status_cond` with the Gen 3 `status1` layout (dashboard); only `link_panel` uses `adapter.status_token` | a client whose RAM layout differs MUST send `status_cond` re-encoded to: SLP = bits 0-2 counter, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40, TOX 0x80 (GB layout already matches for SLP/PSN/BRN/FRZ/PAR, `base.py:516-527`) | encode on the wire |
 | 6 | `html_render.py:169-196` | `stat_stages` are 7 slots, raw 0-12 with **6 = neutral** | Gen 1 stat mods are 1-13 with 7 neutral; client MUST subtract 1 and blank/omit slots per `adapter.stat_stage_labels()` | encode on the wire; adapter blanks labels |
 | 7 | `server.py:3392-3410` | PP-Up encoding accepts `pp_bonuses` (packed u8) or `pp_ups` (list) | Gen 1 stores PP-Ups in the PP byte's top 2 bits — client must split into `pp` and `pp_ups` | send `pp_ups` |
-| 8 | `state.py:892-895`, `base.py:550-562` | identity fallback parses OT from `party[0].key` with the 2-part default | a 3-part key MUST override `parse_ot_id`; better: send `ot_id` in hello | Gen 1 adapter overrides `gen1_rby.py:408-416` |
+| 8 | `state.py:892-895`, `base.py:610-622` | identity fallback parses OT from `party[0].key` with the 2-part default | a 3-part key MUST override `parse_ot_id`; better: send `ot_id` in hello | Gen 1 adapter overrides `gen1_rby.py:318-319` |
 | 9 | `state.py:2740-2784` | blob validation by `party_blob_size()` | default 0 disables trade + rival swap entirely | adapter override (Gen 1: 66) |
 | 10 | `server.py:2629` vs `2647-2652` | wide `link_panel` "Badges" row reads the `status` event count; compact rows popcount the hello/tick bitmask | a client without `status` shows 0/8 in the wide layout | send `status{badges:count}` or use width ≤ 20 |
 | 11 | `server.py:1798` | absent `panel` capability ⇒ panel sent iff `info_panel_width()==0` | a Gen with width > 0 gets **no** panel unless hello carries `panel:true` | send `panel`/`panel_abi` |
 | 12 | `server.py:3720-3734` | dashboard `ROM_LABEL` lacks Gen 2/5 and AP-Gen 1 labels | header falls back to raw `rom_type` | use `variant_label` (`adapters/__init__.py:98-100`) |
 | 13 | `state.py:1590-1591`, `2131`, `2318-2320` | party capacity hardcoded 6 | correct for every supported generation | — |
-| 14 | `state.py` `MonInfo.species` vs wire `species_id`; `_build_status_dict` links expose `a_species` while `_lp_mon_cell` looks up `lnk["a_species_id"]` (`server.py:3774`) | server-internal naming drift; the fallback never hits | none needed on the wire: **always** `species_id` |
+| 14 | `state.py` `MonInfo.species` vs wire `species_id`; `_build_status_dict` links expose `a_species` while `_lp_mon_cell` looks up `lnk["a_species_id"]` (`server.py:2407`) | server-internal naming drift; the fallback never hits | none needed on the wire: **always** `species_id` |
 | 15 | `state.py:2559-2564` | gender clause via `gender_from_key`; a `genderless` result never violates | Gen 1 adapter returns `genderless` — clause inert, no wire impact | — |
 | 16 | `state.py:1162-1219` | shiny clause via `adapter.is_shiny(key)` | Gen 1 adapter returns `False` — inert | — |
 | 17 | `gen3_frlge_client.lua:835`, `953` | client hardcodes 100-byte blobs | client-side only; a new client checks its own adapter size | — |
@@ -548,7 +548,7 @@ Assertions for `tests/unit/test_protocol_conformance.py`: a lupa-driven fake ser
 15. The first tick after a wild battle starts has `in_battle=true`, `is_trainer_battle=false`, non-empty `area_id`, and `enemy_party[0].species_id > 0` (`server.py`: the wild-battle-start dupes block inside `_dispatch`, gated on `_enc_species` — `:2129-2148` at `99c70d9c`; the block moved from `:3074-3093`, which is why this cites the function).
 16. In a trainer battle the tick has `is_trainer_battle=true` and `trainer_id>0`, or `opponent_name`/`opponent_class` (`server.py`: `_dispatch`'s tick branch — `is_trainer_battle` at `:2102-2103`, the `trainer_id` → `adapter.trainer_info` resolution that fills `opponent_name`/`opponent_class` at `:2104-2121`; the range moved from `:3049-3064`, which is why this cites the function).
 17. `status_cond` uses the §8-5 bit layout; `stat_stages` is a 7-list with 6 = neutral present only for `active` mons; `pp_ups` or `pp_bonuses` present when `moves` are (`html_render.py:150-196`, `server.py:3392-3410`).
-18. `pc_boxes` entries have 0-based `box`/`slot`, `key`, `species_id`, `nickname`; the memorial box index used by the client equals `adapter.memorial_box_index` (`server.py:8019-8027`).
+18. `pc_boxes` entries have 0-based `box`/`slot`, `key`, `species_id`, `nickname`; the memorial box index used by the client equals `adapter.memorial_box_index` (`server.py`: `_memorial_box_indices`, `:4544-4568`).
 19. `safe` is sent on the first overworld frame after a battle (`gen3:4120-4124`).
 
 **Encounter events**
