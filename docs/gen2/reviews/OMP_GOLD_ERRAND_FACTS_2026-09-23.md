@@ -24,8 +24,8 @@ safe to lose (`BATTLETYPE_CANLOSE`: no whiteout, party healed, scene → NOOP).
 The three Route 30 objects are flag-gated (`maps/Route30.asm:338` Joey's important-battle script,
 `:343`/`:344` the two SPRITE_MONSTER scenery objects) and an object whose trailing EVENT_* flag is SET
 is **masked** (hidden) — `engine/overworld/map_objects_2.asm:32-63` (`CheckObjectFlag` → `EventFlagAction`
-→ `jr nz, .masked`). The flag is set by the lab handoff (`maps/ElmsLab.asm:304`), and the trainer Joey
-is *cleared* there too (`:303`), so after the errand: scene objects gone, trainer Joey present, Route 31
+→ `jr nz, .masked`). The flag is set by the lab handoff (`maps/ElmsLab.asm:302`), and the trainer Joey
+is *cleared* there too (`:301`), so after the errand: scene objects gone, trainer Joey present, Route 31
 reachable (Route 30's north side is a *connection*, `data/maps/attributes.asm:184`). Confidence: high.
 
 ### F2 — the Mystery Egg is a bag item; the party stays at one mon
@@ -65,7 +65,7 @@ the driver routes around them. Confidence: high (grid re-derived from the pinned
 2. **Route 30 → Mr. Pokémon's house**: no scene scripts, no coord events (`maps/Route30.asm:327-329`
    empty blocks); the trainers' sight lines (Joey 4, Mikey 1, Don 3 — `:339/:340/:341`) are only live
    where the walk passes their rows; the house door is at (17,5).
-3. **Mr. Pokémon's house** (`sdefer` scene, `maps/MrPokemonsHouse.asm:14-16`): A-press waits only —
+3. **Mr. Pokémon's house** (`sdefer` scene, `maps/MrPokemonsHouse.asm:12-13`): A-press waits only —
    `waitbutton` `:24`, the player is walked `:26`, `promptbutton` `:29`, the egg `:31`, then `:39`,
    `:42` promptbutton, `:46` waitbutton — and then `sjump MrPokemonsHouse_OakScript` `:48`.
 4. **Oak's scene** (`:84-141`): `promptbutton` `:90`; **`setflag ENGINE_POKEDEX` `:95`**;
@@ -87,7 +87,7 @@ the driver routes around them. Confidence: high (grid re-derived from the pinned
    A/B press, plus the ring's fixed waits.
 7. **Elm's lab**: the cop coord event at (4,5)/(5,5) (`maps/ElmsLab.asm:1228-1229`) is **optional** —
    approach Elm at (5,2) from x=6 (the aisle at x=4/5 is the only trigger column). If taken, the script
-   contains `special NameRival` (`MeetCopScript`, `maps/ElmsLab.asm:228-241`), a `_NamingScreen`
+   contains `special NameRival` (`MeetCopScript`, `maps/ElmsLab.asm:508-518`), a `_NamingScreen`
    (letter grid, `engine/menus/naming_screen.asm:7`): A on the END button is the exit (cursor command
    `$3`, `naming_screen.asm:396-399`), START only toggles the letter case (`:404-418`), and the default
    name "SILVER" is applied after (`engine/events/specials.asm:80-89`). The existing UI hooks cover
@@ -98,9 +98,9 @@ the driver routes around them. Confidence: high (grid re-derived from the pinned
    dependency** (the dispatch is by events). `ElmAfterTheftScript` `:283-309`: `promptbutton` `:287`,
    `waitbutton` `:289`, `takeitem MYSTERY_EGG` `:290`, the jump-back texts `:291-297`, then
    **`setevent EVENT_GAVE_MYSTERY_EGG_TO_ELM` `:299`**, **`setmapscene ROUTE_29, SCENE_ROUTE29_CATCH_TUTORIAL`
-   `:303`**, **`clearevent EVENT_ROUTE_30_YOUNGSTER_JOEY` `:303`** (line 303 is the clearevent; the
-   setevent is 304 — see the block at :299-304), `waitbutton` `:305`, `setscene SCENE_ELMSLAB_AIDE_GIVES_POKE_BALLS`
-   `:308`. A-press waits only.
+   `:300`**, **`clearevent EVENT_ROUTE_30_YOUNGSTER_JOEY` `:301`**, **`setevent EVENT_ROUTE_30_BATTLE`
+   `:302`** (the block at :299-302), `waitbutton` `:304`, `closetext` `:305`, `setscene
+   SCENE_ELMSLAB_AIDE_GIVES_POKE_BALLS` `:306`. A-press waits only.
 9. **Leaving the lab**: the aide's coord events at (4,8)/(5,8) (`:1232-1233`) give **5 Poké Balls**
    (`AideScript_GiveYouBalls`, `giveitem POKE_BALL, 5` `:461`) — **avoidable** by exiting via x=3
    (the warp is (4,11)/(5,11)). If taken, the ball count becomes 15 with the O-10 injection.
@@ -140,7 +140,7 @@ the driver routes around them. Confidence: high (grid re-derived from the pinned
 
 No time-of-day gate exists anywhere on the path. The only clock conditions in the two route maps are
 the fruit trees' daily reset (`engine/events/fruit_trees.asm`, `DAILYFLAGS1_ALL_FRUIT_TREES_F`) and
-Route 29's Tuscany (a *talk* NPC gated on Tuesday, `maps/Route29.asm:430`) — both avoidable/irrelevant.
+Route 29's Tuscany (a *talk* NPC gated on Tuesday, `maps/Route29.asm:436`) — both avoidable/irrelevant.
 The phone calls that can raise a **yes/no** are Mom's (her callee script) — armed only by
 `SPECIALCALL_WORRIED` on Route 31 (`maps/Route31.asm:22`), *not* on this path; the errand's own call is
 Elm's text-only one (F4.6). A random call needs at least 20 RTC minutes since the map load
@@ -160,9 +160,9 @@ rival battle either skipped or won/lost):
 | `EVENT_RIVAL_NEW_BARK_TOWN` | `maps/MrPokemonsHouse.asm:122` |
 | `EVENT_ELM_CALLED_ABOUT_STOLEN_POKEMON` (after the call) | `engine/phone/scripts/elm.asm:78` |
 | `EVENT_GAVE_MYSTERY_EGG_TO_ELM` | `maps/ElmsLab.asm:299` |
-| `EVENT_ROUTE_30_BATTLE` set / `EVENT_ROUTE_30_YOUNGSTER_JOEY` cleared | `maps/ElmsLab.asm:303-304` |
-| Route 29 scene = CATCH_TUTORIAL (→ NOOP if the tutorial is declined) | `maps/ElmsLab.asm:303`, `maps/Route29.asm:94` |
-| Elm's lab scene = AIDE_GIVES_POKE_BALLS (→ NOOP if the exit avoids the aide) | `maps/ElmsLab.asm:308` |
+| `EVENT_ROUTE_30_BATTLE` set / `EVENT_ROUTE_30_YOUNGSTER_JOEY` cleared | `maps/ElmsLab.asm:301-302` |
+| Route 29 scene = CATCH_TUTORIAL (→ NOOP if the tutorial is declined) | `maps/ElmsLab.asm:300`, `maps/Route29.asm:94` |
+| Elm's lab scene = AIDE_GIVES_POKE_BALLS (→ NOOP if the exit avoids the aide) | `maps/ElmsLab.asm:306` |
 | `EVENT_CHIKORITA_POKEBALL_IN_ELMS_LAB` (the rival's pick) | `maps/MrPokemonsHouse.asm:136` |
 | the party is fully healed (Oak's scene + possibly the rival battle) | `maps/MrPokemonsHouse.asm:113`, `core.asm:2314-2317` |
 
@@ -209,7 +209,7 @@ any wild battle to keep the level exact.
 
 | # | claim | verdict | evidence | confidence |
 |---|---|---|---|---|
-| 1 | EVENT_ROUTE_30_BATTLE must be set to remove the Route 30 objects and reach Route 31 | VERIFIED | `maps/Route30.asm:338/343/344`; polarity `engine/overworld/map_objects_2.asm:32-63`; set at `maps/ElmsLab.asm:304` | high |
+| 1 | EVENT_ROUTE_30_BATTLE must be set to remove the Route 30 objects and reach Route 31 | VERIFIED | `maps/Route30.asm:338/343/344`; polarity `engine/overworld/map_objects_2.asm:32-63`; set at `maps/ElmsLab.asm:302` | high |
 | 2 | The save can end at Route 29 (53,12) with one L5 Totodile and 10 balls | VERIFIED (party) / route-dependent (balls) | (53,12) is grass (grid); the egg is an item (F2); balls 10 only if the aide is avoided (`maps/ElmsLab.asm:461`) | high |
 | 3 | The errand route can be played with normal inputs, no save editing | VERIFIED (source) | every interaction above is a script prompt; no memory write required | high |
 | 4 | The rival battle is winnable by a scripted L5 Totodile | PLAUSIBLE, RNG-dependent | matchup from `evos_attacks.asm:2059-2060/2148-2149`; no deterministic guarantee | medium |
