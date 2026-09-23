@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 8: ALL THREE O-16 PAIRS LINKED PHYSICALLY (C<->C, G<->S, C<->G); next = the gen2_faint duo = first physical production WRITE)
+# Gen 2 implementation resume (updated 2026-09-23, session 8 late: FIRST PHYSICAL Gen 2 PRODUCTION WRITE (gen2_faint C<->C + G<->S); paused for compaction)
 
 ## Who coordinates
 
@@ -37,6 +37,49 @@ This note summarises it; it is not a second ledger.
 - Coordinator lane drivers (gitignored): `.cache/requal.py <suffix> [names]` = qualify() of each
   COMMITTED fixture with its original played receipt (no replay); `run_fixtures.py` (session scratchpad;
   replay + qualify + stage). Staged inputs as in the runbook.
+
+## Session 8, late: the first physical production write (compaction point)
+
+- **MILESTONE `554a2290`: `gen2_faint` PASS physically on C<->C and G<->S.**
+  - A's linked mon faints in a wild battle, and the production `battle_faint` site fires.
+  - The server propagates the faint, and B's production client zeroes the partner mon via the U2 checkpoint write permit.
+  - The independent PYDEC oracle checks both saves. The pair ends MEMORIAL: owner-approved, because Gen 2 NACKs memorialize until BOX lands.
+  - C<->C: A `1288:B541:10`, B `BD57:AC24:A1`. G<->S: A `01A5:C4A6:10`, B `F89B:C78C:10`.
+- **Link re-runs with the fact-bearing PYDEC line:** C<->C `91ea1919`, G<->S `5c408840`, C<->G `d3270118`.
+- **C<->G `gen2_faint` is still FAILING on the Crystal A side.**
+  - Run 1: "the target survived 3 battles".
+  - Diagnostic run 2: "UI is not valid in phase walk: yes_no". Suspects: an unexpected YES/NO while walking, e.g. a Crystal phone call (OMP O19 said that is possible only after ~20 in-game minutes) or a battle prompt.
+  - The LIVE worker holds the lane worktrees `.claude/worktrees/gen2-{cc,gs,cg}-faint-link`.
+- Landed since the link milestone:
+  - U1d `0cd791e0`: battle_faint PHYSICAL C/G/S.
+  - O-24 server faint repair (`6e9bff5b`, `25bfca25`: 60 s window, budget 3, 5 min refill, `faint_repair_stalled` on status).
+  - O-25 AP refused plus the legacy Gen 2 REMOVE: `aa9c960b`, `d8028dbf`, `c6201179`, `c84f41b4`, cleanup `b5ff1b55`/`e545616c`, legacy duo chain `d8bcfb83` (Codex H6).
+  - gsc fixed-species gift `63c2558d`.
+  - H4b live-new-gates `034728e7`.
+  - H5 faint lane/oracle `3a64b0e3` (Codex).
+  - H1c faint driver `4f1ea1b4`..`ceb4825a`.
+  - Gen 1 fixes: `3941198c`/`a32dc385` (force_faint arrival order) and `44bf25d6` (stale SFX gate).
+- Owner rulings this session:
+  - O-24: server faint repair.
+  - O-25: refuse Archipelago Crystal.
+  - O-26: shiny_bonus is a recorded limit.
+  - O-27: the P4 decisions (mailbox at WRAM0 C $CFD8 / G,S $C1D9, Gen 1-shape trade, refuse mail/unholdable items, patched<->patched pairing, one DelayFrame sound site).
+  - Unlimited emulators, but the machine crashed the coordinator twice under ~6 EmuHawks + 5 agents. Keep live lanes at 2 with staggered starts.
+- Plans/facts:
+  - `docs/gen2/reviews/DUO_SCENARIO_ROADMAP_2026-09-23.md` (SCN)
+  - `docs/gen2/reviews/P4_PLAN_2026-09-23.md`
+  - `docs/gen2/reviews/OMP_O21_U1E_SITE_FACTS_2026-09-23.md` (U1e order: poison_faint < gift < evolution < npc_trade < egg_hatch < whiteout; P4 START row grows in bank 4; receptionist = the 2-byte object pointer; SFX hold on wMusicFade)
+- In flight at the pause:
+  - LIVE: the C<->G faint diagnosis, then the live `gen2_admit_wrong_rom` (Codex H7 `2dc959d0`).
+  - BOX: the box executor `0bd77db6` plus a pending composition commit, and 2 live lanes (C, G) for U2 box_runs.
+  - SCN: wave A drivers done (`d1567fc1` admit_wrong_rom, `c58b55fb` reconnect, `33d03063` soft_reset), now the wave B clause drivers.
+  - P4.1a build tool (Sonnet), P4.1b mailbox census (Sonnet).
+  - Codex: H8 reconnect (G<->S wrong_save fails closed until `gold_battle_ot2` exists) -> H9 soft_reset -> P4.1c asm skeleton.
+- Queued (not dispatched):
+  - a pre-live review of the wave A drivers (the Gen 2 OMP session closed)
+  - the U1e poison_faint + gift party-row proof
+  - the `gold_battle_ot2` fixture (play + qualify)
+  - the full unit suite
 
 ## Done this session (8) — every O-16 pair linked physically
 
