@@ -73,10 +73,13 @@ G.CART_RAM_BYTES = 0x8000
 G.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
 -- ponytail: idle-stability window, not a measured native timing; raise if a live run needs longer.
 G.STABILITY_IDLE_FRAMES = 60
--- ponytail: scripted-display calibration knobs, not measured native timings. A 2D menu samples its
--- joypad per frame, so a short HOLD registers; the GAP keeps a second press out of the frame the
--- first is still being consumed in. Raise if a live run drops a press.
-G.DISPLAY_HOLD = 2
+-- ponytail: scripted-display calibration knobs, not measured native timings. HOLD is the route's
+-- proven 12 frames (lua/tests/gen2_scripted_play.lua HOLD): Crystal menus sample the joypad once per
+-- loop after WaitBGMap's DelayFrames, so a 2-frame press on the START menu was never seen (live
+-- inspect run 2026-09-23: display-card stalled in card_wait with the cursor on the Status entry).
+-- Stays < 15 so a held menu direction never auto-repeats. The GAP keeps a second press out of the
+-- frame the first is still being consumed in.
+G.DISPLAY_HOLD = 12
 G.DISPLAY_GAP = 12
 -- Frames a screen's tilemap is left to finish drawing after its per-frame joypad state is reached.
 G.DISPLAY_SETTLE = 8
