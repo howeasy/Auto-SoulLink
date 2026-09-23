@@ -35,6 +35,8 @@ REASON_TERMINALS = {
     "native_idle_battle": "companion beacon present and mailbox idle in battle",
     "native_absent": "no native block in this pack",
     "sound_driver": "m4a SE1 ident == ID_NUMBER",
+    "battle_commit_held_rr": "battle_main_func==HandleTurnActionSelectionState and "
+        "gBattleCommunication[0]==1 and BATTLE_TYPE_TRAINER",
 }
 # 2B-INTEGRATE-PROBE: the G4 2b battle-window rows, P.STATES indices 23..31, in run order
 # (N8 last: its bag helper can end the whole run). name -> gen3_battle_window_rows row.
@@ -58,8 +60,9 @@ LEAFGREEN_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_M
     BATTLE_ANIMATION, BATTLE_FAINT_PROMPT, BATTLE_INTRO, BATTLE_LINK, BATTLE_OVER,
     BATTLE_COMMIT_STATE3, NATIVE_ABSENT, SOUND_DRIVER}
 RADICAL_RED_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, NATIVE_ABSENT, SOUND_DRIVER}
-RADICAL_RED_COMPANION_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU,
-    BATTLE_OVER, BATTLE_COMMIT_STATE3, NATIVE_IDLE_FIELD, NATIVE_IDLE_BATTLE}
+BATTLE_COMMIT_HELD_RR = 32   # a1bbc686: appended after the bw rows (23..31), RR companion only
+RADICAL_RED_COMPANION_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_MOVE_MENU,
+    BATTLE_OVER, BATTLE_COMMIT_STATE3, NATIVE_IDLE_FIELD, NATIVE_IDLE_BATTLE, BATTLE_COMMIT_HELD_RR}
 assert len(FIRERED_CLEAN_REASON_ROWS) == 11
 assert len(LEAFGREEN_CLEAN_REASON_ROWS) == 11
 assert len(RADICAL_RED_CLEAN_REASON_ROWS) == 3
@@ -276,7 +279,8 @@ def test_every_negative_row_declares_expect_clauses(module):
             "battle_link": {"battle_not_link"},
             "battle_over": {"battle_outcome_open", "battle_engine_loaded"},
             "battle_commit_state3": {"battle_commit_guard"},
-            "native_absent": {"native_present"}}
+            "native_absent": {"native_present"},
+            "battle_commit_held_rr": {"battle_commit_hold"}}
     got = {r.name: set(r.expect_clauses.keys()) for r in probe.STATES.values() if r.expectation == "negative"}
     assert got == want
     row = lua.table_from({"expectation": "negative", "samples": 5, "yes": 0, "reached": True})
@@ -1079,3 +1083,30 @@ def test_press_first_waits_for_the_game_to_read_the_release(module):
     old_taps(g, [("A", 0)])
     ok, _ = probe.press("A", lambda k: g.set(k), g.advance, lambda: g.held, 0)
     assert ok is True and [f for f, _ in g.edges] == [1, 6]
+
+
+# ── a1bbc686: RR holds battle_commit, so the trainer tuple signs a refusal there ─────────────
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_parked_trainer_commit_is_a_held_refusal_row(module, kind):
+    from tests.unit.test_gen3_safety import rr_battle_world
+    lua, probe = module
+    rows = {r.name: r for r in probe.STATES.values()}
+    assert set(rows["battle_input_trainer"].artifacts.keys()) == {"firered/clean", "leafgreen/clean"}
+    held = rows["battle_commit_held_rr"]
+    assert set(held.artifacts.keys()) == {"radical_red/companion"}
+    assert (held.reason, held.args.battler, held.witness, held.state) == (
+        "battle_commit", 0, "battle_input_trainer", "slink_pretrainer.State")
+    # the real RR pack + safety at the parked menu: battle_commit refused by the hold alone
+    ok, _, clauses = rr_battle_world(kind, 1, 1, 0x0802E439).check_reason("battle_commit", {"battler": 0})
+    assert ok is False and clauses == ["battle_commit_hold"]
+    row = run_row(lua, probe, "battle_commit_held_rr", [clauses] * 60)
+    assert tuple(probe.verdict(row)) == (True, "-")
+    # ...which the positive trainer row could never have passed on RR
+    pos = run_row(lua, probe, "battle_input_trainer", [clauses] * 60)
+    pos.non_irq_samples, pos.non_irq_yes = 60, 0
+    assert probe.verdict(pos)[0] is False
+    # a refusal by anything else (the hold lifted) is not this row's evidence
+    row = run_row(lua, probe, "battle_commit_held_rr", [["battle_input_controller"]] * 60)
+    assert probe.verdict(row)[0] is False
+    with pytest.raises(lupa.LuaError):
+        probe.planned("radical_red", "companion", "battle_input_trainer")

@@ -70,9 +70,10 @@ P.REASON_ROWS = {
         .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
         reason="battle_commit", args={battler=0}, witness="battle_input_trainer",
         state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State",
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="trainer battle parked at the action menu (gBattleTypeFlags & BATTLE_TYPE_TRAINER); "
-            .. "battler 0 is uncommitted so the guard holds"},
+            .. "battler 0 is uncommitted so the guard holds. RR holds battle_commit: see "
+            .. "battle_commit_held_rr"},
     {name="battle_move_menu", terminal="gBattleCommunication[0]==2",
         expectation="negative", expect_clauses={battle_comm_0=true},
         reason="battle_faint", witness="battle_comm_eq", witness_value=2,
@@ -216,6 +217,19 @@ for _, spec in ipairs(P.BW_ROWS) do
     spec.expectation, spec.reason, spec.artifacts = "bw", "battle_faint", FRLG
     P.REASON_ROWS[#P.REASON_ROWS + 1] = spec
 end
+-- a1bbc686 (C5-RR-BW-FIX): the RR pack carries battle.commit_hold, so safety refuses
+-- battle_commit with battle_commit_hold even at a parked, uncommitted trainer menu (CFRU's parked
+-- controller stays live after comm = 3). The trainer tuple therefore signs a REFUSAL on RR.
+-- Appended after the bw rows so every FR/LG index is unchanged; it runs on RR only.
+P.REASON_ROWS[#P.REASON_ROWS + 1] = {name="battle_commit_held_rr",
+    terminal="battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1 "
+        .. "and BATTLE_TYPE_TRAINER",
+    expectation="negative", expect_clauses={battle_commit_hold=true}, min_samples=60,
+    reason="battle_commit", args={battler=0}, witness="battle_input_trainer",
+    state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State",
+    artifacts={["radical_red/companion"]=true},
+    note="RR holds battle_commit (pack battle.commit_hold): the parked trainer menu must refuse "
+        .. "it by battle_commit_hold"}
 for _, spec in ipairs(P.REASON_ROWS) do P.STATES[#P.STATES + 1] = spec end
 P.REASON_BASE = #P.STATES - #P.REASON_ROWS + 1
 
