@@ -475,3 +475,107 @@ def test_frlg_script_row_uses_the_built_state_at_the_woman_tile(module):
     assert list(probe.SCRIPT_TILE.values()) == [20, 13]
     assert '"slink_script.State"' in SOURCE and "slink_fr_parcel_deliver" not in SOURCE
     assert "walk({}, P.SCRIPT_TILE[1], P.SCRIPT_TILE[2])" in SOURCE
+
+
+# ── C4-PROBE2 review (A-1 + low a): trainer witness, state loading, witness names ─────────────
+import json  # noqa: E402
+
+FRLG_PACK = json.loads((ROOT / "data/games/gen3_frlg/write_checkpoint.json").read_text(encoding="utf-8"))
+
+
+def parked_menu(pack, type_flags):
+    """Fake RAM for a parked action menu; r8 and r32 read the same address->value map."""
+    cl = {c["name"]: c for c in pack["battle"]["clauses"]}
+
+    def addr(n):
+        return cl[n]["address"] + cl[n].get("offset", 0)
+    return {addr("battle_main_func"): cl["battle_main_func"]["expect"], addr("battle_comm_0"): 1,
+            addr("battle_not_link"): type_flags}
+
+
+def witness_table(lua, probe, pack, mem):
+    def read(a):
+        return mem.get(a, 0)
+    return probe.witnesses(lua.table_from(pack, recursive=True), read, read)
+
+
+def run_reason_row(lua, probe, WIT, name, frames=180):
+    """The runner's hold loop: one tally per frame the row's witness holds (ok = the permit)."""
+    spec = next(r for r in probe.STATES.values() if r.name == name)
+    witness, _ = probe.row_witness(WIT, spec)
+    row = lua.table_from({"expectation": spec.expectation, "expect_clauses": spec.expect_clauses,
+                          "min_samples": spec.min_samples, "samples": 0, "yes": 0, "no": 0,
+                          "irq": 0, "non_irq_samples": 0, "non_irq_yes": 0})
+    held = 0
+    for _ in range(frames):
+        if witness():
+            held += 1
+            probe.tally(row, True, "ok", None, 0x1F)
+    row.reached = held > 0
+    return row
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_a1_trainer_row_fails_on_a_wild_parked_menu(module, title):
+    lua, probe = module
+    pack = FRLG_PACK[title]
+    wild = witness_table(lua, probe, pack, parked_menu(pack, 0x4))
+    assert wild.battle_input() is True and wild.battle_input_trainer() is False
+    ok, why = probe.verdict(run_reason_row(lua, probe, wild, "battle_input_trainer"))
+    assert ok is False and why == "terminal not reached"
+    # positive control: the recorded trainer tuple (type=0000000C, c4probe2 receipt) passes
+    trainer = witness_table(lua, probe, pack, parked_menu(pack, 0xC))
+    assert trainer.battle_input_trainer() is True
+    assert tuple(probe.verdict(run_reason_row(lua, probe, trainer, "battle_input_trainer"))) == (True, "positive rate")
+    # the wild row keeps the plain parked witness
+    wild_row = next(r for r in probe.STATES.values() if r.name == "battle_input_wild")
+    assert wild_row.witness == "battle_input" and probe.BATTLE_TYPE_TRAINER == 8
+
+
+def test_a1_missing_or_refused_state_never_loads(module, tmp_path):
+    lua, probe = module
+    io_open = lua.eval("io.open")
+    calls = []
+
+    def load_fn(path):
+        calls.append(path)
+        return True
+    missing = (tmp_path / "slink_pretrainer.State").as_posix()
+    ok, why = probe.load_state(missing, load_fn, io_open)
+    assert ok is False and why == "state missing: " + missing and calls == []
+    present = tmp_path / "slink_prebattle.State"
+    present.write_bytes(b"x")
+    ok, why = probe.load_state(present.as_posix(), lambda p: False, io_open)
+    assert ok is False and why.startswith("savestate.load refused: ")
+    assert probe.load_state(present.as_posix(), load_fn, io_open) is True and len(calls) == 1
+    assert probe.state_path("slink_x.State", "D:/s") == "D:/s/slink_x.State"
+    assert probe.state_path("C:/a/slink_x.State", "D:/s") == "C:/a/slink_x.State"
+
+
+def test_a1_a_blocked_row_fails_by_name_whatever_it_counted(module):
+    lua, probe = module
+    pack = FRLG_PACK["firered"]
+    row = run_reason_row(lua, probe, witness_table(lua, probe, pack, parked_menu(pack, 0xC)),
+                         "battle_input_trainer")
+    assert probe.verdict(row)[0] is True
+    row.blocked = "UNREACHED state missing: X/slink_pretrainer.State"
+    assert tuple(probe.verdict(row)) == (False, "UNREACHED state missing: X/slink_pretrainer.State")
+    # the runner: the core phases assert the load, a reason row is blocked by name
+    assert SOURCE.count("assert(load(") == 8
+    assert 'row.blocked, row.reason = "UNREACHED " .. why, why' in SOURCE
+    assert "savestate.load(name)" not in SOURCE
+
+
+def test_low_a_unknown_witness_names_are_errors(module):
+    lua, probe = module
+    WIT = witness_table(lua, probe, FRLG_PACK["firered"], {})
+    for spec in probe.STATES.values():
+        if spec.witness is not None:
+            probe.row_witness(WIT, spec)          # every declared name resolves
+    with pytest.raises(lupa.LuaError, match="unknown witness bogus"):
+        probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "bogus"}))
+    with pytest.raises(lupa.LuaError, match="unknown until_witness send_out_promt"):
+        probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "always",
+                                               "until_witness": "send_out_promt"}))
+    w, stop = probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "always"}))
+    assert w() is True and stop() is True

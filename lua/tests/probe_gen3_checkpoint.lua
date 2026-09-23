@@ -63,10 +63,11 @@ P.REASON_ROWS = {
         note="wild encounter parked at the action menu; no input"},
     {name="battle_input_trainer", terminal="battle_main_func==HandleTurnActionSelectionState and "
         .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
-        reason="battle_commit", args={battler=0}, witness="battle_input",
+        reason="battle_commit", args={battler=0}, witness="battle_input_trainer",
         state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State",
         artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
-        note="trainer battle parked at the action menu; battler 0 is uncommitted so the guard holds"},
+        note="trainer battle parked at the action menu (gBattleTypeFlags & BATTLE_TYPE_TRAINER); "
+            .. "battler 0 is uncommitted so the guard holds"},
     {name="battle_move_menu", terminal="gBattleCommunication[0]==2",
         expectation="negative", expect_clauses={battle_comm_0=true},
         reason="battle_faint", witness="battle_comm_eq", witness_value=2,
@@ -181,6 +182,92 @@ function P.task_active(read_u8, read_u32, tasks, fn)
     return false
 end
 
+-- BATTLE_TYPE_TRAINER (pret include/constants/battle.h, bit 3). The trainer row's witness
+-- needs it: without it a wild parked menu satisfied battle_input, so a state dir lacking
+-- slink_pretrainer.State (with the previous wild state still loaded) PASSED the trainer row.
+P.BATTLE_TYPE_TRAINER = 8
+
+--- A bare state name resolves under `dir` (SLINK_STATE_DIR); a path is kept as given.
+function P.state_path(name, dir)
+    if name:find("[/\\]") then return name end
+    return (dir or "E:/Howard/Bizhawk/GBA/State") .. "/" .. name
+end
+
+--- true, or false + why. BizHawk 2.11's savestate.load returns false on a missing file instead
+--- of raising, which kept the PREVIOUS state loaded under the new row's name (C4-PROBE2 review
+--- A-1). Existence is checked first so the answer does not rest on that return value alone.
+function P.load_state(path, load_fn, open_fn)
+    local f = open_fn(path, "rb")
+    if not f then return false, "state missing: " .. path end
+    f:close()
+    if load_fn(path) == false then return false, "savestate.load refused: " .. path end
+    return true
+end
+
+--- The reason-row state witnesses over the pack's battle clauses (plus native/sound), read
+--- through r8/r32. None consults the permit.
+function P.witnesses(cp, r8, r32)
+    local function clause_of(name)
+        for _, c in ipairs(assert(cp.battle, "no battle block").clauses) do
+            if c.name == name then
+                return c.address + (c.offset or 0), c.width, c
+            end
+        end
+    end
+    local comm_a = clause_of("battle_comm_0")
+    local main_a, _, main_c = clause_of("battle_main_func")
+    -- FR/LG name the input-wait flags clause battle_exec_flags_input (C4-BW); RR keeps _idle
+    local flags_a = clause_of("battle_exec_flags_input") or clause_of("battle_exec_flags_idle")
+    local ctrl_a, _, ctrl_c = clause_of("battle_input_controller")
+    local type_a = clause_of("battle_not_link")
+    local out_a = clause_of("battle_outcome_open")
+    local native = cp.native
+    local sound = cp.sound
+    local sound_player = sound and sound.player_se1 and sound.player_se1.address
+    local function w32(a) return r32(a) end
+    local function w8(a) return r8(a) end
+    local WIT = {}
+    WIT.always = function() return true end
+    WIT.battle_input = function()
+        return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == 1
+    end
+    WIT.battle_input_trainer = function()
+        return WIT.battle_input() and w32(type_a) & P.BATTLE_TYPE_TRAINER ~= 0
+    end
+    WIT.battle_not_input = function()
+        return main_c ~= nil and w32(main_a) ~= main_c.expect
+    end
+    WIT.battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value end end
+    WIT.battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value end end
+    -- flags ~= 0 alone also holds at the parked action menu (bit 0 pends on the input,
+    -- C4-BW), which the battle_faint window admits; busy = not battler 0's action input
+    WIT.battle_exec_busy = function()
+        return w32(flags_a) ~= 0 and (ctrl_c == nil or w32(ctrl_a) ~= ctrl_c.expect)
+    end
+    WIT.battle_link = function() return w32(type_a) & 2 ~= 0 end
+    WIT.battle_resolved = function() return w8(out_a) ~= 0 end
+    WIT.send_out_prompt = function() return w32(ctrl_a) == P.WAIT_FOR_MON_SELECTION end
+    WIT.native_idle = function()
+        return native ~= nil and w32(native.base) == native.sig
+    end
+    WIT.sound_driver = function()
+        return sound_player ~= nil
+            and w32(sound_player + sound.ident_off) == sound.ident_magic
+    end
+    return WIT
+end
+
+--- (witness, stop) for a reason row. battle_comm_eq/_ge are factories over witness_value; every
+--- other WIT entry IS the witness (calling it handed begin() a boolean: C4-PROBE, first FR run).
+--- An unknown witness or until_witness name is an error, never a silent fallback.
+function P.row_witness(WIT, spec)
+    local build = assert(WIT[spec.witness], "unknown witness " .. tostring(spec.witness) .. " in " .. spec.name)
+    local w = spec.witness_value ~= nil and build(spec) or build
+    if spec.until_witness == nil then return w, w end
+    return w, assert(WIT[spec.until_witness],
+        "unknown until_witness " .. tostring(spec.until_witness) .. " in " .. spec.name)
+end
+
 -- Set of P.STATES indices to run for this artifact.
 function P.planned(title, kind, rows_env)
     local artifact, want = tostring(title) .. "/" .. tostring(kind), nil
@@ -243,6 +330,7 @@ end
 -- Counts are conditional on the row's state witness, not on safety's answer. Returns ok, why.
 function P.verdict(row)
     if row.error then return false, "callback error: " .. tostring(row.error) end
+    if row.blocked then return false, tostring(row.blocked) end
     if not row.reached then return false, "terminal not reached" end
     local min = row.min_samples or 1
     if row.samples < min then return false, string.format("samples %d < min_samples %d", row.samples, min) end
@@ -325,13 +413,13 @@ function P.run()
         return G.pred_ok(cp,"callback2") and G.pred_ok(cp,"in_battle")
             and G.pred_ok(cp,"field_controls_locked") and G.pred_ok(cp,"script_context_status")
     end
+    -- true, or false + why; a core phase asserts it, a reason row fails by name (A-1).
     local function load(name)
-        if not name:find("[/\\]") then
-            name = (os.getenv("SLINK_STATE_DIR") or "E:/Howard/Bizhawk/GBA/State") .. "/" .. name
-        end
+        local path = P.state_path(name, os.getenv("SLINK_STATE_DIR"))
         active = nil
-        savestate.load(name)
-        G.idle(1)
+        local ok, why = P.load_state(path, function(q) return savestate.load(q) end, io.open)
+        if ok then G.idle(1) end
+        return ok, why
     end
     local idle_state = os.getenv("SLINK_STATE") or "slink_overworld.State"
     local function begin(index, witness)
@@ -407,13 +495,13 @@ function P.run()
         end, "SLink-gen3-checkpoint-probe")
         assert(hook and tostring(hook):gsub("[{}]", "") ~= "00000000-0000-0000-0000-000000000000",
             "frame-end registration refused")
-        load(idle_state)
+        assert(load(idle_state))
         local row = begin(1,function() return true end)
         G.idle(300)
         row.reached = field() and row.samples == 300
         active = nil
 
-        load(idle_state)
+        assert(load(idle_state))
         local x,y = G.pos(cp)
         assert(x >= 0 and y >= 0, "invalid walking origin")
         row = begin(2,function() return true end)
@@ -427,12 +515,12 @@ function P.run()
         row.reached = moved and row.samples == 120
         active = nil
 
-        load(idle_state)
+        assert(load(idle_state))
         G.tap("Start",3,30)
         row = begin(3,function() return not G.pred_ok(cp,"field_controls_locked") end)
         G.idle(120); row.reached = row.samples > 0; active = nil
 
-        load(idle_state)
+        assert(load(idle_state))
         assert(open_save_dialog(), "save prompt not reached for dialog control")
         row = begin(4,function() return dialog_open() end)
         G.idle(120); row.reached = row.samples > 0; active = nil
@@ -453,11 +541,11 @@ function P.run()
         end
         joypad.set({}); row.reached = complete and row.samples > 0; active = nil
 
-        load(os.getenv("SLINK_CHECKPOINT_BATTLE_STATE") or "slink_prebattle.State")
+        assert(load(os.getenv("SLINK_CHECKPOINT_BATTLE_STATE") or "slink_prebattle.State"))
         row = begin(6,function() return not G.pred_ok(cp,"in_battle") end)
         G.idle(120); row.reached = row.samples > 0; active = nil
 
-        load(os.getenv("SLINK_CHECKPOINT_DOOR_STATE") or "slink_door.State")
+        assert(load(os.getenv("SLINK_CHECKPOINT_DOOR_STATE") or "slink_door.State"))
         local group,number = G.map(cp)
         assert(group >= 0 and number >= 0, "invalid starting map")
         row = begin(7,function() return not G.pred_ok(cp,"palette_fade_active") end)
@@ -472,7 +560,7 @@ function P.run()
 
         if plan[8] then
             -- gba_map 5.4 --bfs 7,8 11,2; PC at (11,1). Five A presses reach the storage menu.
-            load(os.getenv("SLINK_CHECKPOINT_PC_STATE") or "slink_pokecenter_full.State")
+            assert(load(os.getenv("SLINK_CHECKPOINT_PC_STATE") or "slink_pokecenter_full.State"))
             local tasks = assert(cp.tasks, "no tasks block")
             local function pc_up()
                 return P.task_active(memory.read_u8, memory.read_u32_le, tasks, P.TASK_PC_MAIN_MENU)
@@ -495,75 +583,32 @@ function P.run()
         end
 
         -- ── C4-B2 reason rows: one generic runner, declarative specs ──────────────────────
-        local function clause_of(name)
-            for _, c in ipairs(assert(cp.battle, "no battle block").clauses) do
-                if c.name == name then
-                    return c.address + (c.offset or 0), c.width, c
-                end
-            end
-        end
-        local comm_a, comm_w = clause_of("battle_comm_0")
-        local main_a, main_w, main_c = clause_of("battle_main_func")
-        -- FR/LG name the input-wait flags clause battle_exec_flags_input (C4-BW); RR keeps _idle
-        local flags_a = clause_of("battle_exec_flags_input") or clause_of("battle_exec_flags_idle")
-        local ctrl_a, _, ctrl_c = clause_of("battle_input_controller")
-        local type_a, type_w = clause_of("battle_not_link")
-        local out_a, out_w = clause_of("battle_outcome_open")
-        local native = cp.native
-        local sound = cp.sound
-        local sound_player = sound and sound.player_se1 and sound.player_se1.address
-        local function w32(a) return memory.read_u32_le(a) end
-        local function w16(a) return memory.read_u16_le(a) end
-        local function w8(a) return memory.read_u8(a) end
-        local WIT = {
-            always = function() return true end,
-            battle_input = function()
-                return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == 1
-            end,
-            battle_not_input = function()
-                return main_c ~= nil and w32(main_a) ~= main_c.expect
-            end,
-            battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value end end,
-            battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value end end,
-            -- flags ~= 0 alone also holds at the parked action menu (bit 0 pends on the input,
-            -- C4-BW), which the battle_faint window admits; busy = not battler 0's action input
-            battle_exec_busy = function()
-                return w32(flags_a) ~= 0 and (ctrl_c == nil or w32(ctrl_a) ~= ctrl_c.expect)
-            end,
-            battle_link = function() return w32(type_a) & 2 ~= 0 end,
-            battle_resolved = function() return w8(out_a) ~= 0 end,
-            send_out_prompt = function() return w32(ctrl_a) == P.WAIT_FOR_MON_SELECTION end,
-            native_idle = function()
-                return native ~= nil and w32(native.base) == native.sig
-            end,
-            sound_driver = function()
-                return sound_player ~= nil
-                    and w32(sound_player + sound.ident_off) == sound.ident_magic
-            end,
-        }
+        local WIT = P.witnesses(cp, function(a) return memory.read_u8(a) end,
+                                function(a) return memory.read_u32_le(a) end)
         for i = P.REASON_BASE, #P.STATES do
             if plan[i] then
                 local spec = P.STATES[i]
-                load(os.getenv(spec.state_env) or spec.state)
-                -- battle_comm_eq/_ge are factories over witness_value; every other WIT entry IS
-                -- the witness (calling it here handed begin() a boolean: C4-PROBE, first FR run)
-                local build = WIT[spec.witness]
-                row = begin(i, spec.witness_value ~= nil and build(spec) or build)
+                local loaded, why = load(os.getenv(spec.state_env) or spec.state)
                 -- until_witness: the mash runs to that state, and the row is only reached there
-                local stop = WIT[spec.until_witness] or function() return row.witness() end
-                for _, step in ipairs(spec.inputs or {}) do
-                    if step.tap then G.tap(step.tap, step.frames or 3, step.gap or 13)
-                    elseif step.idle then G.idle(step.idle)
-                    elseif step.mash then G.mash(step.mash, stop) end
+                local witness, stop = P.row_witness(WIT, spec)
+                row = begin(i, witness)
+                if not loaded then
+                    row.blocked, row.reason = "UNREACHED " .. why, why
+                else
+                    for _, step in ipairs(spec.inputs or {}) do
+                        if step.tap then G.tap(step.tap, step.frames or 3, step.gap or 13)
+                        elseif step.idle then G.idle(step.idle)
+                        elseif step.mash then G.mash(step.mash, stop) end
+                    end
+                    local held, arrived = 0, spec.until_witness == nil or stop()
+                    for _ = 1, spec.hold or 180 do
+                        if row.witness() then held = held + 1 end
+                        G.advance()
+                    end
+                    row.reached = held > 0 and arrived
+                    if not arrived then row.reason = spec.until_witness .. " never reached"
+                    elseif not row.reached then row.reason = "state witness never held" end
                 end
-                local held, arrived = 0, spec.until_witness == nil or stop()
-                for _ = 1, spec.hold or 180 do
-                    if row.witness() then held = held + 1 end
-                    G.advance()
-                end
-                row.reached = held > 0 and arrived
-                if not arrived then row.reason = spec.until_witness .. " never reached"
-                elseif not row.reached then row.reason = "state witness never held" end
                 active = nil
             end
         end
@@ -576,8 +621,8 @@ function P.run()
             -- FR/LG: the Viridian woman from P.SCRIPT_TILE, in the mkstates-built state (C4-PROBE2;
             -- the earlier FR row used an externally made Oak-lab state).
             local rr = title == "radical_red"
-            load(os.getenv("SLINK_CHECKPOINT_SCRIPT_STATE")
-                or (rr and "slink_pokecenter_full.State" or "slink_script.State"))
+            assert(load(os.getenv("SLINK_CHECKPOINT_SCRIPT_STATE")
+                or (rr and "slink_pokecenter_full.State" or "slink_script.State")))
             local function running() return P.script_active(memory.read_u8) end
             row = begin(9, running)
             local there, where
