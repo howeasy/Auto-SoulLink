@@ -633,8 +633,11 @@ def test_our_emuhawk_pids_scopes_to_our_own_lua_driver_never_a_blanket_match():
 
 
 def _q(counter, party, ok=True, message="ok"):
+    """party: (species, level) or (species, level, key) -- the key defaults to one per slot."""
     return {"ok": ok, "message": message, "counter": counter,
-            "party": [{"species": s, "level": lv} for s, lv in party]}
+            "party": [{"species": m[0], "level": m[1],
+                       "key": m[2] if len(m) > 2 else f"{i:08X}:0000BEEF"}
+                      for i, m in enumerate(party)]}
 
 
 def test_boot_check_verdict_accepts_one_save_with_an_unchanged_party():
@@ -678,3 +681,21 @@ def test_boot_check_verdict_over_real_images():
     assert fx.boot_check_verdict(before, after) == (True, [])
     ok, problems = fx.boot_check_verdict(before, before)
     assert not ok and problems
+
+
+
+def test_boot_check_verdict_compares_identity_keys_not_just_species_and_level():
+    """Codex receipt audit 2026-09-23: a lookalike party (same species and levels, other PID/OTID)
+    is a different save, and must not pass as the fixture."""
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5, "AAAAAAAA:0000BEEF")]),
+                                         _q(5, [(1, 5, "BBBBBBBB:0000BEEF")]))
+    assert not ok and "party changed" in problems[0], problems
+    keyless = {"ok": True, "message": "ok", "counter": 5, "party": [{"species": 1, "level": 5}]}
+    ok, problems = fx.boot_check_verdict(_q(4, [(1, 5)]), keyless)
+    assert not ok and any("identity key" in p for p in problems), problems
+
+
+def test_qualify_prints_the_clients_key_for_each_party_mon():
+    """The key format is the client's (lua/gen3/reads.lua r.key): PID:OTID, 8 upper-hex each."""
+    entry = fx._party_entry({"personality": 0x2D356A90, "ot_id": 0x99DE0D8A, "species": 7, "level": 9})
+    assert entry == {"key": "2D356A90:99DE0D8A", "species": 7, "level": 9}

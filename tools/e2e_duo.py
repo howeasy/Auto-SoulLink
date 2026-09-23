@@ -1439,9 +1439,53 @@ def gen3_capture_problems(label, saved, fixture, key, sent=None, rr=False, limit
     return problems
 
 
+# Paths a run itself rewrites (the wire goldens `--wire-log` refreshes): never "dirty source".
+GEN3_IDENTITY_EXCLUDE = ("tests/fixtures/gen3/wire/",)
+
+# While a Gen 3 oracle runs, DuoRun._run_oracle points this at a list: gen3_receipt_problems
+# appends (label, line) for every receipt line a required/ordered pattern matched, and the runner
+# copies them into the PYDEC receipt (Codex receipt audit 2026-09-23: the receipt must carry
+# the raw markers the verdict consumed, not only its summary line).
+_CONSUMED_MARKERS = None
+
+
+def _receipt_line(text, match):
+    start = text.rfind("\n", 0, match.start()) + 1
+    end = text.find("\n", match.end())
+    return text[start:end if end >= 0 else len(text)]
+
+
+def center_controls_chain(ka):
+    """center_controls_gen3's A receipt, in order (scenario_gen3_center_controls.lua emits it):
+    each control's source-pinned WITNESS before its CONTROL_LIVE, the keyed probe after it, the
+    refusal, then CONTROL_RELEASED at the release input BEFORE the probe's ACK and read-back,
+    and CONTROL_SETTLED after them (Codex REV-center-receipt-2)."""
+    k = re.escape(ka)
+    return [r"(?m)^WITNESS cable_menu script=CableClub_EventScript_SelectCableClubRoom at=\S+ "
+            r"multichoice=true adapter_connected=false",
+            rf"(?m)^CONTROL_LIVE cable_menu {k} ", gen3_rx("box_mon", ka),
+            rf"(?m)^CONTROL_REFUSED cable_menu box_mon {k} clause=\S+ ",
+            r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
+            rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
+            rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}$", gen3_tx("stats_cache", ka),
+            gen3_boxed(ka), rf"(?m)^CONTROL_SETTLED cable_link box_mon {k}$",
+            r"(?m)^WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
+            r"at=\S+ adapter_connected=false",
+            rf"(?m)^CONTROL_LIVE union_room_attendant {k} ", gen3_rx("party_mon", ka),
+            rf"(?m)^CONTROL_REFUSED union_room_attendant party_mon {k} clause=\S+ ",
+            rf"(?m)^CONTROL_RELEASED union_room_attendant party_mon {k}$",
+            gen3_tx("sync_retrieve_done", ka), gen3_returned(ka),
+            rf"(?m)^CONTROL_SETTLED union_room_attendant party_mon {k}$"]
+
+
 def gen3_receipt_problems(label, text, required=(), forbidden=(), ordered=()):
     """Receipt markers: every `required` regex present, no `forbidden` one, each `ordered`
     (before, after) pair found in that order."""
+    if _CONSUMED_MARKERS is not None:
+        for pattern in [*required, *(p for pair in ordered for p in pair)]:
+            match = re.search(pattern, text or "")
+            if match:
+                _CONSUMED_MARKERS.append((label, _receipt_line(text, match)))
     problems = [f"{label}: missing /{p}/" for p in required if not re.search(p, text or "")]
     problems += [f"{label}: forbidden /{p}/ present" for p in forbidden
                  if re.search(p, text or "")]
@@ -5140,24 +5184,35 @@ class DuoRun:
             self._append_reconnect_marker(inst, "SAVE")
 
     def _gen3_identity(self) -> str:
-        """G4 item 2a (1): what this receipt ran on -- each side's ROM and fixture bytes, the pack
-        files, and the source cut (HEAD, +dirty when lua/, tools/ or data/ differ from it)."""
+        """G4 item 2a (1) + Codex REV-center-receipt-2: what this receipt ran on -- each side's ROM
+        and fixture bytes, the pack files (full SHA-256), and the source cut: HEAD, +dirty when
+        ANY tracked or untracked path differs from it (the whole executed closure: server/, lua/,
+        tools/, data/, ...), minus GEN3_IDENTITY_EXCLUDE's run outputs. A git error fails the
+        run closed; `_gen3_source_dirty` lets _run_oracle REJECT a dirty receipt."""
         import hashlib
 
         def sha(path):
             with open(path if os.path.isabs(path) else os.path.join(REPO, path), "rb") as handle:
-                return hashlib.sha256(handle.read()).hexdigest()[:16]
+                return hashlib.sha256(handle.read()).hexdigest()
+
+        def git(*args):
+            proc = subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True)
+            if proc.returncode != 0:
+                raise RuntimeError(f"IDENTITY: git {' '.join(args)} failed ({proc.returncode}): "
+                                   f"{proc.stderr.strip()}")
+            return proc.stdout
 
         pack = os.path.join(REPO, "data", "games", "gen3_rr" if self._gen3_rr else "gen3_frlg")
         sides = " ".join(f"{inst}={self._gen3_title(inst)}:rom={sha(self._gen3_rom(inst))}"
                          f":fixture={sha(self._gen3_fixture_path(inst))}" for inst in ("a", "b"))
         packs = " ".join(f"{name}={sha(os.path.join(pack, name))}"
                          for name in ("write_checkpoint.json", "profile.json"))
-        git = ["git", "-C", REPO]
-        head = subprocess.run(git + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-        dirty = subprocess.run(git + ["status", "--porcelain", "--", "lua", "tools", "data"],
-                               capture_output=True, text=True).stdout.strip()
-        return f"IDENTITY {sides} {packs} source={head[:12]}{'+dirty' if dirty else ''}"
+        head = git("rev-parse", "HEAD").strip()
+        dirty = [line[3:].strip('"') for line in git("status", "--porcelain", "--untracked-files=all").splitlines()
+                 if line[3:].strip('"') and not line[3:].strip('"').startswith(GEN3_IDENTITY_EXCLUDE)]
+        self._gen3_source_dirty = dirty
+        shown = f" dirty=[{','.join(dirty[:20])}{',...' if len(dirty) > 20 else ''}]" if dirty else ""
+        return f"IDENTITY {sides} {packs} source={head}{'+dirty' if dirty else ''}{shown}"
 
     def orchestrate_center_controls_gen3(self):
         """G4 item 2a (4) on the Center 2F: each time A parks in a refusing state it logs
@@ -5165,7 +5220,6 @@ class DuoRun:
         menu (still held through the link wait), party_mon (with the stats A's own stats_cache
         reported when the box_mon landed) for the Union Room attendant."""
         self._gen3_prelude(link_slot=1)
-        self._pydec_note(self._gen3_identity())
         self.go(self._gen3_linked_lines())
         ka = self._link_keys["a"]
         self._gen3_mark("a", rf"^CONTROL_LIVE cable_menu {re.escape(ka)} ", "A parked at the Cable Club menu")
@@ -5182,7 +5236,6 @@ class DuoRun:
         server's own party_keys agreeing (assert_whiteout_both_boxed, shared with Gen 1), then A
         whites out with its lone starter and the server rebuilds the pair out of both PCs."""
         self._gen3_prelude(link_slot=1)
-        self._pydec_note(self._gen3_identity())
         self.go(self._gen3_linked_lines())
         self.assert_whiteout_both_boxed()
         # G4 item 2a's negative control: after its save A parks in the Center nurse's script, and
@@ -5480,25 +5533,18 @@ class DuoRun:
 
     def assert_center_controls_gen3_saved(self, results):
         """G4 item 2a (4): A's one save (the Cable Club's) holds the linked mon in its party with
-        the fixture record; each keyed probe arrived only after its CONTROL_LIVE, was REFUSED in
-        that state by a named clause, and landed once the state ended (ACK + read-back). The
-        cable probe stays the same box_mon from the menu through the link wait."""
+        the fixture record -- it is taken BEFORE any probe moves a byte, so it is no persistence
+        proof of the later deposit/withdraw; each keyed probe arrived only after its CONTROL_LIVE,
+        was REFUSED in its witnessed state by a named clause, and landed only after the release
+        (ACK + read-back). The cable probe stays the same box_mon from the menu through the link
+        wait."""
         self._gen3_flush_boundary()
         self._gen3_one_link("alive")
         ka = self._link_keys["a"]
-        k = re.escape(ka)
         problems = gen3_round_trip_problems("a", self._gen3_saved("a"), self._gen3_fixture_saved("a"),
                                             ka, rr=self._gen3_rr, limits=self._gen3_limits("a"),
                                             walked=True)
-        chain = [rf"(?m)^CONTROL_LIVE cable_menu {k} ", gen3_rx("box_mon", ka),
-                 rf"(?m)^CONTROL_REFUSED cable_menu box_mon {k} clause=\S+ ",
-                 r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
-                 rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
-                 rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}\b", gen3_tx("stats_cache", ka),
-                 gen3_boxed(ka), rf"(?m)^CONTROL_LIVE union_room_attendant {k} ", gen3_rx("party_mon", ka),
-                 rf"(?m)^CONTROL_REFUSED union_room_attendant party_mon {k} clause=\S+ ",
-                 rf"(?m)^CONTROL_RELEASED union_room_attendant party_mon {k}\b",
-                 gen3_tx("sync_retrieve_done", ka), gen3_returned(ka)]
+        chain = center_controls_chain(ka)
         problems += gen3_receipt_problems(
             "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
             forbidden=[gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka)])
@@ -5647,7 +5693,9 @@ class DuoRun:
             problems.append("A's same-save battery differs from its pre-kill bytes")
         if codec.split_rtc(self._gen3_flushed("a"))[0] != self._gen3_wrong_body:
             problems.append("the rejected wrong-save cartridge's battery changed")
-        problems += gen3_receipt_problems("a", results["a"], required=[r"(?m)^WRITES 0$"])
+        problems += gen3_receipt_problems("a", results["a"], required=[
+            r"(?m)^WRITES 0$",
+            r"(?m)^WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged box=unchanged$"])
         b_keys = [gen3_key(m) for m in self._gen3_saved("b")[0]]
         if self._link_keys["b"] not in b_keys:
             problems.append(f"B's saved party {b_keys} lacks its linked {self._link_keys['b']}")
@@ -5763,7 +5811,33 @@ class DuoRun:
             self.check_save_witness(results)
         elif row.get("oracle_required"):
             getattr(self, row["save_witness"])(results)
-        getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+        if not self.is_gen3_battery:
+            getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+            return
+        dirty = getattr(self, "_gen3_source_dirty", None)
+        if dirty:
+            raise RuntimeError(f"the receipt's source is +dirty ({', '.join(dirty[:5])}"
+                               f"{', ...' if len(dirty) > 5 else ''}): a G4 receipt must come "
+                               f"from a clean cut")
+        global _CONSUMED_MARKERS
+        _CONSUMED_MARKERS = consumed = []
+        try:
+            getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+        finally:
+            _CONSUMED_MARKERS = None
+            seen = set()
+            for label, line in consumed:
+                if (label, line) not in seen:
+                    seen.add((label, line))
+                    self._pydec_note(f"MARKER {label}: {line[:400]}")
+
+    def _note_result_lines(self, texts):
+        """Each side's own RESULT line, verbatim, beside the runner's verdict (Gen 3 rows)."""
+        if not self.is_gen3_battery:
+            return
+        for inst in ("a", "b"):
+            lines = [ln for ln in (texts.get(inst) or "").splitlines() if ln.startswith("RESULT:")]
+            self._pydec_note(f"RESULT_LINE {inst}: {lines[-1] if lines else '(none)'}")
 
     def _live_ok(self) -> bool:
         """True when every live leg this scenario needs ran to completion."""
@@ -5781,6 +5855,9 @@ class DuoRun:
         try:
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
+            if self.is_gen3_battery:
+                # every Gen 3 receipt names its own cut (Codex receipt audit 2026-09-23)
+                self._pydec_note(self._gen3_identity())
             self.start_server()
             self.start_instances()
             try:
@@ -5792,6 +5869,7 @@ class DuoRun:
                     raise  # an unrelated failed half is never a game-RNG retry
             else:
                 ra, rb = self.wait_results()
+            self._note_result_lines({"a": ra, "b": rb})
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb:
@@ -5827,6 +5905,7 @@ class DuoRun:
             # run_scenario_with_rng_retry still classifies them (a mid-wait ball miss keeps its
             # retry; anything else fails as the receipts say).
             if getattr(self, "_pydec_path", None):
+                self._note_result_lines({inst: self._read_receipt(inst) or "" for inst in ("a", "b")})
                 self._pydec_note(f"PYDEC: FAIL client RESULT before {exc.awaited}")
             print(f"[duo] {self.scenario}: {exc}")
             for inst in ("a", "b"):

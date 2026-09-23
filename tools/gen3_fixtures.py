@@ -94,6 +94,13 @@ def _trainer_identity(sb2: bytes) -> tuple[str, int]:
     return name, trainer_id
 
 
+def _party_entry(mon: dict) -> dict:
+    """One party record as qualify prints it: the client's identity key (lua/gen3/reads.lua
+    r.key, PERSONALITY:OTID in eight upper-case hex digits) with species and level."""
+    return {"key": f"{mon['personality']:08X}:{mon['ot_id']:08X}", "species": mon["species"],
+            "level": mon["level"]}
+
+
 def qualify_one(data: bytes, *, rr: bool) -> dict:
     """Everything `qualify` prints, as a dict, so the test suite can assert
     on it directly instead of parsing stdout."""
@@ -115,14 +122,13 @@ def qualify_one(data: bytes, *, rr: bool) -> dict:
             raise ValueError("RR party count exceeds six")
         party = codec.rr_party_from_save(body)
         boxes = codec.rr_boxes_from_save(body)
-        result["party"] = [{"species": m["species"], "level": m["level"]} for m in party]
+        result["party"] = [_party_entry(m) for m in party]
         result["boxes"] = sum(bool(m["species"]) for box in boxes for m in box)
         result["boxes_note"] = ("RR layout pinned; extension sectors 30/31 have no checksum "
                                 "or generation counter (rr_save_layout.md §5, §7)")
     else:
         party = codec.party_from_save(body, rr=False)
-        result["party"] = [{"species": m["species"], "level": m["level"]}
-                            for m in party]
+        result["party"] = [_party_entry(m) for m in party]
         boxes = codec.boxes_from_save(body, rr=False)
         result["boxes"] = sum(1 for box in boxes for mon in box
                               if mon["personality"] or mon["ot_id"])
@@ -551,8 +557,12 @@ def boot_check_verdict(before: dict, after: dict) -> tuple[bool, list[str]]:
         problems.append(f"save counter {before['counter']} -> {after['counter']}, "
                         f"expected exactly one in-game save "
                         f"({before['counter']} -> {before['counter'] + 1})")
-    keys_before = [(m["species"], m["level"]) for m in (before.get("party") or [])]
-    keys_after = [(m["species"], m["level"]) for m in (after.get("party") or [])]
+    # identity first (Codex receipt audit 2026-09-23): an ordered (species, level) match is
+    # also what a DIFFERENT save with a lookalike party would give
+    keys_before = [(m.get("key"), m["species"], m["level"]) for m in (before.get("party") or [])]
+    keys_after = [(m.get("key"), m["species"], m["level"]) for m in (after.get("party") or [])]
+    if any(k is None for k, _, _ in keys_before + keys_after):
+        problems.append("a party record carries no PID:OTID identity key")
     if keys_before != keys_after:
         problems.append(f"party changed: {keys_before} -> {keys_after}")
     return not problems, problems

@@ -141,7 +141,10 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
                "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon",
                "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
-               "Task_LinkupAwaitConnection" }
+               "Task_LinkupAwaitConnection", "sGlobalScriptContext",
+               "CableClub_EventScript_SelectCableClubRoom", "CableClub_EventScript_Colosseum",
+               "CableClub_EventScript_UnionRoomAdapterNotConnected",
+               "CableClub_EventScript_WirelessClubAttendant", "Task_MultichoiceMenu_HandleInput" }
 local S = {}
 do
     local want = {}
@@ -444,7 +447,11 @@ function ctx.mutable_bytes()
     local party = bytes(profile.ram.PARTY_COUNT_ADDR, 1) .. bytes(profile.ram.PARTY_BASE, 6 * Reads.PARTY_MON_SIZE)
     local store = memory.read_u32_le(cp.pointers.gPokemonStoragePtr.address, "System Bus")
     local d = profile.derived
-    local box = bytes(store, d.BOX_DATA_OFFSET + d.BOXES_PER_STORE * d.MONS_PER_BOX * 80)
+    -- pret include/pokemon_storage_system.h struct PokemonStorage: currentBox, the boxes (from
+    -- BOX_DATA_OFFSET), then boxNames[n][9] and boxWallpapers[n] -- the whole struct, 0x83D0 on
+    -- FR/LG. RR's 25-box storage is sized by the same formula from its pack (layout unverified).
+    local n = d.BOXES_PER_STORE
+    local box = bytes(store, d.BOX_DATA_OFFSET + n * d.MONS_PER_BOX * 80 + n * 9 + n)
     return party, box
 end
 function ctx.party_base() return reader.party_base() end
@@ -579,6 +586,25 @@ local function party_task(fn)
     return false
 end
 function ctx.battler_slot() return memory.read_u16_le(S.gBattlerPartyIndexes) end
+--- Where the global script context sits inside the script range [lo, hi): "scriptPtr" when its
+--- next command is there, "stack[i]" when a CALLER there is waiting (a `callstd` msgbox runs in
+--- the std script with the caller's return address stacked), else nil. pret include/script.h
+--- struct ScriptContext: stackDepth +0, scriptPtr +8, stack[20] +12 (sGlobalScriptContext 0x74).
+--- Self-contained (no upvalues) so tests/unit/test_e2e_duo_gen3.py runs this exact body.
+local function script_at(read_u8, read_u32, base, lo, hi)
+    local p = read_u32(base + 8)
+    if p >= lo and p < hi then return "scriptPtr" end
+    for i = 0, math.min(read_u8(base), 20) - 1 do
+        local r = read_u32(base + 12 + 4 * i)
+        if r >= lo and r < hi then return "stack[" .. i .. "]" end
+    end
+end
+--- script_at over the named script labels (SYMS), read now.
+function ctx.script_at(label, next_label)
+    return script_at(function(a) return memory.read_u8(a, "System Bus") end,
+                     function(a) return memory.read_u32_le(a, "System Bus") end,
+                     S.sGlobalScriptContext, S[label], S[next_label])
+end
 --- Is the pret function `name` (one of SYMS) an active task right now?
 function ctx.task_live(name) return party_task(assert(S[name], "no SYMS entry " .. name)) end
 
@@ -682,6 +708,10 @@ end
 -- ponytail: one probe per control; a queue-wide token is not needed while the key is unique
 function ctx.hold_probe(name, cmd, key, live, frames, already_queued)
     frames = frames or 600
+    -- the baseline comes BEFORE the probe is even queued: zero attempts throughout delivery
+    -- (Codex REV-center-receipt-2), not only from the RX on
+    local attempted0, writes0 = ctx.attempted(), ctx.writes()
+    local party0, box0 = ctx.mutable_bytes()
     local rx0 = ctx.received(cmd, key)
     local state = ctx.center_state()
     ctx.log(fmt("CONTROL_LIVE %s %s %s", name, key, state))
@@ -691,27 +721,34 @@ function ctx.hold_probe(name, cmd, key, live, frames, already_queued)
             return nil, name .. ": the runner never queued " .. cmd .. " " .. key
         end
     end
-    local attempted0, writes0 = ctx.attempted(), ctx.writes()
-    local party0, box0 = ctx.mutable_bytes()
-    local why
-    for i = 1, frames do
-        if not live() then return nil, fmt("%s: the refusing state ended after %d frames", name, i - 1) end
+    -- one sample per advanced frame, the final one included: every invariant is checked AFTER
+    -- the advance, and the named refusal is read from that same last sample (Codex executed a
+    -- change on frame 600 that the old before-advance checks never saw)
+    local function sample(i)
+        if not live() then return nil, fmt("%s: the refusing state ended by frame %d", name, i) end
         local q = ctx.queued(cmd, key)
-        if not q then return nil, fmt("%s: %s %s is not queued (frame %d)", name, cmd, key, i - 1) end
-        why = q.why
+        if not q then return nil, fmt("%s: %s %s is not queued (frame %d)", name, cmd, key, i) end
         if ctx.attempted() ~= attempted0 or ctx.writes() ~= writes0 then
-            return nil, name .. ": the sink attempted a write while the state was live"
+            return nil, fmt("%s: the sink attempted a write while the state was live (frame %d)", name, i)
         end
-        ctx.frames(1)
+        return q
     end
-    local party1, box1 = ctx.mutable_bytes()
-    if party1 ~= party0 then return nil, name .. ": the party bytes changed while held" end
-    if box1 ~= box0 then return nil, name .. ": the PC storage bytes changed while held" end
+    local q, why = sample(0)
+    if not q then return nil, why end
+    for i = 1, frames do
+        ctx.frames(1)
+        q, why = sample(i)
+        if not q then return nil, why end
+    end
+    why = q.why
     local clause = why and why:match("forbidden state: (%S+)$")
     if clause and G.pred_ok(cp, clause) then clause = nil end
     if not clause and why and why:find("unknown active task", 1, true) then clause = "task" end
     if not clause and why and why:find("CPU outside parked checkpoint", 1, true) then clause = "cpu" end
     if not clause then return nil, name .. ": the hold names no failing clause (" .. tostring(why) .. ")" end
+    local party1, box1 = ctx.mutable_bytes()
+    if party1 ~= party0 then return nil, name .. ": the party bytes changed while held" end
+    if box1 ~= box0 then return nil, name .. ": the PC storage bytes changed while held" end
     ctx.log(fmt("CONTROL_REFUSED %s %s %s clause=%s held_frames=%d attempted=0 writes=0 bytes=unchanged %s",
                 name, cmd, key, clause, frames, (ctx.center_state())))
     return clause, why

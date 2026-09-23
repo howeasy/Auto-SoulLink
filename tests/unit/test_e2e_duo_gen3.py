@@ -847,7 +847,12 @@ function FAKE(scenario, player, phase, spec)
     local probes, released = 0, false          -- released: a talk's script closed (mash_until)
     ctx.log = function(s)
         logs[#logs + 1] = tostring(s)
-        if tostring(s):find("^CONTROL_LIVE") then probes = probes + 1 end
+        local live = tostring(s):match("^CONTROL_LIVE (%S+)")
+        if live then
+            probes = probes + 1
+            local probe = ({ cable_menu = "box_mon", nurse = "box_mon", union_room_attendant = "party_mon" })[live]
+            if probe then logs[#logs + 1] = "RX " .. probe .. " key=" .. (spec.linked or "K1") end
+        end
     end
     ctx.frames = function() end
     ctx.wait_until = function(pred) return pred() end
@@ -894,6 +899,7 @@ function FAKE(scenario, player, phase, spec)
     ctx.wait_sent = function(event, key)
         if event == "stats_cache" and not spec.noop_deposit then gone[key] = true; boxed[key] = true end
         if event == "sync_retrieve_done" then gone[key] = nil; boxed[key] = nil end
+        logs[#logs + 1] = "TX " .. event .. " " .. tostring(key) .. " {}"
         return true
     end
     ctx.wait_received = function(cmd)
@@ -976,7 +982,15 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.locate = function() return { party = 1, box = false } end
     ctx.on_field = function() return true end
-    ctx.task_live = function() return true end
+    local saved = false
+    ctx.task_live = function(name)
+        if name == "Task_LinkupAwaitConnection" and not saved then
+            saved = true                       -- the Cable Club save precedes the link wait
+            logs[#logs + 1] = "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5"
+        end
+        return true
+    end
+    ctx.script_at = function() if spec.no_witness then return nil end return "scriptPtr" end
     -- the deferred queue the REAL ctx.queued/ctx.hold_probe read (HOLD_SRC, from the driver);
     -- spec.queue = "wrong" is Codex's case: the right reason, but only an unrelated party_mon
     local key = spec.linked or "K1"
@@ -1073,7 +1087,9 @@ def _run_module(lua, scenario, player, phase, spec):
     ("deadzone", "b", "initial", {"hp0": "lua:{frame=1,in_battle=false}"}, ["CAUGHT K9", "RETIRED K9"]),
     ("reconnect", "b", "initial", {}, ["RECONNECT_READY b"]),
     ("reconnect", "a", "same_save", {}, ["RECONNECT_HELLO same_save count=1"]),
-    ("reconnect", "a", "wrong_save", {}, ["RECONNECT_HELLO wrong_save count=1"]),
+    ("reconnect", "a", "wrong_save", {}, ["RECONNECT_HELLO wrong_save count=1",
+                                          "WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged "
+                                          "box=unchanged"]),
     # RR-only: explode now reads the engine through ctx (no raw memory/joypad), so it runs here.
     ("explode", "a", "initial", {"linked": "K0"}, ["LINKED_FAINTED K0"]),
     ("explode", "b", "initial", {"linked": "K0"},
@@ -1095,6 +1111,10 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("linked_faint_active", "b", "initial", {"linked": "K0"}, "never reached HP 0 in battle"),
     ("faint_cmd", "b", "initial", {}, "never took K1 to HP 0"),
     ("reconnect", "a", "wrong_save", {"writes": 2}, "wrote 2 time(s)"),
+    # C4-6n (Codex receipt audit): zero ATTEMPTED bytes and unchanged live RAM, not only zero
+    # completed write-log lines
+    ("reconnect", "a", "wrong_save", {"attempted_change": "lua:true"}, "ATTEMPTED 1 byte(s)"),
+    ("reconnect", "a", "wrong_save", {"bytes_change": "lua:true"}, "live party/PC RAM changed"),
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='ok'}"}, "expected error=refresh_failed"),
@@ -2221,17 +2241,21 @@ def test_deadzone_oracle_takes_one_dead_zone_row_per_player(monkeypatch, tmp_pat
 
 
 def _center_controls_receipt(k):
-    return (f"CONTROL_LIVE cable_menu {k} map=5.5\nRX box_mon key={k}\n"
+    return ("WITNESS cable_menu script=CableClub_EventScript_SelectCableClubRoom at=scriptPtr "
+            "multichoice=true adapter_connected=false(observed: the no-adapter branch)\n"
+            f"CONTROL_LIVE cable_menu {k} map=5.5\nRX box_mon key={k}\n"
             f"CONTROL_REFUSED cable_menu box_mon {k} clause=script_context_status held\n"
             "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
             f"CONTROL_LIVE cable_link {k} map=5.5\n"
             f"CONTROL_REFUSED cable_link box_mon {k} clause=task held\n"
             f"CONTROL_RELEASED cable_link box_mon {k}\nTX stats_cache {k} {{}}\n"
-            f"BOXED_OBSERVED {k} box=0:0\nCONTROL_LIVE union_room_attendant {k} map=5.5\n"
-            f"RX party_mon key={k}\n"
+            f"BOXED_OBSERVED {k} box=0:0\nCONTROL_SETTLED cable_link box_mon {k}\n"
+            "WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
+            "at=stack[0] adapter_connected=false(observed: the adapter-not-connected branch)\n"
+            f"CONTROL_LIVE union_room_attendant {k} map=5.5\nRX party_mon key={k}\n"
             f"CONTROL_REFUSED union_room_attendant party_mon {k} clause=field_controls_locked held\n"
             f"CONTROL_RELEASED union_room_attendant party_mon {k}\nTX sync_retrieve_done {k} {{}}\n"
-            f"RETURNED_OBSERVED {k} slot=1\n")
+            f"RETURNED_OBSERVED {k} slot=1\nCONTROL_SETTLED union_room_attendant party_mon {k}\n")
 
 
 def test_center_controls_oracle_positive_and_negatives(monkeypatch, tmp_path):
@@ -2251,6 +2275,11 @@ def test_center_controls_oracle_positive_and_negatives(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="CONTROL_RELEASED union_room_attendant"):
         run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
             f"CONTROL_RELEASED union_room_attendant party_mon {k}\n", "")))
+    # Codex REV-center-receipt-2: the release boundary logged AFTER the ACK is refused
+    late = good["a"].replace(f"CONTROL_RELEASED cable_link box_mon {k}\n", "").replace(
+        f"BOXED_OBSERVED {k} box=0:0\n", f"BOXED_OBSERVED {k} box=0:0\nCONTROL_RELEASED cable_link box_mon {k}\n")
+    with pytest.raises(RuntimeError, match="CONTROL_RELEASED cable_link"):
+        run.assert_center_controls_gen3_saved(dict(good, a=late))
 
 
 def test_the_lgfr_row_is_the_frlg_family_with_leafgreen_as_a():
@@ -2273,15 +2302,16 @@ def test_the_runner_records_rom_pack_source_and_fixture_identity(monkeypatch, tm
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: str(rom))
     monkeypatch.setattr(run, "_gen3_fixture_path", lambda inst: str(fix))
     line = run._gen3_identity()
-    assert re.match(r"IDENTITY a=firered:rom=[0-9a-f]{16}:fixture=[0-9a-f]{16} "
-                    r"b=leafgreen:rom=[0-9a-f]{16}:fixture=[0-9a-f]{16} "
-                    r"write_checkpoint\.json=[0-9a-f]{16} profile\.json=[0-9a-f]{16} "
-                    r"source=[0-9a-f]{12}(\+dirty)?$", line), line
+    assert re.match(r"IDENTITY a=firered:rom=[0-9a-f]{64}:fixture=[0-9a-f]{64} "
+                    r"b=leafgreen:rom=[0-9a-f]{64}:fixture=[0-9a-f]{64} "
+                    r"write_checkpoint\.json=[0-9a-f]{64} profile\.json=[0-9a-f]{64} "
+                    r"source=[0-9a-f]{40}(\+dirty dirty=\[.+\])?$", line), line
+    # C4-6n: every Gen 3 scenario's receipt carries it -- run() writes it for any battery row
     body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
-    for name in ("orchestrate_whiteout_gen3", "orchestrate_center_controls_gen3"):
-        orch = body[body.index(f"def {name}"):]
-        orch = orch[:orch.index("\n    def ", 10)]
-        assert "self._pydec_note(self._gen3_identity())" in orch, name
+    run_body = body[body.index("    def run(self):"):]
+    run_body = run_body[:run_body.index("\n    def ", 10) if "\n    def " in run_body[10:] else None]
+    assert "if self.is_gen3_battery:\n                # every Gen 3 receipt names its own cut" in run_body
+    assert "self._pydec_note(self._gen3_identity())" in run_body
 
 
 def test_the_center_controls_runner_queues_each_probe_after_its_marker():
@@ -2290,3 +2320,177 @@ def test_the_center_controls_runner_queues_each_probe_after_its_marker():
     assert orch.index("CONTROL_LIVE cable_menu") < orch.index('"cmd": "box_mon"')
     assert orch.index("CONTROL_LIVE union_room_attendant") < orch.index('"cmd": "party_mon"')
     assert "stats_cache" in orch
+
+
+# ── C4-6n: self-proving receipts (Codex receipt audit 2026-09-23) ────────────────────────────
+def test_the_oracle_writes_the_markers_it_consumed_into_the_receipt(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    run.cfg = dict(duo.SCENARIOS["whiteout_gen3"])
+    run.game = "gen3_frlg"
+    monkeypatch.setattr(run, "check_save_witness_gen3", lambda results: None)
+    run._run_oracle(_whiteout_receipts(k))
+    markers = [n for n in notes if n.startswith("MARKER ")]
+    assert f"MARKER a: CONTROL_REFUSED nurse box_mon {k} clause=field_controls_locked held" in markers
+    assert f"MARKER b: RX box_mon key={k}" in markers
+    assert "MARKER a: CENTER_STATE map=5.4 at=(7,4)" in markers
+    assert duo._CONSUMED_MARKERS is None
+
+
+def test_each_sides_raw_result_line_is_kept(monkeypatch):
+    run = _oracle_run("link_gen3")
+    run.gcfg = dict(duo.GAMES["gen3_frlg"])
+    notes = []
+    run._pydec_note = notes.append
+    run._note_result_lines({"a": "X\nRESULT: PASS (caught K9)\n", "b": "no result here\n"})
+    assert notes == ["RESULT_LINE a: RESULT: PASS (caught K9)", "RESULT_LINE b: (none)"]
+    body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    run_body = body[body.index("    def run(self):"):body.index("\ndef list_lines(")]
+    # both exits keep them: the double-RESULT path and the early-finish path
+    assert run_body.count("self._note_result_lines(") == 2
+
+
+def test_reconnect_oracle_requires_the_attempted_zero_witness(monkeypatch, tmp_path):
+    codec = duo.gen3_codec()
+    image = _fixture([STARTER, PIDGEY])
+    body = codec.split_rtc(image)[0]
+    run = _oracle_run("reconnect_gen3")
+    run.gcfg = dict(duo.GAMES["gen3_frlg"])
+    run._live_complete = {"reconnect_gen3": True}
+    run._gen3_flush_boundary = lambda: None
+    run._gen3_one_link = lambda status, cause=None: {}
+    same = tmp_path / "same.sav"
+    same.write_bytes(image)
+    run._same_save_artifact = str(same)
+    run._artifact = lambda path, what: Path(path)
+    run._gen3_before_kill = image
+    run._gen3_wrong_body = body
+    run._gen3_flushed = lambda inst: image
+    run._gen3_saved = lambda inst: ([PIDGEY_B], {})
+    run._link_keys = {"a": _key(PIDGEY), "b": _key(PIDGEY_B)}
+    notes = []
+    run._pydec_note = notes.append
+    zero = "WRITES 0\nWRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged box=unchanged\n"
+    run.assert_reconnect_gen3_saved({"a": zero, "b": ""})
+    assert notes and "reconnect" in notes[-1]
+    with pytest.raises(RuntimeError, match="WRONG_SAVE_ZERO"):
+        run.assert_reconnect_gen3_saved({"a": "WRITES 0\n", "b": ""})
+
+
+# ── C4-6n addendum: Codex REV-center-receipt-2 ──────────────────────────────────────────────
+def test_the_center_controls_emitter_satisfies_its_own_oracle_chain(lua):
+    """Producer -> consumer: the REAL scenario's emitted receipt (under the fake ctx, which
+    echoes the driver tee's RX/TX/DUMP lines) against the oracle's own chain."""
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {})
+    assert ok and passed is True, msg
+    chain = duo.center_controls_chain("K1")
+    problems = duo.gen3_receipt_problems("a", logs, required=chain,
+                                         ordered=list(zip(chain, chain[1:], strict=False)))
+    assert problems == [], (problems, logs)
+
+
+def test_center_controls_needs_its_source_pinned_witness(lua):
+    ok, passed, msg, _ = _run_module(lua, "center_controls", "a", "initial", {"no_witness": "lua:true"})
+    assert ok and passed is False and "the no-adapter branch" in msg, msg
+
+
+_HOLD_MODEL = r"""
+FRAME, FLIP, DURING_RX, ATT, RX, LIVE = 0, nil, false, 0, 0, true
+ITEMS = { { cmd = "box_mon", key = "K" } }
+session = { deferred = { items = ITEMS, exec = { write_count = function() return ATT end } } }
+function session.deferred:pending() return #self.items, "x.lua:73: forbidden state: script_context_status" end
+emu = { framecount = function() return FRAME end }
+G, cp, fmt = { pred_ok = function() return false end }, {}, string.format
+ctx = { log = function() end, writes = function() return 0 end, center_state = function() return "s" end,
+        mutable_bytes = function() return "P", "B" end, received = function() return RX end,
+        wait_until = function(pred)
+            if DURING_RX then ATT = ATT + 1 end        -- a byte attempted while the probe is in flight
+            RX = RX + 1
+            return pred()
+        end,
+        frames = function(n) FRAME = FRAME + n; if FRAME == 600 and FLIP then FLIP() end end }
+function PROBE() local c, why = ctx.hold_probe("t", "box_mon", "K", function() return LIVE end, 600)
+    return c, tostring(why) end
+"""
+
+
+@pytest.fixture
+def hold_model():
+    from lupa import LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute(_HOLD_MODEL)
+    defs = [re.search(_LUA_DEF.format(re.escape(n)), text, re.M | re.S).group(0)
+            for n in ("queued_entry", "ctx.queued", "ctx.hold_probe")]
+    defs.append(re.search(r"^function ctx\.attempted\(\) .* end$", text, re.M).group(0))
+    runtime.execute("\n".join(defs))
+    return runtime
+
+
+@pytest.mark.parametrize("flip, why", [
+    ("function() ATT = ATT + 1 end", "the sink attempted a write"),
+    ("function() table.remove(ITEMS, 1) end", "box_mon K is not queued (frame 600)"),
+    ("function() LIVE = false end", "the refusing state ended by frame 600"),
+])
+def test_hold_probe_samples_the_final_frame(hold_model, flip, why):
+    """Codex executed each of these ON frame 600; the old before-advance checks returned success."""
+    hold_model.execute(f"FLIP = {flip}")
+    clause, msg = hold_model.globals().PROBE()
+    assert clause is None and why in msg, msg
+
+
+def test_hold_probe_counts_attempts_made_while_the_probe_is_delivered(hold_model):
+    hold_model.execute("DURING_RX = true")
+    clause, msg = hold_model.globals().PROBE()
+    assert clause is None and "the sink attempted a write" in msg, msg
+
+
+def test_hold_probe_positive_control(hold_model):
+    clause, _ = hold_model.globals().PROBE()
+    assert clause == "script_context_status"
+
+
+def _identity_run(monkeypatch, tmp_path, status="", fail=None):
+    run = _oracle_run("whiteout_gen3")
+    run.gcfg = dict(duo.GAMES["gen3_frlg"])
+    rom = tmp_path / "rom.gba"
+    rom.write_bytes(b"rom")
+    monkeypatch.setattr(run, "_gen3_rom", lambda inst: str(rom))
+    monkeypatch.setattr(run, "_gen3_fixture_path", lambda inst: str(rom))
+
+    class Proc:
+        def __init__(self, out, code=0):
+            self.stdout, self.stderr, self.returncode = out, "boom", code
+
+    def fake_run(cmd, **_kwargs):
+        if fail and fail in cmd:
+            return Proc("", 128)
+        return Proc("a" * 40 + "\n" if "rev-parse" in cmd else status)
+    monkeypatch.setattr(duo.subprocess, "run", fake_run)
+    return run
+
+
+def test_identity_marks_any_tracked_change_dirty_and_the_oracle_rejects_it(monkeypatch, tmp_path):
+    run = _identity_run(monkeypatch, tmp_path, status=" M server/state.py\n M tests/fixtures/gen3/wire/x.jsonl\n")
+    line = run._gen3_identity()
+    assert line.endswith("source=" + "a" * 40 + "+dirty dirty=[server/state.py]"), line
+    run.cfg = dict(duo.SCENARIOS["whiteout_gen3"])
+    run.game = "gen3_frlg"
+    monkeypatch.setattr(run, "check_save_witness_gen3", lambda results: None)
+    with pytest.raises(RuntimeError, match=r"\+dirty \(server/state.py\)"):
+        run._run_oracle({"a": "", "b": ""})
+    clean = _identity_run(monkeypatch, tmp_path, status=" M tests/fixtures/gen3/wire/x.jsonl\n")
+    assert clean._gen3_identity().endswith("source=" + "a" * 40)
+    assert clean._gen3_source_dirty == []
+
+
+@pytest.mark.parametrize("step", ["rev-parse", "status"])
+def test_identity_fails_closed_on_a_git_error(monkeypatch, tmp_path, step):
+    run = _identity_run(monkeypatch, tmp_path, fail=step)
+    with pytest.raises(RuntimeError, match="IDENTITY: git .* failed"):
+        run._gen3_identity()
