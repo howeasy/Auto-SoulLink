@@ -166,7 +166,12 @@ class TestTheShippedPatchesActuallyApply:
                                              "patch", "build", name))
 
     @pytest.mark.parametrize("slug,base", [("rb-red", "gen1_red.gb"),
-                                           ("rb-blue", "gen1_blue.gb")])
+                                           ("rb-blue", "gen1_blue.gb"),
+                                           # The RR companion is the oldest and the one a rollback
+                                           # bundle freezes; it had no apply row at all, which is
+                                           # how its advertised md5 drifted from the artifact
+                                           # (docs/gen3/rollback_bundle.md §3.2).
+                                           ("rr", "rr_clean.gba")])
     def test_applying_the_shipped_ups_reproduces_the_recorded_md5(self, slug, base):
         import hashlib
         src, patch_bytes = self._bytes(self._clean(base), patcher.patch_path(slug))

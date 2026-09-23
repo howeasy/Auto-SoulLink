@@ -209,7 +209,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     ],
 }
 
-# lua/x64/ — DLL optional (present on dev machine, excluded from git)
+# lua/x64/ — the DLL is optional to the ZIP (a player may supply it from Archipelago) but it IS
+# tracked in git (blob 896b3cba at master, lua/x64/README.md alongside it), so a checkout has it;
+# only a hand-stripped tree would miss it. Absent -> warn, do not fail.
 _LUA_X64_OPTIONAL = ["socket-windows-5-4.dll"]
 
 # ── Companion patch (Radical Red native code-injection) — optional add-on ──────
