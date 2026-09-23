@@ -1768,27 +1768,6 @@ def test_pc_cursor_reports_a_cursor_that_never_moves(machine):
     assert fake.downs == 1, "a stuck cursor read must not be pressed at again"
 
 
-def test_pc_popup_reports_a_popup_cursor_that_moves_but_never_arrives(machine):
-    """The popup is up and five rows wide, the cursor steps one row per press -- and the row this
-    stage wants is the LAST one, which the bounded search never tests because the budget runs out
-    on the press that would reach it. Failing here is the point: the popup would otherwise be
-    confirmed on the wrong row (CANCEL, or RELEASE on a summary read)."""
-    lua, mod, fake = machine
-    lua.execute("""
-        F.pcstore=0x0202A000
-        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,2); F.w8(F.pcstore+1,1)
-        F.w8(0x02039820,1); F.w8(0x02039821,1)
-        F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)
-        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
-        F.on_tap=function(button)
-            if button=='A' then F.w32(0x03005090,0x0808D879) end -- the popup opens
-            if button=='Down' then F.w8(0x0203ADE4+2,F.r8(0x0203ADE4+2)+1) end
-        end
-    """)
-    with pytest.raises(LuaError, match="pc_storage_popup_cursor_stalled"):
-        mod.PC.popup("last-row", 1, 1, 4)
-
-
 def test_pc_popup_reports_a_popup_cursor_that_never_moves(machine):
     """The popup read never advances on a press, so the cursor wait is the witness that fails --
     the same name as the search's end, so the press COUNT is asserted as well: one Down and then
@@ -1823,3 +1802,72 @@ def test_pc_release_reports_a_missing_confirmation(machine, pointer, task):
         fake.w8(0x03005090 + 4, 1)
     with pytest.raises(LuaError, match="pc_release_confirmation_missing"):
         mod.PC.release("no-confirmation")
+
+
+# ── C3-42: the popup's row walk reaches every row, and the area -> option mapping is pinned ───
+
+
+@pytest.mark.parametrize("row,presses", [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)])
+def test_pc_popup_reaches_every_row_inside_its_budget(machine, row, presses):
+    """STORE / SUMMARY / MARK / RELEASE / CANCEL is rows 0..4 and PC_MENU_MAX_CURSOR reads 4
+    (SetMenuTextsForMon's shared tail, pokemon_storage_system_data.c:1755-1805). The walk tests
+    the cursor BEFORE each Down, so a budget of maxCursor presses presses four times and never
+    tests row 4: the popup sits on CANCEL while the leg reports pc_storage_popup_cursor_stalled,
+    one press short (C3-41 finding 2; fixed in C3-42 by walking max_row + 1). Revert-tested: with
+    the bound back at 4, the row-4 case fails with exactly that name and rows 0..3 still pass."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000; F.downs=0
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0); F.w8(F.pcstore+1,1)
+        F.w8(0x02039820,1); F.w8(0x02039821,1)              -- the party-area storage cursor
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)  -- Task_PokeStorageMain
+        F.on_tap=function(button)
+            if button=='A' then
+                F.w32(0x03005090,0x0808D879)                -- Task_OnSelectedMon: the popup opens
+                F.w8(F.pcstore,2)
+                F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)  -- on STORE, five rows
+            end
+            if button=='Down' then
+                F.downs=F.downs+1
+                F.w8(0x0203ADE4+2,F.r8(0x0203ADE4+2)+1)     -- one row per press
+            end
+        end
+    """)
+    assert mod.PC.popup("row-walk", 1, 1, row) is True
+    assert fake.downs == presses, "each row is one press from the one above it"
+
+
+@pytest.mark.parametrize("area,option,accepted", [
+    (0, 0, True),   # CURSOR_AREA_IN_BOX   -> OPTION_WITHDRAW
+    (1, 1, True),   # CURSOR_AREA_IN_PARTY -> OPTION_DEPOSIT
+    (0, 1, False),  # a box-area popup does not offer the deposit option
+    (1, 2, False),  # ... nor does a party-area popup offer OPTION_MOVE_MONS
+    (2, 2, False),  # 2 is not a CURSOR_AREA value at all
+])
+def test_pc_popup_requires_the_option_its_cursor_area_implies(machine, area, option, accepted):
+    """Two enums mapped, not compared: gStorage->boxOption is OPTION_WITHDRAW 0 / OPTION_DEPOSIT 1
+    / OPTION_MOVE_MONS 2 (include/pokemon_storage_system_internal.h:17-24) while the cursor area is
+    CURSOR_AREA_IN_BOX 0 / CURSOR_AREA_IN_PARTY 1 (:108-115) -- they merely share 0/1. The
+    driver's PC_POPUP_OPTION encodes IN_BOX -> WITHDRAW and IN_PARTY -> DEPOSIT; it is a file-local
+    table, so the mapping is pinned here through its observable effect: the two positive rows drive
+    a real popup to completion, and the rest are refusals. Area 2 is included because pret defines
+    no such area -- the lookup yields nil and must still fail BY NAME rather than compare against
+    nothing."""
+    lua, mod, fake = machine
+    lua.execute(f"""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0); F.w8(F.pcstore+1,{option})
+        F.w8(0x02039820,{area}); F.w8(0x02039821,1)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.on_tap=function(button)
+            if button=='A' then
+                F.w32(0x03005090,0x0808D879)
+                F.w8(F.pcstore,2); F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)
+            end
+        end
+    """)
+    if accepted:
+        assert mod.PC.popup("mapped", area, 1, 0) is True
+    else:
+        with pytest.raises(LuaError, match="pc_storage_popup_wrong_mode"):
+            mod.PC.popup("mismatched", area, 1, 0)

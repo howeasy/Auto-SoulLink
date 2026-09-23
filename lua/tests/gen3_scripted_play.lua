@@ -1549,6 +1549,8 @@ function PC.cursor(label, area, pos)
         end, 90) then return false end
         if memory.read_u8(PC_CURSOR_AREA) ~= area then return pc_fail(label, "storage_cursor_wrong_area") end
     end
+    -- Reached only by a cursor that keeps moving but never lands on the row: a +1 march from any
+    -- start reaches its position inside this budget (C3-41 finding 2).
     return pc_fail(label, "storage_cursor_stalled")
 end
 
@@ -1570,8 +1572,12 @@ function PC.popup(label, area, pos, row)
     if not pc_task(PC_ON_SELECTED) or memory.read_u8(storage) ~= 2 then
         return pc_fail(label, "storage_popup_missing")
     end
-    if memory.read_u8(PC_MENU_MAX_CURSOR) ~= 4 then return pc_fail(label, "storage_popup_wrong_row_count") end
-    for _ = 1, 4 do
+    local max_row = memory.read_u8(PC_MENU_MAX_CURSOR)
+    if max_row ~= 4 then return pc_fail(label, "storage_popup_wrong_row_count") end
+    -- The cursor is tested BEFORE each Down, so a budget of max_row presses reaches the last row
+    -- (4, CANCEL) but never tests it: the popup would sit on row 4 and the leg would report
+    -- storage_popup_cursor_stalled one press short (C3-41 finding 2). max_row + 1 walks 0..4.
+    for _ = 1, max_row + 1 do
         local current = memory.read_u8(PC_MENU_CURSOR)
         if current == row then return true end
         if current > row then return pc_fail(label, "storage_popup_wrong_row") end
@@ -1580,6 +1586,8 @@ function PC.popup(label, area, pos, row)
             return memory.read_u8(PC_MENU_CURSOR) == current + 1
         end, 90) then return false end
     end
+    -- Only a cursor that keeps moving but never lands on the row gets here: a +1 march from any
+    -- start reaches its row inside the budget above.
     return pc_fail(label, "storage_popup_cursor_stalled")
 end
 
