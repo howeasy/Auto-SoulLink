@@ -95,7 +95,7 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 | `pc_boxes` | list[BoxEntry] (§4.4) | optional | no (tick only) | `pc_boxes`, memorial contamination scan | `server.py:2875-2881` |
 | `in_battle`, `is_trainer_battle`, `enemy_party` | as in tick | optional | no | seed `battle_state` | `server.py:2904-2909` |
 
-**Declaring clients (client conformance).** Gen 1 and Gen 2 clients always send both pairing fields, so for their foundations (`gen1_rby`, `gen1_purergb`, `gen2_gsc`) a hello that omits `foundation` or `artifact_kind` is non-conformant, and a Gen 2 hello (`Crystal`/`crystal`, `Gold`/`gold`, `Silver`/`silver`) must declare `foundation:"gen2_gsc"` — a Gen 1, Gen 3 or legacy `gen2_crystal` claim is refused like any disagreeing claim. The Gen 2 hello sends `rom_type`, `foundation:"gen2_gsc"`, `artifact_kind:"clean"`, `party`, `ot_id`, `trainer_name`, `has_pokeballs`, `ball_count`, `badges` (Johto), `kanto_badges`, `area_id`, `loc_name`, `pc_boxes`, `writes_enabled`, `rom_sha1`, `in_battle`, `panel:false`, `panel_abi:0`, `sfx:false`; no `rom_content` (`lua/gen2/client.lua:55`, `:613-624`). Gen 3 declares neither and stays conformant. The permitted relation is data: `HELLO_DECLARES` plus the server's own `foundation_for_rom_type` (`tests/unit/protocol_schema.py`), never a `game_id` branch.
+**Declaring clients (client conformance).** Gen 1 and Gen 2 clients always send both pairing fields, so for their foundations (`gen1_rby`, `gen1_purergb`, `gen2_gsc`) a hello that omits `foundation` or `artifact_kind` is non-conformant, and a Gen 2 hello (`Crystal`/`crystal`, `Gold`/`gold`, `Silver`/`silver`) must declare `foundation:"gen2_gsc"` — a Gen 1, Gen 3 or legacy `gen2_crystal` claim is refused like any disagreeing claim. The Gen 2 hello sends `rom_type`, `foundation:"gen2_gsc"`, `artifact_kind:"clean"`, `party`, `ot_id`, `trainer_name`, `has_pokeballs`, `ball_count`, `badges` (Johto), `kanto_badges`, `area_id`, `loc_name`, `pc_boxes`, `writes_enabled`, `rom_sha1`, `in_battle`, `panel:false`, `panel_abi:0`, `sfx:false`; no `rom_content` (`lua/gen2/client.lua:55`, `:617-628`). Gen 3 declares neither and stays conformant. The permitted relation is data: `HELLO_DECLARES` plus the server's own `foundation_for_rom_type` (`tests/unit/protocol_schema.py`), never a `game_id` branch.
 
 ### 2.2 Admission and identity (in order)
 
@@ -110,7 +110,7 @@ Sent on every TCP (re)connect edge (`gen3_frlge_client.lua:1915-1945`). The serv
 | 4 | Later hello with a different OT: `identity_error[pid]` set, `msg["_rejected"]=True`, the reply is **only** `hud_show{text:"[x] WRONG SAVE: slot A", color:[255,0,0], duration:600}`, and `_handle_hello` returns before touching party state | rejected | `state.py:900-918` |
 | 5 | Matching OT clears `identity_error` and may refresh `trainer_name` | ok | `state.py:919-927` |
 
-⚠ DISAGREEMENT: step 1' says a non-string `artifact_kind` is refused, but the caller passes `msg.get("artifact_kind") or "clean"` (`server/server.py:1321`; the commit at `:1763-1764` likewise), so `null`/`""`/`false`/`0`/`[]`/`{}` are admitted and committed as `clean` before `_mixed_games_error`'s type check sees them. The contract is the refusal (`tests/unit/protocol_schema.py` `ARTIFACT_KINDS`); the server fix is a carry. Gen 2 kind normalization today comes from the routed legacy adapter class (`adapter_class_for_rom_type` → `gen2_crystal`, `server/adapters/__init__.py:64-72`); `Gen2GSCAdapter.pairing_kind` keeps `named` distinct (`server/adapters/gen2_gsc.py:433-435`) once the G3 cutover routes it.
+⚠ DISAGREEMENT: step 1' says a non-string `artifact_kind` is refused, but the caller passes `msg.get("artifact_kind") or "clean"` (`server/server.py:1321`; the commit at `:1763-1764` likewise), so `null`/`""`/`false`/`0`/`[]`/`{}` are admitted and committed as `clean` before `_mixed_games_error`'s type check sees them. The contract is the refusal (`tests/unit/protocol_schema.py` `ARTIFACT_KINDS`); the server fix is a carry. Gen 2 kind normalization today comes from the routed legacy adapter class (`adapter_class_for_rom_type` → `gen2_crystal`, `server/adapters/__init__.py:64-72`); `Gen2GSCAdapter.pairing_kind` keeps `named` distinct (`server/adapters/gen2_gsc.py:442-444`) once the G3 cutover routes it.
 
 ⚠ DISAGREEMENT: the WRONG SAVE `hud_show` uses `color`/`duration`, not the `r,g,b,frames` every other `hud_show` uses. The Gen 3 parser only reads `r,g,b,frames` (`gen3_frlge_client.lua:299-302`), so this toast renders white for 300 frames. A new client SHOULD accept both spellings.
 
@@ -526,27 +526,27 @@ One per row above, plus the held item. Client = `lua/gen2/client.lua`, wire = `l
 
 | # | Gen 2 answer | Cite |
 |---|---|---|
-| 1 | **Recorded limit (OPEN, P4.2).** `play_sound` is bound to `request_sfx_local`, which plays nothing and logs once: no Gen 2 cartridge has a sound mailbox yet; the hello says `sfx:false`. The client's own cues (25/26/22/95) go through the same seam | client `:328-335`, `:376-377`, `:624`; `:202`, `:400`, `:458`, `:503` |
-| 2 | Inert: the trade prompts are answered with the protocol cancel and never rendered, so the `OAK:` text never shows (native trade UI is P4.3) | client `:298-301`, `:407-408`; adapter `native_trade_ui` `:443-444` |
-| 3 | Every `msgbox`/`gui_prompt`/`hud_show` text goes through `hud.show`/`hud.prompt`, which sanitise | client `:370-375`; `lua/hud.lua:69-86`, `:259-260`, `:285-286` |
-| 4 | `species_id` is always sent: capture, no_catch, key_change, every party/box/foe entry | client `:477`, `:520`, `:565`; wire `:154`, `:188`, `:219` |
-| 5 | Raw status byte, no re-encoding: the GB layout already matches (bit 7 unused, no persistent TOX); adapter `status_token` is the GB decoder | wire `:155`, `:189`; adapter `:463-464`; `server/adapters/base.py:576-588` |
+| 1 | **Recorded limit (OPEN, P4.2).** `play_sound` is bound to `request_sfx_local`, which plays nothing and logs once: no Gen 2 cartridge has a sound mailbox yet; the hello says `sfx:false`. The client's own cues (25/26/22/95) go through the same seam | client `:332-339`, `:380-381`, `:628`; `:202`, `:404`, `:462`, `:507` |
+| 2 | Inert: the trade prompts are answered with the protocol cancel and never rendered, so the `OAK:` text never shows (native trade UI is P4.3) | client `:302-305`, `:411-412`; adapter `native_trade_ui` `:452-453` |
+| 3 | Every `msgbox`/`gui_prompt`/`hud_show` text goes through `hud.show`/`hud.prompt`, which sanitise | client `:374-379`; `lua/hud.lua:69-86`, `:259-260`, `:285-286` |
+| 4 | `species_id` is always sent: capture, no_catch, key_change, every party/box/foe entry | client `:481`, `:524`, `:569`; wire `:154`, `:188`, `:219` |
+| 5 | Raw status byte, no re-encoding: the GB layout already matches (bit 7 unused, no persistent TOX); adapter `status_token` is the GB decoder | wire `:155`, `:189`; adapter `:472-473`; `server/adapters/base.py:576-588` |
 | 6 | Seven independent stages, converted to 0-12 / 6-neutral in ATK..EVA order from the source's neutral 7; sent only for the active mon; default labels kept | reads `:529-560`; wire `:24-31`, `:113-122`, `:161-165`; `server/adapters/base.py:524` |
 | 7 | PP byte split into `pp` (low 6 bits) and `pp_ups` (top 2) | reads `:133`, `:520`; wire `:144-147`, `:156`, `:190` |
-| 8 | Hello sends `ot_id`; the adapter also overrides `parse_ot_id` (middle key segment) | client `:615`; adapter `:170-171` |
-| 9 | `party_blob_size()` = 70 (48-byte struct + 11 OT + 11 nickname) | adapter `:244-245`; wire `:81-97` |
-| 10 | **OPEN (P4).** No `status` event is sent; the wide Badges row is unused while there is no panel (row 11) | client (no `status` send); `:414-416` |
-| 11 | Hello sends `panel:false, panel_abi:0`; `link_panel` is ignored; adapter width 0, no info panel. Native panel is P4 | client `:624`, `:414-416`; adapter `:440-441`, `:449-450` |
+| 8 | Hello sends `ot_id`; the adapter also overrides `parse_ot_id` (middle key segment) | client `:619`; adapter `:179-180` |
+| 9 | `party_blob_size()` = 70 (48-byte struct + 11 OT + 11 nickname) | adapter `:253-254`; wire `:81-97` |
+| 10 | **OPEN (P4).** No `status` event is sent; the wide Badges row is unused while there is no panel (row 11) | client (no `status` send); `:418-420` |
+| 11 | Hello sends `panel:false, panel_abi:0`; `link_panel` is ignored; adapter width 0, no info panel. Native panel is P4 | client `:628`, `:418-420`; adapter `:449-450`, `:458-459` |
 | 12 | `ROM_LABEL` is gone; the dashboard uses `variant_label`, which has every Gen 2 spelling | `server/server.py:1056-1057`, `:1071-1072`; `server/adapters/__init__.py:91-93` |
 | 13 | Correct: party slots 0-5 | wire `:136` |
 | 14 | Wire is `species_id` throughout (row 4) | — |
-| 15 | **Live, not inert:** `gender_from_key` derives gender from the Attack/Speed DVs against the species ratio | adapter `:173-187` |
-| 16 | **Live:** `is_shiny` is the Gen 2 DV rule | adapter `:189-194` |
+| 15 | **Live, not inert:** `gender_from_key` derives gender from the Attack/Speed DVs against the species ratio | adapter `:182-196` |
+| 16 | **Live:** `is_shiny` is the Gen 2 DV rule | adapter `:198-203` |
 | 17 | Client builds 70-byte blobs from the record's own raw bytes | wire `:81-97` |
 | 18 | None: no Gen 2 `rom_type` ends `_rr` | `server/adapters/__init__.py:69-72` |
-| 19 | `key_change{old_key,new_key,new_species,new_nickname,reason}` for `evolution` and `npc_trade` | client `:562-567`; `lua/gen2/signals.lua:372`, `:461` |
-| 20 | **OPEN.** Neither `trainer_id` nor `opponent_name`/`opponent_class` is sent and `trainer_info` answers `("","")`: the Gen 2 (class, id) pair has no agreed single-int packing, so trainer display stays blank and there is no `trainer_battle_start` | client `:505-508`, `:696`; adapter `:483-486` |
-| held item | `held_item_id` rides every party, foe and box entry and `capture`, read from struct offset 1; named by adapter `item_name` | reads `:121`; wire `:148`, `:157`, `:186`, `:189`, `:214`, `:220`; client `:478`; adapter `:226` |
+| 19 | `key_change{old_key,new_key,new_species,new_nickname,reason}` for `evolution` and `npc_trade` | client `:566-571`; `lua/gen2/signals.lua:372`, `:461` |
+| 20 | **OPEN.** Neither `trainer_id` nor `opponent_name`/`opponent_class` is sent and `trainer_info` answers `("","")`: the Gen 2 (class, id) pair has no agreed single-int packing, so trainer display stays blank and there is no `trainer_battle_start` | client `:509-512`, `:700`; adapter `:492-495` |
+| held item | `held_item_id` rides every party, foe and box entry and `capture`, read from struct offset 1; named by adapter `item_name` | reads `:121`; wire `:148`, `:157`, `:186`, `:189`, `:214`, `:220`; client `:482`; adapter `:235` |
 
 ---
 
