@@ -1,16 +1,16 @@
 {
- "attempt_id": "n3-crystal-town-ot2-a1",
+ "attempt_id": "requal-crystal-town-ot2-n14b",
  "errors": [],
  "fixtures": [
   {
    "artifacts": {
     "boot:game_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\boot-f3b07ff42d78f440\\crystal_town_ot2.boot.witness.json",
-     "sha256": "69abb15e5548f68799f3e45f3e5ceb2b2ae6e921946526a0465e2675a041c2ff",
-     "size": 1941
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\boot-eaf0d6f5cee8394f\\crystal_town_ot2.boot.witness.json",
+     "sha256": "e01fe1930aa26531e4439cd8670dfcd4269f2a74a7df3409ec6bc8ecdf5656a8",
+     "size": 1947
     },
     "fixture": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\saveram\\Pokemon - Crystal Version (USA, Europe).SaveRAM",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\crystal_town_ot2.SaveRAM",
      "sha256": "8b254f04e23cb0a99e50c5170f9d8ba0b55df75015d00d2467193ce75e026c2e",
      "size": 32790
     },
@@ -25,19 +25,19 @@
      "size": 79972
     },
     "resave:fixture": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resaved.SaveRAM",
-     "sha256": "1c63a44d929e527e97f91d6bcc97535afd45153a0bc175f7daa8ba444913e3cc",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\resave-c8d4465b9958c684\\crystal_town_ot2.resaved.SaveRAM",
+     "sha256": "d69d18de7666818b37cb969d7f240e760ea349975f23bbe81d5701916cf474db",
      "size": 32790
     },
     "resave:reload_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\reload-bb46f43fe09e7643\\crystal_town_ot2.reload.witness.json",
-     "sha256": "9d7699fa7adc34cebd33a8556fe5d13e29038088211658d91ed4f618246406af",
-     "size": 1943
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\reload-c8d4465b9958c684\\crystal_town_ot2.reload.witness.json",
+     "sha256": "8ca41e50a933a35282b6cd22b2ca361a12b1d3d370fc6a5166d13a7594d8608a",
+     "size": 1949
     },
     "resave:save_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resave.witness.json",
-     "sha256": "7368bdea9c5a617ddfb8ea10dd99d20bbe0c5c1e910f41b258dde7a68946d3d1",
-     "size": 2065
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\resave-c8d4465b9958c684\\crystal_town_ot2.resave.witness.json",
+     "sha256": "6463b9431570bd827187486009ea3f4fbc2bc9ba387486897b4f04e32689ebce",
+     "size": 2071
     },
     "rom": {
      "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokecrystal\\pokecrystal.gbc",
@@ -45,7 +45,7 @@
      "size": 2097152
     },
     "route_facts": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\crystal_route_facts.json",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\crystal_route_facts.json",
      "sha256": "0b27d2f2c98e8bc108919bdab016ed536f0bdf0f77d332c5f7a3cfb544fffcc4",
      "size": 13930
     }
@@ -67,7 +67,7 @@
       "oracle": "independent Gen2 PYDEC",
       "player_id": "44068"
      },
-     "fingerprint": "4744cf938ea39e5ff48e796aa776cd9fa9b96e6e406ae90edb4ab6cffcdff30b",
+     "fingerprint": "2255a53ae810ec0671a9e8fb33a10730b296ab1c9d1e6ff8e869f06345dff757",
      "notes": [
       "Static bytes do not prove played origin, RTC or GAME qualification."
      ],
@@ -82,13 +82,13 @@
       "observer": "independent_GAME CONTINUE",
       "position": "[5, 3]"
      },
-     "fingerprint": "f3b07ff42d78f44099a6fc841527098e766cb319b1a679302b10cb0e3dc28c1d",
+     "fingerprint": "eaf0d6f5cee8394f8dde74ef9ce7ec00b4b6f46ceaabe3b7be34df9740007e6c",
      "notes": [],
      "outputs": {
       "boot:game_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\boot-f3b07ff42d78f440\\crystal_town_ot2.boot.witness.json",
-       "sha256": "69abb15e5548f68799f3e45f3e5ceb2b2ae6e921946526a0465e2675a041c2ff",
-       "size": 1941
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\boot-eaf0d6f5cee8394f\\crystal_town_ot2.boot.witness.json",
+       "sha256": "e01fe1930aa26531e4439cd8670dfcd4269f2a74a7df3409ec6bc8ecdf5656a8",
+       "size": 1947
       }
      },
      "problems": [],
@@ -98,25 +98,25 @@
     {
      "evidence": {
       "observer": "independent_GAME re-save + reload",
-      "resave_cartram_sha256": "1245949e66bf49bd94d349de363fbca9555690b69889e0bb539b0086929ec348"
+      "resave_cartram_sha256": "ac2934475d5ca84079a3cec12f0885f0a84c19f753e8e9c76ada42c2d479525c"
      },
-     "fingerprint": "bb46f43fe09e764333806af12ddbeac8e8f7a6126582817a9ba5753a00c8f470",
+     "fingerprint": "c8d4465b9958c684e9ef0c0d45b3def9bab7d88c07349b91baf7eb0e0a7f4d7a",
      "notes": [],
      "outputs": {
       "resave:fixture": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resaved.SaveRAM",
-       "sha256": "1c63a44d929e527e97f91d6bcc97535afd45153a0bc175f7daa8ba444913e3cc",
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\resave-c8d4465b9958c684\\crystal_town_ot2.resaved.SaveRAM",
+       "sha256": "d69d18de7666818b37cb969d7f240e760ea349975f23bbe81d5701916cf474db",
        "size": 32790
       },
       "resave:reload_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\reload-bb46f43fe09e7643\\crystal_town_ot2.reload.witness.json",
-       "sha256": "9d7699fa7adc34cebd33a8556fe5d13e29038088211658d91ed4f618246406af",
-       "size": 1943
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\reload-c8d4465b9958c684\\crystal_town_ot2.reload.witness.json",
+       "sha256": "8ca41e50a933a35282b6cd22b2ca361a12b1d3d370fc6a5166d13a7594d8608a",
+       "size": 1949
       },
       "resave:save_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resave.witness.json",
-       "sha256": "7368bdea9c5a617ddfb8ea10dd99d20bbe0c5c1e910f41b258dde7a68946d3d1",
-       "size": 2065
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-ot2-n14b\\crystal_town_ot2\\qualify\\resave-c8d4465b9958c684\\crystal_town_ot2.resave.witness.json",
+       "sha256": "6463b9431570bd827187486009ea3f4fbc2bc9ba387486897b4f04e32689ebce",
+       "size": 2071
       }
      },
      "problems": [],
@@ -127,7 +127,7 @@
      "evidence": {
       "oracle": "independent re-save PYDEC + GAME raw-party witness"
      },
-     "fingerprint": "42fd696f91bc6125b409dfce03c5c5167c0e1e942772f85b8aff3712a093ead7",
+     "fingerprint": "ed1b6aa29ea3597fa3beee18f914cc617f329290ce0546f6a95d221e00e2e642",
      "notes": [],
      "problems": [],
      "stage": "post_oracle",

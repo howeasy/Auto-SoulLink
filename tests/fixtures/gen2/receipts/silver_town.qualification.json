@@ -1,16 +1,16 @@
 {
- "attempt_id": "n3-silver-town-a2",
+ "attempt_id": "requal-silver-town-n14b",
  "errors": [],
  "fixtures": [
   {
    "artifacts": {
     "boot:game_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\boot-ccd646159715d03f\\silver_town.boot.witness.json",
-     "sha256": "f5a955b61a56844bb1b98c117ccbadba49b92a4802dea75588b65e2e8bb8ce16",
-     "size": 1930
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\boot-cf5b852b7f6cd5f9\\silver_town.boot.witness.json",
+     "sha256": "b53fb2998c6a811b97683a993ddab64895c415cec53ad245238f6c6a10e02de5",
+     "size": 1936
     },
     "fixture": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\saveram\\Pokemon - Silver Version (USA, Europe).SaveRAM",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\silver_town.SaveRAM",
      "sha256": "74fee08224f2df27081d5667dd571cb1f3ee329d72cf6c20cd4ecec0e03109b5",
      "size": 32790
     },
@@ -25,19 +25,19 @@
      "size": 73328
     },
     "resave:fixture": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\resave-b6f84cb8273f6d38\\silver_town.resaved.SaveRAM",
-     "sha256": "6c8b43bf3e9475ed0d1cd3ce8dbe0dbf62350edb4136dade8749f33b255aa50d",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\resave-0f56b97a8d68b2bc\\silver_town.resaved.SaveRAM",
+     "sha256": "9775b6a34041bc5ed6fac254278f558813e50d4e3bf1ee83a106840fa4115c8a",
      "size": 32790
     },
     "resave:reload_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\reload-b6f84cb8273f6d38\\silver_town.reload.witness.json",
-     "sha256": "622a04696b6e3120d55f105a61940632c0901f65eda9513a752c2898886dbf19",
-     "size": 1932
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\reload-0f56b97a8d68b2bc\\silver_town.reload.witness.json",
+     "sha256": "a3b3c6f96700c03e1896816e84371e022816eca36e4283e074cc8d6459e6cff0",
+     "size": 1938
     },
     "resave:save_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\resave-b6f84cb8273f6d38\\silver_town.resave.witness.json",
-     "sha256": "f02e1be9ad382371df92d233f2d52dd33f87e27c3122d3d708b59fbae25a8bea",
-     "size": 2054
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\resave-0f56b97a8d68b2bc\\silver_town.resave.witness.json",
+     "sha256": "92c2b4e3fe813277674c1594bfad17f6c7ca41ad0d6b860aa0a5ef3a4db55d76",
+     "size": 2060
     },
     "rom": {
      "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokegold\\pokesilver.gbc",
@@ -45,7 +45,7 @@
      "size": 2097152
     },
     "route_facts": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\silver_route_facts.json",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\silver_route_facts.json",
      "sha256": "f9f341a431fc332677b8c134a7a0a4696bd94bf9e521148c105c30b6489a6c1d",
      "size": 13576
     }
@@ -67,7 +67,7 @@
       "oracle": "independent Gen2 PYDEC",
       "player_id": "51084"
      },
-     "fingerprint": "aa57acb1cfa16390d9272f6e7f0d71ce6f13e36863900c3ba4b5cbc3a74029eb",
+     "fingerprint": "187adcf05bab18efd144e930f1bcc6b29571c911b56ec5667ddc5cbcfdd26373",
      "notes": [
       "Static bytes do not prove played origin, RTC or GAME qualification."
      ],
@@ -82,13 +82,13 @@
       "observer": "independent_GAME CONTINUE",
       "position": "[5, 3]"
      },
-     "fingerprint": "ccd646159715d03f38787afcb635047037c22e6c53f6237ee23f97f235a8a0d4",
+     "fingerprint": "cf5b852b7f6cd5f99fc36073b00602cb72441f9fc184a452b5934d9966f8adce",
      "notes": [],
      "outputs": {
       "boot:game_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\boot-ccd646159715d03f\\silver_town.boot.witness.json",
-       "sha256": "f5a955b61a56844bb1b98c117ccbadba49b92a4802dea75588b65e2e8bb8ce16",
-       "size": 1930
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\boot-cf5b852b7f6cd5f9\\silver_town.boot.witness.json",
+       "sha256": "b53fb2998c6a811b97683a993ddab64895c415cec53ad245238f6c6a10e02de5",
+       "size": 1936
       }
      },
      "problems": [],
@@ -98,25 +98,25 @@
     {
      "evidence": {
       "observer": "independent_GAME re-save + reload",
-      "resave_cartram_sha256": "eac9d153322e98c5a50e3295bf3b7217b997d20f9b692a711932c416d2fa7ca8"
+      "resave_cartram_sha256": "4332c211f0abf56177a7a9a7584426d5267992219e684205fe127c0346fd5f65"
      },
-     "fingerprint": "b6f84cb8273f6d3806cd8a936ed556a3abf4fa3c743963f5c4910e9369a0798e",
+     "fingerprint": "0f56b97a8d68b2bc212e6ae714cb3f5646cf46058ff970ce922019c0288a4675",
      "notes": [],
      "outputs": {
       "resave:fixture": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\resave-b6f84cb8273f6d38\\silver_town.resaved.SaveRAM",
-       "sha256": "6c8b43bf3e9475ed0d1cd3ce8dbe0dbf62350edb4136dade8749f33b255aa50d",
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\resave-0f56b97a8d68b2bc\\silver_town.resaved.SaveRAM",
+       "sha256": "9775b6a34041bc5ed6fac254278f558813e50d4e3bf1ee83a106840fa4115c8a",
        "size": 32790
       },
       "resave:reload_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\reload-b6f84cb8273f6d38\\silver_town.reload.witness.json",
-       "sha256": "622a04696b6e3120d55f105a61940632c0901f65eda9513a752c2898886dbf19",
-       "size": 1932
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\reload-0f56b97a8d68b2bc\\silver_town.reload.witness.json",
+       "sha256": "a3b3c6f96700c03e1896816e84371e022816eca36e4283e074cc8d6459e6cff0",
+       "size": 1938
       },
       "resave:save_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-town-a2\\silver_town\\qualify\\resave-b6f84cb8273f6d38\\silver_town.resave.witness.json",
-       "sha256": "f02e1be9ad382371df92d233f2d52dd33f87e27c3122d3d708b59fbae25a8bea",
-       "size": 2054
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-town-n14b\\silver_town\\qualify\\resave-0f56b97a8d68b2bc\\silver_town.resave.witness.json",
+       "sha256": "92c2b4e3fe813277674c1594bfad17f6c7ca41ad0d6b860aa0a5ef3a4db55d76",
+       "size": 2060
       }
      },
      "problems": [],
@@ -127,7 +127,7 @@
      "evidence": {
       "oracle": "independent re-save PYDEC + GAME raw-party witness"
      },
-     "fingerprint": "1f885300c2d3d3e0edad856b110daaa132f7cabf3eb28d316390ef425a0d540f",
+     "fingerprint": "829251291615a369391a54b9c6c86aab376342b90ec3ea89a6fc7813b400c31c",
      "notes": [],
      "problems": [],
      "stage": "post_oracle",

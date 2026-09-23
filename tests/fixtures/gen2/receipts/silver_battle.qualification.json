@@ -1,16 +1,16 @@
 {
- "attempt_id": "n3-silver-battle-a2",
+ "attempt_id": "requal-silver-battle-n14b",
  "errors": [],
  "fixtures": [
   {
    "artifacts": {
     "boot:game_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\boot-398e8ad272148bb6\\silver_battle.boot.witness.json",
-     "sha256": "bdd34d3b70add6ce968f7968d77b691135b097de2c9b94005c217598b483c831",
-     "size": 1936
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\boot-0b43730452f14b2c\\silver_battle.boot.witness.json",
+     "sha256": "b721978b31e51d25c5ea40319e343263f6a88ce26f894ef7636b3fedd31cb342",
+     "size": 1942
     },
     "fixture": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\saveram\\Pokemon - Silver Version (USA, Europe).SaveRAM",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\silver_battle.SaveRAM",
      "sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
      "size": 32790
     },
@@ -25,19 +25,19 @@
      "size": 73328
     },
     "resave:fixture": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resaved.SaveRAM",
-     "sha256": "b929ce0ca92f5749a2c75e3cff5c0d90765140f655ef9ba187b800630e71acca",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\resave-53008a2942331e16\\silver_battle.resaved.SaveRAM",
+     "sha256": "a59f57b1e282f1762ef015b89206591c4ac02fbc98eab3b3afa2cc7fb9bf540a",
      "size": 32790
     },
     "resave:reload_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\reload-92ffc517b79e0794\\silver_battle.reload.witness.json",
-     "sha256": "726f4f7debbcccd77c9e9a1d3b4a68e8cf6cf9c350a8299ab64d3b79791632d5",
-     "size": 1938
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\reload-53008a2942331e16\\silver_battle.reload.witness.json",
+     "sha256": "f0d30f53e4e10409abedefac29356db9d319973b30b660999abd9472dd4869a5",
+     "size": 1944
     },
     "resave:save_witness": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resave.witness.json",
-     "sha256": "33d035806d8c4b12f17229756fd3a1adc4ac62e0c16e132c61cbb41932fb384a",
-     "size": 2060
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\resave-53008a2942331e16\\silver_battle.resave.witness.json",
+     "sha256": "1ee00288819221a730b5059e19eafdc1bbae34c7130059e5d4ebca53282f0b15",
+     "size": 2066
     },
     "rom": {
      "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokegold\\pokesilver.gbc",
@@ -45,7 +45,7 @@
      "size": 2097152
     },
     "route_facts": {
-     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\silver_route_facts.json",
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\silver_route_facts.json",
      "sha256": "f9f341a431fc332677b8c134a7a0a4696bd94bf9e521148c105c30b6489a6c1d",
      "size": 13576
     }
@@ -67,7 +67,7 @@
       "oracle": "independent Gen2 PYDEC",
       "player_id": "51084"
      },
-     "fingerprint": "f68ab2f7a1cfd445d89c43176ce993a9eaabb78d0fd05f631eb85b79fd43f57e",
+     "fingerprint": "150596a187eadd2690a93d5c9028d5eaf7a043920d682fa043408595521aaf47",
      "notes": [
       "Static bytes do not prove played origin, RTC or GAME qualification."
      ],
@@ -82,13 +82,13 @@
       "observer": "independent_GAME CONTINUE",
       "position": "[53, 12]"
      },
-     "fingerprint": "398e8ad272148bb60faadb2b91b283e98c4ffdcf08beb3e396357b5106344387",
+     "fingerprint": "0b43730452f14b2c42ac070914145766b428d40010271e1881a8ef0370121510",
      "notes": [],
      "outputs": {
       "boot:game_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\boot-398e8ad272148bb6\\silver_battle.boot.witness.json",
-       "sha256": "bdd34d3b70add6ce968f7968d77b691135b097de2c9b94005c217598b483c831",
-       "size": 1936
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\boot-0b43730452f14b2c\\silver_battle.boot.witness.json",
+       "sha256": "b721978b31e51d25c5ea40319e343263f6a88ce26f894ef7636b3fedd31cb342",
+       "size": 1942
       }
      },
      "problems": [],
@@ -98,25 +98,25 @@
     {
      "evidence": {
       "observer": "independent_GAME re-save + reload",
-      "resave_cartram_sha256": "c9f7b2554019009b95833cd93472f18eec6d1c5f68f472b524f4757b549b1f6d"
+      "resave_cartram_sha256": "0cbcfbe306d7e949143abbd522656b5a1811d07b8d89e5cbb3214ec7c6d687b8"
      },
-     "fingerprint": "92ffc517b79e0794595d931f4e7452da490b444272edb23210a7101546a5c016",
+     "fingerprint": "53008a2942331e16f10bf4c3050796b37ef7b806e90ed89c3a1d01eac23aecda",
      "notes": [],
      "outputs": {
       "resave:fixture": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resaved.SaveRAM",
-       "sha256": "b929ce0ca92f5749a2c75e3cff5c0d90765140f655ef9ba187b800630e71acca",
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\resave-53008a2942331e16\\silver_battle.resaved.SaveRAM",
+       "sha256": "a59f57b1e282f1762ef015b89206591c4ac02fbc98eab3b3afa2cc7fb9bf540a",
        "size": 32790
       },
       "resave:reload_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\reload-92ffc517b79e0794\\silver_battle.reload.witness.json",
-       "sha256": "726f4f7debbcccd77c9e9a1d3b4a68e8cf6cf9c350a8299ab64d3b79791632d5",
-       "size": 1938
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\reload-53008a2942331e16\\silver_battle.reload.witness.json",
+       "sha256": "f0d30f53e4e10409abedefac29356db9d319973b30b660999abd9472dd4869a5",
+       "size": 1944
       },
       "resave:save_witness": {
-       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resave.witness.json",
-       "sha256": "33d035806d8c4b12f17229756fd3a1adc4ac62e0c16e132c61cbb41932fb384a",
-       "size": 2060
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-silver-battle-n14b\\silver_battle\\qualify\\resave-53008a2942331e16\\silver_battle.resave.witness.json",
+       "sha256": "1ee00288819221a730b5059e19eafdc1bbae34c7130059e5d4ebca53282f0b15",
+       "size": 2066
       }
      },
      "problems": [],
@@ -127,7 +127,7 @@
      "evidence": {
       "oracle": "independent re-save PYDEC + GAME raw-party witness"
      },
-     "fingerprint": "01d9bc88d1f68528919b950b30e68f4c337a90b11d95e73f370834d95aafc1b4",
+     "fingerprint": "627204b8f54ba4346dcc9b14a1c1875e0239209371f6d53fd3569c19c8eb0d62",
      "notes": [],
      "problems": [],
      "stage": "post_oracle",
