@@ -389,6 +389,99 @@ def test_an_overworld_and_a_battle_refusal_hold():
     assert ok is False, "an overworld arm inside the fake world must still refuse (no real state)"
 
 
+def _seed_native_world(world, busy=None):
+    """An RR companion production client with its checkpoint ROM anchors and mailbox seeded.
+
+    `busy` = None (idle), "opcode" or "status". The mailbox words come from the pack's own native
+    block, so this cannot drift from what lua/gen3/native.lua reads.
+    """
+    checkpoint = pack_json("gen3_rr", "write_checkpoint.json")["radical_red"]
+    for a in checkpoint["anchors"].values():
+        hexs = a["expected_hex"]["companion"]
+        for i in range(a["length"]):
+            world.rom[a["rom_offset"] + i] = int(hexs[i * 2:i * 2 + 2], 16)
+    n = checkpoint["native"]
+    world.poke(n["base"], n["sig"].to_bytes(4, "little"))
+    world.poke(n["base"] + n["abi_off"], n["abi"].to_bytes(2, "little"))
+    world.poke(n["base"] + n["opcode_off"], b"\x00\x00")
+    world.poke(n["base"] + n["status_off"], b"\x02\x00")           # ST_OK, not ST_BUSY
+    world.poke(n["info"] + n["info_drawn_off"], b"\x01")
+    world.poke(n["info"] + n["info_ack_off"], b"\x01")
+    if busy == "opcode":
+        world.poke(n["base"] + n["opcode_off"], (16).to_bytes(2, "little"))   # OP_SET_ENEMY_PARTY
+    elif busy == "status":
+        world.poke(n["base"] + n["status_off"], n["busy"].to_bytes(2, "little"))
+    return n
+
+
+def test_one_native_instance_answers_safety_the_client_and_the_part():
+    """Codex REV2 hold (C4-7 addendum): the client's service, Safety's native_idle and the writes
+    policy must all read the SAME native part. An idle mailbox answers "not busy" in all three; a
+    busy one refuses in all three -- if entry.lua had left Safety's closure nil (the reported
+    bug), Safety would keep reporting idle while the real part was busy.
+    """
+    world = World(pack="gen3_rr", title="radical_red", kind="companion", build=False)
+    client, parts = _production(world)
+    assert parts.native_present is True, "an RR companion production build must own a native part"
+    _seed_native_world(world)
+
+    # positive control: the idle mailbox accepts everywhere
+    assert parts.native.idle(parts.native) is True
+    ok, why = parts.safety.check(parts.safety, None, "native")
+    assert ok is True, why
+    assert list(parts.safety.last_clauses.values()) == []
+
+    for busy in ("opcode", "status"):
+        _seed_native_world(world, busy=busy)
+        assert parts.native.idle(parts.native) is False, busy
+        ok, why = parts.safety.check(parts.safety, None, "native")
+        assert ok is False and "mailbox" in str(why), why
+        assert list(parts.safety.last_clauses.values()) == ["native_idle"], busy
+        # the client's own gate refuses too -- and its refusal now names the native clause
+        # (in the fake world the pointer snapshot is nil, so the durable evidence is the safety
+        # seam; checkpoint_ok returning false is the client-side half)
+        assert client.driver.checkpoint_ok(client.driver)[0] is False, busy
+        parts.safety.check(parts.safety, None, "overworld")
+        clauses = list(parts.safety.last_clauses.values())
+        assert "native" in clauses, (busy, clauses)
+
+
+@pytest.mark.parametrize("busy", ["opcode", "status"])
+def test_a_busy_mailbox_makes_the_overworld_checkpoint_refuse_only_for_native(busy):
+    """The delta: with the rest of the fake overworld in the state the harness leaves it, the
+    ONLY clause a busy mailbox adds to `checkpoint_ok`'s refusal is "native" -- which is what
+    proves the client and Safety share the instance."""
+    world = World(pack="gen3_rr", title="radical_red", kind="companion", build=False)
+    client, parts = _production(world)
+    _seed_native_world(world)
+    parts.safety.check(parts.safety, None, "overworld")
+    idle = list(parts.safety.last_clauses.values())
+    _seed_native_world(world, busy=busy)
+    parts.safety.check(parts.safety, None, "overworld")
+    busy_clauses = list(parts.safety.last_clauses.values())
+    assert set(busy_clauses) - set(idle) == {"native"}, (idle, busy_clauses)
+    assert set(idle) - set(busy_clauses) == set(), (idle, busy_clauses)
+
+
+def test_a_native_reply_reaches_the_wire_through_the_production_build():
+    """C4-2f: Entry's native `send` is the dot call client.send(event, fields). A native-owned
+    prompt refused by an absent companion answers with its sentinel, and that line reaches
+    net.send through the production build (the colon form passed the session as the event)."""
+    world = World(pack="gen3_rr", title="radical_red", kind="companion", build=False)
+    L = world.lua
+    world.io.write_u8 = lambda a, v: None
+    lines = []
+    net = L.table(connected=lambda: True, pump=lambda: None, send=lambda line: lines.append(str(line)),
+                  receive=lambda: None)
+    hud = L.table(show=lambda *a: None, prompt=lambda *a: None)
+    client, parts = world.Entry.build(world.deps(mode="production", net=net, hud=hud, player="a"))
+    assert parts.native is not None
+    client.hello_sent, client.writes_enabled = True, True
+    client.handle_command(client, L.table(cmd="show_menu", token="tk", text="?"))
+    replies = [json.loads(line) for line in lines]
+    assert [(m["event"], m["token"], m["choice"]) for m in replies] == [("menu_result", "tk", 0)]
+
+
 def test_build_refuses_an_unadmitted_title():
     world = World(pack="gen3_frlg", title="emerald", build=False)
     with pytest.raises(lupa.LuaError, match="unadmitted Gen 3 title"):
