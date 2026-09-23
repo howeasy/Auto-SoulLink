@@ -51,7 +51,7 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # adapter, its own data/games/gen1_purergb/ pack (docs/purergb/PLAN.md §4 row 2).
     "PureRed": "gen1_purergb", "PureBlue": "gen1_purergb", "PureGreen": "gen1_purergb",
     "purered": "gen1_purergb", "pureblue": "gen1_purergb", "puregreen": "gen1_purergb",
-    # Gen 2. `lua/games/gen2_crystal.lua:rom_type_for_variant` returns the title-cased forms;
+    # Gen 2. lua/gen2/entry.lua sends the title-cased forms (as the legacy client did);
     # the lowercase ones mirror the Gen 1 convention above and are what new code should send.
     # Registering BOTH is deliberate: a rom_type is persisted into the run directory
     # (server/state.py), so dropping the title-cased spellings would orphan existing runs.
@@ -233,10 +233,6 @@ register_adapter("gen1_rby", Gen1Adapter)
 from .gen1_purergb import Gen1PureRGBAdapter  # noqa: E402
 
 register_adapter("gen1_purergb", Gen1PureRGBAdapter)
-
-from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
-
-register_adapter("gen2_crystal", Gen2CrystalAdapter)
 
 # Routed for Crystal, Gold and Silver (U5 cutover, above).
 from .gen2_gsc import Gen2GSCAdapter  # noqa: E402
